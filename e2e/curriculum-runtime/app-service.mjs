@@ -16,23 +16,28 @@
 // and HPS_TEST_ORIGIN = http://{project}.test.invalid:<port>, so the App can publish a test
 // version and a request whose Host is a test origin reaches the published runtime.
 //
-// Every run also writes a director's issuer token for the same cohort and profile to `<token-file>.issuer` (cr-review).
+// Every run also writes a director's issuer token for the same cohort and profile to `<token-file>.issuer` (cr-review),
+// and the admin credential of this run (a random password for /admin's Basic auth) to `<token-file>.admin` (cr-e2e).
 //
-// Control routes (the spec only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
+// Control routes (the spec only, loopback only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
 // (cr-evidence: removes one participant session key behind the record's back, with no tombstone,
 // so a stored draft's reference stops resolving; publish mode only) · GET /__cr/records?project=<id>
 // (cr-e2e: every object of that Project's measurement-core record with its SHA-256 and, for a JSON
-// object, its parsed body; read-only, publish mode only).
+// object, its parsed body; read-only, publish mode only) · POST /__cr/switch {"enabled": bool}
+// (cr-e2e: turns the profile's CR switch on or off in this process, so records made with it on are
+// walked with it off) · POST /__cr/plant-deck {"slide": n} (cr-e2e: the next Deck Builder answer also
+// patches slide n, which the Service's output gate must refuse).
 //
-// cr-e2e (#1400) adds the scripted model's part of the PRD §14 loop (loop-app.spec.ts and the dev
-// kit): `[cr:observe]` (open the preview and observe it once), `[cr:edit]` (make the element the
-// student picked bigger) and `[cr:apply]` (apply the team's decision as v1) answer with the whole
-// page in an html fence, as a coach does in the proxy runtime; the Evidence and Deck Builder skills
-// are answered from their prompts alone, like the Experiment skill.
+// cr-e2e (#1400) adds the scripted model's part of the PRD §14 loop (loop-app.spec.ts and the dev kit):
+// `[cr:observe]`, `[cr:edit]`, `[cr:apply]` and the Evidence and Deck Builder skill prompts are answered by
+// loop-coach.mjs, which cr-e2e owns. Every request passes service-gate.mjs first: through a tunnel
+// (cr-dev-kit.sh --phone) only the published runtime `/l/…` is reachable.
 import "../../worker/test/harness/loader.mjs";
 import { createServer } from "node:http";
-import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { GATE_HEADER, gate } from "./service-gate.mjs";
+import { createLoopCoach } from "./loop-coach.mjs";
 
 const [portArg, tokenFile, switchArg, modeArg] = process.argv.slice(2);
 // cr-e2e (scripts/cr-dev-kit.sh --real-model): HPS_CR_MODEL=real lets the Service's own calls to
@@ -46,6 +51,13 @@ if (REAL_MODEL && !process.env.ANTHROPIC_API_KEY) {
 const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("../../worker/test/harness/index.mjs");
 const { getProfile } = await import("../../worker/src/profiles/index.ts");
 const { issue, issueIssuer } = await import("../../worker/src/lib/tokens.ts");
+// The kit's exposed mode (one shared test origin, a tunnel: --phone) and paid mode (--real-model) sign
+// tokens with a secret made for this run: TEST_SECRET is in the repository, so with it anyone who has
+// the source could sign a student's or a director's token for this Service.
+const SHARED_ORIGIN = !!process.env.HPS_TEST_ORIGIN && !process.env.HPS_TEST_ORIGIN.includes("{project}");
+const SECRET = REAL_MODEL || SHARED_ORIGIN ? randomBytes(32).toString("hex") : TEST_SECRET;
+// /admin's Basic-auth password for this run only (cr-e2e: CR-T02 walks the admin routes with it).
+const ADMIN_PASSWORD = randomBytes(18).toString("base64url");
 
 // An adult, workshop-tier profile with browser control, image paste and an observation
 // format (every condition curriculumRuntimeAllowed and the validator ask for). Only the
@@ -58,6 +70,8 @@ const env = createMockEnv({
   withSession: false,
   withRoster: false,
   environment: "development",
+  secret: SECRET,
+  adminPassword: ADMIN_PASSWORD,
   env: { LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: REAL_MODEL ? process.env.ANTHROPIC_API_KEY : "synthetic-no-live-key", OPENAI_API_KEY: undefined, ANTHROPIC_PROXY_URL: undefined },
 });
 if (modeArg === "publish") {
@@ -75,10 +89,11 @@ if (modeArg === "publish") {
 const now = Date.now();
 await env.HPS_KV.put(`cohort:${cohort}:active_session`, JSON.stringify({ session_id: "cr-app-session", profile_id: profile.id, starts_at: new Date(now - 60_000).toISOString(), ends_at: new Date(now + 6 * 3600_000).toISOString() }));
 await env.HPS_KV.put(`cohort:${cohort}:roster`, JSON.stringify({ users: ["cr-adult-a"] }));
-writeFileSync(tokenFile, (await issue({ u: "cr-adult-a", c: cohort, p: profile.id }, 6, TEST_SECRET)).token);
+writeFileSync(tokenFile, (await issue({ u: "cr-adult-a", c: cohort, p: profile.id }, 6, SECRET)).token, { mode: 0o600 });
 // cr-review (#1398): a director's issuer token whose scope covers this cohort and profile, next to
 // the learner's (`<token-file>.issuer`), for the director's Weekly Review screen (CR-51, CR-53).
-writeFileSync(`${tokenFile}.issuer`, (await issueIssuer({ issuer: "cr-director", scopes: [{ cohort, profiles: [profile.id] }] }, 6, TEST_SECRET)).token);
+writeFileSync(`${tokenFile}.issuer`, (await issueIssuer({ issuer: "cr-director", scopes: [{ cohort, profiles: [profile.id] }] }, 6, SECRET)).token, { mode: 0o600 });
+writeFileSync(`${tokenFile}.admin`, ADMIN_PASSWORD, { mode: 0o600 });
 
 // ── the scripted agent ───────────────────────────────────────────────────────
 
@@ -107,7 +122,11 @@ const recordLines = (text) => text.split("\n").filter((l) => /^- \[(console|exce
 const blocks = (content) => (typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : []);
 const textOf = (content) => blocks(content).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 
-const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], observations: [], edits: [] };
+// cr-e2e adds: observations and edits (the §14 coach), directorProbes (every answer of the director route,
+// so a spec reads the director's palette only after the App's probe was answered), skillOutputs (what the
+// Service's skill output gate answered) and deckPlant (POST /__cr/plant-deck).
+const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], observations: [], edits: [], directorProbes: [], skillOutputs: [], deckPlant: null };
+const coach = createLoopCoach(state, { blocks, textOf });
 
 /** The next move for one upstream request: a tool call or the final text. */
 function agent(body) {
@@ -131,9 +150,9 @@ function agent(body) {
   if (/\[cr:propose\]/.test(userText)) return propose(msgs.slice(start + 1));
   // cr-skills (#1396): a curriculum skill run's prompt (skill, schema, context, input).
   if (/^## Skill\n[a-z-]+@\d/m.test(userText)) return { text: skillAnswer(userText) };
-  // cr-e2e (#1400): the §14 loop's own requests.
-  if (/\[cr:observe\]/.test(userText)) return observeOnce(body, msgs, msgs.slice(start + 1));
-  if (/\[cr:(edit|apply)\]/.test(userText)) return { text: editAnswer(userText, msgs.slice(0, Math.max(start, 0))) };
+  // cr-e2e (#1400): the §14 loop's own requests (loop-coach.mjs).
+  if (/\[cr:observe\]/.test(userText)) return coach.observeOnce(body, msgs, msgs.slice(start + 1));
+  if (/\[cr:(edit|apply)\]/.test(userText)) return { text: coach.editAnswer(userText, msgs.slice(0, Math.max(start, 0))) };
   const scenario = /\[cr:flow(?::([a-z0-9-]+))?\]/.exec(userText);
   if (!scenario) return { text: "[로컬 시험 응답] 받았어요." };
   const plant = scenario[1] ?? "";
@@ -232,83 +251,6 @@ function propose(after) {
   return { text: "[로컬 시험 응답] 조건 하나를 제안했어요. 확인해 주세요." };
 }
 
-// ── cr-e2e: the §14 loop's scripted coach ────────────────────────────────────
-
-/**
- * Step 2: open the student's preview and observe it once. What the App sent back is kept as
- * the model read it (header lines of the observation and whether a screenshot came with it).
- */
-function observeOnce(body, msgs, after) {
-  const round = after.filter((m) => m.role === "assistant").length;
-  if (round === 0) {
-    const origin = /http:\/\/127\.0\.0\.1:\d+/.exec(JSON.stringify(body.system ?? "") + JSON.stringify(msgs))?.[0];
-    if (!origin) return { text: "[로컬 시험 응답] 미리보기 주소를 받지 못했어요." };
-    return { tool: "browser_navigate", input: { url: `${origin}/` } };
-  }
-  const last = blocks(after.at(-1)?.content).find((b) => b.type === "tool_result");
-  if (round === 1) return last?.is_error === true ? { text: "[로컬 시험 응답] 미리보기를 열지 못했어요." } : { tool: "browser_observe", input: {} };
-  const text = textOf(last?.content);
-  const field = (label) => new RegExp(`^${label}: (.*)$`, "m").exec(text)?.[1] ?? null;
-  state.observations.push({
-    at: Date.now(),
-    is_error: last?.is_error === true,
-    url: field("URL"),
-    route: field("경로"),
-    viewport: field("뷰포트"),
-    generation: field("문서 세대"),
-    version: /^산출물 버전: (sha256:[0-9a-f]{64})/m.exec(text)?.[1] ?? null,
-    refs: (text.match(/\[ref=e\d+\]/g) ?? []).length,
-    buttons: [...text.matchAll(/\[ref=e\d+\] button "([^"]+)"/g)].map((m) => m[1]),
-    screenshot: blocks(last?.content).some((b) => b.type === "image" || b.type === "image_url"),
-  });
-  return { text: "[로컬 시험 응답] 지금 화면을 봤어요." };
-}
-
-const KIOSK = new URL("./fixtures/kiosk-practice/index.html", import.meta.url);
-/** The page the coach last wrote in this conversation (its own html fence), else the kiosk as it was handed out. */
-function lastPage(history) {
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (history[i].role !== "assistant") continue;
-    const m = /```html\n([\s\S]*?)\n```/.exec(textOf(history[i].content));
-    if (m) return m[1];
-  }
-  // The App may send a clamped history; the coach's own last page is then the one it wrote last in this run.
-  return state.lastHtml ?? readFileSync(KIOSK, "utf8");
-}
-
-/**
- * Step 3 (`[cr:edit]`): make the element the student picked bigger. The element is read from the
- * payload the App put before the student's words (its HTML snippet's id); nothing is guessed when
- * it is missing. Step 13 (`[cr:apply]`): the team's decision as v1, one more line on the drink
- * screen. Both answer with the whole page, which the App saves as index.html.
- */
-function editAnswer(userText, history) {
-  const base = lastPage(history);
-  const body = base.indexOf("<body");
-  let html;
-  if (/\[cr:edit\]/.test(userText)) {
-    const id = /^HTML(?: \(앞부분\))?:\n<[a-z][a-z0-9-]*\b[^>]*\bid="([^"]+)"/m.exec(userText)?.[1];
-    if (!id || body < 0) return "[로컬 시험 응답] 어느 요소를 고쳐야 할지 받지 못했어요.";
-    const open = new RegExp(`<([a-z][a-z0-9-]*)\\b([^>]*\\bid="${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*)>`);
-    const rest = base.slice(body);
-    if (!open.test(rest)) return `[로컬 시험 응답] ${id} 요소를 페이지에서 찾지 못했어요.`;
-    html = base.slice(0, body) + rest.replace(open, (_m, tag, attrs) => `<${tag}${attrs.replace(/\sclass="[^"]*"/, "")} class="big">`);
-    if (!html.includes(".big{")) html = html.replace("</head>", "  <style>.big{font-size:1.5em;padding:18px 32px}</style>\n</head>");
-    state.edits.push({ kind: "edit", element: id, at: Date.now() });
-    state.lastHtml = html;
-    return `[로컬 시험 응답] 고른 요소를 더 크게 고쳤어요.\n\`\`\`html\n${html}\n\`\`\``;
-  }
-  const label = '<label for="drink">음료 고르기</label>';
-  if (!base.includes(label)) return "[로컬 시험 응답] 음료 고르는 화면을 찾지 못했어요.";
-  html = base.replace(label, `${label}\n    <p class="hint">음료와 수량을 이 화면에서 한 번에 골라요.</p>`);
-  state.edits.push({ kind: "apply", at: Date.now() });
-  state.lastHtml = html;
-  return `[로컬 시험 응답] 결정대로 한 화면에서 고르게 고쳤어요.\n\`\`\`html\n${html}\n\`\`\``;
-}
-
-/** The v5 deck's slide titles (CR-54), for the Deck Builder's patches. */
-const SLIDE_TITLES = { 1: "문제·기회", 2: "제공 가치", 3: "해결 원리 — AI / Human / Safety", 4: "수익 구조와 임팩트", 5: "현장·고객 접근", 6: "기존 도움과 대안", 7: "재무·임팩트 지표", 8: "현재 성과와 다음 계획" };
-
 /**
  * cr-skills: the scripted model's answer to a skill prompt, computed only from the prompt it
  * received. "[cr:skill-bad]" in the input plants an answer that breaks the skill's rules.
@@ -330,35 +272,9 @@ function skillAnswer(userText) {
       success_criteria: bad ? ["사람들이 좋아한다"] : ["5명 중 3명이 도움 없이 주문을 마친다"],
     }) + "\n```";
   }
-  // cr-e2e: the Evidence skill sorts what the prompt's records say; every observation cites them.
-  if (tag.startsWith("evidence@")) {
-    const rec = context.experiment_records ?? {};
-    const sessions = Array.isArray(rec.sessions) ? rec.sessions : [];
-    const notes = Array.isArray(rec.notes) ? rec.notes : [];
-    const items = [];
-    if (sessions.length) {
-      const pages = sessions.reduce((n, s) => n + (Number(s.pages) || 0), 0);
-      const clicks = sessions.reduce((n, s) => n + (Number(s.clicks) || 0), 0);
-      items.push({ id: "o1", section: "observation", text: `참가 세션 ${sessions.length}개에서 화면을 ${pages}번 보고 ${clicks}번 눌렀다`, source_refs: [...sessions.map((s) => s.ref), ...sessions.flatMap((s) => (s.event_refs ?? []).slice(0, 10))] });
-    }
-    notes.forEach((n, i) => items.push({ id: `o${i + 2}`, section: "observation", text: String(n.text), source_refs: [n.ref] }));
-    if (notes.length) items.push({ id: "i1", section: "interpretation", text: "음료를 고르는 화면이 처음 쓰는 사람에게 낯설다", source_refs: [notes[0].ref] });
-    items.push({ id: "a1", section: "assumption", text: "음료와 수량을 한 화면에서 고르면 도움 없이 주문을 마칠 수 있다", source_refs: [] });
-    items.push({ id: "n1", section: "next_experiment", text: "한 화면 버전으로 다섯 명에게 주문을 부탁한다", source_refs: [] });
-    state.skills.at(-1).cited = items.flatMap((i) => i.source_refs);
-    return "```json\n" + JSON.stringify({ items }) + "\n```";
-  }
-  // cr-e2e: the Deck Builder patches only the slides the named decision affects, citing its usable evidence.
-  if (tag.startsWith("deck-builder@")) {
-    const input = JSON.parse(/^## Input\n(.*)$/m.exec(userText)?.[1] ?? "{}");
-    const d = (context.decisions ?? []).find((x) => x.id === input.decision_id);
-    if (!d) return "{}";
-    const usable = new Set((context.evidence_items ?? []).filter((i) => !i.pending_review && i.sources_real !== false && i.confidence !== "assumed").map((i) => i.id));
-    const refs = (d.evidence_refs ?? []).filter((r) => usable.has(r));
-    const patches = (d.affected_deck_slides ?? []).map((n) => ({ slide: n, title: SLIDE_TITLES[n] ?? `슬라이드 ${n}`, body: `${d.statement} — 근거 ${refs.length}개`, evidence_refs: refs }));
-    state.skills.at(-1).patches = patches.map((p) => ({ slide: p.slide, evidence_refs: p.evidence_refs }));
-    return "```json\n" + JSON.stringify({ patches, rationale: "결정이 바꾸는 슬라이드만 고쳤어요." }) + "\n```";
-  }
+  // cr-e2e: the Evidence and Deck Builder skills of the §14 loop (loop-coach.mjs).
+  if (tag.startsWith("evidence@")) return coach.evidenceAnswer(context);
+  if (tag.startsWith("deck-builder@")) return coach.deckBuilderAnswer(context, JSON.parse(/^## Input\n(.*)$/m.exec(userText)?.[1] ?? "{}"));
   return "{}";
 }
 
@@ -402,54 +318,81 @@ globalThis.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
-// cr-e2e (scripts/cr-dev-kit.sh --phone): with a shared test origin (one host, an ngrok tunnel) the
-// tunnel reaches only the published runtime (`/l/…`); this Service's API and its control routes stay
-// on this machine. A request that came through a tunnel carries the tunnel's Host.
-const SHARED_HOST = (() => {
-  const t = process.env.HPS_TEST_ORIGIN;
-  if (!t || t.includes("{project}")) return null;
-  try {
-    return new URL(t).host.toLowerCase();
-  } catch {
-    return null;
+// cr-e2e (#1400): every request passes service-gate.mjs before the router sees it. Through a tunnel
+// (cr-dev-kit.sh --phone, a shared test origin) only the published runtime `/l/…` answers; this
+// Service's API and the control routes below stay on this Mac.
+const GATE_SERVICE = { testOrigin: env.HPS_TEST_ORIGIN, environment: env.ENVIRONMENT };
+const SKILL_OUTPUT = /^\/v1\/curriculum\/projects\/[^/]+\/skills\/([^/]+)\/output$/;
+const sendJson = (res, status, value) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
+async function readBody(req) {
+  const parts = [];
+  for await (const p of req) parts.push(p);
+  return Buffer.concat(parts);
+}
+
+/** The spec-only control routes (loopback only, the gate's `local` kind). */
+async function control(req, res, path, search) {
+  if (path === "/__cr/state") return sendJson(res, 200, state);
+  if (path === "/__cr/reset") {
+    Object.assign(state, { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], observations: [], edits: [], directorProbes: [], skillOutputs: [], deckPlant: null, lastHtml: undefined });
+    return res.writeHead(204).end();
   }
-})();
-const isLoopback = (h) => !h || /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(h);
+  if (path === "/__cr/records" && modeArg === "publish") {
+    // cr-e2e: what the Service stored for one Project, read from the bucket itself (digests, and the JSON of each JSON object).
+    const project = new URLSearchParams(search).get("project") ?? "";
+    const prefix = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/`;
+    const records = [...env.HPS_TRACES.map.entries()].filter(([k]) => project && k.startsWith(prefix)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, bytes]) => {
+      let json = null;
+      try { json = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* bytes, not JSON */ }
+      return { key: key.slice(prefix.length), sha256: createHash("sha256").update(bytes).digest("hex"), json };
+    });
+    return sendJson(res, 200, { prefix, records });
+  }
+  const body = (await readBody(req)).toString("utf8");
+  if (path === "/__cr/plant-dangling" && modeArg === "publish") {
+    const { project, session } = JSON.parse(body);
+    const key = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/sessions/published/${encodeURIComponent(session)}`;
+    const had = (await env.HPS_TRACES.get(key)) !== null;
+    await env.HPS_TRACES.delete(key);
+    return sendJson(res, 200, { removed: had });
+  }
+  if (path === "/__cr/switch" && req.method === "POST") {
+    // cr-e2e (CR-T02): the profile's switch, changed in this process; records made with it on stay.
+    const { enabled } = JSON.parse(body || "{}");
+    if (typeof enabled !== "boolean") return sendJson(res, 400, { error: "enabled must be true or false" });
+    profile.curriculum_runtime = { enabled };
+    return sendJson(res, 200, { enabled });
+  }
+  if (path === "/__cr/plant-deck" && req.method === "POST") {
+    // cr-e2e (§14 step 15): the next Deck Builder answer also patches this slide (loop-coach.mjs).
+    const { slide } = JSON.parse(body || "{}");
+    state.deckPlant = Number.isInteger(slide) && slide >= 1 && slide <= 8 ? slide : null;
+    return sendJson(res, 200, { deckPlant: state.deckPlant });
+  }
+  return res.writeHead(404).end();
+}
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.url?.startsWith("/__cr/") && !isLoopback(req.headers.host)) return res.writeHead(404).end();
-    if (SHARED_HOST && (req.headers.host ?? "").toLowerCase() === SHARED_HOST && !(req.url ?? "").startsWith("/l/")) return res.writeHead(404).end();
-    if (req.url === "/__cr/state") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(state));
-    if (req.url === "/__cr/reset") { state.requests = []; state.runs = {}; state.verify = []; state.skills = []; state.skillHeaders = []; state.observations = []; state.edits = []; state.lastHtml = undefined; return res.writeHead(204).end(); }
-    if (req.url?.startsWith("/__cr/records") && modeArg === "publish") {
-      // cr-e2e: what the Service stored for one Project, read from the bucket itself (digests, and the JSON of each JSON object).
-      const project = new URL(req.url, "http://x").searchParams.get("project") ?? "";
-      const prefix = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/`;
-      const records = [...env.HPS_TRACES.map.entries()].filter(([k]) => project && k.startsWith(prefix)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, bytes]) => {
-        let json = null;
-        try { json = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* bytes, not JSON */ }
-        return { key: key.slice(prefix.length), sha256: createHash("sha256").update(bytes).digest("hex"), json };
-      });
-      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ prefix, records }));
-    }
-    const parts = [];
-    for await (const p of req) parts.push(p);
-    const body = Buffer.concat(parts);
-    if (req.url === "/__cr/plant-dangling" && modeArg === "publish") {
-      const { project, session } = JSON.parse(body.toString("utf8"));
-      const key = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/sessions/published/${encodeURIComponent(session)}`;
-      const had = (await env.HPS_TRACES.get(key)) !== null;
-      await env.HPS_TRACES.delete(key);
-      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ removed: had }));
-    }
-    // A test origin (cr-publish: `*.test.invalid`, or an ngrok host given as HPS_TEST_ORIGIN for a
-    // phone) keeps its own Host so the Service dispatches it as one; everything else is this Service.
-    const h = req.headers.host ?? "";
-    const host = /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(h) || !h ? `127.0.0.1:${portArg}` : h;
-    const r = await app.fetch(new Request(`http://${host}${req.url}`, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), env, makeCtx());
+    const g = gate({ url: req.url, headers: req.headers }, GATE_SERVICE);
+    if (!g.ok) return res.writeHead(404, { [GATE_HEADER]: "refused" }).end();
+    const path = g.pathname;
+    if (g.kind === "local" && (path === "/__cr" || path.startsWith("/__cr/"))) return await control(req, res, path, g.search);
+    const body = await readBody(req);
+    // This Mac's requests go to the Service's own host. A test origin keeps its Host, so the router
+    // dispatches it to the published runtime (cr-publish: `*.test.invalid`, or the ngrok host given as
+    // HPS_TEST_ORIGIN for a phone); the router is handed exactly the path the gate checked.
+    const host = g.kind === "local" ? `127.0.0.1:${portArg}` : (g.host ?? "no-host.invalid");
+    const r = await app.fetch(new Request(`http://${host}${path}${g.search}`, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), env, makeCtx());
     // cr-skills: what the coach route recorded for a skill request, and whether the App named a model.
     if (req.headers["x-hps-skill"]) state.skillHeaders.push({ sent: { skill: req.headers["x-hps-skill"], capability: req.headers["x-hps-capability"], model_in_body: JSON.parse(body.toString("utf8") || "{}").model ?? null }, answered: { status: r.status, skill: r.headers.get("x-hps-skill"), capability: r.headers.get("x-hps-capability"), model: r.headers.get("x-hps-model") } });
+    // cr-e2e: the director route's answers (the App's probe of the director's switch) and the skill output gate's verdicts.
+    if (path === "/v1/curriculum/director/projects") state.directorProbes.push({ at: Date.now(), status: r.status });
+    const skillOutput = req.method === "POST" ? SKILL_OUTPUT.exec(path) : null;
+    if (skillOutput) {
+      const answer = await r.clone().json().catch(() => null);
+      state.skillOutputs.push({ at: Date.now(), skill: decodeURIComponent(skillOutput[1]), status: r.status, slides: Array.isArray(answer?.output?.patches) ? answer.output.patches.map((p) => p.slide) : null, code: answer?.error?.code ?? null, problems: answer?.error?.problems ?? null });
+    }
     res.writeHead(r.status, Object.fromEntries(r.headers));
     if (r.body) for await (const chunk of r.body) res.write(Buffer.from(chunk));
     res.end();

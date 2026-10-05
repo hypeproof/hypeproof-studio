@@ -14,10 +14,19 @@
 // Chromium as a 390 px phone, `*.test.invalid` resolved to this Mac). The live run with a real
 // phone is Jay's (curriculum-runtime-dev.md, cr-e2e).
 //
-//   positive   all fifteen steps in order; one line per step with the record it read.
-//              Step 15 is PARTIAL by definition until cr-deck stores proposals (CR-56): the
-//              Deck Builder skill's proposal is checked (slides 2 and 3 only, with evidence),
-//              nothing is stored.
+//   positive   all fifteen steps in order; one line per step with the record it read. Three
+//              steps cannot be PASS here, and the run says so:
+//              - step 5 is PARTIAL when AI Verify needed a re-test before it read "verified" (a
+//                first run that is unreliable must show, not be absorbed by the retry);
+//              - step 13 is PARTIAL, "PASS via harness, not product": v1 is registered and named
+//                on the decision by register-version.mjs, a node script outside the App, because
+//                no panel registers a version without starting a test or names the version a
+//                decision produced. CR-71 is not met until one does;
+//              - step 15 is PARTIAL until cr-deck stores proposals (CR-56): the Deck Builder's
+//                proposal is checked as the Service's output gate answered it and as the skills
+//                panel shows it (slides 2 and 3 only, each with evidence); nothing is stored.
+//                Before it, a planted coach answer that also patches slide 5 must be refused
+//                by the gate and shown to the student as a refusal.
 //   negative   the same loop with a planted break after step 8: the participant session is
 //              removed from the record behind its back (no tombstone), so the events never
 //              reach the Evidence skill. The loop must stop at step 10.
@@ -54,7 +63,9 @@ type LoopState = {
   requests: Array<{ tools: string[]; userText: string; images: number }>;
   observations: Array<{ is_error: boolean; url: string | null; route: string | null; viewport: string | null; generation: string | null; version: string | null; refs: number; buttons: string[]; screenshot: boolean }>;
   edits: Array<{ kind: string; element?: string }>;
-  skills: Array<{ tag: string; cited?: string[]; patches?: Array<{ slide: number; evidence_refs: string[] }> }>;
+  skills: Array<{ tag: string; cited?: string[]; patches?: Array<{ slide: number; evidence_refs: string[] }>; planted?: number | null }>;
+  /** What the Service's skill output gate answered (app-service.mjs records the router's answer). */
+  skillOutputs: Array<{ skill: string; status: number; slides: number[] | null; code: string | null; problems: string[] | null }>;
 };
 const st = async (): Promise<LoopState> => (await svc.state()) as unknown as LoopState;
 /** The Service's own identity-key rule (learning-events.ts IDENTITY_FIELD), applied to what it stored. */
@@ -93,10 +104,12 @@ interface StepOut {
   verdict?: Verdict;
   note?: string;
 }
+/** Step 13's evidence: the App and the coach, then a harness script where the product has no control yet. */
+const HARNESS_V1 = "live-host App, synthetic model; v1 registered and named on the decision by the harness script register-version.mjs, not the product";
 interface Step {
   n: number;
   name: string;
-  evidence: "live-host" | "synthetic" | "live-host App, synthetic model" | "live-host App, synthetic Service";
+  evidence: "live-host" | "synthetic" | "live-host App, synthetic model" | "live-host App, synthetic Service" | typeof HARNESS_V1;
   run(L: Loop): Promise<StepOut>;
 }
 interface Line {
@@ -271,7 +284,7 @@ const STEPS: Step[] = [
       await runCommand(win, PICK);
       await win.waitForTimeout(900);
       await app.evaluate(async ({ webContents }, o) => {
-        const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(`${o}/`))!;
+        const wc = webContents.getAllWebContents().find((w: { getURL(): string }) => w.getURL().startsWith(`${o}/`))!;
         const [x, y] = await wc.executeJavaScript(`(() => { const r = document.getElementById("begin").getBoundingClientRect(); return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)]; })()`);
         wc.sendInputEvent({ type: "mouseMove", x, y });
         wc.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
@@ -336,7 +349,9 @@ const STEPS: Step[] = [
       const chat = (await L.showing('[data-testid="verify-report"]')) ?? (await L.panel(TEST, "verify-panel"));
       await expect(chat.locator('[data-testid="verify-running"]')).toHaveCount(0, { timeout: 180_000 });
       // The first run on a freshly opened preview can read its page log as started late and leave
-      // one criterion "확인 안 됨" (pre-existing, cr-verify follow-up); the student re-tests.
+      // one criterion "확인 안 됨" (pre-existing, cr-verify follow-up). The student may re-test, as the
+      // live checklist says, but here a re-test makes the step PARTIAL: the scripted run must show an
+      // unreliable first run, not absorb it.
       let retests = 0;
       const first = await chat.locator('[data-testid="verify-result"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-status")));
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -359,7 +374,8 @@ const STEPS: Step[] = [
       expect(await rows.locator("details ol li").count(), "each verdict lists the steps the runner took").toBeGreaterThanOrEqual(3);
       expect(version).toBe(L.seen.v0prime);
       L.seen.run = runId;
-      return { read: "the 3 criteria of step 4 (report rows)", record: `hps-verification/1 run ${runId.slice(0, 12)} on ${short(version)}: pass ×3, verified (first run ${first.join("/")}, ${retests} re-test${retests === 1 ? "" : "s"})` };
+      const out = { read: "the 3 criteria of step 4 (report rows)", record: `hps-verification/1 run ${runId.slice(0, 12)} on ${short(version)}: pass ×3, verified (first run ${first.join("/")}, ${retests} re-test${retests === 1 ? "" : "s"})` };
+      return retests === 0 ? out : { ...out, verdict: "PARTIAL", note: `verified only after ${retests} re-test${retests === 1 ? "" : "s"}: the first run read ${first.join("/")} (cr-verify follow-up)` };
     },
   },
   {
@@ -611,7 +627,7 @@ const STEPS: Step[] = [
   {
     n: 13,
     name: "produce v1",
-    evidence: "live-host App, synthetic model",
+    evidence: HARNESS_V1,
     async run(L) {
       const projectId = String(L.seen.project);
       // The record step 12 made: the decision, with no version yet.
@@ -624,8 +640,9 @@ const STEPS: Step[] = [
       await expect.poll(() => fs.readFileSync(path.join(L.wsDir, "index.html"), "utf8").includes("음료와 수량을 이 화면에서 한 번에 골라요"), { timeout: 30_000 }).toBe(true);
       await expect.poll(async () => (await L.appVersion()).id, { timeout: 30_000, message: "v1 is a new version" }).not.toBe(L.seen.v0prime);
       const v1 = await L.appVersion();
-      // Register v1 with the App's own set builder and upload, and name it on the decision
-      // (register-version.mjs: no panel offers a version without starting a test of it).
+      // Not the product: no panel registers a version without starting a test of it, and none names
+      // the version a decision produced. register-version.mjs, a node script outside the App, runs the
+      // panel's own set builder and upload, then POST /decisions/:id/version (CR-41).
       const out = execFileSync(process.execPath, ["--experimental-strip-types", "--no-warnings", path.join(here, "register-version.mjs"), `http://127.0.0.1:${PORT}/v1`, process.env.HPS_E2E_TOKEN_FILE!, projectId, L.wsDir, "--link-decision", String(L.seen.decision)], { cwd: repo, encoding: "utf8" });
       const up = JSON.parse(out.trim().split("\n").at(-1)!);
       expect(up.ok, out).toBe(true);
@@ -637,7 +654,12 @@ const STEPS: Step[] = [
       const chat = await L.panel(MEMORY, "memory-panel");
       await expect(chat.locator(`[data-testid="memory-decision"][data-id="${L.seen.decision}"]`)).toContainText(`버전 ${v1.id.replace(/^sha256:/, "").slice(0, 8)}`);
       L.seen.v1 = v1.id;
-      return { read: `decision ${L.seen.decision} (memory read)`, record: `v1 ${short(v1.id)} written by the coach, registered (created ${up.created}), named by the decision's resulting_version_id` };
+      return {
+        read: `decision ${L.seen.decision} (memory read)`,
+        record: `v1 ${short(v1.id)} written by the coach in the App; registered (created ${up.created}) and named by the decision's resulting_version_id through register-version.mjs`,
+        verdict: "PARTIAL",
+        note: "PASS via harness, not product: no panel registers a version without starting a test or names the version a decision produced; until one does, CR-71 is not met",
+      };
     },
   },
   {
@@ -686,19 +708,42 @@ const STEPS: Step[] = [
     evidence: "live-host App, synthetic model",
     async run(L) {
       const chat = await L.panel(SKILLS, "skills-panel");
-      await chat.locator('[data-testid="skill-deck-builder"]').check();
-      // The record step 12 made: the team's decision on slides 2 and 3, offered by the panel.
-      await chat.locator('select[aria-label="팀의 결정"]').selectOption(String(L.seen.decision));
-      await chat.locator('[data-testid="skill-run"]').click();
       const result = chat.locator('[data-testid="skill-result"]');
-      await expect(result).toHaveAttribute("data-tag", /^deck-builder@/, { timeout: 120_000 });
-      await expect(result).toHaveAttribute("data-ok", "true");
-      const skill = (await st()).skills.at(-1) as unknown as { tag: string; patches?: Array<{ slide: number; evidence_refs: string[] }> };
-      expect(skill.tag).toMatch(/^deck-builder@/);
-      expect(skill.patches?.map((p) => p.slide), "patches for the decision's slides only").toEqual([2, 3]);
-      for (const p of skill.patches ?? []) expect(p.evidence_refs.length, `slide ${p.slide} cites evidence`).toBeGreaterThan(0);
+      /** One Deck Builder run from the panel on the step 12 decision; the gate's answer, once the panel shows the result. */
+      const runDeck = async (ok: "true" | "false") => {
+        await chat.locator('[data-testid="skill-deck-builder"]').check();
+        // The record step 12 made: the team's decision on slides 2 and 3, offered by the panel.
+        await chat.locator('select[aria-label="팀의 결정"]').selectOption(String(L.seen.decision));
+        const before = (await st()).skillOutputs.length;
+        await chat.locator('[data-testid="skill-run"]').click();
+        await expect.poll(async () => (await st()).skillOutputs.length, { timeout: 120_000, message: "the Service's output gate answered" }).toBeGreaterThan(before);
+        await expect(result).toHaveAttribute("data-tag", /^deck-builder@/, { timeout: 30_000 });
+        await expect(result).toHaveAttribute("data-ok", ok, { timeout: 30_000 });
+        return (await st()).skillOutputs.at(-1)!;
+      };
+      // Planted first: the coach's answer also patches slide 5, which the decision does not name.
+      const armed = (await (await fetch(`http://127.0.0.1:${PORT}/__cr/plant-deck`, { method: "POST", body: JSON.stringify({ slide: 5 }) })).json()) as { deckPlant: number | null };
+      expect(armed.deckPlant, "the plant is armed").toBe(5);
+      const refused = await runDeck("false");
+      expect((await st()).skills.at(-1)?.planted, "the planted answer patched slide 5").toBe(5);
+      expect(refused.status, "the gate refuses a patch for a slide the decision does not name").toBe(422);
+      expect(refused.problems ?? [], "and names that slide").toEqual(expect.arrayContaining([expect.stringMatching(/slide_not_affected:5$/)]));
+      await expect(result.locator('[data-testid="skill-problems"] li[data-code$="slide_not_affected:5"]'), "the student sees the refusal").toHaveCount(1);
+      await expect(result.locator("h4"), "no proposal is shown for a refused answer").toHaveCount(0);
+      // The real run: what the gate accepted, and what the panel shows the student.
+      const accepted = await runDeck("true");
+      expect(accepted.status, "the gate accepts the proposal").toBe(200);
+      expect(accepted.slides, "patches for the decision's slides only").toEqual([2, 3]);
+      const shown = await result.locator("div:has(> h4)").evaluateAll((els) => els.map((e) => ({ heading: e.querySelector("h4")?.textContent?.trim() ?? "", lines: Array.from(e.querySelectorAll("li")).map((li) => (li.textContent ?? "").trim()) })));
+      expect(shown.map((s) => s.heading), "the panel shows slides 2 and 3 and nothing else").toEqual(["슬라이드 2: 제공 가치", "슬라이드 3: 해결 원리 — AI / Human / Safety"]);
+      for (const s of shown) expect(s.lines.some((l) => /^근거 [1-9]\d*개$/.test(l)), `${s.heading} cites evidence (${JSON.stringify(s.lines)})`).toBe(true);
       await expect(chat.locator('[data-testid="skill-written"]'), "nothing is stored: cr-deck stores and accepts proposals (CR-56)").toHaveCount(0);
-      return { read: `decision ${L.seen.decision} (skills panel)`, record: "slide patch proposals for slides 2 and 3 with evidence refs, accepted by the Service's gate; not stored", verdict: "PARTIAL", note: "CR-56 (stored proposals, accept/reject, pending in the pack) waits for cr-deck" };
+      return {
+        read: `decision ${L.seen.decision} (skills panel)`,
+        record: `planted slide-5 patch refused by the gate (422 slide_not_affected:5, shown as a refusal); then patches for slides ${accepted.slides?.join(", ")} accepted by the gate and shown as ${shown.map((s) => `"${s.heading}" (${s.lines.find((l) => /^근거/.test(l))})`).join(", ")}; not stored`,
+        verdict: "PARTIAL",
+        note: "CR-56 (stored proposals, accept/reject, pending in the pack) waits for cr-deck",
+      };
     },
   },
 ];
@@ -742,7 +787,10 @@ test("CR-T66 scripted run: the fifteen §14 steps in order, each reading the pre
   const L = await runLoop(null);
   record["positive"] = { failed_at: L.failedAt, steps: L.lines };
   expect(L.failedAt, `the loop stopped at step ${L.failedAt}: ${JSON.stringify(L.lines.find((l) => l.verdict === "FAIL"))}`).toBeNull();
-  expect(L.lines.map((l) => l.verdict)).toEqual([...Array(14).fill("PASS"), "PARTIAL"]);
+  // Step 13 is PARTIAL until a panel registers v1 and names it on the decision; step 15 until cr-deck
+  // stores proposals. Any other PARTIAL (step 5 after a re-test) fails the run.
+  expect(L.lines.map((l) => `${l.step} ${l.verdict}`)).toEqual(L.lines.map((l) => `${l.step} ${l.step === 13 || l.step === 15 ? "PARTIAL" : "PASS"}`));
+  expect(L.lines.map((l) => l.step)).toEqual([...Array(15).keys()].map((i) => i + 1));
 });
 
 test("CR-T66 negative: a planted break between steps 8 and 10 (events not reaching the Evidence skill) stops the loop at step 10", async () => {

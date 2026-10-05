@@ -3452,6 +3452,12 @@
           "path": "e2e/curriculum-runtime/app-service.mjs"
         },
         {
+          "path": "e2e/curriculum-runtime/loop-coach.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-gate.mjs"
+        },
+        {
           "path": "e2e/curriculum-runtime/loop-app.spec.ts"
         },
         {

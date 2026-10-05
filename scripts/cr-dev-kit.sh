@@ -10,31 +10,42 @@
 #   3. the isolated development app, scripts/studio-dev.py --provider service run --service local,
 #      built from this checkout and launched with in-memory secret storage (never the login
 #      keychain), the kiosk-practice fixture in its workspace.
+# With --phone, before it prints the tunnel's address, the kit checks that only the published
+# runtime (/l/…) answers through the tunnel: the Service's API, its control routes, dot-segment
+# and encoded paths and a port-suffixed Host must all be refused. If any answers, it stops.
 # Then follow the §14 checklist in docs/testing/curriculum-runtime-dev.md (section cr-e2e).
 #
 # Usage:
 #   bash scripts/cr-dev-kit.sh               published links open on this Mac at http://prj-….localhost:8787 (Chrome)
+#   bash scripts/cr-dev-kit.sh --fresh       start the §14 loop over: the kiosk as handed out (v0) and an app with no
+#                                            stored results (the previous workspace and app state are kept as *.previous)
 #   bash scripts/cr-dev-kit.sh --phone       + an ngrok tunnel: published links open on a phone
 #   bash scripts/cr-dev-kit.sh --real-model  the coach and the skills ask a real model (ANTHROPIC_API_KEY
 #                                            from worker/.dev.vars, into the Service process only; spends credit)
 #   bash scripts/cr-dev-kit.sh --no-app      the Service (and tunnel) only
 #   bash scripts/cr-dev-kit.sh --dry-run     print what would start; start nothing
-#   --state-dir DIR                          default: ~/Library/Application Support/HypeProof Studio Development/cr-dev-kit
+#   --state-dir DIR                          default: one directory per checkout, ~/Library/Application Support/
+#                                            HypeProof Studio Development/cr-dev-kit-<first 12 hex of the SHA-256 of
+#                                            the checkout path> (studio-dev.py binds a state directory to one checkout)
 #
 # Ctrl-C stops the Service and the tunnel. The development app keeps running; quit it yourself.
 # What the Service stored lives in memory and is gone when it stops; the app's token is re-read
-# from the state directory at every launch. Port 8787 must be free (the development app's
-# local Service address): stop scripts/dev-stack.sh's wrangler first.
+# from the state directory at every launch. Without --fresh the workspace and the app's stored
+# results stay from the last run, so the §14 checklist's expected values (v0, "검증 안 됨") hold
+# only after --fresh. Port 8787 must be free (the development app's local Service address): stop
+# scripts/dev-stack.sh's wrangler first.
 set -euo pipefail
 # Written for macOS's /bin/bash 3.2 too: no negative array subscripts, no associative arrays.
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 PORT=8787
 PHONE=0
 REAL=0
 APP=1
 DRY=0
-STATE="$HOME/Library/Application Support/HypeProof Studio Development/cr-dev-kit"
+FRESH=0
+CHECKOUT_ID="$(printf '%s' "$ROOT" | shasum -a 256 | cut -c1-12)"
+STATE="$HOME/Library/Application Support/HypeProof Studio Development/cr-dev-kit-$CHECKOUT_ID"
 NGROK="${NGROK:-$(command -v ngrok || echo /opt/homebrew/bin/ngrok)}"
 
 while [[ $# -gt 0 ]]; do
@@ -43,6 +54,7 @@ while [[ $# -gt 0 ]]; do
     --real-model) REAL=1 ;;
     --no-app) APP=0 ;;
     --dry-run) DRY=1 ;;
+    --fresh) FRESH=1 ;;
     --state-dir) STATE="$2"; shift ;;
     -h|--help) awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; exit 0 ;;
     *) echo "✗ unknown option: $1 (see --help)" >&2; exit 2 ;;
@@ -84,7 +96,8 @@ APP_CMD=(python3 "$ROOT/scripts/studio-dev.py" --state-dir "$STATE" --provider s
 
 if [[ $DRY -eq 1 ]]; then
   echo "state:   $STATE"
-  [[ $PHONE -eq 1 ]] && echo "tunnel:  $NGROK http 127.0.0.1:$PORT  →  HPS_TEST_ORIGIN=https://<ngrok host>"
+  [[ $FRESH -eq 1 ]] && echo "fresh:   $STATE/workspace and $STATE/user-data → *.previous; the kiosk fixture copied in"
+  [[ $PHONE -eq 1 ]] && echo "tunnel:  $NGROK http 127.0.0.1:$PORT  →  HPS_TEST_ORIGIN=https://<ngrok host>, checked before use"
   [[ $PHONE -eq 0 ]] && echo "origin:  HPS_TEST_ORIGIN=http://{project}.localhost:$PORT"
   echo "service: ${SERVICE_CMD[*]}$([[ $REAL -eq 1 ]] && echo "   (HPS_CR_MODEL=real, key from worker/.dev.vars)")"
   [[ $APP -eq 1 ]] && echo "app:     ${APP_CMD[*]}"
@@ -93,6 +106,21 @@ fi
 
 # studio-dev.py claims the state directory (owner.json) before anything is written into it.
 python3 "$ROOT/scripts/studio-dev.py" --state-dir "$STATE" status >/dev/null
+
+# --fresh: the §14 loop from its start. The Service is empty at every start; this empties the app's
+# side too (its stored browser and verification results live in user-data) and puts the kiosk back
+# as handed out. One previous generation of each is kept.
+if [[ $FRESH -eq 1 ]]; then
+  if pgrep -f -- "--user-data-dir=$STATE/user-data" >/dev/null 2>&1; then
+    fail "the development app of this state directory is running: quit it first (--fresh replaces its state)"
+  fi
+  for part in workspace user-data; do
+    if [[ -e "$STATE/$part" ]]; then
+      rm -rf "$STATE/$part.previous"
+      mv "$STATE/$part" "$STATE/$part.previous"
+    fi
+  done
+fi
 
 PIDS=()
 cleanup() {
@@ -143,6 +171,60 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 grep -q "^READY" "$SERVICE_LOG" || { tail -20 "$SERVICE_LOG" >&2; fail "the local Service did not start"; }
+
+# ── 2b. the tunnel's check (--phone): only the published runtime answers through it ─────
+# Each probe is classified by what answered it: the gate's refusal (x-hps-dev-gate, from
+# e2e/curriculum-runtime/service-gate.mjs), the Service's router (x-request-id), the published
+# runtime (its referrer-policy header) or none of them (ngrok's edge). A probe that must be refused
+# and was answered by the router or the runtime stops the kit; the trap then ends the tunnel and
+# the Service, so nothing stays exposed.
+answered_by() {  # answered_by <URL> [Host] → "<status> <gate|router|runtime|edge>"
+  local hdr=(-H "ngrok-skip-browser-warning: 1")
+  [[ -n "${2:-}" ]] && hdr+=(-H "Host: $2")
+  { curl -s -o /dev/null -D - --path-as-is --max-time 20 "${hdr[@]}" "$1" 2>/dev/null || true; } | tr -d '\r' | awk '
+    NR == 1 { status = $2 }
+    tolower($1) == "x-hps-dev-gate:" { gate = 1 }
+    tolower($1) == "x-request-id:" { router = 1 }
+    tolower($1) == "referrer-policy:" { runtime = 1 }
+    END { print (status ? status : "000"), (gate ? "gate" : router ? "router" : runtime ? "runtime" : "edge") }'
+}
+if [[ $PHONE -eq 1 ]]; then
+  TUNNEL_HOST="${URL#https://}"
+  UPPER_HOST="$(printf '%s' "$TUNNEL_HOST" | tr '[:lower:]' '[:upper:]')"
+  LEAKS=""
+  N_LOCAL=0
+  N_EDGE=0
+  # As the tunnel delivers a request (its Host), sent on this Mac: the gate itself must refuse each.
+  for probe in "$TUNNEL_HOST /v1/health" "$TUNNEL_HOST /v1/profile" "$TUNNEL_HOST /__cr/state" "$TUNNEL_HOST /admin/cohorts" \
+               "$TUNNEL_HOST /l/%2e%2e/v1/profile" "$TUNNEL_HOST /l/../v1/profile" "$TUNNEL_HOST /l/x/..%2f..%2fv1/profile" \
+               "$TUNNEL_HOST:443 /v1/profile" "$UPPER_HOST /v1/profile"; do
+    got="$(answered_by "http://127.0.0.1:$PORT${probe#* }" "${probe%% *}")"
+    N_LOCAL=$((N_LOCAL + 1))
+    [[ "$got" == "404 gate" ]] || LEAKS="$LEAKS
+    Host ${probe%% *} ${probe#* } → $got"
+  done
+  # Through the tunnel itself: refused by the gate, or never delivered by ngrok's edge.
+  for path in /v1/health /v1/profile /__cr/state /l/%2e%2e/v1/profile /l/../v1/profile; do
+    got="$(answered_by "$URL$path")"
+    N_EDGE=$((N_EDGE + 1))
+    case "$got" in
+      "404 gate" | [345]??" edge") ;;
+      *) LEAKS="$LEAKS
+    $URL$path → $got" ;;
+    esac
+  done
+  # Controls, so a check that sees nothing cannot pass: this Mac reaches the API, and the tunnel
+  # reaches the published runtime (an unknown link answers the runtime's own 404).
+  [[ "$(answered_by "http://127.0.0.1:$PORT/v1/health")" == "200 router" ]] || LEAKS="$LEAKS
+    control: /v1/health on this Mac did not answer 200 from the Service"
+  [[ "$(answered_by "$URL/l/AAAAAAAAAAAAAAAAAAAAAA/")" == "404 runtime" ]] || LEAKS="$LEAKS
+    control: the published runtime did not answer through the tunnel"
+  if [[ -n "$LEAKS" ]]; then
+    echo "✗ tunnel check:$LEAKS" >&2
+    fail "the tunnel would expose more than the published runtime, or the check could not run; the tunnel and the Service are stopped"
+  fi
+  echo "▶ tunnel checked: $N_LOCAL requests as the tunnel delivers them and $N_EDGE through $URL refused; the published runtime answers through it"
+fi
 
 # ── 3. the development app ────────────────────────────────────────────────────
 WORKSPACE="$STATE/workspace"

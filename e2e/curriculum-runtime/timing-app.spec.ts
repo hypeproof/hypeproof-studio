@@ -14,8 +14,11 @@
 //   CR-T56   element capture to agent context, N samples. A sample runs from the click on
 //            "주문 시작" in the preview (inspect mode on) to the moment the chat shows the element
 //            queued for the next message with its crop. p50 under 1 s, and every crop must be
-//            the element's box, not the page. Negative control: a planted full-page screenshot
-//            in place of the crop (captured from the same tab) is reported as a miss.
+//            the element's box, not the page. Negative controls: a planted 1.5 s delay in the
+//            capture path (the preview tab's CDP channel answers Page.captureScreenshot late, so
+//            the crop reaches the chat late) is reported as a miss by the same instrument; and a
+//            full-page screenshot of the same tab fed to the crop check in place of the crop is
+//            reported as a miss (that one checks the crop check only, not the capture path).
 //
 // Both verdicts and every raw sample are written to e2e/test-results/cr-app/timing-result.json.
 // Needs an unlocked screen (recon F7): when locked the run is skipped as NOT RUN.
@@ -37,6 +40,9 @@ const PLANTED_SAMPLES = 3;
 const REFRESH_LIMIT_MS = 2000; // CR-59
 const CAPTURE_LIMIT_MS = 1000; // CR-60
 const PLANTED_DELAY_MS = 3000;
+const PLANTED_CAPTURE_DELAY_MS = 1500;
+/** A web contents as the main-process callbacks below use it (the e2e package has no Electron types). */
+type Wc = { getURL(): string };
 
 let ctx: AppContext | undefined;
 const svc = new Service();
@@ -162,7 +168,7 @@ async function openKioskPreview(): Promise<{ app: ElectronApplication; win: Page
 /** Is the preview tab's document loaded? */
 async function pageReady(app: ElectronApplication, origin: string): Promise<boolean> {
   return app.evaluate(async ({ webContents }, o) => {
-    const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(`${o}/`));
+    const wc = webContents.getAllWebContents().find((w: Wc) => w.getURL().startsWith(`${o}/`));
     if (!wc) return false;
     try {
       return (await wc.executeJavaScript("document.readyState")) === "complete";
@@ -189,7 +195,7 @@ async function watchForMarker(app: ElectronApplication, origin: string, marker: 
       if (!s.busy) {
         s.busy = true;
         try {
-          const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(`${a.origin}/`));
+          const wc = webContents.getAllWebContents().find((w: Wc) => w.getURL().startsWith(`${a.origin}/`));
           if (wc && (await wc.executeJavaScript(probe)) === s.want) s.seenAt = Date.now();
         } catch {
           /* the document is being replaced; ask again */
@@ -237,14 +243,14 @@ async function refreshSample(app: ElectronApplication, wsDir: string, origin: st
  */
 async function plantRefreshDelay(app: ElectronApplication, origin: string, on: boolean): Promise<string> {
   return app.evaluate(({ webContents, session }, a) => {
-    const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(`${a.origin}/`));
+    const wc = webContents.getAllWebContents().find((w: Wc) => w.getURL().startsWith(`${a.origin}/`));
     if (!wc) return "no preview tab";
     if (wc.session === session.defaultSession) return "the preview uses the default session; nothing planted";
     if (!a.on) {
       wc.session.webRequest.onBeforeRequest(null);
       return "removed";
     }
-    wc.session.webRequest.onBeforeRequest({ urls: [`${a.origin}/*`] }, (details, callback) => {
+    wc.session.webRequest.onBeforeRequest({ urls: [`${a.origin}/*`] }, (details: { resourceType: string; url: string }, callback: (response: Record<string, never>) => void) => {
       const doc = details.resourceType === "mainFrame" || details.resourceType === "subFrame";
       if (doc && !details.url.includes("/__hp_livereload")) setTimeout(() => callback({}), a.delay);
       else callback({});
@@ -361,7 +367,7 @@ async function chatTabForward(win: Page): Promise<void> {
 /** Click an element of the preview tab like a person: returns the wall-clock time of the press and the element's geometry. */
 async function clickInPreview(app: ElectronApplication, origin: string, id: string) {
   return app.evaluate(async ({ webContents }, a) => {
-    const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(`${a.origin}/`))!;
+    const wc = webContents.getAllWebContents().find((w: Wc) => w.getURL().startsWith(`${a.origin}/`))!;
     const geo = await wc.executeJavaScript(`(() => { const r = document.getElementById(${JSON.stringify(a.id)}).getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), width: r.width, height: r.height, vw: innerWidth, vh: innerHeight, dpr: devicePixelRatio }; })()`);
     wc.sendInputEvent({ type: "mouseMove", x: geo.x, y: geo.y });
     const pressedAt = Date.now();
@@ -371,52 +377,131 @@ async function clickInPreview(app: ElectronApplication, origin: string, id: stri
   }, { origin, id });
 }
 
-test("CR-T56 in-app: element capture to agent context, p50 under 1 s with the element's crop; a planted full-page screenshot is a miss", async () => {
+type Geo = { width: number; height: number; vw: number; vh: number; dpr: number };
+type CaptureSample = { ms: number; png: { width: number; height: number } | null; geo: Geo } | { failure: string; geo: Geo };
+
+/**
+ * One CR-T56 sample: inspect mode on, a click on "주문 시작" in the preview, then the earliest chat
+ * surface showing the queued element with its crop. `clear` takes the previous sample's element off first.
+ */
+async function captureSample(app: ElectronApplication, win: Page, origin: string, label: string, clear: boolean): Promise<CaptureSample> {
+  await chatTabForward(win);
+  if (clear) await removeQueuedElement(win);
+  await armChipClocks(win);
+  await runCommand(win, PICK);
+  // Inspect mode starts right after the host's notice; the clock starts at the click, not here.
+  await win.waitForTimeout(900);
+  const { pressedAt, geo } = await clickInPreview(app, origin, "begin");
+  const end = Date.now() + 20_000;
+  let chip = { at: 0, src: null as string | null };
+  while (!chip.at && Date.now() < end) {
+    await win.waitForTimeout(10);
+    chip = await firstChip(win);
+  }
+  if (!chip.at) {
+    const notices: string[] = [];
+    for (const chat of await chatSurfaces(win)) notices.push(...(await chat.locator(".hps-page-notice").allInnerTexts().catch(() => [])));
+    return { failure: `${label}: no element reached the chat within 20 s (notices: ${JSON.stringify(notices)})`, geo };
+  }
+  return { ms: chip.at - pressedAt, png: chip.src ? pngSize(chip.src.replace(/^data:image\/png;base64,/, "")) : null, geo };
+}
+
+/**
+ * Planted delay (CR-T56 negative): the integrated browser forwards the extension's CDP commands
+ * through the preview tab's own `webContents.debugger` (VS Code's browser view, main process), so
+ * answering its Page.captureScreenshot 1.5 s late delays the element crop on the real capture path.
+ * Removed afterwards (the debugger's own method again).
+ */
+async function plantCaptureDelay(app: ElectronApplication, origin: string, on: boolean): Promise<string> {
+  return app.evaluate(({ webContents }, a) => {
+    const wc = webContents.getAllWebContents().find((w: Wc) => w.getURL().startsWith(`${a.origin}/`));
+    if (!wc) return "no preview tab";
+    type Send = (method: string, ...rest: unknown[]) => Promise<unknown>;
+    const dbg = wc.debugger as { sendCommand: Send };
+    const g = globalThis as unknown as { __crCaptureDelay?: { own: boolean; send: Send } };
+    if (!a.on) {
+      if (!g.__crCaptureDelay) return "nothing planted";
+      if (g.__crCaptureDelay.own) dbg.sendCommand = g.__crCaptureDelay.send;
+      else delete (dbg as Partial<{ sendCommand: Send }>).sendCommand;
+      g.__crCaptureDelay = undefined;
+      return "removed";
+    }
+    if (g.__crCaptureDelay) return "already planted";
+    const send = dbg.sendCommand;
+    g.__crCaptureDelay = { own: Object.prototype.hasOwnProperty.call(dbg, "sendCommand"), send };
+    dbg.sendCommand = function (this: unknown, method: string, ...rest: unknown[]) {
+      const answer = send.call(this, method, ...rest);
+      return method === "Page.captureScreenshot" ? answer.then((r) => new Promise((resolve) => setTimeout(() => resolve(r), a.delay))) : answer;
+    };
+    return "planted";
+  }, { origin, on, delay: PLANTED_CAPTURE_DELAY_MS });
+}
+
+test("CR-T56 in-app: element capture to agent context, p50 under 1 s with the element's crop; a planted capture delay and a full-page screenshot are misses", async () => {
   const { app, win, origin } = await openKioskPreview();
   const samples: number[] = [];
   const failures: string[] = [];
   const misses: string[] = [];
   const crops: Array<{ png: { width: number; height: number } | null; el: { width: number; height: number }; dpr: number }> = [];
-  let last: { geo: { width: number; height: number; vw: number; vh: number; dpr: number } } | null = null;
+  let last: { geo: Geo } | null = null;
   for (let i = 1; i <= SAMPLES; i++) {
-    await chatTabForward(win);
-    if (i > 1) await removeQueuedElement(win);
-    await armChipClocks(win);
-    await runCommand(win, PICK);
-    // Inspect mode starts right after the host's notice; the clock starts at the click, not here.
-    await win.waitForTimeout(900);
-    const { pressedAt, geo } = await clickInPreview(app, origin, "begin");
-    last = { geo };
-    const end = Date.now() + 20_000;
-    let chip = { at: 0, src: null as string | null };
-    while (!chip.at && Date.now() < end) {
-      await win.waitForTimeout(10);
-      chip = await firstChip(win);
-    }
-    if (!chip.at) {
-      const notices: string[] = [];
-      for (const chat of await chatSurfaces(win)) notices.push(...(await chat.locator(".hps-page-notice").allInnerTexts().catch(() => [])));
-      failures.push(`pick ${i}: no element reached the chat within 20 s (notices: ${JSON.stringify(notices)})`);
+    const s = await captureSample(app, win, origin, `pick ${i}`, i > 1);
+    last = { geo: s.geo };
+    if ("failure" in s) {
+      failures.push(s.failure);
       continue;
     }
-    samples.push(chip.at - pressedAt);
-    const png = chip.src ? pngSize(chip.src.replace(/^data:image\/png;base64,/, "")) : null;
-    crops.push({ png, el: { width: geo.width, height: geo.height }, dpr: geo.dpr });
-    const problem = cropProblem(png, geo, { width: geo.vw, height: geo.vh }, geo.dpr);
+    samples.push(s.ms);
+    crops.push({ png: s.png, el: { width: s.geo.width, height: s.geo.height }, dpr: s.geo.dpr });
+    const problem = cropProblem(s.png, s.geo, { width: s.geo.vw, height: s.geo.vh }, s.geo.dpr);
     if (problem) misses.push(`pick ${i}: ${problem}`);
   }
   const verdict = timingVerdict(samples, SAMPLES, CAPTURE_LIMIT_MS, failures, misses);
 
-  // Negative control: the same crop check, fed a full-page screenshot of the same tab in place of the crop.
+  // Negative control 1: the capture path delayed (the preview tab's CDP channel), the same instrument.
+  const planted = await plantCaptureDelay(app, origin, true);
+  const slow: number[] = [];
+  const slowFailures: string[] = [];
+  const slowMisses: string[] = [];
+  try {
+    for (let i = 1; i <= PLANTED_SAMPLES; i++) {
+      const s = await captureSample(app, win, origin, `planted ${i}`, true);
+      if ("failure" in s) {
+        slowFailures.push(s.failure);
+        continue;
+      }
+      slow.push(s.ms);
+      const problem = cropProblem(s.png, s.geo, { width: s.geo.vw, height: s.geo.vh }, s.geo.dpr);
+      if (problem) slowMisses.push(`planted ${i}: ${problem}`);
+    }
+  } finally {
+    await plantCaptureDelay(app, origin, false);
+  }
+  const delayedVerdict = timingVerdict(slow, PLANTED_SAMPLES, CAPTURE_LIMIT_MS, slowFailures, slowMisses);
+
+  // Negative control 2, the crop check only: a full-page screenshot of the same tab in place of the crop.
   const full = await app.evaluate(async ({ webContents }, o) => {
-    const wc = webContents.getAllWebContents().find((w) => w.getURL().startsWith(`${o}/`))!;
+    const wc = webContents.getAllWebContents().find((w: Wc) => w.getURL().startsWith(`${o}/`))!;
     return (await wc.capturePage()).toPNG().toString("base64");
   }, origin);
   const fullPng = pngSize(full);
   const plantedProblem = last ? cropProblem(fullPng, last.geo, { width: last.geo.vw, height: last.geo.vh }, last.geo.dpr) : "no sample";
   const plantedVerdict = timingVerdict(samples, SAMPLES, CAPTURE_LIMIT_MS, failures, plantedProblem ? [...misses, `planted: ${plantedProblem}`] : misses);
-  record["CR-T56"] = { limit_ms: CAPTURE_LIMIT_MS, verdict, samples, crops: crops.slice(0, 3), planted: { full_page: fullPng, problem: plantedProblem, verdict: plantedVerdict } };
+  record["CR-T56"] = {
+    limit_ms: CAPTURE_LIMIT_MS,
+    verdict,
+    samples,
+    crops: crops.slice(0, 3),
+    planted: {
+      capture_delay: { how: planted, delay_ms: PLANTED_CAPTURE_DELAY_MS, verdict: delayedVerdict, samples: slow },
+      full_page: { png: fullPng, problem: plantedProblem, verdict: plantedVerdict },
+    },
+  };
 
+  expect(planted, "instrument: the delay was planted on the preview tab's CDP channel").toBe("planted");
+  expect(slow.length, `negative control: every planted pick reached the chat (${JSON.stringify(slowFailures)})`).toBe(PLANTED_SAMPLES);
+  expect(slow.every((s) => s >= PLANTED_CAPTURE_DELAY_MS), `negative control: every planted sample carries the delay (${JSON.stringify(slow)})`).toBe(true);
+  expect(delayedVerdict.met, `negative control: a planted ${PLANTED_CAPTURE_DELAY_MS} ms capture delay is reported as a miss (${JSON.stringify(delayedVerdict)})`).toBe(false);
   expect(plantedProblem, "negative control: a full-page screenshot in place of the crop is reported").toMatch(/whole viewport/);
   expect(plantedVerdict.met, "negative control: the sample set with the planted crop is a miss").toBe(false);
   expect(verdict.failures, "every pick reached the chat").toEqual([]);
