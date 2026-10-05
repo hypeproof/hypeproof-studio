@@ -203,3 +203,192 @@ denial with edit preservation, and the negative path where clearing a visible se
 removes the hidden target and blocks create/save until the setting is reselected without
 discarding curriculum edits. It also checks no credential storage and 390/1280px layout.
 This is local evidence; production deployment and live classroom behavior are separate.
+
+<a id="feedback-loop-20261005"></a>
+
+## Feedback loop — a person's feedback, the learner's answer, the retrospective and the next draft (#1013) · 2026-10-05
+
+First slice of ledger item `feedback-loop` ([#1013](https://github.com/jayleekr/hypeproof-studio/issues/1013)): AE-42/AE-43 in
+[learning-agent-experience](../requirements/learning-agent-experience.md) and CH-05/EDU-03 here. The requirement rows are not
+changed; this section records what was built and what was run. Everything sits behind the Service switch
+`HPS_FEEDBACK_LOOP=enabled`. Unset (the default), the new routes answer 404 `feedback_loop_unavailable`, no 0039 table is read or
+written (the suite checks this on a database without the 0039 tables), share reads keep their exact shape, and `/authoring` hides
+section 07 once it connects. Migration `0039-feedback-loop.sql` must be applied before the switch is turned on (it is 0039 because
+0038 is the Curriculum Runtime review migration of #1398, developed at the same time). It is not in `deploy-worker.yml`: applying it
+to production D1 and turning the switch on is Jay's decision (human-only step).
+
+| Step | Contract (observable) | Rows |
+|---|---|---|
+| Learner's answer | After a person answered one of the learner's shares (status `answered` or `resolved`, non-empty feedback), the learner may record 고치기 / 그대로 두기 / 보류 and a reason on `/sharing` (`POST /v1/classroom/shares/:id/response`). Optional, nothing pre-selected, written once per feedback text (bound to its sha256): the same answer again is a replay, a different one is `already_answered`. Refused before any answer (`no_human_feedback`) and on an expired share (404). Feedback saved while still "검토 중" (the `/manage` default) is shown to the learner without a form; a submit that races a return to "검토 중" reads "강사가 아직 답변을 마치지 않았습니다…" and keeps the input. The answer shown (on `/sharing`, on `/manage` and to a retrospective) is the one bound to the feedback text as it is stored now, whatever the share's status: a return to "검토 중" with the same text leaves it current, and feedback edited back to a text the learner already answered shows that answer again, not a newer one. Only when no answer is bound to the current text is the newest shown, marked "이전 피드백에 대한 결정", and a new answer is allowed once the feedback is answered again. The reason is masked for credentials before storage. The share's status, revision and the learner's separate "해결됐어요" confirmation are untouched. The instructor sees the answer in the `/manage` share detail and in `/authoring` 07 "내용 보기" (both the audited share view); withdrawal and expiry delete it with the share (`ON DELETE CASCADE`) | AE-43 |
+| Lesson of a share | With the switch on, a new share records the lesson its sender was executing when they sent it (`classroom_share_lessons`: course, version, lesson sha256, source; no content; deleted with the share). It is decided by the chat gate's own resolver (`resolveEffectiveLesson`): the learner code's lesson, or the setting the learner is switched to where settings are enforced. Both are checked: under `HPS_LESSON_BINDINGS=enforce`, a learner switched to another frozen version by a lesson setting (saved, sent, held by the device and switched through the existing routes) records that version with source `setting`, and a learner of the same class who was not switched records the code's version with source `token`. A code that names no lesson, a share sent before the switch, or a failed write leaves no record, and that share reads `lesson: unknown` | AE-42 |
+| Sources | `GET …/authoring/:course/retrospectives/sources` lists only shares sent to this instructor, in the course's profile and cohort, unexpired, and not recorded under another course: metadata, the recorded version (or none), and which parts hold something, each with whose words it is (`learner`, `ai`, `tool`, `artifact`, `human`). Never content; `/authoring` reads content through the existing instructor share route, which writes the view audit the learner can see | AE-43, ADM-07/14 |
+| Retrospective | `hps-lesson-retrospective/1` about one frozen version: hypothesis, findings that cite share parts by reference (never a copy), keep/revise/hold decisions per step or for the whole lesson with reasons, and the instructor's notes on what was not observed (all masked for credentials before storage). A cited share must have been sent after the version was frozen (`source_before_version`) and, where its lesson was recorded, under this course and version (`source_other_lesson`); a cited learner decision must answer the feedback as it reads now (`learner_response_stale`). Recomputed by the Service on every read: the version's digest and per-step help condition; a finding is `observed` only on the learner's own words (question, prompt, verification, their answer to feedback), decided by the measurement core's one predicate `isHumanEvidence` over each part read as an event. The instructor's own feedback (actor `teacher`), an AI answer, a tool line or a URL never make a finding observed (`no_person_source`); feedback sets `human_feedback: present`, otherwise it is unobserved. A finding resting on a share whose lesson was not recorded reads `lesson_unconfirmed`; one citing a decision about feedback that was later edited or cleared reads `stale_learner_response`, and a cleared feedback part reads `part_empty`, not withdrawn. `assisted` only on a cited help request; `independent` is refused (`unsupported_independence`); the denominator (current roster, learners with a cited source, the rest unobserved; help use and stopping reported unobserved, not zero). A withdrawn or expired source reads unavailable on the next read and its finding falls back to unobserved. Score-shaped keys are refused. Request bodies may be up to `RETRO_BODY_MAX` (about 635 KiB: every field at its limit at six JSON bytes per unit); a larger body is 413 `too_large`. At most 50 retrospectives about one version of a course (429 `limit_reached`); the count is per version, so a course that runs for many weeks, each next draft frozen as a new version, is never closed by its history. The list shows the newest 50 and says when there are more (`has_more`) | AE-42, AE-43 |
+| Next draft | `POST …/retrospectives/:id/next-draft` writes the frozen version's content (Service bindings stripped, the same reuse `/authoring` offers) as a new draft revision and marks the retrospective applied, in one batch whose second statement lands only with its own draft write. The draft saves again as an ordinary draft body. Refused while a cited share is no longer readable or is not evidence about the version (`source_unavailable`), when the draft moved (`draft_changed`), when the version no longer reads the same (`lesson_unavailable`), for an independent course whose execution template is not reviewed now (`template_not_reviewed`), when the course now runs on another profile than the version (`profile_changed`, which also refuses editing the retrospective and writing a new one), or a second time (`already_applied`). The frozen version, its rehearsals and its confirmation are never written; nothing is frozen or confirmed automatically. An applied retrospective is immutable (`retrospective_applied`); a correction is a new one | AE-42, CH-05, VER-01 |
+| Next rehearsal | The retrospective names the first version frozen from that draft revision onward (by draft revision; a candidate frozen later does not replace it, whatever its name) and its learner-condition rehearsal state (`readinessOf`, the G2 store) | AE-42, VER-02 |
+
+**Share lifetime.** A share lives at most 24 hours (the learner's 5–1440-minute duration, capped by the learning code) and is then
+purged. After that the findings citing it read unobserved, and "다음 초안 시작" is refused (`source_unavailable`) until the
+instructor removes those citations. `/authoring` 07 states the window. Whether a retrospective may start a draft over expired (not
+withdrawn) sources, or instructors need a longer-lived reference, is an open product decision for Jay.
+
+### Run record
+
+Synthetic accounts and shares only. No model call, no real class, no person's real feedback, no installed Studio, no production
+database. Source: branch `feat/feedback-loop` (`099fe830`, `3a6c8269`, the review-round-1 fix `2d51e1c0` and the review-round-2
+fix commit on top of it) on origin/main `4291e796`, macOS arm64, Node 24.4.1, Chromium (Playwright). Regression, rerun after
+review round 2: worker `npm test` and `typecheck`, chalk `npm test` and `typecheck`, the D1 suites `test:feedback-loop:d1`,
+`test:classroom:d1`, `test:authoring:d1`, `test:classroom-ops:d1`, the browser suites `test:classroom`, `test:classroom-ops`,
+`test:classroom-ops-help`, `test:classroom-authoring-g2`, `test:classroom-authoring-mission`, `test:chalk-authoring`, and
+`scripts/next-work.py --check` and `scripts/check-registry.py` pass on the same tree.
+
+| Test | What ran | Result | Evidence |
+|---|---|---|---|
+| T-28 (CH-05) | Selected share A cited by part; share B to another instructor, a share of another class (other profile), an expired one and an unknown id refused with one answer (`source_unavailable`); a share sent before the version was frozen and one recorded under another course of the same profile refused by name; A's help request withdrawn after citing → the next draft is refused and nothing is written; the instructor removes it, then the draft starts from the version that ran, never from the drifted draft; no freeze or confirmation happens on its own | PARTIAL. The permission and withdrawal half PASS (synthetic: Service SQLite, local workerd/D1, Chromium). The model-generated draft half is NOT RUN, because it is not built: the next draft is the run version's content and holds no reference to record A (only the retrospective row links to A), and no real-model check ran | `worker/test/feedback-loop.test.mjs`, `worker/test/feedback-loop-d1.test.mjs`, `e2e/classroom/feedback-loop.mjs` |
+| T-20 (EDU-03, EDU-04) | EDU-03: a submission with its change reason and checks (the existing share fields) is cited part by part with its origin. EDU-04 (an independent task different from the demo, and the scope of help used) has no record to cite yet | EDU-03 part PASS (synthetic); EDU-04 NOT RUN (not built); instructor evaluation NOT RUN | same |
+| T-44 (EDU-05) | Direct / helped / expert-delegated: only the refusal half exists (`independent` refused, `assisted` only on a help request, a missing record stays unknown) | refusal controls PASS; the self-reliance record and the human review NOT RUN (not built) | `worker/test/feedback-loop.test.mjs` |
+
+Worker (`npm --prefix worker run test:feedback-loop`, 26 checks) adds, for review round 1: the measurement core's predicate decides
+every part's evidence (the instructor's feedback beside an AI answer reads `unobserved`, `no_person_source`, `human_feedback:
+present`); the switch-off checks run on a database with the 0039 tables dropped and fail on any attempt to reach them; each share
+records its lesson (a learner code from the existing 학생 초대 route records `token`, a code without a lesson records nothing); the
+earlier/other-course/unknown-lesson cases; the "검토 중" and expired-share refusals; credential masking in the learner's reason and in
+every retrospective text field; the stale-decision mark and refusal; a next draft from a version with a feature policy saves as an
+ordinary draft; an unreviewed independent template is refused at next draft; a changed version document leaves the retrospective
+unreadable for view, edit and next draft; a Korean doc at every field limit is accepted and a larger body is `too_large`.
+Review round 2 adds: which answer a reader sees (rules, and a route check: feedback A → B → A shows the answer to A again on
+`/sharing`, on `/manage`, in a conflict and to a retrospective; a third, unanswered text shows the newest answer marked as earlier and
+refuses citing it; a return to "검토 중" with the same text keeps the answer current while a new one is refused); the lesson of a share
+where settings are enforced, on its own fixture (a learner switched to S2 through the lesson-setting routes records S2 `setting`, an
+unswitched learner S1 `token`, and each version's retrospective takes only its own share); "next" stays the first candidate after a
+later one is frozen; `profile_changed` at next draft, edit and create after the course moved to another profile; the per-version
+limit and `has_more`; inherited names (`constructor`, `__proto__`, …) refused as parts. The D1 suite (`test:feedback-loop:d1`, 2
+checks) adds the enforced-setting case on a second local D1 database that holds the whole schema.
+
+Browser (`npm --prefix e2e run test:classroom-feedback-loop`, 9 checks): the learner records 고치기 and a reason on `/sharing` at 390px
+(nothing pre-selected, one answer per feedback text); feedback still "검토 중" shows no form, and an answer taken back to "검토 중"
+after the form appeared is refused by name with the input kept; the instructor sees the decision in the `/manage` share detail;
+`/authoring` 07 is hidden while the switch is off and shown when it is on; it lists only the shares sent to the instructor with the
+version each was sent under and whose words each part is, and opening one writes a view audit; the saved retrospective shows 관찰 1
+"관찰됨 — 학생이 쓴 말이 근거입니다", 관찰 2 (an AI answer alone) "미관찰", 관찰 3 (a help request) "도움을 받음", 관찰 4 (the AI answer and
+the instructor's own feedback) "미관찰 … 사람의 피드백 있음", and the denominator; after the learner withdraws the help request the finding
+reads "근거였던 공유가 철회되었거나 만료되어 볼 수 없습니다" and "다음 초안 시작" is refused; after the instructor removes it the next
+draft starts from the version that ran (the drifted title is replaced, the run version byte-identical); freezing the edited draft and
+issuing a rehearsal code shows "다음 후보 … · 리허설: 리허설 중"; no horizontal scroll at 390px, no page errors; and (review round 2) a
+course with 51 retrospectives (50 about one version, one about the next) loads as "돌아보기 50개(최근 50개만)". Screenshots:
+`e2e/test-results/classroom-feedback-loop/fl-01…05`.
+
+**Planted defects** (each applied alone to the source, the suite rerun, the source restored; every one turned it red). First slice:
+
+| Suite | Planted defect | Red at |
+|---|---|---|
+| worker (SQLite) | an AI answer counted as a person's words | rules: whose words |
+| worker | the recipient boundary dropped when citing | `share-other-teacher` |
+| worker | expiry ignored when citing | `share-expired` |
+| worker | `independent` accepted | `unsupported_independence` |
+| worker | an answer allowed before any feedback | "no answer from a person yet" |
+| worker | the next draft taken from the current draft | "the next draft starts from the version that ran" |
+| worker | the applied mark not tied to its own draft write | "a stale draft revision changes nothing" |
+| worker | a withdrawn source still starts a draft | "a withdrawn share cannot start the next draft" |
+| worker | a withdrawn share still named | "nothing about a withdrawn share is shown" |
+| worker | `assisted` without a help request | "a submission is no record of help" |
+| D1 | no `ON DELETE CASCADE` on the answers | the withdrawal count |
+| D1 | `CREATE TABLE` without `IF NOT EXISTS` | the second apply |
+| D1 | the answer insert without `ON CONFLICT DO NOTHING` | the duplicate answer (UNIQUE constraint) |
+| Chalk | the learner's answer not forwarded | `POST …/response` |
+| Chalk | retrospectives widened to `DELETE` | `DELETE …/rt-…` |
+| browser | an AI answer labelled as a person's feedback | the sources list |
+| browser | the learner's decision pre-selected | "nothing is pre-selected" |
+| browser | the next draft kept the drifted draft | "the editor now holds the version that ran" |
+
+Review round 1 (a scripted run: one exact replacement per defect, suite rerun, file restored and its hash checked). Where a pure
+rule check went red first, the same defect was rerun with the rule checks skipped to show the route check catches it as well:
+
+| Suite | Planted defect | Red at |
+|---|---|---|
+| worker | the instructor's feedback counted as evidence about the learner (by origin, or by giving feedback the actor `user`) | rules: whose words; route: "negative control (review F1)" |
+| worker | no freeze-time check | rules: which version; route: "sent before the version existed" |
+| worker | the recorded lesson ignored | rules: which version; route: "recorded under another course of the same profile" |
+| worker | an unrecorded lesson read as this version | rules; route: "reads 'lesson unknown'" |
+| worker | `/sources` offers shares recorded under another course | "sources: … never one recorded under another course" |
+| worker | the lesson never recorded | "switch on: each share records the lesson" |
+| worker | the lesson recorded with the switch off | "switch off … WITHOUT migration 0039" (an attempt to reach a dropped table) |
+| worker | the switch check after the read in `responsesFor` | "switch off … WITHOUT migration 0039" (500 on the share read) |
+| worker | `hasFeedback` without its status check | rules-skipped run and full run: "AE-43 boundaries" (feedback under review) |
+| worker | no expiry check when answering | "an expired share takes no answer" |
+| worker | the learner's reason not masked | "a credential pasted into the reason is masked" |
+| worker | the hypothesis / a finding text / a decision reason / a note not masked (four runs) | "a credential in the instructor's own text is masked" |
+| worker | the next draft keeps the Service binding | "the Service binding is stripped and the draft saves" |
+| worker | no template admission at next draft | `template_not_reviewed` |
+| worker | the view ignores the base digest / the edit ignores it (two runs) | "a changed document leaves it unreadable" |
+| worker | the old 64 KiB body cap | "a doc at every field limit in Korean is accepted" |
+| worker | a stale decision accepted at write / not marked at read (two runs) | rules; route: probe P4 check |
+| D1 | no `ON DELETE CASCADE` on the lesson record | "the lesson record goes with the share" |
+| D1 | the lesson never recorded | the lesson record on D1 |
+| browser | the decision form for any feedback (the first slice's predicate) | "feedback still under review offers no decision form" |
+| browser | the reason map dropped (every 409 reads "기록이 변경됐습니다") | "강사가 아직 답변을 마치지 않았습니다" |
+| browser | the `/manage` detail without the learner's decision | "피드백에 대한 학생의 결정" |
+| browser | section 07 never hidden | `#retro` hidden with the switch off |
+| browser | the page labels a finding observed on feedback alone | "관찰 4 · 미관찰" |
+
+Review round 2 (the same scripted method; script and results kept outside the repository). The round-2 reviewer's own set (an
+unrecorded lesson read as this version, a stale revision accepted, a second answer overwriting, the rehearsal state never read, the
+freeze-second boundary, the `/manage` detail without the answer, a stale decision accepted at write, the learner's answer counted as
+AI, expiry ignored in the view, help use reported as 0, a resolved share refused) was rerun on this tree and every defect turned it red:
+
+| Suite | Planted defect | Red at |
+|---|---|---|
+| worker | the share's lesson resolved without its class run (`classRunId: null`, the code-only path) | "lesson of a share where settings are enforced" |
+| worker | the resolver skipped: the code's lesson recorded | "lesson of a share where settings are enforced" |
+| D1 | `classRunId: null` | the enforced-setting lesson record on D1 |
+| worker | the answer shown chosen by time only, never the one bound to the current text | rules: which answer; rules-skipped run: route "which answer is shown" |
+| worker | the fallback picks the oldest answer | rules: which answer; rules-skipped run: route "which answer is shown" |
+| worker | `/sharing` and `/manage` compare the answer only while the share is answered | "which answer is shown" (back under "검토 중") |
+| worker | the retrospective compares the answer only while the share is answered | "which answer is shown" ("the retrospective reads the same answer as current") |
+| worker | "next" picks the newest candidate / orders by version name (two runs) | "the first candidate and its rehearsal, not the newest" |
+| worker | no `profile_changed` guard at next draft | "the course moved to another profile" |
+| worker | parts checked with `in` | rules: the doc (`invalid_source`) |
+| worker | the limit counted per course | "retrospective limit" (another version refused) |
+| worker | the list never says there are more | "retrospective limit" (`has_more`) |
+| browser | the page drops the "(최근 50개만)" note / the Service never sets `has_more` (two runs) | "list: … says it shows only the newest 50" |
+
+**NOT RUN:** a real person's counter-argument and the learner's reasoning about it (AE-T37 "사람 실습"), an instructor's review of a
+real class (AE-T34), the Studio App help panel (the learner can answer only on the `/sharing` web page in this slice), the
+model-generated draft (T-28's model half), EDU-04/05 records, class cohorts opened from a template (their shares live in the class
+cohort and are not offered to the template course's retrospective in this slice), Windows, an installed Studio, production D1 and
+the switch in production.
+
+### Trying it on the dev host
+
+**Fastest check (one command, no app, no model key):** `cd e2e && npm run test:classroom-feedback-loop`. It runs the real Chalk
+pages and the Service in-process and writes `e2e/test-results/classroom-feedback-loop/` (screenshots and `result.json`).
+
+**By hand** (written from the scripts, not executed end to end; the command above is the executed path):
+
+```bash
+# 1. Service: switch on, schema applied to the local D1 (a fresh local database can take schema.sql instead)
+echo 'HPS_FEEDBACK_LOOP=enabled' >> worker/.dev.vars
+(cd worker && npx wrangler d1 execute hypeproof-studio --local --file=migrations/0039-feedback-loop.sql)
+# 2. an adult class (sharing is refused for minors): roster and open session
+HPS_COHORT=boah-dental-2026-a HPS_PROFILE=boah-dental-director-copyclone-2026-s1 HPS_USER=learner-a bash scripts/dev-stack.sh
+# 3. Chalk on :8788 and an instructor code for teacher-a
+(cd chalk && cp ../worker/.dev.vars .dev.vars && npx wrangler dev --env dev --port 8788)
+HPS_SIGNING_SECRET="<from worker/.dev.vars>" node --experimental-strip-types worker/scripts/issue-issuer-token.ts \
+  --instructor teacher-a --cohorts boah-dental-2026-a --profiles boah-dental-director-copyclone-2026-s1 --max-hours 12 --days 1
+```
+
+| Step | Who · where | Expected |
+|---|---|---|
+| 1 | Instructor · `http://localhost:8788/authoring`: connects, opens or writes the course, freezes a version, then "학생 초대 · 참여 코드 발급" for `learner-a` | A learner code bound to that version (a code from `dev-stack.sh` names no version: its shares read "보낸 수업의 버전 기록 없음") |
+| 2 | Learner · `/sharing` with that code: shares a 결과물 제출 to `teacher-a` with 변경 이유·검수 내용 | "공유했습니다" |
+| 3 | Instructor · `/manage` 공유 기록: opens it, writes 피드백 and 다음 조치, sets 검토 상태 to 답변 완료 and saves (left at 검토 중, the learner sees the text but no decision form yet) | The learner's card shows the feedback |
+| 4 | Learner · `/sharing`: under the feedback, picks 고치기 (or 그대로 두기 / 보류), writes 이유, presses "결정 남기기" | "내 결정: 고치기 — …"; the form is gone for that feedback; `/manage` shows "피드백에 대한 학생의 결정" in the share detail |
+| 5 | Instructor · `/authoring` 07 "돌아보기 불러오기" | The share is listed with "버전 …", "AI 응답(AI 응답)", "강사 피드백(사람의 피드백)", "피드백에 대한 학생의 결정(학생이 쓴 말)" |
+| 6 | Instructor: picks the version, writes 가설, adds 관찰 citing the change reason + feedback + decision, a second citing only the AI answer, a third citing the AI answer and the feedback, a 결정 for a step, saves | "관찰 1 · 관찰됨 — 학생이 쓴 말이 근거입니다", "관찰 2 · 미관찰 — 학생이 쓴 말이 근거에 없습니다 …", "관찰 3 · 미관찰 … 사람의 피드백 있음", the 분모 line |
+| 7 | Learner · `/sharing`: "공유 철회·삭제"; instructor: reopens the 돌아보기 | The cited part reads "철회·만료되어 볼 수 없음"; "다음 초안 시작" is refused until that source is unchecked and saved |
+| 8 | Instructor: "이 돌아보기로 다음 초안 시작" | The editor holds the version that ran; the 돌아보기 shows "다음 초안 revision N"; after 04 freezes it and issues a rehearsal code, "다음 후보 … · 리허설: 리허설 중" |
+
+With `HPS_FEEDBACK_LOOP` unset, step 5 has no section 07 to open: `/authoring` hides it after connecting.
+
+**Where the data is.** D1 `classroom_share_responses` (the learner's answers), `classroom_share_lessons` (the version each share was
+sent under), both deleted with their share, and `lesson_retrospectives` (the instructor's words and share references; `applied_*`
+names the draft revision it started). Share content stays in `classroom_shares` and is read only through the audited instructor route.
