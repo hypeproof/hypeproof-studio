@@ -7,8 +7,9 @@
 // no network.
 //
 // CR-T02 (Worker half: the review routes) · CR-T45 · CR-T46 · CR-T47 · CR-T48 (Service half) ·
-// CR-T49 · CR-T58 (synthetic provider latency). Each with a positive sample that must pass and a
-// planted defect that must be caught.
+// CR-T49 · CR-T58 (synthetic provider latency) · CR-69 with packs (a regression check of the
+// deletion paths, the retention sweep included). Each with a positive sample that must pass and
+// a planted defect that must be caught.
 //
 // Run: node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs [--d1]
 
@@ -24,6 +25,8 @@ const store = await import("../src/lib/curriculum/store.ts");
 const { RULES } = await import("../src/skills/curriculum/rules.ts");
 const { CURRICULUM_ROUTES, REVIEW_LIMITS, setAfterReviewInsert } = await import("../src/routes/curriculum.ts");
 const { participantPrefix } = await import("../src/lib/curriculum/participant-record.ts");
+const { runCurriculumRetention } = await import("../src/lib/curriculum/retention.ts");
+const { getProfile } = await import("../src/profiles/index.ts");
 const { CR_SURFACES } = await import("../../extensions/hypeproof-chat/src/curriculumRuntime.ts");
 const { ReviewSession, directorAvailable } = await import("../../extensions/hypeproof-chat/src/reviewSession.ts");
 const reviewView = await import("../../extensions/hypeproof-chat/src/reviewView.ts");
@@ -42,6 +45,10 @@ async function test(name, fn) {
 }
 
 const REVIEW_ROUTES = CURRICULUM_ROUTES.filter((r) => /\/projects\/:id\/review(\/|$)|\/reviews$/.test(r));
+const DAY = 24 * 3600_000;
+/** Profiles for CR-T49's filters: an adult profile whose switch the test turns off, and a minors profile (never allowed, switch on or off). */
+const OFF_PROFILE = "studio-model-practice";
+const MINORS_PROFILE = "sk-biopharm-kids-2026-grade-5-6-s1";
 const MIGRATIONS = ["0032-curriculum-runtime-publish", "0033-curriculum-runtime-evidence", "0034-curriculum-runtime-memory", "0038-curriculum-runtime-review"];
 const SECTIONS = review.REVIEW_SECTION_IDS;
 
@@ -70,7 +77,7 @@ const V0 = { "index.html": PAGE("버전 0"), "app.js": "document.title += ' ok';
 const V1 = { ...V0, "index.html": PAGE("버전 1 — 옵션 한 단계"), "help.html": PAGE("도움말") };
 const OBSERVER = { note_kind: "observer_note", provenance: { who: "관찰자 A", when: "2주차 수업", where: "교실 키오스크 앞" }, source_state: "real" };
 
-async function started(f, { token, title = "키오스크 실험", week = 2, files = V0 } = {}) {
+async function started(f, { token, title = "키오스크 실험", week = 2, files = V0, noLink = false } = {}) {
   const t = token ?? (await f.student());
   const p = await f.api("/v1/curriculum/projects", { method: "POST", token: t, body: { title } });
   assert.equal(p.status, 201, p.text);
@@ -82,6 +89,8 @@ async function started(f, { token, title = "키오스크 실험", week = 2, file
     body: { project_id: p.json.project.id, product_version_id: up.id, week, question: "도움 없이 주문을 마칠 수 있나?", method: "task_test", success_criteria: ["5명 중 3명 완료"], hypothesis: "처음 쓰는 사람도 혼자 주문할 수 있다" },
   });
   assert.equal(e.status, 201, e.text);
+  // An experiment that only holds manual records (interviews, notes): it never had a link.
+  if (noLink) return { token: t, project: p.json.project, version: up.id, experiment: e.json.experiment, hypothesis: e.json.hypothesis, link: null, url: null };
   const l = await f.api(`/v1/curriculum/experiments/${e.json.experiment.id}/links`, { method: "POST", token: t, body: { expires_at: Date.now() + 3600_000 } });
   assert.equal(l.status, 201, l.text);
   return { token: t, project: p.json.project, version: up.id, experiment: e.json.experiment, hypothesis: e.json.hypothesis, link: l.json.link, url: l.json.share_url };
@@ -305,7 +314,48 @@ await test("CR-T45 negative: a factual claim without a source, a claim in the wr
     assert.deepEqual(plant((p) => p.sections.splice(5, 1)), ["sections_not_the_ten_in_order"]);
     // The commit route runs this check before it stores anything (the route source, read).
     const src = readFileSync(new URL("../src/routes/curriculum.ts", import.meta.url), "utf8");
-    assert.match(src, /const problems = packProblems\(pack\);\s*if \(problems\.length\) return refuse\(c, 422, "invalid_pack", \{ problems \}\);[\s\S]{0,400}?insertReview\(/);
+    assert.match(src, /const problems = packProblems\(pack\);\s*if \(problems\.length\) return refuse\(c, 422, "invalid_pack", \{ problems \}\);[\s\S]{0,700}?insertReview\(/);
+  } finally {
+    f.close();
+  }
+});
+
+await test("CR-T45 weeks and sources: a pack reads only its own week (a week-1 observation is in no week-2 section, and the other way round); a source deleted after preparing opens as not found while the rest still resolve", async () => {
+  const f = await fixture();
+  try {
+    // One team, week 1 then week 2, an observation in each.
+    const w1 = await started(f, { title: "두 주", week: 1 });
+    const n1 = await note(f, w1, "1주차: 첫 화면에서 길을 잃음");
+    const d1 = await reviewDraft(f, w1, await draft(f, w1, [{ id: "w1o", section: "observation", text: "1주차에 한 명이 첫 화면에서 길을 잃었다", source_refs: [`note:${n1}`] }]), [{ item: "w1o", action: "accept" }]);
+    const e2 = await f.api("/v1/curriculum/experiments", { method: "POST", token: w1.token, body: { project_id: w1.project.id, product_version_id: w1.version, week: 2, question: "옵션을 혼자 고를 수 있나?", method: "task_test", success_criteria: ["5명 중 3명 완료"], hypothesis_id: w1.hypothesis.id } });
+    assert.equal(e2.status, 201, e2.text);
+    const w2 = { ...w1, experiment: e2.json.experiment };
+    const n2 = await note(f, w2, "2주차: 옵션에서 멈춤");
+    const d2 = await reviewDraft(f, w2, await draft(f, w2, [{ id: "w2o", section: "observation", text: "2주차에 두 명이 옵션에서 멈췄다", source_refs: [`note:${n2}`] }, { id: "w2i", section: "interpretation", text: "옵션 이름이 어렵다", source_refs: [`note:${n2}`] }]), [{ item: "w2o", action: "accept" }, { item: "w2i", action: "accept" }]);
+    const ref1 = venture.evidenceItemRef(w1.experiment.id, d1.id, "w1o");
+    const ref2 = venture.evidenceItemRef(w2.experiment.id, d2.id, "w2o");
+    const refsIn = (pack, id) => sectionOf(pack, id).items.flatMap((i) => i.sources);
+    // The week the team ran last is the default.
+    assert.equal((await sessionFor(f, w1).session.prepare()).ok, true);
+    const p2 = (await open(f, w1)).pack;
+    assert.equal(p2.week, 2);
+    assert.deepEqual(refsIn(p2, "observed"), [ref2], "week 2's observation only");
+    assert.deepEqual(refsIn(p2, "interpretation"), [venture.evidenceItemRef(w2.experiment.id, d2.id, "w2i")]);
+    assert.ok(!review.sourcesOf(p2).includes(ref1), "week 1's observation is in no section of the week-2 pack");
+    assert.equal((await sessionFor(f, w1).session.prepare(1)).ok, true);
+    const p1 = (await open(f, w1, w1.token, 1)).pack;
+    assert.deepEqual([p1.week, refsIn(p1, "observed"), refsIn(p1, "interpretation")], [1, [ref1], []], "and week 1's pack holds its own");
+    assert.ok(!review.sourcesOf(p1).includes(ref2));
+    // A source deleted after preparing: the student rejects the week-2 observation. The pack opens
+    // as prepared, that claim's source reads "not found", and every other source still resolves.
+    for (const ref of review.sourcesOf(p2)) assert.equal((await open(f, w1)).sources[ref]?.found, true, `control: ${ref} resolves before`);
+    await reviewDraft(f, w2, d2, [{ item: "w2o", action: "reject" }]);
+    const after = await open(f, w1);
+    assert.equal(after.pack.revision, p2.revision, "opening generated nothing");
+    assert.deepEqual([after.sources[ref2]?.found, after.sources[ref2]?.label], [false, "찾을 수 없는 기록이에요 (지워졌거나 바뀌었어요)"]);
+    for (const ref of review.sourcesOf(after.pack).filter((r) => r !== ref2)) assert.equal(after.sources[ref]?.found, true, `${ref} still resolves`);
+    assert.equal(after.status, "stale");
+    assert.ok(after.stale_sections.includes("observed"));
   } finally {
     f.close();
   }
@@ -373,7 +423,7 @@ await test("CR-T46: changing one evidence item marks only the sections that read
   }
 });
 
-await test("CR-T46 the model section: an answer to other records than the ones now is refused (409 inputs_changed) and the App starts over once; an answer the skill gate refuses stores the facts and keeps the AI section not generated, with the problems shown", async () => {
+await test("CR-T46 the model section: an answer to other records than the ones now is refused (409 inputs_changed), the press ends with its one model call and the next press stores the pack; an answer the skill gate refuses stores the facts and keeps the AI section not generated, with the problems shown", async () => {
   const f = await fixture();
   try {
     const s = await week2(f);
@@ -386,7 +436,9 @@ await test("CR-T46 the model section: an answer to other records than the ones n
     assert.equal(sectionOf(pack, "observed").items.length, 2, "the facts were stored");
     assert.ok((await bad.session.studentView()).refused.some((p) => /experiment_criteria_countable/.test(p)), "the refusal is shown");
     assert.equal((await open(f, s)).status, "stale");
-    // The records change between prepare and commit: the first answer is refused, the second run stores.
+    // The records change between prepare and commit, after the model was asked: the answer is
+    // refused and the press ends there, so one press makes one model call (MU-02, decision 2:
+    // retry bound 0). The student's next press stores the pack for the records as they are now.
     let changed = false;
     const racing = sessionFor(f, s, {
       complete: async (prompt) => {
@@ -399,9 +451,14 @@ await test("CR-T46 the model section: an answer to other records than the ones n
         return { ok: true, text: experimentAnswer(prompt), model: "hypeproof-default" };
       },
     });
+    const storedBefore = (await rows(f, s.project.id)).length;
     const r = await racing.session.prepare();
-    assert.equal(r.ok, true, JSON.stringify(r));
-    assert.equal(racing.calls.length, 2, "asked again for the records as they are now");
+    assert.deepEqual(r, { ok: false, message: "준비하는 동안 기록이 바뀌었어요. 다시 준비해 주세요." });
+    assert.equal(racing.calls.length, 1, "one press, one model call");
+    assert.equal((await rows(f, s.project.id)).length, storedBefore, "nothing stored from the refused answer");
+    const again = await racing.session.prepare();
+    assert.equal(again.ok, true, JSON.stringify(again));
+    assert.equal(racing.calls.length, 2, "the next press asks again, for the records as they are now");
     const after = await open(f, s);
     assert.equal(after.status, "fresh");
     assert.ok(sectionOf(after.pack, "assumptions").items.some((i) => i.text === "매장 직원이 옆에서 돕는다"));
@@ -502,14 +559,26 @@ await test("CR-T48 Service half: the director writes the final decision and the 
   }
 });
 
-await test("CR-T48 Service half, negatives: a student token cannot write a director decision (unknown route, nothing written); refs outside the pack, an unreviewed AI item, a revision the director did not read, and a director outside the scope are refused; the decision is never stored without the director actor", async () => {
+await test("CR-T48 Service half, negatives: a student token cannot write a director decision (unknown route, nothing written); an unreviewed AI item and an item on a record that is not real are refused although the pack shows them, as for a team decision; refs outside the pack, a revision the director did not read, and a director outside the scope are refused; the decision is never stored without the director actor", async () => {
   const f = await fixture();
   try {
     const s = await week2(f);
+    // In the pack the director reads: an AI observation the team has not reviewed, and a
+    // reviewed observation resting on a record the student marked simulated.
+    const aiIn = await draft(f, s, [{ id: "o7", section: "observation", text: "AI가 센 관찰 (팀 검토 전)", source_refs: [`session:${s.sessions[0]}`] }], "ai");
+    const sim = await f.api(`/v1/curriculum/experiments/${s.experiment.id}/notes`, { method: "POST", token: s.token, body: { ...OBSERVER, source_state: "simulated", text: "연습으로 만든 메모" } });
+    assert.equal(sim.status, 201, sim.text);
+    const unrealDraft = await reviewDraft(f, s, await draft(f, s, [{ id: "o8", section: "observation", text: "연습 기록에서 본 것", source_refs: [`note:${sim.json.note.id}`] }]), [{ item: "o8", action: "accept" }]);
     await sessionFor(f, s).session.prepare();
     const director = await f.issuer();
     const rv = await open(f, s, director);
     const path = `/v1/curriculum/projects/${s.project.id}/review/decision`;
+    const unreviewedRef = venture.evidenceItemRef(s.experiment.id, aiIn.id, "o7");
+    const unrealRef = venture.evidenceItemRef(s.experiment.id, unrealDraft.id, "o8");
+    // Instrument: both are in the pack's observed section, with their marks, so the pack check
+    // (ref_not_in_review) cannot be what refuses them; only the evidence rules can.
+    const shown = (ref) => sectionOf(rv.pack, "observed").items.find((i) => i.sources.includes(ref))?.marks;
+    assert.deepEqual([shown(unreviewedRef), shown(unrealRef)], [["unreviewed"], ["not_real"]]);
     const body = { week: 2, revision: rv.pack.revision, statement: "옵션을 줄인다", evidence_refs: [s.ev("o1")], assumption_refs: [], affected_deck_slides: [2] };
     const n = async () => (await f.env.HPS_DB.prepare("SELECT COUNT(*) AS n FROM cr_decisions").first()).n;
     const start = await n();
@@ -517,7 +586,12 @@ await test("CR-T48 Service half, negatives: a student token cannot write a direc
     const unknown = await f.api("/v1/cr-never-registered", { method: "POST", token: s.token, body });
     assert.deepEqual([asStudent.status, asStudent.json.error.type], [unknown.status, unknown.json.error.type], "a student gets the unknown route");
     assert.equal(await n(), start);
-    // An AI draft item the team has not reviewed, cited by a director: refused like a team decision would be.
+    // Shown in the pack, still not evidence for a person's decision (SX-45, CR-26): the team-decision rules hold for the director.
+    const notReviewed = await f.api(path, { method: "POST", token: director, body: { ...body, evidence_refs: [unreviewedRef] } });
+    assert.deepEqual([notReviewed.status, notReviewed.json.error.code, notReviewed.json.error.problems], [409, "unresolved_decision_refs", [`evidence_ref_not_reviewed:${unreviewedRef}`]]);
+    const notReal = await f.api(path, { method: "POST", token: director, body: { ...body, evidence_refs: [unrealRef] } });
+    assert.deepEqual([notReal.status, notReal.json.error.code, notReal.json.error.problems], [409, "unresolved_decision_refs", [`evidence_ref_not_real:${unrealRef}`]]);
+    // An AI draft written after the pack was prepared is not in it: refused before the evidence rules (the control of the two above).
     const ai = await draft(f, s, [{ id: "o9", section: "observation", text: "AI가 센 관찰", source_refs: [`session:${s.sessions[0]}`] }], "ai");
     const outside = await f.api(path, { method: "POST", token: director, body: { ...body, evidence_refs: [venture.evidenceItemRef(s.experiment.id, ai.id, "o9")] } });
     assert.deepEqual([outside.status, outside.json.error.code], [409, "ref_not_in_review"], "not in the pack the director read");
@@ -543,6 +617,111 @@ await test("CR-T48 Service half, negatives: a student token cannot write a direc
     assert.deepEqual((await open(f, s)).decisions.map((x) => x.id), [ok.json.decision.id]);
     assert.deepEqual(review.decisionsOfReview([{ ...stored, actor: "student" }], 2), [], "a decision without the director actor is not the director's");
   } finally {
+    f.close();
+  }
+});
+
+await test("CR-T48 Service half, retries and corrections: the same submission sent again is the stored decision (200 reused, nothing written), whatever the order of its refs; the same statement with other evidence, slides, assumptions or next experiment is a decision of its own, with its own draft", async () => {
+  const f = await fixture();
+  try {
+    const s = await week2(f);
+    await sessionFor(f, s).session.prepare();
+    const director = await f.issuer();
+    const rv = await open(f, s, director);
+    const path = `/v1/curriculum/projects/${s.project.id}/review/decision`;
+    const send = (body) => f.api(path, { method: "POST", token: director, body });
+    const counts = async () => [(await f.env.HPS_DB.prepare("SELECT COUNT(*) AS n FROM cr_decisions").first()).n, (await f.env.HPS_DB.prepare("SELECT COUNT(*) AS n FROM cr_experiments").first()).n];
+    const body = { week: 2, revision: rv.pack.revision, statement: "다음 주에 다시 시험한다", evidence_refs: [s.ev("o1")], assumption_refs: [], affected_deck_slides: [2] };
+    const first = await send(body);
+    assert.equal(first.status, 201, first.text);
+    const n1 = await counts();
+    const retry = await send({ ...body, statement: ` ${body.statement} ` });
+    assert.deepEqual([retry.status, retry.json.reused, retry.json.decision.id], [200, true, first.json.decision.id], "a retry (the statement as stored) is the stored decision");
+    assert.deepEqual(await counts(), n1, "and writes nothing");
+    // Corrected under the same statement: other evidence, another slide, and a next experiment.
+    const corrected = { ...body, evidence_refs: [s.ev("o2"), s.ev("i1")], affected_deck_slides: [5], next_experiment: { hypothesis: "도움말 버튼이 있으면 혼자 주문한다", question: "도움말을 누르나?", method: "interview", success_criteria: ["5명 중 3명"] } };
+    const second = await send(corrected);
+    assert.equal(second.status, 201, second.text);
+    assert.notEqual(second.json.decision.id, first.json.decision.id);
+    assert.deepEqual([second.json.decision.evidence_refs, second.json.decision.affected_deck_slides, second.json.experiment?.question], [[s.ev("o2"), s.ev("i1")], [5], "도움말을 누르나?"]);
+    const n2 = await counts();
+    const secondRetry = await send({ ...corrected, evidence_refs: [s.ev("i1"), s.ev("o2")] });
+    assert.deepEqual([secondRetry.status, secondRetry.json.reused, secondRetry.json.decision.id, secondRetry.json.experiment?.id], [200, true, second.json.decision.id, second.json.experiment.id], "its retry, refs in another order, is that decision with its draft");
+    assert.deepEqual(await counts(), n2);
+    // Each other field the director chose makes another decision too.
+    for (const [what, change] of [["assumptions", { assumption_refs: [s.ev("a1")] }], ["slides", { affected_deck_slides: [3] }], ["next experiment", { next_experiment: { ...corrected.next_experiment, question: "도움말을 끝까지 읽나?" } }]]) {
+      const r = await send({ ...body, ...change });
+      assert.equal(r.status, 201, `${what}: ${r.text}`);
+    }
+    const mem = (await f.api(`/v1/curriculum/projects/${s.project.id}/memory`, { token: s.token })).json.memory;
+    assert.equal(mem.decisions.filter((d) => d.actor === "director").length, 5);
+    assert.deepEqual(mem.experiments.filter((e) => e.status === "draft").map((e) => e.question).sort(), ["도움말을 끝까지 읽나?", "도움말을 누르나?"], "a draft per decision that wrote one");
+  } finally {
+    f.close();
+  }
+});
+
+await test("CR-T48 Service half, at the same time: two identical submissions sent together (a double press) store one decision and one draft; the one that loses answers that decision and takes back nothing it names; the store never takes back a draft a decision names", async () => {
+  const f = await fixture();
+  const real = f.env.HPS_DB;
+  try {
+    const s = await week2(f);
+    await sessionFor(f, s).session.prepare();
+    const director = await f.issuer();
+    const rv = await open(f, s, director);
+    const path = `/v1/curriculum/projects/${s.project.id}/review/decision`;
+    const body = { week: 2, revision: rv.pack.revision, statement: "다음 주에 다시 시험한다", evidence_refs: [s.ev("o1")], assumption_refs: [], affected_deck_slides: [2], next_experiment: { hypothesis: "옵션이 한 화면이면 혼자 주문한다", question: "혼자 주문할 수 있나?", method: "task_test", success_criteria: ["5명 중 3명"] } };
+    // The first request's decision insert is held until the second request has finished: the
+    // first has then written the hypothesis and the draft, and the second finds both and stores
+    // the decision naming the draft.
+    const seen = [];
+    let release;
+    const gate = new Promise((r) => (release = r));
+    let reached;
+    const atInsert = new Promise((r) => (reached = r));
+    let held = false;
+    f.env.HPS_DB = {
+      prepare(sql) {
+        seen.push(sql);
+        const st = real.prepare(sql);
+        if (held || !/^INSERT OR IGNORE INTO cr_decisions/.test(sql)) return st;
+        held = true;
+        return {
+          bind: (...a) => {
+            const b = st.bind(...a);
+            return { run: async () => (reached(), await gate, b.run()), first: (...x) => b.first(...x), all: (...x) => b.all(...x) };
+          },
+        };
+      },
+      batch: (...x) => real.batch(...x),
+    };
+    const firstSent = f.api(path, { method: "POST", token: director, body });
+    await atInsert;
+    const mark = seen.length;
+    const second = await f.api(path, { method: "POST", token: director, body });
+    release();
+    const first = await firstSent;
+    f.env.HPS_DB = real;
+    assert.equal(second.status, 201, second.text);
+    const draftId = second.json.decision.next_experiment_id;
+    assert.ok(draftId);
+    assert.deepEqual([first.status, first.json.reused, first.json.decision.id, first.json.experiment?.id], [200, true, second.json.decision.id, draftId], first.text);
+    assert.deepEqual(seen.slice(mark).filter((q) => /^DELETE FROM cr_(experiments|hypotheses)/.test(q)), [], "the request that lost took back nothing");
+    const mem = (await f.api(`/v1/curriculum/projects/${s.project.id}/memory`, { token: s.token })).json.memory;
+    assert.equal(mem.decisions.filter((d) => d.actor === "director").length, 1, "one decision");
+    const drafts = mem.experiments.filter((e) => e.status === "draft");
+    assert.deepEqual(drafts.map((e) => e.id), [draftId], "the draft the decision names is stored, once");
+    assert.ok(mem.hypotheses.some((h) => h.id === drafts[0].hypothesis_id && h.statement === body.next_experiment.hypothesis), "with its hypothesis");
+    // The store's own guard, behind the route's: a draft a decision names is never taken back;
+    // one no decision names is (control).
+    await store.deleteExperimentDraft(real, draftId);
+    assert.ok(await store.getExperiment(real, draftId), "a draft a decision names stays");
+    const unnamed = await store.createExperimentDraft(real, { id: venture.newVentureId("exp"), project_id: s.project.id, week: 3, hypothesis_id: drafts[0].hypothesis_id, question: "아무 결정도 이름을 대지 않은 초안", method: "task_test", success_criteria: ["1명"], product_version_id: drafts[0].product_version_id, now: Date.now(), key: "test:unnamed", max: 100 });
+    assert.equal(unnamed.ok && unnamed.created, true);
+    await store.deleteExperimentDraft(real, unnamed.experiment.id);
+    assert.equal(await store.getExperiment(real, unnamed.experiment.id), null, "control: a draft no decision names is taken back");
+  } finally {
+    f.env.HPS_DB = real;
     f.close();
   }
 });
@@ -578,8 +757,12 @@ await test("director decisions downstream: a director's decision drives a Deck B
 
 // ── CR-T49 (worker D1): the four-team overview ───────────────────────────────────
 
-await test("CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls; another cohort's team never appears; the instrument catches a planted foreign team", async () => {
+await test("CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes", async () => {
   const f = await fixture();
+  const offProfile = getProfile(OFF_PROFILE);
+  const minors = getProfile(MINORS_PROFILE);
+  const saved = [offProfile.curriculum_runtime, minors.curriculum_runtime];
+  const restore = (p, v) => (v === undefined ? delete p.curriculum_runtime : (p.curriculum_runtime = v));
   try {
     const a = await week2(f, { title: "1팀" });
     const b = await week2(f, { title: "2팀", token: await f.student("cr-b") });
@@ -592,7 +775,16 @@ await test("CR-T49: four directed teams show fresh, stale and missing correctly 
     // Another cohort's team, prepared, under a profile the director's scope does not cover.
     const outsider = await week2(f, { title: "다른 반", token: await f.student("hp-a", f.other.id, f.otherCohort) });
     await sessionFor(f, outsider).session.prepare();
-    const director = await f.issuer();
+    // Three teams of the directed cohort itself, stored as a served profile's student would store
+    // them: under a profile the scope does not list (its switch on), under a listed profile whose
+    // switch is off, and under a listed minors profile (its switch on; minors never pass).
+    offProfile.curriculum_runtime = { enabled: false };
+    minors.curriculum_runtime = { enabled: true };
+    const team = async (profile, creator, title) => (await store.createProject(f.env.HPS_DB, { cohort_id: f.cohort, profile_id: profile, creator, title, now: Date.now(), max: 10 })).id;
+    const unlisted = await team(f.other.id, "cr-x1", "목록에 없는 프로필");
+    const switchedOff = await team(offProfile.id, "cr-x2", "스위치 꺼진 프로필");
+    const minorsTeam = await team(minors.id, "cr-x3", "미성년 프로필");
+    const director = await f.issuer(f.cohort, [f.profile.id, offProfile.id, minors.id]);
     const { calls, out } = await spyModelCalls(() => f.api("/v1/curriculum/reviews", { token: director }));
     assert.deepEqual(calls, [], "the overview makes no model call");
     assert.equal(out.status, 200, out.text);
@@ -611,7 +803,19 @@ await test("CR-T49: four directed teams show fresh, stale and missing correctly 
     assert.deepEqual((await f.api("/v1/curriculum/reviews", { token: otherDirector })).json.teams.map((t) => t.title), ["다른 반"]);
     assert.equal((await f.api("/v1/curriculum/reviews", { token: a.token })).status, 404);
     assert.equal(REVIEW_LIMITS.overviewProjects >= 4, true);
+    // The directed cohort's own teams under the wrong profile: not one is listed.
+    const filtered = [unlisted, switchedOff, minorsTeam];
+    assert.deepEqual(teams.filter((t) => filtered.includes(t.project_id)).map((t) => t.title), [], "no team of a profile the scope does not list, a switch-off profile or a minors profile");
+    // Positive controls: each is a real, listable team once its own check passes.
+    const unlistedDirector = await f.issuer(f.cohort, [f.other.id]);
+    assert.deepEqual((await f.api("/v1/curriculum/reviews", { token: unlistedDirector })).json.teams.map((t) => t.project_id), [unlisted], "a scope that lists its profile sees it");
+    offProfile.curriculum_runtime = { enabled: true };
+    const switchedOn = (await f.api("/v1/curriculum/reviews", { token: director })).json.teams.map((t) => t.project_id);
+    assert.ok(switchedOn.includes(switchedOff), "its switch on, it is listed");
+    assert.ok(!switchedOn.includes(minorsTeam), "a minors profile is not, with its switch on");
   } finally {
+    restore(offProfile, saved[0]);
+    restore(minors, saved[1]);
     f.close();
   }
 });
@@ -667,6 +871,28 @@ await test("CR-69 with packs: deleting a participant session or an experiment's 
     assert.deepEqual(await store.reviewSummariesOf(noTable, "prj-x"), []);
     const other = { prepare: () => ({ bind: () => ({ run: async () => { throw new Error("D1_ERROR: disk I/O error"); } }) }) };
     await assert.rejects(store.dropProjectReviews(other, "prj-x"), /disk I\/O/, "any other failure is not swallowed");
+  } finally {
+    f.close();
+  }
+});
+
+await test("CR-69 with packs, the retention sweep (decision 6): an experiment with no link and only manual records, deleted 30 days after its last record, takes the Project's packs with it; at 29 days the pack stays", async () => {
+  const f = await fixture();
+  try {
+    const s = await started(f, { title: "인터뷰만 한 팀", noLink: true });
+    const n = await note(f, s, "참가자 A가 옵션 화면에서 멈춤");
+    await reviewDraft(f, s, await draft(f, s, [{ id: "m1", section: "observation", text: "참가자 A가 옵션 화면에서 멈췄다", source_refs: [`note:${n}`] }]), [{ item: "m1", action: "accept" }]);
+    const at = Date.now();
+    assert.equal((await sessionFor(f, s).session.prepare()).ok, true);
+    const before = await rows(f, s.project.id);
+    assert.equal(before.length, 1);
+    assert.ok(before[0].doc.includes("참가자 A가 옵션 화면에서 멈췄다"), "the pack quotes the manual record's statement");
+    const env = { ...f.env, HPS_TEST_ORIGIN: undefined };
+    assert.ok(!(await runCurriculumRetention(env, at + 29 * DAY)).deleted.includes(s.experiment.id), "29 days after the last record: not due");
+    assert.equal((await rows(f, s.project.id)).length, 1, "control: the pack stays while the records it quotes do");
+    assert.ok((await runCurriculumRetention(env, at + 31 * DAY)).deleted.includes(s.experiment.id), "30 days after the last record: deleted");
+    assert.deepEqual(await rows(f, s.project.id), [], "the pack went with the records it quotes");
+    assert.equal((await open(f, s)).status, "missing");
   } finally {
     f.close();
   }
@@ -763,9 +989,13 @@ await test("CR-T58 (synthetic provider latency): ten full regenerations through 
     assert.equal(reviewView.regenerationVerdict({ total_ms: 9_000, provider_ms: 8_000 }).verdict, "pass");
     assert.equal(reviewView.regenerationVerdict({ total_ms: 36_000, provider_ms: 35_000 }).verdict, "miss_provider");
     assert.equal(reviewView.regenerationVerdict({ total_ms: 41_000, provider_ms: 9_000 }).verdict, "miss_studio");
-    // The stored pack carries the App's figures for later reading (CR-62 across real runs).
+    // The stored pack carries the App's figures for later reading (CR-62 across real runs): the
+    // run up to sending the commit, and the Service's own commit time, which the App could not
+    // send. Read back, the two add up to the App's whole run, the network round trip apart.
     const stored = (await open(f, s)).pack.timing;
     assert.ok(stored.provider_ms >= 35_000 && stored.provider_ms < 35_500, JSON.stringify(stored));
+    assert.ok(Number.isInteger(stored.commit_ms) && stored.commit_ms >= 0, JSON.stringify(stored));
+    assert.ok(stored.total_ms + stored.commit_ms <= st.total_ms + 2, `${JSON.stringify(stored)} vs the App's ${JSON.stringify(st)}`);
   } finally {
     f.close();
   }

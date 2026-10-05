@@ -31,6 +31,8 @@ export const CR_BYTES_CONTEXT_KEY = "hypeproof-chat.crBrowserBytesStored";
  * director's commands are gated on this key exactly as the student's are on CR_CONTEXT_KEY.
  */
 export const CR_DIRECTOR_CONTEXT_KEY = "hypeproof-chat.curriculumRuntimeDirector";
+/** How often the App asks the Service again for CR_DIRECTOR_CONTEXT_KEY while it runs: the longest the director's palette entry can outlive the switch. */
+export const CR_DIRECTOR_REPROBE_MS = 5 * 60_000;
 
 /** The five Experiment Browser tool names shared by both coach runtimes (CR-04, CR-06). */
 export const CR_BROWSER_TOOL_NAMES = [

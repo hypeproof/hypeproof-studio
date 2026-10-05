@@ -120,10 +120,17 @@ function make(answers, opts = {}) {
   assert.deepEqual((await facts.session.prepare()).regenerated, ["metrics"]);
   assert.equal(facts.completions.length, 0, "a fact section costs no model call");
   assert.deepEqual(facts.calls.at(-1).body.outputs, {});
-  // Records changed between the two calls: the run starts over once.
+  // Records changed between the two calls after the model was asked: the press ends there, so one
+  // press makes one model call (MU-02, decision 2: retry bound 0); the next press asks again.
   const race = make({ "POST /projects/prj-1/review/prepare": [{ body: PREPARE() }, { body: PREPARE({ base_revision: 4 }) }], "POST /projects/prj-1/review/commit": [{ status: 409, body: { error: { code: "inputs_changed" } } }, { status: 201, body: { regenerated: ["next_experiment"] } }] });
+  assert.deepEqual(await race.session.prepare(), { ok: false, message: "준비하는 동안 기록이 바뀌었어요. 다시 준비해 주세요." });
+  assert.deepEqual([race.completions.length, race.calls.filter((c) => c.key.endsWith("/commit")).length], [1, 1], "one press, one model call, one commit");
   assert.equal((await race.session.prepare()).ok, true);
-  assert.deepEqual([race.completions.length, race.calls.filter((c) => c.key.endsWith("/commit")).map((c) => c.body.base_revision)], [2, [3, 4]]);
+  assert.deepEqual([race.completions.length, race.calls.filter((c) => c.key.endsWith("/commit")).map((c) => c.body.base_revision)], [2, [3, 4]], "the next press asks again");
+  // A race on the facts alone, before any model call: the press starts over once by itself.
+  const factRace = make({ "POST /projects/prj-1/review/prepare": [{ body: PREPARE({ stale_sections: ["metrics"], model_sections: [] }) }, { body: PREPARE({ base_revision: 4, stale_sections: ["metrics"], model_sections: [] }) }], "POST /projects/prj-1/review/commit": [{ status: 409, body: { error: { code: "review_changed" } } }, { status: 201, body: { regenerated: ["metrics"] } }] });
+  assert.deepEqual(await factRace.session.prepare(), { ok: true, regenerated: ["metrics"], unchanged: false });
+  assert.deepEqual([factRace.completions.length, factRace.calls.filter((c) => c.key.endsWith("/commit")).map((c) => c.body.base_revision)], [0, [3, 4]]);
   // The model fails or answers no JSON: the facts are still committed, the reason is shown.
   const failing = make({ "POST /projects/prj-1/review/prepare": { body: PREPARE() }, "POST /projects/prj-1/review/commit": { status: 201, body: { regenerated: ["observed"] } } }, { complete: async () => ({ ok: false }) });
   assert.equal((await failing.session.prepare()).ok, true);
@@ -147,7 +154,7 @@ function make(answers, opts = {}) {
   const eager = new Eager({ switchOn: () => true, token: async () => "t", directorToken: async () => null, base: () => "https://svc.test/v1/curriculum", projectId: () => "prj-1", fetchImpl: stub({ "POST /projects/prj-1/review/prepare": { body: PREPARE({ status: "fresh", model_sections: [] }) } }, []), complete: async () => (eagerCalls.push(1), { ok: false }) });
   await eager.prepare();
   assert.equal(eagerCalls.length, 1, "a model call on a fresh pack is counted");
-  ok("student: switch off and signed out send nothing; one model call per stale model section with the skill's metadata; none when fresh or only facts are stale; a race starts over once; a failed or refused answer stores the facts and shows why");
+  ok("student: switch off and signed out send nothing; one model call per stale model section with the skill's metadata; none when fresh or only facts are stale; a race after the model call ends the press (one model call per press), a race on facts alone starts over once; a failed or refused answer stores the facts and shows why");
 }
 
 // ── The director: overview, pack, decision ─────────────────────────────────────
@@ -175,6 +182,21 @@ function make(answers, opts = {}) {
   assert.match(bad.message, /무엇을 하기로 했는지/);
   assert.equal(d.calls.length, n, "nothing sent");
   assert.deepEqual(directorFormProblems({ ...form, next: null }), [], "a decision alone is allowed");
+  // One decision in flight: a second press while the first is being written sends nothing.
+  let openGate;
+  const gate = new Promise((r) => (openGate = r));
+  const decisionCalls = [];
+  const inner = stub({ "POST /projects/prj-1/review/decision": [{ status: 201, body: { decision: { id: "dec-9" } } }, { status: 200, body: { decision: { id: "dec-9" }, reused: true } }] }, decisionCalls);
+  const once = new ReviewSession({ switchOn: () => true, token: async () => null, directorToken: async () => "issuer-tok", base: () => "https://svc.test/v1/curriculum", projectId: () => "prj-1", fetchImpl: async (url, init) => (await gate, inner(url, init)), complete: async () => ({ ok: false }) });
+  const pressed = once.decide("prj-1", { week: 2, revision: 3 }, form);
+  const pressedAgain = once.decide("prj-1", { week: 2, revision: 3 }, form);
+  assert.equal(once.isDeciding(), true);
+  openGate();
+  assert.deepEqual(await pressedAgain, { ok: false, busy: true, message: "결정을 기록하고 있어요." });
+  assert.deepEqual(await pressed, { ok: true, reused: false });
+  assert.deepEqual([decisionCalls.length, once.isDeciding()], [1, false], "two presses while one is in flight: one request");
+  assert.deepEqual(await once.decide("prj-1", { week: 2, revision: 3 }, form), { ok: true, reused: true }, "control: once answered, the next press is sent");
+  assert.equal(decisionCalls.length, 2);
   assert.ok(directorFormProblems({ ...form, affected_deck_slides: [9] }).some((p) => /1번부터 8번/.test(p)));
   // What the form offers: the pack's reviewed, real evidence; never an unreviewed AI item.
   const choices = packChoices(REVIEW);
@@ -188,7 +210,7 @@ function make(answers, opts = {}) {
   assert.equal(await directorAvailable({ base: "https://svc.test/v1/curriculum", token: "issuer-tok", fetchImpl: stub({}, probe) }), false, "the unknown route (switch off) keeps it off");
   assert.equal(await directorAvailable({ base: "https://svc.test/v1/curriculum", token: null, fetchImpl: stub({}, probe) }), false);
   assert.equal(probe.length, 2, "no call without an issuer token");
-  ok("director: no issuer token, no call; overview and pack read with the issuer token; the decision and next experiment sent as the form says, checked first; the form offers only reviewed, real evidence of the pack; the director key follows the Service's answer");
+  ok("director: no issuer token, no call; overview and pack read with the issuer token; the decision and next experiment sent as the form says, checked first, one at a time; the form offers only reviewed, real evidence of the pack; the director key follows the Service's answer");
 }
 
 // ── CR-62: the timing verdict ───────────────────────────────────────────────────
@@ -246,7 +268,13 @@ if (!status.available) {
   assert.match(dtext, /디렉터 결정: 옵션을 줄인 v1으로 다시 시험한다/);
   assert.match(dtext, /다음 실험 초안 \(3주차\): 혼자 주문할 수 있나\?/);
   assert.match(dhtml, /data-testid="review-decision" data-actor="director"/);
-  ok("panel render: ten titled sections with only the stale ones marked, 'no proposal' and the AI section said in words, the timing line; missing and switch-off draw no pack; the director's overview, form and decision");
+  // A decision sent and not answered yet: no button to press again, a status line instead (one press, one decision).
+  const sending = await renderComponent("ReviewPanel", { ...props({ mode: "director", available: true, notice: null, review: withDecision, teams, running: false, timing: null, refused: null }), deciding: true });
+  assert.doesNotMatch(sending, /data-testid="review-decide"/, "no decide button while a decision is in flight");
+  assert.match(visibleText(sending), /결정을 기록하고 있어요…/);
+  assert.match(dhtml, /data-testid="review-decide"/, "control: nothing in flight, the button is there");
+  assert.doesNotMatch(dhtml, /review-deciding/);
+  ok("panel render: ten titled sections with only the stale ones marked, 'no proposal' and the AI section said in words, the timing line; missing and switch-off draw no pack; the director's overview, form and decision, and no decide button while a decision is in flight");
 }
 
 console.log(`\n${passed} cr-review smoke checks passed`);

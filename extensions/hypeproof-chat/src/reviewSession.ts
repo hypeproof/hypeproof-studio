@@ -40,6 +40,7 @@ const OFF = "이 수업에서는 주간 리뷰를 쓸 수 없어요.";
 const SIGN_IN = "참여 코드를 먼저 입력해 주세요.";
 const NO_PROJECT = "아직 프로젝트가 없어요. 먼저 사용자 테스트용으로 공개해 주세요.";
 const NO_DIRECTOR = "강사 토큰을 넣어야 디렉터 화면을 볼 수 있어요.";
+const DECIDING = "결정을 기록하고 있어요.";
 const msg = (r: { code: string; message: string; status?: number }) => REVIEW_MESSAGES[r.code] ?? (r.code === "not_found" ? OFF : r.message.startsWith("공개하지 못했어요") ? `주간 리뷰를 읽지 못했어요 (${r.status ?? "?"})` : r.message);
 
 type Client = { base: string; token: string; fetchImpl?: typeof fetch };
@@ -54,6 +55,7 @@ export async function directorAvailable(input: { base: string; token: string | n
 export class ReviewSession {
   private readonly ports: ReviewPorts;
   private running = false;
+  private deciding = false;
   private timing: PrepareTiming | null = null;
   private refused: string[] | null = null;
   /** The director's open team and week (the overview picks it). */
@@ -105,7 +107,10 @@ export class ReviewSession {
   /**
    * "Prepare Weekly Review" (CR-49): only the stale sections are regenerated, and the model is
    * asked once per stale model section. When the records change between the two calls the
-   * Service refuses the answer (`inputs_changed`, `review_changed`) and the run starts over once.
+   * Service refuses the commit (`inputs_changed`, `review_changed`, `evidence_changed`). One press
+   * asks the model at most once (MU-02, decision 2: one upstream call per user request, retry
+   * bound 0): a race after the model was asked ends the run and the student presses again; a race
+   * on the facts alone, before any model call, starts over once.
    */
   async prepare(week?: number): Promise<{ ok: true; regenerated: string[]; unchanged: boolean } | { ok: false; message: string }> {
     if (!this.ports.switchOn()) return { ok: false, message: OFF };
@@ -118,6 +123,7 @@ export class ReviewSession {
       const projectId = await this.project(client);
       if (!projectId) return { ok: false, message: NO_PROJECT };
       const path = `/projects/${encodeURIComponent(projectId)}/review`;
+      let modelCalls = 0;
       for (let attempt = 0; attempt < 2; attempt++) {
         const t0 = this.now();
         let provider = 0;
@@ -131,6 +137,7 @@ export class ReviewSession {
         let failed: string | null = null;
         for (const m of prep.body.model_sections) {
           const t1 = this.now();
+          modelCalls++;
           const answer = await this.ports.complete(m.prompt, m.headers);
           provider += this.now() - t1;
           if (!answer.ok || typeof answer.text !== "string") {
@@ -146,7 +153,8 @@ export class ReviewSession {
         }
         const sent = { total_ms: this.now() - t0, provider_ms: provider };
         const done = await curriculumRequest<{ regenerated: string[]; unchanged?: boolean; refused?: { next_experiment?: { problems: string[] } } }>(client, "POST", `${path}/commit`, { week: prep.body.week, base_revision: prep.body.base_revision, outputs, timing: sent });
-        if (!done.ok && attempt === 0 && (done.code === "inputs_changed" || done.code === "review_changed" || done.code === "evidence_changed")) continue;
+        // Started over only while no model was asked on this press; after one, the refusal is the answer.
+        if (!done.ok && attempt === 0 && modelCalls === 0 && (done.code === "inputs_changed" || done.code === "review_changed" || done.code === "evidence_changed")) continue;
         if (!done.ok) return { ok: false, message: msg(done) };
         this.timing = regenerationVerdict({ total_ms: this.now() - t0, provider_ms: provider });
         this.refused = done.body.refused?.next_experiment?.problems ?? (failed ? [failed] : null);
@@ -194,28 +202,40 @@ export class ReviewSession {
    * the director opened (its week and revision): checked here in the director's words, then by
    * the Service, which stores a Decision with the director as its actor and an Experiment draft.
    */
-  async decide(projectId: string, at: { week: number; revision: number }, form: DirectorDecisionForm): Promise<{ ok: true; reused: boolean } | { ok: false; message: string }> {
+  async decide(projectId: string, at: { week: number; revision: number }, form: DirectorDecisionForm): Promise<{ ok: true; reused: boolean } | { ok: false; message: string; busy?: true }> {
     const problems = directorFormProblems(form);
     if (problems.length) return { ok: false, message: problems.join(" ") };
-    const token = await this.ports.directorToken();
-    if (!token) return { ok: false, message: NO_DIRECTOR };
-    const next = form.next
-      ? {
-          ...(form.next.hypothesis_id ? { hypothesis_id: form.next.hypothesis_id } : { hypothesis: (form.next.hypothesis ?? "").trim() }),
-          question: form.next.question.trim(),
-          method: form.next.method,
-          success_criteria: form.next.success_criteria.map((c) => c.trim()).filter(Boolean),
-        }
-      : null;
-    const r = await curriculumRequest<{ reused?: boolean }>(this.client(token), "POST", `/projects/${encodeURIComponent(projectId)}/review/decision`, {
-      week: at.week,
-      revision: at.revision,
-      statement: form.statement.trim(),
-      evidence_refs: form.evidence_refs,
-      assumption_refs: form.assumption_refs,
-      affected_deck_slides: form.affected_deck_slides,
-      ...(next ? { next_experiment: next } : {}),
-    });
-    return r.ok ? { ok: true, reused: r.body.reused === true } : { ok: false, message: msg(r) };
+    // One decision in flight: a second press (or message) while the first is being written sends nothing.
+    if (this.deciding) return { ok: false, busy: true, message: DECIDING };
+    this.deciding = true;
+    try {
+      const token = await this.ports.directorToken();
+      if (!token) return { ok: false, message: NO_DIRECTOR };
+      const next = form.next
+        ? {
+            ...(form.next.hypothesis_id ? { hypothesis_id: form.next.hypothesis_id } : { hypothesis: (form.next.hypothesis ?? "").trim() }),
+            question: form.next.question.trim(),
+            method: form.next.method,
+            success_criteria: form.next.success_criteria.map((c) => c.trim()).filter(Boolean),
+          }
+        : null;
+      const r = await curriculumRequest<{ reused?: boolean }>(this.client(token), "POST", `/projects/${encodeURIComponent(projectId)}/review/decision`, {
+        week: at.week,
+        revision: at.revision,
+        statement: form.statement.trim(),
+        evidence_refs: form.evidence_refs,
+        assumption_refs: form.assumption_refs,
+        affected_deck_slides: form.affected_deck_slides,
+        ...(next ? { next_experiment: next } : {}),
+      });
+      return r.ok ? { ok: true, reused: r.body.reused === true } : { ok: false, message: msg(r) };
+    } finally {
+      this.deciding = false;
+    }
+  }
+
+  /** A director decision is being written; a second press meanwhile is dropped (`decide` answers `busy`). */
+  isDeciding(): boolean {
+    return this.deciding;
   }
 }

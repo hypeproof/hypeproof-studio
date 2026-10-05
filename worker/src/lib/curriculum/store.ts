@@ -786,9 +786,20 @@ export async function createExperimentDraft(
   return same ? { ok: true, experiment: same, created: false } : { ok: false, code: "experiment_limit" };
 }
 
-/** Take back a draft this submission wrote when its decision could not be stored. Only an untouched draft (no link). */
+/**
+ * Take back a draft this submission wrote when its decision could not be stored. Only an
+ * untouched draft (no link) that no stored decision names: an identical submission sent at the
+ * same time finds the same draft (its key is the decision id) and may store its decision, naming
+ * this draft, first (CR-52). Its hypothesis then stays too (`deleteHypothesis` keeps a
+ * hypothesis an experiment names).
+ */
 export async function deleteExperimentDraft(db: DB, id: string): Promise<void> {
-  await db.prepare("DELETE FROM cr_experiments WHERE id = ? AND json_extract(doc, '$.status') = 'draft' AND NOT EXISTS (SELECT 1 FROM cr_test_links WHERE experiment_id = ?)").bind(id, id).run();
+  await db
+    .prepare(
+      "DELETE FROM cr_experiments WHERE id = ? AND json_extract(doc, '$.status') = 'draft' AND NOT EXISTS (SELECT 1 FROM cr_test_links WHERE experiment_id = ?) AND NOT EXISTS (SELECT 1 FROM cr_decisions d WHERE d.project_id = cr_experiments.project_id AND json_extract(d.doc, '$.next_experiment_id') = ?)",
+    )
+    .bind(id, id, id)
+    .run();
 }
 
 /**

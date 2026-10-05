@@ -119,8 +119,12 @@ export interface WeeklyReview {
   /** The team member who ran "Prepare Weekly Review" for this revision. */
   prepared_by: string;
   sections: ReviewSection[];
-  /** What the App measured for this preparation (CR-62): whole run and the model's share of it. Reported, not trusted for anything. */
-  timing?: { total_ms: number; provider_ms: number };
+  /**
+   * What the App measured for this preparation (CR-62): the run up to sending the commit and the
+   * model's share of it, plus the Service's own time for the commit (`commit_ms`), which the App
+   * cannot know when it sends its figures. Reported, not trusted for anything.
+   */
+  timing?: { total_ms: number; provider_ms: number; commit_ms?: number };
 }
 
 // ── Student-facing words (Korean product copy) ──────────────────────────────

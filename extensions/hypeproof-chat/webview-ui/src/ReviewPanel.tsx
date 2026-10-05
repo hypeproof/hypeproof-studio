@@ -112,8 +112,12 @@ function Pack(props: { review: ReviewAnswer }) {
 
 const EMPTY_NEXT: NextExperimentForm = { hypothesis: "", question: "", method: "task_test", success_criteria: [] };
 
-/** CR-51, CR-52 — the director's decision and next experiment, written from the pack on screen. */
-function DirectorForm(props: { review: ReviewAnswer; busy: boolean; onDecide(form: DirectorDecisionForm): void }) {
+/**
+ * CR-51, CR-52 — the director's decision and next experiment, written from the pack on screen.
+ * `deciding` from the press until the host answers: the button is replaced by a status line, so
+ * one press writes one decision.
+ */
+function DirectorForm(props: { review: ReviewAnswer; busy: boolean; deciding: boolean; onDecide(form: DirectorDecisionForm): void }) {
   const { review } = props;
   const choices = packChoices(review);
   const weekHypotheses = (review.pack?.sections.find((s) => s.id === "hypothesis")?.items ?? [])
@@ -194,9 +198,16 @@ function DirectorForm(props: { review: ReviewAnswer; busy: boolean; onDecide(for
         </div>
       )}
       {problems.length > 0 && form.statement.trim() && <p data-testid="review-form-problems">{problems.join(" ")}</p>}
-      <button type="button" data-testid="review-decide" disabled={props.busy || problems.length > 0} onClick={() => props.onDecide(sent)}>
-        결정 기록하기
-      </button>
+      {/* While a decision is in flight there is no button to press again: one press, one decision. */}
+      {props.deciding ? (
+        <p data-testid="review-deciding" role="status">
+          결정을 기록하고 있어요…
+        </p>
+      ) : (
+        <button type="button" data-testid="review-decide" disabled={props.busy || problems.length > 0} onClick={() => props.onDecide(sent)}>
+          결정 기록하기
+        </button>
+      )}
     </details>
   );
 }
@@ -206,6 +217,8 @@ export function ReviewPanel(props: {
   error: string | null;
   done: string | null;
   busy: boolean;
+  /** A director decision was sent and the host has not answered yet. */
+  deciding?: boolean;
   onRefresh(): void;
   onPrepare(): void;
   onOpenTeam(projectId: string | null): void;
@@ -219,7 +232,7 @@ export function ReviewPanel(props: {
     <section className="hps-evidence" data-testid="review-panel" data-mode={view.mode} aria-label={director ? "주간 리뷰 (디렉터)" : "주간 리뷰"}>
       <header>
         <strong>{director ? "주간 리뷰 · 디렉터" : "주간 리뷰"}</strong>
-        <button type="button" onClick={props.onRefresh} disabled={props.busy || view.running}>새로 불러오기</button>
+        <button type="button" onClick={props.onRefresh} disabled={props.busy || view.running || props.deciding === true}>새로 불러오기</button>
         <button type="button" onClick={props.onClose} aria-label="닫기">✕</button>
       </header>
       {view.notice && <p data-testid="review-notice">{view.notice}</p>}
@@ -261,7 +274,7 @@ export function ReviewPanel(props: {
         <>
           <h4>{review.project_title}</h4>
           <Pack review={review} />
-          {director && review.pack && <DirectorForm review={review} busy={props.busy} onDecide={(form) => props.onDecide(review.project_id, review.week, review.pack!.revision, form)} />}
+          {director && review.pack && <DirectorForm review={review} busy={props.busy} deciding={props.deciding === true} onDecide={(form) => props.onDecide(review.project_id, review.week, review.pack!.revision, form)} />}
         </>
       )}
     </section>

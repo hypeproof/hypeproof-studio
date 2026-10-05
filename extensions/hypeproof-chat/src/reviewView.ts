@@ -62,7 +62,8 @@ export interface ReviewPackView {
   prepared_at: number;
   prepared_by: string;
   sections: ReviewSectionView[];
-  timing?: { total_ms: number; provider_ms: number };
+  /** The App's figures up to sending the commit, and the Service's own time for the commit (CR-62). */
+  timing?: { total_ms: number; provider_ms: number; commit_ms?: number };
 }
 
 export interface ReviewSourceView {

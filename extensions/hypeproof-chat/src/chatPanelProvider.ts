@@ -57,7 +57,7 @@ import {
   toProxyToolResult,
   isLoopbackUrl,
 } from "./browserControlHelpers";
-import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY } from "./curriculumRuntime";
+import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, CR_DIRECTOR_REPROBE_MS } from "./curriculumRuntime";
 import { VerifySession, recordChecked, refusalText, verifyContext, verifyToolResult, type VerifyRecorderPort } from "./verifySession";
 import { artifactVersionFor } from "./artifactVersion";
 import type { ElementContext } from "./elementPick";
@@ -1020,7 +1020,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * CR-02 for the director (cr-review): mirror "the stored issuer token directs a cohort whose
    * profile has the switch on" to CR_DIRECTOR_CONTEXT_KEY, from the Service's answer (a director
    * has no served student profile). Asked again when the token changes, after five minutes, or
-   * when `force`d; false without an issuer token or with any refusal.
+   * when `force`d, and every five minutes by the constructor's timer, so the palette entry goes
+   * within five minutes of the Service's switch going off; false without an issuer token or with
+   * any refusal.
    */
   async refreshCrDirectorContext(force = false): Promise<boolean> {
     const token = (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null;
@@ -1119,6 +1121,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           }
         : null,
     });
+    // A second press while the first decision is being written sent nothing; the first one's answer redraws the panel.
+    if (!r.ok && r.busy) return;
     return this.postReviewState("director", r.ok ? { done: r.reused ? "이미 기록된 결정이에요. 다시 저장하지 않았어요." : "결정과 다음 실험을 프로젝트 기억에 기록했어요." } : { error: r.message });
   }
 
@@ -1189,6 +1193,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
     if (sub) context.subscriptions.push(sub);
+    // cr-review (CR-02) — the Service's switch can go off while the App stays open: the director's
+    // key is asked again every five minutes (no request without an issuer token), so the palette
+    // entry does not outlive the switch. The command itself asks again on every use.
+    const directorProbe = setInterval(() => void this.refreshCrDirectorContext(true).catch(() => undefined), CR_DIRECTOR_REPROBE_MS);
+    context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
   }
 
   /**

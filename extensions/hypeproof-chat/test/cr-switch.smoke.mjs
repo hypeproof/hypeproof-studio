@@ -24,7 +24,7 @@ registerHooks({
   },
 });
 
-const { CR_SURFACES, CR_CONTEXT_KEY, CR_BYTES_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, manifestSwitchProblems, manifestStoredOnlyProblems, isCurriculumRuntimeEnabled, isCrBrowserTool, isCrVerifyTool } = await import("../src/curriculumRuntime.ts");
+const { CR_SURFACES, CR_CONTEXT_KEY, CR_BYTES_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, CR_DIRECTOR_REPROBE_MS, manifestSwitchProblems, manifestStoredOnlyProblems, isCurriculumRuntimeEnabled, isCrBrowserTool, isCrVerifyTool } = await import("../src/curriculumRuntime.ts");
 const { VerifySession } = await import("../src/verifySession.ts");
 const { permittedMcpToolsFor } = await import("../src/sdkCoachHelpers.ts");
 const { buildHypeproofMcpServer, MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
@@ -88,7 +88,11 @@ for (const id of CR_SURFACES.directorCommands) assert.ok(!CR_SURFACES.commands.i
 // The handler re-checks through the Service before anything, and the key mirrors only that answer.
 assert.match(providerSrc, /async weeklyReviewDirector\(\): Promise<void> \{\s*if \(!\(await this\.refreshCrDirectorContext\(true\)\)\)/);
 assert.match(providerSrc, /const on = token \? await directorAvailable\(\{ base: curriculumBase\(this\.proxyUrl\(\)\), token \}\) : false;[\s\S]{0,200}?executeCommand\("setContext", CR_DIRECTOR_CONTEXT_KEY, on\)/);
-ok("director command: gated on its own key, which mirrors only the Service's answer for the issuer token; planted ungated variants are caught");
+// The Service's switch can go off while the App stays open: the key is asked again on a timer that
+// lives as long as the extension, so the palette entry outlives the switch by at most CR_DIRECTOR_REPROBE_MS.
+assert.ok(CR_DIRECTOR_REPROBE_MS > 0 && CR_DIRECTOR_REPROBE_MS <= 5 * 60_000, "re-asked at least every five minutes");
+assert.match(providerSrc, /const directorProbe = setInterval\(\(\) => void this\.refreshCrDirectorContext\(true\)\.catch\(\(\) => undefined\), CR_DIRECTOR_REPROBE_MS\);\s*context\.subscriptions\.push\(\{ dispose: \(\) => clearInterval\(directorProbe\) \}\);/, "the director key is re-asked on a timer, disposed with the extension");
+ok("director command: gated on its own key, which mirrors only the Service's answer for the issuer token and is asked again every five minutes; planted ungated variants are caught");
 
 // ── the listed exception: delete-only, shown only while the person has bytes stored ──
 assert.deepEqual(CR_SURFACES.switchOffWhileStored, ["hypeproof-chat.clearBrowserResultBytes"], "the delete command is in the inventory as the one allowed exception");

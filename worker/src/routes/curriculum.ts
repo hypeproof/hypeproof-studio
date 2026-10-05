@@ -1505,6 +1505,7 @@ curriculum.post("/projects/:id/review/prepare", async (c) => {
 
 /** Store the next revision of the week's pack: only the stale sections are regenerated (CR-49). */
 curriculum.post("/projects/:id/review/commit", async (c) => {
+  const started = Date.now();
   const w = await memberWrite(c, c.req.param("id"));
   if (w instanceof Response) return w;
   const db = c.env.HPS_DB;
@@ -1533,6 +1534,10 @@ curriculum.post("/projects/:id/review/commit", async (c) => {
   const problems = packProblems(pack);
   if (problems.length) return refuse(c, 422, "invalid_pack", { problems });
   if (pack.revision > REVIEW_LIMITS.revisionsPerWeek) return refuse(c, 409, "review_revision_limit", { max: REVIEW_LIMITS.revisionsPerWeek });
+  // CR-62: the App's figures run to sending this request, so the Service adds its own share of
+  // the commit; a revision read back covers the preparation as `total_ms + commit_ms` (the
+  // network round trip apart).
+  if (pack.timing) pack.timing = { ...pack.timing, commit_ms: Date.now() - started };
   if (!(await insertReview(db, pack, base?.revision ?? 0, REVIEW_LIMITS.revisionsPerWeek))) return refuse(c, 409, "review_changed", { latest: (await latestReview<WeeklyReview>(db, w.project.id, week))?.revision ?? 0 });
   if (afterReviewInsert) await afterReviewInsert(w.project);
   // The pack quotes the statements of the evidence items it was composed from. When the team's
@@ -1552,11 +1557,31 @@ curriculum.post("/projects/:id/review/commit", async (c) => {
 });
 
 /**
+ * Everything one director submission chose, normalized as it would be stored (cr-review, CR-51,
+ * CR-52): the statement, the cited evidence and assumptions and the slides as sets, and the next
+ * experiment's fields. The decision id is derived from it, so a retry of the submission is the
+ * same decision and any change to what was chosen is another one.
+ */
+function decisionSubmission(body: Record<string, unknown>, statement: unknown, evidenceRefs: readonly string[], assumptionRefs: readonly string[]) {
+  const trimmed = (v: unknown) => (typeof v === "string" ? v.trim() : (v ?? null));
+  const ne = body.next_experiment;
+  let next: unknown = ne ?? null;
+  if (ne && typeof ne === "object" && !Array.isArray(ne)) {
+    const o = ne as Record<string, unknown>;
+    const hypothesisId = o.hypothesis_id === undefined ? null : o.hypothesis_id;
+    next = { hypothesis_id: hypothesisId, hypothesis: hypothesisId === null ? trimmed(o.hypothesis) : null, question: trimmed(o.question), method: trimmed(o.method), success_criteria: Array.isArray(o.success_criteria) ? o.success_criteria.map(trimmed) : (o.success_criteria ?? null) };
+  }
+  const slides = Array.isArray(body.affected_deck_slides) ? [...body.affected_deck_slides].sort((a, b) => Number(a) - Number(b)) : (body.affected_deck_slides ?? []);
+  return { statement, evidence_refs: [...evidenceRefs].sort(), assumption_refs: [...assumptionRefs].sort(), affected_deck_slides: slides, next_experiment: next };
+}
+
+/**
  * CR-51, CR-52 — the director's final decision and the next experiment, written from the review
  * screen into Venture Memory: a Decision with actor `director`, linked to evidence of the pack it
  * names (its observed and interpretation items; its assumptions as assumption refs), and an
  * Experiment draft for the next week, written first and named by the decision. A retried
- * submission of the same decision answers the stored one and writes nothing.
+ * submission of the same decision (`decisionSubmission`) answers the stored one and writes
+ * nothing; two sent at the same time store one decision and one draft.
  */
 curriculum.post("/projects/:id/review/decision", async (c) => {
   const d = await directorProject(c, c.req.param("id"));
@@ -1584,13 +1609,16 @@ curriculum.post("/projects/:id/review/decision", async (c) => {
   if (outside.length) return refuse(c, 409, "ref_not_in_review", { refs: outside });
   const now = Date.now();
   const statement = typeof body.statement === "string" ? body.statement.trim() : body.statement;
-  const id = `dec-${(await digestOf(["review-decision", project.id, week, pack.revision, d.payload.u, statement])).slice(7, 23)}`;
+  // The id names the whole submission, so only a retry of it is answered as the stored decision; a
+  // corrected one (other evidence, slides or next experiment under the same statement) is its own.
+  const id = `dec-${(await digestOf(["review-decision", project.id, week, pack.revision, d.payload.u, decisionSubmission(body, statement, evidenceRefs, assumptionRefs)])).slice(7, 23)}`;
   const v = validateDecisionContract({ id, statement, evidence_refs: evidenceRefs, assumption_refs: assumptionRefs, resulting_version_id: null, affected_deck_slides: body.affected_deck_slides ?? [], decided_at: now });
   if (!v.ok) return refuse(c, 400, "invalid_decision", { problems: v.problems });
   const memory = await loadMemory(c.env, project);
   const items = new Map(memory.evidence_items.map((i) => [i.id, i]));
-  const answerStored = (stored: Decision, status: 200 | 201) =>
-    c.json({ decision: decisionView(stored, items), experiment: memory.experiments.find((e) => e.id === stored.next_experiment_id) ?? null, ...(status === 200 ? { reused: true } : {}) }, status);
+  // The draft is read from storage: a submission sent at the same time may have written it after this request read the memory.
+  const answerStored = async (stored: Decision, status: 200 | 201) =>
+    c.json({ decision: decisionView(stored, items), experiment: stored.next_experiment_id ? await getExperiment(db, stored.next_experiment_id) : null, ...(status === 200 ? { reused: true } : {}) }, status);
   const already = await getDecision(db, id);
   if (already) return answerStored(already, 200);
   const experimentId = weekExperiments(memory, week as number).at(-1)?.id;
@@ -1662,12 +1690,16 @@ curriculum.post("/projects/:id/review/decision", async (c) => {
   };
   const added = await addDecisionOnce(db, decision, now, MEMORY_LIMITS.decisionsPerProject);
   if (added !== "created") {
-    // Nothing of this submission stays: a draft it wrote is taken back (a concurrent identical
-    // submission stored the decision first, or the Project is full).
-    if (draft && draftCreated) await deleteExperimentDraft(db, draft.id);
-    if (storedHypothesis) await deleteHypothesis(db, storedHypothesis);
+    // An identical submission sent at the same time found this draft (its key is the decision id)
+    // and stored its decision, naming the draft, first: everything stays, and this request answers
+    // that decision. Otherwise (the Project is full) nothing of this submission stays: the draft
+    // and the hypothesis it wrote are taken back, and the store keeps any a decision names.
+    const stored = added === "exists" ? await getDecision(db, id) : null;
+    if (!(draft && stored?.next_experiment_id === draft.id)) {
+      if (draft && draftCreated) await deleteExperimentDraft(db, draft.id);
+      if (storedHypothesis) await deleteHypothesis(db, storedHypothesis);
+    }
     if (added === "limit") return refuse(c, 409, "decision_limit", { max: MEMORY_LIMITS.decisionsPerProject });
-    const stored = await getDecision(db, id);
     return stored ? answerStored(stored, 200) : refuse(c, 409, "decision_limit");
   }
   return c.json({ decision: decisionView(decision, items), experiment: draft }, 201);
