@@ -5,8 +5,9 @@
 //
 // This screen does one thing: **keep you from losing track of what to do right now.**
 // So top to bottom it is week → one mission sentence → the 1–3 actions to do now →
-// completion conditions → steps remaining, and the growth-record entry sits **below
-// that, at link size** (SX-03).
+// completion conditions → "지난번 이어서" when an earlier session left the task mid-way
+// (SX-02) → steps remaining, and the growth-record entry sits **below that, at link
+// size** (SX-03).
 // The largest type is the mission sentence — the 5-second recall test (SX-T01) looks at it.
 //
 // What is not here, and why:
@@ -22,8 +23,9 @@
 // condition stays unchecked (☐) and the header says so: drawing a check mark with no
 // evidence is the one thing this product must most avoid.
 
+import { useEffect, useRef } from "react";
 import type { ResolvedProfile } from "../../src/protocol";
-import { actionsFrom, completionMet, stepsRemaining, type LessonStep as Step } from "./missionHeaderLogic";
+import { actionsFrom, completionMet, resumeStepOf, stepsRemaining, type LessonStep as Step } from "./missionHeaderLogic";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
 
@@ -34,17 +36,30 @@ export interface MissionHeaderProps {
    * still missing. null when the host sends no verdict; then nothing is checked off.
    */
   missing?: ReadonlyArray<{ item?: string; event?: string }> | null;
-  /** The id of the step currently being viewed. null means the first step. */
+  /**
+   * The id of the step currently being viewed. null means the first step. ChatPanel starts it at
+   * the step the task's record holds (`stepViewOnState`), not at the first step.
+   */
   currentStepId: string | null;
   onSelectStep: (stepId: string) => void;
   /** Feeds the current step's task to the coach. The screen's only Primary CTA (SX-04). */
   onStartStep: (step: Step) => void;
   /** To the growth record. A single small link (SX-03). */
   onOpenGrowth: () => void;
-  /** While streaming the Primary goes busy and no second Primary appears (SX-04). */
+  /**
+   * While streaming the Primary goes busy and no second Primary appears (SX-04). ChatPanel also
+   * holds it busy on a task-flow seat until the host's learning state has shown the task's record
+   * (`recordShownBy`): before that the header stands on the first step, not the recorded one.
+   */
   busy: boolean;
   /** Activity kind and name. Demoted to a small line inside the header (design §정보 구조, region A). */
   activity: { label: string; name: string; verified: boolean } | null;
+  /**
+   * SX-02 — "지난번 이어서": the step the host says this task's record still holds from an earlier
+   * session of the app (`learningState.resume`). null or absent: no entry. The host decides when
+   * there is one; this header only draws it, and only for a step of this lesson.
+   */
+  resume?: { step: string } | null;
 }
 
 export function MissionHeader(props: MissionHeaderProps) {
@@ -55,6 +70,28 @@ export function MissionHeader(props: MissionHeaderProps) {
   const actions = actionsFrom(steps, currentStepId);
   const remaining = stepsRemaining(steps, currentStepId);
   const current = actions[0] ?? null;
+  const resumeStep = resumeStepOf(steps, props.resume);
+
+  // "지난번 이어서" hands the keyboard to the recorded step's action (the Primary). The view already
+  // starts at the recorded step (ChatPanel, `stepViewOnState`), so usually the entry only moves the
+  // focus, at once. If the student has since looked at another step, it first brings the recorded
+  // one back to the front, and the focus waits for the render that moved it. Either way the entry
+  // never does nothing.
+  const primary = useRef<HTMLButtonElement | null>(null);
+  const focusAfterMove = useRef(false);
+  useEffect(() => {
+    if (!focusAfterMove.current) return;
+    focusAfterMove.current = false;
+    primary.current?.focus();
+  });
+  const resumeAt = (step: Step) => {
+    if (current?.id === step.id) {
+      primary.current?.focus();
+      return;
+    }
+    focusAfterMove.current = true;
+    props.onSelectStep(step.id);
+  };
 
   return (
     <header className="hp-mission" aria-label="현재 과제">
@@ -78,12 +115,12 @@ export function MissionHeader(props: MissionHeaderProps) {
           mission is the same move SX-02 forbids when it says not to substitute a
           progress card.
 
-          The 이어가기 진입 that SX-02 does ask for is NOT implemented anywhere in this
-          repo (`grep -rn 지난번 extensions/` finds nothing), and SX-T11 makes it
-          conditional on a previous session existing. Building it is a separate piece of
-          work with its own design question — what "이어가기" resumes, the conversation
-          or the project. Until then this seat shows the activity line below and nothing
-          invented above it. */}
+          The 이어가기 진입 SX-02 asks for is drawn further down ("지난번 이어서"), from
+          the task record the task flow keeps — which only a seat with a mission has.
+          With no design file there is no record and no entry: what "이어가기" would
+          resume on such a seat (the conversation, which already reopens by itself, or
+          the project folder) is still an open question, so this seat shows the activity
+          line below and nothing invented above it. */}
       {content ? (
         <h1 className="hp-mission-sentence">
           {learning?.mission ?? "미션이 정해지지 않았습니다."}
@@ -110,6 +147,7 @@ export function MissionHeader(props: MissionHeaderProps) {
             <li key={step.id} className={index === 0 ? "hp-mission-action hp-mission-action-now" : "hp-mission-action"}>
               {index === 0 ? (
                 <button
+                  ref={primary}
                   type="button"
                   className="hp-cta-primary"
                   disabled={props.busy}
@@ -153,6 +191,18 @@ export function MissionHeader(props: MissionHeaderProps) {
             </span>
           </li>
         </ul>
+      ) : null}
+
+      {/* SX-02 — "지난번 이어서": below the actions and the completion conditions, above the
+          growth-record link (PROJECT_RULES order). A quiet button, never a Primary (SX-04): the
+          one emphasized action stays the step to do now. No date, count or progress figure
+          (SX-51) — the step's own title is the whole entry. */}
+      {resumeStep ? (
+        <p className="hp-mission-resume">
+          <button type="button" className="hp-cta-quiet" data-resume-step={resumeStep.id} onClick={() => resumeAt(resumeStep)}>
+            지난번 이어서 · {resumeStep.title}
+          </button>
+        </p>
       ) : null}
 
       <p className="hp-mission-foot">

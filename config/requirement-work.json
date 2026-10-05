@@ -2454,7 +2454,12 @@
         "extensions/hypeproof-chat/webview-ui/src/LocalReview.tsx",
         "e2e/sx/task-flow-app.spec.ts",
         "e2e/sx/sx-service.mjs",
-        "e2e/sx/playwright.config.ts"
+        "e2e/sx/playwright.config.ts",
+        "extensions/hypeproof-chat/test/sx-home.smoke.mjs",
+        "e2e/sx/home-app.spec.ts",
+        "extensions/hypeproof-chat/test/sx-audit.mjs",
+        "extensions/hypeproof-chat/test/sx-audit.smoke.mjs",
+        "extensions/hypeproof-chat/test/sx-mission-header.smoke.mjs"
       ]
     },
     {

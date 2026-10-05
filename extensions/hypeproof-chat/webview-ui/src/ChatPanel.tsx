@@ -2,6 +2,7 @@ import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
+import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
 import { EvidenceDrawer } from './EvidenceDrawer';
 import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
@@ -229,6 +230,28 @@ export function ChatPanel(props: Props) {
    * screen does nothing when pressed.
    */
   const [learning, setLearning] = useState<LearningStatePayload | null>(null);
+  /**
+   * SX-01/SX-02 — the step region A shows starts where the task's record stands, then follows the
+   * student (`stepViewOnState`). Drawn from the first step, a reopened task offered an earlier
+   * step's action as the Primary, and pressing it moved the record back.
+   */
+  const stepView = useRef<StepViewSettled>(null);
+  const learningTask = useRef<string | null>(null);
+  const pickStep = (stepId: string) => {
+    stepView.current = stepViewOnPick(learningTask.current);
+    setCurrentStepId(stepId);
+  };
+  /**
+   * SX-01/SX-02 — the lesson and activity (`recordViewKey`) whose task record a learning state has
+   * shown this screen (`recordShownBy`). Until then, on a seat that runs the task flow, region A's
+   * Primary is busy: it is drawn from the profile at the first step, and a start pressed there
+   * moved a task left mid-way back to that step (review of 2026-10-05). The key a state counts for
+   * is the one of the last `config` message, read in message order (not from a render, which can
+   * run after the next message).
+   */
+  const recordKeyNow = useRef(recordViewKey(config));
+  const [recordShownFor, setRecordShownFor] = useState<string | null>(null);
+  const awaitingRecord = taskFlowSeat(config?.profile) && recordShownFor !== recordViewKey(config);
   /** Drawer open/closed is a **view state**, so the webview owns it. Closed by default (SX-17). */
   const [drawerOpen, setDrawerOpen] = useState(false);
   // #751 U3 — instructor prompts imported into THIS draft (bodiless refs, saved with the draft, handed over with the send).
@@ -265,7 +288,14 @@ export function ChatPanel(props: Props) {
   // task's events.
   useEffect(() => {
     const off = onHostMessage((msg) => {
-      if (msg.type === "learningState") setLearning(msg.state);
+      if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);
+      if (msg.type !== "learningState") return;
+      setLearning(msg.state);
+      learningTask.current = msg.state.task;
+      const next = stepViewOnState(stepView.current, msg.state);
+      stepView.current = next.settled;
+      if (next.step) setCurrentStepId(next.step);
+      if (recordShownBy(msg.state)) setRecordShownFor(recordKeyNow.current);
     });
     return off;
   }, []);
@@ -734,10 +764,12 @@ export function ChatPanel(props: Props) {
         // Without `learningState` (a seat that records no learning events) there is no verdict,
         // and nothing gets a check mark.
         missing={learning ? learning.complete.missing : null}
+        // SX-02 — "지난번 이어서", exactly as the host decided it from the task record.
+        resume={learning?.resume ?? null}
         currentStepId={currentStepId}
-        onSelectStep={setCurrentStepId}
+        onSelectStep={pickStep}
         onStartStep={(step) => {
-          setCurrentStepId(step.id);
+          pickStep(step.id);
           const lesson = config?.profile?.lesson;
           if (!lesson) return;
           postToHost({ type: 'lessonStep', stepId: step.id, status: 'in_progress' });
@@ -748,7 +780,10 @@ export function ChatPanel(props: Props) {
           });
         }}
         onOpenGrowth={() => postToHost({ type: "openLocalReview" })}
-        busy={streaming}
+        // SX-04 — busy while the coach answers, and (SX-01/SX-02) until a learning state has shown
+        // this screen the task's record: before it the Primary stands on the first step, not the
+        // step the record holds.
+        busy={streaming || awaitingRecord}
         activity={config?.activity ? {
           label: config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업",
           name: config.activity.name,
