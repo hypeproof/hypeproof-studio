@@ -646,6 +646,17 @@ REQ-M27의 활동 원문 보존은 유지하되 기본 표시를 조정한다. �
 배포·이행은 [공통 릴리스 절차](dev/unified-release-and-migration.md)를 따르며
 양쪽 활동 검사 누락을 한쪽의 성공으로 보충하지 않는다.
 
+`REQ-STUDIO-ACCEPTANCE-SDK-SEED` (jayleekr/hypeprooflab#997): acceptance that drives a
+packaged App (`e2e/unified-release/run.mjs`, called by `verify-service-activities.yml`
+and `verify-unified-release.yml`) first seeds the native Agent SDK binary at the version
+the App vendors, the same per-machine step the installers perform. It refuses to start
+(BLOCKED) when that seed is absent or would not be trusted by the App. Without it a native
+trial turn falls back to the proxy runtime, the Service answers `409 trial_requires_sdk`
+before any model call, and the check fails on UI timing without naming the cause.
+Verification: `e2e/unified-release/sdk-seed.test.mjs` (fresh-runner negative, seeded
+positive, stale/truncated/unmarked/other-version seeds rejected). The macOS and Windows
+acceptance runs are recorded per run, not by this control.
+
 ## Local task review (#1020)
 
 `REQ-STUDIO-LOCAL-REVIEW`: [Explicit local task review](requirements/local-task-review.md) connects selected Claude/Codex message evidence to private file storage, the six-capability card, human review revisions and an independently verified local submission receipt. Captured replay, automated installed-shell tests, public release and Jay acceptance remain distinct.
