@@ -20,7 +20,7 @@ import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
-import {applyTaskFlow, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
+import {flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
 import type {TaskCurriculum} from '../../../worker/src/lib/measurement-core/local-record.ts';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
@@ -426,15 +426,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * `hps-local-record/1` store the local review and CR-10 share; no new store, SX-48).
    *
    * null when this seat runs no task flow (`taskFlowTarget`). The step gate and the start are
-   * judged on this recorder's batch. What the student must be told is decided by `flowNotice`:
-   * a storage failure becomes a notice and null, never a phase nobody stored.
+   * judged on this recorder's batch. The record's lock is taken only for a write
+   * (`runTaskFlowOn`): a plain refresh reads. What the student must be told is decided by
+   * `flowNotice`: a storage failure becomes a notice and null, never a phase nobody stored.
    */
   private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
     const target = this.taskFlowTarget(recorder, profile);
     if (!target) return null;
     try {
       const { store, record } = this.crRecordHandle();
-      const outcome = await store.exclusive(() => applyTaskFlow(record, { ...target, signal, events: recorder.batch.events, at: Date.now() }));
+      const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });
       this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };
       this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });
       return outcome;
@@ -3414,8 +3415,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.opsObserver?.lessonStep(signal.lesson_version, signal.step_id, signal.status);
         // SX-55 — starting a step makes it the task's current step when its gates allow
         // (recordStepStart). "Marked done" (`submitted`) is the learner's own report to the class
-        // board and moves nothing in the task flow.
-        if (signal.status === "in_progress") void this.recordStepStart(signal.step_id).catch(() => undefined);
+        // board and moves nothing in the task flow. Only a seat that runs the flow goes on: every
+        // other seat keeps this handler exactly as it was, with no observation recorder prepared
+        // and no Service request on a step start (runsTaskFlow).
+        if (signal.status === "in_progress" && runsTaskFlow(this.cachedProfile)) void this.recordStepStart(signal.step_id).catch(() => undefined);
         return;
       }
       // #751 G2 — the learner's focus (step + help choice) for the NEXT turn. A turn already running keeps what it started with.

@@ -2438,7 +2438,8 @@
         "extensions/hypeproof-chat/src/learningStateHelpers.ts",
         "extensions/hypeproof-chat/src/chatPanelProvider.ts",
         "extensions/hypeproof-chat/src/localReviewService.ts",
-        "extensions/hypeproof-chat/src/localReviewPanel.ts"
+        "extensions/hypeproof-chat/src/localReviewPanel.ts",
+        "extensions/hypeproof-chat/src/localReviewProtocol.ts"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/sx-task-flow.smoke.mjs",

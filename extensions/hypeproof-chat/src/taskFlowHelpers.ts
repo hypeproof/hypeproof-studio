@@ -34,6 +34,7 @@ import {
   isLearningEventKind,
   nextStep,
   updateCurriculum,
+  type Actor,
   type LearningEventKind,
   type LocalRecord,
   type ObservationEvent,
@@ -101,7 +102,10 @@ const nonEmpty = (v: unknown, max: number): v is string => typeof v === "string"
  * week below one, no step to stand on); refusing them here keeps a malformed lesson from
  * turning into a storage error on every screen refresh. A step `gate` that is not a learning
  * event kind is malformed too (the frozen design never has one: learning-design.ts refuses it):
- * no flow, rather than a gate nothing can ever meet.
+ * no flow, rather than a gate nothing can ever meet. So is a step id the design repeats (the
+ * Service's session-design.ts refuses it, "step ids must be unique"): the step walk in
+ * `decideFlow` finds a step by its id, so a repeated id would send it back to the first one
+ * and around again, forever, inside the record's lock.
  */
 export function flowLessonOf(lesson: unknown): FlowLesson | null {
   if (!lesson || typeof lesson !== "object") return null;
@@ -113,13 +117,28 @@ export function flowLessonOf(lesson: unknown): FlowLesson | null {
   if (!nonEmpty(l.course_id, 200) || !nonEmpty(l.version, 100) || typeof l.sha256 !== "string" || !SHA256.test(l.sha256)) return null;
   const rawSteps = l.content?.steps;
   const steps: FlowLesson["steps"][number][] = [];
+  const ids = new Set<string>();
   for (const s of Array.isArray(rawSteps) ? rawSteps : []) {
     const { id, gate } = (s && typeof s === "object" ? s : {}) as { id?: unknown; gate?: unknown };
-    if (!nonEmpty(id, 200) || (gate !== undefined && !isLearningEventKind(gate))) return null;
+    if (!nonEmpty(id, 200) || ids.has(id) || (gate !== undefined && !isLearningEventKind(gate))) return null;
+    ids.add(id);
     steps.push(gate === undefined ? { id } : { id, gate });
   }
   if (!steps.length) return null;
   return { course_id: l.course_id, version: l.version, sha256: l.sha256, week, steps };
+}
+
+/**
+ * Does this seat run the task flow at all: a profile that records `/2` learning events, on a
+ * lesson the flow can run (`flowLessonOf`: a mission, a sound step list)?
+ *
+ * Read before anything that prepares the observation recorder. Preparing it asks the Service
+ * for the observation context and rebuilds the recorder from the folder's saved batch, and for
+ * that moment the host has no recorder at all. A seat outside the flow never did that on a step
+ * start before SX-55, and must not now (`/1` classroom seats send a step start on every step).
+ */
+export function runsTaskFlow(profile: { observation?: { format?: unknown } | null; lesson?: unknown } | null | undefined): boolean {
+  return profile?.observation?.format === "hps-observation/2" && flowLessonOf(profile.lesson) !== null;
 }
 
 /**
@@ -223,12 +242,14 @@ export function screenFlow(
  * reads; only the events naming `taskId` count.
  *
  * The caller holds the record's lock (`FileRecordStorage.exclusive`), so a read and a write
- * from two Studio windows cannot interleave. A storage failure is thrown by name
- * (`storage_busy`, `storage_failure`, `capacity_exceeded`, ...) and nothing is claimed.
+ * from two Studio windows cannot interleave (`runTaskFlowOn` takes it). A storage failure is
+ * thrown by name (`storage_busy`, `storage_failure`, `capacity_exceeded`, ...) and nothing is
+ * claimed.
  *
- * Who acted: `user` for what the student did (work, a step, a submit, a learning event that
- * started the task), `adapter_explicit` for the record the host opens when the task first
- * appears on screen.
+ * Who acted, as the record says it. The record a screen refresh opens is the host's:
+ * `adapter_explicit` on its `created` line and on the curriculum it starts with, whatever phase
+ * the batch puts that in. Everything a signal of the student's own moves is `user`: work, a step,
+ * a submit, and the start of a task already open that their learning event now shows.
  */
 export async function applyTaskFlow(
   record: LocalRecord,
@@ -237,13 +258,14 @@ export async function applyTaskFlow(
   const { lesson, signal, at } = input;
   const mine = input.events.filter((e) => e.task === input.taskId);
   const started = startedBefore(mine, input.taskId);
+  const opener: Actor = signal.kind === "seen" ? "adapter_explicit" : "user";
   let task: Task;
   let changed = false;
   try {
     task = await record.getTask(input.recordId);
   } catch (error) {
     if (!(error instanceof Error) || error.message !== "unknown_task") throw error;
-    task = await record.createTask({ id: input.recordId, project: lesson.course_id, at });
+    task = await record.createTask({ id: input.recordId, project: lesson.course_id, at, by: opener });
     changed = true;
   }
   if (!task.curriculum) {
@@ -255,7 +277,7 @@ export async function applyTaskFlow(
         phase: started || signal.kind === "work" ? "working" : "assigned",
         current_step: lesson.steps[0]!.id,
       },
-      { by: signal.kind === "seen" ? "adapter_explicit" : "user", at },
+      { by: opener, at },
     );
     changed = true;
   } else if (task.curriculum.phase === "assigned" && started) {
@@ -275,6 +297,48 @@ export async function applyTaskFlow(
     changed,
     ...(decision.kind === "refused" ? { refused: decision.code } : {}),
   };
+}
+
+/**
+ * One signal on the record, taking the record's cross-window lock only when something has to
+ * be written.
+ *
+ * A screen refresh (`seen`) of a task that is already open, with nothing in the batch to start
+ * it, writes nothing (`applyTaskFlow` would decide exactly that), so it is answered from a plain
+ * read. A refresh then never fails `storage_busy` because another Studio window is writing to
+ * the record (a CR-10 screenshot, the local review), and the first refresh in a host does not
+ * pay the lock's scan of every stored file. The plain read cannot see half a write: a record
+ * file is published by an atomic rename (FileRecordStorage.write).
+ *
+ * Every other signal, and a refresh that must open the task or start it, runs `applyTaskFlow`
+ * under `store.exclusive`, so a read and a write from two windows cannot interleave.
+ */
+export async function runTaskFlowOn(
+  store: { exclusive<T>(fn: () => Promise<T>): Promise<T> },
+  record: LocalRecord,
+  input: Parameters<typeof applyTaskFlow>[1],
+): Promise<FlowOutcome> {
+  if (input.signal.kind === "seen") {
+    const unchanged = await seenWithoutWrite(record, input);
+    if (unchanged) return unchanged;
+  }
+  return store.exclusive(() => applyTaskFlow(record, input));
+}
+
+/** `seen` on a task `applyTaskFlow` would leave as it is: its stored curriculum. null when it would write. */
+async function seenWithoutWrite(record: LocalRecord, input: { taskId: string; recordId: string; events: readonly ObservationEvent[] }): Promise<FlowOutcome | null> {
+  let task: Task;
+  try {
+    task = await record.getTask(input.recordId);
+  } catch (error) {
+    if (error instanceof Error && error.message === "unknown_task") return null;
+    throw error;
+  }
+  const current = task.curriculum;
+  // The two writes a `seen` can cause in applyTaskFlow: opening the curriculum, and the level start.
+  if (!current) return null;
+  if (current.phase === "assigned" && startedBefore(input.events.filter((e) => e.task === input.taskId), input.taskId)) return null;
+  return { curriculum: current, changed: false };
 }
 
 // ── What the student is told (region D, beside the completion button) ────────────────────────

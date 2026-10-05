@@ -14,9 +14,12 @@
 //      the record id, and the notice the host shows;
 //   5. the same rules on the App's real record store (FileRecordStorage on a temp dir), read
 //      back through a fresh instance, as a restarted extension host would: a gated jump refused,
-//      a start that a lost signal cannot undo, two seats on one record kept apart;
-//   6. the local review list does not offer a task it cannot open;
-//   7. the rendered region A marks and region D line (test/sx-render.mjs, real components).
+//      a start that a lost signal cannot undo, two seats on one record kept apart, who acted,
+//      and a plain refresh that needs no lock while every write still takes it;
+//   6. the local review list does not offer a task it cannot open, says how many it leaves out
+//      (MC-27), and deletes them only through the core's delete (MC-31);
+//   7. the rendered region A marks, the region D line and the local review's omission line
+//      (test/sx-render.mjs, real components).
 //
 // Every check runs and reports (the worker tests' `check` pattern), so a red run names each
 // broken rule. On the tree before this change the run is red at the functions this extends
@@ -234,30 +237,51 @@ await check("host: the student's learning event and a coach turn that answered b
   );
 });
 
+const stepBody = (text) => between(text, 'case "lessonStep": {', 'case "lessonFocus": {');
 await hostCheck(
   "host: starting a step asks the flow, and a moved step is redrawn; marking a step done moves nothing",
   provider,
   (text) =>
-    lacks(between(text, 'case "lessonStep": {', 'case "lessonFocus": {'), /if \(signal\.status === "in_progress"\) void this\.recordStepStart\(signal\.step_id\)/, "a started step never reaches the flow") ??
+    lacks(stepBody(text), /if \(signal\.status === "in_progress" && runsTaskFlow\(this\.cachedProfile\)\) void this\.recordStepStart\(signal\.step_id\)/, "a started step never reaches the flow") ??
     lacks(between(text, "private async recordStepStart(", "private view?"), /runTaskFlow\(\{ kind: 'start_step', stepId \}[\s\S]*if \(flow\?\.changed \|\| this\.taskFlowNotice\) await this\.postLearningState\(\);/, "a step start is stored but never redrawn"),
   [
-    ['if (signal.status === "in_progress") void this.recordStepStart(signal.step_id)', 'if (false) void this.recordStepStart(signal.step_id)'],
+    ['if (signal.status === "in_progress" && runsTaskFlow(this.cachedProfile)) void this.recordStepStart(signal.step_id)', 'if (false) void this.recordStepStart(signal.step_id)'],
     // M5 — the step start's redraw is gone.
     ["if (flow?.changed || this.taskFlowNotice) await this.postLearningState();\n  }", "\n  }"],
   ],
 );
 
 await hostCheck(
-  "host: the flow runs on the record the local review already uses, under its lock (SX-48), on this seat's own events",
+  "host: a step start on a seat outside the flow prepares no observation recorder (no Service request, no recorder reset)",
+  provider,
+  (text) => {
+    const body = stepBody(text);
+    // Every call that reaches the recorder from this handler must sit behind the flow's own test.
+    const calls = [...body.matchAll(/this\.(recordStepStart|currentLearningRecorder|postLearningState|runTaskFlow)\(/g)];
+    if (calls.length === 0) return "the handler no longer starts a step in the flow at all";
+    return calls.every((m) => /&& runsTaskFlow\(this\.cachedProfile\)\) void $/.test(body.slice(0, m.index))) ? null : "a /1 or mission-less seat now prepares the observation recorder on every step start";
+  },
+  [
+    // The review's finding: the hook ran on every seat.
+    ['if (signal.status === "in_progress" && runsTaskFlow(this.cachedProfile)) void this.recordStepStart', 'if (signal.status === "in_progress") void this.recordStepStart'],
+    // A second, ungated way into the recorder from the same handler.
+    ['this.opsObserver?.lessonStep(signal.lesson_version, signal.step_id, signal.status);', 'this.opsObserver?.lessonStep(signal.lesson_version, signal.step_id, signal.status); void this.currentLearningRecorder();'],
+  ],
+);
+
+await hostCheck(
+  "host: the flow runs on the record the local review already uses, locked for every write (SX-48), on this seat's own events",
   provider,
   (text) =>
     lacks(runBody(text), /this\.crRecordHandle\(\)/, "the flow opened a store of its own") ??
-    lacks(runBody(text), /store\.exclusive\(\(\) => applyTaskFlow\(record, \{ \.\.\.target, signal, events: recorder\.batch\.events, at: Date\.now\(\) \}\)\)/, "the flow writes outside the record's lock, or judges the start and the step gates on something other than this recorder's batch") ??
+    lacks(runBody(text), /await runTaskFlowOn\(store, record, \{ \.\.\.target, signal, events: recorder\.batch\.events, at: Date\.now\(\) \}\)/, "the flow runs around runTaskFlowOn (the lock for a write, a plain read for a refresh), or judges the start and the step gates on something other than this recorder's batch") ??
     lacks(targetBody(text), /if \(!lesson \|\| recorder\.batch\.format !== 'hps-observation\/2'\) return null;/, "a seat without a mission or without /2 runs the flow"),
   [
     // M2 — the start and the gates are judged on nothing: a seat that worked reopens as not started.
     ["signal, events: recorder.batch.events, at: Date.now()", "signal, events: [], at: Date.now()"],
     ["if (!lesson || recorder.batch.format !== 'hps-observation/2') return null;", "if (!lesson) return null;"],
+    // Back to the lock for every refresh: a busy record again fails a plain screen refresh.
+    ["await runTaskFlowOn(store, record, {", "await store.exclusive(() => applyTaskFlow(record, {"],
   ],
 );
 
@@ -273,12 +297,37 @@ await hostCheck(
 );
 
 const reviewPanel = readFileSync(new URL("../src/localReviewPanel.ts", import.meta.url), "utf8");
+const refreshBody = (text) => between(text, "const refresh = async", "const handle = async");
 await hostCheck(
-  "review panel: the list it shows comes from reviewRecords",
+  "review panel (MC-27): the list comes from reviewRecords, and how many it leaves out goes to the screen with it",
   reviewPanel,
-  (text) => lacks(between(text, "const refresh = async", "const handle = async"), /await service\.reviewRecords\(\)/, "the review panel lists the raw record again"),
-  // M1 — the panel reads the raw record: the curriculum task is listed and fails when clicked.
-  [["await service.reviewRecords()", "await service.record.records()"]],
+  (text) =>
+    lacks(refreshBody(text), /const \{ tasks, improvements, curriculumTasks \} = await service\.reviewRecords\(\);/, "the review panel lists the raw record again, or drops the count of what it leaves out") ??
+    lacks(refreshBody(text), /postMessage\(\{ type: 'localReviewState', tasks, improvements, curriculumTasks,/, "the count of what the list leaves out never reaches the screen: the omission is silent again"),
+  [
+    // M1 — the panel reads the raw record: the curriculum task is listed and fails when clicked.
+    ["await service.reviewRecords()", "await service.record.records()"],
+    // The review's finding: the records are filtered and nothing says so.
+    ["tasks, improvements, curriculumTasks, storage", "tasks, improvements, storage"],
+  ],
+);
+
+const deleteBody = (text) => between(text, "msg.action === 'deleteCurriculum'", "else if (msg.action !== 'load')");
+await hostCheck(
+  "review panel (MC-31): the curriculum task records are deleted only after a modal question that says what stays",
+  reviewPanel,
+  (text) => {
+    const body = deleteBody(text);
+    const ask = body.indexOf("showWarningMessage(curriculumDeleteQuestion(curriculumTasks), { modal: true }, '지우기') === '지우기'");
+    const remove = body.indexOf("service.deleteCurriculumTasks()");
+    return ask > 0 && remove > ask ? null : "the curriculum task records are deleted without the question, or before it";
+  },
+  [
+    // Deleted with no question at all.
+    ["if (curriculumTasks > 0 && await vscode.window.showWarningMessage(curriculumDeleteQuestion(curriculumTasks), { modal: true }, '지우기') === '지우기') {", "if (curriculumTasks > 0) {"],
+    // Asked, but without saying what stays where the delete cannot reach (MC-31).
+    ["showWarningMessage(curriculumDeleteQuestion(curriculumTasks),", "showWarningMessage('기록을 지울까요?',"],
+  ],
 );
 
 // ── 4. The flow's rules, pure ──────────────────────────────────────────────────
@@ -309,6 +358,28 @@ if (flow) {
     assert.deepEqual(lesson.steps, week3.steps.map((s) => (s.gate ? { id: s.id, gate: s.gate } : { id: s.id })), "a step's gate was lost: the step could be left without it");
     const bad = { ...week3, steps: week3.steps.map((s, i) => (i === 0 ? { ...s, gate: "criterion_written" } : s)) };
     assert.equal(flow.flowLessonOf({ ...LESSON, content: bad }), null, "a gate that is no learning event kind was kept: nothing could ever leave that step");
+  });
+
+  await check("a design that repeats a step id runs no flow: the step walk could never end (the Service refuses it too)", () => {
+    // The review's repro: steps a, b, a, c — a start_step to c walked a → b → a → b … inside the record's lock.
+    const repeated = { ...week3, steps: [{ id: "a" }, { id: "b" }, { id: "a" }, { id: "c" }] };
+    assert.equal(flow.flowLessonOf({ ...LESSON, content: repeated }), null, "a repeated step id was accepted");
+    const [first, second] = week3.steps;
+    assert.equal(flow.flowLessonOf({ ...LESSON, content: { ...week3, steps: [first, second, { ...first, gate: undefined }] } }), null, "a repeat of the first step was accepted");
+    // Control: the same shape with distinct ids is a lesson the flow runs.
+    assert.ok(flow.flowLessonOf({ ...LESSON, content: { ...week3, steps: [{ id: "a" }, { id: "b" }, { id: "a2" }, { id: "c" }] } }), "distinct ids refused: too strict");
+  });
+
+  await check("runsTaskFlow: only a /2 seat on a lesson the flow can run — the test the step-start hook reads", () => {
+    const p2 = { observation: { format: "hps-observation/2" }, lesson: LESSON };
+    assert.equal(flow.runsTaskFlow(p2), true, "a /2 seat with a mission does not run the flow: too strict");
+    assert.equal(flow.runsTaskFlow({ ...p2, observation: { format: "hps-observation/1" } }), false, "a /1 classroom seat runs the flow");
+    assert.equal(flow.runsTaskFlow({ lesson: LESSON }), false, "a seat that declares no observation format runs the flow");
+    assert.equal(flow.runsTaskFlow({ ...p2, observation: null }), false);
+    assert.equal(flow.runsTaskFlow({ ...p2, lesson: { ...LESSON, content: { ...week3, learning: { ...week3.learning, mission: "" } } } }), false, "a lesson without a mission runs the flow (SX-01 negative)");
+    assert.equal(flow.runsTaskFlow({ ...p2, lesson: undefined }), false, "a seat with no confirmed lesson runs the flow");
+    assert.equal(flow.runsTaskFlow(null), false);
+    assert.equal(flow.runsTaskFlow(undefined), false);
   });
 
   await check("decideFlow: the phase transitions, both directions", () => {
@@ -416,6 +487,14 @@ if (flow) {
     assert.equal(flow.flowNotice("남은 줄", { kind: "seen" }, answered()), "남은 줄", "a successful refresh dropped the line still waiting");
   });
 
+  await check("notice: a step start refused before any work says nothing, and leaves the line still waiting as it was", () => {
+    // Same refusal code as the submit's, different signal: only the submit is told "제출할 수 없어요".
+    const refusedStart = { outcome: { curriculum: curriculumAt("assigned"), changed: false, refused: "not_started" } };
+    assert.equal(flow.flowNotice(null, { kind: "start_step", stepId: "build" }, refusedStart), null, "a step start before any work was told it cannot be submitted");
+    assert.equal(flow.flowNotice("남은 줄", { kind: "start_step", stepId: "build" }, refusedStart), "남은 줄", "a refused step start replaced the line still waiting");
+    assert.equal(flow.flowNotice("남은 줄", { kind: "start_step", stepId: "없는단계" }, { outcome: { curriculum: curriculumAt("working"), changed: false, refused: "unknown_step" } }), "남은 줄");
+  });
+
   await check("notice: a failure is named by its code, never by a message or a path", () => {
     assert.equal(flow.flowErrorCode(new Error("storage_busy")), "storage_busy");
     assert.equal(flow.flowErrorCode(new Error("ENOENT: no such file, open '/Users/someone/x.json'")), "storage_failure");
@@ -435,13 +514,25 @@ try {
       const store = new FileRecordStorage(root);
       return { store, record: new LocalRecord(store) };
     };
+    // What the host runs (runTaskFlowOn): the record's lock for a write, a plain read for a refresh.
     const apply = (signal, at, { events = [], taskId = TASK, recordId = RECORD } = {}) => {
       const { store, record } = open();
-      return store.exclusive(() => flow.applyTaskFlow(record, { taskId, recordId, lesson, signal, events, at }));
+      return flow.runTaskFlowOn(store, record, { taskId, recordId, lesson, signal, events, at });
     };
     const stored = (recordId = RECORD) => open().record.getTask(recordId);
     const phases = async (recordId = RECORD) =>
       (await stored(recordId)).history.filter((h) => h.change.startsWith("curriculum:phase:")).map((h) => h.change.slice("curriculum:phase:".length));
+    /** Another live Studio window holding the record's lock (this test's parent process stands in for it). */
+    const whileLocked = async (fn) => {
+      const lock = join(root, ".writer");
+      await mkdir(lock);
+      await writeFile(join(lock, "pid"), String(process.ppid));
+      try {
+        return await fn();
+      } finally {
+        await rm(lock, { recursive: true, force: true });
+      }
+    };
     seq = 0;
     // The student's own criterion for this task: expect's gate.
     const theirCriterion = criterion();
@@ -457,6 +548,18 @@ try {
       assert.equal((await stored()).id, RECORD, "the record is not stored under this seat's id");
       const again = await apply({ kind: "seen" }, 1001);
       assert.equal(again.changed, false, "a screen refresh rewrote the record");
+    });
+
+    await check("who acted: the record a refresh opens is the host's, created line included; the student's work is theirs", async () => {
+      const opened = await stored();
+      assert.deepEqual(opened.history[0], { at: 1000, by: "adapter_explicit", change: "created" }, "the record says the student created a task the host opened");
+      assert.deepEqual(opened.history.filter((h) => h.change.startsWith("curriculum:")).map((h) => h.by), ["adapter_explicit", "adapter_explicit"], "the host's opening of the curriculum is not marked as the host's");
+      // A task first opened by the student's own work: every line is theirs.
+      const byWork = flow.learningTaskIdOf("f".repeat(64), "wk000000");
+      const recordId = flow.taskRecordIdOf(byWork, SEAT_A);
+      await apply({ kind: "work" }, 1050, { taskId: byWork, recordId });
+      const worked = await stored(recordId);
+      assert.deepEqual(worked.history.map((h) => [h.by, h.change]), [["user", "created"], ["user", "curriculum:phase:working"], ["user", "curriculum:step:expect:entered"]]);
     });
 
     await check("SX-55 negative: a submit before any work is refused by name and moves nothing", async () => {
@@ -587,6 +690,29 @@ try {
       assert.equal((await stored(A.recordId)).curriculum.phase, "submitted");
     });
 
+    await check("a refresh of an open task needs no lock: another Studio window writing to the record does not make it fail", async () => {
+      // RECORD is submitted by now (the checks above), and another live window holds the lock.
+      const shown = await whileLocked(() => apply({ kind: "seen" }, 1950, { events: [theirCriterion] }));
+      assert.equal(shown.changed, false);
+      assert.equal(shown.refused, undefined);
+      assert.equal(shown.curriculum.phase, "submitted", "the refresh showed something other than the stored phase");
+    });
+
+    await check("refresh control: whatever must be written still takes the lock, and fails storage_busy while another window holds it", async () => {
+      const fresh = flow.learningTaskIdOf("c".repeat(64), "a1b2c3d4");
+      const at = { taskId: fresh, recordId: flow.taskRecordIdOf(fresh, SEAT_A) };
+      // Opening a task the record does not hold yet is a write.
+      await whileLocked(() => assert.rejects(apply({ kind: "seen" }, 1960, at), /storage_busy/, "a task was opened without the record's lock"));
+      assert.equal((await apply({ kind: "seen" }, 1961, at)).curriculum.phase, "assigned");
+      // So is the level start: the student's event for this assigned task is in the batch now.
+      const mine = [forTask(fresh)];
+      await whileLocked(() => assert.rejects(apply({ kind: "seen" }, 1962, { ...at, events: mine }), /storage_busy/, "the level start was answered from a plain read: a started task shown as not started"));
+      assert.equal((await apply({ kind: "seen" }, 1963, { ...at, events: mine })).curriculum.phase, "working");
+      // And every signal of the student's own is a write.
+      await whileLocked(() => assert.rejects(apply({ kind: "submit" }, 1964, { ...at, events: mine }), /storage_busy/));
+      assert.equal((await stored(at.recordId)).curriculum.phase, "working", "a refused write was stored after all");
+    });
+
     await check("SX-48: the flow writes only Task records — no new store, no new record kind", async () => {
       const keys = await open().store.list("");
       assert.ok(keys.length > 0, "nothing was written: the checks above proved nothing");
@@ -597,11 +723,12 @@ try {
   await rm(root, { recursive: true, force: true });
 }
 
-// ── 6. The local review does not offer a task it cannot open ──────────────────
+// ── 6. The local review says what its list leaves out, and deletes it on request ──
 
 const reviewRoot = await mkdtemp(join(tmpdir(), "hps-task-flow-review-"));
 try {
-  const { LocalReviewService } = await import("../src/localReviewService.ts");
+  const reviewModule = await import("../src/localReviewService.ts");
+  const { LocalReviewService } = reviewModule;
   const at = "2026-09-14T12:00:00Z";
   const transcript = [
     { type: "session_meta", payload: { id: "codex-one", cwd: "/project" } },
@@ -610,18 +737,46 @@ try {
   ].map((r) => JSON.stringify(r)).join("\n");
   const service = new LocalReviewService(reviewRoot);
   const card = await service.import(transcript, "codex", "/project");
-  if (flow && lesson) await service.store.exclusive(() => flow.applyTaskFlow(service.record, { taskId: TASK, recordId: RECORD, lesson, signal: { kind: "seen" }, events: [], at: 2000 }));
+  const openTask = (at) => flow.runTaskFlowOn(service.store, service.record, { taskId: TASK, recordId: RECORD, lesson, signal: { kind: "seen" }, events: [], at });
+  if (flow && lesson) await openTask(2000);
 
-  await check("review list: transcript tasks stay, the curriculum task it cannot open is left out", async () => {
-    assert.equal(typeof service.reviewRecords, "function", "the review screen has no list that leaves curriculum tasks out");
-    const listed = (await service.reviewRecords()).tasks.map((t) => t.id);
-    assert.deepEqual(listed, [card.task.id]);
+  await check("review list (MC-27): transcript tasks stay as rows; the curriculum task it cannot open is counted, never dropped silently", async () => {
+    assert.equal(typeof service.reviewRecords, "function", "the review screen has no list of its own");
+    const listed = await service.reviewRecords();
+    assert.deepEqual(listed.tasks.map((t) => t.id), [card.task.id], "a row the screen cannot open, or a transcript task missing");
+    assert.equal(listed.curriculumTasks, 1, "the list left the curriculum task out and says nothing about it");
   });
 
-  await check("review list control: the record holds both, so the filter is what keeps it out", async () => {
+  await check("review list control: the record holds both, so the list is what keeps it out", async () => {
     const all = (await service.record.records()).tasks.map((t) => t.id).sort();
-    assert.deepEqual(all, [card.task.id, RECORD].sort(), "the curriculum task is not on the record — the check above proves nothing");
-    await assert.rejects(service.card(RECORD), /import_incomplete/, "the review can open it after all, so it should be listed");
+    assert.deepEqual(all, [card.task.id, RECORD].sort(), "the curriculum task is not on the record — the checks above prove nothing");
+    await assert.rejects(service.card(RECORD), /import_incomplete/, "the review can open it after all, so it should be a row");
+  });
+
+  await check("review delete (MC-31): the question says what is deleted and what stays where the delete cannot reach", () => {
+    const q = reviewModule.curriculumDeleteQuestion?.(2) ?? "";
+    for (const part of ["수업 과제 진행 기록 2개를 지울까요?", "되돌릴 수 없어요", "학습 기록은 각 폴더의 관찰 기록에 남아서", "진행 기록이 거기서 새로 시작돼요"]) {
+      assert.ok(q.includes(part), `the question does not say "${part}": ${q}`);
+    }
+    assert.equal(reviewModule.curriculumDeletedSentence?.(2), "수업 과제 진행 기록 2개를 지웠어요.");
+  });
+
+  await check("review delete (MC-31): the curriculum task records go through the core's delete; the transcript task stays and still opens", async () => {
+    assert.equal(typeof service.deleteCurriculumTasks, "function", "there is no way to delete a curriculum task record");
+    assert.equal(await service.deleteCurriculumTasks(), 1);
+    const after = await service.reviewRecords();
+    assert.equal(after.curriculumTasks, 0, "a curriculum task record is still on the record");
+    assert.deepEqual(after.tasks.map((t) => t.id), [card.task.id], "the delete took a transcript task with it");
+    assert.ok(after.deleted_tasks.includes(RECORD), "the core's tombstone is missing: the delete went around deleteTask");
+    assert.equal((await service.card(card.task.id)).task.id, card.task.id, "the transcript task no longer opens");
+    assert.equal(await service.deleteCurriculumTasks(), 0, "a second delete found something to delete");
+  });
+
+  await check("review delete: opening the lesson again starts a new progress record, as the question says", async () => {
+    const reopened = await openTask(3000);
+    assert.equal(reopened.changed, true);
+    assert.equal(reopened.curriculum.phase, "assigned", "the deleted progress came back");
+    assert.equal((await service.reviewRecords()).curriculumTasks, 1);
   });
 } finally {
   await rm(reviewRoot, { recursive: true, force: true });
@@ -729,6 +884,15 @@ if (!status.available) {
     const html = await gate({ ...failedSubmit, notice: "검증 점수 62점 · 개선 필요" });
     const audit = auditRegionText(visibleText(html), { region: "work", minLength: 5 });
     assert.equal(audit.ok, false, "a score in region D passed the audit — the audit above counts nothing");
+  });
+
+  await check("local review (MC-27): the line says how many curriculum task records the list leaves out, with the delete beside it", async () => {
+    const html = await renderComponent("OmittedRecords", { count: 2, busy: false, onDelete: noop });
+    assert.ok(visibleText(html).includes("수업 과제 진행 기록 2개는 이 화면에서 열 수 없어 목록에서 뺐어요."), `the omission is not said: ${visibleText(html)}`);
+    assert.match(html, /<button class="danger">수업 과제 진행 기록 지우기<\/button>/, "no way to delete what the list leaves out");
+    assert.match(await renderComponent("OmittedRecords", { count: 2, busy: true, onDelete: noop }), /<button class="danger" disabled="">/, "the delete stays pressable while the screen is busy");
+    // Control: nothing left out, nothing drawn — no empty box and no "0개".
+    assert.equal(await renderComponent("OmittedRecords", { count: 0, busy: false, onDelete: noop }), "");
   });
 }
 

@@ -4,24 +4,53 @@ import { FileRecordStorage } from './localRecordFile.ts';
 import { manualInterpretation, parseLocalTranscript } from './localTranscript.ts';
 import type { ReviewHost, TaskCard } from './localReviewProtocol.ts';
 
+/**
+ * MC-31 — the question asked before the curriculum task records go: what is deleted, and what
+ * stays where this screen cannot reach it (the learning events live in each folder's
+ * observation record, and a lesson opened again starts a new progress record from them).
+ */
+export const curriculumDeleteQuestion = (n: number): string =>
+  `수업 과제 진행 기록 ${n}개를 지울까요? 단계와 제출 기록이 지워지고 되돌릴 수 없어요. 기대 조건 같은 학습 기록은 각 폴더의 관찰 기록에 남아서, 그 수업을 다시 열면 진행 기록이 거기서 새로 시작돼요.`;
+export const curriculumDeletedSentence = (n: number): string => `수업 과제 진행 기록 ${n}개를 지웠어요.`;
+
 /** All mutations use the same file lock; source originals are never written. */
 export class LocalReviewService {
   readonly store: FileRecordStorage;
   readonly record: LocalRecord;
   constructor(root: string) { this.store = new FileRecordStorage(root); this.record = new LocalRecord(this.store); }
   /**
-   * The records this screen lists. A curriculum task (SX-55) lives on the same record: the chat
-   * panel writes it, it has no transcript import, and `card()` cannot open it. It is left out of
-   * this list instead of failing when clicked. Nothing is removed from the record itself.
-   * Open (MC-27 asks this list to leave nothing out): whether a curriculum task is listed here and
-   * how it is deleted. `deleteTask` cannot reach its learning events (the folder's observation
-   * batch), and the next screen refresh would open the task again from them.
+   * The records this screen lists, and how many it leaves out (MC-27: the list shows what it
+   * omits). A curriculum task (SX-55) lives on the same record: the chat panel writes it, it has
+   * no transcript import, and `card()` cannot open it. It is not offered as a row that fails when
+   * clicked; it is counted in `curriculumTasks`, which the screen says out loud next to a way to
+   * delete them (`deleteCurriculumTasks`). Listing removes nothing from the record.
+   * Open for Jay (MC-27): whether a curriculum task becomes a row of its own here.
    */
   async reviewRecords() {
     const records = await this.record.records();
     const tasks: typeof records.tasks = [];
-    for (const t of records.tasks) if (!(await this.record.getTask(t.id)).curriculum) tasks.push(t);
-    return { ...records, tasks };
+    let curriculumTasks = 0;
+    for (const t of records.tasks) {
+      if ((await this.record.getTask(t.id)).curriculum) curriculumTasks++;
+      else tasks.push(t);
+    }
+    return { ...records, tasks, curriculumTasks };
+  }
+  /**
+   * MC-31 — deletes every curriculum task record this screen leaves out, through the core's own
+   * `deleteTask` (tombstone included), and returns how many went. Transcript tasks are not
+   * touched. What it cannot reach is said in `curriculumDeleteQuestion`.
+   */
+  async deleteCurriculumTasks(): Promise<number> {
+    return this.store.exclusive(async () => {
+      let removed = 0;
+      for (const t of (await this.record.records()).tasks) {
+        if (!(await this.record.getTask(t.id)).curriculum) continue;
+        await this.record.deleteTask(t.id, { by: 'user', at: Date.now() });
+        removed++;
+      }
+      return removed;
+    });
   }
   async import(raw: string, host: ReviewHost, project: string): Promise<TaskCard> {
     return this.importParsed(parseLocalTranscript(raw, host), project);

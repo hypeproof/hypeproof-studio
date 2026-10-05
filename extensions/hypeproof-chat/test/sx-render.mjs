@@ -51,6 +51,9 @@ export const COMPONENTS = {
   // Region D's completion line (SX-14 gate, SX-55 phase). Props only — it draws the
   // `learningState` the host sent; ChatPanel's hook that holds that state never fills under SSR.
   CompletionGate: { from: "./src/CompletionGate.tsx", exportName: "CompletionGate" },
+  // The local review's line for the curriculum task records its list leaves out (MC-27), with
+  // its delete button (MC-31). Props only; LocalReview's own state never fills under SSR.
+  OmittedRecords: { from: "./src/LocalReview.tsx", exportName: "OmittedRecords" },
   // cr-verify — "내 제품 테스트" (CR-12–CR-16, CR-81). Lives on props alone: it draws the
   // VerifyView the host computed and never decides "검증됨" itself.
   VerifyPanel: { from: "./src/VerifyPanel.tsx", exportName: "VerifyPanel" },
