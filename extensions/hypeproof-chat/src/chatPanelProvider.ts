@@ -1020,9 +1020,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * CR-02 for the director (cr-review): mirror "the stored issuer token directs a cohort whose
    * profile has the switch on" to CR_DIRECTOR_CONTEXT_KEY, from the Service's answer (a director
    * has no served student profile). Asked again when the token changes, after five minutes, or
-   * when `force`d, and every five minutes by the constructor's timer, so the palette entry goes
-   * within five minutes of the Service's switch going off; false without an issuer token or with
-   * any refusal.
+   * when `force`d, and, while the key is on, every five minutes by the constructor's timer, so the
+   * palette entry goes within five minutes of the Service's switch going off; false without an
+   * issuer token or with any refusal.
    */
   async refreshCrDirectorContext(force = false): Promise<boolean> {
     const token = (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null;
@@ -1193,10 +1193,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
     if (sub) context.subscriptions.push(sub);
-    // cr-review (CR-02) — the Service's switch can go off while the App stays open: the director's
-    // key is asked again every five minutes (no request without an issuer token), so the palette
-    // entry does not outlive the switch. The command itself asks again on every use.
-    const directorProbe = setInterval(() => void this.refreshCrDirectorContext(true).catch(() => undefined), CR_DIRECTOR_REPROBE_MS);
+    // cr-review (CR-02) — the Service's switch can go off while the App stays open: while the
+    // director's key is on, it is asked again every five minutes, so the palette entry outlives the
+    // switch by at most that long. While the key is off the timer sends nothing, so an instructor
+    // whose cohorts never use the runtime makes no standing request; the key turns on at activation,
+    // when the issuer token changes, or when the panel's settings are sent (at most once per five
+    // minutes, `refreshCrDirectorContext`). The command itself asks again on every use.
+    const directorProbe = setInterval(() => {
+      if (this.crDirector.on) void this.refreshCrDirectorContext(true).catch(() => undefined);
+    }, CR_DIRECTOR_REPROBE_MS);
     context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
   }
 

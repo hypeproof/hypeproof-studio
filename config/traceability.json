@@ -3252,6 +3252,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts"
         }
       ]
     },

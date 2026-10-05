@@ -23,7 +23,7 @@ const review = await import("../src/lib/curriculum/review.ts");
 const memoryMod = await import("../src/lib/curriculum/memory.ts");
 const store = await import("../src/lib/curriculum/store.ts");
 const { RULES } = await import("../src/skills/curriculum/rules.ts");
-const { CURRICULUM_ROUTES, REVIEW_LIMITS, setAfterReviewInsert } = await import("../src/routes/curriculum.ts");
+const { CURRICULUM_ROUTES, MEMORY_LIMITS, REVIEW_LIMITS, setAfterReviewInsert } = await import("../src/routes/curriculum.ts");
 const { participantPrefix } = await import("../src/lib/curriculum/participant-record.ts");
 const { runCurriculumRetention } = await import("../src/lib/curriculum/retention.ts");
 const { getProfile } = await import("../src/profiles/index.ts");
@@ -210,6 +210,44 @@ const rows = async (f, projectId) => (await f.env.HPS_DB.prepare("SELECT week, r
 const sectionOf = (pack, id) => pack.sections.find((x) => x.id === id);
 
 /**
+ * A D1 binding over `real` whose statements matching `re` go through `hook` (`run` or `first`,
+ * with a state shared by every call); every other statement passes through untouched.
+ */
+function hooked(real, re, hook) {
+  const state = { fired: 0 };
+  const db = {
+    prepare(sql) {
+      const st = real.prepare(sql);
+      if (!re.test(sql)) return st;
+      return {
+        bind: (...a) => {
+          const b = st.bind(...a);
+          return {
+            run: (...x) => (hook.run ? hook.run(b, state, ...x) : b.run(...x)),
+            first: (...x) => (hook.first ? hook.first(b, state, ...x) : b.first(...x)),
+            all: (...x) => b.all(...x),
+          };
+        },
+      };
+    },
+    batch: (...x) => real.batch(...x),
+  };
+  return { db, state };
+}
+
+/** The first `run` of a statement matching `re` throws (a transient storage failure); later ones run. */
+const failingOnce = (real, re) =>
+  hooked(real, re, {
+    run: async (b, state, ...x) => {
+      if (state.fired++ === 0) throw new Error("D1_ERROR: network connection lost (planted)");
+      return b.run(...x);
+    },
+  });
+
+/** The statement that drops a Project's packs (store.ts `dropProjectReviews`). */
+const DROP_PACKS = /^DELETE FROM cr_weekly_reviews WHERE project_id = \?$/;
+
+/**
  * Every outbound call a model could be reached by while `fn` runs: the provider hosts every
  * adapter calls (callAnthropic, callOpenAI, callGemini, GLM) and the coach routes. Local D1/R2
  * traffic of Miniflare passes through untouched.
@@ -320,7 +358,7 @@ await test("CR-T45 negative: a factual claim without a source, a claim in the wr
   }
 });
 
-await test("CR-T45 weeks and sources: a pack reads only its own week (a week-1 observation is in no week-2 section, and the other way round); a source deleted after preparing opens as not found while the rest still resolve", async () => {
+await test("CR-T45 weeks and sources: a pack reads only its own week (a week-1 observation is in no week-2 section, and the other way round), and lists only the director decisions written from that week's pack; a source deleted after preparing opens as not found while the rest still resolve", async () => {
   const f = await fixture();
   try {
     // One team, week 1 then week 2, an observation in each.
@@ -346,6 +384,17 @@ await test("CR-T45 weeks and sources: a pack reads only its own week (a week-1 o
     const p1 = (await open(f, w1, w1.token, 1)).pack;
     assert.deepEqual([p1.week, refsIn(p1, "observed"), refsIn(p1, "interpretation")], [1, [ref1], []], "and week 1's pack holds its own");
     assert.ok(!review.sourcesOf(p1).includes(ref2));
+    // The director's decisions are listed under the pack of the week they were written from.
+    const director = await f.issuer();
+    const decide = async (week, pack, ref) => {
+      const r = await f.api(`/v1/curriculum/projects/${w1.project.id}/review/decision`, { method: "POST", token: director, body: { week, revision: pack.revision, statement: `${week}주차 리뷰에서 정한 것`, evidence_refs: [ref], assumption_refs: [], affected_deck_slides: [] } });
+      assert.equal(r.status, 201, r.text);
+      return r.json.decision.id;
+    };
+    const dec1 = await decide(1, p1, ref1);
+    const dec2 = await decide(2, p2, venture.evidenceItemRef(w2.experiment.id, d2.id, "w2i"));
+    assert.deepEqual((await open(f, w1)).decisions.map((d) => d.id), [dec2], "a week-1 decision is not listed on the week-2 pack");
+    assert.deepEqual((await open(f, w1, w1.token, 1)).decisions.map((d) => d.id), [dec1], "nor a week-2 decision on the week-1 pack");
     // A source deleted after preparing: the student rejects the week-2 observation. The pack opens
     // as prepared, that claim's source reads "not found", and every other source still resolves.
     for (const ref of review.sourcesOf(p2)) assert.equal((await open(f, w1)).sources[ref]?.found, true, `control: ${ref} resolves before`);
@@ -726,6 +775,61 @@ await test("CR-T48 Service half, at the same time: two identical submissions sen
   }
 });
 
+await test("CR-T48 Service half, the Project's decision bound: a full Project refuses the director's decision (409 decision_limit) before writing anything; filled while the submission is being written, it keeps nothing of it (the draft and the hypothesis it wrote are taken back)", async () => {
+  const f = await fixture();
+  const real = f.env.HPS_DB;
+  const bound = MEMORY_LIMITS.decisionsPerProject;
+  try {
+    const s = await week2(f);
+    await sessionFor(f, s).session.prepare();
+    const director = await f.issuer();
+    const rv = await open(f, s, director);
+    const path = `/v1/curriculum/projects/${s.project.id}/review/decision`;
+    const body = { week: 2, revision: rv.pack.revision, statement: "다음 주에 다시 시험한다", evidence_refs: [s.ev("o1")], assumption_refs: [], affected_deck_slides: [2], next_experiment: { hypothesis: "도움말이 있으면 혼자 주문한다", question: "도움말을 누르나?", method: "task_test", success_criteria: ["5명 중 3명"] } };
+    const count = async (table) => Number((await real.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE project_id = ?`).bind(s.project.id).first()).n);
+    const counts = async () => [await count("cr_decisions"), await count("cr_experiments"), await count("cr_hypotheses")];
+    const before = await counts();
+    // Full before the submission: refused before anything is written.
+    MEMORY_LIMITS.decisionsPerProject = before[0];
+    const full = await f.api(path, { method: "POST", token: director, body });
+    assert.deepEqual([full.status, full.json?.error?.code], [409, "decision_limit"], full.text);
+    assert.deepEqual(await counts(), before, "nothing written");
+    // One place left, taken by a team decision that lands while the director's submission is
+    // written: after its hypothesis and draft, right before its decision insert.
+    MEMORY_LIMITS.decisionsPerProject = before[0] + 1;
+    let team = null;
+    const { db, state } = hooked(real, /^INSERT OR IGNORE INTO cr_decisions/, {
+      run: async (b, st, ...x) => {
+        if (st.fired++ === 0) {
+          f.env.HPS_DB = real;
+          team = await f.api(`/v1/curriculum/projects/${s.project.id}/decisions`, { method: "POST", token: s.token, body: { author: "user", statement: "팀이 먼저 정한 것", evidence_refs: [], assumption_refs: [], affected_deck_slides: [] } });
+        }
+        return b.run(...x);
+      },
+    });
+    f.env.HPS_DB = db;
+    let raced;
+    try {
+      raced = await f.api(path, { method: "POST", token: director, body });
+    } finally {
+      f.env.HPS_DB = real;
+    }
+    assert.equal(state.fired, 1, "the director's decision insert was reached");
+    assert.equal(team?.status, 201, team?.text);
+    assert.deepEqual([raced.status, raced.json?.error?.code], [409, "decision_limit"], raced.text);
+    assert.deepEqual(await counts(), [before[0] + 1, before[1], before[2]], "only the team's decision stays: the director's draft and the new hypothesis are taken back");
+    // Control: with room, the same submission stores its decision, its draft and its hypothesis.
+    MEMORY_LIMITS.decisionsPerProject = bound;
+    const stored = await f.api(path, { method: "POST", token: director, body });
+    assert.equal(stored.status, 201, stored.text);
+    assert.deepEqual(await counts(), [before[0] + 2, before[1] + 1, before[2] + 1]);
+  } finally {
+    MEMORY_LIMITS.decisionsPerProject = bound;
+    f.env.HPS_DB = real;
+    f.close();
+  }
+});
+
 await test("director decisions downstream: a director's decision drives a Deck Builder patch and a hypothesis revision as the team's does; an AI suggestion still drives neither", async () => {
   const f = await fixture();
   try {
@@ -757,7 +861,7 @@ await test("director decisions downstream: a director's decision drives a Deck B
 
 // ── CR-T49 (worker D1): the four-team overview ───────────────────────────────────
 
-await test("CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes", async () => {
+await test("CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls, for their own review week or the week asked; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes", async () => {
   const f = await fixture();
   const offProfile = getProfile(OFF_PROFILE);
   const minors = getProfile(MINORS_PROFILE);
@@ -793,6 +897,11 @@ await test("CR-T49: four directed teams show fresh, stale and missing correctly 
     assert.deepEqual(status, { "1팀": "fresh", "2팀": "stale", "3팀": "missing", "4팀": "fresh" });
     assert.deepEqual(teams.find((t) => t.title === "2팀").stale_sections, ["observed", "decision_needed", "next_experiment"]);
     assert.equal(teams.find((t) => t.title === "1팀").week, 2);
+    // `?week=` names the week the overview reads, for every team.
+    const week1 = (await f.api("/v1/curriculum/reviews?week=1", { token: director })).json.teams;
+    assert.deepEqual([...new Set(week1.map((t) => t.week))], [1], "every team is read for the week asked");
+    assert.deepEqual(Object.fromEntries(week1.map((t) => [t.title, t.status])), { "1팀": "missing", "2팀": "missing", "3팀": "missing", "4팀": "missing" }, "no team prepared week 1");
+    assert.equal((await f.api("/v1/curriculum/reviews?week=0", { token: director })).status, 400);
     const foreign = (list) => list.filter((t) => t.cohort_id !== f.cohort || t.project_id === outsider.project.id);
     assert.deepEqual(foreign(teams), [], "no team of another cohort");
     assert.equal(out.json.truncated, false);
@@ -898,6 +1007,76 @@ await test("CR-69 with packs, the retention sweep (decision 6): an experiment wi
   }
 });
 
+await test("CR-69 with packs, a drop that fails once: the deletion is not marked done, so the next sweep removes the pack (the delete action, the no-link sweep); a session erase answers 500 and repeating it removes the pack; a session that never was still drops nothing", async () => {
+  const f = await fixture();
+  const real = f.env.HPS_DB;
+  const logged = [];
+  const consoleError = console.error;
+  try {
+    const env = { ...f.env, HPS_TEST_ORIGIN: undefined };
+    // The student's delete action on an experiment that ran with participants.
+    const s = await week2(f);
+    assert.equal((await sessionFor(f, s).session.prepare()).ok, true);
+    assert.ok((await rows(f, s.project.id))[0].doc.includes("세 명 중 두 명이 옵션 선택에서 멈췄다"), "control: the pack quotes the data to delete");
+    const del = failingOnce(real, DROP_PACKS);
+    f.env.HPS_DB = del.db;
+    const deleted = await f.api(`/v1/curriculum/experiments/${s.experiment.id}`, { method: "DELETE", token: s.token });
+    f.env.HPS_DB = real;
+    assert.equal(del.state.fired, 1, "the planted failure fired");
+    assert.equal(deleted.status, 500, deleted.text);
+    assert.equal((await rows(f, s.project.id)).length, 1, "the pack outlived the failed drop");
+    assert.equal((await store.getExperiment(real, s.experiment.id)).data_deletion_pending, true, "so the deletion is still pending");
+    assert.ok((await runCurriculumRetention(env, Date.now())).deleted.includes(s.experiment.id), "the next sweep takes it at once");
+    assert.deepEqual(await rows(f, s.project.id), [], "and the pack goes");
+    const done = await store.getExperiment(real, s.experiment.id);
+    assert.deepEqual([done.data_deletion_pending, typeof done.data_deleted_at], [undefined, "number"], "then the deletion is done");
+
+    // The sweep's no-link branch: an experiment holding only manual records.
+    const m = await started(f, { title: "인터뷰만 한 팀", noLink: true });
+    const n = await note(f, m, "참가자 A가 옵션 화면에서 멈춤");
+    await reviewDraft(f, m, await draft(f, m, [{ id: "m1", section: "observation", text: "참가자 A가 옵션 화면에서 멈췄다", source_refs: [`note:${n}`] }]), [{ item: "m1", action: "accept" }]);
+    const at = Date.now();
+    assert.equal((await sessionFor(f, m).session.prepare()).ok, true);
+    const sweep = failingOnce(real, DROP_PACKS);
+    console.error = (...a) => logged.push(a.join(" "));
+    let first;
+    try {
+      first = await runCurriculumRetention({ ...env, HPS_DB: sweep.db }, at + 31 * DAY);
+    } finally {
+      console.error = consoleError;
+    }
+    assert.equal(sweep.state.fired, 1, "the planted failure fired");
+    assert.ok(!first.deleted.includes(m.experiment.id) && logged.some((l) => l.includes("curriculum_retention_failed") && l.includes(m.experiment.id)), "the failed one is logged, not reported deleted");
+    assert.equal((await rows(f, m.project.id)).length, 1, "its pack outlived the failed drop");
+    assert.ok((await runCurriculumRetention(env, at + 31 * DAY + 1)).deleted.includes(m.experiment.id), "the next tick takes it again");
+    assert.deepEqual(await rows(f, m.project.id), [], "and the pack goes");
+
+    // A participant session's erase.
+    const t = await week2(f, { title: "세션 지우기" });
+    assert.equal((await sessionFor(f, t).session.prepare()).ok, true);
+    const erase = (sid) => f.api(`/v1/curriculum/experiments/${t.experiment.id}/sessions/${sid}`, { method: "DELETE", token: t.token });
+    const er = failingOnce(real, DROP_PACKS);
+    f.env.HPS_DB = er.db;
+    const one = await erase(t.sessions[1]);
+    f.env.HPS_DB = real;
+    assert.equal(er.state.fired, 1, "the planted failure fired");
+    assert.equal(one.status, 500, one.text);
+    assert.equal((await rows(f, t.project.id)).length, 1, "the pack outlived the failed drop");
+    const again = await erase(t.sessions[1]);
+    assert.equal(again.status, 200, again.text);
+    assert.deepEqual([again.json.receipt.kind, again.json.receipt.already_deleted, again.json.receipt.review_packs_deleted], ["participant_session_deleted", true, 1]);
+    assert.deepEqual(await rows(f, t.project.id), [], "repeating the erase removes the pack");
+    // Control: a session that never was is still the unknown route, and drops nothing.
+    assert.equal((await sessionFor(f, t).session.prepare()).ok, true);
+    assert.equal((await erase("ps-" + "0".repeat(32))).status, 404);
+    assert.equal((await rows(f, t.project.id)).length, 1, "nothing dropped for a session that never was");
+  } finally {
+    console.error = consoleError;
+    f.env.HPS_DB = real;
+    f.close();
+  }
+});
+
 // ── The coach route itself: one upstream call per stale model section (SQLite) ────
 
 if (!D1_MODE) {
@@ -958,7 +1137,7 @@ if (!D1_MODE) {
 
 // ── CR-T58 (synthetic): regeneration time, provider latency apart ───────────────
 
-await test("CR-T58 (synthetic provider latency): ten full regenerations through the App session with a normal planted provider latency pass the 30 s target and report Studio's time apart; a slow provider is a provider-caused miss, never a Studio pass", async () => {
+await test("CR-T58 (synthetic provider latency): ten full regenerations through the App session with a normal planted provider latency pass the 30 s target and report Studio's time apart; a slow provider is a provider-caused miss, never a Studio pass; the stored revision carries the Service's own commit time, measured (a held commit stores at least the hold)", async () => {
   const f = await fixture();
   try {
     const s = await week2(f);
@@ -996,6 +1175,33 @@ await test("CR-T58 (synthetic provider latency): ten full regenerations through 
     assert.ok(stored.provider_ms >= 35_000 && stored.provider_ms < 35_500, JSON.stringify(stored));
     assert.ok(Number.isInteger(stored.commit_ms) && stored.commit_ms >= 0, JSON.stringify(stored));
     assert.ok(stored.total_ms + stored.commit_ms <= st.total_ms + 2, `${JSON.stringify(stored)} vs the App's ${JSON.stringify(st)}`);
+    // `commit_ms` is the Service's own measurement: a commit whose read of the base revision is
+    // held HOLD_MS stores at least that much, next to the App's figures as sent.
+    const HOLD_MS = 300;
+    await store.dropProjectReviews(f.env.HPS_DB, s.project.id);
+    const prep = await f.api(`/v1/curriculum/projects/${s.project.id}/review/prepare`, { method: "POST", token: s.token, body: {} });
+    assert.equal(prep.status, 200, prep.text);
+    const ms = prep.json.model_sections[0];
+    const output = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(experimentAnswer(ms.prompt))[1]);
+    const real = f.env.HPS_DB;
+    const held = hooked(real, /^SELECT doc FROM cr_weekly_reviews WHERE project_id = \? AND week = \? ORDER BY revision DESC LIMIT 1$/, {
+      first: async (b, state, ...x) => {
+        if (state.fired++ === 0) await new Promise((r) => setTimeout(r, HOLD_MS));
+        return b.first(...x);
+      },
+    });
+    f.env.HPS_DB = held.db;
+    let commit;
+    try {
+      commit = await f.api(`/v1/curriculum/projects/${s.project.id}/review/commit`, { method: "POST", token: s.token, body: { week: prep.json.week, base_revision: 0, timing: { total_ms: 9_000, provider_ms: 8_000 }, outputs: { next_experiment: { input_digest: ms.input_digest, output } } } });
+    } finally {
+      f.env.HPS_DB = real;
+    }
+    assert.equal(commit.status, 201, commit.text);
+    assert.ok(held.state.fired >= 1, "the commit read its base revision through the hold");
+    const measured = (await open(f, s)).pack.timing;
+    assert.deepEqual([measured.total_ms, measured.provider_ms], [9_000, 8_000], "the App's figures as sent");
+    assert.ok(measured.commit_ms >= HOLD_MS - 2, `the Service's commit time covers the hold: ${JSON.stringify(measured)}`);
   } finally {
     f.close();
   }

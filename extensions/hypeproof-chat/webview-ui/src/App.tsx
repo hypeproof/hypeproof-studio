@@ -22,8 +22,8 @@ import { EvidencePanel } from "./EvidencePanel";
 import { MemoryPanel } from "./MemoryPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { pressDecision, reviewPanelReducer, type ReviewPanelAction, type ReviewPanelState } from "./reviewPanelState";
 import type { SkillsView } from "../../src/skillView";
-import type { ReviewView } from "../../src/reviewView";
 import type { MemoryView } from "../../src/memoryView";
 import type { EvidenceView } from "../../src/evidenceView";
 import type { PublishView } from "../../src/publishView";
@@ -56,8 +56,8 @@ interface State {
   memory: { view: MemoryView; error: string | null; done: string | null } | null;
   /** cr-skills — the "커리큘럼 스킬" panel (null = hidden). */
   skills: { view: SkillsView; running: boolean; error: string | null; done: string | null } | null;
-  /** cr-review — the "주간 리뷰" panel, the student's or the director's (null = hidden); `deciding` from a decision's press until the host answers. */
-  review: { view: ReviewView; error: string | null; done: string | null; deciding: boolean } | null;
+  /** cr-review — the "주간 리뷰" panel (reviewPanelState.ts). */
+  review: ReviewPanelState;
   aiNotice: string | null;          // #320 — AI disclosure at session start (host-gated)
   stopNotice: string | null;        // #497 — Stop 을 눌러 턴이 끊겼음을 알리는 인라인 안내
   /** #649 — 지금 열려 있는 세상 id. 친구 스트립이 이 버튼을 강조한다(aria-pressed). */
@@ -90,9 +90,7 @@ type Action =
   | { type: "memoryClose" }
   | { type: "skillsState"; view: SkillsView | null; running?: boolean; error?: string; done?: string }
   | { type: "skillsClose" }
-  | { type: "reviewState"; view: ReviewView | null; error?: string; done?: string }
-  | { type: "reviewDeciding" }
-  | { type: "reviewClose" }
+  | ReviewPanelAction
   | { type: "verifySent" }
   | { type: "aiDisclosure"; text: string }
   | { type: "streamEnd" }
@@ -185,12 +183,12 @@ function reducer(state: State, action: Action): State {
     case "skillsClose":
       return { ...state, skills: null };
     case "reviewState":
-      return { ...state, review: action.view ? { view: action.view, error: action.error ?? null, done: action.done ?? null, deciding: false } : null };
     case "reviewDeciding":
-      // cr-review (CR-52) — the decide button gives way to a status line until the host answers this one.
-      return state.review ? { ...state, review: { ...state.review, error: null, done: null, deciding: true } } : state;
-    case "reviewClose":
-      return { ...state, review: null };
+    case "reviewClose": {
+      // cr-review (CR-52) — a decision's press shows a status line until the host's next answer.
+      const review = reviewPanelReducer(state.review, action);
+      return review === state.review ? state : { ...state, review };
+    }
     case "verifySent":
       return { ...state, verifySend: null };
     case "worldOpened":
@@ -431,10 +429,7 @@ export function App() {
       onRefresh={() => postToHost(state.review!.view.mode === "director" ? { type: "reviewDirectorOpen", projectId: state.review!.view.review?.project_id ?? null } : { type: "reviewOpen" })}
       onPrepare={() => postToHost({ type: "reviewPrepare" })}
       onOpenTeam={(projectId) => postToHost({ type: "reviewDirectorOpen", projectId })}
-      onDecide={(projectId, week, revision, form) => {
-        dispatch({ type: "reviewDeciding" });
-        postToHost({ type: "reviewDecision", projectId, week, revision, form });
-      }}
+      onDecide={(projectId, week, revision, form) => pressDecision(dispatch, postToHost, { type: "reviewDecision", projectId, week, revision, form })}
       onClose={() => dispatch({ type: "reviewClose" })}
     />
   ) : null;

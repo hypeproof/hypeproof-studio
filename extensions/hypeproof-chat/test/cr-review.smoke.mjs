@@ -1,6 +1,7 @@
 // The Weekly Review panel, App side (cr-review #1398): the session over a stub Service (the
 // student's "Prepare Weekly Review" and the director's overview, pack and decision), the
-// director's form checks, the timing verdict (CR-62) and the panel rendered for real
+// director's form checks, the webview's decision press (webview-ui/src/reviewPanelState.ts and
+// App's wiring of it), the timing verdict (CR-62) and the panel rendered for real
 // (test/sx-render.mjs). Every check has a planted defect that must be caught. The same flows
 // against the real Service router run in worker/test/cr-review.test.mjs; the director's write
 // and the reopen in the app are e2e/curriculum-runtime/review-app.spec.ts (CR-T48).
@@ -8,8 +9,10 @@
 // Run: node --experimental-strip-types test/cr-review.smoke.mjs
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ReviewSession, directorAvailable } from "../src/reviewSession.ts";
 import { REVIEW_SECTION_IDS, directorFormProblems, packChoices, regenerationVerdict, sectionTitle, suggestedNext, timingLine } from "../src/reviewView.ts";
+import { pressDecision, reviewPanelReducer } from "../webview-ui/src/reviewPanelState.ts";
 import { rendererStatus, renderComponent, visibleText } from "./sx-render.mjs";
 
 let passed = 0;
@@ -197,6 +200,43 @@ function make(answers, opts = {}) {
   assert.deepEqual([decisionCalls.length, once.isDeciding()], [1, false], "two presses while one is in flight: one request");
   assert.deepEqual(await once.decide("prj-1", { week: 2, revision: 3 }, form), { ok: true, reused: true }, "control: once answered, the next press is sent");
   assert.equal(decisionCalls.length, 2);
+  // The webview's side of it (reviewPanelState.ts, which App's reducer and decide button use): a
+  // press shows the status line before the decision goes to the host, and the host's next answer
+  // ends it; with the panel closed a press changes nothing.
+  const dview = { mode: "director", available: true, notice: null, review: REVIEW, teams: [], running: false, timing: null, refused: null };
+  let panel = reviewPanelReducer(null, { type: "reviewState", view: dview, error: "이전 오류" });
+  assert.deepEqual([panel.deciding, panel.error], [false, "이전 오류"]);
+  const order = [];
+  const press = { type: "reviewDecision", projectId: "prj-1", week: 2, revision: 3, form };
+  pressDecision((a) => (order.push(a.type), (panel = reviewPanelReducer(panel, a))), (m) => order.push(m), press);
+  assert.deepEqual(order, ["reviewDeciding", press], "the status line first, then the decision to the host");
+  assert.deepEqual([panel.deciding, panel.error, panel.done], [true, null, null], "an earlier line is cleared while it is written");
+  panel = reviewPanelReducer(panel, { type: "reviewState", view: dview, done: "결정과 다음 실험을 프로젝트 기억에 기록했어요." });
+  assert.deepEqual([panel.deciding, panel.done], [false, "결정과 다음 실험을 프로젝트 기억에 기록했어요."], "the host's answer ends it");
+  assert.equal(reviewPanelReducer(null, { type: "reviewDeciding" }), null, "no panel, nothing shown");
+  assert.equal(reviewPanelReducer(panel, { type: "reviewClose" }), null);
+  // App wires both ends to it (checked on its source: App needs a webview host to run): the decide
+  // button presses through pressDecision, the host's reviewState reaches the reducer, and the panel
+  // is drawn with the reducer's `deciding`.
+  const appSrc = readFileSync(new URL("../webview-ui/src/App.tsx", import.meta.url), "utf8");
+  const APP = {
+    press: /onDecide=\{\(projectId, week, revision, form\) => pressDecision\(dispatch, postToHost, \{ type: "reviewDecision", projectId, week, revision, form \}\)\}/,
+    answer: /case "reviewState": dispatch\(\{ type: "reviewState", view: msg\.view, error: msg\.error, done: msg\.done \}\); break;/,
+    reduce: /case "reviewState":\s*case "reviewDeciding":\s*case "reviewClose": \{[^}]*?reviewPanelReducer\(state\.review, action\)/,
+    panel: /deciding=\{state\.review\.deciding\}/,
+  };
+  const appProblems = (src) => Object.entries(APP).filter(([, re]) => !re.test(src)).map(([k]) => k);
+  assert.deepEqual(appProblems(appSrc), []);
+  assert.deepEqual(appProblems(appSrc.replace("pressDecision(dispatch, postToHost, ", "postToHost(")), ["press"], "planted: a press that never shows the status line");
+  assert.deepEqual(appProblems(appSrc.replace(/case "reviewState": dispatch\(\{ type: "reviewState"[^\n]*\n/, "")), ["answer"], "planted: the host's answer never reaches the panel");
+  assert.deepEqual(appProblems(appSrc.replace("reviewPanelReducer(state.review, action)", "state.review")), ["reduce"], "planted: the reducer is bypassed");
+  assert.deepEqual(appProblems(appSrc.replace("deciding={state.review.deciding}", "deciding={false}")), ["panel"], "planted: the panel is never told");
+  // The host posts nothing for a busy answer (a second press while the first is being written), so
+  // the first decision's answer is the one that ends the status line.
+  const providerSrc = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  const BUSY = /const r = await this\.reviewSession\.decide\([\s\S]{0,1500}?\n {4}\}\);\s*(?:\/\/[^\n]*\n\s*)*if \(!r\.ok && r\.busy\) return;\s*return this\.postReviewState\("director"/;
+  assert.match(providerSrc, BUSY);
+  assert.doesNotMatch(providerSrc.replace("if (!r.ok && r.busy) return;", ""), BUSY, "planted: a busy answer that posts is caught");
   assert.ok(directorFormProblems({ ...form, affected_deck_slides: [9] }).some((p) => /1번부터 8번/.test(p)));
   // What the form offers: the pack's reviewed, real evidence; never an unreviewed AI item.
   const choices = packChoices(REVIEW);
@@ -210,7 +250,7 @@ function make(answers, opts = {}) {
   assert.equal(await directorAvailable({ base: "https://svc.test/v1/curriculum", token: "issuer-tok", fetchImpl: stub({}, probe) }), false, "the unknown route (switch off) keeps it off");
   assert.equal(await directorAvailable({ base: "https://svc.test/v1/curriculum", token: null, fetchImpl: stub({}, probe) }), false);
   assert.equal(probe.length, 2, "no call without an issuer token");
-  ok("director: no issuer token, no call; overview and pack read with the issuer token; the decision and next experiment sent as the form says, checked first, one at a time; the form offers only reviewed, real evidence of the pack; the director key follows the Service's answer");
+  ok("director: no issuer token, no call; overview and pack read with the issuer token; the decision and next experiment sent as the form says, checked first, one at a time; the webview shows the status line from the press to the host's answer, App wires it, and the host posts nothing for a busy press; the form offers only reviewed, real evidence of the pack; the director key follows the Service's answer");
 }
 
 // ── CR-62: the timing verdict ───────────────────────────────────────────────────
@@ -268,13 +308,23 @@ if (!status.available) {
   assert.match(dtext, /디렉터 결정: 옵션을 줄인 v1으로 다시 시험한다/);
   assert.match(dtext, /다음 실험 초안 \(3주차\): 혼자 주문할 수 있나\?/);
   assert.match(dhtml, /data-testid="review-decision" data-actor="director"/);
-  // A decision sent and not answered yet: no button to press again, a status line instead (one press, one decision).
-  const sending = await renderComponent("ReviewPanel", { ...props({ mode: "director", available: true, notice: null, review: withDecision, teams, running: false, timing: null, refused: null }), deciding: true });
+  // A decision sent and not answered yet, drawn from the state a press leaves (reviewPanelState.ts):
+  // no button to press again, a status line instead, and no refresh (one press, one decision).
+  const directorView = { mode: "director", available: true, notice: null, review: withDecision, teams, running: false, timing: null, refused: null };
+  let pressed = reviewPanelReducer(null, { type: "reviewState", view: directorView });
+  pressDecision((a) => (pressed = reviewPanelReducer(pressed, a)), () => undefined, { type: "reviewDecision", projectId: "prj-1", week: 2, revision: 3, form: { statement: "옵션을 줄인다", evidence_refs: [EV("o1")], assumption_refs: [], affected_deck_slides: [], next: null } });
+  const sending = await renderComponent("ReviewPanel", { ...props(pressed.view), deciding: pressed.deciding });
   assert.doesNotMatch(sending, /data-testid="review-decide"/, "no decide button while a decision is in flight");
   assert.match(visibleText(sending), /결정을 기록하고 있어요…/);
   assert.match(dhtml, /data-testid="review-decide"/, "control: nothing in flight, the button is there");
   assert.doesNotMatch(dhtml, /review-deciding/);
-  ok("panel render: ten titled sections with only the stale ones marked, 'no proposal' and the AI section said in words, the timing line; missing and switch-off draw no pack; the director's overview, form and decision, and no decide button while a decision is in flight");
+  const refresh = (h) => /<button type="button"( disabled="")?>새로 불러오기<\/button>/.exec(h);
+  assert.deepEqual([refresh(sending)?.[1], refresh(dhtml) && (refresh(dhtml)[1] ?? "enabled")], [' disabled=""', "enabled"], "no refresh while a decision is in flight (control: drawn and enabled otherwise)");
+  const answered = reviewPanelReducer(pressed, { type: "reviewState", view: directorView, done: "결정과 다음 실험을 프로젝트 기억에 기록했어요." });
+  const after = await renderComponent("ReviewPanel", { ...props(answered.view), done: answered.done, deciding: answered.deciding });
+  assert.match(after, /data-testid="review-decide"/, "the host's answer brings the button back");
+  assert.doesNotMatch(after, /review-deciding/);
+  ok("panel render: ten titled sections with only the stale ones marked, 'no proposal' and the AI section said in words, the timing line; missing and switch-off draw no pack; the director's overview, form and decision; after a press no decide or refresh button until the host answers");
 }
 
 console.log(`\n${passed} cr-review smoke checks passed`);

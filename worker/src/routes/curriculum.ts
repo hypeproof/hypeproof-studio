@@ -19,7 +19,7 @@ import { resolveProfile } from "../lib/modules";
 import { profileServesCohort } from "../lib/cohort-binding";
 import { curriculumRuntimeAllowed } from "../lib/moderation";
 import { makeErrorBody } from "../middleware/request-id";
-import { digestOf, NOTES_HOST } from "../lib/measurement-core/local-record";
+import { DELETE_NOT_COVERED, digestOf, NOTES_HOST } from "../lib/measurement-core/local-record";
 import {
   CHANNEL_MAX,
   HYPOTHESIS_STATUSES,
@@ -845,12 +845,23 @@ curriculum.delete("/experiments/:id/sessions/:sid", async (c) => {
   const sid = c.req.param("sid");
   if (!/^ps-[0-9a-f]{32}$/.test(sid)) return unknownRoute(c);
   const link = await r.record.sessionLink(PUBLISHED_HOST, sid);
-  if (!link || link.task !== r.experiment.id) return unknownRoute(c);
   const now = Date.now();
+  if (!link) {
+    // cr-review (CR-69): a repeated erase. The session is gone and its tombstone stands in this
+    // Project's record (one record per Project), so an erase of it ran; that erase may have failed
+    // before the Project's packs went, and they quote statements of the drafts it removed. The packs
+    // go now. What a failure inside `deleteSession` itself left (after the session key went) is not
+    // redone here.
+    if (!(await r.record.sessionDeleted(PUBLISHED_HOST, sid))) return unknownRoute(c);
+    const reviews = await dropProjectReviews(c.env.HPS_DB, r.project.id);
+    return c.json({ receipt: { kind: "participant_session_deleted", experiment_id: r.experiment.id, session_id: sid, at: now, deleted_by: r.by, already_deleted: true, removed: {}, not_covered: DELETE_NOT_COVERED, review_packs_deleted: reviews } });
+  }
+  if (link.task !== r.experiment.id) return unknownRoute(c);
   const report = await r.record.deleteSession(PUBLISHED_HOST, sid, { by: "user", at: now });
   if (link.attribution?.link) await releaseErasedSession(c.env.HPS_DB, link.attribution.link, sid);
   // cr-review (CR-69): a Weekly Review Pack quotes the statements of the drafts the erase just
-  // removed, so the Project's packs go too, after the erase; the team prepares a new one.
+  // removed, so the Project's packs go too, after the erase; the team prepares a new one. When
+  // this drop fails, the erase is answered 500 and repeating it drops them (the branch above).
   const reviews = await dropProjectReviews(c.env.HPS_DB, r.project.id);
   return c.json({ receipt: { kind: "participant_session_deleted", experiment_id: r.experiment.id, session_id: sid, at: now, deleted_by: r.by, removed: report.removed, not_covered: report.not_covered, review_packs_deleted: reviews } });
 });

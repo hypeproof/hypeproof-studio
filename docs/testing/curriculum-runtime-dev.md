@@ -252,7 +252,7 @@ It writes `e2e/test-results/cr-app/skills-result.json` (the skill and capability
 
 ## `cr-review` — Weekly Review (#1398)
 
-**Flag:** the same `curriculum_runtime: { enabled: true }`. With `scripts/dev-stack.sh`, apply `migrations/0038-curriculum-runtime-review.sql` to the local D1 after 0032–0034 (0036 is reserved for #1485 and not part of this). The director needs an issuer token whose scope covers the cohort and the profile; nothing else is new.
+**Flag:** the same `curriculum_runtime: { enabled: true }`. With `scripts/dev-stack.sh`, apply `migrations/0036-chalk-feedback.sql` through `migrations/0038-curriculum-runtime-review.sql` to the local D1 in order, after 0032–0034 (0036 and 0037 are Chalk's; applying the whole `migrations/` directory in order does the same). The director needs an issuer token whose scope covers the cohort and the profile; nothing else is new.
 
 **Fastest check (background, no app).**
 

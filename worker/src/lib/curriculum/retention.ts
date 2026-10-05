@@ -51,15 +51,18 @@ async function deleteTaskIfAny(record: LocalRecord, id: string, at: number): Pro
  * itself, and only then is the record scanned. The pending mark is cleared last: a failure in
  * between leaves the experiment due again on the next sweep.
  *
- * cr-review: the Project's Weekly Review Packs go after the scan. A pack quotes the statements
- * of the drafts it was composed from, so none may outlive their deletion; one stored while the
- * scan ran is caught by this drop or by its own check after it was stored (the commit route).
+ * cr-review: the Project's Weekly Review Packs go after the scan and before the pending mark is
+ * cleared. A pack quotes the statements of the drafts it was composed from, so none may outlive
+ * their deletion: a drop that fails leaves the deletion pending, and the next sweep runs it all
+ * again. Not before the scan: a pack stored while the scan ran is caught by this drop or by its
+ * own check after it was stored (the commit route), and one stored before the scan by neither.
  */
 export async function deleteExperimentData(db: DB, record: LocalRecord, experiment: Experiment, now: number): Promise<{ experiment: Experiment; report: Awaited<ReturnType<LocalRecord["deleteTask"]>> | null; review_packs_deleted: number }> {
   const closed = await closeExperimentAfterDeletion(db, experiment, now);
   const report = await deleteTaskIfAny(record, experiment.id, now);
+  const reviewPacksDeleted = await dropProjectReviews(db, experiment.project_id);
   const finished = await finishExperimentDeletion(db, closed, now);
-  return { experiment: finished, report, review_packs_deleted: await dropProjectReviews(db, experiment.project_id) };
+  return { experiment: finished, report, review_packs_deleted: reviewPacksDeleted };
 }
 
 export async function runCurriculumRetention(env: Env, now: number, limit = 25): Promise<{ ran: boolean; deleted: string[] }> {
@@ -74,9 +77,11 @@ export async function runCurriculumRetention(env: Env, now: number, limit = 25):
       if (had_links || experiment.data_deletion_pending === true) await deleteExperimentData(env.HPS_DB, record, experiment, now);
       else {
         await deleteTaskIfAny(record, experiment.id, now);
-        await forgetExperimentRecords(env.HPS_DB, experiment.id, ended_at);
         // cr-review: packs may quote the drafts of these manual records (see deleteExperimentData).
+        // Dropped before the last-record row is forgotten: until then the experiment stays due, so
+        // a drop that fails runs again on the next tick.
         await dropProjectReviews(env.HPS_DB, project.id);
+        await forgetExperimentRecords(env.HPS_DB, experiment.id, ended_at);
       }
       deleted.push(experiment.id);
     } catch (e) {

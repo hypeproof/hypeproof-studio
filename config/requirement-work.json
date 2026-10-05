@@ -3596,6 +3596,7 @@
         "extensions/hypeproof-chat/src/skillSession.ts",
         "extensions/hypeproof-chat/package.json",
         "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts",
         "extensions/hypeproof-chat/webview-ui/src/App.tsx",
         "extensions/hypeproof-chat/webview-ui/src/InstructorChatPanel.tsx",
         "extensions/hypeproof-chat/webview-ui/src/MemoryPanel.tsx"
@@ -3609,7 +3610,8 @@
         "worker/migrations/0038-curriculum-runtime-review.sql",
         "extensions/hypeproof-chat/src/reviewSession.ts",
         "extensions/hypeproof-chat/src/reviewView.ts",
-        "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx"
+        "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts"
       ]
     },
     {
