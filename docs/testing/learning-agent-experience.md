@@ -66,6 +66,11 @@ AE-T34·AE-T37의 선행 Service·Chalk 계약(#1013 feedback-loop 첫 슬라이
 '도움 없이'는 독립 수행으로 올리지 않음 · 기록 없음은 미관찰 · 분모는 학생이 적은 도움을 Service 관측(`help_use` 미관찰)과 따로 셈.
 실행 기록: [Chalk 테스트 기록](chalk-authoring.md#feedback-loop-records-20261006). 사람의 검토·실제 수업 없음 → 여전히 **NOT RUN**.
 
+AE-T01의 AE-01 절반(#554 첫 조각, 2026-10-06) → 학생이 목표·개인 완료 기준을 적고 고친 뒤 영역 A의 수업 기준이 그대로인지,
+결과(옆 미리보기)를 띄우고 대화를 끝까지 내려도·앱을 다시 열어도 같은 목표가 보이는지, 목표를 열거나 저장해도 완료·과제 이동이 없는지를
+실제 App(합성 Service)으로, 다른 수업 버전·활동의 목표 미복원과 두 화면 동시 저장 거절을 실제 호스트 처리·화면 렌더로 실행.
+실행 기록: [아래](#goal-20261006). 자료 선택·요청 payload(AE-02, #555) 절반이 남아 AE-T01은 여전히 **NOT RUN**.
+
 AE-T36은 종단 연결 검사다. 그 한 번의 성공으로 연결된 요구사항의 모든 부정·장애 조건을
 통과했다고 처리하지 않는다. 특히 AE-T06/07/10/11/33/35의 경계 검사가 별도로 필요하다.
 
@@ -216,3 +221,66 @@ E7의 고정/제한 선택은 AE-T19~21/25와 기존 모델 정규화 회귀가 
 이번 보강의 실제 문서 검사 결과는 PR에 기록한다. 이 게이트의 PASS는 위 AE-T의 실행 상태를 바꾸지 않는다.
 
 #792의 [모델 선택·전환 인수](lesson-model-selection.md)는 위 시나리오의 일부다. 전체 AE-T19/20/25의 완료 판정은 아니다.
+
+<a id="goal-20261006"></a>
+
+## AE-01 첫 조각 — 내 목표와 수업 기준 · 2026-10-06 ([#554](https://github.com/jayleekr/hypeproof-studio/issues/554))
+
+범위: 수업이 서빙된 학생 좌석. 학생이 자기 목표 한 문장과 개인 완료 기준(다섯 줄까지)을 적고 고친다. 저장한 목표는 영역 A의
+수업 완료 조건 아래 한 줄로 헤더와 함께 고정되고, 기준과 고치는 칸은 영역 A 바로 아래 rail에 접혀 있다. 영역 A는 수업 설계 파일의
+기준(이번 단계가 끝났다고 볼 조건, 이번 주차의 완료 조건)을 그대로 그리며, 이 기능은 그것을 읽어 보내지도 고치지도 않는다.
+계약: [REQ-STUDIO-LESSON-GOAL](../studio-requirements.md). 스위치는 없다. 서빙된 수업(`profile.lesson`)이 있는 학생 화면에만
+있고 강사 화면(#1298)과 수업 없는 좌석에는 없다. 학생 앱에는 다음 데스크톱 배포 때 들어간다(머지 ≠ 배포). 모델 요청에는 아무것도 더하지 않는다.
+
+### 해 보기
+
+가장 빠른 확인 — 백그라운드, 합성 Service(`e2e/sx/sx-service.mjs`: 실제 Service 라우터, 수업이 고정된 `/2` 좌석, 한 줄로만
+답하는 모델, 외부 호출 차단), 모델 키 없음. 이 브랜치 확장을 주입한 준비된 앱 사본으로([e2e/README.md](../../e2e/README.md)
+"Driving a different .app"):
+
+```bash
+bash scripts/prep-test-app.sh "<앱 사본>"     # 사본마다 한 번: LSUIElement=1, ad-hoc 재서명
+GATE=idle HPS_QUIET_NO_HIDE=1 HPS_APP_PATH="<앱 사본>" bash scripts/e2e-quiet.sh npx playwright test -c sx/playwright.config.ts goal-app
+```
+
+5분 동안 입력이 없을 때 시작하고 Mac을 만지면 멈춘다(exit 75 = 나중에 다시). 창은 화면 밖에 있고 포커스를 가져가지 않는다.
+`HPS_QUIET_NO_HIDE=1`은 화면 사진을 남기려는 것이며 없으면 사진만 빠진다. 기록: `e2e/test-results/sx-app/goal-result.json`, 사진 `goal-*.png`.
+
+손으로(개발 앱) — 스크립트를 읽고 쓴 절차이며 끝까지 실행하지 않았다. 위 Playwright 실행이 실행한 경로다.
+
+```bash
+STATE="$HOME/Library/Application Support/HypeProof Studio Development/goal"
+python3 scripts/studio-dev.py --state-dir "$STATE" --provider service prepare
+node --experimental-strip-types --experimental-sqlite e2e/sx/sx-service.mjs 8787 "$STATE/local-participant-token.txt" c1,c2,c3 &
+python3 scripts/studio-dev.py --state-dir "$STATE" --provider service run --service local
+```
+
+| 단계 | 학생이 하는 일 | 기대 결과 (학생 말로) |
+|---|---|---|
+| 1 | 작업 화면을 연다 | 영역 A에 "내 목표" 줄은 없다(적은 목표가 없으면 지어내지 않는다). 그 아래 rail에 "내 목표와 완료 기준 적기"가 접혀 있다. 영역 A의 "이번 단계가 끝났다고 볼 조건"과 "이번 주차의 완료 조건" 세 줄은 수업 그대로다 |
+| 2 | "내 목표와 완료 기준 적기"를 펼쳐 목표 한 문장과 완료 기준 두 줄을 적고 "목표 저장" | "저장했어요." 영역 A의 완료 조건 아래에 "내 목표 · (적은 목표)" 한 줄이 생긴다. 수업 조건은 한 글자도 바뀌지 않고 ☑도 생기지 않는다. "이 과제 완료하기"는 여전히 눌리지 않는다 |
+| 3 | `index.html`을 열고 "HypeProof: HTML 미리보기 (옆 패널)"로 결과를 옆에 띄운 뒤 채팅을 다시 앞으로 | 결과가 옆에 열린 채 영역 A에 같은 목표 줄, rail에 같은 기준. 대화를 맨 아래까지 내려도 목표 줄은 영역 A와 함께 화면에 남는다 |
+| 4 | 앱을 껐다 켠다 | 같은 목표와 기준이 돌아온다 |
+| 5 | Service를 `c1`로 다시 시작하고 새로 받은 코드로 연다(다른 수업 버전 = 새 활동) | 앞 버전의 목표가 따라오지 않는다: "내 목표" 줄이 없고 rail은 "내 목표와 완료 기준 적기" |
+| 6 | 목표와 기준을 비우고 저장 | 영역 A의 "내 목표" 줄이 사라지고 수업 조건은 그대로다 |
+
+데이터 위치: 이 작업 폴더의 VS Code `workspaceState` 키 `hps.studentGoal`(사용자 데이터 폴더의 `User/workspaceStorage/<id>/state.vscdb`).
+수업 버전(sha256)과 활동마다 레코드 하나: `schema: "hps-student-goal/1"`, `lesson{course_id,version,sha256}`, `activity`, `goal`,
+`criteria[]`, `revision`, `saved_at`. Service로 보내지 않고 학습 이벤트·과제 흐름 기록·수업 보드 기록을 만들지 않는다. 같은 수업의
+다음 버전은 새 과제라(과제 id와 같은 기준) 앞 버전의 목표를 가져오지 않는다. 다른 화면에서 먼저 저장된 뒤의 저장은 거절하고 지금 목표를 다시 보여 준다.
+
+### 실행 기록
+
+| 층 · 증거 종류 | 명령 | 결과 |
+|---|---|---|
+| 규칙·실제 호스트 처리와 config 경로·실제 채팅 화면 렌더 · 합성 | `cd extensions/hypeproof-chat && node --experimental-strip-types test/student-goal.smoke.mjs` | PASS 16. 저장은 목표·기준만 남기고 수업 기준을 실을 수 없음, 다른 과정·다음 버전·다른 활동·키를 바꿔 넣은 레코드의 목표 미복원, 예전 revision 저장 거절(두 화면이 같은 revision에서 동시 저장하면 둘째 거절), 저장 실패·다른 수업 저장 거절, 새 호스트(재접속)의 config가 같은 목표로 시작, 목표를 보거나 저장해도 완료·단계 이동·관찰·수업 보드 기록 0, 영역 A의 목표 줄은 수업 조건 아래·☑와 버튼 없음, 강사 화면에는 없음. 각 판정은 심은 화면·잘못된 구현 대조군으로 살아 있음을 확인 |
+| 구현에 심은 결함 19종 · 합성 | 세션 scratch 스크립트(커밋하지 않음): 한 번에 하나씩 심고 위 smoke 실행 후 원복 | 19/19 잡힘 (레코드가 메시지를 통째로 저장 · 과정 단위 키 · 레코드의 수업 확인 생략 · stale 검사 삭제 · 화면이 예전 revision 수용 · 저장이 수업 보드에 진행 보고 · 저장 큐 제거 · config에 목표 없음 · config가 활동 무시 · 웹뷰만 목표 보관 · 다른 수업 목표 그리기(rail·영역 A) · 강사에게도 그림 · 블록 자동 열림 · 기준에 ☑ · 기준·목표 줄에 수업 조건 클래스 · 영역 A 줄 삭제 · 줄을 수업 조건 위에 그림) |
+| 확장 전체 · 합성 | `npm run typecheck`, `webview-ui`에서 `npx tsc -b`, `npm test` | typecheck·tsc 0건. smoke 134 PASS, classroom-ops review·chalk 도구·생성기·판정 PASS. instructor-render 17건은 이 Mac의 `~/node_modules/react`(React 19)가 webview의 React 18보다 먼저 잡혀 React가 두 벌이 되는 환경 결함으로 실패하고, React를 webview의 한 벌로 묶어 같은 테스트를 돌리면 17/17 PASS. CI(ubuntu)에는 그 폴더가 없다 |
+| 실제 App · 실기(App) + 합성 Service | 위 "가장 빠른 확인" 명령(기기 전체 app lock 안에서) | PASS(1건). 빌드 커밋 `e23d47e3`. 셸 HypeProof Studio 0.1.51 사본(LSUIElement=1)에 확장 주입: `dist/extension.js` `6da4953e…`, `webview-ui/dist/assets/index.js` `beeb8099…`, `index.css` `b0d794b0…`. Service는 `canary-sdk-contract`(`/2`), 수업 `sx-week3` `m2026.10.05-1`(sha256 `94c9aced…`), 완료 조건 c1,c2,c3. macOS 15.7.4(24G517) arm64, Node 24.4.1, Playwright 1.60.0. 관측: 저장 전 영역 A 목표 줄 없음 → 저장 뒤 영역 A·rail에 같은 목표와 기준 두 줄, 수업 조건 세 줄·단계 확인 기준 그대로, ☑ 0, 완료 버튼 비활성 → 결과가 옆에 열린 채 같은 목표·조건, 목표 줄 화면 안 → 대화를 끝까지 내려도(셸 scrollTop 1235) 목표 줄 화면 안 → 앱 재실행 뒤 같은 목표·기준·조건. 과제 기록 phase는 처음부터 끝까지 `assigned`. 심은 화면 4종(수업 조건 글자 변경·조건 ☑·목표 글자 변경·목표 줄 화면 밖) 모두 보고됨. 사진(로컬, 커밋 안 함) sha256: `goal-1-before` `11ea3c28…`, `goal-2-saved` `4770fdc9…`, `goal-3-result-beside` `e235e0f5…`, `goal-3b-scrolled` `01e08092…`, `goal-4-reopened` `ce56440d…` |
+| App에 심은 결함 · 실기 | 같은 명령, config가 저장된 목표를 싣지 않는 확장 빌드로 | FAIL이어야 하고 FAIL(잡힘): 첫 세션의 저장·결과 화면은 통과하고(저장 답은 `goalState`로 옴) 앱을 다시 연 뒤 영역 A의 목표 줄을 20초 동안 찾지 못해 실패(`goal-app.spec.ts` 재실행 단계). 실행 뒤 주입한 확장을 원래 빌드(`6da4953e…`)로 되돌렸다 |
+| NOT RUN | — | AE-T01의 AE-02 절반(자료 선택·요청 payload, #555). 다른 수업 버전의 App 실행: 수업이 고정된 좌석은 활동 id에 수업이 들어가(Service `activityIdentity`) 새 버전 = 새 코드·새 활동이고 시작 화면의 "이 활동 시작하기"로 다른 폴더가 열릴 수 있어 그 이유만으로 통과할 수 있으므로, 버전·활동 경계는 위 실제 호스트 처리로 확인했다. Windows, 실제 학생, 실제 모델 |
+
+실행 중 계측기 쪽 문제 두 건을 먼저 고쳤다. 첫 실행은 조용한 모드가 앱을 숨겨 화면 사진이 멈췄고(사진을 선택 사항으로 바꾸고
+`HPS_QUIET_NO_HIDE=1`로 실행), 둘째 실행은 새 버전 코드에서 시작 화면 버튼이 "이 활동 시작하기"라 fixture가 기다리던
+"이어서 하기"를 찾지 못했다(위 NOT RUN 사유로 그 단계를 뺐다). 셋째 실행은 통과했지만 사진에서 rail의 목표 줄이 대화를 내리면 고정된
+헤더 아래로 사라지는 것이 보여, 설계(현재 과제 요약을 고정)에 맞게 목표 줄을 영역 A로 옮긴 뒤 넷째 실행으로 위 결과를 얻었다.
