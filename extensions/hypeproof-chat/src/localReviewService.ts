@@ -9,6 +9,17 @@ export class LocalReviewService {
   readonly store: FileRecordStorage;
   readonly record: LocalRecord;
   constructor(root: string) { this.store = new FileRecordStorage(root); this.record = new LocalRecord(this.store); }
+  /**
+   * The records this screen lists. A curriculum task (SX-55) lives on the same record: the chat
+   * panel writes it, it has no transcript import, and `card()` cannot open it. It is left out of
+   * this list instead of failing when clicked. Nothing is removed from the record itself.
+   */
+  async reviewRecords() {
+    const records = await this.record.records();
+    const tasks: typeof records.tasks = [];
+    for (const t of records.tasks) if (!(await this.record.getTask(t.id)).curriculum) tasks.push(t);
+    return { ...records, tasks };
+  }
   async import(raw: string, host: ReviewHost, project: string): Promise<TaskCard> {
     return this.importParsed(parseLocalTranscript(raw, host), project);
   }

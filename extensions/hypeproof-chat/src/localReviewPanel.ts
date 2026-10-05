@@ -14,7 +14,7 @@ export function registerLocalReview(context: vscode.ExtensionContext, render: (w
   let selected: string | undefined;
   let busy = false;
   const refresh = async (extra: Partial<LocalReviewState> = {}) => {
-    const { tasks, improvements } = await service.record.records();
+    const { tasks, improvements } = await service.reviewRecords();
     await panel?.webview.postMessage({ type: 'localReviewState', tasks, improvements, storage: service.store.root,
       ...(selected ? { card: await service.card(selected) } : {}), ...extra } satisfies LocalReviewState);
   };
