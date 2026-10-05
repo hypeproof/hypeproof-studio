@@ -54,7 +54,9 @@ jobs:
     if: needs.candidate.outputs.published != 'true'
     strategy:
       fail-fast: false
-      max-parallel: 1 # public synthetic codes retain their normal concurrency limits
+      # One session key per cohort: each OS run opens and closes the synthetic
+      # acceptance session (#1404), so the two must not overlap.
+      max-parallel: 1
       matrix:
         include:
           - os: macos-15
@@ -130,6 +132,14 @@ jobs:
       - name: Candidate App against the current public Service
         shell: bash
         env:
+          # #1404 — per-run synthetic codes and a short session on the synthetic
+          # acceptance cohort. The scoped issuer is preferred; the admin secret
+          # the publish job's freeze already uses is the fallback, so no new
+          # long-lived secret is required. public.mjs strips all of these from
+          # the App's environment.
+          HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          # Pre-#1404 static codes: read only when neither credential is set.
           HPS_ACCEPTANCE_TRIAL_CODE: ${{ secrets.HPS_ACCEPTANCE_TRIAL_CODE }}
           HPS_ACCEPTANCE_CLASSROOM_CODE: ${{ secrets.HPS_ACCEPTANCE_CLASSROOM_CODE }}
           TAG: ${{ inputs.tag }}
