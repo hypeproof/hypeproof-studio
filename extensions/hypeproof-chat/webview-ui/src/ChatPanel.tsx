@@ -6,7 +6,9 @@ import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlow
 import { EvidenceDrawer } from './EvidenceDrawer';
 import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
+import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
+import { acceptGoalView, goalOfLesson, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
@@ -222,6 +224,16 @@ export function ChatPanel(props: Props) {
   useEffect(() => onHostMessage((msg) => {
     if (msg.type === "lessonWorkState") setLessonWork({ sha256: msg.sha256, work: msg.work });
     if (msg.type === "rehearsalState") setRehearsalResult({ state: msg.state, verdict: msg.verdict, reasons: msg.reasons, message: msg.message });
+  }), []);
+  // AE-01 (#554) — the learner's own goal for the served lesson, as the host stored it. It starts from `config` (every
+  // mount and reconnect) and then follows the host's answers; a goal never moves back to an older revision.
+  const [studentGoal, setStudentGoal] = useState<StudentGoalView | null>(() => config?.studentGoal ?? null);
+  const [goalNote, setGoalNote] = useState<{ error?: string; saved?: boolean } | null>(null);
+  useEffect(() => { setStudentGoal((prev) => acceptGoalView(prev, config?.studentGoal)); }, [config?.studentGoal]);
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type !== "goalState") return;
+    setStudentGoal((prev) => acceptGoalView(prev, msg.view));
+    setGoalNote(msg.error ? { error: msg.error } : msg.saved ? { saved: true } : null);
   }), []);
   /**
    * SX-14·15·17 — the learning state the host computed and sent. **It is not
@@ -792,6 +804,18 @@ export function ChatPanel(props: Props) {
       />}
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
+
+      {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
+          Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
+          Student-only, like region A (#1298). */}
+      {!props.instructor && config?.profile?.lesson && (
+        <StudentGoal
+          lesson={config.profile.lesson}
+          view={goalOfLesson(studentGoal, config.profile.lesson)}
+          note={goalNote}
+          onSave={(edit) => postToHost({ type: "goalSave", ...edit })}
+        />
+      )}
 
       {/* Region B's lesson info — inside the coach rail, **outside** the message stream
           (SX-05). Closed by default, and it opens only the current step. It used to
