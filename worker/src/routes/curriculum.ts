@@ -107,6 +107,7 @@ import { addDecisionOnce, createExperimentDraft, deleteExperimentDraft, deleteRe
 import {
   buildPack,
   checkNextExperiment,
+  contextEvidenceRefs,
   currentReview,
   decisionsOfReview,
   evidenceRefsOf,
@@ -848,11 +849,12 @@ curriculum.delete("/experiments/:id/sessions/:sid", async (c) => {
   const now = Date.now();
   if (!link) {
     // cr-review (CR-69): a repeated erase. The session is gone and its tombstone stands in this
-    // Project's record (one record per Project), so an erase of it ran; that erase may have failed
-    // before the Project's packs went, and they quote statements of the drafts it removed. The packs
-    // go now. What a failure inside `deleteSession` itself left (after the session key went) is not
-    // redone here.
-    if (!(await r.record.sessionDeleted(PUBLISHED_HOST, sid))) return unknownRoute(c);
+    // Project's record (one record per Project), naming the experiment it was erased from, so an
+    // erase of it ran; that erase may have failed before the Project's packs went, and they quote
+    // statements of the drafts it removed. The packs go now. Under another experiment the session
+    // is the unknown route, as a live one is (below). What a failure inside `deleteSession` itself
+    // left (after the session key went) is not redone here: a CR-69 follow-up.
+    if ((await r.record.deletedSessionTask(PUBLISHED_HOST, sid)) !== r.experiment.id) return unknownRoute(c);
     const reviews = await dropProjectReviews(c.env.HPS_DB, r.project.id);
     return c.json({ receipt: { kind: "participant_session_deleted", experiment_id: r.experiment.id, session_id: sid, at: now, deleted_by: r.by, already_deleted: true, removed: {}, not_covered: DELETE_NOT_COVERED, review_packs_deleted: reviews } });
   }
@@ -1551,11 +1553,17 @@ curriculum.post("/projects/:id/review/commit", async (c) => {
   if (pack.timing) pack.timing = { ...pack.timing, commit_ms: Date.now() - started };
   if (!(await insertReview(db, pack, base?.revision ?? 0, REVIEW_LIMITS.revisionsPerWeek))) return refuse(c, 409, "review_changed", { latest: (await latestReview<WeeklyReview>(db, w.project.id, week))?.revision ?? 0 });
   if (afterReviewInsert) await afterReviewInsert(w.project);
-  // The pack quotes the statements of the evidence items it was composed from. When the team's
-  // participant data was deleted while it was being composed (CR-69), the deletion has already
-  // dropped every stored pack, or will after this one; either way a pack whose items no longer
-  // resolve is taken back here, so no deleted statement outlives the deletion in a pack.
-  const evRefs = evidenceRefsOf(pack);
+  // The pack quotes the statements of the evidence items it was composed from: each fact section
+  // cites its items, and the AI's suggestion may quote any item of the context the model read (the
+  // project-wide register, every week's), cited or not. When the team's participant data was
+  // deleted while the pack was being composed (CR-69), the deletion has already dropped every
+  // stored pack, or will after this one; either way a pack any of whose items no longer resolve is
+  // taken back here, so no deleted statement outlives the deletion in a pack. A suggestion kept
+  // from an earlier context (stale, its digest another) sits on a base revision such a deletion
+  // drops, so the insert on top of that revision fails instead (`insertReview`).
+  const next = pack.sections.find((s) => s.id === "next_experiment");
+  const read = next?.suggestion && next.digest === current.next.digest ? contextEvidenceRefs(current.next.run) : [];
+  const evRefs = [...new Set([...evidenceRefsOf(pack), ...read])];
   if (evRefs.length) {
     const items = await itemsFor(c.env, w.project, experimentsOfRefs(evRefs));
     const gone = evRefs.filter((r) => !items.has(r));

@@ -554,6 +554,27 @@ export function packEvidence(pack: Pick<WeeklyReview, "sections">): { evidence: 
 /** The `ev:` references a pack quotes (its statements are copies of these items' statements). */
 export const evidenceRefsOf = (pack: Pick<WeeklyReview, "sections">): string[] => sourcesOf(pack).filter((r) => parseEvidenceItemRef(r) !== null);
 
+/**
+ * The evidence items whose statements the model read for the suggested next experiment: every
+ * item of the run's context (the Experiment skill reads the project-wide register, every week's
+ * items; a contract that reads `evidence_items` adds those). The suggestion may quote any of them
+ * whether or not it cites one, so a pack holding it quotes them too (CR-69).
+ */
+export function contextEvidenceRefs(run: Pick<NextExperimentRun, "context">): string[] {
+  const out = new Set<string>();
+  const add = (list: unknown) => {
+    if (!Array.isArray(list)) return;
+    for (const item of list) {
+      const id = (item as { id?: unknown } | null)?.id;
+      if (typeof id === "string" && parseEvidenceItemRef(id) !== null) out.add(id);
+    }
+  };
+  const register = run.context.register as Partial<Record<"observed" | "interpreted" | "assumed", unknown>> | null | undefined;
+  for (const k of ["observed", "interpreted", "assumed"] as const) add(register?.[k]);
+  add(run.context.evidence_items);
+  return [...out];
+}
+
 /** A director's decision as the pack shows it under its sections (CR-51): the decision and the draft written with it. */
 export function decisionsOfReview(decisions: readonly Decision[], week: number): Decision[] {
   return decisions.filter((d) => d.actor === "director" && d.review?.week === week);

@@ -751,6 +751,12 @@ export class LocalRecord {
     return (await this.#read(`deleted/sessions/${enc(host)}/${enc(sessionId)}`)) !== null;
   }
 
+  /** The task an erased session belonged to, as its `deleteSession` tombstone names it; null when the session was not erased. */
+  async deletedSessionTask(host: string, sessionId: string): Promise<string | null> {
+    const task = (await this.#read<{ task?: unknown }>(`deleted/sessions/${enc(host)}/${enc(sessionId)}`))?.task;
+    return typeof task === "string" ? task : null;
+  }
+
   /** The keys every deletion so far removed, read once so a caller resolving many references does not re-read them per reference. */
   async deletedEvidenceKeys(): Promise<Set<string>> {
     return this.#deletedEvidence();

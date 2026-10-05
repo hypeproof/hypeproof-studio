@@ -3589,6 +3589,7 @@
         "worker/src/lib/curriculum/retention.ts",
         "worker/src/routes/curriculum.ts",
         "worker/src/skills/curriculum/rules.ts",
+        "worker/src/lib/measurement-core/local-record.ts",
         "worker/migrations/0038-curriculum-runtime-review.sql",
         "worker/schema.sql",
         "extensions/hypeproof-chat/src/reviewSession.ts",

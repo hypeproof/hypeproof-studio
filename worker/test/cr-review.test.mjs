@@ -26,6 +26,7 @@ const { RULES } = await import("../src/skills/curriculum/rules.ts");
 const { CURRICULUM_ROUTES, MEMORY_LIMITS, REVIEW_LIMITS, setAfterReviewInsert } = await import("../src/routes/curriculum.ts");
 const { participantPrefix } = await import("../src/lib/curriculum/participant-record.ts");
 const { runCurriculumRetention } = await import("../src/lib/curriculum/retention.ts");
+const { revokeToken } = await import("../src/lib/kv.ts");
 const { getProfile } = await import("../src/profiles/index.ts");
 const { CR_SURFACES } = await import("../../extensions/hypeproof-chat/src/curriculumRuntime.ts");
 const { ReviewSession, directorAvailable } = await import("../../extensions/hypeproof-chat/src/reviewSession.ts");
@@ -521,6 +522,52 @@ await test("CR-T46 the model section: an answer to other records than the ones n
   }
 });
 
+await test("CR-T46 nothing to regenerate, at the Service (CR-49): with only the AI's section stale and its answer missing, refused by the skill gate or failed in the App, a commit regenerates nothing and stores no revision (200 unchanged), so a director who read the pack still decides on it; an accepted answer stores the next revision (control)", async () => {
+  const f = await fixture();
+  try {
+    const s = await week2(f);
+    await sessionFor(f, s).session.prepare();
+    const director = await f.issuer();
+    const read = (await open(f, s, director)).pack.revision;
+    // The problem is in the Experiment skill's context and in no fact section: only the AI's section goes stale.
+    const problem = await f.api(`/v1/curriculum/projects/${s.project.id}/problem`, { method: "PUT", token: s.token, body: { statement: "처음 쓰는 사람은 키오스크 옵션 화면에서 혼자 주문을 끝내지 못한다" } });
+    assert.equal(problem.status, 200, problem.text);
+    assert.deepEqual((await open(f, s)).stale_sections, ["next_experiment"]);
+    const path = `/v1/curriculum/projects/${s.project.id}/review/commit`;
+    const stored = async () => (await rows(f, s.project.id)).map((r) => r.revision);
+    assert.deepEqual(await stored(), [read]);
+    // No answer sent (the model was not reached).
+    const none = await f.api(path, { method: "POST", token: s.token, body: { week: 2, base_revision: read } });
+    assert.deepEqual([none.status, none.json.unchanged, none.json.regenerated], [200, true, []], none.text);
+    assert.deepEqual(await stored(), [read], "no revision written");
+    // An answer the Experiment skill's gate refuses.
+    const prep = await f.api(`/v1/curriculum/projects/${s.project.id}/review/prepare`, { method: "POST", token: s.token, body: {} });
+    assert.deepEqual(prep.json.stale_sections, ["next_experiment"], prep.text);
+    const ms = prep.json.model_sections[0];
+    const bad = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(experimentAnswer(ms.prompt, { bad: true }))[1]);
+    const refused = await f.api(path, { method: "POST", token: s.token, body: { week: 2, base_revision: read, outputs: { next_experiment: { input_digest: ms.input_digest, output: bad } } } });
+    assert.deepEqual([refused.status, refused.json.unchanged, refused.json.regenerated], [200, true, []], refused.text);
+    assert.ok(refused.json.refused.next_experiment.problems.some((p) => /experiment_criteria_countable/.test(p)), refused.text);
+    assert.deepEqual(await stored(), [read], "no revision written");
+    // Through the App: the model call fails, so the press commits no answer.
+    const failing = sessionFor(f, s, { complete: async () => ({ ok: false, error: "provider_unavailable" }) });
+    assert.deepEqual(await failing.session.prepare(), { ok: true, regenerated: [], unchanged: false });
+    assert.equal(failing.calls.length, 1);
+    assert.deepEqual((await failing.session.studentView()).refused, ["model_failed"], "the press says why nothing changed");
+    assert.deepEqual(await stored(), [read], "no revision written");
+    // The director decides on the revision read before all of this.
+    const decided = await f.api(`/v1/curriculum/projects/${s.project.id}/review/decision`, { method: "POST", token: director, body: { week: 2, revision: read, statement: "옵션을 줄인 v1으로 다시 시험한다", evidence_refs: [s.ev("o1")], assumption_refs: [], affected_deck_slides: [] } });
+    assert.equal(decided.status, 201, decided.text);
+    // Control: an accepted answer for the records as they are now stores the next revision, the AI's section only.
+    const { session, calls } = sessionFor(f, s);
+    assert.deepEqual(await session.prepare(), { ok: true, regenerated: ["next_experiment"], unchanged: false });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(await stored(), [read, read + 1]);
+  } finally {
+    f.close();
+  }
+});
+
 // ── CR-T47 (worker D1): opening never calls a model ──────────────────────────────
 
 await test("CR-T47: opening the latest pack, fresh or stale, as a member or a director, makes zero model calls on every path the pack builder can reach and writes nothing; the spy counts a planted call", async () => {
@@ -608,7 +655,7 @@ await test("CR-T48 Service half: the director writes the final decision and the 
   }
 });
 
-await test("CR-T48 Service half, negatives: a student token cannot write a director decision (unknown route, nothing written); an unreviewed AI item and an item on a record that is not real are refused although the pack shows them, as for a team decision; refs outside the pack, a revision the director did not read, and a director outside the scope are refused; the decision is never stored without the director actor", async () => {
+await test("CR-T48 Service half, negatives: a student token cannot write a director decision (unknown route, nothing written); an unreviewed AI item and an item on a record that is not real are refused although the pack shows them, as for a team decision; evidence and assumptions outside the pack, a revision the director did not read, and a director outside the scope are refused; the decision is never stored without the director actor", async () => {
   const f = await fixture();
   try {
     const s = await week2(f);
@@ -646,6 +693,15 @@ await test("CR-T48 Service half, negatives: a student token cannot write a direc
     assert.deepEqual([outside.status, outside.json.error.code], [409, "ref_not_in_review"], "not in the pack the director read");
     const assumptionAsEvidence = await f.api(path, { method: "POST", token: director, body: { ...body, evidence_refs: [s.ev("a1")] } });
     assert.deepEqual([assumptionAsEvidence.status, assumptionAsEvidence.json.error.code], [409, "ref_not_in_review"], "an assumption is cited as one, never as evidence");
+    // Assumptions are cited from the pack's assumptions section only: an observation of the pack
+    // cited as an assumption, and an assumption the team accepted after the pack was prepared
+    // (reviewed and open, so only the pack check can refuse it).
+    const observedAsAssumption = await f.api(path, { method: "POST", token: director, body: { ...body, assumption_refs: [s.ev("o1")] } });
+    assert.deepEqual([observedAsAssumption.status, observedAsAssumption.json.error.code, observedAsAssumption.json.error.refs], [409, "ref_not_in_review", [s.ev("o1")]]);
+    const lateDraft = await reviewDraft(f, s, await draft(f, s, [{ id: "a9", section: "assumption", text: "준비한 뒤에 받아들인 가정", source_refs: [] }]), [{ item: "a9", action: "accept" }]);
+    const lateAssumption = venture.evidenceItemRef(s.experiment.id, lateDraft.id, "a9");
+    const notInPack = await f.api(path, { method: "POST", token: director, body: { ...body, assumption_refs: [lateAssumption] } });
+    assert.deepEqual([notInPack.status, notInPack.json.error.code, notInPack.json.error.refs], [409, "ref_not_in_review", [lateAssumption]], "an assumption outside the pack the director read");
     const old = await f.api(path, { method: "POST", token: director, body: { ...body, revision: rv.pack.revision + 7 } });
     assert.deepEqual([old.status, old.json.error.code], [409, "review_changed"]);
     const otherDirector = await f.issuer(f.otherCohort, f.other.id);
@@ -861,7 +917,7 @@ await test("director decisions downstream: a director's decision drives a Deck B
 
 // ── CR-T49 (worker D1): the four-team overview ───────────────────────────────────
 
-await test("CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls, for their own review week or the week asked; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes", async () => {
+await test("CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls, for their own review week or the week asked; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes; a revoked director token is refused (401 revoked)", async () => {
   const f = await fixture();
   const offProfile = getProfile(OFF_PROFILE);
   const minors = getProfile(MINORS_PROFILE);
@@ -902,6 +958,13 @@ await test("CR-T49: four directed teams show fresh, stale and missing correctly 
     assert.deepEqual([...new Set(week1.map((t) => t.week))], [1], "every team is read for the week asked");
     assert.deepEqual(Object.fromEntries(week1.map((t) => [t.title, t.status])), { "1팀": "missing", "2팀": "missing", "3팀": "missing", "4팀": "missing" }, "no team prepared week 1");
     assert.equal((await f.api("/v1/curriculum/reviews?week=0", { token: director })).status, 400);
+    // A revoked director token sees no team's status (the same token read the overview before its revocation: control).
+    const issued = await f.issuerIssued();
+    const before = await f.api("/v1/curriculum/reviews", { token: issued.token });
+    assert.deepEqual([before.status, before.json.teams.length], [200, 4], "control: the token reads the overview before it is revoked");
+    await revokeToken(f.env.HPS_KV, issued.jti, { reason: "test", by: "test" }, 3600);
+    const revoked = await f.api("/v1/curriculum/reviews", { token: issued.token });
+    assert.deepEqual([revoked.status, revoked.json?.error?.code, revoked.json?.teams], [401, "revoked", undefined], "a revoked director token is refused");
     const foreign = (list) => list.filter((t) => t.cohort_id !== f.cohort || t.project_id === outsider.project.id);
     assert.deepEqual(foreign(teams), [], "no team of another cohort");
     assert.equal(out.json.truncated, false);
@@ -985,6 +1048,116 @@ await test("CR-69 with packs: deleting a participant session or an experiment's 
   }
 });
 
+await test("CR-69 with packs, the AI's suggestion: when another week's data is deleted after the commit read the records and before its insert, a pack whose suggestion quotes a statement the deletion removed is taken back (409 evidence_changed) although no section cites that statement; with nothing deleted the same preparation stores its pack (control); a suggestion kept, stale, from an earlier revision goes with that revision (the insert on top of it fails, 409 review_changed)", async () => {
+  const f = await fixture();
+  const real = f.env.HPS_DB;
+  // One Project, week 1 then week 2. Week 1 holds an observation; week 2 an observation and an
+  // open assumption. The week-2 pack cites only week 2's items, while the Experiment skill reads
+  // the project-wide register, week 1's observation included.
+  const W1 = "1주차에 한 명이 첫 화면에서 길을 잃었다";
+  const twoWeeks = async (title) => {
+    const w1 = await started(f, { title, week: 1 });
+    const n1 = await note(f, w1, "1주차: 첫 화면에서 길을 잃음");
+    const d1 = await reviewDraft(f, w1, await draft(f, w1, [{ id: "w1o", section: "observation", text: W1, source_refs: [`note:${n1}`] }]), [{ item: "w1o", action: "accept" }]);
+    const e2 = await f.api("/v1/curriculum/experiments", { method: "POST", token: w1.token, body: { project_id: w1.project.id, product_version_id: w1.version, week: 2, question: "옵션을 혼자 고를 수 있나?", method: "task_test", success_criteria: ["5명 중 3명 완료"], hypothesis_id: w1.hypothesis.id } });
+    assert.equal(e2.status, 201, e2.text);
+    const w2 = { ...w1, experiment: e2.json.experiment };
+    const n2 = await note(f, w2, "2주차: 옵션에서 멈춤");
+    await reviewDraft(f, w2, await draft(f, w2, [{ id: "w2o", section: "observation", text: "2주차에 두 명이 옵션에서 멈췄다", source_refs: [`note:${n2}`] }, { id: "w2a", section: "assumption", text: "옵션 이름만 바꾸면 혼자 고른다", source_refs: [] }]), [{ item: "w2o", action: "accept" }, { item: "w2a", action: "accept" }]);
+    // The model's answer to the week-2 prompt quotes week 1's observation in its reasoning and cites week 2's open assumption.
+    const prep = await f.api(`/v1/curriculum/projects/${w1.project.id}/review/prepare`, { method: "POST", token: w1.token, body: { week: 2 } });
+    assert.equal(prep.status, 200, prep.text);
+    const ms = prep.json.model_sections[0];
+    assert.ok(ms.prompt.includes(W1), "the model reads week 1's observation");
+    const output = { ...JSON.parse(/```json\n([\s\S]*?)\n```/.exec(experimentAnswer(ms.prompt))[1]), why_riskiest: `1주차 관찰 "${W1}"을(를) 보면 가장 위험하다` };
+    return { w1, w2, ref1: venture.evidenceItemRef(w1.experiment.id, d1.id, "w1o"), ms, output };
+  };
+  const commit = (t) => f.api(`/v1/curriculum/projects/${t.w1.project.id}/review/commit`, { method: "POST", token: t.w1.token, body: { week: 2, base_revision: 0, outputs: { next_experiment: { input_digest: t.ms.input_digest, output: t.output } } } });
+  try {
+    // Control: nothing deleted, the pack is stored; it quotes week 1's observation in the AI's
+    // section only, and no section cites it (so the check of the cited items alone cannot see it).
+    const ctl = await twoWeeks("두 주, 대조");
+    const stored = await commit(ctl);
+    assert.equal(stored.status, 201, stored.text);
+    const pack = stored.json.review.pack;
+    assert.ok(!review.evidenceRefsOf(pack).includes(ctl.ref1), "no section cites week 1's observation");
+    assert.deepEqual(pack.sections.filter((x) => JSON.stringify(x).includes(W1)).map((x) => x.id), ["next_experiment"], "only the AI's suggestion quotes it");
+    // The race: the student deletes week 1's data after the commit read the records and before its insert.
+    const t = await twoWeeks("두 주, 경합");
+    let receipt = null;
+    const h = hooked(real, /^INSERT OR IGNORE INTO cr_weekly_reviews/, {
+      run: async (b, state, ...x) => {
+        if (state.fired++ === 0) {
+          f.env.HPS_DB = real;
+          const del = await f.api(`/v1/curriculum/experiments/${t.w1.experiment.id}`, { method: "DELETE", token: t.w1.token });
+          assert.equal(del.status, 200, del.text);
+          receipt = del.json.receipt;
+          f.env.HPS_DB = h.db;
+        }
+        return b.run(...x);
+      },
+    });
+    f.env.HPS_DB = h.db;
+    let raced;
+    try {
+      raced = await commit(t);
+    } finally {
+      f.env.HPS_DB = real;
+    }
+    assert.equal(h.state.fired, 1, "the commit reached its insert");
+    assert.equal(receipt?.review_packs_deleted, 0, "the deletion found no pack to drop: none was stored yet");
+    assert.deepEqual([raced.status, raced.json?.error?.code], [409, "evidence_changed"], raced.text);
+    assert.ok(raced.json.error.refs.includes(t.ref1), `the deleted observation is named: ${raced.text}`);
+    assert.deepEqual(await rows(f, t.w1.project.id), [], "no pack quoting the deleted statement is left");
+    // What is left is prepared again: week 1's statement is in no part of the new pack.
+    assert.equal((await sessionFor(f, t.w1).session.prepare(2)).ok, true);
+    const again = await rows(f, t.w1.project.id);
+    assert.equal(again.length, 1);
+    assert.ok(!again[0].doc.includes(W1), "the new pack does not quote the deleted statement");
+
+    // A suggestion kept from an earlier context: revision 1 holds the suggestion quoting week 1;
+    // then the problem changes (only the AI's section goes stale) and a metric is defined (the
+    // metrics section too). A press whose model call fails stores revision 2 with the metrics
+    // regenerated and the old suggestion kept, stale. When week 1's data is deleted during that
+    // commit, the deletion drops revision 1 and the insert on top of it fails (409
+    // review_changed), so no revision keeps the deleted statement.
+    const k = await twoWeeks("두 주, 남은 제안");
+    assert.equal((await commit(k)).status, 201);
+    const pr = await f.api(`/v1/curriculum/projects/${k.w1.project.id}/problem`, { method: "PUT", token: k.w1.token, body: { statement: "처음 쓰는 사람은 옵션 화면에서 혼자 주문하지 못한다" } });
+    assert.equal(pr.status, 200, pr.text);
+    const mt = await f.api(`/v1/curriculum/projects/${k.w1.project.id}/metrics`, { method: "POST", token: k.w1.token, body: { name: "열람", metric_kind: "usage", definition: "참가 세션의 화면 열람 수", unit: "회", source: { type: "event_count", experiment_id: k.w2.experiment.id, event_kind: "page_view" } } });
+    assert.equal(mt.status, 201, mt.text);
+    assert.deepEqual((await open(f, k.w1, k.w1.token, 2)).stale_sections, ["metrics", "next_experiment"]);
+    let keptReceipt = null;
+    const kh = hooked(real, /^INSERT OR IGNORE INTO cr_weekly_reviews/, {
+      run: async (b, state, ...x) => {
+        if (state.fired++ === 0) {
+          f.env.HPS_DB = real;
+          const del = await f.api(`/v1/curriculum/experiments/${k.w1.experiment.id}`, { method: "DELETE", token: k.w1.token });
+          assert.equal(del.status, 200, del.text);
+          keptReceipt = del.json.receipt;
+          f.env.HPS_DB = kh.db;
+        }
+        return b.run(...x);
+      },
+    });
+    f.env.HPS_DB = kh.db;
+    let kept;
+    try {
+      kept = await sessionFor(f, k.w1, { complete: async () => ({ ok: false, error: "provider_unavailable" }) }).session.prepare(2);
+    } finally {
+      f.env.HPS_DB = real;
+    }
+    assert.equal(kh.state.fired, 1, "the commit reached its insert");
+    assert.equal(keptReceipt?.review_packs_deleted, 1, "the deletion dropped revision 1");
+    assert.equal(kept.ok, false, JSON.stringify(kept));
+    assert.deepEqual(await rows(f, k.w1.project.id), [], "no revision keeps the deleted statement");
+  } finally {
+    f.env.HPS_DB = real;
+    f.close();
+  }
+});
+
 await test("CR-69 with packs, the retention sweep (decision 6): an experiment with no link and only manual records, deleted 30 days after its last record, takes the Project's packs with it; at 29 days the pack stays", async () => {
   const f = await fixture();
   try {
@@ -1007,7 +1180,7 @@ await test("CR-69 with packs, the retention sweep (decision 6): an experiment wi
   }
 });
 
-await test("CR-69 with packs, a drop that fails once: the deletion is not marked done, so the next sweep removes the pack (the delete action, the no-link sweep); a session erase answers 500 and repeating it removes the pack; a session that never was still drops nothing", async () => {
+await test("CR-69 with packs, a drop that fails once: the deletion is not marked done, so the next sweep removes the pack (the delete action, the no-link sweep); a session erase answers 500 and repeating it removes the pack; a session that never was still drops nothing, nor does the erased session repeated under another experiment of the Project", async () => {
   const f = await fixture();
   const real = f.env.HPS_DB;
   const logged = [];
@@ -1067,9 +1240,20 @@ await test("CR-69 with packs, a drop that fails once: the deletion is not marked
     assert.deepEqual([again.json.receipt.kind, again.json.receipt.already_deleted, again.json.receipt.review_packs_deleted], ["participant_session_deleted", true, 1]);
     assert.deepEqual(await rows(f, t.project.id), [], "repeating the erase removes the pack");
     // Control: a session that never was is still the unknown route, and drops nothing.
+    const later = await f.api("/v1/curriculum/experiments", { method: "POST", token: t.token, body: { project_id: t.project.id, product_version_id: t.version, week: 3, question: "도움말을 누르나?", method: "interview", success_criteria: ["5명 중 3명"], hypothesis_id: t.hypothesis.id } });
+    assert.equal(later.status, 201, later.text);
     assert.equal((await sessionFor(f, t).session.prepare()).ok, true);
     assert.equal((await erase("ps-" + "0".repeat(32))).status, 404);
     assert.equal((await rows(f, t.project.id)).length, 1, "nothing dropped for a session that never was");
+    // The erased session repeated under another experiment of the same Project is the unknown
+    // route too, as a live session there is, and drops nothing.
+    const elsewhere = await f.api(`/v1/curriculum/experiments/${later.json.experiment.id}/sessions/${t.sessions[1]}`, { method: "DELETE", token: t.token });
+    const unknown = await f.api("/v1/cr-never-registered", { method: "DELETE", token: t.token });
+    assert.deepEqual([elsewhere.status, elsewhere.json?.error?.type, elsewhere.json?.receipt], [unknown.status, unknown.json?.error?.type, undefined], elsewhere.text);
+    assert.equal((await rows(f, t.project.id)).length, 1, "nothing dropped under another experiment");
+    const liveElsewhere = await f.api(`/v1/curriculum/experiments/${later.json.experiment.id}/sessions/${t.sessions[0]}`, { method: "DELETE", token: t.token });
+    assert.equal(liveElsewhere.status, unknown.status, "control: a live session of the first experiment is the unknown route under the other");
+    assert.equal((await erase(t.sessions[1])).status, 200, "control: under its own experiment the repeat still answers");
   } finally {
     console.error = consoleError;
     f.env.HPS_DB = real;
@@ -1077,18 +1261,17 @@ await test("CR-69 with packs, a drop that fails once: the deletion is not marked
   }
 });
 
-await test("CR-69 with packs, the order of the drop: a pack stored after the deletion began and before its record scan passes its own check (every source still resolves) and is dropped after the scan", async () => {
+await test("CR-69 with packs, the order of the drop: a pack stored after the deletion began and before its record scan passes its own check (every source still resolves) and is dropped after the scan, by the delete action and by the retention sweep's no-link branch", async () => {
   const f = await fixture();
   const real = f.env.HPS_TRACES;
-  try {
-    const s = await week2(f);
-    // The record scan of the deletion starts by writing the experiment's tombstone (local-record
-    // deleteTask). Right before that write a team member prepares and stores a pack in full: its
-    // sources all resolve then, so only a drop after the scan can take it (a drop before the scan
-    // would leave it quoting the deleted statements).
+  // The record scan of a deletion starts by writing the experiment's tombstone (local-record
+  // deleteTask). Right before that write a team member prepares and stores a pack in full: its
+  // sources all resolve then, so only a drop after the scan can take it (a drop before the scan
+  // would leave it quoting the deleted statements).
+  const packAtScan = (s) => {
     const tombstone = `/deleted/${s.experiment.id}`;
     const during = {};
-    f.env.HPS_TRACES = new Proxy(real, {
+    const bucket = new Proxy(real, {
       get(t, k) {
         const v = t[k];
         if (typeof v !== "function") return v;
@@ -1105,6 +1288,13 @@ await test("CR-69 with packs, the order of the drop: a pack stored after the del
         };
       },
     });
+    return { bucket, during };
+  };
+  try {
+    // The student's delete action, on an experiment that ran with participants.
+    const s = await week2(f);
+    const action = packAtScan(s);
+    f.env.HPS_TRACES = action.bucket;
     let del;
     try {
       del = await f.api(`/v1/curriculum/experiments/${s.experiment.id}`, { method: "DELETE", token: s.token });
@@ -1112,10 +1302,23 @@ await test("CR-69 with packs, the order of the drop: a pack stored after the del
       f.env.HPS_TRACES = real;
     }
     assert.equal(del.status, 200, del.text);
-    assert.equal(during.commit?.status, 201, `a pack was stored while the deletion ran: ${during.commit?.text}`);
-    assert.ok(JSON.stringify(during.commit.json.review.pack).includes("세 명 중 두 명이 옵션 선택에서 멈췄다"), "control: it quotes the evidence the scan then deletes");
+    assert.equal(action.during.commit?.status, 201, `a pack was stored while the deletion ran: ${action.during.commit?.text}`);
+    assert.ok(JSON.stringify(action.during.commit.json.review.pack).includes("세 명 중 두 명이 옵션 선택에서 멈췄다"), "control: it quotes the evidence the scan then deletes");
     assert.equal(del.json.receipt.review_packs_deleted, 1, "the drop after the scan takes it");
     assert.deepEqual(await rows(f, s.project.id), [], "no pack quoting the deleted evidence is left");
+
+    // The retention sweep's no-link branch: an experiment holding only manual records, deleted
+    // 30 days after its last record, with a pack stored at the start of its record scan.
+    const m = await started(f, { title: "인터뷰만 한 팀", noLink: true });
+    const n = await note(f, m, "참가자 A가 옵션 화면에서 멈춤");
+    await reviewDraft(f, m, await draft(f, m, [{ id: "m1", section: "observation", text: "참가자 A가 옵션 화면에서 멈췄다", source_refs: [`note:${n}`] }]), [{ item: "m1", action: "accept" }]);
+    const at = Date.now();
+    const sweep = packAtScan(m);
+    const swept = await runCurriculumRetention({ ...f.env, HPS_TEST_ORIGIN: undefined, HPS_TRACES: sweep.bucket }, at + 31 * DAY);
+    assert.ok(swept.deleted.includes(m.experiment.id), "the sweep deleted the manual records");
+    assert.equal(sweep.during.commit?.status, 201, `a pack was stored while the sweep ran: ${sweep.during.commit?.text}`);
+    assert.ok(JSON.stringify(sweep.during.commit.json.review.pack).includes("참가자 A가 옵션 화면에서 멈췄다"), "control: it quotes the manual record the scan then deletes");
+    assert.deepEqual(await rows(f, m.project.id), [], "the sweep's drop after the scan takes it");
   } finally {
     f.env.HPS_TRACES = real;
     f.close();
