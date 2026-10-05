@@ -12,7 +12,7 @@ import { isMinorCohort } from '../lib/moderation';
 import { opsEnabled } from './classroom-ops';
 import { NOT_FENCED } from '../lib/classroom-distribution-store';
 import { sha256Hex } from '../lib/modules';
-import { feedbackLoopEnabled, hasFeedback, parseResponse, responseView, type ResponseRow } from '../lib/feedback-loop';
+import { feedbackLoopEnabled, hasFeedback, parseResponse, responseFor, responseView, storedFeedback, type ResponseRow } from '../lib/feedback-loop';
 import { resolveEffectiveLesson } from '../lib/lesson-binding-store';
 
 type Row = {id:string;cohort_id:string;profile_id:string;student_id:string;recipient_id:string;session_id:string;kind:string;content_json:string;revision:number;status:string;feedback:string;next_action:string;created_at:number;expires_at:number};
@@ -27,14 +27,16 @@ const studentView=(r:Row)=>({...metadata(r),content:JSON.parse(r.content_json),f
 const shareLimit=bodyLimit({maxSize:6*8000*6+8192,onError:c=>c.json({error:'share too large',reason:'too_large'},413)});
 const limit=bodyLimit({maxSize:32*1024,onError:c=>c.json({error:'share too large'},413)});
 const json=async(c:any)=>{try{return await c.req.json();}catch{return null;}};
-// #1013 feedback-loop — the learner's latest answer to a person's feedback, per share. Read only while HPS_FEEDBACK_LOOP is
-// enabled: with it off no field is added and no table is read, so a database without migration 0039 answers as before.
+// #1013 feedback-loop — the learner's answer to a person's feedback as a reader sees it, per share: the one bound to the
+// feedback text as it is stored now (whatever the status), else the newest, marked as answering an earlier text (responseFor).
+// Read only while HPS_FEEDBACK_LOOP is enabled: with it off no field is added and no table is read, so a database without
+// migration 0039 answers as before.
 async function responsesFor(env:Env,rows:Row[]){
  const out=new Map<string,ReturnType<typeof responseView>>();
  if(!feedbackLoopEnabled(env))return null;
  if(!rows.length)return out;
- const found=(await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?)) ORDER BY created_at DESC, feedback_revision DESC').bind(JSON.stringify(rows.map(r=>r.id))).all<ResponseRow>()).results??[];
- for(const r of rows){const latest=found.find(x=>x.share_id===r.id)??null;out.set(r.id,responseView(latest,hasFeedback(r)?await sha256Hex(r.feedback):null));}
+ const found=(await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(rows.map(r=>r.id))).all<ResponseRow>()).results??[];
+ for(const r of rows){const text=storedFeedback(r),sha=text===null?null:await sha256Hex(text);out.set(r.id,responseView(responseFor(found.filter(x=>x.share_id===r.id),sha),sha));}
  return out;
 }
 const withResponse=(r:Row,m:Map<string,ReturnType<typeof responseView>>|null)=>m?{...studentView(r),response:m.get(r.id)??null}:studentView(r);

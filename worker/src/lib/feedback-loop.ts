@@ -86,7 +86,28 @@ export function parseResponse(b: unknown): { ok: true; expected_revision: number
   return { ok: true, expected_revision: o.expected_revision as number, decision: o.decision as ResponseDecision, reason: o.reason };
 }
 
-/** What a reader sees of the learner's latest answer. `answers_current_feedback` is false once the feedback text changed. */
+/**
+ * The feedback text a learner's answer is compared with: the text as it is stored NOW, whatever the share's status. The learner
+ * sees that text on /sharing while it is "검토 중" too, so a status change alone does not make it another question; status
+ * decides only whether a NEW answer may be written (`hasFeedback`). Null = no text, nothing an answer could be bound to.
+ */
+export const storedFeedback = (s: Pick<ShareRow, 'feedback'>) => (typeof s.feedback === 'string' && s.feedback.trim() !== '' ? s.feedback : null);
+
+/**
+ * Which of one share's stored answers a reader sees: the one bound to the feedback as it reads now (`feedbackSha`, the digest of
+ * `storedFeedback`), whenever it was written, so feedback edited A → B → A shows A's answer again rather than B's newer one.
+ * Only when no answer is bound to the current text is the newest shown (by time, then by the feedback revision it answered),
+ * and `responseView` then marks it as answering an earlier feedback.
+ */
+export function responseFor(rows: readonly ResponseRow[], feedbackSha: string | null): ResponseRow | null {
+  const bound = feedbackSha === null ? undefined : rows.find((r) => r.feedback_sha256 === feedbackSha);
+  if (bound) return bound;
+  let newest: ResponseRow | null = null;
+  for (const r of rows) if (!newest || r.created_at > newest.created_at || (r.created_at === newest.created_at && r.feedback_revision > newest.feedback_revision)) newest = r;
+  return newest;
+}
+
+/** What a reader sees of the learner's answer (`responseFor`). `answers_current_feedback` is false once the feedback text changed. */
 export const responseView = (r: ResponseRow | null, currentFeedbackSha: string | null) =>
   r ? { decision: r.decision, reason: r.reason, created_at: r.created_at, answers_current_feedback: currentFeedbackSha !== null && r.feedback_sha256 === currentFeedbackSha } : null;
 
@@ -148,7 +169,8 @@ export function validateRetrospectiveDoc(raw: unknown, steps: readonly string[])
     if (!Array.isArray(f.sources) || f.sources.length > LIMITS.sources) return fail('invalid_source');
     const sources: RetroSource[] = [], seen = new Set<string>();
     for (const s of f.sources) {
-      if (!isObject(s) || !keysOk(s, ['share_id', 'part']) || typeof s.share_id !== 'string' || !SHARE_ID.test(s.share_id) || typeof s.part !== 'string' || !(s.part in PART_ORIGIN)) return fail('invalid_source');
+      // An own key only: `in` would also admit inherited names such as `constructor` or `__proto__` as parts.
+      if (!isObject(s) || !keysOk(s, ['share_id', 'part']) || typeof s.share_id !== 'string' || !SHARE_ID.test(s.share_id) || typeof s.part !== 'string' || !Object.hasOwn(PART_ORIGIN, s.part)) return fail('invalid_source');
       const key = s.share_id + '\u0000' + s.part;
       if (seen.has(key)) return fail('duplicate_source');
       seen.add(key); sources.push({ share_id: s.share_id, part: s.part as SharePart });
@@ -202,8 +224,8 @@ export function citeRefusal(src: RetroSource, share: ShareRow | null, response: 
 export interface ShareLessonRow { share_id: string; course_id: string; version: string; lesson_sha256: string; source: string; recorded_at: number }
 /** The version a retrospective is about: its course, its version id and when it was frozen (unix seconds; null = unreadable). */
 export interface RetroBase { course_id: string; version: string; frozen_at: number | null }
-/** A share as a retrospective reads it: the row, the learner's latest answer, whether that answer is to the feedback as it
- *  reads NOW, and the lesson recorded when it was sent (null = none recorded). */
+/** A share as a retrospective reads it: the row, the learner's answer as a reader sees it (`responseFor`), whether that answer
+ *  is to the feedback as it reads NOW, and the lesson recorded when it was sent (null = none recorded). */
 export interface CitedShare { share: ShareRow; response: ResponseRow | null; response_current: boolean; lesson: ShareLessonRow | null }
 
 /**

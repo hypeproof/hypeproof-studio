@@ -68,6 +68,21 @@ await check('rules — which version: after the freeze, and under that course an
   assert.equal(L.answerRefusal({ part: 'learner_response' }, { response_current: true }), '');
   assert.equal(L.answerRefusal({ part: 'question' }, { response_current: false }), '');
 });
+await check('rules — which answer a reader sees (review round 2): the one bound to the feedback as it reads now, else the newest; whatever the status', async () => {
+  const A = { share_id: 's', feedback_sha256: 'a', feedback_revision: 2, decision: 'keep', reason: 'A', created_at: 100 };
+  const B = { ...A, feedback_sha256: 'b', feedback_revision: 3, decision: 'revise', reason: 'B', created_at: 200 };
+  for (const rows of [[A, B], [B, A]]) {
+    assert.equal(L.responseFor(rows, 'a'), A, 'feedback back to text A: the answer to A, not the newer answer to B');
+    assert.equal(L.responseFor(rows, 'b'), B);
+    assert.equal(L.responseFor(rows, 'c'), B, 'no answer to the current text: the newest');
+    assert.equal(L.responseFor(rows, null), B);
+  }
+  const sameSecond = { ...B, created_at: A.created_at };
+  for (const rows of [[A, sameSecond], [sameSecond, A]]) assert.equal(L.responseFor(rows, 'c'), sameSecond, 'written in the same second: the later feedback revision');
+  assert.equal(L.responseFor([], 'a'), null);
+  // The text an answer is compared with is the stored text; "검토 중" or not is the route's question of whether a NEW answer may be written.
+  assert.deepEqual([L.storedFeedback({ feedback: '피드백' }), L.storedFeedback({ feedback: '  ' }), L.storedFeedback({ feedback: undefined })], ['피드백', null, null]);
+});
 await check('rules — the doc: exact keys, named refusals, no independence and no score', async () => {
   const doc = { hypothesis: '힌트 방식이면 스스로 기준을 세운다', findings: [{ id: 'f1', text: '기준을 적었다', sources: [{ share_id: 's1', part: 'verification' }] }], decisions: [{ id: 'd1', target: 'build', action: 'revise', reason: '예시를 줄인다', findings: ['f1'] }] };
   const ok = L.validateRetrospectiveDoc(doc, ['intro', 'build']); assert.equal(ok.ok, true, JSON.stringify(ok)); assert.equal(ok.doc.findings[0].assistance, 'unknown', 'no record → unknown, never filled in');
@@ -83,6 +98,8 @@ await check('rules — the doc: exact keys, named refusals, no independence and 
   bad({ findings: [{ ...doc.findings[0], score: 3 }] }, 'unsupported_score');
   bad({ extra: 1 }, 'invalid_retrospective');
   bad({ notes: { mood: 'x' } }, 'invalid_notes');
+  // Review round 2: a part is one of the eight names, never a name the object inherits.
+  for (const part of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) bad({ findings: [{ ...doc.findings[0], sources: [{ share_id: 's1', part }] }] }, 'invalid_source');
   assert.equal(L.parseResponse({ expected_revision: 2, decision: 'agree', reason: 'x' }).code, 'invalid_decision');
   assert.equal(L.parseResponse({ expected_revision: 2, decision: 'keep', reason: '  ' }).code, 'invalid_reason');
   assert.equal(L.parseResponse({ expected_revision: 2, decision: 'keep', reason: 'x', score: 1 }).code, 'unknown_field');
@@ -90,7 +107,8 @@ await check('rules — the doc: exact keys, named refusals, no independence and 
 
 // ── HTTP: the whole loop on the real routes ────────────────────────────────────────────────────────────────────
 const f = await localOps();
-const course = f.lesson.course_id, V1 = f.lesson.version, V2 = 'm2026.10.05-2', OTHER = 'other-course', OV = 'm2026.10.01-1';
+// V3 sorts before V2 by name but is frozen after it, from a later draft revision (the "first candidate" check below).
+const course = f.lesson.course_id, V1 = f.lesson.version, V2 = 'm2026.10.05-2', V3 = 'm2026.10.05-1', OTHER = 'other-course', OV = 'm2026.10.01-1';
 const authoring = `/admin/cohorts/${f.cohort}/authoring/${course}`, retros = authoring + '/retrospectives', otherRetros = `/admin/cohorts/${f.cohort}/authoring/${OTHER}/retrospectives`;
 const teacherShares = `/admin/cohorts/${f.cohort}/classroom/shares`, studentShares = '/v1/classroom/shares';
 const one = (sql, ...a) => { const r = f.db.prepare(sql).get(...a); return r ? { ...r } : r; };
@@ -197,6 +215,41 @@ try {
     assert.deepEqual([mine.response.decision, mine.response.answers_current_feedback], ['hold', false]);
     const again = await respond('share-c', { expected_revision: 3, decision: 'revise', reason: '대비를 맞추겠습니다' }); assert.equal(again.status, 201, again.raw);
     assert.equal(again.json.response.answers_current_feedback, true);
+  });
+
+  await check('AE-43 which answer is shown (review round 2): the one bound to the feedback as it reads now, not the newest; a return to "검토 중" with the same text is not a new question', async () => {
+    const TA = '버튼 문구가 너무 깁니다', TB = '버튼 색이 배경과 비슷합니다', TC = '버튼을 화면 위쪽으로 옮겨 보세요';
+    const mine = async () => (await f.request(studentShares, 'GET', undefined, studentA)).json.shares.find((s) => s.id === 'share-e').response;
+    const managed = async () => (await f.request(`${teacherShares}/share-e`)).json.response;
+    const citeAnswer = () => f.request(retros, 'POST', { request_id: KEY(), base_version: V1, doc: retroDoc([{ share_id: 'share-e', part: 'learner_response' }]) });
+    assert.equal((await share('share-e', { content: { verification: '예약 버튼 문구를 줄였다' } })).status, 201);
+    assert.equal((await answer('share-e', 1, TA)).status, 200);
+    assert.equal((await respond('share-e', { expected_revision: 2, decision: 'keep', reason: 'A에 대한 답' })).status, 201);
+    assert.equal((await answer('share-e', 2, TB)).status, 200);
+    assert.equal((await respond('share-e', { expected_revision: 3, decision: 'revise', reason: 'B에 대한 답' })).status, 201);
+    assert.deepEqual(await mine().then((r) => [r.reason, r.answers_current_feedback]), ['B에 대한 답', true], 'positive control: the answer to text B while B is the feedback');
+    // A → B → A: the learner already answered text A. That answer is the current one on /sharing and /manage, though B's is newer.
+    assert.equal((await answer('share-e', 3, TA)).status, 200);
+    assert.deepEqual(await mine().then((r) => [r.decision, r.reason, r.answers_current_feedback]), ['keep', 'A에 대한 답', true]);
+    assert.deepEqual(await managed().then((r) => [r.reason, r.answers_current_feedback]), ['A에 대한 답', true]);
+    assert.equal((await respond('share-e', { expected_revision: 4, decision: 'keep', reason: 'A에 대한 답' })).status, 200, 'the same answer again is a replay of the answer the page shows');
+    const other = await respond('share-e', { expected_revision: 4, decision: 'hold', reason: '다시 생각해 보겠습니다' });
+    assert.deepEqual([other.status, other.json.reason, other.json.response.reason, other.json.response.answers_current_feedback], [409, 'already_answered', 'A에 대한 답', true], 'a conflict names the answer the page shows');
+    const cited = await citeAnswer(); assert.equal(cited.status, 201, cited.raw);
+    assert.deepEqual([cited.json.findings[0].sources[0].answers_current_feedback, 'stale_learner_response' in cited.json.findings[0]], [true, false], 'a retrospective cites the answer to the text as it reads now');
+    // Back to "검토 중" with the SAME text: the learner still sees that text, so their answer still answers it. Only a NEW answer waits.
+    assert.equal((await answer('share-e', 4, TA, 'reviewing')).status, 200);
+    assert.deepEqual(await mine().then((r) => [r.reason, r.answers_current_feedback]), ['A에 대한 답', true]);
+    assert.deepEqual(await managed().then((r) => [r.reason, r.answers_current_feedback]), ['A에 대한 답', true]);
+    assert.deepEqual(await respond('share-e', { expected_revision: 5, decision: 'hold', reason: '기다리겠습니다' }).then((r) => [r.status, r.json.reason]), [409, 'no_human_feedback']);
+    assert.equal((await citeAnswer()).status, 201, 'the retrospective reads the same answer as current');
+    // A third text nobody answered yet: the newest answer is shown, marked as answering an earlier feedback; citing it now is refused.
+    assert.equal((await answer('share-e', 5, TC, 'reviewing')).status, 200);
+    assert.deepEqual(await mine().then((r) => [r.reason, r.answers_current_feedback]), ['B에 대한 답', false]);
+    assert.deepEqual(await citeAnswer().then((r) => [r.status, r.json.reason]), [409, 'learner_response_stale']);
+    const marked = (await f.request(`${retros}/${cited.json.id}`)).json.findings[0];
+    assert.deepEqual([marked.stale_learner_response, marked.sources[0].answers_current_feedback], [true, false], 'the written retrospective marks it');
+    assert.equal(one("SELECT count(*) AS n FROM classroom_share_responses WHERE share_id='share-e'").n, 2, 'both answers are kept; only which one is shown changed');
   });
 
   await check('sources: only this instructor\'s, this class\'s, unexpired shares, never one recorded under another course; parts, whose words and the lesson, never content', async () => {
@@ -347,6 +400,13 @@ try {
     assert.deepEqual([v.next.version, v.next.rehearsal.state, v.next.rehearsal.id], [V2, 'running', code.json.rehearsal_id]);
     assert.equal(v.coverage.roster, 5, 'the denominator is the roster as it is now, rehearsal IDs included — not a claim about who attended');
     const list = (await f.request(retros)).json.retrospectives; assert.equal(list.find((r) => r.id === retro.id).applied_draft_revision !== null, true);
+    // Review round 2: "next" is the FIRST candidate frozen from the next draft onward. A later one, frozen from a later
+    // revision (and named so it sorts first), does not take its place.
+    const later = (await f.request(authoring)).json;
+    const resaved = await f.request(authoring, 'PUT', { profile_id: f.profile, request_id: KEY(), expected_revision: later.revision, content: { ...later.content, title: later.content.title + ' · 다음 판' } }); assert.equal(resaved.status, 200, resaved.raw);
+    const frozen3 = await f.request(`${authoring}/versions/${V3}`, 'PUT', { expected_revision: resaved.json.revision }); assert.equal(frozen3.status, 200, frozen3.raw);
+    v = (await f.request(`${retros}/${retro.id}`)).json;
+    assert.deepEqual([v.next.version, v.next.rehearsal.state, v.next.rehearsal.id], [V2, 'running', code.json.rehearsal_id], 'the first candidate and its rehearsal, not the newest');
     // Review probe P2: share-a ran under V1 and was sent before V2 existed — it is no evidence about V2, whichever rule says so first.
     const p2 = await f.request(retros, 'POST', { request_id: KEY(), base_version: V2, doc: retroDoc([{ share_id: 'share-a', part: 'verification' }]) });
     assert.equal(p2.status, 409, p2.raw); assert.ok(['source_before_version', 'source_other_lesson'].includes(p2.json.reason), p2.json.reason);
@@ -386,6 +446,37 @@ try {
     assert.deepEqual(await f.request(`${ta}/retrospectives/${made.json.id}/next-draft`, 'POST', { request_id: KEY(), expected_draft_revision: 1 }).then((r) => [r.status, r.json.reason]), [409, 'lesson_unavailable']);
   });
 
+  await check('the course moved to another profile after the retrospective (review round 2): no next draft, no edit, no new one — refused by name, nothing written', async () => {
+    const PC = 'profile-course', PV = 'm2026.10.06-1', pa = `/admin/cohorts/${f.cohort}/authoring/${PC}`, MOVED_TO = 'boah-dental-teaser-2026-s1';
+    await f.freeze(PC, PV, ['intro', 'build', 'review']);
+    const made = await f.request(`${pa}/retrospectives`, 'POST', { request_id: KEY(), base_version: PV, doc: retroDoc([]) }); assert.equal(made.status, 201, made.raw);
+    // The same instructor holds both classes of the cohort and moves the course's draft to the other one (an ordinary save).
+    const both = await f.teacher('teacher-a', OPS_ALL, f.cohort, [f.profile, MOVED_TO]);
+    const cur = (await f.request(pa, 'GET', undefined, both)).json;
+    const moved = await f.request(pa, 'PUT', { profile_id: MOVED_TO, request_id: KEY(), expected_revision: cur.revision, content: cur.content }, both); assert.equal(moved.status, 200, moved.raw);
+    const go = await f.request(`${pa}/retrospectives/${made.json.id}/next-draft`, 'POST', { request_id: KEY(), expected_draft_revision: moved.json.revision }, both);
+    assert.deepEqual([go.status, go.json.reason], [409, 'profile_changed'], go.raw);
+    assert.deepEqual([(await f.request(pa, 'GET', undefined, both)).json.revision, one('SELECT applied_draft_revision AS a FROM lesson_retrospectives WHERE retro_id=?', made.json.id).a], [moved.json.revision, null], 'nothing was written');
+    assert.deepEqual(await f.request(`${pa}/retrospectives/${made.json.id}`, 'PUT', { expected_revision: 1, doc: retroDoc([]) }, both).then((r) => [r.status, r.json.reason]), [409, 'profile_changed']);
+    assert.deepEqual(await f.request(`${pa}/retrospectives`, 'POST', { request_id: KEY(), base_version: PV, doc: retroDoc([]) }, both).then((r) => [r.status, r.json.reason]), [409, 'profile_changed']);
+  });
+
+  await check('retrospective limit (review round 2): 50 about one version, then limit_reached; another version of the course still takes one; the list says when it shows only the newest 50', async () => {
+    const CC = 'cap-course', CV1 = 'm2026.10.06-2', CV2 = 'm2026.10.06-3', ca = `/admin/cohorts/${f.cohort}/authoring/${CC}`;
+    await f.freeze(CC, CV1, ['intro', 'build', 'review']);
+    const cur = (await f.request(ca)).json;
+    const saved = await f.request(ca, 'PUT', { profile_id: f.profile, request_id: KEY(), expected_revision: cur.revision, content: { ...cur.content, title: cur.content.title + ' · 2주차' } }); assert.equal(saved.status, 200, saved.raw);
+    assert.equal((await f.request(`${ca}/versions/${CV2}`, 'PUT', { expected_revision: saved.json.revision })).status, 200);
+    const post = (version) => f.request(`${ca}/retrospectives`, 'POST', { request_id: KEY(), base_version: version, doc: retroDoc([]) });
+    for (let i = 0; i < 50; i++) { const r = await post(CV1); assert.equal(r.status, 201, r.raw); }
+    assert.deepEqual(await post(CV1).then((r) => [r.status, r.json.reason]), [429, 'limit_reached'], 'the 51st about one version');
+    const next = await post(CV2); assert.equal(next.status, 201, 'the history of one version does not close the course: ' + next.raw);
+    const list = (await f.request(`${ca}/retrospectives`)).json;
+    assert.deepEqual([list.retrospectives.length, list.has_more, list.retrospectives.some((r) => r.id === next.json.id)], [50, true, true], 'the newest 50, and a flag that there are more');
+    assert.equal((await f.request(retros)).json.has_more, false, 'a course with fewer says so');
+    assert.equal(one('SELECT count(*) AS n FROM lesson_retrospectives WHERE course_id=?', CC).n, 51);
+  });
+
   await check('body size (review F8): a doc at every field limit in Korean is accepted; a body past RETRO_BODY_MAX is refused by name', async () => {
     const ta = `/admin/cohorts/${f.cohort}/authoring/size-course`, SV = 'm2026.10.04-1';
     await f.freeze('size-course', SV, ['intro', 'build', 'review']);
@@ -412,6 +503,49 @@ try {
     const v = (await f.request(`${retros}/${retro.id}`)).json;
     assert.deepEqual(v.findings.map((x) => x.status), ['unobserved', 'unobserved'], 'nothing the learner withdrew still stands behind a finding');
   });
+
+  // ── review round 2: which lesson a share records where lesson settings are ENFORCED. Its own fixture: a class run with
+  // remote operations and lesson settings on, and the switch made the way classroom-ops-lesson-settings makes it — a setting
+  // saved and sent by an instructor who may send settings, held by the learner's device, switched through the lesson-binding route.
+  const g = await localOps(); g.env.HPS_LESSON_BINDINGS = 'enforce'; g.env.HPS_FEEDBACK_LOOP = 'enabled';
+  try {
+    await check('lesson of a share where settings are enforced (review round 2): a learner switched to S2 records S2 (`setting`), an unswitched one S1 (`token`); each is evidence about that version only', async () => {
+      const gc = g.lesson.course_id, S1 = g.lesson.version, S2 = 'm2026.09.18-2', ga = `/admin/cohorts/${g.cohort}/authoring/${gc}`, gr = ga + '/retrospectives';
+      await g.freeze(gc, S1, ['intro', 'build', 'review']);
+      const cur = (await g.request(ga)).json;
+      const v2 = await g.request(ga, 'PUT', { profile_id: g.profile, request_id: KEY(), expected_revision: cur.revision, content: { ...cur.content, title: '합성 수업 v2' } }); assert.equal(v2.status, 200, v2.raw);
+      assert.equal((await g.request(`${ga}/versions/${S2}`, 'PUT', { expected_revision: v2.json.revision })).status, 200);
+      const sha = {}; for (const v of [S1, S2]) sha[v] = (await readLesson(g.env, g.cohort, gc, v, g.profile)).sha256;
+      assert.equal((await g.configure([{ seat_id: 'A1', student_id: 'student-a' }, { seat_id: 'A2', student_id: 'student-b' }], 0, { flags: { ops_observe: true, ops_commands: true, ops_distribute: true, ops_lesson_settings: true } })).status, 201);
+      const CAPS = ['observe', 'commands', 'distribution_inbox', 'inbox_prompt', 'lesson_binding'];
+      const a1 = (await g.pair('A1', 1, 1, CAPS)).conn.json; assert.equal((await g.pair('A2', 1, 2, CAPS)).conn.status, 201);
+      const code = async (u) => (await issue({ u, c: g.cohort, p: g.profile, lesson: { course_id: gc, version: S1, sha256: sha[S1] } }, 2, TEST_SECRET)).token;
+      const tokenA = await code('student-a'), tokenB = await code('student-b');
+      const L = await g.teacher('teacher-l', [...OPS_ALL, 'distribute', 'lesson_settings']);
+      const setting = await g.request(g.base + '/contents', 'POST', { idempotency_key: KEY(), kind: 'setting', title: '2번째 판', body: '다음 질문부터 새 단계로 진행합니다.', lesson: { course_id: gc, version: S2, sha256: sha[S2] } }, L); assert.equal(setting.status, 201, setting.raw);
+      const sent = await g.request(g.base + '/distributions', 'POST', { idempotency_key: KEY(), expected_roster_revision: 1, object_id: setting.json.object_id, revision: setting.json.revision, content_hash: setting.json.content_hash, targets: ['A1'] }, L); assert.ok(sent.json?.distribution, sent.raw);
+      g.db.prepare('UPDATE classroom_distribution_targets SET next_offer_at=0').run();
+      const [item] = (await g.sync(a1.credential, [], 1)).json.distribution?.items ?? []; assert.ok(item, 'positive control: the device holds the setting');
+      const receipt = (stage) => ({ offer_key: item.offer_key, distribution_id: item.distribution_id, object_id: item.object_id, revision: item.revision, content_hash: item.content_hash, seq: item.seq, stage, result_code: '', observed_at: Date.now() });
+      const held = await g.sync(a1.credential, [], 1, { distribution: { receipts: [receipt('received'), receipt('reflected')] } }); assert.ok(held.json.distribution.receipt_acks.every((x) => x.recorded), held.raw);
+      const sw = await g.request('/v1/classroom/ops/lesson-binding', 'POST', { app_instance_id: g.instance(1).app_instance_id, boot_id: g.instance(1).boot_id, offer_key: item.offer_key, distribution_id: item.distribution_id, object_id: item.object_id, revision: item.revision, content_hash: item.content_hash, base_lesson_sha256: sha[S1], learner_token: tokenA }, a1.credential);
+      assert.equal(sw.status, 201, sw.raw); assert.deepEqual([sw.json.binding.source, sw.json.binding.version], ['setting', S2]);
+      // Both learners share with the instructor their class assigns them (the help route names who that is).
+      const recipient = (await g.request('/v1/classroom/help-recipient', 'GET', undefined, tokenA)).json.recipient_id;
+      const send = (id, token) => g.request(studentShares, 'POST', { id, recipient_id: recipient, kind: 'submission', consent: true, duration_minutes: 60, content: { verification: '바뀐 단계에서 직접 확인했다' } }, token);
+      assert.equal((await send('share-switched', tokenA)).status, 201); assert.equal((await send('share-unswitched', tokenB)).status, 201);
+      const rec = (id) => ({ ...g.db.prepare('SELECT course_id, version, lesson_sha256, source FROM classroom_share_lessons WHERE share_id=?').get(id) });
+      assert.deepEqual(rec('share-switched'), { course_id: gc, version: S2, lesson_sha256: sha[S2], source: 'setting' }, 'the setting the learner runs, not the version on their code');
+      assert.deepEqual(rec('share-unswitched'), { course_id: gc, version: S1, lesson_sha256: sha[S1], source: 'token' });
+      const cite = (version, id) => g.request(gr, 'POST', { request_id: KEY(), base_version: version, doc: retroDoc([{ share_id: id, part: 'verification' }]) });
+      assert.deepEqual(await cite(S1, 'share-switched').then((r) => [r.status, r.json.reason]), [409, 'source_other_lesson'], 'sent under S2: no evidence about S1');
+      assert.deepEqual(await cite(S2, 'share-unswitched').then((r) => [r.status, r.json.reason]), [409, 'source_other_lesson'], 'sent under S1: no evidence about S2');
+      for (const [version, id] of [[S2, 'share-switched'], [S1, 'share-unswitched']]) {
+        const r = await cite(version, id); assert.equal(r.status, 201, r.raw);
+        const [x] = r.json.findings; assert.deepEqual([x.status, x.sources[0].lesson, 'lesson_unconfirmed' in x], ['observed', 'this_version', false], version + ' ← ' + id);
+      }
+    });
+  } finally { g.close(); }
 
   console.log(`${passed} feedback-loop checks passed`);
 } finally { f.close(); }

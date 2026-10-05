@@ -199,6 +199,21 @@ try {
   assert.ok(await noOverflow(page), 'no horizontal scroll at 390px'); await page.screenshot({ path: path.join(out, 'fl-05-retrospective-390.png') });
   assert.deepEqual(errors, [], 'no page errors');
   ok('layout: the retrospective section and the learner card fit 390px without horizontal scroll; no page errors');
+
+  // ── 8. a course with more retrospectives than the list holds (50 about one version, one about the next): the page says so ──
+  const CC = 'cap-ui-course', ca = `/admin/cohorts/${local.cohort}/authoring/${CC}`, CV1 = 'm2026.10.06-5', CV2 = 'm2026.10.06-6';
+  await local.freeze(CC, CV1, ['intro', 'build', 'review']);
+  const ccur = (await api(ca, 'GET', undefined, teacher)).json;
+  const csaved = await api(ca, 'PUT', { profile_id: local.profile, request_id: crypto.randomUUID(), expected_revision: ccur.revision, content: { ...ccur.content, title: ccur.content.title + ' · 2주차' } }, teacher); assert.equal(csaved.status, 200, csaved.raw);
+  assert.equal((await api(`${ca}/versions/${CV2}`, 'PUT', { expected_revision: csaved.json.revision }, teacher)).status, 200);
+  const rdoc = { hypothesis: '근거 확인', findings: [{ id: 'f1', text: '근거', sources: [] }], decisions: [{ id: 'd1', target: 'lesson', action: 'keep', reason: '유지' }] };
+  for (let i = 0; i < 51; i++) { const r = await api(`${ca}/retrospectives`, 'POST', { request_id: crypto.randomUUID(), base_version: i < 50 ? CV1 : CV2, doc: rdoc }, teacher); assert.equal(r.status, 201, r.raw); }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.locator('#course').evaluate((e) => { const d = e.closest('details'); if (d) d.open = true; });
+  await page.locator('#course').fill(CC); await page.locator('#load').click(); await waitStatus(/저장본을 열었습니다/);
+  await page.locator('#retro-load').click(); await retroStatus(/^돌아보기 50개\(최근 50개만\) · /);
+  assert.deepEqual(errors, [], 'no page errors');
+  ok('list: a course with more retrospectives than the list holds says it shows only the newest 50');
   writeFileSync(path.join(out, 'result.json'), JSON.stringify({ passed: n, ...results }, null, 2));
 } finally { await browser?.close(); chalkServer.close(); globalThis.fetch = realFetch; local.close(); }
 console.log(`${n} feedback-loop browser checks passed`);

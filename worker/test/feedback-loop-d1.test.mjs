@@ -1,18 +1,21 @@
 // #1013 feedback-loop on actual local workerd/D1 (Miniflare): migration 0039 applies twice over 0002/0003/0026, and the
 // statements SQLite cannot vouch for run on D1 itself — json_each source lookup, the guarded INSERT … SELECT … ON CONFLICT
 // of the learner's answer and of the share's lesson record, the next-draft batch whose second UPDATE only lands with its
-// own draft write, and the ON DELETE CASCADE that withdrawal relies on. Synthetic accounts; no model, no production database.
+// own draft write, and the ON DELETE CASCADE that withdrawal relies on; on a second database with the whole schema, the lesson
+// record of a share sent from an enforced lesson setting. Synthetic accounts; no model, no production database.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createMiniflare } from './harness/miniflare.mjs';
-import { localOps } from './harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './harness/classroom-ops.mjs';
 import { TEST_SECRET } from './harness/index.mjs';
 const { issue } = await import('../src/lib/tokens.ts');
 const { readLesson } = await import('../src/lib/lesson-delivery.ts');
 
 const compatibilityDate = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8').match(/^compatibility_date\s*=\s*"([^"]+)"/m)?.[1];
-const mf = createMiniflare({ modules: true, script: 'export default {fetch(){return new Response("local test")}}', compatibilityDate, d1Databases: ['HPS_DB'] });
-let f;
+// HPS_DB: the migrations this slice builds on, remote operations off. HPS_DB_OPS: the whole schema, remote operations and
+// enforced lesson settings on (review round 2: the lesson a share records when its sender was switched by a setting).
+const mf = createMiniflare({ modules: true, script: 'export default {fetch(){return new Response("local test")}}', compatibilityDate, d1Databases: ['HPS_DB', 'HPS_DB_OPS'] });
+let f, g;
 try {
   const db = await mf.getD1Database('HPS_DB');
   const apply = async () => {
@@ -61,4 +64,38 @@ try {
   await apply();
   assert.equal(await n('SELECT count(*) AS n FROM lesson_retrospectives'), 1, 're-applying the migration over data changes nothing');
   console.log('PASS actual local workerd/D1: idempotent 0039, guarded learner answer and lesson record, json_each sources, one-batch next draft under a race, cascade on withdrawal');
-} finally { f?.close(); await mf.dispose(); }
+
+  // Review round 2 — where lesson settings are enforced, the gate's binding read and the guarded lesson-record INSERT on D1
+  // itself: a learner switched to S2 by a setting (saved, sent, held by the device, switched through the existing routes)
+  // shares, and the share records S2 with source `setting`; a V1 retrospective refuses it, an S2 one takes it as this version.
+  const ops = await mf.getD1Database('HPS_DB_OPS');
+  for (const s of readFileSync(new URL('../schema.sql', import.meta.url), 'utf8').replace(/--[^\n]*/g, '').split(';').map((x) => x.trim()).filter(Boolean)) await ops.prepare(s).run();
+  g = await localOps({ binding: ops }); g.env.HPS_LESSON_BINDINGS = 'enforce'; g.env.HPS_FEEDBACK_LOOP = 'enabled';
+  // localOps writes these two rows itself only into its own SQLite; production has them for every class run.
+  await ops.prepare('INSERT OR IGNORE INTO cohorts(id,display_name) VALUES(?,?)').bind(g.cohort, g.cohort).run();
+  await ops.prepare('INSERT OR IGNORE INTO sessions(id,cohort_id,profile_id,starts_at,ends_at) VALUES(?,?,?,?,?)').bind(g.run, g.cohort, g.profile, new Date(Date.now() - 60000).toISOString(), new Date(Date.now() + 3600000).toISOString()).run();
+  const gc = g.lesson.course_id, S1 = g.lesson.version, S2 = 'm2026.09.18-2', ga = `/admin/cohorts/${g.cohort}/authoring/${gc}`, KEY = () => crypto.randomUUID();
+  await g.freeze(gc, S1, ['intro', 'build', 'review']);
+  const cur = (await g.request(ga)).json, next = await g.request(ga, 'PUT', { profile_id: g.profile, request_id: KEY(), expected_revision: cur.revision, content: { ...cur.content, title: '합성 수업 v2' } });
+  assert.equal(next.status, 200, next.raw); assert.equal((await g.request(`${ga}/versions/${S2}`, 'PUT', { expected_revision: next.json.revision })).status, 200);
+  const sha = {}; for (const v of [S1, S2]) sha[v] = (await readLesson(g.env, g.cohort, gc, v, g.profile)).sha256;
+  assert.equal((await g.configure([{ seat_id: 'A1', student_id: 'student-a' }], 0, { flags: { ops_observe: true, ops_commands: true, ops_distribute: true, ops_lesson_settings: true } })).status, 201);
+  const a1 = (await g.pair('A1', 1, 1, ['observe', 'commands', 'distribution_inbox', 'inbox_prompt', 'lesson_binding'])).conn.json;
+  const tokenA = (await issue({ u: 'student-a', c: g.cohort, p: g.profile, lesson: { course_id: gc, version: S1, sha256: sha[S1] } }, 2, TEST_SECRET)).token;
+  const L = await g.teacher('teacher-l', [...OPS_ALL, 'distribute', 'lesson_settings']);
+  const setting = await g.request(g.base + '/contents', 'POST', { idempotency_key: KEY(), kind: 'setting', title: '2번째 판', body: '다음 질문부터 새 단계로 진행합니다.', lesson: { course_id: gc, version: S2, sha256: sha[S2] } }, L); assert.equal(setting.status, 201, setting.raw);
+  const sent = await g.request(g.base + '/distributions', 'POST', { idempotency_key: KEY(), expected_roster_revision: 1, object_id: setting.json.object_id, revision: setting.json.revision, content_hash: setting.json.content_hash, targets: ['A1'] }, L); assert.ok(sent.json?.distribution, sent.raw);
+  await ops.prepare('UPDATE classroom_distribution_targets SET next_offer_at=0').run();
+  const [item] = (await g.sync(a1.credential, [], 1)).json.distribution?.items ?? []; assert.ok(item, 'the device holds the setting');
+  const receipt = (stage) => ({ offer_key: item.offer_key, distribution_id: item.distribution_id, object_id: item.object_id, revision: item.revision, content_hash: item.content_hash, seq: item.seq, stage, result_code: '', observed_at: Date.now() });
+  assert.ok((await g.sync(a1.credential, [], 1, { distribution: { receipts: [receipt('received'), receipt('reflected')] } })).json.distribution.receipt_acks.every((x) => x.recorded));
+  const sw = await g.request('/v1/classroom/ops/lesson-binding', 'POST', { app_instance_id: g.instance(1).app_instance_id, boot_id: g.instance(1).boot_id, offer_key: item.offer_key, distribution_id: item.distribution_id, object_id: item.object_id, revision: item.revision, content_hash: item.content_hash, base_lesson_sha256: sha[S1], learner_token: tokenA }, a1.credential);
+  assert.equal(sw.status, 201, sw.raw);
+  const recipient = (await g.request('/v1/classroom/help-recipient', 'GET', undefined, tokenA)).json.recipient_id;
+  assert.equal((await g.request('/v1/classroom/shares', 'POST', { id: 'd1-switched', recipient_id: recipient, kind: 'submission', consent: true, duration_minutes: 60, content: { verification: '바뀐 단계에서 직접 확인했다' } }, tokenA)).status, 201);
+  assert.deepEqual({ ...(await ops.prepare('SELECT course_id, version, lesson_sha256, source FROM classroom_share_lessons WHERE share_id=?').bind('d1-switched').first()) }, { course_id: gc, version: S2, lesson_sha256: sha[S2], source: 'setting' });
+  const cite = (version) => g.request(`${ga}/retrospectives`, 'POST', { request_id: KEY(), base_version: version, doc: { hypothesis: '바뀐 단계가 확인을 돕는다', findings: [{ id: 'f1', text: '직접 확인했다', sources: [{ share_id: 'd1-switched', part: 'verification' }] }], decisions: [{ id: 'd1', target: 'lesson', action: 'keep', reason: '유지' }] } });
+  assert.deepEqual(await cite(S1).then((r) => [r.status, r.json.reason]), [409, 'source_other_lesson']);
+  const taken = await cite(S2); assert.equal(taken.status, 201, taken.raw); assert.equal(taken.json.findings[0].sources[0].lesson, 'this_version');
+  console.log('PASS actual local workerd/D1: under enforced lesson settings a share records the setting its sender was switched to (source setting); only that version\'s retrospective takes it');
+} finally { f?.close(); g?.close(); await mf.dispose(); }

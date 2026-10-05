@@ -2,6 +2,7 @@
 -- that starts the next draft. Additive: no existing table or column is touched, every statement is safe to re-apply.
 -- Read and written only while the Service sets HPS_FEEDBACK_LOOP=enabled; apply this file to a database before that.
 -- Contract: docs/testing/chalk-authoring.md#feedback-loop-20261005.
+-- Numbered 0039, not 0038: 0038 is 0038-curriculum-runtime-review.sql (#1398, branch feat/cr-review), developed at the same time.
 
 -- The learner's decision after a person's feedback on one share they chose to send (AE-43): revise, keep or hold, and why.
 -- Bound to the feedback text it answers (its sha256), so a later edit of the feedback is visibly a different question.

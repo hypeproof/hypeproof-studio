@@ -28,7 +28,7 @@ import { getProfile } from '../profiles';
 import { reusable, templateAdmission } from './authoring';
 import {
   RETROSPECTIVE_FORMAT, RETRO_BODY_MAX, answerRefusal, assistanceRefusal, citeRefusal, citedShareIds, coverageOf, feedbackLoopEnabled,
-  findingView, hasFeedback, helpConditions, lessonAttribution, lessonRefusal, shareParts, validateRetrospectiveDoc,
+  findingView, helpConditions, lessonAttribution, lessonRefusal, responseFor, shareParts, storedFeedback, validateRetrospectiveDoc,
   type CitedShare, type RetroBase, type RetroDoc, type RetroSource, type ResponseRow, type ShareLessonRow, type ShareRow,
 } from '../lib/feedback-loop';
 
@@ -41,7 +41,12 @@ interface RetroRow {
 const root = '/cohorts/:cohort/authoring/:course/retrospectives';
 const validId = (s: string) => /^[a-zA-Z0-9_-]{1,128}$/.test(s);
 const RETRO_ID = /^rt-[a-f0-9-]{36}$/;
-const MAX_PER_COURSE = 50;
+// At most this many retrospectives about ONE version of a course. Counted per version (the unit a retrospective is about), not
+// per course: nothing is deleted and a correction is a new retrospective, so a course-wide count would close a course for good
+// once its history reached it, although the loop freezes each next draft as a new version.
+const MAX_PER_VERSION = 50;
+/** The list shows the newest this many retrospectives of a course and says whether older ones exist (`has_more`). */
+const LIST_LIMIT = 50;
 const nowS = () => Math.floor(Date.now() / 1000);
 const PROFILE_CHANGED = { error: 'the course now runs on another profile than this version', reason: 'profile_changed' };
 
@@ -86,8 +91,9 @@ async function baseOf(env: Env, cohort: string, course: string, version: string,
 /**
  * The shares, among `ids`, that THIS instructor may read now: the same rule as the instructor share routes (same cohort,
  * addressed to them, unexpired, a profile in their scope) narrowed to the course's own profile. Withdrawn shares no longer
- * exist. Each with the learner's latest answer, whether it answers the feedback as it reads now, and the lesson recorded
- * when it was sent — which version it is evidence about is decided against that (lessonRefusal), not assumed.
+ * exist. Each with the learner's answer as /sharing and /manage show it (`responseFor`: the one bound to the feedback text as
+ * it is stored now, else the newest), whether it answers that text, and the lesson recorded when it was sent — which version
+ * it is evidence about is decided against that (lessonRefusal), not assumed.
  */
 async function citable(env: Env, cohort: string, recipient: string, profileId: string, ids: string[]): Promise<Map<string, CitedShare>> {
   const out = new Map<string, CitedShare>();
@@ -96,12 +102,13 @@ async function citable(env: Env, cohort: string, recipient: string, profileId: s
   const shares = (await env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE id IN (SELECT value FROM json_each(?)) AND cohort_id=? AND recipient_id=? AND profile_id=? AND expires_at>?')
     .bind(list, cohort, recipient, profileId, nowS()).all<ShareRow>()).results ?? [];
   if (!shares.length) return out;
-  const responses = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?)) ORDER BY created_at DESC, feedback_revision DESC')
+  const responses = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?))')
     .bind(list).all<ResponseRow>()).results ?? [];
   const lessons = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_lessons WHERE share_id IN (SELECT value FROM json_each(?))').bind(list).all<ShareLessonRow>()).results ?? [];
   for (const s of shares) {
-    const response = responses.find((r) => r.share_id === s.id) ?? null;
-    const current = !!response && hasFeedback(s) && response.feedback_sha256 === await sha256Hex(s.feedback);
+    const text = storedFeedback(s), sha = text === null ? null : await sha256Hex(text);
+    const response = responseFor(responses.filter((r) => r.share_id === s.id), sha);
+    const current = !!response && sha !== null && response.feedback_sha256 === sha;
     out.set(s.id, { share: s, response, response_current: current, lesson: lessons.find((l) => l.share_id === s.id) ?? null });
   }
   return out;
@@ -210,8 +217,8 @@ lessonRetrospectives.get(root, async (c) => {
   const a = c.get('author'), cohort = c.req.param('cohort')!, course = c.req.param('course')!;
   const d = await readDraft(c.env.HPS_DB, cohort, course);
   if (!d || !owns(d, a)) return c.json({ error: 'course not found' }, 404);
-  const rows = (await c.env.HPS_DB.prepare('SELECT * FROM lesson_retrospectives WHERE cohort_id=? AND course_id=? AND owner_id=? ORDER BY created_at DESC, retro_id DESC LIMIT ?').bind(cohort, course, a.payload.u, MAX_PER_COURSE).all<RetroRow>()).results ?? [];
-  return c.json({ retrospectives: rows.map((r) => ({ id: r.retro_id, base_version: r.base_version, revision: r.revision, hypothesis: (JSON.parse(r.doc_json) as RetroDoc).hypothesis.slice(0, 120), applied_draft_revision: r.applied_draft_revision, created_at: r.created_at, updated_at: r.updated_at })) });
+  const rows = (await c.env.HPS_DB.prepare('SELECT * FROM lesson_retrospectives WHERE cohort_id=? AND course_id=? AND owner_id=? ORDER BY created_at DESC, retro_id DESC LIMIT ?').bind(cohort, course, a.payload.u, LIST_LIMIT + 1).all<RetroRow>()).results ?? [];
+  return c.json({ retrospectives: rows.slice(0, LIST_LIMIT).map((r) => ({ id: r.retro_id, base_version: r.base_version, revision: r.revision, hypothesis: (JSON.parse(r.doc_json) as RetroDoc).hypothesis.slice(0, 120), applied_draft_revision: r.applied_draft_revision, created_at: r.created_at, updated_at: r.updated_at })), has_more: rows.length > LIST_LIMIT });
 });
 
 lessonRetrospectives.post(root, async (c) => {
@@ -229,8 +236,8 @@ lessonRetrospectives.post(root, async (c) => {
   const same = (r: RetroRow) => r.owner_id === a.payload.u && r.base_version === b.base_version && r.doc_json === docJson;
   const prior = await c.env.HPS_DB.prepare('SELECT * FROM lesson_retrospectives WHERE cohort_id=? AND course_id=? AND request_id=?').bind(cohort, course, b.request_id).first<RetroRow>();
   if (prior) return same(prior) ? c.json(await view(c.env, a, prior, d)) : c.json({ error: 'request id reused with different content', reason: 'request_id_conflict' }, 409);
-  const count = await c.env.HPS_DB.prepare('SELECT count(*) AS n FROM lesson_retrospectives WHERE cohort_id=? AND course_id=?').bind(cohort, course).first<{ n: number }>();
-  if ((count?.n ?? 0) >= MAX_PER_COURSE) return c.json({ error: 'retrospective limit reached for this course', reason: 'limit_reached' }, 429);
+  const count = await c.env.HPS_DB.prepare('SELECT count(*) AS n FROM lesson_retrospectives WHERE cohort_id=? AND course_id=? AND base_version=?').bind(cohort, course, b.base_version).first<{ n: number }>();
+  if ((count?.n ?? 0) >= MAX_PER_VERSION) return c.json({ error: 'retrospective limit reached for this version', reason: 'limit_reached' }, 429);
   const id = 'rt-' + crypto.randomUUID(), at = Date.now();
   await c.env.HPS_DB.prepare(`INSERT INTO lesson_retrospectives(retro_id,cohort_id,course_id,base_version,base_sha256,owner_id,revision,doc_json,request_id,created_at,updated_at)
  SELECT ?,?,?,?,?,?,1,?,?,?,? WHERE EXISTS (SELECT 1 FROM authoring_drafts WHERE cohort_id=? AND course_id=? AND owner_id=?) ON CONFLICT DO NOTHING`)
