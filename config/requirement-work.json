@@ -808,6 +808,7 @@
         "extensions/hypeproof-chat/src/studentGoal.ts",
         "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx",
         "extensions/hypeproof-chat/test/student-goal.smoke.mjs",
+        "e2e/sx/goal-browser.mjs",
         "e2e/sx/goal-app.spec.ts"
       ]
     },

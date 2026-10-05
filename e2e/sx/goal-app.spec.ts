@@ -22,7 +22,9 @@
 //                   editor's fields; the short window again, now with the result beside the chat.
 //   two chat views  The sidebar chat opens next to the editor chat. Clearing the goal in the editor chat clears it in
 //                   both: region A's line goes, the sidebar's open fields follow, and only the editor chat says
-//                   "저장했어요." (a view shows the note of its own save only).
+//                   "저장했어요." (a view shows the note of its own save only). Then the student types in the sidebar
+//                   without saving while the editor chat saves a new goal: the sidebar keeps the typed text and says
+//                   the goal was changed on another screen, and its own save then replaces that goal in both views.
 // Every probe also runs once on a planted DOM (a lesson criterion's words changed, a condition checked off, the goal
 // text changed, the goal line moved) and must report it (verification.md rule 2).
 //
@@ -31,8 +33,10 @@
 // "이 활동 시작하기", possibly another folder: such a run could pass for that reason alone. The revision and activity
 // boundary is checked where it can be isolated, against the real host and config path in
 // extensions/hypeproof-chat/test/student-goal.smoke.mjs. Also not covered: a refused save on screen (a stale save cannot
-// be made from one screen, and the others need a host without its lesson: the smoke's host and render checks), AE-T01's
-// other half (material selection and the request payload, AE-02: the `context` item #555), Windows, a real student.
+// be made from one screen, and the others need a host without its lesson: the smoke's host and render checks, and the
+// built webview in Chromium, e2e/sx/goal-browser.mjs), a panel that mounted before its lesson arrived (the Service
+// unreachable at first: e2e/sx/goal-browser.mjs), AE-T01's other half (material selection and the request payload,
+// AE-02: the `context` item #555), Windows, a real student.
 // Needs an unlocked screen: when it is locked the run is skipped as NOT RUN.
 import { test, expect, type ElectronApplication, type FrameLocator, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -60,6 +64,11 @@ const CRITERIA = ["휴대폰 화면에서도 예약 버튼이 보인다", "원�
 /** The change: a new goal, the first criterion kept, the second one replaced. */
 const GOAL2 = "예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기";
 const CRITERIA2 = [CRITERIA[0], "예약 화면에 진료 시간이 그대로 나온다"];
+/** Two views at once: the goal the editor chat saves, and the text typed meanwhile in the sidebar. */
+const GOAL3 = "예약 화면에서 날짜를 먼저 고르게 만들기";
+const TYPED = "예약을 마치면 확인 문장이 보이게 만들기";
+/** The sidebar's sentence (studentGoal.ts `GOAL_CHANGED_ELSEWHERE`; this e2e package cannot import the extension's CommonJS source). */
+const CHANGED_ELSEWHERE = /^다른 화면에서 목표가 바뀌었어요\. 적던 내용은 그대로 있으니, 저장하면 이 내용으로 바뀌어요\.$/;
 const WEEK3 = JSON.parse(fs.readFileSync(path.join(repo, "worker/test/fixtures/session-design/week-3.json"), "utf8")) as {
   learning: { completion: Array<{ id: string; text: string }> };
 };
@@ -533,5 +542,39 @@ test("AE-01 goal: kept beside the lesson's criteria through a change, the previe
     expect(completionProblem(p), JSON.stringify(p)).toBeNull();
   }
   expect(taskPhase(ctx.userDataDir), "clearing the goal moved the task").toBe(phase);
-  record.two_views = { cleared, phase: taskPhase(ctx.userDataDir), shot: await shot(ctx.win, "5-two-views-cleared") };
+  const clearedShot = await shot(ctx.win, "5-two-views-cleared");
+
+  // The student types in the sidebar and does not save; meanwhile the editor chat saves a new goal (revision 4).
+  await sidebarGoal.locator("textarea").nth(0).fill(TYPED);
+  await clearGoal.locator("textarea").nth(0).fill(GOAL3);
+  await clearGoal.getByRole("button", { name: "목표 저장" }).click();
+  await expect(clearGoal.getByRole("status")).toHaveText("저장했어요.", { timeout: 20_000 });
+  for (const view of [editor, sidebar]) {
+    await expect(view.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL3}`, { timeout: 20_000 });
+    await expect(view.locator("details.hp-goal")).toHaveAttribute("data-student-goal", "4");
+  }
+  // The sidebar keeps what was typed there and says the goal changed on another screen; nothing is lost or saved.
+  await expect(sidebarGoal.locator("textarea").nth(0), "the editor chat's save dropped the text typed in the sidebar").toHaveValue(TYPED);
+  await expect(sidebarGoal.locator(".hp-goal-elsewhere")).toHaveText(CHANGED_ELSEWHERE);
+  await expect(sidebarGoal.getByText("저장했어요."), "a view that did not save says it saved").toHaveCount(0);
+  await expect(clearGoal.locator(".hp-goal-elsewhere"), "the view that saved says another screen changed the goal").toHaveCount(0);
+  const typedKept = { editor: await probeGoal(editor), sidebar: await probeGoal(sidebar), shot: await shot(ctx.win, "6-two-views-typed-kept") };
+  // The sidebar's save, made after it said so, replaces the editor chat's goal in both views (revision 5); the editor
+  // chat's fields held its own saved goal, untouched, so they follow.
+  await sidebarGoal.getByRole("button", { name: "목표 저장" }).click();
+  await expect(sidebarGoal.getByRole("status")).toHaveText("저장했어요.", { timeout: 20_000 });
+  for (const view of [editor, sidebar]) {
+    await expect(view.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${TYPED}`, { timeout: 20_000 });
+    await expect(view.locator("details.hp-goal")).toHaveAttribute("data-student-goal", "5");
+    await expect(view.locator(".hp-goal-elsewhere")).toHaveCount(0);
+  }
+  await expect(clearGoal.locator("textarea").nth(0)).toHaveValue(TYPED);
+  await expect(clearGoal.getByText("저장했어요."), "the editor chat still says it saved after the sidebar's save").toHaveCount(0);
+  const replaced = { editor: await probeGoal(editor), sidebar: await probeGoal(sidebar) };
+  for (const p of [replaced.editor, replaced.sidebar]) {
+    expect(lessonProblem(p, lesson), JSON.stringify(p)).toBeNull();
+    expect(completionProblem(p), JSON.stringify(p)).toBeNull();
+  }
+  expect(taskPhase(ctx.userDataDir), "saving from two views moved the task").toBe(phase);
+  record.two_views = { cleared, typed_kept: typedKept, replaced, phase: taskPhase(ctx.userDataDir), shot: clearedShot, shot_replaced: await shot(ctx.win, "7-two-views-replaced") };
 });

@@ -14,20 +14,25 @@
 //   · quiet controls only: the screen's one Primary stays region A's action (SX-04);
 //   · no completion: nothing here marks a criterion as met or posts a step or task message. Opening it records
 //     nothing, and saving changes only the goal (AE-01: "과제 열람만으로 완료되지 않는다");
-//   · the values come from the host (`config.studentGoal`, then `goalState`), so a reconnect or a second chat view
-//     shows the same goal (AE-01: "대화와 결과를 오가도 유지한다"). The fields follow every goal the host sends, and a
-//     save starts from the revision the fields were loaded from (`goalEditOf`): an edit left over from before another
-//     view's save is refused as stale instead of replacing that save.
+//   · the values come from the host (`config.studentGoal` and `goalState`), so a reconnect or a second chat view
+//     shows the same goal (AE-01: "대화와 결과를 오가도 유지한다"). The fields follow every goal the host sends, except
+//     text the student typed and has not saved: another chat view's save keeps it, moves the next save's base to the
+//     newer goal and says the goal was changed on another screen (`goalEditorOnView`). A save already sent from the
+//     older revision is refused as stale by the host instead of replacing the newer save.
 // Class names stay apart from region A's `hp-mission-*`: the rehearsal read-back (LessonStepPanel `drawnMission`) reads
 // only those, so a student's criteria are never reported as the lesson's.
 
 import { useEffect, useState } from "react";
 import {
+  GOAL_CHANGED_ELSEWHERE,
   GOAL_TEXT_MAX,
   goalEditOf,
-  goalFieldsOf,
+  goalEditorOf,
+  goalEditorOnEdit,
+  goalEditorOnView,
   goalSavedNoteShown,
   type GoalEdit,
+  type GoalEditorState,
   type GoalFields,
   type GoalNote,
   type GoalSaveRequest,
@@ -49,21 +54,23 @@ export interface StudentGoalProps {
 }
 
 export function StudentGoal({ lesson, view, note, pending, onSave }: StudentGoalProps) {
-  const shown = goalFieldsOf(view);
-  const [fields, setFields] = useState<GoalFields>(shown);
+  const [editor, setEditor] = useState<GoalEditorState>(() => goalEditorOf(view));
   const [open, setOpen] = useState(false);
   // Every goal the host sends for this screen (this view's save, another chat view's, a reconnect, another lesson or
-  // activity) replaces what the fields hold, with its revision as the base of the next save.
+  // activity) moves the editor to it: untouched fields follow it, with its revision as the base of the next save, and
+  // typed text stays (`goalEditorOnView`). `own`: the goal is this view's own save, so nothing is said about another screen.
+  const own = !!note?.saved && note.revision === view?.revision;
   useEffect(() => {
-    setFields(shown);
-  }, [lesson.sha256, view?.activity, shown.base, shown.goal, shown.criteria]);
+    setEditor((state) => goalEditorOnView(state, view, own));
+  }, [lesson.sha256, view?.lesson.sha256, view?.activity, view?.revision]);
 
+  const fields = editor.fields;
   const edit = goalEditOf(view, lesson.sha256, fields, pending);
   const goal = view?.goal ?? "";
   const criteria = view?.criteria ?? [];
 
   return (
-    <details className="hp-rail-goal hp-goal" data-student-goal={shown.base} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+    <details className="hp-rail-goal hp-goal" data-student-goal={view?.revision ?? 0} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>{goal || criteria.length ? "내 목표와 완료 기준 보기·고치기" : "내 목표와 완료 기준 적기"}</summary>
       <p className="hp-goal-current">
         <span className="hp-goal-label">내 목표</span>
@@ -84,12 +91,14 @@ export function StudentGoal({ lesson, view, note, pending, onSave }: StudentGoal
         )}
       </section>
 
-      {open ? <GoalEditor fields={fields} edit={edit} onEdit={(patch) => setFields((f) => ({ ...f, ...patch }))} onSave={onSave} /> : null}
+      {open ? <GoalEditor fields={fields} edit={edit} onEdit={(patch) => setEditor((state) => goalEditorOnEdit(state, patch))} onSave={onSave} /> : null}
 
       {note?.error ? (
         <p className="hp-goal-error" role="alert">{note.error}</p>
       ) : goalSavedNoteShown(note, view, edit) ? (
         <p className="hp-rail-lesson-note" role="status">저장했어요.</p>
+      ) : editor.elsewhere && !edit.unchanged ? (
+        <p className="hp-rail-lesson-note hp-goal-elsewhere" role="status">{GOAL_CHANGED_ELSEWHERE}</p>
       ) : null}
       <p className="hp-rail-lesson-note">
         수업이 정한 조건은 내 목표를 고쳐도 그대로예요. 목표를 적거나 고쳐도 과제가 완료되지는 않아요.

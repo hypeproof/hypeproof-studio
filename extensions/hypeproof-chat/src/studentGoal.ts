@@ -15,7 +15,8 @@
 // Storage is VS Code workspaceState, like the lesson work surfaces (`hps.lessonWork`, #751 G2) and the activity draft:
 // device-local working state. It is not a learning event (SX-47) or an observation store (SX-48), nothing here is sent
 // to the Service, and saving or viewing a goal records no completion and moves no task phase (AE-01: "과제 열람만으로
-// 완료되지 않는다").
+// 완료되지 않는다"). Records of earlier lesson revisions stay on this device with no delete path, like `hps.lessonWork`;
+// how long they are kept is an open decision (docs/testing/learning-agent-experience.md#goal-20261006).
 
 export const STUDENT_GOAL_KEY = "hps.studentGoal";
 export const STUDENT_GOAL_SCHEMA = "hps-student-goal/1";
@@ -35,7 +36,7 @@ export interface GoalLessonRef {
 export interface StudentGoalRecord {
   schema: typeof STUDENT_GOAL_SCHEMA;
   lesson: GoalLessonRef;
-  /** The activity the seat is bound to, or null on a seat without activity connections. */
+  /** The activity the seat is bound to. Null only on a host without activity connections (tests): see `goalScopeKey`. */
   activity: string | null;
   goal: string;
   criteria: string[];
@@ -120,7 +121,17 @@ const sameLesson = (a: GoalLessonRef, b: GoalLessonRef): boolean =>
 const activityOf = (activity: string | null | undefined): string | null =>
   typeof activity === "string" && activity.length > 0 && activity.length <= ACTIVITY_MAX ? activity : null;
 
-/** Where one lesson revision's goal for one activity is stored inside the workspaceState map. */
+/**
+ * Where one lesson revision's goal for one activity is stored inside the workspaceState map.
+ *
+ * In the App every goal is filed under an activity. The provider's context is the ActivityConnections wrapper
+ * (extension.ts `connections.wrap()`): it hands out only the active activity's token, and `ensureProfile` answers no
+ * profile while no activity of this Service is active, so a seat without an activity binding is served no lesson and
+ * draws no goal. The activity id includes the Service's per-user activity id, and a workspace folder is claimed by one
+ * activity only (`ActivityConnections.claim`), so two students on one Mac never share a key. The empty scope below is
+ * reached only by hosts without that wrapper (tests); a seat served a lesson without an activity would first need its
+ * own seat identity here.
+ */
 export function goalScopeKey(ref: GoalLessonRef, activity: string | null): string {
   return ref.sha256 + ":" + (activity ?? "");
 }
@@ -213,7 +224,8 @@ export function acceptGoalSave(
 /**
  * Which of two goal views the screen keeps. Views for one lesson and activity only move forward by revision: a config
  * built before a save cannot put the older goal back after the save's own answer. A view of another lesson or activity
- * replaces the held one (the screen follows the served lesson); null means the seat has no lesson now.
+ * replaces the held one (the screen follows the served lesson); null means the seat has no lesson now. The chat screen
+ * folds the host's save answers with this, and draws `acceptGoalView(answers, config.studentGoal)` on every render.
  */
 export function acceptGoalView(prev: StudentGoalView | null, next: StudentGoalView | null | undefined): StudentGoalView | null {
   if (next === undefined) return prev;
@@ -254,6 +266,54 @@ export function goalFieldsOf(view: StudentGoalView | null | undefined): GoalFiel
   return { goal: view?.goal ?? "", criteria: (view?.criteria ?? []).join("\n"), base: view?.revision ?? 0 };
 }
 
+/** What the editor holds over time: its fields, the goal they stand on, and whether to say the goal changed elsewhere. */
+export interface GoalEditorState {
+  fields: GoalFields;
+  /** The goal the fields were loaded from or last moved to (`fields.base` is its revision); null before the host sent one. */
+  from: StudentGoalView | null;
+  /** The fields keep text the student typed before another chat view's save arrived: the screen says so (`GOAL_CHANGED_ELSEWHERE`). */
+  elsewhere: boolean;
+}
+
+/** The editor for a goal the host sent: its text, its revision as the next save's base, nothing to say. */
+export function goalEditorOf(view: StudentGoalView | null | undefined): GoalEditorState {
+  return { fields: goalFieldsOf(view), from: view ?? null, elsewhere: false };
+}
+
+/**
+ * The editor after the host sends `next` (a reconnect, this view's save, another chat view's save, another lesson).
+ * A field the student has not changed since the goal it stands on follows `next`; a field they typed in keeps the typed
+ * text, so another chat view's save never drops what is being written here. The base moves to `next` either way: a save
+ * made after this starts from the newest goal (it is not refused as stale), and `elsewhere` has the screen say first
+ * that the goal was changed on another screen, so the save replaces it knowingly. A save already sent from the older
+ * revision is still refused by the host (`acceptGoalSave`). `own` means `next` is this view's own stored save: nothing
+ * is said, and text typed after pressing save stays. Another lesson, revision or activity, or no goal, starts the editor
+ * over: typed text never moves to another lesson's goal. A goal no newer than the one the fields stand on (a repeated
+ * config, the goal a stale refusal brings) changes nothing.
+ */
+export function goalEditorOnView(state: GoalEditorState, next: StudentGoalView | null | undefined, own: boolean): GoalEditorState {
+  const from = state.from;
+  if (!next || !from || !sameLesson(from.lesson, next.lesson) || from.activity !== next.activity) return goalEditorOf(next);
+  if (next.revision <= from.revision) return state;
+  const goalTyped = state.fields.goal.trim() !== from.goal;
+  const criteriaTyped = goalCriteriaFromText(state.fields.criteria).join("\n") !== from.criteria.join("\n");
+  const fields: GoalFields = {
+    goal: goalTyped ? state.fields.goal : next.goal,
+    criteria: criteriaTyped ? state.fields.criteria : next.criteria.join("\n"),
+    base: next.revision,
+  };
+  // Nothing typed, or what was typed is what `next` stores (this view's own save): the fields hold `next` as stored.
+  if (goalEditOf(next, next.lesson.sha256, fields, false).unchanged) return goalEditorOf(next);
+  return { fields, from: next, elsewhere: !own };
+}
+
+/** The editor after the student types: the change applied; once the fields hold the goal they stand on again, nothing is said. */
+export function goalEditorOnEdit(state: GoalEditorState, patch: Partial<Pick<GoalFields, "goal" | "criteria">>): GoalEditorState {
+  const fields = { ...state.fields, ...patch };
+  const unchanged = goalEditOf(state.from, state.from?.lesson.sha256 ?? "", fields, false).unchanged;
+  return { fields, from: state.from, elsewhere: state.elsewhere && !unchanged };
+}
+
 /**
  * Whether the fields can be saved, and the request if so. The request starts from the revision the fields were loaded
  * from, never from a newer goal that reached the screen since: an edit made before another view's save is then refused
@@ -281,3 +341,9 @@ export const GOAL_REFUSAL_SENTENCES: Record<GoalRefusal | "not_stored", string> 
   stale: "다른 화면에서 목표가 먼저 바뀌었어요. 지금 목표를 확인하고 다시 고쳐 주세요.",
   not_stored: "목표를 저장하지 못했어요. 적은 내용은 그대로 있으니 다시 저장해 주세요.",
 };
+
+/**
+ * Said under the editor while it keeps text the student typed before another chat view's save
+ * (`GoalEditorState.elsewhere`): the goal above is now the other screen's, and saving replaces it. No numbers (SX-59).
+ */
+export const GOAL_CHANGED_ELSEWHERE = "다른 화면에서 목표가 바뀌었어요. 적던 내용은 그대로 있으니, 저장하면 이 내용으로 바뀌어요.";

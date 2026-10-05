@@ -8,9 +8,10 @@
 // view shows an answer), the real host handler and config path (src/chatPanelProvider.ts, bundled, driven through a
 // stand-in host as test/activity-draft.smoke.mjs does, plus bundles carrying one planted defect each), and the real
 // rendered chat screen (webview-ui/src/ChatPanel.tsx and StudentGoal.tsx through the render instrument). A server
-// render runs no effect and opens no block, so the editor over time (a second save, the fields following the host, a
-// reopen) is checked in the App: e2e/sx/goal-app.spec.ts. Every check that could pass vacuously runs once on a planted
-// defect that must be caught (verification.md rule 2).
+// render keeps no state, runs no effect and opens no block, so the screen over time (a lesson that arrives after the
+// panel mounted, answers, another view's save reaching typed text, a reopen) is checked in the built webview in
+// Chromium (e2e/sx/goal-browser.mjs, CI) and in the App (e2e/sx/goal-app.spec.ts). Every check that could pass
+// vacuously runs once on a planted defect that must be caught (verification.md rule 2).
 //
 // Run: node --experimental-strip-types test/student-goal.smoke.mjs
 
@@ -153,6 +154,7 @@ await test("rules: a save from an older revision, another lesson or past the bou
   for (const code of ["no_lesson", "other_lesson", "invalid", "too_long", "too_many", "stale", "not_stored"]) {
     assert.doesNotMatch(G.GOAL_REFUSAL_SENTENCES[code], /\d/, `${code}: screen copy carries no number (SX-59)`);
   }
+  assert.doesNotMatch(G.GOAL_CHANGED_ELSEWHERE, /\d/, "the other-screen sentence carries no number (SX-59)");
 });
 
 await test("rules: the screen keeps the newest goal of a lesson and follows the served lesson", () => {
@@ -200,6 +202,57 @@ await test("rules: a save starts from the revision the fields were loaded from, 
   assert.equal(G.acceptGoalSave(LESSON_A, ACT, { ...leftover, base: v2.revision }, after, 3000).ok, true);
   // Fields reloaded from revision 2 save normally.
   assert.equal(G.acceptGoalSave(LESSON_A, ACT, edit({ ...G.goalFieldsOf(v2), goal: "다시 고친 목표" }, v2).save, after, 3000).ok, true);
+});
+
+await test("rules: another view's save keeps text typed here, untouched fields follow, and the next save starts from it", () => {
+  let all = save({}, LESSON_A).all;
+  const v1 = G.goalViewOf(LESSON_A, ACT, all);
+  const loaded = G.goalEditorOf(v1);
+  assert.deepEqual([loaded.fields, loaded.from, loaded.elsewhere], [{ goal: GOAL, criteria: CRITERIA.join("\n"), base: 1 }, v1, false]);
+  // Another chat view saves revision 2: a new goal sentence and new criteria.
+  all = G.acceptGoalSave(LESSON_A, ACT, { lesson: LESSON_A.sha256, goal: "다른 화면의 목표", criteria: ["다른 화면의 기준"], base: 1 }, all, 2000).all;
+  const v2 = G.goalViewOf(LESSON_A, ACT, all);
+  // Untouched fields follow it, text and revision, and nothing is said.
+  const followed = G.goalEditorOnView(loaded, v2, false);
+  assert.deepEqual([followed.fields, followed.elsewhere], [G.goalFieldsOf(v2), false]);
+  // Typed in the goal field: that text stays, the untouched criteria field follows, the base moves, the screen says so.
+  const typing = G.goalEditorOnEdit(loaded, { goal: "  여기서 적던 목표 " });
+  assert.equal(typing.elsewhere, false, "typing alone says nothing about another screen");
+  const kept = G.goalEditorOnView(typing, v2, false);
+  assert.deepEqual([kept.fields, kept.elsewhere], [{ goal: "  여기서 적던 목표 ", criteria: "다른 화면의 기준", base: 2 }, true]);
+  // ...and the other way round: typed criteria stay, the untouched goal follows.
+  const criteriaTyped = G.goalEditorOnView(G.goalEditorOnEdit(loaded, { criteria: "여기서 적던 기준" }), v2, false);
+  assert.deepEqual([criteriaTyped.fields, criteriaTyped.elsewhere], [{ goal: "다른 화면의 목표", criteria: "여기서 적던 기준", base: 2 }, true]);
+  // The save made after the sentence starts from revision 2: the host stores it as revision 3.
+  const after = G.goalEditOf(v2, LESSON_A.sha256, kept.fields, false).save;
+  assert.deepEqual(after, { lesson: LESSON_A.sha256, goal: "  여기서 적던 목표 ", criteria: ["다른 화면의 기준"], base: 2 });
+  const stored = G.acceptGoalSave(LESSON_A, ACT, after, all, 3000);
+  assert.deepEqual([stored.ok, stored.record.goal, stored.record.revision], [true, "여기서 적던 목표", 3]);
+  // Negative controls: an editor that replaces its fields drops the typed text; one that keeps the text but not the base
+  // sends a save the host refuses as stale every time, so the student could never save it.
+  assert.notEqual(G.goalEditorOf(v2).fields.goal, typing.fields.goal, "the control must actually drop the typed text");
+  const stuck = G.goalEditOf(v2, LESSON_A.sha256, { ...kept.fields, base: 1 }, false).save;
+  assert.deepEqual(G.acceptGoalSave(LESSON_A, ACT, stuck, all, 3000), { ok: false, code: "stale" });
+  // Typing back what the goal now is: nothing left to say and nothing to save.
+  const reverted = G.goalEditorOnEdit(kept, { goal: "다른 화면의 목표" });
+  assert.deepEqual([reverted.elsewhere, G.goalEditOf(v2, LESSON_A.sha256, reverted.fields, false).save], [false, null]);
+  // This view's own save: fields that hold what it stored take it as stored (spaces gone), nothing is said; text typed
+  // after pressing save stays, still nothing said, and the next save starts from the stored revision.
+  const v3 = G.goalViewOf(LESSON_A, ACT, stored.all);
+  const own = G.goalEditorOnView(kept, v3, true);
+  assert.deepEqual([own.fields, own.elsewhere], [G.goalFieldsOf(v3), false]);
+  const more = G.goalEditorOnView(G.goalEditorOnEdit(kept, { goal: "여기서 적던 목표 더" }), v3, true);
+  assert.deepEqual([more.fields.goal, more.fields.base, more.elsewhere], ["여기서 적던 목표 더", 3, false]);
+  // Negative control: the same answer treated as another screen's would say so.
+  assert.equal(G.goalEditorOnView(G.goalEditorOnEdit(kept, { goal: "여기서 적던 목표 더" }), v3, false).elsewhere, true);
+  // A goal no newer than the one the fields stand on (a repeated config, a stale refusal's goal) changes nothing.
+  assert.equal(G.goalEditorOnView(kept, v2, false), kept);
+  assert.equal(G.goalEditorOnView(kept, v1, false), kept);
+  // Another revision of the lesson, another activity or no goal: the editor starts over and the typed text stays behind.
+  for (const next of [G.goalViewOf(LESSON_A2, ACT, all), G.goalViewOf(LESSON_A, ACT_B, all), null]) {
+    const fresh = G.goalEditorOnView(kept, next, false);
+    assert.deepEqual([fresh.fields, fresh.elsewhere], [G.goalFieldsOf(next), false], JSON.stringify(next?.lesson ?? null));
+  }
 });
 
 await test("rules: only the view whose save an answer names shows its note; ids are echoed only when plain", () => {
@@ -581,6 +634,21 @@ await test("screen: every chat view and every remount draws the same goal from t
   assert.ok(forgetful.goal.startsWith("내 목표와 완료 기준 적기"), forgetful.goal);
   assert.ok(forgetful.goal.includes("내 목표 · 아직 적지 않았어요"));
   assert.notEqual(forgetful.goal, sidebar.goal);
+});
+
+await test("screen: a goal only the config carries (revision 2, no save answered) is drawn — the panel reads config on every render", async () => {
+  // A server render holds no answer: what is drawn here can only come from `config`. The same panel over time (mounted
+  // before its lesson arrived, then given a config under the same key) is e2e/sx/goal-browser.mjs.
+  const two = G.acceptGoalSave(LESSON_A, ACT, { lesson: LESSON_A.sha256, goal: "두 번째로 고친 목표", criteria: ["두 번째 기준"], base: 1 }, save({}, LESSON_A).all, 2000).all;
+  const v2 = G.goalViewOf(LESSON_A, ACT, two);
+  assert.equal(v2.revision, 2);
+  const screen = screenOf(await renderComponent("ChatPanel", withGoal(v2)));
+  assert.equal(screen.headerGoal, "내 목표 · 두 번째로 고친 목표");
+  assert.ok(screen.goal.includes("내 목표 · 두 번째로 고친 목표") && screen.goal.includes("두 번째 기준"), screen.goal);
+  assert.match(screen.goalHtml, /^<details class="hp-rail-goal hp-goal" data-student-goal="2"/, "the block does not stand on revision 2");
+  // Negative control: the same verdicts on a screen drawn from no config goal report it missing.
+  const none = screenOf(await renderComponent("ChatPanel", withGoal(null)));
+  assert.deepEqual([none.headerGoal, /data-student-goal="0"/.test(none.goalHtml)], [null, true]);
 });
 
 await test("screen: another lesson's goal is not drawn, and an empty goal still leaves the lesson's criteria whole", async () => {

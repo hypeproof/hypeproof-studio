@@ -225,20 +225,24 @@ export function ChatPanel(props: Props) {
     if (msg.type === "lessonWorkState") setLessonWork({ sha256: msg.sha256, work: msg.work });
     if (msg.type === "rehearsalState") setRehearsalResult({ state: msg.state, verdict: msg.verdict, reasons: msg.reasons, message: msg.message });
   }), []);
-  // AE-01 (#554) — the learner's own goal for the served lesson, as the host stored it. It starts from `config` (every
-  // mount and reconnect) and then follows the host's answers, which reach every chat view; a goal never moves back to an
-  // older revision. The note under the editor is this view's own: the host echoes the id of the save it answers, and
-  // only the view that sent that save shows "저장했어요." or the refusal. One save at a time per view.
-  const [studentGoal, setStudentGoal] = useState<StudentGoalView | null>(() => config?.studentGoal ?? null);
+  // AE-01 (#554) — the learner's own goal for the served lesson, as the host stored it: the newer, by revision, of the
+  // goal the current `config` carries and the goal the host's save answers brought (they reach every chat view). Only
+  // the answers are kept in state; `config` is read on every render, never copied once. A panel that mounted before its
+  // lesson arrived (no config yet, or a first config without a profile under the same activity, so nothing remounts)
+  // therefore draws the goal of the config that brings the lesson, and its first save starts from that goal's revision.
+  // A goal never moves back to an older revision. The note under the editor is this view's own: the host echoes the id
+  // of the save it answers, and only the view that sent that save shows "저장했어요." or the refusal. One save at a time
+  // per view.
+  const [goalAnswer, setGoalAnswer] = useState<StudentGoalView | null>(null);
+  const studentGoal = acceptGoalView(goalAnswer, config?.studentGoal);
   const [goalNote, setGoalNote] = useState<GoalNote>(null);
   const goalRequest = useRef<string | null>(null);
   const [goalPending, setGoalPending] = useState(false);
-  useEffect(() => { setStudentGoal((prev) => acceptGoalView(prev, config?.studentGoal)); }, [config?.studentGoal]);
   // A note belongs to the lesson it was made under.
   useEffect(() => { setGoalNote(null); }, [config?.profile?.lesson?.sha256]);
   useEffect(() => onHostMessage((msg) => {
     if (msg.type !== "goalState") return;
-    setStudentGoal((prev) => acceptGoalView(prev, msg.view));
+    setGoalAnswer((prev) => acceptGoalView(prev, msg.view));
     const note = goalNoteFor(msg, goalRequest.current);
     if (note === undefined) return;
     goalRequest.current = null;

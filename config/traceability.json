@@ -1952,7 +1952,7 @@
     {
       "id": "ST-TEST-AE-GOAL",
       "stage": "test",
-      "label": "Learner goal beside the lesson criteria — rules, host, screen and App tests (AE-01, #554)",
+      "label": "Learner goal beside the lesson criteria — rules, host, screen, browser and App tests (AE-01, #554)",
       "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE",
@@ -1961,6 +1961,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/student-goal.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/goal-browser.mjs"
         },
         {
           "path": "e2e/sx/goal-app.spec.ts"
