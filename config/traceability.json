@@ -3020,7 +3020,7 @@
     {
       "id": "ST-REQ-CR",
       "stage": "requirement",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-INT-CR",
         "ST-REQ-SX",
@@ -3045,7 +3045,7 @@
     {
       "id": "ST-DES-CR",
       "stage": "design",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR"
       ],
@@ -3061,7 +3061,7 @@
     {
       "id": "ST-IMP-CR-PUBLISH",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR"
@@ -3117,7 +3117,7 @@
     {
       "id": "ST-IMP-CR-EVIDENCE",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3150,7 +3150,7 @@
     {
       "id": "ST-IMP-CR-MEMORY",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3178,7 +3178,7 @@
     {
       "id": "ST-IMP-CR-SKILLS",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3215,7 +3215,7 @@
     {
       "id": "ST-TEST-CR",
       "stage": "test",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR",
         "ST-DES-CR",
