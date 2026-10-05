@@ -1,6 +1,11 @@
 // #1464 — E2-4 기계 판정 항목 단위 테스트.
 // lesson-pedagogy.ts 순수 함수를 직접 호출한다. DB/HTTP 없음.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const {
   checkLessonPedagogy,
@@ -9,6 +14,7 @@ const {
   checkInstructorRatio,
   DURATION_TOLERANCE_MIN,
 } = await import('../src/lib/lesson-pedagogy.ts');
+const { parsePlan } = await import('../src/lib/chalk-plan/index.ts');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -338,6 +344,103 @@ t('opts 없으면 G3-1/G3-4/G1-* finding 없음', () => {
   assert.equal(findCheck(findings, 'g3_4_closing_duration').length, 0, 'G3-4 must not appear without opts');
   const g1Items = findings.filter(f => f.check.startsWith('g1_'));
   assert.equal(g1Items.length, 0, `G1-* must not appear without opts: ${JSON.stringify(g1Items)}`);
+});
+
+// ── G2-9 duration source 우선순위 — r3.html 픽스처 통합 (#1531) ──────────────
+
+console.log('=== G2-9 r3.html 픽스처 통합 (#1531) ===');
+
+// r3.html: chalk:duration-min=90, 단계 합=10+15+20+25+20=90
+// 검수 스크립트는 content.duration_minutes를 60으로 만든다.
+// 수정 전: warning (90 vs 60 → diff 30 > 10)
+// 수정 후: meta=90 기준 → warning 없음
+
+const r3Html = readFileSync(path.join(DIR, 'fixtures/chalk-plan/r3.html'), 'utf8');
+const r3Parsed = parsePlan(r3Html, 'lesson');
+
+t('#1531 r3.html 픽스처: meta=90이면 content=60이어도 warning 없음', () => {
+  // 검수 환경 재현: content.duration_minutes = 60 (review-pr.sh:405)
+  const contentWith60 = { ...BASE_CONTENT, duration_minutes: 60 };
+  const findings = checkLessonPedagogy(contentWith60, {
+    parsedSteps: r3Parsed.steps,
+    planDurationMin: r3Parsed.meta.durationMin, // 90
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(r3Parsed.meta.durationMin, 90, `r3.html meta.durationMin 확인: ${r3Parsed.meta.durationMin}`);
+  assert.equal(findings.length, 0,
+    `meta=90, 단계 합=90 → warning 없어야 함. got: ${JSON.stringify(findings)}`);
+});
+
+t('#1531 r3.html 픽스처: planDurationMin 없이 content=60이면 warning 발생 (수정 전 동작)', () => {
+  const contentWith60 = { ...BASE_CONTENT, duration_minutes: 60 };
+  const findings = checkLessonPedagogy(contentWith60, {
+    parsedSteps: r3Parsed.steps,
+    // planDurationMin 없음 → content 기준 60
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 1,
+    `content=60, 단계 합=90 → diff=30 > 10 → warning이어야 함. got: ${JSON.stringify(findings)}`);
+});
+
+// ── G2-9 duration source 우선순위 (#1531) ─────────────────────────────────────
+
+console.log('=== G2-9 duration source 우선순위 (#1531) ===');
+
+t('#1531 계획서 meta(90)가 content(60)보다 우선 — 단계 합=90이면 warning 없음', () => {
+  // 검수 스크립트가 content를 60분으로 만들어도 meta가 90이면 통과해야 한다.
+  const content = { ...BASE_CONTENT, duration_minutes: 60 };
+  const steps = [mkParsedStep('s1', 30), mkParsedStep('s2', 30), mkParsedStep('s3', 30)]; // 합 90
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    planDurationMin: 90,
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 0, `meta=90 이면 90분 기준 → warning 없어야 함. got: ${JSON.stringify(findings)}`);
+});
+
+t('#1531 content(60) 기준이면 단계 합(90)과 30분 차 → warning 1개 (수정 전 동작 확인)', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 60 };
+  const steps = [mkParsedStep('s1', 30), mkParsedStep('s2', 30), mkParsedStep('s3', 30)]; // 합 90
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    // planDurationMin 없음 → content 기준
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 1, `content=60 기준이면 90-60=30 → warning이어야 함. got: ${JSON.stringify(findings)}`);
+  assert.ok(findings[0].message.includes('30분'), `메시지에 30분이 있어야 함: ${findings[0].message}`);
+});
+
+t('#1531 message에 "계획서 기준 90분" 포함', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 60 };
+  // 단계 합 80 = 90-80 = 10 <= 허용치(10)이면 통과. 합을 80으로 만들어서 diff=10이 되게 함
+  // diff > 10 이어야 warning. 단계 합을 75로.
+  const steps = [mkParsedStep('s1', 40), mkParsedStep('s2', 35)]; // 합 75, 90-75=15 > 10
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    planDurationMin: 90,
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 1, `합 75 + meta=90 → diff=15 > 10 → warning. got: ${JSON.stringify(findings)}`);
+  assert.ok(findings[0].message.includes('계획서 기준 90분'), `메시지에 출처 표시 없음: ${findings[0].message}`);
+});
+
+t('#1531 inputDurationMin이 planDurationMin 없을 때 content보다 우선', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 60 };
+  const steps = [mkParsedStep('s1', 30), mkParsedStep('s2', 30), mkParsedStep('s3', 30)]; // 합 90
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    inputDurationMin: 90, // plan meta 없지만 input이 90
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 0, `input=90 기준이면 warning 없어야 함. got: ${JSON.stringify(findings)}`);
+});
+
+t('#1531 opts 없는 호출(v0)은 여전히 content 기준 — skipped finding 유지', () => {
+  // opts 없으면 parsedSteps도 없어서 항상 skipped
+  const findings = checkLessonPedagogy(BASE_CONTENT);
+  const dc = findings.filter(f => f.check === 'duration_consistency');
+  assert.ok(dc.length === 1 && dc[0].skipped, `opts 없으면 skipped finding 하나: ${JSON.stringify(dc)}`);
+});
+
+t('#1531 checkDurationConsistency durationLabel이 message에 포함됨', () => {
+  const steps = [mkParsedStep('s1', 60), mkParsedStep('s2', 45)]; // 합 105
+  const findings = checkDurationConsistency(steps, 90, '계획서 기준 90분');
+  assert.equal(findings.length, 1);
+  assert.ok(findings[0].message.includes('계획서 기준 90분'), `label 없음: ${findings[0].message}`);
 });
 
 // ── 요약 ───────────────────────────────────────────────────────────────────────

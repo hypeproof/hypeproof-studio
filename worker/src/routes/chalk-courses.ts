@@ -856,6 +856,7 @@ function runPlanCheck(
   draft: Draft,
   htmlOverride?: string,
   audienceTier?: string | null,
+  inputDurationMin?: number | null,
 ): CheckResultItem[] {
   const results: CheckResultItem[] = [];
 
@@ -863,6 +864,7 @@ function runPlanCheck(
   let parsedSteps: import('../lib/chalk-plan/types.ts').ParsedStep[] | undefined;
   let parsedPlanText: string | undefined;
   let parsedAudienceTier: string | null | undefined;
+  let planDurationMin: number | null = null;
 
   if (htmlOverride !== undefined) {
     const parsed = parsePlan(htmlOverride, 'lesson');
@@ -881,6 +883,8 @@ function runPlanCheck(
     if (audienceTier === undefined && parsed.meta.audienceTier) {
       parsedAudienceTier = parsed.meta.audienceTier;
     }
+    // G2-9 reads lesson length from plan meta first (#1531).
+    planDurationMin = parsed.meta.durationMin ?? null;
   }
 
   const effectiveAudienceTier = audienceTier !== undefined ? audienceTier : (parsedAudienceTier ?? null);
@@ -910,7 +914,7 @@ function runPlanCheck(
   const pedagogyFindings = checkLessonPedagogy(
     checkContent,
     parsedSteps !== undefined
-      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText }
+      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText, planDurationMin, inputDurationMin }
       : undefined,
   );
   for (const f of pedagogyFindings) {
