@@ -28,7 +28,7 @@ import { getProfile } from '../profiles';
 import { reusable, templateAdmission } from './authoring';
 import {
   RETROSPECTIVE_FORMAT, RETRO_BODY_MAX, answerRefusal, assistanceRefusal, citeRefusal, citedShareIds, coverageOf, feedbackLoopEnabled,
-  findingView, helpConditions, lessonAttribution, lessonRefusal, responseFor, shareParts, storedFeedback, validateRetrospectiveDoc,
+  findingView, helpConditions, lessonAttribution, lessonRefusal, reportedHelpSeen, responseFor, shareParts, storedFeedback, validateRetrospectiveDoc,
   type CitedShare, type RetroBase, type RetroDoc, type RetroSource, type ResponseRow, type ShareLessonRow, type ShareRow,
 } from '../lib/feedback-loop';
 
@@ -92,8 +92,9 @@ async function baseOf(env: Env, cohort: string, course: string, version: string,
  * The shares, among `ids`, that THIS instructor may read now: the same rule as the instructor share routes (same cohort,
  * addressed to them, unexpired, a profile in their scope) narrowed to the course's own profile. Withdrawn shares no longer
  * exist. Each with the learner's answer as /sharing and /manage show it (`responseFor`: the one bound to the feedback text as
- * it is stored now, else the newest), whether it answers that text, and the lesson recorded when it was sent — which version
- * it is evidence about is decided against that (lessonRefusal), not assumed.
+ * it is stored now, else the newest), whether it answers that text, the lesson recorded when it was sent — which version
+ * it is evidence about is decided against that (lessonRefusal), not assumed — and whether this instructor has opened it
+ * through the audited share view.
  */
 async function citable(env: Env, cohort: string, recipient: string, profileId: string, ids: string[]): Promise<Map<string, CitedShare>> {
   const out = new Map<string, CitedShare>();
@@ -105,11 +106,16 @@ async function citable(env: Env, cohort: string, recipient: string, profileId: s
   const responses = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?))')
     .bind(list).all<ResponseRow>()).results ?? [];
   const lessons = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_lessons WHERE share_id IN (SELECT value FROM json_each(?))').bind(list).all<ShareLessonRow>()).results ?? [];
+  // Which of them this instructor has opened through the audited share view (its `view` rows go with the share). Nothing drawn
+  // from a share's content is shown or relied on before that (reportedHelpSeen).
+  const viewed = (await env.HPS_DB.prepare("SELECT DISTINCT share_id FROM classroom_share_audit WHERE share_id IN (SELECT value FROM json_each(?)) AND actor_id=? AND action='view'")
+    .bind(list, recipient).all<{ share_id: string }>()).results ?? [];
+  const opened = new Set(viewed.map((v) => v.share_id));
   for (const s of shares) {
     const text = storedFeedback(s), sha = text === null ? null : await sha256Hex(text);
     const response = responseFor(responses.filter((r) => r.share_id === s.id), sha);
     const current = !!response && sha !== null && response.feedback_sha256 === sha;
-    out.set(s.id, { share: s, response, response_current: current, lesson: lessons.find((l) => l.share_id === s.id) ?? null });
+    out.set(s.id, { share: s, response, response_current: current, lesson: lessons.find((l) => l.share_id === s.id) ?? null, opened: opened.has(s.id) });
   }
   return out;
 }
@@ -133,8 +139,9 @@ async function checkedDoc(env: Env, a: IssuerAuthz, cohort: string, profileId: s
       const x = shares.get(s.share_id), why = standRefusal(s, x, base) || answerRefusal(s, x!);
       if (why) return { refusal: { status: 409 as const, body: { error: 'a cited share part cannot be used', reason: why, share_id: s.share_id, part: s.part, finding: f.id } } };
     }
-    const why = assistanceRefusal(f, (id) => shares.get(id)?.share.kind);
-    if (why) return { refusal: { status: 400 as const, body: { error: 'assisted needs a cited help request', reason: why, finding: f.id } } };
+    const why = assistanceRefusal(f, (id) => { const x = shares.get(id); return x ? { kind: x.share.kind, reported_help: reportedHelpSeen(x.share, x.opened) } : undefined; });
+    if (why === 'record_not_opened') return { refusal: { status: 409 as const, body: { error: 'open the cited task record through the share view before citing the help it names', reason: why, finding: f.id } } };
+    if (why) return { refusal: { status: 400 as const, body: { error: 'assisted needs a cited help request or a cited task record that names help', reason: why, finding: f.id } } };
   }
   return { doc };
 }
@@ -149,7 +156,7 @@ async function view(env: Env, a: IssuerAuthz, row: RetroRow, draft: Draft) {
     const x = shares.get(id);
     // A share that is not evidence about this version reads like one that is gone: nothing of it is shown.
     return x && !lessonRefusal(x.share, x.lesson, base)
-      ? { available: true, kind: x.share.kind, student_id: x.share.student_id, parts: new Set(shareParts(x.share, !!x.response).map((p) => p.part)), lesson: lessonAttribution(x.lesson), response_current: x.response_current }
+      ? { available: true, kind: x.share.kind, student_id: x.share.student_id, parts: new Set(shareParts(x.share, !!x.response).map((p) => p.part)), lesson: lessonAttribution(x.lesson), response_current: x.response_current, reported_help: reportedHelpSeen(x.share, x.opened) }
       : { available: false };
   };
   const findings = doc.findings.map((f) => findingView(f, resolve));

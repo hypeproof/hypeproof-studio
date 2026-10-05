@@ -65,6 +65,17 @@ try {
   assert.equal(await n('SELECT count(*) AS n FROM lesson_retrospectives'), 1, 're-applying the migration over data changes nothing');
   console.log('PASS actual local workerd/D1: idempotent 0039, guarded learner answer and lesson record, json_each sources, one-batch next draft under a race, cascade on withdrawal');
 
+  // Slice 2 review r1 — what a task record says about help is read only after THIS instructor opened the share through the
+  // audited view: the `view` row lookup (json_each, actor, action) on D1 itself. Before that: a named refusal, no basis.
+  assert.equal((await f.request('/v1/classroom/shares', 'POST', { id: 'd1-task', recipient_id: 'teacher-a', kind: 'submission', consent: true, duration_minutes: 60, content: { verification: '시연과 다른 날짜로 바꿨다', independent_task: { task: '시연과 다른 날짜의 휴진 공지', help: ['ai_made'] } } }, learner)).status, 201);
+  const helped = { hypothesis: '받은 도움을 스스로 적는다', findings: [{ id: 'f1', text: 'AI가 대신 만들었다고 적었다', sources: [{ share_id: 'd1-task', part: 'independent_task' }], assistance: 'assisted' }], decisions: [{ id: 'd1', target: 'lesson', action: 'hold', reason: '더 본다' }] };
+  assert.deepEqual(await f.request(retros, 'POST', { request_id: 'd1-unopened', base_version: V1, doc: helped }).then((r) => [r.status, r.json.reason]), [409, 'record_not_opened']);
+  assert.equal(await n("SELECT count(*) AS n FROM classroom_share_audit WHERE share_id='d1-task'"), 0, 'the refusal wrote no audit row');
+  assert.equal((await f.request(`/admin/cohorts/${f.cohort}/classroom/shares/d1-task`)).status, 200, 'the instructor opens it (audited)');
+  const opened = await f.request(retros, 'POST', { request_id: 'd1-opened', base_version: V1, doc: helped }); assert.equal(opened.status, 201, opened.raw);
+  assert.deepEqual([opened.json.findings[0].assistance_basis, opened.json.findings[0].sources[0].self_reported_help, opened.json.coverage.help_reported], [['learner_report'], 'help', { source_state: 'self_reported', with_help: 1, no_help: 0, not_opened: 0 }]);
+  console.log('PASS actual local workerd/D1: a task record\'s reported help is read only after the instructor\'s audited view of that share');
+
   // Review round 2 — where lesson settings are enforced, the gate's binding read and the guarded lesson-record INSERT on D1
   // itself: a learner switched to S2 by a setting (saved, sent, held by the device, switched through the existing routes)
   // shares, and the share records S2 with source `setting`; a V1 retrospective refuses it, an S2 one takes it as this version.
