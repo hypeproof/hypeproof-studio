@@ -28,6 +28,7 @@ import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } fr
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, type ProfileFailure } from "./proxyClientHelpers";
 import { runSdkCoach, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
@@ -553,6 +554,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private cachedProfile: ResolvedProfile | null = null;
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
+  /**
+   * AE-01 (#554) — goal saves run one after another: the answers come back in the order the saves were sent, and each
+   * save reads, checks and writes as one step. What refuses a second save made from the same revision is the revision
+   * check in `acceptGoalSave`, not this queue.
+   */
+  private goalWrites: Promise<void> = Promise.resolve();
   private profileFetchPromise: Promise<ResolvedProfile | null> | null = null;
   /**
    * #381 — why the last profile fetch failed (null when it succeeded or was
@@ -3620,6 +3627,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.post({ type: "lessonWorkState", sha256: lesson.sha256, work: this.lessonWorkFor(lesson.sha256) });
         return;
       }
+      // AE-01 (#554) — the learner's own goal and completion criteria for this lesson revision. Kept on this device beside
+      // the lesson's criteria, which this path never reads from the message or stores; it moves no task and records no event.
+      case "goalSave": {
+        const save = this.goalWrites.then(() => this.saveGoal(msg));
+        this.goalWrites = save.catch(() => undefined);
+        await save;
+        return;
+      }
       // #751 G2 — rehearsal only: send what the panel drew, with this App's identity, under the rehearsal code.
       case "rehearsalSend": {
         await this.sendRehearsalReport(msg.steps, msg.mission);
@@ -5065,6 +5080,35 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * AE-01 (#554) — one goal save, judged against the served lesson and the stored goal (`acceptGoalSave`), then
+   * answered to every chat view with the id of the save it answers, so only the view that sent it shows the note. A
+   * stored save carries the goal as stored. A refused or failed save stores nothing and carries no goal, so every view
+   * keeps the goal and the typed text it shows (the host may have no lesson at hand while the screen still draws one);
+   * only a `stale` refusal brings the newer goal the save lost to.
+   */
+  private async saveGoal(msg: unknown): Promise<void> {
+    const lesson = this.cachedProfile?.lesson;
+    const activity = activityConnections(this.context)?.scope ?? null;
+    const all = this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY);
+    const requestId = goalRequestIdOf(msg);
+    const echo = requestId ? { requestId } : {};
+    const saved = acceptGoalSave(lesson, activity, msg, all, Date.now());
+    if (!saved.ok) {
+      const newer = saved.code === "stale" ? goalViewOf(lesson, activity, all) : null;
+      await this.post({ type: "goalState", ...(newer ? { view: newer } : {}), error: GOAL_REFUSAL_SENTENCES[saved.code], ...echo });
+      return;
+    }
+    try {
+      await this.context.workspaceState.update(STUDENT_GOAL_KEY, saved.all);
+    } catch {
+      await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.not_stored, ...echo });
+      return;
+    }
+    const view = goalViewOf(lesson, activity, saved.all);
+    await this.post({ type: "goalState", ...(view ? { view } : {}), saved: true, ...echo });
+  }
+
+  /**
    * #751 G2 — the rehearsal report. The panel's own read-back of what it drew goes out unchanged (only steps of this lesson);
    * the Service compares it with the candidate AND with its own records of the requests made under this code.
    */
@@ -5157,6 +5201,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         hasToken: !!token,
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile},
           activityDraft:this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
+        // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
+        studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         coach: this.getCoach(),

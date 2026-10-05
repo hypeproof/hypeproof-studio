@@ -66,6 +66,13 @@ AE-T34·AE-T37의 선행 Service·Chalk 계약(#1013 feedback-loop 첫 슬라이
 '도움 없이'는 독립 수행으로 올리지 않음 · 기록 없음은 미관찰 · 분모는 학생이 적은 도움을 Service 관측(`help_use` 미관찰)과 따로 셈.
 실행 기록: [Chalk 테스트 기록](chalk-authoring.md#feedback-loop-records-20261006). 사람의 검토·실제 수업 없음 → 여전히 **NOT RUN**.
 
+AE-T01의 AE-01 절반(#554, 2026-10-06) → 학생이 목표·개인 완료 기준을 적고 고친 뒤 영역 A의 수업 기준이 그대로인지,
+결과(옆 미리보기)를 띄우고 대화를 끝까지 내려도·창을 낮게 줄여도·앱을 다시 열어도·두 번째 채팅 화면에서도 같은 목표가 보이는지, 목표를
+열거나 저장해도 완료·과제 이동이 없는지, 한 화면에 적던 글이 다른 화면의 저장에도 남는지를 실제 App(합성 Service)으로, 다른 수업
+버전·활동의 목표 미복원과 예전 revision에서 시작한 저장 거절을 실제 호스트 처리·화면 렌더로, 채팅 화면보다 늦게 온 수업의 목표를 빌드한
+webview(Chromium)로 실행. 실행 기록: [아래](#goal-20261006). 이 기록이 기대는 것은 AE-T01의 AE-01 절반뿐이다.
+자료 선택·요청 payload(AE-02, #555) 절반이 남아 AE-T01은 여전히 **NOT RUN**.
+
 AE-T36은 종단 연결 검사다. 그 한 번의 성공으로 연결된 요구사항의 모든 부정·장애 조건을
 통과했다고 처리하지 않는다. 특히 AE-T06/07/10/11/33/35의 경계 검사가 별도로 필요하다.
 
@@ -216,3 +223,145 @@ E7의 고정/제한 선택은 AE-T19~21/25와 기존 모델 정규화 회귀가 
 이번 보강의 실제 문서 검사 결과는 PR에 기록한다. 이 게이트의 PASS는 위 AE-T의 실행 상태를 바꾸지 않는다.
 
 #792의 [모델 선택·전환 인수](lesson-model-selection.md)는 위 시나리오의 일부다. 전체 AE-T19/20/25의 완료 판정은 아니다.
+
+<a id="goal-20261006"></a>
+
+## AE-01 — 내 목표와 수업 기준 · 2026-10-06 ([#554](https://github.com/jayleekr/hypeproof-studio/issues/554))
+
+범위: 수업이 서빙된 학생 좌석. 학생이 자기 목표 한 문장과 개인 완료 기준(다섯 줄까지)을 적고 고친다. 저장한 목표는 영역 A의
+수업 완료 조건 아래에 두 줄까지(넘치면 줄임, 전체는 rail에서) 헤더와 함께 고정되고, 기준과 고치는 칸은 영역 A 바로 아래 rail에 접혀 있다.
+창이 낮으면 영역 A가 접혀 그려지고 목표는 완료 조건 뒤, 헤더가 꽉 차면 헤더 안 스크롤에 있다. 접힌 블록은 화면에 입력 칸을 더하지
+않는다(칸은 펼쳤을 때만 그린다). 그래서 이 블록이 없던 때와 같은 칸이 첫 입력 칸이고(단계 작업 칸이 없으면 대화 입력창), 수업 카드가
+첫 `.hp-rail-lesson`으로 남는다. 영역 A는 수업
+설계 파일의 기준(이번 단계가 끝났다고 볼 조건, 이번 주차의 완료 조건)을 그대로 그리며, 이 기능은 그것을 읽어 보내지도 고치지도 않는다.
+채팅 화면이 둘이면(사이드바와 편집기 탭) 한쪽에 적고 아직 저장하지 않은 글은 다른 쪽의 저장에도 남고, 그 화면은 다른 화면에서 목표가
+바뀌었다고 알려 준다. 계약: [REQ-STUDIO-LESSON-GOAL](../studio-requirements.md). 스위치는 없다. 서빙된 수업(`profile.lesson`)이 있는 모든 학생 화면(미성년
+코호트 포함)에 있고 강사 화면(#1298)과 수업 없는 좌석에는 없다. 학생 앱에는 다음 데스크톱 배포 때 들어간다(머지 ≠ 배포). 모델 요청에는
+아무것도 더하지 않는다.
+
+### 해 보기
+
+App 없이 — 빌드한 webview를 Chromium에서 띄우고 호스트가 보내는 메시지를 그대로 보낸다(저장 답은 호스트 규칙으로 만든다). CI의
+`start-page`가 이 브랜치부터 돌린다. 채팅 화면이 수업보다 먼저 그려진 경우, 저장 답, 다른 화면의 저장이 적던 글에 닿는 경우를 본다.
+
+```bash
+npm --prefix extensions/hypeproof-chat/webview-ui run build
+npm --prefix e2e run test:goal:browser      # 기록: e2e/test-results/goal-browser/report.json, 사진 goal-typed-kept.png
+```
+
+가장 빠른 App 확인 — 백그라운드, 합성 Service(`e2e/sx/sx-service.mjs`: 실제 Service 라우터, 수업이 고정된 `/2` 좌석, 한 줄로만
+답하는 모델, 외부 호출 차단), 모델 키 없음. 이 브랜치 확장을 주입한 준비된 앱 사본으로([e2e/README.md](../../e2e/README.md)
+"Driving a different .app"):
+
+```bash
+bash scripts/prep-test-app.sh "<앱 사본>"     # 사본마다 한 번: LSUIElement=1, ad-hoc 재서명
+GATE=idle HPS_QUIET_NO_HIDE=1 HPS_APP_PATH="<앱 사본>" bash scripts/e2e-quiet.sh npx playwright test -c sx/playwright.config.ts goal-app
+```
+
+5분 동안 입력이 없을 때 시작하고 Mac을 만지면 멈춘다(exit 75 = 나중에 다시). 창은 화면 밖에 있고 포커스를 가져가지 않는다.
+`HPS_QUIET_NO_HIDE=1`은 화면 사진을 남기려는 것이며 없으면 사진만 빠진다. 기록: `e2e/test-results/sx-app/goal-result.json`, 사진 `goal-*.png`.
+
+손으로(개발 앱) — 스크립트를 읽고 쓴 절차이며 끝까지 실행하지 않았다. 위 Playwright 실행이 실행한 경로다.
+
+```bash
+STATE="$HOME/Library/Application Support/HypeProof Studio Development/goal"
+python3 scripts/studio-dev.py --state-dir "$STATE" --provider service prepare
+node --experimental-strip-types --experimental-sqlite e2e/sx/sx-service.mjs 8787 "$STATE/local-participant-token.txt" c1,c2,c3 &
+python3 scripts/studio-dev.py --state-dir "$STATE" --provider service run --service local
+```
+
+| 단계 | 학생이 하는 일 | 기대 결과 (학생 말로) |
+|---|---|---|
+| 1 | 작업 화면을 연다 | 영역 A에 "내 목표" 줄은 없다(적은 목표가 없으면 지어내지 않는다). 그 아래 rail에 "내 목표와 완료 기준 적기"가 접혀 있다. 영역 A의 "이번 단계가 끝났다고 볼 조건"과 "이번 주차의 완료 조건" 세 줄은 수업 그대로다 |
+| 2 | "내 목표와 완료 기준 적기"를 펼쳐 목표 한 문장과 완료 기준 두 줄을 적고 "목표 저장" | 펼치면 목표 칸과 기준 칸이 나온다(아직 적은 것이 없어 "목표 저장"은 눌리지 않는다). 저장하면 "저장했어요." 영역 A의 완료 조건 아래에 "내 목표 · (적은 목표)" 줄이 생긴다. 수업 조건은 한 글자도 바뀌지 않고 ☑도 생기지 않는다. "이 과제 완료하기"는 여전히 눌리지 않는다 |
+| 3 | 목표를 고치고 기준 한 줄을 바꿔 다시 저장(앞뒤 빈칸이나 빈 줄이 섞여도 된다, 두 번 눌러도 된다) | "저장했어요." 영역 A 줄과 rail이 새 목표와 새 기준으로 바뀌고, 칸에는 빈칸과 빈 줄을 뺀 저장된 그대로가 보인다. 한 번만 저장되고 오류 문장은 없다. 수업 조건은 그대로다 |
+| 4 | 창을 낮게 줄인다(예: 1280×450) | 영역 A가 접혀 그려진다. 주차·미션·완료 조건·남은 단계·첫 행동 버튼은 다 보이고, "내 목표" 줄은 완료 조건 뒤에 있다(헤더가 꽉 차면 헤더 안에서 내려 보면 있다) |
+| 5 | `index.html`을 열고 "HypeProof: HTML 미리보기 (옆 패널)"로 결과를 옆에 띄운 뒤 채팅을 다시 앞으로 | 결과가 옆에 열린 채 영역 A에 같은 새 목표 줄, rail에 같은 기준. 대화를 맨 아래까지 내려도 목표 줄은 영역 A와 함께 화면에 남는다 |
+| 6 | 앱을 껐다 켠다 | 같은 목표와 기준이 돌아오고, 블록을 펼치면 칸에도 그대로 있다 |
+| 7 | 명령 팔레트에서 "View: Show HypeProof Chat"으로 옆 사이드바에 채팅을 하나 더 연다 | 두 채팅 화면에 같은 목표 |
+| 8 | 한쪽 화면에서 목표와 기준을 비우고 저장 | 두 화면 모두 영역 A의 "내 목표" 줄이 사라지고 rail은 "내 목표와 완료 기준 적기". 다른 화면에 펼쳐 둔 칸도 비워진다. "저장했어요."는 저장한 화면에만 뜬다. 수업 조건은 그대로다 |
+| 9 | 사이드바 칸에 새 목표를 적어 두고(저장하지 않음) 편집기 쪽 채팅에서 다른 목표를 적어 저장한 뒤, 사이드바에서 "목표 저장" | 편집기 쪽 저장 뒤: 두 화면 영역 A에 편집기 쪽 목표. 사이드바 칸에는 적던 글이 그대로 있고 "다른 화면에서 목표가 바뀌었어요. 적던 내용은 그대로 있으니, 저장하면 이 내용으로 바뀌어요."가 뜬다("저장했어요."는 편집기 쪽에만). 사이드바에서 저장하면 두 화면 모두 사이드바에 적은 목표가 되고 그 문장은 사라진다. 편집기 쪽 칸도 그 목표로 바뀐다 |
+| 10 | Service를 `c1`로 다시 시작하고 새로 받은 코드로 연다(다른 수업 버전 = 새 활동) | 앞 버전의 목표가 따라오지 않는다: "내 목표" 줄이 없고 rail은 "내 목표와 완료 기준 적기" |
+
+데이터 위치: 이 작업 폴더의 VS Code `workspaceState` 키 `hps.studentGoal`(사용자 데이터 폴더의 `User/workspaceStorage/<id>/state.vscdb`).
+수업 버전(sha256)과 활동마다 레코드 하나: `schema: "hps-student-goal/1"`, `lesson{course_id,version,sha256}`, `activity`, `goal`,
+`criteria[]`, `revision`, `saved_at`. Service로 보내지 않고 학습 이벤트·과제 흐름 기록·수업 보드 기록을 만들지 않는다. 같은 수업의
+다음 버전은 새 과제라(과제 id와 같은 기준) 앞 버전의 목표를 가져오지 않는다. 화면이 그리는 목표는 지금 config가 실은 목표와 저장 답이
+가져온 목표 중 revision이 큰 쪽이고, config는 그릴 때마다 읽는다. 그래서 채팅 화면이 수업보다 먼저 그려졌어도(config가 아직 없거나 첫
+config에 프로필이 없음 — Service에 닿지 못한 경우) 수업을 실은 config가 오면 그 목표를 그리고, 첫 저장은 그 revision에서 시작한다. 칸은
+저장된 목표가 바뀔 때마다(다른 화면의 저장 포함) 그 목표로 바뀐다. 단, 학생이 적고 아직 저장하지 않은 칸은 그대로 두고 다른 화면에서
+목표가 바뀌었다고 알려 주며, 다음 저장은 새 revision에서 시작한다(알고 바꾼다). 다른 화면의 저장이 이 화면에 닿기 전에 보낸 저장은
+거절하고 지금 목표를 보여 준다. 저장이 거절되거나 기기에 쓰지 못해도 어느 화면의 목표나 적던 글도 바뀌지 않는다.
+
+목표는 늘 활동 아래 저장된다. 확장은 활동 연결을 거쳐서만 참여 토큰을 읽고(`ActivityConnections.wrap`, 이 Service의 활동이 활성일
+때만 토큰을 준다), 활동이 없으면 프로필도 수업도 없어(`ensureProfile`) 목표 블록이 그려지지 않는다. 활동 id에는 Service의 사용자별 활동
+id가 들어가고 작업 폴더 하나는 활동 하나에만 묶이므로(`ActivityConnections.claim`), 같은 Mac을 쓰는 두 학생이 같은 레코드를 보거나 덮지
+않는다. 활동 없는 키(`<sha256>:`)는 활동 연결이 없는 호스트(테스트)에서만 쓰인다. 활동 없이 수업을 주는 좌석을 만든다면 먼저 그 좌석의
+식별자를 키에 넣어야 한다.
+
+지난 수업 버전의 레코드는 지우는 길 없이 이 기기에 남는다(`hps.lessonWork`와 같은 방식). 학생은 지금 수업의 목표만 비울 수 있다. 학생이
+직접 쓴 글이고 미성년 코호트도 포함되므로, 이 레코드(그리고 `hps.lessonWork`)를 얼마나 두는지와 지난 버전 레코드를 지우는 길은 Jay의
+결정을 기다린다. 미성년 데이터의 보존 기간은 Lab 기록과 Jay가 정하고([curriculum-runtime §L](../requirements/curriculum-runtime.md#l-privacy-and-youth-safety-prd-12)),
+공개 테스트 참가자 기록의 규칙(CR-67·CR-69)은 이 기기 기록을 다루지 않는다. PR의 열린 질문으로 올렸다.
+
+### 실행 기록 — 리뷰 2차 수정 뒤 (빌드 `bc237dcc`)
+
+| 층 · 증거 종류 | 명령 | 결과 |
+|---|---|---|
+| 규칙·실제 호스트 처리와 config 경로·실제 채팅 화면 렌더 · 합성 | `cd extensions/hypeproof-chat && node --experimental-strip-types test/student-goal.smoke.mjs` | PASS 23(1차의 21에 둘을 더함). 다른 화면의 저장이 닿을 때: 손대지 않은 칸은 새 목표를 따르고 아무 말도 하지 않는다. 목표 칸(또는 기준 칸)에 적던 글은 남고 다른 칸은 따르며, base가 새 revision으로 옮겨 가고 문장이 뜬다. 그 뒤 저장은 새 revision에서 나가 저장된다. 대조군: 칸을 갈아 끼우는 편집기는 적던 글을 잃고, 글은 두되 base를 그대로 두는 편집기의 저장은 매번 stale로 거절된다. 지금 목표와 같게 고쳐 쓰면 문장이 사라지고 저장할 것이 없다. 이 화면 자신의 저장 답에는 문장이 없다(저장을 누른 뒤 더 적은 글은 남는다. 대조군: 같은 답을 다른 화면의 저장으로 취급하면 문장이 뜬다). 더 새것이 아닌 목표(되풀이된 config, stale 거절이 싣는 목표)는 아무것도 바꾸지 않는다. 다른 수업 버전·다른 활동·목표 없음이면 칸을 새로 시작한다(적던 글이 넘어가지 않는다). config만 revision 2 목표를 싣고 답은 아직 없는 서버 렌더: 영역 A 줄·rail·블록 revision 2(대조군: config에 목표가 없으면 줄 없음·revision 0). 새 문장도 숫자 없음(SX-59) |
+| 빌드한 webview, 시간에 따라 · 합성(CI `start-page`) | `npm --prefix extensions/hypeproof-chat/webview-ui run build && npm --prefix e2e run test:goal:browser` | PASS 7, 심은 화면 4종 모두 보고, 페이지 오류 0. 호스트가 보내는 메시지를 그대로 보내고 저장 답은 호스트 규칙(`acceptGoalSave`·`goalViewOf`)으로 만든다. ① 같은 활동에서 첫 config가 프로필 없이(Service에 닿지 못함) 오고 다음 config가 수업과 revision 2 목표를 실어 와도(채팅 화면은 다시 그려지지 않는다) 영역 A·rail·블록에 그 목표, 펼친 칸에도 그대로 ② 첫 저장은 base 2로 나가 revision 3으로 저장되고 "저장했어요." ③ 다른 화면의 저장: 영역 A·rail·손대지 않은 칸이 따라가고 이 화면은 아무 말도 하지 않는다 ④ 목표 칸에 적던 중 다른 화면이 저장: 적던 글은 남고 기준 칸은 새 목표를 따르며 문장이 뜬다. 저장은 revision 5에서 나가 저장되고, 저장을 누른 뒤 더 적은 글은 답이 와도 남는다(문장 없음) ⑤ 그 저장들 전에 만들어진 config(revision 2)가 늦게 와도 목표는 최신 revision ⑥ 거절(수업 연결 확인 못 함)은 목표와 적던 글을 그대로 두고 alert ⑦ 같은 활동에서 다른 수업이 오면 칸과 문장이 새로 시작 ⑧ config가 없던 화면에 활동 없는 config가 와도(키 "disconnected"가 그대로라 다시 그려지지 않는다) 그 목표, 첫 저장은 base 2 |
+| webview에 심은 결함 9종 · 합성 | scratch 스크립트(커밋하지 않음): 소스를 scratch에 복사해 결함을 하나씩 심고 vite로 따로 빌드한 뒤 `HPS_WEBVIEW_DIST`로 위 브라우저 검사를, 같은 소스로 smoke를 돌림 | 브라우저 검사 9/9 FAIL(잡힘). smoke는 순수 규칙에 있는 4종만 잡는다(서버 렌더로는 시간에 따른 동작을 볼 수 없다). P1 화면이 config를 읽지 않고 답만 그림 → 브라우저 ①, smoke(화면 렌더) · P2 config를 처음 한 번만 복사(1차 구조에서 config를 따르는 효과를 지운 것, 리뷰의 변이) → 브라우저 ①, smoke 통과 · P3 칸이 모든 목표로 갈아 끼워짐(1차의 편집기) → 브라우저 ④, smoke 통과 · P4 적던 글은 두되 base를 옮기지 않음 → 브라우저 ④(저장이 base 4로 나감), smoke · P5 문장 없음 → 브라우저 ④, smoke 통과 · P6 자기 저장 답을 다른 화면의 저장으로 취급 → 브라우저 ④(저장을 누른 뒤 더 적은 글에 문장), smoke 통과 · P7 손대지 않은 칸이 따라가지 않음 → 브라우저 ③, smoke · P8 적던 글이 다른 수업으로 넘어감 → 브라우저 ⑦, smoke · P9 config가 늘 이김(답 무시) → 브라우저 ②, smoke 통과 |
+| 실제 App · 실기(App) + 합성 Service | 위 "가장 빠른 App 확인" 명령(기기 전체 app lock·idle gate 안에서, `HPS_QUIET_NO_HIDE=1`) | PASS 2회(goal-app 단독, 그리고 아래 sx App 3종 안에서). 빌드 커밋 `bc237dcc`. 셸 HypeProof Studio 0.1.51(`d4db9049`) 사본(LSUIElement=1)에 주입한 번들 sha256: `dist/extension.js` `2e709ee8ff94992c81ed7c0d1f3fe5975cd31a03c9c8d22a974de083ad4b3931`(1차와 같은 바이트: 호스트 코드는 이번에 바뀌지 않았다), `webview-ui/dist/assets/index.js` `bdf7cc70442fcb8ed281877ab02f75fecef7ac101020c868a5108689b2797314`, `webview-ui/dist/assets/index.css` `0f87e7eadaf209d49e86197a3b2911a2f615ddb4d02f9fae1f671972a7497137`, `webview-ui/dist/index.html` `b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6`. Service `canary-sdk-contract`(`/2`), 수업 `sx-week3` `m2026.10.05-1`(sha256 `94c9aced1b5f39d3ce1486db707619698ba3c59629a95445f3e19cd8b477313a`), 완료 조건 c1,c2,c3. macOS 15.7.4(24G517) arm64, Node 24.4.1, Playwright 1.60.0. 1차의 모든 단계가 같은 결과다(웹뷰 1280×387·640×387, 셸 scrollTop 1235, 과제 phase는 처음부터 끝까지 `assigned`). 더한 단계: 사이드바 칸에 목표를 적어 두고 편집기 쪽에서 새 목표를 저장 → 두 화면 영역 A에 편집기 쪽 목표(revision 4), 사이드바 칸은 적던 글 그대로·문장이 뜨고 "저장했어요." 없음, 편집기 쪽엔 문장 없음 → 사이드바에서 저장 → 두 화면 모두 사이드바 글(revision 5), 문장 사라짐, 편집기 칸도 따라가고 편집기의 "저장했어요."는 사라짐. 수업 조건 그대로, ☑ 0. 판정은 모두 DOM 프로브다. 프로브 값과 심은 화면 대조군 결과는 [app-goal-result.json](../evidence/goal-20261006/app-goal-result.json)(sha256 `c57734bd978cf2ae66882d8f00b97190ab0be48326ba463e35c1bcd59e3f9aa9`)으로 커밋했다. 사진 8장은 판정에 쓰지 않은 그림이고 커밋하지 않았다(로컬). 각 사진의 sha256 전체는 같은 파일의 `shot` 항목에 있다 |
+| App에 심은 결함 · 실기 | 같은 명령, P3(칸이 모든 목표로 갈아 끼워짐) webview 빌드로(확장은 같은 빌드, index.js `2c729ba9e28337a829aa7cbae620b6130539410ee72d73f261e0e51f32d83e83`) | FAIL(잡힘): spec 557행 "the editor chat's save dropped the text typed in the sidebar" — 사이드바 칸이 편집기 쪽 목표로 바뀌었다(리뷰가 말한 손실). 실행 뒤 수정 빌드를 다시 주입하고(같은 sha256) 다음 줄의 sx App 3종으로 PASS를 다시 확인했다 |
+| 같은 화면의 다른 App 검사 · 실기(App) + 합성 Service | 같은 앱 사본과 gate로 `npx playwright test -c sx/playwright.config.ts`(task-flow·home·goal 전부) | 3/3 PASS(52.4초) |
+| 확장 전체 · 합성 | `npm run typecheck`, `webview-ui`에서 `npx tsc -b`, `npm test`의 각 단계 | typecheck·tsc 0건. smoke 파일 134개 PASS(student-goal 23 포함), classroom-ops review 41 PASS, chalk 도구·생성기·판정 PASS, activity-resume PASS. instructor-render는 1차와 같은 환경 결함(이 Mac의 `~/node_modules/react`가 React를 두 벌로 만든다)으로 실패하고, React를 webview의 한 벌로 묶으면(esbuild `--alias:react`) 17/17 PASS. CI(ubuntu)에는 그 폴더가 없다 |
+| classroom-ops 브라우저(CI `classroom / browser`) · 합성 | 워크플로의 `node --test e2e/classroom/mac-devhost.test.mjs`와 `e2e`의 14단계(`test:classroom` … `test:classroom-report`), 이 브랜치의 webview 빌드(App에 주입한 것과 같은 파일, index.js `bdf7cc70442fcb8ed281877ab02f75fecef7ac101020c868a5108689b2797314`)로 | 15/15 PASS(`test:classroom-ops-lesson-settings` 포함: 첫 textarea는 여전히 대화 입력창) |
+| 시작 화면 브라우저(CI `start-page`) · 합성 | `test:start-page`, `test:trial-ux`, `test:voice:popup`, `test:goal:browser`, webview 빌드 뒤 | 4/4 PASS(trial-ux 49 PASS) |
+| 레지스트리 게이트 · 합성 | `python3 scripts/next-work.py --check`, `python3 scripts/check-registry.py`, `python3 scripts/check-registry-coverage.py` | 모두 exit 0 |
+| NOT RUN | — | 1차의 NOT RUN 그대로(AE-T01의 AE-02 절반 #555, 다른 수업 버전의 App 실행, 거절 문장의 App 표시, 원본 `test:lesson:mac`, Windows, 실제 학생, 실제 모델). 이번에 App에서 돌리지 않은 것: 채팅 화면보다 늦게 오는 수업 — App에서는 Service를 멈췄다가 다시 살려야 하고, 그때 프로필을 다시 받는 경로가 따로 있어 그 경로만으로 통과하거나 실패할 수 있으므로, 같은 webview 빌드를 Chromium에서 메시지 순서를 정해 돌렸다(위 ①·⑧). 활동 없는 좌석은 출시된 App에 생기지 않는다(위 데이터 문단). `e2e/lesson-studio/mac.mjs`는 다시 돌리지 않았다: 접힌 블록의 DOM은 1차와 같고, 그 스크립트가 기대는 첫 `.hp-rail-lesson`·첫 textarea는 이번 빌드에서 smoke·App의 layout 검사가 다시 확인했다 |
+
+리뷰 2차(2026-10-06)가 찾은 것과 한 일. 채팅 화면이 수업보다 먼저 그려지면(config가 아직 없거나, 같은 활동의 첫 config에 프로필이 없어
+다시 그려지지 않음) 나중 config의 목표가 화면에 오는 길은 효과 하나뿐이었고, 어떤 검사도 그 효과를 지나지 않았다(그 줄을 지워도 smoke와
+App이 통과했고, 그러면 목표가 안 보이고 첫 저장이 revision 0에서 나가 stale로 거절된다) → 저장 답만 상태로 두고 그릴 때마다 config와
+합친다. 그 경로를 보는 검사가 없었다 → 빌드한 webview를 Chromium에서 시간 순서대로 돌리는 검사를 CI(`start-page`)에 더했다(P1·P2를
+잡는다). 다른 화면의 저장이 펼쳐 둔 칸의 저장하지 않은 글을 지웠다 → 적던 칸은 남기고 base를 옮기고 문장을 띄운다(브라우저 검사와 App의
+두 화면 단계, P3–P6). 증거의 hash가 앞 8자뿐이었고 사진은 다시 열 수 없었다 → 번들 sha256 전체, 판정은 DOM 프로브라고 밝히고 프로브
+파일을 커밋했다. 지난 버전 레코드의 보존과 삭제 → 코드는 바꾸지 않고 Jay의 열린 질문으로 올렸다(위 데이터 문단). 활동 없는 좌석의 키 →
+출시된 App에서는 생기지 않는 이유를 코드(`goalScopeKey` 주석)와 위 데이터 문단에 적었다. `verification_inputs`는 이 항목에만 있는
+파일을 고정한다. 여러 기능이 함께 쓰는 호스트 처리기(`chatPanelProvider.ts`)와 `MissionHeader.tsx`는 고정한 smoke·브라우저 검사·App
+검사가 덮는다(파일째 고정하면 상관없는 수정에도 항목이 다시 열린다). 브라우저 검사를 `verification_inputs`에 더했다. trial-ux가 git
+저장소가 아닌 사본에서 보고서를 쓰지 못한 것(49 PASS, FAIL 0)은 환경 문제라 고칠 것이 없다.
+
+### 실행 기록 — 리뷰 1차 수정 때 (빌드 `c5beca34`)
+
+그때의 기록이다. 주입한 번들의 sha256 전체: `dist/extension.js` `2e709ee8ff94992c81ed7c0d1f3fe5975cd31a03c9c8d22a974de083ad4b3931`,
+`webview-ui/dist/assets/index.js` `8d47e2266ade063fa8de24050129fe7f45c5a7329a54fc56a8325faf35bdf131`,
+`webview-ui/dist/assets/index.css` `0f87e7eadaf209d49e86197a3b2911a2f615ddb4d02f9fae1f671972a7497137`.
+
+| 층 · 증거 종류 | 명령 | 결과 |
+|---|---|---|
+| 규칙·실제 호스트 처리와 config 경로·실제 채팅 화면 렌더 · 합성 | `cd extensions/hypeproof-chat && node --experimental-strip-types test/student-goal.smoke.mjs` | PASS 21. 저장은 목표·기준만 남기고 수업 기준을 실을 수 없음, 다른 과정·다음 버전·다른 활동·키를 바꿔 넣은 레코드(다른 수업·다른 활동)의 목표 미복원, 같은 수업 버전의 두 활동 목표가 서로를 덮지 않음, 예전 revision 저장 거절, 칸은 불러온 revision에서 저장을 시작하고 바뀐 것이 없거나 다섯 줄·길이를 넘거나 앞 저장의 답을 기다리는 동안에는 저장하지 않음, 답의 요청 id로 저장한 화면만 "저장했어요."·거절 문장을 보임(평범하지 않은 id는 돌려보내지 않음), 거절·쓰기 실패는 목표를 싣지 않음(stale만 더 새 목표를 실음, 호스트가 수업을 잃었을 때도 화면의 목표가 그대로), 새 호스트(재접속)의 config가 같은 목표로 시작, 목표를 보거나 저장해도 완료·단계 이동·관찰·수업 보드 기록 0, 접힌 블록은 입력 칸을 더하지 않고 첫 `.hp-rail-lesson`은 수업 카드, 펼친 칸은 저장된 목표를 담고 바뀐 것이 있을 때만 저장 버튼이 눌림, 거절 문장은 alert·"저장했어요."는 저장한 revision일 때만, 영역 A의 목표 줄은 수업 조건 아래·☑와 버튼 없음, 강사 화면에는 없음. 두 화면이 같은 revision에서 동시에 저장하면 하나만 저장되고 답은 보낸 순서대로 온다. 실제 처리기에 결함을 하나씩 심은 번들로 역할을 나눠 확인: revision 검사를 빼면 둘 다 저장되어 첫 화면의 목표가 덮이고, 저장 큐를 빼면 하나는 여전히 거절되며 답 순서만 뒤바뀐다(거절은 revision 검사, 큐는 순서). 각 판정은 심은 화면·잘못된 구현 대조군으로 살아 있음을 확인 |
+| 구현에 심은 결함 46종 · 합성 | 세션 scratch 스크립트(커밋하지 않음): 한 번에 하나씩 심고 위 smoke 실행 후 원복 | 36/46 잡힘. 이 층에서 못 잡은 10종은 시간에 따라 움직이는 웹뷰 동작과 CSS다(저장을 보내지 않음, 호스트 답을 무시, 마운트 뒤 config의 목표 무시, 모든 화면이 모든 답의 문장을 보임, 대기 표시 없음, 칸이 revision 0에서 저장, 칸이 호스트를 따르지 않음 세 가지, 낮은 창에서 목표 줄 순서 규칙 삭제). 서버 렌더는 효과를 돌리지 않고 블록을 펼치지 않으므로 아래 App에 심어 실행했다 |
+| 확장 전체 · 합성 | `npm run typecheck`, `webview-ui`에서 `npx tsc -b`, `npm test`의 각 단계 | typecheck·tsc 0건. smoke 134 PASS(위 smoke 포함), classroom-ops review·chalk 도구·생성기·판정·activity-resume PASS. instructor-render 17건은 이 Mac의 `~/node_modules/react`(React 19)가 webview의 React 18보다 먼저 잡혀 React가 두 벌이 되는 환경 결함으로 실패하고, React를 webview의 한 벌로 묶어(esbuild `--alias:react`) 같은 테스트를 돌리면 17/17 PASS. CI(ubuntu)에는 그 폴더가 없다 |
+| classroom-ops 브라우저(CI `classroom / browser`) · 합성 | 워크플로의 `node --test e2e/classroom/mac-devhost.test.mjs`와 `e2e`의 14단계(`test:classroom` … `test:classroom-report`), webview 빌드 뒤 | 15/15 PASS. `test:classroom-ops-lesson-settings`도 통과(리뷰 때 `3218f67b`에서는 첫 textarea가 접힌 목표 블록의 숨은 칸이라 실패). 심은 결함: 접힌 블록이 칸을 그리게 한 빌드로 같은 단계 → FAIL(`locator('textarea').first()` 대기 시간 초과, 리뷰 때와 같은 신호) |
+| 실제 App · 실기(App) + 합성 Service | 위 "가장 빠른 확인" 명령(기기 전체 app lock 안에서, `HPS_QUIET_NO_HIDE=1`) | PASS, 같은 빌드로 4회. 빌드 커밋 `c5beca34`. 셸 HypeProof Studio 0.1.51(`d4db9049`) 사본(LSUIElement=1)에 확장 주입(번들 sha256 전체는 이 표 위). Service는 `canary-sdk-contract`(`/2`), 수업 `sx-week3` `m2026.10.05-1`(sha256 `94c9aced1b5f39d3ce1486db707619698ba3c59629a95445f3e19cd8b477313a`), 완료 조건 c1,c2,c3. macOS 15.7.4(24G517) arm64, Node 24.4.1, Playwright 1.60.0. 관측: 접힌 블록 안 칸 0·첫 입력 칸은 블록 밖·첫 `.hp-rail-lesson`은 "이번 단계 안내 · 1. 기대 조건" → 펼친 칸은 비어 있고 저장 버튼 꺼짐 → 첫 저장(revision 1) → 고친 목표와 바꾼 기준을 앞뒤 빈칸·빈 줄을 섞어 두 번 눌러 저장: revision 2, "저장했어요.", 오류 문장 0, 칸에는 빈칸·빈 줄을 뺀 저장값, 저장 버튼 꺼짐 → 영역 A·rail에 새 목표와 기준, 수업 조건 세 줄·단계 확인 기준 그대로, ☑ 0, 완료 버튼 꺼짐 → 1280×450(웹뷰 1280×387): 주차·미션·완료 조건·남은 단계·첫 행동이 다 보이고 목표 줄은 완료 조건 뒤, 화면 안 → 결과를 옆에 띄우고 채팅을 앞으로, 대화를 끝까지 내려도(셸 scrollTop 1235) 목표 줄 화면 안 → 앱 재실행: 같은 새 목표, 펼친 칸에도 그대로 → 결과를 옆에 둔 1280×450(웹뷰 640×387): 부분은 다 보이고 목표 줄은 완료 조건 뒤 헤더 안 스크롤에 있음(내리면 화면 안) → 사이드바 채팅을 열어 두 화면, 편집기 쪽에서 목표와 기준을 비워 저장: 두 화면 모두 영역 A 줄 없음·revision 3·"내 목표와 완료 기준 적기", 사이드바에 펼쳐 둔 칸도 비워짐, "저장했어요."는 편집기 쪽에만. 과제 기록 phase는 처음부터 끝까지 `assigned`. 심은 화면 8종(접힌 블록 안 칸·블록에 수업 카드 클래스·수업 조건 글자·조건 ☑·목표 글자·목표 줄 화면 밖·낮은 창에서 목표 줄을 앞으로, 두 크기) 모두 보고됨. 판정은 모두 DOM 프로브였다. 그 실행의 사진과 프로브 파일은 로컬에만 있었고 지금은 남아 있지 않다(2차 기록은 프로브 파일을 커밋했다) |
+| App에 심은 결함 11종 · 실기 | 같은 명령, 결함을 하나씩 심은 webview 빌드로(확장은 같은 빌드) | FAIL이어야 하는 9종 모두 FAIL(잡힘): 칸이 revision 0에서 저장 → 고친 저장이 stale로 거절되어 영역 A가 첫 목표에 머묾(spec 416행) · 칸이 호스트를 따르지 않음(세 가지 중 둘) → 칸의 revision도 따르지 않아 같은 자리에서 실패 · 칸의 글은 그대로 두고 revision만 따름 → 저장 뒤 칸에 앞뒤 빈칸이 남음(421행) · 두 번 누르면 두 번 보냄 → 둘째가 stale로 거절되어 "저장했어요." 대신 거절 문장(417행) · 저장을 보내지 않음, 호스트 답을 무시 → 첫 저장 뒤 영역 A에 목표 줄 없음(396행) · 모든 화면이 모든 답의 문장을 보임 → 저장하지 않은 사이드바에 "저장했어요."(528행) · 낮은 창의 목표 줄 순서 규칙 삭제 → "the goal line is not after the completion conditions"(324행). 통과한 2종(잡지 못함): 마운트 뒤 config의 목표 무시 — 이 실행에서 목표를 실은 config는 모두 채팅 화면이 새로 그려질 때(활동 id가 키) 처음부터 실려 와 그 효과를 거치지 않는다(리뷰 2차가 이 빈틈을 찾았다: 위 2차 기록의 P1·P2). 저장 대기 중 버튼을 끄지 않음 — 두 번째 저장을 막는 것은 요청 id 확인(위 두 번 누르기로 확인)이고 버튼이 꺼져 있는 시간은 답이 오기 전 몇 ms라 App에서 잴 수 없다(대기 중 꺼짐은 렌더 검사로 확인). 실행 뒤 앱 사본을 수정 빌드로 되돌리고 PASS를 다시 확인했다 |
+| REQ-STUDIO-LESSON 실제 Mac(`e2e/lesson-studio/mac.mjs`, `npm run test:lesson:mac`) · 실기(App) + 로컬 Service | 같은 앱 사본, app lock·idle gate 안에서, 창은 화면 밖·포커스 없음·`--use-inmemory-secretstorage`(scratch preload로 fixture와 같은 조용한 처리) | 원본 스크립트는 앱을 띄우기 전에 실패한다: 합성 수업을 고정할 때 Service가 422 `pedagogy_blocked`(선행 조건이 비어 있음)로 거절. origin/main `ccba1b0c`에서도 같다(이 항목과 무관, 후속). 또 시작 화면 버튼을 "수업 시작하기"로만 찾는데 지금 화면은 "이어서 하기"다. 이 셸은 개발 확장(`^1.116.0`)을 버전 불일치로 거절하므로 주입한 내장 확장(같은 빌드)이 돈다. 이 두 군데만 고친 scratch 사본(커밋 안 함)으로: 수정 빌드 → PASS(첫 `.hp-rail-lesson`이 "합성 홈페이지 강의" 수업 카드, 첫 textarea에 과제가 들어감). 심은 결함(목표 블록에 수업 카드 클래스) → FAIL(첫 `.hp-rail-lesson`이 목표 블록을 읽음, 리뷰가 본 실패와 같음) |
+| 같은 화면의 다른 App 검사 · 실기(App) + 합성 Service | 같은 앱 사본과 gate로 `npx playwright test -c sx/playwright.config.ts`(task-flow·home·goal 전부) | 3/3 PASS(home-app의 영역 A·낮은 창·좁은 창·Primary 하나 검사 포함) |
+| 시작 화면 브라우저(CI `start-page`) · 합성 | `test:start-page`, `test:trial-ux`, `test:voice:popup`, webview 빌드 뒤 | 3/3 PASS |
+| 레지스트리 게이트 · 합성 | `python3 scripts/next-work.py --check`, `python3 scripts/check-registry.py`, `python3 scripts/check-registry-coverage.py` | 모두 exit 0 |
+| NOT RUN | — | AE-T01의 AE-02 절반(자료 선택·요청 payload, #555). 다른 수업 버전의 App 실행: 수업이 고정된 좌석은 활동 id에 수업이 들어가(Service `activityIdentity`) 새 버전 = 새 코드·새 활동이고 시작 화면의 "이 활동 시작하기"로 다른 폴더가 열릴 수 있어 그 이유만으로 통과할 수 있으므로, 버전·활동 경계는 위 실제 호스트 처리로 확인했다. 거절 문장의 App 표시: 한 화면에서는 stale 저장을 만들 수 없고 다른 거절은 호스트가 수업을 잃어야 해서, 호스트 처리와 렌더 검사로 확인했다. 원본 `test:lesson:mac`(위 이유). Windows, 실제 학생, 실제 모델 |
+
+실행 중 계측기 쪽 문제 두 건을 먼저 고쳤다. 첫 실행은 조용한 모드가 앱을 숨겨 화면 사진이 멈췄고(사진을 선택 사항으로 바꾸고
+`HPS_QUIET_NO_HIDE=1`로 실행), 둘째 실행은 새 버전 코드에서 시작 화면 버튼이 "이 활동 시작하기"라 fixture가 기다리던
+"이어서 하기"를 찾지 못했다(위 NOT RUN 사유로 그 단계를 뺐다). 셋째 실행은 통과했지만 사진에서 rail의 목표 줄이 대화를 내리면 고정된
+헤더 아래로 사라지는 것이 보여, 설계(현재 과제 요약을 고정)에 맞게 목표 줄을 영역 A로 옮겼다. 그 넷째 실행(빌드 `e23d47e3`)이 리뷰 전
+기록이다.
+
+리뷰(2026-10-06)가 찾은 것과 고친 것. 접힌 블록의 숨은 칸이 화면의 첫 textarea가 되어 CI의 classroom-ops `lesson-settings`가 실패했고,
+블록이 `.hp-rail-lesson` 클래스를 써서 `lesson-studio/mac.mjs`가 수업 카드 대신 목표 블록을 읽었다 → 칸은 펼쳤을 때만 그리고 블록은
+`hp-rail-goal` 클래스(모양은 같음). 저장된 목표를 고치는 App 검사가 없었다 → 고친 저장·두 번 누르기·칸 되읽기·비우기를 더했고
+revision 0에서 저장하는 빌드가 실패함을 확인. 저장 답이 모든 화면에 "저장했어요."를 띄웠고, 호스트가 수업을 잃은 때의 거절은 화면의
+목표와 적던 글을 지웠다 → 답에 요청 id, 거절은 목표를 싣지 않음. 두 화면 동시 저장의 대조군이 큐가 이중 저장을 막는다고 말했다 →
+막는 것은 revision 검사, 큐는 답 순서(결함을 심은 실제 처리기로 확인). 헤더 고정은 넓은 창에서만 쟀다 → 낮은 창 두 크기를 재고, 문구를
+"두 줄까지"로 맞췄다. 활동별 저장 분리, 거절 문장 표시, 칸이 호스트를 따르는지를 검사하지 않았다 → 위 smoke와 App 검사.

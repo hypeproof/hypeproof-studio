@@ -96,6 +96,8 @@ export interface EffortRequestRecord {
 export interface ChatConfig {
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean};
   activityDraft?: import('./activityDraft').ActivityDraft;
+  /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
+  studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
   effortNotice?: string;
@@ -438,6 +440,10 @@ export type WebviewMessage = (
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
+  // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the
+  // lesson's own criteria are never part of it.
+  | ({ type: "goalSave" } & import("./studentGoal").GoalSaveRequest)
   // #751 U2 — the inbox of instructor notices/materials. `generation` is the connection the card list was drawn under: the
   // host answers a callback from an older one with nothing. Opening a card is kept on this device; it is not reported.
   | { type: "inboxRequest" }
@@ -503,6 +509,12 @@ export type HostMessage = (
   /** #751 G2 — the learner's saved work-surface entries for the lesson `sha256` (read from this device), and the rehearsal result. */
   | { type: "lessonWorkState"; sha256: string; work: Record<string, import("./lessonFocus").StepWork> }
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
+  /**
+   * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
+   * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the
+   * newer goal a `stale` save lost to; any other refusal carries none, so every view keeps the goal and the text it shows.
+   */
+  | ({ type: "goalState" } & import("./studentGoal").GoalAnswer)
   /** #751 U2 — always read from disk by the host; the webview holds no copy of record. */
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }

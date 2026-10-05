@@ -6,8 +6,8 @@
 // This screen does one thing: **keep you from losing track of what to do right now.**
 // So top to bottom it is week → one mission sentence → the 1–3 actions to do now →
 // completion conditions → "지난번 이어서" when an earlier session left the task mid-way
-// (SX-02) → steps remaining, and the growth-record entry sits **below that, at link
-// size** (SX-03).
+// (SX-02) → the learner's own goal when they wrote one (AE-01) → steps remaining, and the
+// growth-record entry sits **below that, at link size** (SX-03).
 // The largest type is the mission sentence — the 5-second recall test (SX-T01) looks at it.
 //
 // What is not here, and why:
@@ -60,6 +60,15 @@ export interface MissionHeaderProps {
    * there is one; this header only draws it, and only for a step of this lesson.
    */
   resume?: { step: string } | null;
+  /**
+   * AE-01 (#554) — the learner's own goal for this lesson, as the host stored it (`goalOfLesson`). It
+   * is the student's sentence, drawn quietly under the lesson's own conditions (at most two lines,
+   * read whole in the rail) so it stays with the header while the conversation scrolls or a result
+   * opens beside it. On a short window the header packs and the goal comes after the conditions,
+   * inside the header's own scroll (styles.css). Empty or absent: no line (nothing is invented).
+   * Editing lives in the rail (StudentGoal.tsx).
+   */
+  goal?: string | null;
 }
 
 export function MissionHeader(props: MissionHeaderProps) {
@@ -202,6 +211,16 @@ export function MissionHeader(props: MissionHeaderProps) {
           <button type="button" className="hp-cta-quiet" data-resume-step={resumeStep.id} onClick={() => resumeAt(resumeStep)}>
             지난번 이어서 · {resumeStep.title}
           </button>
+        </p>
+      ) : null}
+
+      {/* AE-01 — the learner's own goal, apart from the lesson's conditions above it: its own label, its own
+          class (the rehearsal read-back reads `hp-mission-completion-text` only), no mark, no button. */}
+      {props.goal ? (
+        <p className="hp-mission-goal">
+          <span className="hp-mission-goal-label">내 목표</span>
+          {" · "}
+          <span className="hp-mission-goal-text">{props.goal}</span>
         </p>
       ) : null}
 
