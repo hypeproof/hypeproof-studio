@@ -76,7 +76,7 @@ The synthetic CR-20 figures of this run (not CR-T20): 61–63 ms from opening th
 | Command | Result |
 |---|---|
 | `cd worker && npm test` | exit 0 (`cr-traceability: OK — 84 requirements · 80 tests`, `cr-recon (CR-T01): OK`, `cr-switch (CR-T02 Worker half): OK`) |
-| `python3 scripts/next-work.py --check` (Harness `0d27ffe`) | exit 0 |
+| `python3 scripts/next-work.py --check` (Harness at the CI pin `539560f1` and at `0d27ffe`) | exit 0 |
 | `python3 scripts/check-registry.py` | OK |
 | `align.py check --item cr-e2e` (Harness `align-main`) | chain intact |
 | `python3 scripts/test-studio-dev.py`, `local-runtime.smoke.mjs`, `codex-rehearsal.test.mjs`, `scripts/test/review-pr-shell.test.sh` | pass (review-pr-shell: 48 passed) |
