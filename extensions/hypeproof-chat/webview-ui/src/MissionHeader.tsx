@@ -14,21 +14,26 @@
 //   · a progress card — SX-51. "남은 단계 3" is a **sentence**, not a number card.
 //   · interpretive sentences — interpretation happens only in the retrospective and the growth record (SX-17).
 //
-// The webview holding the current step is **P0-only**. The design says the host owns
-// the truth and pushes it down as `learningState` (§정보 구조 "호스트·웹뷰·워커의
-// 경계"). That state machine is SX-55/P1-B's job, and with no learning events yet there
-// is no basis for judging completion. So P0 keeps only a **view state** — "which step am
-// I looking at" — and draws every completion condition as unchecked (☐). The check marks
-// are filled in by P1, where the events come from — drawing a ✓ with no evidence is the
-// one thing this product must most avoid.
+// Which step the student is LOOKING AT is a view state the webview keeps. The truth about
+// the task is the host's (§정보 구조 "호스트·웹뷰·워커의 경계"): it judges the SX-14 gate
+// from the learning events and sends the result down as `learningState`, and this header
+// checks a completion condition off (☑) only where that verdict says it is met (`missing`,
+// SX-55). Where the host sends no verdict — a seat that records no learning events — every
+// condition stays unchecked (☐) and the header says so: drawing a check mark with no
+// evidence is the one thing this product must most avoid.
 
 import type { ResolvedProfile } from "../../src/protocol";
-import { actionsFrom, stepsRemaining, type LessonStep as Step } from "./missionHeaderLogic";
+import { actionsFrom, completionMet, stepsRemaining, type LessonStep as Step } from "./missionHeaderLogic";
 
 type Lesson = NonNullable<ResolvedProfile["lesson"]>;
 
 export interface MissionHeaderProps {
   lesson: Lesson | null;
+  /**
+   * The host's SX-14 gate verdict for this task (`learningState.complete.missing`): what is
+   * still missing. null when the host sends no verdict; then nothing is checked off.
+   */
+  missing?: ReadonlyArray<{ item?: string; event?: string }> | null;
   /** The id of the step currently being viewed. null means the first step. */
   currentStepId: string | null;
   onSelectStep: (stepId: string) => void;
@@ -126,17 +131,26 @@ export function MissionHeader(props: MissionHeaderProps) {
 
       {learning?.completion?.length ? (
         <ul className="hp-mission-completion" aria-label="이번 주차의 완료 조건">
-          {learning.completion.map((item) => (
-            <li key={item.id}>
-              {/* SX-50 — state is never expressed by color alone. Icon + wording together.
-                  P0 has no events to judge on, so everything is unchecked, and we say so. */}
-              <span className="hp-mark" aria-hidden="true">☐</span>
-              <span className="hp-mission-completion-text">{item.text}</span>
-            </li>
-          ))}
+          {learning.completion.map((item) => {
+            const met = props.missing ? completionMet(item, props.missing) : false;
+            return (
+              <li key={item.id} data-met={met ? "yes" : "no"}>
+                {/* SX-50 — state is never expressed by color alone: an icon AND words. The mark
+                    carries its state for a screen reader too, now that marks differ. The rehearsal
+                    read-back (LessonStepPanel `drawnMission`) reads only the `-text` span, so the
+                    condition's wording stays exactly what the design file says. */}
+                <span className="hp-mark" role="img" aria-label={met ? "확인됨" : "아직"}>{met ? "☑" : "☐"}</span>
+                <span className="hp-mission-completion-text">{item.text}</span>
+              </li>
+            );
+          })}
           <li className="hp-mission-completion-note">
             <span className="hp-mark" aria-hidden="true">·</span>
-            <span>확인 표시는 직접 적고 시험한 기록이 쌓일 때 붙습니다. 지금은 아직 확인 전입니다.</span>
+            <span>
+              {props.missing
+                ? "☑ 표시는 내가 남긴 기록에서 확인된 것이에요."
+                : "확인 표시는 직접 적고 시험한 기록이 쌓일 때 붙습니다. 지금은 아직 확인 전입니다."}
+            </span>
           </li>
         </ul>
       ) : null}
