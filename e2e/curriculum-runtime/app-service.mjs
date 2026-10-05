@@ -16,6 +16,8 @@
 // and HPS_TEST_ORIGIN = http://{project}.test.invalid:<port>, so the App can publish a test
 // version and a request whose Host is a test origin reaches the published runtime.
 //
+// Every run also writes a director's issuer token for the same cohort and profile to `<token-file>.issuer` (cr-review).
+//
 // Control routes (the spec only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
 // (cr-evidence: removes one participant session key behind the record's back, with no tombstone,
 // so a stored draft's reference stops resolving; publish mode only).
@@ -26,7 +28,7 @@ import { writeFileSync } from "node:fs";
 const [portArg, tokenFile, switchArg, modeArg] = process.argv.slice(2);
 const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("../../worker/test/harness/index.mjs");
 const { getProfile } = await import("../../worker/src/profiles/index.ts");
-const { issue } = await import("../../worker/src/lib/tokens.ts");
+const { issue, issueIssuer } = await import("../../worker/src/lib/tokens.ts");
 
 // An adult, workshop-tier profile with browser control, image paste and an observation
 // format (every condition curriculumRuntimeAllowed and the validator ask for). Only the
@@ -57,6 +59,9 @@ const now = Date.now();
 await env.HPS_KV.put(`cohort:${cohort}:active_session`, JSON.stringify({ session_id: "cr-app-session", profile_id: profile.id, starts_at: new Date(now - 60_000).toISOString(), ends_at: new Date(now + 6 * 3600_000).toISOString() }));
 await env.HPS_KV.put(`cohort:${cohort}:roster`, JSON.stringify({ users: ["cr-adult-a"] }));
 writeFileSync(tokenFile, (await issue({ u: "cr-adult-a", c: cohort, p: profile.id }, 6, TEST_SECRET)).token);
+// cr-review (#1398): a director's issuer token whose scope covers this cohort and profile, next to
+// the learner's (`<token-file>.issuer`), for the director's Weekly Review screen (CR-51, CR-53).
+writeFileSync(`${tokenFile}.issuer`, (await issueIssuer({ issuer: "cr-director", scopes: [{ cohort, profiles: [profile.id] }] }, 6, TEST_SECRET)).token);
 
 // ── the scripted agent ───────────────────────────────────────────────────────
 
