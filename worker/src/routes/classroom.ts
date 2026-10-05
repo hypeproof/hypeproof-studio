@@ -12,7 +12,7 @@ import { isMinorCohort } from '../lib/moderation';
 import { opsEnabled } from './classroom-ops';
 import { NOT_FENCED } from '../lib/classroom-distribution-store';
 import { sha256Hex } from '../lib/modules';
-import { feedbackLoopEnabled, hasFeedback, parseResponse, responseFor, responseView, storedFeedback, type ResponseRow } from '../lib/feedback-loop';
+import { RECORD_PARTS, RECORDS_BODY_MAX, feedbackLoopEnabled, hasFeedback, maskRecords, parseResponse, parseShareRecords, responseFor, responseView, storedFeedback, type ResponseRow } from '../lib/feedback-loop';
 import { resolveEffectiveLesson } from '../lib/lesson-binding-store';
 
 type Row = {id:string;cohort_id:string;profile_id:string;student_id:string;recipient_id:string;session_id:string;kind:string;content_json:string;revision:number;status:string;feedback:string;next_action:string;created_at:number;expires_at:number};
@@ -25,6 +25,9 @@ const studentView=(r:Row)=>({...metadata(r),content:JSON.parse(r.content_json),f
 // Six 8,000-code-unit fields may each require six JSON bytes per unit (escaped controls).
 // Include bounded identifiers/consent metadata without changing the field limits.
 const shareLimit=bodyLimit({maxSize:6*8000*6+8192,onError:c=>c.json({error:'share too large',reason:'too_large'},413)});
+// #1013 EDU-04/05 — while the feedback loop is on, a submission may also carry the learner's records, so the cap grows by
+// the most they can add (RECORDS_BODY_MAX). Off, the cap is exactly the one above.
+const shareLimitWithRecords=bodyLimit({maxSize:6*8000*6+8192+RECORDS_BODY_MAX,onError:c=>c.json({error:'share too large',reason:'too_large'},413)});
 const limit=bodyLimit({maxSize:32*1024,onError:c=>c.json({error:'share too large'},413)});
 const json=async(c:any)=>{try{return await c.req.json();}catch{return null;}};
 // #1013 feedback-loop — the learner's answer to a person's feedback as a reader sees it, per share: the one bound to the
@@ -57,7 +60,7 @@ async function recordShareLesson(env:Env,p:TokenPayload,share:Row){
 }
 
 export const classroomStudent=new Hono<StudentEnv>();
-classroomStudent.use('*',shareLimit);
+classroomStudent.use('*',(c,next)=>(feedbackLoopEnabled(c.env)?shareLimitWithRecords:shareLimit)(c,next));
 classroomStudent.use('*',async(c,next)=>{
  c.header('cache-control','no-store');
  const token=bearer(c.req.header('authorization'));if(!token)return c.json({error:'student Bearer required'},401);
@@ -148,7 +151,8 @@ classroomStudent.get('/shares',async c=>{
  const p=c.get('student'),sid=c.req.query('session_id');if(sid!==undefined&&!idOK(sid))return c.json({error:'invalid session_id'},400);
  const rows=await c.env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE cohort_id=? AND student_id=? AND profile_id=? AND expires_at>?'+(sid===undefined?'':' AND session_id=?')+' ORDER BY created_at DESC LIMIT 100').bind(p.c,p.u,p.p,now(),...(sid===undefined?[]:[sid])).all<Row>();
  const list=rows.results??[],responses=await responsesFor(c.env,list);
- return c.json({shares:list.map(r=>withResponse(r,responses)),limit:100,filter:{session_id:sid??null}});
+ // #1013 — `share_records` names the records a submission may carry here; absent while the feedback loop is off.
+ return c.json({shares:list.map(r=>withResponse(r,responses)),limit:100,filter:{session_id:sid??null},...(feedbackLoopEnabled(c.env)?{share_records:[...RECORD_PARTS]}:{})});
 });
 classroomStudent.post('/shares',async c=>{
  const p=c.get('student'),b=await json(c);
@@ -156,10 +160,16 @@ classroomStudent.post('/shares',async c=>{
  // `question` = the learner's own words to the instructor, so help can be asked without sharing any conversation. Stored only
  // when sent: a request without it keeps the exact stored shape it had before (its retry still matches).
  const keys=['question','prompt','response','tool_summary','artifact_url','verification'];
- if(!b.content||typeof b.content!=='object'||Array.isArray(b.content)||Object.keys(b.content).some(k=>!keys.includes(k)))return c.json({error:'select supported content fields'},400);
+ // #1013 EDU-04/05 — with the feedback loop on, a submission may also carry the learner's own records (RECORD_PARTS). Off,
+ // a body naming them is refused right here exactly as before, and the stored content keeps its exact shape.
+ const accepted=feedbackLoopEnabled(c.env)?[...keys,...RECORD_PARTS]:keys;
+ if(!b.content||typeof b.content!=='object'||Array.isArray(b.content)||Object.keys(b.content).some(k=>!accepted.includes(k)))return c.json({error:'select supported content fields'},400);
  const content:Record<string,string>={};
  for(const k of keys){if(k==='question'&&b.content.question===undefined)continue;const value=b.content[k]??'';if(typeof value!=='string'||value.length>8000)return c.json({error:'invalid or excessive field'},400);content[k]=scrubSecrets(value);}
- if(!Object.values(content).some(v=>v.trim()))return c.json({error:'select content to share'},400);
+ const parsed=parseShareRecords(b.content,b.kind);
+ if(!parsed.ok)return c.json({error:'invalid record',reason:parsed.code},400);
+ const records=maskRecords(parsed.records,scrubSecrets);
+ if(!Object.values(content).some(v=>v.trim())&&!Object.keys(records).length)return c.json({error:'select content to share'},400);
  if(content.artifact_url){try{const url=new URL(content.artifact_url);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error();}catch{return c.json({error:'artifact must be an http(s) URL without credentials'},400);}}
  if((b.class_run_id!==undefined&&!idOK(b.class_run_id))||(b.grant_id!==undefined&&!idOK(b.grant_id)))return c.json({error:'invalid class or connection id'},400);
  // A native request names its class and connection and carries the Service-signed end time the learner consented to. The
@@ -188,7 +198,8 @@ classroomStudent.post('/shares',async c=>{
   return null;
  };
  if(hasRun){const x=await helpAssignment(c.env,p),no=refuse(x);if(no)return no;a=x as Assignment;}
- const contentJson=JSON.stringify(content);
+ // The records follow the six fields in a fixed order (parseShareRecords), so a retried share compares equal byte for byte.
+ const contentJson=JSON.stringify({...content,...records});
  // A retried id is the same request only with the same consent envelope: learner, class, recipient, kind, exact content and the
  // expiry that was granted (native: the signed end time, or the token's end if that came first; web: the duration counted from
  // creation, capped by the token). Anything else is a conflict, so a retry can neither widen the granted expiry nor pass an earlier class's record off
