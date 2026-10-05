@@ -198,10 +198,16 @@
         "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
       },
       {
-        "command": "hypeproof-chat.ventureIngest",
+        "command": "hypeproof-chat.wikiIngest",
         "title": "HypeProof: 이번 수업 정리하기 (팀 위키)",
         "icon": "$(notebook)",
-        "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
+        "command": "hypeproof-chat.deckDraft",
+        "title": "HypeProof: 덱 초안 만들기",
+        "icon": "$(preview)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
       },
       {
         "command": "hypeproof-chat.curriculumSkills",
@@ -312,8 +318,12 @@
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
         },
         {
-          "command": "hypeproof-chat.ventureIngest",
-          "when": "hypeproof-chat.curriculumRuntimeEnabled"
+          "command": "hypeproof-chat.wikiIngest",
+          "when": "hypeproof-chat.learningWikiEnabled"
+        },
+        {
+          "command": "hypeproof-chat.deckDraft",
+          "when": "hypeproof-chat.learningWikiEnabled"
         },
         {
           "command": "hypeproof-chat.curriculumSkills",

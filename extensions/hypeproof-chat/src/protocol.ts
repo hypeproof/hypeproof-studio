@@ -250,6 +250,11 @@ export interface ResolvedProfile {
   /** CR-02 — Curriculum Runtime switch (`curriculum_runtime.enabled`), off when absent. */
   curriculum_runtime?: { enabled: boolean };
   /**
+   * Learning wiki and deck generator (App-side generic skills), off when absent. `plan` is the
+   * cohort's specialization: folder, audience, session label, deck template and per-session focus.
+   */
+  learning_wiki?: { enabled: boolean; plan?: import("./learningWiki").LearningWikiPlan };
+  /**
    * #306 — hardened native-browser session for minor cohorts. `mode: "safe"`
    * makes the host enable the locked-down `persist:hp-safe` integrated-browser
    * session (via the hypeproof.browser.safeSession setting). Absent / "browse"

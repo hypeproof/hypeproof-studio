@@ -43,7 +43,8 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
-import { VENTURE_DIR, applyProposal, archiveNotes, coachContext, ingestPrompt, initWiki, loadState, proposalFromText, readNotes, sessionHash, turnsFromEvents, writeWiki } from "./ventureMemory";
+import { applyWikiProposal, archiveNotes, coachContext, initWiki, jsonFromText, loadState, readNotes, renderWikiPages, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
+import { applyDeckProposal, deckPrompt, renderDeck, type DeckProposal } from "./deckGenerator";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
 import {
@@ -927,15 +928,26 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postMemoryState();
   }
 
+  // ── Learning wiki and deck generator (generic skills; a cohort specializes them via learning_wiki.plan) ──
+
+  /** Is the learning wiki on for the served profile? Re-read at every use. */
+  isLearningWikiEnabled(): boolean {
+    return this.cachedProfile?.learning_wiki?.enabled === true;
+  }
+
+  private learningWikiPlan(): LearningWikiPlan | undefined {
+    return this.cachedProfile?.learning_wiki?.plan;
+  }
+
   /**
-   * Venture Memory, local wiki (founder course): one ingest of this session's conversation (the
-   * spool's events.jsonl) and the student's notes (venture/notes/) into the workspace's venture/
-   * folder, then the weekly pack opens. The model call is one non-streaming coach-route request;
-   * only items citing a turn or a note of this session are kept. Nothing is stored on the Service.
+   * "이번 수업 정리하기": the wiki skill on this session's conversation (the spool's events.jsonl) and
+   * the notes in <wiki>/notes/, then, when the plan names slides for that session, the deck skill on
+   * those slides. Each skill is one non-streaming coach-route request; only cited items are kept.
+   * Nothing is stored on the Service.
    */
-  async ventureIngest(): Promise<void> {
-    if (!this.isCurriculumRuntimeEnabled()) {
-      this.postPageNotice("이 수업에서는 팀 위키 정리를 쓸 수 없어요.");
+  async wikiIngest(): Promise<void> {
+    if (!this.isLearningWikiEnabled()) {
+      this.postPageNotice("이 수업에서는 팀 위키를 쓸 수 없어요.");
       return;
     }
     const folder = vscode.workspace.workspaceFolders?.[0];
@@ -943,45 +955,106 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void vscode.window.showWarningMessage("HypeProof: 작업 폴더를 먼저 열어 주세요.");
       return;
     }
-    const dir = path.join(folder.uri.fsPath, VENTURE_DIR);
-    const state = initWiki(dir, folder.name);
-    const nextWeek = Math.min((state.weeks.length ? Math.max(...state.weeks) : 0) + 1, 6);
-    const pick = await vscode.window.showQuickPick(
-      [1, 2, 3, 4, 5, 6].map((week) => ({ label: `${week}주차`, description: week === nextWeek ? "이번 주" : undefined, week })),
-      { placeHolder: "몇 주차 수업을 정리할까요?" },
-    );
-    if (!pick) return;
+    const plan = this.learningWikiPlan();
+    const label = sessionLabel(plan);
+    const dir = wikiDir(folder.uri.fsPath, plan);
+    const state = initWiki(dir, folder.name, plan);
+    const session = await this.pickSession(state, plan, `몇 ${label} 수업을 정리할까요?`);
+    if (session === undefined) return;
     try { await this.spool?.flush(); } catch {}
     const sessionDir = this.spool?.currentSessionDir() ?? null;
     let events = "";
     try { if (sessionDir) events = fs.readFileSync(path.join(sessionDir, "events.jsonl"), "utf8"); } catch {}
     const sources = { turns: turnsFromEvents(events), notes: readNotes(dir) };
     if (!sources.turns.length && !Object.keys(sources.notes).length) {
-      void vscode.window.showInformationMessage("HypeProof: 정리할 대화나 메모가 아직 없어요.");
+      this.postPageNotice("정리할 대화나 메모가 아직 없어요.");
       return;
     }
-    const sid = sessionHash(pick.week, sources);
-    if (state.sessions.includes(sid)) {
-      void vscode.window.showInformationMessage(`HypeProof: ${pick.week}주차 이 수업은 이미 정리했어요.`);
+    const sid = sessionHash(session, sources);
+    if (state.sessions_ingested.includes(sid)) {
+      this.postPageNotice(`${session}${label} 이 대화는 이미 정리했어요.`);
       return;
     }
     const answer = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "HypeProof: 이번 수업을 팀 위키에 정리하는 중…" },
-      () => this.completeSkill(ingestPrompt(state, pick.week, sources), {}),
+      { location: vscode.ProgressLocation.Window, title: "HypeProof: 팀 위키 정리 중" },
+      () => this.completeSkill(wikiPrompt(state, session, sources, plan), {}),
     );
-    const proposal = answer.ok ? proposalFromText(answer.text) : null;
+    const proposal = answer.ok ? jsonFromText<WikiProposal>(answer.text) : null;
     if (!proposal) {
-      void vscode.window.showWarningMessage("HypeProof: 정리하지 못했어요. 팀 위키는 바뀌지 않았어요. 잠시 뒤 다시 해 주세요.");
+      this.postPageNotice("정리하지 못했어요. 팀 위키는 바뀌지 않았어요. 잠시 뒤 다시 해 주세요.");
       return;
     }
     const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
-    const r = applyProposal(state, pick.week, sources, proposal, sid, today);
-    writeWiki(dir, r.state);
+    const r = applyWikiProposal(state, session, sources, proposal, sid, today, plan);
+    saveState(dir, r.state);
+    writeFiles(dir, renderWikiPages(r.state, plan));
     archiveNotes(dir, sources.notes);
-    // The summary goes to the chat, not a toast: a notification pauses the integrated browser
-    // ("Paused due to Notification"), which would hide the weekly pack just opened.
-    this.postPageNotice(`팀 위키를 정리했어요. ${r.logLine.replace(/^\[[^\]]*\] /, "")}${r.dropped.length ? ` · 인용이 없어 뺀 ${r.dropped.length}개는 venture/log.md에 있어요` : ""}`);
+    const focus = sessionFocus(plan, session);
+    let deckLine = "";
+    if (plan?.deck && focus.length) deckLine = await this.draftDeck(dir, r.state, plan, focus, session);
+    // In-chat, not a toast: a notification pauses the integrated browser over the weekly pack.
+    this.postPageNotice(`팀 위키를 정리했어요. ${r.logLine.replace(/^\[[^\]]*\] /, "")}${deckLine}${r.dropped.length ? ` · 인용이 없어 뺀 것은 log.md에 있어요` : ""}`);
+    const open = plan?.deck ? "deck.html" : "index.md";
+    await vscode.commands.executeCommand(open.endsWith(".html") ? "hypeproof-chat.previewActiveFile" : "vscode.open", vscode.Uri.file(path.join(dir, open)));
+  }
+
+  /** "덱 초안 만들기": the deck skill on slides the student picks (the plan's focus for the latest session is preselected). */
+  async deckDraft(): Promise<void> {
+    if (!this.isLearningWikiEnabled()) {
+      this.postPageNotice("이 수업에서는 덱 초안을 쓸 수 없어요.");
+      return;
+    }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    const plan = this.learningWikiPlan();
+    if (!folder || !plan?.deck) {
+      this.postPageNotice("이 수업에는 덱 템플릿이 없어요.");
+      return;
+    }
+    const dir = wikiDir(folder.uri.fsPath, plan);
+    const state = loadState(dir);
+    if (!state || !state.sessions.length) {
+      this.postPageNotice("먼저 '이번 수업 정리하기'로 팀 위키를 만들어 주세요.");
+      return;
+    }
+    const last = Math.max(...state.sessions);
+    const focus = new Set(sessionFocus(plan, last));
+    const picked = await vscode.window.showQuickPick(
+      plan.deck.slides.map((x) => ({ label: `${x.no} · ${x.title}`, description: x.question, picked: focus.has(x.no), no: x.no })),
+      { canPickMany: true, placeHolder: "초안을 쓸 장을 고르세요" },
+    );
+    if (!picked?.length) return;
+    const line = await this.draftDeck(dir, state, plan, picked.map((x) => x.no), last);
+    this.postPageNotice(`덱 초안을 썼어요${line}`);
     await vscode.commands.executeCommand("hypeproof-chat.previewActiveFile", vscode.Uri.file(path.join(dir, "deck.html")));
+  }
+
+  /** One deck-skill run; writes deck/ and deck.html and returns a short summary line. */
+  private async draftDeck(dir: string, state: WikiState, plan: LearningWikiPlan, slides: number[], session: number): Promise<string> {
+    const template = plan.deck!;
+    const answer = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 초안 쓰는 중" },
+      () => this.completeSkill(deckPrompt(state, template, slides, plan), {}),
+    );
+    const proposal = answer.ok ? jsonFromText<DeckProposal>(answer.text) : null;
+    if (!proposal) {
+      writeFiles(dir, renderDeck(state, template, plan));
+      return " · 덱 초안은 쓰지 못했어요";
+    }
+    const r = applyDeckProposal(state, template, slides, proposal, session);
+    saveState(dir, r.state);
+    writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) });
+    return ` · 덱 ${r.written.join("·") || "없음"}장 초안 (${Object.keys(r.state.deck).length}/${template.slides.length})${r.dropped.length ? ` · 번호 없어 뺀 문장 ${r.dropped.length}` : ""}`;
+  }
+
+  private async pickSession(state: WikiState, plan: LearningWikiPlan | undefined, placeHolder: string): Promise<number | undefined> {
+    const label = sessionLabel(plan);
+    const count = sessionCount(plan);
+    const next = Math.min((state.sessions.length ? Math.max(...state.sessions) : 0) + 1, count);
+    const pick = await vscode.window.showQuickPick(
+      Array.from({ length: count }, (_, i) => i + 1).map((n) => ({ label: `${n}${label}`, description: n === next ? `이번 ${label}` : undefined, n })),
+      { placeHolder },
+    );
+    return pick?.n;
   }
 
   // ── Curriculum skills (cr-skills, #1396) ────────────────────────────────────
@@ -1954,6 +2027,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         );
         // CR-02 (recon R3) — mirror the Curriculum Runtime switch; CR commands are gated on it.
         void vscode.commands.executeCommand("setContext", CR_CONTEXT_KEY, crContextKeyValue(p));
+        // Learning wiki and deck generator commands follow the cohort's own switch.
+        void vscode.commands.executeCommand("setContext", "hypeproof-chat.learningWikiEnabled", p?.learning_wiki?.enabled === true);
         if (!isCurriculumRuntimeEnabled(p)) this.clearElementContext();
         // CR-10 — the delete command follows whoever is signed in now (no disk I/O).
         void this.refreshCrBytesContext();
@@ -3739,13 +3814,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const notice = openWorldNotice(open);
       if (notice) userTextForModel = `${notice}\n\n${userTextForModel}`;
     }
-    // Venture Memory (local wiki): on the first send of a conversation in a founder-course workspace,
-    // the team's summary is laid in front of the model input (not the student's bubble), so the coach
-    // can open with "what did you test last week?" and compare the answer with the wiki.
-    if (history.length === 0 && this.isCurriculumRuntimeEnabled()) {
+    // Learning wiki: on the first send of a conversation, the team's summary (and, from the cohort's
+    // plan, the next session's question and deck focus) is laid in front of the model input, not the
+    // student's bubble, so the coach can open with the last session's test.
+    if (history.length === 0 && this.isLearningWikiEnabled()) {
       const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const wiki = root ? loadState(path.join(root, VENTURE_DIR)) : null;
-      if (wiki?.weeks.length) userTextForModel = `${coachContext(wiki)}\n\n${userTextForModel}`;
+      const plan = this.learningWikiPlan();
+      const wiki = root ? loadState(wikiDir(root, plan)) : null;
+      if (wiki?.sessions.length) userTextForModel = `${coachContext(wiki, plan)}\n\n${userTextForModel}`;
     }
     // #278 Phase 2 — fold any queued page screenshot into this turn's images.
     // CR-09 — a picked element's crop joins the queued page screenshot; neither replaces the other.

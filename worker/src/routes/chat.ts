@@ -484,6 +484,8 @@ chat.get("/profile", async (c) => {
     // CR-02 (recon R3) — the Curriculum Runtime switch, off unless the profile says so,
     // and never served on for a minor cohort (curriculumRuntimeAllowed, #1391).
     curriculum_runtime: { enabled: curriculumRuntimeAllowed(served) },
+    // Learning wiki and deck generator (App-side skills): the cohort's switch and its plan.
+    learning_wiki: served.learning_wiki?.enabled === true ? { enabled: true, ...(served.learning_wiki.plan ? { plan: served.learning_wiki.plan } : {}) } : { enabled: false },
     // #306 — per-cohort hardened native-browser session. Minor cohorts send
     // mode="safe"; the Studio host maps it to hypeproof.browser.safeSession so
     // the integrated browser uses the locked-down persist:hp-safe session.

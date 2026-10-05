@@ -634,7 +634,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => provider.publishTestVersion()),
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
-    vscode.commands.registerCommand("hypeproof-chat.ventureIngest", () => provider.ventureIngest()),
+    vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
+    vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
     // CR-10 — delete the stored browser-result bytes. Gated on "bytes are stored", NOT on
     // the CR switch: what an earlier switch-on stored stays deletable after it goes off.

@@ -92,8 +92,8 @@ export const CR_TEST_ORIGIN_EVENTS_ROUTE = "POST <test-origin>/l/:link/__hp/even
 export const CR_SURFACES: CrSurfaceInventory = {
   // cr-verify adds "Test my product" (CR-12); cr-publish adds "Publish for user test" (CR-17);
   // cr-evidence adds the experiment evidence panel (CR-24–CR-27, CR-69); cr-memory the Venture Memory panel (CR-35–CR-38);
-  // cr-skills the curriculum skills panel (CR-43–CR-47); the local Venture Memory wiki its ingest command.
-  commands: ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills", "hypeproof-chat.ventureIngest"],
+  // cr-skills the curriculum skills panel (CR-43–CR-47).
+  commands: ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills"],
   mcpTools: [...CR_BROWSER_TOOL_NAMES, ...CR_VERIFY_TOOL_NAMES].map((n) => `mcp__hypeproof__${n}`),
   proxyTools: [...CR_BROWSER_TOOL_NAMES, ...CR_VERIFY_TOOL_NAMES],
   webviewMessages: ["removeElementContext", "verifyOpen", "verifyStart", "verifyRetest", "verifyFix", "publishOpen", "publishSubmit", "publishLink", "publishRevoke", "evidenceOpen", "evidenceNote", "evidenceDraft", "evidenceReview", "evidenceDelete", "memoryOpen", "memoryDiff", "memoryDecision", "skillsOpen", "skillRun"],
