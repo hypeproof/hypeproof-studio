@@ -2036,7 +2036,7 @@
     {
       "id": "ST-DES-CLASSROOM-ADMIN",
       "stage": "design",
-      "owner": "rabqatab",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN"
       ],
@@ -3033,7 +3033,7 @@
     {
       "id": "ST-IMP-CR-PUBLISH",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR"
@@ -3089,7 +3089,7 @@
     {
       "id": "ST-IMP-CR-EVIDENCE",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3122,7 +3122,7 @@
     {
       "id": "ST-IMP-CR-MEMORY",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3150,7 +3150,7 @@
     {
       "id": "ST-IMP-CR-SKILLS",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
