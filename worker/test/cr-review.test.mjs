@@ -3,18 +3,22 @@
 // Service router and token verifier; packs are composed from real Venture Memory over real
 // participant sessions, manual records and hps-evidence-draft/1 revisions. The App's ReviewSession
 // is driven against the same router; the model is a planted answer to the Experiment skill's real
-// prompt, and once (SQLite) the real coach route with the provider stubbed. Synthetic identities;
-// no network.
+// prompt, once (SQLite) the real coach route with the provider stubbed, and for CR-T58 the real
+// provider's answers replayed from a recording. Synthetic identities; no network, except in
+// `--record-provider`, which makes that recording (below, "CR-T58 against a recorded provider").
 //
 // CR-T02 (Worker half: the review routes) · CR-T45 · CR-T46 · CR-T47 · CR-T48 (Service half) ·
-// CR-T49 · CR-T58 (synthetic provider latency) · CR-69 with packs (a regression check of the
-// deletion paths, the retention sweep included). Each with a positive sample that must pass and
-// a planted defect that must be caught.
+// CR-T49 · CR-T58 (synthetic provider latency, and the recorded provider) · CR-69 with packs (a
+// regression check of the deletion paths, the retention sweep included). Each with a positive
+// sample that must pass and a planted defect that must be caught.
 //
 // Run: node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs [--d1]
+// Record (the key read from .dev.vars, never typed): ANTHROPIC_API_KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' .dev.vars)" node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs --record-provider [--d1]
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { localCurriculum } from "./harness/curriculum.mjs";
 import { createMockEnv, makeCtx, openAIJsonBody, TEST_SECRET } from "./harness/index.mjs";
 
@@ -32,8 +36,10 @@ const { CR_SURFACES } = await import("../../extensions/hypeproof-chat/src/curric
 const { ReviewSession, directorAvailable } = await import("../../extensions/hypeproof-chat/src/reviewSession.ts");
 const reviewView = await import("../../extensions/hypeproof-chat/src/reviewView.ts");
 const { completeSkillRequest } = await import("../../extensions/hypeproof-chat/src/skillSession.ts");
+const { extractJsonObject } = await import("../../extensions/hypeproof-chat/src/skillView.ts");
 
 const D1_MODE = process.argv.includes("--d1");
+const RECORD_PROVIDER = process.argv.includes("--record-provider");
 let failed = 0;
 async function test(name, fn) {
   try {
@@ -271,6 +277,125 @@ async function spyModelCalls(fn) {
   } finally {
     globalThis.fetch = real;
   }
+}
+
+// ── CR-T58 against a recorded provider: the recording (opt-in, the only network use) ──
+
+/** The recorded provider: the real provider's ten answers to the Week 2 pack's Experiment-skill prompt, each with its time. */
+const RECORDING = new URL("./fixtures/cr-review/provider-recording.json", import.meta.url);
+const RECORDING_FORMAT = "hps-cr-review-provider-recording/1";
+const RECORDED_RUNS = 10;
+
+/** The Experiment skill's context as its prompt carries it (the `## Context` line, registry.ts `skillPrompt`). */
+const promptContext = (prompt) => JSON.parse(/^## Context\n(.*)$/m.exec(prompt)[1]);
+
+/**
+ * The recording's provenance: the commit checked out and whether the working tree differs from it
+ * (a recorder run before it was committed says so). Read before the first provider call, so it
+ * costs no paid call; outside a git checkout it is "unknown" rather than a failure.
+ */
+function recordingSource() {
+  const git = (...args) => execFileSync("git", args, { cwd: fileURLToPath(new URL(".", import.meta.url)), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  try {
+    return { head: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain") !== "" };
+  } catch {
+    return { head: "unknown", dirty: null };
+  }
+}
+
+/**
+ * `--record-provider`: RECORDED_RUNS full regenerations of the Week 2 pack, each through the App's
+ * ReviewSession and the real coach route (`POST /v1/chat/completions`, in process) to the provider
+ * production uses: the deployment default `LLM_PROVIDER=anthropic` under the canary profile's model
+ * policy (`hypeproof-default`), with no model named (CR-45). The key comes from the environment and
+ * is written nowhere. The upstream is api.anthropic.com itself; production reaches it through
+ * ANTHROPIC_PROXY_URL, which this run does not include. Every time is the real clock's. The recording
+ * is written only when every run got an answer.
+ */
+async function recordProvider() {
+  const key = process.env.ANTHROPIC_API_KEY || process.env.HYPE_ANTHROPIC_KEY;
+  if (!key) {
+    console.error("--record-provider: set ANTHROPIC_API_KEY (or HYPE_ANTHROPIC_KEY) to reach the real provider");
+    return 2;
+  }
+  const source = recordingSource();
+  const f = await fixture();
+  try {
+    const s = await week2(f);
+    const coachEnv = createMockEnv({ withSession: false, withRoster: false, env: { LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: key, OPENAI_API_KEY: undefined } });
+    const now = Date.now();
+    await coachEnv.HPS_KV.put(`cohort:${f.cohort}:active_session`, JSON.stringify({ session_id: "sess-review-recording", profile_id: f.profile.id, starts_at: new Date(now - 60_000).toISOString(), ends_at: new Date(now + 3600_000).toISOString() }));
+    await coachEnv.HPS_KV.put(`cohort:${f.cohort}:roster`, JSON.stringify({ users: ["cr-a", "cr-b", "cr-c"], updated_at: new Date(now).toISOString() }));
+    let prompt = null;
+    const runs = [];
+    for (let i = 1; i <= RECORDED_RUNS; i++) {
+      await store.dropProjectReviews(f.env.HPS_DB, s.project.id);
+      let answer = null;
+      const session = new ReviewSession({
+        switchOn: () => true,
+        token: async () => s.token,
+        directorToken: async () => null,
+        base: () => "https://service.test/v1/curriculum",
+        fetchImpl: (url, init) => f.app.fetch(new Request(url, init), f.env, makeCtx()),
+        projectId: () => s.project.id,
+        complete: async (p, headers) => {
+          if (prompt !== null && p !== prompt) throw new Error("the Experiment skill's prompt changed between runs");
+          prompt = p;
+          answer = await completeSkillRequest((url, init) => f.app.fetch(new Request(url, init), coachEnv, makeCtx()), { proxyUrl: "https://service.test/v1", baseHeaders: { authorization: `Bearer ${s.token}`, "content-type": "application/json" }, binding: {}, prompt: p, headers });
+          return answer;
+        },
+      });
+      const startedAt = new Date().toISOString();
+      const r = await session.prepare();
+      const view = await session.studentView();
+      const pack = view.review?.pack;
+      const run = {
+        run: i,
+        started_at: startedAt,
+        status: answer?.status ?? null,
+        model: answer?.model ?? null,
+        provider_ms: view.timing?.provider_ms ?? null,
+        total_ms: view.timing?.total_ms ?? null,
+        commit_ms: pack?.timing?.commit_ms ?? null,
+        verdict: view.timing?.verdict ?? null,
+        regenerated: r.ok ? r.regenerated : null,
+        accepted: Boolean(pack && sectionOf(pack, "next_experiment")?.suggestion),
+        problems: view.refused ?? [],
+        answer: answer?.text ?? null,
+      };
+      runs.push(run);
+      console.log(`   run ${i}: ${run.status} ${run.model} · provider ${run.provider_ms} ms · total ${run.total_ms} ms + commit ${run.commit_ms} ms · ${run.verdict} · ${run.accepted ? "accepted" : `refused ${run.problems.join(" ")}`}`);
+    }
+    const unanswered = runs.filter((x) => x.status !== 200 || typeof x.answer !== "string").length;
+    if (unanswered) {
+      console.error(`--record-provider: ${unanswered} of ${runs.length} runs got no answer; nothing written`);
+      return 1;
+    }
+    const doc = {
+      format: RECORDING_FORMAT,
+      recorded_at: new Date().toISOString(),
+      source: { ...source, node: process.version, store: D1_MODE ? "local workerd D1 and R2" : "SQLite" },
+      route: "POST /v1/chat/completions, the coach route in process, profile canary-sdk-contract, model policy hypeproof-default, no model named",
+      provider: "anthropic",
+      upstream: "https://api.anthropic.com/v1/messages directly; production goes through ANTHROPIC_PROXY_URL",
+      skill: "experiment@1.0.0",
+      capability: "reasoning.high",
+      prompt,
+      runs,
+    };
+    mkdirSync(new URL(".", RECORDING), { recursive: true });
+    writeFileSync(RECORDING, JSON.stringify(doc, null, 2) + "\n");
+    console.log(`recorded ${runs.length} runs to ${RECORDING.pathname}`);
+    return 0;
+  } finally {
+    f.close();
+  }
+}
+
+if (RECORD_PROVIDER) {
+  const code = await recordProvider();
+  if (mf) await mf.dispose();
+  process.exit(code);
 }
 
 // ── CR-T45 (unit): ten sections, every factual claim linked, interpretation apart ──
@@ -1450,6 +1575,119 @@ await test("CR-T58 (synthetic provider latency): ten full regenerations through 
     const measured = (await open(f, s)).pack.timing;
     assert.deepEqual([measured.total_ms, measured.provider_ms], [9_000, 8_000], "the App's figures as sent");
     assert.ok(measured.commit_ms >= HOLD_MS - 2, `the Service's commit time covers the hold: ${JSON.stringify(measured)}`);
+  } finally {
+    f.close();
+  }
+});
+
+// ── CR-T58 (recorded provider): the real provider's answers and times, replayed ──
+
+/**
+ * Each id the recorded prompt named → the id of the same record in this run, matched by content
+ * (evidence items by confidence and statement, hypotheses by statement, experiments by week and
+ * question), longest first because an evidence id contains its experiment's id.
+ */
+function recordedIds(recordedPrompt, prompt) {
+  const keyed = (ctx) => {
+    const out = new Map();
+    for (const k of ["observed", "interpreted", "assumed"]) for (const i of ctx.register?.[k] ?? []) out.set(`ev ${k} ${i.statement}`, i.id);
+    for (const h of ctx.hypotheses ?? []) out.set(`hypothesis ${h.statement}`, h.id);
+    for (const e of ctx.experiments ?? []) out.set(`experiment ${e.week} ${e.question}`, e.id);
+    return out;
+  };
+  const was = keyed(promptContext(recordedPrompt));
+  const now = keyed(promptContext(prompt));
+  return [...was].filter(([k]) => now.has(k)).map(([k, id]) => [id, now.get(k)]).sort((a, b) => b[0].length - a[0].length);
+}
+const remapIds = (text, ids) => ids.reduce((t, [from, to]) => t.split(from).join(to), text);
+
+/** Why a replay stops: the prompt sent now is not the recorded one (ids mapped). Where they first differ, and what to do. */
+function promptDrift(recorded, now, recordedAt) {
+  let i = 0;
+  while (i < recorded.length && recorded[i] === now[i]) i++;
+  const around = (s) => JSON.stringify(s.slice(Math.max(0, i - 40), i + 80));
+  return `the Experiment skill's prompt is not the one recorded on ${recordedAt} (first difference at line ${recorded.slice(0, i).split("\n").length}: recorded ${around(recorded)}, now ${around(now)}); re-record the provider with --record-provider (docs/testing/curriculum-runtime-dev.md)`;
+}
+
+await test("CR-T58 (recorded provider): ten full regenerations replaying the real provider's ten recorded answers at their recorded times, to the prompt the product sends now (a changed prompt fails until it is recorded again), pass the 30 s target with Studio's time apart; each answer meets the Experiment skill's gate against this run's records as it did live; a recorded answer that comes back slow is a provider-caused miss, never a Studio pass", async () => {
+  const rec = JSON.parse(readFileSync(RECORDING, "utf8"));
+  // The recording is what it says: one provider's answers to one prompt, every run answered and timed.
+  assert.equal(rec.format, RECORDING_FORMAT);
+  assert.equal(rec.runs.length, RECORDED_RUNS);
+  assert.match(rec.prompt, /^## Skill\nexperiment@1\.0\.0$/m);
+  for (const r of rec.runs) {
+    assert.equal(r.status, 200, `run ${r.run}`);
+    assert.ok(typeof r.answer === "string" && r.answer.length > 0, `run ${r.run}`);
+    assert.ok(Number.isInteger(r.provider_ms) && r.provider_ms > 0, `run ${r.run}`);
+  }
+  const f = await fixture();
+  try {
+    const s = await week2(f);
+    /** The App's session whose model answers with run `r`'s recorded text, after its recorded time (or `latency`). */
+    const replay = (r, { latency = r.provider_ms, ids = true } = {}) => {
+      const asked = [];
+      const { session } = sessionFor(f, s, {
+        latency,
+        complete: (prompt) => {
+          asked.push(prompt);
+          return { ok: true, text: ids ? remapIds(r.answer, recordedIds(rec.prompt, prompt)) : r.answer, model: r.model, status: 200 };
+        },
+      });
+      return { session, asked };
+    };
+    const seen = [];
+    for (const r of rec.runs) {
+      await store.dropProjectReviews(f.env.HPS_DB, s.project.id);
+      const { session, asked } = replay(r);
+      const res = await session.prepare();
+      assert.equal(res.ok, true, JSON.stringify(res));
+      assert.equal(asked.length, 1, `run ${r.run}: one model call`);
+      const ids = recordedIds(rec.prompt, asked[0]);
+      // The recording answers the prompt the product sends now: with the ids mapped, the recorded
+      // prompt is this one. A changed skill text, prompt builder or context fails here, before the
+      // replayed answer is judged, instead of replaying answers to a prompt no longer sent.
+      const recordedPrompt = remapIds(rec.prompt, ids);
+      if (recordedPrompt !== asked[0]) assert.fail(`run ${r.run}: ${promptDrift(recordedPrompt, asked[0], rec.recorded_at)}`);
+      const view = await session.studentView();
+      const next = sectionOf(view.review.pack, "next_experiment");
+      assert.deepEqual(res.regenerated, [...SECTIONS], `run ${r.run}: a full regeneration`);
+      // The skill's gate gives the replayed answer the verdict it gave live.
+      if (r.accepted) {
+        assert.deepEqual(next.suggestion, extractJsonObject(remapIds(r.answer, ids)), `run ${r.run}: the recorded answer is the stored suggestion`);
+        assert.equal(next.model, r.model);
+      } else {
+        assert.equal(next.suggestion, undefined, `run ${r.run}: refused live, refused now`);
+        assert.deepEqual(view.refused, r.problems.map((p) => remapIds(p, ids)), `run ${r.run}`);
+      }
+      // The provider's time is the recorded one; Studio's own is measured now.
+      const t = view.timing;
+      assert.ok(t.provider_ms >= r.provider_ms && t.provider_ms < r.provider_ms + 200, `run ${r.run}: ${JSON.stringify(t)} vs recorded ${r.provider_ms} ms`);
+      assert.equal(t.verdict, "pass", `run ${r.run}: ${JSON.stringify(t)}`);
+      assert.ok(t.total_ms < reviewView.REGENERATION_TARGET_MS, JSON.stringify(t));
+      seen.push({ provider: t.provider_ms, studio: t.total_ms - t.provider_ms, total: t.total_ms });
+    }
+    const pct = (xs, q) => {
+      const v = [...xs].sort((a, b) => a - b);
+      return v[Math.min(v.length - 1, Math.floor(q * v.length))];
+    };
+    const line = (k) => `p50 ${pct(seen.map((x) => x[k]), 0.5)} ms, p95 ${pct(seen.map((x) => x[k]), 0.95)} ms, max ${Math.max(...seen.map((x) => x[k]))} ms`;
+    console.log(`   CR-T58 recorded provider (${rec.provider} ${[...new Set(rec.runs.map((r) => r.model))].join(", ")}, recorded ${rec.recorded_at}) over ${seen.length} runs (${D1_MODE ? "local workerd D1" : "SQLite"}): total ${line("total")}; provider ${line("provider")}; Studio's share ${line("studio")}; ${rec.runs.filter((r) => r.accepted).length} of ${rec.runs.length} answers accepted; every replayed prompt equals the recorded one`);
+    // Instrument control: the replayed answers met the gate on THIS run's records. A recorded answer
+    // that cites an open assumption, sent with the recording's own ids, is refused as unresolved.
+    const citing = rec.runs.find((r) => r.accepted && /"assumption_ref"\s*:/.test(r.answer));
+    assert.ok(citing, "an accepted recorded answer cites the assumption it tests");
+    await store.dropProjectReviews(f.env.HPS_DB, s.project.id);
+    const unmapped = replay(citing, { ids: false });
+    assert.equal((await unmapped.session.prepare()).ok, true);
+    assert.ok(((await unmapped.session.studentView()).refused ?? []).some((p) => /assumption_ref: unresolved_evidence_ref:ev:/.test(p)), "the gate checked the recorded answer against this run's records");
+    // Negative: the slowest recorded answer, coming back past the target, is the provider's miss.
+    const slowest = [...rec.runs].sort((a, b) => b.provider_ms - a.provider_ms)[0];
+    await store.dropProjectReviews(f.env.HPS_DB, s.project.id);
+    const slow = replay(slowest, { latency: slowest.provider_ms + reviewView.REGENERATION_TARGET_MS });
+    assert.equal((await slow.session.prepare()).ok, true);
+    const st = (await slow.session.studentView()).timing;
+    assert.equal(st.verdict, "miss_provider", JSON.stringify(st));
+    assert.match(reviewView.timingLine(st), /30초를 넘었어요 \(AI 응답이 늦었어요\)/);
   } finally {
     f.close();
   }

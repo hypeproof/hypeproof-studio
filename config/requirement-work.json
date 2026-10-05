@@ -3623,7 +3623,9 @@
       ],
       "verification_inputs": [
         "docs/testing/curriculum-runtime-2026-10-05-review.md",
+        "docs/testing/curriculum-runtime-2026-10-06-review-provider.md",
         "worker/test/cr-review.test.mjs",
+        "worker/test/fixtures/cr-review/provider-recording.json",
         "extensions/hypeproof-chat/test/cr-review.smoke.mjs",
         "e2e/curriculum-runtime/review-app.spec.ts",
         "worker/src/lib/curriculum/review.ts",
