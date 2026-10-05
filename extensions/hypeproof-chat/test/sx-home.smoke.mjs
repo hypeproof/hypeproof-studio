@@ -13,18 +13,22 @@
 //      task takes it away though neither writes, and so does a move in the new session;
 //   3. `learningState` carries it only when the host gives it;
 //   4. the host passes it, with the session made once, notes every signal before it runs, redraws
-//      a state that still shows an ended entry, and sends it only on a seat that runs the task flow
-//      (static, as test/sx-task-flow.smoke.mjs: ChatPanelProvider cannot load without VS Code);
-//      the webview hands the host's value to region A untouched, and starts the view at the step
-//      the record holds (`stepViewOnState`; the student's own pick holds after that). Every static
+//      a state that still shows an ended entry, sends it only on a seat that runs the task flow,
+//      and owes a state it could not build to the next answered turn (static, as
+//      test/sx-task-flow.smoke.mjs: ChatPanelProvider cannot load without VS Code); the webview
+//      hands the host's value to region A untouched, starts the view at the step the record holds
+//      (`stepViewOnState`; the student's own pick holds after that), and holds region A's Primary
+//      busy on a task-flow seat until a state has shown the record (`recordShownBy`). Every static
 //      check also runs on a planted source that must fail it;
 //   5. region A draws it (the real MissionHeader through test/sx-render.mjs): below the actions
 //      and the completion conditions, above the growth link, a quiet button with the step's own
-//      title and no figure, and nothing for a step this lesson does not have;
+//      title and no figure, and nothing for a step this lesson does not have; and the step view's
+//      and the busy Primary's pure rules (missionHeaderLogic.ts);
 //   6. styles.css keeps the header on screen while the rest scrolls, bounded so region B keeps
-//      room on a short window and packed so its first 150 px hold all four parts there (SX-01),
-//      and leaves one Lime button while region A shows its Primary (SX-04). A server render applies
-//      no CSS, so these are static tripwires for CI; what they guard was measured in the App.
+//      room on a short window and packed so its first 160 px hold all four parts there (SX-01),
+//      and leaves one Lime element while region A shows its Primary (SX-04, SX-49 negative). A
+//      server render applies no CSS, so these are static tripwires for CI; what they guard was
+//      measured in the App, and the packing's per-condition numbers by rendering the real header.
 //
 // Controls (.claude/rules/verification.md rules 2·3): each rule has a sample that must pass
 // (catches a too-strict instrument) and one that must be refused (catches a too-lenient one).
@@ -295,7 +299,7 @@ await staticCheck(
   (text) =>
     lacks(runFlowBody(text), /if \(!target\) return null;[\s\S]*this\.flowSession\.noteSignal\(target\.recordId, signal\);\s*try \{/, "the student's signals never reach the session, or only those that stored") ??
     lacks(between(text, "private async recordStepStart(", "private view?"), /if \(flow\?\.changed \|\| this\.taskFlowNotice \|\| this\.flowSession\.stale\) await this\.postLearningState\(\);/, "a step start that wrote nothing leaves the ended entry on screen") ??
-    lacks(turnEnd(text), /flow\?\.changed \|\| this\.taskFlowNotice \|\| this\.flowSession\.stale \? this\.postLearningState\(\)/, "a coach turn on a working task leaves the ended entry on screen"),
+    lacks(turnEnd(text), /flow\?\.changed \|\| this\.taskFlowNotice \|\| this\.flowSession\.stale \|\| this\.learningStateOwed \? this\.postLearningState\(\)/, "a coach turn on a working task leaves the ended entry on screen"),
   [
     ["    this.flowSession.noteSignal(target.recordId, signal);\n", ""],
     // Noted only once the record answered: a busy record keeps the entry after the student acted.
@@ -304,7 +308,24 @@ await staticCheck(
       "    try {\n      const { store, record } = this.crRecordHandle();\n      const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });\n      this.flowSession.noteSignal(target.recordId, signal);\n",
     ],
     ["if (flow?.changed || this.taskFlowNotice || this.flowSession.stale) await this.postLearningState();", "if (flow?.changed || this.taskFlowNotice) await this.postLearningState();"],
-    ["flow?.changed || this.taskFlowNotice || this.flowSession.stale ? this.postLearningState()", "flow?.changed || this.taskFlowNotice ? this.postLearningState()"],
+    ["flow?.changed || this.taskFlowNotice || this.flowSession.stale || this.learningStateOwed ? this.postLearningState()", "flow?.changed || this.taskFlowNotice || this.learningStateOwed ? this.postLearningState()"],
+  ],
+);
+// The webview holds region A's Primary busy until a state has shown the record (below), so a state
+// the host could not build (the Service's observation context did not answer) must still come: it
+// is owed, and the next coach turn that answers sends it. Otherwise one failed read on opening left
+// the Primary busy until the webview was made again.
+await staticCheck(
+  "host: a learning state it could not build is owed, and the next answered turn sends it",
+  provider,
+  (text) =>
+    lacks(postBody(text), /const recorder = await this\.currentLearningRecorder\(\);\s*if \(!recorder\) \{\s*this\.learningStateOwed = true;\s*return;\s*\}/, "a state the host could not build is not owed") ??
+    lacks(postBody(text), /type: 'learningState',[\s\S]*?\}\),\s*\}\);\s*this\.learningStateOwed = false;\s*\}/, "a sent state does not settle what was owed") ??
+    lacks(turnEnd(text), /\|\| this\.learningStateOwed \? this\.postLearningState\(\)/, "an answered turn does not send the owed state"),
+  [
+    ["      this.learningStateOwed = true;\n", ""],
+    ["    this.learningStateOwed = false;\n  }", "  }"],
+    [" || this.learningStateOwed ? this.postLearningState()", " ? this.postLearningState()"],
   ],
 );
 
@@ -325,15 +346,57 @@ await staticCheck(
   chatPanel,
   (text) =>
     lacks(learningHandler(text), /const next = stepViewOnState\(stepView\.current, msg\.state\);\s*stepView\.current = next\.settled;\s*if \(next\.step\) setCurrentStepId\(next\.step\);/, "a learning state never moves the view to the step the record holds") ??
+    // The task a later pick belongs to: without it a pick is never tied to its task, and the first
+    // state of ANOTHER task keeps the old pick instead of moving to that task's recorded step.
+    lacks(learningHandler(text), /setLearning\(msg\.state\);\s*learningTask\.current = msg\.state\.task;/, "a learning state does not say which task the student's next pick belongs to") ??
     lacks(between(text, "const pickStep = (stepId: string) => {", "};"), /stepView\.current = stepViewOnPick\(learningTask\.current\);\s*setCurrentStepId\(stepId\);/, "a step the student picks does not settle the view") ??
     lacks(headerProps(text), /onSelectStep=\{pickStep\}/, "a step the student selects is not their pick: the next state moves the view away") ??
     lacks(headerProps(text), /onStartStep=\{\(step\) => \{\s*pickStep\(step\.id\);/, "a step the student starts is not their pick: the next state moves the view away"),
   [
     // The review's finding: the webview never reads the step the record holds.
     ["      if (next.step) setCurrentStepId(next.step);\n", ""],
+    // The third review's mutation C1, which every smoke passed.
+    ["      learningTask.current = msg.state.task;\n", ""],
     ["    stepView.current = stepViewOnPick(learningTask.current);\n", ""],
     ["onSelectStep={pickStep}", "onSelectStep={setCurrentStepId}"],
     ["          pickStep(step.id);\n", "          setCurrentStepId(step.id);\n"],
+  ],
+);
+// SX-01/SX-02 — before the host's first state the header is drawn from the profile at the first
+// step; pressed there, its Primary moved a task left at "build" back to "expect" (second review of
+// 2026-10-05). On a task-flow seat it is busy until a state has shown the task's record, counted for
+// the lesson and activity of the last `config` message (read in message order).
+await staticCheck(
+  "webview: region A's Primary is busy on a task-flow seat until a state has shown the record (recordShownBy)",
+  chatPanel,
+  (text) =>
+    lacks(text, /const awaitingRecord = taskFlowSeat\(config\?\.profile\) && recordShownFor !== recordViewKey\(config\);/, "the screen does not know whether the record has been shown on a task-flow seat") ??
+    lacks(between(text, "take the learning state the host sent as-is.", "return off;"), /if \(msg\.type === "config"\) recordKeyNow\.current = recordViewKey\(msg\.config\);\s*if \(msg\.type !== "learningState"\) return;/, "a state is not counted for the lesson and activity of the last config message") ??
+    lacks(learningHandler(text), /if \(recordShownBy\(msg\.state\)\) setRecordShownFor\(recordKeyNow\.current\);/, "a state that shows the record does not release the Primary") ??
+    lacks(headerProps(text), /\n\s*busy=\{streaming \|\| awaitingRecord\}\n/, "region A's Primary can be started before the record is shown"),
+  [
+    ["busy={streaming || awaitingRecord}", "busy={streaming}"],
+    ["      if (recordShownBy(msg.state)) setRecordShownFor(recordKeyNow.current);\n", "      setRecordShownFor(recordKeyNow.current);\n"],
+    ["const awaitingRecord = taskFlowSeat(config?.profile) && recordShownFor !== recordViewKey(config);", "const awaitingRecord = taskFlowSeat(config?.profile) && recordShownFor === null;"],
+    ['      if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);\n', ""],
+  ],
+);
+// "지난번 이어서" never does nothing: with the recorded step already in front (the usual case, the
+// view starts there) it hands the keyboard to that Primary at once; with another step in front it
+// brings the recorded one back first, and the focus waits for that render. Only the in-app run
+// pressed it before (the third review's mutation R1, which every smoke passed).
+const missionHeader = readFileSync(new URL("../webview-ui/src/MissionHeader.tsx", import.meta.url), "utf8");
+await staticCheck(
+  "webview: '지난번 이어서' focuses the recorded step's Primary — at once when it is in front, after the move otherwise",
+  missionHeader,
+  (text) =>
+    lacks(between(text, "const resumeAt = (step: Step) => {", "\n  };"), /if \(current\?\.id === step\.id\) \{\s*primary\.current\?\.focus\(\);\s*return;\s*\}\s*focusAfterMove\.current = true;\s*props\.onSelectStep\(step\.id\);/, "the entry does nothing when the recorded step is already in front, or never brings it back") ??
+    lacks(text, /useEffect\(\(\) => \{\s*if \(!focusAfterMove\.current\) return;\s*focusAfterMove\.current = false;\s*primary\.current\?\.focus\(\);\s*\}\);/, "after the move the focus never reaches the recorded step's Primary") ??
+    lacks(text, /<button\s*ref=\{primary\}\s*type="button"\s*className="hp-cta-primary"/, "the focus has no Primary to go to"),
+  [
+    ["    if (current?.id === step.id) {\n      primary.current?.focus();\n      return;\n    }\n", ""],
+    ["    focusAfterMove.current = true;\n", ""],
+    ["                  ref={primary}\n", ""],
   ],
 );
 
@@ -377,6 +440,73 @@ await check("stepViewOnState negative: a state with no recorded step settles not
   const claimed = logic.stepViewOnState(early, { task: TASK, currentStep: "build" });
   assert.deepEqual(claimed, { settled: { task: TASK }, step: null }, "the first state overrode a step the student chose before it arrived");
   assert.equal(logic.stepViewOnState(claimed.settled, { task: TASK, currentStep: "build" }).step, null);
+});
+
+await check("stepViewOnPick: a pick belongs to the task of the last state, so ANOTHER task's first state still moves the view to its recorded step", () => {
+  const picked = logic.stepViewOnPick("task-A");
+  assert.deepEqual(picked, { task: "task-A" }, "a pick after a state is not tied to that state's task");
+  assert.equal(logic.stepViewOnState(picked, { task: "task-B", currentStep: "x" }).step, "x", "a pick on task A kept the view when task B's record named its step");
+  assert.equal(logic.stepViewOnState(picked, { task: "task-A", currentStep: "x" }).step, null, "a later state of the picked task moved the student's view");
+});
+
+// The busy Primary (SX-01/SX-02). Before the host's first state the header is drawn from the profile
+// at the first step; a start pressed there moved a task left mid-way back (second review of
+// 2026-10-05). These are the pure rules; the static check above holds ChatPanel to exactly this use.
+const FLOW_PROFILE = { observation: { format: "hps-observation/2" }, lesson: { sha256: "a".repeat(64), content: week3 } };
+await check("taskFlowSeat: a /2 profile whose lesson has a mission and steps — and nothing else", () => {
+  assert.equal(logic.taskFlowSeat(FLOW_PROFILE), true, "the seat that runs the task flow is not one: the Primary is never held");
+  const noMission = { ...week3, learning: { ...week3.learning, mission: " " } };
+  for (const [why, profile] of [
+    ["a /1 profile", { ...FLOW_PROFILE, observation: { format: "hps-observation/1" } }],
+    ["no observation", { lesson: FLOW_PROFILE.lesson }],
+    ["no lesson", { observation: FLOW_PROFILE.observation }],
+    ["a lesson with no learning block", { ...FLOW_PROFILE, lesson: { sha256: "a".repeat(64), content: { ...week3, learning: undefined } } }],
+    ["a blank mission", { ...FLOW_PROFILE, lesson: { sha256: "a".repeat(64), content: noMission } }],
+    ["no steps", { ...FLOW_PROFILE, lesson: { sha256: "a".repeat(64), content: { ...week3, steps: [] } } }],
+    ["no profile", null],
+  ]) assert.equal(logic.taskFlowSeat(profile), false, `${why} was taken for a task-flow seat: its Primary would wait for a record that never comes`);
+});
+
+await check("recordShownBy: shown when the state names the recorded step, or says the host runs no flow here; not when the record could not be read", () => {
+  assert.equal(logic.recordShownBy({ task: TASK, phase: "working", currentStep: "build" }), true);
+  assert.equal(logic.recordShownBy({ task: TASK }), true, "a state of a seat the host runs no flow on keeps the Primary busy for ever");
+  assert.equal(logic.recordShownBy({ task: TASK, notice: "과제 진행 기록을 읽거나 저장하지 못했어요 (storage_busy). 작업은 계속할 수 있어요." }), false, "a record that could not be read was taken as shown: the Primary stands on the first step");
+  assert.equal(logic.recordShownBy({ task: TASK, phase: "working", currentStep: "" }), false);
+});
+
+await check("the busy Primary across opening, a lesson change and a refresh (ChatPanel's use of the three rules)", () => {
+  // ChatPanel: the key of the last config message, the key a state that showed the record counted
+  // for, and the Primary busy on a task-flow seat while the two differ.
+  const screen = () => {
+    let config = null;
+    let keyNow = logic.recordViewKey(null);
+    let shownFor = null;
+    return {
+      config(c) { config = c; keyNow = logic.recordViewKey(c); },
+      state(s) { if (logic.recordShownBy(s)) shownFor = keyNow; },
+      get busy() { return logic.taskFlowSeat(config?.profile) && shownFor !== logic.recordViewKey(config); },
+    };
+  };
+  const seat = { profile: FLOW_PROFILE, activity: { id: "act-1" } };
+  const s = screen();
+  s.config(seat);
+  assert.equal(s.busy, true, "the Primary drawn from the profile can be started before the host's first state");
+  s.state({ task: TASK, notice: "과제 진행 기록을 읽거나 저장하지 못했어요 (storage_busy). 작업은 계속할 수 있어요." });
+  assert.equal(s.busy, true, "a state that could not read the record released the Primary");
+  s.state({ task: TASK, phase: "working", currentStep: "build" });
+  assert.equal(s.busy, false, "the Primary stays busy after the state showed the record");
+  s.config(seat);
+  assert.equal(s.busy, false, "the same lesson's config again (a refresh) held the Primary once more");
+  s.config({ ...seat, profile: { ...FLOW_PROFILE, lesson: { ...FLOW_PROFILE.lesson, sha256: "b".repeat(64) } } });
+  assert.equal(s.busy, true, "another lesson's Primary can be started before its own record was shown");
+  s.config({ ...seat, activity: { id: "act-2" } });
+  assert.equal(s.busy, true, "another activity's Primary can be started before its own record was shown");
+  s.state({ task: "task-x" });
+  assert.equal(s.busy, false, "a seat the host runs no flow on keeps its Primary busy");
+  // A seat without the flow never waits.
+  const plain = screen();
+  plain.config({ profile: { ...FLOW_PROFILE, observation: { format: "hps-observation/1" } }, activity: { id: "act-1" } });
+  assert.equal(plain.busy, false, "a seat without the task flow waits for a state that never comes");
 });
 
 const { rendererStatus, renderComponent, visibleText } = await import("./sx-render.mjs");
@@ -481,80 +611,115 @@ function scrollerProblem(css) {
   const bound = rules.find(([sel, body]) => sel === `${LESSON_SHELL} > .hp-mission` && /max-height/.test(body));
   if (!bound) return "the sticky header has no bound: on a short window it covers the composer";
   const [, body] = bound;
-  if (!/max-height:\s*max\(\d+px,\s*calc\(100%\s*-\s*\d+px\)\)/.test(body)) return `the header's bound is not "all of the shell but region B's reserve, with a floor": ${body.trim()}`;
+  const limits = /max-height:\s*max\((\d+)px,\s*calc\(100%\s*-\s*(\d+)px\)\)/.exec(body);
+  if (!limits) return `the header's bound is not "all of the shell but region B's reserve, with a floor": ${body.trim()}`;
+  // The floor holds the four parts on a short window: 160 px for every completion condition of the
+  // six week fixtures at 640 wide (150 cut the third one of weeks 4 and 5: third review of 2026-10-05).
+  if (Number(limits[1]) < 160) return `the header's floor (${limits[1]} px) is under the 160 px its four parts need on a short window`;
+  // The reserve keeps the composer (208 px in the App, model picker and usage line included).
+  if (Number(limits[2]) < 208) return `region B's reserve (${limits[2]} px) is smaller than the composer's 208 px`;
   if (!/overflow-y:\s*auto/.test(body)) return "the bounded header does not scroll inside itself: what does not fit is cut";
   if (!/box-sizing:\s*border-box/.test(body)) return "the bound leaves out the header's padding: the box eats into region B's reserve";
   return null;
 }
-/** The body of every `@media (max-height:600px)` block, comments stripped. */
-function shortWindowBlocks(css) {
+/** Every `@media` block whose query names a max-height, as [query, body], comments stripped. */
+function heightBlocks(css) {
   const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const blocks = [];
-  for (const m of text.matchAll(/@media\s*\(max-height:\s*600px\)\s*\{/g)) {
+  for (const m of text.matchAll(/@media\s*([^{]*max-height[^{]*)\{/g)) {
     let depth = 1;
     let i = m.index + m[0].length;
     const start = i;
     for (; i < text.length && depth > 0; i++) depth += text[i] === "{" ? 1 : text[i] === "}" ? -1 : 0;
-    blocks.push(text.slice(start, i - 1));
+    blocks.push([m[1].trim().replace(/\s+/g, " "), text.slice(start, i - 1)]);
   }
   return blocks;
 }
 /**
- * SX-01 on a short window: the bound keeps the header's first 150 px, and those must hold all four
- * parts. Stacked, the week-3 header put its completion conditions and steps remaining below them
- * (the second review of 2026-10-05, in the App at 1280×450). So at 600 px of webview and below the
- * header packs into wrapping lines: the steps remaining leave the foot for the week's line, and the
- * parts that may scroll inside the header come after the completion conditions.
+ * SX-01 on a short window: the bound keeps the header's first 160 px, and those must hold all four
+ * parts, every completion condition whole. Stacked, the week-3 header put its completion conditions
+ * and steps remaining below them (the second review of 2026-10-05, in the App at 1280×450). So at
+ * 600 px of webview and below, and on a narrow webview up to 700 px (where the stacked header, its
+ * actions on two rows, is taller than the 351–450 px it gets), the header packs into wrapping lines:
+ * the steps remaining leave the foot for the week's line, the completion conditions share their
+ * line with "지난번 이어서" only while they keep 280 px, and everything that may scroll inside the
+ * header — the activity line, also when it reports a connection problem, the acceptance sentence,
+ * the growth link — comes after the completion conditions and the entry (the third review of
+ * 2026-10-05: a connection line under the mission pushed conditions 2 and 3 out of the 150 px).
+ * The per-condition numbers were measured by rendering the real header (styles.css comment).
  */
 const HEADER = `${LESSON_SHELL} > .hp-mission`;
+const PACKED_QUERY = "(max-height:600px), (max-height:700px) and (max-width:560px)";
 function compactProblem(css) {
-  const rules = shortWindowBlocks(css).flatMap(cssRules);
+  const blocks = heightBlocks(css).filter(([, b]) => cssRules(b).some(([s]) => s === HEADER));
+  if (blocks.length !== 1) return `region A's short-window packing is not one @media block (${blocks.length})`;
+  const [query, block] = blocks[0];
+  if (query.replace(/:\s+/g, ":") !== PACKED_QUERY) return `the packing is not for a short window and a narrow one up to 700 px: @media ${query}`;
+  const rules = cssRules(block);
   const body = (sel) => rules.filter(([s]) => s === sel).map(([, b]) => b).join(";");
-  if (!/display:\s*flex/.test(body(HEADER)) || !/flex-wrap:\s*wrap/.test(body(HEADER))) return "on a short window the header stacks: its first 150 px end before the completion conditions";
+  if (!/display:\s*flex/.test(body(HEADER)) || !/flex-wrap:\s*wrap/.test(body(HEADER))) return "on a short window the header stacks: its first 160 px end before the completion conditions";
+  if (!/flex:\s*1 1 100%/.test(body(`${HEADER} > *`))) return "on a short window the header's parts do not each take a whole line by default";
   if (!/display:\s*contents/.test(body(`${HEADER} > .hp-mission-foot`))) return "on a short window the steps remaining stay in the foot, after everything else";
-  const orderOf = (part) => Number(/order:\s*(-?\d+)/.exec(body(`${HEADER} ${part}`))?.[1] ?? Number.NaN);
+  const completion = body(`${HEADER} .hp-mission-completion`);
+  if (!/flex:\s*1 1 0(?:px|%)?\s*[;}]?/.test(completion) || !/min-width:\s*min\(100%,\s*280px\)/.test(completion)) return `the completion conditions do not keep 280 px beside "지난번 이어서" (else the entry wraps off the 160 px): ${completion.trim()}`;
+  const orderOf = (sel) => Number(/order:\s*(-?\d+)/.exec(body(sel))?.[1] ?? Number.NaN);
   const o = Object.fromEntries(
-    Object.entries({ week: ".hp-mission-week", remaining: ".hp-mission-remaining", mission: ".hp-mission-sentence", actions: ".hp-mission-actions", completion: ".hp-mission-completion", resume: ".hp-mission-resume", acceptance: ".hp-mission-acceptance", activity: ".hp-mission-activity", growth: ".hp-mission-growth" }).map(([k, sel]) => [k, orderOf(sel)]),
+    Object.entries({ week: ".hp-mission-week", remaining: ".hp-mission-remaining", mission: ".hp-mission-sentence", actions: ".hp-mission-actions", completion: ".hp-mission-completion", resume: ".hp-mission-resume", status: '.hp-mission-activity:has(> [role="status"])', acceptance: ".hp-mission-acceptance", activity: ".hp-mission-activity", growth: ".hp-mission-growth" }).map(([k, sel]) => [k, orderOf(`${HEADER} ${sel}`)]),
   );
   if (Object.values(o).some(Number.isNaN)) return `a part has no place in the short window's order: ${JSON.stringify(o)}`;
   if (!(o.week < o.remaining && o.remaining < o.mission && o.mission < o.actions && o.actions < o.completion)) return `on a short window the four parts and the actions do not come first: ${JSON.stringify(o)}`;
-  if (!(Math.min(o.acceptance, o.activity, o.growth) > o.completion)) return `on a short window a part that may scroll comes before the completion conditions: ${JSON.stringify(o)}`;
+  if (!(Math.min(o.acceptance, o.activity, o.status, o.growth) > o.completion)) return `on a short window a part that may scroll comes before the completion conditions: ${JSON.stringify(o)}`;
   if (!(o.completion < o.resume && o.resume < o.growth)) return `"지난번 이어서" is not between the completion conditions and the growth link (PROJECT_RULES order): ${JSON.stringify(o)}`;
+  if (!(o.status > o.resume)) return `on a short window the connection line comes before "지난번 이어서": ${JSON.stringify(o)}`;
   return null;
 }
+const PACKED = "@media (max-height:600px), (max-height:700px) and (max-width:560px) {";
 await staticCheck("SX-01 styles: on a short window the header packs all four parts into its first lines (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, compactProblem, [
   // The second review's finding: the header stacked as on a tall window.
   ["> .hp-mission { display:flex; flex-wrap:wrap; align-items:center; column-gap:12px; padding:8px 12px 6px; }", "> .hp-mission { padding:8px 12px 6px; }"],
   ["> .hp-mission > .hp-mission-foot { display:contents; }\n", ""],
-  [".hp-mission-remaining { order:2;", ".hp-mission-remaining { order:11;"],
-  [".hp-mission-acceptance { order:8; }", ".hp-mission-acceptance { order:4; }"],
-  [".hp-mission-resume { order:7;", ".hp-mission-resume { order:11;"],
+  [".hp-mission-remaining { order:2;", ".hp-mission-remaining { order:12;"],
+  [".hp-mission-acceptance { order:9; }", ".hp-mission-acceptance { order:4; }"],
+  [".hp-mission-resume { order:7;", ".hp-mission-resume { order:12;"],
+  // The third review's mutations, which every smoke passed: G1 a lower threshold, G3 the conditions
+  // with no width of their own (the entry went off screen at 640 in the App), G4 the parts not on
+  // whole lines, G5 the connection line back under the mission.
+  [PACKED, "@media (max-height:380px) {"],
+  [PACKED, "@media (max-height:600px) {"],
+  ["order:6; flex:1 1 0; min-width:min(100%, 280px);", "order:6; flex:1 1 auto;"],
+  ["> .hp-mission > * { flex:1 1 100%; }\n", ""],
+  ['.hp-mission-activity:has(> [role="status"]) { order:8;', '.hp-mission-activity:has(> [role="status"]) { order:4;'],
 ]);
 await staticCheck("SX-01 styles: the header stays on screen while the rest scrolls, and leaves region B room (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, scrollerProblem, [
   [".hps-shell:has(> .hp-mission .hp-mission-sentence) { overflow-y: auto; }\n", ""],
   ["position: sticky; top: 0; z-index: 2;", "position: relative; z-index: 2;"],
   // The review's finding: the header sticks with no bound.
-  [".hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }\n", ""],
-  ["max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }", "max-height: none; overflow-y: auto; }"],
-  ["max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }", "max-height: max(150px, calc(100% - 250px)); }"],
-  ["box-sizing: border-box; max-height: max(150px", "max-height: max(150px"],
+  [".hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(160px, calc(100% - 250px)); overflow-y: auto; }\n", ""],
+  ["max-height: max(160px, calc(100% - 250px)); overflow-y: auto; }", "max-height: none; overflow-y: auto; }"],
+  ["max-height: max(160px, calc(100% - 250px)); overflow-y: auto; }", "max-height: max(160px, calc(100% - 250px)); }"],
+  ["box-sizing: border-box; max-height: max(160px", "max-height: max(160px"],
+  // The third review's finding: a 150 px floor left the third condition of weeks 4 and 5 under the edge at 640.
+  ["max-height: max(160px, calc(100% - 250px))", "max-height: max(150px, calc(100% - 250px))"],
 ]);
 
 /**
- * SX-04: every button the theme paints Lime (`background: var(--vscode-button-background)`, which
- * the App's theme sets to the accent) steps down while region A shows its Primary — or is named
- * here with the reason it never shares a screen with it. A new theme-Lime button fails until it
- * is one or the other.
+ * SX-04: every element the theme paints Lime (`background: var(--vscode-button-background)`, which
+ * the App's theme sets to the accent) steps down to a background that is not Lime while region A
+ * shows its Primary — or is named here with the reason it never shares a screen with it. A new
+ * theme-Lime element fails until it is one or the other. Not only buttons: SX-49's negative makes
+ * Lime on any second element of the viewport an SX-04 failure, and the student's own chat bubble
+ * was one (third review of 2026-10-05).
  */
 const NOT_BESIDE_THE_PRIMARY = {
-  ".hps-msg-user .hps-msg-body": "a chat bubble, not a button (SX-04 counts buttons; Lime on a bubble is SX-49's token-role question)",
   ".hps-naming-btn": "the naming ritual's own screen, drawn instead of the work screen",
   ".hps-world-open": "the kids worlds strip's open-world marker: a state, on seats with no lesson",
   ".hps-fatal-btn": "the error boundary's screen, drawn instead of the work screen",
-  ".hps-voice-bar": "a voice level bar, not a button",
+  ".hps-voice-bar": "a voice level bar in VoicePanel, which no screen of this webview mounts",
   ".hps-voice-to-text": "VoicePanel, which no screen of this webview mounts",
 };
 const STEP_DOWN = ".hps-shell:has(.hp-mission .hp-cta-primary) ";
+/** A background that is not Lime: transparent, or one of the design tokens other than the accent. */
+const NOT_LIME = /^(?:transparent|var\(--hp-(?:bg|panel|paper)\))$/;
 function limeProblem(css) {
   const rules = cssRules(css);
   // The background each selector ends with, in source order (same selector, later rule wins).
@@ -564,15 +729,19 @@ function limeProblem(css) {
     if (bg) for (const sel of selectorsOf(list)) last.set(sel, bg);
   }
   const themeLime = [...last].filter(([sel, bg]) => bg.startsWith("var(--vscode-button-background") && !sel.startsWith(STEP_DOWN)).map(([sel]) => sel);
-  if (themeLime.length === 0) return "no theme-Lime button found — the check reads nothing";
-  const stepDown = rules.filter(([list, body]) => selectorsOf(list).every((s) => s.startsWith(STEP_DOWN)) && /background:\s*transparent/.test(body)).flatMap(([list]) => selectorsOf(list));
+  if (themeLime.length === 0) return "no theme-Lime element found — the check reads nothing";
+  const stepDown = [...last].filter(([sel, bg]) => sel.startsWith(STEP_DOWN) && NOT_LIME.test(bg)).map(([sel]) => sel);
   const loose = themeLime.filter((sel) => !stepDown.some((s) => s.endsWith(" " + sel)) && !(sel in NOT_BESIDE_THE_PRIMARY));
-  return loose.length ? `theme-Lime buttons beside region A's Primary: ${loose.join(", ")}` : null;
+  return loose.length ? `theme-Lime elements beside region A's Primary: ${loose.join(", ")}` : null;
 }
-await staticCheck("SX-04 styles: no theme-Lime button stays Lime beside region A's Primary (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, limeProblem, [
+await staticCheck("SX-04 styles: nothing the theme paints Lime stays Lime beside region A's Primary (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, limeProblem, [
   // Send keeps the theme's Lime again (the in-app finding of 2026-10-05).
   [".hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send,\n", ""],
-  // A new button takes the theme's colour without stepping down.
+  // The student's own bubble keeps the theme's Lime again (the third review's finding).
+  [".hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {\n  color: var(--hp-ink); background: var(--hp-panel);", ".hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {\n  color: var(--hp-ink);"],
+  // ...or steps "down" to the accent itself.
+  ["background: var(--hp-panel); border: 1px solid var(--hp-line);\n}", "background: var(--hp-accent); border: 1px solid var(--hp-line);\n}"],
+  // A new element takes the theme's colour without stepping down.
   [".hps-btn-send {\n", ".hps-new-cta { background: var(--vscode-button-background); }\n.hps-btn-send {\n"],
 ]);
 

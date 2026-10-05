@@ -46,7 +46,11 @@ export interface MissionHeaderProps {
   onStartStep: (step: Step) => void;
   /** To the growth record. A single small link (SX-03). */
   onOpenGrowth: () => void;
-  /** While streaming the Primary goes busy and no second Primary appears (SX-04). */
+  /**
+   * While streaming the Primary goes busy and no second Primary appears (SX-04). ChatPanel also
+   * holds it busy on a task-flow seat until the host's learning state has shown the task's record
+   * (`recordShownBy`): before that the header stands on the first step, not the recorded one.
+   */
   busy: boolean;
   /** Activity kind and name. Demoted to a small line inside the header (design §정보 구조, region A). */
   activity: { label: string; name: string; verified: boolean } | null;

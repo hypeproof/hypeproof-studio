@@ -13,33 +13,42 @@
 //                  nothing opens it. SX-T13: one Primary on the work screen at 1280, while the
 //                  coach is answering (the Primary busy, no second one), at the narrowest window,
 //                  after a switch to another editor and back, and with a preview open beside it.
-//                  SX-T10: the header's four parts (week, mission, completion conditions, steps
-//                  remaining) stay on screen while the coach is answering, through a scrolled
+//                  SX-T10: the header's four parts (week, mission, every completion condition, steps
+//                  remaining) stay wholly on screen while the coach is answering, through a scrolled
 //                  conversation, at the narrowest window (where the header wraps instead of being
 //                  cut), after the editor switch, and with the preview open. On a short window
 //                  (1280×450, as with a terminal panel open) the header is bounded and packed: all
 //                  four parts and the Primary stay on screen, and the composer is wholly reachable
-//                  under it. Then the task is moved to the step "build" (criterion written, step
-//                  started).
-//   reopened       SX-01/SX-02 after a reopen: the view starts at the step the record holds, so the
-//                  one Primary is "Build pane", no earlier step is among the actions, and the steps
-//                  remaining count from it (from the first step, its Primary moved the record back:
-//                  review of 2026-10-05). SX-T11's other half: "지난번 이어서 · Build pane" is there,
-//                  is not a Primary, and hands the keyboard to the recorded step's action; on the
-//                  short window it is on screen with the four parts. Pressing that action (a start
-//                  onto the step the record holds, which writes nothing) ends the entry.
+//                  under it. SX-T13 counts Lime on anything, not only buttons: the student's own
+//                  chat bubble beside the Primary is a second Lime element (SX-49 negative). Then
+//                  the task is moved to the step "build" (criterion written, step started).
+//   reopened       The Service holds the observation context, so the header is drawn from the
+//                  profile before the host's first state: its Primary is busy, and pressing it then
+//                  leaves the record at "build" (drawn at the first step and startable, it moved the
+//                  record back: second review of 2026-10-05). SX-01/SX-02 once the state is there:
+//                  the view starts at the step the record holds, so the one Primary is "Build pane",
+//                  no earlier step is among the actions, and the steps remaining count from it.
+//                  SX-T11's other half: "지난번 이어서 · Build pane" is there, is not a Primary, and
+//                  hands the keyboard to the recorded step's action; on the short window it is on
+//                  screen with the four parts. Pressing that action (a start onto the step the record
+//                  holds, which writes nothing) ends the entry.
 //   reopened again The record still stands where the first session left it, so the entry is back
 //                  and the view starts at "build" again; a coach turn that answered (which writes
 //                  nothing either) ends it. Then the student moves the task on to "test".
+//   context failed Reopened while the Service's observation context answers only after the App gave
+//                  up: no state, so the Primary stays busy and region D is not drawn; the next coach
+//                  turn that answers brings the owed state, and the Primary stands on "test".
 //
-// Every instrument here is also run on a planted DOM (a second Primary, a header pushed off the
-// screen, a mission line wider than the window, a growth link above the actions or drawn as a
-// Primary, a score in the header text, an unbounded header on the short window, the short window's
-// header stacked as on a tall one) and must report it: a check that passes a planted defect counts
-// nothing (verification.md rule 2). The entry itself has its controls in builds: a host that never
-// sends it fails at the reopen, one that always sends it fails in the first session, one that never
-// ends it fails after the Primary, a webview that starts the view at the first step fails at the
-// reopen's Primary.
+// Every instrument here is also run on a planted DOM (a second Primary, a Lime Send button, a Lime
+// chat bubble, a header pushed off the screen, a mission line wider than the window, a growth link
+// above the actions or drawn as a Primary, a score in the header text, an unbounded header on the
+// short window, the short window's header stacked as on a tall one, completion conditions 2 and 3
+// below the header's edge) and must report it: a check that passes a planted defect counts nothing
+// (verification.md rule 2). The entry itself has its controls in builds: a host that never sends it
+// fails at the reopen, one that always sends it fails in the first session, one that never ends it
+// fails after the Primary, a webview that starts the view at the first step fails at the reopen's
+// Primary, a webview whose Primary can be started before the first state fails at the record, and
+// a host that never owes the state it could not build fails after the turn that should bring it.
 //
 // Not covered: SX-T13's other screens (the reflection does not exist yet — sx-p2; the growth
 // record is a separate panel), SX-T01's human half and SX-T60 (people), SX-T12's screenshot
@@ -80,6 +89,14 @@ const auditRegionText = auditText as (text: string, opts: { region: "work"; minL
 const NARROW = { width: 400, height: 800 };
 /** A short window: what the chat keeps with a terminal panel open, or at 200% zoom (about 390 px of webview). */
 const SHORT = { width: 1280, height: 450 };
+/**
+ * How long the Service holds the observation context on the reopen, so the screen is drawn from the
+ * profile well before the host's first learning state. Under the App's own 5 s limit on that
+ * request: past it the App gives up and no state comes until the next coach turn.
+ */
+const CONTEXT_HOLD_MS = 4_000;
+/** ...and how long it holds it to make that request fail: past the App's 5 s limit. */
+const CONTEXT_FAIL_MS = 6_500;
 
 class SxService {
   private proc?: ChildProcess;
@@ -109,6 +126,20 @@ class SxService {
     const r = await fetch(`http://127.0.0.1:${PORT}/__sx/hold?ms=${ms}`);
     expect((await r.json()) as unknown, "the Service did not take the hold").toEqual({ hold: ms });
   }
+  /**
+   * Every observation-context request from now on is answered this late (`/__sx/hold-context`; 0
+   * ends it). The host builds no learning state before that request is answered, so the screen can
+   * be read, and pressed, before the host's first state.
+   */
+  async holdContext(ms: number): Promise<void> {
+    const r = await fetch(`http://127.0.0.1:${PORT}/__sx/hold-context?ms=${ms}`);
+    expect((await r.json()) as unknown, "the Service did not take the context hold").toEqual({ hold_context: ms });
+  }
+  /** How many observation-context requests arrived, and how many were answered. */
+  async context(): Promise<{ requests: number; answered: number }> {
+    const r = await fetch(`http://127.0.0.1:${PORT}/__sx/state`);
+    return ((await r.json()) as { context: { requests: number; answered: number } }).context;
+  }
 }
 
 type TaskRecord = { id: string; curriculum?: { phase: string; current_step: string } };
@@ -134,6 +165,8 @@ const recordedStep = (userDataDir: string) => taskRecords(userDataDir).find((t) 
 type HeaderProbe = {
   present: boolean;
   parts: Record<"week" | "mission" | "completion" | "remaining", boolean>;
+  /** Each completion condition (the note after them is not one), in order: wholly on screen or not. */
+  conditions: boolean[];
   /** Region A's Primary and "지난번 이어서" (null: not drawn), measured the same way; not SX-T10's four parts. */
   primary: boolean;
   resume: boolean | null;
@@ -141,44 +174,55 @@ type HeaderProbe = {
   viewport: { width: number; height: number };
 };
 
-/** Is each of the header's four parts inside the frame's viewport and not covered; does anything in it run past the right edge? */
+/**
+ * Is each of the header's four parts wholly on screen — every completion condition, not only the
+ * first (third review of 2026-10-05: the first one's corner was all that was read) — and does
+ * anything in it run past the right edge? "Wholly": the box is inside the header's visible box (a
+ * bounded header scrolls inside itself, and what it scrolled away is not on screen) and the
+ * frame's viewport, and its centre is not covered.
+ */
 async function probeHeader(chat: FrameLocator): Promise<HeaderProbe> {
   const header = chat.locator("header.hp-mission");
-  if ((await header.count()) === 0) return { present: false, parts: { week: false, mission: false, completion: false, remaining: false }, primary: false, resume: null, cut: [], viewport: { width: 0, height: 0 } };
+  if ((await header.count()) === 0) return { present: false, parts: { week: false, mission: false, completion: false, remaining: false }, conditions: [], primary: false, resume: null, cut: [], viewport: { width: 0, height: 0 } };
   return header.evaluate((el) => {
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
-    const seen = (part: Element | null) => {
+    const box = el.getBoundingClientRect();
+    const whole = (part: Element | null) => {
       if (!part) return false;
       const r = part.getBoundingClientRect();
-      if (r.width === 0 || r.height === 0 || r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw) return false;
-      const x = Math.min(Math.max(r.left + Math.min(r.width, 24) / 2, 0), vw - 1);
-      const y = Math.min(Math.max(r.top + Math.min(r.height, 24) / 2, 0), vh - 1);
-      const hit = document.elementFromPoint(x, y);
+      if (r.width === 0 || r.height === 0) return false;
+      if (r.top < Math.max(box.top, 0) - 0.5 || r.bottom > Math.min(box.bottom, vh) + 0.5 || r.left < -0.5 || r.right > vw + 0.5) return false;
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return !!hit && (part === hit || part.contains(hit));
     };
     const cut = Array.from(el.querySelectorAll("*"))
       .filter((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().right > vw + 1)
       .map((node) => `${node.tagName.toLowerCase()}.${node.className}`.slice(0, 80));
     if (el.scrollWidth > el.clientWidth + 1) cut.push(`header scrollWidth ${el.scrollWidth} > ${el.clientWidth}`);
+    const conditions = Array.from(el.querySelectorAll(".hp-mission-completion li:not(.hp-mission-completion-note)")).map(whole);
     return {
       present: true,
       parts: {
-        week: seen(el.querySelector(".hp-mission-week")),
-        mission: seen(el.querySelector(".hp-mission-sentence")),
-        completion: seen(el.querySelector(".hp-mission-completion li")),
-        remaining: seen(el.querySelector(".hp-mission-remaining")),
+        week: whole(el.querySelector(".hp-mission-week")),
+        mission: whole(el.querySelector(".hp-mission-sentence")),
+        completion: conditions.length > 0 && conditions.every(Boolean),
+        remaining: whole(el.querySelector(".hp-mission-remaining")),
       },
-      primary: seen(el.querySelector(".hp-cta-primary")),
-      resume: el.querySelector(".hp-mission-resume button") ? seen(el.querySelector(".hp-mission-resume button")) : null,
+      conditions,
+      primary: whole(el.querySelector(".hp-cta-primary")),
+      resume: el.querySelector(".hp-mission-resume button") ? whole(el.querySelector(".hp-mission-resume button")) : null,
       cut,
       viewport: { width: vw, height: vh },
     };
   });
 }
-/** SX-T10's verdict: all four parts on screen, nothing cut at the right edge. */
-const headerProblem = (p: HeaderProbe): string | null =>
-  !p.present ? "no mission header" : Object.entries(p.parts).filter(([, ok]) => !ok).map(([k]) => k).join(", ") ? `not on screen: ${Object.entries(p.parts).filter(([, ok]) => !ok).map(([k]) => k).join(", ")}` : p.cut.length ? `cut at the right edge: ${p.cut.join(" | ")}` : null;
+/** SX-T10's verdict: all four parts wholly on screen (every completion condition), nothing cut at the right edge. */
+const headerProblem = (p: HeaderProbe): string | null => {
+  if (!p.present) return "no mission header";
+  const off = Object.entries(p.parts).filter(([, ok]) => !ok).map(([k]) => (k === "completion" ? `completion [${p.conditions.map((ok, i) => `c${i + 1}:${ok ? "on" : "off"}`).join(" ")}]` : k));
+  return off.length ? `not on screen: ${off.join(", ")}` : p.cut.length ? `cut at the right edge: ${p.cut.join(" | ")}` : null;
+};
 /** The short window's verdict: SX-T10's, and region A's Primary (SX-04) and, when drawn, "지난번 이어서" (SX-02) on screen too. */
 const shortHeaderProblem = (p: HeaderProbe): string | null =>
   headerProblem(p) ?? (!p.primary ? "region A's Primary is not on screen" : p.resume === false ? "'지난번 이어서' is not on screen" : null);
@@ -188,7 +232,8 @@ type PrimaryProbe = { byClass: number; byColour: number; lime: string[]; limeOth
  * SX-04: buttons drawn as the Primary — by its class, and by a Lime background wherever that
  * came from (the theme paints `--vscode-button-background` Lime, so a class count alone misses a
  * button the theme coloured). Lime on something that is not a control (a chat bubble) is listed
- * apart: SX-04 counts emphasised buttons; that is SX-49's token-role question.
+ * apart, and fails the screen too: SX-49's negative makes Lime on two elements of one viewport an
+ * SX-04 failure, whatever the second one is (third review of 2026-10-05: the student's own bubble).
  */
 async function probePrimary(chat: FrameLocator): Promise<PrimaryProbe> {
   return chat.locator("body").evaluate((body, lime) => {
@@ -211,7 +256,10 @@ async function probePrimary(chat: FrameLocator): Promise<PrimaryProbe> {
     };
   }, LIME);
 }
-const primaryProblem = (p: PrimaryProbe): string | null => (p.byClass === 1 && p.byColour === 1 ? null : `Primary by class ${p.byClass}, Lime buttons ${p.byColour}: ${p.lime.join(" | ")}`);
+const primaryProblem = (p: PrimaryProbe): string | null =>
+  p.byClass === 1 && p.byColour === 1 && p.limeOther.length === 0
+    ? null
+    : `Primary by class ${p.byClass}, Lime buttons ${p.byColour}, Lime on other elements ${p.limeOther.length}: ${[...p.lime, ...p.limeOther].join(" | ")}`;
 
 type GrowthProbe = { present: boolean; primary: boolean; belowActions: boolean; fontPx: number; missionFontPx: number; text: string };
 async function probeGrowth(chat: FrameLocator): Promise<GrowthProbe> {
@@ -437,10 +485,13 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   const narrow = await probeHeader(chat);
   expect(headerProblem(narrow), JSON.stringify(narrow)).toBeNull();
   const primaryNarrow = await probePrimary(chat);
-  expect(primaryProblem(primaryNarrow)).toBeNull();
+  expect(primaryProblem(primaryNarrow), JSON.stringify(primaryNarrow)).toBeNull();
   const cutControl = await plantedMust(chat, "header.hp-mission h1.hp-mission-sentence", "el.style.minWidth = '1500px';", "el.style.minWidth = '';", async () => headerProblem(await probeHeader(chat)), "a mission line wider than the window");
+  // Control: the student's own bubble painted Lime again (the third review's finding: it took the
+  // theme's button colour beside region A's Primary) must be reported.
+  const bubbleControl = await plantedMust(chat, ".hps-msg-user .hps-msg-body", `el.style.background = '${LIME}';`, "el.style.background = '';", async () => primaryProblem(await probePrimary(chat)), "a Lime chat bubble beside the Primary");
   record.header = { ...(record.header as object), narrow, cut_control: cutControl };
-  record.primary = { ...(record.primary as object), narrow: primaryNarrow };
+  record.primary = { ...(record.primary as object), narrow: primaryNarrow, bubble_control: bubbleControl };
 
   // ── SX-T10 (2b): a short window. The sticky header is bounded, so it never takes region B, and
   //    packed, so all four parts and the Primary stay inside it; the composer can be reached under it ──
@@ -453,11 +504,20 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   expect(shortHeaderProblem(shortHeader), JSON.stringify(shortHeader)).toBeNull();
   // Controls: the same window with the header unbounded (the first review's finding) must be
   // reported, and so must the header stacked as on a tall window (the second review's finding: the
-  // completion conditions and the steps remaining scrolled inside it).
+  // completion conditions and the steps remaining scrolled inside it), and completion conditions 2
+  // and 3 moved below the header's edge while the first stays (the third review's finding: only the
+  // first condition was read). That one must name exactly those two.
   const shortControl = [
     await plantedMust(chat, "header.hp-mission", "el.style.maxHeight = 'none';", "el.style.maxHeight = '';", async () => regionBProblem(await probeRegionB(chat)), "an unbounded header on a short window"),
     await plantedMust(chat, "header.hp-mission", "el.style.display = 'block';", "el.style.display = '';", async () => shortHeaderProblem(await probeHeader(chat)), "a stacked header on a short window"),
+    await plantedMust(
+      chat, "header.hp-mission .hp-mission-completion",
+      "for (const li of Array.from(el.querySelectorAll('li:not(.hp-mission-completion-note)')).slice(1)) li.style.transform = 'translateY(400px)';",
+      "for (const li of Array.from(el.querySelectorAll('li'))) li.style.transform = '';",
+      async () => shortHeaderProblem(await probeHeader(chat)), "completion conditions 2 and 3 below the header's edge",
+    ),
   ];
+  expect(shortControl[2], "the planted conditions were not told apart from the first").toContain("c1:on c2:off c3:off");
   record.short_window = { region_b: short, header: shortHeader, control: shortControl };
   await resize(ctx.app, WIDE);
   await expect.poll(async () => (await probeHeader(chat)).viewport.width, { timeout: 10_000 }).toBeGreaterThan(NARROW.width);
@@ -503,14 +563,40 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   // Still this session: moving the task here offers no "last time".
   await expect(chat.locator(".hp-mission-resume")).toHaveCount(0);
 
-  // ── Reopened: the same seat (same Service process, same token), a new App process ──
+  // ── Reopened: the same seat (same Service process, same token), a new App process. The Service
+  //    holds every observation-context answer, so the header is drawn from the profile (at the
+  //    first step) for seconds before the host's first learning state can show the record ──
   const userDataDir = ctx.userDataDir;
   await ctx.app.close();
   ctx = undefined;
+  await svc.holdContext(CONTEXT_HOLD_MS);
+  // The Service's counts are for its whole life; this App's requests are the ones after this.
+  const contextBefore = await svc.context();
   ctx = await launchApp({ reuseUserDataDir: userDataDir, preseedToken: true, preseedCoach: { name: "코치" } });
   await resize(ctx.app, WIDE);
   chat = await focusChat(ctx.win);
   await expect(chat.locator("header.hp-mission h1.hp-mission-sentence")).toHaveText(MISSION);
+  // First paint, measured: the Primary and whether it can be started, before any state.
+  const front = chat.locator("header.hp-mission .hp-mission-actions .hp-cta-primary");
+  const firstPaint = { primary: await front.innerText(), busy: await front.isDisabled(), resume: await chat.locator(".hp-mission-resume").count(), context: await svc.context() };
+  record.reopened_first_paint = { ...firstPaint, context_before_launch: contextBefore };
+  expect(firstPaint.context.answered - contextBefore.answered, "this App had an observation-context request answered before the first paint was read: the first state may be on screen").toBe(0);
+  expect(firstPaint.resume, "'지난번 이어서' is on screen before the host's first state").toBe(0);
+  // The student presses that Primary before the state (second review of 2026-10-05: drawn at the
+  // first step, it moved a task left at "build" back to "expect"). A click a busy button refuses.
+  await front.click({ force: true });
+  const pressedBefore = await svc.context();
+  expect(pressedBefore.answered - contextBefore.answered, "the press came after the host could have shown the record — it proves nothing").toBe(0);
+  await svc.holdContext(0);
+  // A step start the press reached the host with waits on its own context request: let every one
+  // be answered, and the write that would follow it land, before reading the record. (Read first:
+  // such a start also ends "지난번 이어서", which would otherwise be the first thing to fail.)
+  await expect.poll(async () => { const c = await svc.context(); return c.answered >= c.requests; }, { timeout: 20_000 }).toBe(true);
+  await ctx.win.waitForTimeout(1_500);
+  record.reopened_press_before_state = { pressed: firstPaint.primary, context_at_press: pressedBefore, recorded_step_after: recordedStep(ctx.userDataDir) };
+  expect(recordedStep(ctx.userDataDir), "a press of the Primary before the host's first state moved the record").toBe("build");
+  // SX-01/SX-02 — and that Primary could not be started: it was busy until the state came.
+  expect(firstPaint.busy, `region A's Primary ("${firstPaint.primary}") could be started before the host had shown the record's step`).toBe(true);
   const resume = chat.locator("header.hp-mission .hp-mission-resume button");
   await expect(resume).toHaveText("지난번 이어서 · Build pane", { timeout: 20_000 });
   await expect(resume).toHaveAttribute("data-resume-step", "build");
@@ -529,12 +615,14 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   // earlier step is offered as an action, and the steps remaining count from it. Started at the
   // first step, the Primary was "기대 조건", and pressing it moved the record back to that step
   // (review of 2026-10-05).
-  const front = chat.locator("header.hp-mission .hp-mission-actions .hp-cta-primary");
   await expect(front, "the reopened screen's Primary is not the step the record holds").toHaveText("Build pane");
+  await expect(front, "the Primary is still busy after the host's state showed the record").toBeEnabled();
+  const frontOnState = await front.innerText();
   for (const step of WEEK3.steps.slice(0, WEEK3.steps.findIndex((s) => s.id === "build"))) {
     await expect(chat.locator("header.hp-mission .hp-mission-actions button", { hasText: step.title }), `an earlier step (${step.title}) is offered as an action after the reopen`).toHaveCount(0);
   }
   await expect(chat.locator("header.hp-mission .hp-mission-remaining")).toHaveText(remainingAt("build"));
+  const remainingOnState = await chat.locator("header.hp-mission .hp-mission-remaining").innerText();
   expect(primaryProblem(await probePrimary(chat))).toBeNull();
   // The short window with the entry drawn: the four parts, the Primary and the entry on screen. The
   // layout comes back with the preview the first session opened, so the chat is about 640 px wide here.
@@ -560,7 +648,7 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   await front.click();
   await expect(chat.locator(".hp-mission-resume"), "'지난번 이어서' stays after the student continued the step it names").toHaveCount(0, { timeout: 20_000 });
   expect(recordedStep(ctx.userDataDir), "the start onto the recorded step moved the record").toBe("build");
-  record.reopened = { front_on_open: "Build pane", remaining_on_open: remainingAt("build"), resume: resumeText, front_after: await front.innerText(), focused: true, after_primary: { resume: 0, recorded_step: "build" } };
+  record.reopened = { front_at_first_paint: firstPaint.primary, busy_at_first_paint: firstPaint.busy, front_on_state: frontOnState, remaining_on_state: remainingOnState, resume: resumeText, front_after: await front.innerText(), focused: true, after_primary: { resume: 0, recorded_step: recordedStep(ctx.userDataDir) } };
 
   // ── Reopened again: nothing was written, so the record still stands where the first session left it ──
   await ctx.app.close();
@@ -586,4 +674,35 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   await expect.poll(() => recordedStep(ctx!.userDataDir), { timeout: 30_000 }).toBe("test");
   await expect(chat.locator(".hp-mission-resume")).toHaveCount(0);
   record.moved_on = { recorded_step: "test", resume: 0 };
+
+  // ── Reopened while the Service's observation context does not answer in time (the App gives up
+  //    after 5 s): no state can show the record, so the Primary stays busy, and nothing else of the
+  //    task (region D) is drawn. The next coach turn that answers sends the state that was owed
+  //    (chatPanelProvider `learningStateOwed`); without it the Primary stayed busy until the webview
+  //    was made again ──
+  await ctx.app.close();
+  ctx = undefined;
+  await svc.holdContext(CONTEXT_FAIL_MS);
+  const failingBefore = await svc.context();
+  ctx = await launchApp({ reuseUserDataDir: userDataDir, preseedToken: true, preseedCoach: { name: "코치" } });
+  await resize(ctx.app, WIDE);
+  chat = await focusChat(ctx.win);
+  await expect(chat.locator("header.hp-mission h1.hp-mission-sentence")).toHaveText(MISSION);
+  // The Service has been done with every request this App made (each after the App gave up on it).
+  await expect.poll(async () => { const c = await svc.context(); return c.requests > failingBefore.requests && c.answered >= c.requests; }, { timeout: 30_000 }).toBe(true);
+  await svc.holdContext(0);
+  const failingFront = chat.locator("header.hp-mission .hp-mission-actions .hp-cta-primary");
+  const failing = { primary: await failingFront.innerText(), busy: await failingFront.isDisabled(), region_d: await chat.locator(".hp-evidence-region").count(), context: await svc.context() };
+  record.context_failed = { ...failing, context_before_launch: failingBefore };
+  expect(failing.region_d, "a learning state arrived although the context request failed — the check proves nothing").toBe(0);
+  expect(failing.busy, `region A's Primary ("${failing.primary}") can be started though no state has shown the record`).toBe(true);
+  // The student talks to the coach: that turn's own context request is answered now.
+  const answeredBefore = await chat.locator(".hps-msg-body", { hasText: "[로컬 시험 응답]" }).count();
+  await send(ctx.win, "다시 해 볼게요");
+  await expect(chat.locator(".hps-msg-body", { hasText: "[로컬 시험 응답]" })).toHaveCount(answeredBefore + 1, { timeout: 60_000 });
+  await expect(failingFront, "the state owed since the failed read never came: the Primary stays busy").toBeEnabled({ timeout: 20_000 });
+  await expect(failingFront, "the owed state did not show the recorded step").toHaveText("Preview / Test");
+  await expect(chat.locator(".hp-evidence-region")).toHaveCount(1);
+  expect(recordedStep(ctx.userDataDir), "the turn after a failed read moved the recorded step").toBe("test");
+  record.context_failed = { ...(record.context_failed as object), after_turn: { primary: await failingFront.innerText(), busy: await failingFront.isDisabled(), recorded_step: recordedStep(ctx.userDataDir) } };
 });

@@ -1214,36 +1214,43 @@ html, body, #root {
    conversation and the composer a thin strip or none: at 1280×400 the textarea sat under it
    (review of 2026-10-05). The header leaves region B 250 px — the composer measured 208 px in the
    App, model picker and usage line included — and scrolls inside itself past that, but keeps at
-   least its first 150 px. The whole week-3 header still fits from about 600 px of webview; only
-   below roughly 400 px does region B get less than 250. */
-.hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }
-/* ...and on a short window those first 150 px hold all four SX-01 parts. Stacked, the week-3 header
-   is about 330 px, so its completion conditions and steps remaining scrolled inside it (in the App
-   at 1280×450, 387 px of webview: review of 2026-10-05). At 600 px of webview and below it packs
-   the way the design's own sketch of region A does (design §정보 구조): the week with "남은 단계 N"
-   on one line, the mission, the actions, then the completion conditions on wrapping lines, with
-   "지난번 이어서" beside them while they keep 280 px, and under them on a narrower window. The step's
-   acceptance sentence, the activity line and the growth link follow inside the header's own scroll;
-   an activity line that reports a connection problem stays under the mission. Measured on the real
-   header with the week-3 design (three conditions): the four parts and the Primary stay on screen
-   down to 230 px of webview at 1280, 640 and 350 wide; "지난번 이어서" does too down to about
-   500 wide, and scrolls inside the header on a narrower short window. Order only: the markup, and
-   so the keyboard and screen-reader order, is unchanged. */
-@media (max-height:600px) {
+   least its first 160 px (150 left the third completion condition of weeks 4 and 5 under the edge
+   at 640 wide: third review of 2026-10-05). Below about 410 px of webview region B gets less than
+   250, and the composer's top runs under the header from about 370 px down. */
+.hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(160px, calc(100% - 250px)); overflow-y: auto; }
+/* ...and on a short window those first 160 px hold all four SX-01 parts, every completion condition
+   whole. Stacked, the week-3 header is about 330 px, so its completion conditions and steps remaining
+   scrolled inside it (in the App at 1280×450, 387 px of webview: review of 2026-10-05). At 600 px of
+   webview and below it packs the way the design's own sketch of region A does (design §정보 구조):
+   the week with "남은 단계 N" on one line, the mission, the actions, then the completion conditions on
+   wrapping lines, with "지난번 이어서" beside them while they keep 280 px, and under them on a narrower
+   window. A narrow webview packs from 700 px: there the stacked header is up to 425 px (the actions
+   wrap), more than the 351–450 px it gets between 601 and 700. The activity line (also when it
+   reports a connection problem), the step's acceptance sentence and the growth link come after
+   "지난번 이어서", inside the header's own scroll when it is full. Order only: the markup, and so the
+   keyboard and screen-reader order, is unchanged.
+   Measured on the real header (server render in Chromium, the shell padded to the App's composer) with
+   the six week fixtures, verified and unverified seats, with and without "지난번 이어서", at 1280, 640,
+   560, 520 and 400 wide and 337–800 px of webview: the four parts, every completion condition and the
+   Primary are wholly on screen everywhere except 400 wide and 410 px or lower for weeks 2 and 6, whose
+   three actions take two rows there; "지난번 이어서" is wholly on screen except at 400 wide and 450 px
+   or lower (500 for weeks 2 and 6) and 520 wide and 450 or lower for week 6. In the App:
+   e2e/sx/home-app.spec.ts at 1280×387 and 640×387. */
+@media (max-height:600px), (max-height:700px) and (max-width:560px) {
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { display:flex; flex-wrap:wrap; align-items:center; column-gap:12px; padding:8px 12px 6px; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission > * { flex:1 1 100%; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission > .hp-mission-foot { display:contents; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-week { order:1; flex:1 1 auto; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-remaining { order:2; flex:0 0 auto; margin:0 0 2px; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-sentence { order:3; font-size:18px; margin-bottom:4px; }
-  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity:has(> [role="status"]) { order:4; margin-bottom:4px; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-actions { order:5; margin-bottom:6px; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-completion { order:6; flex:1 1 0; min-width:min(100%, 280px); display:flex; flex-wrap:wrap; gap:2px 12px; margin-bottom:6px; font-size:12px; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-completion li { margin:0; }
   .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-resume { order:7; flex:0 0 auto; align-self:flex-start; margin-bottom:6px; }
-  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-acceptance { order:8; }
-  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity { order:9; }
-  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:10; flex:0 0 auto; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity:has(> [role="status"]) { order:8; margin-bottom:4px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-acceptance { order:9; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity { order:10; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:11; flex:0 0 auto; }
 }
 .hp-mission-week { margin: 0 0 2px; font-size: 12px; letter-spacing: 1px; color: var(--hp-muted); }
 .hp-mission-sentence { margin: 0 0 8px; font-size: 22px; line-height: 1.35; font-weight: 700; overflow-wrap: anywhere; }
@@ -1269,6 +1276,14 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button {
   color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-line);
+}
+/* ...and the student's own chat bubble, which takes the same theme colour as its background: Lime
+   on a second element of the viewport is SX-04's failure (SX-49 negative), and a bubble is none of
+   Lime's roles (Primary CTA, current step). Found in the App beside region A's Primary, mid-turn and
+   on every later screen (e2e/sx/home-app.spec.ts, review of 2026-10-05). It keeps its side and its
+   shape on the Panel token, which SX-49 gives to secondary surfaces. */
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-user .hps-msg-body {
+  color: var(--hp-ink); background: var(--hp-panel); border: 1px solid var(--hp-line);
 }
 .hp-cta-quiet {
   min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer;

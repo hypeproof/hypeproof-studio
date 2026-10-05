@@ -18,9 +18,13 @@
 // row and a lesson-pinned token) without the authoring, rehearsal and confirmation steps: those
 // are Chalk's contract, not the learner's screen this Service exists to show.
 //
-// Control routes (specs only): GET /__sx/state — the turns the model answered; GET /__sx/hold?ms=N
-// — the next streamed turn starts at once and holds its reply for N ms (at most 30 s), so a spec
-// can look at the screen while the coach is answering.
+// Control routes (specs only): GET /__sx/state — the turns the model answered, and how many
+// observation-context requests arrived and were answered; GET /__sx/hold?ms=N — the next streamed
+// turn starts at once and holds its reply for N ms (at most 30 s), so a spec can look at the screen
+// while the coach is answering; GET /__sx/hold-context?ms=N — every `/v1/observations/context`
+// request that arrives from now on waits N ms before it is answered (at most 30 s; 0 ends it), so a
+// spec can look at the screen before the host's first learning state (the App gives up on that
+// request after 5 s, so a spec that wants the state keeps N under that).
 import "../../worker/test/harness/loader.mjs";
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -75,9 +79,11 @@ const lesson = { course_id: COURSE, version: VERSION, sha256: module.sha256 };
 writeFileSync(tokenFile, (await issue({ u: USER, c: cohort, p: profile.id, lesson }, 6, TEST_SECRET)).token);
 
 // ── the model: one fixed line per turn ───────────────────────────────────────
-const state = { turns: [] };
+const state = { turns: [], context: { requests: 0, answered: 0 } };
 /** ms the next streamed turn holds its reply (GET /__sx/hold); 0 = answer at once. */
 let holdNext = 0;
+/** ms every observation-context request waits before it is answered (GET /__sx/hold-context); 0 = at once. */
+let holdContext = 0;
 const ANSWER = "[로컬 시험 응답] 받았어요. 기대 조건부터 같이 정해 볼까요?";
 const ev = (t, d) => `event: ${t}\ndata: ${JSON.stringify(d)}\n\n`;
 /** The reply in two parts: the start, and the text with the end. A held turn sends the second part late. */
@@ -117,11 +123,22 @@ globalThis.fetch = async (input, init) => {
 };
 
 const server = createServer(async (req, res) => {
+  /** An observation-context request: counted when it arrives, and as answered once the Service is done with it (also when the App had already given up). */
+  let context = false;
   try {
     if (req.url === "/__sx/state") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ...state, lesson, completion: completion.map((c) => c.id) }));
     if (req.url?.startsWith("/__sx/hold?")) {
       holdNext = Math.max(0, Math.min(30_000, Number(new URL(req.url, "http://local").searchParams.get("ms")) || 0));
       return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ hold: holdNext }));
+    }
+    if (req.url?.startsWith("/__sx/hold-context?")) {
+      holdContext = Math.max(0, Math.min(30_000, Number(new URL(req.url, "http://local").searchParams.get("ms")) || 0));
+      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ hold_context: holdContext }));
+    }
+    context = new URL(req.url ?? "/", "http://local").pathname.endsWith("/observations/context");
+    if (context) {
+      state.context.requests += 1;
+      if (holdContext) await new Promise((r) => setTimeout(r, holdContext));
     }
     const parts = [];
     for await (const p of req) parts.push(p);
@@ -134,6 +151,8 @@ const server = createServer(async (req, res) => {
     console.error("service failure", e);
     if (!res.headersSent) res.writeHead(500);
     res.end();
+  } finally {
+    if (context) state.context.answered += 1;
   }
 });
 server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} lesson=${COURSE}@${VERSION} completion=${[...keep].join(",")}`));

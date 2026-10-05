@@ -373,7 +373,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private async postLearningState() {
     const recorder = await this.currentLearningRecorder();
-    if (!recorder) return;
+    if (!recorder) {
+      this.learningStateOwed = true;
+      return;
+    }
     const profile = await this.ensureProfile();
     const task = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
     const target = this.taskFlowTarget(recorder, profile);
@@ -393,7 +396,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         notice,
       }),
     });
+    this.learningStateOwed = false;
   }
+
+  /**
+   * SX-01/SX-02 — a learning state could not be built (no `/2` recorder: the Service's observation
+   * context did not answer). On a task-flow seat region A's Primary stays busy until a state has
+   * shown the task's record (webview `recordShownBy`), so the next coach turn that answers sends one
+   * (the turn end below) rather than leaving that to the webview being made again (`ready`).
+   */
+  private learningStateOwed = false;
 
   /** SX-55 — the last record this host read, so a busy record does not reopen a submitted task on screen. */
   private taskFlowLast: ({ recordId: string } & ShownFlow) | null = null;
@@ -4392,7 +4404,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // own path: the turn has ended either way, and the flow reports its own failure.
       if (observation?.batch.format === 'hps-observation/2' && finalSpoolStatus === 'ok' && assistantText.length > 0) {
         void this.runTaskFlow({ kind: 'work' }, observation, profile)
-          .then((flow) => (flow?.changed || this.taskFlowNotice || this.flowSession.stale ? this.postLearningState() : undefined))
+          .then((flow) => (flow?.changed || this.taskFlowNotice || this.flowSession.stale || this.learningStateOwed ? this.postLearningState() : undefined))
           .catch(() => undefined);
       }
       if (assistantText.length > 0) {

@@ -2457,7 +2457,9 @@
         "e2e/sx/playwright.config.ts",
         "extensions/hypeproof-chat/test/sx-home.smoke.mjs",
         "e2e/sx/home-app.spec.ts",
-        "extensions/hypeproof-chat/test/sx-audit.mjs"
+        "extensions/hypeproof-chat/test/sx-audit.mjs",
+        "extensions/hypeproof-chat/test/sx-audit.smoke.mjs",
+        "extensions/hypeproof-chat/test/sx-mission-header.smoke.mjs"
       ]
     },
     {
