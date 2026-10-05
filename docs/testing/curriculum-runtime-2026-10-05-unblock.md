@@ -2,9 +2,17 @@
 
 Status: run record, 2026-10-05. Issue [#1506](https://github.com/jayleekr/hypeproof-studio/issues/1506), epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388). Row definitions: [curriculum-runtime.md](curriculum-runtime.md). #1506 is a repair issue, not a ledger work item; no row here is a completion. The record sweep (#1507) re-runs CR-T01 for `cr-recon` and CR-T02's switch-off baseline for every item, and cites this file for what changed.
 
+## Requirement IDs: touched, none met
+
+Records, issue comments, `align.py` inputs and the PR's assessment name these as touched or re-mapped, never as claimed or met.
+
+- CR-01 (`cr-recon`): CR-T01 re-run on the edited recon page, five plants caught (Part 2). `cr-recon`'s completion stays reopened until the record sweep (#1507) re-records it.
+- CR-02 (cited by every implementation item, `cr-browser` to `cr-e2e`): `09-preview.spec.ts` with the switch off, on both preview paths (Part 1). That is one spec of CR-T02's switch-off half. Not run here: the HTML generation specs, the switch-off inventory, the switch-on half and the stored-bytes exception. `app-layer.spec.ts` ran only to compare fixtures (Part 1, last section), so it is no CR-T02 result.
+- CR-59 and CR-60 (`cr-e2e` since decision 9): the recon map now names `cr-e2e` as their item (Part 2). Nothing was measured. CR-T55 and CR-T56 (30 samples each, in the Studio app on the reference Mac) stay with `cr-e2e`.
+
 ## What was run
 
-- Code: branch `chore/cr-unblock` off `origin/main` `00590823`. No product code changed. Changed: `e2e/tests/09-preview.spec.ts` and `e2e/fixtures/app.ts` (the instrument), the recon page, the CR-T01 frozen control inputs, the plan, this file and its trace node.
+- Code: branch `chore/cr-unblock` off `origin/main` `00590823`. No product code changed. Changed: `e2e/tests/09-preview.spec.ts` and `e2e/fixtures/app.ts` (the instrument), the recon page, the CR-T01 frozen control inputs, the plan, the status line of [curriculum-runtime.md](curriculum-runtime.md) (a link to this file), this file and its trace node.
 - Machine: Apple M3 Pro, macOS 15.7.4, Node 22.22.1. Screen unlocked. Every app run waited for 5 minutes without keyboard or mouse input (`GATE=idle`), ran in quiet mode (off-screen, not focusable, in-memory secret storage, temporary user data) and held the machine-wide app lock (`app-lock.sh`).
 - App: a scratch copy of HypeProof Studio 0.1.51 (`d4db9049`) with the extension and webview built from `00590823` injected (`e2e/classroom/mac-devhost.mjs prepare`: 4 bundle hashes equal to the build), marked `LSUIElement` (`scripts/prep-test-app.sh`). The branch changes nothing the app runs, so the same build serves the branch. Each planted regression below was its own build of `00590823` plus the plant, injected the same way.
 - Service: `scripts/dev-stack.sh` (local `wrangler dev`, dev-only signing secret, no provider key), cohort `sk-biopharm-2026-a`, profile `sk-biopharm-kids-2026-grade-3-4-s1`, served with `preview.type: "live_server"` and `curriculum_runtime.enabled: false` (the CR switch off).
@@ -56,9 +64,11 @@ Runs 13:20–13:30, one gated run per plant; the clean build was injected again 
 
 Instrument control (test code, no rebuild): M7, the forwarder stops changing the profile. Run 13:31 with `--grep webview`: each webview test failed at its own first check, "the forwarder serves a webview cohort" (expected `iframe`, received `live`), in under 30 ms and without launching the app. The served REQ-D4 test, which the grep also matched, passed.
 
-### The shared fixture in the other CR in-app specs
+### What ran against the changed fixture
 
-`runCommand` is shared by the CR in-app specs (`e2e/curriculum-runtime/*-app.spec.ts`, `app-layer.spec.ts`). `app-layer.spec.ts` with this branch's fixture, same app copy, gated (13:31–13:32): 2 passed, 1 failed. The failure is the last assertion of "CR-T02 exception in-app": "hidden again once nothing is stored". The stored bytes were already gone (the spec polls the files first), but the delete command was still listed. The spec reads the palette once, right after the files are gone, and the App sets the context key without waiting (`refreshCrBytesContext`: `void executeCommand("setContext", …)`), so the read can come first. `runCommand` only ran the delete command, which did its job.
+`e2e/fixtures/app.ts` is shared. 26 spec files call `runCommand` or `openChatContainer` (`grep -rln "openChatContainer\|runCommand(" e2e` lists them and the fixture itself): 20 under `e2e/tests/` and the six CR in-app specs under `e2e/curriculum-runtime/`. Only two were re-run against this branch's fixture: `09-preview.spec.ts` (above) and `app-layer.spec.ts` (below). The other 24 were not. What changed for them: `openChatContainer` returns at once when a chat `.hps-shell` is already visible (only `ChatPanel.tsx` and `ChatErrorBoundary.tsx` render one), and `runCommand` fills the palette and checks that it is still open inside its retry, then presses Enter. Whoever next finds one of the 24 red (the record sweep #1507 re-runs the CR in-app specs) runs it with `origin/main`'s fixture and with this one before blaming the product.
+
+`app-layer.spec.ts` with this branch's fixture, same app copy, gated (13:31–13:32): 2 passed, 1 failed. The failure is the last assertion of "CR-T02 exception in-app": "hidden again once nothing is stored". The stored bytes were already gone (the spec polls the files first), but the delete command was still listed. The spec reads the palette once, right after the files are gone, and the App sets the context key without waiting (`refreshCrBytesContext`: `void executeCommand("setContext", …)`), so the read can come first. `runCommand` only ran the delete command, which did its job.
 
 The same test alone, three gated runs per fixture, the fixture file swapped on the same app copy and Service (scratch runner `ab_fixture.py`):
 
@@ -114,9 +124,12 @@ Not run: the extension typecheck and smokes (no file under `extensions/` changed
 
 - The webview path ran with a synthetic `preview.type`. No shipped profile is a webview cohort, and this run did not force a live server to fail.
 - REQ-D4 on the live path counts tabs. A product that closed and reopened its tab instead of reloading it would pass; only a second tab is caught (M5).
+- `runCommand` narrows the palette race but does not close it. It checks that the palette is still open 150 ms after `fill`, then presses Enter; if the "AI와 작업" editor takes focus between that check and Enter, the palette closes, Enter lands in that editor, the command does not run and the caller's next step fails. No run after the change failed inside `runCommand`; the one that did (`variants-try1`) predates it.
 - CR-T02's HTML generation specs and the rest of the switch-off inventory: `cr-e2e`.
 - No completion is written here. `cr-recon` stays reopened until the record sweep re-records it: its pin on the requirements document had already changed, and this branch changes the page and the fixture it pins.
 - The shell is the installed 0.1.51 copy; only the extension and webview are current.
-- Follow-ups for the record sweep (#1507), which re-runs the CR in-app specs; pre-existing, not changed here:
-  - `paletteRows` (`e2e/curriculum-runtime/app-helpers.ts`) opens the palette until its input shows and then fills it outside the retry, the race `runCommand` had: it failed 1 of 3 runs with either fixture.
-  - `app-layer.spec.ts`, "CR-T02 exception in-app": the last assertion reads the palette once right after the stored files are gone, while the App sets the context key without waiting. It failed once in 5 runs that reached it.
+- Follow-ups for the record sweep (#1507), which re-runs the CR in-app specs:
+  - From this change: 24 of the 26 specs that use the changed fixture were not re-run against it (Part 1, last section). One found red is run with `origin/main`'s fixture and with this branch's before the product is blamed.
+  - Pre-existing, not changed here: `paletteRows` (`e2e/curriculum-runtime/app-helpers.ts`) opens the palette until its input shows and then fills it outside the retry, the race `runCommand` had: it failed 1 of 3 runs with either fixture.
+  - Pre-existing, not changed here: `app-layer.spec.ts`, "CR-T02 exception in-app": the last assertion reads the palette once right after the stored files are gone, while the App sets the context key without waiting. It failed once in 5 runs that reached it.
+  - Pre-existing, not changed here: `cr-browser` lists `docs/testing/curriculum-runtime.md` in its `verification_inputs`, and `align.py record` pins every verification input as a whole file. Once `cr-browser` is recorded, the next clause added to that file's status line (each item adds one; this change added one before any completion pinned the file) reopens it.
