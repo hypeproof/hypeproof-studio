@@ -65,6 +65,8 @@ export const COMPONENTS = {
   MemoryPanel: { from: "./src/MemoryPanel.tsx", exportName: "MemoryPanel" },
   // cr-skills (#1396) — the curriculum skills panel; draws the SkillsView the host read.
   SkillsPanel: { from: "./src/SkillsPanel.tsx", exportName: "SkillsPanel" },
+  // cr-review (#1398) — the Weekly Review panel, the student's and the director's; draws the ReviewView the host read.
+  ReviewPanel: { from: "./src/ReviewPanel.tsx", exportName: "ReviewPanel" },
 };
 
 /**
