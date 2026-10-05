@@ -3447,6 +3447,36 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-06-review-provider.md"
+        },
+        {
+          "path": "e2e/curriculum-runtime/app-service.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/loop-coach.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-gate.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-control.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/loop-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/timing-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/switch-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/register-version.mjs"
+        },
+        {
+          "path": "scripts/cr-dev-kit.sh"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-06-e2e.md"
         }
       ]
     },
