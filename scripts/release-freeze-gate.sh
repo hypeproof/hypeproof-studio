@@ -43,4 +43,6 @@ if [[ -n "$(bash "$HERE/tag-is-prerelease.sh" "$TAG")" ]]; then
 fi
 
 echo "live-session freeze: $TAG is a STABLE release — asking the worker whether a class is live."
+# A session on a cohort the worker reports as synthetic (release acceptance's
+# own, #1404) is ignored there, from the worker's flag — never decided here.
 exec node "$HERE/check-live-sessions.mjs"

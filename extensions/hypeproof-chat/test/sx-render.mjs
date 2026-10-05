@@ -13,12 +13,13 @@
 //   bundle with esbuild and run it under vm.runInNewContext. The only difference is that
 //   resolveDir is webview-ui, because react / react-dom / react/jsx-runtime live there.
 //
-// Known limitation (also recorded in the report):
-//   CI's `npm ci --omit=optional` installs **only the extension's dependencies**
-//   (.github/workflows/pr-ci.yml extension-test job). There is no webview-ui/node_modules.
-//   So when react is missing, rendererStatus() returns reason:"webview-deps-missing" and the
-//   caller skips while **surfacing** that fact. It does not silently pass. The pure text
-//   controls and the empty-region guard (auditRegionText's empty_region) still run in CI.
+// Where react is missing:
+//   CI installs the webview's dependencies before the smoke tests (.github/workflows/pr-ci.yml,
+//   `extension / smoke` job, step "Install webview deps (the render instrument needs react)"),
+//   so the render checks run there. A checkout without webview-ui/node_modules has no react:
+//   rendererStatus() then returns reason:"webview-deps-missing" and the caller skips while
+//   **surfacing** that fact (a NOT RUN line). It does not silently pass. The pure text
+//   controls and the empty-region guard (auditRegionText's empty_region) run either way.
 
 import vm from "node:vm";
 import { build } from "esbuild";
@@ -48,6 +49,12 @@ export const COMPONENTS = {
   // Region D (SX-17~24). Lives on props alone — it draws the `learningState.evidence` the
   // host sent, and does not recompute the gate.
   EvidenceDrawer: { from: "./src/EvidenceDrawer.tsx", exportName: "EvidenceDrawer" },
+  // Region D's completion line (SX-14 gate, SX-55 phase). Props only — it draws the
+  // `learningState` the host sent; ChatPanel's hook that holds that state never fills under SSR.
+  CompletionGate: { from: "./src/CompletionGate.tsx", exportName: "CompletionGate" },
+  // The local review's line for the curriculum task records its list leaves out (MC-27), with
+  // its delete button (MC-31). Props only; LocalReview's own state never fills under SSR.
+  OmittedRecords: { from: "./src/LocalReview.tsx", exportName: "OmittedRecords" },
   // cr-verify — "내 제품 테스트" (CR-12–CR-16, CR-81). Lives on props alone: it draws the
   // VerifyView the host computed and never decides "검증됨" itself.
   VerifyPanel: { from: "./src/VerifyPanel.tsx", exportName: "VerifyPanel" },

@@ -25,6 +25,16 @@
 //     during exactly the hours it is most needed. The workflows decide that
 //     with scripts/tag-is-prerelease.sh and simply do not call this script.
 //
+// WHAT IT IGNORES (#1404)
+//   A live session on a cohort the worker reports as `synthetic: true`, running
+//   one of that cohort's own profiles. Release acceptance opens a short session
+//   on such a cohort (worker/src/profiles/synthetic-release-acceptance.ts); the
+//   worker refuses any non-`synthetic-` handle on its roster, so no class can be
+//   in it. Reading it as a class would block the same run's publish job and
+//   every worker deploy. The exemption is fail closed: anything other than the
+//   boolean `true` from the worker — a missing field from an older worker, a
+//   string, a session on a profile the cohort does not own — still blocks.
+//
 // FAIL CLOSED — deliberate. See the long note above classify() for the
 // reasoning and the exact failure taxonomy.
 //
@@ -57,6 +67,19 @@
 
 const DEFAULT_API_BASE = "https://api.hypeproof-ai.xyz";
 const REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * #1404 — true only when the worker said this cohort is synthetic AND the
+ * session runs one of the cohort's own profiles. Exact `true`, never truthy.
+ */
+export function isSyntheticSession(cohort, session) {
+  return (
+    cohort.synthetic === true &&
+    Array.isArray(cohort.profile_ids) &&
+    typeof session.profile_id === "string" &&
+    cohort.profile_ids.includes(session.profile_id)
+  );
+}
 
 /**
  * Mirror of worker/src/lib/kv.ts `isSessionLive`, deliberately using the same
@@ -128,6 +151,7 @@ export function classify(payload, now) {
 
   // --- the actual question ----------------------------------------------
   const live = [];
+  const synthetic = [];
   for (const cohort of payload.cohorts) {
     if (cohort === null || typeof cohort !== "object") {
       live.push({ cohort: "<malformed cohort entry>", state: "undecidable" });
@@ -137,6 +161,12 @@ export function classify(payload, now) {
     const session = cohort.session;
     if (session === null || session === undefined) continue; // no session: fine
     const verdict = isLive(session, now);
+    // Only a session that is decidably live is exempted; "cannot tell" on a
+    // synthetic cohort still blocks like everywhere else.
+    if (verdict === true && isSyntheticSession(cohort, session)) {
+      synthetic.push(id);
+      continue;
+    }
     if (verdict === null) {
       live.push({
         cohort: id,
@@ -153,33 +183,43 @@ export function classify(payload, now) {
     }
   }
 
+  // Said in every message, so a run log shows what was ignored and why.
+  const ignored = synthetic.length
+    ? `; ignored ${synthetic.length} synthetic ${plural(synthetic.length, "session")} (${synthetic.join(", ")})`
+    : "";
+
   if (live.length === 0) {
     return {
       decision: "proceed",
       reason: "no_live_sessions",
       liveCount: 0,
       live: [],
+      synthetic,
       message:
         `no live sessions across ${payload.cohorts.length} ` +
-        `${plural(payload.cohorts.length, "cohort")} at ${now.toISOString()}`,
+        `${plural(payload.cohorts.length, "cohort")} at ${now.toISOString()}${ignored}`,
     };
   }
 
   const undecidable = live.filter((l) => l.state === "undecidable").length;
   const reason = undecidable === live.length ? "undecidable_session" : "live_session";
-  return blocked(
-    reason,
-    live.length,
-    live,
-    `${live.length} live ${plural(live.length, "session")} at ${now.toISOString()}: ` +
-      live
-        .map((l) =>
-          l.state === "undecidable"
-            ? `${l.cohort} (session timestamps unparseable — treated as live)`
-            : `${l.cohort}${l.profile_id ? `/${l.profile_id}` : ""} until ${l.ends_at ?? "?"}`,
-        )
-        .join(", "),
-  );
+  return {
+    ...blocked(
+      reason,
+      live.length,
+      live,
+      `${live.length} live ${plural(live.length, "session")} at ${now.toISOString()}: ` +
+        live
+          .map((l) =>
+            l.state === "undecidable"
+              ? `${l.cohort} (session timestamps unparseable — treated as live)`
+              : `${l.cohort}${l.profile_id ? `/${l.profile_id}` : ""} until ${l.ends_at ?? "?"}`,
+          )
+          .join(", ") +
+        ignored,
+    ),
+    synthetic,
+  };
 }
 
 function plural(n, word) {

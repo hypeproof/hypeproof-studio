@@ -22,10 +22,14 @@ export type LocalReviewRequest =
   | { type: 'localReview'; action: 'followUp'; task: string; improvement: string; attempt: 'tried' | 'not_tried' | 'unknown'; observed: string }
   | { type: 'localReview'; action: 'preview'; task: string; includeEvidence: boolean }
   | { type: 'localReview'; action: 'submit'; task: string; digest: string }
-  | { type: 'localReview'; action: 'delete'; task: string };
+  | { type: 'localReview'; action: 'delete'; task: string }
+  /** MC-31 — delete the curriculum task records the list leaves out (asked first, on the host). */
+  | { type: 'localReview'; action: 'deleteCurriculum' };
 export interface LocalReviewState {
   type: 'localReviewState';
   tasks: Array<{ id: string; project: string; status: string }>;
+  /** MC-27 — curriculum task records (SX-55) on this record that `tasks` leaves out; the screen says how many. */
+  curriculumTasks?: number;
   storage: string;
   improvements?: Improvement[];
   card?: TaskCard;

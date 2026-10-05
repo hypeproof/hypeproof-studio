@@ -30,10 +30,12 @@ on:
         type: boolean
         default: false
       # jayleekr/hypeprooflab#997: the activity-compatibility check has never
-      # passed since it was added on 2026-09-10 (first run with its key on
-      # 09-23 failed before any request reached the Service). Skipping it is a
-      # recorded, per-dispatch decision; the freeze, schemas and post-deploy
-      # checks still run.
+      # passed since it was added on 2026-09-10. The first run with its key on
+      # 09-23 failed before any model call: the runner had no seeded Agent SDK
+      # binary, so the trial fell back to the proxy and the Service answered
+      # 409 trial_requires_sdk. verify-service-activities.yml now seeds it.
+      # Skipping it is a recorded, per-dispatch decision; the freeze, schemas
+      # and post-deploy checks still run.
       skip_activity_compatibility:
         description: "Skip the public-App compatibility check for this deploy (recorded in the job summary)"
         type: boolean

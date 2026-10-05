@@ -353,20 +353,25 @@ test('profile labels an authorized native grant as trial without creating anothe
 
 const { listProfiles, getProfile } = await import('../src/profiles/index.ts');
 
-test('exactly two profiles may mint an individual trial seat', async () => {
+test('exactly three profiles may mint an individual trial seat', async () => {
   // A set assertion, not a per-profile one, because the failure mode is a
-  // profile JOINING the set without anyone writing a line about it. Three of
-  // the nine profiles are built by spreading another one
-  // (studio-gpt-practice spreads studio-native-trial, studio-model-practice
-  // spreads studio-gpt-practice, homepage-practice spreads the dental cohort),
+  // profile JOINING the set without anyone writing a line about it. Four of
+  // the ten profiles are built by spreading another one
+  // (studio-gpt-practice and synthetic-release-acceptance spread
+  // studio-native-trial, studio-model-practice spreads studio-gpt-practice,
+  // homepage-practice spreads the dental cohort),
   // so a `trial` block placed on a base profile is inherited in silence — the
   // same trap ADR 0010 documents for `observation`.
   //
   // If this list is meant to change, change it here and say why in the commit.
+  // #1404 added `synthetic-release-acceptance`: release acceptance mints a fresh
+  // trial seat there per run. It inherits the block from studio-native-trial on
+  // purpose, and it is synthetic, so the seat can only go to a `synthetic-` handle.
   assert.deepEqual(
     listProfiles().filter((p) => p.trial?.individual === true).map((p) => p.id).sort(),
-    ['canary-sdk-contract', 'studio-native-trial'],
+    ['canary-sdk-contract', 'studio-native-trial', 'synthetic-release-acceptance'],
   );
+  assert.equal(getProfile('synthetic-release-acceptance')?.synthetic, true);
   // And the minors are on the other side of it, named rather than implied.
   for (const id of ['sk-biopharm-kids-2026-grade-3-4-s1', 'sk-biopharm-kids-2026-grade-5-6-s1'])
     assert.notEqual(getProfile(id)?.trial?.individual, true, `${id} 가 개인 체험 발급 대상이 됐다`);

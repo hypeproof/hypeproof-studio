@@ -47,6 +47,9 @@ export interface LaunchOptions {
   preseedHistory?: SeedHistoryTurn[];
   /** Pre-seed an issuer token into SecretStorage for mint-flow tests (G5/G6). */
   preseedIssuerToken?: string;
+  /** The Service base URL written to `hypeproofChat.proxyUrl` (e.g. a test forwarder in
+   *  front of the dev Worker). Default: `HPS_E2E_PROXY_URL`, else the local dev Worker. */
+  proxyUrl?: string;
 }
 
 /**
@@ -160,7 +163,7 @@ export async function launchApp(opts: LaunchOptions = { preseedToken: true }): P
     path.join(userDir, "settings.json"),
     JSON.stringify(
       {
-        "hypeproofChat.proxyUrl": process.env.HPS_E2E_PROXY_URL?.trim() || "http://localhost:8787/v1",
+        "hypeproofChat.proxyUrl": opts.proxyUrl ?? (process.env.HPS_E2E_PROXY_URL?.trim() || "http://localhost:8787/v1"),
         // Render dialogs in the DOM (default on macOS is a NATIVE NSAlert that
         // Playwright cannot see or click) — required to drive approval modals
         // (writeFile/openBrowser) in SDK-runtime specs.
@@ -300,7 +303,10 @@ export async function runCommand(win: Page, label: string): Promise<void> {
   // The unified layout opens its "AI와 작업" editor a moment after the workbench is
   // ready and takes focus, which closes a palette opened in that window (recon F1,
   // cr-browser #1391: the input was found but hidden). So the palette is opened again,
-  // up to three times, until its input is visible; a palette that never opens still fails.
+  // up to three times. The focus can move after the input became visible too (#1506:
+  // `fill` then waited 30 s on a closed palette), so filling it, and finding it still
+  // open after the filter settles, are part of each attempt. A palette that never stays
+  // open still fails.
   const titleBar = win.locator(".monaco-workbench .part.titlebar").first();
   const input = win.locator(".quick-input-widget input.input").first();
   for (let attempt = 1; ; attempt++) {
@@ -310,6 +316,10 @@ export async function runCommand(win: Page, label: string): Promise<void> {
     await win.keyboard.press("Meta+Shift+P");
     try {
       await input.waitFor({ state: "visible", timeout: attempt < 3 ? 2_500 : 5_000 });
+      await input.fill(`>${label}`, { timeout: 2_500 });
+      // Wait briefly for the filter to settle
+      await win.waitForTimeout(150);
+      if (!(await input.isVisible())) throw new Error(`the command palette closed before "${label}" ran`);
       break;
     } catch (err) {
       if (attempt >= 3) throw err;
@@ -317,14 +327,14 @@ export async function runCommand(win: Page, label: string): Promise<void> {
       await win.waitForTimeout(500);
     }
   }
-  await input.fill(`>${label}`);
-  // Wait briefly for the filter to settle
-  await win.waitForTimeout(150);
   await win.keyboard.press("Enter");
 }
 
 /** Open + select the HypeProof Chat container (idempotent — safe if already open). */
 export async function openChatContainer(win: Page): Promise<void> {
+  // The unified layout already shows the chat in its "AI와 작업" editor and has no
+  // activity bar; opening it again through the palette only races that editor's focus.
+  if (await chatSurfaceVisible(win)) return;
   // Try several selectors — VS Code's activitybar DOM varies a bit by version.
   const selectors = [
     '.activitybar [aria-label*="HypeProof"]',
@@ -363,6 +373,16 @@ export async function previewFrame(win: Page) {
 /** Entry editor, before opening other editor webviews. */
 export async function startFrame(win: Page) {
   return surfaceFrame(win, '.studio-start', 'start');
+}
+
+/** Is a chat surface rendered and visible right now (editor or sidebar)? Checks once, no wait. */
+async function chatSurfaceVisible(win: Page): Promise<boolean> {
+  const frames = win.locator('iframe.webview.ready');
+  for (let i = 0; i < await frames.count(); i++) {
+    const frame = win.frameLocator('iframe.webview.ready').nth(i).frameLocator('#active-frame');
+    if (await frame.locator('.hps-shell').isVisible().catch(() => false)) return true;
+  }
+  return false;
 }
 
 /** Locate the rendered surface, whether it is in an editor or a sidebar. */
