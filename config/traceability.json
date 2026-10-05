@@ -1901,6 +1901,12 @@
         },
         {
           "path": "worker/test/feedback-loop-d1.test.mjs"
+        },
+        {
+          "path": "chalk/test/feedback-loop-forward.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/feedback-loop.mjs"
         }
       ]
     },
@@ -1928,6 +1934,15 @@
         },
         {
           "path": "worker/migrations/0039-feedback-loop.sql"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
         }
       ]
     },
