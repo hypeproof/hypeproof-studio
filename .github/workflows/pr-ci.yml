@@ -110,6 +110,10 @@ jobs:
       - name: Run classroom sharing against local D1
         working-directory: worker
         run: npm run test:classroom:d1
+      # #1013 — the learner's answer to feedback and the lesson retrospective → next draft on local workerd/D1.
+      - name: Run the feedback loop against local D1
+        working-directory: worker
+        run: npm run test:feedback-loop:d1
       - name: Run individual trials against local D1
         working-directory: worker
         run: npm run test:native-trial:d1

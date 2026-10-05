@@ -1245,6 +1245,47 @@ CREATE TABLE IF NOT EXISTS authoring_confirmations (
  PRIMARY KEY (cohort_id, course_id, version)
 );
 
+-- ── migrations/0039-feedback-loop.sql (a person's feedback, the learner's answer and the lesson retrospective, #1013) ──
+-- The learner's revise/keep/hold after a person's feedback on a share, bound to the feedback text it answers; deleted with the share.
+CREATE TABLE IF NOT EXISTS classroom_share_responses (
+ share_id TEXT NOT NULL REFERENCES classroom_shares(id) ON DELETE CASCADE,
+ feedback_sha256 TEXT NOT NULL,
+ feedback_revision INTEGER NOT NULL,
+ decision TEXT NOT NULL CHECK (decision IN ('revise','keep','hold')),
+ reason TEXT NOT NULL,
+ created_at INTEGER NOT NULL,
+ PRIMARY KEY (share_id, feedback_sha256)
+);
+-- The lesson the learner was executing when they sent a share (chat-gate resolution), written once after the share; deleted with it.
+CREATE TABLE IF NOT EXISTS classroom_share_lessons (
+ share_id TEXT PRIMARY KEY REFERENCES classroom_shares(id) ON DELETE CASCADE,
+ course_id TEXT NOT NULL,
+ version TEXT NOT NULL,
+ lesson_sha256 TEXT NOT NULL,
+ source TEXT NOT NULL,
+ recorded_at INTEGER NOT NULL
+);
+-- The instructor's retrospective of one frozen version: own words plus share REFERENCES only; immutable once it starts the next draft.
+CREATE TABLE IF NOT EXISTS lesson_retrospectives (
+ retro_id TEXT PRIMARY KEY,
+ cohort_id TEXT NOT NULL,
+ course_id TEXT NOT NULL,
+ base_version TEXT NOT NULL,
+ base_sha256 TEXT NOT NULL,
+ owner_id TEXT NOT NULL,
+ revision INTEGER NOT NULL CHECK (revision >= 1),
+ doc_json TEXT NOT NULL,
+ request_id TEXT NOT NULL,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ applied_draft_revision INTEGER,
+ applied_request_id TEXT,
+ applied_at INTEGER,
+ UNIQUE (cohort_id, course_id, request_id),
+ FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
+);
+CREATE INDEX IF NOT EXISTS lesson_retrospectives_course ON lesson_retrospectives(cohort_id, course_id, created_at);
+
 -- ── migrations/0030-chalk-knowledge-store.sql (#1288 E1-2) ──
 CREATE TABLE IF NOT EXISTS chalk_knowledge_versions (
   version        INTEGER PRIMARY KEY,

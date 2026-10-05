@@ -1885,6 +1885,71 @@
       ]
     },
     {
+      "id": "ST-TEST-FEEDBACK-LOOP",
+      "stage": "test",
+      "label": "Feedback loop — learner answer, retrospective and next draft tests (#1013)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-TEST-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "worker/test/feedback-loop.test.mjs"
+        },
+        {
+          "path": "worker/test/feedback-loop-d1.test.mjs"
+        },
+        {
+          "path": "chalk/test/feedback-loop-forward.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/feedback-loop.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-FEEDBACK-LOOP",
+      "stage": "implementation",
+      "label": "Feedback loop — learner answer to feedback, lesson retrospective → next draft (#1013)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-DES-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-DES-CHALK-AUTHORING",
+        "ST-TEST-FEEDBACK-LOOP"
+      ],
+      "sources": [
+        {
+          "path": "worker/src/lib/feedback-loop.ts"
+        },
+        {
+          "path": "worker/src/routes/lesson-retrospective.ts"
+        },
+        {
+          "path": "worker/src/routes/classroom.ts"
+        },
+        {
+          "path": "worker/migrations/0039-feedback-loop.sql"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-DES-VOICE-CONVERSATION",
       "stage": "design",
       "owner": "TJ-kr",

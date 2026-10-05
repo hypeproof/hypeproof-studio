@@ -28,7 +28,7 @@ const validId = (s: string) => /^[a-zA-Z0-9_-]{1,128}$/.test(s);
 // course (persisted marker) may use only a profile that is currently a reviewed execution
 // template; losing the flag blocks further binding and new versions, never prior versions.
 const reviewedTemplate = (id: string) => getProfile(id)?.execution_template === true;
-const templateAdmission = (independent: boolean, profileId: string) =>
+export const templateAdmission = (independent: boolean, profileId: string) =>
   independent && profileId !== '' && !reviewedTemplate(profileId) ? 'template_not_reviewed' : null;
 const openingBlockedBy = (d: Draft) => !d.profile_id ? ['template_required'] : templateAdmission(!!d.independent, d.profile_id) ? ['template_not_reviewed'] : [];
 const draftView = (d: Draft) => ({ course_id: d.course_id, profile_id: d.profile_id || null, independent: !!d.independent, revision: d.revision, content: JSON.parse(d.content_json), updated_at: d.updated_at, opening_blocked_by: openingBlockedBy(d) });
@@ -239,7 +239,7 @@ async function stateOf(env: Env, cohort: string, course: string, version: string
   return (await readinessOf(env, { cohort, course, version, profileId: m.profile_id, lessonSha: lesson.sha256, content: lesson.content })).state;
 }
 /** Service-produced bindings are stripped: a reused version's content is an ordinary draft body again. */
-const reusable = (content: any) => { const x = structuredClone(content); if (x.model) delete x.model.binding; if (x.features) delete x.features.binding; return x; };
+export const reusable = (content: any) => { const x = structuredClone(content); if (x.model) delete x.model.binding; if (x.features) delete x.features.binding; return x; };
 const MAX_VERSIONS = 20;
 
 // The course's frozen versions, newest first, each with what a teacher needs to pick one: title, readiness, confirmation.

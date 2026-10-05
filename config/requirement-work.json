@@ -1268,10 +1268,24 @@
       "negative_control": "공유 철회/만료/타 수업 접근 거부. AI 검토를 사람 피드백으로 표시하거나 누락을 독립 수행으로 채우지 않음.",
       "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
-        "worker/src/lib/native-observation.ts",
-        "chalk/src"
+        "worker/src/lib/feedback-loop.ts",
+        "worker/src/routes/lesson-retrospective.ts",
+        "worker/src/routes/classroom.ts",
+        "worker/migrations/0039-feedback-loop.sql",
+        "chalk/src/ui/authoring.html",
+        "chalk/src/ui/sharing.html",
+        "chalk/src/ui/manage.html",
+        "chalk/src/routes/forward.ts"
       ],
-      "verification_inputs": []
+      "verification_inputs": [
+        "worker/src/lib/feedback-loop.ts",
+        "worker/src/routes/lesson-retrospective.ts",
+        "worker/migrations/0039-feedback-loop.sql",
+        "worker/test/feedback-loop.test.mjs",
+        "worker/test/feedback-loop-d1.test.mjs",
+        "chalk/test/feedback-loop-forward.test.mjs",
+        "e2e/classroom/feedback-loop.mjs"
+      ]
     },
     {
       "id": "human-learning",
