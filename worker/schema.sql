@@ -1297,6 +1297,38 @@ CREATE TABLE IF NOT EXISTS chalk_course_inputs (
   PRIMARY KEY (cohort_id, course_id),
   FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
 );
+CREATE TABLE IF NOT EXISTS chalk_course_input_options (
+  cohort_id     TEXT NOT NULL,
+  course_id     TEXT NOT NULL,
+  audience_tier TEXT,
+  duration_min  INTEGER,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (cohort_id, course_id),
+  FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
+);
+-- #1465 E2-5: migration 0037-chalk-judgements.sql. Ops: apply at next release (J2).
+CREATE TABLE IF NOT EXISTS chalk_judgements (
+  judgement_id    TEXT NOT NULL PRIMARY KEY,
+  cohort_id       TEXT NOT NULL,
+  course_id       TEXT NOT NULL,
+  revision        INTEGER NOT NULL,
+  file            TEXT NOT NULL DEFAULT 'lesson',
+  plan_sha256     TEXT NOT NULL,
+  item            TEXT,
+  check_name      TEXT,
+  at_section      TEXT,
+  at_step         TEXT,
+  at_key          TEXT,
+  prompt_id       TEXT NOT NULL,
+  prompt_version  INTEGER NOT NULL,
+  model           TEXT NOT NULL,
+  verdict         TEXT NOT NULL,
+  rationale       TEXT NOT NULL,
+  actor           TEXT NOT NULL,
+  created_at      INTEGER NOT NULL,
+  FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
+);
+CREATE INDEX IF NOT EXISTS idx_chalk_judgements_course_sha ON chalk_judgements(cohort_id, course_id, plan_sha256);
 
 -- cr-publish (#1393) — Venture Memory: migration 0032-curriculum-runtime-publish.sql.
 CREATE TABLE IF NOT EXISTS cr_projects (

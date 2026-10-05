@@ -7,7 +7,7 @@ import plistlib
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 spec = importlib.util.spec_from_file_location('studio_dev', Path(__file__).with_name('studio-dev.py'))
 dev = importlib.util.module_from_spec(spec)
@@ -190,5 +190,29 @@ class DevLauncherTests(unittest.TestCase):
                 self.assertTrue(any('--user-data-dir=' in s for s in popen.call_args.args[0]))
                 self.assertNotIn('HPS_TEST_TOKEN', popen.call_args.kwargs['env'])
                 self.assertNotIn('HPS_TEST_E2E', popen.call_args.kwargs['env'])
+
+    def test_launch_uses_one_cdp_flag_and_platform_process_options(self):
+        # Both branches run on any host: os.name is patched only around launch().
+        for system, layout in (('posix', 'dev.app'), ('nt', 'Studio Dev')):
+            with tempfile.TemporaryDirectory() as tmp:
+                state = Path(tmp); app = state/layout; expected = app/'HypeProof Studio.exe'
+                if system == 'posix':
+                    (app/'Contents').mkdir(parents=True); expected = app/'Contents/MacOS/HypeProof Studio'
+                    (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable':'HypeProof Studio'}))
+                with patch.object(dev.os,'name',system),patch.object(dev.subprocess,'CREATE_NEW_PROCESS_GROUP',0x200,create=True),patch.object(dev,'_clear_stale_ipc_socket') as clear,patch.object(dev.subprocess,'Popen') as popen,patch.object(dev.time,'sleep'),patch('builtins.print'):
+                    popen.return_value.poll.return_value=None
+                    dev.launch(app,state); dev.launch(app,state,cdp_port=9333)
+                default, debug = (c.args[0] for c in popen.call_args_list)
+                self.assertEqual((default[0], debug[0]), (str(expected), str(expected)))
+                self.assertEqual([a for a in default if a.startswith('--remote-debugging')], [])
+                self.assertEqual([a for a in debug if a.startswith('--remote-debugging')], ['--remote-debugging-port=9333'])
+                if system == 'nt':
+                    clear.assert_not_called()
+                    self.assertEqual(popen.call_args.kwargs['creationflags'], 0x200)
+                    self.assertNotIn('start_new_session', popen.call_args.kwargs)
+                else:
+                    self.assertEqual(clear.call_args_list, [call(state/'user-data')]*2)
+                    self.assertTrue(popen.call_args.kwargs['start_new_session'])
+                    self.assertNotIn('creationflags', popen.call_args.kwargs)
 
 if __name__=='__main__': unittest.main()

@@ -43,6 +43,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } }), errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.on('dialog', (d) => d.accept());
   const status = () => page.locator('#status').innerText(), shot = (name) => page.screenshot({ path: path.join(out, name), fullPage: false });
   const waitStatus = async (re) => { await page.waitForFunction((src) => new RegExp(src).test(document.getElementById('status').textContent), re.source); };
+  // Each authoring action announces its outcome (status, #completion, #confirm-status) before its readiness reload returns
+  // (authoring.html: `...; await loadReadiness()`). So #readiness, and the buttons it governs, are read only once the panel
+  // shows the expected line AND the action has finished (#readiness-load is disabled exactly while one runs, controls());
+  // never right after the announcement or a fixed sleep. Returns the panel's text at that moment.
+  const readinessShows = (re) => page.waitForFunction((src) => { const t = document.getElementById('readiness').innerText; return !document.getElementById('readiness-load').disabled && new RegExp(src).test(t) && t; }, re.source, { timeout: 8000 })
+    .then((h) => h.jsonValue(), async (e) => { throw Error('readiness: expected ' + re + ((await page.locator('#readiness-load').isDisabled()) ? ' (an action is still running)' : '') + ', the panel shows: ' + await page.locator('#readiness').innerText() + ' | ' + e.message); });
 
   // ── 1. connect, open the class's course, reuse V1 as the body, then EDIT it into curriculum A with the ordinary controls ──
   await page.goto(origin + '/authoring'); await page.locator('#token').fill(teacher); await page.locator('#connect').click();
@@ -78,11 +84,11 @@ try {
   // ── 3. candidate A → rehearsal code → running (not ready) ──
   await page.locator('#version').evaluate((e) => { e.closest('details').open = true; }); await page.locator('#version').fill('m2026.09.22-21');
   await page.locator('#freeze').click(); await page.locator('#completion').filter({ hasText: '리허설 후보' }).waitFor({ timeout: 8000 }).catch(async (e) => { throw Error('freeze: ' + await status() + ' / ' + e.message); });
-  assert.match(await page.locator('#readiness').innerText(), /후보 m2026\.09\.22-21 · 리허설 전/);
+  await readinessShows(/후보 m2026\.09\.22-21 · 리허설 전/);
   assert.equal(await page.locator('#confirm-go').isDisabled(), true, 'a candidate that was not rehearsed cannot be confirmed');
   await page.locator('#rehearsal-learner').fill('rehearsal-t1'); await page.locator('#rehearsal-issue').click(); await waitStatus(/리허설 코드를 발급했습니다/);
   const code = await page.locator('#rehearsal-token').inputValue(); assert.ok(code.length > 40);
-  assert.match(await page.locator('#readiness').innerText(), /리허설 중 — 코드를 발급했고 Studio의 결과를 기다립니다 \(준비 완료 아님\)/);
+  await readinessShows(/리허설 중 — 코드를 발급했고 Studio의 결과를 기다립니다 \(준비 완료 아님\)/);
   assert.equal(await page.locator('#confirm-go').isDisabled(), true, 'issuing the code is not readiness');
   await page.locator('#rehearsal').scrollIntoViewIfNeeded(); await shot('g2-03-rehearsal-running-1280x720.png');
 
@@ -124,11 +130,10 @@ try {
   results.first_verdict = judged.verdict;
 
   // ── 5. the teacher sees the Service's judgement ──
-  await page.locator('#readiness-load').click(); await page.waitForTimeout(200);
-  const afterFirst = await page.locator('#readiness').innerText(); results.readiness_after_first = afterFirst;
+  await page.locator('#readiness-load').click();
   assert.deepEqual([judged.verdict, judged.reasons], ['failed', ['steps_not_visited']], 'a rehearsal that never opened steps 2–3 is not a pass');
+  const afterFirst = await readinessShows(/통과하지 못함 — .*Studio에서 열어 보지 않은 단계가 있습니다/); results.readiness_after_first = afterFirst;
   {
-    assert.match(afterFirst, /통과하지 못함 — .*Studio에서 열어 보지 않은 단계가 있습니다/, afterFirst);
     await shot('g2-06-rehearsal-failed-1280x720.png');
     // A second rehearsal of the same candidate, this time every step opened on the learner's screen.
     await page.locator('#rehearsal-issue').click(); await waitStatus(/리허설 코드를 발급했습니다/);
@@ -148,10 +153,10 @@ try {
     results.second_report = { steps: rep2.steps, verdict: j2.verdict, reasons: j2.reasons }; assert.equal(j2.verdict, 'passed', JSON.stringify(j2));
     await app2.evaluate((m) => window.dispatchEvent(new MessageEvent('message', { data: m })), { type: 'rehearsalState', state: 'sent', verdict: j2.verdict, reasons: j2.reasons });
     await app2.locator('[data-rehearsal-result="passed"]').waitFor(); await app2.screenshot({ path: path.join(out, 'g2-07-learner-rehearsal-passed.png') });
-    await page.locator('#readiness-load').click(); await page.waitForTimeout(200);
+    await page.locator('#readiness-load').click();
   }
-  assert.match(await page.locator('#readiness').innerText(), /통과 — 학생 조건에서 설계대로 실행됐습니다/);
-  assert.match(await page.locator('#readiness').innerText(), /초안이 바뀌었습니다/, 'the pass is for the candidate; the edited draft is named as untested');
+  const passed = await readinessShows(/통과 — 학생 조건에서 설계대로 실행됐습니다/);
+  assert.match(passed, /초안이 바뀌었습니다/, 'the pass is for the candidate; the edited draft is named as untested');
   await page.locator('#readiness-detail').evaluate((e) => { e.closest('details').open = true; });
   await page.locator('#rehearsal').scrollIntoViewIfNeeded(); await shot('g2-08-rehearsal-passed-1280x720.png');
   ok('teacher: failed and passed are the Service\'s judgements in words, with the evidence under detail');
@@ -161,7 +166,7 @@ try {
   await page.locator('#confirm-go').click(); await page.locator('#confirm-status').filter({ hasText: '확정했습니다' }).waitFor();
   await page.locator('#confirm').scrollIntoViewIfNeeded(); await shot('g2-09-confirmed-1280x720.png');
   await page.locator('#version').fill('m2026.09.22-22'); await page.locator('#freeze').click(); await page.locator('#completion').filter({ hasText: 'm2026.09.22-22' }).waitFor();
-  assert.match(await page.locator('#readiness').innerText(), /후보 m2026\.09\.22-22 · 리허설 전/); assert.equal(await page.locator('#confirm-go').isDisabled(), true);
+  await readinessShows(/후보 m2026\.09\.22-22 · 리허설 전/); assert.equal(await page.locator('#confirm-go').isDisabled(), true);
   await shot('g2-10-edited-candidate-untested-1280x720.png');
   ok('confirmation: only the passed candidate; the draft edited during its rehearsal becomes its own untested candidate');
 

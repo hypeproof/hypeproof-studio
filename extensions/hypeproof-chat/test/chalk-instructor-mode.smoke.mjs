@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { InstructorModeManager } from "../src/chalk/instructorMode.ts";
 import { adminBaseFrom } from "../src/chalk/serverBase.ts";
+import { decideMode, profileFailureToStatus } from "../src/chalk/modeDecision.ts";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`  ok   ${name}`); };
@@ -252,13 +253,13 @@ t("runInstructorTurn: missing brief → throws '강사 지시문'", async () => 
   assert.ok(threw, "must throw with '강사 지시문' when brief is absent");
 });
 
-t("INSTRUCTOR_TOOL_PROFILE: sdk_tools.read and write are true, shell/browser false", async () => {
+t("INSTRUCTOR_TOOL_PROFILE: sdk_tools.read and write are true, browser true, shell false", async () => {
   const { INSTRUCTOR_TOOL_PROFILE } = await import("../src/chalk/instructorTurn.ts");
   assert.ok(INSTRUCTOR_TOOL_PROFILE, "INSTRUCTOR_TOOL_PROFILE must be exported");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.read, true, "read must be true");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.write, true, "write must be true");
   assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.shell, undefined, "shell must be off (undefined)");
-  assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.browser, undefined, "browser must be off (undefined)");
+  assert.strictEqual(INSTRUCTOR_TOOL_PROFILE.sdk_tools?.browser, true, "browser must be on (true) — instructor uses live_preview_start + browser_open (#1295)");
 });
 
 // --- webview render guard (ChatPanel.tsx:553-554) ---
@@ -402,6 +403,90 @@ t("execGetKnowledge with serverUrl=/v1 fetches /admin/chalk/knowledge/versions",
   assert.ok(capturedUrl !== null, "fetch must have been called");
   assert.ok(!capturedUrl.includes("/v1/admin"), `URL must not contain /v1/admin — got: ${capturedUrl}`);
   assert.ok(capturedUrl.startsWith("http://127.0.0.1:8787/admin/"), `URL must start with /admin/ — got: ${capturedUrl}`);
+});
+
+// ── decideMode ──────────────────────────────────────────────────────────────
+
+function makeToken(exp) {
+  const payload = JSON.stringify({ sub: "test-student", exp });
+  const b64 = Buffer.from(payload).toString("base64url");
+  return `${b64}.fakesig`;
+}
+
+const NOW = Math.floor(Date.now() / 1000);
+const FUTURE_TOKEN = makeToken(NOW + 3600);
+const PAST_TOKEN = makeToken(NOW - 1);
+
+console.log("\n=== decideMode — student-slot-first priority ===");
+
+t("rehearsal token (exp future, status null) → student", () => {
+  const mode = decideMode({ studentToken: FUTURE_TOKEN, studentProfileStatus: null, now: NOW });
+  assert.strictEqual(mode, "student");
+});
+
+t("class token (exp future, status ok) → student", () => {
+  const mode = decideMode({ studentToken: FUTURE_TOKEN, studentProfileStatus: "ok", now: NOW });
+  assert.strictEqual(mode, "student");
+});
+
+t("no student token → instructor", () => {
+  const mode = decideMode({ studentToken: undefined, studentProfileStatus: null, now: NOW });
+  assert.strictEqual(mode, "instructor");
+});
+
+t("empty string token → instructor", () => {
+  const mode = decideMode({ studentToken: "", studentProfileStatus: null, now: NOW });
+  assert.strictEqual(mode, "instructor");
+});
+
+t("token exp past → instructor (structurally expired)", () => {
+  const mode = decideMode({ studentToken: PAST_TOKEN, studentProfileStatus: null, now: NOW });
+  assert.strictEqual(mode, "instructor");
+});
+
+t("status expired → instructor (hard rejection)", () => {
+  const mode = decideMode({ studentToken: FUTURE_TOKEN, studentProfileStatus: "expired", now: NOW });
+  assert.strictEqual(mode, "instructor");
+});
+
+t("status rejected → instructor (hard rejection)", () => {
+  const mode = decideMode({ studentToken: FUTURE_TOKEN, studentProfileStatus: "rejected", now: NOW });
+  assert.strictEqual(mode, "instructor");
+});
+
+t("status unreachable + valid token → student (transient outage)", () => {
+  const mode = decideMode({ studentToken: FUTURE_TOKEN, studentProfileStatus: "unreachable", now: NOW });
+  assert.strictEqual(mode, "student");
+});
+
+console.log("\n=== profileFailureToStatus ===");
+
+t("no token → null", () => {
+  assert.strictEqual(profileFailureToStatus(null, false, false), null);
+});
+
+t("has token, not yet fetched → null", () => {
+  assert.strictEqual(profileFailureToStatus(undefined, true, false), null);
+});
+
+t("has token, fetched, no failure → ok", () => {
+  assert.strictEqual(profileFailureToStatus(null, true, true), "ok");
+});
+
+t("failure reason expired → expired", () => {
+  assert.strictEqual(profileFailureToStatus({ reason: "expired" }, true, true), "expired");
+});
+
+t("failure reason rejected → rejected", () => {
+  assert.strictEqual(profileFailureToStatus({ reason: "rejected" }, true, true), "rejected");
+});
+
+t("failure reason forbidden → rejected", () => {
+  assert.strictEqual(profileFailureToStatus({ reason: "forbidden" }, true, true), "rejected");
+});
+
+t("failure reason network → unreachable", () => {
+  assert.strictEqual(profileFailureToStatus({ reason: "network" }, true, true), "unreachable");
 });
 
 console.log(`\n${n} tests passed\n`);

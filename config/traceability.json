@@ -1185,6 +1185,10 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/pending-send.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/activity-resume.test.mjs",
+          "owner": "JinyongShin"
         }
       ]
     },
@@ -2830,6 +2834,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/sx-source-state.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sx-task-flow.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/task-flow-app.spec.ts"
+        },
+        {
+          "path": "e2e/sx/sx-service.mjs"
+        },
+        {
+          "path": "e2e/sx/playwright.config.ts"
         }
       ]
     },
@@ -2862,6 +2878,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskFlowHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CompletionGate.tsx"
         }
       ]
     },
@@ -2899,6 +2921,19 @@
         },
         {
           "path": "worker/test/chalk-session-design-fields.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-PEDAGOGY-MACHINE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-SCH"
+      ],
+      "sources": [
+        {
+          "path": "worker/test/chalk-pedagogy-machine.test.mjs"
         }
       ]
     },
@@ -3267,6 +3302,9 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-02-skills.md"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-05-unblock.md"
         }
       ]
     },
@@ -3906,6 +3944,66 @@
         {
           "path": "extensions/hypeproof-chat/test/chalk-tools.test.mjs"
         }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-GEN-APP",
+      "stage": "implementation",
+      "label": "Chalk 생성 도구 4개 — 앱 측 (E2-6 / #1295, #1306)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-DES-CHALK-TOOLS",
+        "ST-IMP-CHALK-TOOL-LAYER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-GEN-APP",
+      "stage": "test",
+      "label": "Chalk 생성 도구 단위 시험 (E2-6 / #1295, #1306)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-GEN",
+        "ST-IMP-CHALK-GEN-APP"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-JUDGEMENTS",
+      "stage": "implementation",
+      "label": "Context judgement items and records — server (E2-5 / #1465)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-GEN",
+        "ST-IMP-CHALK-GEN-SERVER"
+      ],
+      "sources": [
+        {"path": "worker/src/routes/chalk-courses.ts"},
+        {"path": "worker/src/lib/chalk-judge-prompts.ts"},
+        {"path": "worker/src/lib/instructor-auth.ts"},
+        {"path": "worker/migrations/0037-chalk-judgements.sql"}
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-JUDGEMENTS",
+      "stage": "test",
+      "label": "Context judgement items and records — tests (E2-5 / #1465)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-GEN",
+        "ST-IMP-CHALK-JUDGEMENTS"
+      ],
+      "sources": [
+        {"path": "worker/test/chalk-judgements.test.mjs"},
+        {"path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"}
       ]
     }
   ]

@@ -268,3 +268,56 @@ Jay dogfood 인수 프로토콜:
 | | | SX-T39 | NOT RUN | | |
 
 SX-T50은 학습 근거의 강사 조회 경로와 학생 공유 범위 선택이 생기기 전(P4)에는 실행하면 BLOCKED다. 강사 인증 자체는 이미 있다(`role: "issuer"`, `IssuerScope`). NOT RUN과 BLOCKED를 구분해 적는다. 기능이 미구현인 행은 NOT RUN, 실행에 필요한 환경·권한이 없는 행은 BLOCKED와 원인이다.
+
+## Jay 개발 확인 — 과제 흐름 (SX-55, sx-p0-curriculum-first)
+
+> 2026-10-05 추가. 실행 방법이다. 실행 기록이 아니며, 위 실행 상태 표의 어느 행도 이 절 때문에 바뀌지 않는다.
+
+**무엇이 보이나.** 과제의 단계(phase)를 확장 호스트가 `hps-local-record/1` Task 레코드에 남긴다. 시작 전(assigned) → 작업 중(working) → 제출함(submitted). 회고(reflected)와 다음 과제는 아직 없다(sx-p2-boundary-reflection). 학생 화면에서는 두 곳이 달라진다.
+
+- 미션 헤더의 완료 조건 앞에 ☑ 또는 ☐가 붙는다. ☑는 호스트의 완료 게이트가 학생 본인의 기록으로 확인한 조건에만 붙는다. 학습 이벤트를 남기지 않는 좌석에서는 지금처럼 전부 ☐이고 "아직 확인 전입니다"라고 말한다.
+- 근거 영역의 "이 과제 완료하기": 시작 전이면 닫혀 있고 옆에 "아직 시작 전이에요. 코치와 이야기하거나 기록을 남기면 시작돼요"가 보인다. 누르면 "☑ 이 과제를 제출했어요"로 바뀌고 버튼이 없어진다. 앱을 다시 열어도 그대로다. 제출을 저장하지 못하면 그 사실을 버튼 옆에 한 줄로 말한다.
+
+**켜지는 조건.** 좌석의 프로필이 `observation.format: "hps-observation/2"`를 선언하고, 좌석 토큰이 미션(`learning.mission`)이 있는 확정 세션 설계에 묶여 있을 때만이다. 미션이 없는 설계 파일은 과제 흐름을 시작하지 않는다. 오늘 `/2`를 선언한 출하 프로필은 `canary-sdk-contract` 하나이고 거기 묶인 수업이 없으므로, 실제 학생 중 이 화면을 보는 사람은 아직 없다. 어느 반을 `/2`로 보낼지는 STATE.md H-P1의 결정을 기다린다.
+
+**가장 빠른 확인 (백그라운드, 한 줄로만 답하는 모델, 모델 키 없음).** 이 브랜치의 확장을 넣은 앱 사본(`e2e/README.md` "Driving a different `.app`")으로:
+
+```bash
+bash scripts/prep-test-app.sh "<앱 사본>"     # 사본마다 한 번
+GATE=idle HPS_APP_PATH="<앱 사본>" bash scripts/e2e-quiet.sh npx playwright test -c sx/playwright.config.ts
+```
+
+이 실행은 `e2e/sx/sx-service.mjs`(진짜 Service 라우터 + SQLite, `canary-sdk-contract`의 `/2` 좌석 하나, 3주차 설계를 완료 조건 c1만 남겨 확정한 수업, 한 줄로만 답하는 모델)를 스스로 띄우고 `e2e/test-results/sx-app/task-flow-result.json`을 쓴다. `GATE=idle`은 5분 동안 키보드·마우스 입력이 없을 때 시작하고 손을 대면 멈춘다(exit 75 = 나중에 다시).
+
+**손으로 (개발 앱).** 8787을 쓰는 wrangler가 있으면 먼저 멈춘다.
+
+```bash
+STATE="$HOME/Library/Application Support/HypeProof Studio Development/sx"
+python3 scripts/studio-dev.py --state-dir "$STATE" --provider service prepare
+node --experimental-strip-types --experimental-sqlite e2e/sx/sx-service.mjs 8787 "$STATE/local-participant-token.txt" &
+python3 scripts/studio-dev.py --state-dir "$STATE" --provider service run --service local
+```
+
+`sx-service.mjs`의 세 번째 인자로 남길 완료 조건을 고른다(`c1,c2,c3`이면 3주차 원본 그대로). 이 손 경로는 스크립트를 읽고 옮겨 적었고 처음부터 끝까지 돌려 보지는 않았다. 실행한 것은 위 Playwright 경로다.
+
+| 순서 | 학생이 하는 일 | 기대 결과 (학생 화면) |
+|---|---|---|
+| 1 | 앱을 연다 | 작업 화면 맨 위 "3주차 · AI가 만든 걸 내가 확인했나?". 완료 조건 "기대 조건을 시험 전에 적었다" 앞이 ☐. "이 과제 완료하기"는 닫혀 있고 옆에 "☐ 아직 시작 전이에요…"와 "☐ 아직 안 한 것: 기대 조건을 시험 전에 적었다" |
+| 2 | 아무 말이나 보낸다 | 코치가 "[로컬 시험 응답] 받았어요…"로 답한다. "아직 시작 전이에요" 줄이 없어진다. 버튼은 여전히 닫혀 있다 |
+| 3 | "근거 · 기대 조건 · 전후 · 출처"를 열어 기대 조건을 한 줄 적고 "기대 조건 남기기" | 미션 헤더의 조건이 ☑로 바뀌고 "☑ 표시는 내가 남긴 기록에서 확인된 것이에요."가 보인다. "이 과제 완료하기"가 열린다 |
+| 4 | "이 과제 완료하기" | 버튼 자리에 "☑ 이 과제를 제출했어요". 누를 버튼이 없다 |
+| 5 | 앱을 닫고 다시 연다 | 4의 화면 그대로다 |
+
+**데이터 위치.** 과제 레코드는 앱의 `User/globalStorage/hypeproof.hypeproof-chat/local-review-v1/` 아래 `tasks/<id>` 키 하나다. `<id>`는 설계의 과제 id(`task-<설계 sha256 앞 16자>-<활동 id 앞 8자>`) 뒤에 `.`과 이 좌석의 관찰 배치(폴더·토큰)에서 나온 16자를 붙인 것이라, 같은 컴퓨터의 다른 좌석·다시 받은 토큰·다른 폴더는 각자 다른 레코드를 쓴다. 로컬 검토와 CR-10이 쓰는 그 측정 코어 레코드이고 새 저장소가 아니다. `curriculum.phase`·`current_step`·단계별 들어간/나온 시각과 `history`의 `curriculum:phase:*` 줄이 기록이다. `current_step`은 작업 중일 때만, 앞 단계들의 gate 이벤트가 학생 본인 기록으로 있을 때만 앞으로 움직인다(뒤로는 언제나). 미션 헤더에서 보고 있는 단계는 이와 상관없이 바뀐다. 기대 조건 같은 학습 이벤트는 지금처럼 워크스페이스의 관찰 배치(`workspaceState`)에 있고, 완료 게이트는 저장하지 않고 매번 이벤트에서 다시 계산한다.
+
+- 잠금: 레코드에 쓸 때만 (과제 열기·시작·단계 이동·제출). 쓸 것이 없는 신호는 잠금 없이 읽기 (화면 새로고침, 이미 작업 중인 과제의 코치 답·학습 이벤트, 지금 단계로의 단계 시작, 거절된 단계 이동, 두 번째 제출) → 다른 Studio 창이 같은 레코드에 쓰는 중에도 `storage_busy` 줄 없음
+
+**나의 변화 기록에서 (MC-27, MC-31).**
+
+- 과제 레코드: 목록의 행으로는 안 보임 (이 화면은 대화 기록을 가져온 과제만 열 수 있음)
+- 대신 목록 아래: "수업 과제 진행 기록 N개는 이 화면에서 열 수 없어 목록에서 뺐어요." · "수업 과제 진행 기록 지우기" 버튼
+- 버튼 → 지워지는 것·남는 것을 묻는 확인창 → "지우기" → 측정 코어 과제 삭제(`deleteTask`, 삭제 표시 포함)로 과제 레코드만 삭제. 대화 기록 과제는 그대로
+- 학습 이벤트는 각 폴더의 관찰 배치에 남음 → 그 수업을 다시 열면 진행 기록 새로 시작
+- Jay 결정 대기: 과제 레코드를 목록의 행으로 보일지 · 지운 뒤 다시 시작하지 않게 할지
+
+**흐름 밖의 좌석.** `/1` 좌석 · 미션 없는 수업의 좌석 → 단계 시작 때 관찰 기록 준비 없음 · Service 요청 없음 (이 변경 전과 같음)

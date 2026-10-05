@@ -38,11 +38,28 @@ export function actionsFrom(steps: readonly LessonStep[], currentStepId: string 
 /**
  * The number of steps not yet passed, including the current one.
  *
- * **This is a position, not a progress rate.** Knowing what was completed requires
- * learning events, and P0 does not have them (SX-55 is P1-B). Do not pretend to count
- * completions.
+ * **This is a position, not a progress rate.** What was completed is shown by the
+ * completion marks (`completionMet`, from the host's gate verdict), never by this count.
+ * Do not pretend to count completions here.
  */
 export function stepsRemaining(steps: readonly LessonStep[], currentStepId: string | null): number {
   const at = stepIndex(steps, currentStepId);
   return at < 0 ? 0 : steps.length - at;
+}
+
+/**
+ * Is one completion condition met, by the host's own verdict (SX-01, SX-50; SX-55)?
+ *
+ * `missing` is the SX-14 gate's list the host sent down as `learningState.complete.missing`.
+ * The webview does not recompute the gate; it only reads which conditions the gate named.
+ *
+ * Conservative on purpose. A miss that names no condition but names this condition's event
+ * (`criterion_after_artifact` names `criterion_set`) leaves it unchecked: "기대 조건을 시험
+ * 전에 적었다" must not get a ☑ while the gate says the criterion came after the draft.
+ */
+export function completionMet(
+  item: { id: string; event: string },
+  missing: ReadonlyArray<{ item?: string; event?: string }>,
+): boolean {
+  return !missing.some((m) => m.item === item.id || (m.item === undefined && m.event === item.event));
 }

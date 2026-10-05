@@ -276,7 +276,45 @@ def prepare(repo, base, state, service):
     return app
 
 
-def launch(app, state, local_runtime=None, debug_port=None):
+def _clear_stale_ipc_socket(user_data: Path) -> None:
+    """Remove VS Code single-instance IPC sockets left by a dead process.
+
+    VS Code uses a UNIX socket named after the product version (e.g. "0.1.-main")
+    in the user-data directory for single-instance coordination.  If a previous
+    run exited abnormally the socket file is left behind.  On the next launch VS
+    Code finds it, tries to hand focus to the old instance, fails, and exits.
+
+    Safe-guard: if code.lock names a living PID the old instance is still running
+    — do NOT remove the socket and abort instead of silently stealing focus.
+    """
+    lock_file = user_data / 'code.lock'
+    if lock_file.exists():
+        try:
+            locked_pid = int(lock_file.read_text().strip())
+        except (ValueError, OSError):
+            locked_pid = None
+        if locked_pid:
+            try:
+                os.kill(locked_pid, 0)
+                # PID is alive — another Dev instance is running
+                raise RuntimeError(
+                    f'Another Dev instance (PID {locked_pid}) is already running '
+                    f'with this state dir. Stop it before launching a new one.')
+            except ProcessLookupError:
+                pass  # PID is dead — stale lock, continue
+
+    # Remove every file whose name ends with "-main" (VS Code IPC socket pattern).
+    removed = []
+    for p in user_data.glob('*-main'):
+        if p.is_socket():
+            p.unlink()
+            removed.append(p.name)
+    if removed:
+        print(f'Warning: removed stale IPC socket(s) from user-data: {removed}',
+              file=sys.stderr, flush=True)
+
+
+def launch(app, state, local_runtime=None, cdp_port=None):
     executable = (app / 'Contents/MacOS' / plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleExecutable']) if is_mac_app(app) else app / 'HypeProof Studio.exe'
     env = dict(os.environ)
     # Tests from another Studio window must not override this copy's local identity.
@@ -295,14 +333,19 @@ def launch(app, state, local_runtime=None, debug_port=None):
     env['HPS_DEV_TOKEN_FILE'] = str(state / 'local-participant-token.txt')
     # HPS_DEV_ISSUER_TOKEN_FILE: forwarded from the caller when set (review-pr.sh writes it).
     # dict(os.environ) above already carries it; no explicit override needed.
-    args = [str(executable),
-            '--user-data-dir=' + str(state / 'user-data'), '--extensions-dir=' + str(state / 'extensions'),
-            '--new-window', '--skip-welcome', '--skip-release-notes', str(state / 'workspace')]
-    if debug_port:
-        args += ['--remote-debugging-port=' + str(debug_port), '--remote-debugging-address=127.0.0.1']
+    if os.name != 'nt':
+        # POSIX only: Windows keeps the single-instance handle in a named pipe, not in
+        # user-data, and os.kill(pid, 0) there sends CTRL_C_EVENT instead of probing.
+        _clear_stale_ipc_socket(state / 'user-data')
+    cmd = [str(executable),
+           '--user-data-dir=' + str(state / 'user-data'), '--extensions-dir=' + str(state / 'extensions'),
+           '--new-window', '--skip-welcome', '--skip-release-notes', str(state / 'workspace')]
+    if cdp_port is not None:
+        # Chromium binds --remote-debugging-port to 127.0.0.1 by default; no address flag needed.
+        cmd += [f'--remote-debugging-port={cdp_port}']
     options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
     with (state / 'app.log').open('a', encoding='utf-8') as log:
-        process = subprocess.Popen(args, env=env, stdout=log, stderr=subprocess.STDOUT, **options)
+        process = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, **options)
     time.sleep(3)
     if process.poll() is not None:
         raise RuntimeError('Development app exited during startup. Inspect app.log; launch is not verified.')
@@ -372,19 +415,18 @@ def main():
     parser.add_argument('--base-app', type=Path)
     parser.add_argument('--state-dir', type=Path)
     parser.add_argument('--service', choices=['local', 'live'], default='local')
+    parser.add_argument('--cdp-port', type=int, default=None,
+                        help='Open CDP remote debugging port on 127.0.0.1 only. Default: off.')
     parser.add_argument('--provider', choices=['claude', 'codex', 'service'],
                         default='codex' if platform.system() == 'Windows' else 'claude',
                         help='Development funding: local Codex subscription (Windows default), Claude Code subscription (macOS default), or Service API.')
     parser.add_argument('--cli-executable', type=Path, help='Explicit installed native Claude Code or Codex CLI.')
     parser.add_argument('--setup-local', action='store_true', help='Prepare a developer activity/code through an already running local development Service.')
-    parser.add_argument('--debug-port', type=int, help='Optional loopback renderer debugging port for actual-app verification.')
     args = parser.parse_args()
     if not (platform.system() == 'Windows' or (platform.system() == 'Darwin' and platform.machine() == 'arm64')):
         raise RuntimeError('This development launcher supports macOS arm64 and Windows only.')
     if args.setup_local and args.service != 'local':
         raise ValueError('--setup-local cannot change a live Service.')
-    if args.debug_port is not None and not 1024 <= args.debug_port <= 65535:
-        raise ValueError('--debug-port must be 1024..65535.')
     args.base_app = args.base_app or default_base()
     state_parent = Path(os.environ['LOCALAPPDATA']) / 'HypeProofStudioDev' if platform.system() == 'Windows' else Path.home() / 'Library/Application Support/HypeProof Studio Development'
     state = args.state_dir or state_parent / hashlib.sha256(str(REPO).encode()).hexdigest()[:12]
@@ -425,7 +467,7 @@ def main():
                 setup_local_participant(REPO, state)
             app = prepare(REPO, args.base_app.resolve(), state, args.service)
             if args.action == 'run':
-                launch(app, state, local_runtime, args.debug_port)
+                launch(app, state, local_runtime, cdp_port=args.cdp_port)
 
 
 if __name__ == '__main__':
