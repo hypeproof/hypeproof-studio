@@ -3,6 +3,7 @@ import { EffortControl } from './EffortControl';
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { EvidenceDrawer } from './EvidenceDrawer';
+import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
 import type { StepWork } from '../../src/lessonFocus';
 import { InstructorInbox } from './InstructorInbox';
@@ -729,6 +730,10 @@ export function ChatPanel(props: Props) {
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
       {!props.instructor && <MissionHeader
         lesson={config?.profile?.lesson ?? null}
+        // SX-01·SX-50 — the completion items are checked off from the host's own gate verdict.
+        // Without `learningState` (a seat that records no learning events) there is no verdict,
+        // and nothing gets a check mark.
+        missing={learning ? learning.complete.missing : null}
         currentStepId={currentStepId}
         onSelectStep={setCurrentStepId}
         onStartStep={(step) => {
@@ -803,32 +808,8 @@ export function ChatPanel(props: Props) {
           decoration that does nothing when pressed. */}
       {learning && (
         <section className="hp-evidence-region" aria-label="근거와 완료">
-          <div className="hp-complete">
-            {/* SX-14 — the reason it is disabled is visible **next to the button**.
-                There is no bypass button. The host made the judgment; this only draws it. */}
-            <button
-              type="button"
-              // **Not a Primary.** There is one emphasized button on screen and that
-              // slot belongs to region A's "지금 할 행동" (SX-01·SX-51). Completion is
-              // pressed **after** all those actions are done, so it has no reason to
-              // catch the eye first. Emphasize both and "what to do now" becomes two things.
-              className="hp-cta-quiet"
-              disabled={!learning.complete.ok}
-              onClick={() => postToHost({ type: "submitTask", task: learning.task })}
-            >
-              이 과제 완료하기
-            </button>
-            {!learning.complete.ok && (
-              <ul className="hp-complete-why">
-                {learning.complete.reasons.map((reason) => (
-                  <li key={reason}>☐ {reason}</li>
-                ))}
-              </ul>
-            )}
-            {!learning.declared && (
-              <p className="hp-complete-note">이 단계는 따로 정해 둔 완료 조건이 없어요.</p>
-            )}
-          </div>
+          {/* SX-14 gate and SX-55 phase, as the host decided them. The host made the judgment; this only draws it. */}
+          <CompletionGate learning={learning} onSubmit={() => postToHost({ type: "submitTask", task: learning.task })} />
           <EvidenceDrawer
             open={drawerOpen}
             rows={learning.evidence}

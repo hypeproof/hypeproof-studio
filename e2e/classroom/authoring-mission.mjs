@@ -42,6 +42,12 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } }), errors = []; page.on('pageerror', (e) => errors.push(e.message)); page.on('dialog', (d) => d.accept());
   const shot = (name, p = page) => p.screenshot({ path: path.join(out, name), fullPage: false });
   const waitStatus = (re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('status').textContent), re.source);
+  // Each authoring action announces its outcome (status, #completion, #confirm-status) before its readiness reload returns
+  // (authoring.html: `...; await loadReadiness()`). So #readiness, and the buttons it governs, are read only once the panel
+  // shows the expected line AND the action has finished (#readiness-load is disabled exactly while one runs, controls());
+  // never right after the announcement. Returns the panel's text at that moment.
+  const readinessShows = (re) => page.waitForFunction((src) => { const t = document.getElementById('readiness').innerText; return !document.getElementById('readiness-load').disabled && new RegExp(src).test(t) && t; }, re.source, { timeout: 8000 })
+    .then((h) => h.jsonValue(), async (e) => { throw Error('readiness: expected ' + re + ((await page.locator('#readiness-load').isDisabled()) ? ' (an action is still running)' : '') + ', the panel shows: ' + await page.locator('#readiness').innerText() + ' | ' + e.message); });
   const statusText = () => page.locator('#status').innerText();
   await page.goto(origin + '/authoring'); await page.locator('#token').fill(teacher); await page.locator('#connect').click();
   await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
@@ -98,7 +104,7 @@ try {
   // ── 5. candidate identity: the frozen candidate is shown with its mission ──
   await page.locator('#version').evaluate((e) => { e.closest('details').open = true; }); await page.locator('#version').fill(VA);
   await page.locator('#freeze').click(); await page.locator('#completion').filter({ hasText: VA }).waitFor();
-  assert.match(await page.locator('#readiness').innerText(), new RegExp('이 후보의 학생 미션: 2주차 ‘' + MISSION + '’ · 완료 조건 2개'));
+  await readinessShows(new RegExp('이 후보의 학생 미션: 2주차 ‘' + MISSION + '’ · 완료 조건 2개'));
   // ── 6. rehearsal 1: the learner's header is STALE (tampered to another mission) → the Service fails it ──
   await page.locator('#rehearsal-learner').fill('rehearsal-t1');
   const learnerSide = async (tamper) => {
@@ -150,12 +156,12 @@ try {
   // ── 8. edit the mission after the pass: a new candidate, untested; confirmation names the mission; the picker shows it ──
   await page.locator('#confirm-go').click(); await page.locator('#confirm-status').filter({ hasText: '확정했습니다' }).waitFor();
   await page.locator('#learning-mission').fill(EDITED); await page.locator('#save').click(); await waitStatus(/저장했습니다/);
-  assert.match(await page.locator('#readiness').innerText(), /초안이 바뀌었습니다/);
+  await readinessShows(/초안이 바뀌었습니다/);
   await page.locator('#versions-load').click(); await page.locator(`#base-version option[value="${VA}"]`).waitFor({ state: 'attached' });
   await page.locator('#base-version').selectOption(VA); await page.waitForTimeout(300); await page.locator('#impact').click(); await page.locator('#impact-view li').first().waitFor();
   assert.ok((await page.locator('#impact-view li').allInnerTexts()).includes('학생 미션: 2주차 ‘' + MISSION + '’ → 2주차 ‘' + EDITED + '’'));
   await page.locator('#version').fill(VB); await page.locator('#freeze').click(); await page.locator('#completion').filter({ hasText: VB }).waitFor();
-  const rb = await page.locator('#readiness').innerText(); assert.match(rb, /후보 m2026\.09\.22-52 · 리허설 전/); assert.match(rb, new RegExp('이 후보의 학생 미션: 2주차 ‘' + EDITED + '’')); assert.equal(await page.locator('#confirm-go').isDisabled(), true);
+  const rb = await readinessShows(/후보 m2026\.09\.22-52 · 리허설 전/); assert.match(rb, new RegExp('이 후보의 학생 미션: 2주차 ‘' + EDITED + '’')); assert.equal(await page.locator('#confirm-go').isDisabled(), true);
   await page.locator('#rehearsal').scrollIntoViewIfNeeded(); await shot('m-07-edited-mission-new-candidate-1280x720.png');
   const manage = await browser.newPage({ viewport: { width: 1280, height: 720 } }); manage.on('pageerror', (e) => errors.push(e.message));
   await manage.goto(origin + '/manage'); await manage.locator('#token').fill(teacher); await manage.locator('#cohort').fill(local.cohort); await manage.locator('#prefix').fill('student-');

@@ -2433,11 +2433,28 @@
       "implementation_paths": [
         "worker/src/lib",
         "extensions/hypeproof-chat/webview-ui/src",
-        "chalk/src/ui"
+        "chalk/src/ui",
+        "extensions/hypeproof-chat/src/taskFlowHelpers.ts",
+        "extensions/hypeproof-chat/src/learningStateHelpers.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/localReviewService.ts",
+        "extensions/hypeproof-chat/src/localReviewPanel.ts",
+        "extensions/hypeproof-chat/src/localReviewProtocol.ts"
       ],
       "verification_inputs": [
-        "docs/requirements/studio-learning-experience.md",
-        "docs/testing/studio-learning-experience.md"
+        "extensions/hypeproof-chat/test/sx-task-flow.smoke.mjs",
+        "extensions/hypeproof-chat/src/taskFlowHelpers.ts",
+        "extensions/hypeproof-chat/src/learningStateHelpers.ts",
+        "extensions/hypeproof-chat/webview-ui/src/CompletionGate.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/missionHeaderLogic.ts",
+        "extensions/hypeproof-chat/webview-ui/src/MissionHeader.tsx",
+        "extensions/hypeproof-chat/src/localReviewService.ts",
+        "extensions/hypeproof-chat/src/localReviewPanel.ts",
+        "extensions/hypeproof-chat/src/localReviewProtocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/LocalReview.tsx",
+        "e2e/sx/task-flow-app.spec.ts",
+        "e2e/sx/sx-service.mjs",
+        "e2e/sx/playwright.config.ts"
       ]
     },
     {
