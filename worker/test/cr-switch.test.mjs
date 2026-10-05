@@ -77,28 +77,28 @@ await test("switch ON without browser tools: nothing CR appears (the switch neve
   for (const runtime of ["proxy", "sdk"]) assert.ok(!buildAnthropicSystemBlocks(kids, {}, runtime)[0].text.includes(CR_CONTRACT));
 });
 
-await test("switch ON for a minor cohort WITH browser_control: still no CR tool or contract on either runtime", () => {
+await test("switch ON for a kids-quest cohort WITH browser_control: no CR tool or contract (the CR surfaces need a web-app tier)", () => {
   const kids = getProfile("sk-biopharm-kids-2026-grade-3-4-s1");
   const kidsBrowsing = { ...withSwitch(kids, true), browser_control: { ...(kids.browser_control ?? {}), enabled: true } };
   const names = toolNames(kidsBrowsing);
   assert.ok(names.includes("browser_navigate"), "control: the planted browser_control really injects the base tools");
-  assert.deepEqual(names.filter((n) => CR_NAMES.includes(n)), [], "no CR tool for a minor");
-  for (const runtime of ["proxy", "sdk"]) assert.ok(!buildAnthropicSystemBlocks(kidsBrowsing, {}, runtime)[0].text.includes(CR_CONTRACT), `${runtime}: no CR contract for a minor`);
+  assert.deepEqual(names.filter((n) => CR_NAMES.includes(n)), [], "no CR tool on a non-web-app tier");
+  for (const runtime of ["proxy", "sdk"]) assert.ok(!buildAnthropicSystemBlocks(kidsBrowsing, {}, runtime)[0].text.includes(CR_CONTRACT), `${runtime}: no CR contract on a non-web-app tier`);
 });
 
-await test("switch ON for a 14-17 workshop-tier cohort: no CR tool, no contract, served off (one minor test)", async () => {
+// 2026-10-05 — age no longer decides the switch: the founder course runs high-school cohorts.
+await test("switch ON for a 14-17 workshop-tier cohort: CR tools and contract, served on; still a minor for moderation", async () => {
   const teen = { ...withSwitch(COPYCLONE, true), audience: { ...COPYCLONE.audience, age_range: [14, 17] } };
   assert.equal(teen.game.template_tier, "website", "control: a workshop tier, above the child threshold");
-  assert.ok(toolNames(teen).includes("browser_navigate"), "control: its base browser tools are injected");
-  assert.deepEqual(toolNames(teen).filter((n) => CR_NAMES.includes(n)), [], "no CR tool for a teen");
-  for (const runtime of ["proxy", "sdk"]) assert.ok(!buildAnthropicSystemBlocks(teen, {}, runtime)[0].text.includes(CR_CONTRACT), `${runtime}: no CR contract for a teen`);
+  assert.deepEqual(toolNames(teen).filter((n) => CR_NAMES.includes(n)).sort(), [...CR_NAMES].sort(), "every CR tool for a teen");
+  for (const runtime of ["proxy", "sdk"]) assert.ok(buildAnthropicSystemBlocks(teen, {}, runtime)[0].text.includes(CR_CONTRACT), `${runtime}: the CR contract for a teen`);
   const original = { cr: COPYCLONE.curriculum_runtime, audience: COPYCLONE.audience };
   COPYCLONE.curriculum_runtime = { enabled: true };
   COPYCLONE.audience = teen.audience;
   try {
     const served = await profileJson(COPYCLONE.id);
-    assert.equal(served.json.minor_cohort, true);
-    assert.deepEqual(served.json.curriculum_runtime, { enabled: false }, "the served switch is off for a minor, so the App's SDK grant, pick and executor stay off");
+    assert.equal(served.json.minor_cohort, true, "moderation and consent still treat the cohort as minors");
+    assert.deepEqual(served.json.curriculum_runtime, { enabled: true }, "the served switch is on, so the App's CR surfaces open");
   } finally {
     COPYCLONE.audience = original.audience;
     if (original.cr === undefined) delete COPYCLONE.curriculum_runtime;
@@ -106,20 +106,18 @@ await test("switch ON for a 14-17 workshop-tier cohort: no CR tool, no contract,
   }
 });
 
-await test("switch ON for a mixed-age [15, 40] or unknown-age workshop cohort: no CR tool or contract (adult lower bound)", async () => {
+await test("switch ON for a mixed-age [15, 40] or unknown-age workshop cohort: CR tools and contract, served on", async () => {
   for (const [label, audience] of [["mixed-age 15-40", { ...COPYCLONE.audience, age_range: [15, 40] }], ["no age_range", (({ age_range: _a, ...rest }) => rest)(COPYCLONE.audience)]]) {
     const p = { ...withSwitch(COPYCLONE, true), audience };
-    assert.ok(toolNames(p).includes("browser_navigate"), `${label}: control, its base browser tools are injected`);
-    assert.deepEqual(toolNames(p).filter((n) => CR_NAMES.includes(n)), [], `${label}: no CR tool`);
-    for (const runtime of ["proxy", "sdk"]) assert.ok(!buildAnthropicSystemBlocks(p, {}, runtime)[0].text.includes(CR_CONTRACT), `${label} ${runtime}: no CR contract`);
+    assert.deepEqual(toolNames(p).filter((n) => CR_NAMES.includes(n)).sort(), [...CR_NAMES].sort(), `${label}: every CR tool`);
+    for (const runtime of ["proxy", "sdk"]) assert.ok(buildAnthropicSystemBlocks(p, {}, runtime)[0].text.includes(CR_CONTRACT), `${label} ${runtime}: the CR contract`);
   }
   const original = { cr: COPYCLONE.curriculum_runtime, audience: COPYCLONE.audience };
   COPYCLONE.curriculum_runtime = { enabled: true };
   COPYCLONE.audience = { ...COPYCLONE.audience, age_range: [15, 40] };
   try {
     const served = await profileJson(COPYCLONE.id);
-    assert.equal(served.json.minor_cohort, false, "control: the upper-bound minor test alone would let it through");
-    assert.deepEqual(served.json.curriculum_runtime, { enabled: false }, "served off, so the App's CR surfaces stay off");
+    assert.deepEqual(served.json.curriculum_runtime, { enabled: true }, "served on");
   } finally {
     COPYCLONE.audience = original.audience;
     if (original.cr === undefined) delete COPYCLONE.curriculum_runtime;

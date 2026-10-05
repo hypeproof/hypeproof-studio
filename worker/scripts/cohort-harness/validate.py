@@ -289,17 +289,9 @@ def check_profile(p: dict, rules: dict, findings: list, seen_ids: set, cohort_to
         add(findings, rules, pid, "cr_without_observation_format",
             "HARD FAIL: curriculum_runtime.enabled=true requires observation.format "
             "(hps-observation/1 or /2) — without the recorder, browser results are not stored (CR-10)")
-    # The Experiment Browser is adult-only by the same test the Worker uses
-    # (curriculumRuntimeAllowed: not minor_cohort, and age_range min >= 18), not just the
-    # child threshold below: a 13-17 cohort and a mixed-age one such as [15, 40] must not
-    # switch it on either. An unknown lower bound fails closed.
-    cr_ar = (p.get("audience") or {}).get("age_range")
-    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
-    cr_adult = isinstance(cr_ar, list) and len(cr_ar) == 2 and num(cr_ar[0]) and cr_ar[0] >= 18
-    if cr_on and (p.get("minor_cohort") is True or not cr_adult):
-        add(findings, rules, pid, "minor_curriculum_runtime",
-            "HARD FAIL: curriculum_runtime.enabled=true on a cohort that may include minors "
-            "(minor_cohort=true, or age_range min < 18 or unknown) — the Experiment Browser is adult-only")
+    # 2026-10-05 — age no longer decides whether a cohort may switch the Curriculum
+    # Runtime on (the founder course runs high-school cohorts). The checks
+    # minor_curriculum_runtime and child_curriculum_runtime were removed with it.
 
     # --- child cohort guardrails ---
     # A cohort is "child" when audience.parent_coaching is true OR its age_range
@@ -387,31 +379,13 @@ def check_profile(p: dict, rules: dict, findings: list, seen_ids: set, cohort_to
                 "HARD FAIL: child cohort sets sdk_tools.write=true but coach_runtime "
                 "is not 'agent-sdk' — 도구를 열어놓고 실행할 런타임이 없다 "
                 "(워커가 proxy 로 내려주고 코치는 도구가 있다고 믿은 채 실패한다)")
-        # #282 P2 slice 2 (#306/#318): a child cohort must not grant the
-        # native-browser MCP tools either — outward navigation stays off for
-        # minors until safe-session ships. When in doubt, deny for minors.
-        if sdk_tools.get("browser") is True:
-            add(findings, rules, pid, "child_sdk_browser",
-                "HARD FAIL: child cohort must not set sdk_tools.browser=true "
-                "(minors get no browser MCP tools until safe-session ships)")
-        # cr-browser (#1391): the Experiment Browser drives a browser and sends page
-        # screenshots and element crops to the model. Both runtimes' tool grants check
-        # for minors, and this is the profile-side lock: neither switch opens for a child.
-        if (p.get("curriculum_runtime") or {}).get("enabled") is True:
-            add(findings, rules, pid, "child_curriculum_runtime",
-                "HARD FAIL: child cohort must not set curriculum_runtime.enabled=true "
-                "(Experiment Browser automation and screenshot upload are adult-only)")
-        if (p.get("browser_control") or {}).get("enabled") is True:
-            add(findings, rules, pid, "child_browser_control",
-                "HARD FAIL: child cohort must not set browser_control.enabled=true "
-                "(the proxy coach's browser tools are adult-only, like sdk_tools.browser)")
-        # #282 P2 slice 3: a child cohort must not grant the Agent SDK
-        # subagents either — delegation stays adult-only until a pedagogy
-        # decision lands. When in doubt, deny for minors.
-        if sdk_tools.get("subagents") is True:
-            add(findings, rules, pid, "child_sdk_subagents",
-                "HARD FAIL: child cohort must not set sdk_tools.subagents=true "
-                "(minors get no SDK subagents until a pedagogy decision lands)")
+        # 2026-10-05 — capability switches (sdk_tools.browser, sdk_tools.subagents,
+        # browser_control.enabled, curriculum_runtime.enabled) follow the profile at
+        # any age. The child checks child_sdk_browser, child_browser_control,
+        # child_curriculum_runtime and child_sdk_subagents were removed. What stays
+        # for a child cohort is above and below: no message logging or raw upload
+        # without consent, the hardened browser session, the URL-ban phrase, and
+        # moderation (isMinorCohort) in the Worker.
         # 2026-08-10 — `sandbox.file_write` 는 읽는 코드가 없는 레거시인데
         # (도구 정책의 owner 는 sdk_tools), child 프로필에 true 로 남아 있어
         # 실제로 두 사람이 "미성년도 파일 쓰기가 켜져 있다" 고 오독했다.

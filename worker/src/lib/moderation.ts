@@ -127,19 +127,19 @@ export function isMinorCohort(profile: Profile): boolean {
 }
 
 /**
- * Is the Curriculum Runtime (Experiment Browser) usable for this cohort? The ONE minor
- * test every CR surface uses (cr-browser #1391): the served switch, the proxy CR tools
- * and the CR contract here, and on the App side the SDK grant, element pick and the CR
+ * Is the Curriculum Runtime (Experiment Browser) usable for this cohort? The ONE test
+ * every CR surface uses (cr-browser #1391): the served switch, the proxy CR tools and
+ * the CR contract here, and on the App side the SDK grant, element pick and the CR
  * executor, which all read the served switch. Fail-closed: the switch must be exactly
- * `true`, the cohort must be adult throughout (not a minor by `isMinorCohort`, and the
- * audience's LOWER age bound at least 18, so a mixed-age cohort such as [15, 40] is out;
- * an unknown lower bound counts as minor), and the tier must be a workshop tier (an
- * unknown tier counts as minor, like isMinorTier in sdkCoachHelpers.ts).
+ * `true` and the tier must be a web-app workshop tier, the only templates the CR
+ * surfaces work on (an unknown tier is off).
+ *
+ * Age does not decide it. The profile's switch does (2026-10-05: the AI for Good founder
+ * course runs high-school cohorts, so the earlier adult-only rule kept the course off
+ * for its own audience). Moderation and guardian consent still key off isMinorCohort.
  */
 export function curriculumRuntimeAllowed(profile: Profile): boolean {
-  if (profile.curriculum_runtime?.enabled !== true || isMinorCohort(profile)) return false;
-  const lower = profile.audience.age_range?.[0];
-  if (typeof lower !== "number" || lower < 18) return false;
+  if (profile.curriculum_runtime?.enabled !== true) return false;
   const tier = profile.game?.template_tier;
   return tier === "search-webapp" || tier === "website";
 }

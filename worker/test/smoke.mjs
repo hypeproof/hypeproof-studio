@@ -1749,11 +1749,9 @@ const TINY_PNG =
   // 없으면 워커가 proxy 로 내려주고 코치는 도구가 있다고 믿은 채 실패한다(#476).
   // 하네스의 child_sdk_write_without_runtime FAIL 과 같은 검사다.
   // shell / browser / subagents 는 아동에게 여전히 닫혀 있다.
-  // Slice 2 (#306/#318): the browser MCP grant is equally off for minors until
-  // safe-session ships — mirrors the harness child_sdk_browser FAIL check.
-  // Slice 3: the SDK subagents grant (읽기 전용 코드리뷰어/리서처) is equally
-  // off for minors until a pedagogy decision lands — mirrors the harness
-  // child_sdk_subagents FAIL check.
+  // 2026-10-05 — the browser MCP and subagent grants follow the profile at any
+  // age (the harness checks child_sdk_browser / child_sdk_subagents were removed),
+  // so this loop no longer asserts them off for parent-coached cohorts.
   for (const p of all) {
     if (p.audience.parent_coaching === true) {
       if (p.sdk_tools?.write === true) {
@@ -1763,8 +1761,6 @@ const TINY_PNG =
           `minor cohort ${p.id}: sdk_tools.write=true 인데 coach_runtime 이 agent-sdk 가 아니다 — 도구를 열고 실행할 런타임이 없다`,
         );
       }
-      assert.notEqual(p.sdk_tools?.browser, true, `minor cohort ${p.id}: sdk_tools.browser MUST stay off`);
-      assert.notEqual(p.sdk_tools?.subagents, true, `minor cohort ${p.id}: sdk_tools.subagents MUST stay off`);
     }
   }
   // #278 is layered onto the existing website-copyclone track (원장 v2), not a

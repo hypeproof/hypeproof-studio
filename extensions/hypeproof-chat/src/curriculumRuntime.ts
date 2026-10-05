@@ -48,19 +48,15 @@ const CR_TIERS = new Set(["search-webapp", "website"]);
 /**
  * Is the switch on for this served profile? Anything but an explicit `true` is off.
  *
- * It is also the App's one minor test for every CR surface (the SDK grant, element pick,
- * the CR executor, the context key): off for a served `minor_cohort` (explicit flag or
- * age_range max < 18, computed by the Worker's isMinorCohort) and off unless the tier is
- * a workshop tier, fail-closed on an unknown or missing tier. The Worker serves the switch
- * through curriculumRuntimeAllowed, which also requires the audience's lower age bound to
- * be at least 18 (a mixed-age cohort is served the switch off); the App has no age range
- * on the served profile, so it relies on the served switch for that part.
+ * It is also the App's one test for every CR surface (the SDK grant, element pick, the CR
+ * executor, the context key): on only for the served switch and a web-app workshop tier,
+ * fail-closed on an unknown or missing tier. It mirrors the Worker's
+ * curriculumRuntimeAllowed. Age does not decide it (2026-10-05).
  */
 export function isCurriculumRuntimeEnabled(
-  profile: { curriculum_runtime?: { enabled?: unknown } | null; minor_cohort?: unknown; game?: { template_tier?: unknown } | null } | null | undefined,
+  profile: { curriculum_runtime?: { enabled?: unknown } | null; game?: { template_tier?: unknown } | null } | null | undefined,
 ): boolean {
   if (profile?.curriculum_runtime?.enabled !== true) return false;
-  if (profile.minor_cohort === true) return false;
   return CR_TIERS.has(String(profile.game?.template_tier ?? ""));
 }
 

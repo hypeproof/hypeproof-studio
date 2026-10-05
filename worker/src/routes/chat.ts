@@ -480,8 +480,8 @@ chat.get("/profile", async (c) => {
       enabled: served.browser_control?.enabled === true,
       max_iterations: served.browser_control?.max_iterations ?? 8,
     },
-    // CR-02 (recon R3) — the Curriculum Runtime switch, off unless the profile says so,
-    // and never served on for a minor cohort (curriculumRuntimeAllowed, #1391).
+    // CR-02 (recon R3) — the Curriculum Runtime switch, off unless the profile says so
+    // and the tier is a web-app workshop tier (curriculumRuntimeAllowed, #1391). Age does not decide it.
     curriculum_runtime: { enabled: curriculumRuntimeAllowed(served) },
     // #306 — per-cohort hardened native-browser session. Minor cohorts send
     // mode="safe"; the Studio host maps it to hypeproof.browser.safeSession so
@@ -508,12 +508,10 @@ chat.get("/profile", async (c) => {
       read: served.sdk_tools?.read === true,
       write: served.sdk_tools?.write === true,
       // #282 P2 slice 2 — native-browser MCP tools (browser_open/screenshot/
-      // live_preview). Adults only; minors stay false until safe-session
-      // ships (#306/#318) — harness child_sdk_browser FAIL enforces it.
+      // live_preview). The profile's flag decides, at any age (2026-10-05).
       browser: served.sdk_tools?.browser === true,
-      // #282 P2 slice 3 — read-only 코드리뷰어/리서처 subagents. Adults only;
-      // minors stay false until a pedagogy decision lands — harness
-      // child_sdk_subagents FAIL enforces it.
+      // #282 P2 slice 3 — read-only 코드리뷰어/리서처 subagents. The profile's
+      // flag decides, at any age (2026-10-05).
       subagents: served.sdk_tools?.subagents === true,
       // epic #431 — shell. This serializer is the LAST hop: a profile can set
       // `shell: true` and it still never reaches the client unless it is listed

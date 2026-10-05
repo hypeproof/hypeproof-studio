@@ -45,11 +45,12 @@ assert.equal(isCurriculumRuntimeEnabled({}), false);
 assert.equal(isCurriculumRuntimeEnabled({ curriculum_runtime: { enabled: "true" } }), false, "only an explicit true");
 const ADULT_ON = { curriculum_runtime: { enabled: true }, minor_cohort: false, game: { template_tier: "website" } };
 assert.equal(isCurriculumRuntimeEnabled(ADULT_ON), true);
-// One fail-closed minor test for every CR surface (the Worker serves the switch through the same one).
-assert.equal(isCurriculumRuntimeEnabled({ ...ADULT_ON, minor_cohort: true }), false, "a served minor (flag or age < 18) is off");
-assert.equal(isCurriculumRuntimeEnabled({ ...ADULT_ON, game: { template_tier: "kids-quest" } }), false, "a minor tier is off");
+// One fail-closed test for every CR surface (the Worker serves the switch through the same one).
+// Age does not decide it (2026-10-05): a served minor on a web-app tier is on.
+assert.equal(isCurriculumRuntimeEnabled({ ...ADULT_ON, minor_cohort: true }), true, "a served minor (flag or age < 18) is on");
+assert.equal(isCurriculumRuntimeEnabled({ ...ADULT_ON, game: { template_tier: "kids-quest" } }), false, "a non-web-app tier is off");
 assert.equal(isCurriculumRuntimeEnabled({ curriculum_runtime: { enabled: true } }), false, "an unknown tier is off (fail-closed)");
-ok("flag: absent or anything but true is off; minors (served flag or tier) and unknown tiers are off");
+ok("flag: absent or anything but true is off; non-web-app and unknown tiers are off; age does not decide it");
 
 // ── commands: gated in the manifest ────────────────────────────────────────
 assert.deepEqual(manifestSwitchProblems(manifest), [], "every CR command is hidden and disabled with the switch off");
@@ -98,11 +99,13 @@ const on = permittedMcpToolsFor({ ...adult, curriculum_runtime: { enabled: true 
 assert.deepEqual(off, [...MCP_BROWSER_TOOLS], "switch off: the existing grant, unchanged");
 assert.deepEqual(off.filter((t) => CR_SURFACES.mcpTools.includes(t)), []);
 assert.deepEqual(on.filter((t) => CR_SURFACES.mcpTools.includes(t)).sort(), [...CR_SURFACES.mcpTools].sort());
-const minor = permittedMcpToolsFor({ ...adult, game: { template_tier: "kids-quest" }, curriculum_runtime: { enabled: true } });
-assert.deepEqual(minor, [], "the switch never grants browser tools the minor rule strips");
-// A 14-17 workshop-tier cohort: the tier says adult, the served minor flag says minor. No CR tool.
+// A kids-quest tier that opts into browser tools gets them (the flag decides), but no CR tool:
+// the CR surfaces need a web-app tier.
+const kidsTier = permittedMcpToolsFor({ ...adult, game: { template_tier: "kids-quest" }, curriculum_runtime: { enabled: true } });
+assert.deepEqual(kidsTier, [...MCP_BROWSER_TOOLS], "the browser grant follows the flag; no CR tool on a non-web-app tier");
+// A 14-17 workshop-tier cohort (served minor flag true) gets every CR tool (2026-10-05).
 const teen = permittedMcpToolsFor({ ...adult, minor_cohort: true, curriculum_runtime: { enabled: true } });
-assert.deepEqual(teen.filter((t) => CR_SURFACES.mcpTools.includes(t)), [], "no CR tool for a 13-17 cohort");
+assert.deepEqual(teen.filter((t) => CR_SURFACES.mcpTools.includes(t)).sort(), [...CR_SURFACES.mcpTools].sort(), "every CR tool for a 13-17 cohort");
 function registered(opts) {
   const names = [];
   buildHypeproofMcpServer(
@@ -130,7 +133,7 @@ assert.match(sdkCoachSrc, /buildHypeproofMcpServer\([\s\S]{0,400}?crMcpRegistrat
 // The context-key mirror: false for every off profile, true only for an explicit true.
 for (const p of [undefined, {}, { curriculum_runtime: { enabled: "true" } }, { curriculum_runtime: { enabled: false } }]) assert.equal(crContextKeyValue(p), false);
 assert.equal(crContextKeyValue(ADULT_ON), true);
-assert.equal(crContextKeyValue({ ...ADULT_ON, minor_cohort: true }), false, "the context key is off for a minor too");
+assert.equal(crContextKeyValue({ ...ADULT_ON, minor_cohort: true }), true, "the context key follows the switch at any age");
 // …and the provider mirrors exactly that value (a constant `true` would show pickElement with the switch off).
 assert.match(providerSrc, /executeCommand\("setContext", CR_CONTEXT_KEY, crContextKeyValue\(p\)\)/);
 ok("glue: the context key mirrors the switch and the SDK server registers CR tools only from the grant");

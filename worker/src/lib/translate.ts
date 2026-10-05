@@ -24,7 +24,7 @@ import curriculumRuntimeBrowserContractMd from "../prompts/_curriculum-runtime-b
 // @ts-ignore — string import enabled via wrangler rules in wrangler.toml
 import runtimeDegradedNoticeMd from "../prompts/_runtime-degraded-notice.md";
 import { BROWSER_TOOLS, CR_BROWSER_TOOLS, CR_VERIFY_TOOLS } from "./browser-tools.ts";
-import { curriculumRuntimeAllowed, isMinorCohort } from "./moderation.ts";
+import { curriculumRuntimeAllowed } from "./moderation.ts";
 import { resolveSkills } from "../skills/index.ts";
 
 // A polished single-file game (gradient bg, 3 states, score, juice) plus the
@@ -371,28 +371,21 @@ export type CoachRuntime = "proxy" | "sdk";
  *  - proxy → `browser_control.enabled`, the same flag that injects
  *    BROWSER_TOOLS below (translate(), "worker-defined browser control tools").
  *  - sdk   → `sdk_tools.browser`, the same flag `permittedMcpToolsFor()`
- *    (sdkCoachHelpers.ts) reads, minus minors. The client strips browser MCP
- *    tools for minor tiers regardless of the flag (#306/#318), so teaching the
- *    contract there would recreate exactly this bug for kids cohorts. Mirrored
- *    here, fail-closed: an unknown tier counts as minor.
+ *    (sdkCoachHelpers.ts) reads. Since 2026-10-05 that grant follows the flag
+ *    alone (no age or tier strip), so the contract follows the flag alone too;
+ *    teaching it where the client withholds the tools would recreate this bug.
  */
 function browserContractFor(profile: Profile, runtime: CoachRuntime): string {
   const base = baseBrowserContractFor(profile, runtime);
   // CR-02 — the Experiment Browser tools exist only behind the CR switch, and only
   // where the runtime already grants browser tools at all.
-  // Never for minors, on either runtime (fail-closed like the SDK grant).
   if (!base || !curriculumRuntimeAllowed(profile)) return base;
   return `${base}\n\n${curriculumRuntimeBrowserContractMd as unknown as string}`;
 }
 
 function baseBrowserContractFor(profile: Profile, runtime: CoachRuntime): string {
   if (runtime === "sdk") {
-    if (profile.sdk_tools?.browser !== true) return "";
-    // Mirrors isMinorTier() in sdkCoachHelpers.ts — keep the tier list in sync.
-    const workshopTier =
-      profile.game.template_tier === "search-webapp" || profile.game.template_tier === "website";
-    if (!workshopTier || isMinorCohort(profile)) return "";
-    return browserControlContractSdkMd as unknown as string;
+    return profile.sdk_tools?.browser === true ? (browserControlContractSdkMd as unknown as string) : "";
   }
   return profile.browser_control?.enabled === true
     ? (browserControlContractProxyMd as unknown as string)
@@ -608,8 +601,8 @@ export function translate(
   // Static per cohort → cache with the other function tools. Only injected when
   // the profile opts in; the extension host executes them via CDP.
   if (profile.browser_control?.enabled === true) {
-    // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
-    // Never for minors: the SDK grant checks the tier, and so does this one.
+    // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch
+    // (which also requires a web-app workshop tier).
     // cr-verify — the AI Verify tools ride the same switch (CR-12–CR-16).
     const crTools = curriculumRuntimeAllowed(profile) ? [...CR_BROWSER_TOOLS, ...CR_VERIFY_TOOLS] : [];
     for (const t of [...BROWSER_TOOLS, ...crTools]) {

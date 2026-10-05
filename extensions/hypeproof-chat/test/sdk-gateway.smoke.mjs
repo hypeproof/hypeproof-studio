@@ -21,6 +21,7 @@ const {
   sdkConfigDirFor,
   SDK_CONFIG_DIR_NAME,
 } = await import("../src/sdkCoachHelpers.ts");
+const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
 
 // ─── anthropicBaseUrlFor — proxyUrl (/v1 base) → SDK base URL ────────────────
 // The SDK appends /v1/messages to ANTHROPIC_BASE_URL; passing the proxyUrl
@@ -233,12 +234,12 @@ const {
   assert.equal(browserOptions.strictMcpConfig, true, "strictMcpConfig pinned for browser cohorts too");
   assert.deepEqual(browserOptions.allowedTools, [], "REQ-M5: browser MCP tools also route through canUseTool");
 
-  // Minor cohort defense-in-depth: even a polluted profile grants nothing.
-  const pollutedKids = profileToAgentOptions(
+  // 2026-10-05 — the profile flag decides at any tier: a kids tier that opts in gets the grant.
+  const kidsOptIn = profileToAgentOptions(
     { game: { template_tier: "kids-rich" }, sdk_tools: { browser: true } },
     { model: "hypeproof-default", systemPrompt: "" },
   );
-  assert.deepEqual(pollutedKids.permittedMcpTools, [], "minor tier: browser grant stripped client-side");
+  assert.deepEqual(kidsOptIn.permittedMcpTools, [...MCP_BROWSER_TOOLS], "kids tier: the browser grant follows the flag");
 }
 
 // ─── coachRuntime flag still defaults to "proxy" (Phase-3 flip is Jay-gated) ─

@@ -77,7 +77,7 @@ export interface Profile {
     fallback?: ModelKey;
     /** Explicit, reviewed catalogue keys for this cohort. Omission preserves the legacy pair. */
     allowed?: ModelKey[];
-    /** Reviewed adult proxy catalogue; explicit model IDs select their provider. */
+    /** Reviewed proxy catalogue; explicit model IDs select their provider. */
     cross_provider?: boolean;
     /** Derived from a validated frozen lesson, never from client input. */
     lesson_locked?: boolean;
@@ -503,9 +503,9 @@ export function explicitModelProvider(key: string): LLMProvider | undefined {
   if (Object.hasOwn(GLM_MODELS, key)) return 'glm';
 }
 
+// The profile's switch decides; age does not (2026-10-05). Moderation still keys off isMinorCohort.
 export function crossProviderEnabled(profile: Profile): boolean {
-  return profile.model.cross_provider === true && profile.coach_runtime === 'proxy'
-    && profile.minor_cohort === false && (profile.audience.age_range?.[0] ?? 0) >= 18;
+  return profile.model.cross_provider === true && profile.coach_runtime === 'proxy';
 }
 
 export function permittedModelKeys(profile: Profile): ModelKey[] {
