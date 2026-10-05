@@ -33,19 +33,58 @@ flowchart TD
   배포 인수는 아니다. 활동별 upstream 요청 최대 8회, 동시 테스트 1개, 실패 시 중단한다.
 - `install-windows.mjs`: 폐기 가능한 Windows CI에서 User/System 설치기를 실제로
   별도 위치에 설치하고 모든 portable payload 파일을 대조한다. 로컬 Mac에서는 실행 불가다.
-- `public.mjs`: 동일 후보 App으로 현재 공개 Service의 승인된 합성 체험·수업 자격을
-  확인하고 각 활동에서 파일 2개를 만든다. 기존 정책/요청 한도를 사용하며 자동 재시도는
-  하지 않는다. 모델 키는 App에 전달하지 않는다. 공개 cohort나 session을 생성/변경하지 않는다.
+- `public.mjs`: checks the same candidate App against the current public Service with
+  synthetic trial and classroom codes minted for this run, and creates two files in each
+  activity. Existing policy and request limits apply and a failed activity is not retried
+  (only a 403 read in the first 20 s after minting is re-read, for KV convergence). The
+  model key is never passed to the App. It touches no real cohort: it opens and closes one
+  short session on the synthetic acceptance cohort only ([credentials](#public-acceptance-credentials-1404)).
 - `check-unified-release.mjs`: 양쪽 OS receipt와 현재 다운로드 bytes를 대조한다.
   실호출 없는 검사, 공개 연결 누락, 실패/skip/옛 SHA/다른 artifact는 승격하지 않는다.
   최종 freeze 후 공개하며, mirror의 수동 dispatch도 같은 판정기를 거친다.
 
-CI 필요 설정은 `HPS_ACCEPTANCE_ANTHROPIC_API_KEY`와
-`HPS_ACCEPTANCE_TRIAL_CODE`, `HPS_ACCEPTANCE_CLASSROOM_CODE`다. 뒤 두 코드는
-**실제 참가자 대신 인수 검사 전용 합성 사용자**의 제한된 자격이어야 한다.
-체험/수업 구분, native SDK 및 `hypeproof-fast`를 지원하는 준비된 연습 프로필을 사용한다.
-미발급·만료·잔액 부족은 BLOCKED다. 가격/결제·한도 완화·운영 학생 대체를 하지 않는다.
-두 OS 인수는 순서대로 실행해 공유 합성 코드의 동시 사용 제한을 유지한다. 누적 요청 한도와 만료는 기존 코드 정책을 따른다.
+### Public acceptance credentials (#1404)
+
+Static codes did not survive a second release. A trial code's one-hour window and
+40-request allowance start on first use and a reissue to the same handle does not reset
+them; a classroom code needs an open session, and an open session read as a live class
+blocked the same run's `publish` job and every worker deploy. Acceptance therefore mints
+its own credentials on every run, on a cohort that cannot hold a real participant.
+
+- **CI settings**: `HPS_ACCEPTANCE_ANTHROPIC_API_KEY`, plus either `HPS_ACCEPTANCE_ISSUER`
+  (preferred) or `HPS_ADMIN_PASSWORD`. The latter is the secret the `publish` job's freeze
+  already uses, so the fallback needs no new long-lived secret.
+- **Cohort**: `synthetic-release-acceptance`
+  (`worker/src/profiles/synthetic-release-acceptance.ts`). It is `studio-native-trial`
+  under another identity; `worker/test/profile-serving-snapshot.test.mjs` asserts both are
+  served identically, so a pass here is evidence about trial seats. It declares
+  `synthetic: true`: every roster write and token mint on it must name a `synthetic-`
+  handle (otherwise `400 synthetic_handle_required`), and it is hidden from the console.
+- **Per run and OS**: a fresh handle `synthetic-acceptance-<platform>-<time>-<random>`;
+  `POST /admin/cohorts/synthetic-release-acceptance/session/open` (1 h, `force`) returns the
+  classroom code; `POST /admin/tokens/issue` with `native_trial` returns the trial code
+  with a fresh allowance. `finally` revokes the trial grant and closes the session, which
+  revokes the classroom code. A cleanup failure is logged, not turned into a failure.
+- **Freeze**: `GET /admin/cohorts` reports `synthetic` per cohort from the compiled
+  profiles. `scripts/check-live-sessions.mjs` ignores a live session only when its cohort
+  is reported exactly `synthetic: true` and the session runs one of that cohort's own
+  profiles, and names what it ignored. Anything else, including the field missing from an
+  older worker, still blocks. A session left behind by a killed run therefore blocks
+  neither this run's `publish` job nor a worker deploy.
+- **Scoped issuer**: mint with `worker/scripts/issue-issuer-token.ts --cohorts
+  synthetic-release-acceptance --profiles synthetic-release-acceptance --max-hours 1
+  --can-start-session --max-session-hours 1`. The trial mint requires the issuer itself to
+  stay valid for at least an hour after each run starts.
+- **Order**: deploy the worker that carries this cohort first. Against an older Service the
+  mint is refused, acceptance reports BLOCKED, and the App candidate stays draft.
+- **Fallback**: with neither credential set, `HPS_ACCEPTANCE_TRIAL_CODE` and
+  `HPS_ACCEPTANCE_CLASSROOM_CODE` are read as before (single-use per release; the
+  classroom code needs a session opened by hand). The receipt records which path ran as
+  `publicService.credentials`.
+- **Limits**: the cohort has one session key, so the two OS runs stay sequential
+  (`max-parallel: 1`). Two different tags accepting at the same moment can close each
+  other's session; rerun the failed leg. The roster grows by one synthetic handle per OS
+  run. No real participant, price or payment change, or limit relaxation is involved.
 
 원문 입력/응답/도구·화면은 합성 자료로 한정한다. 토큰은 evidence 밖 임시 파일에 두고
 마지막에 삭제한다. trace/video는 끄며 자격 입력 화면을 촬영하지 않는다.

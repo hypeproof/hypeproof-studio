@@ -42,6 +42,7 @@ import { chalkKnowledge } from './chalk-knowledge';
 import { chalkInstructor } from './chalk-instructor';
 import type { Env } from "../env";
 import { listProfiles, getProfile } from "../profiles";
+import { isSyntheticCohort, refusedSyntheticHandles, syntheticHandleError } from "../lib/synthetic-cohort";
 import {createNativeGrant,NATIVE_TRIAL_LIMITS} from "../lib/native-trial-grants";
 import { USAGE_LAST_HOUR_SQL } from "../lib/analytics";
 import { modelUsageSummary } from '../lib/model-usage';
@@ -188,6 +189,9 @@ admin.get("/cohorts", async (c) => {
       profile_ids: c2.profiles.map((p) => p.id),
       profile_names: c2.profiles.map((p) => p.display_name),
       roster_size: roster?.users.length ?? 0,
+      // #1404 — the live-session freeze ignores a session only on a cohort
+      // reported as synthetic (scripts/check-live-sessions.mjs).
+      synthetic: isSyntheticCohort(c2.id),
       session,
     });
   }
@@ -302,6 +306,10 @@ admin.post("/tokens/issue", async (c) => {
     // Permit; mint below.
   }
   // (else: the .use("*", ...) admin gate already enforced Basic auth — no extra check needed)
+
+  // #1404 — after auth, so an unauthenticated caller learns nothing from it.
+  const refusedHandles = refusedSyntheticHandles(cohort, [u]);
+  if (refusedHandles.length) return c.json(syntheticHandleError(refusedHandles), 400);
 
   // Mint the student token.
   if(body.native_trial){
@@ -723,6 +731,9 @@ admin.post("/cohorts/:id/roster", async (c) => {
   if (users.some((u) => typeof u !== "string" || u.length < 1 || u.length > 64)) {
     return c.json({ error: "user ids must be 1-64 char strings" }, 400);
   }
+  // #1404 — a synthetic cohort's roster holds only `synthetic-` handles.
+  const refused = refusedSyntheticHandles(id, users);
+  if (refused.length) return c.json(syntheticHandleError(refused), 400);
   await setRoster(c.env.HPS_KV, id, users);
   return c.json({ ok: true, size: users.length });
 });
@@ -748,6 +759,8 @@ admin.post("/cohorts/:id/roster/append", async (c) => {
   if (users.some((u) => typeof u !== "string" || u.length < 1 || u.length > 64)) {
     return c.json({ error: "user ids must be 1-64 char strings" }, 400);
   }
+  const refused = refusedSyntheticHandles(id, users); // #1404
+  if (refused.length) return c.json(syntheticHandleError(refused), 400);
   const existing = (await getRoster(c.env.HPS_KV, id))?.users ?? [];
   const merged = [...existing];
   const added: string[] = [];
@@ -920,6 +933,9 @@ admin.post("/cohorts/:id/session/open", async (c) => {
       );
     }
   }
+  // #1404 — a synthetic cohort's roster holds only `synthetic-` handles.
+  const refusedHandles = refusedSyntheticHandles(cohortId, [user]);
+  if (refusedHandles.length) return c.json(syntheticHandleError(refusedHandles), 400);
 
   // Guard — refuse to clobber a live session unless the caller opts in.
   // (active_session is a single key per cohort; a silent overwrite would end

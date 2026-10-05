@@ -1350,7 +1350,19 @@
           "path": "e2e/unified-release/public.mjs"
         },
         {
+          "path": "worker/src/lib/synthetic-cohort.ts"
+        },
+        {
+          "path": "worker/src/profiles/synthetic-release-acceptance.ts"
+        },
+        {
+          "path": "scripts/check-live-sessions.mjs"
+        },
+        {
           "path": "e2e/unified-release/install-windows.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.mjs"
         },
         {
           "path": ".github/workflows/build-mac.yml"
@@ -1386,6 +1398,15 @@
         },
         {
           "path": "e2e/unified-release/gate.test.mjs"
+        },
+        {
+          "path": "worker/test/synthetic-cohort.test.mjs"
+        },
+        {
+          "path": "scripts/test-check-live-sessions.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.test.mjs"
         },
         {
           "path": "e2e/tests/native-public-activity.spec.ts"
@@ -3020,7 +3041,7 @@
     {
       "id": "ST-REQ-CR",
       "stage": "requirement",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-INT-CR",
         "ST-REQ-SX",
@@ -3045,7 +3066,7 @@
     {
       "id": "ST-DES-CR",
       "stage": "design",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR"
       ],
@@ -3061,7 +3082,7 @@
     {
       "id": "ST-IMP-CR-PUBLISH",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR"
@@ -3117,7 +3138,7 @@
     {
       "id": "ST-IMP-CR-EVIDENCE",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3150,7 +3171,7 @@
     {
       "id": "ST-IMP-CR-MEMORY",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3178,7 +3199,7 @@
     {
       "id": "ST-IMP-CR-SKILLS",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3215,7 +3236,7 @@
     {
       "id": "ST-TEST-CR",
       "stage": "test",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR",
         "ST-DES-CR",

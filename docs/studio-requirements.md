@@ -442,6 +442,7 @@ dev-host 검증(자동화 셸 불가). REQ-D3(iframe 샌드박싱)은 live_serve
 | ID | 요구 | 설명 | 테스트 |
 |---|---|---|---|
 | REQ-N1 | live_server 프리뷰 | `preview.type:"live_server"` 코호트는 iframe 대신 워크스페이스를 127.0.0.1로 서빙해 네이티브 브라우저로 열고, 저장 시 SSE로 자동 새로고침. path-traversal 거부 | U(liveServerHelpers) + 실기계 |
+| REQ-N10 | Live preview denies devices (#1403) | The live server's page opens as a top-level integrated-browser tab, so the preview iframe's `allow="microphone 'none'; camera 'none'"` (REQ-D3, `PREVIEW_IFRAME_ALLOW`) never applies to it. Every static response (HTML, asset, `/__hp_viewport`, 403/404) carries `Permissions-Policy: camera=(), microphone=(), geolocation=(), display-capture=()`, the same text the Service's published runtime sends for an undeclared project (cr-publish), via `staticResponseHeaders`. The SSE reload stream keeps its own headers. Negative controls: a server sending the pre-#1403 header set, and a policy leaving `microphone=(self)`, both fail the check; the pre-fix `liveServer.ts` fails the smoke. Not claimed: that the header is the only gate (the base app's browser permission handler is separate) or an in-app run | U (`test/live-server.smoke.mjs`, real `LiveServer` over HTTP) |
 | REQ-N2 | live_server 계약 완화 | live_server 코호트는 멀티파일·상대경로·same-origin fetch·스토리지 허용 계약을 받음(iframe 단일파일 계약 아님) | U(translate 분기) |
 | REQ-N3 | 페이지→코치(vision) | page_context+image_paste 코호트에서 "페이지를 코치에게"가 현재 탭 스크린샷+DOM을 코치에 전달. 미성년 코호트는 반드시 off | U(worker gate) + 실기계 |
 | REQ-N4 | 브라우저 tool 게이팅 | `browser_control` 켜진 코호트만 worker가 8개 브라우저 도구 + **프록시용** 사용 규약을 주입. 꺼지면 tool_use/tool_result 블록도 drop. 규약 주입은 런타임별로 갈린다 — REQ-N8 | U(translate, browser-contract) |
@@ -647,6 +648,17 @@ REQ-M27의 활동 원문 보존은 유지하되 기본 표시를 조정한다. �
 배포·이행은 [공통 릴리스 절차](dev/unified-release-and-migration.md)를 따르며
 양쪽 활동 검사 누락을 한쪽의 성공으로 보충하지 않는다.
 
+`REQ-STUDIO-ACCEPTANCE-SDK-SEED` (jayleekr/hypeprooflab#997): acceptance that drives a
+packaged App (`e2e/unified-release/run.mjs`, called by `verify-service-activities.yml`
+and `verify-unified-release.yml`) first seeds the native Agent SDK binary at the version
+the App vendors, the same per-machine step the installers perform. It refuses to start
+(BLOCKED) when that seed is absent or would not be trusted by the App. Without it a native
+trial turn falls back to the proxy runtime, the Service answers `409 trial_requires_sdk`
+before any model call, and the check fails on UI timing without naming the cause.
+Verification: `e2e/unified-release/sdk-seed.test.mjs` (fresh-runner negative, seeded
+positive, stale/truncated/unmarked/other-version seeds rejected). The macOS and Windows
+acceptance runs are recorded per run, not by this control.
+
 ## Local task review (#1020)
 
 `REQ-STUDIO-LOCAL-REVIEW`: [Explicit local task review](requirements/local-task-review.md) connects selected Claude/Codex message evidence to private file storage, the six-capability card, human review revisions and an independently verified local submission receipt. Captured replay, automated installed-shell tests, public release and Jay acceptance remain distinct.
@@ -670,6 +682,12 @@ legacy-seven records, task outcomes and research validity.
 REQ-SS4: Both host tools can read server workbench results with the existing
 connection, preserving review/hold states without submitting reviews. Specific
 server deletion responses prevent recapture and unblock download races across restart.
+REQ-SS5: Known-secret redaction (MC-30) also removes a pasted Lab measurement
+connection token (`hps_sync_` + 43 base64url characters), bare or after `Bearer`,
+before local storage and upload (package 0.3.4, #1377; MC-T18 in
+`worker/test/measurement-core-local-record.test.mjs`). Installation is mandatory
+for every member since 2026-10-01; scope, purpose, score display and read access are
+owned by [measurement-core §멤버 설치 의무](requirements/measurement-core.md#멤버-설치-의무--2026-10-01-결정).
 
 Contract: [SS-01–10](requirements/session-sync.md). Validation:
 `packages/measurement/test/sync.test.mjs`; production acceptance and installed
@@ -805,3 +823,15 @@ after restart, and keep undated damaged fragments only inside the evidenced time
 window (all-undated legacy inputs retain compatibility). Missing approved pages
 never receive complete coverage. See the existing classroom-admin contract and
 `docs/testing/classroom-admin.md` for the nine regression cases and actual results.
+
+## Release acceptance synthetic cohort (#1404)
+
+Release acceptance (`verify-unified-release.yml`, [procedure](dev/unified-release-and-migration.md#public-acceptance-credentials-1404))
+must run unattended without a long-lived student code, without holding a session the
+live-session freeze reads as a class, and without consuming a real trial allowance.
+REQ-STUDIO-NATIVE-LIFETIME is unchanged: a fresh handle gets a fresh allowance, and a
+reissue to the same handle still cannot reset one.
+
+| ID | Acceptance criteria | Implementation / verification |
+|---|---|---|
+| REQ-STUDIO-SYNTHETIC-ACCEPTANCE | A cohort whose every profile declares `synthetic: true` refuses any roster write (replace, append, session open) or token mint naming a handle outside `synthetic-` with `400 synthetic_handle_required`, and `GET /admin/cohorts` reports `synthetic` for every cohort. `synthetic-release-acceptance` is served exactly what `studio-native-trial` is served and is hidden from the console. Each acceptance run mints a fresh handle's classroom code (session open) and trial code, and revokes the trial grant and closes the session in `finally`. The freeze ignores a live session only on a cohort reported exactly `synthetic: true` running one of its own profiles, names what it ignored, and still blocks a real class beside it; a missing or non-boolean flag, a foreign profile or an undecidable window blocks. The real workflow run with these credentials is NOT RUN. | `worker/src/lib/synthetic-cohort.ts`, `worker/src/profiles/synthetic-release-acceptance.ts`, `worker/src/routes/admin.ts`, `scripts/check-live-sessions.mjs`, `e2e/unified-release/public.mjs`; `worker/test/synthetic-cohort.test.mjs`, `worker/test/profile-serving-snapshot.test.mjs`, `scripts/test-check-live-sessions.mjs` |

@@ -132,6 +132,9 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
   ["openai_key", /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/g],
   ["github_token", /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g],
   ["aws_access_key", /\bAKIA[0-9A-Z]{16}\b/g],
+  // Lab measurement connection token (#1377): "hps_sync_" + 32 random bytes in base64url.
+  // Before `bearer_token` so a bare paste is caught and a header names the real kind.
+  ["measurement_connection_token", /\bhps_sync_[A-Za-z0-9_-]{43}\b/g],
   ["bearer_token", /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/g],
 ];
 
