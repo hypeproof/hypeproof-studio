@@ -68,6 +68,21 @@ jobs:
           $assets = @(Get-ChildItem "$env:RUNNER_TEMP/public-assets/*win32-x64*.zip")
           if ($assets.Count -ne 1) { throw 'Expected one Windows package' }
           Expand-Archive -LiteralPath $assets[0].FullName -DestinationPath "$env:RUNNER_TEMP/public-app"
+      # jayleekr/hypeprooflab#997: the App never ships the native Agent SDK binary;
+      # each machine seeds it, as the installers do. Unseeded, every trial turn falls
+      # back to the proxy and the Service answers 409 before any model call. Seed the
+      # exact version the downloaded App vendors; run.mjs refuses to start otherwise.
+      - name: Seed the Agent SDK binary the public App expects
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/seed-sdk-binary.sh --version "$(node e2e/unified-release/sdk-seed.mjs version "$RUNNER_TEMP/public-app/HypeProof Studio.app")"
+      - name: Seed the Agent SDK binary the public App expects
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = node e2e/unified-release/sdk-seed.mjs version "$env:RUNNER_TEMP/public-app"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/seed-sdk-binary.ps1 -Version $version
       - name: Exercise current public App against candidate Service
         shell: bash
         env:

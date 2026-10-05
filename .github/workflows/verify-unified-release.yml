@@ -103,6 +103,19 @@ jobs:
           Expand-Archive -LiteralPath $asset[0].FullName -DestinationPath "$env:RUNNER_TEMP/candidate-app"
           node e2e/unified-release/install-windows.mjs "$env:RUNNER_TEMP/candidate-assets" "$env:RUNNER_TEMP/candidate-app"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # jayleekr/hypeprooflab#997: same per-machine SDK binary precondition as
+      # verify-service-activities.yml; run.mjs refuses to start without it.
+      - name: Seed the Agent SDK binary the candidate expects
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/seed-sdk-binary.sh --version "$(node e2e/unified-release/sdk-seed.mjs version "$RUNNER_TEMP/candidate-app/HypeProof Studio.app")"
+      - name: Seed the Agent SDK binary the candidate expects
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = node e2e/unified-release/sdk-seed.mjs version "$env:RUNNER_TEMP/candidate-app"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/seed-sdk-binary.ps1 -Version $version
       - name: Both activities in the shipped App
         shell: bash
         env:
