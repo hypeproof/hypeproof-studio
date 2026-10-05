@@ -60,7 +60,14 @@ Instrument control (test code, no rebuild): M7, the forwarder stops changing the
 
 `runCommand` is shared by the CR in-app specs (`e2e/curriculum-runtime/*-app.spec.ts`, `app-layer.spec.ts`). `app-layer.spec.ts` with this branch's fixture, same app copy, gated (13:31–13:32): 2 passed, 1 failed. The failure is the last assertion of "CR-T02 exception in-app": "hidden again once nothing is stored". The stored bytes were already gone (the spec polls the files first), but the delete command was still listed. The spec reads the palette once, right after the files are gone, and the App sets the context key without waiting (`refreshCrBytesContext`: `void executeCommand("setContext", …)`), so the read can come first. `runCommand` only ran the delete command, which did its job.
 
-The same test with `origin/main`'s fixture, three gated runs (13:33–13:34): run 1 failed at `locator.fill: Timeout 30000ms exceeded`, the palette race this branch fixes; runs 2 and 3 passed. With this branch's fixture: the first run was aborted when input resumed (exit 75); the rest are listed under "Not run, limits".
+The same test alone, three gated runs per fixture, the fixture file swapped on the same app copy and Service (scratch runner `ab_fixture.py`):
+
+| Fixture | Runs | Result |
+|---|---|---|
+| `origin/main`'s | 13:33–13:34 | 2 passed. 1 failed at `locator.fill: Timeout 30000ms exceeded` in `paletteRows` (`e2e/curriculum-runtime/app-helpers.ts:95`, first palette read after launch) |
+| this branch's | 13:40–13:42 (one earlier attempt aborted at 13:35 when input resumed, exit 75) | 2 passed. 1 failed the same way, in `paletteRows` |
+
+Both failures are the palette race this branch fixes in `runCommand`, inside the CR specs' own copy of the palette code, which this branch does not touch. The four runs that reached "hidden again" passed it, two per fixture. Neither race comes from `fixtures/app.ts`; both are left as follow-ups (below).
 
 ## Part 2 — CR-T01 after decision 9
 
@@ -72,6 +79,7 @@ Decision 9 (2026-10-01) moved CR-59 and CR-60 (CR-T55, CR-T56) from `cr-browser`
 | Page edited (§4 rows CR-59 and CR-60 name `cr-e2e`, §5 `cr-browser` and `cr-e2e` rows, §7 `cr-e2e` note), fixture unchanged | same | exit 1: `frozen-inputs.json is not the projection of the verdict's inputs … The verdict passes on this tree, so regenerate the fixture`. The edited page no longer matches `cr-recon`'s pin, so the verdict reads this tree |
 | Fixture regenerated | `HPS_CR_RECON_FREEZE=1` the same | `wrote worker/test/fixtures/cr-recon/frozen-inputs.json`. The diff is exactly `cr-browser` minus CR-59 and CR-60, `cr-e2e` plus CR-59 and CR-60 |
 | After | the same, without the variable | exit 0, `verdict read at this tree … · 10 areas · 73 map entries · 84 matrix rows · 11 decisions · 34 negative controls each caught`; no problem |
+| After the record sweep, simulated | scratch clone of `d73fb630` whose ledger (working tree only) gives `cr-recon` a completion pinning this page and fixture, as `align.py record --replace` would; then CR-T01 | commit = `d73fb630`: exit 0, verdict read at that commit, `INFO this tree still matches the recorded map`. Commit absent from the clone (every CI run checks out at depth 1): exit 0, verdict not re-run, the same INFO line. The control is `origin/main` itself (first row): six differences |
 
 Planted defects on this branch, one at a time (scratch runner `mutate_recon.py`, the file restored after each; the clean tree passed before and after):
 
@@ -85,7 +93,22 @@ Planted defects on this branch, one at a time (scratch runner `mutate_recon.py`,
 
 ## Gates
 
-PENDING
+At `d73fb630` (exit codes, run after committing; the commit after it changes only this file):
+
+| Gate | Exit |
+|---|---|
+| `worker` `npm test` (includes CR-T01 `cr-recon.test.mjs`: "verdict read at this tree", and `cr-traceability.test.mjs`) | 0 |
+| `worker` `npm run typecheck` | 0 |
+| `worker` `test:authoring:d1` · `test:classroom:d1` · `test:native-trial:d1` · `test:classroom-ops:d1` · `test:cr-publish:d1` · `test:cr-memory:d1` · `test:cr-skills:d1` · `test:cr-evidence:d1` | 0 · 0 · 0 · 0 · 0 · 0 · 0 · 0 |
+| `worker` `npm run validate-profiles` · `bash worker/scripts/cohort-harness/test/run.sh` | 0 · 0 |
+| `e2e` `npm run test:cr-publish` · `npm run test:cr-evidence` (real Chromium, the PR CI job) | 0 · 0 |
+| `e2e` `tsc --noEmit -p .` (not in CI) | 2, the same 24 errors with `origin/main`'s and this branch's versions of the two changed files, none in them |
+| `python3 scripts/next-work.py --check` (`HYPEPROOF_HARNESS=~/.cache/hypeproof/harness`) | 0 |
+| `python3 scripts/check-registry.py` | 0 |
+| `hype-align` `align.py check --item cr-unblock` | 1: `refused: unknown work item: cr-unblock`. #1506 is not a ledger item |
+| `hype-align` `align.py check --doc curriculum-runtime` | 1: `BROKEN cr-recon`, completion no longer holds (changed since recorded: the recon page, the requirements document, the frozen inputs). At `origin/main` the same check exits 1 with the requirements document alone. The record sweep re-records `cr-recon` |
+
+Not run: the extension typecheck and smokes (no file under `extensions/` changed), the measurement, chalk and workflow jobs (untouched).
 
 ## Not run, limits
 
@@ -94,4 +117,6 @@ PENDING
 - CR-T02's HTML generation specs and the rest of the switch-off inventory: `cr-e2e`.
 - No completion is written here. `cr-recon` stays reopened until the record sweep re-records it: its pin on the requirements document had already changed, and this branch changes the page and the fixture it pins.
 - The shell is the installed 0.1.51 copy; only the extension and webview are current.
-- `app-layer.spec.ts`, "CR-T02 exception in-app": its last assertion reads the palette once right after the stored files are gone, while the App updates the context key without waiting (above). That race is in the spec and the App, not in this branch's fixture; it is left to the record sweep, which re-runs `cr-browser`'s in-app rows. This branch's fixture side of the comparison is listed here when it ran.
+- Follow-ups for the record sweep (#1507), which re-runs the CR in-app specs; pre-existing, not changed here:
+  - `paletteRows` (`e2e/curriculum-runtime/app-helpers.ts`) opens the palette until its input shows and then fills it outside the retry, the race `runCommand` had: it failed 1 of 3 runs with either fixture.
+  - `app-layer.spec.ts`, "CR-T02 exception in-app": the last assertion reads the palette once right after the stored files are gone, while the App sets the context key without waiting. It failed once in 5 runs that reached it.
