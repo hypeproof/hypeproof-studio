@@ -48,6 +48,20 @@ export function stepsRemaining(steps: readonly LessonStep[], currentStepId: stri
 }
 
 /**
+ * SX-02 — the lesson step "지난번 이어서" names, or null.
+ *
+ * The host sends a step id only while the task record still stands where an earlier session
+ * left it (`resumeOf`, taskFlowHelpers.ts). The webview does not judge that again; it only
+ * refuses to invent: an id that is not one of this lesson's steps (a record of another version,
+ * a malformed message) draws no entry, never a fallback step.
+ */
+export function resumeStepOf(steps: readonly LessonStep[], resume: { step?: unknown } | null | undefined): LessonStep | null {
+  const id = resume?.step;
+  if (typeof id !== "string" || !id) return null;
+  return steps.find((s) => s.id === id) ?? null;
+}
+
+/**
  * Is one completion condition met, by the host's own verdict (SX-01, SX-50; SX-55)?
  *
  * `missing` is the SX-14 gate's list the host sent down as `learningState.complete.missing`.

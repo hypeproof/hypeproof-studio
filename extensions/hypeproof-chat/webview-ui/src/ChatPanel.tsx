@@ -734,6 +734,8 @@ export function ChatPanel(props: Props) {
         // Without `learningState` (a seat that records no learning events) there is no verdict,
         // and nothing gets a check mark.
         missing={learning ? learning.complete.missing : null}
+        // SX-02 — "지난번 이어서", exactly as the host decided it from the task record.
+        resume={learning?.resume ?? null}
         currentStepId={currentStepId}
         onSelectStep={setCurrentStepId}
         onStartStep={(step) => {

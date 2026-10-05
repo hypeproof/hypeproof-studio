@@ -1223,6 +1223,9 @@ html, body, #root {
 .hp-mission-completion-note { color: var(--hp-muted); }
 /* SX-50 — state is icon + wording. It reads in a render with the color removed. */
 .hp-mark { flex: 0 0 auto; font-variant-emoji: text; }
+/* SX-02 — "지난번 이어서": below the actions, above the growth link; a quiet button (SX-04). */
+.hp-mission-resume { margin: 0 0 8px; font-size: 13px; }
+.hp-mission-resume .hp-cta-quiet { overflow-wrap: anywhere; text-align: left; }
 .hp-mission-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; font-size: 12px; color: var(--hp-muted); }
 /* SX-03 — one link. It does not use the Primary style and sits below the mission, smaller. */
 .hp-mission-growth {

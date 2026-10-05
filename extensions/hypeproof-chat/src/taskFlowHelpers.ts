@@ -212,26 +212,62 @@ export function decideFlow(current: TaskCurriculum, signal: FlowSignal, lesson: 
 
 export interface FlowOutcome {
   curriculum: TaskCurriculum;
+  /**
+   * When the task's record last changed: its latest `history` line (every write appends one).
+   * NaN when the record has none, which a record the core made never is. Read by `resumeOf`.
+   */
+  changed_at: number;
   /** True when this call wrote the record. */
   changed: boolean;
   refused?: FlowRefusal;
 }
 
+/** What the screen is shown of one task's record. */
+export interface ShownFlow {
+  curriculum: TaskCurriculum;
+  /** `FlowOutcome.changed_at` of the read this comes from. */
+  changed_at: number;
+}
+
 /**
- * The curriculum the screen is shown: this read's, or — when the record could not be read
- * this time (another Studio window holding its lock) — the last one this host read for the
- * SAME record (`taskRecordIdOf`: the same task, seat and folder). Never a default: falling back
- * to "working" would put the completion button back on a task that was already submitted.
- * null when nothing was ever read for this record; the screen then shows the gate alone, as a
- * seat without the flow does.
+ * The record the screen is shown: this read's, or — when the record could not be read this
+ * time (another Studio window holding its lock) — the last one this host read for the SAME
+ * record (`taskRecordIdOf`: the same task, seat and folder). Never a default: falling back to
+ * "working" would put the completion button back on a task that was already submitted. null
+ * when nothing was ever read for this record; the screen then shows the gate alone, as a seat
+ * without the flow does.
  */
 export function screenFlow(
   outcome: FlowOutcome | null,
-  last: { recordId: string; curriculum: TaskCurriculum } | null,
+  last: ({ recordId: string } & ShownFlow) | null,
   recordId: string,
-): TaskCurriculum | null {
-  if (outcome) return outcome.curriculum;
-  return last && last.recordId === recordId ? last.curriculum : null;
+): ShownFlow | null {
+  if (outcome) return { curriculum: outcome.curriculum, changed_at: outcome.changed_at };
+  return last && last.recordId === recordId ? { curriculum: last.curriculum, changed_at: last.changed_at } : null;
+}
+
+/**
+ * SX-02 — "지난번 이어서": the step to continue from, when this task's record still stands where
+ * an earlier session of the app left it.
+ *
+ *   - "An earlier session": the record last changed before `sessionStartedAt`, the moment this
+ *     host started (the App's extension host). In the session that opened the record, or once
+ *     the student has moved the task again in this one (a step, a submit), there is nothing left
+ *     over from last time and there is no entry.
+ *   - "Continue": only a task still being worked on (assigned, working). A submitted task has no
+ *     step to go back to; what follows a submit is the boundary reflection and the next task
+ *     (sx-p2), not this entry.
+ *   - The step is the record's own `current_step`, the step the gates let the task reach. The
+ *     webview draws it only if it is one of the lesson's steps.
+ *
+ * The record is the one this seat and folder read (`taskRecordIdOf`), so the entry never names
+ * another seat's step. A seat without the task flow has no record and no entry.
+ */
+export function resumeOf(shown: ShownFlow | null, sessionStartedAt: number): { step: string } | null {
+  // Written as "not before" so that a time that cannot be read (NaN) is never taken as before.
+  if (!shown || !(shown.changed_at < sessionStartedAt)) return null;
+  const { phase, current_step } = shown.curriculum;
+  return phase === "assigned" || phase === "working" ? { step: current_step } : null;
 }
 
 /**
@@ -297,8 +333,13 @@ function stepFlow(stored: Task, input: FlowInput): { task: Task; changed: boolea
   return { task, changed, decision };
 }
 
+/** The latest `history` line's time. NaN for a record with no history line. */
+const changedAtOf = (task: Task): number =>
+  task.history.length ? task.history.reduce((latest, line) => Math.max(latest, line.at), -Infinity) : Number.NaN;
+
 const outcomeOf = (task: Task, changed: boolean, decision: FlowDecision): FlowOutcome => ({
   curriculum: task.curriculum!,
+  changed_at: changedAtOf(task),
   changed,
   ...(decision.kind === "refused" ? { refused: decision.code } : {}),
 });

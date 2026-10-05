@@ -182,11 +182,11 @@ await hostCheck(
   provider,
   (text) =>
     lacks(postBody(text), /const target = this\.taskFlowTarget\(recorder, profile\);\s*const shown = target \? screenFlow\(await this\.runTaskFlow\(\{ kind: 'seen' \}, recorder, profile\), this\.taskFlowLast, target\.recordId\) : null;/, "postLearningState never opens the task, or reads the last phase of another record") ??
-    lacks(postBody(text), /phase: shown\.phase, currentStep: shown\.current_step/, "the stored phase is not what the screen gets") ??
-    lacks(runBody(text), /this\.taskFlowLast = \{ recordId: target\.recordId, curriculum: outcome\.curriculum \};/, "a successful read is not remembered for a busy record"),
+    lacks(postBody(text), /phase: shown\.curriculum\.phase, currentStep: shown\.curriculum\.current_step/, "the stored phase is not what the screen gets") ??
+    lacks(runBody(text), /this\.taskFlowLast = \{ recordId: target\.recordId, curriculum: outcome\.curriculum, changed_at: outcome\.changed_at \};/, "a successful read is not remembered for a busy record"),
   [
     ["this.taskFlowLast, target.recordId) : null;", "this.taskFlowLast, task) : null;"],
-    ["this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };", ""],
+    ["this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum, changed_at: outcome.changed_at };", ""],
   ],
 );
 
@@ -457,9 +457,10 @@ if (flow) {
   await check("screenFlow: a record that could not be read shows the last phase read for the same record, never a default", () => {
     const submitted = { ...curriculumAt("submitted", "retest") };
     const working = { ...submitted, phase: "working" };
-    assert.equal(flow.screenFlow({ curriculum: working, changed: false }, { recordId: RECORD, curriculum: submitted }, RECORD), working, "a fresh read lost to a remembered one");
-    assert.equal(flow.screenFlow(null, { recordId: RECORD, curriculum: submitted }, RECORD), submitted, "a busy record put the completion button back on a submitted task");
-    assert.equal(flow.screenFlow(null, { recordId: flow.taskRecordIdOf(TASK, SEAT_B), curriculum: submitted }, RECORD), null, "another seat's phase was shown for this one");
+    // The record's last-change time travels with its phase (SX-02 reads it), from the same read.
+    assert.deepEqual(flow.screenFlow({ curriculum: working, changed_at: 2, changed: false }, { recordId: RECORD, curriculum: submitted, changed_at: 1 }, RECORD), { curriculum: working, changed_at: 2 }, "a fresh read lost to a remembered one");
+    assert.deepEqual(flow.screenFlow(null, { recordId: RECORD, curriculum: submitted, changed_at: 1 }, RECORD), { curriculum: submitted, changed_at: 1 }, "a busy record put the completion button back on a submitted task");
+    assert.equal(flow.screenFlow(null, { recordId: flow.taskRecordIdOf(TASK, SEAT_B), curriculum: submitted, changed_at: 1 }, RECORD), null, "another seat's phase was shown for this one");
     assert.equal(flow.screenFlow(null, null, RECORD), null);
   });
 

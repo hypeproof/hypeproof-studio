@@ -20,8 +20,7 @@ import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
-import {flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
-import type {TaskCurriculum} from '../../../worker/src/lib/measurement-core/local-record.ts';
+import {flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, resumeOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
@@ -388,14 +387,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         task,
         events: recorder.batch.events,
         completion: this.learningCompletion(profile),
-        ...(shown ? { phase: shown.phase, currentStep: shown.current_step } : {}),
+        ...(shown ? { phase: shown.curriculum.phase, currentStep: shown.curriculum.current_step, resume: resumeOf(shown, this.appSessionStartedAt) } : {}),
         notice,
       }),
     });
   }
 
-  /** SX-55 — the last curriculum this host read, so a busy record does not reopen a submitted task on screen. */
-  private taskFlowLast: { recordId: string; curriculum: TaskCurriculum } | null = null;
+  /** SX-55 — the last record this host read, so a busy record does not reopen a submitted task on screen. */
+  private taskFlowLast: ({ recordId: string } & ShownFlow) | null = null;
+
+  /**
+   * SX-02 — when this session of the App began: the moment this host was made, on the
+   * extension's activation. A task record last changed before it was left by an earlier session
+   * ("지난번", `resumeOf`). Taken once, never per state: a fresh `Date.now()` at each state would
+   * make the record of a moment ago read as "last time".
+   */
+  private readonly appSessionStartedAt = Date.now();
 
   /**
    * SX-55 — the one task-flow line the student has to see, next to the completion button.
@@ -438,7 +445,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       const { store, record } = this.crRecordHandle();
       const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });
-      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };
+      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum, changed_at: outcome.changed_at };
       this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });
       return outcome;
     } catch (error) {
