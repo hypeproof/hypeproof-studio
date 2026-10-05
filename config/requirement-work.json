@@ -569,7 +569,7 @@
         "MC-48"
       ],
       "inline_prefixes": [],
-      "sha256": "7582ea0ba262581ffba8637b3deab5c024fe232b3590bd43a0b6d430f3e53f72",
+      "sha256": "69d3dd2f9666cd4098fac7ff84e961cb2a611f69e6abb12fa47a0ea81a9132b2",
       "owner": "jayleekr",
       "intent": "docs/intents/measurement-core.md",
       "design": "docs/design/measurement-core.md",
@@ -2302,7 +2302,7 @@
         "measurement-core-dogfood"
       ],
       "gate": {
-        "reason": "P1·P2. Jay 첫 사용 수용(MC-47·48)과 팀 운영·데이터 정책 준비 전에는 착수하지 않는다."
+        "reason": "P1·P2. 전 멤버 설치는 2026-10-01 결정으로 필수다(#1377): HypeProof 작업 저장소(studio·lab·harness) 최소 1개 등록, 그 이상은 자발; 데이터는 계측기 점검에만 쓰고 평가·보수·KPI에 쓰지 않음; #1249 P2·P3 출시 전에는 프로필 점수 표시·비교 없음; 원시 기록 열람은 운영자(Jay)·연구 담당(조민한·태봉호). 원격 팀 제출·연구 큐 구현은 Jay 첫 사용 수용(MC-47·48)과 남은 데이터 정책(MC-41 철회·삭제·보관·내보내기·지원 책임) 준비 전에는 착수하지 않는다."
       },
       "next_action": "Jay 첫 사용 수용이 확인된 뒤 인증·권한·운영 규칙과 연구 큐 설계를 착수한다.",
       "design_delta": "원격 제출은 서버가 멤버·프로젝트 권한·수집 목적을 검증하고, 로컬 접수와 원격 접수를 분리한다.",
