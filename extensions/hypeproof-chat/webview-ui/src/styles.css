@@ -1200,6 +1200,15 @@ html, body, #root {
   border-bottom: 1px solid var(--hp-line);
   flex-shrink: 0;
 }
+/* SX-01 — the header stays on screen while everything under it scrolls. A sticky element sticks
+   only inside its containing block, and the shell (height 100%) is that block: when a lesson's
+   panels make the shell taller than the window, the DOCUMENT scrolled and carried the shell, and
+   the header, off the top (measured in the App at 1280×800: shell 737/1496 px, header at
+   -270..-22 px, e2e/sx/home-app.spec.ts). While region A shows a lesson's mission the shell is
+   the scroller, as it already is when the effort control is drawn (rule below), so the header
+   sticks to it. A seat with no lesson (no mission sentence) keeps its layout. */
+.hps-shell:has(> .hp-mission .hp-mission-sentence) { overflow-y: auto; }
+.hps-shell:has(> .hp-mission .hp-mission-sentence) > .hps-input-area { flex-shrink: 0; }
 .hp-mission-week { margin: 0 0 2px; font-size: 12px; letter-spacing: 1px; color: var(--hp-muted); }
 .hp-mission-sentence { margin: 0 0 8px; font-size: 22px; line-height: 1.35; font-weight: 700; overflow-wrap: anywhere; }
 .hp-mission-activity { margin: 0 0 10px; font-size: 12px; color: var(--hp-muted); overflow-wrap: anywhere; }
@@ -1212,6 +1221,19 @@ html, body, #root {
   border: 1px solid var(--hp-accent); border-radius: 6px;
 }
 .hp-cta-primary:disabled { opacity: .55; cursor: default; }
+/* SX-04 — one Lime button on the screen. The App's theme paints `--vscode-button-background`
+   Lime, so every button that takes the theme's button colour was a second Lime button next to
+   region A's Primary: found on the real work screen, not in a server render (Send and the
+   observation panel's button, e2e/sx/home-app.spec.ts, 2026-10-05). While region A draws its
+   Primary they step down to the quiet style (design §디자인 시스템: "B의 보내기 … 투명 배경,
+   --hp-line 테두리"). A seat without a lesson has no Primary and keeps the theme's button. */
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-run,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button {
+  color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-line);
+}
 .hp-cta-quiet {
   min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer;
   color: var(--hp-ink); background: transparent;

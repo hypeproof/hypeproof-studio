@@ -1,5 +1,6 @@
 // Region A, the work screen's home (SX-01 ~ SX-04): SX-02's "지난번 이어서" — the step the task
-// record still holds from an earlier session of the App. Run: node --experimental-strip-types test/sx-home.smoke.mjs
+// record still holds from an earlier session of the App — and the two style rules the in-app run
+// found missing. Run: node --experimental-strip-types test/sx-home.smoke.mjs
 //
 // What is judged:
 //   1. the rule (`resumeOf`, src/taskFlowHelpers.ts), pure: an entry only for a record last
@@ -14,11 +15,15 @@
 //      also runs on a planted source that must fail it;
 //   5. region A draws it (the real MissionHeader through test/sx-render.mjs): below the actions
 //      and the completion conditions, above the growth link, a quiet button with the step's own
-//      title and no figure, and nothing for a step this lesson does not have.
+//      title and no figure, and nothing for a step this lesson does not have;
+//   6. styles.css keeps the header on screen while the rest scrolls (SX-01) and leaves one Lime
+//      button while region A shows its Primary (SX-04). A server render applies no CSS, so these
+//      are static tripwires for CI; what they guard was measured in the App.
 //
 // Controls (.claude/rules/verification.md rules 2·3): each rule has a sample that must pass
 // (catches a too-strict instrument) and one that must be refused (catches a too-lenient one).
-// The in-app half (a real App closed and reopened) is e2e/sx/home-app.spec.ts.
+// The in-app half (a real App: computed styles, a scrolled conversation, a narrow window, a close
+// and a reopen) is e2e/sx/home-app.spec.ts.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -299,6 +304,63 @@ if (!status.available) {
     assert.ok(!noLesson.includes(RESUME), "a seat with no design file was offered a step");
   });
 }
+
+// ── 6. The style rules the in-app run found missing (static tripwires) ─────────────
+
+const stylesCss = readFileSync(new URL("../webview-ui/src/styles.css", import.meta.url), "utf8");
+/** [selector list, body] for every rule (comments stripped; the rule inside an @media block is listed too). */
+const cssRules = (text) =>
+  [...text.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim().replace(/\s+/g, " "), m[2]]);
+const selectorsOf = (list) => list.split(",").map((s) => s.trim()).filter(Boolean);
+
+/** SX-01: while region A shows a lesson's mission, the shell is the scroller the sticky header sticks to. */
+function scrollerProblem(css) {
+  const rules = cssRules(css);
+  const sticky = rules.find(([sel]) => sel === ".hp-mission");
+  if (!sticky || !/position:\s*sticky/.test(sticky[1]) || !/top:\s*0/.test(sticky[1])) return "region A's header is no longer sticky";
+  const scroller = rules.find(([sel, body]) => sel === ".hps-shell:has(> .hp-mission .hp-mission-sentence)" && /overflow-y:\s*auto/.test(body));
+  return scroller ? null : "the shell is not the scroller while the mission is on screen: the document scrolls the header away";
+}
+await staticCheck("SX-01 styles: the header stays on screen while the rest scrolls (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, scrollerProblem, [
+  [".hps-shell:has(> .hp-mission .hp-mission-sentence) { overflow-y: auto; }\n", ""],
+  ["position: sticky; top: 0; z-index: 2;", "position: relative; z-index: 2;"],
+]);
+
+/**
+ * SX-04: every button the theme paints Lime (`background: var(--vscode-button-background)`, which
+ * the App's theme sets to the accent) steps down while region A shows its Primary — or is named
+ * here with the reason it never shares a screen with it. A new theme-Lime button fails until it
+ * is one or the other.
+ */
+const NOT_BESIDE_THE_PRIMARY = {
+  ".hps-msg-user .hps-msg-body": "a chat bubble, not a button (SX-04 counts buttons; Lime on a bubble is SX-49's token-role question)",
+  ".hps-naming-btn": "the naming ritual's own screen, drawn instead of the work screen",
+  ".hps-world-open": "the kids worlds strip's open-world marker: a state, on seats with no lesson",
+  ".hps-fatal-btn": "the error boundary's screen, drawn instead of the work screen",
+  ".hps-voice-bar": "a voice level bar, not a button",
+  ".hps-voice-to-text": "VoicePanel, which no screen of this webview mounts",
+};
+const STEP_DOWN = ".hps-shell:has(.hp-mission .hp-cta-primary) ";
+function limeProblem(css) {
+  const rules = cssRules(css);
+  // The background each selector ends with, in source order (same selector, later rule wins).
+  const last = new Map();
+  for (const [list, body] of rules) {
+    const bg = [...body.matchAll(/background(?:-color)?:\s*([^;]+)/g)].at(-1)?.[1].trim();
+    if (bg) for (const sel of selectorsOf(list)) last.set(sel, bg);
+  }
+  const themeLime = [...last].filter(([sel, bg]) => bg.startsWith("var(--vscode-button-background") && !sel.startsWith(STEP_DOWN)).map(([sel]) => sel);
+  if (themeLime.length === 0) return "no theme-Lime button found — the check reads nothing";
+  const stepDown = rules.filter(([list, body]) => selectorsOf(list).every((s) => s.startsWith(STEP_DOWN)) && /background:\s*transparent/.test(body)).flatMap(([list]) => selectorsOf(list));
+  const loose = themeLime.filter((sel) => !stepDown.some((s) => s.endsWith(" " + sel)) && !(sel in NOT_BESIDE_THE_PRIMARY));
+  return loose.length ? `theme-Lime buttons beside region A's Primary: ${loose.join(", ")}` : null;
+}
+await staticCheck("SX-04 styles: no theme-Lime button stays Lime beside region A's Primary (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, limeProblem, [
+  // Send keeps the theme's Lime again (the in-app finding of 2026-10-05).
+  [".hps-shell:has(.hp-mission .hp-cta-primary) .hps-input .hps-btn-send,\n", ""],
+  // A new button takes the theme's colour without stepping down.
+  [".hps-btn-send {\n", ".hps-new-cta { background: var(--vscode-button-background); }\n.hps-btn-send {\n"],
+]);
 
 console.log(`sx-home: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
