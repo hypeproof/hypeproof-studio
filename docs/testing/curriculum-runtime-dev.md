@@ -262,6 +262,14 @@ cd worker && npm run test:cr-review:d1                                          
 cd extensions/hypeproof-chat && node --experimental-strip-types test/cr-review.smoke.mjs                    # App sessions, timing verdict, panel render
 ```
 
+The first two include CR-T58 against the recorded provider: the real provider's ten answers to the Week 2 pack, replayed at their recorded times. To measure the real provider again and refresh that recording (ten real Experiment-skill calls through the coach route, a few cents; the key stays in the process environment):
+
+```bash
+cd worker && ANTHROPIC_API_KEY=<key> node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs --record-provider --d1
+```
+
+It prints each run's times ("provider … ms · total … ms + commit … ms · pass · accepted") and writes `worker/test/fixtures/cr-review/provider-recording.json` only when all ten answered. The ten runs of 2026-10-06 took 12.7 s to 14.7 s each ([run record](curriculum-runtime-2026-10-06-review-provider.md)).
+
 **In the app (background).** The same prepared copy, with this branch's extension and webview injected. `app-service.mjs` also writes a director's issuer token next to the learner's (`<token-file>.issuer`):
 
 ```bash
