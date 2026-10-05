@@ -100,6 +100,11 @@ export function isIssuerAllowedEndpoint(path: string, method: string): boolean {
   // #1012 · #751 G2 — reuse/review reads, learner-condition rehearsal codes and confirmation. Same owner/scope checks in the handlers.
   if (method === 'GET' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/(?:versions|impact|versions\/[^/]+\/readiness)$/.test(path)) return true;
   if (method === 'POST' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/versions\/[^/]+\/(?:rehearsals|confirmation)$/.test(path)) return true;
+  // #1013 — lesson retrospective → next draft. Handlers re-check issuer, cohort scope, course owner and HPS_FEEDBACK_LOOP.
+  if ((method === 'GET' || method === 'POST') && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives$/.test(path)) return true;
+  if (method === 'GET' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives\/[^/]+$/.test(path)) return true;
+  if (method === 'PUT' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives\/rt-[^/]+$/.test(path)) return true;
+  if (method === 'POST' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives\/rt-[^/]+\/next-draft$/.test(path)) return true;
   if ((method === "GET" || method === "PUT") && /^\/admin\/cohorts\/[^/]+\/classroom\/shares(?:\/[^/]+)?$/.test(path)) return true;
   // Chalk authoring: handlers still enforce issuer identity, cohort/profile and owner.
   if ((method === "GET" || method === "PUT") && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+(?:\/versions\/[^/]+)?$/.test(path)) return true;
