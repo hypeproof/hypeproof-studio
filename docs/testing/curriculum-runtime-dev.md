@@ -262,6 +262,14 @@ cd worker && npm run test:cr-review:d1                                          
 cd extensions/hypeproof-chat && node --experimental-strip-types test/cr-review.smoke.mjs                    # App sessions, timing verdict, panel render
 ```
 
+The first two include CR-T58 against the recorded provider: the real provider's ten answers to the Week 2 pack, replayed at their recorded times. The replay holds only while the product sends the prompt those answers were given: when the Experiment skill's text, the prompt builder or what its context carries changes, the case fails with "the Experiment skill's prompt is not the one recorded" and where the two first differ. Then measure the real provider again and refresh the recording (ten real Experiment-skill calls through the coach route, a few cents). The key is read from `worker/.dev.vars` into this one command's environment, so it is never typed and never lands in shell history:
+
+```bash
+cd worker && ANTHROPIC_API_KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' .dev.vars)" node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs --record-provider --d1
+```
+
+It prints each run's times ("provider … ms · total … ms + commit … ms · pass · accepted") and writes `worker/test/fixtures/cr-review/provider-recording.json` only when all ten answered, with the commit checked out and whether the tree differed from it (`source.head`, `source.dirty`, read before the first provider call). The ten runs of 2026-10-06 took 12.7 s to 14.7 s each ([run record](curriculum-runtime-2026-10-06-review-provider.md)).
+
 **In the app (background).** The same prepared copy, with this branch's extension and webview injected. `app-service.mjs` also writes a director's issuer token next to the learner's (`<token-file>.issuer`):
 
 ```bash
