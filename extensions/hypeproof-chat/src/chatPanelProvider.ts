@@ -43,6 +43,7 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
+import { VENTURE_DIR, applyProposal, archiveNotes, coachContext, ingestPrompt, initWiki, loadState, proposalFromText, readNotes, sessionHash, turnsFromEvents, writeWiki } from "./ventureMemory";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
 import {
@@ -924,6 +925,61 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
     await this.postMemoryState();
+  }
+
+  /**
+   * Venture Memory, local wiki (founder course): one ingest of this session's conversation (the
+   * spool's events.jsonl) and the student's notes (venture/notes/) into the workspace's venture/
+   * folder, then the weekly pack opens. The model call is one non-streaming coach-route request;
+   * only items citing a turn or a note of this session are kept. Nothing is stored on the Service.
+   */
+  async ventureIngest(): Promise<void> {
+    if (!this.isCurriculumRuntimeEnabled()) {
+      this.postPageNotice("이 수업에서는 팀 위키 정리를 쓸 수 없어요.");
+      return;
+    }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) {
+      void vscode.window.showWarningMessage("HypeProof: 작업 폴더를 먼저 열어 주세요.");
+      return;
+    }
+    const dir = path.join(folder.uri.fsPath, VENTURE_DIR);
+    const state = initWiki(dir, folder.name);
+    const nextWeek = Math.min((state.weeks.length ? Math.max(...state.weeks) : 0) + 1, 6);
+    const pick = await vscode.window.showQuickPick(
+      [1, 2, 3, 4, 5, 6].map((week) => ({ label: `${week}주차`, description: week === nextWeek ? "이번 주" : undefined, week })),
+      { placeHolder: "몇 주차 수업을 정리할까요?" },
+    );
+    if (!pick) return;
+    try { await this.spool?.flush(); } catch {}
+    const sessionDir = this.spool?.currentSessionDir() ?? null;
+    let events = "";
+    try { if (sessionDir) events = fs.readFileSync(path.join(sessionDir, "events.jsonl"), "utf8"); } catch {}
+    const sources = { turns: turnsFromEvents(events), notes: readNotes(dir) };
+    if (!sources.turns.length && !Object.keys(sources.notes).length) {
+      void vscode.window.showInformationMessage("HypeProof: 정리할 대화나 메모가 아직 없어요.");
+      return;
+    }
+    const sid = sessionHash(pick.week, sources);
+    if (state.sessions.includes(sid)) {
+      void vscode.window.showInformationMessage(`HypeProof: ${pick.week}주차 이 수업은 이미 정리했어요.`);
+      return;
+    }
+    const answer = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "HypeProof: 이번 수업을 팀 위키에 정리하는 중…" },
+      () => this.completeSkill(ingestPrompt(state, pick.week, sources), {}),
+    );
+    const proposal = answer.ok ? proposalFromText(answer.text) : null;
+    if (!proposal) {
+      void vscode.window.showWarningMessage("HypeProof: 정리하지 못했어요. 팀 위키는 바뀌지 않았어요. 잠시 뒤 다시 해 주세요.");
+      return;
+    }
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    const r = applyProposal(state, pick.week, sources, proposal, sid, today);
+    writeWiki(dir, r.state);
+    archiveNotes(dir, sources.notes);
+    await vscode.commands.executeCommand("hypeproof-chat.previewActiveFile", vscode.Uri.file(path.join(dir, "deck.html")));
+    void vscode.window.showInformationMessage(`HypeProof: ${r.logLine}${r.dropped.length ? ` · 인용이 없어 뺀 ${r.dropped.length}개는 log.md에 있어요` : ""}`);
   }
 
   // ── Curriculum skills (cr-skills, #1396) ────────────────────────────────────
@@ -3680,6 +3736,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const open = profile?.worlds?.find((w) => w.id === this.lastPrebuiltWorld);
       const notice = openWorldNotice(open);
       if (notice) userTextForModel = `${notice}\n\n${userTextForModel}`;
+    }
+    // Venture Memory (local wiki): on the first send of a conversation in a founder-course workspace,
+    // the team's summary is laid in front of the model input (not the student's bubble), so the coach
+    // can open with "what did you test last week?" and compare the answer with the wiki.
+    if (history.length === 0 && this.isCurriculumRuntimeEnabled()) {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const wiki = root ? loadState(path.join(root, VENTURE_DIR)) : null;
+      if (wiki?.weeks.length) userTextForModel = `${coachContext(wiki)}\n\n${userTextForModel}`;
     }
     // #278 Phase 2 — fold any queued page screenshot into this turn's images.
     // CR-09 — a picked element's crop joins the queued page screenshot; neither replaces the other.

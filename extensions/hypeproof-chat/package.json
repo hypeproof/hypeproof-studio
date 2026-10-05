@@ -198,6 +198,12 @@
         "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
       },
       {
+        "command": "hypeproof-chat.ventureIngest",
+        "title": "HypeProof: 이번 수업 정리하기 (팀 위키)",
+        "icon": "$(notebook)",
+        "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
+      },
+      {
         "command": "hypeproof-chat.curriculumSkills",
         "title": "HypeProof: 커리큘럼 스킬",
         "icon": "$(lightbulb)",
@@ -303,6 +309,10 @@
         },
         {
           "command": "hypeproof-chat.ventureMemory",
+          "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.ventureIngest",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
         },
         {

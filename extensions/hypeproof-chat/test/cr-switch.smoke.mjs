@@ -69,8 +69,9 @@ assert.match(providerSrc, /async publishTestVersion\(\): Promise<void> \{\s*if \
 assert.match(providerSrc, /async experimentEvidence\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async ventureMemory\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async curriculumSkills\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
-assert.deepEqual(CR_SURFACES.commands, ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills"], "every CR command is in the inventory the manifest check walks (cr-verify adds testMyProduct, cr-publish publishTestVersion, cr-evidence experimentEvidence, cr-memory ventureMemory, cr-skills curriculumSkills)");
-ok("commands: the pickElement, browserResults, testMyProduct, publishTestVersion, experimentEvidence, ventureMemory and curriculumSkills handlers re-check the served switch before anything else");
+assert.match(providerSrc, /async ventureIngest\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
+assert.deepEqual(CR_SURFACES.commands, ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills", "hypeproof-chat.ventureIngest"], "every CR command is in the inventory the manifest check walks (cr-verify adds testMyProduct, cr-publish publishTestVersion, cr-evidence experimentEvidence, cr-memory ventureMemory, cr-skills curriculumSkills, the local wiki ventureIngest)");
+ok("commands: the pickElement, browserResults, testMyProduct, publishTestVersion, experimentEvidence, ventureMemory, curriculumSkills and ventureIngest handlers re-check the served switch before anything else");
 
 // ── the listed exception: delete-only, shown only while the person has bytes stored ──
 assert.deepEqual(CR_SURFACES.switchOffWhileStored, ["hypeproof-chat.clearBrowserResultBytes"], "the delete command is in the inventory as the one allowed exception");
