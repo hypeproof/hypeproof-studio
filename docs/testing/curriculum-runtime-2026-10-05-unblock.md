@@ -89,9 +89,9 @@ Decision 9 (2026-10-01) moved CR-59 and CR-60 (CR-T55, CR-T56) from `cr-browser`
 | Page edited (§4 rows CR-59 and CR-60 name `cr-e2e`, §5 `cr-browser` and `cr-e2e` rows, §7 `cr-e2e` note), fixture unchanged | same | exit 1: `frozen-inputs.json is not the projection of the verdict's inputs … The verdict passes on this tree, so regenerate the fixture`. The edited page no longer matches `cr-recon`'s pin, so the verdict reads this tree |
 | Fixture regenerated | `HPS_CR_RECON_FREEZE=1` the same | `wrote worker/test/fixtures/cr-recon/frozen-inputs.json`. The diff is exactly `cr-browser` minus CR-59 and CR-60, `cr-e2e` plus CR-59 and CR-60 |
 | After | the same, without the variable | exit 0, `verdict read at this tree … · 10 areas · 73 map entries · 84 matrix rows · 11 decisions · 34 negative controls each caught`; no problem |
-| After the record sweep, simulated | scratch clone of `d73fb630` whose ledger (working tree only) gives `cr-recon` a completion pinning this page and fixture, as `align.py record --replace` would; then CR-T01 | commit = `d73fb630`: exit 0, verdict read at that commit, `INFO this tree still matches the recorded map`. Commit absent from the clone (every CI run checks out at depth 1): exit 0, verdict not re-run, the same INFO line. The control is `origin/main` itself (first row): six differences |
+| After the record sweep, simulated | scratch clone of `d73fb630` whose ledger (working tree only) gives `cr-recon` a completion pinning this page and fixture, as `align.py record --replace` would; then CR-T01 | commit = `d73fb630`: exit 0, verdict read at that commit, `INFO this tree still matches the recorded map`. Commit absent from the clone (every CI run checks out at depth 1): exit 0, verdict not re-run, the same INFO line. The control is `origin/main` itself (first row): six differences. Repeated on a clone of `0b74fc17`: the same results |
 
-Planted defects on this branch, one at a time (scratch runner `mutate_recon.py`, the file restored after each; the clean tree passed before and after):
+Planted defects on this branch, one at a time (scratch runner `mutate_recon.py`, the file restored after each; the clean tree passed before and after; run at `d73fb630` and again at `0b74fc17`, with the same results):
 
 | Plant | Result |
 |---|---|
@@ -103,7 +103,7 @@ Planted defects on this branch, one at a time (scratch runner `mutate_recon.py`,
 
 ## Gates
 
-At `d73fb630` (exit codes, run after committing; the commit after it changes only this file):
+At `0b74fc17` (exit codes, run after committing; the commit after it changes only this file). The same gates first ran at `d73fb630`, with the same exits. `0b74fc17` adds the review round 1 fixes: this file and the status line of `curriculum-runtime.md`.
 
 | Gate | Exit |
 |---|---|
@@ -112,13 +112,15 @@ At `d73fb630` (exit codes, run after committing; the commit after it changes onl
 | `worker` `test:authoring:d1` · `test:classroom:d1` · `test:native-trial:d1` · `test:classroom-ops:d1` · `test:cr-publish:d1` · `test:cr-memory:d1` · `test:cr-skills:d1` · `test:cr-evidence:d1` | 0 · 0 · 0 · 0 · 0 · 0 · 0 · 0 |
 | `worker` `npm run validate-profiles` · `bash worker/scripts/cohort-harness/test/run.sh` | 0 · 0 |
 | `e2e` `npm run test:cr-publish` · `npm run test:cr-evidence` (real Chromium, the PR CI job) | 0 · 0 |
-| `e2e` `tsc --noEmit -p .` (not in CI) | 2, the same 24 errors with `origin/main`'s and this branch's versions of the two changed files, none in them |
+| `e2e` `tsc --noEmit -p .` (not in CI) | 2, the same 24 errors with `origin/main`'s and this branch's versions of the two changed e2e files, none in them |
 | `python3 scripts/next-work.py --check` (`HYPEPROOF_HARNESS=~/.cache/hypeproof/harness`) | 0 |
 | `python3 scripts/check-registry.py` | 0 |
 | `hype-align` `align.py check --item cr-unblock` | 1: `refused: unknown work item: cr-unblock`. #1506 is not a ledger item |
-| `hype-align` `align.py check --doc curriculum-runtime` | 1: `BROKEN cr-recon`, completion no longer holds (changed since recorded: the recon page, the requirements document, the frozen inputs). At `origin/main` the same check exits 1 with the requirements document alone. The record sweep re-records `cr-recon` |
+| `hype-align` `align.py check --doc curriculum-runtime` | 1: `BROKEN cr-recon`, completion no longer holds (changed since recorded: the recon page, the requirements document, the frozen inputs). At `origin/main` the same check exits 1 with the requirements document alone. The record sweep re-records `cr-recon`. The row-pin revision of `align.py` (Harness #270) prints the same |
 
-Not run: the extension typecheck and smokes (no file under `extensions/` changed), the measurement, chalk and workflow jobs (untouched).
+The status-line clause in `curriculum-runtime.md` names only test IDs already on that line. hype-align's test index over the registered test documents (the tests defined, the IDs each is tied to, the documents defining each and, with #270, every CR-T row's digest) is byte-identical at `085ed359` and `0b74fc17` under three Harness revisions: `align-main`, `~/.cache/hypeproof/harness` and #270's branch. Controls (scratch runner `plant_status_line.py`, the file restored after each): the same clause naming CR-02 changes the index; CR-T56's target set to CR-59 changes it and turns CR-T01 and `cr-traceability` red.
+
+Not run: the extension typecheck and smokes (no file under `extensions/` changed), the measurement, chalk and workflow jobs (untouched). The in-app runs were not repeated for review round 1: it changes two Markdown files that no in-app spec reads.
 
 ## Not run, limits
 
