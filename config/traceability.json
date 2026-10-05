@@ -133,6 +133,24 @@
       ]
     },
     {
+      "id": "REQ-STUDIO-DEV-SUBSCRIPTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/studio-dev.md",
+          "section": "### Windows"
+        },
+        {
+          "path": "docs/dev/studio-dev.md",
+          "section": "## Local subscriptions"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-COACH-SESSION",
       "stage": "test",
       "owner": "JinyongShin",
@@ -276,6 +294,7 @@
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME",
+        "REQ-STUDIO-DEV-SUBSCRIPTION",
         "ST-REQ-NATIVE"
       ],
       "sources": [
@@ -296,6 +315,9 @@
         },
         {
           "path": "scripts/test-studio-dev.py"
+        },
+        {
+          "path": "docs/testing/studio-dev-windows-2026-10-02.md"
         }
       ]
     },
@@ -1340,6 +1362,9 @@
           "path": "e2e/unified-release/install-windows.mjs"
         },
         {
+          "path": "e2e/unified-release/sdk-seed.mjs"
+        },
+        {
           "path": ".github/workflows/build-mac.yml"
         },
         {
@@ -1379,6 +1404,9 @@
         },
         {
           "path": "scripts/test-check-live-sessions.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.test.mjs"
         },
         {
           "path": "e2e/tests/native-public-activity.spec.ts"
@@ -3007,7 +3035,7 @@
     {
       "id": "ST-REQ-CR",
       "stage": "requirement",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-INT-CR",
         "ST-REQ-SX",
@@ -3032,7 +3060,7 @@
     {
       "id": "ST-DES-CR",
       "stage": "design",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR"
       ],
@@ -3048,7 +3076,7 @@
     {
       "id": "ST-IMP-CR-PUBLISH",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR"
@@ -3104,7 +3132,7 @@
     {
       "id": "ST-IMP-CR-EVIDENCE",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3137,7 +3165,7 @@
     {
       "id": "ST-IMP-CR-MEMORY",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3165,7 +3193,7 @@
     {
       "id": "ST-IMP-CR-SKILLS",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3202,7 +3230,7 @@
     {
       "id": "ST-TEST-CR",
       "stage": "test",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR",
         "ST-DES-CR",
