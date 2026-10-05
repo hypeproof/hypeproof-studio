@@ -1353,6 +1353,9 @@
           "path": "e2e/unified-release/install-windows.mjs"
         },
         {
+          "path": "e2e/unified-release/sdk-seed.mjs"
+        },
+        {
           "path": ".github/workflows/build-mac.yml"
         },
         {
@@ -1386,6 +1389,9 @@
         },
         {
           "path": "e2e/unified-release/gate.test.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.test.mjs"
         },
         {
           "path": "e2e/tests/native-public-activity.spec.ts"

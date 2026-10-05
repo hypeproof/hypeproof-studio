@@ -55,6 +55,7 @@ jobs:
       - name: Unified release verdict and launcher recovery controls
         run: |
           node e2e/unified-release/gate.test.mjs
+          node e2e/unified-release/sdk-seed.test.mjs
           node scripts/test-unified-launcher.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         run: bash scripts/test/review-pr-shell.test.sh
