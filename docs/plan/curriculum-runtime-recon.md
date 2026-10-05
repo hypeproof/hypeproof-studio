@@ -1,7 +1,7 @@
 # Curriculum Runtime reconnaissance — architecture map, gap matrix, decisions
 
 Status: active, the `cr-recon` output (CR-01, issue [#1390](https://github.com/jayleekr/hypeproof-studio/issues/1390), epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388)). 2026-09-29. Owner: jayleekr.
-Revised 2026-10-05 ([#1506](https://github.com/jayleekr/hypeproof-studio/issues/1506)): CR-59 and CR-60 belong to `cr-e2e` (Jay's decision 9, §4 and §5). Everything else is as read at the commit below.
+Revised 2026-10-05 ([#1506](https://github.com/jayleekr/hypeproof-studio/issues/1506)): CR-59 and CR-60 belong to `cr-e2e` (Jay's decision 9, §4 and §5), and finding F1 is closed (§9). Everything else is as read at the commit below.
 Read at: Studio `origin/main` `cc3785260e92315dcc4bc31410b7cc79713f604e`. Upstream pins: `vscodium@59e579274e3a32fbb93bd10b38bfe071da043cce` (the `vscodium-base` submodule pointer), `vscode@1.116.0` (commit `560a9dba96f961efea7b1612916f89e5d5d4d679`, from that commit's `upstream/stable.json`). Probed app: HypeProof Studio 0.1.51 (`d4db90498fce6c337823a4ce73cbe79c5e688b05`), as installed and with the `origin/main` extension injected (§8; the two differ, F8).
 Parent: [plan](curriculum-runtime.md) · [requirements CR-01–84](../requirements/curriculum-runtime.md) · [verification CR-T01–T80](../testing/curriculum-runtime.md) · [PRD v1.0](../design/curriculum-runtime-prd-v1.0-2026-09-28.md) §13 Phase 0, §15.
 
@@ -410,7 +410,7 @@ Layers are the testing contract's. "CI" = `.github/workflows/pr-ci.yml` (worker 
 | `cr-deck` | CR-T02 (Worker half), CR-T50 (unit half), CR-T51, CR-T52, CR-T53 | CR-T02 (app half), CR-T50 (render half), CR-T54 | CR-T59 (recorded provider) |
 | `cr-e2e` | — | CR-T02 (full inventory), CR-T66 (scripted run) | CR-T55, CR-T56 (in the Studio app on the reference Mac, decision 9), CR-T66 (live run) |
 
-The switch-off baseline (`e2e/tests/09-preview.spec.ts`) is not green on the probed app: see finding F1 (§9). `cr-browser` re-baselines it on the pre-change tree before using it as a control.
+The switch-off baseline (`e2e/tests/09-preview.spec.ts`) was not green on the probed app (finding F1, §9, closed 2026-10-05). It now runs every check on both preview paths in the app.
 
 ## 6. Interface proposal — Publish for User Test + Evidence Capture (PRD §15 item 8)
 
@@ -562,6 +562,7 @@ Not inspected: Chalk (`chalk/`), `packages/measurement` beyond its CI job, Windo
 Findings (pre-existing, not changed here):
 
 - **F1.** `e2e/tests/09-preview.spec.ts` on app 0.1.51 with the `origin/main` extension: REQ-D5 passed; REQ-D1/D3/D6 failed (`#frame` never attached in the preview webview) and REQ-D4 failed (the command-palette input stayed hidden; the page snapshot shows the unified "AI와 작업" editor tab in front). Whether the instrument or the product is wrong is not yet separated (verification.md rule 6); CR-T02 names this spec as its baseline.
+  **Closed 2026-10-05 ([#1506](https://github.com/jayleekr/hypeproof-studio/issues/1506)): the instrument was wrong, not the product.** On a `live_server` cohort, the dev-stack default, `revealBuilt` opens a native browser tab, so the wait for `#frame` measured a path the product never takes there. The palette helper lost to the unified "AI와 작업" editor taking focus after start. `cr-browser` (#1433) made each check assert the path the served profile names and reopen a palette that never showed. #1506 also retries a palette that closes after it showed, and runs every check on both paths: the webview path through a forwarder that serves the same profile with `preview.type: "iframe"`, since every shipped profile is `live_server`. Run record: [curriculum-runtime-2026-10-05-unblock.md](../testing/curriculum-runtime-2026-10-05-unblock.md).
 - **F2.** `callGeminiResilient` substitutes `gemini-2.5-flash` after a failure; fine for the kids route that uses it today, forbidden for CR capability calls.
 - **F3.** `resolveSkills` drops an unknown skill with a warning; curriculum skills need a refusal.
 - **F4.** `BrowserControl` clears refs on navigate/back/forward only; live-server reloads create new documents without clearing them (CDP then refuses the stale node).
