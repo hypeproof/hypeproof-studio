@@ -34,6 +34,17 @@
 //       "상위 N(%/위/명/등)" with a number, and "상위 랭킹/순위". The narrowing is recorded
 //       in the RANK_PATTERNS comment and in the report.
 
+import { ANTHROPIC_MODELS, GEMINI_MODELS, GLM_MODELS, OPENAI_MODELS } from "../../../worker/src/profiles/types.ts";
+
+/**
+ * The model names the work screen's model picker shows ("Claude Sonnet 4.6"). Read from the
+ * Service's catalogue, which is where those labels come from (lesson-model-policy.ts gives each
+ * choice `label` from these four tables), so the allowance below names exactly what the product
+ * draws and nothing else: a version-like number anywhere else is still a bare number.
+ */
+export const MODEL_NAMES = Object.values({ ...ANTHROPIC_MODELS, ...OPENAI_MODELS, ...GEMINI_MODELS, ...GLM_MODELS });
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // ─── Rule table ──────────────────────────────────────────────────────────
 // All of these scan the raw source text (not the masked text). No denial exemption.
 /** SX-35 banned labels. "낮음 / 높음" is one label in the requirement doc, so it is split into two rows. */
@@ -128,6 +139,12 @@ export const ALLOWED_NUMERIC = [
   //      `worker/src/lib/modules.ts:146`.
   { id: "module_version", label: "모듈 버전 m2026.09.20-1", re: /m\d{4}\.\d{2}\.\d{2}-\d{1,4}/g },
   { id: "ordinal", label: "목록 번호 N.", re: /(?:^|[\n·]\s*)\d+\.(?=\s)/gm },
+  // Same side of the same error, found the first time the whole work screen was audited in the
+  // App (e2e/sx/home-app.spec.ts, 2026-10-05): the model picker's "Claude Sonnet 4.6" and
+  // "Claude Haiku 4.5". The server render of ChatPanel the two above were found on draws no
+  // picker. They are the product's labels for a choice, not scores. Only the catalogue's exact
+  // names are allowed (MODEL_NAMES), longest first so one name is never cut to another's prefix.
+  { id: "model_name", label: "모델 이름(서비스 카탈로그)", re: new RegExp([...MODEL_NAMES].sort((a, b) => b.length - a.length).map(escapeRe).join("|"), "g") },
 ];
 
 /**

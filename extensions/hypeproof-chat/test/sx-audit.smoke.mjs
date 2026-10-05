@@ -43,6 +43,7 @@ const {
   NUMERIC_PATTERNS,
   ALLOWED_NUMERIC,
   DENIAL_MARKERS,
+  MODEL_NAMES,
   auditPrimaryCta,
   auditRegionText,
   parseCssCustomProperties,
@@ -203,6 +204,25 @@ const describe = (r) => r.findings.map((f) => `${f.rule}:${JSON.stringify(f.matc
   const ver = auditRegionText("Underlying Magic · 버전 m2026.09.20-1 · 120분", { region: "work" });
   assert.equal(ver.ok, true, `모듈 버전을 수치로 잡았다 → 계측기가 너무 엄격하다: ${describe(ver)}`);
   console.log("ok 양성: 날짜·시각·N개 카운트 · 목록 번호 · 모듈 버전은 허용 수치다");
+}
+
+{
+  // The model picker on the real work screen (first seen by e2e/sx/home-app.spec.ts). Every name
+  // the Service's catalogue can put there passes; a version-like number that is not exactly one of
+  // those names is still caught.
+  assert.ok(
+    MODEL_NAMES.includes("Claude Sonnet 4.6") && MODEL_NAMES.includes("Claude Haiku 4.5"),
+    "the catalogue no longer names the two models the App showed — the control below proves nothing",
+  );
+  const picker = ["모델", ...MODEL_NAMES, "대화를 유지하며 모델을 바꿀 수 있어요"].join("\n");
+  const ok = auditRegionText(picker, { region: "work" });
+  assert.equal(ok.ok, true, `a model name from the Service's catalogue was caught → the instrument is too strict: ${describe(ok)}`);
+  for (const sample of ["Claude Sonnet 9.9", "Sonnet 4.6", "검증 4.6"]) {
+    const r = auditRegionText(sample, { region: "work" });
+    assert.equal(r.ok, false, `a version-like number outside a catalogue name passed: ${JSON.stringify(sample)}`);
+    assert.ok(r.findings.some((f) => f.rule === "bare_number"), describe(r));
+  }
+  console.log(`ok 양성/음성: 모델 선택의 이름 ${MODEL_NAMES.length}개(서비스 카탈로그)는 통과하고, 카탈로그에 없는 버전 숫자는 잡힌다`);
 }
 
 // ─── Negative controls — each bad sample must fail (catches an instrument that is too lax) ──
