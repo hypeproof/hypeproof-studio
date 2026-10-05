@@ -5,7 +5,7 @@
 // extension and webview injected), synthetic for the Service (sx-service.mjs: the real router
 // over SQLite, a lesson-pinned seat on the one `/2` profile, a model that answers one fixed line).
 //
-// One student, one task (the week-3 design, completion kept to c1):
+// One student, one task (the week-3 design as written: three completion conditions and the note):
 //   first session  SX-T01 (e2e half): the mission and 1–3 actions are on screen within 5 s of the
 //                  work screen's first render, and the screen's text carries no score or grade.
 //                  SX-T11: actions 1–3, no "지난번 이어서" (no earlier session), no number card.
@@ -17,23 +17,29 @@
 //                  remaining) stay on screen while the coach is answering, through a scrolled
 //                  conversation, at the narrowest window (where the header wraps instead of being
 //                  cut), after the editor switch, and with the preview open. On a short window
-//                  (1280×450, as with a terminal panel open) the header is bounded: its week,
-//                  mission and Primary stay on screen and the composer is wholly reachable under it.
-//                  Then the task is moved to the step "build" (criterion written, step started).
-//   reopened       SX-T11's other half (SX-02): "지난번 이어서 · Build pane" is there, is not a
-//                  Primary, and brings the recorded step to the front with the keyboard on its
-//                  action; pressing that action (a start onto the step the record holds, which
-//                  writes nothing) ends the entry.
-//   reopened again The record still stands where the first session left it, so the entry is back;
-//                  a coach turn that answered (which writes nothing either) ends it. Then the
-//                  student moves the task on to "test".
+//                  (1280×450, as with a terminal panel open) the header is bounded and packed: all
+//                  four parts and the Primary stay on screen, and the composer is wholly reachable
+//                  under it. Then the task is moved to the step "build" (criterion written, step
+//                  started).
+//   reopened       SX-01/SX-02 after a reopen: the view starts at the step the record holds, so the
+//                  one Primary is "Build pane", no earlier step is among the actions, and the steps
+//                  remaining count from it (from the first step, its Primary moved the record back:
+//                  review of 2026-10-05). SX-T11's other half: "지난번 이어서 · Build pane" is there,
+//                  is not a Primary, and hands the keyboard to the recorded step's action; on the
+//                  short window it is on screen with the four parts. Pressing that action (a start
+//                  onto the step the record holds, which writes nothing) ends the entry.
+//   reopened again The record still stands where the first session left it, so the entry is back
+//                  and the view starts at "build" again; a coach turn that answered (which writes
+//                  nothing either) ends it. Then the student moves the task on to "test".
 //
 // Every instrument here is also run on a planted DOM (a second Primary, a header pushed off the
 // screen, a mission line wider than the window, a growth link above the actions or drawn as a
-// Primary, a score in the header text, an unbounded header on the short window) and must report
-// it: a check that passes a planted defect counts nothing (verification.md rule 2). The entry
-// itself has its controls in builds: a host that never sends it fails at the reopen, one that
-// always sends it fails in the first session, one that never ends it fails after the Primary.
+// Primary, a score in the header text, an unbounded header on the short window, the short window's
+// header stacked as on a tall one) and must report it: a check that passes a planted defect counts
+// nothing (verification.md rule 2). The entry itself has its controls in builds: a host that never
+// sends it fails at the reopen, one that always sends it fails in the first session, one that never
+// ends it fails after the Primary, a webview that starts the view at the first step fails at the
+// reopen's Primary.
 //
 // Not covered: SX-T13's other screens (the reflection does not exist yet — sx-p2; the growth
 // record is a separate panel), SX-T01's human half and SX-T60 (people), SX-T12's screenshot
@@ -57,6 +63,14 @@ const PORT = Number(process.env.HPS_SX_APP_PORT || 18951);
 const MISSION = "AI가 만든 걸 내가 확인했나?";
 const PREVIEW = "HypeProof: HTML 미리보기 (옆 패널)";
 const FIXTURE = path.join(repo, "e2e/curriculum-runtime/fixtures/kiosk-practice");
+/** The design the Service serves (sx-service.mjs), every completion condition kept: the header as it ships. */
+const WEEK3 = JSON.parse(fs.readFileSync(path.join(repo, "worker/test/fixtures/session-design/week-3.json"), "utf8")) as {
+  steps: Array<{ id: string; title: string }>;
+  learning: { completion: Array<{ id: string; text: string }> };
+};
+const COMPLETION = WEEK3.learning.completion.map((c) => c.id).join(",");
+/** "남은 단계 N" when the view stands on `stepId` (a position, counted from it: missionHeaderLogic.ts). */
+const remainingAt = (stepId: string) => `남은 단계 ${WEEK3.steps.length - WEEK3.steps.findIndex((s) => s.id === stepId)}`;
 /** The Primary's colour: `--hp-accent` (webview-ui/src/tokens.css), as Chromium computes it. */
 const LIME = "rgb(213, 242, 121)";
 const WIDE = { width: 1280, height: 800 };
@@ -73,7 +87,7 @@ class SxService {
     fs.mkdirSync(path.dirname(process.env.HPS_E2E_TOKEN_FILE!), { recursive: true });
     this.proc = spawn(
       process.execPath,
-      ["--experimental-strip-types", "--experimental-sqlite", "--no-warnings", path.join(here, "sx-service.mjs"), String(PORT), process.env.HPS_E2E_TOKEN_FILE!],
+      ["--experimental-strip-types", "--experimental-sqlite", "--no-warnings", path.join(here, "sx-service.mjs"), String(PORT), process.env.HPS_E2E_TOKEN_FILE!, COMPLETION],
       { cwd: repo, stdio: ["ignore", "pipe", "inherit"] },
     );
     await new Promise<void>((resolve, reject) => {
@@ -117,12 +131,20 @@ const recordedStep = (userDataDir: string) => taskRecords(userDataDir).find((t) 
 
 // ── Instruments: a probe of the frame, and a pure verdict over what it measured ──────────────
 
-type HeaderProbe = { present: boolean; parts: Record<"week" | "mission" | "completion" | "remaining", boolean>; cut: string[]; viewport: { width: number; height: number } };
+type HeaderProbe = {
+  present: boolean;
+  parts: Record<"week" | "mission" | "completion" | "remaining", boolean>;
+  /** Region A's Primary and "지난번 이어서" (null: not drawn), measured the same way; not SX-T10's four parts. */
+  primary: boolean;
+  resume: boolean | null;
+  cut: string[];
+  viewport: { width: number; height: number };
+};
 
 /** Is each of the header's four parts inside the frame's viewport and not covered; does anything in it run past the right edge? */
 async function probeHeader(chat: FrameLocator): Promise<HeaderProbe> {
   const header = chat.locator("header.hp-mission");
-  if ((await header.count()) === 0) return { present: false, parts: { week: false, mission: false, completion: false, remaining: false }, cut: [], viewport: { width: 0, height: 0 } };
+  if ((await header.count()) === 0) return { present: false, parts: { week: false, mission: false, completion: false, remaining: false }, primary: false, resume: null, cut: [], viewport: { width: 0, height: 0 } };
   return header.evaluate((el) => {
     const vw = document.documentElement.clientWidth;
     const vh = document.documentElement.clientHeight;
@@ -147,6 +169,8 @@ async function probeHeader(chat: FrameLocator): Promise<HeaderProbe> {
         completion: seen(el.querySelector(".hp-mission-completion li")),
         remaining: seen(el.querySelector(".hp-mission-remaining")),
       },
+      primary: seen(el.querySelector(".hp-cta-primary")),
+      resume: el.querySelector(".hp-mission-resume button") ? seen(el.querySelector(".hp-mission-resume button")) : null,
       cut,
       viewport: { width: vw, height: vh },
     };
@@ -155,6 +179,9 @@ async function probeHeader(chat: FrameLocator): Promise<HeaderProbe> {
 /** SX-T10's verdict: all four parts on screen, nothing cut at the right edge. */
 const headerProblem = (p: HeaderProbe): string | null =>
   !p.present ? "no mission header" : Object.entries(p.parts).filter(([, ok]) => !ok).map(([k]) => k).join(", ") ? `not on screen: ${Object.entries(p.parts).filter(([, ok]) => !ok).map(([k]) => k).join(", ")}` : p.cut.length ? `cut at the right edge: ${p.cut.join(" | ")}` : null;
+/** The short window's verdict: SX-T10's, and region A's Primary (SX-04) and, when drawn, "지난번 이어서" (SX-02) on screen too. */
+const shortHeaderProblem = (p: HeaderProbe): string | null =>
+  headerProblem(p) ?? (!p.primary ? "region A's Primary is not on screen" : p.resume === false ? "'지난번 이어서' is not on screen" : null);
 
 type PrimaryProbe = { byClass: number; byColour: number; lime: string[]; limeOther: string[] };
 /**
@@ -415,17 +442,22 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   record.header = { ...(record.header as object), narrow, cut_control: cutControl };
   record.primary = { ...(record.primary as object), narrow: primaryNarrow };
 
-  // ── SX-T10 (2b): a short window. The sticky header is bounded, so it never takes region B: its
-  //    week, mission and Primary stay on screen and the composer can be reached under it ──
+  // ── SX-T10 (2b): a short window. The sticky header is bounded, so it never takes region B, and
+  //    packed, so all four parts and the Primary stay inside it; the composer can be reached under it ──
   await resize(ctx.app, SHORT);
   await expect.poll(async () => (await probeHeader(chat)).viewport.height, { timeout: 10_000 }).toBeLessThan(SHORT.height);
   const short = await probeRegionB(chat);
   const shortHeader = await probeHeader(chat);
   record.short_window = { region_b: short, header: shortHeader };
   expect(regionBProblem(short), JSON.stringify(short)).toBeNull();
-  expect(shortHeader.parts.week && shortHeader.parts.mission, `the week or the mission left the screen: ${JSON.stringify(shortHeader)}`).toBe(true);
-  // Control: the same window with the header unbounded (the review's finding) must be reported.
-  const shortControl = await plantedMust(chat, "header.hp-mission", "el.style.maxHeight = 'none';", "el.style.maxHeight = '';", async () => regionBProblem(await probeRegionB(chat)), "an unbounded header on a short window");
+  expect(shortHeaderProblem(shortHeader), JSON.stringify(shortHeader)).toBeNull();
+  // Controls: the same window with the header unbounded (the first review's finding) must be
+  // reported, and so must the header stacked as on a tall window (the second review's finding: the
+  // completion conditions and the steps remaining scrolled inside it).
+  const shortControl = [
+    await plantedMust(chat, "header.hp-mission", "el.style.maxHeight = 'none';", "el.style.maxHeight = '';", async () => regionBProblem(await probeRegionB(chat)), "an unbounded header on a short window"),
+    await plantedMust(chat, "header.hp-mission", "el.style.display = 'block';", "el.style.display = '';", async () => shortHeaderProblem(await probeHeader(chat)), "a stacked header on a short window"),
+  ];
   record.short_window = { region_b: short, header: shortHeader, control: shortControl };
   await resize(ctx.app, WIDE);
   await expect.poll(async () => (await probeHeader(chat)).viewport.width, { timeout: 10_000 }).toBeGreaterThan(NARROW.width);
@@ -462,7 +494,9 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   await region.locator("details.hp-evidence > summary").click();
   await region.locator("textarea#hp-criterion").fill("시간표가 학교 규정 원문과 같아야 한다");
   await region.getByRole("button", { name: "기대 조건 남기기" }).click();
-  await expect(chat.locator(".hp-mission-completion li[data-met]")).toHaveAttribute("data-met", "yes");
+  // c1 ("기대 조건을 시험 전에 적었다", the first condition) is met by the criterion; the others are not.
+  await expect(chat.locator(".hp-mission-completion li[data-met]").first()).toHaveAttribute("data-met", "yes");
+  await expect(chat.locator(".hp-mission-completion li[data-met='yes']")).toHaveCount(1);
   await chat.locator("header.hp-mission .hp-mission-actions button", { hasText: "Build pane" }).click();
   await chat.locator("header.hp-mission .hp-mission-actions .hp-cta-primary", { hasText: "Build pane" }).click();
   await expect.poll(() => recordedStep(ctx!.userDataDir), { timeout: 30_000 }).toBe("build");
@@ -491,15 +525,34 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
       : null;
   });
   expect(placement, "the entry is not between the completion conditions and the growth link").toEqual({ belowActions: true, belowCompletion: true, aboveGrowth: true });
-  // The view starts at the first step; the entry is what brings the recorded one to the front.
+  // SX-01/SX-02: the view starts at the step the record holds. Its action is the one Primary, no
+  // earlier step is offered as an action, and the steps remaining count from it. Started at the
+  // first step, the Primary was "기대 조건", and pressing it moved the record back to that step
+  // (review of 2026-10-05).
   const front = chat.locator("header.hp-mission .hp-mission-actions .hp-cta-primary");
-  await expect(front).toHaveText("기대 조건");
+  await expect(front, "the reopened screen's Primary is not the step the record holds").toHaveText("Build pane");
+  for (const step of WEEK3.steps.slice(0, WEEK3.steps.findIndex((s) => s.id === "build"))) {
+    await expect(chat.locator("header.hp-mission .hp-mission-actions button", { hasText: step.title }), `an earlier step (${step.title}) is offered as an action after the reopen`).toHaveCount(0);
+  }
+  await expect(chat.locator("header.hp-mission .hp-mission-remaining")).toHaveText(remainingAt("build"));
   expect(primaryProblem(await probePrimary(chat))).toBeNull();
+  // The short window with the entry drawn: the four parts, the Primary and the entry on screen. The
+  // layout comes back with the preview the first session opened, so the chat is about 640 px wide here.
+  await resize(ctx.app, SHORT);
+  await expect.poll(async () => (await probeHeader(chat)).viewport.height, { timeout: 10_000 }).toBeLessThan(SHORT.height);
+  const shortReopened = { region_b: await probeRegionB(chat), header: await probeHeader(chat) };
+  record.short_window_reopened = shortReopened;
+  expect(regionBProblem(shortReopened.region_b), JSON.stringify(shortReopened.region_b)).toBeNull();
+  expect(shortReopened.header.resume, "the entry is not drawn on the short window — the check proves nothing").not.toBeNull();
+  expect(shortHeaderProblem(shortReopened.header), JSON.stringify(shortReopened.header)).toBeNull();
+  await resize(ctx.app, WIDE);
+  await expect.poll(async () => (await probeHeader(chat)).viewport.height, { timeout: 10_000 }).toBeGreaterThan(SHORT.height);
+  // The recorded step is already in front, so following the entry hands the keyboard to its action.
   const resumeText = await resume.innerText();
   await resume.click();
   await expect(front).toHaveText("Build pane");
   await expect.poll(() => front.evaluate((el) => el === document.activeElement), { timeout: 5_000 }).toBe(true);
-  // Following the entry only moves the view; until the student acts on the task it stays.
+  // Following the entry only moves the focus; until the student acts on the task it stays.
   await expect(chat.locator(".hp-mission-resume")).toHaveCount(1);
   // The student presses the recorded step's own action: a start onto the step the record already
   // holds, which writes nothing. The entry goes all the same (it stayed all session before the
@@ -507,7 +560,7 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   await front.click();
   await expect(chat.locator(".hp-mission-resume"), "'지난번 이어서' stays after the student continued the step it names").toHaveCount(0, { timeout: 20_000 });
   expect(recordedStep(ctx.userDataDir), "the start onto the recorded step moved the record").toBe("build");
-  record.reopened = { resume: resumeText, front_after: await front.innerText(), focused: true, after_primary: { resume: 0, recorded_step: "build" } };
+  record.reopened = { front_on_open: "Build pane", remaining_on_open: remainingAt("build"), resume: resumeText, front_after: await front.innerText(), focused: true, after_primary: { resume: 0, recorded_step: "build" } };
 
   // ── Reopened again: nothing was written, so the record still stands where the first session left it ──
   await ctx.app.close();
@@ -517,6 +570,7 @@ test("SX home: region A on the work screen, and 지난번 이어서 after a reop
   chat = await focusChat(ctx.win);
   const again = chat.locator("header.hp-mission .hp-mission-resume button");
   await expect(again, "a session that only continued the step lost the entry for the next one").toHaveText("지난번 이어서 · Build pane", { timeout: 20_000 });
+  await expect(chat.locator("header.hp-mission .hp-mission-actions .hp-cta-primary"), "the view did not start at the recorded step again").toHaveText("Build pane");
   // The student talks to the coach first: an answered turn on a task already working writes nothing,
   // and ends the entry.
   const answered = await chat.locator(".hps-msg-body", { hasText: "[로컬 시험 응답]" }).count();

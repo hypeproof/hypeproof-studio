@@ -15,15 +15,16 @@
 //   4. the host passes it, with the session made once, notes every signal before it runs, redraws
 //      a state that still shows an ended entry, and sends it only on a seat that runs the task flow
 //      (static, as test/sx-task-flow.smoke.mjs: ChatPanelProvider cannot load without VS Code);
-//      the webview hands the host's value to region A untouched. Every static check also runs on a
-//      planted source that must fail it;
+//      the webview hands the host's value to region A untouched, and starts the view at the step
+//      the record holds (`stepViewOnState`; the student's own pick holds after that). Every static
+//      check also runs on a planted source that must fail it;
 //   5. region A draws it (the real MissionHeader through test/sx-render.mjs): below the actions
 //      and the completion conditions, above the growth link, a quiet button with the step's own
 //      title and no figure, and nothing for a step this lesson does not have;
 //   6. styles.css keeps the header on screen while the rest scrolls, bounded so region B keeps
-//      room on a short window (SX-01), and leaves one Lime button while region A shows its Primary
-//      (SX-04). A server render applies no CSS, so these are static tripwires for CI; what they
-//      guard was measured in the App.
+//      room on a short window and packed so its first 150 px hold all four parts there (SX-01),
+//      and leaves one Lime button while region A shows its Primary (SX-04). A server render applies
+//      no CSS, so these are static tripwires for CI; what they guard was measured in the App.
 //
 // Controls (.claude/rules/verification.md rules 2·3): each rule has a sample that must pass
 // (catches a too-strict instrument) and one that must be refused (catches a too-lenient one).
@@ -318,6 +319,23 @@ await staticCheck(
     ["resume={learning?.resume ?? null}", "resume={null}"],
   ],
 );
+const learningHandler = (text) => between(text, 'if (msg.type !== "learningState") return;', "return off;");
+await staticCheck(
+  "webview: the view starts at the step the record holds (stepViewOnState), and the student's own picks settle it",
+  chatPanel,
+  (text) =>
+    lacks(learningHandler(text), /const next = stepViewOnState\(stepView\.current, msg\.state\);\s*stepView\.current = next\.settled;\s*if \(next\.step\) setCurrentStepId\(next\.step\);/, "a learning state never moves the view to the step the record holds") ??
+    lacks(between(text, "const pickStep = (stepId: string) => {", "};"), /stepView\.current = stepViewOnPick\(learningTask\.current\);\s*setCurrentStepId\(stepId\);/, "a step the student picks does not settle the view") ??
+    lacks(headerProps(text), /onSelectStep=\{pickStep\}/, "a step the student selects is not their pick: the next state moves the view away") ??
+    lacks(headerProps(text), /onStartStep=\{\(step\) => \{\s*pickStep\(step\.id\);/, "a step the student starts is not their pick: the next state moves the view away"),
+  [
+    // The review's finding: the webview never reads the step the record holds.
+    ["      if (next.step) setCurrentStepId(next.step);\n", ""],
+    ["    stepView.current = stepViewOnPick(learningTask.current);\n", ""],
+    ["onSelectStep={pickStep}", "onSelectStep={setCurrentStepId}"],
+    ["          pickStep(step.id);\n", "          setCurrentStepId(step.id);\n"],
+  ],
+);
 
 // ── 5. Region A draws it (the real component) ───────────────────────────────────
 
@@ -327,6 +345,38 @@ await check("resumeStepOf: a step of this lesson, or nothing — never a fallbac
   assert.equal(logic.resumeStepOf(steps, { step: "없는단계" }), null, "a step this lesson does not have was drawn (or replaced by another)");
   for (const resume of [null, undefined, {}, { step: "" }, { step: 3 }]) assert.equal(logic.resumeStepOf(steps, resume), null, JSON.stringify(resume));
   assert.equal(logic.resumeStepOf([], { step: "build" }), null);
+});
+
+// The view region A starts from (SX-01, SX-02): the step the task's record holds, not the first
+// step. From the first step a reopened task offered an earlier step's action as the Primary, and
+// pressing it moved the record back (decideFlow allows a move back) — review of 2026-10-05.
+await check("stepViewOnState positive: the first state that names the record's step moves the view there, once per task", () => {
+  const first = logic.stepViewOnState(null, { task: TASK, currentStep: "build" });
+  assert.equal(first.step, "build", "a reopened task's view starts at the first step, not where its record stands");
+  assert.deepEqual(first.settled, { task: TASK });
+  // Settled: the record moving later, or the same state again, never moves the student's view.
+  assert.equal(logic.stepViewOnState(first.settled, { task: TASK, currentStep: "test" }).step, null, "a later state for the same task moved the view");
+  // Another task (another lesson or activity) starts where its own record stands.
+  const other = logic.stepViewOnState(first.settled, { task: "task-other", currentStep: "diff" });
+  assert.deepEqual(other, { settled: { task: "task-other" }, step: "diff" }, "a new task kept the old task's view");
+});
+
+await check("stepViewOnState negative: a state with no recorded step settles nothing, and the student's own pick is never overridden", () => {
+  for (const currentStep of [null, undefined, ""]) {
+    const none = logic.stepViewOnState(null, { task: TASK, currentStep });
+    assert.deepEqual(none, { settled: null, step: null }, `a state with currentStep=${JSON.stringify(currentStep)} moved or settled the view`);
+    // ...so the next state that names the step still moves it there.
+    assert.equal(logic.stepViewOnState(none.settled, { task: TASK, currentStep: "build" }).step, "build");
+  }
+  // The student chose a step for this task: later states keep their choice.
+  assert.equal(logic.stepViewOnState(logic.stepViewOnPick(TASK), { task: TASK, currentStep: "build" }).step, null, "a state overrode the step the student chose");
+  // The student chose before any state arrived (the header draws from the profile first): the first
+  // state settles that task without moving the view, and so do the states after it.
+  const early = logic.stepViewOnPick(null);
+  assert.deepEqual(early, { picked: true });
+  const claimed = logic.stepViewOnState(early, { task: TASK, currentStep: "build" });
+  assert.deepEqual(claimed, { settled: { task: TASK }, step: null }, "the first state overrode a step the student chose before it arrived");
+  assert.equal(logic.stepViewOnState(claimed.settled, { task: TASK, currentStep: "build" }).step, null);
 });
 
 const { rendererStatus, renderComponent, visibleText } = await import("./sx-render.mjs");
@@ -436,6 +486,50 @@ function scrollerProblem(css) {
   if (!/box-sizing:\s*border-box/.test(body)) return "the bound leaves out the header's padding: the box eats into region B's reserve";
   return null;
 }
+/** The body of every `@media (max-height:600px)` block, comments stripped. */
+function shortWindowBlocks(css) {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const blocks = [];
+  for (const m of text.matchAll(/@media\s*\(max-height:\s*600px\)\s*\{/g)) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const start = i;
+    for (; i < text.length && depth > 0; i++) depth += text[i] === "{" ? 1 : text[i] === "}" ? -1 : 0;
+    blocks.push(text.slice(start, i - 1));
+  }
+  return blocks;
+}
+/**
+ * SX-01 on a short window: the bound keeps the header's first 150 px, and those must hold all four
+ * parts. Stacked, the week-3 header put its completion conditions and steps remaining below them
+ * (the second review of 2026-10-05, in the App at 1280×450). So at 600 px of webview and below the
+ * header packs into wrapping lines: the steps remaining leave the foot for the week's line, and the
+ * parts that may scroll inside the header come after the completion conditions.
+ */
+const HEADER = `${LESSON_SHELL} > .hp-mission`;
+function compactProblem(css) {
+  const rules = shortWindowBlocks(css).flatMap(cssRules);
+  const body = (sel) => rules.filter(([s]) => s === sel).map(([, b]) => b).join(";");
+  if (!/display:\s*flex/.test(body(HEADER)) || !/flex-wrap:\s*wrap/.test(body(HEADER))) return "on a short window the header stacks: its first 150 px end before the completion conditions";
+  if (!/display:\s*contents/.test(body(`${HEADER} > .hp-mission-foot`))) return "on a short window the steps remaining stay in the foot, after everything else";
+  const orderOf = (part) => Number(/order:\s*(-?\d+)/.exec(body(`${HEADER} ${part}`))?.[1] ?? Number.NaN);
+  const o = Object.fromEntries(
+    Object.entries({ week: ".hp-mission-week", remaining: ".hp-mission-remaining", mission: ".hp-mission-sentence", actions: ".hp-mission-actions", completion: ".hp-mission-completion", resume: ".hp-mission-resume", acceptance: ".hp-mission-acceptance", activity: ".hp-mission-activity", growth: ".hp-mission-growth" }).map(([k, sel]) => [k, orderOf(sel)]),
+  );
+  if (Object.values(o).some(Number.isNaN)) return `a part has no place in the short window's order: ${JSON.stringify(o)}`;
+  if (!(o.week < o.remaining && o.remaining < o.mission && o.mission < o.actions && o.actions < o.completion)) return `on a short window the four parts and the actions do not come first: ${JSON.stringify(o)}`;
+  if (!(Math.min(o.acceptance, o.activity, o.growth) > o.completion)) return `on a short window a part that may scroll comes before the completion conditions: ${JSON.stringify(o)}`;
+  if (!(o.completion < o.resume && o.resume < o.growth)) return `"지난번 이어서" is not between the completion conditions and the growth link (PROJECT_RULES order): ${JSON.stringify(o)}`;
+  return null;
+}
+await staticCheck("SX-01 styles: on a short window the header packs all four parts into its first lines (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, compactProblem, [
+  // The second review's finding: the header stacked as on a tall window.
+  ["> .hp-mission { display:flex; flex-wrap:wrap; align-items:center; column-gap:12px; padding:8px 12px 6px; }", "> .hp-mission { padding:8px 12px 6px; }"],
+  ["> .hp-mission > .hp-mission-foot { display:contents; }\n", ""],
+  [".hp-mission-remaining { order:2;", ".hp-mission-remaining { order:11;"],
+  [".hp-mission-acceptance { order:8; }", ".hp-mission-acceptance { order:4; }"],
+  [".hp-mission-resume { order:7;", ".hp-mission-resume { order:11;"],
+]);
 await staticCheck("SX-01 styles: the header stays on screen while the rest scrolls, and leaves region B room (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, scrollerProblem, [
   [".hps-shell:has(> .hp-mission .hp-mission-sentence) { overflow-y: auto; }\n", ""],
   ["position: sticky; top: 0; z-index: 2;", "position: relative; z-index: 2;"],

@@ -2,6 +2,7 @@ import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
+import { stepViewOnPick, stepViewOnState, type StepViewSettled } from './missionHeaderLogic';
 import { EvidenceDrawer } from './EvidenceDrawer';
 import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
@@ -229,6 +230,17 @@ export function ChatPanel(props: Props) {
    * screen does nothing when pressed.
    */
   const [learning, setLearning] = useState<LearningStatePayload | null>(null);
+  /**
+   * SX-01/SX-02 — the step region A shows starts where the task's record stands, then follows the
+   * student (`stepViewOnState`). Drawn from the first step, a reopened task offered an earlier
+   * step's action as the Primary, and pressing it moved the record back.
+   */
+  const stepView = useRef<StepViewSettled>(null);
+  const learningTask = useRef<string | null>(null);
+  const pickStep = (stepId: string) => {
+    stepView.current = stepViewOnPick(learningTask.current);
+    setCurrentStepId(stepId);
+  };
   /** Drawer open/closed is a **view state**, so the webview owns it. Closed by default (SX-17). */
   const [drawerOpen, setDrawerOpen] = useState(false);
   // #751 U3 — instructor prompts imported into THIS draft (bodiless refs, saved with the draft, handed over with the send).
@@ -265,7 +277,12 @@ export function ChatPanel(props: Props) {
   // task's events.
   useEffect(() => {
     const off = onHostMessage((msg) => {
-      if (msg.type === "learningState") setLearning(msg.state);
+      if (msg.type !== "learningState") return;
+      setLearning(msg.state);
+      learningTask.current = msg.state.task;
+      const next = stepViewOnState(stepView.current, msg.state);
+      stepView.current = next.settled;
+      if (next.step) setCurrentStepId(next.step);
     });
     return off;
   }, []);
@@ -737,9 +754,9 @@ export function ChatPanel(props: Props) {
         // SX-02 — "지난번 이어서", exactly as the host decided it from the task record.
         resume={learning?.resume ?? null}
         currentStepId={currentStepId}
-        onSelectStep={setCurrentStepId}
+        onSelectStep={pickStep}
         onStartStep={(step) => {
-          setCurrentStepId(step.id);
+          pickStep(step.id);
           const lesson = config?.profile?.lesson;
           if (!lesson) return;
           postToHost({ type: 'lessonStep', stepId: step.id, status: 'in_progress' });

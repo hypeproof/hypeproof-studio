@@ -1214,13 +1214,36 @@ html, body, #root {
    conversation and the composer a thin strip or none: at 1280×400 the textarea sat under it
    (review of 2026-10-05). The header leaves region B 250 px — the composer measured 208 px in the
    App, model picker and usage line included — and scrolls inside itself past that, but keeps at
-   least its first 150 px: the week, the mission and the action to do now. The whole week-3 header
-   still fits from about 600 px down; only below roughly 400 px does region B get less than 250.
-   Short windows also get the effort rule's compaction below. */
+   least its first 150 px. The whole week-3 header still fits from about 600 px of webview; only
+   below roughly 400 px does region B get less than 250. */
 .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }
+/* ...and on a short window those first 150 px hold all four SX-01 parts. Stacked, the week-3 header
+   is about 330 px, so its completion conditions and steps remaining scrolled inside it (in the App
+   at 1280×450, 387 px of webview: review of 2026-10-05). At 600 px of webview and below it packs
+   the way the design's own sketch of region A does (design §정보 구조): the week with "남은 단계 N"
+   on one line, the mission, the actions, then the completion conditions on wrapping lines, with
+   "지난번 이어서" beside them while they keep 280 px, and under them on a narrower window. The step's
+   acceptance sentence, the activity line and the growth link follow inside the header's own scroll;
+   an activity line that reports a connection problem stays under the mission. Measured on the real
+   header with the week-3 design (three conditions): the four parts and the Primary stay on screen
+   down to 230 px of webview at 1280, 640 and 350 wide; "지난번 이어서" does too down to about
+   500 wide, and scrolls inside the header on a narrower short window. Order only: the markup, and
+   so the keyboard and screen-reader order, is unchanged. */
 @media (max-height:600px) {
-  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { padding:8px 12px 6px; }
-  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-sentence { font-size:18px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { display:flex; flex-wrap:wrap; align-items:center; column-gap:12px; padding:8px 12px 6px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission > * { flex:1 1 100%; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission > .hp-mission-foot { display:contents; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-week { order:1; flex:1 1 auto; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-remaining { order:2; flex:0 0 auto; margin:0 0 2px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-sentence { order:3; font-size:18px; margin-bottom:4px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity:has(> [role="status"]) { order:4; margin-bottom:4px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-actions { order:5; margin-bottom:6px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-completion { order:6; flex:1 1 0; min-width:min(100%, 280px); display:flex; flex-wrap:wrap; gap:2px 12px; margin-bottom:6px; font-size:12px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-completion li { margin:0; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-resume { order:7; flex:0 0 auto; align-self:flex-start; margin-bottom:6px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-acceptance { order:8; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-activity { order:9; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-growth { order:10; flex:0 0 auto; }
 }
 .hp-mission-week { margin: 0 0 2px; font-size: 12px; letter-spacing: 1px; color: var(--hp-muted); }
 .hp-mission-sentence { margin: 0 0 8px; font-size: 22px; line-height: 1.35; font-weight: 700; overflow-wrap: anywhere; }

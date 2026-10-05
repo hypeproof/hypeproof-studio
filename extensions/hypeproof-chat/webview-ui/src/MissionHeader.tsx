@@ -36,7 +36,10 @@ export interface MissionHeaderProps {
    * still missing. null when the host sends no verdict; then nothing is checked off.
    */
   missing?: ReadonlyArray<{ item?: string; event?: string }> | null;
-  /** The id of the step currently being viewed. null means the first step. */
+  /**
+   * The id of the step currently being viewed. null means the first step. ChatPanel starts it at
+   * the step the task's record holds (`stepViewOnState`), not at the first step.
+   */
   currentStepId: string | null;
   onSelectStep: (stepId: string) => void;
   /** Feeds the current step's task to the coach. The screen's only Primary CTA (SX-04). */
@@ -65,9 +68,11 @@ export function MissionHeader(props: MissionHeaderProps) {
   const current = actions[0] ?? null;
   const resumeStep = resumeStepOf(steps, props.resume);
 
-  // "지난번 이어서" puts the recorded step in front and hands the keyboard to its action (the
-  // Primary). The focus waits for the render that moved the step; when the step is already in
-  // front there is no such render, so it is given at once. Either way the entry never does nothing.
+  // "지난번 이어서" hands the keyboard to the recorded step's action (the Primary). The view already
+  // starts at the recorded step (ChatPanel, `stepViewOnState`), so usually the entry only moves the
+  // focus, at once. If the student has since looked at another step, it first brings the recorded
+  // one back to the front, and the focus waits for the render that moved it. Either way the entry
+  // never does nothing.
   const primary = useRef<HTMLButtonElement | null>(null);
   const focusAfterMove = useRef(false);
   useEffect(() => {

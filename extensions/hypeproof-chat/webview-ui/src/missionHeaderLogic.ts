@@ -48,6 +48,44 @@ export function stepsRemaining(steps: readonly LessonStep[], currentStepId: stri
 }
 
 /**
+ * SX-01, SX-02 — what has settled which step region A shows, for one task.
+ *
+ * The step on screen is a view state the webview keeps, but it does not start at the first
+ * step: it starts where the task's record stands (`learningState.currentStep`). Drawn from the
+ * first step, a reopened task put an earlier step's action in the Primary and counted the steps
+ * remaining from there, and pressing that Primary moved the record back, because a move back is
+ * always allowed (SX-16; review of 2026-10-05). Once the view of a task is settled, later states
+ * for that task never move it: from then on the student's own choice holds.
+ *
+ *   - `{ task }`: the view of that task is settled, by its record or by the student.
+ *   - `{ picked: true }`: the student chose a step before any state named the task (the header is
+ *     drawn from the profile before the host's first state arrives). That choice is the view.
+ *   - null: nothing is settled yet.
+ */
+export type StepViewSettled = { task: string } | { picked: true } | null;
+
+/**
+ * A learning state arrived. `step`: the step to show now, or null to keep the view as it is.
+ *
+ * A state that names no recorded step (a seat without the task flow, or a record not read this
+ * time) settles nothing, so the next state that names the step still moves the view there.
+ */
+export function stepViewOnState(
+  settled: StepViewSettled,
+  state: { task: string; currentStep?: string | null },
+): { settled: StepViewSettled; step: string | null } {
+  if (settled && "picked" in settled) return { settled: { task: state.task }, step: null };
+  if (settled && settled.task === state.task) return { settled, step: null };
+  if (typeof state.currentStep !== "string" || !state.currentStep) return { settled, step: null };
+  return { settled: { task: state.task }, step: state.currentStep };
+}
+
+/** The student chose a step. `task`: the task of the last learning state, or null before any arrived. */
+export function stepViewOnPick(task: string | null): StepViewSettled {
+  return task ? { task } : { picked: true };
+}
+
+/**
  * SX-02 — the lesson step "지난번 이어서" names, or null.
  *
  * The host sends a step id only while the task record still stands where an earlier session
