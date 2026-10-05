@@ -532,7 +532,7 @@ export interface LearningWikiPlan {
   dir?: string;
   audience?: string;
   session_label?: string;
-  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string }> };
+  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
   sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }
 

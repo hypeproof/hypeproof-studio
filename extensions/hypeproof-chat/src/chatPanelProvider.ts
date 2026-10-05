@@ -43,8 +43,8 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
-import { applyWikiProposal, archiveNotes, coachContext, initWiki, jsonFromText, loadState, readNotes, renderWikiPages, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
-import { applyDeckProposal, deckPrompt, renderDeck, type DeckProposal } from "./deckGenerator";
+import { applyWikiProposal, archiveNotes, coachContext, initWiki, jsonFromText, loadState, productTitle, readNotes, renderWikiPages, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
+import { applyDeckProposal, deckPrompt, deckRepairPrompt, refusedSlides, renderDeck, type DeckProposal } from "./deckGenerator";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
 import {
@@ -958,7 +958,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const plan = this.learningWikiPlan();
     const label = sessionLabel(plan);
     const dir = wikiDir(folder.uri.fsPath, plan);
-    const state = initWiki(dir, folder.name, plan);
+    const state = initWiki(dir, productTitle(folder.uri.fsPath) ?? folder.name, plan);
     const session = await this.pickSession(state, plan, `몇 ${label} 수업을 정리할까요?`);
     if (session === undefined) return;
     try { await this.spool?.flush(); } catch {}
@@ -1040,7 +1040,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       writeFiles(dir, renderDeck(state, template, plan));
       return " · 덱 초안은 쓰지 못했어요";
     }
-    const r = applyDeckProposal(state, template, slides, proposal, session);
+    let r = applyDeckProposal(state, template, slides, proposal, session);
+    // One repair round for slides the gate refused (no resolvable citation, or a number the evidence lacks).
+    const refused = refusedSlides(r.dropped);
+    if (refused.length) {
+      const again = await this.completeSkill(deckRepairPrompt(r.state, template, refused, plan), {});
+      const fix = again.ok ? jsonFromText<DeckProposal>(again.text) : null;
+      if (fix) {
+        const r2 = applyDeckProposal(r.state, template, refused.map((x) => x.no), fix, session);
+        r = { state: r2.state, dropped: r2.dropped, written: [...r.written, ...r2.written] };
+      }
+    }
     saveState(dir, r.state);
     writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) });
     return ` · 덱 ${r.written.join("·") || "없음"}장 초안 (${Object.keys(r.state.deck).length}/${template.slides.length})${r.dropped.length ? ` · 번호 없어 뺀 문장 ${r.dropped.length}` : ""}`;

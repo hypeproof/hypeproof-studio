@@ -69,44 +69,63 @@ assert.match(ppages["sessions/01.md"], /이 문제를 겪는 사람은 누구이
 assert.match(ppages["index.md"], /deck\/ 0 \/ 8장/);
 ok("wiki skill is generic: no plan → 회차, folder wiki/, no deck; the founder plan → 주차, venture/, its questions");
 
-// ── deck skill: only requested slides, only resolvable references ────────────
+// ── deck skill: pitch slides, only requested slides, citations and the numbers rule ──
 const template = PLAN.deck;
 const prompt = deck.deckPrompt(s1, template, [2, 3], PLAN);
 assert.match(prompt, /2번 "제공 가치"/);
 assert.match(prompt, /3번 "해결 원리"/);
 assert.ok(!prompt.includes('1번 "문제·기회"'), "only the requested slides are asked for");
+assert.match(prompt, /주장 하나, 시각 요소 하나/);
 const dp = {
   slides: [
-    { no: 2, title: "한 단계씩 따라간다", bullets: [{ text: "할아버지가 다음 버튼이 작다고 하셨다", refs: ["E-1"] }, { text: "문제 문장", refs: ["P"] }, { text: "없는 번호", refs: ["E-42"] }], open: ["실제 어르신 3명"] },
-    { no: 3, title: "기준물로 말한다", bullets: [{ text: "버튼을 키우기로 했다", refs: ["D-1"] }] },
-    { no: 5, title: "요청하지 않은 장", bullets: [{ text: "x", refs: ["E-1"] }] },
+    { no: 2, headline: "다음 버튼은 바로 통했다", visual: { type: "quote", value: "다음 버튼이 작다", label: "할아버지, 첫 시험" }, support: ["직접 보여 드림"], notes: "첫 시험에서 들은 말", refs: ["E-1", "E-42"], gaps: ["실제 어르신 3명"] },
+    { no: 3, headline: "버튼을 52px로 키웠다", visual: { type: "number", value: "52px", label: "다음 버튼" }, refs: ["D-1"] },
+    { no: 5, headline: "요청하지 않은 장", visual: { type: "statement", value: "x" }, refs: ["E-1"] },
   ],
 };
 const d = deck.applyDeckProposal(s1, template, [2, 3], dp, 2);
-assert.deepEqual(d.written, [2, 3], "a slide that was not requested is not written");
-assert.deepEqual(d.state.deck["2"].bullets.map((b) => b.refs), [["E-1"], ["P"]], "P is citable once there is a problem; unknown numbers are dropped");
-assert.equal(d.dropped.length, 1);
-const noProblem = deck.applyDeckProposal({ ...s1, problem: null }, template, [2], { slides: [{ no: 2, title: "t", bullets: [{ text: "문제", refs: ["P"] }] }] }, 2);
-assert.deepEqual(noProblem.state.deck["2"].bullets, [], "planted: P without a problem is dropped");
-const notInTemplate = deck.applyDeckProposal(s1, template, [9], { slides: [{ no: 9, title: "t", bullets: [{ text: "a", refs: ["E-1"] }] }] }, 2);
-assert.deepEqual(notInTemplate.written, [], "planted: a slide outside the template is never written");
-ok("deck skill: writes only requested template slides, keeps only sentences citing wiki ids (P only with a problem)");
+assert.deepEqual(d.written, [2], "slide 3 cites D-1, whose text has no 52, so the numbers rule drops it; slide 5 was not requested");
+assert.deepEqual(d.state.deck["2"].refs, ["E-1"], "unknown references are removed");
+assert.ok(d.dropped.some((x) => x.includes("근거에 없는 숫자 52")), JSON.stringify(d.dropped));
+const s1Num = { ...s1, D: [{ ...s1.D[0], therefore: "다음 버튼을 52px로 키운다" }] };
+assert.deepEqual(deck.applyDeckProposal(s1Num, template, [3], dp, 2).written, [3], "a number present in the cited entry passes");
+assert.deepEqual(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "근거 없음", refs: ["E-77"] }] }, 2).written, [], "planted: a slide with no resolvable reference is not written");
+assert.deepEqual(deck.applyDeckProposal({ ...s1, problem: null }, template, [2], { slides: [{ no: 2, headline: "문제", refs: ["P"] }] }, 2).written, [], "planted: P without a problem is not citable");
+assert.deepEqual(deck.applyDeckProposal(s1, template, [9], { slides: [{ no: 9, headline: "t", refs: ["E-1"] }] }, 2).written, [], "planted: a slide outside the template is never written");
+assert.equal(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "h", visual: { type: "hologram" }, refs: ["E-1"] }] }, 2).state.deck["2"].visual.type, "statement", "an unknown visual falls back to a statement");
+assert.deepEqual(deck.unsupportedNumbers("3명 중 2명", "세 분 중 두 분"), ["3", "2"]);
+assert.deepEqual(deck.applyDeckProposal(s1, template, [2], { slides: [{ no: 2, headline: "h", visual: { type: "quote", value: "말", label: "70대 사용자" }, refs: ["E-1"] }] }, 2).written, [], "planted: an age in a label that the evidence does not state is a made-up number");
+assert.match(deck.deckPrompt(s1, template, [1], PLAN), /이 장의 역할: 당사자의 어려움만/, "the plan's slide role reaches the prompt");
+assert.match(prompt, /"no": 2[\s\S]*"no": 3/, "the JSON skeleton lists every requested slide");
+const missing = deck.applyDeckProposal(s1, template, [2, 3], { slides: [{ no: 2, headline: "h", refs: ["E-1"] }] }, 2);
+assert.deepEqual(deck.refusedSlides(missing.dropped), [{ no: 3, reason: "빠짐" }], "a requested slide left out is refused, so the repair asks for it");
+assert.deepEqual(deck.refusedSlides(["덱 03: \"x…\" (근거에 없는 숫자 52)", "덱 05: \"y…\" (근거 번호 없음)"]), [{ no: 3, reason: "근거에 없는 숫자 52" }, { no: 5, reason: "근거 번호 없음" }]);
+const repair = deck.deckRepairPrompt(s1, template, [{ no: 3, reason: "근거에 없는 숫자 52" }], PLAN);
+assert.match(repair, /3번: 근거에 없는 숫자 52/);
+assert.ok(!repair.includes('2번 "제공 가치"'), "the repair asks only for the refused slides");
+assert.equal(deck.basisLabel(s1, ["E-1"]), "근거: 실제 관찰 1");
+assert.equal(deck.basisLabel(s1, ["E-1", "E-2"]), "근거: 실제 관찰 1 · 팀 시험 1", "the basis line comes from the cited evidence, not the model");
+assert.equal(deck.basisLabel(s1, ["D-1"]), "근거: 팀 결정·문제 정의");
+ok("deck skill: headline + one visual + notes; references must resolve; every on-screen number must be in the cited entries; one repair round; basis computed");
 
-// ── deck rendering follows the plan; the wiki lists deck drops ───────────────
+// ── deck rendering: pitch slides for the audience, notes and gaps behind the switch ──
 const sDeck = { ...d.state, sessions: [1, 2] };
 const files = deck.renderDeck(sDeck, template, PLAN);
-assert.ok(files["deck/01.md"].includes("1주차에 채움"), "an empty slide says when the plan fills it");
-assert.match(files["deck/02.md"], /초안 · 2주차/);
-assert.match(files["deck.html"], /2 \/ 8장/);
-assert.match(files["deck.html"], /dot now" href="#s2"/, "this session's slides are marked");
-assert.ok(!files["deck.html"].includes("<script"));
+assert.ok(files["deck/01.md"].includes("1주차에 채움"), "an undrafted slide says when the plan fills it");
+assert.match(files["deck/02.md"], /## 다음 버튼은 바로 통했다/);
+assert.match(files["deck.html"], /<h2>다음 버튼은 바로 통했다<\/h2>/);
+assert.match(files["deck.html"], /class="v-quote"/);
+assert.match(files["deck.html"], /1 \/ 8장/);
+assert.match(files["deck.html"], /class="notes notes-only"/, "notes and citations are in the notes layer");
+assert.ok(!/<article[^>]*>[\s\S]*?<div class="frame">[\s\S]*?E-1[\s\S]*?<\/div>\s*<aside/.test(files["deck.html"]), "citations are not on the slide face");
+assert.ok(!files["deck.html"].includes("<script"), "no script; the notes switch is an inline handler only");
+const withProduct = deck.renderDeck({ ...sDeck, deck: { "3": { headline: "써 보세요", visual: { type: "product", label: "길 안내 화면" }, support: [], notes: "", refs: ["E-1"], gaps: [], session: 2 } } }, template, PLAN, "../index.html")["deck.html"];
+assert.match(withProduct, /<iframe src="\.\.\/index\.html"/, "the product visual embeds the student's page");
 const xss = deck.renderDeck({ ...sDeck, team: "<img src=x onerror=alert(1)>" }, template, PLAN)["deck.html"];
 assert.ok(!xss.includes("<img"), "planted: markup in the team name is escaped");
-const lines = wiki.lintWiki(sDeck);
-assert.ok(lines.some((x) => x.startsWith("덱 02:") && x.endsWith("뺐어요")), lines.join("\n"));
-assert.ok(deck.lintDeck(sDeck).some((x) => x.includes("근거(E)·결정(D) 번호 없는 문장")), "a P-only sentence is flagged for evidence");
+assert.ok(wiki.lintWiki(sDeck).some((x) => x.startsWith("덱 03:") && x.endsWith("뺐어요")), wiki.lintWiki(sDeck).join("\n"));
 assert.match(wiki.renderWikiPages(sDeck, PLAN)["log.md"], /인용이 없어 뺀 것/);
-ok("deck rendering: template order, plan schedule for empty slides, this session marked, escaped; drops listed in lint and log.md");
+ok("deck rendering: 16:9 pitch slides in template order, quote/number/product visuals, notes·근거 behind a switch, escaped");
 
 // ── coach context and disk round trip ────────────────────────────────────────
 const ctx = wiki.coachContext(s1, PLAN);
@@ -127,10 +146,13 @@ wiki.archiveNotes(dir, wiki.readNotes(dir));
 assert.equal(readFileSync(join(dir, "raw", "s1-관찰.md"), "utf8"), "할아버지가 다음 버튼을 바로 누르심", "planted: a same-name note must not overwrite the cited raw file");
 wiki.saveState(dir, sDeck);
 wiki.writeFiles(dir, { ...wiki.renderWikiPages(sDeck, PLAN), ...deck.renderDeck(sDeck, template, PLAN) });
-assert.equal(wiki.loadState(dir).deck["2"].title, "한 단계씩 따라간다");
+assert.equal(wiki.loadState(dir).deck["2"].headline, "다음 버튼은 바로 통했다");
 assert.equal(wiki.initWiki(dir, "다른 팀").team, "A · 어르신 길찾기", "init keeps an existing wiki");
 assert.equal(wiki.jsonFromText('앞 {"next": {"text": "a"}} 뒤').next.text, "a");
 assert.equal(wiki.jsonFromText("{broken"), null);
+writeFileSync(join(dir, "..", "index.html"), "<html><head><title>길 안내</title></head></html>");
+assert.equal(wiki.productTitle(join(dir, "..")), "길 안내");
+assert.equal(wiki.productTitle("/nonexistent"), null);
 ok("coach context carries the next session's question and deck focus; disk: init once, notes archived, state round-trips");
 
 console.log(`\n${passed} learning-wiki checks passed`);

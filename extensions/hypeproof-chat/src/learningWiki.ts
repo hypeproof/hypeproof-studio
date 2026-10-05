@@ -23,7 +23,8 @@ export interface LearningWikiPlan {
   /** What one session is called (default "회차"; the founder course says "주차"). */
   session_label?: string;
   /** Deck template for the deck skill. */
-  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string }> };
+  /** Deck template for the deck skill; `hint` tells the skill what the slide must and must not show. */
+  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
   /** Per session: the slides the deck skill drafts that session and the session's question. */
   sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }
@@ -39,7 +40,6 @@ export type HypothesisStatus = "열림" | "시험 중" | "팀 시험에서만 �
 export interface Hypothesis extends Cited { id: string; text: string; date: string; status: HypothesisStatus; evidence: string[] }
 export interface Evidence extends Cited { id: string; kind: string; state: SourceState; outcome: Outcome; text: string; provenance: string; hypothesis: string | null; date: string }
 export interface Decision extends Cited { id: string; therefore: string; ai_choice: string; observed: string[]; date: string }
-export interface Slide { title: string; bullets: Array<{ text: string; refs: string[] }>; open: string[]; session: number }
 export interface WikiState {
   format: "hps-learning-wiki/1";
   team: string;
@@ -52,7 +52,7 @@ export interface WikiState {
   changes: Array<{ text: string; cite: string[]; session: number }>;
   next: { text: string; cite: string[]; session: number } | null;
   /** Drafted by the deck skill (deckGenerator.ts), by slide number. */
-  deck: Record<string, Slide>;
+  deck: Record<string, import("./deckGenerator.ts").PitchSlide>;
   dropped: string[];
   log: string[];
 }
@@ -400,6 +400,16 @@ export function jsonFromText<T>(text: string | undefined): T | null {
   try {
     const v = JSON.parse(text.slice(start, end + 1));
     return v && typeof v === "object" ? (v as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The student's product title (the workspace's index.html <title>), used as the wiki's team label. */
+export function productTitle(root: string): string | null {
+  try {
+    const m = /<title>([^<]{1,80})<\/title>/i.exec(fs.readFileSync(path.join(root, "index.html"), "utf8"));
+    return m?.[1].trim() || null;
   } catch {
     return null;
   }
