@@ -232,4 +232,21 @@ class DevLauncherTests(unittest.TestCase):
                 self.assertEqual(exited.exception.code, 2)
                 self.assertIn('unrecognized arguments: --debug-port', stderr.getvalue())
 
+    def test_inmemory_secrets_only_when_asked(self):
+        # cr-e2e (#1400): scripts/cr-dev-kit.sh launches the copy without the OS keychain; a plain run keeps it.
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp); app = state/'dev.app'; (app/'Contents').mkdir(parents=True)
+            (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable':'HypeProof Studio'}))
+            with patch.object(dev.os,'name','posix'),patch.object(dev,'_clear_stale_ipc_socket'),patch.object(dev.subprocess,'Popen') as popen,patch.object(dev.time,'sleep'),patch('builtins.print'):
+                popen.return_value.poll.return_value=None
+                dev.launch(app,state); dev.launch(app,state,inmemory_secrets=True)
+            plain, kit = (c.args[0] for c in popen.call_args_list)
+            self.assertNotIn('--use-inmemory-secretstorage', plain)
+            self.assertEqual(kit.count('--use-inmemory-secretstorage'), 1)
+            self.assertEqual([a for a in kit if a != '--use-inmemory-secretstorage'], plain)
+            argv = ['studio-dev.py', 'run', '--provider', 'service', '--inmemory-secrets', '--state-dir', str(state/'state')]
+            with patch.object(dev.platform,'system',return_value='Darwin'),patch.object(dev.platform,'machine',return_value='arm64'),patch.object(dev,'prepare'),patch.object(dev,'launch') as launch,patch.object(dev.sys,'argv',argv):
+                dev.main()
+            self.assertTrue(launch.call_args.kwargs['inmemory_secrets'])
+
 if __name__=='__main__': unittest.main()

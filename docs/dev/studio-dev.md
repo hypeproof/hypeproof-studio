@@ -149,6 +149,12 @@ Initialize a fresh local database from `worker/schema.sql` using Wrangler's loca
 D1 command and the same `--persist-to` directory as the running development Worker.
 An existing valid local code can still be placed in `local-participant-token.txt`.
 
+`--inmemory-secrets` launches the copy with `--use-inmemory-secretstorage`: secrets live
+only for that process, and macOS never asks for the login keychain password (the ad-hoc
+signed copy would otherwise ask before it reads the shared "Safe Storage" item). The
+participant code is imported again from `local-participant-token.txt` at every launch.
+`scripts/cr-dev-kit.sh` (the Curriculum Runtime dev kit) launches with it.
+
 `--provider service --service live` explicitly points to production API. Enter your own valid
 participation code in the development app. This preserves the installed app and
 its data, but real API requests consume real allowance and are recorded by the
@@ -169,7 +175,8 @@ python3 scripts/test-studio-dev.py
 
 Tests cover path/state ownership, Helper identity regression, process inspection,
 settings preservation, official-payload change detection, running-app refusal and
-early launch failure, and stale JavaScript shadowing TypeScript source. Webview
+early launch failure, the in-memory secret storage flag only when asked, and stale
+JavaScript shadowing TypeScript source. Webview
 type checks use `noEmit`; keep generated JavaScript outside `src`. If preparation
 reports a shadowed source, move the generated companion out before rebuilding.
 Actual native evidence is recorded separately in the PR.
