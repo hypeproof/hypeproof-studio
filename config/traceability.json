@@ -2867,6 +2867,12 @@
         },
         {
           "path": "e2e/sx/playwright.config.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sx-home.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/home-app.spec.ts"
         }
       ]
     },

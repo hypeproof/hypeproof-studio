@@ -20,8 +20,7 @@ import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
-import {flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
-import type {TaskCurriculum} from '../../../worker/src/lib/measurement-core/local-record.ts';
+import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
@@ -374,11 +373,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private async postLearningState() {
     const recorder = await this.currentLearningRecorder();
-    if (!recorder) return;
+    if (!recorder) {
+      this.learningStateOwed = true;
+      return;
+    }
     const profile = await this.ensureProfile();
     const task = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
     const target = this.taskFlowTarget(recorder, profile);
     const shown = target ? screenFlow(await this.runTaskFlow({ kind: 'seen' }, recorder, profile), this.taskFlowLast, target.recordId) : null;
+    // SX-02 — "지난번 이어서" for the record shown, decided by this session (`FlowSession`).
+    const resume = this.flowSession.resumeFor(target?.recordId ?? null, shown);
     // A notice is said once, with the state it explains.
     const notice = this.taskFlowNotice;
     this.taskFlowNotice = null;
@@ -388,14 +392,32 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         task,
         events: recorder.batch.events,
         completion: this.learningCompletion(profile),
-        ...(shown ? { phase: shown.phase, currentStep: shown.current_step } : {}),
+        ...(shown ? { phase: shown.curriculum.phase, currentStep: shown.curriculum.current_step, resume } : {}),
         notice,
       }),
     });
+    this.learningStateOwed = false;
   }
 
-  /** SX-55 — the last curriculum this host read, so a busy record does not reopen a submitted task on screen. */
-  private taskFlowLast: { recordId: string; curriculum: TaskCurriculum } | null = null;
+  /**
+   * SX-01/SX-02 — a learning state could not be built (no `/2` recorder: the Service's observation
+   * context did not answer). On a task-flow seat region A's Primary stays busy until a state has
+   * shown the task's record (webview `recordShownBy`), so the next coach turn that answers sends one
+   * (the turn end below) rather than leaving that to the webview being made again (`ready`).
+   */
+  private learningStateOwed = false;
+
+  /** SX-55 — the last record this host read, so a busy record does not reopen a submitted task on screen. */
+  private taskFlowLast: ({ recordId: string } & ShownFlow) | null = null;
+
+  /**
+   * SX-02 — this session of the App, for "지난번 이어서" (`FlowSession`, in memory only). It began
+   * when this host was made, on the extension's activation: a task record last changed before
+   * that was left by an earlier session. Taken once, never per state: a fresh `Date.now()` at each
+   * state would make the record of a moment ago read as "last time". It also holds the records
+   * the student has acted on since, which end the entry whether or not the act wrote anything.
+   */
+  private readonly flowSession = new FlowSession(Date.now());
 
   /**
    * SX-55 — the one task-flow line the student has to see, next to the completion button.
@@ -435,10 +457,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
     const target = this.taskFlowTarget(recorder, profile);
     if (!target) return null;
+    // SX-02 — the student's own signal ends "지난번 이어서" for this record, written or not, and
+    // also when the record cannot be read this time.
+    this.flowSession.noteSignal(target.recordId, signal);
     try {
       const { store, record } = this.crRecordHandle();
       const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });
-      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };
+      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum, changed_at: outcome.changed_at };
       this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });
       return outcome;
     } catch (error) {
@@ -451,13 +476,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * SX-55 — the step the learner started (region A's Primary) becomes the task's current step,
    * while the task is being worked on and only past steps whose gate the student met (back is
    * always allowed). A refused move stores no step and says nothing (`flowNotice`); the screen
-   * is redrawn only when the record changed or a notice is waiting.
+   * is redrawn only when the record changed, a notice is waiting, or the "지난번 이어서" it shows
+   * has ended (a start onto the step the record holds writes nothing, yet the student continued).
    */
   private async recordStepStart(stepId: string) {
     const recorder = await this.currentLearningRecorder();
     if (!recorder) return;
     const flow = await this.runTaskFlow({ kind: 'start_step', stepId }, recorder, await this.ensureProfile());
-    if (flow?.changed || this.taskFlowNotice) await this.postLearningState();
+    if (flow?.changed || this.taskFlowNotice || this.flowSession.stale) await this.postLearningState();
   }
 
   private view?: vscode.WebviewView;
@@ -4378,7 +4404,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // own path: the turn has ended either way, and the flow reports its own failure.
       if (observation?.batch.format === 'hps-observation/2' && finalSpoolStatus === 'ok' && assistantText.length > 0) {
         void this.runTaskFlow({ kind: 'work' }, observation, profile)
-          .then((flow) => (flow?.changed || this.taskFlowNotice ? this.postLearningState() : undefined))
+          .then((flow) => (flow?.changed || this.taskFlowNotice || this.flowSession.stale || this.learningStateOwed ? this.postLearningState() : undefined))
           .catch(() => undefined);
       }
       if (assistantText.length > 0) {
