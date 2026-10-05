@@ -18,6 +18,8 @@ Rows the run record claims, positive controls green again here: CR-36–CR-38, C
 
 Environment, app copy and gating: as in [cr-browser.md](cr-browser.md).
 
+Evidence classes (MC-38): **synthetic** for the worker suites (SQLite, local workerd D1 and R2) and the extension smoke. For `memory-app.spec.ts`, **live-host** for the App and **synthetic** for the Service and its storage (`app-service.mjs` with `publish`: the real Service router over SQLite D1, an in-memory R2) and the model (a scripted agent). No real model, real phone or classroom.
+
 | Command | Result |
 |---|---|
 | `cd worker && npm test` | exit 0; `cr-memory (worker SQLite): OK`, 24 checks |

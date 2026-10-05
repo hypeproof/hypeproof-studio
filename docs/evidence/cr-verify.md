@@ -22,6 +22,8 @@ The record is withheld by the sweep's rule, not by the tool: with `cr-browser` c
 
 Environment, app copy and gating: as in [cr-browser.md](cr-browser.md) (same worktree, build and runs).
 
+Evidence classes (MC-38): **synthetic** for the worker suite and the extension smokes (scripted CDP page). For `verify-app.spec.ts`, **live-host** for the App (integrated browser, proxy loop, verify panel) and **synthetic** for the Service account and the model (`app-service.mjs`: the real Service router, a scripted agent that hands the runner one plan per criterion). No real model, real device or phone.
+
 | Command | Result |
 |---|---|
 | `cd worker && npm test` (`cr-verify.test.mjs` among 68 files) | exit 0; `cr-verify.test.mjs` 22 of 22 |

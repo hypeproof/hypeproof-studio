@@ -2857,11 +2857,11 @@
       ],
       "completion": {
         "verdict": "PASS",
-        "reviewed_by": "cr-unblock:review:r1",
+        "reviewed_by": "cr-record-sweep:review:r1",
         "report": "docs/evidence/cr-recon.md",
         "scope_sha256": "c50cd5fc0d1e063dff2f1d9f9127dc30917d0fba11395547c1e1ab4c29047ef2",
         "inputs": {
-          "docs/evidence/cr-recon.md": "e64803d46799cea9f8be847d2da608021654943b4da23c1ccf540a4ce0cf2d2d",
+          "docs/evidence/cr-recon.md": "47e56774a6082dde566ebf258b531927d6f4ec0c9d36ccee4bea814e29fc64ed",
           "docs/plan/curriculum-runtime-recon.md": "554838ae1b1e6071e2ac1b62bf172f407e8332bac438cb2bab5f74720f56fd76",
           "e2e/curriculum-runtime/cdp-probe-extension/extension.js": "d7a073461def6e68ddd73847e93a27c7580f9f3ea7ff3149b325d40ebacebd3f",
           "e2e/curriculum-runtime/cdp-probe-extension/package.json": "283d4ca9d210e5d5ed6eff580071d8a6d5577a7de4835ad5397cadbc2f1cd8fe",
@@ -2881,7 +2881,7 @@
         "test_ids": [
           "CR-T01"
         ],
-        "recorded_at": "2026-10-05T08:24:24Z",
+        "recorded_at": "2026-10-05T09:19:31Z",
         "pr": 1420
       }
     },
@@ -2981,19 +2981,16 @@
         "worker/test/cr-browser-refs.test.mjs",
         "e2e/curriculum-runtime/app-layer.spec.ts",
         "e2e/curriculum-runtime/app-service.mjs",
-        "e2e/curriculum-runtime/playwright.config.ts",
-        "e2e/tests/09-preview.spec.ts",
         "extensions/hypeproof-chat/test/local-record-file.smoke.mjs",
-        "worker/test/measurement-core-local-record.test.mjs",
-        "e2e/fixtures/app.ts"
+        "worker/test/measurement-core-local-record.test.mjs"
       ],
       "completion": {
         "verdict": "PASS",
-        "reviewed_by": "cr-browser:review:regression-conventions:r3",
+        "reviewed_by": "cr-record-sweep:review:r1",
         "report": "docs/evidence/cr-browser.md",
-        "scope_sha256": "73f73c0c14bb8b760ec5a8c5bcaca6b56e682fba62303d76bb2932691daf5ab4",
+        "scope_sha256": "18568da22cd2d6e18754648c0e8fe128e344ef1732ef200222c7a00c95e90509",
         "inputs": {
-          "docs/evidence/cr-browser.md": "b0cdf6ba440ce9110e05bb57a8804d3e1da3db9e0034cc9cf0c376aba5c152a9",
+          "docs/evidence/cr-browser.md": "067c834d2d95baabcd343bd6169114efe0755eb402de7b7a039f73ff98f2ad2e",
           "e2e/curriculum-runtime/app-layer.spec.ts": "806be8ffa184af0a340f67253e4193f6c7aeecbd9acbc1874d4c467d633e1605",
           "e2e/curriculum-runtime/app-service.mjs": "8b86b2897f07aa16b2d557ab0e50b40139832919496ca97e22007a8a142e1126",
           "e2e/curriculum-runtime/experiment-browser.real.mjs": "41b75766fe7eaa3cbb66fea6a00e012b8e4bf9c2426b2a1f8b53abcc2f51b763",
@@ -3003,9 +3000,6 @@
           "e2e/curriculum-runtime/fixtures/kiosk-practice/redir.html": "83af37c575da57e7fc3a4a2a93936ba0ffe0a7bde6ce78ab8efc5b63ee48525e",
           "e2e/curriculum-runtime/fixtures/kiosk-practice/style.css": "f05e96a84196a8e5124ef5b183c3bbc5ca970a6bc1c1840785bae6b545b72af2",
           "e2e/curriculum-runtime/fixtures/kiosk-practice/typo.html": "4676e2122fb4101a85fa0172b626ee037a8508a4a151ea92fd5175373d816433",
-          "e2e/curriculum-runtime/playwright.config.ts": "05e656236473a34c08f64ec1728ba895a43c5a782be81e84143cdc797bcdda1f",
-          "e2e/fixtures/app.ts": "46892a2a80979447243547d5bc854d024742b42aa3af8fb7ca8b0a0a0792da7b",
-          "e2e/tests/09-preview.spec.ts": "bd1118ddb774da09d2364fd621225db8bb570a7e1a619ced2a67554b72b39436",
           "extensions/hypeproof-chat/test/artifact-version.smoke.mjs": "a2bf2f35a5f4e14401a9acc62cdbd4561bb673c8585ca29ae331954cd5440fa5",
           "extensions/hypeproof-chat/test/browser-tool-log.smoke.mjs": "e26caa3c5ff83eda5c6bbb711074b20c7a3e1aa70f84a204c49821db3994f952",
           "extensions/hypeproof-chat/test/cdp-session.smoke.mjs": "94d8aefe26a894dc82e6a6f11db848cc8cda727afc5bd611038fc7d9f5ea28b5",
@@ -3066,7 +3060,7 @@
           "CR-T11",
           "CR-T63"
         ],
-        "recorded_at": "2026-10-05T08:27:47Z",
+        "recorded_at": "2026-10-05T09:19:32Z",
         "pr": 1433
       }
     },

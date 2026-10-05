@@ -17,7 +17,8 @@ PASS for CR-T01 at `bed32b89`. Evidence class: doc check (the CI layer of the te
 | Label | Role |
 |---|---|
 | `cr-recon:review:acceptance:r3`, `cr-recon:review:adversarial:r3`, `cr-recon:review:regression-conventions:r3` | independent review of the recon, round 3 of PR #1420 |
-| `cr-unblock:review:r1` | independent review, round 1 of PR #1508 (#1506): the decision 9 revision of the recon page and the regenerated frozen inputs this completion pins; its four minor findings were fixed in that PR. Named as `reviewed_by` |
+| `cr-unblock:review:r1` | independent review, round 1 of PR #1508 (#1506): the decision 9 revision of the recon page and the regenerated frozen inputs this completion pins; its four minor findings were fixed in that PR |
+| `cr-record-sweep:review:r1` | independent review of this re-run and record, round 1 of the sweep (ledger, evidence truth and conventions lenses): it re-ran the record in a clone of the branch and CR-T01, and its findings are applied in this version. Named as `reviewed_by` |
 
 The recorder is a record-only agent that wrote neither the recon nor its revision.
 
@@ -37,7 +38,7 @@ The recorder is a record-only agent that wrote neither the recon nor its revisio
 
 Built into CR-T01: 34 planted defects, each reported exactly once, on the page plus the frozen inputs and on a temporary directory (the count is in the positive-control line).
 
-Planted by the recorder in this worktree before the record, while the verdict reads the tree, one at a time (scratch runner `mutate_recon.py`); every touched file was restored byte-identical (sha256 checked) before the next plant. The clean tree passed before and after; `git status` was clean afterwards.
+Planted by the recorder in this worktree before the record, while the verdict reads the tree, one at a time (scratch runner `mutate_recon.py`); every touched file was restored byte-identical (sha256 checked) before the next plant. The clean tree passed before and after; `git status` was clean afterwards. The fix round for review r1 (18:18–18:19) ran R1–R5 again in a scratch clone at `bed32b89`: the same results, the clean control green before and after.
 
 | Plant | Result |
 |---|---|
@@ -64,7 +65,9 @@ In a scratch worktree at `bed32b89`, `align.py record cr-recon --replace --commi
 | Command | Result |
 |---|---|
 | `align.py check --studio <this worktree> --doc curriculum-runtime` (Harness `4df7d3c`) | exit 1: `BROKEN cr-recon`, the completion above no longer holds; no other finding |
-| `next-work.py --check` with Harness `539560f1` (the pin in `requirement-work.yml`), `44e6bbb` (`~/.cache/hypeproof/harness`) and `4df7d3c` | exit 0 with each |
+| `next-work.py --check` with Harness `539560f1` (the pin in `requirement-work.yml`), `44e6bbb` (the Harness main checkout, which `scripts/next-work.py` reads when `HYPEPROOF_HARNESS` is unset) and `4df7d3c` (`align-main`; `~/.cache/hypeproof/harness` since 17:01) | exit 0 with each |
+
+Readers of completions with `rows`: a `discover.py` from before row pins counts none of them. Offline (a local snapshot with every issue open, no GitHub read), `539560f1` and `44e6bbb` show `cr-recon` ready and `cr-browser` waiting on it, where `4df7d3c` shows both complete. `requirement-work.yml` runs `next-work.py --check`, which reads ledger integrity only, so CI is green with either pin. Moving the CI pin to `4df7d3c` or later is a follow-up (ledger contract §4).
 
 ## Open PRs and ownership
 

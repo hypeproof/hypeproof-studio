@@ -18,6 +18,8 @@ No row of this item is known to be unmet. When `cr-verify` and `cr-publish` are 
 
 Environment, app copy and gating: as in [cr-browser.md](cr-browser.md).
 
+Evidence classes (MC-38): **synthetic** for the worker suites (SQLite, local workerd D1 and R2), the extension smoke and `evidence-runtime.real.mjs` (real Chromium). For `evidence-app.spec.ts`, **live-host** for the App and **synthetic** for the Service, its storage and the participants (`app-service.mjs` with `publish`; participant visits are scripted HTTP calls through the published runtime). No real model, real phone or production host.
+
 | Command | Result |
 |---|---|
 | `cd worker && npm test` | exit 0; `cr-evidence: all checks passed`, 36 checks |

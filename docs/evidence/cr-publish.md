@@ -23,6 +23,8 @@ Rows the run record left partial that this run closes or hands on:
 
 Environment, app copy and gating: as in [cr-browser.md](cr-browser.md).
 
+Evidence classes (MC-38): **synthetic** for the worker suites (SQLite, local workerd D1), the extension smokes and `publish-runtime.real.mjs` (real Chromium emulating a 390 × 844 phone). For `publish-app.spec.ts`, **live-host** for the App and **synthetic** for the Service account, storage and model (`app-service.mjs` with `publish`: the real Service router over SQLite D1, an in-memory R2, a `*.test.invalid` test origin, a scripted agent). No real model, real phone or production host.
+
 | Command | Result |
 |---|---|
 | `cd worker && npm test` | exit 0; `cr-publish (worker SQLite): OK`, 22 checks |
