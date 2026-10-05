@@ -7,7 +7,9 @@
 // extensions/hypeproof-chat/src/shellPolicy.ts), plus one pattern for every `LLMProvider`
 // value (env.ts: gemini, anthropic, openai, glm) and for Supabase service keys. The existing
 // lists are not changed (no MC-30 change). worker/test/cr-publish.test.mjs pins each pattern
-// against a sample of the real format and checks the superset claim against the other lists.
+// against a sample of the real format and checks the superset claim per pattern: it reads every
+// pattern name from the other lists' sources, so one added there without a sample (and a rule
+// here that refuses it) fails the test.
 //
 // Token-shaped values are decoded, not refused on their shape (R4):
 //   - a three-part JWT passes only as a Supabase anon key (payload iss "supabase", role "anon");
@@ -27,6 +29,7 @@ export type ScanRule =
   | "supabase_secret_key"
   | "github_token"
   | "aws_access_key"
+  | "measurement_connection_token"
   | "url_credentials"
   | "bearer_token"
   | "secret_assignment"
@@ -77,6 +80,9 @@ const PATTERNS: readonly Pattern[] = [
   { rule: "supabase_secret_key", re: /\bsb_secret_[A-Za-z0-9_-]{16,}/g },
   { rule: "github_token", re: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g },
   { rule: "aws_access_key", re: /\bAKIA[0-9A-Z]{16}\b/g },
+  // Lab measurement connection token (#1377): "hps_sync_" + 43 base64url characters, the same
+  // pattern as MC-30's `measurement_connection_token`, so a bare token is refused too.
+  { rule: "measurement_connection_token", re: /\bhps_sync_[A-Za-z0-9_-]{43}\b/g },
   // Linear time: the scheme may start only where no scheme character precedes it, and every
   // part is bounded, so a long dotted or kebab-case run is not re-scanned from each position.
   { rule: "url_credentials", re: /(?<![a-z0-9+.-])[a-z][a-z0-9+.-]{0,31}:\/\/[^\s/:@'"`]{1,256}:[^\s/@'"`]{1,256}@/gi },
@@ -208,6 +214,7 @@ export function scanRefusalText(h: ScanHit): string {
     supabase_secret_key: "Supabase 비밀 키",
     github_token: "GitHub 토큰",
     aws_access_key: "AWS 키",
+    measurement_connection_token: "HypeProof 측정 연결 토큰",
     url_credentials: "주소 안의 아이디·비밀번호",
     bearer_token: "인증 토큰",
     secret_assignment: "비밀값처럼 보이는 설정",

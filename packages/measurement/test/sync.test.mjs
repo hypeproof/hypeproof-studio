@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const exec = promisify(execFile);
-import { SessionSync,projectId,digestOf,makeSnapshots,validateServer,SyncHttpError } from '../dist/sync.mjs';
+import { SessionSync,projectId,digestOf,makeSnapshots,validateServer,SyncHttpError,hash } from '../dist/sync.mjs';
 import { parseLocalTranscript,parseLocalTranscriptFile } from '../dist/adapters.mjs';
 const at=Date.now();
 const msg=(text,role='user')=>({type:'response_item',timestamp:new Date(at).toISOString(),payload:{type:'message',role,content:[{type:'input_text',text}]}});
@@ -98,6 +98,21 @@ test('results CLI reads scoped server list and verified detail, preserves held s
  await assert.rejects(exec(process.execPath,[cli,'results','--id',id,'--state',f.root]),e=>{const body=JSON.parse(e.stdout);return e.code===1&&body.status===410&&body.code==='snapshot_deleted'&&!e.stdout.includes('x'.repeat(40));});
 });
 
+test('stop pauses capture on every platform; only macOS removes its LaunchAgent, before pausing',async t=>{
+ const f=await fixture(t);const cli=new URL('../dist/cli.mjs',import.meta.url).pathname;
+ // A fake launchctl on PATH and a temporary HOME keep this hermetic on a real Mac too.
+ const bin=join(f.dir,'bin'),log=join(f.dir,'launchctl.log'),seen=join(f.dir,'config-at-bootout.json');await mkdir(bin);
+ await writeFile(join(bin,'launchctl'),`#!/bin/sh\ncp '${join(f.root,'records',hash('config')+'.json')}' '${seen}'\necho "$@" >> '${log}'\n`,{mode:0o755});
+ const stop=platform=>exec(process.execPath,['--import',`data:text/javascript,Object.defineProperty(process,'platform',{value:'${platform}'})`,cli,'stop','--state',f.root],{env:{...process.env,HOME:f.home,PATH:bin+':'+process.env.PATH}});
+ assert.deepEqual(JSON.parse((await stop('linux')).stdout),{enabled:false});assert.equal((await f.sync.status()).enabled,false);
+ await assert.rejects(readFile(log),{code:'ENOENT'});
+ await f.sync.connect({server:f.origin,token:'x'.repeat(40),projects:[f.project]});assert.equal((await f.sync.status()).enabled,true);
+ const label='xyz.hypeproof.measurement.'+hash(f.root).slice(0,12),plist=join(f.home,'Library/LaunchAgents',label+'.plist');
+ await mkdir(join(f.home,'Library/LaunchAgents'),{recursive:true});await writeFile(plist,'<plist/>');
+ assert.deepEqual(JSON.parse((await stop('darwin')).stdout),{enabled:false});assert.equal((await f.sync.status()).enabled,false);
+ assert.equal(await readFile(log,'utf8'),`bootout gui/${process.getuid()}/${label}\n`);await assert.rejects(stat(plist),{code:'ENOENT'});
+ assert.equal(JSON.parse(JSON.parse(await readFile(seen,'utf8')).value).enabled,true);
+});
 test('results fail closed on malformed lists and digest corruption; offline is an explicit error',async t=>{
  const f=await fixture(t);await seedLegacy(f);await f.sync.tick();
  f.workbench({sessions:[],assessments:{},actions:[],comparisons:[]});await assert.rejects(f.sync.results(),/invalid_server_results/);

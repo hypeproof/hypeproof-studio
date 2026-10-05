@@ -1,6 +1,6 @@
 # HypeProof measurement package
 
-Codex and Claude Code → local observer → compact immutable event deltas → member server → evidence review. Version 0.3.4 captures execution evidence without sending whole transcripts or running a model. Existing historical snapshot readers and `results` remain compatible.
+Codex and Claude Code → local observer → compact immutable event deltas → member server → evidence review. Version 0.3.5 captures execution evidence without sending whole transcripts or running a model. Existing historical snapshot readers and `results` remain compatible.
 
 ## Who installs
 
@@ -14,7 +14,7 @@ Node 22+ is required. Update your studio clone first (`git pull --ff-only`); old
 cd packages/measurement
 npm ci
 npm pack
-npm install -g ./hypeproof-measurement-0.3.4.tgz
+npm install -g ./hypeproof-measurement-0.3.5.tgz
 hypeproof-measure projects --project /absolute/path/to/project
 ```
 
@@ -33,7 +33,7 @@ The existing macOS LaunchAgent runs one cycle every 30 seconds after the prior c
 
 ### Linux and Windows: run `watch` under a supervisor
 
-`install-service` and `stop` are macOS only. On Linux and Windows both exit with `service_install_requires_macos_use_watch` and change nothing, so `stop` does not pause capture there; stopping the supervisor does. `watch` is the same 30-second loop the LaunchAgent runs. The supervisor starts it by absolute paths because it does not load your shell `PATH` (nvm, npm prefix).
+`install-service` is macOS only; on Linux and Windows it exits with `service_install_requires_macos_use_watch` and changes nothing. Since 0.3.5 `stop` pauses capture on every platform: the supervised `watch` keeps running, but each cycle reports `disconnected` and captures nothing until you `connect` again. If a cycle is running at that moment, `stop` exits with `storage_busy`; run it again. Removing the supervisor (below) is a separate step. Before 0.3.5 `stop` failed on Linux and Windows without pausing. `watch` is the same 30-second loop the LaunchAgent runs. The supervisor starts it by absolute paths because it does not load your shell `PATH` (nvm, npm prefix).
 
 Linux (systemd user service), after `connect`:
 
@@ -99,7 +99,7 @@ hypeproof-measure observations --id UUID      # online captured task/activity de
 hypeproof-measure results                    # saved review/results list
 hypeproof-measure results --id SNAPSHOT_UUID  # verified frozen review source + result
 hypeproof-measure records                    # historical imported snapshot receipts
-hypeproof-measure stop                       # macOS: stop service and pause collection
+hypeproof-measure stop                       # pause collection; on macOS also stop the service
 ```
 
 `observations` and `results` only read the server. They remain available while capture is paused. Offline or revoked access fails explicitly; no stale-result fallback or review write occurs. Open the member page to select a task, freeze its review source, review the evidence, and record an interpretation. Receipt acceptance proves transfer, not task success, independent human behavior, capability or improvement.

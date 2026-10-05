@@ -26,6 +26,7 @@ const { CR_SURFACES, CR_TEST_ORIGIN_ROUTE, CR_TEST_ORIGIN_SESSION_ROUTE, CR_TEST
 const { CURRICULUM_ADMIN_ROUTES } = await import("../src/routes/curriculum-admin.ts");
 const { issue, issueIssuer } = await import("../src/lib/tokens.ts");
 const { scrubSecrets } = await import("../src/lib/scrub-secrets.ts");
+const { scrubSecrets: scrubShell } = await import("../../extensions/hypeproof-chat/src/shellPolicy.ts");
 const { redactText } = await import("../src/lib/measurement-core/local-record.ts");
 
 const D1_MODE = process.argv.includes("--d1");
@@ -190,11 +191,14 @@ async function plantedSecrets() {
     student_token: ["hypeproof_token", `fetch("/x", { headers: { a: "${student}" } });`],
     issuer_token: ["hypeproof_token", `const t = "${issuerTok}";`],
     issuer_assignment: ["hypeproof_token", `HYPEPROOF_TOKEN = "${issuerTok}";`],
+    // A bare Lab measurement connection token (#1377) is refused; code naming only its prefix is not.
+    measurement_token: ["measurement_connection_token", `const t = "${"hps_" + "sync_"}${"A1b2_-".repeat(7)}C";`],
+    measurement_prefix_ok: [null, `const prefix = "${"hps_" + "sync_"}";`],
     anon_ok: [null, `const supabaseKey = "${jwt({ iss: "supabase", ref: "abcdefghijklmnop", role: "anon", iat: 1, exp: 2 })}";`],
   };
 }
 
-await test("CR-T17 scan: one planted key per LLMProvider, a Supabase service key, a student and an issuer token (bare and assigned) are refused; a Supabase anon key is not", async () => {
+await test("CR-T17 scan: one planted key per LLMProvider, a Supabase service key, a student and an issuer token (bare and assigned) and a measurement connection token are refused; a Supabase anon key is not; every pattern of the existing lists is refused", async () => {
   const ctx = { projectId: "prj-0000000000000000", testOrigin: "http://prj-0000000000000000.test.invalid" };
   const env = readFileSync(new URL("../src/env.ts", import.meta.url), "utf8");
   const providers = /export type LLMProvider = ([^;]+);/.exec(env)[1].match(/"([a-z]+)"/g).map((s) => s.slice(1, -1));
@@ -209,12 +213,50 @@ await test("CR-T17 scan: one planted key per LLMProvider, a Supabase service key
       assert.match(scanRefusalText(hits[0]), /app\.js 2번째 줄/);
     }
   }
-  // Superset of the existing lists: every sample they mask, the publish scan refuses.
-  const theirs = [`gh${"p"}_${"A".repeat(36)}`, `AKIA${"ABCDEFGHIJKLMNOP"}`, "https://user:pass@example.com/x", "API_KEY=abcdefghijkl", "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----", `Bearer ${"c".repeat(30)}`];
-  for (const s of theirs) {
-    const masked = scrubSecrets(s) !== s || redactText(s).text !== s;
-    assert.ok(masked, `control: an existing list masks ${s.slice(0, 12)}`);
-    assert.ok(scanFile("a.js", s, ctx).length > 0, `the publish scan misses what an existing list masks: ${s.slice(0, 12)}`);
+  // Superset of the existing lists, per pattern. Each list's pattern names are read from its
+  // source; every name needs a sample here that the list masks under that name and the publish
+  // scan refuses, so a pattern added to a list without a publish-scan rule fails this test.
+  const namesIn = (path, name) => {
+    const block = /const SECRET_PATTERNS[^\n]*\n([\s\S]*?)\n\];/.exec(readFileSync(new URL(path, import.meta.url), "utf8"))?.[1] ?? "";
+    return [...new Set([...block.matchAll(name)].map((m) => m[1]))];
+  };
+  const pem = "-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----";
+  const github = `gh${"p"}_${"A".repeat(36)}`;
+  const aws = `AKIA${"ABCDEFGHIJKLMNOP"}`;
+  const anthropic = `${"sk-" + "ant-"}api03-${"a".repeat(40)}`;
+  const mc30 = {
+    private_key: pem,
+    anthropic_key: anthropic,
+    openai_key: `${"sk-" + "proj-"}${"b".repeat(40)}`,
+    github_token: github,
+    aws_access_key: aws,
+    measurement_connection_token: `${"hps_" + "sync_"}${"A1b2_-".repeat(7)}C`,
+    bearer_token: `Bearer ${"c".repeat(30)}`,
+  };
+  const scrubbed = {
+    GITHUB_TOKEN: github,
+    ANTHROPIC_KEY: anthropic,
+    API_KEY: `${"sk-"}${"d".repeat(30)}`,
+    AWS_KEY: aws,
+    URL_CREDENTIALS: "https://user:pass@example.com/x",
+    HYPEPROOF_TOKEN: (await issue({ u: "cr-a", c: "canary-internal", p: "canary-sdk-contract" }, 1, TEST_SECRET)).token,
+    SECRET_ASSIGNMENT: "API_KEY=abcdefghijkl",
+    PRIVATE_KEY: pem,
+  };
+  const lists = [
+    ["MC-30", "../src/lib/measurement-core/local-record.ts", /^\s*\["([a-z_]+)",/gm, mc30, (s, n) => redactText(s).exclusions.some((e) => e.kind === n)],
+    ["scrubSecrets", "../src/lib/scrub-secrets.ts", /label: "([A-Z_]+)"/g, scrubbed, (s, n) => scrubSecrets(s).includes(`«${n} 가려짐»`)],
+    ["shellPolicy", "../../extensions/hypeproof-chat/src/shellPolicy.ts", /label: "([A-Z_]+)"/g, scrubbed, (s, n) => scrubShell(s).includes(`«${n} 가려짐»`)],
+  ];
+  for (const [list, path, name, samples, masks] of lists) {
+    const names = namesIn(path, name);
+    assert.ok(names.length >= 7, `control: ${list} pattern names are read from ${path}: ${names}`);
+    for (const n of names) {
+      const s = samples[n];
+      assert.ok(s, `${list} has a pattern ${n} with no sample here: add one, and a publish-scan rule if nothing refuses it`);
+      assert.ok(masks(s, n), `control: ${list} masks the ${n} sample as ${n}`);
+      assert.ok(scanFile("a.js", s, ctx).length > 0, `the publish scan misses what ${list} masks as ${n}`);
+    }
   }
   // The token rule's app-token branch (cr-gateway mints them): bound to this project and origin passes only.
   const app = (o) => `${b64u({ u: "a", c: "x", p: "y", role: "app", ...o })}.${"s".repeat(43)}`;
