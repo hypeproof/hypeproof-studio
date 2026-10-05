@@ -1,6 +1,6 @@
 # HypeProof measurement package
 
-Codex and Claude Code → local observer → compact immutable event deltas → member server → evidence review. Version 0.3.2 captures execution evidence without sending whole transcripts or running a model. Existing historical snapshot readers and `results` remain compatible.
+Codex and Claude Code → local observer → compact immutable event deltas → member server → evidence review. Version 0.3.3 captures execution evidence without sending whole transcripts or running a model. Existing historical snapshot readers and `results` remain compatible.
 
 ## Connect once
 
@@ -10,7 +10,7 @@ Node 22+ is required:
 cd packages/measurement
 npm ci
 npm pack
-npm install -g ./hypeproof-measurement-0.3.2.tgz
+npm install -g ./hypeproof-measurement-0.3.3.tgz
 hypeproof-measure projects --project /absolute/path/to/project
 ```
 
