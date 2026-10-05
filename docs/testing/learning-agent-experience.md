@@ -50,6 +50,13 @@ AE-T28의 선행 Service 계약(#1008)은 `worker/test/lesson-help-mode.test.mjs
 upstream 본문(system 제외) 동일, 영수증의 `performance=unobserved`. 이것은 실제 모델 행동·App·사람
 인수가 아니므로 AE-T28은 여전히 **NOT RUN**이다.
 
+AE-T34·AE-T37의 선행 Service·Chalk 계약(#1013 feedback-loop 첫 슬라이스, 스위치 `HPS_FEEDBACK_LOOP`) → 합성 공유로 검사:
+`worker/test/feedback-loop.test.mjs`·`worker/test/feedback-loop-d1.test.mjs`·`e2e/classroom/feedback-loop.mjs`. 범위: 사람 피드백 뒤
+학생의 수정·유지·보류와 이유(피드백 문구마다 한 번) · 이 강사에게 보낸 공유만 근거 · AI 응답만으로는 미관찰 · 사람 피드백 없음은
+미관찰 · 도움 요청 없는 '도움 받음'과 '혼자 해냄' 거절 · 공유 철회·만료·타 강사·타 수업 접근 거부 · 진행한 버전 불변, 다음 초안만
+시작 · 다음 후보·리허설 연결. 실행 기록·심은 결함: [Chalk 테스트 기록](chalk-authoring.md#feedback-loop-20261005). 실제 사람의 반론·
+강사 검토·학습 효과 관찰 없음 → AE-T34·AE-T37 여전히 **NOT RUN**.
+
 AE-T36은 종단 연결 검사다. 그 한 번의 성공으로 연결된 요구사항의 모든 부정·장애 조건을
 통과했다고 처리하지 않는다. 특히 AE-T06/07/10/11/33/35의 경계 검사가 별도로 필요하다.
 
