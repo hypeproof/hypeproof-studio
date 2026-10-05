@@ -3,18 +3,19 @@ import { recentLocalSessions } from './localSessionDiscovery.ts';
 import * as vscode from 'vscode';
 import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
-import { LocalReviewService } from './localReviewService.ts';
+import { LocalReviewService, curriculumDeleteQuestion, curriculumDeletedSentence } from './localReviewService.ts';
+import { LOCAL_RECORD_DIR } from './localRecordFile.ts';
 import { parseLocalTranscriptFile } from './localTranscript.ts';
 import type { LocalReviewRequest, LocalReviewState } from './localReviewProtocol.ts';
 
 export function registerLocalReview(context: vscode.ExtensionContext, render: (webview: vscode.Webview, dist: vscode.Uri) => string) {
-  const service = new LocalReviewService(join(context.globalStorageUri.fsPath, 'local-review-v1'));
+  const service = new LocalReviewService(join(context.globalStorageUri.fsPath, LOCAL_RECORD_DIR));
   let panel: vscode.WebviewPanel | undefined;
   let selected: string | undefined;
   let busy = false;
   const refresh = async (extra: Partial<LocalReviewState> = {}) => {
-    const { tasks, improvements } = await service.record.records();
-    await panel?.webview.postMessage({ type: 'localReviewState', tasks, improvements, storage: service.store.root,
+    const { tasks, improvements, curriculumTasks } = await service.reviewRecords();
+    await panel?.webview.postMessage({ type: 'localReviewState', tasks, improvements, curriculumTasks, storage: service.store.root,
       ...(selected ? { card: await service.card(selected) } : {}), ...extra } satisfies LocalReviewState);
   };
   const handle = async (msg: LocalReviewRequest) => {
@@ -42,6 +43,13 @@ export function registerLocalReview(context: vscode.ExtensionContext, render: (w
         if (decision !== 'Import task') { await refresh(); return; }
         selected = (await service.importParsed(parsed, parsed.project)).task.id;
       } else if (msg.action === 'open') { await service.card(msg.task); selected = msg.task; }
+      else if (msg.action === 'deleteCurriculum') {
+        // MC-27/MC-31 — the curriculum task records the list leaves out: asked first, with what stays.
+        const { curriculumTasks } = await service.reviewRecords();
+        if (curriculumTasks > 0 && await vscode.window.showWarningMessage(curriculumDeleteQuestion(curriculumTasks), { modal: true }, '지우기') === '지우기') {
+          await refresh({ notice: curriculumDeletedSentence(await service.deleteCurriculumTasks()) }); return;
+        }
+      }
       else if (msg.action !== 'load') {
         if (msg.task !== selected) throw Error('Select the task before editing it.');
         if (msg.action === 'purpose') await service.purpose(msg.task, msg.text);

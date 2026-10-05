@@ -293,6 +293,16 @@ test("SX-55 curriculum phase moves forward only, and every move is in the task h
   assert.equal(submitted.status, "open");
 });
 
+test("SX-55 createTask names who opened the task: the person unless an adapter says it did, and no one else", () => {
+  // Absent `by` keeps the line every task had before the task flow (the person).
+  assert.deepEqual(core.createTask({ id: "t1", project: "p", at: 1 }).history, [{ at: 1, by: "user", change: "created" }]);
+  assert.equal(core.createTask({ id: "t1", project: "p", at: 1, by: "user" }).history[0].by, "user");
+  // The App's task flow opens a task when a lesson first appears on screen, and says so.
+  assert.equal(core.createTask({ id: "t1", project: "p", at: 1, by: "adapter_explicit" }).history[0].by, "adapter_explicit");
+  // Negative: an actor the record does not know is refused, never stored on the created line.
+  for (const by of ["ai", "model", "adapter", "", null, 0]) throwsCode(() => core.createTask({ id: "t1", project: "p", at: 1, by }), "invalid_task");
+});
+
 test("SX-42 teacher_state defaults to unreviewed while no teacher record exists", async () => {
   const store = new Map();
   const record = new core.LocalRecord({
