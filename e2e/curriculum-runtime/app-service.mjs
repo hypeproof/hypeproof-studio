@@ -20,12 +20,29 @@
 //
 // Control routes (the spec only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
 // (cr-evidence: removes one participant session key behind the record's back, with no tombstone,
-// so a stored draft's reference stops resolving; publish mode only).
+// so a stored draft's reference stops resolving; publish mode only) · GET /__cr/records?project=<id>
+// (cr-e2e: every object of that Project's measurement-core record with its SHA-256 and, for a JSON
+// object, its parsed body; read-only, publish mode only).
+//
+// cr-e2e (#1400) adds the scripted model's part of the PRD §14 loop (loop-app.spec.ts and the dev
+// kit): `[cr:observe]` (open the preview and observe it once), `[cr:edit]` (make the element the
+// student picked bigger) and `[cr:apply]` (apply the team's decision as v1) answer with the whole
+// page in an html fence, as a coach does in the proxy runtime; the Evidence and Deck Builder skills
+// are answered from their prompts alone, like the Experiment skill.
 import "../../worker/test/harness/loader.mjs";
 import { createServer } from "node:http";
-import { writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const [portArg, tokenFile, switchArg, modeArg] = process.argv.slice(2);
+// cr-e2e (scripts/cr-dev-kit.sh --real-model): HPS_CR_MODEL=real lets the Service's own calls to
+// api.anthropic.com through with ANTHROPIC_API_KEY from this process's environment, instead of the
+// scripted coach. Every other outbound host stays blocked. Off by default; the specs never set it.
+const REAL_MODEL = process.env.HPS_CR_MODEL === "real";
+if (REAL_MODEL && !process.env.ANTHROPIC_API_KEY) {
+  console.error("HPS_CR_MODEL=real needs ANTHROPIC_API_KEY in the environment");
+  process.exit(2);
+}
 const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("../../worker/test/harness/index.mjs");
 const { getProfile } = await import("../../worker/src/profiles/index.ts");
 const { issue, issueIssuer } = await import("../../worker/src/lib/tokens.ts");
@@ -41,7 +58,7 @@ const env = createMockEnv({
   withSession: false,
   withRoster: false,
   environment: "development",
-  env: { LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "synthetic-no-live-key", OPENAI_API_KEY: undefined, ANTHROPIC_PROXY_URL: undefined },
+  env: { LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: REAL_MODEL ? process.env.ANTHROPIC_API_KEY : "synthetic-no-live-key", OPENAI_API_KEY: undefined, ANTHROPIC_PROXY_URL: undefined },
 });
 if (modeArg === "publish") {
   const { DatabaseSync } = await import("node:sqlite");
@@ -90,7 +107,7 @@ const recordLines = (text) => text.split("\n").filter((l) => /^- \[(console|exce
 const blocks = (content) => (typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : []);
 const textOf = (content) => blocks(content).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 
-const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [] };
+const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], observations: [], edits: [] };
 
 /** The next move for one upstream request: a tool call or the final text. */
 function agent(body) {
@@ -114,6 +131,9 @@ function agent(body) {
   if (/\[cr:propose\]/.test(userText)) return propose(msgs.slice(start + 1));
   // cr-skills (#1396): a curriculum skill run's prompt (skill, schema, context, input).
   if (/^## Skill\n[a-z-]+@\d/m.test(userText)) return { text: skillAnswer(userText) };
+  // cr-e2e (#1400): the §14 loop's own requests.
+  if (/\[cr:observe\]/.test(userText)) return observeOnce(body, msgs, msgs.slice(start + 1));
+  if (/\[cr:(edit|apply)\]/.test(userText)) return { text: editAnswer(userText, msgs.slice(0, Math.max(start, 0))) };
   const scenario = /\[cr:flow(?::([a-z0-9-]+))?\]/.exec(userText);
   if (!scenario) return { text: "[로컬 시험 응답] 받았어요." };
   const plant = scenario[1] ?? "";
@@ -212,6 +232,83 @@ function propose(after) {
   return { text: "[로컬 시험 응답] 조건 하나를 제안했어요. 확인해 주세요." };
 }
 
+// ── cr-e2e: the §14 loop's scripted coach ────────────────────────────────────
+
+/**
+ * Step 2: open the student's preview and observe it once. What the App sent back is kept as
+ * the model read it (header lines of the observation and whether a screenshot came with it).
+ */
+function observeOnce(body, msgs, after) {
+  const round = after.filter((m) => m.role === "assistant").length;
+  if (round === 0) {
+    const origin = /http:\/\/127\.0\.0\.1:\d+/.exec(JSON.stringify(body.system ?? "") + JSON.stringify(msgs))?.[0];
+    if (!origin) return { text: "[로컬 시험 응답] 미리보기 주소를 받지 못했어요." };
+    return { tool: "browser_navigate", input: { url: `${origin}/` } };
+  }
+  const last = blocks(after.at(-1)?.content).find((b) => b.type === "tool_result");
+  if (round === 1) return last?.is_error === true ? { text: "[로컬 시험 응답] 미리보기를 열지 못했어요." } : { tool: "browser_observe", input: {} };
+  const text = textOf(last?.content);
+  const field = (label) => new RegExp(`^${label}: (.*)$`, "m").exec(text)?.[1] ?? null;
+  state.observations.push({
+    at: Date.now(),
+    is_error: last?.is_error === true,
+    url: field("URL"),
+    route: field("경로"),
+    viewport: field("뷰포트"),
+    generation: field("문서 세대"),
+    version: /^산출물 버전: (sha256:[0-9a-f]{64})/m.exec(text)?.[1] ?? null,
+    refs: (text.match(/\[ref=e\d+\]/g) ?? []).length,
+    buttons: [...text.matchAll(/\[ref=e\d+\] button "([^"]+)"/g)].map((m) => m[1]),
+    screenshot: blocks(last?.content).some((b) => b.type === "image" || b.type === "image_url"),
+  });
+  return { text: "[로컬 시험 응답] 지금 화면을 봤어요." };
+}
+
+const KIOSK = new URL("./fixtures/kiosk-practice/index.html", import.meta.url);
+/** The page the coach last wrote in this conversation (its own html fence), else the kiosk as it was handed out. */
+function lastPage(history) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role !== "assistant") continue;
+    const m = /```html\n([\s\S]*?)\n```/.exec(textOf(history[i].content));
+    if (m) return m[1];
+  }
+  // The App may send a clamped history; the coach's own last page is then the one it wrote last in this run.
+  return state.lastHtml ?? readFileSync(KIOSK, "utf8");
+}
+
+/**
+ * Step 3 (`[cr:edit]`): make the element the student picked bigger. The element is read from the
+ * payload the App put before the student's words (its HTML snippet's id); nothing is guessed when
+ * it is missing. Step 13 (`[cr:apply]`): the team's decision as v1, one more line on the drink
+ * screen. Both answer with the whole page, which the App saves as index.html.
+ */
+function editAnswer(userText, history) {
+  const base = lastPage(history);
+  const body = base.indexOf("<body");
+  let html;
+  if (/\[cr:edit\]/.test(userText)) {
+    const id = /^HTML(?: \(앞부분\))?:\n<[a-z][a-z0-9-]*\b[^>]*\bid="([^"]+)"/m.exec(userText)?.[1];
+    if (!id || body < 0) return "[로컬 시험 응답] 어느 요소를 고쳐야 할지 받지 못했어요.";
+    const open = new RegExp(`<([a-z][a-z0-9-]*)\\b([^>]*\\bid="${id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"[^>]*)>`);
+    const rest = base.slice(body);
+    if (!open.test(rest)) return `[로컬 시험 응답] ${id} 요소를 페이지에서 찾지 못했어요.`;
+    html = base.slice(0, body) + rest.replace(open, (_m, tag, attrs) => `<${tag}${attrs.replace(/\sclass="[^"]*"/, "")} class="big">`);
+    if (!html.includes(".big{")) html = html.replace("</head>", "  <style>.big{font-size:1.5em;padding:18px 32px}</style>\n</head>");
+    state.edits.push({ kind: "edit", element: id, at: Date.now() });
+    state.lastHtml = html;
+    return `[로컬 시험 응답] 고른 요소를 더 크게 고쳤어요.\n\`\`\`html\n${html}\n\`\`\``;
+  }
+  const label = '<label for="drink">음료 고르기</label>';
+  if (!base.includes(label)) return "[로컬 시험 응답] 음료 고르는 화면을 찾지 못했어요.";
+  html = base.replace(label, `${label}\n    <p class="hint">음료와 수량을 이 화면에서 한 번에 골라요.</p>`);
+  state.edits.push({ kind: "apply", at: Date.now() });
+  state.lastHtml = html;
+  return `[로컬 시험 응답] 결정대로 한 화면에서 고르게 고쳤어요.\n\`\`\`html\n${html}\n\`\`\``;
+}
+
+/** The v5 deck's slide titles (CR-54), for the Deck Builder's patches. */
+const SLIDE_TITLES = { 1: "문제·기회", 2: "제공 가치", 3: "해결 원리 — AI / Human / Safety", 4: "수익 구조와 임팩트", 5: "현장·고객 접근", 6: "기존 도움과 대안", 7: "재무·임팩트 지표", 8: "현재 성과와 다음 계획" };
+
 /**
  * cr-skills: the scripted model's answer to a skill prompt, computed only from the prompt it
  * received. "[cr:skill-bad]" in the input plants an answer that breaks the skill's rules.
@@ -232,6 +329,35 @@ function skillAnswer(userText) {
       procedure: ["새 버전을 공개한다", "다섯 명에게 주문을 부탁한다"],
       success_criteria: bad ? ["사람들이 좋아한다"] : ["5명 중 3명이 도움 없이 주문을 마친다"],
     }) + "\n```";
+  }
+  // cr-e2e: the Evidence skill sorts what the prompt's records say; every observation cites them.
+  if (tag.startsWith("evidence@")) {
+    const rec = context.experiment_records ?? {};
+    const sessions = Array.isArray(rec.sessions) ? rec.sessions : [];
+    const notes = Array.isArray(rec.notes) ? rec.notes : [];
+    const items = [];
+    if (sessions.length) {
+      const pages = sessions.reduce((n, s) => n + (Number(s.pages) || 0), 0);
+      const clicks = sessions.reduce((n, s) => n + (Number(s.clicks) || 0), 0);
+      items.push({ id: "o1", section: "observation", text: `참가 세션 ${sessions.length}개에서 화면을 ${pages}번 보고 ${clicks}번 눌렀다`, source_refs: [...sessions.map((s) => s.ref), ...sessions.flatMap((s) => (s.event_refs ?? []).slice(0, 10))] });
+    }
+    notes.forEach((n, i) => items.push({ id: `o${i + 2}`, section: "observation", text: String(n.text), source_refs: [n.ref] }));
+    if (notes.length) items.push({ id: "i1", section: "interpretation", text: "음료를 고르는 화면이 처음 쓰는 사람에게 낯설다", source_refs: [notes[0].ref] });
+    items.push({ id: "a1", section: "assumption", text: "음료와 수량을 한 화면에서 고르면 도움 없이 주문을 마칠 수 있다", source_refs: [] });
+    items.push({ id: "n1", section: "next_experiment", text: "한 화면 버전으로 다섯 명에게 주문을 부탁한다", source_refs: [] });
+    state.skills.at(-1).cited = items.flatMap((i) => i.source_refs);
+    return "```json\n" + JSON.stringify({ items }) + "\n```";
+  }
+  // cr-e2e: the Deck Builder patches only the slides the named decision affects, citing its usable evidence.
+  if (tag.startsWith("deck-builder@")) {
+    const input = JSON.parse(/^## Input\n(.*)$/m.exec(userText)?.[1] ?? "{}");
+    const d = (context.decisions ?? []).find((x) => x.id === input.decision_id);
+    if (!d) return "{}";
+    const usable = new Set((context.evidence_items ?? []).filter((i) => !i.pending_review && i.sources_real !== false && i.confidence !== "assumed").map((i) => i.id));
+    const refs = (d.evidence_refs ?? []).filter((r) => usable.has(r));
+    const patches = (d.affected_deck_slides ?? []).map((n) => ({ slide: n, title: SLIDE_TITLES[n] ?? `슬라이드 ${n}`, body: `${d.statement} — 근거 ${refs.length}개`, evidence_refs: refs }));
+    state.skills.at(-1).patches = patches.map((p) => ({ slide: p.slide, evidence_refs: p.evidence_refs }));
+    return "```json\n" + JSON.stringify({ patches, rationale: "결정이 바꾸는 슬라이드만 고쳤어요." }) + "\n```";
   }
   return "{}";
 }
@@ -265,6 +391,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (url.hostname === "api.anthropic.com") {
+    if (REAL_MODEL) return realFetch(input, init);
     const body = JSON.parse(init.body);
     if (url.pathname.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
     const move = agent(body);
@@ -275,10 +402,37 @@ globalThis.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
+// cr-e2e (scripts/cr-dev-kit.sh --phone): with a shared test origin (one host, an ngrok tunnel) the
+// tunnel reaches only the published runtime (`/l/…`); this Service's API and its control routes stay
+// on this machine. A request that came through a tunnel carries the tunnel's Host.
+const SHARED_HOST = (() => {
+  const t = process.env.HPS_TEST_ORIGIN;
+  if (!t || t.includes("{project}")) return null;
+  try {
+    return new URL(t).host.toLowerCase();
+  } catch {
+    return null;
+  }
+})();
+const isLoopback = (h) => !h || /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(h);
+
 const server = createServer(async (req, res) => {
   try {
+    if (req.url?.startsWith("/__cr/") && !isLoopback(req.headers.host)) return res.writeHead(404).end();
+    if (SHARED_HOST && (req.headers.host ?? "").toLowerCase() === SHARED_HOST && !(req.url ?? "").startsWith("/l/")) return res.writeHead(404).end();
     if (req.url === "/__cr/state") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(state));
-    if (req.url === "/__cr/reset") { state.requests = []; state.runs = {}; state.verify = []; state.skills = []; state.skillHeaders = []; return res.writeHead(204).end(); }
+    if (req.url === "/__cr/reset") { state.requests = []; state.runs = {}; state.verify = []; state.skills = []; state.skillHeaders = []; state.observations = []; state.edits = []; state.lastHtml = undefined; return res.writeHead(204).end(); }
+    if (req.url?.startsWith("/__cr/records") && modeArg === "publish") {
+      // cr-e2e: what the Service stored for one Project, read from the bucket itself (digests, and the JSON of each JSON object).
+      const project = new URL(req.url, "http://x").searchParams.get("project") ?? "";
+      const prefix = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/`;
+      const records = [...env.HPS_TRACES.map.entries()].filter(([k]) => project && k.startsWith(prefix)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, bytes]) => {
+        let json = null;
+        try { json = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* bytes, not JSON */ }
+        return { key: key.slice(prefix.length), sha256: createHash("sha256").update(bytes).digest("hex"), json };
+      });
+      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ prefix, records }));
+    }
     const parts = [];
     for await (const p of req) parts.push(p);
     const body = Buffer.concat(parts);
@@ -305,4 +459,4 @@ const server = createServer(async (req, res) => {
     res.end();
   }
 });
-server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} switch=${switchArg}`));
+server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} switch=${switchArg} model=${REAL_MODEL ? "real" : "scripted"}`));
