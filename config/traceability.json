@@ -4001,6 +4001,9 @@
           "path": "worker/test/chalk-feedback.test.mjs"
         },
         {
+          "path": "worker/test/chalk-plan-units.test.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
         }
       ]
