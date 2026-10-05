@@ -5,12 +5,16 @@
 //   1. `learningState` (src/learningStateHelpers.ts) closes completion by phase, and keeps the
 //      gate's own `missing` list for region A in every phase;
 //   2. region A's check marks read only that list (webview-ui/src/missionHeaderLogic.ts);
-//   3. the host CALLS the flow at each moment the design names. STATE.md's finding was exactly
-//      "the transition table shipped, the caller did not", so the callers are checked first.
-//      Static, like test/cr-host.smoke.mjs: ChatPanelProvider cannot load without VS Code;
-//   4. the flow's rules (src/taskFlowHelpers.ts), pure;
+//   3. the host CALLS the flow at each moment the design names, keys the record like the events,
+//      and says what the student must be told. STATE.md's finding was exactly "the transition
+//      table shipped, the caller did not", so the callers are checked first. Static, like
+//      test/cr-host.smoke.mjs: ChatPanelProvider cannot load without VS Code. Every static check
+//      also runs on a planted provider that must fail it;
+//   4. the flow's rules (src/taskFlowHelpers.ts), pure: the transition table with the step gate,
+//      the record id, and the notice the host shows;
 //   5. the same rules on the App's real record store (FileRecordStorage on a temp dir), read
-//      back through a fresh instance, as a restarted extension host would;
+//      back through a fresh instance, as a restarted extension host would: a gated jump refused,
+//      a start that a lost signal cannot undo, two seats on one record kept apart;
 //   6. the local review list does not offer a task it cannot open;
 //   7. the rendered region A marks and region D line (test/sx-render.mjs, real components).
 //
@@ -24,7 +28,7 @@
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -147,18 +151,79 @@ function submitOrder(text) {
   return { body, ok: gate > 0 && refuse > gate && move > refuse };
 }
 
-await check("host: the task opens where the learning state is computed, and its phase is what is sent", () => {
-  const body = between(provider, "private async postLearningState()", "private taskFlowNotice");
-  assert.match(body, /screenFlow\(await this\.runTaskFlow\(\{ kind: 'seen' \}, recorder, profile\), this\.taskFlowLast, task\)/, "postLearningState never opens the task, or ignores the last phase it read");
-  assert.match(body, /phase: shown\.phase, currentStep: shown\.current_step/, "the stored phase is not what the screen gets");
-  assert.match(between(provider, "private async runTaskFlow(", "private async recordStepStart("), /this\.taskFlowLast = \{ taskId, curriculum: outcome\.curriculum \};/, "a successful read is not remembered for a busy record");
-});
+/**
+ * A static host check: `rule(text)` names what is wrong with one source text, or returns null.
+ * It runs on the real source, then on each planted copy, which it must refuse — a rule that
+ * passes a provider with the defect planted counts nothing.
+ */
+async function hostCheck(name, source, rule, plants) {
+  await check(name, () => {
+    const problem = rule(source);
+    assert.equal(problem, null, problem ?? "");
+    for (const [from, to] of plants) {
+      assert.ok(source.includes(from), `the planted defect did not apply (${from.slice(0, 70)}) — the check proves nothing`);
+      assert.notEqual(rule(source.replace(from, to)), null, `a source planted with "${to.slice(0, 70)}" passed`);
+    }
+  });
+}
+const lacks = (text, pattern, why) => (pattern.test(text) ? null : why);
+const postBody = (text) => between(text, "private async postLearningState()", "private taskFlowNotice");
+const targetBody = (text) => between(text, "private taskFlowTarget(", "private async runTaskFlow(");
+const runBody = (text) => between(text, "private async runTaskFlow(", "private async recordStepStart(");
 
-await check("host: a submit moves the task only after the gate is judged again on the host", () => {
-  const { body, ok } = submitOrder(provider);
-  assert.ok(ok, "the submit handler moves the task before (or without) re-judging the gate");
-  assert.match(body, /if \(msg\.task !== current\)/, "a submit naming another task would move this one");
-});
+await hostCheck(
+  "host: the task opens where the learning state is computed, and its stored phase is what is sent",
+  provider,
+  (text) =>
+    lacks(postBody(text), /const target = this\.taskFlowTarget\(recorder, profile\);\s*const shown = target \? screenFlow\(await this\.runTaskFlow\(\{ kind: 'seen' \}, recorder, profile\), this\.taskFlowLast, target\.recordId\) : null;/, "postLearningState never opens the task, or reads the last phase of another record") ??
+    lacks(postBody(text), /phase: shown\.phase, currentStep: shown\.current_step/, "the stored phase is not what the screen gets") ??
+    lacks(runBody(text), /this\.taskFlowLast = \{ recordId: target\.recordId, curriculum: outcome\.curriculum \};/, "a successful read is not remembered for a busy record"),
+  [
+    ["this.taskFlowLast, target.recordId) : null;", "this.taskFlowLast, task) : null;"],
+    ["this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };", ""],
+  ],
+);
+
+await hostCheck(
+  "host: the notice is read, cleared and sent with the state it explains (postLearningState)",
+  provider,
+  (text) =>
+    lacks(postBody(text), /const notice = this\.taskFlowNotice;\s*this\.taskFlowNotice = null;[\s\S]*learningState\(\{[\s\S]*\bnotice,\s*\}\)/, "the waiting notice never reaches the screen, or is said twice"),
+  [
+    // (h) the notice is dropped before it is sent.
+    ["const notice = this.taskFlowNotice;\n    this.taskFlowNotice = null;", "const notice = null;"],
+    // the notice is read but never cleared: it would be said again with every later state.
+    ["const notice = this.taskFlowNotice;\n    this.taskFlowNotice = null;", "const notice = this.taskFlowNotice;"],
+  ],
+);
+
+await hostCheck(
+  "host: every task-flow result goes through flowNotice with the line still waiting",
+  provider,
+  (text) =>
+    lacks(runBody(text), /this\.taskFlowNotice = flowNotice\(this\.taskFlowNotice, signal, \{ outcome \}\);/, "a refused submit is never said beside the button") ??
+    lacks(runBody(text), /catch \(error\) \{\s*this\.taskFlowNotice = flowNotice\(this\.taskFlowNotice, signal, \{ error: flowErrorCode\(error\) \}\);/, "a store failure is not said, or replaces the line still waiting"),
+  [
+    // (f) the outcome is never turned into a notice: "아직 시작 전이라 제출할 수 없어요" is lost.
+    ["this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });", ""],
+    // (b) a failure forgets the line still waiting: the refresh after a failed submit overwrites it.
+    ["flowNotice(this.taskFlowNotice, signal, { error:", "flowNotice(null, signal, { error:"],
+  ],
+);
+
+await hostCheck(
+  "host: a submit moves the task only after the gate is judged again on the host",
+  provider,
+  (text) => {
+    const { body, ok } = submitOrder(text);
+    return (ok ? null : "the submit handler moves the task before (or without) re-judging the gate") ?? lacks(body, /if \(msg\.task !== current\)/, "a submit naming another task would move this one");
+  },
+  [
+    // The move now comes first: the same order check must refuse it.
+    ["case 'submitTask': {", "case 'submitTask': { await this.runTaskFlow({ kind: 'submit' }, recorder, profile);"],
+    ["if (msg.task !== current) { await this.postLearningState(); return; }", ""],
+  ],
+);
 
 await check("host: the student's learning event and a coach turn that answered both count as work", () => {
   assert.match(between(provider, "case 'learningEvent': {", "case 'learningDrawer':"), /recordLearningEvent\(made\.event\)[\s\S]*runTaskFlow\(\{ kind: 'work' \}/);
@@ -169,32 +234,62 @@ await check("host: the student's learning event and a coach turn that answered b
   );
 });
 
-await check("host: starting a step records it; marking a step done moves nothing in the flow", () => {
-  const body = between(provider, 'case "lessonStep": {', 'case "lessonFocus": {');
-  assert.match(body, /if \(signal\.status === "in_progress"\) void this\.recordStepStart\(signal\.step_id\)/);
-});
+await hostCheck(
+  "host: starting a step asks the flow, and a moved step is redrawn; marking a step done moves nothing",
+  provider,
+  (text) =>
+    lacks(between(text, 'case "lessonStep": {', 'case "lessonFocus": {'), /if \(signal\.status === "in_progress"\) void this\.recordStepStart\(signal\.step_id\)/, "a started step never reaches the flow") ??
+    lacks(between(text, "private async recordStepStart(", "private view?"), /runTaskFlow\(\{ kind: 'start_step', stepId \}[\s\S]*if \(flow\?\.changed \|\| this\.taskFlowNotice\) await this\.postLearningState\(\);/, "a step start is stored but never redrawn"),
+  [
+    ['if (signal.status === "in_progress") void this.recordStepStart(signal.step_id)', 'if (false) void this.recordStepStart(signal.step_id)'],
+    // M5 — the step start's redraw is gone.
+    ["if (flow?.changed || this.taskFlowNotice) await this.postLearningState();\n  }", "\n  }"],
+  ],
+);
 
-await check("host: the flow runs on the record the local review already uses, under its lock (SX-48)", () => {
-  const body = between(provider, "private async runTaskFlow(", "private async recordStepStart(");
-  assert.match(body, /this\.crRecordHandle\(\)/, "the flow opened a store of its own");
-  assert.match(body, /store\.exclusive\(\(\) => applyTaskFlow\(/, "the flow writes outside the record's lock");
-  assert.match(body, /if \(!lesson \|\| recorder\.batch\.format !== 'hps-observation\/2'\) return null;/, "a seat without a mission or without /2 runs the flow");
-});
+await hostCheck(
+  "host: the flow runs on the record the local review already uses, under its lock (SX-48), on this seat's own events",
+  provider,
+  (text) =>
+    lacks(runBody(text), /this\.crRecordHandle\(\)/, "the flow opened a store of its own") ??
+    lacks(runBody(text), /store\.exclusive\(\(\) => applyTaskFlow\(record, \{ \.\.\.target, signal, events: recorder\.batch\.events, at: Date\.now\(\) \}\)\)/, "the flow writes outside the record's lock, or judges the start and the step gates on something other than this recorder's batch") ??
+    lacks(targetBody(text), /if \(!lesson \|\| recorder\.batch\.format !== 'hps-observation\/2'\) return null;/, "a seat without a mission or without /2 runs the flow"),
+  [
+    // M2 — the start and the gates are judged on nothing: a seat that worked reopens as not started.
+    ["signal, events: recorder.batch.events, at: Date.now()", "signal, events: [], at: Date.now()"],
+    ["if (!lesson || recorder.batch.format !== 'hps-observation/2') return null;", "if (!lesson) return null;"],
+  ],
+);
 
-await check("static checks count something: a planted provider that moves before judging fails", () => {
-  // Swap the two lines: the move now comes first. The same order check must refuse it.
-  const planted = provider.replace("const verdict = acceptSubmit({", "const verdictLater = 0; const verdict = acceptSubmit({").replace(
-    "const flow = recorder ? await this.runTaskFlow({ kind: 'submit' }, recorder, profile) : null;",
-    "",
-  ).replace("case 'submitTask': {", "case 'submitTask': { await this.runTaskFlow({ kind: 'submit' }, recorder, profile);");
-  assert.notEqual(planted, provider, "the planted defect did not apply — the check below proves nothing");
-  assert.equal(submitOrder(planted).ok, false, "a handler that moves before judging passed the order check");
-});
+await hostCheck(
+  "host: the record id carries the observation batch the gate reads and this folder",
+  provider,
+  (text) =>
+    lacks(targetBody(text), /const \{ format, scope, program \} = recorder\.batch;\s*return \{ lesson, taskId, recordId: taskRecordIdOf\(taskId, \{ workspace: this\.context\.storageUri\?\.toString\(\) \?\? '', format, scope, program \}\) \};/, "the record is keyed without the seat's observation scope or the folder: another seat reads this task's phase"),
+  [
+    ["recordId: taskRecordIdOf(taskId, {", "recordId: taskId, unused: ({"],
+    ["workspace: this.context.storageUri?.toString() ?? ''", "workspace: ''"],
+  ],
+);
+
+const reviewPanel = readFileSync(new URL("../src/localReviewPanel.ts", import.meta.url), "utf8");
+await hostCheck(
+  "review panel: the list it shows comes from reviewRecords",
+  reviewPanel,
+  (text) => lacks(between(text, "const refresh = async", "const handle = async"), /await service\.reviewRecords\(\)/, "the review panel lists the raw record again"),
+  // M1 — the panel reads the raw record: the curriculum task is listed and fails when clicked.
+  [["await service.reviewRecords()", "await service.record.records()"]],
+);
 
 // ── 4. The flow's rules, pure ──────────────────────────────────────────────────
 
 const flow = await load("../src/taskFlowHelpers.ts");
 const lesson = flow?.flowLessonOf(LESSON) ?? null;
+/** Two seats on one OS account: the same folder, two observation scopes (two tokens). */
+const SEAT_A = { workspace: "file:///ws/globalbuddy", format: "hps-observation/2", scope: "a".repeat(64), program: "canary-sdk-contract" };
+const SEAT_B = { ...SEAT_A, scope: "b".repeat(64) };
+const RECORD = flow ? flow.taskRecordIdOf(TASK, SEAT_A) : "";
+const curriculumAt = (phase, current_step = "expect") => ({ module: { course_id: "globalbuddy", version: LESSON.version, sha256: LESSON.sha256 }, week: 3, phase, current_step, steps: {} });
 
 if (flow) {
   await check("SX-01 negative: a design file without a mission starts no task flow", () => {
@@ -210,25 +305,60 @@ if (flow) {
     assert.equal(flow.flowLessonOf({ ...LESSON, content: { ...week3, learning: { ...week3.learning, week: 0 } } }), null);
   });
 
-  await check("decideFlow: the transition table, both directions", () => {
-    const at = (phase, current_step = "expect") => ({ module: { course_id: "globalbuddy", version: LESSON.version, sha256: LESSON.sha256 }, week: 3, phase, current_step, steps: {} });
-    assert.deepEqual(flow.decideFlow(at("assigned"), { kind: "work" }, lesson), { kind: "patch", patch: { phase: "working" } });
-    assert.deepEqual(flow.decideFlow(at("working"), { kind: "work" }, lesson), { kind: "none" });
-    assert.deepEqual(flow.decideFlow(at("working"), { kind: "submit" }, lesson), { kind: "patch", patch: { phase: "submitted" } });
-    assert.deepEqual(flow.decideFlow(at("assigned"), { kind: "submit" }, lesson), { kind: "refused", code: "not_started" });
-    assert.deepEqual(flow.decideFlow(at("submitted"), { kind: "submit" }, lesson), { kind: "none" });
-    assert.deepEqual(flow.decideFlow(at("working"), { kind: "start_step", stepId: "test" }, lesson), { kind: "patch", patch: { current_step: "test" } });
-    assert.deepEqual(flow.decideFlow(at("working", "test"), { kind: "start_step", stepId: "test" }, lesson), { kind: "none" });
-    assert.deepEqual(flow.decideFlow(at("working"), { kind: "start_step", stepId: "없는단계" }, lesson), { kind: "refused", code: "unknown_step" });
-    assert.deepEqual(flow.decideFlow(at("working"), { kind: "seen" }, lesson), { kind: "none" });
+  await check("the flow reads each step's gate from the design, and refuses a gate no event can meet", () => {
+    assert.deepEqual(lesson.steps, week3.steps.map((s) => (s.gate ? { id: s.id, gate: s.gate } : { id: s.id })), "a step's gate was lost: the step could be left without it");
+    const bad = { ...week3, steps: week3.steps.map((s, i) => (i === 0 ? { ...s, gate: "criterion_written" } : s)) };
+    assert.equal(flow.flowLessonOf({ ...LESSON, content: bad }), null, "a gate that is no learning event kind was kept: nothing could ever leave that step");
+  });
+
+  await check("decideFlow: the phase transitions, both directions", () => {
+    assert.deepEqual(flow.decideFlow(curriculumAt("assigned"), { kind: "work" }, lesson, []), { kind: "patch", patch: { phase: "working" } });
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "work" }, lesson, []), { kind: "none" });
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "submit" }, lesson, []), { kind: "patch", patch: { phase: "submitted" } });
+    assert.deepEqual(flow.decideFlow(curriculumAt("assigned"), { kind: "submit" }, lesson, []), { kind: "refused", code: "not_started" });
+    assert.deepEqual(flow.decideFlow(curriculumAt("submitted"), { kind: "submit" }, lesson, []), { kind: "none" });
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "seen" }, lesson, []), { kind: "none" });
+  });
+
+  await check("SX-55 step gate positive: forward past a gate the student met moves; back always moves (SX-16)", () => {
+    seq = 0;
+    const mine = [criterion()];
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "start_step", stepId: "build" }, lesson, mine), { kind: "patch", patch: { current_step: "build" } }, "the student's criterion meets expect's gate and the move was refused: too strict");
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "start_step", stepId: "test" }, lesson, mine), { kind: "patch", patch: { current_step: "test" } }, "build has no gate, so test is reachable");
+    assert.deepEqual(flow.decideFlow(curriculumAt("working", "test"), { kind: "start_step", stepId: "expect" }, lesson, []), { kind: "patch", patch: { current_step: "expect" } }, "going back was refused");
+    // Back to a step that is not the first, with no event at all: still allowed, no gate is asked.
+    assert.deepEqual(flow.decideFlow(curriculumAt("working", "retest"), { kind: "start_step", stepId: "build" }, lesson, []), { kind: "patch", patch: { current_step: "build" } }, "going back was judged like a forward move");
+    assert.deepEqual(flow.decideFlow(curriculumAt("working", "test"), { kind: "start_step", stepId: "test" }, lesson, mine), { kind: "none" });
+  });
+
+  await check("SX-55 step gate negative: no forward move past a gate the student's own event has not met", () => {
+    seq = 0;
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "start_step", stepId: "build" }, lesson, []), { kind: "refused", code: "gate_not_met", gate: "criterion_set" });
+    // A jump is judged on every step before the target, not only on the one being left.
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "start_step", stepId: "retest" }, lesson, [criterion()]), { kind: "refused", code: "gate_not_met", gate: "test_observed" });
+    assert.deepEqual(flow.decideFlow(curriculumAt("working", "diff"), { kind: "start_step", stepId: "retest" }, lesson, []), { kind: "refused", code: "gate_not_met", gate: "criterion_set" }, "a later stored step let a jump skip the earlier gates");
+    // The gate needs the STUDENT's event: a criterion the coach wrote is not theirs (SX-45).
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "start_step", stepId: "build" }, lesson, [{ ...criterion(), actor: "ai" }]), { kind: "refused", code: "gate_not_met", gate: "criterion_set" }, "an AI-authored criterion opened the student's gate");
+    assert.deepEqual(flow.decideFlow(curriculumAt("working"), { kind: "start_step", stepId: "없는단계" }, lesson, []), { kind: "refused", code: "unknown_step" });
+  });
+
+  await check("SX-55 step negative: a step moves only while working — not before any work, not after the submit", () => {
+    seq = 0;
+    const mine = [criterion()];
+    assert.deepEqual(flow.decideFlow(curriculumAt("assigned"), { kind: "start_step", stepId: "build" }, lesson, mine), { kind: "refused", code: "not_started" });
+    for (const phase of ["submitted", "reflected"]) {
+      for (const stepId of ["build", "expect", "retest"]) {
+        assert.deepEqual(flow.decideFlow(curriculumAt(phase, "test"), { kind: "start_step", stepId }, lesson, mine), { kind: "none" }, `${phase}: a step move to ${stepId} was decided`);
+      }
+    }
   });
 
   await check("SX-55 negative: no signal the host has moves a task to reflected (the boundary reflection, sx-p2)", () => {
-    const at = (phase) => ({ module: { course_id: "globalbuddy", version: LESSON.version, sha256: LESSON.sha256 }, week: 3, phase, current_step: "expect", steps: {} });
-    const signals = [{ kind: "seen" }, { kind: "work" }, { kind: "submit" }, { kind: "start_step", stepId: "retest" }];
+    seq = 0;
+    const signals = [{ kind: "seen" }, { kind: "work" }, { kind: "submit" }, { kind: "start_step", stepId: "build" }, { kind: "start_step", stepId: "retest" }];
     for (const phase of ["assigned", "working", "submitted"]) {
       for (const signal of signals) {
-        const d = flow.decideFlow(at(phase), signal, lesson);
+        const d = flow.decideFlow(curriculumAt(phase), signal, lesson, [criterion()]);
         assert.notEqual(d.kind === "patch" ? d.patch.phase : undefined, "reflected", `${phase} + ${signal.kind} reached reflected`);
       }
     }
@@ -239,13 +369,24 @@ if (flow) {
     assert.notEqual(flow.learningTaskIdOf("e".repeat(64), "a1b2c3d4"), flow.learningTaskIdOf("f".repeat(64), "a1b2c3d4"));
   });
 
-  await check("screenFlow: a record that could not be read shows the last phase read for the same task, never a default", () => {
-    const submitted = { module: { course_id: "globalbuddy", version: LESSON.version, sha256: LESSON.sha256 }, week: 3, phase: "submitted", current_step: "retest", steps: {} };
+  await check("record id: one record per seat and folder — named by the observation batch the gate reads", () => {
+    const a = flow.taskRecordIdOf(TASK, SEAT_A);
+    assert.equal(a, flow.taskRecordIdOf(TASK, { ...SEAT_A }), "the same seat in the same folder got two records");
+    assert.ok(a.startsWith(TASK + "."), "the record id no longer names the design's task");
+    assert.match(a, /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/, "the record store refuses this id (LocalRecord's id rule)");
+    for (const other of [SEAT_B, { ...SEAT_A, workspace: "file:///ws/other-folder" }, { ...SEAT_A, program: "other-program" }, { ...SEAT_A, format: "hps-observation/1" }]) {
+      assert.notEqual(flow.taskRecordIdOf(TASK, other), a, `a seat differing only in ${JSON.stringify(other)} shares the record`);
+    }
+    assert.notEqual(flow.taskRecordIdOf(flow.learningTaskIdOf("e".repeat(64), "a1b2c3d4"), SEAT_A), a, "two tasks of one seat share a record");
+  });
+
+  await check("screenFlow: a record that could not be read shows the last phase read for the same record, never a default", () => {
+    const submitted = { ...curriculumAt("submitted", "retest") };
     const working = { ...submitted, phase: "working" };
-    assert.equal(flow.screenFlow({ curriculum: working, changed: false }, { taskId: TASK, curriculum: submitted }, TASK), working, "a fresh read lost to a remembered one");
-    assert.equal(flow.screenFlow(null, { taskId: TASK, curriculum: submitted }, TASK), submitted, "a busy record put the completion button back on a submitted task");
-    assert.equal(flow.screenFlow(null, { taskId: "task-other", curriculum: submitted }, TASK), null, "another task's phase was shown for this one");
-    assert.equal(flow.screenFlow(null, null, TASK), null);
+    assert.equal(flow.screenFlow({ curriculum: working, changed: false }, { recordId: RECORD, curriculum: submitted }, RECORD), working, "a fresh read lost to a remembered one");
+    assert.equal(flow.screenFlow(null, { recordId: RECORD, curriculum: submitted }, RECORD), submitted, "a busy record put the completion button back on a submitted task");
+    assert.equal(flow.screenFlow(null, { recordId: flow.taskRecordIdOf(TASK, SEAT_B), curriculum: submitted }, RECORD), null, "another seat's phase was shown for this one");
+    assert.equal(flow.screenFlow(null, null, RECORD), null);
   });
 
   await check("startedBefore: only this task's learning event counts", () => {
@@ -253,6 +394,32 @@ if (flow) {
     assert.equal(flow.startedBefore([criterion()], TASK), true);
     assert.equal(flow.startedBefore([criterion()], "task-other"), false, "another task's event started this one");
     assert.equal(flow.startedBefore([ev("coach", { text: "안녕하세요" }), ev("artifact", { sha256: "a".repeat(64) })], TASK), false, "a coach message or an AI draft is not the student's work");
+  });
+
+  await check("notice: a submit the record could not store is said, and replaces the line still waiting", () => {
+    assert.equal(flow.flowNotice(null, { kind: "submit" }, { error: "storage_busy" }), "제출을 저장하지 못했어요 (storage_busy). 다시 한 번 눌러 주세요.");
+    assert.equal(flow.flowNotice("앞의 줄", { kind: "submit" }, { error: "storage_busy" }), flow.submitNotStoredSentence("storage_busy"));
+  });
+
+  await check("notice (b): the refresh after a failed submit keeps the submit's sentence; other failures are said", () => {
+    const waiting = flow.submitNotStoredSentence("storage_busy");
+    assert.equal(flow.flowNotice(waiting, { kind: "seen" }, { error: "storage_busy" }), waiting, "the refresh overwrote the sentence that says the submit was not stored");
+    assert.equal(flow.flowNotice(null, { kind: "seen" }, { error: "storage_busy" }), flow.flowNotStoredSentence("storage_busy"), "a failed read with nothing waiting went unsaid");
+    assert.equal(flow.flowNotice(null, { kind: "work" }, { error: "capacity_exceeded" }), "과제 진행 기록을 읽거나 저장하지 못했어요 (capacity_exceeded). 작업은 계속할 수 있어요.");
+  });
+
+  await check("notice (f): a submit refused before any work says what starts the task; nothing else adds a line", () => {
+    const answered = (refused) => ({ outcome: { curriculum: curriculumAt("assigned"), changed: false, ...(refused ? { refused } : {}) } });
+    assert.equal(flow.flowNotice(null, { kind: "submit" }, answered("not_started")), "아직 시작 전이라 제출할 수 없어요. 코치와 이야기하거나 기록을 남기면 시작돼요");
+    assert.equal(flow.flowNotice(null, { kind: "submit" }, answered()), null, "an accepted submit was told something");
+    assert.equal(flow.flowNotice(null, { kind: "start_step", stepId: "retest" }, answered("gate_not_met")), null, "a refused step start put an alert beside the completion button");
+    assert.equal(flow.flowNotice("남은 줄", { kind: "seen" }, answered()), "남은 줄", "a successful refresh dropped the line still waiting");
+  });
+
+  await check("notice: a failure is named by its code, never by a message or a path", () => {
+    assert.equal(flow.flowErrorCode(new Error("storage_busy")), "storage_busy");
+    assert.equal(flow.flowErrorCode(new Error("ENOENT: no such file, open '/Users/someone/x.json'")), "storage_failure");
+    assert.equal(flow.flowErrorCode("storage_busy"), "storage_failure");
   });
 }
 
@@ -268,12 +435,17 @@ try {
       const store = new FileRecordStorage(root);
       return { store, record: new LocalRecord(store) };
     };
-    const apply = (signal, at, started = false, taskId = TASK) => {
+    const apply = (signal, at, { events = [], taskId = TASK, recordId = RECORD } = {}) => {
       const { store, record } = open();
-      return store.exclusive(() => flow.applyTaskFlow(record, { taskId, lesson, signal, started, at }));
+      return store.exclusive(() => flow.applyTaskFlow(record, { taskId, recordId, lesson, signal, events, at }));
     };
-    const phases = async (taskId = TASK) =>
-      (await open().record.getTask(taskId)).history.filter((h) => h.change.startsWith("curriculum:phase:")).map((h) => h.change.slice("curriculum:phase:".length));
+    const stored = (recordId = RECORD) => open().record.getTask(recordId);
+    const phases = async (recordId = RECORD) =>
+      (await stored(recordId)).history.filter((h) => h.change.startsWith("curriculum:phase:")).map((h) => h.change.slice("curriculum:phase:".length));
+    seq = 0;
+    // The student's own criterion for this task: expect's gate.
+    const theirCriterion = criterion();
+    const forTask = (taskId, e = theirCriterion) => ({ ...e, task: taskId, context: { ...e.context, task: taskId } });
 
     await check("seen: the task opens once, as assigned on its first step, naming its module", async () => {
       const first = await apply({ kind: "seen" }, 1000);
@@ -282,6 +454,7 @@ try {
       assert.equal(first.curriculum.current_step, "expect");
       assert.equal(first.curriculum.week, 3);
       assert.deepEqual(first.curriculum.module, { course_id: "globalbuddy", version: LESSON.version, sha256: LESSON.sha256 });
+      assert.equal((await stored()).id, RECORD, "the record is not stored under this seat's id");
       const again = await apply({ kind: "seen" }, 1001);
       assert.equal(again.changed, false, "a screen refresh rewrote the record");
     });
@@ -301,8 +474,18 @@ try {
       assert.deepEqual(await phases(), ["assigned", "working"]);
     });
 
-    await check("step: starting a step records it; going back is allowed and keeps the earlier record", async () => {
-      const r = await apply({ kind: "start_step", stepId: "test" }, 1300);
+    await check("SX-55 step negative: a jump past gates nobody met is refused and stores nothing", async () => {
+      const r = await apply({ kind: "start_step", stepId: "retest" }, 1250);
+      assert.equal(r.refused, "gate_not_met");
+      assert.equal(r.changed, false, "a refused jump was written");
+      const task = await stored();
+      assert.equal(task.curriculum.current_step, "expect");
+      assert.ok(!task.history.some((h) => h.change.startsWith("curriculum:step:retest")), "the record says the student entered retest");
+    });
+
+    await check("step: past a met gate the step is recorded; going back is allowed and keeps the earlier record", async () => {
+      const r = await apply({ kind: "start_step", stepId: "test" }, 1300, { events: [theirCriterion] });
+      assert.equal(r.refused, undefined, "the student's own criterion did not open expect's gate: too strict");
       assert.equal(r.curriculum.current_step, "test");
       assert.equal(r.curriculum.steps.expect.left_at, 1300, "the step left has no left_at");
       const back = await apply({ kind: "start_step", stepId: "expect" }, 1400);
@@ -311,20 +494,22 @@ try {
       assert.equal(back.curriculum.steps.test.left_at, 1400);
     });
 
-    await check("step negative: a step that is not this lesson's is refused and not stored", async () => {
-      const r = await apply({ kind: "start_step", stepId: "없는단계" }, 1450);
+    await check("step negative: a step that is not this lesson's, or a gate met only by another task's event, moves nothing", async () => {
+      const r = await apply({ kind: "start_step", stepId: "없는단계" }, 1450, { events: [theirCriterion] });
       assert.equal(r.refused, "unknown_step");
       assert.equal(r.changed, false);
-      assert.equal((await open().record.getTask(TASK)).curriculum.current_step, "expect");
+      const foreign = await apply({ kind: "start_step", stepId: "build" }, 1460, { events: [forTask("task-other")] });
+      assert.equal(foreign.refused, "gate_not_met", "another task's criterion opened this task's gate");
+      assert.equal((await stored()).curriculum.current_step, "expect");
     });
 
     await check("SX-55: a submit while working moves to submitted, and a reload reads it back", async () => {
       const r = await apply({ kind: "submit" }, 1500);
       assert.equal(r.curriculum.phase, "submitted");
       assert.equal(r.curriculum.submitted_at, 1500);
-      const stored = await open().record.getTask(TASK);
-      assert.equal(stored.curriculum.phase, "submitted", "the submit did not survive a reload");
-      assert.equal(stored.status, "open", "the flow touched the work axis (Task.status, MC-23)");
+      const task = await stored();
+      assert.equal(task.curriculum.phase, "submitted", "the submit did not survive a reload");
+      assert.equal(task.status, "open", "the flow touched the work axis (Task.status, MC-23)");
       assert.deepEqual(await phases(), ["assigned", "working", "submitted"]);
     });
 
@@ -335,17 +520,71 @@ try {
       assert.deepEqual(await phases(), ["assigned", "working", "submitted"], "a second submit was recorded twice");
     });
 
-    await check("SX-55 negative: after the submit, nothing the host sends moves the phase", async () => {
-      for (const signal of [{ kind: "seen" }, { kind: "work" }, { kind: "submit" }, { kind: "start_step", stepId: "retest" }]) await apply(signal, 1700);
-      assert.equal((await open().record.getTask(TASK)).curriculum.phase, "submitted");
-      assert.deepEqual(await phases(), ["assigned", "working", "submitted"]);
+    await check("SX-55 negative: after the submit, nothing the host sends moves the phase or the step", async () => {
+      const before = (await stored()).history.length;
+      for (const signal of [{ kind: "seen" }, { kind: "work" }, { kind: "submit" }, { kind: "start_step", stepId: "build" }, { kind: "start_step", stepId: "retest" }]) {
+        await apply(signal, 1700, { events: [theirCriterion] });
+      }
+      const task = await stored();
+      assert.equal(task.curriculum.phase, "submitted");
+      assert.equal(task.curriculum.current_step, "expect", "a step was entered after the submit");
+      assert.equal(task.history.length, before, "something was written after the submit");
     });
 
     await check("started before: a task whose student already left a learning event opens as working", async () => {
       const other = flow.learningTaskIdOf("f".repeat(64), "zz000000");
-      const r = await apply({ kind: "seen" }, 1800, true, other);
+      const recordId = flow.taskRecordIdOf(other, SEAT_A);
+      const r = await apply({ kind: "seen" }, 1800, { taskId: other, recordId, events: [forTask(other)] });
       assert.equal(r.curriculum.phase, "working", "work already in the batch is shown as not started");
-      assert.deepEqual(await phases(other), ["working"]);
+      assert.deepEqual(await phases(recordId), ["working"]);
+    });
+
+    await check("SX-55: a lost `work` signal cannot leave a started task closed — the next refresh reads the event", async () => {
+      const level = flow.learningTaskIdOf("f".repeat(64), "lv000000");
+      const at = { taskId: level, recordId: flow.taskRecordIdOf(level, SEAT_A) };
+      const mine = [forTask(level)];
+      assert.equal((await apply({ kind: "seen" }, 1900, at)).curriculum.phase, "assigned");
+      // The student's criterion is in the batch, and the `work` write fails: another live Studio
+      // window holds the record's lock (this test's parent process stands in for it).
+      const lock = join(root, ".writer");
+      await mkdir(lock);
+      await writeFile(join(lock, "pid"), String(process.ppid));
+      try {
+        await assert.rejects(apply({ kind: "work" }, 1901, { ...at, events: mine }), /storage_busy/, "the lock did not hold — the check below proves nothing");
+      } finally {
+        await rm(lock, { recursive: true, force: true });
+      }
+      assert.equal((await stored(at.recordId)).curriculum.phase, "assigned", "the failed write was stored after all — the check below proves nothing");
+      const seen = await apply({ kind: "seen" }, 1902, { ...at, events: mine });
+      assert.equal(seen.curriculum.phase, "working", "a refresh with the student's criterion on record still reads 'not started'");
+      const state = learningState({ task: level, events: mine, completion: COMPLETION.slice(0, 1), phase: seen.curriculum.phase });
+      assert.equal(state.complete.ok, true, "the gate holds and the button is still closed");
+      const submit = await apply({ kind: "submit" }, 1903, { ...at, events: mine });
+      assert.equal(submit.refused, undefined, "the submit was refused as not started");
+      assert.deepEqual(await phases(at.recordId), ["assigned", "working", "submitted"]);
+    });
+
+    await check("two seats on one record: B never reads A's phase, and B's submit is its own", async () => {
+      const shared = flow.learningTaskIdOf("d".repeat(64), "a1b2c3d4");
+      const A = { taskId: shared, recordId: flow.taskRecordIdOf(shared, SEAT_A) };
+      const B = { taskId: shared, recordId: flow.taskRecordIdOf(shared, SEAT_B) };
+      const eventsA = [forTask(shared)];
+      await apply({ kind: "seen" }, 2000, A);
+      await apply({ kind: "work" }, 2001, { ...A, events: eventsA });
+      assert.equal((await apply({ kind: "submit" }, 2002, { ...A, events: eventsA })).curriculum.phase, "submitted");
+      // Seat B: another token on this OS account, so another observation batch with none of A's events.
+      const b = await apply({ kind: "seen" }, 2003, B);
+      assert.equal(b.curriculum.phase, "assigned", "seat B opened on seat A's submitted task");
+      const stateB = learningState({ task: shared, events: [], completion: COMPLETION.slice(0, 1), phase: b.curriculum.phase });
+      assert.equal(stateB.complete.ok, false);
+      assert.ok(stateB.complete.reasons.some((r) => r.includes("시작 전")), "region D and region A disagree about seat B");
+      assert.deepEqual(stateB.complete.missing.map((m) => m.item), ["c1"]);
+      assert.equal((await apply({ kind: "submit" }, 2004, B)).refused, "not_started");
+      await apply({ kind: "work" }, 2005, B);
+      assert.equal((await apply({ kind: "submit" }, 2006, B)).curriculum.phase, "submitted", "seat B cannot submit its own work");
+      assert.deepEqual(await phases(A.recordId), ["assigned", "working", "submitted"], "seat B's moves were written on seat A's record");
+      // Control: under the design's id alone (the old key) B would have read A's record, submitted.
+      assert.equal((await stored(A.recordId)).curriculum.phase, "submitted");
     });
 
     await check("SX-48: the flow writes only Task records — no new store, no new record kind", async () => {
@@ -371,7 +610,7 @@ try {
   ].map((r) => JSON.stringify(r)).join("\n");
   const service = new LocalReviewService(reviewRoot);
   const card = await service.import(transcript, "codex", "/project");
-  if (flow && lesson) await service.store.exclusive(() => flow.applyTaskFlow(service.record, { taskId: TASK, lesson, signal: { kind: "seen" }, started: false, at: 2000 }));
+  if (flow && lesson) await service.store.exclusive(() => flow.applyTaskFlow(service.record, { taskId: TASK, recordId: RECORD, lesson, signal: { kind: "seen" }, events: [], at: 2000 }));
 
   await check("review list: transcript tasks stay, the curriculum task it cannot open is left out", async () => {
     assert.equal(typeof service.reviewRecords, "function", "the review screen has no list that leaves curriculum tasks out");
@@ -381,8 +620,8 @@ try {
 
   await check("review list control: the record holds both, so the filter is what keeps it out", async () => {
     const all = (await service.record.records()).tasks.map((t) => t.id).sort();
-    assert.deepEqual(all, [card.task.id, TASK].sort(), "the curriculum task is not on the record — the check above proves nothing");
-    await assert.rejects(service.card(TASK), /import_incomplete/, "the review can open it after all, so it should be listed");
+    assert.deepEqual(all, [card.task.id, RECORD].sort(), "the curriculum task is not on the record — the check above proves nothing");
+    await assert.rejects(service.card(RECORD), /import_incomplete/, "the review can open it after all, so it should be listed");
   });
 } finally {
   await rm(reviewRoot, { recursive: true, force: true });

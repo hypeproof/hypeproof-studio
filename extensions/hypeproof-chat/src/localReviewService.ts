@@ -13,6 +13,9 @@ export class LocalReviewService {
    * The records this screen lists. A curriculum task (SX-55) lives on the same record: the chat
    * panel writes it, it has no transcript import, and `card()` cannot open it. It is left out of
    * this list instead of failing when clicked. Nothing is removed from the record itself.
+   * Open (MC-27 asks this list to leave nothing out): whether a curriculum task is listed here and
+   * how it is deleted. `deleteTask` cannot reach its learning events (the folder's observation
+   * batch), and the next screen refresh would open the task again from them.
    */
   async reviewRecords() {
     const records = await this.record.records();

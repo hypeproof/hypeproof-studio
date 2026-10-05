@@ -20,7 +20,7 @@ import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
-import {applyTaskFlow, flowLessonOf, learningTaskIdOf, screenFlow, startedBefore, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
+import {applyTaskFlow, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
 import type {TaskCurriculum} from '../../../worker/src/lib/measurement-core/local-record.ts';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
@@ -377,7 +377,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!recorder) return;
     const profile = await this.ensureProfile();
     const task = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
-    const shown = screenFlow(await this.runTaskFlow({ kind: 'seen' }, recorder, profile), this.taskFlowLast, task);
+    const target = this.taskFlowTarget(recorder, profile);
+    const shown = target ? screenFlow(await this.runTaskFlow({ kind: 'seen' }, recorder, profile), this.taskFlowLast, target.recordId) : null;
     // A notice is said once, with the state it explains.
     const notice = this.taskFlowNotice;
     this.taskFlowNotice = null;
@@ -394,7 +395,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** SX-55 — the last curriculum this host read, so a busy record does not reopen a submitted task on screen. */
-  private taskFlowLast: { taskId: string; curriculum: TaskCurriculum } | null = null;
+  private taskFlowLast: { recordId: string; curriculum: TaskCurriculum } | null = null;
 
   /**
    * SX-55 — the one task-flow line the student has to see, next to the completion button.
@@ -404,35 +405,51 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private taskFlowNotice: string | null = null;
 
   /**
-   * SX-55 — move this seat's task by one signal on the measurement-core record (the
-   * `hps-local-record/1` store the local review and CR-10 share; no new store, SX-48).
+   * SX-55 — the task this seat's flow runs on: the lesson, the design's task id (the one the
+   * learning events, the screen and the submit name) and the id its record is stored under,
+   * which adds the observation batch the gate reads and this folder (`taskRecordIdOf`), so a
+   * phase is never read next to another seat's or another folder's events.
    *
    * null when this seat runs no task flow: no `/2` learning recorder, or a lesson without a
-   * mission (SX-01 negative: then the flow does not start). A storage failure is turned into
-   * a notice and null, never into a phase nobody stored.
+   * mission (SX-01 negative: then the flow does not start).
    */
-  private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
+  private taskFlowTarget(recorder: NativeObservationRecorder, profile: ResolvedProfile | null): { lesson: FlowLesson; taskId: string; recordId: string } | null {
     const lesson = flowLessonOf(profile?.lesson);
     if (!lesson || recorder.batch.format !== 'hps-observation/2') return null;
     const taskId = this.learningTaskId(lesson.sha256, activityConnections(this.context)?.current?.id);
+    const { format, scope, program } = recorder.batch;
+    return { lesson, taskId, recordId: taskRecordIdOf(taskId, { workspace: this.context.storageUri?.toString() ?? '', format, scope, program }) };
+  }
+
+  /**
+   * SX-55 — move this seat's task by one signal on the measurement-core record (the
+   * `hps-local-record/1` store the local review and CR-10 share; no new store, SX-48).
+   *
+   * null when this seat runs no task flow (`taskFlowTarget`). The step gate and the start are
+   * judged on this recorder's batch. What the student must be told is decided by `flowNotice`:
+   * a storage failure becomes a notice and null, never a phase nobody stored.
+   */
+  private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
+    const target = this.taskFlowTarget(recorder, profile);
+    if (!target) return null;
     try {
       const { store, record } = this.crRecordHandle();
-      const outcome = await store.exclusive(() => applyTaskFlow(record, { taskId, lesson, signal, started: startedBefore(recorder.batch.events, taskId), at: Date.now() }));
-      this.taskFlowLast = { taskId, curriculum: outcome.curriculum };
+      const outcome = await store.exclusive(() => applyTaskFlow(record, { ...target, signal, events: recorder.batch.events, at: Date.now() }));
+      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };
+      this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });
       return outcome;
     } catch (error) {
-      const code = error instanceof Error && /^[a-z_0-9]{1,80}$/.test(error.message) ? error.message : 'storage_failure';
-      // The refresh that follows a failed submit usually fails for the same reason; it must not
-      // replace the sentence that tells the student their submit was not stored.
-      if (signal.kind === 'seen' && this.taskFlowNotice) return null;
-      this.taskFlowNotice = signal.kind === 'submit'
-        ? '제출을 저장하지 못했어요 (' + code + '). 다시 한 번 눌러 주세요.'
-        : '과제 진행 기록을 읽거나 저장하지 못했어요 (' + code + '). 작업은 계속할 수 있어요.';
+      this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { error: flowErrorCode(error) });
       return null;
     }
   }
 
-  /** SX-55 — the step the learner started (region A's Primary) becomes the task's current step. */
+  /**
+   * SX-55 — the step the learner started (region A's Primary) becomes the task's current step,
+   * while the task is being worked on and only past steps whose gate the student met (back is
+   * always allowed). A refused move stores no step and says nothing (`flowNotice`); the screen
+   * is redrawn only when the record changed or a notice is waiting.
+   */
   private async recordStepStart(stepId: string) {
     const recorder = await this.currentLearningRecorder();
     if (!recorder) return;
@@ -3154,9 +3171,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         this.nativeObservationError = null;
         // SX-55 — the gate held, so the task is submitted (working → submitted). Before any work
-        // the record refuses by name: a button alone does not skip `working`.
-        const flow = recorder ? await this.runTaskFlow({ kind: 'submit' }, recorder, profile) : null;
-        if (flow?.refused === 'not_started') this.taskFlowNotice = '아직 시작 전이라 제출할 수 없어요. 코치와 이야기하거나 기록을 남기면 시작돼요';
+        // the record refuses by name and runTaskFlow says so beside the button: a button alone
+        // does not skip `working`.
+        if (recorder) await this.runTaskFlow({ kind: 'submit' }, recorder, profile);
         await this.postLearningState();
         return;
       }
@@ -3395,8 +3412,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!signal) return;
         this.spool?.recordWorkflow({ event: "lesson_step", payload: signal });
         this.opsObserver?.lessonStep(signal.lesson_version, signal.step_id, signal.status);
-        // SX-55 — starting a step makes it the task's current step. "Marked done" (`submitted`) is
-        // the learner's own report to the class board and moves nothing in the task flow.
+        // SX-55 — starting a step makes it the task's current step when its gates allow
+        // (recordStepStart). "Marked done" (`submitted`) is the learner's own report to the class
+        // board and moves nothing in the task flow.
         if (signal.status === "in_progress") void this.recordStepStart(signal.step_id).catch(() => undefined);
         return;
       }

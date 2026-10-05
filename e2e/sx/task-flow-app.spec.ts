@@ -17,6 +17,13 @@
 // refusal of a submit sent around the disabled button (extensions/hypeproof-chat/test/
 // sx-task-flow.smoke.mjs and sx-evidence-gate.smoke.mjs judge those without the app).
 //
+// What a pass is evidence of: SX-T57's existing transitions only (assigned → working → submitted
+// and the restart). It is NOT a run of SX-T01 or SX-T02 in the app. The mission sentence and the
+// completion button disabled until a criterion is stored are seen on the way, but this spec has
+// none of those rows' pass criteria: no 5-second first-render bound, no action or score-text
+// audit (SX-T01), no AI draft, Enter-key bypass, whitespace-only criterion or cleared criterion
+// (SX-T02).
+//
 // Needs an unlocked screen: when it is locked the run is skipped as NOT RUN.
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";

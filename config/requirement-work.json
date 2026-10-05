@@ -2443,7 +2443,9 @@
       "verification_inputs": [
         "extensions/hypeproof-chat/test/sx-task-flow.smoke.mjs",
         "extensions/hypeproof-chat/src/taskFlowHelpers.ts",
+        "extensions/hypeproof-chat/src/learningStateHelpers.ts",
         "extensions/hypeproof-chat/webview-ui/src/CompletionGate.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/missionHeaderLogic.ts",
         "e2e/sx/task-flow-app.spec.ts",
         "e2e/sx/sx-service.mjs",
         "e2e/sx/playwright.config.ts"
