@@ -201,18 +201,35 @@ class DevLauncherTests(unittest.TestCase):
                     (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable':'HypeProof Studio'}))
                 with patch.object(dev.os,'name',system),patch.object(dev.subprocess,'CREATE_NEW_PROCESS_GROUP',0x200,create=True),patch.object(dev,'_clear_stale_ipc_socket') as clear,patch.object(dev.subprocess,'Popen') as popen,patch.object(dev.time,'sleep'),patch('builtins.print'):
                     popen.return_value.poll.return_value=None
-                    dev.launch(app,state); dev.launch(app,state,cdp_port=9333)
-                default, debug = (c.args[0] for c in popen.call_args_list)
+                    dev.launch(app,state); dev.launch(app,state,cdp_port=9333); dev.launch(app,state,cdp_port=0)
+                default, debug, zero = (c.args[0] for c in popen.call_args_list)
                 self.assertEqual((default[0], debug[0]), (str(expected), str(expected)))
                 self.assertEqual([a for a in default if a.startswith('--remote-debugging')], [])
                 self.assertEqual([a for a in debug if a.startswith('--remote-debugging')], ['--remote-debugging-port=9333'])
+                # Port 0 asks Chromium for any free port: it is a value, not "off".
+                self.assertEqual([a for a in zero if a.startswith('--remote-debugging')], ['--remote-debugging-port=0'])
                 if system == 'nt':
                     clear.assert_not_called()
                     self.assertEqual(popen.call_args.kwargs['creationflags'], 0x200)
                     self.assertNotIn('start_new_session', popen.call_args.kwargs)
                 else:
-                    self.assertEqual(clear.call_args_list, [call(state/'user-data')]*2)
+                    self.assertEqual(clear.call_args_list, [call(state/'user-data')]*3)
                     self.assertTrue(popen.call_args.kwargs['start_new_session'])
                     self.assertNotIn('creationflags', popen.call_args.kwargs)
+
+    def test_run_passes_cdp_port_to_launch_and_rejects_debug_port(self):
+        # review-pr.sh calls `studio-dev.py run ... --cdp-port N`; #1458's duplicate --debug-port stays rejected.
+        with tempfile.TemporaryDirectory() as tmp:
+            def argv(flag): return ['studio-dev.py', 'run', '--provider', 'service', flag, '9333', '--state-dir', str(Path(tmp)/'state')]
+            # Darwin/arm64 is patched only so the supported-host check passes on any runner.
+            with patch.object(dev.platform,'system',return_value='Darwin'),patch.object(dev.platform,'machine',return_value='arm64'),patch.object(dev,'prepare'),patch.object(dev,'launch') as launch:
+                with patch.object(dev.sys,'argv',argv('--cdp-port')):
+                    dev.main()
+                launch.assert_called_once()
+                self.assertEqual(launch.call_args.kwargs['cdp_port'], 9333)
+                with patch.object(dev.sys,'argv',argv('--debug-port')),patch.object(dev.sys,'stderr',new_callable=io.StringIO) as stderr:
+                    with self.assertRaises(SystemExit) as exited: dev.main()
+                self.assertEqual(exited.exception.code, 2)
+                self.assertIn('unrecognized arguments: --debug-port', stderr.getvalue())
 
 if __name__=='__main__': unittest.main()
