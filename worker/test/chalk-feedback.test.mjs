@@ -56,11 +56,10 @@ const MINIMAL_LESSON_HTML = `<!DOCTYPE html>
   </ul></section>
   <section data-chalk-section="essential-question"></section>
   <section data-chalk-section="flow"><table>
-    <tr data-chalk-step="s-1">
-      <td data-chalk-field="title">도입</td>
-      <td data-chalk-field="teacher">질문하기</td>
-      <td data-chalk-field="learner">탐구</td>
-      <td data-chalk-field="duration-min">10</td>
+    <tr data-chalk-step="s-1" data-duration-min="10" data-chalk-requires="" data-chalk-forbids="">
+      <th data-chalk-field="title">도입</th>
+      <td data-chalk-role="teacher">질문하기</td>
+      <td data-chalk-role="learner">탐구</td>
     </tr>
   </table></section>
   <section data-chalk-section="key-questions"></section>

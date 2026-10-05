@@ -1,6 +1,8 @@
 // #1466 (E2-7) — planUnits: stable-key unit extraction for revision diff.
 // Pure function: same input → same output. No side effects, no I/O.
-// Does NOT modify parsePlan return shape.
+// Delegates structural extraction to parsePlan so both paths share one spec.
+
+import { parsePlan } from './index.ts';
 
 export interface PlanUnit {
   /** Stable key for this unit (e.g. "meta:chalk:format", "flow/s-2:teacher"). */
@@ -14,70 +16,19 @@ function normalize(raw: string): string {
   return raw.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// Extract the inner HTML of a section identified by data-chalk-section.
-function sectionInner(html: string, sectionKey: string): string | null {
-  const re = new RegExp(
-    `<[^>]*data-chalk-section=["']${sectionKey}["'][^>]*>([\\s\\S]*?)</section>`,
-    'i',
-  );
-  const m = re.exec(html);
-  return m ? (m[1] ?? null) : null;
-}
-
-// Extract all <tr data-chalk-step> elements from the flow section.
-function flowSteps(flowHtml: string): Array<{ stepKey: string; fields: Record<string, string> }> {
-  const results: Array<{ stepKey: string; fields: Record<string, string> }> = [];
-  const rowRe = /<tr[^>]*data-chalk-step="([^"]*)"[^>]*>([\s\S]*?)<\/tr>/gi;
-  let rowM: RegExpExecArray | null;
-  while ((rowM = rowRe.exec(flowHtml)) !== null) {
-    const stepKey = rowM[1] ?? '';
-    const rowHtml = rowM[2] ?? '';
-    const fields: Record<string, string> = {};
-    const fieldRe = /<td[^>]*data-chalk-field="([^"]*)"[^>]*>([\s\S]*?)<\/td>/gi;
-    let fieldM: RegExpExecArray | null;
-    while ((fieldM = fieldRe.exec(rowHtml)) !== null) {
-      const fKey = fieldM[1] ?? '';
-      fields[fKey] = normalize(fieldM[2] ?? '');
-    }
-    results.push({ stepKey, fields });
-  }
-  return results;
-}
-
-// Extract <li data-chalk-stuck> elements from the support section.
-function supportItems(supportHtml: string): Array<{ stuckKey: string; fields: Record<string, string> }> {
-  const results: Array<{ stuckKey: string; fields: Record<string, string> }> = [];
-  const liRe = /<li[^>]*data-chalk-stuck="([^"]*)"[^>]*>([\s\S]*?)<\/li>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = liRe.exec(supportHtml)) !== null) {
-    const stuckKey = m[1] ?? '';
-    const liHtml = m[2] ?? '';
-    const fields: Record<string, string> = {};
-    const fieldRe = /<[^>]*data-chalk-field="([^"]*)"[^>]*>([\s\S]*?)<\/(?:td|div|span|p)>/gi;
-    let fieldM: RegExpExecArray | null;
-    while ((fieldM = fieldRe.exec(liHtml)) !== null) {
-      const fKey = fieldM[1] ?? '';
-      fields[fKey] = normalize(fieldM[2] ?? '');
-    }
-    results.push({ stuckKey, fields });
-  }
-  return results;
-}
 
 const LESSON_NAMED_SECTIONS = new Set([
   'meta', 'objectives', 'essential-question', 'evidence',
   'flow', 'key-questions', 'prohibited-moves', 'materials', 'safety', 'bridging', 'support',
 ]);
 
-const FLOW_FIELDS = ['title', 'teacher', 'assistant', 'learner', 'parent', 'duration-min', 'requires', 'forbids'];
-const STUCK_FIELDS = ['expected-stuck', 'signal', 'min-support', 'expected-response'];
-
 /**
  * Extract stable-key units from a plan HTML for diffing.
- * file='lesson' is currently the only supported kind.
- * Returns a flat list of (key, text) pairs — one per unit field.
+ * Structural extraction (flow steps, stucks, objectives, evidence,
+ * key-questions, prohibited-moves) is delegated to parsePlan so that
+ * planUnits and the check pipeline share one spec.
  */
-export function planUnits(html: string, _file: string): PlanUnit[] {
+export function planUnits(html: string, file: string): PlanUnit[] {
   const units: PlanUnit[] = [];
 
   // 1. head meta tags: meta:<name>
@@ -87,82 +38,113 @@ export function planUnits(html: string, _file: string): PlanUnit[] {
     units.push({ key: `meta:${metaM[1] ?? ''}`, text: (metaM[2] ?? '').trim() });
   }
 
-  // 2. flow steps
-  const flowHtml = sectionInner(html, 'flow');
-  if (flowHtml) {
-    for (const { stepKey, fields } of flowSteps(flowHtml)) {
-      for (const field of FLOW_FIELDS) {
-        const val = fields[field];
-        if (val !== undefined) {
-          units.push({ key: `flow/${stepKey}:${field}`, text: val });
-        }
+  // Delegate structural extraction to parsePlan (lesson only).
+  // ops plans skip pedagogy content sections.
+  if (file === 'lesson') {
+    const parsed = parsePlan(html, 'lesson');
+
+    // 2. flow steps — parser reads <th data-chalk-field="title"> and
+    //    <td data-chalk-role="teacher|learner|assistant|parent">
+    for (const step of parsed.steps) {
+      if (step.title !== null) {
+        units.push({ key: `flow/${step.id}:title`, text: step.title });
+      }
+      if (step.durationMin !== null) {
+        units.push({ key: `flow/${step.id}:duration-min`, text: String(step.durationMin) });
+      }
+      if (step.cells.teacher !== undefined) {
+        units.push({ key: `flow/${step.id}:teacher`, text: step.cells.teacher });
+      }
+      if (step.cells.assistant !== undefined) {
+        units.push({ key: `flow/${step.id}:assistant`, text: step.cells.assistant });
+      }
+      if (step.cells.learner !== undefined) {
+        units.push({ key: `flow/${step.id}:learner`, text: step.cells.learner });
+      }
+      if (step.cells.parent !== undefined) {
+        units.push({ key: `flow/${step.id}:parent`, text: step.cells.parent.text });
+      }
+      if (step.requires.length > 0) {
+        units.push({ key: `flow/${step.id}:requires`, text: step.requires.join(' ') });
+      }
+      if (step.forbids.length > 0) {
+        units.push({ key: `flow/${step.id}:forbids`, text: step.forbids.join(' ') });
       }
     }
-  }
 
-  // 3. support (stuck items)
-  const supportHtml = sectionInner(html, 'support');
-  if (supportHtml) {
-    for (const { stuckKey, fields } of supportItems(supportHtml)) {
-      for (const field of STUCK_FIELDS) {
-        const val = fields[field];
-        if (val !== undefined) {
-          units.push({ key: `support/${stuckKey}:${field}`, text: val });
-        }
+    // 3. support (stuck items) — parser reads <div data-chalk-stuck> fields
+    for (const stuck of parsed.stucks) {
+      if (stuck.expectedStuck !== null) {
+        units.push({ key: `support/${stuck.id}:expected-stuck`, text: stuck.expectedStuck });
+      }
+      if (stuck.signal !== null) {
+        units.push({ key: `support/${stuck.id}:signal`, text: stuck.signal });
+      }
+      if (stuck.minSupport !== null) {
+        units.push({ key: `support/${stuck.id}:min-support`, text: stuck.minSupport });
+      }
+      if (stuck.expectedResponse !== null) {
+        units.push({ key: `support/${stuck.id}:expected-response`, text: stuck.expectedResponse });
       }
     }
-  }
 
-  // 4. objectives list items
-  const objHtml = sectionInner(html, 'objectives');
-  if (objHtml) {
-    const liRe = /<li[^>]*data-chalk-objective[^>]*>([\s\S]*?)<\/li>/gi;
-    let i = 1;
-    let liM: RegExpExecArray | null;
-    while ((liM = liRe.exec(objHtml)) !== null) {
-      units.push({ key: `objectives/obj-${i}`, text: normalize(liM[1] ?? '') });
-      i++;
+    // 4. objectives
+    for (const obj of parsed.objectives) {
+      const id = obj.id ?? `obj-${parsed.objectives.indexOf(obj) + 1}`;
+      units.push({ key: `objectives/${id}`, text: obj.text });
     }
-  }
 
-  // 5. evidence list items
-  const evHtml = sectionInner(html, 'evidence');
-  if (evHtml) {
-    const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-    let i = 1;
-    let liM: RegExpExecArray | null;
-    while ((liM = liRe.exec(evHtml)) !== null) {
-      units.push({ key: `evidence/ev-${i}`, text: normalize(liM[1] ?? '') });
-      i++;
+    // 5. evidence
+    for (const ev of parsed.evidence) {
+      const id = ev.id ?? `ev-${parsed.evidence.indexOf(ev) + 1}`;
+      units.push({ key: `evidence/${id}`, text: ev.text });
     }
-  }
 
-  // 6. prohibited-moves: group by <p-key>/<step>
-  const pmHtml = sectionInner(html, 'prohibited-moves');
-  if (pmHtml) {
-    const groupRe = /<[^>]*data-chalk-prohibited="([^"]*)"[^>]*>([\s\S]*?)<\/(?:ul|ol|div)>/gi;
-    let gM: RegExpExecArray | null;
-    while ((gM = groupRe.exec(pmHtml)) !== null) {
-      const pKey = gM[1] ?? '';
-      const groupHtml = gM[2] ?? '';
-      const liRe = /<li[^>]*data-chalk-step="([^"]*)"[^>]*>([\s\S]*?)<\/li>/gi;
-      let liM: RegExpExecArray | null;
-      while ((liM = liRe.exec(groupHtml)) !== null) {
-        units.push({
-          key: `prohibited-moves/${pKey}/${liM[1] ?? ''}`,
-          text: normalize(liM[2] ?? ''),
-        });
-      }
+    // 6. prohibited-moves: <li data-chalk-move="Px" data-chalk-step="s-y">
+    for (const pm of parsed.prohibitedMoves) {
+      const stepPart = pm.stepId ? `/${pm.stepId}` : '';
+      units.push({ key: `prohibited-moves/${pm.family}${stepPart}`, text: pm.text });
     }
-  }
 
-  // 7. all other named sections: whole section text
-  const sectionRe = /<section[^>]*data-chalk-section="([^"]*)"[^>]*>([\s\S]*?)<\/section>/gi;
-  let sM: RegExpExecArray | null;
-  while ((sM = sectionRe.exec(html)) !== null) {
-    const sKey = sM[1] ?? '';
-    if (!LESSON_NAMED_SECTIONS.has(sKey)) {
+    // 7. key-questions
+    for (const kq of parsed.keyQuestions) {
+      const idx = parsed.keyQuestions.indexOf(kq) + 1;
+      units.push({ key: `key-questions/kq-${idx}`, text: kq.text });
+    }
+
+    // 8. essential-question
+    if (parsed.essentialQuestion) {
+      units.push({ key: 'essential-question', text: parsed.essentialQuestion });
+    }
+
+    // 9. safety
+    if (parsed.safety !== null) {
+      units.push({ key: 'safety', text: parsed.safety });
+    }
+
+    // 10. bridging opener
+    if (parsed.bridgingOpener !== null) {
+      units.push({ key: 'bridging', text: parsed.bridgingOpener });
+    }
+  } else {
+    // ops: capture section text verbatim for any section present
+    const sectionRe = /<section[^>]*data-chalk-section="([^"]*)"[^>]*>([\s\S]*?)<\/section>/gi;
+    let sM: RegExpExecArray | null;
+    while ((sM = sectionRe.exec(html)) !== null) {
+      const sKey = sM[1] ?? '';
       units.push({ key: sKey, text: normalize(sM[2] ?? '') });
+    }
+  }
+
+  // 11. all other named sections not handled above (lesson only): whole section text
+  if (file === 'lesson') {
+    const sectionRe = /<section[^>]*data-chalk-section="([^"]*)"[^>]*>([\s\S]*?)<\/section>/gi;
+    let sM: RegExpExecArray | null;
+    while ((sM = sectionRe.exec(html)) !== null) {
+      const sKey = sM[1] ?? '';
+      if (!LESSON_NAMED_SECTIONS.has(sKey)) {
+        units.push({ key: sKey, text: normalize(sM[2] ?? '') });
+      }
     }
   }
 
