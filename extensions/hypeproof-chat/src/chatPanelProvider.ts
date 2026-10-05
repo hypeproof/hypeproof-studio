@@ -427,8 +427,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    *
    * null when this seat runs no task flow (`taskFlowTarget`). The step gate and the start are
    * judged on this recorder's batch. The record's lock is taken only for a write
-   * (`runTaskFlowOn`): a plain refresh reads. What the student must be told is decided by
-   * `flowNotice`: a storage failure becomes a notice and null, never a phase nobody stored.
+   * (`runTaskFlowOn`): a signal that writes nothing (a refresh, a coach turn on a task already
+   * working, a step start in place) is answered from a plain read. What the student must be
+   * told is decided by `flowNotice`: a storage failure becomes a notice and null, never a phase
+   * nobody stored.
    */
   private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
     const target = this.taskFlowTarget(recorder, profile);

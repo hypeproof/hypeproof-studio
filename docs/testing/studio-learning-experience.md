@@ -310,7 +310,7 @@ python3 scripts/studio-dev.py --state-dir "$STATE" --provider service run --serv
 
 **데이터 위치.** 과제 레코드는 앱의 `User/globalStorage/hypeproof.hypeproof-chat/local-review-v1/` 아래 `tasks/<id>` 키 하나다. `<id>`는 설계의 과제 id(`task-<설계 sha256 앞 16자>-<활동 id 앞 8자>`) 뒤에 `.`과 이 좌석의 관찰 배치(폴더·토큰)에서 나온 16자를 붙인 것이라, 같은 컴퓨터의 다른 좌석·다시 받은 토큰·다른 폴더는 각자 다른 레코드를 쓴다. 로컬 검토와 CR-10이 쓰는 그 측정 코어 레코드이고 새 저장소가 아니다. `curriculum.phase`·`current_step`·단계별 들어간/나온 시각과 `history`의 `curriculum:phase:*` 줄이 기록이다. `current_step`은 작업 중일 때만, 앞 단계들의 gate 이벤트가 학생 본인 기록으로 있을 때만 앞으로 움직인다(뒤로는 언제나). 미션 헤더에서 보고 있는 단계는 이와 상관없이 바뀐다. 기대 조건 같은 학습 이벤트는 지금처럼 워크스페이스의 관찰 배치(`workspaceState`)에 있고, 완료 게이트는 저장하지 않고 매번 이벤트에서 다시 계산한다.
 
-- 잠금: 레코드 생성·단계 변경 때만. 화면 새로고침은 잠금 없이 읽기 → 다른 Studio 창이 같은 레코드에 쓰는 중에도 새로고침 `storage_busy` 없음
+- 잠금: 레코드에 쓸 때만 (과제 열기·시작·단계 이동·제출). 쓸 것이 없는 신호는 잠금 없이 읽기 (화면 새로고침, 이미 작업 중인 과제의 코치 답·학습 이벤트, 지금 단계로의 단계 시작, 거절된 단계 이동, 두 번째 제출) → 다른 Studio 창이 같은 레코드에 쓰는 중에도 `storage_busy` 줄 없음
 
 **나의 변화 기록에서 (MC-27, MC-31).**
 

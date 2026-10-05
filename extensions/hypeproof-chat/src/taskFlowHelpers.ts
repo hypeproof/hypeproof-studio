@@ -235,39 +235,42 @@ export function screenFlow(
 }
 
 /**
- * Read, decide, write: one task, one signal, on the measurement-core record.
- *
- * `taskId` is the design's id, the one the learning events name; `recordId` is where this
- * seat's record of it is stored (`taskRecordIdOf`). `events` is the observation batch the gate
- * reads; only the events naming `taskId` count.
- *
- * The caller holds the record's lock (`FileRecordStorage.exclusive`), so a read and a write
- * from two Studio windows cannot interleave (`runTaskFlowOn` takes it). A storage failure is
- * thrown by name (`storage_busy`, `storage_failure`, `capacity_exceeded`, ...) and nothing is
- * claimed.
- *
+ * One signal on one task's record. `taskId` is the design's id, the one the learning events name;
+ * `recordId` is where this seat's record of it is stored (`taskRecordIdOf`). `events` is the
+ * observation batch the gate reads; only the events naming `taskId` count.
+ */
+export interface FlowInput {
+  taskId: string;
+  recordId: string;
+  lesson: FlowLesson;
+  signal: FlowSignal;
+  events: readonly ObservationEvent[];
+  at: number;
+}
+
+/**
  * Who acted, as the record says it. The record a screen refresh opens is the host's:
  * `adapter_explicit` on its `created` line and on the curriculum it starts with, whatever phase
  * the batch puts that in. Everything a signal of the student's own moves is `user`: work, a step,
  * a submit, and the start of a task already open that their learning event now shows.
  */
-export async function applyTaskFlow(
-  record: LocalRecord,
-  input: { taskId: string; recordId: string; lesson: FlowLesson; signal: FlowSignal; events: readonly ObservationEvent[]; at: number },
-): Promise<FlowOutcome> {
+const openerOf = (signal: FlowSignal): Actor => (signal.kind === "seen" ? "adapter_explicit" : "user");
+
+/**
+ * What one signal does to a task the record holds: the task after it, and whether that differs
+ * from the one stored. Pure. The plain read and the write under the lock both run it
+ * (`runTaskFlowOn`, `applyTaskFlow`), so they cannot disagree about whether a signal writes.
+ *
+ * Two writes can come before the signal's own decision: opening the curriculum (a task created a
+ * moment ago has none), and the level start of an assigned task whose student's learning event is
+ * in the batch. Then `decideFlow` decides the signal itself.
+ */
+function stepFlow(stored: Task, input: FlowInput): { task: Task; changed: boolean; decision: FlowDecision } {
   const { lesson, signal, at } = input;
   const mine = input.events.filter((e) => e.task === input.taskId);
   const started = startedBefore(mine, input.taskId);
-  const opener: Actor = signal.kind === "seen" ? "adapter_explicit" : "user";
-  let task: Task;
+  let task = stored;
   let changed = false;
-  try {
-    task = await record.getTask(input.recordId);
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== "unknown_task") throw error;
-    task = await record.createTask({ id: input.recordId, project: lesson.course_id, at, by: opener });
-    changed = true;
-  }
   if (!task.curriculum) {
     task = updateCurriculum(
       task,
@@ -277,7 +280,7 @@ export async function applyTaskFlow(
         phase: started || signal.kind === "work" ? "working" : "assigned",
         current_step: lesson.steps[0]!.id,
       },
-      { by: opener, at },
+      { by: openerOf(signal), at },
     );
     changed = true;
   } else if (task.curriculum.phase === "assigned" && started) {
@@ -291,42 +294,66 @@ export async function applyTaskFlow(
     task = updateCurriculum(task, decision.patch, { by: "user", at });
     changed = true;
   }
-  if (changed) await record.saveTask(task);
-  return {
-    curriculum: task.curriculum!,
-    changed,
-    ...(decision.kind === "refused" ? { refused: decision.code } : {}),
-  };
+  return { task, changed, decision };
+}
+
+const outcomeOf = (task: Task, changed: boolean, decision: FlowDecision): FlowOutcome => ({
+  curriculum: task.curriculum!,
+  changed,
+  ...(decision.kind === "refused" ? { refused: decision.code } : {}),
+});
+
+/**
+ * Read, decide, write: one task, one signal, on the measurement-core record.
+ *
+ * The caller holds the record's lock (`FileRecordStorage.exclusive`), so a read and a write
+ * from two Studio windows cannot interleave (`runTaskFlowOn` takes it). A storage failure is
+ * thrown by name (`storage_busy`, `storage_failure`, `capacity_exceeded`, ...) and nothing is
+ * claimed.
+ */
+export async function applyTaskFlow(record: LocalRecord, input: FlowInput): Promise<FlowOutcome> {
+  let task: Task;
+  let created = false;
+  try {
+    task = await record.getTask(input.recordId);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "unknown_task") throw error;
+    task = await record.createTask({ id: input.recordId, project: input.lesson.course_id, at: input.at, by: openerOf(input.signal) });
+    created = true;
+  }
+  const step = stepFlow(task, input);
+  if (step.changed) await record.saveTask(step.task);
+  return outcomeOf(step.task, created || step.changed, step.decision);
 }
 
 /**
  * One signal on the record, taking the record's cross-window lock only when something has to
  * be written.
  *
- * A screen refresh (`seen`) of a task that is already open, with nothing in the batch to start
- * it, writes nothing (`applyTaskFlow` would decide exactly that), so it is answered from a plain
- * read. A refresh then never fails `storage_busy` because another Studio window is writing to
- * the record (a CR-10 screenshot, the local review), and the first refresh in a host does not
- * pay the lock's scan of every stored file. The plain read cannot see half a write: a record
- * file is published by an atomic rename (FileRecordStorage.write).
+ * Most signals write nothing: a screen refresh of a task already open, an answered coach turn or
+ * a learning event on a task already working, a step start onto the step it stands on, a refused
+ * step move, a second submit. Each is answered from a plain read, through the same `stepFlow` a
+ * write runs. Such a signal then never fails `storage_busy` because another Studio window is
+ * writing to the record (a CR-10 screenshot, the local review), and never pays the lock's scan of
+ * every stored file. The plain read cannot see half a write: a record file is published by an
+ * atomic rename (FileRecordStorage.write).
  *
- * Every other signal, and a refresh that must open the task or start it, runs `applyTaskFlow`
- * under `store.exclusive`, so a read and a write from two windows cannot interleave.
+ * A signal that has to write (the task's record or curriculum opened, the level start, a phase or
+ * step move) runs `applyTaskFlow` under `store.exclusive`, which reads and decides again under
+ * the lock, so a read and a write from two windows cannot interleave.
  */
 export async function runTaskFlowOn(
   store: { exclusive<T>(fn: () => Promise<T>): Promise<T> },
   record: LocalRecord,
-  input: Parameters<typeof applyTaskFlow>[1],
+  input: FlowInput,
 ): Promise<FlowOutcome> {
-  if (input.signal.kind === "seen") {
-    const unchanged = await seenWithoutWrite(record, input);
-    if (unchanged) return unchanged;
-  }
+  const unchanged = await withoutWrite(record, input);
+  if (unchanged) return unchanged;
   return store.exclusive(() => applyTaskFlow(record, input));
 }
 
-/** `seen` on a task `applyTaskFlow` would leave as it is: its stored curriculum. null when it would write. */
-async function seenWithoutWrite(record: LocalRecord, input: { taskId: string; recordId: string; events: readonly ObservationEvent[] }): Promise<FlowOutcome | null> {
+/** The outcome of a signal on a task `stepFlow` would leave as stored, from a plain read. null when it writes, or the record holds no such task yet. */
+async function withoutWrite(record: LocalRecord, input: FlowInput): Promise<FlowOutcome | null> {
   let task: Task;
   try {
     task = await record.getTask(input.recordId);
@@ -334,11 +361,8 @@ async function seenWithoutWrite(record: LocalRecord, input: { taskId: string; re
     if (error instanceof Error && error.message === "unknown_task") return null;
     throw error;
   }
-  const current = task.curriculum;
-  // The two writes a `seen` can cause in applyTaskFlow: opening the curriculum, and the level start.
-  if (!current) return null;
-  if (current.phase === "assigned" && startedBefore(input.events.filter((e) => e.task === input.taskId), input.taskId)) return null;
-  return { curriculum: current, changed: false };
+  const step = stepFlow(task, input);
+  return step.changed ? null : outcomeOf(step.task, false, step.decision);
 }
 
 // ── What the student is told (region D, beside the completion button) ────────────────────────

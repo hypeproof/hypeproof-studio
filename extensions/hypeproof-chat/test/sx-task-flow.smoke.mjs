@@ -15,7 +15,7 @@
 //   5. the same rules on the App's real record store (FileRecordStorage on a temp dir), read
 //      back through a fresh instance, as a restarted extension host would: a gated jump refused,
 //      a start that a lost signal cannot undo, two seats on one record kept apart, who acted,
-//      and a plain refresh that needs no lock while every write still takes it;
+//      and a signal that writes nothing answered without the lock while every write still takes it;
 //   6. the local review list does not offer a task it cannot open, says how many it leaves out
 //      (MC-27), and deletes them only through the core's delete (MC-31);
 //   7. the rendered region A marks, the region D line and the local review's omission line
@@ -88,10 +88,13 @@ await check("SX-55 positive: the same task while working opens on the gate alone
 });
 
 await check("SX-55: once submitted there is nothing to press, and nothing is listed as missing", () => {
-  const state = learningState({ task: TASK, events: [], completion: [], phase: "submitted" });
-  assert.equal(state.complete.ok, false, "a submitted task can be submitted again");
-  assert.deepEqual(state.complete.reasons, [], "a submitted task is told something is still missing");
-  assert.equal(state.phase, "submitted");
+  // With the gate met (nothing declared) and with it unmet: there is no button left to explain.
+  for (const completion of [[], COMPLETION]) {
+    const state = learningState({ task: TASK, events: [], completion, phase: "submitted" });
+    assert.equal(state.complete.ok, false, "a submitted task can be submitted again");
+    assert.deepEqual(state.complete.reasons, [], `a submitted task is told something is still missing (${completion.length} conditions declared)`);
+    assert.equal(state.phase, "submitted");
+  }
 });
 
 await check("invariant: a seat that runs no task flow (no phase) reads exactly as before — the gate alone decides", () => {
@@ -274,13 +277,13 @@ await hostCheck(
   provider,
   (text) =>
     lacks(runBody(text), /this\.crRecordHandle\(\)/, "the flow opened a store of its own") ??
-    lacks(runBody(text), /await runTaskFlowOn\(store, record, \{ \.\.\.target, signal, events: recorder\.batch\.events, at: Date\.now\(\) \}\)/, "the flow runs around runTaskFlowOn (the lock for a write, a plain read for a refresh), or judges the start and the step gates on something other than this recorder's batch") ??
+    lacks(runBody(text), /await runTaskFlowOn\(store, record, \{ \.\.\.target, signal, events: recorder\.batch\.events, at: Date\.now\(\) \}\)/, "the flow runs around runTaskFlowOn (the lock for a write, a plain read for whatever writes nothing), or judges the start and the step gates on something other than this recorder's batch") ??
     lacks(targetBody(text), /if \(!lesson \|\| recorder\.batch\.format !== 'hps-observation\/2'\) return null;/, "a seat without a mission or without /2 runs the flow"),
   [
     // M2 — the start and the gates are judged on nothing: a seat that worked reopens as not started.
     ["signal, events: recorder.batch.events, at: Date.now()", "signal, events: [], at: Date.now()"],
     ["if (!lesson || recorder.batch.format !== 'hps-observation/2') return null;", "if (!lesson) return null;"],
-    // Back to the lock for every refresh: a busy record again fails a plain screen refresh.
+    // Back to the lock for every signal: a busy record again fails a refresh or a coach turn that writes nothing.
     ["await runTaskFlowOn(store, record, {", "await store.exclusive(() => applyTaskFlow(record, {"],
   ],
 );
@@ -514,7 +517,7 @@ try {
       const store = new FileRecordStorage(root);
       return { store, record: new LocalRecord(store) };
     };
-    // What the host runs (runTaskFlowOn): the record's lock for a write, a plain read for a refresh.
+    // What the host runs (runTaskFlowOn): the record's lock for a write, a plain read for whatever writes nothing.
     const apply = (signal, at, { events = [], taskId = TASK, recordId = RECORD } = {}) => {
       const { store, record } = open();
       return flow.runTaskFlowOn(store, record, { taskId, recordId, lesson, signal, events, at });
@@ -667,6 +670,19 @@ try {
       assert.deepEqual(await phases(at.recordId), ["assigned", "working", "submitted"]);
     });
 
+    await check("who acted: a start that a refresh reads from the student's own event is theirs, not the host's", async () => {
+      const level = flow.learningTaskIdOf("f".repeat(64), "ls000000");
+      const at = { taskId: level, recordId: flow.taskRecordIdOf(level, SEAT_A) };
+      assert.equal((await apply({ kind: "seen" }, 1910, at)).curriculum.phase, "assigned");
+      // The next refresh finds the student's criterion in the batch: the level start.
+      assert.equal((await apply({ kind: "seen" }, 1911, { ...at, events: [forTask(level)] })).curriculum.phase, "working");
+      assert.deepEqual(
+        (await stored(at.recordId)).history.map((h) => [h.by, h.change]),
+        [["adapter_explicit", "created"], ["adapter_explicit", "curriculum:phase:assigned"], ["adapter_explicit", "curriculum:step:expect:entered"], ["user", "curriculum:phase:working"]],
+        "the start is credited to the host, though the student's own event is what started the task",
+      );
+    });
+
     await check("two seats on one record: B never reads A's phase, and B's submit is its own", async () => {
       const shared = flow.learningTaskIdOf("d".repeat(64), "a1b2c3d4");
       const A = { taskId: shared, recordId: flow.taskRecordIdOf(shared, SEAT_A) };
@@ -708,9 +724,49 @@ try {
       const mine = [forTask(fresh)];
       await whileLocked(() => assert.rejects(apply({ kind: "seen" }, 1962, { ...at, events: mine }), /storage_busy/, "the level start was answered from a plain read: a started task shown as not started"));
       assert.equal((await apply({ kind: "seen" }, 1963, { ...at, events: mine })).curriculum.phase, "working");
-      // And every signal of the student's own is a write.
+      // And so is a submit that moves the phase.
       await whileLocked(() => assert.rejects(apply({ kind: "submit" }, 1964, { ...at, events: mine }), /storage_busy/));
       assert.equal((await stored(at.recordId)).curriculum.phase, "working", "a refused write was stored after all");
+    });
+
+    await check("a signal that writes nothing needs no lock either: a coach turn or learning event while working, a step start in place, a refused move, a second submit", async () => {
+      const quiet = flow.learningTaskIdOf("f".repeat(64), "qt000000");
+      const at = { taskId: quiet, recordId: flow.taskRecordIdOf(quiet, SEAT_A) };
+      const mine = [forTask(quiet)];
+      await apply({ kind: "seen" }, 2100, at);
+      assert.equal((await apply({ kind: "work" }, 2101, { ...at, events: mine })).curriculum.phase, "working");
+      const before = (await stored(at.recordId)).history.length;
+      /** One signal while another live window holds the lock: its outcome, or the error it failed with. */
+      const lockedOut = (signal, when) => apply(signal, when, { ...at, events: mine }).catch((error) => ({ error: String(error?.message ?? error) }));
+      const quietAs = (r, signal, refused, phase) => {
+        assert.equal(r.error, undefined, `${JSON.stringify(signal)} writes nothing, yet failed ${r.error} while another window held the lock`);
+        assert.equal(r.changed, false, `${JSON.stringify(signal)} wrote`);
+        assert.equal(r.refused, refused);
+        assert.equal(r.curriculum.phase, phase);
+        // What the host does with it (runTaskFlow → flowNotice): no line beside the completion button.
+        assert.equal(flow.flowNotice(null, signal, { outcome: r }), null, `${JSON.stringify(signal)} put a line beside the completion button`);
+      };
+      await whileLocked(async () => {
+        // An answered coach turn or a learning event (`work`) on a working task; a step start onto the
+        // step it stands on; a jump past test's gate (test_observed), which nobody met; a foreign step.
+        for (const [signal, refused] of [[{ kind: "work" }, undefined], [{ kind: "start_step", stepId: "expect" }, undefined], [{ kind: "start_step", stepId: "retest" }, "gate_not_met"], [{ kind: "start_step", stepId: "없는단계" }, "unknown_step"]]) {
+          quietAs(await lockedOut(signal, 2102), signal, refused, "working");
+        }
+        // Control: what does write still takes the lock, and fails while another window holds it.
+        await assert.rejects(apply({ kind: "start_step", stepId: "build" }, 2103, { ...at, events: mine }), /storage_busy/, "a step move was answered from a plain read: nothing stored it");
+        await assert.rejects(apply({ kind: "submit" }, 2104, { ...at, events: mine }), /storage_busy/, "a submit was answered from a plain read: nothing stored it");
+      });
+      const after = await stored(at.recordId);
+      assert.equal(after.history.length, before, "a signal that writes nothing wrote, or a write refused for the lock was stored after all");
+      assert.equal(after.curriculum.current_step, "expect");
+      // With the lock free, the same move and the submit are stored: what refused them above was the lock.
+      assert.equal((await apply({ kind: "start_step", stepId: "build" }, 2105, { ...at, events: mine })).curriculum.current_step, "build");
+      assert.equal((await apply({ kind: "submit" }, 2106, { ...at, events: mine })).curriculum.phase, "submitted");
+      const submitted = (await stored(at.recordId)).history.length;
+      await whileLocked(async () => {
+        for (const signal of [{ kind: "submit" }, { kind: "work" }, { kind: "start_step", stepId: "build" }]) quietAs(await lockedOut(signal, 2107), signal, undefined, "submitted");
+      });
+      assert.equal((await stored(at.recordId)).history.length, submitted, "a second submit or a signal after it wrote");
     });
 
     await check("SX-48: the flow writes only Task records — no new store, no new record kind", async () => {
@@ -803,16 +859,20 @@ if (!status.available) {
       activity: { label: "수업", name: "GlobalBuddy", verified: true },
     });
   const marks = (html) => [...html.matchAll(/<li data-met="(yes|no)"/g)].map((m) => m[1]);
+  /** Each condition's mark as the eye and a screen reader get it: "☑ 확인됨" or "☐ 아직" (SX-50: icon and words). */
+  const markSaid = (html) => [...html.matchAll(/<li data-met="(?:yes|no)"><span class="hp-mark" role="img" aria-label="([^"]*)">([^<]*)<\/span>/g)].map((m) => `${m[2]} ${m[1]}`);
   const conditionTexts = (html) => [...html.matchAll(/<span class="hp-mission-completion-text">([^<]*)<\/span>/g)].map((m) => m[1]);
   const designTexts = week3.learning.completion.map((c) => c.text);
 
   await check("SX-01·SX-50: region A checks a condition off only where the host's gate says it is met", async () => {
     const all = await header([]);
     assert.deepEqual(marks(all), ["yes", "yes", "yes"], "nothing missing, and a condition stayed unchecked");
+    assert.deepEqual(markSaid(all), ["☑ 확인됨", "☑ 확인됨", "☑ 확인됨"], "a screen reader is told something other than the marks show");
     assert.equal((all.match(/☑/g) ?? []).length, 4, "three ☑ marks and the note that explains them");
     assert.ok(visibleText(all).includes("☑ 표시는 내가 남긴 기록에서 확인된 것이에요."));
     const some = await header([{ code: "missing_completion_event", item: "c2", event: "change_requested" }]);
     assert.deepEqual(marks(some), ["yes", "no", "yes"]);
+    assert.deepEqual(markSaid(some), ["☑ 확인됨", "☐ 아직", "☑ 확인됨"], "a screen reader hears an unmet condition as confirmed, or a met one as not yet");
     const late = await header([{ code: "criterion_after_artifact", event: "criterion_set" }]);
     assert.deepEqual(marks(late), ["no", "yes", "yes"], "a late criterion was checked off as '시험 전에 적었다'");
   });
@@ -820,6 +880,7 @@ if (!status.available) {
   await check("SX-50 negative: with no verdict from the host, nothing is checked off and the header says why", async () => {
     for (const html of [await header(undefined), await header(null)]) {
       assert.deepEqual(marks(html), ["no", "no", "no"], "a check mark was drawn with no verdict behind it");
+      assert.deepEqual(markSaid(html), ["☐ 아직", "☐ 아직", "☐ 아직"], "a screen reader hears a condition confirmed with no verdict behind it");
       assert.ok(!html.includes("☑"), "a ☑ appeared with no verdict");
       assert.ok(visibleText(html).includes("지금은 아직 확인 전입니다"), "the header stopped saying nothing is confirmed yet");
     }

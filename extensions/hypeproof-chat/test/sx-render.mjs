@@ -13,12 +13,13 @@
 //   bundle with esbuild and run it under vm.runInNewContext. The only difference is that
 //   resolveDir is webview-ui, because react / react-dom / react/jsx-runtime live there.
 //
-// Known limitation (also recorded in the report):
-//   CI's `npm ci --omit=optional` installs **only the extension's dependencies**
-//   (.github/workflows/pr-ci.yml extension-test job). There is no webview-ui/node_modules.
-//   So when react is missing, rendererStatus() returns reason:"webview-deps-missing" and the
-//   caller skips while **surfacing** that fact. It does not silently pass. The pure text
-//   controls and the empty-region guard (auditRegionText's empty_region) still run in CI.
+// Where react is missing:
+//   CI installs the webview's dependencies before the smoke tests (.github/workflows/pr-ci.yml,
+//   `extension / smoke` job, step "Install webview deps (the render instrument needs react)"),
+//   so the render checks run there. A checkout without webview-ui/node_modules has no react:
+//   rendererStatus() then returns reason:"webview-deps-missing" and the caller skips while
+//   **surfacing** that fact (a NOT RUN line). It does not silently pass. The pure text
+//   controls and the empty-region guard (auditRegionText's empty_region) run either way.
 
 import vm from "node:vm";
 import { build } from "esbuild";
