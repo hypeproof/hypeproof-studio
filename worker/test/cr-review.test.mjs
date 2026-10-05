@@ -1077,6 +1077,51 @@ await test("CR-69 with packs, a drop that fails once: the deletion is not marked
   }
 });
 
+await test("CR-69 with packs, the order of the drop: a pack stored after the deletion began and before its record scan passes its own check (every source still resolves) and is dropped after the scan", async () => {
+  const f = await fixture();
+  const real = f.env.HPS_TRACES;
+  try {
+    const s = await week2(f);
+    // The record scan of the deletion starts by writing the experiment's tombstone (local-record
+    // deleteTask). Right before that write a team member prepares and stores a pack in full: its
+    // sources all resolve then, so only a drop after the scan can take it (a drop before the scan
+    // would leave it quoting the deleted statements).
+    const tombstone = `/deleted/${s.experiment.id}`;
+    const during = {};
+    f.env.HPS_TRACES = new Proxy(real, {
+      get(t, k) {
+        const v = t[k];
+        if (typeof v !== "function") return v;
+        if (k !== "put") return (...a) => v.apply(t, a);
+        return async (...a) => {
+          if (!during.commit && typeof a[0] === "string" && a[0].endsWith(tombstone)) {
+            during.commit = "started";
+            const prep = await f.api(`/v1/curriculum/projects/${s.project.id}/review/prepare`, { method: "POST", token: s.token, body: {} });
+            const ms = prep.json?.model_sections?.[0];
+            const output = ms ? JSON.parse(/```json\n([\s\S]*?)\n```/.exec(experimentAnswer(ms.prompt))[1]) : undefined;
+            during.commit = await f.api(`/v1/curriculum/projects/${s.project.id}/review/commit`, { method: "POST", token: s.token, body: { week: prep.json?.week, base_revision: 0, ...(ms ? { outputs: { next_experiment: { input_digest: ms.input_digest, output } } } : {}) } });
+          }
+          return v.apply(t, a);
+        };
+      },
+    });
+    let del;
+    try {
+      del = await f.api(`/v1/curriculum/experiments/${s.experiment.id}`, { method: "DELETE", token: s.token });
+    } finally {
+      f.env.HPS_TRACES = real;
+    }
+    assert.equal(del.status, 200, del.text);
+    assert.equal(during.commit?.status, 201, `a pack was stored while the deletion ran: ${during.commit?.text}`);
+    assert.ok(JSON.stringify(during.commit.json.review.pack).includes("세 명 중 두 명이 옵션 선택에서 멈췄다"), "control: it quotes the evidence the scan then deletes");
+    assert.equal(del.json.receipt.review_packs_deleted, 1, "the drop after the scan takes it");
+    assert.deepEqual(await rows(f, s.project.id), [], "no pack quoting the deleted evidence is left");
+  } finally {
+    f.env.HPS_TRACES = real;
+    f.close();
+  }
+});
+
 // ── The coach route itself: one upstream call per stale model section (SQLite) ────
 
 if (!D1_MODE) {
