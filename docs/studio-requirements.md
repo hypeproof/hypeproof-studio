@@ -804,3 +804,15 @@ after restart, and keep undated damaged fragments only inside the evidenced time
 window (all-undated legacy inputs retain compatibility). Missing approved pages
 never receive complete coverage. See the existing classroom-admin contract and
 `docs/testing/classroom-admin.md` for the nine regression cases and actual results.
+
+## Release acceptance synthetic cohort (#1404)
+
+Release acceptance (`verify-unified-release.yml`, [procedure](dev/unified-release-and-migration.md#public-acceptance-credentials-1404))
+must run unattended without a long-lived student code, without holding a session the
+live-session freeze reads as a class, and without consuming a real trial allowance.
+REQ-STUDIO-NATIVE-LIFETIME is unchanged: a fresh handle gets a fresh allowance, and a
+reissue to the same handle still cannot reset one.
+
+| ID | Acceptance criteria | Implementation / verification |
+|---|---|---|
+| REQ-STUDIO-SYNTHETIC-ACCEPTANCE | A cohort whose every profile declares `synthetic: true` refuses any roster write (replace, append, session open) or token mint naming a handle outside `synthetic-` with `400 synthetic_handle_required`, and `GET /admin/cohorts` reports `synthetic` for every cohort. `synthetic-release-acceptance` is served exactly what `studio-native-trial` is served and is hidden from the console. Each acceptance run mints a fresh handle's classroom code (session open) and trial code, and revokes the trial grant and closes the session in `finally`. The freeze ignores a live session only on a cohort reported exactly `synthetic: true` running one of its own profiles, names what it ignored, and still blocks a real class beside it; a missing or non-boolean flag, a foreign profile or an undecidable window blocks. The real workflow run with these credentials is NOT RUN. | `worker/src/lib/synthetic-cohort.ts`, `worker/src/profiles/synthetic-release-acceptance.ts`, `worker/src/routes/admin.ts`, `scripts/check-live-sessions.mjs`, `e2e/unified-release/public.mjs`; `worker/test/synthetic-cohort.test.mjs`, `worker/test/profile-serving-snapshot.test.mjs`, `scripts/test-check-live-sessions.mjs` |

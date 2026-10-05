@@ -1328,6 +1328,15 @@
           "path": "e2e/unified-release/public.mjs"
         },
         {
+          "path": "worker/src/lib/synthetic-cohort.ts"
+        },
+        {
+          "path": "worker/src/profiles/synthetic-release-acceptance.ts"
+        },
+        {
+          "path": "scripts/check-live-sessions.mjs"
+        },
+        {
           "path": "e2e/unified-release/install-windows.mjs"
         },
         {
@@ -1364,6 +1373,12 @@
         },
         {
           "path": "e2e/unified-release/gate.test.mjs"
+        },
+        {
+          "path": "worker/test/synthetic-cohort.test.mjs"
+        },
+        {
+          "path": "scripts/test-check-live-sessions.mjs"
         },
         {
           "path": "e2e/tests/native-public-activity.spec.ts"
