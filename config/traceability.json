@@ -2812,6 +2812,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/sx-source-state.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sx-task-flow.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/task-flow-app.spec.ts"
+        },
+        {
+          "path": "e2e/sx/sx-service.mjs"
+        },
+        {
+          "path": "e2e/sx/playwright.config.ts"
         }
       ]
     },
@@ -2844,6 +2856,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/tokens.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskFlowHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CompletionGate.tsx"
         }
       ]
     },
