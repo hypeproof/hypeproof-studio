@@ -116,6 +116,45 @@ export function refusedSlides(dropped: string[]): Array<{ no: number; reason: st
   return dropped.map((x) => /^덱 (\d+): .*\((.+)\)$/.exec(x)).filter(Boolean).map((m) => ({ no: Number(m![1]), reason: m![2] }));
 }
 
+/**
+ * The on-screen and notes text of the given slides as humanizer items. A quote's value is the user's
+ * own words and is never rewritten.
+ */
+export function slideTextItems(s: WikiState, slides: number[]): Array<{ id: string; text: string }> {
+  const out: Array<{ id: string; text: string }> = [];
+  for (const no of slides) {
+    const sl = s.deck[String(no)];
+    if (!sl) continue;
+    const add = (key: string, text: string | undefined) => { if (text) out.push({ id: `${no}.${key}`, text }); };
+    add("headline", sl.headline);
+    if (sl.visual.type !== "quote") add("value", sl.visual.value);
+    add("label", sl.visual.label);
+    (sl.visual.items ?? []).forEach((t, i) => add(`items.${i}`, t));
+    add("left", sl.visual.left);
+    add("right", sl.visual.right);
+    sl.support.forEach((t, i) => add(`support.${i}`, t));
+    add("notes", sl.notes);
+  }
+  return out;
+}
+
+/** Writes humanized texts back into the slides they came from. */
+export function applySlideText(prev: WikiState, items: Array<{ id: string; text: string }>): WikiState {
+  const s: WikiState = JSON.parse(JSON.stringify(prev));
+  for (const { id, text } of items) {
+    const [no, key, idx] = id.split(".");
+    const sl = s.deck[no];
+    if (!sl) continue;
+    if (key === "headline") sl.headline = text;
+    else if (key === "notes") sl.notes = text;
+    else if (key === "support" && idx !== undefined) sl.support[Number(idx)] = text;
+    else if (key === "items" && idx !== undefined && sl.visual.items) sl.visual.items[Number(idx)] = text;
+    else if (key === "value" && sl.visual.type !== "quote") sl.visual.value = text;
+    else if (key === "label" || key === "left" || key === "right") sl.visual[key] = text;
+  }
+  return s;
+}
+
 export interface DeckResult { state: WikiState; dropped: string[]; written: number[] }
 
 /**

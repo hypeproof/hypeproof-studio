@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 const wiki = await import("../src/learningWiki.ts");
 const deck = await import("../src/deckGenerator.ts");
+const hz = await import("../src/humanizer.ts");
 const { FOUNDER_AI_FOR_GOOD_V5: PLAN } = await import("../../../worker/src/profiles/plans/founder-ai-for-good-v5.ts");
 let passed = 0;
 const ok = (name) => { passed++; console.log(`✓ ${name}`); };
@@ -126,6 +127,28 @@ assert.ok(!xss.includes("<img"), "planted: markup in the team name is escaped");
 assert.ok(wiki.lintWiki(sDeck).some((x) => x.startsWith("덱 03:") && x.endsWith("뺐어요")), wiki.lintWiki(sDeck).join("\n"));
 assert.match(wiki.renderWikiPages(sDeck, PLAN)["log.md"], /인용이 없어 뺀 것/);
 ok("deck rendering: 16:9 pitch slides in template order, quote/number/product visuals, notes·근거 behind a switch, escaped");
+
+// ── humanizer skill on slides: quotes verbatim, no new numbers, dashes gone ──
+{
+  const st = { ...s1, deck: { "2": { headline: "단순한 앱이 아니라 혁신적인 길잡이 — 3명 중 2명", visual: { type: "quote", value: "혼자 갈 수 있겠다", label: "경로당 어르신" }, support: ["직접 만남"], notes: "노트", refs: ["E-1"], gaps: [], session: 2 } } };
+  const items = deck.slideTextItems(st, [2]);
+  assert.ok(!items.some((x) => x.id === "2.value"), "a quote's value is never sent for rewriting");
+  const res = hz.applyHumanized(items, { items: [
+    { id: "2.headline", text: "어르신 3명 중 2명이 혼자 끝까지 갔다" },
+    { id: "2.label", text: "경로당 어르신 5명" },
+    { id: "2.support.0", text: "직접 만났다" },
+  ] });
+  assert.equal(res.items.find((x) => x.id === "2.headline").text, "어르신 3명 중 2명이 혼자 끝까지 갔다");
+  assert.equal(res.items.find((x) => x.id === "2.label").text, "경로당 어르신", "planted: a rewrite that adds a number (5) is refused");
+  assert.ok(res.rejected.some((x) => x.includes("새 숫자 5")));
+  const back = deck.applySlideText(st, res.items);
+  assert.equal(back.deck["2"].visual.value, "혼자 갈 수 있겠다", "the quote is untouched");
+  assert.equal(back.deck["2"].support[0], "직접 만났다");
+  assert.equal(hz.stripDashes("가 — 나 – 다"), "가, 나, 다");
+  assert.equal(hz.applyHumanized([{ id: "a", text: "길잡이 — 앱" }], null).items[0].text, "길잡이, 앱", "dashes go even when the model answer fails");
+  assert.match(hz.humanizePrompt(items), /대조 구문을 쓰지 않는다/);
+  ok("humanizer skill: slide text rewritten without new numbers, quotes verbatim, dashes stripped; failure keeps the original");
+}
 
 // ── coach context and disk round trip ────────────────────────────────────────
 const ctx = wiki.coachContext(s1, PLAN);

@@ -44,7 +44,8 @@ import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
 import { applyWikiProposal, archiveNotes, coachContext, initWiki, jsonFromText, loadState, productTitle, readNotes, renderWikiPages, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
-import { applyDeckProposal, deckPrompt, deckRepairPrompt, refusedSlides, renderDeck, type DeckProposal } from "./deckGenerator";
+import { applyDeckProposal, applySlideText, deckPrompt, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal } from "./deckGenerator";
+import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
 import {
@@ -1050,6 +1051,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const r2 = applyDeckProposal(r.state, template, refused.map((x) => x.no), fix, session);
         r = { state: r2.state, dropped: r2.dropped, written: [...r.written, ...r2.written] };
       }
+    }
+    // The humanizer skill on what was written (quotes stay verbatim; a rewrite that adds a number is refused).
+    const texts = slideTextItems(r.state, r.written);
+    if (texts.length) {
+      const h = await this.completeSkill(humanizePrompt(texts, "발표 슬라이드 문장"), {});
+      const fixed = applyHumanized(texts, h.ok ? jsonFromText<HumanizeProposal>(h.text) : null);
+      r = { ...r, state: applySlideText(r.state, fixed.items) };
     }
     saveState(dir, r.state);
     writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) });
