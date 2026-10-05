@@ -1526,3 +1526,15 @@ CREATE TABLE IF NOT EXISTS chalk_feedback_revisions (
   PRIMARY KEY (feedback_id, revision, file),
   FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
 );
+
+-- cr-review (#1398) — migration 0038: Weekly Review Packs (Venture Memory's WeeklyReviews).
+-- One immutable row per prepared revision of one Project's pack for one week; claims name their
+-- sources by reference and the evidence stays in the measurement-core record (SX-48).
+CREATE TABLE IF NOT EXISTS cr_weekly_reviews (
+  project_id TEXT NOT NULL REFERENCES cr_projects(id),
+  week       INTEGER NOT NULL,
+  revision   INTEGER NOT NULL,
+  doc        TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, week, revision)
+);

@@ -3596,14 +3596,42 @@
       "negative_control": "An unlinked factual claim fails; changing one evidence item regenerates only the sections that read it; any model call on open fails; another cohort's team never appears in the overview. With the CR switch off, the review screen, \"Prepare Weekly Review\" and the director overview routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory.",
       "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
-        "worker/src/lib/classroom-report.ts",
-        "worker/src/lib/classroom-evaluator.ts",
-        "worker/src/lib/classroom-report-html.ts",
-        "worker/src/routes",
-        "extensions/hypeproof-chat/webview-ui/src"
+        "worker/src/lib/curriculum/review.ts",
+        "worker/src/lib/curriculum/store.ts",
+        "worker/src/lib/curriculum/venture.ts",
+        "worker/src/lib/curriculum/memory.ts",
+        "worker/src/lib/curriculum/retention.ts",
+        "worker/src/routes/curriculum.ts",
+        "worker/src/skills/curriculum/rules.ts",
+        "worker/src/lib/measurement-core/local-record.ts",
+        "worker/migrations/0038-curriculum-runtime-review.sql",
+        "worker/schema.sql",
+        "extensions/hypeproof-chat/src/reviewSession.ts",
+        "extensions/hypeproof-chat/src/reviewView.ts",
+        "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/src/memoryView.ts",
+        "extensions/hypeproof-chat/src/skillSession.ts",
+        "extensions/hypeproof-chat/package.json",
+        "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/InstructorChatPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/MemoryPanel.tsx"
       ],
       "verification_inputs": [
-        "docs/requirements/curriculum-runtime.md"
+        "docs/testing/curriculum-runtime-2026-10-05-review.md",
+        "worker/test/cr-review.test.mjs",
+        "extensions/hypeproof-chat/test/cr-review.smoke.mjs",
+        "e2e/curriculum-runtime/review-app.spec.ts",
+        "worker/src/lib/curriculum/review.ts",
+        "worker/migrations/0038-curriculum-runtime-review.sql",
+        "extensions/hypeproof-chat/src/reviewSession.ts",
+        "extensions/hypeproof-chat/src/reviewView.ts",
+        "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts"
       ]
     },
     {

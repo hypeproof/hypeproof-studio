@@ -693,3 +693,124 @@ export async function slidesOf(db: DB, projectId: string): Promise<DeckSlide[]> 
 export async function getStakeholder(db: DB, id: string): Promise<Stakeholder | null> {
   return parse<Stakeholder>(await db.prepare("SELECT doc FROM cr_stakeholders WHERE id = ?").bind(id).first());
 }
+
+// ── cr-review (#1398): Weekly Review Packs (migration 0038; CR-48–CR-53) ─────────
+
+/**
+ * A database without migration 0038 has no pack and nothing to delete: the reads Venture Memory
+ * and the deletion paths share with it answer that way instead of failing (cr-memory's read and
+ * cr-evidence's deletion work on a database where only 0032–0034 are applied).
+ */
+const noReviewTable = (e: unknown) => e instanceof Error && /no such table:?\s*cr_weekly_reviews/i.test(e.message);
+
+/** The latest prepared revision of a Project's pack for one week, or null. */
+export async function latestReview<T>(db: DB, projectId: string, week: number): Promise<T | null> {
+  return parse<T>(await db.prepare("SELECT doc FROM cr_weekly_reviews WHERE project_id = ? AND week = ? ORDER BY revision DESC LIMIT 1").bind(projectId, week).first());
+}
+
+/** The latest revision of every week's pack of a Project: week, revision and when it was prepared. Content is not read. */
+export async function reviewSummariesOf(db: DB, projectId: string): Promise<Array<{ week: number; revision: number; prepared_at: number }>> {
+  try {
+    const rows = await db
+      .prepare("SELECT week, MAX(revision) AS revision, MAX(created_at) AS prepared_at FROM cr_weekly_reviews WHERE project_id = ? GROUP BY week ORDER BY week")
+      .bind(projectId)
+      .all<{ week: number; revision: number; prepared_at: number }>();
+    return (rows.results ?? []).map((r) => ({ week: Number(r.week), revision: Number(r.revision), prepared_at: Number(r.prepared_at) }));
+  } catch (e) {
+    if (noReviewTable(e)) return [];
+    throw e;
+  }
+}
+
+/**
+ * Store the next revision of a week's pack, only on top of the revision it was prepared from:
+ * one statement decides, so two preparations sent at the same time cannot both write revision
+ * N+1, and the one that lost answers `review_changed`. `max` bounds the revisions of one week.
+ */
+export async function insertReview(db: DB, pack: { project_id: string; week: number; revision: number; prepared_at: number }, baseRevision: number, max: number): Promise<boolean> {
+  if (pack.revision !== baseRevision + 1 || pack.revision > max) return false;
+  const r = await db
+    .prepare(
+      "INSERT OR IGNORE INTO cr_weekly_reviews (project_id, week, revision, doc, created_at) SELECT ?, ?, ?, ?, ? WHERE COALESCE((SELECT MAX(revision) FROM cr_weekly_reviews WHERE project_id = ? AND week = ?), 0) = ?",
+    )
+    .bind(pack.project_id, pack.week, pack.revision, JSON.stringify(pack), pack.prepared_at, pack.project_id, pack.week, baseRevision)
+    .run();
+  return Number(r.meta?.changes ?? 0) > 0;
+}
+
+/** Take back one stored revision (a pack whose evidence was deleted while it was being stored). */
+export async function deleteReviewRevision(db: DB, projectId: string, week: number, revision: number): Promise<void> {
+  await db.prepare("DELETE FROM cr_weekly_reviews WHERE project_id = ? AND week = ? AND revision = ?").bind(projectId, week, revision).run();
+}
+
+/**
+ * Every pack of a Project, every revision (CR-69): a pack quotes the statements of the evidence
+ * items it was composed from, so deleting the team's participant data deletes its packs too. The
+ * team prepares a new one from what is left. Returns how many rows went.
+ */
+export async function dropProjectReviews(db: DB, projectId: string): Promise<number> {
+  try {
+    const r = await db.prepare("DELETE FROM cr_weekly_reviews WHERE project_id = ?").bind(projectId).run();
+    return Number(r.meta?.changes ?? 0);
+  } catch (e) {
+    if (noReviewTable(e)) return 0;
+    throw e;
+  }
+}
+
+/**
+ * The next experiment a director wrote with a decision (CR-52): an Experiment with status
+ * `draft` in the same table as every other experiment (CR-39, CR-T80), naming a stored
+ * Hypothesis and a stored version of the Project. `key` is the submission's own key (the
+ * decision id it is written with): a retried submission finds the draft it already wrote
+ * instead of writing a second one (the unique open-start key). Bounded with the Project's
+ * other experiments.
+ */
+export async function createExperimentDraft(
+  db: DB,
+  input: Omit<Experiment, "schema" | "kind" | "created_at" | "status"> & { now: number; key: string; max: number },
+): Promise<{ ok: true; experiment: Experiment; created: boolean } | { ok: false; code: "hypothesis_unresolved" | "version_unresolved" | "experiment_limit" }> {
+  const h = await getHypothesis(db, input.hypothesis_id);
+  if (!h || h.project_id !== input.project_id) return { ok: false, code: "hypothesis_unresolved" };
+  if (!(await getVersion(db, input.project_id, input.product_version_id))) return { ok: false, code: "version_unresolved" };
+  const { now, key, max, ...rest } = input;
+  const experiment: Experiment = { schema: VENTURE_SCHEMA, kind: "experiment", ...rest, status: "draft", created_at: now };
+  const r = await db
+    .prepare(
+      "INSERT OR IGNORE INTO cr_experiments (id, project_id, hypothesis_id, product_version_id, doc, revision, open_start_key, created_at, updated_at) SELECT ?, ?, ?, ?, ?, 1, ?, ?, ? WHERE (SELECT COUNT(*) FROM cr_experiments WHERE project_id = ?) < ?",
+    )
+    .bind(experiment.id, experiment.project_id, experiment.hypothesis_id, experiment.product_version_id, JSON.stringify(experiment), key, now, now, experiment.project_id, max)
+    .run();
+  if (Number(r.meta?.changes ?? 0) > 0) return { ok: true, experiment, created: true };
+  const same = await openStart(db, experiment.project_id, key);
+  return same ? { ok: true, experiment: same, created: false } : { ok: false, code: "experiment_limit" };
+}
+
+/**
+ * Take back a draft this submission wrote when its decision could not be stored. Only an
+ * untouched draft (no link) that no stored decision names: an identical submission sent at the
+ * same time finds the same draft (its key is the decision id) and may store its decision, naming
+ * this draft, first (CR-52). Its hypothesis then stays too (`deleteHypothesis` keeps a
+ * hypothesis an experiment names).
+ */
+export async function deleteExperimentDraft(db: DB, id: string): Promise<void> {
+  await db
+    .prepare(
+      "DELETE FROM cr_experiments WHERE id = ? AND json_extract(doc, '$.status') = 'draft' AND NOT EXISTS (SELECT 1 FROM cr_test_links WHERE experiment_id = ?) AND NOT EXISTS (SELECT 1 FROM cr_decisions d WHERE d.project_id = cr_experiments.project_id AND json_extract(d.doc, '$.next_experiment_id') = ?)",
+    )
+    .bind(id, id, id)
+    .run();
+}
+
+/**
+ * Store a decision under its own id once: a retried submission (same id) changes nothing and
+ * answers `exists`; `limit` when the Project already holds `max` decisions.
+ */
+export async function addDecisionOnce(db: DB, d: Decision, now: number, max: number): Promise<"created" | "exists" | "limit"> {
+  const r = await db
+    .prepare("INSERT OR IGNORE INTO cr_decisions (id, project_id, doc, revision, created_at, updated_at) SELECT ?, ?, ?, 1, ?, ? WHERE (SELECT COUNT(*) FROM cr_decisions WHERE project_id = ?) < ?")
+    .bind(d.id, d.project_id, JSON.stringify(d), now, now, d.project_id, max)
+    .run();
+  if (Number(r.meta?.changes ?? 0) > 0) return "created";
+  return (await getDecision(db, d.id)) ? "exists" : "limit";
+}

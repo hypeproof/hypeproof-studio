@@ -19,12 +19,13 @@ import { resolveProfile } from "../lib/modules";
 import { profileServesCohort } from "../lib/cohort-binding";
 import { curriculumRuntimeAllowed } from "../lib/moderation";
 import { makeErrorBody } from "../middleware/request-id";
-import { digestOf, NOTES_HOST } from "../lib/measurement-core/local-record";
+import { DELETE_NOT_COVERED, digestOf, NOTES_HOST } from "../lib/measurement-core/local-record";
 import {
   CHANNEL_MAX,
   HYPOTHESIS_STATUSES,
   LINK_ID,
   VENTURE_SCHEMA,
+  isHumanDecision,
   isVentureId,
   parseEvidenceItemRef,
   validateDecisionContract,
@@ -102,6 +103,24 @@ import { CURRICULUM, CURRICULUM_SKILLS, checkSkillOutput, curriculumWeek, skillP
 import { evidenceDraftOf } from "../skills/curriculum/rules";
 import { validateAgainstSchema } from "../skills/curriculum/contract";
 import { SOURCE_LIMITS, isSourcePath, modelContextOf, runWeek, skillContextOf, type VersionForSkill } from "../lib/curriculum/skill-run";
+import { addDecisionOnce, createExperimentDraft, deleteExperimentDraft, deleteReviewRevision, dropProjectReviews, insertReview, latestReview, reviewSummariesOf } from "../lib/curriculum/store";
+import {
+  buildPack,
+  checkNextExperiment,
+  contextEvidenceRefs,
+  currentReview,
+  decisionsOfReview,
+  evidenceRefsOf,
+  packEvidence,
+  packProblems,
+  resolveSources,
+  reviewStatus,
+  reviewWeek,
+  sourcesOf,
+  weekExperiments,
+  type SlideProposal,
+  type WeeklyReview,
+} from "../lib/curriculum/review";
 
 type Ctx = Context<{ Bindings: Env; Variables: { requestId: string } }>;
 
@@ -816,8 +835,8 @@ curriculum.delete("/experiments/:id", async (c) => {
   const r = await evidenceDeleter(c, c.req.param("id"));
   if (r instanceof Response) return r;
   const now = Date.now();
-  const { experiment, report } = await deleteExperimentData(c.env.HPS_DB, r.record, r.experiment, now);
-  return c.json({ receipt: { kind: "experiment_test_data_deleted", experiment_id: experiment.id, at: now, deleted_by: r.by, removed: report?.removed ?? {}, not_covered: report?.not_covered ?? [], links_revoked: true }, experiment });
+  const { experiment, report, review_packs_deleted } = await deleteExperimentData(c.env.HPS_DB, r.record, r.experiment, now);
+  return c.json({ receipt: { kind: "experiment_test_data_deleted", experiment_id: experiment.id, at: now, deleted_by: r.by, removed: report?.removed ?? {}, not_covered: report?.not_covered ?? [], links_revoked: true, review_packs_deleted }, experiment });
 });
 
 /** Delete one participant session (CR-69; recon R6's per-session erase), with its receipt; the link's counter follows. */
@@ -827,11 +846,26 @@ curriculum.delete("/experiments/:id/sessions/:sid", async (c) => {
   const sid = c.req.param("sid");
   if (!/^ps-[0-9a-f]{32}$/.test(sid)) return unknownRoute(c);
   const link = await r.record.sessionLink(PUBLISHED_HOST, sid);
-  if (!link || link.task !== r.experiment.id) return unknownRoute(c);
   const now = Date.now();
+  if (!link) {
+    // cr-review (CR-69): a repeated erase. The session is gone and its tombstone stands in this
+    // Project's record (one record per Project), naming the experiment it was erased from, so an
+    // erase of it ran; that erase may have failed before the Project's packs went, and they quote
+    // statements of the drafts it removed. The packs go now. Under another experiment the session
+    // is the unknown route, as a live one is (below). What a failure inside `deleteSession` itself
+    // left (after the session key went) is not redone here: a CR-69 follow-up.
+    if ((await r.record.deletedSessionTask(PUBLISHED_HOST, sid)) !== r.experiment.id) return unknownRoute(c);
+    const reviews = await dropProjectReviews(c.env.HPS_DB, r.project.id);
+    return c.json({ receipt: { kind: "participant_session_deleted", experiment_id: r.experiment.id, session_id: sid, at: now, deleted_by: r.by, already_deleted: true, removed: {}, not_covered: DELETE_NOT_COVERED, review_packs_deleted: reviews } });
+  }
+  if (link.task !== r.experiment.id) return unknownRoute(c);
   const report = await r.record.deleteSession(PUBLISHED_HOST, sid, { by: "user", at: now });
   if (link.attribution?.link) await releaseErasedSession(c.env.HPS_DB, link.attribution.link, sid);
-  return c.json({ receipt: { kind: "participant_session_deleted", experiment_id: r.experiment.id, session_id: sid, at: now, deleted_by: r.by, removed: report.removed, not_covered: report.not_covered } });
+  // cr-review (CR-69): a Weekly Review Pack quotes the statements of the drafts the erase just
+  // removed, so the Project's packs go too, after the erase; the team prepares a new one. When
+  // this drop fails, the erase is answered 500 and repeating it drops them (the branch above).
+  const reviews = await dropProjectReviews(c.env.HPS_DB, r.project.id);
+  return c.json({ receipt: { kind: "participant_session_deleted", experiment_id: r.experiment.id, session_id: sid, at: now, deleted_by: r.by, removed: report.removed, not_covered: report.not_covered, review_packs_deleted: reviews } });
 });
 
 // ── Venture Memory (cr-memory #1395; CR-35–CR-42, CR-75–CR-79, CR-82) ─────────
@@ -881,6 +915,17 @@ async function memoryReader(c: Ctx, projectId: string): Promise<{ project: Proje
     const project = await memberProject(c, s, projectId);
     return project instanceof Response ? project : { project, by: "student" };
   }
+  const d = await directorProject(c, projectId);
+  return d instanceof Response ? d : { project: d.project, by: "director" };
+}
+
+/**
+ * A Project a director may act on: an issuer whose scope covers its cohort and profile, the
+ * switch on for that profile, the token not revoked (R5, CR-37, SX-38). Anyone else, and any id
+ * that does not exist, gets the unknown-route answer. Reads go through `memoryReader`; the one
+ * director write is the Weekly Review decision (cr-review, CR-51).
+ */
+async function directorProject(c: Ctx, projectId: string): Promise<{ payload: TokenPayload; project: Project } | Response> {
   const d = await director(c);
   if (d instanceof Response) return d;
   if (!isVentureId(projectId)) return unknownRoute(c);
@@ -890,7 +935,7 @@ async function memoryReader(c: Ctx, projectId: string): Promise<{ project: Proje
   if (!resolved || !curriculumRuntimeAllowed(resolved.profile)) return unknownRoute(c);
   noStore(c);
   if (d.payload.jti && (await isTokenRevoked(c.env.HPS_KV, d.payload.jti))) return refuse(c, 401, "revoked");
-  return { project, by: "director" };
+  return { payload: d.payload, project };
 }
 
 /** A member writing to a Project's memory, with the parsed body, or the answer to send. */
@@ -945,7 +990,7 @@ const unresolved = (refs: readonly string[], items: ReadonlyMap<string, Evidence
 /** Everything the Project's memory holds, assembled with no model call (CR-36): no chat history is read anywhere. */
 async function loadMemory(env: Env, project: Project): Promise<MemoryState> {
   const db = env.HPS_DB;
-  const [hypotheses, experiments, versions, decisions, stakeholders, metrics, slides] = await Promise.all([
+  const [hypotheses, experiments, versions, decisions, stakeholders, metrics, slides, reviews] = await Promise.all([
     hypothesesOf(db, project.id),
     experimentsOf(db, project.id),
     versionsOf(db, project.id),
@@ -953,6 +998,7 @@ async function loadMemory(env: Env, project: Project): Promise<MemoryState> {
     stakeholdersOf(db, project.id),
     metricsOf(db, project.id),
     slidesOf(db, project.id),
+    reviewSummariesOf(db, project.id),
   ]);
   const record = recordOf(env, project);
   const items: EvidenceItemView[] = [];
@@ -963,7 +1009,7 @@ async function loadMemory(env: Env, project: Project): Promise<MemoryState> {
     if (m.source.type !== "event_count" || events.has(m.source.experiment_id) || !experiments.some((e) => e.id === (m.source as { experiment_id: string }).experiment_id)) continue;
     events.set(m.source.experiment_id, (await record.observationsOf(PUBLISHED_HOST, m.source.experiment_id)).map((r) => r.event));
   }
-  return memoryState({ project, hypotheses, experiments, versions, decisions, stakeholders, metrics, slides, items }, events);
+  return memoryState({ project, hypotheses, experiments, versions, decisions, stakeholders, metrics, slides, items, reviews }, events);
 }
 
 curriculum.get("/projects/:id/memory", async (c) => {
@@ -1065,9 +1111,10 @@ curriculum.post("/projects/:id/hypotheses/:hid/revisions", async (c) => {
   let decisionId: string | undefined;
   if (w.body.decision_id !== undefined) {
     const d = isVentureId(w.body.decision_id) ? await getDecision(c.env.HPS_DB, w.body.decision_id) : null;
-    // Only the team's own decision can be the reason a belief changed (SX-45).
+    // Only a person's decision (the team's, or the director's from a review pack, cr-review) can
+    // be the reason a belief changed; an AI suggestion never is (SX-45).
     if (!d || d.project_id !== w.project.id) return refuse(c, 409, "decision_unresolved");
-    if (d.actor !== "student") return refuse(c, 409, "decision_is_ai_suggestion");
+    if (!isHumanDecision(d)) return refuse(c, 409, "decision_is_ai_suggestion");
     decisionId = d.id;
   }
   const items = await itemsFor(c.env, w.project, experimentsOfRefs(refs));
@@ -1223,8 +1270,8 @@ curriculum.put("/projects/:id/slides/:n", async (c) => {
   if (v.value.decision_id !== undefined) {
     const d = await getDecision(c.env.HPS_DB, v.value.decision_id);
     if (!d || d.project_id !== w.project.id) return refuse(c, 409, "decision_unresolved");
-    // A slide changes because of the team's decision, never an AI suggestion (SX-45), as for a hypothesis revision.
-    if (d.actor !== "student") return refuse(c, 409, "decision_is_ai_suggestion");
+    // A slide changes because of a person's decision (the team's or the director's), never an AI suggestion (SX-45), as for a hypothesis revision.
+    if (!isHumanDecision(d)) return refuse(c, 409, "decision_is_ai_suggestion");
   }
   const slide = await addSlideRevision(c.env.HPS_DB, { schema: VENTURE_SCHEMA, kind: "deck_slide", project_id: w.project.id, ...v.value, at: Date.now(), by: w.s.payload.u }, MEMORY_LIMITS.slideRevisions);
   if (!slide) return refuse(c, 409, "slide_revision_limit");
@@ -1382,6 +1429,335 @@ curriculum.post("/projects/:id/skills/:skill/output", async (c) => {
   return c.json({ skill: r.skill.tag, capability: r.skill.contract.preferred_capability, output, written }, written.length ? 201 : 200);
 });
 
+// ── Weekly Review Pack (cr-review #1398; CR-48–CR-53, CR-62; recon R9) ─────────
+//
+// A member prepares the team's pack for a week ("Prepare Weekly Review", CR-49) in two calls.
+// `prepare` reads the records and answers which sections are stale and, when the model's
+// section is one of them, the Experiment skill's prompt and the coach route's metadata (CR-45);
+// the App sends that prompt through `/v1/chat/completions` once and posts the answer to
+// `commit`. `commit` reads the records again, checks the answer with the skill's own gate
+// (CR-44) for exactly the context it was asked with, composes the stale fact sections, checks
+// the whole pack (`packProblems`, CR-48) and stores the next revision on top of the one it was
+// prepared from; fresh sections are carried over unchanged. Opening a pack (`GET …/review`)
+// reads storage and the records and never generates (CR-50). A director in scope opens the same
+// pack, writes the final decision and the next experiment from it into Venture Memory (CR-51,
+// CR-52), and sees every directed team's pack status (CR-53). Behind the CR switch like every
+// route here; packs live in `cr_weekly_reviews` (migration 0038).
+
+/** Policy bounds: revisions of one week's pack, and the teams one overview computes. */
+export const REVIEW_LIMITS = { revisionsPerWeek: 100, overviewProjects: 40 } as const;
+
+/** Test seam only: runs after a pack revision is stored and before its evidence is checked again. Production never sets it. */
+let afterReviewInsert: ((project: Project) => Promise<void>) | undefined;
+export const setAfterReviewInsert = (f: typeof afterReviewInsert) => {
+  afterReviewInsert = f;
+};
+
+/**
+ * Slide patch proposals pending for a Project (CR-56), part of a pack's source state. None are
+ * stored before cr-deck, which reads them here so a new proposal marks "deck slides affected"
+ * stale (CR-49).
+ */
+const pendingProposals = async (_env: Env, _project: Project): Promise<SlideProposal[]> => [];
+
+/** The pack of one week as a reader sees it: stored content, what is stale now, every source resolved now. No model call. */
+async function openReview(env: Env, project: Project, memory: MemoryState, week: number) {
+  const pack = await latestReview<WeeklyReview>(env.HPS_DB, project.id, week);
+  const current = await currentReview(memory, week, await pendingProposals(env, project));
+  const state = reviewStatus(pack, current);
+  const decisions = memory.decisions.filter((d) => decisionsOfReview([d], week).length > 0);
+  return {
+    project_id: project.id,
+    project_title: project.title,
+    week,
+    status: state.status,
+    stale_sections: state.stale_sections,
+    pack,
+    sources: pack ? resolveSources(memory, sourcesOf(pack)) : {},
+    // The director's decisions written from this week's packs, and the drafts written with them (CR-51, CR-52).
+    decisions,
+    drafts: memory.experiments.filter((e) => e.status === "draft" && decisions.some((d) => d.next_experiment_id === e.id)),
+    weeks: memory.weekly_reviews,
+  };
+}
+
+const timingOf = (v: unknown): { total_ms: number; provider_ms: number } | undefined => {
+  const t = v as { total_ms?: unknown; provider_ms?: unknown } | null;
+  const ok = (x: unknown) => typeof x === "number" && Number.isFinite(x) && x >= 0 && x < 3600_000;
+  return t && ok(t.total_ms) && ok(t.provider_ms) ? { total_ms: Math.round(t.total_ms as number), provider_ms: Math.round(t.provider_ms as number) } : undefined;
+};
+
+curriculum.get("/projects/:id/review", async (c) => {
+  const r = await memoryReader(c, c.req.param("id"));
+  if (r instanceof Response) return r;
+  const memory = await loadMemory(c.env, r.project);
+  const week = reviewWeek(memory, c.req.query("week"));
+  if (week === null) return refuse(c, 400, "invalid_week");
+  return c.json({ review: await openReview(c.env, r.project, memory, week), read_by: r.by });
+});
+
+/** What "Prepare Weekly Review" has to do now: the stale sections, and the model section's prompt when it is one. Writes nothing. */
+curriculum.post("/projects/:id/review/prepare", async (c) => {
+  const w = await memberWrite(c, c.req.param("id"));
+  if (w instanceof Response) return w;
+  const memory = await loadMemory(c.env, w.project);
+  const week = reviewWeek(memory, w.body.week);
+  if (week === null) return refuse(c, 400, "invalid_week");
+  const pack = await latestReview<WeeklyReview>(c.env.HPS_DB, w.project.id, week);
+  const current = await currentReview(memory, week, await pendingProposals(c.env, w.project));
+  const state = reviewStatus(pack, current);
+  const run = current.next.run;
+  return c.json({
+    week,
+    base_revision: pack?.revision ?? 0,
+    status: state.status,
+    stale_sections: state.stale_sections,
+    model_sections: state.stale_sections.includes("next_experiment") ? [{ section: "next_experiment", skill: run.skill.tag, capability: run.skill.contract.preferred_capability, headers: run.headers, prompt: run.prompt, input_digest: current.next.digest }] : [],
+  });
+});
+
+/** Store the next revision of the week's pack: only the stale sections are regenerated (CR-49). */
+curriculum.post("/projects/:id/review/commit", async (c) => {
+  const started = Date.now();
+  const w = await memberWrite(c, c.req.param("id"));
+  if (w instanceof Response) return w;
+  const db = c.env.HPS_DB;
+  if (w.body.week === undefined) return refuse(c, 400, "invalid_week");
+  const memory = await loadMemory(c.env, w.project);
+  const week = reviewWeek(memory, w.body.week);
+  if (week === null) return refuse(c, 400, "invalid_week");
+  const base = await latestReview<WeeklyReview>(db, w.project.id, week);
+  if (w.body.base_revision !== (base?.revision ?? 0)) return refuse(c, 409, "review_changed", { latest: base?.revision ?? 0 });
+  const current = await currentReview(memory, week, await pendingProposals(c.env, w.project));
+  let model: { output: Record<string, unknown>; model: string | null } | undefined;
+  let refused: { code: string; problems: string[] } | undefined;
+  const sent = (w.body.outputs as { next_experiment?: { input_digest?: unknown; output?: unknown; model?: unknown } } | undefined)?.next_experiment;
+  if (sent !== undefined) {
+    // The answer is to exactly the context it was asked with; records that changed since make it an answer to another question.
+    if (!sent || typeof sent !== "object" || sent.input_digest !== current.next.digest) return refuse(c, 409, "inputs_changed");
+    const check = checkNextExperiment(memory, current.next.run, sent.output);
+    if (check.ok) model = { output: sent.output as Record<string, unknown>, model: typeof sent.model === "string" ? sent.model.slice(0, 120) : null };
+    else refused = { code: check.code, problems: check.problems };
+  }
+  const timing = timingOf(w.body.timing);
+  const { pack, regenerated } = buildPack(base, current, { project_id: w.project.id, by: w.s.payload.u, now: Date.now(), ...(model ? { model } : {}), ...(timing ? { timing } : {}) });
+  const extra = refused ? { refused: { next_experiment: refused } } : {};
+  // Nothing is stale: nothing is regenerated and no revision is written.
+  if (base && regenerated.length === 0) return c.json({ review: await openReview(c.env, w.project, memory, week), regenerated, unchanged: true, ...extra }, 200);
+  const problems = packProblems(pack);
+  if (problems.length) return refuse(c, 422, "invalid_pack", { problems });
+  if (pack.revision > REVIEW_LIMITS.revisionsPerWeek) return refuse(c, 409, "review_revision_limit", { max: REVIEW_LIMITS.revisionsPerWeek });
+  // CR-62: the App's figures run to sending this request, so the Service adds its own share of
+  // the commit; a revision read back covers the preparation as `total_ms + commit_ms` (the
+  // network round trip apart).
+  if (pack.timing) pack.timing = { ...pack.timing, commit_ms: Date.now() - started };
+  if (!(await insertReview(db, pack, base?.revision ?? 0, REVIEW_LIMITS.revisionsPerWeek))) return refuse(c, 409, "review_changed", { latest: (await latestReview<WeeklyReview>(db, w.project.id, week))?.revision ?? 0 });
+  if (afterReviewInsert) await afterReviewInsert(w.project);
+  // The pack quotes the statements of the evidence items it was composed from: each fact section
+  // cites its items, and the AI's suggestion may quote any item of the context the model read (the
+  // project-wide register, every week's), cited or not. When the team's participant data was
+  // deleted while the pack was being composed (CR-69), the deletion has already dropped every
+  // stored pack, or will after this one; either way a pack any of whose items no longer resolve is
+  // taken back here, so no deleted statement outlives the deletion in a pack. A suggestion kept
+  // from an earlier context (stale, its digest another) sits on a base revision such a deletion
+  // drops, so the insert on top of that revision fails instead (`insertReview`).
+  const next = pack.sections.find((s) => s.id === "next_experiment");
+  const read = next?.suggestion && next.digest === current.next.digest ? contextEvidenceRefs(current.next.run) : [];
+  const evRefs = [...new Set([...evidenceRefsOf(pack), ...read])];
+  if (evRefs.length) {
+    const items = await itemsFor(c.env, w.project, experimentsOfRefs(evRefs));
+    const gone = evRefs.filter((r) => !items.has(r));
+    if (gone.length) {
+      await deleteReviewRevision(db, w.project.id, week, pack.revision);
+      return refuse(c, 409, "evidence_changed", { refs: gone });
+    }
+  }
+  return c.json({ review: await openReview(c.env, w.project, memory, week), regenerated, ...extra }, 201);
+});
+
+/**
+ * Everything one director submission chose, normalized as it would be stored (cr-review, CR-51,
+ * CR-52): the statement, the cited evidence and assumptions and the slides as sets, and the next
+ * experiment's fields. The decision id is derived from it, so a retry of the submission is the
+ * same decision and any change to what was chosen is another one.
+ */
+function decisionSubmission(body: Record<string, unknown>, statement: unknown, evidenceRefs: readonly string[], assumptionRefs: readonly string[]) {
+  const trimmed = (v: unknown) => (typeof v === "string" ? v.trim() : (v ?? null));
+  const ne = body.next_experiment;
+  let next: unknown = ne ?? null;
+  if (ne && typeof ne === "object" && !Array.isArray(ne)) {
+    const o = ne as Record<string, unknown>;
+    const hypothesisId = o.hypothesis_id === undefined ? null : o.hypothesis_id;
+    next = { hypothesis_id: hypothesisId, hypothesis: hypothesisId === null ? trimmed(o.hypothesis) : null, question: trimmed(o.question), method: trimmed(o.method), success_criteria: Array.isArray(o.success_criteria) ? o.success_criteria.map(trimmed) : (o.success_criteria ?? null) };
+  }
+  const slides = Array.isArray(body.affected_deck_slides) ? [...body.affected_deck_slides].sort((a, b) => Number(a) - Number(b)) : (body.affected_deck_slides ?? []);
+  return { statement, evidence_refs: [...evidenceRefs].sort(), assumption_refs: [...assumptionRefs].sort(), affected_deck_slides: slides, next_experiment: next };
+}
+
+/**
+ * CR-51, CR-52 — the director's final decision and the next experiment, written from the review
+ * screen into Venture Memory: a Decision with actor `director`, linked to evidence of the pack it
+ * names (its observed and interpretation items; its assumptions as assumption refs), and an
+ * Experiment draft for the next week, written first and named by the decision. A retried
+ * submission of the same decision (`decisionSubmission`) answers the stored one and writes
+ * nothing; two sent at the same time store one decision and one draft.
+ */
+curriculum.post("/projects/:id/review/decision", async (c) => {
+  const d = await directorProject(c, c.req.param("id"));
+  if (d instanceof Response) return d;
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return refuse(c, 400, "invalid_json");
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return refuse(c, 400, "invalid_json");
+  const db = c.env.HPS_DB;
+  const project = d.project;
+  const week = body.week;
+  if (!Number.isInteger(week) || (week as number) < 1 || (week as number) > 52) return refuse(c, 400, "invalid_week");
+  const pack = await latestReview<WeeklyReview>(db, project.id, week as number);
+  if (!pack) return refuse(c, 409, "review_missing");
+  // The decision is written from the pack the director read; a newer revision needs a new read.
+  if (body.revision !== pack.revision) return refuse(c, 409, "review_changed", { latest: pack.revision });
+  const evidenceRefs = refList(body.evidence_refs);
+  const assumptionRefs = refList(body.assumption_refs);
+  if (!evidenceRefs || !assumptionRefs) return refuse(c, 400, "invalid_decision", { problems: ["invalid:evidence_refs"] });
+  const inPack = packEvidence(pack);
+  const outside = [...evidenceRefs.filter((r) => !inPack.evidence.has(r)), ...assumptionRefs.filter((r) => !inPack.assumptions.has(r))];
+  if (outside.length) return refuse(c, 409, "ref_not_in_review", { refs: outside });
+  const now = Date.now();
+  const statement = typeof body.statement === "string" ? body.statement.trim() : body.statement;
+  // The id names the whole submission, so only a retry of it is answered as the stored decision; a
+  // corrected one (other evidence, slides or next experiment under the same statement) is its own.
+  const id = `dec-${(await digestOf(["review-decision", project.id, week, pack.revision, d.payload.u, decisionSubmission(body, statement, evidenceRefs, assumptionRefs)])).slice(7, 23)}`;
+  const v = validateDecisionContract({ id, statement, evidence_refs: evidenceRefs, assumption_refs: assumptionRefs, resulting_version_id: null, affected_deck_slides: body.affected_deck_slides ?? [], decided_at: now });
+  if (!v.ok) return refuse(c, 400, "invalid_decision", { problems: v.problems });
+  const memory = await loadMemory(c.env, project);
+  const items = new Map(memory.evidence_items.map((i) => [i.id, i]));
+  // The draft is read from storage: a submission sent at the same time may have written it after this request read the memory.
+  const answerStored = async (stored: Decision, status: 200 | 201) =>
+    c.json({ decision: decisionView(stored, items), experiment: stored.next_experiment_id ? await getExperiment(db, stored.next_experiment_id) : null, ...(status === 200 ? { reused: true } : {}) }, status);
+  const already = await getDecision(db, id);
+  if (already) return answerStored(already, 200);
+  const experimentId = weekExperiments(memory, week as number).at(-1)?.id;
+  const problems = decisionRefProblems(
+    { ...v.value, actor: "director", ...(experimentId ? { experiment_id: experimentId } : {}) },
+    { items, versions: new Set(memory.versions.map((x) => x.id)), experiments: new Set(memory.experiments.map((x) => x.id)) },
+  );
+  if (problems.length) return refuse(c, 409, "unresolved_decision_refs", { problems });
+  if (memory.decisions.length >= MEMORY_LIMITS.decisionsPerProject) return refuse(c, 409, "decision_limit", { max: MEMORY_LIMITS.decisionsPerProject });
+
+  // The next experiment (optional): a draft for the next week, on the Project's newest version,
+  // testing a hypothesis of this Project or a statement stored as one. Checked whole before any write.
+  let next: { contract: Omit<Experiment, "schema" | "kind" | "created_at">; hypothesisId: string | null; statement: string | null } | null = null;
+  if (body.next_experiment !== undefined && body.next_experiment !== null) {
+    const ne = body.next_experiment as Record<string, unknown>;
+    if (!ne || typeof ne !== "object" || Array.isArray(ne)) return refuse(c, 400, "invalid_next_experiment", { problems: ["not_an_object"] });
+    const newest = memory.versions.at(-1);
+    if (!newest) return refuse(c, 409, "version_unresolved");
+    const hypothesisId = ne.hypothesis_id === undefined ? null : ne.hypothesis_id;
+    if (hypothesisId !== null && !(isVentureId(hypothesisId) && memory.hypotheses.some((h) => h.id === hypothesisId))) return refuse(c, 409, "hypothesis_unresolved");
+    const hStatement = hypothesisId === null ? validateHypothesisStatement(ne.hypothesis) : null;
+    if (hypothesisId === null && !hStatement) return refuse(c, 400, "hypothesis_required");
+    const contract = validateExperimentContract({ id: newVentureId("exp"), project_id: project.id, week: Math.min((week as number) + 1, 52), hypothesis_id: (hypothesisId as string | null) ?? "hyp-pending", question: ne.question, method: ne.method, success_criteria: ne.success_criteria, product_version_id: newest.id, status: "draft" });
+    if (!contract.ok) return refuse(c, 400, "invalid_next_experiment", { problems: contract.problems });
+    if (memory.experiments.length >= PUBLISH_LIMITS.maxExperimentsPerProject) return refuse(c, 409, "experiment_limit", { max: PUBLISH_LIMITS.maxExperimentsPerProject });
+    next = { contract: contract.value, hypothesisId: hypothesisId as string | null, statement: hStatement };
+  }
+
+  // Writes: the hypothesis (only when it is a new statement), the draft, then the decision naming it.
+  let draft: Experiment | null = null;
+  let draftCreated = false;
+  let storedHypothesis: string | null = null;
+  if (next) {
+    let hypId = next.hypothesisId;
+    if (!hypId) {
+      const open = await openHypothesis(db, project.id, next.statement!);
+      if (open) hypId = open.id;
+      else {
+        const h = await addHypothesis(db, { project_id: project.id, statement: next.statement!, by: `director:${d.payload.u}`, now, max: MEMORY_LIMITS.hypothesesPerProject });
+        if (!h) {
+          const raced = await openHypothesis(db, project.id, next.statement!);
+          if (!raced) return refuse(c, 409, "hypothesis_limit", { max: MEMORY_LIMITS.hypothesesPerProject });
+          hypId = raced.id;
+        } else {
+          hypId = h.id;
+          storedHypothesis = h.id;
+        }
+      }
+    }
+    const { status: _draft, ...fields } = next.contract;
+    const made = await createExperimentDraft(db, { ...fields, hypothesis_id: hypId, drafted_from: { decision_id: id, week: week as number, revision: pack.revision }, now, key: `review:${id}`, max: PUBLISH_LIMITS.maxExperimentsPerProject });
+    if (!made.ok) {
+      if (storedHypothesis) await deleteHypothesis(db, storedHypothesis);
+      return refuse(c, 409, made.code, made.code === "experiment_limit" ? { max: PUBLISH_LIMITS.maxExperimentsPerProject } : {});
+    }
+    draft = made.experiment;
+    draftCreated = made.created;
+  }
+  const decision: Decision = {
+    schema: VENTURE_SCHEMA,
+    kind: "decision",
+    ...v.value,
+    project_id: project.id,
+    actor: "director",
+    decided_by: d.payload.u,
+    ...(experimentId ? { experiment_id: experimentId } : {}),
+    review: { week: week as number, revision: pack.revision },
+    ...(draft ? { next_experiment_id: draft.id } : {}),
+  };
+  const added = await addDecisionOnce(db, decision, now, MEMORY_LIMITS.decisionsPerProject);
+  if (added !== "created") {
+    // An identical submission sent at the same time found this draft (its key is the decision id)
+    // and stored its decision, naming the draft, first: everything stays, and this request answers
+    // that decision. Otherwise (the Project is full) nothing of this submission stays: the draft
+    // and the hypothesis it wrote are taken back, and the store keeps any a decision names.
+    const stored = added === "exists" ? await getDecision(db, id) : null;
+    if (!(draft && stored?.next_experiment_id === draft.id)) {
+      if (draft && draftCreated) await deleteExperimentDraft(db, draft.id);
+      if (storedHypothesis) await deleteHypothesis(db, storedHypothesis);
+    }
+    if (added === "limit") return refuse(c, 409, "decision_limit", { max: MEMORY_LIMITS.decisionsPerProject });
+    return stored ? answerStored(stored, 200) : refuse(c, 409, "decision_limit");
+  }
+  return c.json({ decision: decisionView(decision, items), experiment: draft }, 201);
+});
+
+/**
+ * CR-53 — every directed team's pack status for its review week (fresh, stale, missing), read
+ * from storage and the records with no model call. Only Projects of the cohorts and profiles the
+ * director's scope covers, with the switch on, ever appear; at most `overviewProjects` are
+ * computed and the answer says when more exist.
+ */
+curriculum.get("/reviews", async (c) => {
+  const d = await director(c);
+  if (d instanceof Response) return d;
+  noStore(c);
+  if (d.payload.jti && (await isTokenRevoked(c.env.HPS_KV, d.payload.jti))) return refuse(c, 401, "revoked");
+  const requested = c.req.query("week");
+  if (requested !== undefined && reviewWeek({ experiments: [] }, requested) === null) return refuse(c, 400, "invalid_week");
+  const teams: Array<{ project_id: string; title: string; cohort_id: string; members: number; week: number; status: string; stale_sections: string[]; revision: number | null; prepared_at: number | null }> = [];
+  let truncated = false;
+  for (const cohort of [...new Set((d.payload.scopes ?? []).map((s) => s.cohort))]) {
+    for (const p of await projectsOfCohort(c.env.HPS_DB, cohort)) {
+      if (!scopeCovers(d.payload, p)) continue;
+      const resolved = await resolveProfile(c.env, p.profile_id);
+      if (!resolved || !curriculumRuntimeAllowed(resolved.profile)) continue;
+      if (teams.length >= REVIEW_LIMITS.overviewProjects) {
+        truncated = true;
+        break;
+      }
+      const memory = await loadMemory(c.env, p);
+      const week = reviewWeek(memory, requested) ?? 1;
+      const pack = await latestReview<WeeklyReview>(c.env.HPS_DB, p.id, week);
+      const state = reviewStatus(pack, await currentReview(memory, week, await pendingProposals(c.env, p)));
+      teams.push({ project_id: p.id, title: p.title, cohort_id: p.cohort_id, members: p.members.length, week, status: state.status, stale_sections: state.stale_sections, revision: pack?.revision ?? null, prepared_at: pack?.prepared_at ?? null });
+    }
+  }
+  return c.json({ teams, truncated });
+});
+
 /** The CR-T02 Worker inventory of this router, as `METHOD /path` under /v1/curriculum. */
 export const CURRICULUM_ROUTES = [
   "GET /v1/curriculum/projects",
@@ -1417,4 +1793,10 @@ export const CURRICULUM_ROUTES = [
   "GET /v1/curriculum/skills",
   "POST /v1/curriculum/projects/:id/skills/:skill/prepare",
   "POST /v1/curriculum/projects/:id/skills/:skill/output",
+  // cr-review (#1398)
+  "GET /v1/curriculum/projects/:id/review",
+  "POST /v1/curriculum/projects/:id/review/prepare",
+  "POST /v1/curriculum/projects/:id/review/commit",
+  "POST /v1/curriculum/projects/:id/review/decision",
+  "GET /v1/curriculum/reviews",
 ] as const;

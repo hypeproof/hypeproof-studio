@@ -42,6 +42,7 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
+import { ReviewSession, directorAvailable } from "./reviewSession";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
 import {
@@ -55,7 +56,7 @@ import {
   toProxyToolResult,
   isLoopbackUrl,
 } from "./browserControlHelpers";
-import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY } from "./curriculumRuntime";
+import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, CR_DIRECTOR_REPROBE_MS } from "./curriculumRuntime";
 import { VerifySession, recordChecked, refusalText, verifyContext, verifyToolResult, type VerifyRecorderPort } from "./verifySession";
 import { artifactVersionFor } from "./artifactVersion";
 import type { ElementContext } from "./elementPick";
@@ -1022,6 +1023,135 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.postSkillsState(r.ok ? { done: "AI의 답이 규칙을 지켰어요." } : { error: r.message });
   }
 
+  // ── Weekly Review (cr-review, #1398) ────────────────────────────────────────
+  /**
+   * The student's "주간 리뷰" over the same Project the publish panel remembers, and, with the
+   * issuer token, the director's overview, pack and decision. The model call goes through the
+   * existing coach route with the Experiment skill's tag and capability (CR-45), never a model
+   * id, and only for a stale model section (CR-49); opening never calls a model (CR-50).
+   */
+  private readonly reviewSession = new ReviewSession({
+    switchOn: () => this.isCurriculumRuntimeEnabled(),
+    token: () => this.crProjectMemory.refresh(),
+    directorToken: async () => (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null,
+    base: () => curriculumBase(this.proxyUrl()),
+    projectId: () => this.crProjectMemory.projectId(),
+    complete: (prompt, headers) => this.completeSkill(prompt, headers),
+  });
+
+  /** CR_DIRECTOR_CONTEXT_KEY as last answered, per issuer token. */
+  private crDirector: { token: string | null; on: boolean; at: number } = { token: null, on: false, at: 0 };
+
+  /**
+   * CR-02 for the director (cr-review): mirror "the stored issuer token directs a cohort whose
+   * profile has the switch on" to CR_DIRECTOR_CONTEXT_KEY, from the Service's answer (a director
+   * has no served student profile). Asked again when the token changes, after five minutes, or
+   * when `force`d, and, while the key is on, every five minutes by the constructor's timer, so the
+   * palette entry goes within five minutes of the Service's switch going off; false without an
+   * issuer token or with any refusal.
+   */
+  async refreshCrDirectorContext(force = false): Promise<boolean> {
+    const token = (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null;
+    if (!force && token === this.crDirector.token && Date.now() - this.crDirector.at < 5 * 60_000) return this.crDirector.on;
+    const on = token ? await directorAvailable({ base: curriculumBase(this.proxyUrl()), token }) : false;
+    this.crDirector = { token, on, at: Date.now() };
+    void vscode.commands.executeCommand("setContext", CR_DIRECTOR_CONTEXT_KEY, on);
+    return on;
+  }
+
+  /** Post the review panel state, the student's or the director's (null hides it with the switch off). */
+  private async postReviewState(mode: "student" | "director", extra: { error?: string; done?: string } = {}, week?: number): Promise<void> {
+    if (mode === "student") {
+      if (!this.isCurriculumRuntimeEnabled()) {
+        await this.post({ type: "reviewState", view: null, ...extra });
+        return;
+      }
+      await this.post({ type: "reviewState", view: await this.reviewSession.studentView(week), ...extra });
+      return;
+    }
+    if (!(await this.refreshCrDirectorContext())) {
+      await this.post({ type: "reviewState", view: null, ...extra });
+      return;
+    }
+    await this.post({ type: "reviewState", view: await this.reviewSession.directorView(), ...extra });
+  }
+
+  /** CR-49 — "주간 리뷰" (the student's): re-checks the served switch, then opens the panel. */
+  async weeklyReview(): Promise<void> {
+    if (!this.isCurriculumRuntimeEnabled()) {
+      this.postPageNotice("이 수업에서는 주간 리뷰를 쓸 수 없어요.");
+      return;
+    }
+    await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    await this.postReviewState("student");
+  }
+
+  /** CR-50, CR-53 — "주간 리뷰 (디렉터)": re-checks the switch through the Service for the issuer token, then opens the overview. */
+  async weeklyReviewDirector(): Promise<void> {
+    if (!(await this.refreshCrDirectorContext(true))) {
+      this.postPageNotice("이 수업에서는 주간 리뷰를 쓸 수 없어요.");
+      return;
+    }
+    this.reviewSession.select(null);
+    await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    await this.postReviewState("director");
+  }
+
+  /** The student's review actions, behind the served switch (a message can be posted without the panel). */
+  private async handleReviewMessage(msg: { type: "reviewOpen"; week?: number } | { type: "reviewPrepare"; week?: number }): Promise<void> {
+    if (!this.isCurriculumRuntimeEnabled()) {
+      await this.post({ type: "reviewState", view: null, error: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+      return;
+    }
+    const week = Number.isInteger(msg.week) ? msg.week : undefined;
+    if (msg.type === "reviewOpen") return this.postReviewState("student", {}, week);
+    void this.post({ type: "reviewState", view: { ...(await this.reviewSession.studentView(week)), running: true } });
+    const r = await this.reviewSession.prepare(week);
+    if (!r.ok) return this.postReviewState("student", { error: r.message }, week);
+    const refused = this.reviewSession.lastRefusal() !== null;
+    const done = r.unchanged
+      ? "바뀐 기록이 없어서 다시 만들지 않았어요. 지금 리뷰가 최신이에요."
+      : refused
+        ? r.regenerated.length
+          ? "바뀐 부분은 다시 준비했어요. 다음 실험 제안은 만들지 못했어요."
+          : "다음 실험 제안을 만들지 못했어요. 다시 준비해 주세요."
+        : "주간 리뷰를 준비했어요.";
+    return this.postReviewState("student", { done }, week);
+  }
+
+  /** The director's review actions, behind the switch as the Service answers the issuer token. */
+  private async handleReviewDirectorMessage(
+    msg: { type: "reviewDirectorOpen"; projectId?: string | null; week?: number } | { type: "reviewDecision"; projectId: string; week: number; revision: number; form: import("./reviewView").DirectorDecisionForm },
+  ): Promise<void> {
+    if (!(await this.refreshCrDirectorContext())) {
+      await this.post({ type: "reviewState", view: null, error: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+      return;
+    }
+    if (msg.type === "reviewDirectorOpen") {
+      this.reviewSession.select(typeof msg.projectId === "string" && msg.projectId ? msg.projectId : null, Number.isInteger(msg.week) ? msg.week : undefined);
+      return this.postReviewState("director");
+    }
+    const f = msg.form ?? ({} as import("./reviewView").DirectorDecisionForm);
+    const n = f.next;
+    const r = await this.reviewSession.decide(String(msg.projectId ?? ""), { week: Number(msg.week), revision: Number(msg.revision) }, {
+      statement: String(f.statement ?? ""),
+      evidence_refs: Array.isArray(f.evidence_refs) ? f.evidence_refs.map(String) : [],
+      assumption_refs: Array.isArray(f.assumption_refs) ? f.assumption_refs.map(String) : [],
+      affected_deck_slides: Array.isArray(f.affected_deck_slides) ? f.affected_deck_slides.map(Number) : [],
+      next: n
+        ? {
+            ...(typeof n.hypothesis_id === "string" && n.hypothesis_id ? { hypothesis_id: n.hypothesis_id } : { hypothesis: String(n.hypothesis ?? "") }),
+            question: String(n.question ?? ""),
+            method: String(n.method ?? ""),
+            success_criteria: Array.isArray(n.success_criteria) ? n.success_criteria.map(String) : [],
+          }
+        : null,
+    });
+    // A second press while the first decision is being written sent nothing; the first one's answer redraws the panel.
+    if (!r.ok && r.busy) return;
+    return this.postReviewState("director", r.ok ? { done: r.reused ? "이미 기록된 결정이에요. 다시 저장하지 않았어요." : "결정과 다음 실험을 프로젝트 기억에 기록했어요." } : { error: r.message });
+  }
+
   /** One memory action from the panel, behind the served switch (a message can be posted without the panel). */
   private async handleMemoryMessage(
     msg: { type: "memoryOpen" } | { type: "memoryDiff"; from: string; to: string } | { type: "memoryDecision"; form: import("./memoryView").DecisionForm },
@@ -1085,8 +1215,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
       if (e.key === TOKEN_KEY) void this.crProjectMemory.refresh().catch(() => undefined);
+      // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
+      if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
     if (sub) context.subscriptions.push(sub);
+    // cr-review (CR-02) — the Service's switch can go off while the App stays open: while the
+    // director's key is on, it is asked again every five minutes, so the palette entry outlives the
+    // switch by at most that long. While the key is off the timer sends nothing, so an instructor
+    // whose cohorts never use the runtime makes no standing request; the key turns on at activation,
+    // when the issuer token changes, or when the panel's settings are sent (at most once per five
+    // minutes, `refreshCrDirectorContext`). The command itself asks again on every use.
+    const directorProbe = setInterval(() => {
+      if (this.crDirector.on) void this.refreshCrDirectorContext(true).catch(() => undefined);
+    }, CR_DIRECTOR_REPROBE_MS);
+    context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
   }
 
   /**
@@ -3399,6 +3541,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // cr-skills — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
         await this.handleSkillsMessage(msg);
         break;
+      case "reviewOpen":
+      case "reviewPrepare":
+        // cr-review — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
+        await this.handleReviewMessage(msg);
+        break;
+      case "reviewDirectorOpen":
+      case "reviewDecision":
+        // cr-review — the director's messages (CR-T02 inventory); the handler re-checks the switch through the Service first.
+        await this.handleReviewDirectorMessage(msg);
+        break;
       case "clearHistory":
         void this.clearHistory();
         return;
@@ -4970,6 +5122,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const panelMode = decideMode({ studentToken: token ?? undefined, studentProfileStatus });
     // Instructor auth always uses the issuer token slot, never the student token.
     const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
+    // cr-review — the director's Weekly Review command follows the switch as the Service answers this token.
+    void this.refreshCrDirectorContext();
     let isInstructor: boolean;
     if (panelMode === "instructor") {
       isInstructor = await this._instructorMode.checkInstructorMode(issuerToken, proxyUrl);
