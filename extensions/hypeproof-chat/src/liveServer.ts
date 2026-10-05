@@ -1,7 +1,7 @@
 import * as http from "node:http";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { LIVERELOAD_PATH, serveStatic } from "./liveServerHelpers";
+import { LIVERELOAD_PATH, serveStatic, staticResponseHeaders } from "./liveServerHelpers";
 
 // #278 Phase 1 — in-process live server for the "live_server" preview path.
 //
@@ -17,7 +17,9 @@ import { LIVERELOAD_PATH, serveStatic } from "./liveServerHelpers";
 // index.html, or the user editing a sibling file), so the browser refreshes
 // itself. No CDP / browser-tab plumbing needed for reload.
 //
-// Security: binds 127.0.0.1 only; path traversal is rejected in serveStatic.
+// Security: binds 127.0.0.1 only; path traversal is rejected in serveStatic;
+// every static response carries a Permissions-Policy denying camera, microphone,
+// geolocation and display capture (#1403, staticResponseHeaders).
 // Lifecycle is owned by the extension — dispose() on deactivate closes the
 // server + watcher + open SSE streams.
 
@@ -177,10 +179,7 @@ export class LiveServer {
       return;
     }
     const result = serveStatic(root, req.url ?? "/");
-    res.writeHead(result.status, {
-      "content-type": result.contentType,
-      "cache-control": "no-store",
-    });
+    res.writeHead(result.status, staticResponseHeaders(result.contentType));
     res.end(result.body);
   }
 

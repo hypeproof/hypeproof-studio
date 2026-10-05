@@ -80,6 +80,28 @@ export interface ServeResult {
 }
 
 /**
+ * #1403 — device policy for every static response of the live server.
+ *
+ * The preview opens http://127.0.0.1:PORT/ as a top-level integrated-browser page, so the
+ * AI-generated HTML it serves is not inside the hardened preview iframe (`PREVIEW_IFRAME_ALLOW`
+ * in cspBuilder.ts) and, without this header, keeps the browser's default allow-list
+ * (`microphone`/`camera` default to `self`). The text is the Service's published runtime for an
+ * undeclared project (`pageHeaders([])` in worker/src/routes/curriculum-test-origin.ts), so a
+ * page behaves the same on the local preview and on its published test origin. It narrows the
+ * page; it does not replace the browser host's own permission handler.
+ */
+export const LIVE_SERVER_PERMISSIONS_POLICY = "camera=(), microphone=(), geolocation=(), display-capture=()";
+
+/** Headers for a static response (page, asset, 403/404). The SSE reload stream has its own. */
+export function staticResponseHeaders(contentType: string): Record<string, string> {
+  return {
+    "content-type": contentType,
+    "cache-control": "no-store",
+    "permissions-policy": LIVE_SERVER_PERMISSIONS_POLICY,
+  };
+}
+
+/**
  * Serve a static file from `root` for `urlPath`. Directory requests fall back
  * to `index.html`; HTML gets the live-reload snippet injected. Returns a
  * 403 on traversal, 404 on miss. Pure + synchronous (real fs), no http/vscode.
