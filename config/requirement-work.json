@@ -796,10 +796,19 @@
       "negative_control": "학생 수정으로 공통 기준 삭제·다른 수업 목표 복원·열람만으로 완료 기록 거부.",
       "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
-        "extensions/hypeproof-chat/src",
-        "extensions/hypeproof-chat/webview-ui/src"
+        "extensions/hypeproof-chat/src/studentGoal.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/styles.css"
       ],
-      "verification_inputs": []
+      "verification_inputs": [
+        "extensions/hypeproof-chat/src/studentGoal.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx",
+        "extensions/hypeproof-chat/test/student-goal.smoke.mjs",
+        "e2e/sx/goal-app.spec.ts"
+      ]
     },
     {
       "id": "context",
