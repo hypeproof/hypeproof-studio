@@ -13,11 +13,12 @@
 // sample that must pass and a planted defect that must be caught.
 //
 // Run: node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs [--d1]
-// Record: ANTHROPIC_API_KEY=… node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs --record-provider [--d1]
+// Record (the key read from .dev.vars, never typed): ANTHROPIC_API_KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' .dev.vars)" node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs --record-provider [--d1]
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { localCurriculum } from "./harness/curriculum.mjs";
 import { createMockEnv, makeCtx, openAIJsonBody, TEST_SECRET } from "./harness/index.mjs";
 
@@ -289,6 +290,20 @@ const RECORDED_RUNS = 10;
 const promptContext = (prompt) => JSON.parse(/^## Context\n(.*)$/m.exec(prompt)[1]);
 
 /**
+ * The recording's provenance: the commit checked out and whether the working tree differs from it
+ * (a recorder run before it was committed says so). Read before the first provider call, so it
+ * costs no paid call; outside a git checkout it is "unknown" rather than a failure.
+ */
+function recordingSource() {
+  const git = (...args) => execFileSync("git", args, { cwd: fileURLToPath(new URL(".", import.meta.url)), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  try {
+    return { head: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain") !== "" };
+  } catch {
+    return { head: "unknown", dirty: null };
+  }
+}
+
+/**
  * `--record-provider`: RECORDED_RUNS full regenerations of the Week 2 pack, each through the App's
  * ReviewSession and the real coach route (`POST /v1/chat/completions`, in process) to the provider
  * production uses: the deployment default `LLM_PROVIDER=anthropic` under the canary profile's model
@@ -303,6 +318,7 @@ async function recordProvider() {
     console.error("--record-provider: set ANTHROPIC_API_KEY (or HYPE_ANTHROPIC_KEY) to reach the real provider");
     return 2;
   }
+  const source = recordingSource();
   const f = await fixture();
   try {
     const s = await week2(f);
@@ -355,11 +371,10 @@ async function recordProvider() {
       console.error(`--record-provider: ${unanswered} of ${runs.length} runs got no answer; nothing written`);
       return 1;
     }
-    const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
     const doc = {
       format: RECORDING_FORMAT,
       recorded_at: new Date().toISOString(),
-      source: { head, node: process.version, store: D1_MODE ? "local workerd D1 and R2" : "SQLite" },
+      source: { ...source, node: process.version, store: D1_MODE ? "local workerd D1 and R2" : "SQLite" },
       route: "POST /v1/chat/completions, the coach route in process, profile canary-sdk-contract, model policy hypeproof-default, no model named",
       provider: "anthropic",
       upstream: "https://api.anthropic.com/v1/messages directly; production goes through ANTHROPIC_PROXY_URL",
@@ -1586,7 +1601,15 @@ function recordedIds(recordedPrompt, prompt) {
 }
 const remapIds = (text, ids) => ids.reduce((t, [from, to]) => t.split(from).join(to), text);
 
-await test("CR-T58 (recorded provider): ten full regenerations replaying the real provider's ten recorded answers at their recorded times pass the 30 s target with Studio's time apart; each answer meets the Experiment skill's gate against this run's records as it did live; a recorded answer that comes back slow is a provider-caused miss, never a Studio pass", async () => {
+/** Why a replay stops: the prompt sent now is not the recorded one (ids mapped). Where they first differ, and what to do. */
+function promptDrift(recorded, now, recordedAt) {
+  let i = 0;
+  while (i < recorded.length && recorded[i] === now[i]) i++;
+  const around = (s) => JSON.stringify(s.slice(Math.max(0, i - 40), i + 80));
+  return `the Experiment skill's prompt is not the one recorded on ${recordedAt} (first difference at line ${recorded.slice(0, i).split("\n").length}: recorded ${around(recorded)}, now ${around(now)}); re-record the provider with --record-provider (docs/testing/curriculum-runtime-dev.md)`;
+}
+
+await test("CR-T58 (recorded provider): ten full regenerations replaying the real provider's ten recorded answers at their recorded times, to the prompt the product sends now (a changed prompt fails until it is recorded again), pass the 30 s target with Studio's time apart; each answer meets the Experiment skill's gate against this run's records as it did live; a recorded answer that comes back slow is a provider-caused miss, never a Studio pass", async () => {
   const rec = JSON.parse(readFileSync(RECORDING, "utf8"));
   // The recording is what it says: one provider's answers to one prompt, every run answered and timed.
   assert.equal(rec.format, RECORDING_FORMAT);
@@ -1619,9 +1642,14 @@ await test("CR-T58 (recorded provider): ten full regenerations replaying the rea
       const res = await session.prepare();
       assert.equal(res.ok, true, JSON.stringify(res));
       assert.equal(asked.length, 1, `run ${r.run}: one model call`);
+      const ids = recordedIds(rec.prompt, asked[0]);
+      // The recording answers the prompt the product sends now: with the ids mapped, the recorded
+      // prompt is this one. A changed skill text, prompt builder or context fails here, before the
+      // replayed answer is judged, instead of replaying answers to a prompt no longer sent.
+      const recordedPrompt = remapIds(rec.prompt, ids);
+      if (recordedPrompt !== asked[0]) assert.fail(`run ${r.run}: ${promptDrift(recordedPrompt, asked[0], rec.recorded_at)}`);
       const view = await session.studentView();
       const next = sectionOf(view.review.pack, "next_experiment");
-      const ids = recordedIds(rec.prompt, asked[0]);
       assert.deepEqual(res.regenerated, [...SECTIONS], `run ${r.run}: a full regeneration`);
       // The skill's gate gives the replayed answer the verdict it gave live.
       if (r.accepted) {
@@ -1636,15 +1664,14 @@ await test("CR-T58 (recorded provider): ten full regenerations replaying the rea
       assert.ok(t.provider_ms >= r.provider_ms && t.provider_ms < r.provider_ms + 200, `run ${r.run}: ${JSON.stringify(t)} vs recorded ${r.provider_ms} ms`);
       assert.equal(t.verdict, "pass", `run ${r.run}: ${JSON.stringify(t)}`);
       assert.ok(t.total_ms < reviewView.REGENERATION_TARGET_MS, JSON.stringify(t));
-      seen.push({ provider: t.provider_ms, studio: t.total_ms - t.provider_ms, total: t.total_ms, prompt: asked[0] });
+      seen.push({ provider: t.provider_ms, studio: t.total_ms - t.provider_ms, total: t.total_ms });
     }
     const pct = (xs, q) => {
       const v = [...xs].sort((a, b) => a - b);
       return v[Math.min(v.length - 1, Math.floor(q * v.length))];
     };
     const line = (k) => `p50 ${pct(seen.map((x) => x[k]), 0.5)} ms, p95 ${pct(seen.map((x) => x[k]), 0.95)} ms, max ${Math.max(...seen.map((x) => x[k]))} ms`;
-    const same = seen.every((x) => remapIds(rec.prompt, recordedIds(rec.prompt, x.prompt)) === x.prompt);
-    console.log(`   CR-T58 recorded provider (${rec.provider} ${[...new Set(rec.runs.map((r) => r.model))].join(", ")}, recorded ${rec.recorded_at}) over ${seen.length} runs (${D1_MODE ? "local workerd D1" : "SQLite"}): total ${line("total")}; provider ${line("provider")}; Studio's share ${line("studio")}; ${rec.runs.filter((r) => r.accepted).length} of ${rec.runs.length} answers accepted; ${same ? "the recording answers this exact prompt" : "NOTE: the Experiment skill's prompt changed since the recording (re-record with --record-provider)"}`);
+    console.log(`   CR-T58 recorded provider (${rec.provider} ${[...new Set(rec.runs.map((r) => r.model))].join(", ")}, recorded ${rec.recorded_at}) over ${seen.length} runs (${D1_MODE ? "local workerd D1" : "SQLite"}): total ${line("total")}; provider ${line("provider")}; Studio's share ${line("studio")}; ${rec.runs.filter((r) => r.accepted).length} of ${rec.runs.length} answers accepted; every replayed prompt equals the recorded one`);
     // Instrument control: the replayed answers met the gate on THIS run's records. A recorded answer
     // that cites an open assumption, sent with the recording's own ids, is refused as unresolved.
     const citing = rec.runs.find((r) => r.accepted && /"assumption_ref"\s*:/.test(r.answer));
