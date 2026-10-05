@@ -159,7 +159,7 @@ export function ingestPrompt(s: VentureState, week: number, sources: Sources): s
 - outcome은 학생이 기준에 맞았다/안 맞았다고 말했을 때만 "match"/"mismatch", 아니면 "".
 - WIKI에 이미 있는 내용은 다시 넣지 않는다.
 - 새 항목에는 임시 번호를 쓴다: 가설 nH1, nH2 … / 근거 nE1 … / 결정 nD1 …. 기존 번호(H-1, E-3, D-2)는 그대로 쓴다.
-- 덱은 이번 주 장만 쓴다: ${spec}. 각 장은 제목 한 문장과 문장 3~5개. 문장마다 refs에 E·D·H 번호(기존 또는 임시)를 단다.
+- 덱은 이번 주 장만 쓴다: ${spec}. 각 장은 제목 한 문장과 문장 3~5개. 문장마다 refs에 E·D·H 번호(기존 또는 임시)를 단다. 문제를 설명하는 문장은 refs에 P를 쓸 수 있다(이번 주 problem이나 WIKI의 problem이 있을 때).
   팀 시험이나 모의 근거에 기대면 문장에 "팀 시험" 또는 "모의"라고 밝힌다. 근거가 부족한 것은 open에 적는다. "위키", "기록" 같은 말은 문장에 쓰지 않는다.
 - 짧은 한국어 문장. 평가·점수 없음.
 
@@ -254,6 +254,7 @@ export function applyProposal(prev: VentureState, week: number, sources: Sources
   }
   const slides = WEEK_SLIDES[week] ?? [];
   const known = new Set([...s.H, ...s.E, ...s.D].map((x) => x.id));
+  if (s.problem) known.add("P");
   for (const sl of proposal.slides ?? []) {
     const no = Number(sl?.no);
     if (!slides.includes(no)) continue;
@@ -380,7 +381,8 @@ export function renderWiki(s: VentureState): Record<string, string> {
       ? `# ${nn} · ${DECK[no]} (초안 · ${sl.week}주차)\n\n**${sl.title}**\n\n${sl.bullets.map((b) => `- ${b.text} [${b.refs.join(", ")}]\n`).join("")}\n아직 확인 못 한 것: ${sl.open.join(" · ") || "없음"}\n`
       : `# ${nn} · ${DECK[no]}\n\n${SLIDE_WEEK[no]}주차에 채움. 질문: ${DECK_Q[no]}\n`;
   }
-  files["log.md"] = `# 기록\n\n${s.log.map((l) => `- ${l}`).join("\n")}\n`;
+  const dropped = s.dropped.map((x) => `- ${x}`);
+  files["log.md"] = `# 기록\n\n${s.log.map((l) => `- ${l}`).join("\n")}\n${dropped.length ? `\n## 인용이 없어 뺀 것\n\n${dropped.join("\n")}\n` : ""}`;
   files["deck.html"] = deckHtml(s);
   return files;
 }

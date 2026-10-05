@@ -55,6 +55,10 @@ assert.deepEqual(s1.E[1].cite, ["raw/w1-관찰.md"], "a note citation points at 
 assert.deepEqual(s1.D[0].observed, ["E-1"], "a decision keeps only evidence that exists");
 assert.deepEqual(Object.keys(s1.deck), ["1"], "only this week's slides are written (week 1 → slide 1)");
 assert.deepEqual(s1.deck["1"].bullets.map((b) => b.refs), [["E-1"]], "a deck sentence with no resolvable number is dropped");
+const withP = vm.applyProposal(s0, 1, sources, { ...proposal, slides: [{ no: 1, title: "t", bullets: [{ text: "문제 문장", refs: ["P"] }] }] }, "p1", "2026-10-05").state;
+assert.deepEqual(withP.deck["1"].bullets.map((b) => b.refs), [["P"]], "the problem can be cited as P once there is a problem");
+const noP = vm.applyProposal(s0, 1, sources, { slides: [{ no: 1, title: "t", bullets: [{ text: "문제 문장", refs: ["P"] }] }] }, "p2", "2026-10-05").state;
+assert.deepEqual(noP.deck["1"].bullets, [], "planted: P without a problem is dropped");
 assert.ok(r.dropped.some((d) => d.startsWith("가설")) && r.dropped.some((d) => d.startsWith("덱 01")), JSON.stringify(r.dropped));
 assert.equal(s0.H.length, 0, "the previous state is not mutated");
 // Planted defect: the same session again is refused, nothing is added.
@@ -80,6 +84,7 @@ assert.ok(issues.some((x) => x.includes("E-1") && x.includes("판정")), "a real
 const files = vm.renderWiki(s1);
 for (const k of ["venture.md", "hypotheses.md", "evidence.md", "decisions.md", "weeks/w1.md", "deck/01.md", "deck/08.md", "log.md", "deck.html"]) assert.ok(k in files, k);
 assert.match(files["deck/01.md"], /초안 · 1주차/);
+assert.match(files["log.md"], /인용이 없어 뺀 것/, "log.md lists what was dropped (the command's notice points there)");
 assert.match(files["deck/02.md"], /2주차에 채움/);
 assert.match(files["deck.html"], /주간 팩 1주차/);
 assert.ok(!files["deck.html"].includes("<script"), "the weekly pack has no script");

@@ -978,8 +978,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const r = applyProposal(state, pick.week, sources, proposal, sid, today);
     writeWiki(dir, r.state);
     archiveNotes(dir, sources.notes);
+    // The summary goes to the chat, not a toast: a notification pauses the integrated browser
+    // ("Paused due to Notification"), which would hide the weekly pack just opened.
+    this.postPageNotice(`팀 위키를 정리했어요. ${r.logLine.replace(/^\[[^\]]*\] /, "")}${r.dropped.length ? ` · 인용이 없어 뺀 ${r.dropped.length}개는 venture/log.md에 있어요` : ""}`);
     await vscode.commands.executeCommand("hypeproof-chat.previewActiveFile", vscode.Uri.file(path.join(dir, "deck.html")));
-    void vscode.window.showInformationMessage(`HypeProof: ${r.logLine}${r.dropped.length ? ` · 인용이 없어 뺀 ${r.dropped.length}개는 log.md에 있어요` : ""}`);
   }
 
   // ── Curriculum skills (cr-skills, #1396) ────────────────────────────────────
