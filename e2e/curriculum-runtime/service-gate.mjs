@@ -12,7 +12,11 @@
 //      backslash and no fragment, and parsing must leave it unchanged. Anything else is refused,
 //      whatever the Host.
 //   2. A loopback Host (127.0.0.1, localhost or [::1], any port) on a request that carries no forwarding
-//      header (a tunnel adds X-Forwarded-For) is this Mac: every path, the /__cr/ control routes included.
+//      header (a tunnel adds X-Forwarded-For) is this Mac: every path. The /__cr/ control routes answer
+//      only such a request that also carries no header a browser adds (Origin, Referer, Sec-Fetch-Site,
+//      Sec-Fetch-Dest; the specs' Node clients send none), and only while the Service runs with them on
+//      (the dev kit turns them off). A web page open on this Mac reaches loopback too: a simple request
+//      from it needs no CORS preflight, so without this a page could flip the switch or wipe a run.
 //   3. A dedicated test-origin Host (HPS_TEST_ORIGIN with {project}: a prj-<hex> label under the
 //      template's suffix, on its port) reaches every path but /__cr/. The router hands that whole host
 //      to the published runtime (worker/src/index.ts), so nothing of the API answers on it.
@@ -27,6 +31,8 @@ export const GATE_HEADER = "x-hps-dev-gate";
 const LOOPBACK = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?$/;
 const HOST_LIKE = /^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:]+\])(?::\d{1,5})?$/;
 const FORWARDED = ["x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "forwarded", "x-real-ip"];
+/** Headers a browser adds to a page's request (Origin on every POST and CORS request; Sec-Fetch-* on every request of a current engine). */
+const BROWSER = ["origin", "referer", "sec-fetch-site", "sec-fetch-dest"];
 const SPECIAL = /%2e|%2f|%5c/i;
 
 /** Is `host` a project origin of a dedicated (`{project}`) test-origin template? */
@@ -46,7 +52,8 @@ function dedicatedTestOrigin(host, template, environment) {
  * The gate's verdict on one request.
  *
  * @param {{ url?: string; headers: Record<string, string | string[] | undefined> }} req the Node request
- * @param {{ testOrigin?: string; environment?: string }} service the Service's HPS_TEST_ORIGIN and ENVIRONMENT
+ * @param {{ testOrigin?: string; environment?: string; control?: boolean }} service the Service's HPS_TEST_ORIGIN and
+ *   ENVIRONMENT, and whether its /__cr/ control routes are on (`false`: refused for every request)
  * @returns {{ ok: true; kind: "local" | "test-origin" | "other"; host: string | null; pathname: string; search: string } | { ok: false; why: string }}
  *   `host` is the Host header to route by (lowercased; null when absent or not a host name).
  */
@@ -74,6 +81,8 @@ export function gate(req, service) {
 
   const control = url.pathname === "/__cr" || url.pathname.startsWith("/__cr/");
   if (control && kind !== "local") return { ok: false, why: "control_route" };
+  if (control && service.control === false) return { ok: false, why: "control_off" };
+  if (control && BROWSER.some((h) => req.headers[h] !== undefined)) return { ok: false, why: "control_from_browser" };
   if (kind === "other" && !url.pathname.startsWith("/l/")) return { ok: false, why: "api_not_exposed" };
   return { ok: true, kind, host, pathname: url.pathname, search: url.search };
 }

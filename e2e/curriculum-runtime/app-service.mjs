@@ -19,27 +19,31 @@
 // Every run also writes a director's issuer token for the same cohort and profile to `<token-file>.issuer` (cr-review),
 // and the admin credential of this run (a random password for /admin's Basic auth) to `<token-file>.admin` (cr-e2e).
 //
-// Control routes (the spec only, loopback only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
+// Control routes (the spec only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
 // (cr-evidence: removes one participant session key behind the record's back, with no tombstone,
-// so a stored draft's reference stops resolving; publish mode only) · GET /__cr/records?project=<id>
-// (cr-e2e: every object of that Project's measurement-core record with its SHA-256 and, for a JSON
-// object, its parsed body; read-only, publish mode only) · POST /__cr/switch {"enabled": bool}
-// (cr-e2e: turns the profile's CR switch on or off in this process, so records made with it on are
-// walked with it off) · POST /__cr/plant-deck {"slide": n} (cr-e2e: the next Deck Builder answer also
-// patches slide n, which the Service's output gate must refuse).
+// so a stored draft's reference stops resolving; publish mode only) · cr-e2e's GET /__cr/records,
+// POST /__cr/switch and POST /__cr/plant-deck (service-control.mjs). service-gate.mjs admits them only
+// from this Mac and never from a browser (a page's request carries Origin, Referer or Sec-Fetch-*), and
+// HPS_CR_CONTROL=0 turns them all off (scripts/cr-dev-kit.sh runs the Service that way). A route that
+// changes something takes POST only.
 //
 // cr-e2e (#1400) adds the scripted model's part of the PRD §14 loop (loop-app.spec.ts and the dev kit):
 // `[cr:observe]`, `[cr:edit]`, `[cr:apply]` and the Evidence and Deck Builder skill prompts are answered by
-// loop-coach.mjs, which cr-e2e owns. Every request passes service-gate.mjs first: through a tunnel
+// loop-coach.mjs, and its control routes and recorders are service-control.mjs; cr-e2e owns and pins both,
+// and this file only calls in. Every request passes service-gate.mjs first: through a tunnel
 // (cr-dev-kit.sh --phone) only the published runtime `/l/…` is reachable.
 import "../../worker/test/harness/loader.mjs";
 import { createServer } from "node:http";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { GATE_HEADER, gate } from "./service-gate.mjs";
 import { createLoopCoach } from "./loop-coach.mjs";
+import { createServiceControl, freshE2eState } from "./service-control.mjs";
 
 const [portArg, tokenFile, switchArg, modeArg] = process.argv.slice(2);
+// cr-e2e (scripts/cr-dev-kit.sh): HPS_CR_CONTROL=0 turns the /__cr/ control routes off (the gate refuses
+// them); the dev kit's Service needs none, and a page open in the browser beside it must reach none.
+const CONTROL = process.env.HPS_CR_CONTROL !== "0";
 // cr-e2e (scripts/cr-dev-kit.sh --real-model): HPS_CR_MODEL=real lets the Service's own calls to
 // api.anthropic.com through with ANTHROPIC_API_KEY from this process's environment, instead of the
 // scripted coach. Every other outbound host stays blocked. Off by default; the specs never set it.
@@ -122,11 +126,11 @@ const recordLines = (text) => text.split("\n").filter((l) => /^- \[(console|exce
 const blocks = (content) => (typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : []);
 const textOf = (content) => blocks(content).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 
-// cr-e2e adds: observations and edits (the §14 coach), directorProbes (every answer of the director route,
-// so a spec reads the director's palette only after the App's probe was answered), skillOutputs (what the
-// Service's skill output gate answered) and deckPlant (POST /__cr/plant-deck).
-const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], observations: [], edits: [], directorProbes: [], skillOutputs: [], deckPlant: null };
+// cr-e2e adds its own keys (service-control.mjs `freshE2eState`): the §14 coach's observations and edits,
+// the recorders' directorProbes and skillOutputs, and the Deck Builder plant.
+const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], ...freshE2eState() };
 const coach = createLoopCoach(state, { blocks, textOf });
+const e2eControl = createServiceControl({ state, profile, env, cohort, publish: modeArg === "publish" });
 
 /** The next move for one upstream request: a tool call or the final text. */
 function agent(body) {
@@ -321,8 +325,7 @@ globalThis.fetch = async (input, init) => {
 // cr-e2e (#1400): every request passes service-gate.mjs before the router sees it. Through a tunnel
 // (cr-dev-kit.sh --phone, a shared test origin) only the published runtime `/l/…` answers; this
 // Service's API and the control routes below stay on this Mac.
-const GATE_SERVICE = { testOrigin: env.HPS_TEST_ORIGIN, environment: env.ENVIRONMENT };
-const SKILL_OUTPUT = /^\/v1\/curriculum\/projects\/[^/]+\/skills\/([^/]+)\/output$/;
+const GATE_SERVICE = { testOrigin: env.HPS_TEST_ORIGIN, environment: env.ENVIRONMENT, control: CONTROL };
 const sendJson = (res, status, value) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
 async function readBody(req) {
   const parts = [];
@@ -330,23 +333,14 @@ async function readBody(req) {
   return Buffer.concat(parts);
 }
 
-/** The spec-only control routes (loopback only, the gate's `local` kind). */
+/** The spec-only control routes (what service-gate.mjs admits: this Mac, not a browser, control on). */
 async function control(req, res, path, search) {
   if (path === "/__cr/state") return sendJson(res, 200, state);
+  // A route that changes something takes POST only: a page's <img> or link is a GET.
+  if ((path === "/__cr/reset" || path === "/__cr/plant-dangling") && req.method !== "POST") return res.writeHead(405, { allow: "POST" }).end();
   if (path === "/__cr/reset") {
-    Object.assign(state, { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], observations: [], edits: [], directorProbes: [], skillOutputs: [], deckPlant: null, lastHtml: undefined });
+    Object.assign(state, { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [] }, freshE2eState());
     return res.writeHead(204).end();
-  }
-  if (path === "/__cr/records" && modeArg === "publish") {
-    // cr-e2e: what the Service stored for one Project, read from the bucket itself (digests, and the JSON of each JSON object).
-    const project = new URLSearchParams(search).get("project") ?? "";
-    const prefix = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/`;
-    const records = [...env.HPS_TRACES.map.entries()].filter(([k]) => project && k.startsWith(prefix)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, bytes]) => {
-      let json = null;
-      try { json = JSON.parse(new TextDecoder().decode(bytes)); } catch { /* bytes, not JSON */ }
-      return { key: key.slice(prefix.length), sha256: createHash("sha256").update(bytes).digest("hex"), json };
-    });
-    return sendJson(res, 200, { prefix, records });
   }
   const body = (await readBody(req)).toString("utf8");
   if (path === "/__cr/plant-dangling" && modeArg === "publish") {
@@ -356,19 +350,8 @@ async function control(req, res, path, search) {
     await env.HPS_TRACES.delete(key);
     return sendJson(res, 200, { removed: had });
   }
-  if (path === "/__cr/switch" && req.method === "POST") {
-    // cr-e2e (CR-T02): the profile's switch, changed in this process; records made with it on stay.
-    const { enabled } = JSON.parse(body || "{}");
-    if (typeof enabled !== "boolean") return sendJson(res, 400, { error: "enabled must be true or false" });
-    profile.curriculum_runtime = { enabled };
-    return sendJson(res, 200, { enabled });
-  }
-  if (path === "/__cr/plant-deck" && req.method === "POST") {
-    // cr-e2e (§14 step 15): the next Deck Builder answer also patches this slide (loop-coach.mjs).
-    const { slide } = JSON.parse(body || "{}");
-    state.deckPlant = Number.isInteger(slide) && slide >= 1 && slide <= 8 ? slide : null;
-    return sendJson(res, 200, { deckPlant: state.deckPlant });
-  }
+  // cr-e2e's routes: /__cr/records, /__cr/switch, /__cr/plant-deck.
+  if (await e2eControl.route(req, res, path, search, body)) return;
   return res.writeHead(404).end();
 }
 
@@ -386,13 +369,8 @@ const server = createServer(async (req, res) => {
     const r = await app.fetch(new Request(`http://${host}${path}${g.search}`, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), env, makeCtx());
     // cr-skills: what the coach route recorded for a skill request, and whether the App named a model.
     if (req.headers["x-hps-skill"]) state.skillHeaders.push({ sent: { skill: req.headers["x-hps-skill"], capability: req.headers["x-hps-capability"], model_in_body: JSON.parse(body.toString("utf8") || "{}").model ?? null }, answered: { status: r.status, skill: r.headers.get("x-hps-skill"), capability: r.headers.get("x-hps-capability"), model: r.headers.get("x-hps-model") } });
-    // cr-e2e: the director route's answers (the App's probe of the director's switch) and the skill output gate's verdicts.
-    if (path === "/v1/curriculum/director/projects") state.directorProbes.push({ at: Date.now(), status: r.status });
-    const skillOutput = req.method === "POST" ? SKILL_OUTPUT.exec(path) : null;
-    if (skillOutput) {
-      const answer = await r.clone().json().catch(() => null);
-      state.skillOutputs.push({ at: Date.now(), skill: decodeURIComponent(skillOutput[1]), status: r.status, slides: Array.isArray(answer?.output?.patches) ? answer.output.patches.map((p) => p.slide) : null, code: answer?.error?.code ?? null, problems: answer?.error?.problems ?? null });
-    }
+    // cr-e2e: the director route's answers and the skill output gate's verdicts (service-control.mjs).
+    await e2eControl.observe(req.method, path, r);
     res.writeHead(r.status, Object.fromEntries(r.headers));
     if (r.body) for await (const chunk of r.body) res.write(Buffer.from(chunk));
     res.end();
@@ -402,4 +380,4 @@ const server = createServer(async (req, res) => {
     res.end();
   }
 });
-server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} switch=${switchArg} model=${REAL_MODEL ? "real" : "scripted"}`));
+server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} switch=${switchArg} model=${REAL_MODEL ? "real" : "scripted"} control=${CONTROL ? "on" : "off"}`));
