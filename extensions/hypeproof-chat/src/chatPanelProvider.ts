@@ -43,8 +43,8 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
-import { applyWikiProposal, archiveNotes, coachContext, initWiki, jsonFromText, loadState, productTitle, readNotes, renderWikiPages, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
-import { applyDeckProposal, applySlideText, deckPrompt, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal } from "./deckGenerator";
+import { applyWikiProposal, archiveNotes, brainIntent, brainIntro, brainName, brainSummary, coachContext, defaultIngestSession, firstCoachTurn, ingestReport, initWiki, josa, jsonFromText, loadState, productTitle, readNotes, renderWikiPages, ro, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type BrainIntent, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
+import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun } from "./deckGenerator";
 import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
@@ -236,6 +236,9 @@ function promptRefs(raw: unknown): Array<{ object_id: string; revision: number }
 }
 /** #751 U3 — the switch was recorded but the new profile could not be verified: the turn is not sent, the input is returned. */
 class LessonBindingPreflightError extends Error {}
+
+/** What one 팀 브레인 run tells the student (one short sentence per line) and the page to open when it worked. */
+interface BrainRun { lines: string[]; open?: string }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
@@ -940,97 +943,153 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.cachedProfile?.learning_wiki?.plan;
   }
 
-  /**
-   * "이번 수업 정리하기": the wiki skill on this session's conversation (the spool's events.jsonl) and
-   * the notes in <wiki>/notes/, then, when the plan names slides for that session, the deck skill on
-   * those slides. Each skill is one non-streaming coach-route request; only cited items are kept.
-   * Nothing is stored on the Service.
-   */
+  /** The command "팀 브레인에 정리하기": always asks which session (the palette is where any session can be picked). */
   async wikiIngest(): Promise<void> {
-    if (!this.isLearningWikiEnabled()) {
-      this.postPageNotice("이 수업에서는 팀 위키를 쓸 수 없어요.");
-      return;
+    const run = await this.runWikiIngest({ ask: true });
+    if (run) await this.showBrainRun(run);
+  }
+
+  /** The command "팀 브레인으로 덱 만들기": the student picks the slides (the latest session's focus is preselected). */
+  async deckDraft(): Promise<void> {
+    const run = await this.runDeckDraft({ ask: true });
+    if (run) await this.showBrainRun(run);
+  }
+
+  /** A command's result: in-chat, not a toast (a notification pauses the integrated browser over the weekly pack). */
+  private async showBrainRun(run: BrainRun): Promise<void> {
+    this.postPageNotice(run.lines.join(" "));
+    if (run.open) await this.openBrainFile(run.open);
+  }
+
+  private async openBrainFile(file: string): Promise<void> {
+    await vscode.commands.executeCommand(file.endsWith(".html") ? "hypeproof-chat.previewActiveFile" : "vscode.open", vscode.Uri.file(file));
+  }
+
+  /**
+   * The wiki called by name in the chat ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘",
+   * "팀 브레인에 뭐 있어?"). The skill runs here instead of a coach turn and its report is the reply
+   * bubble; the stream stays open while it works, so the chat shows it is busy. The student's sentence
+   * and the reply are recorded like the other answers the App writes itself (show intent, guest list),
+   * and neither goes to the spool, so the next ingest reads only the class conversation.
+   */
+  private async answerBrainCall(text: string, intent: BrainIntent): Promise<void> {
+    const name = brainName(this.learningWikiPlan());
+    const uid = randomId();
+    const aid = randomId();
+    void this.post({ type: "streamStart", streamId: uid, messageId: aid });
+    let run: BrainRun | undefined;
+    try {
+      run = intent.kind === "show" ? this.brainShow() : intent.kind === "deck" ? await this.runDeckDraft({ ask: false }) : await this.runWikiIngest({ ask: false, session: intent.session });
+      run ??= { lines: [intent.kind === "deck" ? "덱 초안은 쓰지 않았어요." : `정리하지 않았어요. ${josa(name, "은", "는")} 그대로예요.`] };
+    } catch (err) {
+      this.logChannel?.appendLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
+      run = { lines: [`${name} 작업이 중간에 멈췄어요. 잠시 뒤 다시 해 주세요.`] };
     }
-    const folder = vscode.workspace.workspaceFolders?.[0];
-    if (!folder) {
-      void vscode.window.showWarningMessage("HypeProof: 작업 폴더를 먼저 열어 주세요.");
-      return;
-    }
+    // Markdown hard breaks: one short sentence per line in one bubble.
+    const reply = run.lines.join("  \n");
+    void this.post({ type: "streamChunk", streamId: uid, delta: reply });
+    void this.post({ type: "streamEnd", streamId: uid });
+    await this.appendHistory([
+      { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+      { id: aid, role: "assistant", content: reply, createdAt: Date.now(), assistantName: this.coachDisplayName() },
+    ]);
+    if (run.open) await this.openBrainFile(run.open);
+  }
+
+  /** "팀 브레인에 뭐 있어?": the summary from the wiki state; no model call, nothing opened. */
+  private brainShow(): BrainRun {
     const plan = this.learningWikiPlan();
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const dir = root ? wikiDir(root, plan) : null;
+    return { lines: brainSummary(dir ? loadState(dir) : null, plan, dir ? path.basename(dir) : "") };
+  }
+
+  /**
+   * The wiki skill on this session's conversation (the spool's events.jsonl) and the notes in
+   * <wiki>/notes/, then, when the plan names slides for that session, the deck skill on those slides.
+   * Each skill is one non-streaming coach-route request; only cited items are kept. Nothing is stored
+   * on the Service. Returns what to tell the student, or undefined when the student closed the pick.
+   */
+  private async runWikiIngest(opts: { ask: boolean; session?: number }): Promise<BrainRun | undefined> {
+    const plan = this.learningWikiPlan();
+    const name = brainName(plan);
+    if (!this.isLearningWikiEnabled()) return { lines: [`이 수업에서는 ${josa(name, "을", "를")} 쓸 수 없어요.`] };
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return { lines: ["작업 폴더를 먼저 열어 주세요."] };
     const label = sessionLabel(plan);
     const dir = wikiDir(folder.uri.fsPath, plan);
     const state = initWiki(dir, productTitle(folder.uri.fsPath) ?? folder.name, plan);
-    const session = await this.pickSession(state, plan, `몇 ${label} 수업을 정리할까요?`);
-    if (session === undefined) return;
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    const session = await this.ingestSession(state, plan, today, opts);
+    if (session === undefined) return undefined;
     try { await this.spool?.flush(); } catch {}
     const sessionDir = this.spool?.currentSessionDir() ?? null;
     let events = "";
     try { if (sessionDir) events = fs.readFileSync(path.join(sessionDir, "events.jsonl"), "utf8"); } catch {}
     const sources = { turns: turnsFromEvents(events), notes: readNotes(dir) };
-    if (!sources.turns.length && !Object.keys(sources.notes).length) {
-      this.postPageNotice("정리할 대화나 메모가 아직 없어요.");
-      return;
-    }
+    if (!sources.turns.length && !Object.keys(sources.notes).length) return { lines: ["정리할 대화나 메모가 아직 없어요."] };
     const sid = sessionHash(session, sources);
-    if (state.sessions_ingested.includes(sid)) {
-      this.postPageNotice(`${session}${label} 이 대화는 이미 정리했어요.`);
-      return;
-    }
+    if (state.sessions_ingested.includes(sid)) return { lines: [`${session}${label} 이 대화는 이미 정리했어요.`] };
     const answer = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: "HypeProof: 팀 위키 정리 중" },
+      { location: vscode.ProgressLocation.Window, title: `HypeProof: ${name}에 정리하는 중` },
       () => this.completeSkill(wikiPrompt(state, session, sources, plan), {}),
     );
     const proposal = answer.ok ? jsonFromText<WikiProposal>(answer.text) : null;
-    if (!proposal) {
-      this.postPageNotice("정리하지 못했어요. 팀 위키는 바뀌지 않았어요. 잠시 뒤 다시 해 주세요.");
-      return;
-    }
-    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    if (!proposal) return { lines: [`정리하지 못했어요. ${josa(name, "은", "는")} 그대로예요. 잠시 뒤 다시 해 주세요.`] };
     const r = applyWikiProposal(state, session, sources, proposal, sid, today, plan);
     saveState(dir, r.state);
     writeFiles(dir, renderWikiPages(r.state, plan));
     archiveNotes(dir, sources.notes);
     const focus = sessionFocus(plan, session);
-    let deckLine = "";
-    if (plan?.deck && focus.length) deckLine = await this.draftDeck(dir, r.state, plan, focus, session);
-    // In-chat, not a toast: a notification pauses the integrated browser over the weekly pack.
-    this.postPageNotice(`팀 위키를 정리했어요. ${r.logLine.replace(/^\[[^\]]*\] /, "")}${deckLine}${r.dropped.length ? ` · 인용이 없어 뺀 것은 log.md에 있어요` : ""}`);
-    const open = plan?.deck ? "deck.html" : "index.md";
-    await vscode.commands.executeCommand(open.endsWith(".html") ? "hypeproof-chat.previewActiveFile" : "vscode.open", vscode.Uri.file(path.join(dir, open)));
+    const deck = plan?.deck && focus.length ? await this.draftDeck(dir, r.state, plan, focus, session) : null;
+    const info = { session, turns: sources.turns.length, notes: Object.keys(sources.notes).length };
+    return {
+      lines: ingestReport(state, r, info, plan, { deck: deck ? deckReport(deck) : undefined, opened: plan?.deck ? "덱 미리보기를 열었어요." : "index.md를 열었어요." }),
+      open: path.join(dir, plan?.deck ? "deck.html" : "index.md"),
+    };
   }
 
-  /** "덱 초안 만들기": the deck skill on slides the student picks (the plan's focus for the latest session is preselected). */
-  async deckDraft(): Promise<void> {
-    if (!this.isLearningWikiEnabled()) {
-      this.postPageNotice("이 수업에서는 덱 초안을 쓸 수 없어요.");
-      return;
-    }
-    const folder = vscode.workspace.workspaceFolders?.[0];
+  /**
+   * Which session an ingest files under. The command always asks. A chat call takes the session the
+   * student named ("2주차 …"), else the next session without a click, and asks only when the latest
+   * session was already filed today (defaultIngestSession).
+   */
+  private async ingestSession(state: WikiState, plan: LearningWikiPlan | undefined, today: string, opts: { ask: boolean; session?: number }): Promise<number | undefined> {
+    const label = sessionLabel(plan);
+    if (opts.session !== undefined && opts.session >= 1 && opts.session <= sessionCount(plan)) return opts.session;
+    if (opts.ask || opts.session !== undefined) return this.pickSession(state, plan, `몇 ${label} 수업을 정리할까요?`);
+    const d = defaultIngestSession(state, plan, today);
+    if (!d.ambiguous) return d.session;
+    return this.pickSession(state, plan, `오늘 ${d.last}${josa(label, "을", "를")} 이미 정리했어요. 어느 ${label}에 정리할까요?`, [d.last, d.session]);
+  }
+
+  /** The deck skill on the latest session's slides: the plan's focus in the chat, the student's pick from the command (or when there is no focus). */
+  private async runDeckDraft(opts: { ask: boolean }): Promise<BrainRun | undefined> {
     const plan = this.learningWikiPlan();
-    if (!folder || !plan?.deck) {
-      this.postPageNotice("이 수업에는 덱 템플릿이 없어요.");
-      return;
-    }
+    const name = brainName(plan);
+    if (!this.isLearningWikiEnabled()) return { lines: ["이 수업에서는 덱 초안을 쓸 수 없어요."] };
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder || !plan?.deck) return { lines: ["이 수업에는 덱 템플릿이 없어요."] };
     const dir = wikiDir(folder.uri.fsPath, plan);
     const state = loadState(dir);
-    if (!state || !state.sessions.length) {
-      this.postPageNotice("먼저 '이번 수업 정리하기'로 팀 위키를 만들어 주세요.");
-      return;
-    }
+    if (!state || !state.sessions.length) return { lines: [`먼저 수업 내용을 ${name}에 정리해 주세요. "${name}에 정리해 줘"라고 말하면 돼요.`] };
     const last = Math.max(...state.sessions);
-    const focus = new Set(sessionFocus(plan, last));
-    const picked = await vscode.window.showQuickPick(
-      plan.deck.slides.map((x) => ({ label: `${x.no} · ${x.title}`, description: x.question, picked: focus.has(x.no), no: x.no })),
-      { canPickMany: true, placeHolder: "초안을 쓸 장을 고르세요" },
-    );
-    if (!picked?.length) return;
-    const line = await this.draftDeck(dir, state, plan, picked.map((x) => x.no), last);
-    this.postPageNotice(`덱 초안을 썼어요${line}`);
-    await vscode.commands.executeCommand("hypeproof-chat.previewActiveFile", vscode.Uri.file(path.join(dir, "deck.html")));
+    let slides = sessionFocus(plan, last);
+    if (opts.ask || !slides.length) {
+      const focus = new Set(slides);
+      const picked = await vscode.window.showQuickPick(
+        plan.deck.slides.map((x) => ({ label: `${x.no} · ${x.title}`, description: x.question, picked: focus.has(x.no), no: x.no })),
+        { canPickMany: true, placeHolder: "초안을 쓸 장을 고르세요" },
+      );
+      if (!picked?.length) return undefined;
+      slides = picked.map((x) => x.no);
+    }
+    const d = await this.draftDeck(dir, state, plan, slides, last);
+    return { lines: [deckReport(d), "덱 미리보기를 열었어요."], open: path.join(dir, "deck.html") };
   }
 
-  /** One deck-skill run; writes deck/ and deck.html and returns a short summary line. */
-  private async draftDeck(dir: string, state: WikiState, plan: LearningWikiPlan, slides: number[], session: number): Promise<string> {
+  /** One deck-skill run; writes deck/ and deck.html and returns what happened (deckReport words it). */
+  private async draftDeck(dir: string, state: WikiState, plan: LearningWikiPlan, slides: number[], session: number): Promise<DeckRun> {
     const template = plan.deck!;
     const answer = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 초안 쓰는 중" },
@@ -1039,7 +1098,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const proposal = answer.ok ? jsonFromText<DeckProposal>(answer.text) : null;
     if (!proposal) {
       writeFiles(dir, renderDeck(state, template, plan));
-      return " · 덱 초안은 쓰지 못했어요";
+      return { written: [], drafted: Object.keys(state.deck).length, total: template.slides.length, refused: 0, failed: true };
     }
     let r = applyDeckProposal(state, template, slides, proposal, session);
     // One repair round for slides the gate refused (no resolvable citation, or a number the evidence lacks).
@@ -1061,15 +1120,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     saveState(dir, r.state);
     writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) });
-    return ` · 덱 ${r.written.join("·") || "없음"}장 초안 (${Object.keys(r.state.deck).length}/${template.slides.length})${r.dropped.length ? ` · 번호 없어 뺀 문장 ${r.dropped.length}` : ""}`;
+    return { written: r.written, drafted: Object.keys(r.state.deck).length, total: template.slides.length, refused: r.dropped.length, failed: false };
   }
 
-  private async pickSession(state: WikiState, plan: LearningWikiPlan | undefined, placeHolder: string): Promise<number | undefined> {
+  /** Every session, or only `only` ([the session filed today, the next one]) when a chat call was ambiguous. */
+  private async pickSession(state: WikiState, plan: LearningWikiPlan | undefined, placeHolder: string, only?: number[]): Promise<number | undefined> {
     const label = sessionLabel(plan);
     const count = sessionCount(plan);
-    const next = Math.min((state.sessions.length ? Math.max(...state.sessions) : 0) + 1, count);
+    const last = state.sessions.length ? Math.max(...state.sessions) : 0;
+    const next = Math.min(last + 1, count);
+    const describe = (n: number) => (only ? (n === last ? `오늘 정리한 ${label}에 더하기` : `다음 ${ro(label)} 새로 정리`) : n === next ? `이번 ${label}` : undefined);
     const pick = await vscode.window.showQuickPick(
-      Array.from({ length: count }, (_, i) => i + 1).map((n) => ({ label: `${n}${label}`, description: n === next ? `이번 ${label}` : undefined, n })),
+      (only ?? Array.from({ length: count }, (_, i) => i + 1)).map((n) => ({ label: `${n}${label}`, description: describe(n), n })),
       { placeHolder },
     );
     return pick?.n;
@@ -3683,6 +3745,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the only path out to the model, so they are filtered once right at the entrance.
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
     const history = modelHistory(activityConnections(this.context) ? this.getHistory() : rawHistory);
+    // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
+    // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
+    // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
+    // always a real turn. Reads the profile already held (no await before the turn's first one).
+    const wikiSwitch = this.cachedProfile?.learning_wiki;
+    const brainCall = wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    if (brainCall) {
+      await this.answerBrainCall(text, brainCall);
+      return;
+    }
     // "Show me / open it / run it" — if the kid asks to see the game in plain
     // language and a game already exists, just open it. Don't make them hunt
     // for the ▶ Run button or burn an AI round-trip on a deflection. Skipped
@@ -3832,14 +3904,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const notice = openWorldNotice(open);
       if (notice) userTextForModel = `${notice}\n\n${userTextForModel}`;
     }
-    // Learning wiki: on the first send of a conversation, the team's summary (and, from the cohort's
-    // plan, the next session's question and deck focus) is laid in front of the model input, not the
-    // student's bubble, so the coach can open with the last session's test.
-    if (history.length === 0 && this.isLearningWikiEnabled()) {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    // Learning wiki: on the first coach turn of a conversation (calls of the wiki by name, answered by
+    // the App, do not count), the team's summary (and, from the cohort's plan, the next session's
+    // question and deck focus) is laid in front of the model input, not the student's bubble, so the
+    // coach can open with the last session's test. On an empty conversation, even with an empty wiki,
+    // the coach is also told to mention the wiki by name once, so students know they can call it.
+    if (this.isLearningWikiEnabled()) {
       const plan = this.learningWikiPlan();
-      const wiki = root ? loadState(wikiDir(root, plan)) : null;
-      if (wiki?.sessions.length) userTextForModel = `${coachContext(wiki, plan)}\n\n${userTextForModel}`;
+      if (firstCoachTurn(history, brainName(plan), sessionLabel(plan))) {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const wiki = root ? loadState(wikiDir(root, plan)) : null;
+        const lead = [wiki?.sessions.length ? coachContext(wiki, plan) : "", history.length === 0 ? brainIntro(plan) : ""].filter(Boolean).join("\n\n");
+        if (lead) userTextForModel = `${lead}\n\n${userTextForModel}`;
+      }
     }
     // #278 Phase 2 — fold any queued page screenshot into this turn's images.
     // CR-09 — a picked element's crop joins the queued page screenshot; neither replaces the other.

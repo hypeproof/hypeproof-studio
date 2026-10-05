@@ -199,6 +199,17 @@ export function applyDeckProposal(prev: WikiState, template: DeckTemplate, slide
   return { state: s, dropped, written };
 }
 
+/** One deck-skill run as the caller reports it: slides written now, slides drafted in all, slides refused, or no usable answer. */
+export interface DeckRun { written: number[]; drafted: number; total: number; refused: number; failed: boolean }
+
+/** The student-facing line for a deck run, with the deck's progress (e.g. "지금 덱 3/8장이에요."). */
+export function deckReport(d: DeckRun): string {
+  const progress = `지금 덱 ${d.drafted}/${d.total}장이에요.`;
+  if (d.failed) return `덱 초안은 쓰지 못했어요. ${progress}`;
+  const head = d.written.length ? `덱 ${d.written.join("·")}장 초안을 썼어요.` : "덱 초안은 이번에 쓰지 못했어요.";
+  return `${head} ${progress}${d.refused ? ` 근거와 맞지 않은 ${d.refused}장은 올리지 않았어요.` : ""}`;
+}
+
 /** Notes-layer lines: slides resting only on team tests or simulations, and what is still unconfirmed. */
 export function lintDeck(s: WikiState): string[] {
   const out: string[] = [];

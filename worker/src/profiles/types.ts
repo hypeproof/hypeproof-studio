@@ -309,9 +309,9 @@ export interface Profile {
   /**
    * Learning wiki and deck generator: App-side generic skills that keep a team's record under the
    * workspace and draft deck slides from it. Absent = off. Served by /v1/profile. `plan` specializes
-   * them for a cohort (folder, audience, session label, deck template, per-session focus and
-   * question); the AI for Good founder course uses `FOUNDER_AI_FOR_GOOD_V5` (plans/). Nothing is
-   * stored on the Service.
+   * them for a cohort (student-facing name, folder, audience, session label, deck template,
+   * per-session focus and question); the AI for Good founder course uses `FOUNDER_AI_FOR_GOOD_V5`
+   * (plans/). Nothing is stored on the Service.
    */
   learning_wiki?: {
     enabled: boolean;
@@ -529,6 +529,8 @@ export function explicitModelProvider(key: string): LLMProvider | undefined {
 
 /** A cohort's specialization of the learning wiki and deck generator skills (see `Profile.learning_wiki`). */
 export interface LearningWikiPlan {
+  /** What students call the wiki in the chat and the App's copy (the App defaults to "팀 브레인"). */
+  name?: string;
   dir?: string;
   audience?: string;
   session_label?: string;

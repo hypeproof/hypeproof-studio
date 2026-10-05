@@ -5,7 +5,9 @@
 // of that session. This module checks the citations, numbers the entries (H-n, E-n, D-n), appends
 // only and renders the pages. It knows nothing about a course: a cohort's `learning_wiki.plan`
 // (served on the profile) names the folder, the audience, the session label and each session's
-// question. The deck is a separate skill (deckGenerator.ts) that reads this wiki.
+// question. The deck is a separate skill (deckGenerator.ts) that reads this wiki. Students know the
+// wiki by a plain name ("팀 브레인", overridable by `plan.name`) and call it by that name in the chat
+// (brainIntent); the App answers such a call itself instead of a coach turn.
 //
 // Pure and vscode-free (fs and path only), like sessionSpool.ts, so a smoke drives exactly what the
 // provider runs. Nothing is sent to a server store.
@@ -16,13 +18,14 @@ import { createHash } from "crypto";
 
 /** The cohort's specialization, as /v1/profile serves it under `learning_wiki.plan`. Every field is optional. */
 export interface LearningWikiPlan {
+  /** What students call the wiki in the chat and in the copy (default "팀 브레인"). */
+  name?: string;
   /** Folder in the workspace (default "wiki"). */
   dir?: string;
   /** Who the learners are, in the prompt's words (default "학습 팀"). */
   audience?: string;
   /** What one session is called (default "회차"; the founder course says "주차"). */
   session_label?: string;
-  /** Deck template for the deck skill. */
   /** Deck template for the deck skill; `hint` tells the skill what the slide must and must not show. */
   deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
   /** Per session: the slides the deck skill drafts that session and the session's question. */
@@ -30,6 +33,7 @@ export interface LearningWikiPlan {
 }
 
 export const DEFAULT_WIKI_DIR = "wiki";
+export const DEFAULT_BRAIN_NAME = "팀 브레인";
 const STATE_KO = { real: "실제", self_reported: "팀 시험·자기 보고", simulated: "모의" } as const;
 const OUT_KO = { match: "맞음", mismatch: "안 맞음" } as const;
 type SourceState = keyof typeof STATE_KO;
@@ -73,6 +77,21 @@ export const sessionQuestion = (plan: LearningWikiPlan | undefined, n: number) =
 export const sessionFocus = (plan: LearningWikiPlan | undefined, n: number) => plan?.sessions?.find((s) => s.session === n)?.focus ?? [];
 /** How many sessions to offer (the plan's, else 12). */
 export const sessionCount = (plan?: LearningWikiPlan) => Math.max(1, ...(plan?.sessions?.map((s) => s.session) ?? [12]));
+/** The wiki's name for students: the plan's (up to 20 characters), else "팀 브레인". */
+export const brainName = (plan?: LearningWikiPlan) => {
+  const n = plan?.name?.trim();
+  return n && n.length <= 20 ? n : DEFAULT_BRAIN_NAME;
+};
+
+/** Final consonant index of the last Hangul syllable (0 = none, 8 = ㄹ), for particles after a name the plan may change. */
+const finalConsonant = (w: string) => {
+  const c = w.trim().charCodeAt(w.trim().length - 1);
+  return c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 : 0;
+};
+/** The word with the particle that fits it: josa("팀 브레인", "은", "는") → "팀 브레인은". */
+export const josa = (w: string, afterConsonant: string, afterVowel: string) => `${w}${finalConsonant(w) ? afterConsonant : afterVowel}`;
+/** The word with 으로/로 (ㄹ takes 로): ro("팀 브레인") → "팀 브레인으로". */
+export const ro = (w: string) => `${w}${finalConsonant(w) && finalConsonant(w) !== 8 ? "으로" : "로"}`;
 
 export function newState(team: string): WikiState {
   return { format: "hps-learning-wiki/1", team, sessions_ingested: [], sessions: [], problem: null, H: [], E: [], D: [], changes: [], next: null, deck: {}, dropped: [], log: [] };
@@ -272,7 +291,7 @@ export function coachContext(s: WikiState, plan?: LearningWikiPlan): string {
   const focus = sessionFocus(plan, nextSession).map((n) => plan?.deck?.slides.find((x) => x.no === n)).filter(Boolean).map((x) => `${x!.no} ${x!.title}`);
   const testing = s.H.filter((h) => h.status !== "지지").map((h) => `${h.id} ${h.text}`).join(" / ") || "없음";
   return [
-    `[팀 위키 요약 · ${s.team}]`,
+    `[${brainName(plan)} 요약 · ${s.team}]`,
     `문제: ${s.problem?.text ?? "(아직 없음)"}`,
     `시험 중인 가설: ${testing}`,
     ...(q ? [`이번 ${label} 질문 (${nextSession}${label}): ${q}`] : []),
@@ -281,6 +300,121 @@ export function coachContext(s: WikiState, plan?: LearningWikiPlan): string {
     `최근 기록: ${s.log.slice(-2).join(" / ") || "없음"}`,
     `위 요약을 먼저 보여 주지 말고, 첫 응답에서 "지난 ${label}에 무엇을 시험했고 결과가 어땠어요?"라고 물은 뒤 학생 답과 요약을 비교해 이어 가세요.`,
   ].join("\n");
+}
+
+// ── Calling the wiki by name in the chat ─────────────────────────────────────
+
+export interface BrainIntent { kind: "ingest" | "deck" | "show"; session?: number }
+
+/** Particles that may follow the name ("팀 브레인에", "팀 브레인으로" …), longer ones first. */
+const PARTICLES = "에다가|에다|에서|에게|이랑|한테|으로|에|로|은|는|이|가|을|를|의|도|랑|아|야";
+// Request endings per action. Each must close the message, so a sentence that only mentions the
+// word ("정리하기 전에 …", "정리했어?", "저장하지 마") is not a call.
+const DECK_WORD = /덱|슬라이드|발표자료/;
+const DECK_END = /(?:만들|써|쓰|짜|뽑|그려|채워|다듬|고쳐)(?:어|아)?(?:줘|줘요|주세요|줄래|줄래요|주라|봐|보자|자|기)?$|(?:업데이트|수정)(?:해|해줘|해줘요|해주세요|해줄래)?$|초안$/;
+const INGEST_END = /(?:정리|저장|기록|보관|추가|업데이트)(?:좀)?(?:해|해요|하자|해줘|해줘요|해주세요|해줄래|해줄래요|해주라|해봐|해둬|해둬요|해놔|해놔줘|해두자|부탁해|부탁해요|부탁)?$|(?:넣어|담아|올려)(?:줘|줘요|주세요|줄래|줄래요|주라|둬|놔)?$/;
+const SHOW_END = /(?:뭐|뭐가|무엇이)(?:있어|있어요|있니|있나|있지|들었어|들어있어|들어있어요)$|(?:보여|열어|띄워)(?:줘|줘요|주세요|줄래|줄래요|봐)?$|(?:요약|확인)(?:좀)?(?:해|해줘|해줘요|해주세요|해줄래|해봐)?$|(?:어디까지|얼마나)(?:했어|됐어|왔어|쌓였어)(?:요)?$/;
+const reEscape = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Is this chat message an explicit call of the wiki by name? Only a short one-sentence message that
+ * names it (followed by a particle, a space or the end, so "팀 브레인스토밍" does not count) and ends
+ * in a request: "팀 브레인에 정리해 줘" → ingest, "팀 브레인으로 덱 만들어 줘" → deck, "팀 브레인에
+ * 뭐 있어?" or the name alone → show. A session the student names ("2주차 …") rides along with an
+ * ingest. Anything else, including "정리해 줘" without the name, stays a normal coach turn.
+ */
+export function brainIntent(text: string, name = DEFAULT_BRAIN_NAME, label = "회차"): BrainIntent | null {
+  const t = text.trim();
+  if (!t || t.length > 40 || t.includes("\n")) return null;
+  const words = name.trim().split(/\s+/).filter(Boolean).map(reEscape);
+  if (!words.length) return null;
+  const m = new RegExp(`${words.join("\\s*")}(?:${PARTICLES}|(?![가-힣A-Za-z0-9]))`, "i").exec(t);
+  if (!m) return null;
+  const rest = (t.slice(0, m.index) + t.slice(m.index + m[0].length)).replace(/\s+/g, "").replace(/[.!?~…,ㅋㅎㅠㅜ^\p{Extended_Pictographic}️]+$/u, "");
+  if (/[.!?]/.test(rest)) return null;
+  if (!rest) return { kind: "show" };
+  // What comes before the request (e.g. "오늘 내용") stays short.
+  const ends = (re: RegExp) => { const e = re.exec(rest); return !!e && e.index <= 14; };
+  if (DECK_WORD.test(rest) && ends(DECK_END)) return { kind: "deck" };
+  if (ends(INGEST_END)) {
+    const sm = new RegExp(`(\\d{1,2})\\s*(?:${[label, "주차", "회차", "차시"].map(reEscape).join("|")})`).exec(t);
+    return sm ? { kind: "ingest", session: Number(sm[1]) } : { kind: "ingest" };
+  }
+  return ends(SHOW_END) ? { kind: "show" } : null;
+}
+
+/** Is the next coach turn the conversation's first? Calls of the wiki by name, which the App answered itself, do not count. */
+export function firstCoachTurn(history: ReadonlyArray<{ role: string; content: string }>, name = DEFAULT_BRAIN_NAME, label = "회차"): boolean {
+  return history.every((m) => m.role !== "user" || brainIntent(m.content, name, label) !== null);
+}
+
+/** Two lines for the model on a conversation's first turn, so the coach tells the team once how to call the wiki. */
+export function brainIntro(plan?: LearningWikiPlan): string {
+  const name = brainName(plan);
+  const saved = plan?.deck ? `저장되고, "${ro(name)} 덱 만들어 줘"라고 하면 이번 ${sessionLabel(plan)} 덱 장 초안이 만들어진다` : "저장된다";
+  return `[Studio 안내: 이 팀에는 ${josa(name, "이", "가")} 있다(문제, 가설, 결정${plan?.deck ? ", 덱" : ""}을 쌓아 두는 팀 기록). 첫 답 끝에 한 번만, 한 문장으로 알려 줘라.\n수업이 끝날 때 "${name}에 정리해 줘"라고 하면 오늘 대화가 ${saved}.]`;
+}
+
+/**
+ * The session a chat call files under when the student names none: the next one, no click. It is
+ * ambiguous only when the latest session was already filed today, since a second conversation in the
+ * same class may belong to it; the caller then asks.
+ */
+export function defaultIngestSession(s: WikiState, plan: LearningWikiPlan | undefined, today: string): { session: number; last: number; ambiguous: boolean } {
+  const last = s.sessions.length ? Math.max(...s.sessions) : 0;
+  const session = Math.min(last + 1, sessionCount(plan));
+  const ambiguous = last > 0 && session !== last && s.log.some((l) => l.startsWith(`[${today}] ${last}${sessionLabel(plan)} |`));
+  return { session, last, ambiguous };
+}
+
+const cut = (t: string, n = 40) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+const sentence = (t: string) => (/[.!?…]$/.test(t) ? t : `${t}.`);
+
+/**
+ * What an ingest tells the student, one short sentence per line: what was added (counts), one or two
+ * new items, the deck skill's line and where to look.
+ */
+export function ingestReport(prev: WikiState, r: IngestResult, info: { session: number; turns: number; notes: number }, plan?: LearningWikiPlan, extra: { deck?: string; opened?: string } = {}): string[] {
+  const s = r.state;
+  const label = sessionLabel(plan);
+  const n = (k: "H" | "E" | "D" | "changes") => s[k].length - prev[k].length;
+  const added = [
+    !prev.problem && s.problem ? "문제 정의" : "",
+    n("H") ? `가설 ${n("H")}개` : "",
+    n("E") ? `근거 ${n("E")}개` : "",
+    n("D") ? `결정 ${n("D")}개` : "",
+    n("changes") ? `바뀐 것 ${n("changes")}개` : "",
+  ].filter(Boolean).join(", ");
+  const from = info.turns && info.notes ? `대화 ${info.turns}턴과 메모 ${info.notes}개` : info.turns ? `대화 ${info.turns}턴` : `메모 ${info.notes}개`;
+  const lines = [`${brainName(plan)}에 정리했어요.`, added ? `${info.session}${label} ${from}에서 ${josa(added, "을", "를")} 더했어요.` : `${info.session}${label} ${josa(from, "을", "를")} 읽었지만 새로 더한 것은 없어요.`];
+  const d = s.D.slice(prev.D.length).at(-1);
+  const h = s.H.slice(prev.H.length).at(-1);
+  const e = s.E.slice(prev.E.length).at(-1);
+  const item = d ? `새 결정 ${d.id}: ${cut(d.therefore)}` : h ? `새 가설 ${h.id}: ${cut(h.text)}` : e ? `새 근거 ${e.id}: ${cut(e.text)}` : !prev.problem && s.problem ? `문제: ${cut(s.problem.text)}` : "";
+  if (item) lines.push(sentence(item));
+  if (s.next && s.next.text !== prev.next?.text) lines.push(sentence(`다음 행동: ${cut(s.next.text)}`));
+  if (extra.deck) lines.push(extra.deck);
+  if (r.dropped.length) lines.push(`대화에서 근거를 찾지 못해 뺀 것 ${r.dropped.length}개는 log.md에 적어 뒀어요.`);
+  if (extra.opened) lines.push(extra.opened);
+  return lines;
+}
+
+/** "팀 브레인에 뭐 있어?": a short summary from the wiki state, one line each (no model call). */
+export function brainSummary(s: WikiState | null, plan: LearningWikiPlan | undefined, folder: string): string[] {
+  const name = brainName(plan);
+  if (!s || !s.sessions.length) return [`${josa(name, "은", "는")} 아직 비어 있어요.`, `수업이 끝날 때 "${name}에 정리해 줘"라고 말하면 오늘 대화를 정리해 둘게요.`];
+  const label = sessionLabel(plan);
+  const out = [`${name}에 ${Math.max(...s.sessions)}${label}까지 정리돼 있어요.`, `문제: ${s.problem ? cut(s.problem.text, 60) : "아직 없어요"}`];
+  const hs = s.H.slice(-4);
+  if (!hs.length) out.push("가설: 아직 없어요");
+  for (const h of hs) out.push(`가설 ${h.id} (${h.status}): ${cut(h.text)}`);
+  if (s.H.length > hs.length) out.push(`가설은 모두 ${s.H.length}개예요.`);
+  const d = s.D.at(-1);
+  out.push(`최근 결정: ${d ? `${d.id} ${cut(d.therefore)}` : "아직 없어요"}`);
+  out.push(`다음 행동: ${s.next ? cut(s.next.text) : "정해지지 않았어요"}`);
+  if (plan?.deck) out.push(`덱: ${Object.keys(s.deck).length}/${plan.deck.slides.length}장`);
+  if (folder) out.push(`자세한 기록은 ${folder}/ 폴더에 있어요.`);
+  return out;
 }
 
 const cites = (c: string[]) => (c.length ? ` (${c.join(", ")})` : "");
@@ -294,7 +428,7 @@ export function renderWikiPages(s: WikiState, plan?: LearningWikiPlan): Record<s
   const last = s.sessions.length ? Math.max(...s.sessions) : 0;
   const nq = sessionQuestion(plan, last + 1);
   files["index.md"] = [
-    `# ${s.team}`,
+    `# ${brainName(plan)} · ${s.team}`,
     "",
     `- 문제: ${s.problem?.text ?? "(아직 없음)"}`,
     `- 지금 시험 중인 가설: ${s.H.filter((h) => h.status !== "지지").map((h) => `${h.id} ${h.text}`).join(", ") || "없음"}`,

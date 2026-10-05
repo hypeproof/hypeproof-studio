@@ -178,4 +178,113 @@ assert.equal(wiki.productTitle(join(dir, "..")), "길 안내");
 assert.equal(wiki.productTitle("/nonexistent"), null);
 ok("coach context carries the next session's question and deck focus; disk: init once, notes archived, state round-trips");
 
+// ── 팀 브레인: the wiki's name, called by name in the chat ─────────────────────
+{
+  const I = (t, name = "팀 브레인") => wiki.brainIntent(t, name, "주차");
+  for (const t of ["팀 브레인에 정리해 줘", "팀 브레인에 저장", "오늘 내용 팀 브레인에 넣어 줘", "팀브레인 정리해줘!", "오늘 수업 팀 브레인에 정리해 주세요 🙏", "팀 브레인에 정리 좀 부탁해", "팀 브레인아 저장해 둬"]) {
+    assert.deepEqual(I(t), { kind: "ingest" }, t);
+  }
+  assert.deepEqual(I("2주차 내용 팀 브레인에 정리해 줘"), { kind: "ingest", session: 2 }, "a session the student names rides along");
+  for (const t of ["팀 브레인으로 덱 만들어 줘", "팀 브레인 덱 초안", "팀 브레인으로 이번 주 덱 초안 써 줘", "팀 브레인으로 슬라이드 만들어 줄래?"]) assert.deepEqual(I(t), { kind: "deck" }, t);
+  for (const t of ["팀 브레인에 뭐 있어?", "팀 브레인 보여 줘", "팀 브레인 요약해 줘", "팀 브레인", "팀 브레인 덱 보여 줘"]) assert.deepEqual(I(t), { kind: "show" }, t);
+  // Planted: a casual mention, the plain word without the name, or a sentence that is not a request must stay a coach turn.
+  for (const t of [
+    "우리 팀 브레인이 부족한가 봐 ㅋㅋ",
+    "오늘 내용 정리해 줘",
+    "정리",
+    "덱 만들어 줘",
+    "브레인스토밍 하자",
+    "팀 브레인스토밍 결과 정리해 줘",
+    "브레인에 정리해 줘",
+    "팀 브레인 정리 기능은 어떻게 써?",
+    "팀 브레인에 아직 저장하지 마",
+    "팀 브레인에 정리했어?",
+    "팀 브레인으로 덱 만들었어?",
+    "팀 브레인이 뭐야?",
+    "할머니가 버튼이 작대. 팀 브레인에 정리해 줘",
+    "팀 브레인에 정리하기 전에 할머니 인터뷰 내용을 먼저 같이 봐 줄래?",
+    "팀 브레인에 있는 가설이 맞는지 할머니께 다시 물어볼까?",
+  ]) assert.equal(I(t), null, `planted: "${t}" must not trigger`);
+  // The plan may rename it; the default is 팀 브레인, and only the served name triggers.
+  assert.equal(wiki.brainName(PLAN), "팀 브레인");
+  assert.equal(wiki.brainName({ name: " 우리 노트 " }), "우리 노트");
+  assert.equal(wiki.brainName({ name: "아주 긴 이름이 스무 글자를 훌쩍 넘어가 버린다" }), "팀 브레인", "planted: an overlong name falls back");
+  assert.deepEqual(I("우리 노트에 정리해 줘", "우리 노트"), { kind: "ingest" });
+  assert.equal(I("팀 브레인에 정리해 줘", "우리 노트"), null, "with a renamed wiki the default name is a normal message");
+  assert.equal(wiki.josa("팀 브레인", "은", "는"), "팀 브레인은");
+  assert.equal(wiki.josa("우리 노트", "은", "는"), "우리 노트는");
+  assert.equal(wiki.ro("팀 브레인"), "팀 브레인으로");
+  assert.equal(wiki.ro("우리 일"), "우리 일로", "ㄹ takes 로");
+  // A brain call answered by the App does not use up the coach's first turn.
+  assert.equal(wiki.firstCoachTurn([]), true);
+  assert.equal(wiki.firstCoachTurn([{ role: "user", content: "팀 브레인에 뭐 있어?" }, { role: "assistant", content: "팀 브레인에 1주차까지 정리돼 있어요." }], "팀 브레인", "주차"), true);
+  assert.equal(wiki.firstCoachTurn([{ role: "user", content: "할머니가 버튼이 작대" }, { role: "assistant", content: "…" }], "팀 브레인", "주차"), false);
+  // The coach is told, in the model input only, to mention it once with both phrases.
+  const intro = wiki.brainIntro(PLAN);
+  assert.ok(intro.includes('"팀 브레인에 정리해 줘"') && intro.includes('"팀 브레인으로 덱 만들어 줘"') && intro.includes("이번 주차"), intro);
+  assert.ok(intro.split("\n").length <= 2, "one or two lines");
+  assert.ok(!wiki.brainIntro({}).includes("덱"), "no deck in the plan: no deck phrase");
+  assert.match(wiki.brainIntro({}), /오늘 대화가 저장된다\.\]$/, "the sentence still ends without the deck clause");
+  assert.ok(wiki.brainIntro({ name: "우리 일", deck: PLAN.deck }).includes('"우리 일로 덱 만들어 줘"'));
+  assert.match(wiki.coachContext(s1, PLAN), /^\[팀 브레인 요약 · A · 어르신 길찾기\]/);
+  assert.match(wiki.coachContext(s1, { ...PLAN, name: "우리 노트" }), /^\[우리 노트 요약 · /);
+  assert.match(wiki.renderWikiPages(s1, PLAN)["index.md"], /^# 팀 브레인 · A · 어르신 길찾기\n/);
+  ok("팀 브레인 by name: ingest/deck/show phrases, casual mentions and plain 정리 do not trigger, plan rename, josa, first coach turn, coach intro");
+}
+
+// ── 팀 브레인: which session a chat call files under, and what the student is told ──
+{
+  assert.deepEqual(wiki.defaultIngestSession(wiki.newState("t"), PLAN, "2026-10-05"), { session: 1, last: 0, ambiguous: false });
+  assert.deepEqual(wiki.defaultIngestSession(s1, PLAN, "2026-10-12"), { session: 2, last: 1, ambiguous: false }, "next session, no click");
+  assert.deepEqual(wiki.defaultIngestSession(s1, PLAN, "2026-10-05"), { session: 2, last: 1, ambiguous: true }, "session 1 was filed today: ask");
+  assert.equal(wiki.defaultIngestSession({ ...s1, sessions: [6], log: ["[2026-10-05] 6주차 | 정리 | x"] }, PLAN, "2026-10-05").ambiguous, false, "at the last session there is nothing to choose");
+
+  const deckLine = deck.deckReport({ written: [1], drafted: 1, total: 8, refused: 0, failed: false });
+  assert.equal(deckLine, "덱 1장 초안을 썼어요. 지금 덱 1/8장이에요.");
+  assert.equal(deck.deckReport({ written: [2, 3], drafted: 3, total: 8, refused: 1, failed: false }), "덱 2·3장 초안을 썼어요. 지금 덱 3/8장이에요. 근거와 맞지 않은 1장은 올리지 않았어요.");
+  assert.equal(deck.deckReport({ written: [], drafted: 1, total: 8, refused: 0, failed: true }), "덱 초안은 쓰지 못했어요. 지금 덱 1/8장이에요.");
+
+  const lines = wiki.ingestReport(s0, r, { session: 1, turns: 2, notes: 1 }, PLAN, { deck: deckLine, opened: "덱 미리보기를 열었어요." });
+  assert.deepEqual(lines, [
+    "팀 브레인에 정리했어요.",
+    "1주차 대화 2턴과 메모 1개에서 문제 정의, 가설 1개, 근거 2개, 결정 1개, 바뀐 것 1개를 더했어요.",
+    "새 결정 D-1: 다음 버튼을 키운다.",
+    "다음 행동: 실제 어르신 3명에게 보여 드린다.",
+    "덱 1장 초안을 썼어요. 지금 덱 1/8장이에요.",
+    "대화에서 근거를 찾지 못해 뺀 것 1개는 log.md에 적어 뒀어요.",
+    "덱 미리보기를 열었어요.",
+  ]);
+  const none = wiki.ingestReport(s1, { state: s1, dropped: [], logLine: "", already: false }, { session: 2, turns: 0, notes: 1 }, PLAN);
+  assert.deepEqual(none, ["팀 브레인에 정리했어요.", "2주차 메모 1개를 읽었지만 새로 더한 것은 없어요."], "nothing new is said plainly");
+  const onlyH = wiki.ingestReport(s0, { ...r, state: { ...s1, D: [], next: null } }, { session: 1, turns: 3, notes: 0 }, PLAN);
+  assert.equal(onlyH[2], "새 가설 H-1: 한 단계씩 크게 보이면 혼자 간다.", "without a new decision the newest hypothesis is quoted");
+
+  const empty = wiki.brainSummary(null, PLAN, "venture");
+  assert.deepEqual(empty, ["팀 브레인은 아직 비어 있어요.", '수업이 끝날 때 "팀 브레인에 정리해 줘"라고 말하면 오늘 대화를 정리해 둘게요.']);
+  const sum = wiki.brainSummary(sDeck, PLAN, "venture");
+  assert.equal(sum[0], "팀 브레인에 2주차까지 정리돼 있어요.");
+  assert.ok(sum.includes("문제: 어르신이 다음에 어디서 꺾는지 몰라 가족에게 전화한다"), sum.join("\n"));
+  assert.ok(sum.includes("가설 H-1 (팀 시험에서만 맞음): 한 단계씩 크게 보이면 혼자 간다"));
+  assert.ok(sum.includes("최근 결정: D-1 다음 버튼을 키운다"));
+  assert.ok(sum.includes("다음 행동: 실제 어르신 3명에게 보여 드린다"));
+  assert.ok(sum.includes("덱: 1/8장"));
+  assert.ok(sum.includes("자세한 기록은 venture/ 폴더에 있어요."));
+  assert.ok(!wiki.brainSummary(sDeck, undefined, "wiki").some((x) => x.startsWith("덱")), "no deck in the plan: no deck line");
+  for (const x of [...lines, ...none, ...sum, ...empty, wiki.brainIntro(PLAN)]) assert.ok(!/[—–]|\*\*/.test(x), `plain copy, no dashes or bold: ${x}`);
+  ok("팀 브레인 reports: next session by default (asks only after a same-day filing), counts + newest items + deck n/8 + where to look, summary without a model call");
+}
+
+// ── manifest: the renamed commands keep the cohort's switch ──────────────────
+{
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const cmd = (id) => pkg.contributes.commands.find((c) => c.command === id);
+  assert.equal(cmd("hypeproof-chat.wikiIngest").title, "HypeProof: 팀 브레인에 정리하기");
+  assert.equal(cmd("hypeproof-chat.deckDraft").title, "HypeProof: 팀 브레인으로 덱 만들기");
+  for (const id of ["hypeproof-chat.wikiIngest", "hypeproof-chat.deckDraft"]) {
+    assert.equal(cmd(id).enablement, "hypeproof-chat.learningWikiEnabled", id);
+    assert.equal(pkg.contributes.menus.commandPalette.find((m) => m.command === id)?.when, "hypeproof-chat.learningWikiEnabled", id);
+  }
+  ok("manifest: 팀 브레인 command titles, enablement and palette visibility follow hypeproof-chat.learningWikiEnabled");
+}
+
 console.log(`\n${passed} learning-wiki checks passed`);
