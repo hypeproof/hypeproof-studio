@@ -60,11 +60,48 @@ export interface GoalSaveRequest {
   goal: string;
   criteria: string[];
   base: number;
+  /** The sending chat view's own id for this save. The host echoes it, so only that view shows the answer's note. */
+  requestId?: string;
 }
 
 export type GoalRefusal = "no_lesson" | "other_lesson" | "invalid" | "too_long" | "too_many" | "stale";
 
+/**
+ * The host's answer to one save. It goes to every chat view (the sidebar and the editor tab alike).
+ *   view       the goal as stored, after a save; after a `stale` refusal, the newer goal the save lost to. Absent on
+ *              every other refusal and on a failed write: those change nothing on any screen but the sentence.
+ *   requestId  the id of the save it answers, echoed from the request.
+ */
+export interface GoalAnswer {
+  view?: StudentGoalView;
+  error?: string;
+  saved?: boolean;
+  requestId?: string;
+}
+
+/**
+ * What one chat view says under the editor about its own last save: refused (`error`), or stored as `revision`
+ * (`saved`). The saved note describes that revision only; once another goal reaches the screen it no longer applies.
+ */
+export type GoalNote = { error?: string; saved?: boolean; revision?: number } | null;
+
+/** What the editor holds: the two fields and the revision their text was loaded from (the next save's `base`). */
+export interface GoalFields {
+  goal: string;
+  criteria: string;
+  base: number;
+}
+
+/** The editor's verdict on its fields: `save` is the request to send, or null while saving would change nothing or be refused. */
+export interface GoalEdit {
+  save: GoalSaveRequest | null;
+  unchanged: boolean;
+  tooMany: boolean;
+  tooLong: boolean;
+}
+
 const SHA256 = /^[a-f0-9]{64}$/;
+const REQUEST_ID = /^[A-Za-z0-9-]{1,64}$/;
 const ACTIVITY_MAX = 128;
 const nonEmpty = (v: unknown, max: number): v is string => typeof v === "string" && v.trim().length > 0 && v.length <= max;
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -191,9 +228,52 @@ export function goalOfLesson(view: StudentGoalView | null | undefined, lesson: u
   return view && ref && sameLesson(view.lesson, ref) ? view : null;
 }
 
+/** The save's request id, echoed by the host only when it is a plain short id; anything else is not echoed. */
+export function goalRequestIdOf(msg: unknown): string | undefined {
+  const id = isObject(msg) ? msg.requestId : undefined;
+  return typeof id === "string" && REQUEST_ID.test(id) ? id : undefined;
+}
+
+/**
+ * The note a chat view shows for a host answer, given the id of the save it is waiting on. Only the answer to that save
+ * gives one; for any other answer (another view's save, or none pending) the result is undefined: keep what is shown.
+ */
+export function goalNoteFor(answer: GoalAnswer, pending: string | null): GoalNote | undefined {
+  if (!pending || answer.requestId !== pending) return undefined;
+  if (answer.error) return { error: answer.error };
+  return answer.saved && answer.view ? { saved: true, revision: answer.view.revision } : null;
+}
+
+/** Whether the saved note still describes what the screen shows: the revision it stored, and fields left as saved. */
+export function goalSavedNoteShown(note: GoalNote, view: StudentGoalView | null | undefined, edit: GoalEdit): boolean {
+  return !!note?.saved && note.revision === (view?.revision ?? 0) && edit.unchanged;
+}
+
+/** The editor's fields for a goal the host sent: its text, and its revision as the base of the next save. */
+export function goalFieldsOf(view: StudentGoalView | null | undefined): GoalFields {
+  return { goal: view?.goal ?? "", criteria: (view?.criteria ?? []).join("\n"), base: view?.revision ?? 0 };
+}
+
+/**
+ * Whether the fields can be saved, and the request if so. The request starts from the revision the fields were loaded
+ * from, never from a newer goal that reached the screen since: an edit made before another view's save is then refused
+ * as `stale` instead of silently replacing that save. Nothing to save (the fields hold the stored goal), past the
+ * bounds the host would refuse, or a save of this view still unanswered: no request.
+ */
+export function goalEditOf(view: StudentGoalView | null | undefined, lesson: string, fields: GoalFields, pending: boolean): GoalEdit {
+  const criteria = goalCriteriaFromText(fields.criteria);
+  const unchanged = fields.goal.trim() === (view?.goal ?? "") && criteria.join("\n") === (view?.criteria ?? []).join("\n");
+  const tooMany = criteria.length > GOAL_CRITERIA_MAX;
+  const tooLong = fields.goal.trim().length > GOAL_TEXT_MAX || criteria.some((c) => c.length > GOAL_CRITERION_MAX);
+  const save = unchanged || tooMany || tooLong || pending ? null : { lesson, goal: fields.goal, criteria, base: fields.base };
+  return { save, unchanged, tooMany, tooLong };
+}
+
 /** What the student is told when a save is refused or not stored. Screen copy: no numbers (SX-59). */
 export const GOAL_REFUSAL_SENTENCES: Record<GoalRefusal | "not_stored", string> = {
-  no_lesson: "연결된 수업이 없어서 목표를 저장하지 않았어요.",
+  // Also the answer when the App lost its lesson connection while the screen still shows the lesson (a failed profile
+  // refresh): the refusal leaves the screen and the typed text as they are.
+  no_lesson: "수업 연결을 확인하지 못해 목표를 저장하지 않았어요. 적은 내용은 그대로 있으니 잠시 뒤 다시 저장해 주세요.",
   other_lesson: "수업이 바뀌어서 저장하지 않았어요. 지금 수업에서 다시 적어 주세요.",
   invalid: "목표를 읽지 못해 저장하지 않았어요. 다시 저장해 주세요.",
   too_long: "목표나 완료 기준이 너무 길어요. 조금 줄여서 다시 저장해 주세요.",

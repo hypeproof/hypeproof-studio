@@ -5,25 +5,35 @@
 // the one `/2` profile, a model that answers one fixed line). No model call, no production state.
 //
 // One student on the week-3 design:
-//   first session   The goal block starts empty beside region A's lesson criteria. The student opens it, writes a
-//                   goal and two criteria and saves. Region A reads the same lesson criteria before and after, nothing
-//                   is checked off, the task record does not move and the completion button stays closed (AE-01:
-//                   viewing or writing a goal completes nothing).
+//   first session   The goal block starts empty and closed beside region A's lesson criteria; closed, it adds no field
+//                   to the screen, so the composer and the lesson card stay where other scripts find them. The student
+//                   opens it, writes a goal and two criteria and saves, then changes the goal and one criterion and
+//                   saves again with a double press (one save). After each save the fields hold exactly what was stored
+//                   (they follow the host's revision: spaces and blank lines dropped). Region A reads the same lesson
+//                   criteria throughout, nothing is checked off, the task record does not move and the completion
+//                   button stays closed (AE-01: viewing or writing a goal completes nothing).
+//   short window    At 1280×450 the header packs: the goal comes after the lesson's completion conditions, which stay
+//                   wholly on screen, and sits inside the header's own scroll (it can be brought on screen there).
 //   result screen   index.html opens and the preview opens beside the chat; the student looks at the preview and brings
-//                   the chat back to the front while the result stays open beside it: the same goal and the same lesson
-//                   criteria, and region A's goal line wholly on screen, also with the conversation scrolled to its end
-//                   (AE-01: "대화와 결과를 오가도 유지"; the AE design keeps the goal summary fixed with the task).
-//   reopened        A new App process on the same device storage: the same goal and lesson criteria.
+//                   the chat back to the front while the result stays open beside it: the same NEW goal and the same
+//                   lesson criteria, region A's goal line wholly on screen, also with the conversation scrolled to its
+//                   end (AE-01: "대화와 결과를 오가도 유지"; the AE design keeps the goal summary fixed with the task).
+//   reopened        A new App process on the same device storage: the same new goal and lesson criteria, also in the
+//                   editor's fields; the short window again, now with the result beside the chat.
+//   two chat views  The sidebar chat opens next to the editor chat. Clearing the goal in the editor chat clears it in
+//                   both: region A's line goes, the sidebar's open fields follow, and only the editor chat says
+//                   "저장했어요." (a view shows the note of its own save only).
 // Every probe also runs once on a planted DOM (a lesson criterion's words changed, a condition checked off, the goal
-// text changed) and must report it (verification.md rule 2).
+// text changed, the goal line moved) and must report it (verification.md rule 2).
 //
 // Not covered here: another lesson revision. A lesson-pinned seat's activity id includes the lesson (Service
 // `activityIdentity`), so serving another revision means a new code, a new activity and, through the start page's
 // "이 활동 시작하기", possibly another folder: such a run could pass for that reason alone. The revision and activity
 // boundary is checked where it can be isolated, against the real host and config path in
-// extensions/hypeproof-chat/test/student-goal.smoke.mjs. Also not covered: AE-T01's other half (material selection and
-// the request payload, AE-02: the `context` item #555), Windows, a real student. Needs an unlocked screen: when it is
-// locked the run is skipped as NOT RUN.
+// extensions/hypeproof-chat/test/student-goal.smoke.mjs. Also not covered: a refused save on screen (a stale save cannot
+// be made from one screen, and the others need a host without its lesson: the smoke's host and render checks), AE-T01's
+// other half (material selection and the request payload, AE-02: the `context` item #555), Windows, a real student.
+// Needs an unlocked screen: when it is locked the run is skipped as NOT RUN.
 import { test, expect, type ElectronApplication, type FrameLocator, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
@@ -41,10 +51,15 @@ const FIXTURE = path.join(repo, "e2e/curriculum-runtime/fixtures/kiosk-practice"
 /** The fixture page's own <title>, which labels the preview's tab. */
 const PREVIEW_TITLE = "키오스크 연습";
 const WIDE = { width: 1280, height: 800 };
+/** A short window, as e2e/sx/home-app.spec.ts measures it (about 387 px of webview): the header packs. */
+const SHORT = { width: 1280, height: 450 };
 /** The lesson the Service serves keeps all three week-3 completion conditions, as the design is written. */
 const COMPLETION = "c1,c2,c3";
 const GOAL = "예약 버튼이 첫 화면에서 바로 보이게 만들기";
 const CRITERIA = ["휴대폰 화면에서도 예약 버튼이 보인다", "원래 진료 시간과 같다"];
+/** The change: a new goal, the first criterion kept, the second one replaced. */
+const GOAL2 = "예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기";
+const CRITERIA2 = [CRITERIA[0], "예약 화면에 진료 시간이 그대로 나온다"];
 const WEEK3 = JSON.parse(fs.readFileSync(path.join(repo, "worker/test/fixtures/session-design/week-3.json"), "utf8")) as {
   learning: { completion: Array<{ id: string; text: string }> };
 };
@@ -100,6 +115,13 @@ type GoalProbe = {
   /** Region A's conditions checked off, and whether the completion button can be pressed (null: not drawn). */
   met: number;
   completeEnabled: boolean | null;
+  /**
+   * What scripts that drive the chat by its first field or first rail card meet: the fields inside the goal block, whether
+   * the chat's first text field is the goal editor's, and the summary of the first `.hp-rail-lesson`.
+   */
+  goalFields: number;
+  firstFieldIsGoal: boolean;
+  firstRailCard: string;
 };
 async function probeGoal(chat: FrameLocator): Promise<GoalProbe> {
   return chat.locator("body").evaluate(() => {
@@ -119,6 +141,8 @@ async function probeGoal(chat: FrameLocator): Promise<GoalProbe> {
     };
     const goal = document.querySelector("details.hp-goal");
     const complete = document.querySelector(".hp-complete button") as HTMLButtonElement | null;
+    const firstField = document.querySelector("textarea, input, select");
+    const firstRail = document.querySelector(".hp-rail-lesson");
     return {
       headerGoal: line ? text(line) : null,
       headerGoalOnScreen: onScreen(line),
@@ -129,6 +153,9 @@ async function probeGoal(chat: FrameLocator): Promise<GoalProbe> {
       acceptance: text(document.querySelector("header.hp-mission .hp-mission-acceptance")),
       met: document.querySelectorAll("header.hp-mission .hp-mission-completion li[data-met='yes']").length,
       completeEnabled: complete ? !complete.disabled : null,
+      goalFields: goal?.querySelectorAll("textarea, input, select").length ?? 0,
+      firstFieldIsGoal: !!goal && !!firstField && goal.contains(firstField),
+      firstRailCard: text(firstRail?.querySelector(":scope > summary")),
     };
   });
 }
@@ -145,6 +172,75 @@ const lessonProblem = (p: GoalProbe, lesson: { lesson: string[]; acceptance: str
     : `region A's lesson criteria changed: ${JSON.stringify({ lesson: p.lesson, acceptance: p.acceptance })} vs ${JSON.stringify(lesson)}`;
 const completionProblem = (p: GoalProbe): string | null =>
   p.met === 0 && p.completeEnabled !== true ? null : `something completed: ${p.met} condition(s) checked off, completion button enabled=${p.completeEnabled}`;
+/** The closed block adds no field, and the first rail card is the lesson's (e2e/classroom/ops-lesson-settings.mjs, e2e/lesson-studio/mac.mjs). */
+const layoutProblem = (p: GoalProbe): string | null =>
+  p.goalFields === 0 && !p.firstFieldIsGoal && p.firstRailCard.startsWith("이번 단계 안내")
+    ? null
+    : `the closed goal block holds ${p.goalFields} field(s), first field is the goal editor's=${p.firstFieldIsGoal}, first .hp-rail-lesson reads "${p.firstRailCard}"`;
+
+type ShortProbe = {
+  viewport: { width: number; height: number };
+  /** Region A's parts that must stay wholly on screen on a short window (home-app's SX-T10), with the goal saved. */
+  parts: Record<string, boolean>;
+  goalInHeader: boolean;
+  /** The goal line's top is at or below the last completion condition's bottom. */
+  goalAfterConditions: boolean;
+  goalOnScreenNow: boolean;
+  /** After scrolling the header's own scroll to it (then back): wholly on screen. */
+  goalReachable: boolean;
+};
+async function probeShort(chat: FrameLocator): Promise<ShortProbe> {
+  return chat.locator("header.hp-mission").evaluate((el) => {
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    const whole = (part: Element | null) => {
+      if (!part) return false;
+      const box = el.getBoundingClientRect();
+      const r = part.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return false;
+      if (r.top < Math.max(box.top, 0) - 0.5 || r.bottom > Math.min(box.bottom, vh) + 0.5 || r.left < -0.5 || r.right > vw + 0.5) return false;
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && (part === hit || part.contains(hit));
+    };
+    const conditions = Array.from(el.querySelectorAll(".hp-mission-completion li:not(.hp-mission-completion-note)"));
+    const line = el.querySelector(".hp-mission-goal");
+    const parts = {
+      week: whole(el.querySelector(".hp-mission-week")),
+      mission: whole(el.querySelector(".hp-mission-sentence")),
+      completion: conditions.length > 0 && conditions.every(whole),
+      remaining: whole(el.querySelector(".hp-mission-remaining")),
+      primary: whole(el.querySelector(".hp-cta-primary")),
+    };
+    const lastCondition = Math.max(...conditions.map((c) => c.getBoundingClientRect().bottom));
+    const goalOnScreenNow = whole(line);
+    let goalReachable = false;
+    if (line) {
+      const before = el.scrollTop;
+      const box = el.getBoundingClientRect();
+      const r = line.getBoundingClientRect();
+      if (r.bottom > box.bottom) el.scrollTop += r.bottom - box.bottom + 1;
+      if (r.top < box.top) el.scrollTop -= box.top - r.top + 1;
+      goalReachable = whole(line);
+      el.scrollTop = before;
+    }
+    return {
+      viewport: { width: vw, height: vh },
+      parts,
+      goalInHeader: !!line,
+      goalAfterConditions: !!line && conditions.length > 0 && line.getBoundingClientRect().top >= lastCondition - 0.5,
+      goalOnScreenNow,
+      goalReachable,
+    };
+  });
+}
+/** The short window's verdict: region A's parts whole, the goal after the conditions and reachable in the header's scroll. */
+const shortGoalProblem = (p: ShortProbe): string | null => {
+  const problems = Object.entries(p.parts).filter(([, ok]) => !ok).map(([k]) => `${k} not on screen`);
+  if (!p.goalInHeader) problems.push("no goal line in the header");
+  if (!p.goalAfterConditions) problems.push("the goal line is not after the completion conditions");
+  if (!p.goalReachable) problems.push("the goal line cannot be brought on screen inside the header");
+  return problems.length ? problems.join("; ") : null;
+};
 
 /** Plant a defect in the frame, run the measure, undo it. The measure must report the defect. */
 async function plantedMust(chat: FrameLocator, selector: string, plant: string, undo: string, measure: () => Promise<string | null>, what: string): Promise<string> {
@@ -181,11 +277,28 @@ async function resize(app: ElectronApplication, size: { width: number; height: n
     for (const w of BrowserWindow.getAllWindows()) w.setSize(s.width, s.height);
   }, size);
 }
+async function viewportHeight(chat: FrameLocator): Promise<number> {
+  return chat.locator("body").evaluate(() => document.documentElement.clientHeight);
+}
 async function focusChat(win: Page): Promise<FrameLocator> {
   const tab = win.locator(".tabs-container .tab", { hasText: "AI와 작업" }).first();
   if ((await tab.count()) > 0) await tab.click().catch(() => undefined);
   return chatFrame(win);
 }
+/** The outer webview frames whose document draws a chat (`.hps-shell`) right now, by their frame name. */
+async function chatFrameNames(win: Page): Promise<string[]> {
+  const frames = win.locator("iframe.webview.ready");
+  const names: string[] = [];
+  for (let i = 0; i < (await frames.count()); i++) {
+    const inner = win.frameLocator("iframe.webview.ready").nth(i).frameLocator("#active-frame");
+    if (await inner.locator(".hps-shell").isVisible().catch(() => false)) {
+      const name = await frames.nth(i).getAttribute("name");
+      if (name) names.push(name);
+    }
+  }
+  return names;
+}
+const frameNamed = (win: Page, name: string): FrameLocator => win.frameLocator(`iframe.webview.ready[name="${name}"]`).frameLocator("#active-frame");
 /**
  * A picture of the window for the run record. Best effort: quiet mode hides the app once the workbench is ready, and a
  * hidden app composites no frames, so a screenshot only works with `HPS_QUIET_NO_HIDE=1` (the window stays off-screen,
@@ -201,6 +314,19 @@ async function shot(win: Page, name: string): Promise<{ file: string; sha256: st
   } catch (error) {
     return { skipped: `no frame (${process.env.HPS_QUIET_NO_HIDE === "1" ? "" : "app hidden by quiet mode; "}${String((error as Error).message).split("\n")[0]})` };
   }
+}
+
+/** At the short window: region A's parts whole, the goal after the conditions, reachable; a planted order must be reported. */
+async function shortWindow(app: ElectronApplication, chat: FrameLocator): Promise<Record<string, unknown>> {
+  await resize(app, SHORT);
+  await expect.poll(() => viewportHeight(chat), { timeout: 10_000 }).toBeLessThan(SHORT.height);
+  const probe = await probeShort(chat);
+  expect(shortGoalProblem(probe), JSON.stringify(probe)).toBeNull();
+  // Control: the goal line drawn first in the packed header (its order rule gone) must be reported.
+  const control = await plantedMust(chat, "header.hp-mission .hp-mission-goal", "el.style.order = '0';", "el.style.order = '';", async () => shortGoalProblem(await probeShort(chat)), "the goal line moved ahead of the conditions");
+  await resize(app, WIDE);
+  await expect.poll(() => viewportHeight(chat), { timeout: 10_000 }).toBeGreaterThan(SHORT.height);
+  return { probe, control };
 }
 
 let ctx: AppContext | undefined;
@@ -222,7 +348,7 @@ test.afterAll(() => {
   fs.writeFileSync(out, JSON.stringify(record, null, 2));
 });
 
-test("AE-01 goal: kept beside the lesson's criteria through the preview and a reopen", async () => {
+test("AE-01 goal: kept beside the lesson's criteria through a change, the preview, a reopen and a second chat view", async () => {
   await svc.start(COMPLETION);
   const served = await svc.lesson();
   ctx = await launchApp({ preseedToken: true, preseedCoach: { name: "코치" } });
@@ -242,33 +368,75 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   expect(lesson.acceptance.length, "region A draws no step acceptance").toBeGreaterThan(0);
   expect([before.headerGoal, before.summary, before.railGoal]).toEqual([null, "내 목표와 완료 기준 적기", "내 목표 · 아직 적지 않았어요"]);
   expect(completionProblem(before), JSON.stringify(before)).toBeNull();
-  record.first_session = { lesson: served, phase, before, shot: await shot(ctx.win, "1-before") };
+  // Closed, the block adds no field: the chat's first field and its first rail card are what they were before AE-01.
+  expect(layoutProblem(before), JSON.stringify(before)).toBeNull();
+  const layoutControl = [
+    await plantedMust(chat, "details.hp-goal > summary", "const t = document.createElement('textarea'); t.className = 'sx-planted'; el.after(t);", "el.parentElement.querySelector('.sx-planted')?.remove();", async () => layoutProblem(await probeGoal(chat)), "a field in the closed goal block"),
+    await plantedMust(chat, "details.hp-goal", "el.classList.add('hp-rail-lesson');", "el.classList.remove('hp-rail-lesson');", async () => layoutProblem(await probeGoal(chat)), "the goal block under the lesson card's class"),
+  ];
+  record.first_session = { lesson: served, phase, before, layout_control: layoutControl, shot: await shot(ctx.win, "1-before") };
 
-  // The student opens the block (viewing), writes a goal and two criteria and saves.
+  // The student opens the block (viewing): the editor appears, holding the stored (empty) goal.
   const goal = chat.locator("details.hp-goal");
+  const goalField = goal.locator("textarea").nth(0);
+  const criteriaField = goal.locator("textarea").nth(1);
+  const saveButton = goal.getByRole("button", { name: "목표 저장" });
   await goal.locator("summary").click();
   await expect(goal).toHaveAttribute("open", "");
+  await expect(goalField).toHaveValue("");
+  await expect(criteriaField).toHaveValue("");
+  await expect(saveButton, "nothing written yet, and the save button can be pressed").toBeDisabled();
   const opened = await probeGoal(chat);
   expect(completionProblem(opened), "opening the goal block completed something").toBeNull();
-  await goal.locator("textarea").nth(0).fill(GOAL);
-  await goal.locator("textarea").nth(1).fill(CRITERIA.join("\n"));
-  await goal.getByRole("button", { name: "목표 저장" }).click();
+
+  // ── The first save ──
+  await goalField.fill(GOAL);
+  await criteriaField.fill(CRITERIA.join("\n"));
+  await saveButton.click();
   await expect(chat.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
   await expect(goal.getByRole("status")).toHaveText("저장했어요.");
+  await expect(goal).toHaveAttribute("data-student-goal", "1");
+  await expect(saveButton, "nothing new to save, yet the save button can be pressed").toBeDisabled();
   const saved = await probeGoal(chat);
   expect(goalProblem(saved, GOAL, CRITERIA), JSON.stringify(saved)).toBeNull();
   expect(lessonProblem(saved, lesson), JSON.stringify(saved)).toBeNull();
   expect(completionProblem(saved), JSON.stringify(saved)).toBeNull();
   // The task did not move: the same phase the screen opened it in.
   expect(taskPhase(ctx.userDataDir), "saving a goal moved the task").toBe(phase);
+
+  // ── The change: a new goal and one criterion replaced, typed with spaces and a blank line, saved with a double press ──
+  await goalField.fill(`  ${GOAL2}  `);
+  await criteriaField.fill(`  ${CRITERIA2[0]}  \n\n${CRITERIA2[1]}`);
+  await expect(saveButton).toBeEnabled();
+  // Two submits in one task: the second must not send a second save (it would be refused as stale and say so).
+  await goal.locator("form.hp-goal-form").evaluate((form) => {
+    (form as HTMLFormElement).requestSubmit();
+    (form as HTMLFormElement).requestSubmit();
+  });
+  await expect(chat.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL2}`, { timeout: 20_000 });
+  await expect(goal.getByRole("status")).toHaveText("저장했어요.");
+  await expect(goal.locator(".hp-goal-error"), "a double press sent a second save").toHaveCount(0);
+  await expect(goal).toHaveAttribute("data-student-goal", "2");
+  // The fields hold exactly what the host stored (they follow its new revision): spaces and the blank line are gone.
+  await expect(goalField).toHaveValue(GOAL2);
+  await expect(criteriaField).toHaveValue(CRITERIA2.join("\n"));
+  await expect(saveButton).toBeDisabled();
+  const changed = await probeGoal(chat);
+  expect(goalProblem(changed, GOAL2, CRITERIA2), JSON.stringify(changed)).toBeNull();
+  expect(lessonProblem(changed, lesson), JSON.stringify(changed)).toBeNull();
+  expect(completionProblem(changed), JSON.stringify(changed)).toBeNull();
+  expect(taskPhase(ctx.userDataDir), "changing the goal moved the task").toBe(phase);
   // Controls: each verdict on a planted screen must report it.
   const controls = [
     await plantedMust(chat, "header.hp-mission .hp-mission-completion-text", "const s = document.createElement('span'); s.className = 'sx-planted'; s.textContent = ' (학생이 고침)'; el.appendChild(s);", "el.querySelector('.sx-planted')?.remove();", async () => lessonProblem(await probeGoal(chat), lesson), "a lesson criterion's words changed"),
     await plantedMust(chat, "header.hp-mission .hp-mission-completion li[data-met]", "el.dataset.sxWas = el.dataset.met; el.dataset.met = 'yes';", "el.dataset.met = el.dataset.sxWas; delete el.dataset.sxWas;", async () => completionProblem(await probeGoal(chat)), "a condition checked off"),
-    await plantedMust(chat, "header.hp-mission .hp-mission-goal-text", "const s = document.createElement('span'); s.className = 'sx-planted'; s.textContent = ' 다른 목표'; el.appendChild(s);", "el.querySelector('.sx-planted')?.remove();", async () => goalProblem(await probeGoal(chat), GOAL, CRITERIA), "the goal text changed"),
+    await plantedMust(chat, "header.hp-mission .hp-mission-goal-text", "const s = document.createElement('span'); s.className = 'sx-planted'; s.textContent = ' 다른 목표'; el.appendChild(s);", "el.querySelector('.sx-planted')?.remove();", async () => goalProblem(await probeGoal(chat), GOAL2, CRITERIA2), "the goal text changed"),
     await plantedMust(chat, "header.hp-mission .hp-mission-goal", "el.style.transform = 'translateY(-5000px)';", "el.style.transform = '';", async () => goalOffScreen(await probeGoal(chat)), "the goal line pushed off the screen"),
   ];
-  record.saved = { probe: saved, phase: taskPhase(ctx.userDataDir), controls, shot: await shot(ctx.win, "2-saved") };
+  record.saved = { first: saved, changed, phase: taskPhase(ctx.userDataDir), controls, shot: await shot(ctx.win, "2-changed") };
+
+  // ── Short window, the chat alone (1280 wide) ──
+  record.short_window = await shortWindow(ctx.app, chat);
 
   // ── Result screen: index.html, the preview beside the chat, the preview in front, then the chat again ──
   await ctx.win.locator(".monaco-workbench .part.titlebar").first().click({ position: { x: 10, y: 10 }, force: true });
@@ -288,7 +456,7 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   chat = await focusChat(ctx.win);
   await expect(ctx.win.locator(".tabs-container .tab.active", { hasText: PREVIEW_TITLE }).first(), "the result closed when the chat came back").toBeVisible();
   const beside = await probeGoal(chat);
-  expect(goalProblem(beside, GOAL, CRITERIA), JSON.stringify(beside)).toBeNull();
+  expect(goalProblem(beside, GOAL2, CRITERIA2), JSON.stringify(beside)).toBeNull();
   expect(goalOffScreen(beside), JSON.stringify(beside)).toBeNull();
   expect(lessonProblem(beside, lesson), JSON.stringify(beside)).toBeNull();
   expect(completionProblem(beside), JSON.stringify(beside)).toBeNull();
@@ -303,7 +471,7 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   expect(scrolled.shellScrolls && scrolled.shellScrollTop > 0, `the work screen did not scroll — the check proves nothing: ${JSON.stringify(scrolled)}`).toBe(true);
   const afterScroll = await probeGoal(chat);
   expect(goalOffScreen(afterScroll), JSON.stringify({ afterScroll, scrolled })).toBeNull();
-  expect(goalProblem(afterScroll, GOAL, CRITERIA), JSON.stringify(afterScroll)).toBeNull();
+  expect(goalProblem(afterScroll, GOAL2, CRITERIA2), JSON.stringify(afterScroll)).toBeNull();
   record.result_screen = { preview: await previewUrl(ctx.app), beside, scrolled: { ...scrolled, probe: afterScroll }, shot: withPreview, shot_scrolled: await shot(ctx.win, "3b-scrolled") };
 
   // ── Reopened: a new App process on the same device storage ──
@@ -314,11 +482,56 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   await resize(ctx.app, WIDE);
   chat = await focusChat(ctx.win);
   await expect(chat.locator("header.hp-mission h1.hp-mission-sentence")).toHaveText(MISSION);
-  await expect(chat.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
+  await expect(chat.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL2}`, { timeout: 20_000 });
   const reopened = await probeGoal(chat);
-  expect(goalProblem(reopened, GOAL, CRITERIA), JSON.stringify(reopened)).toBeNull();
+  expect(goalProblem(reopened, GOAL2, CRITERIA2), JSON.stringify(reopened)).toBeNull();
   expect(lessonProblem(reopened, lesson), JSON.stringify(reopened)).toBeNull();
   expect(completionProblem(reopened), JSON.stringify(reopened)).toBeNull();
+  expect(layoutProblem(reopened), JSON.stringify(reopened)).toBeNull();
   expect(taskPhase(ctx.userDataDir), "the reopen moved the task").toBe(phase);
-  record.reopened = { probe: reopened, phase: taskPhase(ctx.userDataDir), shot: await shot(ctx.win, "4-reopened") };
+  // The editor, opened again, holds the stored goal and criteria.
+  const editorGoal = chat.locator("details.hp-goal");
+  await editorGoal.locator("summary").click();
+  await expect(editorGoal.locator("textarea").nth(0)).toHaveValue(GOAL2);
+  await expect(editorGoal.locator("textarea").nth(1)).toHaveValue(CRITERIA2.join("\n"));
+  await expect(editorGoal.getByRole("button", { name: "목표 저장" })).toBeDisabled();
+  // The short window again, the result beside the chat as the first session left it (the chat about 640 wide).
+  const shortReopened = await shortWindow(ctx.app, chat);
+  record.reopened = { probe: reopened, phase: taskPhase(ctx.userDataDir), short_window: shortReopened, shot: await shot(ctx.win, "4-reopened") };
+
+  // ── Two chat views: the sidebar chat beside the editor chat ──
+  const [editorName] = await chatFrameNames(ctx.win);
+  expect(editorName, "no chat frame before the sidebar opened").toBeTruthy();
+  await runCommand(ctx.win, "View: Show HypeProof Chat");
+  await expect.poll(async () => (await chatFrameNames(ctx!.win)).length, { timeout: 30_000, message: "the sidebar chat did not open beside the editor chat" }).toBe(2);
+  const sidebarName = (await chatFrameNames(ctx.win)).find((name) => name !== editorName)!;
+  const editor = frameNamed(ctx.win, editorName);
+  const sidebar = frameNamed(ctx.win, sidebarName);
+  await expect(sidebar.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL2}`, { timeout: 20_000 });
+  const sidebarGoal = sidebar.locator("details.hp-goal");
+  await sidebarGoal.locator("summary").click();
+  await expect(sidebarGoal.locator("textarea").nth(0)).toHaveValue(GOAL2);
+  // The student clears the goal in the editor chat (try-it step 6).
+  const clearGoal = editor.locator("details.hp-goal");
+  await clearGoal.locator("textarea").nth(0).fill("");
+  await clearGoal.locator("textarea").nth(1).fill("");
+  await clearGoal.getByRole("button", { name: "목표 저장" }).click();
+  await expect(clearGoal.getByRole("status")).toHaveText("저장했어요.", { timeout: 20_000 });
+  for (const view of [editor, sidebar]) {
+    await expect(view.locator("header.hp-mission .hp-mission-goal"), "the cleared goal stayed in region A").toHaveCount(0, { timeout: 20_000 });
+    await expect(view.locator("details.hp-goal > summary")).toHaveText("내 목표와 완료 기준 적기");
+    await expect(view.locator("details.hp-goal")).toHaveAttribute("data-student-goal", "3");
+  }
+  // The sidebar's open fields followed the editor chat's save; it did not save, so it says nothing about saving.
+  await expect(sidebarGoal.locator("textarea").nth(0)).toHaveValue("");
+  await expect(sidebarGoal.locator("textarea").nth(1)).toHaveValue("");
+  await expect(sidebarGoal.getByText("저장했어요."), "a view that did not save says it saved").toHaveCount(0);
+  const cleared = { editor: await probeGoal(editor), sidebar: await probeGoal(sidebar) };
+  for (const p of [cleared.editor, cleared.sidebar]) {
+    expect([p.headerGoal, p.railGoal, p.criteria], JSON.stringify(p)).toEqual([null, "내 목표 · 아직 적지 않았어요", []]);
+    expect(lessonProblem(p, lesson), JSON.stringify(p)).toBeNull();
+    expect(completionProblem(p), JSON.stringify(p)).toBeNull();
+  }
+  expect(taskPhase(ctx.userDataDir), "clearing the goal moved the task").toBe(phase);
+  record.two_views = { cleared, phase: taskPhase(ctx.userDataDir), shot: await shot(ctx.win, "5-two-views-cleared") };
 });

@@ -28,7 +28,7 @@ import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } fr
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, type ProfileFailure } from "./proxyClientHelpers";
 import { runSdkCoach, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
-import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalViewOf } from "./studentGoal";
+import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
@@ -554,7 +554,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private cachedProfile: ResolvedProfile | null = null;
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
-  /** AE-01 (#554) — goal saves run one after another, so two chat views cannot both save from the same revision. */
+  /**
+   * AE-01 (#554) — goal saves run one after another: the answers come back in the order the saves were sent, and each
+   * save reads, checks and writes as one step. What refuses a second save made from the same revision is the revision
+   * check in `acceptGoalSave`, not this queue.
+   */
   private goalWrites: Promise<void> = Promise.resolve();
   private profileFetchPromise: Promise<ResolvedProfile | null> | null = null;
   /**
@@ -5077,25 +5081,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /**
    * AE-01 (#554) — one goal save, judged against the served lesson and the stored goal (`acceptGoalSave`), then
-   * answered to every chat view: the goal as stored, with `saved` or the refusal sentence. A refused or failed save
-   * stores nothing and keeps the earlier goal on screen.
+   * answered to every chat view with the id of the save it answers, so only the view that sent it shows the note. A
+   * stored save carries the goal as stored. A refused or failed save stores nothing and carries no goal, so every view
+   * keeps the goal and the typed text it shows (the host may have no lesson at hand while the screen still draws one);
+   * only a `stale` refusal brings the newer goal the save lost to.
    */
   private async saveGoal(msg: unknown): Promise<void> {
     const lesson = this.cachedProfile?.lesson;
     const activity = activityConnections(this.context)?.scope ?? null;
     const all = this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY);
+    const requestId = goalRequestIdOf(msg);
+    const echo = requestId ? { requestId } : {};
     const saved = acceptGoalSave(lesson, activity, msg, all, Date.now());
     if (!saved.ok) {
-      await this.post({ type: "goalState", view: goalViewOf(lesson, activity, all), error: GOAL_REFUSAL_SENTENCES[saved.code] });
+      const newer = saved.code === "stale" ? goalViewOf(lesson, activity, all) : null;
+      await this.post({ type: "goalState", ...(newer ? { view: newer } : {}), error: GOAL_REFUSAL_SENTENCES[saved.code], ...echo });
       return;
     }
     try {
       await this.context.workspaceState.update(STUDENT_GOAL_KEY, saved.all);
     } catch {
-      await this.post({ type: "goalState", view: goalViewOf(lesson, activity, all), error: GOAL_REFUSAL_SENTENCES.not_stored });
+      await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.not_stored, ...echo });
       return;
     }
-    await this.post({ type: "goalState", view: goalViewOf(lesson, activity, saved.all), saved: true });
+    const view = goalViewOf(lesson, activity, saved.all);
+    await this.post({ type: "goalState", ...(view ? { view } : {}), saved: true, ...echo });
   }
 
   /**

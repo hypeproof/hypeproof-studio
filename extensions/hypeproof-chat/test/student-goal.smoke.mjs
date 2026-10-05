@@ -4,10 +4,13 @@
 //             after a reconnect (a fresh host over the same device storage) and in every chat view the host posts to;
 //   negative  a student edit cannot remove a lesson criterion; another lesson's (or revision's, or activity's) goal is
 //             never restored; viewing or saving a goal records no completion.
-// Three layers: the pure rules (src/studentGoal.ts), the real host handler and config path (src/chatPanelProvider.ts,
-// bundled, driven through a stand-in host as test/activity-draft.smoke.mjs does), and the real rendered chat screen
-// (webview-ui/src/ChatPanel.tsx and StudentGoal.tsx through the render instrument). Every check that could pass
-// vacuously runs once on a planted defect that must be caught (verification.md rule 2).
+// Three layers: the pure rules (src/studentGoal.ts, which the screen also uses to decide what a save sends and which
+// view shows an answer), the real host handler and config path (src/chatPanelProvider.ts, bundled, driven through a
+// stand-in host as test/activity-draft.smoke.mjs does, plus bundles carrying one planted defect each), and the real
+// rendered chat screen (webview-ui/src/ChatPanel.tsx and StudentGoal.tsx through the render instrument). A server
+// render runs no effect and opens no block, so the editor over time (a second save, the fields following the host, a
+// reopen) is checked in the App: e2e/sx/goal-app.spec.ts. Every check that could pass vacuously runs once on a planted
+// defect that must be caught (verification.md rule 2).
 //
 // Run: node --experimental-strip-types test/student-goal.smoke.mjs
 
@@ -36,7 +39,9 @@ const LESSON_A = { course_id: "globalbuddy", version: "m2026.09.20-1", sha256: "
 const LESSON_A2 = { ...LESSON_A, version: "m2026.09.27-1", sha256: "e".repeat(64) };
 /** Another course. */
 const LESSON_B = { course_id: "dental-l2", version: "m2026.09.20-3", sha256: "d".repeat(64), content: weekFixture(1) };
+const REF_A = { course_id: LESSON_A.course_id, version: LESSON_A.version, sha256: LESSON_A.sha256 };
 const ACT = "a".repeat(64);
+const ACT_B = "b".repeat(64);
 const GOAL = "예약 버튼이 첫 화면에서 바로 보이게 만들기";
 const CRITERIA = ["휴대폰 화면에서도 예약 버튼이 보인다", "원래 진료 시간과 같다"];
 /** Every criterion the lesson itself states: the week's completion conditions and each step's acceptance. */
@@ -103,14 +108,17 @@ await test("rules: no student edit can reach a lesson criterion (negative: a sav
 
 await test("rules: another lesson's, revision's or activity's goal is never restored (negative controls included)", () => {
   const all = save({}, LESSON_A).all;
-  for (const [label, lesson, activity] of [["another course", LESSON_B, ACT], ["a new revision of the course", LESSON_A2, ACT], ["another activity", LESSON_A, "b".repeat(64)], ["a seat without activity", LESSON_A, null]]) {
+  for (const [label, lesson, activity] of [["another course", LESSON_B, ACT], ["a new revision of the course", LESSON_A2, ACT], ["another activity", LESSON_A, ACT_B], ["a seat without activity", LESSON_A, null]]) {
     const view = G.goalViewOf(lesson, activity, all);
     assert.deepEqual([view.goal, view.criteria, view.revision], ["", [], 0], `${label} showed A's goal`);
   }
   // A record copied under another lesson's key is refused, not shown as that lesson's goal.
-  const record = all[G.goalScopeKey({ course_id: LESSON_A.course_id, version: LESSON_A.version, sha256: LESSON_A.sha256 }, ACT)];
+  const record = all[G.goalScopeKey(REF_A, ACT)];
   const tampered = { [G.goalScopeKey({ course_id: LESSON_B.course_id, version: LESSON_B.version, sha256: LESSON_B.sha256 }, ACT)]: record };
   assert.equal(G.goalViewOf(LESSON_B, ACT, tampered).goal, "", "a copied record must not pass as B's goal");
+  // ...and one filed under another activity's key is not that activity's goal.
+  const crossFiled = { [G.goalScopeKey(REF_A, ACT_B)]: record };
+  assert.equal(G.goalViewOf(LESSON_A, ACT_B, crossFiled).goal, "", "a record of activity A must not pass as activity B's goal");
   // Negative control: a lookup keyed by course alone (one goal per course) would hand A's goal to the new revision.
   const byCourse = (store, lesson) => Object.values(store).find((r) => r.lesson.course_id === lesson.course_id)?.goal ?? "";
   assert.equal(byCourse(all, LESSON_A2), GOAL, "the control must actually restore the old goal");
@@ -120,6 +128,15 @@ await test("rules: another lesson's, revision's or activity's goal is never rest
   // Each revision keeps its own goal: a goal written under the new revision does not replace the old one's.
   const both = G.acceptGoalSave(LESSON_A2, ACT, { lesson: LESSON_A2.sha256, goal: "새 버전의 목표", criteria: [], base: 0 }, all, 2000).all;
   assert.deepEqual([G.goalViewOf(LESSON_A, ACT, both).goal, G.goalViewOf(LESSON_A2, ACT, both).goal], [GOAL, "새 버전의 목표"]);
+  // Each activity keeps its own goal for the same lesson revision: a save under activity B does not replace A's.
+  const twoActivities = G.acceptGoalSave(LESSON_A, ACT_B, { lesson: LESSON_A.sha256, goal: "다른 활동의 목표", criteria: ["다른 활동의 기준"], base: 0 }, all, 3000);
+  assert.equal(twoActivities.ok, true);
+  const [inA, inB] = [G.goalViewOf(LESSON_A, ACT, twoActivities.all), G.goalViewOf(LESSON_A, ACT_B, twoActivities.all)];
+  assert.deepEqual([inA.goal, [...inA.criteria], inA.revision], [GOAL, CRITERIA, 1], "activity B's save replaced activity A's goal");
+  assert.deepEqual([inB.goal, [...inB.criteria], inB.revision], ["다른 활동의 목표", ["다른 활동의 기준"], 1]);
+  // Negative control: one slot per lesson revision (B's save written where A's goal is kept) reads as A's goal lost.
+  const oneSlot = { ...all, [G.goalScopeKey(REF_A, ACT)]: twoActivities.record };
+  assert.notEqual(G.goalViewOf(LESSON_A, ACT, oneSlot).goal, GOAL);
 });
 
 await test("rules: a save from an older revision, another lesson or past the bounds is refused and stores nothing", () => {
@@ -146,33 +163,108 @@ await test("rules: the screen keeps the newest goal of a lesson and follows the 
   const other = G.goalViewOf(LESSON_B, ACT, {});
   assert.equal(G.acceptGoalView(v2, other), other, "another lesson's view replaces the held one");
   assert.equal(G.acceptGoalView(v2, null), null);
-  assert.equal(G.acceptGoalView(v2, undefined), v2, "a config without the field keeps what is shown");
+  assert.equal(G.acceptGoalView(v2, undefined), v2, "an answer or config without a goal keeps what is shown");
   assert.equal(G.goalOfLesson(v2, LESSON_A), v2);
   assert.equal(G.goalOfLesson(v2, LESSON_A2), null, "a view of another revision is not drawn as this lesson's goal");
+});
+
+await test("rules: a save starts from the revision the fields were loaded from, and only when there is something new", () => {
+  const before = save({}, LESSON_A).all;
+  const v1 = G.goalViewOf(LESSON_A, ACT, before);
+  const loaded = G.goalFieldsOf(v1);
+  assert.deepEqual(loaded, { goal: GOAL, criteria: CRITERIA.join("\n"), base: 1 });
+  assert.deepEqual(G.goalFieldsOf(null), { goal: "", criteria: "", base: 0 });
+  const edit = (fields, view = v1, pending = false) => G.goalEditOf(view, LESSON_A.sha256, fields, pending);
+  // Nothing new: no request. Spaces around the text and blank lines are not a change.
+  assert.deepEqual([edit(loaded).save, edit(loaded).unchanged], [null, true]);
+  assert.equal(edit({ ...loaded, goal: `  ${GOAL}  `, criteria: `${CRITERIA[0]}\n\n  ${CRITERIA[1]} ` }).save, null);
+  // A change: the request carries the fields' own revision as its base and the criteria one per line.
+  const changed = { ...loaded, goal: "새 목표", criteria: `${CRITERIA[0]}\n바뀐 기준` };
+  assert.deepEqual(edit(changed).save, { lesson: LESSON_A.sha256, goal: "새 목표", criteria: [CRITERIA[0], "바뀐 기준"], base: 1 });
+  assert.equal(G.acceptGoalSave(LESSON_A, ACT, edit(changed).save, before, 2000).ok, true, "the host accepts what the editor sends");
+  // Past the bounds the host refuses, or while this view's earlier save is unanswered: no request.
+  const six = edit({ ...changed, criteria: "1\n2\n3\n4\n5\n6" });
+  assert.deepEqual([six.save, six.tooMany], [null, true]);
+  assert.notEqual(edit({ ...changed, criteria: "1\n2\n3\n4\n5" }).save, null, "five criteria are allowed");
+  const long = edit({ ...changed, criteria: "x".repeat(G.GOAL_CRITERION_MAX + 1) });
+  assert.deepEqual([long.save, long.tooLong], [null, true]);
+  assert.equal(edit(changed, v1, true).save, null, "a second save while the first is unanswered");
+  // Another view saved revision 2 while these fields still hold revision 1's text: the save is sent from revision 1 and
+  // the host refuses it as stale, instead of letting it replace the other view's goal.
+  const after = G.acceptGoalSave(LESSON_A, ACT, { lesson: LESSON_A.sha256, goal: "다른 화면의 목표", criteria: [], base: 1 }, before, 2000).all;
+  const v2 = G.goalViewOf(LESSON_A, ACT, after);
+  const leftover = edit(changed, v2).save;
+  assert.equal(leftover.base, 1);
+  assert.deepEqual(G.acceptGoalSave(LESSON_A, ACT, leftover, after, 3000), { ok: false, code: "stale" });
+  // Negative control: an edit that took the newest goal's revision as its base would silently replace that save.
+  assert.equal(G.acceptGoalSave(LESSON_A, ACT, { ...leftover, base: v2.revision }, after, 3000).ok, true);
+  // Fields reloaded from revision 2 save normally.
+  assert.equal(G.acceptGoalSave(LESSON_A, ACT, edit({ ...G.goalFieldsOf(v2), goal: "다시 고친 목표" }, v2).save, after, 3000).ok, true);
+});
+
+await test("rules: only the view whose save an answer names shows its note; ids are echoed only when plain", () => {
+  const v1 = G.goalViewOf(LESSON_A, ACT, save({}, LESSON_A).all);
+  const stored = { view: v1, saved: true, requestId: "kq1-abc" };
+  assert.deepEqual(G.goalNoteFor(stored, "kq1-abc"), { saved: true, revision: 1 });
+  assert.equal(G.goalNoteFor(stored, "zz9-other"), undefined, "another view's save gives this view no note");
+  assert.equal(G.goalNoteFor(stored, null), undefined, "no save pending: no note");
+  assert.equal(G.goalNoteFor({ view: v1, saved: true }, "kq1-abc"), undefined, "an answer naming no save is no view's");
+  assert.deepEqual(G.goalNoteFor({ error: "거절", requestId: "kq1-abc" }, "kq1-abc"), { error: "거절" });
+  // "저장했어요." describes the revision it stored, while the fields still hold it.
+  const note = G.goalNoteFor(stored, "kq1-abc");
+  const shown = (view, fields) => G.goalSavedNoteShown(note, view, G.goalEditOf(view, LESSON_A.sha256, fields, false));
+  assert.equal(shown(v1, G.goalFieldsOf(v1)), true);
+  assert.equal(shown(v1, { ...G.goalFieldsOf(v1), goal: "더 고치는 중" }), false, "the fields changed after the save");
+  const v2 = { ...v1, goal: "다른 화면의 목표", revision: 2 };
+  assert.equal(shown(v2, G.goalFieldsOf(v2)), false, "another view's later save is not this view's");
+  // Request ids: echoed when plain, dropped otherwise.
+  assert.equal(G.goalRequestIdOf({ requestId: "lx2k9-4f0q1z" }), "lx2k9-4f0q1z");
+  for (const bad of ["", "x".repeat(65), "<b>", "a b", 7, null]) assert.equal(G.goalRequestIdOf({ requestId: bad }), undefined, JSON.stringify(bad));
+  assert.equal(G.goalRequestIdOf(null), undefined);
 });
 
 // ─── 2. The real host: the save handler and the config every mount and reconnect starts from ──────────
 
 const require = createRequire(import.meta.url);
 const vscode = { workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) }, env: { appName: "HypeProof Studio" } };
-const bundle = await build({
-  stdin: {
-    contents: "export {ChatPanelProvider} from './src/chatPanelProvider';export {ActivityConnections} from './src/activityConnections';",
-    resolveDir: new URL("..", import.meta.url).pathname,
-  },
-  bundle: true,
-  platform: "node",
-  format: "cjs",
-  external: ["vscode"],
-  write: false,
-  logLevel: "silent",
-});
-const hostModule = { exports: {} };
-vm.runInNewContext(bundle.outputFiles[0].text, {
-  module: hostModule, exports: hostModule.exports, require: (id) => (id === "vscode" ? vscode : require(id)),
-  process, console, URL, Buffer, crypto: globalThis.crypto, AbortSignal, TextEncoder, TextDecoder, setTimeout, clearTimeout,
-});
-const { ActivityConnections, ChatPanelProvider } = hostModule.exports;
+/**
+ * The real provider, bundled from source. `plant` (optional) replaces one piece of one source file first: a planted
+ * defect in the real handler. The piece must be found, or the control would run the unchanged code.
+ */
+async function hostModule(plant) {
+  const plugins = plant
+    ? [{
+        name: "plant",
+        setup(b) {
+          b.onLoad({ filter: plant.file }, (args) => {
+            const src = fs.readFileSync(args.path, "utf8");
+            assert.equal(src.split(plant.from).length, 2, `planted defect "${plant.what}": the code to replace is not in ${args.path} exactly once`);
+            return { contents: src.replace(plant.from, plant.to), loader: "ts" };
+          });
+        },
+      }]
+    : [];
+  const bundle = await build({
+    stdin: {
+      contents: "export {ChatPanelProvider} from './src/chatPanelProvider';export {ActivityConnections} from './src/activityConnections';",
+      resolveDir: new URL("..", import.meta.url).pathname,
+    },
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    external: ["vscode"],
+    write: false,
+    logLevel: "silent",
+    plugins,
+  });
+  const module = { exports: {} };
+  vm.runInNewContext(bundle.outputFiles[0].text, {
+    module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)),
+    process, console, URL, Buffer, crypto: globalThis.crypto, AbortSignal, TextEncoder, TextDecoder, setTimeout, clearTimeout,
+  });
+  return module.exports;
+}
+const { ActivityConnections, ChatPanelProvider } = await hostModule();
 const proto = ChatPanelProvider.prototype;
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hps-goal-"));
@@ -180,21 +272,21 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), "hps-goal-"));
 const states = new Map();
 const secrets = new Map();
 let failWrites = false;
-const raw = (dir) => ({
+const raw = (dir, store = states) => ({
   globalStorageUri: { fsPath: path.join(dir, "storage") },
-  workspaceState: { get: (k, d) => (states.has(k) ? states.get(k) : d), update: async (k, v) => { if (failWrites) throw Error("synthetic write failure"); states.set(k, v); } },
+  workspaceState: { get: (k, d) => (store.has(k) ? store.get(k) : d), update: async (k, v) => { if (failWrites) throw Error("synthetic write failure"); store.set(k, v); } },
   secrets: { keys: async () => [...secrets.keys()], get: async (k) => secrets.get(k), store: async (k, v) => secrets.set(k, v), delete: async (k) => secrets.delete(k) },
 });
 
 /** A stand-in host for one App session: the provider's own methods over these fields. Side effects are recorded. */
-function makeHost(context, profile) {
+function makeHost(context, profile, provider = proto) {
   const effects = [];
   const posts = [];
   const host = {
     context,
     cachedProfile: profile,
     goalWrites: Promise.resolve(),
-    saveGoal: proto.saveGoal,
+    saveGoal: provider.saveGoal,
     draftWrites: Promise.resolve(),
     loadAccess: async () => {},
     ensureProfile: async () => profile,
@@ -220,10 +312,37 @@ const connA = new ActivityConnections(raw(root), () => "https://synthetic.invali
 await connA.commit("synthetic-credential", { activity_id: ACT, display_name: "Synthetic" }, root);
 const ctxA = connA.wrap();
 
+/**
+ * Two chat views saving from the same revision, through a host built from `module` on its own storage: a first save
+ * makes revision 1, then both views save from it at once. Returns which answers said "saved", in the order they came,
+ * and the goal stored at the end.
+ */
+async function twoViewsSave(module) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hps-goal-two-"));
+  try {
+    const store = new Map();
+    const conn = new module.ActivityConnections(raw(dir, store), () => "https://synthetic.invalid/v1", () => dir, async () => profileA);
+    await conn.commit("synthetic-credential", { activity_id: ACT, display_name: "Synthetic" }, dir);
+    const { host, posts } = makeHost(conn.wrap(), profileA, module.ChatPanelProvider.prototype);
+    const send = (goal, base, requestId) => module.ChatPanelProvider.prototype.handleMessage.call(host, { type: "goalSave", activityId: conn.scope, lesson: LESSON_A.sha256, goal, criteria: [], base, requestId });
+    await send(GOAL, 0, "first-0");
+    posts.length = 0;
+    await Promise.all([send("첫 화면의 목표", 1, "view-1"), send("둘째 화면의 목표", 1, "view-2")]);
+    const answers = goalStates(posts);
+    return {
+      saved: answers.map((a) => a.saved === true),
+      order: answers.map((a) => a.requestId),
+      goal: G.goalViewOf(LESSON_A, conn.scope, store.get(G.STUDENT_GOAL_KEY)).goal,
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 try {
   await test("host: a save is stored for this lesson and activity and every chat view gets the same goal", async () => {
     const { host, posts } = makeHost(ctxA, profileA);
-    await proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: GOAL, criteria: CRITERIA, base: 0 });
+    await proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: GOAL, criteria: CRITERIA, base: 0, requestId: "kq1-first" });
     const [answer] = goalStates(posts);
     assert.equal(answer.saved, true);
     assert.equal(answer.view.goal, GOAL);
@@ -231,8 +350,11 @@ try {
     assert.equal(answer.view.activity, connA.scope);
     const stored = states.get(G.STUDENT_GOAL_KEY);
     assert.deepEqual(Object.values(stored).map((r) => [r.goal, r.revision]), [[GOAL, 1]]);
-    // The provider's `post` goes to the sidebar view and the editor chat alike; the answer names no view.
-    assert.equal("requestId" in answer, false);
+    // The provider's `post` goes to the sidebar view and the editor chat alike. The answer names the save it answers,
+    // so only the view that sent it shows "저장했어요."; every view takes the goal.
+    assert.equal(answer.requestId, "kq1-first");
+    assert.equal(G.goalNoteFor(answer, "kq1-first")?.saved, true);
+    assert.equal(G.goalNoteFor(answer, "other-view"), undefined);
   });
 
   await test("host: reconnect — a fresh host over the same storage starts the screen from the saved goal", async () => {
@@ -260,27 +382,40 @@ try {
     assert.equal(configOf(posts).studentGoal, null);
   });
 
-  await test("host: refused saves store nothing and say why (stale view, other lesson, write failure, other activity)", async () => {
+  await test("host: refused saves store nothing, say why, and leave every screen's goal as it is (only stale brings the newer one)", async () => {
     const before = JSON.stringify(states.get(G.STUDENT_GOAL_KEY));
-    for (const [msg, sentence] of [
-      [{ lesson: LESSON_A.sha256, goal: "다른 화면의 예전 목표", criteria: [], base: 0 }, G.GOAL_REFUSAL_SENTENCES.stale],
-      [{ lesson: LESSON_B.sha256, goal: "수업 B 목표", criteria: [], base: 1 }, G.GOAL_REFUSAL_SENTENCES.other_lesson],
-    ]) {
-      const { host, posts } = makeHost(ctxA, profileA);
+    const held = G.goalViewOf(LESSON_A, connA.scope, states.get(G.STUDENT_GOAL_KEY));
+    const refused = async (msg, profile = profileA) => {
+      const { host, posts } = makeHost(ctxA, profile);
       await proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, ...msg });
-      const [answer] = goalStates(posts);
-      assert.equal(answer.error, sentence);
-      assert.equal(answer.view.goal, GOAL, "the refusal keeps the stored goal on screen");
-    }
+      const answers = goalStates(posts);
+      assert.equal(answers.length, 1);
+      return answers[0];
+    };
+    // Stale: the save lost to a newer goal, which the answer brings so the student re-edits from it.
+    const stale = await refused({ lesson: LESSON_A.sha256, goal: "다른 화면의 예전 목표", criteria: [], base: 0, requestId: "kq1-stale" });
+    assert.deepEqual([stale.error, stale.requestId, stale.view.goal, stale.view.revision], [G.GOAL_REFUSAL_SENTENCES.stale, "kq1-stale", GOAL, 1]);
+    // Every other refusal carries no goal: the screen keeps the goal it shows, and so the fields keep the typed text.
+    const otherLesson = await refused({ lesson: LESSON_B.sha256, goal: "수업 B 목표", criteria: [], base: 1, requestId: "<b>" });
+    assert.equal(otherLesson.error, G.GOAL_REFUSAL_SENTENCES.other_lesson);
+    assert.equal("view" in otherLesson, false, "a refusal put a goal on the screens");
+    assert.equal("requestId" in otherLesson, false, "a malformed request id was echoed");
     failWrites = true;
+    let notStored;
     try {
-      const { host, posts } = makeHost(ctxA, profileA);
-      await proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: "저장 실패", criteria: [], base: 1 });
-      assert.equal(goalStates(posts)[0].error, G.GOAL_REFUSAL_SENTENCES.not_stored);
-      assert.equal(goalStates(posts)[0].view.goal, GOAL);
+      notStored = await refused({ lesson: LESSON_A.sha256, goal: "저장 실패", criteria: [], base: 1, requestId: "kq1-write" });
     } finally {
       failWrites = false;
     }
+    assert.deepEqual([notStored.error, notStored.requestId, "view" in notStored], [G.GOAL_REFUSAL_SENTENCES.not_stored, "kq1-write", false]);
+    // The App lost its lesson (a failed profile refresh leaves no profile at hand) while the screen still draws lesson A.
+    const noLesson = await refused({ lesson: LESSON_A.sha256, goal: "고친 목표", criteria: ["기준"], base: 1, requestId: "kq1-nolesson" }, null);
+    assert.deepEqual([noLesson.error, "view" in noLesson], [G.GOAL_REFUSAL_SENTENCES.no_lesson, false]);
+    assert.equal(G.acceptGoalView(held, noLesson.view), held, "the screen keeps lesson A's goal (and its fields the typed text)");
+    // Negative control: an answer carrying the host's goal for "no lesson" (null) would wipe the screen's goal.
+    const wiping = G.goalViewOf(undefined, connA.scope, states.get(G.STUDENT_GOAL_KEY));
+    assert.equal(wiping, null);
+    assert.equal(G.acceptGoalView(held, wiping), null);
     // A message from another activity's view is dropped by the handler's activity guard: no answer, nothing stored.
     const { host, posts } = makeHost(ctxA, profileA);
     await proto.handleMessage.call(host, { type: "goalSave", activityId: "c".repeat(64), lesson: LESSON_A.sha256, goal: "다른 활동", criteria: [], base: 1 });
@@ -288,22 +423,31 @@ try {
     assert.equal(JSON.stringify(states.get(G.STUDENT_GOAL_KEY)), before);
   });
 
-  await test("host: two views saving from the same revision — the second is refused, not overwriting the first", async () => {
+  await test("host: two views saving from the same revision — exactly one is stored, the other refused, answers in order", async () => {
     const { host, posts } = makeHost(ctxA, profileA);
     await Promise.all([
-      proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: "첫 화면의 목표", criteria: [], base: 1 }),
-      proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: "둘째 화면의 목표", criteria: [], base: 1 }),
+      proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: "첫 화면의 목표", criteria: [], base: 1, requestId: "view-1" }),
+      proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: "둘째 화면의 목표", criteria: [], base: 1, requestId: "view-2" }),
     ]);
     const answers = goalStates(posts);
-    assert.deepEqual(answers.map((a) => a.saved === true), [true, false]);
+    assert.deepEqual(answers.map((a) => [a.requestId, a.saved === true]), [["view-1", true], ["view-2", false]]);
     assert.equal(answers[1].error, G.GOAL_REFUSAL_SENTENCES.stale);
     assert.equal(G.goalViewOf(LESSON_A, connA.scope, states.get(G.STUDENT_GOAL_KEY)).goal, "첫 화면의 목표");
-    // Negative control: without the queue both handlers read revision 1 and both save. Run the two saves unqueued
-    // on a copy of the store to show the race the queue removes is real.
-    const copy = structuredClone(states.get(G.STUDENT_GOAL_KEY));
-    const a = G.acceptGoalSave(LESSON_A, connA.scope, { lesson: LESSON_A.sha256, goal: "가", criteria: [], base: 2 }, copy, 1);
-    const b = G.acceptGoalSave(LESSON_A, connA.scope, { lesson: LESSON_A.sha256, goal: "나", criteria: [], base: 2 }, copy, 2);
-    assert.equal(a.ok && b.ok, true, "unqueued, both saves pass the revision check");
+    // Which part does what, shown with one planted defect each in the real handler (same procedure, own storage). The
+    // revision check refuses the second save: without it both are stored and the first view's goal is silently
+    // replaced. The queue only keeps the answers in the order the saves were sent: without it one save is still
+    // refused, and the answers come back the other way round.
+    assert.deepEqual(await twoViewsSave({ ActivityConnections, ChatPanelProvider }), { saved: [true, false], order: ["view-1", "view-2"], goal: "첫 화면의 목표" });
+    const noRevisionCheck = await twoViewsSave(await hostModule({
+      what: "the revision check removed", file: /src[\\/]studentGoal\.ts$/,
+      from: 'if (msg.base !== (stored?.revision ?? 0)) return { ok: false, code: "stale" };', to: "",
+    }));
+    assert.deepEqual(noRevisionCheck, { saved: [true, true], order: ["view-1", "view-2"], goal: "둘째 화면의 목표" });
+    const noQueue = await twoViewsSave(await hostModule({
+      what: "the save queue removed", file: /src[\\/]chatPanelProvider\.ts$/,
+      from: "const save = this.goalWrites.then(() => this.saveGoal(msg));", to: "const save = this.saveGoal(msg);",
+    }));
+    assert.deepEqual(noQueue, { saved: [false, true], order: ["view-2", "view-1"], goal: "첫 화면의 목표" });
     // Back to the student's goal for the checks below.
     await proto.handleMessage.call(host, { type: "goalSave", activityId: connA.scope, lesson: LESSON_A.sha256, goal: GOAL, criteria: CRITERIA, base: 2 });
     assert.equal(G.goalViewOf(LESSON_A, connA.scope, states.get(G.STUDENT_GOAL_KEY)).revision, 3);
@@ -340,11 +484,12 @@ if (!status.available) {
 const storedView = G.goalViewOf(LESSON_A, connA.scope, states.get(G.STUDENT_GOAL_KEY));
 assert.deepEqual([storedView.goal, [...storedView.criteria]], [GOAL, CRITERIA], "the screen checks need the stored goal");
 const withGoal = (view, over = {}) => chatPanelProps({ config: { ...chatConfig(3), studentGoal: view }, ...over });
+const GOAL_BLOCK = /<details class="hp-rail-goal hp-goal"[\s\S]*?<\/details>/;
 /** What a criterion check reads: each lesson criterion's words, and the student's own block apart from region A. */
 function screenOf(html) {
   const text = visibleText(html);
   const header = /<header class="hp-mission"[\s\S]*?<\/header>/.exec(html)?.[0] ?? "";
-  const goalBlock = /<details class="hp-rail-lesson hp-goal"[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
+  const goalBlock = GOAL_BLOCK.exec(html)?.[0] ?? "";
   const headerGoal = /<p class="hp-mission-goal">[\s\S]*?<\/p>/.exec(header)?.[0] ?? null;
   return {
     text,
@@ -362,11 +507,26 @@ function lessonCriteriaMissing(screen) {
   const wanted = [...week3.learning.completion.map((c) => c.text), week3.steps[0].acceptance];
   return wanted.filter((t) => !screen.header.includes(t));
 }
+/**
+ * What scripts that drive the chat by its first field or its first rail card meet (e2e/classroom/ops-lesson-settings.mjs
+ * takes the first textarea as the composer, e2e/lesson-studio/mac.mjs the first `.hp-rail-lesson` as the lesson card).
+ */
+function layoutProblem(html) {
+  const goalBlock = /<details class="(?:[^"]*\s)?hp-goal(?:\s[^"]*)?"[\s\S]*?<\/details>/.exec(html);
+  const problems = [];
+  if (!goalBlock) return "the goal block is not drawn — the check proves nothing";
+  if (/<(textarea|input|select)\b/.test(goalBlock[0])) problems.push("the closed goal block puts a field on the screen");
+  const firstField = /<(textarea|input|select)\b/.exec(html);
+  if (firstField && firstField.index > goalBlock.index && firstField.index < goalBlock.index + goalBlock[0].length) problems.push("the screen's first field is the goal editor's");
+  const firstRail = /<(\w+) class="(?:[^"]*\s)?hp-rail-lesson(?:\s[^"]*)?"[^>]*>(?:<summary>([^<]*))?/.exec(html);
+  if (!firstRail?.[2]?.startsWith("이번 단계 안내")) problems.push(`the first .hp-rail-lesson is not the lesson card: ${JSON.stringify(firstRail?.[0])}`);
+  return problems.length ? problems.join("; ") : null;
+}
 
 await test("screen: the chat shows the saved goal and criteria beside the lesson's untouched criteria", async () => {
   const html = await renderComponent("ChatPanel", withGoal(storedView));
   const screen = screenOf(html);
-  // Region A, fixed with the header: the goal as one line, after the lesson's own conditions.
+  // Region A, fixed with the header: the goal, after the lesson's own conditions.
   assert.equal(screen.headerGoal, `내 목표 · ${GOAL}`);
   assert.ok(screen.headerHtml.indexOf("hp-mission-completion") < screen.headerHtml.indexOf("hp-mission-goal"), "the goal line is not after the lesson's conditions");
   assert.ok(screen.headerHtml.indexOf("hp-mission-goal") < screen.headerHtml.indexOf("hp-mission-foot"), "the goal line is not above the steps remaining and the growth link");
@@ -389,6 +549,22 @@ await test("screen: the chat shows the saved goal and criteria beside the lesson
   const noLine = html.replace(/<p class="hp-mission-goal">[\s\S]*?<\/p>/, "");
   assert.notEqual(noLine, html, "the planted header was not made");
   assert.equal(screenOf(noLine).headerGoal, null);
+});
+
+await test("screen: the closed goal block adds no field, and the first .hp-rail-lesson is still the lesson card", async () => {
+  for (const view of [storedView, null]) {
+    const html = await renderComponent("ChatPanel", withGoal(view));
+    assert.equal(layoutProblem(html), null, `with ${view ? "a" : "no"} goal`);
+  }
+  // Negative controls: the editor drawn while the block is closed, and the block under the lesson card's class name
+  // (both as this block first shipped) must each be reported.
+  const html = await renderComponent("ChatPanel", withGoal(storedView));
+  const withEditor = html.replace(/(<details class="hp-rail-goal hp-goal"[^>]*><summary>[^<]*<\/summary>)/, '$1<form class="hp-goal-form"><textarea></textarea></form>');
+  assert.notEqual(withEditor, html, "the planted editor was not made");
+  assert.match(layoutProblem(withEditor) ?? "", /puts a field on the screen.*first field is the goal editor's/);
+  const lessonClass = html.replace('<details class="hp-rail-goal hp-goal"', '<details class="hp-rail-lesson hp-goal"');
+  assert.notEqual(lessonClass, html, "the planted class was not made");
+  assert.match(layoutProblem(lessonClass) ?? "", /first \.hp-rail-lesson is not the lesson card/);
 });
 
 await test("screen: every chat view and every remount draws the same goal from the host (sidebar, editor tab, reconnect)", async () => {
@@ -419,19 +595,61 @@ await test("screen: another lesson's goal is not drawn, and an empty goal still 
   assert.ok(emptied.goal.includes("아직 내가 정한 완료 기준이 없어요."));
 });
 
-await test("screen: the goal block offers no completion — no check mark, no completion button, nothing pressed by opening it", async () => {
+await test("screen: the goal block and its editor offer no completion — no check mark, no completion button", async () => {
   const { goal, goalHtml, headerGoalHtml } = screenOf(await renderComponent("ChatPanel", withGoal(storedView)));
+  const editorHtml = await renderComponent("GoalEditor", { fields: G.goalFieldsOf(storedView), edit: G.goalEditOf(storedView, LESSON_A.sha256, { ...G.goalFieldsOf(storedView), goal: "새 목표" }, false), onEdit() {}, onSave() {} });
   const completionMarks = (html) => [/☑/.test(html), /완료하기|마쳤어요|제출/.test(visibleText(html)), /hp-cta-primary/.test(html)];
   assert.deepEqual(completionMarks(goalHtml), [false, false, false]);
+  assert.deepEqual(completionMarks(editorHtml), [false, false, false]);
   assert.ok(headerGoalHtml, "region A's goal line is not drawn — the check below proves nothing");
   assert.deepEqual(completionMarks(headerGoalHtml), [false, false, false], "region A's goal line carries a mark or a button");
   assert.doesNotMatch(headerGoalHtml, /<button|data-met/);
   assert.ok(goal.includes("목표를 적거나 고쳐도 과제가 완료되지는 않아요."));
-  assert.match(goalHtml, /^<details class="hp-rail-lesson hp-goal"[^>]*>/, "closed by default: no open attribute");
+  assert.match(goalHtml, /^<details class="hp-rail-goal hp-goal"[^>]*>/, "closed by default: no open attribute");
   assert.doesNotMatch(goalHtml.slice(0, goalHtml.indexOf(">")), /\bopen\b/);
   // Negative control: the same detector on a block that ticks a criterion off and offers to complete.
-  const planted = goalHtml.replace("<li>", "<li>☑ ").replace("</form>", '<button class="hp-cta-primary">이 과제 완료하기</button></form>');
+  const planted = goalHtml.replace("<li>", "<li>☑ ").replace("</details>", '<button class="hp-cta-primary">이 과제 완료하기</button></details>');
   assert.deepEqual(completionMarks(planted), [true, true, true]);
+});
+
+await test("screen: the open editor holds the stored goal and saves only a change, with one quiet button", async () => {
+  const fields = G.goalFieldsOf(storedView);
+  const render = (f, pending = false) => renderComponent("GoalEditor", { fields: f, edit: G.goalEditOf(storedView, LESSON_A.sha256, f, pending), onEdit() {}, onSave() {} });
+  /** The save button's disabled attribute (true: cannot be pressed), or null when there is no such button. */
+  const disabled = (html) => {
+    const m = /<button type="submit" class="hp-cta-quiet"( disabled="")?>목표 저장<\/button>/.exec(html);
+    return m ? !!m[1] : null;
+  };
+  const same = await render(fields);
+  assert.match(same, new RegExp(`<textarea maxLength="${G.GOAL_TEXT_MAX}" rows="2">${GOAL}</textarea>`), "the goal field does not hold the stored goal");
+  assert.ok(same.includes(`<textarea rows="3">${CRITERIA.join("\n")}</textarea>`), "the criteria field does not hold the stored criteria");
+  assert.equal(disabled(same), true, "nothing changed, yet the save button can be pressed");
+  assert.equal(disabled(await render({ ...fields, goal: "새 목표" })), false, "a change cannot be saved");
+  assert.equal(disabled(await render({ ...fields, goal: "새 목표" }, true)), true, "a second save while the first is unanswered");
+  const six = await render({ ...fields, criteria: "1\n2\n3\n4\n5\n6" });
+  assert.equal(disabled(six), true);
+  assert.ok(visibleText(six).includes("다섯 줄까지만 저장할 수 있어요."));
+  // Negative control: the detector does see a button that can be pressed.
+  assert.equal(disabled(same.replace(' disabled=""', "")), false);
+});
+
+await test("screen: this view's answer — a refusal as an alert, '저장했어요.' only for the revision it stored", async () => {
+  const props = (note) => ({ lesson: LESSON_A, view: storedView, note, pending: false, onSave() {} });
+  const errorLine = (html) => /<p class="hp-goal-error" role="alert">([^<]*)<\/p>/.exec(html)?.[1] ?? null;
+  const savedLine = (html) => /<p class="hp-rail-lesson-note" role="status">저장했어요\.<\/p>/.test(html);
+  for (const code of ["stale", "no_lesson", "other_lesson", "not_stored"]) {
+    const html = await renderComponent("StudentGoal", props({ error: G.GOAL_REFUSAL_SENTENCES[code] }));
+    assert.deepEqual([errorLine(html), savedLine(html)], [G.GOAL_REFUSAL_SENTENCES[code], false], code);
+  }
+  const saved = await renderComponent("StudentGoal", props({ saved: true, revision: storedView.revision }));
+  assert.deepEqual([errorLine(saved), savedLine(saved)], [null, true]);
+  assert.equal(savedLine(await renderComponent("StudentGoal", props({ saved: true, revision: storedView.revision - 1 }))), false, "a note about an earlier revision");
+  const none = await renderComponent("StudentGoal", props(null));
+  assert.deepEqual([errorLine(none), savedLine(none)], [null, false]);
+  // Negative controls: a block that dropped the refusal line, or the saved line, reads as without it.
+  const refused = await renderComponent("StudentGoal", props({ error: G.GOAL_REFUSAL_SENTENCES.stale }));
+  assert.equal(errorLine(refused.replace(/<p class="hp-goal-error"[^>]*>[^<]*<\/p>/, "")), null);
+  assert.equal(savedLine(saved.replace("저장했어요.", "")), false);
 });
 
 await test("screen: an instructor's chat has no student goal block", async () => {

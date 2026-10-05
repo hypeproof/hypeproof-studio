@@ -62,9 +62,11 @@ export interface MissionHeaderProps {
   resume?: { step: string } | null;
   /**
    * AE-01 (#554) — the learner's own goal for this lesson, as the host stored it (`goalOfLesson`). It
-   * is the student's sentence, drawn as one quiet line under the lesson's own conditions so it stays
-   * on screen with the header while the conversation scrolls or a result opens beside it. Empty or
-   * absent: no line (nothing is invented). Editing lives in the rail (StudentGoal.tsx).
+   * is the student's sentence, drawn quietly under the lesson's own conditions (at most two lines,
+   * read whole in the rail) so it stays with the header while the conversation scrolls or a result
+   * opens beside it. On a short window the header packs and the goal comes after the conditions,
+   * inside the header's own scroll (styles.css). Empty or absent: no line (nothing is invented).
+   * Editing lives in the rail (StudentGoal.tsx).
    */
   goal?: string | null;
 }

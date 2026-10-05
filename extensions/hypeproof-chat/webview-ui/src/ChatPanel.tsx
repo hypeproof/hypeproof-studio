@@ -8,7 +8,7 @@ import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
 import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
-import { acceptGoalView, goalOfLesson, type StudentGoalView } from '../../src/studentGoal';
+import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
@@ -226,15 +226,33 @@ export function ChatPanel(props: Props) {
     if (msg.type === "rehearsalState") setRehearsalResult({ state: msg.state, verdict: msg.verdict, reasons: msg.reasons, message: msg.message });
   }), []);
   // AE-01 (#554) — the learner's own goal for the served lesson, as the host stored it. It starts from `config` (every
-  // mount and reconnect) and then follows the host's answers; a goal never moves back to an older revision.
+  // mount and reconnect) and then follows the host's answers, which reach every chat view; a goal never moves back to an
+  // older revision. The note under the editor is this view's own: the host echoes the id of the save it answers, and
+  // only the view that sent that save shows "저장했어요." or the refusal. One save at a time per view.
   const [studentGoal, setStudentGoal] = useState<StudentGoalView | null>(() => config?.studentGoal ?? null);
-  const [goalNote, setGoalNote] = useState<{ error?: string; saved?: boolean } | null>(null);
+  const [goalNote, setGoalNote] = useState<GoalNote>(null);
+  const goalRequest = useRef<string | null>(null);
+  const [goalPending, setGoalPending] = useState(false);
   useEffect(() => { setStudentGoal((prev) => acceptGoalView(prev, config?.studentGoal)); }, [config?.studentGoal]);
+  // A note belongs to the lesson it was made under.
+  useEffect(() => { setGoalNote(null); }, [config?.profile?.lesson?.sha256]);
   useEffect(() => onHostMessage((msg) => {
     if (msg.type !== "goalState") return;
     setStudentGoal((prev) => acceptGoalView(prev, msg.view));
-    setGoalNote(msg.error ? { error: msg.error } : msg.saved ? { saved: true } : null);
+    const note = goalNoteFor(msg, goalRequest.current);
+    if (note === undefined) return;
+    goalRequest.current = null;
+    setGoalPending(false);
+    setGoalNote(note);
   }), []);
+  const sendGoalSave = (edit: GoalSaveRequest) => {
+    if (goalRequest.current) return;
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    goalRequest.current = requestId;
+    setGoalPending(true);
+    setGoalNote(null);
+    postToHost({ type: "goalSave", ...edit, requestId });
+  };
   /**
    * SX-14·15·17 — the learning state the host computed and sent. **It is not
    * recomputed here.** null means this connection does not use learning events (it is
@@ -815,7 +833,8 @@ export function ChatPanel(props: Props) {
           lesson={config.profile.lesson}
           view={goalOfLesson(studentGoal, config.profile.lesson)}
           note={goalNote}
-          onSave={(edit) => postToHost({ type: "goalSave", ...edit })}
+          pending={goalPending}
+          onSave={sendGoalSave}
         />
       )}
 
