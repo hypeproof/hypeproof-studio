@@ -1306,6 +1306,29 @@ CREATE TABLE IF NOT EXISTS chalk_course_input_options (
   PRIMARY KEY (cohort_id, course_id),
   FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
 );
+-- #1465 E2-5: migration 0037-chalk-judgements.sql. Ops: apply at next release (J2).
+CREATE TABLE IF NOT EXISTS chalk_judgements (
+  judgement_id    TEXT NOT NULL PRIMARY KEY,
+  cohort_id       TEXT NOT NULL,
+  course_id       TEXT NOT NULL,
+  revision        INTEGER NOT NULL,
+  file            TEXT NOT NULL DEFAULT 'lesson',
+  plan_sha256     TEXT NOT NULL,
+  item            TEXT,
+  check_name      TEXT,
+  at_section      TEXT,
+  at_step         TEXT,
+  at_key          TEXT,
+  prompt_id       TEXT NOT NULL,
+  prompt_version  INTEGER NOT NULL,
+  model           TEXT NOT NULL,
+  verdict         TEXT NOT NULL,
+  rationale       TEXT NOT NULL,
+  actor           TEXT NOT NULL,
+  created_at      INTEGER NOT NULL,
+  FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
+);
+CREATE INDEX IF NOT EXISTS idx_chalk_judgements_course_sha ON chalk_judgements(cohort_id, course_id, plan_sha256);
 
 -- cr-publish (#1393) — Venture Memory: migration 0032-curriculum-runtime-publish.sql.
 CREATE TABLE IF NOT EXISTS cr_projects (
@@ -1436,4 +1459,29 @@ CREATE TABLE IF NOT EXISTS cr_deck_slides (
   doc        TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   PRIMARY KEY (project_id, number, revision)
+);
+
+-- ── migrations/0036-chalk-feedback.sql (#1466 E2-7) ──
+CREATE TABLE IF NOT EXISTS chalk_feedback (
+  feedback_id   TEXT PRIMARY KEY,
+  cohort_id     TEXT NOT NULL,
+  course_id     TEXT NOT NULL,
+  base_revision INTEGER NOT NULL,
+  text          TEXT NOT NULL,
+  model         TEXT NOT NULL,
+  actor         TEXT NOT NULL,
+  request_id    TEXT NOT NULL,
+  created_at    INTEGER NOT NULL,
+  UNIQUE(cohort_id, course_id, request_id),
+  FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
+);
+CREATE TABLE IF NOT EXISTS chalk_feedback_revisions (
+  feedback_id TEXT NOT NULL,
+  revision    INTEGER NOT NULL,
+  file        TEXT NOT NULL,
+  cohort_id   TEXT NOT NULL,
+  course_id   TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (feedback_id, revision, file),
+  FOREIGN KEY (cohort_id, course_id) REFERENCES authoring_drafts(cohort_id, course_id)
 );

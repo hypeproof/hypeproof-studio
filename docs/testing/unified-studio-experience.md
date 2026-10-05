@@ -66,6 +66,18 @@
 5. 공개 승격 전 비운영 후보·합성 자격으로 검증하고, 승인된 공개 검증 범위에서
    실제 배포 endpoint/profile/version을 확인한다. 새 참여자·운영 데이터를 만들지 않는다.
 
+Public acceptance credentials (#1404). The synthetic participant that release acceptance
+creates per run exists only on `synthetic-release-acceptance`, a cohort that refuses any
+handle outside `synthetic-`; it is not a new participant in the sense of item 5. Controls:
+`worker/test/synthetic-cohort.test.mjs` (the cohort refuses a real handle on roster replace,
+roster append, session open and token mint while a real cohort accepts it; the per-run flow
+opens a session, mints both codes for a fresh handle and closes; a second run's handle gets a
+fresh trial allowance), `worker/test/profile-serving-snapshot.test.mjs` (the cohort is served
+exactly what `studio-native-trial` is served) and `scripts/test-check-live-sessions.mjs` §2b
+(the acceptance session alone proceeds and is named; a real class beside it still blocks; a
+missing, string or numeric flag, a foreign profile or an undecidable window still blocks).
+`verify-unified-release.yml` run with these credentials: NOT RUN.
+
 이 문서는 아직 없는 실행 파일명이나 CLI 옵션을 확정하지 않는다. 구현 PR이 기존 harness에
 연결한 명령과 의존성·환경을 기록해야 한다. 기능이 미구현인 행은 NOT RUN, 실행에 필요한
 환경/권한이 없는 행은 BLOCKED와 정확한 원인을 남긴다.

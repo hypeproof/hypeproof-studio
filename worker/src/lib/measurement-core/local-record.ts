@@ -132,6 +132,9 @@ const SECRET_PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
   ["openai_key", /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}/g],
   ["github_token", /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g],
   ["aws_access_key", /\bAKIA[0-9A-Z]{16}\b/g],
+  // Lab measurement connection token (#1377): "hps_sync_" + 32 random bytes in base64url.
+  // Before `bearer_token` so a bare paste is caught and a header names the real kind.
+  ["measurement_connection_token", /\bhps_sync_[A-Za-z0-9_-]{43}\b/g],
   ["bearer_token", /\bBearer\s+[A-Za-z0-9._~+/-]{20,}=*/g],
 ];
 
@@ -258,8 +261,16 @@ export interface Task {
 const purposeState = (p: Purpose | null): PurposeState =>
   !p ? "undecided" : p.source === "user" ? "confirmed" : p.source === "ai_proposed" ? "ai_proposed" : "provided";
 
-export function createTask(input: { id: string; project: string; at: number; purpose?: { text: string; source: PurposeSource; ref?: string } }): Task {
-  check(isObj(input) && ID.test(String(input.id)) && text(input.project, 200) && Number.isFinite(input.at), "invalid_task");
+/**
+ * `by` names who opened the task on its `created` line; absent means the person (`user`), as
+ * before it existed. An adapter that opens a task itself says so (`adapter_explicit`: the App's
+ * task flow opens one when a lesson first appears on screen, SX-55).
+ */
+export function createTask(input: { id: string; project: string; at: number; by?: Actor; purpose?: { text: string; source: PurposeSource; ref?: string } }): Task {
+  check(
+    isObj(input) && ID.test(String(input.id)) && text(input.project, 200) && Number.isFinite(input.at) && (input.by === undefined || ["user", "adapter_explicit"].includes(String(input.by))),
+    "invalid_task",
+  );
   let purpose: Purpose | null = null;
   if (input.purpose !== undefined) {
     const p = input.purpose;
@@ -277,7 +288,7 @@ export function createTask(input: { id: string; project: string; at: number; pur
     purpose_history: purpose ? [purpose] : [],
     status: "open",
     sessions: [],
-    history: [{ at: input.at, by: "user", change: "created" }],
+    history: [{ at: input.at, by: input.by ?? "user", change: "created" }],
   };
 }
 

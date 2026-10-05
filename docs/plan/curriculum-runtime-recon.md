@@ -1,12 +1,13 @@
 # Curriculum Runtime reconnaissance — architecture map, gap matrix, decisions
 
 Status: active, the `cr-recon` output (CR-01, issue [#1390](https://github.com/jayleekr/hypeproof-studio/issues/1390), epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388)). 2026-09-29. Owner: jayleekr.
+Revised 2026-10-05 ([#1506](https://github.com/jayleekr/hypeproof-studio/issues/1506)): CR-59 and CR-60 belong to `cr-e2e` (Jay's decision 9, §4 and §5), and finding F1 is closed (§9). Everything else is as read at the commit below.
 Read at: Studio `origin/main` `cc3785260e92315dcc4bc31410b7cc79713f604e`. Upstream pins: `vscodium@59e579274e3a32fbb93bd10b38bfe071da043cce` (the `vscodium-base` submodule pointer), `vscode@1.116.0` (commit `560a9dba96f961efea7b1612916f89e5d5d4d679`, from that commit's `upstream/stable.json`). Probed app: HypeProof Studio 0.1.51 (`d4db90498fce6c337823a4ce73cbe79c5e688b05`), as installed and with the `origin/main` extension injected (§8; the two differ, F8).
 Parent: [plan](curriculum-runtime.md) · [requirements CR-01–84](../requirements/curriculum-runtime.md) · [verification CR-T01–T80](../testing/curriculum-runtime.md) · [PRD v1.0](../design/curriculum-runtime-prd-v1.0-2026-09-28.md) §13 Phase 0, §15.
 
 This page is the reconnaissance PRD §13 Phase 0 and §15 Rule 1 ask for. Every map and matrix row names a path and a symbol; `worker/test/cr-recon.test.mjs` (CR-T01) checks that each exists with the symbol outside comments, that the ten areas are present and titled after their PRD items, that every CR row has exactly one verdict, and that the item named for a row cites it in the ledger. A path written `vscode@1.116.0:…` or `vscodium@59e5792…:…` is outside this repository; the test checks it only when `HPS_VSCODE_SRC` (a VS Code checkout whose `HEAD` is 1.116.0) / `HPS_VSCODIUM_SRC` point at a checkout, and otherwise lists it as not checked. A `lab:` path is in hypeprooflab and is checked only with `HPS_LAB`.
 
-Where this page and a later slice disagree, the later slice records the deviation in the [plan](curriculum-runtime.md) and says why; this page is the recon as read on its commit and is not rewritten per slice (editing it reopens `cr-recon`'s completion). That includes a slice renaming or removing a symbol named here: it writes the rename in the plan and leaves this page alone.
+Where this page and a later slice disagree, the later slice records the deviation in the [plan](curriculum-runtime.md) and says why; this page is the recon as read on its commit and is not rewritten per slice (editing it reopens `cr-recon`'s completion). That includes a slice renaming or removing a symbol named here: it writes the rename in the plan and leaves this page alone. A row that Jay moves to another item is the exception: the ledger is then the source and this page follows it, because CR-T01 checks that the item named for a row cites it there. Such an edit reopens `cr-recon` like any other, and `cr-recon` is re-recorded (2026-10-05, decision 9).
 
 How CR-T01 treats such a rename depends on where it runs. The "recorded state" means this page and the test's frozen control inputs (`worker/test/fixtures/cr-recon/frozen-inputs.json`) are byte-identical to the ones `cr-recon`'s completion pins.
 
@@ -386,9 +387,9 @@ One row per CR requirement. Verdict: **reuse** (existing code satisfies it once 
 | CR-57 | new | `worker/src/lib/measurement-core/learning-events.ts` | `LEARNING_EVENT_KEYS` | `cr-deck` | Week 2 fixture → slides 2–3. |
 | CR-58 | new | `extensions/hypeproof-chat/webview-ui/src/EvidenceDrawer.tsx` | `EvidenceDrawer` | `cr-deck` | Change view. |
 | CR-63 | new | `worker/src/lib/translate.ts` | `translate` | `cr-deck` | Slide patch timing. |
-| CR-59 | reuse | `extensions/hypeproof-chat/src/liveServer.ts` | `reload` | `cr-browser` | Measure only. |
-| CR-60 | new | `extensions/hypeproof-chat/src/nativeBrowser.ts` | `capturePageContext` | `cr-browser` | Timing of R2. |
 | CR-68 | extend | `extensions/hypeproof-chat/src/chatPanelHelpers.ts` | `browserToolLogLine` | `cr-browser` | R11. |
+| CR-59 | reuse | `extensions/hypeproof-chat/src/liveServer.ts` | `reload` | `cr-e2e` | Measure only, in the Studio app on the reference Mac (decision 9). |
+| CR-60 | new | `extensions/hypeproof-chat/src/nativeBrowser.ts` | `capturePageContext` | `cr-e2e` | Timing of R2, in the Studio app on the reference Mac (decision 9). |
 | CR-71 | new | `e2e/classroom/g4-journey.mjs` | `journey` | `cr-e2e` | Pattern for the §14 script. |
 
 ## 5. Verification strategy per slice
@@ -398,7 +399,7 @@ Layers are the testing contract's. "CI" = `.github/workflows/pr-ci.yml` (worker 
 | Item | CI | Local (`HPS_APP_PATH`) | Real Mac / phone |
 |---|---|---|---|
 | `cr-recon` | CR-T01 (`worker/test/cr-recon.test.mjs`) | `e2e/curriculum-runtime/cdp-probe.mjs` (evidence, §8) | — |
-| `cr-browser` | CR-T02 (Worker half), CR-T03, CR-T04, CR-T05, CR-T06, CR-T10, CR-T11 (smokes over a mock CDP channel and unit tests) | CR-T02 (app half), CR-T07, CR-T08, CR-T09, CR-T63 | CR-T55, CR-T56 |
+| `cr-browser` | CR-T02 (Worker half), CR-T03, CR-T04, CR-T05, CR-T06, CR-T10, CR-T11 (smokes over a mock CDP channel and unit tests) | CR-T02 (app half), CR-T07, CR-T08, CR-T09, CR-T63 | — |
 | `cr-verify` | CR-T02 (Worker half, verify routes), CR-T03 (runner re-check), CR-T11 (runner cases), CR-T13, CR-T15, CR-T76 (unit half) | CR-T02 (app half), CR-T12, CR-T14, CR-T16, CR-T63 (runner case), CR-T76 (app half) | CR-T57 |
 | `cr-publish` | CR-T02 (Worker half), CR-T11 (published-origin cases), CR-T17 (Worker half), CR-T19, CR-T21, CR-T22, CR-T60 (pseudonym), CR-T68, CR-T80 | CR-T02 (app half), CR-T17 (app half), CR-T18 (390 px mobile emulation), CR-T61 | CR-T20 |
 | `cr-evidence` | CR-T02 (Worker half), CR-T23, CR-T24, CR-T25, CR-T26, CR-T28, CR-T60 (re-check), CR-T62, CR-T64, CR-T65, CR-T67, CR-T69 | CR-T02 (app half), CR-T27 | — |
@@ -407,9 +408,9 @@ Layers are the testing contract's. "CI" = `.github/workflows/pr-ci.yml` (worker 
 | `cr-gateway` | CR-T02 (Worker half), CR-T29–T34, CR-T65 (re-check), CR-T75, CR-T78, CR-T79 (scan half) | CR-T79 (coach half, recorded provider) | — |
 | `cr-review` | CR-T02 (Worker half), CR-T45, CR-T46, CR-T47, CR-T49 | CR-T02 (app half), CR-T48 | CR-T58 (recorded provider) |
 | `cr-deck` | CR-T02 (Worker half), CR-T50 (unit half), CR-T51, CR-T52, CR-T53 | CR-T02 (app half), CR-T50 (render half), CR-T54 | CR-T59 (recorded provider) |
-| `cr-e2e` | — | CR-T02 (full inventory), CR-T66 (scripted run) | CR-T66 (live run) |
+| `cr-e2e` | — | CR-T02 (full inventory), CR-T66 (scripted run) | CR-T55, CR-T56 (in the Studio app on the reference Mac, decision 9), CR-T66 (live run) |
 
-The switch-off baseline (`e2e/tests/09-preview.spec.ts`) is not green on the probed app: see finding F1 (§9). `cr-browser` re-baselines it on the pre-change tree before using it as a control.
+The switch-off baseline (`e2e/tests/09-preview.spec.ts`) was not green on the probed app (finding F1, §9, closed 2026-10-05). It now runs every check on both preview paths in the app.
 
 ## 6. Interface proposal — Publish for User Test + Evidence Capture (PRD §15 item 8)
 
@@ -525,6 +526,7 @@ type TestLink = { id: string /* random, the URL token */; experiment_id: string;
 ### `cr-e2e`
 
 - Script under `e2e/classroom/` with the kiosk fixture; the switch-off walk reads the inventory every item added.
+- CR-59 and CR-60 (decision 9, moved from `cr-browser`): CR-T55 and CR-T56 run in the Studio app on the reference Mac with the screen unlocked (F7). F8 (§9) is the known risk for the element-crop timing.
 
 ## 8. Evidence of this reconnaissance
 
@@ -560,6 +562,7 @@ Not inspected: Chalk (`chalk/`), `packages/measurement` beyond its CI job, Windo
 Findings (pre-existing, not changed here):
 
 - **F1.** `e2e/tests/09-preview.spec.ts` on app 0.1.51 with the `origin/main` extension: REQ-D5 passed; REQ-D1/D3/D6 failed (`#frame` never attached in the preview webview) and REQ-D4 failed (the command-palette input stayed hidden; the page snapshot shows the unified "AI와 작업" editor tab in front). Whether the instrument or the product is wrong is not yet separated (verification.md rule 6); CR-T02 names this spec as its baseline.
+  **Closed 2026-10-05 ([#1506](https://github.com/jayleekr/hypeproof-studio/issues/1506)): the instrument was wrong, not the product.** On a `live_server` cohort, the dev-stack default, `revealBuilt` opens a native browser tab, so the wait for `#frame` measured a path the product never takes there. The palette helper lost to the unified "AI와 작업" editor taking focus after start. `cr-browser` (#1433) made each check assert the path the served profile names and reopen a palette that never showed. #1506 also retries a palette that closes after it showed, and runs every check on both paths: the webview path through a forwarder that serves the same profile with `preview.type: "iframe"`, since every shipped profile is `live_server`. Run record: [curriculum-runtime-2026-10-05-unblock.md](../testing/curriculum-runtime-2026-10-05-unblock.md).
 - **F2.** `callGeminiResilient` substitutes `gemini-2.5-flash` after a failure; fine for the kids route that uses it today, forbidden for CR capability calls.
 - **F3.** `resolveSkills` drops an unknown skill with a warning; curriculum skills need a refusal.
 - **F4.** `BrowserControl` clears refs on navigate/back/forward only; live-server reloads create new documents without clearing them (CDP then refuses the stale node).

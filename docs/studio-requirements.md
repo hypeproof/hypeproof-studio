@@ -332,6 +332,7 @@ Service 집행이 없다는 뜻이다.
 | REQ-M11 | 모델 정책 clamp와 fast 예외 | `/v1/messages`는 default/fallback에 `hypeproof-fast`를 항상 추가해 요청 alias/id를 clamp하며 `claude-*haiku*`도 fast 핀으로 보낸다. 프로필에 fast fallback이 없어도 허용된다. SDK 보조 호출 비용이 도입 이유이지만 현재 resolver는 일반 요청과 보조 요청을 구분하지 않음. 그 외는 프로필 default 강제. 이 예외를 수업의 엄격한 단일 모델 제한으로 표현하지 않으며 AE-25/26의 수업별 정책 집행은 별도 계획 | R (`worker/test/messages-integration.test.mjs`) |
 | REQ-M12 | Anthropic-native passthrough + 계량 | 응답은 원형 그대로 (non-stream JSON verbatim; stream 은 Anthropic SSE verbatim — OpenAI chunk/[DONE]/asset_score 미주입) + usage tap 으로 `usage_log`/`turns` 를 chat 과 동일 스키마로 기록; upstream 에러·stream 중단은 #257 규율 (request_id 만 노출) | R (`worker/test/messages-integration.test.mjs`) |
 | REQ-M13 | 로컬 자격증명 불요·불허 | agent-sdk 경로의 유일한 자격증명은 workshop 토큰. `buildSdkGatewayEnv` 가 ambient `ANTHROPIC_API_KEY`(AUTH_TOKEN 보다 우선순위 높음)·`CLAUDE_CODE_OAUTH_TOKEN`·`CLAUDE_CODE_USE_BEDROCK`·`CLAUDE_CODE_USE_VERTEX` 를 스크럽하고, **`CLAUDE_CONFIG_DIR` 을 코치 전용 디렉터리로 격리**(`sdkConfigDirFor`) — env 스크럽은 **디스크에 저장된** 자격증명에 닿지 못한다. CLI 는 자기 config dir 의 Claude Code/Desktop OAuth 자격증명을 `ANTHROPIC_AUTH_TOKEN` 보다 **우선**하므로, 격리 없이는 `claude` 를 한 번이라도 쓴 머신에서 코치가 그 사람 개인 계정으로 게이트웨이에 붙고 401 로 죽는다(2026-07-28 Windows 실측: 유효 토큰인데 401×9 → 격리 후 1회 성공). 개인 자격증명이 게이트웨이로 **유출되지도** 않는다. classroom Anthropic key 는 worker 밖으로 안 나감 | U (`test/sdk-gateway`) |
+| REQ-STUDIO-DEV-SUBSCRIPTION | Explicit isolated developer subscription runtime | On macOS arm64 and Windows, the development launcher checks an installed Claude Code/Codex subscription login and runs the locally built extension/webview in a separately identified app copy. Both Dev identity and launcher opt-in are required; the Service must be loopback, signed participant/profile authorization and tool approvals remain active, and API/admin/workshop credentials are scrubbed from CLI children. Windows native CLI paths and descendant cancellation are supported. Optional local setup reuses existing admin issuance and refuses production. This developer-only exception does not change REQ-M13 release behavior or establish learner outcomes. | U (`scripts/test-studio-dev.py`, `test/local-runtime`) + actual native app evidence |
 | REQ-M31 | ~~미성년은 어느 경로로도 agent-sdk 에 닿지 않는다~~ **대체됨(2026-08-11 d116c2a7, REQ-M32)** | 런타임 선택은 `resolveCoachRuntime`(chatPanelHelpers, pure)이 소유한다. 워커가 미성년 프로필의 `coach_runtime` 을 proxy 로 강제하는 것(routes/chat.ts)과 **짝을 이루는 클라이언트 측 가드**다. 2026-08-11 실측에서 비대칭이 드러났다 — 인라인 판단이 프로필 경로만 미성년을 걸렀고 머신 스코프 `hypeproofChat.coachRuntime` 경로는 안 걸러, 그 설정이 켜진 기기에서 워커의 핀이 우회됐다. 권한 침해는 아니다(도구는 `sdk_tools` 가 소유하고 미성년 프로필은 이를 두지 않아 `permittedToolsFor` 가 빈 배열을 낸다). 그러나 **도구 0개로 SDK 루프가 돌면서 툴 호출 원문이 아이 화면에 그대로 렌더되고, 쓰지도 않은 파일을 썼다고 단언**했다(R0 위반) — 실기기 관측. 계약: 설정·프로필 두 경로의 **합집합 바깥**에 미성년 검사를 둔다. `minor_cohort` 를 모르는 응답(구 워커)에서는 기존 동작을 유지한다 — fail-closed 로 바꾸면 성인 코호트가 조용히 강등된다 | U (`test/coach-runtime`) |
 | REQ-M32 | 아동 코호트의 workspace read/write (2026-08-11 결정) | 커리큘럼이 "코치가 워크스페이스 파일을 읽고 고친다" 를 전제로 바뀌어, SK 두 아동 트랙이 `sdk_tools: {read,write}` + `coach_runtime: "agent-sdk"` 를 명시적으로 opt-in 한다. 이전 불변식("minors never gain workspace write capability", #282 P2)을 이 행이 대체한다. **함께 유지되는 것:** ① 인바운드/아웃바운드 모더레이션(REQ-O2/O3)은 `isMinorCohort` 로 그대로 돈다 — 이 변경과 무관한 계층이다; ② `shell`·`browser`·`subagents` 는 아동에게 여전히 닫혀 있고 하네스가 `child_sdk_browser`/`child_sdk_subagents` HARD FAIL 로 막는다; ③ 모든 툴 호출은 `canUseTool` 승인 게이트를 지나고 `workspace_root` 밖 경로는 `evaluateSdkToolUse` 가 거부한다. **새 배선 검사:** `write` 를 열었으면 실행될 런타임이 있어야 한다 — `coach_runtime != "agent-sdk"` 이면 워커가 proxy 로 내려주고 코치는 도구가 있다고 믿은 채 실패한다(#476 오진 패턴). 하네스 `child_sdk_write_without_runtime` HARD FAIL. 클라이언트의 minor-tier write 스트립도 제거했다 — 정책 owner 는 프로필이며(ADR 0003) 클라이언트가 다시 깎으면 권한이 조용히 사라진다 | R (`worker/test/chat-integration`, `worker/test/smoke`) + U (`extensions/…/test/sdk-coach-helpers`) |
 | REQ-M33 | 톤 문구는 tier 를 따라간다 (게임 프레임 금지 트랙) | `appToneOf` 가 `template_tier` → 톤을 정하고 `TONE_LABELS` 가 문구를 소유한다. **웹뷰는 같은 로직을 손으로 미러링**한다 — `chatPanelHelpers` 가 Node `Buffer` 를 쓰기 때문에 import 할 수 없다(extension-dev.md Boundaries). 미러는 없앨 수 없으므로 **어긋나면 잡는다**: `test/tone-mirror.smoke.mjs` 가 tier 분기·buildingLabel·namingEmoji 일치를 강제하고, "게임 프레임 금지" 트랙(world)의 문구에 `게임`·🎮 가 없음을 검사한다. 2026-08-17 Windows 실기기에서 `kids-world` 가 톤 판정에 없어 `game` 으로 떨어졌고, 커리큘럼이 금지한 "게임" 낱말이 UI 8곳에 노출됐다 | U (`test/tone-mirror`) |
@@ -441,6 +442,7 @@ dev-host 검증(자동화 셸 불가). REQ-D3(iframe 샌드박싱)은 live_serve
 | ID | 요구 | 설명 | 테스트 |
 |---|---|---|---|
 | REQ-N1 | live_server 프리뷰 | `preview.type:"live_server"` 코호트는 iframe 대신 워크스페이스를 127.0.0.1로 서빙해 네이티브 브라우저로 열고, 저장 시 SSE로 자동 새로고침. path-traversal 거부 | U(liveServerHelpers) + 실기계 |
+| REQ-N10 | Live preview denies devices (#1403) | The live server's page opens as a top-level integrated-browser tab, so the preview iframe's `allow="microphone 'none'; camera 'none'"` (REQ-D3, `PREVIEW_IFRAME_ALLOW`) never applies to it. Every static response (HTML, asset, `/__hp_viewport`, 403/404) carries `Permissions-Policy: camera=(), microphone=(), geolocation=(), display-capture=()`, the same text the Service's published runtime sends for an undeclared project (cr-publish), via `staticResponseHeaders`. The SSE reload stream keeps its own headers. Negative controls: a server sending the pre-#1403 header set, and a policy leaving `microphone=(self)`, both fail the check; the pre-fix `liveServer.ts` fails the smoke. Not claimed: that the header is the only gate (the base app's browser permission handler is separate) or an in-app run | U (`test/live-server.smoke.mjs`, real `LiveServer` over HTTP) |
 | REQ-N2 | live_server 계약 완화 | live_server 코호트는 멀티파일·상대경로·same-origin fetch·스토리지 허용 계약을 받음(iframe 단일파일 계약 아님) | U(translate 분기) |
 | REQ-N3 | 페이지→코치(vision) | page_context+image_paste 코호트에서 "페이지를 코치에게"가 현재 탭 스크린샷+DOM을 코치에 전달. 미성년 코호트는 반드시 off | U(worker gate) + 실기계 |
 | REQ-N4 | 브라우저 tool 게이팅 | `browser_control` 켜진 코호트만 worker가 8개 브라우저 도구 + **프록시용** 사용 규약을 주입. 꺼지면 tool_use/tool_result 블록도 drop. 규약 주입은 런타임별로 갈린다 — REQ-N8 | U(translate, browser-contract) |
@@ -646,6 +648,17 @@ REQ-M27의 활동 원문 보존은 유지하되 기본 표시를 조정한다. �
 배포·이행은 [공통 릴리스 절차](dev/unified-release-and-migration.md)를 따르며
 양쪽 활동 검사 누락을 한쪽의 성공으로 보충하지 않는다.
 
+`REQ-STUDIO-ACCEPTANCE-SDK-SEED` (jayleekr/hypeprooflab#997): acceptance that drives a
+packaged App (`e2e/unified-release/run.mjs`, called by `verify-service-activities.yml`
+and `verify-unified-release.yml`) first seeds the native Agent SDK binary at the version
+the App vendors, the same per-machine step the installers perform. It refuses to start
+(BLOCKED) when that seed is absent or would not be trusted by the App. Without it a native
+trial turn falls back to the proxy runtime, the Service answers `409 trial_requires_sdk`
+before any model call, and the check fails on UI timing without naming the cause.
+Verification: `e2e/unified-release/sdk-seed.test.mjs` (fresh-runner negative, seeded
+positive, stale/truncated/unmarked/other-version seeds rejected). The macOS and Windows
+acceptance runs are recorded per run, not by this control.
+
 ## Local task review (#1020)
 
 `REQ-STUDIO-LOCAL-REVIEW`: [Explicit local task review](requirements/local-task-review.md) connects selected Claude/Codex message evidence to private file storage, the six-capability card, human review revisions and an independently verified local submission receipt. Captured replay, automated installed-shell tests, public release and Jay acceptance remain distinct.
@@ -669,6 +682,12 @@ legacy-seven records, task outcomes and research validity.
 REQ-SS4: Both host tools can read server workbench results with the existing
 connection, preserving review/hold states without submitting reviews. Specific
 server deletion responses prevent recapture and unblock download races across restart.
+REQ-SS5: Known-secret redaction (MC-30) also removes a pasted Lab measurement
+connection token (`hps_sync_` + 43 base64url characters), bare or after `Bearer`,
+before local storage and upload (package 0.3.4, #1377; MC-T18 in
+`worker/test/measurement-core-local-record.test.mjs`). Installation is mandatory
+for every member since 2026-10-01; scope, purpose, score display and read access are
+owned by [measurement-core §멤버 설치 의무](requirements/measurement-core.md#멤버-설치-의무--2026-10-01-결정).
 
 Contract: [SS-01–10](requirements/session-sync.md). Validation:
 `packages/measurement/test/sync.test.mjs`; production acceptance and installed
@@ -804,3 +823,15 @@ after restart, and keep undated damaged fragments only inside the evidenced time
 window (all-undated legacy inputs retain compatibility). Missing approved pages
 never receive complete coverage. See the existing classroom-admin contract and
 `docs/testing/classroom-admin.md` for the nine regression cases and actual results.
+
+## Release acceptance synthetic cohort (#1404)
+
+Release acceptance (`verify-unified-release.yml`, [procedure](dev/unified-release-and-migration.md#public-acceptance-credentials-1404))
+must run unattended without a long-lived student code, without holding a session the
+live-session freeze reads as a class, and without consuming a real trial allowance.
+REQ-STUDIO-NATIVE-LIFETIME is unchanged: a fresh handle gets a fresh allowance, and a
+reissue to the same handle still cannot reset one.
+
+| ID | Acceptance criteria | Implementation / verification |
+|---|---|---|
+| REQ-STUDIO-SYNTHETIC-ACCEPTANCE | A cohort whose every profile declares `synthetic: true` refuses any roster write (replace, append, session open) or token mint naming a handle outside `synthetic-` with `400 synthetic_handle_required`, and `GET /admin/cohorts` reports `synthetic` for every cohort. `synthetic-release-acceptance` is served exactly what `studio-native-trial` is served and is hidden from the console. Each acceptance run mints a fresh handle's classroom code (session open) and trial code, and revokes the trial grant and closes the session in `finally`. The freeze ignores a live session only on a cohort reported exactly `synthetic: true` running one of its own profiles, names what it ignored, and still blocks a real class beside it; a missing or non-boolean flag, a foreign profile or an undecidable window blocks. The real workflow run with these credentials is NOT RUN. | `worker/src/lib/synthetic-cohort.ts`, `worker/src/profiles/synthetic-release-acceptance.ts`, `worker/src/routes/admin.ts`, `scripts/check-live-sessions.mjs`, `e2e/unified-release/public.mjs`; `worker/test/synthetic-cohort.test.mjs`, `worker/test/profile-serving-snapshot.test.mjs`, `scripts/test-check-live-sessions.mjs` |

@@ -1,6 +1,7 @@
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { InstructorModeManager } from './chalk/instructorMode';
+import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
 import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
 import { ActivityConnectionError, activityConnections } from './activityConnections';
@@ -19,6 +20,8 @@ import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
+import {flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
+import type {TaskCurriculum} from '../../../worker/src/lib/measurement-core/local-record.ts';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
@@ -340,7 +343,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * folder (MC-08).
    */
   private learningTaskId(lessonSha: string | undefined, activityId: string | undefined) {
-    return 'task-' + String(lessonSha ?? '').slice(0,16) + '-' + String(activityId ?? '').slice(0,8);
+    return learningTaskIdOf(lessonSha, activityId);
   }
 
   /**
@@ -364,20 +367,97 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return steps.find(s => s.id === wanted) ?? steps[0];
   }
 
-  /** The learning state the host computes and sends down to the webview. Never stored; computed every time. */
+  /**
+   * The learning state the host computes and sends down to the webview. The gate is never
+   * stored; it is computed every time. The task-flow phase (SX-55) is read from the record,
+   * which is also where the task is opened the first time it is on screen.
+   */
   private async postLearningState() {
     const recorder = await this.currentLearningRecorder();
     if (!recorder) return;
     const profile = await this.ensureProfile();
     const task = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
+    const target = this.taskFlowTarget(recorder, profile);
+    const shown = target ? screenFlow(await this.runTaskFlow({ kind: 'seen' }, recorder, profile), this.taskFlowLast, target.recordId) : null;
+    // A notice is said once, with the state it explains.
+    const notice = this.taskFlowNotice;
+    this.taskFlowNotice = null;
     await this.post({
       type: 'learningState',
       state: learningState({
         task,
         events: recorder.batch.events,
         completion: this.learningCompletion(profile),
+        ...(shown ? { phase: shown.phase, currentStep: shown.current_step } : {}),
+        notice,
       }),
     });
+  }
+
+  /** SX-55 — the last curriculum this host read, so a busy record does not reopen a submitted task on screen. */
+  private taskFlowLast: { recordId: string; curriculum: TaskCurriculum } | null = null;
+
+  /**
+   * SX-55 — the one task-flow line the student has to see, next to the completion button.
+   * `nativeObservationError` cannot carry it: only the observation results panel reads that,
+   * and a seat that records without assessment never draws that panel.
+   */
+  private taskFlowNotice: string | null = null;
+
+  /**
+   * SX-55 — the task this seat's flow runs on: the lesson, the design's task id (the one the
+   * learning events, the screen and the submit name) and the id its record is stored under,
+   * which adds the observation batch the gate reads and this folder (`taskRecordIdOf`), so a
+   * phase is never read next to another seat's or another folder's events.
+   *
+   * null when this seat runs no task flow: no `/2` learning recorder, or a lesson without a
+   * mission (SX-01 negative: then the flow does not start).
+   */
+  private taskFlowTarget(recorder: NativeObservationRecorder, profile: ResolvedProfile | null): { lesson: FlowLesson; taskId: string; recordId: string } | null {
+    const lesson = flowLessonOf(profile?.lesson);
+    if (!lesson || recorder.batch.format !== 'hps-observation/2') return null;
+    const taskId = this.learningTaskId(lesson.sha256, activityConnections(this.context)?.current?.id);
+    const { format, scope, program } = recorder.batch;
+    return { lesson, taskId, recordId: taskRecordIdOf(taskId, { workspace: this.context.storageUri?.toString() ?? '', format, scope, program }) };
+  }
+
+  /**
+   * SX-55 — move this seat's task by one signal on the measurement-core record (the
+   * `hps-local-record/1` store the local review and CR-10 share; no new store, SX-48).
+   *
+   * null when this seat runs no task flow (`taskFlowTarget`). The step gate and the start are
+   * judged on this recorder's batch. The record's lock is taken only for a write
+   * (`runTaskFlowOn`): a signal that writes nothing (a refresh, a coach turn on a task already
+   * working, a step start in place) is answered from a plain read. What the student must be
+   * told is decided by `flowNotice`: a storage failure becomes a notice and null, never a phase
+   * nobody stored.
+   */
+  private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
+    const target = this.taskFlowTarget(recorder, profile);
+    if (!target) return null;
+    try {
+      const { store, record } = this.crRecordHandle();
+      const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });
+      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };
+      this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });
+      return outcome;
+    } catch (error) {
+      this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { error: flowErrorCode(error) });
+      return null;
+    }
+  }
+
+  /**
+   * SX-55 — the step the learner started (region A's Primary) becomes the task's current step,
+   * while the task is being worked on and only past steps whose gate the student met (back is
+   * always allowed). A refused move stores no step and says nothing (`flowNotice`); the screen
+   * is redrawn only when the record changed or a notice is waiting.
+   */
+  private async recordStepStart(stepId: string) {
+    const recorder = await this.currentLearningRecorder();
+    if (!recorder) return;
+    const flow = await this.runTaskFlow({ kind: 'start_step', stepId }, recorder, await this.ensureProfile());
+    if (flow?.changed || this.taskFlowNotice) await this.postLearningState();
   }
 
   private view?: vscode.WebviewView;
@@ -419,6 +499,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * null is returned here.
    */
   private voiceProbes = new Map<string, (o: import("./voiceCapabilityHelpers").VoiceProbeObservations) => void>();
+
+  isViewVisible(): boolean { return !!this.view?.visible; }
 
   /** The surface the diagnostic command uses. With the webview closed it returns null, leaving it as not measured. */
   async probeVoiceCapability(
@@ -3056,7 +3138,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // they will not write it again.
         if (!made.ok) { this.nativeObservationError = '남긴 내용을 저장하지 못했어요 ('+made.code+'). 다시 한 번 눌러 주세요.'; }
         else {
-          try { recorder.recordLearningEvent(made.event); this.persistObservation(recorder); this.nativeObservationError = null; }
+          try {
+            recorder.recordLearningEvent(made.event); this.persistObservation(recorder); this.nativeObservationError = null;
+            // SX-55 — the student's first learning event starts the task (assigned → working).
+            await this.runTaskFlow({ kind: 'work' }, recorder, profile);
+          }
           catch (error) { this.nativeObservationError = '남긴 내용을 저장하지 못했어요 ('+(error as Error).message+').'; }
         }
         await this.postLearningState();
@@ -3070,7 +3156,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // SX-14's negative condition — the webview's disabled state is not evidence.
         // Run the same gate again.
         const recorder = await this.currentLearningRecorder();
-        const completion = this.learningCompletion(await this.ensureProfile());
+        const profile = await this.ensureProfile();
+        const completion = this.learningCompletion(profile);
+        // SX-55 — the submit names the task on screen. The gate is judged on that task's
+        // events and the record moves that task, so a different name is not this task's submit.
+        const current = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
+        if (msg.task !== current) { await this.postLearningState(); return; }
         const verdict = acceptSubmit({
           task: msg.task,
           events: recorder?.batch.events ?? [],
@@ -3082,6 +3173,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           return;
         }
         this.nativeObservationError = null;
+        // SX-55 — the gate held, so the task is submitted (working → submitted). Before any work
+        // the record refuses by name and runTaskFlow says so beside the button: a button alone
+        // does not skip `working`.
+        if (recorder) await this.runTaskFlow({ kind: 'submit' }, recorder, profile);
         await this.postLearningState();
         return;
       }
@@ -3320,6 +3415,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!signal) return;
         this.spool?.recordWorkflow({ event: "lesson_step", payload: signal });
         this.opsObserver?.lessonStep(signal.lesson_version, signal.step_id, signal.status);
+        // SX-55 — starting a step makes it the task's current step when its gates allow
+        // (recordStepStart). "Marked done" (`submitted`) is the learner's own report to the class
+        // board and moves nothing in the task flow. Only a seat that runs the flow goes on: every
+        // other seat keeps this handler exactly as it was, with no observation recorder prepared
+        // and no Service request on a step start (runsTaskFlow).
+        if (signal.status === "in_progress" && runsTaskFlow(this.cachedProfile)) void this.recordStepStart(signal.step_id).catch(() => undefined);
         return;
       }
       // #751 G2 — the learner's focus (step + help choice) for the NEXT turn. A turn already running keeps what it started with.
@@ -4003,6 +4104,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 serverUrl: proxyUrl,
                 secrets: this.context.secrets,
                 cwd,
+                currentModel: local.model,
                 requestConfirmation: async (message: string): Promise<boolean> => {
                   const answer = await vscode.window.showWarningMessage(
                     message, { modal: true }, "계속", "취소",
@@ -4271,6 +4373,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (assistantText) recordObservation('coach',assistantText);
       recordObservation('turn_end',finalSpoolStatus,{outcome:ctrl.signal.aborted?'cancelled':spoolStatus==='ok'?'success':'error'});
       await this.observationWrites;
+      // SX-55 — the first coach turn that answered starts the task (assigned → working): a turn that
+      // completed with a reply, not one that failed or was cancelled half-way. Kept off the turn's
+      // own path: the turn has ended either way, and the flow reports its own failure.
+      if (observation?.batch.format === 'hps-observation/2' && finalSpoolStatus === 'ok' && assistantText.length > 0) {
+        void this.runTaskFlow({ kind: 'work' }, observation, profile)
+          .then((flow) => (flow?.changed || this.taskFlowNotice ? this.postLearningState() : undefined))
+          .catch(() => undefined);
+      }
       if (assistantText.length > 0) {
         this.spool?.recordResponse({
           turnId: streamId,
@@ -4820,9 +4930,29 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (scope!==activityConnections(this.context)?.scope) return;
     const local=localRuntimeConfig(vscode.env.appName,cfg.get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'));
     const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    // #1298 A-01 — student slot takes priority. If the student token is active
+    // (present, not expired, not hard-rejected), skip the instructor check entirely
+    // to prevent the instructor panel from flashing during a rehearsal.
+    // profileFetched: ensureProfile() completed and recorded an answer (ok or failure).
+    // Distinct from "token exists" to handle the connections.matchesService=false early-return.
+    const profileFetched = !!token && (profile !== null || this.lastProfileFailure !== null);
+    const studentProfileStatus = profileFailureToStatus(
+      this.lastProfileFailure,
+      !!token,
+      profileFetched,
+    );
+    const panelMode = decideMode({ studentToken: token ?? undefined, studentProfileStatus });
     // Instructor auth always uses the issuer token slot, never the student token.
     const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
-    const isInstructor = await this._instructorMode.checkInstructorMode(issuerToken, proxyUrl);
+    let isInstructor: boolean;
+    if (panelMode === "instructor") {
+      isInstructor = await this._instructorMode.checkInstructorMode(issuerToken, proxyUrl);
+    } else {
+      // Student slot active: clear any cached instructor state so that handleSend and other
+      // callers checking this._instructorMode.isInstructor === true see false, not a stale true.
+      this._instructorMode.reset();
+      isInstructor = false;
+    }
     // #1298 — on the auto-read path (postConfig/refresh), act on the whoami result.
     // The setInstructorToken command has its own rejection handler; this covers the background refresh path.
     if (issuerToken) {
