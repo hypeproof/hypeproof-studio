@@ -258,8 +258,16 @@ export interface Task {
 const purposeState = (p: Purpose | null): PurposeState =>
   !p ? "undecided" : p.source === "user" ? "confirmed" : p.source === "ai_proposed" ? "ai_proposed" : "provided";
 
-export function createTask(input: { id: string; project: string; at: number; purpose?: { text: string; source: PurposeSource; ref?: string } }): Task {
-  check(isObj(input) && ID.test(String(input.id)) && text(input.project, 200) && Number.isFinite(input.at), "invalid_task");
+/**
+ * `by` names who opened the task on its `created` line; absent means the person (`user`), as
+ * before it existed. An adapter that opens a task itself says so (`adapter_explicit`: the App's
+ * task flow opens one when a lesson first appears on screen, SX-55).
+ */
+export function createTask(input: { id: string; project: string; at: number; by?: Actor; purpose?: { text: string; source: PurposeSource; ref?: string } }): Task {
+  check(
+    isObj(input) && ID.test(String(input.id)) && text(input.project, 200) && Number.isFinite(input.at) && (input.by === undefined || ["user", "adapter_explicit"].includes(String(input.by))),
+    "invalid_task",
+  );
   let purpose: Purpose | null = null;
   if (input.purpose !== undefined) {
     const p = input.purpose;
@@ -277,7 +285,7 @@ export function createTask(input: { id: string; project: string; at: number; pur
     purpose_history: purpose ? [purpose] : [],
     status: "open",
     sessions: [],
-    history: [{ at: input.at, by: "user", change: "created" }],
+    history: [{ at: input.at, by: input.by ?? "user", change: "created" }],
   };
 }
 

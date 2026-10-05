@@ -22,6 +22,7 @@ export function LocalReview() {
     <div className="review-toolbar"><button disabled={busy} onClick={() => send({ type: 'localReview', action: 'recent', host: 'claude-code' })}>최근 Claude 세션</button><button disabled={busy} onClick={() => send({ type: 'localReview', action: 'recent', host: 'codex' })}>최근 Codex 세션</button><button disabled={busy} onClick={() => send({ type: 'localReview', action: 'import', host: 'claude-code' })}>Import Claude task</button><button disabled={busy} onClick={() => send({ type: 'localReview', action: 'import', host: 'codex' })}>Import Codex task</button><button disabled={busy} onClick={() => send({ type: 'localReview', action: 'load' })}>Refresh records</button></div>
     {busy && <p role="status">Saving or reading local records…</p>}{state.error && <p role="alert">{state.error}</p>}{state.notice && <p role="status">{state.notice}</p>}
     <nav aria-label="Saved tasks">{state.tasks.map(t => <button key={t.id} aria-current={t.id === state.card?.task.id ? 'page' : undefined} disabled={busy} onClick={() => send({ type: 'localReview', action: 'open', task: t.id })}>{t.project.split('/').pop()} · {t.status} · {t.id.slice(-8)}</button>)}</nav>
+    <OmittedRecords count={state.curriculumTasks ?? 0} busy={busy} onDelete={() => send({ type: 'localReview', action: 'deleteCurriculum' })} />
     {!state.card && !state.error && <p>Import a task to start. A receipt records local acceptance, not task completion or capability growth.</p>}
     {state.card && <TaskReview key={state.card.task.id} card={state.card} busy={busy} send={send} />}
     {state.card && <ImprovementReview key={'improve-' + state.card.task.id} card={state.card} all={state.improvements || []} tasks={state.tasks} busy={busy} send={send} />}
@@ -32,6 +33,15 @@ export function LocalReview() {
       {state.card.receipts.map(r => <article className="receipt" key={r.revision}><h3>Accepted locally · revision {r.revision}</h3><p>{r.id} · {new Date(r.accepted_at).toLocaleString()}</p><code>{r.digest}</code><p>Destination: {r.destination} · Stored content verified</p></article>)}
     </section>}
   </main>;
+}
+/**
+ * MC-27 — what the list above leaves out, said with its count, and the way to delete it (MC-31).
+ * A curriculum task record (SX-55) cannot be opened on this screen, so it is not a row; it is
+ * never left out silently either. Nothing is drawn when nothing is left out.
+ */
+export function OmittedRecords({ count, busy, onDelete }: { count: number; busy: boolean; onDelete: () => void }) {
+  if (!(count > 0)) return null;
+  return <div className="record-omitted"><p>수업 과제 진행 기록 {count}개는 이 화면에서 열 수 없어 목록에서 뺐어요.</p><button className="danger" disabled={busy} onClick={onDelete}>수업 과제 진행 기록 지우기</button></div>;
 }
 function TaskReview({ card, busy, send }: { card: TaskCard; busy: boolean; send: (m: LocalReviewRequest) => void }) {
   const [purpose, setPurpose] = useState(card.task.purpose?.text || '');
