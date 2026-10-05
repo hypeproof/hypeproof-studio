@@ -409,10 +409,19 @@ export function readNotes(dir: string): Record<string, string> {
   return out;
 }
 
-/** Notes that reached the wiki are copied to raw/ (the immutable source the citations point at). */
+/**
+ * Notes that reached the wiki move to raw/ (the source the citations point at), so next week's
+ * ingest reads only new notes. A raw/ file of the same name is kept and the new one gets a suffix.
+ */
 export function archiveNotes(dir: string, notes: Record<string, string>): void {
   fs.mkdirSync(path.join(dir, "raw"), { recursive: true });
-  for (const [n, text] of Object.entries(notes)) fs.writeFileSync(path.join(dir, "raw", n), text, "utf8");
+  for (const [n, text] of Object.entries(notes)) {
+    const ext = path.extname(n);
+    let target = path.join(dir, "raw", n);
+    for (let i = 2; fs.existsSync(target) && fs.readFileSync(target, "utf8") !== text; i++) target = path.join(dir, "raw", `${path.basename(n, ext)}-${i}${ext}`);
+    fs.writeFileSync(target, text, "utf8");
+    try { fs.unlinkSync(path.join(dir, "notes", n)); } catch {}
+  }
 }
 
 const CSS = `:root{--bg:#f5f7f3;--paper:#fff;--ink:#18211c;--ink-2:#4b564f;--ink-3:#6b766f;--line:#d8ded7;--acc:#1f6b45;--acc-ink:#134a30;--warn:#7a4f0e;--warn-soft:#f6ecd9;--chip:#eef1ec}

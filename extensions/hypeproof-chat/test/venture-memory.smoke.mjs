@@ -99,6 +99,11 @@ assert.deepEqual(Object.keys(vm.readNotes(dir)), ["w1-관찰.md"], "only .md/.tx
 vm.writeWiki(dir, s1);
 vm.archiveNotes(dir, sources.notes);
 assert.equal(readFileSync(join(dir, "raw", "w1-관찰.md"), "utf8"), "할아버지가 다음 버튼을 바로 누르심");
+assert.deepEqual(Object.keys(vm.readNotes(dir)), [], "an ingested note leaves notes/, so next week reads only new notes");
+writeFileSync(join(dir, "notes", "w1-관찰.md"), "다른 날 같은 이름 메모");
+vm.archiveNotes(dir, vm.readNotes(dir));
+assert.equal(readFileSync(join(dir, "raw", "w1-관찰.md"), "utf8"), "할아버지가 다음 버튼을 바로 누르심", "planted: a same-name note must not overwrite the cited raw file");
+assert.equal(readFileSync(join(dir, "raw", "w1-관찰-2.md"), "utf8"), "다른 날 같은 이름 메모");
 assert.equal(vm.loadState(dir).E.length, 2);
 assert.equal(vm.initWiki(dir, "다른 팀").team, "A · 어르신 길찾기", "init keeps an existing wiki");
 assert.deepEqual(vm.proposalFromText('설명 {"next": {"text": "a", "cite": ["t1"]}} 끝').next.text, "a");
