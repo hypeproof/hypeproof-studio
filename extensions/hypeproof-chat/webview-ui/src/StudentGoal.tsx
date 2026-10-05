@@ -2,11 +2,13 @@
 //
 // Where it sits: the coach rail, right under region A and before the step guidance, where the step's help choice
 // already lives (design §정보 구조: learning information goes in the header and the rail, SX-05). Region A keeps the
-// lesson's own criteria (the step's acceptance, the week's completion conditions) exactly as the design file says.
-// This block never draws, edits or sends them, so writing a goal cannot remove one.
+// lesson's own criteria (the step's acceptance, the week's completion conditions) exactly as the design file says,
+// and draws the saved goal as one line under them (MissionHeader `goal`), fixed with the header: the AE design's
+// "현재 과제 요약을 고정" (learning-agent-experience design, 정보의 우선순위). This block holds the rest: the personal
+// criteria and the editor. It never draws, edits or sends the lesson's criteria, so writing a goal cannot remove one.
 //
 // What it keeps:
-//   · closed by default: the summary line shows the goal itself, so it is seen without opening anything (AE-01 확인);
+//   · closed by default: "완료 기준 편집" opens when needed (same design table);
 //   · quiet controls only: the screen's one Primary stays region A's action (SX-04);
 //   · no completion: nothing here marks a criterion as met or posts a step or task message. Opening it records
 //     nothing, and saving changes only the goal (AE-01: "과제 열람만으로 완료되지 않는다");
@@ -57,11 +59,12 @@ export function StudentGoal({ lesson, view, note, onSave }: StudentGoalProps) {
 
   return (
     <details className="hp-rail-lesson hp-goal" data-student-goal={revision}>
-      <summary>
+      <summary>{goal || criteria.length ? "내 목표와 완료 기준 보기·고치기" : "내 목표와 완료 기준 적기"}</summary>
+      <p className="hp-goal-current">
         <span className="hp-goal-label">내 목표</span>
         {" · "}
         <span className="hp-goal-text">{goal || "아직 적지 않았어요"}</span>
-      </summary>
+      </p>
 
       <section className="hp-goal-criteria" aria-label="내가 정한 완료 기준">
         <p className="hp-goal-heading">내가 정한 완료 기준</p>

@@ -68,6 +68,9 @@ await test("rules: a save stores only the goal and personal criteria, under this
   const second = G.acceptGoalSave(LESSON_A, ACT, { lesson: LESSON_A.sha256, goal: "  새 목표  ", criteria: ["  새 기준 ", "", "  "], base: 1 }, first.all, 2000);
   assert.equal(second.ok, true);
   assert.deepEqual([second.record.goal, second.record.criteria, second.record.revision], ["새 목표", ["새 기준"], 2]);
+  // The student may also clear their own goal; the revision still moves forward.
+  const cleared = G.acceptGoalSave(LESSON_A, ACT, { lesson: LESSON_A.sha256, goal: "", criteria: [], base: 2 }, second.all, 3000);
+  assert.deepEqual([cleared.ok, G.goalViewOf(LESSON_A, ACT, cleared.all).goal, G.goalViewOf(LESSON_A, ACT, cleared.all).revision], [true, "", 3]);
   assert.deepEqual(G.goalCriteriaFromText("하나\r\n\n  둘  \n"), ["하나", "둘"]);
 });
 
@@ -342,7 +345,17 @@ function screenOf(html) {
   const text = visibleText(html);
   const header = /<header class="hp-mission"[\s\S]*?<\/header>/.exec(html)?.[0] ?? "";
   const goalBlock = /<details class="hp-rail-lesson hp-goal"[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
-  return { text, header: visibleText(header), goal: visibleText(goalBlock), goalHtml: goalBlock };
+  const headerGoal = /<p class="hp-mission-goal">[\s\S]*?<\/p>/.exec(header)?.[0] ?? null;
+  return {
+    text,
+    header: visibleText(header),
+    headerHtml: header,
+    /** Region A's goal line (fixed with the header), or null when none is drawn. */
+    headerGoal: headerGoal === null ? null : visibleText(headerGoal),
+    headerGoalHtml: headerGoal,
+    goal: visibleText(goalBlock),
+    goalHtml: goalBlock,
+  };
 }
 /** The lesson's week conditions in region A and the current step's acceptance, each missing one named. */
 function lessonCriteriaMissing(screen) {
@@ -353,6 +366,12 @@ function lessonCriteriaMissing(screen) {
 await test("screen: the chat shows the saved goal and criteria beside the lesson's untouched criteria", async () => {
   const html = await renderComponent("ChatPanel", withGoal(storedView));
   const screen = screenOf(html);
+  // Region A, fixed with the header: the goal as one line, after the lesson's own conditions.
+  assert.equal(screen.headerGoal, `내 목표 · ${GOAL}`);
+  assert.ok(screen.headerHtml.indexOf("hp-mission-completion") < screen.headerHtml.indexOf("hp-mission-goal"), "the goal line is not after the lesson's conditions");
+  assert.ok(screen.headerHtml.indexOf("hp-mission-goal") < screen.headerHtml.indexOf("hp-mission-foot"), "the goal line is not above the steps remaining and the growth link");
+  // The rail: the same goal, the personal criteria and the editor, closed by default.
+  assert.ok(screen.goal.startsWith("내 목표와 완료 기준 보기·고치기"), screen.goal);
   assert.ok(screen.goal.includes(`내 목표 · ${GOAL}`), screen.goal);
   for (const c of CRITERIA) assert.ok(screen.goal.includes(c), `missing personal criterion ${c}`);
   assert.deepEqual(lessonCriteriaMissing(screen), []);
@@ -366,6 +385,10 @@ await test("screen: the chat shows the saved goal and criteria beside the lesson
   const planted = html.replace(/<ul class="hp-mission-completion"[\s\S]*?<\/ul>/, `<ul class="hp-mission-completion">${CRITERIA.map((c) => `<li>${c}</li>`).join("")}</ul>`);
   assert.notEqual(planted, html, "the planted screen was not made");
   assert.deepEqual(lessonCriteriaMissing(screenOf(planted)), week3.learning.completion.map((c) => c.text));
+  // Negative control: a header that dropped the goal line reads as no goal, so the first check above is not vacuous.
+  const noLine = html.replace(/<p class="hp-mission-goal">[\s\S]*?<\/p>/, "");
+  assert.notEqual(noLine, html, "the planted header was not made");
+  assert.equal(screenOf(noLine).headerGoal, null);
 });
 
 await test("screen: every chat view and every remount draws the same goal from the host (sidebar, editor tab, reconnect)", async () => {
@@ -375,8 +398,11 @@ await test("screen: every chat view and every remount draws the same goal from t
   const editor = screenOf(await renderComponent("ChatPanel", withGoal(structuredClone(storedView))));
   assert.equal(editor.goal, sidebar.goal);
   assert.equal(editor.header, sidebar.header);
+  assert.equal(editor.headerGoal, `내 목표 · ${GOAL}`);
   // Negative control: a remount that started from nothing (the goal kept only in the webview) would lose it.
   const forgetful = screenOf(await renderComponent("ChatPanel", withGoal(null)));
+  assert.equal(forgetful.headerGoal, null, "no goal, no line in region A (nothing invented)");
+  assert.ok(forgetful.goal.startsWith("내 목표와 완료 기준 적기"), forgetful.goal);
   assert.ok(forgetful.goal.includes("내 목표 · 아직 적지 않았어요"));
   assert.notEqual(forgetful.goal, sidebar.goal);
 });
@@ -385,6 +411,7 @@ await test("screen: another lesson's goal is not drawn, and an empty goal still 
   const otherRevision = { ...storedView, lesson: { ...storedView.lesson, version: LESSON_A2.version, sha256: LESSON_A2.sha256 } };
   const screen = screenOf(await renderComponent("ChatPanel", withGoal(otherRevision)));
   assert.ok(!screen.text.includes(GOAL), "another revision's goal was drawn");
+  assert.equal(screen.headerGoal, null, "another revision's goal reached region A");
   assert.ok(screen.goal.includes("아직 적지 않았어요"));
   assert.deepEqual(lessonCriteriaMissing(screen), [], "lesson criteria must not depend on the student's goal");
   const emptied = screenOf(await renderComponent("ChatPanel", withGoal({ ...storedView, goal: "", criteria: [], revision: 9 })));
@@ -393,9 +420,12 @@ await test("screen: another lesson's goal is not drawn, and an empty goal still 
 });
 
 await test("screen: the goal block offers no completion — no check mark, no completion button, nothing pressed by opening it", async () => {
-  const { goal, goalHtml } = screenOf(await renderComponent("ChatPanel", withGoal(storedView)));
+  const { goal, goalHtml, headerGoalHtml } = screenOf(await renderComponent("ChatPanel", withGoal(storedView)));
   const completionMarks = (html) => [/☑/.test(html), /완료하기|마쳤어요|제출/.test(visibleText(html)), /hp-cta-primary/.test(html)];
   assert.deepEqual(completionMarks(goalHtml), [false, false, false]);
+  assert.ok(headerGoalHtml, "region A's goal line is not drawn — the check below proves nothing");
+  assert.deepEqual(completionMarks(headerGoalHtml), [false, false, false], "region A's goal line carries a mark or a button");
+  assert.doesNotMatch(headerGoalHtml, /<button|data-met/);
   assert.ok(goal.includes("목표를 적거나 고쳐도 과제가 완료되지는 않아요."));
   assert.match(goalHtml, /^<details class="hp-rail-lesson hp-goal"[^>]*>/, "closed by default: no open attribute");
   assert.doesNotMatch(goalHtml.slice(0, goalHtml.indexOf(">")), /\bopen\b/);
@@ -406,7 +436,7 @@ await test("screen: the goal block offers no completion — no check mark, no co
 
 await test("screen: an instructor's chat has no student goal block", async () => {
   const html = await renderComponent("ChatPanel", withGoal(storedView, { instructor: true }));
-  assert.ok(!html.includes("hp-goal"));
+  assert.ok(!html.includes("hp-goal") && !html.includes("hp-mission-goal") && !html.includes(GOAL));
   assert.ok(html.includes("hps-messages"), "the instructor render is not empty");
 });
 

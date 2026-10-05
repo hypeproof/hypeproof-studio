@@ -800,6 +800,7 @@
         "extensions/hypeproof-chat/src/chatPanelProvider.ts",
         "extensions/hypeproof-chat/src/protocol.ts",
         "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/MissionHeader.tsx",
         "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx",
         "extensions/hypeproof-chat/webview-ui/src/styles.css"
       ],

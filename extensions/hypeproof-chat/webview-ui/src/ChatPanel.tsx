@@ -778,6 +778,8 @@ export function ChatPanel(props: Props) {
         missing={learning ? learning.complete.missing : null}
         // SX-02 — "지난번 이어서", exactly as the host decided it from the task record.
         resume={learning?.resume ?? null}
+        // AE-01 — the learner's own goal for THIS lesson, fixed with the header; edited in the rail below.
+        goal={goalOfLesson(studentGoal, config?.profile?.lesson)?.goal || null}
         currentStepId={currentStepId}
         onSelectStep={pickStep}
         onStartStep={(step) => {

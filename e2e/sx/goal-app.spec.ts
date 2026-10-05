@@ -9,17 +9,21 @@
 //                   goal and two criteria and saves. Region A reads the same lesson criteria before and after, nothing
 //                   is checked off, the task record does not move and the completion button stays closed (AE-01:
 //                   viewing or writing a goal completes nothing).
-//   result screen   index.html opens and the preview opens beside the chat; the student looks at the preview and comes
-//                   back to the chat: the same goal and the same lesson criteria (AE-01: "대화와 결과를 오가도 유지").
+//   result screen   index.html opens and the preview opens beside the chat; the student looks at the preview and brings
+//                   the chat back to the front while the result stays open beside it: the same goal and the same lesson
+//                   criteria, and region A's goal line wholly on screen, also with the conversation scrolled to its end
+//                   (AE-01: "대화와 결과를 오가도 유지"; the AE design keeps the goal summary fixed with the task).
 //   reopened        A new App process on the same device storage: the same goal and lesson criteria.
-//   new revision    The Service serves another revision of the lesson (only the first completion condition): the
-//                   goal block starts empty, so another revision's goal is not restored. Back on the first revision,
-//                   the goal comes back.
 // Every probe also runs once on a planted DOM (a lesson criterion's words changed, a condition checked off, the goal
 // text changed) and must report it (verification.md rule 2).
 //
-// Not covered: AE-T01's other half (material selection and the request payload, AE-02: the `context` item #555),
-// Windows, a real student. Needs an unlocked screen: when it is locked the run is skipped as NOT RUN.
+// Not covered here: another lesson revision. A lesson-pinned seat's activity id includes the lesson (Service
+// `activityIdentity`), so serving another revision means a new code, a new activity and, through the start page's
+// "이 활동 시작하기", possibly another folder: such a run could pass for that reason alone. The revision and activity
+// boundary is checked where it can be isolated, against the real host and config path in
+// extensions/hypeproof-chat/test/student-goal.smoke.mjs. Also not covered: AE-T01's other half (material selection and
+// the request payload, AE-02: the `context` item #555), Windows, a real student. Needs an unlocked screen: when it is
+// locked the run is skipped as NOT RUN.
 import { test, expect, type ElectronApplication, type FrameLocator, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
@@ -37,9 +41,8 @@ const FIXTURE = path.join(repo, "e2e/curriculum-runtime/fixtures/kiosk-practice"
 /** The fixture page's own <title>, which labels the preview's tab. */
 const PREVIEW_TITLE = "키오스크 연습";
 const WIDE = { width: 1280, height: 800 };
-/** The first revision keeps all three week-3 completion conditions; the second keeps only the first. */
-const REVISION_1 = "c1,c2,c3";
-const REVISION_2 = "c1";
+/** The lesson the Service serves keeps all three week-3 completion conditions, as the design is written. */
+const COMPLETION = "c1,c2,c3";
 const GOAL = "예약 버튼이 첫 화면에서 바로 보이게 만들기";
 const CRITERIA = ["휴대폰 화면에서도 예약 버튼이 보인다", "원래 진료 시간과 같다"];
 const WEEK3 = JSON.parse(fs.readFileSync(path.join(repo, "worker/test/fixtures/session-design/week-3.json"), "utf8")) as {
@@ -83,8 +86,13 @@ class GoalService {
 // ── Instruments: one probe of the chat frame, and pure verdicts over what it read ─────────────
 
 type GoalProbe = {
-  /** The goal block's summary line ("내 목표 · …"), and the personal criteria inside it. */
+  /** Region A's goal line ("내 목표 · …", fixed with the header), or null when none is drawn. */
+  headerGoal: string | null;
+  /** Is that line wholly on screen: inside the header's visible box and the frame, its centre not covered. */
+  headerGoalOnScreen: boolean;
+  /** The rail block: its summary, the goal it shows and the personal criteria inside it. */
   summary: string;
+  railGoal: string;
   criteria: string[];
   /** Region A's lesson criteria: the week's completion conditions and the current step's acceptance sentence. */
   lesson: string[];
@@ -96,10 +104,26 @@ type GoalProbe = {
 async function probeGoal(chat: FrameLocator): Promise<GoalProbe> {
   return chat.locator("body").evaluate(() => {
     const text = (e: Element | null | undefined) => (e?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const header = document.querySelector("header.hp-mission");
+    const line = header?.querySelector(".hp-mission-goal") ?? null;
+    const onScreen = (part: Element | null) => {
+      if (!part || !header) return false;
+      const box = header.getBoundingClientRect();
+      const r = part.getBoundingClientRect();
+      const vh = document.documentElement.clientHeight;
+      const vw = document.documentElement.clientWidth;
+      if (r.width === 0 || r.height === 0) return false;
+      if (r.top < Math.max(box.top, 0) - 0.5 || r.bottom > Math.min(box.bottom, vh) + 0.5 || r.left < -0.5 || r.right > vw + 0.5) return false;
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && (part === hit || part.contains(hit));
+    };
     const goal = document.querySelector("details.hp-goal");
     const complete = document.querySelector(".hp-complete button") as HTMLButtonElement | null;
     return {
+      headerGoal: line ? text(line) : null,
+      headerGoalOnScreen: onScreen(line),
       summary: text(goal?.querySelector("summary")),
+      railGoal: text(goal?.querySelector(".hp-goal-current")),
       criteria: Array.from(goal?.querySelectorAll(".hp-goal-criteria li") ?? []).map((li) => text(li)),
       lesson: Array.from(document.querySelectorAll("header.hp-mission .hp-mission-completion-text")).map((e) => text(e)),
       acceptance: text(document.querySelector("header.hp-mission .hp-mission-acceptance")),
@@ -108,10 +132,13 @@ async function probeGoal(chat: FrameLocator): Promise<GoalProbe> {
     };
   });
 }
+/** The saved goal everywhere it is drawn: region A's line, the rail's line and the rail's criteria. */
 const goalProblem = (p: GoalProbe, goal: string, criteria: string[]): string | null =>
-  p.summary === `내 목표 · ${goal}` && JSON.stringify(p.criteria) === JSON.stringify(criteria)
+  p.headerGoal === `내 목표 · ${goal}` && p.railGoal === `내 목표 · ${goal}` && JSON.stringify(p.criteria) === JSON.stringify(criteria)
     ? null
-    : `goal block reads "${p.summary}" with ${JSON.stringify(p.criteria)}, expected "${goal}" with ${JSON.stringify(criteria)}`;
+    : `goal reads "${p.headerGoal}" in region A and "${p.railGoal}" with ${JSON.stringify(p.criteria)} in the rail, expected "${goal}" with ${JSON.stringify(criteria)}`;
+/** With a result open beside the chat, or the conversation scrolled: region A's goal line is still on screen. */
+const goalOffScreen = (p: GoalProbe): string | null => (p.headerGoalOnScreen ? null : `region A's goal line is not on screen (${JSON.stringify(p.headerGoal)})`);
 const lessonProblem = (p: GoalProbe, lesson: { lesson: string[]; acceptance: string }): string | null =>
   JSON.stringify(p.lesson) === JSON.stringify(lesson.lesson) && p.acceptance === lesson.acceptance
     ? null
@@ -159,12 +186,21 @@ async function focusChat(win: Page): Promise<FrameLocator> {
   if ((await tab.count()) > 0) await tab.click().catch(() => undefined);
   return chatFrame(win);
 }
-async function shot(win: Page, name: string): Promise<{ file: string; sha256: string }> {
+/**
+ * A picture of the window for the run record. Best effort: quiet mode hides the app once the workbench is ready, and a
+ * hidden app composites no frames, so a screenshot only works with `HPS_QUIET_NO_HIDE=1` (the window stays off-screen,
+ * shown inactive and never focusable). Without it the record says so; every verdict here reads the DOM, not a picture.
+ */
+async function shot(win: Page, name: string): Promise<{ file: string; sha256: string } | { skipped: string }> {
   const file = path.join(repo, "e2e/test-results/sx-app", `goal-${name}.png`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const bytes = await win.screenshot({ path: file });
-  const { createHash } = await import("node:crypto");
-  return { file: path.relative(repo, file), sha256: createHash("sha256").update(bytes).digest("hex") };
+  try {
+    const bytes = await win.screenshot({ path: file, timeout: 8_000 });
+    const { createHash } = await import("node:crypto");
+    return { file: path.relative(repo, file), sha256: createHash("sha256").update(bytes).digest("hex") };
+  } catch (error) {
+    return { skipped: `no frame (${process.env.HPS_QUIET_NO_HIDE === "1" ? "" : "app hidden by quiet mode; "}${String((error as Error).message).split("\n")[0]})` };
+  }
 }
 
 let ctx: AppContext | undefined;
@@ -186,9 +222,9 @@ test.afterAll(() => {
   fs.writeFileSync(out, JSON.stringify(record, null, 2));
 });
 
-test("AE-01 goal: kept beside the lesson's criteria through the preview and a reopen; another revision starts without it", async () => {
-  await svc.start(REVISION_1);
-  const revision1 = await svc.lesson();
+test("AE-01 goal: kept beside the lesson's criteria through the preview and a reopen", async () => {
+  await svc.start(COMPLETION);
+  const served = await svc.lesson();
   ctx = await launchApp({ preseedToken: true, preseedCoach: { name: "코치" } });
   await resize(ctx.app, WIDE);
   fs.cpSync(FIXTURE, ctx.wsDir, { recursive: true });
@@ -204,9 +240,9 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   const lesson = { lesson: before.lesson, acceptance: before.acceptance };
   expect(lesson.lesson, "region A does not draw the served lesson's completion conditions").toEqual(WEEK3.learning.completion.map((c) => c.text));
   expect(lesson.acceptance.length, "region A draws no step acceptance").toBeGreaterThan(0);
-  expect(before.summary).toBe("내 목표 · 아직 적지 않았어요");
+  expect([before.headerGoal, before.summary, before.railGoal]).toEqual([null, "내 목표와 완료 기준 적기", "내 목표 · 아직 적지 않았어요"]);
   expect(completionProblem(before), JSON.stringify(before)).toBeNull();
-  record.first_session = { lesson: revision1, phase, before, shot: await shot(ctx.win, "1-before") };
+  record.first_session = { lesson: served, phase, before, shot: await shot(ctx.win, "1-before") };
 
   // The student opens the block (viewing), writes a goal and two criteria and saves.
   const goal = chat.locator("details.hp-goal");
@@ -217,7 +253,7 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   await goal.locator("textarea").nth(0).fill(GOAL);
   await goal.locator("textarea").nth(1).fill(CRITERIA.join("\n"));
   await goal.getByRole("button", { name: "목표 저장" }).click();
-  await expect(goal.locator("summary")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
+  await expect(chat.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
   await expect(goal.getByRole("status")).toHaveText("저장했어요.");
   const saved = await probeGoal(chat);
   expect(goalProblem(saved, GOAL, CRITERIA), JSON.stringify(saved)).toBeNull();
@@ -229,7 +265,8 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   const controls = [
     await plantedMust(chat, "header.hp-mission .hp-mission-completion-text", "const s = document.createElement('span'); s.className = 'sx-planted'; s.textContent = ' (학생이 고침)'; el.appendChild(s);", "el.querySelector('.sx-planted')?.remove();", async () => lessonProblem(await probeGoal(chat), lesson), "a lesson criterion's words changed"),
     await plantedMust(chat, "header.hp-mission .hp-mission-completion li[data-met]", "el.dataset.sxWas = el.dataset.met; el.dataset.met = 'yes';", "el.dataset.met = el.dataset.sxWas; delete el.dataset.sxWas;", async () => completionProblem(await probeGoal(chat)), "a condition checked off"),
-    await plantedMust(chat, "details.hp-goal .hp-goal-text", "const s = document.createElement('span'); s.className = 'sx-planted'; s.textContent = ' 다른 목표'; el.appendChild(s);", "el.querySelector('.sx-planted')?.remove();", async () => goalProblem(await probeGoal(chat), GOAL, CRITERIA), "the goal text changed"),
+    await plantedMust(chat, "header.hp-mission .hp-mission-goal-text", "const s = document.createElement('span'); s.className = 'sx-planted'; s.textContent = ' 다른 목표'; el.appendChild(s);", "el.querySelector('.sx-planted')?.remove();", async () => goalProblem(await probeGoal(chat), GOAL, CRITERIA), "the goal text changed"),
+    await plantedMust(chat, "header.hp-mission .hp-mission-goal", "el.style.transform = 'translateY(-5000px)';", "el.style.transform = '';", async () => goalOffScreen(await probeGoal(chat)), "the goal line pushed off the screen"),
   ];
   record.saved = { probe: saved, phase: taskPhase(ctx.userDataDir), controls, shot: await shot(ctx.win, "2-saved") };
 
@@ -247,14 +284,27 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   await expect(previewTab, "the preview tab is not open").toHaveCount(1, { timeout: 30_000 });
   await previewTab.click();
   await expect(ctx.win.locator(".tabs-container .tab.active", { hasText: PREVIEW_TITLE }).first()).toBeVisible();
-  const withPreview = await shot(ctx.win, "3-preview");
+  // The chat comes back to the front of its own group, the result stays open beside it: both on screen at once.
   chat = await focusChat(ctx.win);
-  const back = await probeGoal(chat);
-  expect(goalProblem(back, GOAL, CRITERIA), JSON.stringify(back)).toBeNull();
-  expect(lessonProblem(back, lesson), JSON.stringify(back)).toBeNull();
-  expect(completionProblem(back), JSON.stringify(back)).toBeNull();
+  await expect(ctx.win.locator(".tabs-container .tab.active", { hasText: PREVIEW_TITLE }).first(), "the result closed when the chat came back").toBeVisible();
+  const beside = await probeGoal(chat);
+  expect(goalProblem(beside, GOAL, CRITERIA), JSON.stringify(beside)).toBeNull();
+  expect(goalOffScreen(beside), JSON.stringify(beside)).toBeNull();
+  expect(lessonProblem(beside, lesson), JSON.stringify(beside)).toBeNull();
+  expect(completionProblem(beside), JSON.stringify(beside)).toBeNull();
   expect(taskPhase(ctx.userDataDir), "looking at the result moved the task").toBe(phase);
-  record.result_screen = { preview: await previewUrl(ctx.app), probe: back, shot: withPreview };
+  const withPreview = await shot(ctx.win, "3-result-beside");
+  // The conversation scrolled to its end (where the composer is): region A's goal line stays on screen with the header.
+  const scrolled = await chat.locator(".hps-messages").evaluate((el) => {
+    for (let node: HTMLElement | null = el as HTMLElement; node; node = node.parentElement) node.scrollTop = node.scrollHeight;
+    const shell = document.querySelector(".hps-shell") as HTMLElement | null;
+    return { shellScrollTop: shell?.scrollTop ?? 0, shellScrolls: !!shell && shell.scrollHeight > shell.clientHeight };
+  });
+  expect(scrolled.shellScrolls && scrolled.shellScrollTop > 0, `the work screen did not scroll — the check proves nothing: ${JSON.stringify(scrolled)}`).toBe(true);
+  const afterScroll = await probeGoal(chat);
+  expect(goalOffScreen(afterScroll), JSON.stringify({ afterScroll, scrolled })).toBeNull();
+  expect(goalProblem(afterScroll, GOAL, CRITERIA), JSON.stringify(afterScroll)).toBeNull();
+  record.result_screen = { preview: await previewUrl(ctx.app), beside, scrolled: { ...scrolled, probe: afterScroll }, shot: withPreview, shot_scrolled: await shot(ctx.win, "3b-scrolled") };
 
   // ── Reopened: a new App process on the same device storage ──
   const userDataDir = ctx.userDataDir;
@@ -264,41 +314,11 @@ test("AE-01 goal: kept beside the lesson's criteria through the preview and a re
   await resize(ctx.app, WIDE);
   chat = await focusChat(ctx.win);
   await expect(chat.locator("header.hp-mission h1.hp-mission-sentence")).toHaveText(MISSION);
-  await expect(chat.locator("details.hp-goal summary")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
+  await expect(chat.locator("header.hp-mission .hp-mission-goal")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
   const reopened = await probeGoal(chat);
   expect(goalProblem(reopened, GOAL, CRITERIA), JSON.stringify(reopened)).toBeNull();
   expect(lessonProblem(reopened, lesson), JSON.stringify(reopened)).toBeNull();
   expect(completionProblem(reopened), JSON.stringify(reopened)).toBeNull();
+  expect(taskPhase(ctx.userDataDir), "the reopen moved the task").toBe(phase);
   record.reopened = { probe: reopened, phase: taskPhase(ctx.userDataDir), shot: await shot(ctx.win, "4-reopened") };
-
-  // ── Another revision of the lesson: the goal of revision 1 is not restored ──
-  await ctx.app.close();
-  ctx = undefined;
-  await svc.stop();
-  await svc.start(REVISION_2);
-  const revision2 = await svc.lesson();
-  expect(revision2.sha256, "the second Service did not serve another revision — the check proves nothing").not.toBe(revision1.sha256);
-  ctx = await launchApp({ reuseUserDataDir: userDataDir, preseedToken: true, preseedCoach: { name: "코치" } });
-  await resize(ctx.app, WIDE);
-  chat = await focusChat(ctx.win);
-  await expect(chat.locator("header.hp-mission .hp-mission-completion-text")).toHaveCount(1, { timeout: 20_000 });
-  await expect(chat.locator("details.hp-goal summary")).toHaveText("내 목표 · 아직 적지 않았어요", { timeout: 20_000 });
-  const otherRevision = await probeGoal(chat);
-  expect(otherRevision.criteria, "revision 1's personal criteria were restored under revision 2").toEqual([]);
-  record.new_revision = { lesson: revision2, probe: otherRevision, shot: await shot(ctx.win, "5-new-revision") };
-
-  // ── Back on revision 1: its goal comes back ──
-  await ctx.app.close();
-  ctx = undefined;
-  await svc.stop();
-  await svc.start(REVISION_1);
-  expect((await svc.lesson()).sha256, "the restarted Service serves a different revision 1").toBe(revision1.sha256);
-  ctx = await launchApp({ reuseUserDataDir: userDataDir, preseedToken: true, preseedCoach: { name: "코치" } });
-  await resize(ctx.app, WIDE);
-  chat = await focusChat(ctx.win);
-  await expect(chat.locator("details.hp-goal summary")).toHaveText(`내 목표 · ${GOAL}`, { timeout: 20_000 });
-  const backOnRevision1 = await probeGoal(chat);
-  expect(goalProblem(backOnRevision1, GOAL, CRITERIA), JSON.stringify(backOnRevision1)).toBeNull();
-  expect(lessonProblem(backOnRevision1, lesson), JSON.stringify(backOnRevision1)).toBeNull();
-  record.back_on_revision_1 = { probe: backOnRevision1, phase: taskPhase(ctx.userDataDir) };
 });
