@@ -10,6 +10,9 @@ import { profile as homepagePractice } from "./homepage-practice-s1.ts";
 import { profile as nativeTrial } from "./studio-native-trial.ts";
 import { profile as gptPractice } from "./studio-gpt-practice.ts";
 import { profile as modelPractice } from "./studio-model-practice.ts";
+// Synthetic — release acceptance (#1404). `synthetic: true`, hidden from the
+// console; see the file header for why it exists.
+import { profile as syntheticReleaseAcceptance } from "./synthetic-release-acceptance.ts";
 
 // All known profiles. Add new cohorts here.
 const REGISTRY: Profile[] = [
@@ -22,6 +25,7 @@ const REGISTRY: Profile[] = [
   nativeTrial,
   gptPractice,
   modelPractice,
+  syntheticReleaseAcceptance,
 ];
 
 const BY_ID = new Map(REGISTRY.map((p) => [p.id, p]));

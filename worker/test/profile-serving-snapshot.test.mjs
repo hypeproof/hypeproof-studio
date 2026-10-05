@@ -131,6 +131,15 @@ for (const id of profiles) {
   }
 }
 
+// #1404 — release acceptance checks the candidate App on the synthetic cohort in
+// place of studio-native-trial. That is evidence about trial seats only while
+// the two are served identically, so the equality is asserted, not just pinned.
+assert.deepEqual(
+  current['synthetic-release-acceptance'],
+  current['studio-native-trial'],
+  'synthetic-release-acceptance must be served exactly what studio-native-trial is served',
+);
+
 if (process.env.SNAPSHOT_UPDATE === '1' || !existsSync(BASELINE)) {
   writeFileSync(BASELINE, JSON.stringify(current, null, 2) + '\n');
   console.log(`profile-serving-snapshot: baseline written — ${profiles.length} profiles × ${AXES.length} axes`);

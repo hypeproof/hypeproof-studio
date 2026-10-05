@@ -1,82 +1,55 @@
 # cr-verify evidence report
 
-Status: evidence for the `cr-verify` completion record (CR-12–CR-16, CR-76 view of CR-81; CR-T15, CR-T16, CR-T76). 2026-10-01. Owner: jayleekr.
-Item: `cr-verify`, issue [#1392](https://github.com/jayleekr/hypeproof-studio/issues/1392), epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388).
-Delivered by PR [#1437](https://github.com/jayleekr/hypeproof-studio/pull/1437), squash-merged as `74eb2309f8807d4185798f3601ff84c8b2d6f6e9`. The implementation's run record with all review rounds is [curriculum-runtime-2026-10-01-evidence.md](../testing/curriculum-runtime-2026-10-01-evidence.md); this report re-runs the review round 3 controls at the merge commit.
+Status: tests re-run by the record sweep at `bed32b89`; not recorded (rows not met, below). 2026-10-05. Owner: jayleekr.
+Item: `cr-verify`, issue [#1392](https://github.com/jayleekr/hypeproof-studio/issues/1392), epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388), record sweep [#1507](https://github.com/jayleekr/hypeproof-studio/issues/1507).
+Delivered by PR [#1437](https://github.com/jayleekr/hypeproof-studio/pull/1437), squash-merged as `74eb2309f8807d4185798f3601ff84c8b2d6f6e9` (`Refs #1392`). The implementation's run record is [curriculum-runtime-2026-10-01-evidence.md](../testing/curriculum-runtime-2026-10-01-evidence.md); the 2026-10-01 version of this file holds the review round 3 controls re-run at `74eb2309` and its 13 planted defects.
 
-What the PR does not claim, and this report does not either: CR-15's vision half (no vision step; CR-15 partial), CR-61 (CR-T57 with a real provider NOT RUN), and CR-02 (CR-T02 switch-off regressions BLOCKED by pre-existing F1). The PR says `Refs #1392`.
+## Not recorded
 
-## Completion boundary
+The sweep records an item only when every row it cites is met. `cr-verify` has open rows, so it is not recorded, and neither are the items that depend on it (`cr-publish`, `cr-evidence`, `cr-memory`, `cr-skills`): `align.py record` refuses an item whose dependency is not complete.
 
-This report preserves the recorder's test evidence; it does not mark `cr-verify` complete in the ledger. `align.py record cr-verify --commit 74eb2309f8807d4185798f3601ff84c8b2d6f6e9 --pr 1437 --tests CR-T15,CR-T16,CR-T76 --evidence docs/evidence/cr-verify.md --reviewed-by cr-verify:review:regression-conventions:r3` exited 1 with `refused: cr-verify depends on work that is not complete: cr-browser; record or re-record it first`. `cr-browser` has no completion (see [cr-browser.md](cr-browser.md), "Completion boundary"), and `cr-recon`'s completion is reopened by the requirement edit (`align.py check`: `completion no longer holds (changed since recorded: docs/requirements/curriculum-runtime.md)`). At `74eb2309`, CR-T01 (`worker/test/cr-recon.test.mjs`) exits 0 on the recorded verdict and reports six deviations of the tree from the recorded map (CR-59/CR-60 ownership after decision 9) to be recorded in `docs/plan/curriculum-runtime.md`. Re-recording `cr-recon`, then recording `cr-browser`, comes before this item's record can be written; this report is the evidence to cite then.
-
-## Verdict
-
-PASS at `74eb2309` for the eight round 3 controls below (CR-T15 DOM half, CR-T16, CR-T76 and the CR-81 lifecycle cases they carry). Evidence class (MC-38): **synthetic** (unit and smoke layers: scripted CDP page, real `NativeObservationRecorder`, real `VerifyPanel` render). No in-app run, no real model, no real device or phone in this report.
-
-## Reviewers
-
-| Label | Role |
-|---|---|
-| `cr-verify:review:acceptance:r3` | independent review, acceptance lens, round 3 (PR #1437) |
-| `cr-verify:review:adversarial:r3` | independent review, adversarial lens, round 3 (PR #1437) |
-| `cr-verify:review:regression-conventions:r3` | independent review, regression and conventions lens, round 3 (PR #1437); proposed as `reviewed_by` for the ledger completion |
-
-The recorder is a record-only agent that did not write the implementation.
-
-## Environment
-
-2026-10-01, Apple M3 Pro, macOS 15.7.4 (Darwin 24.6.0), Node v24.4.1. Worktree `chore/record-cr-verify` cut from `origin/main` = `74eb2309f8807d4185798f3601ff84c8b2d6f6e9`, no local change while the tests ran (`npm ci` in `packages/measurement`, `worker`, `extensions/hypeproof-chat` and its `webview-ui`).
-
-## Positive controls (unmutated tree)
-
-| Command (from the worktree root) | Result |
-|---|---|
-| `cd extensions/hypeproof-chat && node --experimental-strip-types --no-warnings test/cr-verify.smoke.mjs` | exit 0, `40 cr-verify checks passed` |
-| `cd extensions/hypeproof-chat && node --experimental-strip-types --no-warnings test/verify-panel.smoke.mjs` | exit 0, `7 verify panel checks passed` |
-| `cd worker && node --experimental-strip-types --no-warnings --test test/cr-verify.test.mjs` | exit 0, `tests 22 pass 22 fail 0` |
-
-The eight round 3 rows and the checks that carry them, each with its positive control inside the same check:
-
-| Row | Check (as printed) | Control in the check |
+| Row | Why it is not met | What closes it |
 |---|---|---|
-| CR-T15: a step target past the snapshot cap gives not_verified | smoke "CR-T15: a step target past the snapshot's line cap is not verified, never fail" | a short page without the button gives fail |
-| CR-T15/CR-81: 100 logs then an error gives not_verified for both `no_errors` and the text-only plan | smoke "CR-T15/CR-81: no_errors on a page whose event log dropped records is not verified, never pass" | 10 logs: `no_errors` fails, the text-only plan is a warning |
-| CR-81, CR-16: run A fails, run B passes with the same words on one version | smoke "CR-81, CR-16: an earlier fail on this version that a later run with the same words passed is shown with its fix action and re-tested": `view.held` shows A as fail with `test_ref`, `fix(A)` is accepted, the re-test re-runs A's plan (fail) | no earlier fail: verified and `held` empty |
-| CR-T76 negative extended | smoke "CR-T76 negative: a later start with fewer criteria never hides an earlier warning or not-verified result": the earlier warning or not_verified stays open and the re-test re-runs it | a later pass of the same words clears it |
-| `plan_untestable` | smoke "a plan with no steps that only expects an absence is refused (plan_untestable); a step or a positive expectation is accepted": three vacuous zero-step plans refused with nothing recorded | a positive expectation or a reload step accepted |
-| `text` word start | smoke "a text expectation matches from a word start: '완료' does not match '미완료'" (also 'complete' does not match 'incomplete') | '주문 완료되었어요', '완료', '(완료)' pass |
-| re-test recorder lifecycle | smoke "a re-test holds its recorder until it ends and then lets it go (host release)": `retestActive` from the click, `release()` once at the end; source assertions `retestHeld`, `retestHolds`, `retestRelease` each red on their own planted removal inside the check | the unplanted provider source matches all three |
-| verify-panel held fail row | panel "CR-T76 UI positive: an earlier fail on this version that the latest report does not hold is shown with its fix request": one held fail row with exactly one fix button | same report with nothing held: no fail row, no fix button |
+| CR-15 | No vision judgment step exists: a criterion that needs visual judgment stays "확인 안 됨" (run record: CR-T15 PARTIAL, CR-15 not claimed). | An implementation change in `cr-verify` (a vision step whose verdicts are labelled as vision-based), or Jay narrowing CR-15. |
+| CR-61 | CR-T57 is ten five-step verify runs on the reference Mac, the first run's model time included; only the Studio half (re-tests, which call no model) was measured, on 2026-10-01. The first run's time with a real provider was never measured. | A real-provider run on the reference Mac. It needs a provider key on the dev Service and Jay's go-ahead to spend it. |
+| CR-12, CR-14, CR-16, CR-81, and the runner cases of CR-11 and CR-68, at the in-app layer | `verify-app.spec.ts` fails at `bed32b89`, below. | A `cr-verify` follow-up, product and spec. |
 
-Supporting runs at the same tree (exit codes): `extensions/hypeproof-chat` `test/cr-switch.smoke.mjs` 0 (`12 cr-switch checks passed`) · `test/cr-provider-neutral.smoke.mjs` 0 (`5 provider-neutral checks passed`) · `worker` `test/cr-switch.test.mjs` 0 · `python3 scripts/next-work.py --check` 0 · `python3 scripts/check-registry.py` 0. Full `npm test` of `worker` and `extensions/hypeproof-chat` was not re-run by the recorder.
+CR-02's switch-off baseline, BLOCKED by F1 in the run record, passes at `bed32b89`: `09-preview.spec.ts` with the switch off, 18 of 18 on both preview paths ([cr-browser.md](cr-browser.md)).
 
-## Negative controls: 13 planted defects
+The record is withheld by the sweep's rule, not by the tool: with `cr-browser` complete, `align.py record cr-verify --dry-run` at `bed32b89` accepts the packet (7 files and 22 rows pinned). `align.py` checks links, test ties and pins, not whether a row's acceptance is met.
 
-Scratch runner `rec-verify/mutate.py`: each defect planted alone by exact-anchor replacement (anchor count checked to be 1), the affected suites run, the file restored before the next; `git status` clean afterwards.
+## Runs at `bed32b89`
 
-| Planted defect | File | Result |
-|---|---|---|
-| M1 runner truncation guard removed (step target past cap) | `verifyRunner.ts` | smoke RED |
-| M2 `droppedRecords`/`recordsPartial` carry removed | `verifyRunner.ts` | smoke RED · unit green |
-| M3 the view's `held` always empty | `verifySession.ts` | smoke RED · panel green (it renders a given view) |
-| M4 the re-test ignores held results | `verifySession.ts` | smoke RED |
-| M5 the panel's held block removed | `VerifyPanel.tsx` | panel RED |
-| M6 carry limited to fail and non_reproducible | `verification.ts` | smoke RED · unit green |
-| M7 `plan_untestable` refusal removed | `verification.ts` | smoke RED · unit green |
-| M8 `text` matched by substring (word start check removed) | `verification.ts` | smoke RED · unit green |
-| M9 host guard `retestHeld` removed | `chatPanelProvider.ts` | smoke RED |
-| M10 host guard `retestHolds` removed | `chatPanelProvider.ts` | smoke RED |
-| M11 host guard `retestRelease` removed | `chatPanelProvider.ts` | smoke RED |
-| M12 the session never calls `release()` | `verifySession.ts` | smoke RED |
-| M13 `retestActive` never true | `verifySession.ts` | smoke RED |
-| none (control) | — | smoke GREEN · panel GREEN · unit GREEN |
+Environment, app copy and gating: as in [cr-browser.md](cr-browser.md) (same worktree, build and runs).
 
-All 13 RED in at least one suite, the unmutated control all green. The worker unit suite does not catch M2, M6, M7 or M8; those round 3 cases are carried by the extension smoke only (reported, not changed here).
+Evidence classes (MC-38): **synthetic** for the worker suite and the extension smokes (scripted CDP page). For `verify-app.spec.ts`, **live-host** for the App (integrated browser, proxy loop, verify panel) and **synthetic** for the Service account and the model (`app-service.mjs`: the real Service router, a scripted agent that hands the runner one plan per criterion). No real model, real device or phone.
+
+| Command | Result |
+|---|---|
+| `cd worker && npm test` (`cr-verify.test.mjs` among 68 files) | exit 0; `cr-verify.test.mjs` 22 of 22 |
+| `cd extensions/hypeproof-chat && npm test` (130 smoke files) | `cr-verify.smoke.mjs` `40 cr-verify checks passed`, `verify-panel.smoke.mjs` `7 verify panel checks passed`, `cr-switch` 12, `cr-provider-neutral` 5 (the one failing step is the environmental `test:instructor-render`, see [cr-browser.md](cr-browser.md)) |
+| in-app `verify-app.spec.ts` | 1 passed, 2 failed, in three gated runs: with the whole CR config (16:55–16:58, a smoke suite running alongside), alone (17:04–17:05), and alone with `e2e/fixtures/app.ts` from before #1506 (`00590823`, 17:07–17:08, #1506's protocol for a red spec among the 24 it did not re-run). The same two tests fail at the same assertions in all three, so neither load nor #1506's fixture change is the cause. |
+
+The passing test: "CR-T02 in-app, switch off: no verify command or tool is reachable".
+
+### In-app failure 1: the first criterion of the session reads "확인 안 됨"
+
+"CR-T12, CR-T63, CR-T76, CR-T14 positive and CR-T57 timing in-app", at `verify-app.spec.ts:198`: three typed criteria give `["not_verified", "pass", "pass"]`, expected three passes. A scratch diagnostic run (a dump of the Service's verify log and the panel rows added before the assertion; the spec restored afterwards, sha256 checked) shows the runner's answer for criterion 1, "주문 시작을 누르면 음료 고르기가 보인다":
+
+`[확인 안 됨] … — 콘솔 기록이 너무 많거나 늦게 읽기 시작해 일부를 읽지 못했어요` with `✓ 확인한 것: 있어야 함: combobox "음료 고르기"`.
+
+The expectation was met; the run is not verified because its records are partial. The runner's step 0 navigates to the preview (`runCriterionPlan`), but the first observation of the session carries `recordsPartial` (`PageEventLog.attachedLate`): the event log attached after the page had loaded. Since review round 3 (`droppedRecords`/`recordsPartial` carried into the verdict), a run that would pass on an incomplete log is "not verified" instead (`evaluate` in `verification.ts`: "a clean run on an incomplete log is not a pass"; a fail or a warning stands), so the first criterion of this run cannot pass. Criteria 2 and 3 of the same run pass. The spec last passed at review round 2 (`ed2acfb5`); round 3 was covered by the smoke and unit layers, whose scripted CDP page attaches before the load. Product follow-up: a fresh start that the log observes from the load (or a reload when the first observation is partial), with an in-app check.
+
+### In-app failure 2: the CR-T16 re-test carries two held results
+
+"CR-T14 negative, CR-T16, CR-T76 recheck and CR-T11 runner in-app", at `verify-app.spec.ts:280`: after the fix, the re-test shows four rows, `[pass test_observed]`, `[pass retest_confirmed]`, `[not_verified test_observed]`, `[pass test_observed]`, where the spec expects the first two, and then "검증됨". CR-T16 itself holds: criterion 2 is `retest_confirmed` on the fixed version (`sha256:cc6ceb45…` after `sha256:7187b0db…`), and the fix request carried the report, criterion 2 and v0. The two extra rows are the CR-T11 external-origin criterion (not verified, out of scope) and the CR-T14 flaky criterion, both run earlier in the same session on v0. Review round 3 made a re-test re-run every open result of that version the latest run does not hold (`VerifySession.retest`, "a re-test after 테스트 시작 with fewer criteria never drops it"), so they ride along, and the version is not "verified" while one of them is not a pass. The spec predates that behaviour. Spec follow-up: run CR-T16 in its own session, or expect the held rows; whether an earlier version's open results should follow a re-test onto the fixed version is a `cr-verify` design question to settle with it.
+
+The diagnostic runs changed nothing committed: `git status` was clean after each.
 
 ## NOT RUN
 
-- In-app `verify-app.spec.ts` / `app-layer.spec.ts` at `74eb2309`: not re-run by the recorder. The in-app rows of the run record stand on `ed2acfb5` (review round 2); round 3 is covered by the smoke and unit layers only.
-- CR-T57 with a real provider (CR-61), a vision judgment step (CR-15 vision half), CR-T02's switch-off regressions (BLOCKED by pre-existing F1): as in the run record.
-- Any real device or phone; any real model.
-- GitHub was not read by the recorder (the API budget belongs to the shipping agent); main CI at `74eb2309` is not re-read here.
+- The 13 planted defects of the 2026-10-01 version of this file: not repeated, because nothing is recorded for this item.
+- CR-T57 with a real provider (CR-61), and its Studio half at `bed32b89` (the timing section of the failing test was not reached).
+- A vision judgment step (CR-15 vision half).
+- Any real device or phone; any real model (the in-app agent is scripted).
+- GitHub was not read by the recorder.
