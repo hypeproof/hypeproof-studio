@@ -1209,6 +1209,19 @@ html, body, #root {
    sticks to it. A seat with no lesson (no mission sentence) keeps its layout. */
 .hps-shell:has(> .hp-mission .hp-mission-sentence) { overflow-y: auto; }
 .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hps-input-area { flex-shrink: 0; }
+/* ...and region B keeps room under it. Stuck to that scroller, the header covers whatever scrolls
+   beneath it, so on a short window (a terminal panel open, 200% zoom) a 300–380 px header left the
+   conversation and the composer a thin strip or none: at 1280×400 the textarea sat under it
+   (review of 2026-10-05). The header leaves region B 250 px — the composer measured 208 px in the
+   App, model picker and usage line included — and scrolls inside itself past that, but keeps at
+   least its first 150 px: the week, the mission and the action to do now. The whole week-3 header
+   still fits from about 600 px down; only below roughly 400 px does region B get less than 250.
+   Short windows also get the effort rule's compaction below. */
+.hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }
+@media (max-height:600px) {
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { padding:8px 12px 6px; }
+  .hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission .hp-mission-sentence { font-size:18px; }
+}
 .hp-mission-week { margin: 0 0 2px; font-size: 12px; letter-spacing: 1px; color: var(--hp-muted); }
 .hp-mission-sentence { margin: 0 0 8px; font-size: 22px; line-height: 1.35; font-weight: 700; overflow-wrap: anywhere; }
 .hp-mission-activity { margin: 0 0 10px; font-size: 12px; color: var(--hp-muted); overflow-wrap: anywhere; }

@@ -253,7 +253,8 @@ export function screenFlow(
  *   - "An earlier session": the record last changed before `sessionStartedAt`, the moment this
  *     host started (the App's extension host). In the session that opened the record, or once
  *     the student has moved the task again in this one (a step, a submit), there is nothing left
- *     over from last time and there is no entry.
+ *     over from last time and there is no entry. A signal that writes nothing ends it too, which
+ *     the record's time cannot show: `FlowSession` adds that.
  *   - "Continue": only a task still being worked on (assigned, working). A submitted task has no
  *     step to go back to; what follows a submit is the boundary reflection and the next task
  *     (sx-p2), not this entry.
@@ -268,6 +269,57 @@ export function resumeOf(shown: ShownFlow | null, sessionStartedAt: number): { s
   if (!shown || !(shown.changed_at < sessionStartedAt)) return null;
   const { phase, current_step } = shown.curriculum;
   return phase === "assigned" || phase === "working" ? { step: current_step } : null;
+}
+
+/**
+ * SX-02 — one session of the App, as "지난번 이어서" needs it. The host holds it in memory while it
+ * runs and stores nothing (SX-48: no second store); the next session starts a new one.
+ *
+ * `startedAt` is when the session began, the moment the host was made: a record last changed
+ * before it was left by an earlier session (`resumeOf`).
+ *
+ * The entry ends once the student acts on the task in this session: a step start, work (a learning
+ * event they stored, a coach turn that answered them) or a submit, whether or not the signal
+ * writes. On a task left mid-way most of those write nothing: pressing the recorded step's own
+ * Primary starts the step the record already holds, and work on a task already `working` moves no
+ * phase. Judged by the record's time alone, the entry stayed for the whole session after the
+ * student had continued (review of 2026-10-05). A screen refresh (`seen`) is not the student's act
+ * and ends nothing.
+ */
+export class FlowSession {
+  readonly startedAt: number;
+  /** The records the student has acted on in this session. */
+  private readonly acted = new Set<string>();
+  /** The record whose entry the last state sent carries, or null. */
+  private offered: string | null = null;
+
+  constructor(startedAt: number) {
+    this.startedAt = startedAt;
+  }
+
+  /** A signal is about to run on this record. Noted before it runs, so a signal that fails to store still counts. */
+  noteSignal(recordId: string, signal: FlowSignal): void {
+    if (signal.kind !== "seen") this.acted.add(recordId);
+  }
+
+  /**
+   * The entry the next state carries for the record the screen is shown: `resumeOf`, or none once
+   * the student has acted on that record in this session. `recordId` null: this seat runs no task
+   * flow. What it returns is remembered for `stale`.
+   */
+  resumeFor(recordId: string | null, shown: ShownFlow | null): { step: string } | null {
+    const entry = recordId === null || this.acted.has(recordId) ? null : resumeOf(shown, this.startedAt);
+    this.offered = entry ? recordId : null;
+    return entry;
+  }
+
+  /**
+   * True while the screen shows an entry the student has acted on since it was sent: the state has
+   * to be sent again even when the signal changed nothing else (no write, no notice).
+   */
+  get stale(): boolean {
+    return this.offered !== null && this.acted.has(this.offered);
+  }
 }
 
 /**

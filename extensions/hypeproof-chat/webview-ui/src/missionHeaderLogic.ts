@@ -51,7 +51,8 @@ export function stepsRemaining(steps: readonly LessonStep[], currentStepId: stri
  * SX-02 — the lesson step "지난번 이어서" names, or null.
  *
  * The host sends a step id only while the task record still stands where an earlier session
- * left it (`resumeOf`, taskFlowHelpers.ts). The webview does not judge that again; it only
+ * left it and the student has not acted on the task in this one (`FlowSession`,
+ * taskFlowHelpers.ts). The webview does not judge that again; it only
  * refuses to invent: an id that is not one of this lesson's steps (a record of another version,
  * a malformed message) draws no entry, never a fallback step.
  */

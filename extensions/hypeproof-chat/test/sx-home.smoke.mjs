@@ -4,21 +4,26 @@
 //
 // What is judged:
 //   1. the rule (`resumeOf`, src/taskFlowHelpers.ts), pure: an entry only for a record last
-//      changed before this session began, and only while the task is being worked on;
+//      changed before this session began, and only while the task is being worked on; and the
+//      session the host keeps (`FlowSession`): the student's own act on the task in this session
+//      (a step start, work, a submit) ends the entry whether or not it writes the record;
 //   2. the same rule over the App's real record store, across a restart (a fresh store instance
 //      and a later session start, as a reopened App has): the first session never shows it, the
-//      reopened one names the recorded step, and a move in the new session takes it away;
+//      reopened one names the recorded step, pressing that step's own Primary or working on the
+//      task takes it away though neither writes, and so does a move in the new session;
 //   3. `learningState` carries it only when the host gives it;
-//   4. the host passes it, with the session start taken once, and only on a seat that runs the
-//      task flow (static, as test/sx-task-flow.smoke.mjs: ChatPanelProvider cannot load without
-//      VS Code); the webview hands the host's value to region A untouched. Every static check
-//      also runs on a planted source that must fail it;
+//   4. the host passes it, with the session made once, notes every signal before it runs, redraws
+//      a state that still shows an ended entry, and sends it only on a seat that runs the task flow
+//      (static, as test/sx-task-flow.smoke.mjs: ChatPanelProvider cannot load without VS Code);
+//      the webview hands the host's value to region A untouched. Every static check also runs on a
+//      planted source that must fail it;
 //   5. region A draws it (the real MissionHeader through test/sx-render.mjs): below the actions
 //      and the completion conditions, above the growth link, a quiet button with the step's own
 //      title and no figure, and nothing for a step this lesson does not have;
-//   6. styles.css keeps the header on screen while the rest scrolls (SX-01) and leaves one Lime
-//      button while region A shows its Primary (SX-04). A server render applies no CSS, so these
-//      are static tripwires for CI; what they guard was measured in the App.
+//   6. styles.css keeps the header on screen while the rest scrolls, bounded so region B keeps
+//      room on a short window (SX-01), and leaves one Lime button while region A shows its Primary
+//      (SX-04). A server render applies no CSS, so these are static tripwires for CI; what they
+//      guard was measured in the App.
 //
 // Controls (.claude/rules/verification.md rules 2·3): each rule has a sample that must pass
 // (catches a too-strict instrument) and one that must be refused (catches a too-lenient one).
@@ -88,6 +93,53 @@ await check("resumeOf negative: no record read, or a record whose time cannot be
   assert.equal(flow.resumeOf({ curriculum: curriculumAt("working"), changed_at: undefined }, SESSION), null);
 });
 
+// The session the host keeps (FlowSession): the entry ends once the student acts on the task in
+// this session, whether or not the act writes the record.
+const LEFT = { curriculum: curriculumAt("working", "build"), changed_at: SESSION - 1 };
+const REC = "record-a";
+const STUDENT_SIGNALS = [{ kind: "start_step", stepId: "build" }, { kind: "start_step", stepId: "test" }, { kind: "work" }, { kind: "submit" }];
+
+await check("FlowSession positive: until the student acts in this session the entry is resumeOf's, and a screen refresh is not an act", () => {
+  const session = new flow.FlowSession(SESSION);
+  assert.equal(session.startedAt, SESSION);
+  assert.deepEqual(session.resumeFor(REC, LEFT), { step: "build" }, "a task left mid-way last time has no entry before the student did anything: too strict");
+  session.noteSignal(REC, { kind: "seen" });
+  assert.deepEqual(session.resumeFor(REC, LEFT), { step: "build" }, "a screen refresh ended the entry");
+  // Another task's record (another lesson, seat or folder) moving ends nothing here.
+  session.noteSignal("record-b", { kind: "work" });
+  assert.deepEqual(session.resumeFor(REC, LEFT), { step: "build" }, "another record's work ended this record's entry");
+  // The rule underneath still holds: nothing from last time, nothing to offer.
+  assert.equal(session.resumeFor(REC, { ...LEFT, changed_at: SESSION }), null);
+  assert.equal(session.resumeFor(null, LEFT), null, "a seat without the task flow was offered an entry");
+});
+
+await check("FlowSession negative: any act of the student's own on the task ends the entry, written or not (the recorded step's own Primary, work on a working task)", () => {
+  for (const signal of STUDENT_SIGNALS) {
+    const session = new flow.FlowSession(SESSION);
+    assert.deepEqual(session.resumeFor(REC, LEFT), { step: "build" }, "no entry to begin with — the check proves nothing");
+    session.noteSignal(REC, signal);
+    assert.equal(session.resumeFor(REC, LEFT), null, `the entry stays after ${JSON.stringify(signal)} in this session`);
+  }
+});
+
+await check("FlowSession.stale: true only while the screen shows an entry the student has acted on since (so a signal that wrote nothing still redraws)", () => {
+  const session = new flow.FlowSession(SESSION);
+  assert.equal(session.stale, false, "a session that sent nothing owes a redraw");
+  session.resumeFor(REC, LEFT);
+  assert.equal(session.stale, false, "the entry just sent is already stale");
+  session.noteSignal(REC, { kind: "seen" });
+  assert.equal(session.stale, false, "a screen refresh made the entry stale");
+  session.noteSignal(REC, { kind: "start_step", stepId: "build" });
+  assert.equal(session.stale, true, "the student continued and the entry on screen is not redrawn");
+  assert.equal(session.resumeFor(REC, LEFT), null);
+  assert.equal(session.stale, false, "a redraw that took the entry away still owes one");
+  // A first session: no entry was ever on screen, so the student's work owes no redraw for it.
+  const first = new flow.FlowSession(SESSION);
+  first.resumeFor(REC, { ...LEFT, changed_at: SESSION + 5 });
+  first.noteSignal(REC, { kind: "work" });
+  assert.equal(first.stale, false, "a redraw is owed for an entry that was never drawn");
+});
+
 // ── 2. The same rule over the App's real record store, across a restart ─────────
 
 const { FileRecordStorage } = await import("../src/localRecordFile.ts");
@@ -126,6 +178,31 @@ try {
     assert.equal(seen.changed, false, "the refresh rewrote the record — then nothing is left over from last time");
     assert.equal(seen.changed_at, 1_200, "the last change read back is not the one session 1 wrote");
     assert.deepEqual(entry(seen, S2), { step: "build" }, "the reopened App does not offer the step left last time");
+  });
+  // What the host keeps for session 2 (FlowSession): the entry the screen shows, ended by the
+  // student's own act. Neither act below writes the record, so the reopen checks after them still
+  // read the record session 1 left.
+  const rid = flow.taskRecordIdOf(TASK, SEAT_A);
+  const shownBy = (session, outcome) => session.resumeFor(rid, flow.screenFlow(outcome, null, ""));
+  await check("reopened, the student presses the recorded step's own Primary: nothing is written, and the entry goes", async () => {
+    const session = new flow.FlowSession(S2);
+    assert.deepEqual(shownBy(session, await apply({ kind: "seen" }, 5_010, { events: mine })), { step: "build" }, "no entry on the reopen — the check proves nothing");
+    const signal = { kind: "start_step", stepId: "build" };
+    session.noteSignal(rid, signal);
+    const pressed = await apply(signal, 5_020, { events: mine });
+    assert.equal(pressed.changed, false, "the start onto the recorded step wrote the record — the check below is the record's time, not the session");
+    assert.equal(session.stale, true, "the screen still shows the entry and nothing asks for a redraw");
+    assert.equal(shownBy(session, pressed), null, "'지난번 이어서' stays after the student continued the step it names");
+  });
+  await check("reopened, the student works on the task (a coach turn that answered): nothing is written, and the entry goes", async () => {
+    const session = new flow.FlowSession(S2);
+    assert.deepEqual(shownBy(session, await apply({ kind: "seen" }, 5_030, { events: mine })), { step: "build" });
+    session.noteSignal(rid, { kind: "work" });
+    const worked = await apply({ kind: "work" }, 5_040, { events: mine });
+    assert.equal(worked.changed, false, "work on a working task wrote the record — the check proves nothing");
+    assert.equal(shownBy(session, worked), null, "'지난번 이어서' stays after the student worked on the task");
+    // The next session (a reopen after this one) offers it again: nothing was written.
+    assert.deepEqual(shownBy(new flow.FlowSession(5_050), await apply({ kind: "seen" }, 5_051, { events: mine })), { step: "build" }, "a session that only worked lost the entry for the next one");
   });
   await check("reopened, another seat on this account: its own record, opened now, offers nothing", async () => {
     const other = await apply({ kind: "seen" }, 5_002, { seat: SEAT_B });
@@ -185,26 +262,48 @@ const lacks = (text, pattern, why) => (pattern.test(text) ? null : why);
 const provider = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
 const postBody = (text) => between(text, "private async postLearningState()", "private taskFlowNotice");
 await staticCheck(
-  "host: the entry is decided from the record the screen is shown, against the session start, on a flow seat only",
+  "host: the entry is decided by this session from the record the screen is shown, and sent on a flow seat only",
   provider,
   (text) =>
-    lacks(postBody(text), /\.\.\.\(shown \? \{ phase: shown\.curriculum\.phase, currentStep: shown\.curriculum\.current_step, resume: resumeOf\(shown, this\.appSessionStartedAt\) \} : \{\}\)/, "the host does not send the entry from the shown record and the session start, or sends it on a seat without the flow"),
+    lacks(postBody(text), /\n    const resume = this\.flowSession\.resumeFor\(target\?\.recordId \?\? null, shown\);\n/, "the host does not ask this session for the entry of the record shown") ??
+    lacks(postBody(text), /\.\.\.\(shown \? \{ phase: shown\.curriculum\.phase, currentStep: shown\.curriculum\.current_step, resume \} : \{\}\)/, "the host does not send the entry, or sends it on a seat without the flow"),
   [
     // The entry is never sent.
-    [", resume: resumeOf(shown, this.appSessionStartedAt) }", " }"],
-    // "Now" taken per state: every record written a moment ago reads as last time.
-    ["resumeOf(shown, this.appSessionStartedAt)", "resumeOf(shown, Date.now())"],
+    ["currentStep: shown.curriculum.current_step, resume }", "currentStep: shown.curriculum.current_step }"],
+    // The record's time alone (the review's finding): the entry stays after the student continued.
+    ["const resume = this.flowSession.resumeFor(target?.recordId ?? null, shown);", "const resume = resumeOf(shown, this.flowSession.startedAt);"],
     // The record's step sent whatever the session: the first session shows it too.
-    ["resume: resumeOf(shown, this.appSessionStartedAt)", "resume: { step: shown.curriculum.current_step }"],
+    ["const resume = this.flowSession.resumeFor(target?.recordId ?? null, shown);", "const resume = shown ? { step: shown.curriculum.current_step } : null;"],
   ],
 );
 await staticCheck(
-  "host: the session start is taken once, when the host is made",
+  "host: the session is made once, when the host is made, and starts then",
   provider,
-  (text) => lacks(text, /\n  private readonly appSessionStartedAt = Date\.now\(\);\n/, "the session start is not a value fixed when the host is made"),
+  (text) => lacks(text, /\n  private readonly flowSession = new FlowSession\(Date\.now\(\)\);\n/, "the session is not one value fixed when the host is made"),
   [
-    ["private readonly appSessionStartedAt = Date.now();", "private get appSessionStartedAt() { return Date.now(); }"],
-    ["private readonly appSessionStartedAt = Date.now();", "private appSessionStartedAt = 0;"],
+    // A session per state: "now" taken at every state, and the student's acts forgotten.
+    ["private readonly flowSession = new FlowSession(Date.now());", "private get flowSession() { return new FlowSession(Date.now()); }"],
+    ["private readonly flowSession = new FlowSession(Date.now());", "private readonly flowSession = new FlowSession(0);"],
+  ],
+);
+const runFlowBody = (text) => between(text, "private async runTaskFlow(", "private async recordStepStart(");
+const turnEnd = (text) => between(text, "void this.runTaskFlow({ kind: 'work' }, observation, profile)", ".catch(() => undefined);");
+await staticCheck(
+  "host: every signal is noted before it runs, and a state still showing an entry the student ended is sent again",
+  provider,
+  (text) =>
+    lacks(runFlowBody(text), /if \(!target\) return null;[\s\S]*this\.flowSession\.noteSignal\(target\.recordId, signal\);\s*try \{/, "the student's signals never reach the session, or only those that stored") ??
+    lacks(between(text, "private async recordStepStart(", "private view?"), /if \(flow\?\.changed \|\| this\.taskFlowNotice \|\| this\.flowSession\.stale\) await this\.postLearningState\(\);/, "a step start that wrote nothing leaves the ended entry on screen") ??
+    lacks(turnEnd(text), /flow\?\.changed \|\| this\.taskFlowNotice \|\| this\.flowSession\.stale \? this\.postLearningState\(\)/, "a coach turn on a working task leaves the ended entry on screen"),
+  [
+    ["    this.flowSession.noteSignal(target.recordId, signal);\n", ""],
+    // Noted only once the record answered: a busy record keeps the entry after the student acted.
+    [
+      "    this.flowSession.noteSignal(target.recordId, signal);\n    try {\n      const { store, record } = this.crRecordHandle();\n      const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });\n",
+      "    try {\n      const { store, record } = this.crRecordHandle();\n      const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });\n      this.flowSession.noteSignal(target.recordId, signal);\n",
+    ],
+    ["if (flow?.changed || this.taskFlowNotice || this.flowSession.stale) await this.postLearningState();", "if (flow?.changed || this.taskFlowNotice) await this.postLearningState();"],
+    ["flow?.changed || this.taskFlowNotice || this.flowSession.stale ? this.postLearningState()", "flow?.changed || this.taskFlowNotice ? this.postLearningState()"],
   ],
 );
 
@@ -294,14 +393,16 @@ if (!status.available) {
     assert.equal(auditRegionText(planted, { region: "work", minLength: 60 }).ok, false, "a score in the entry passed the audit");
   });
 
-  await check("render negative: no entry without the host's word, for a step the lesson lacks, or with no design file", async () => {
+  await check("render negative: no entry without the host's word, or for a step the lesson lacks", async () => {
     for (const resume of [null, undefined, { step: "없는단계" }]) {
       const none = visibleText(await renderComponent("MissionHeader", { ...homeProps, resume }));
       assert.ok(!none.includes(RESUME), `an entry was drawn for resume=${JSON.stringify(resume)}`);
       assert.ok(none.includes(week3.learning.mission), "the header itself disappeared — the check proves nothing");
     }
-    const noLesson = visibleText(await renderComponent("MissionHeader", { ...homeProps, lesson: null, resume: { step: "build" } }));
-    assert.ok(!noLesson.includes(RESUME), "a seat with no design file was offered a step");
+    // A seat with no design file is NOT judged here. SX-02's negative clause says that seat shows
+    // "지난번 이어서" alone (and no progress card); this slice draws none there, because what it
+    // would resume (the conversation, which reopens by itself, or the project folder) waits for
+    // Jay's decision. Asserting either way would turn that open question into a requirement.
   });
 }
 
@@ -313,17 +414,36 @@ const cssRules = (text) =>
   [...text.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map((m) => [m[1].trim().replace(/\s+/g, " "), m[2]]);
 const selectorsOf = (list) => list.split(",").map((s) => s.trim()).filter(Boolean);
 
-/** SX-01: while region A shows a lesson's mission, the shell is the scroller the sticky header sticks to. */
+/**
+ * SX-01: while region A shows a lesson's mission, the shell is the scroller the sticky header
+ * sticks to — and the header is bounded inside it, so region B keeps room on a short window (the
+ * review of 2026-10-05: unbounded, a 346 px header covered the composer at 1280×400).
+ */
+const LESSON_SHELL = ".hps-shell:has(> .hp-mission .hp-mission-sentence)";
 function scrollerProblem(css) {
   const rules = cssRules(css);
   const sticky = rules.find(([sel]) => sel === ".hp-mission");
   if (!sticky || !/position:\s*sticky/.test(sticky[1]) || !/top:\s*0/.test(sticky[1])) return "region A's header is no longer sticky";
-  const scroller = rules.find(([sel, body]) => sel === ".hps-shell:has(> .hp-mission .hp-mission-sentence)" && /overflow-y:\s*auto/.test(body));
-  return scroller ? null : "the shell is not the scroller while the mission is on screen: the document scrolls the header away";
+  const scroller = rules.find(([sel, body]) => sel === LESSON_SHELL && /overflow-y:\s*auto/.test(body));
+  if (!scroller) return "the shell is not the scroller while the mission is on screen: the document scrolls the header away";
+  // The bound: the header's whole box leaves region B a fixed reserve (but keeps a floor of its
+  // own), and what does not fit scrolls inside the header rather than over region B.
+  const bound = rules.find(([sel, body]) => sel === `${LESSON_SHELL} > .hp-mission` && /max-height/.test(body));
+  if (!bound) return "the sticky header has no bound: on a short window it covers the composer";
+  const [, body] = bound;
+  if (!/max-height:\s*max\(\d+px,\s*calc\(100%\s*-\s*\d+px\)\)/.test(body)) return `the header's bound is not "all of the shell but region B's reserve, with a floor": ${body.trim()}`;
+  if (!/overflow-y:\s*auto/.test(body)) return "the bounded header does not scroll inside itself: what does not fit is cut";
+  if (!/box-sizing:\s*border-box/.test(body)) return "the bound leaves out the header's padding: the box eats into region B's reserve";
+  return null;
 }
-await staticCheck("SX-01 styles: the header stays on screen while the rest scrolls (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, scrollerProblem, [
+await staticCheck("SX-01 styles: the header stays on screen while the rest scrolls, and leaves region B room (measured in the App: e2e/sx/home-app.spec.ts)", stylesCss, scrollerProblem, [
   [".hps-shell:has(> .hp-mission .hp-mission-sentence) { overflow-y: auto; }\n", ""],
   ["position: sticky; top: 0; z-index: 2;", "position: relative; z-index: 2;"],
+  // The review's finding: the header sticks with no bound.
+  [".hps-shell:has(> .hp-mission .hp-mission-sentence) > .hp-mission { box-sizing: border-box; max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }\n", ""],
+  ["max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }", "max-height: none; overflow-y: auto; }"],
+  ["max-height: max(150px, calc(100% - 250px)); overflow-y: auto; }", "max-height: max(150px, calc(100% - 250px)); }"],
+  ["box-sizing: border-box; max-height: max(150px", "max-height: max(150px"],
 ]);
 
 /**

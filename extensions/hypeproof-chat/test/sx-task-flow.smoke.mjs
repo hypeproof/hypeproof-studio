@@ -246,11 +246,12 @@ await hostCheck(
   provider,
   (text) =>
     lacks(stepBody(text), /if \(signal\.status === "in_progress" && runsTaskFlow\(this\.cachedProfile\)\) void this\.recordStepStart\(signal\.step_id\)/, "a started step never reaches the flow") ??
-    lacks(between(text, "private async recordStepStart(", "private view?"), /runTaskFlow\(\{ kind: 'start_step', stepId \}[\s\S]*if \(flow\?\.changed \|\| this\.taskFlowNotice\) await this\.postLearningState\(\);/, "a step start is stored but never redrawn"),
+    // The third condition is SX-02's (test/sx-home.smoke.mjs judges it); this check needs the first two.
+    lacks(between(text, "private async recordStepStart(", "private view?"), /runTaskFlow\(\{ kind: 'start_step', stepId \}[\s\S]*if \(flow\?\.changed \|\| this\.taskFlowNotice \|\| this\.flowSession\.stale\) await this\.postLearningState\(\);/, "a step start is stored but never redrawn"),
   [
     ['if (signal.status === "in_progress" && runsTaskFlow(this.cachedProfile)) void this.recordStepStart(signal.step_id)', 'if (false) void this.recordStepStart(signal.step_id)'],
     // M5 — the step start's redraw is gone.
-    ["if (flow?.changed || this.taskFlowNotice) await this.postLearningState();\n  }", "\n  }"],
+    ["if (flow?.changed || this.taskFlowNotice || this.flowSession.stale) await this.postLearningState();\n  }", "\n  }"],
   ],
 );
 

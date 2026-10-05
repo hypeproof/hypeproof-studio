@@ -78,9 +78,9 @@ export interface LearningStatePayload {
   notice?: string;
   /**
    * SX-02 — region A's "지난번 이어서": the step the task record holds, sent only while that
-   * record still stands where an earlier session of the app left it and the task is being worked
-   * on (`resumeOf` in taskFlowHelpers.ts decides). Absent otherwise, and on every seat without
-   * the task flow.
+   * record still stands where an earlier session of the app left it, the task is being worked
+   * on, and the student has not acted on it in this session (`FlowSession.resumeFor` in
+   * taskFlowHelpers.ts decides). Absent otherwise, and on every seat without the task flow.
    */
   resume?: { step: string };
 }

@@ -161,7 +161,9 @@ const text = visibleText(html);
   // The assertion is strengthened, not relaxed: it now pins the ABSENCE of the invented
   // sentence AND the absence of an h1, while still requiring the activity line SX-02
   // does ask for ("현재 프로젝트 상태"). The 이어가기 진입 ("지난번 이어서") is judged in
-  // test/sx-home.smoke.mjs; with no design file it is never drawn (checked there too).
+  // test/sx-home.smoke.mjs. On a seat with no design file it is not drawn today, and no test
+  // pins that: SX-02 says such a seat shows it alone, and what it would resume there waits for
+  // Jay's decision.
   const noneHtml = await renderComponent("MissionHeader", { ...homeProps, lesson: null });
   const none = visibleText(noneHtml);
   assert.doesNotMatch(none, /아직 연결된 수업이 없습니다/, `설계 파일이 없는데 문장을 지어냈다: ${none}`);

@@ -18,7 +18,9 @@
 // row and a lesson-pinned token) without the authoring, rehearsal and confirmation steps: those
 // are Chalk's contract, not the learner's screen this Service exists to show.
 //
-// Control route (specs only): GET /__sx/state — the turns the model answered.
+// Control routes (specs only): GET /__sx/state — the turns the model answered; GET /__sx/hold?ms=N
+// — the next streamed turn starts at once and holds its reply for N ms (at most 30 s), so a spec
+// can look at the screen while the coach is answering.
 import "../../worker/test/harness/loader.mjs";
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -74,16 +76,19 @@ writeFileSync(tokenFile, (await issue({ u: USER, c: cohort, p: profile.id, lesso
 
 // ── the model: one fixed line per turn ───────────────────────────────────────
 const state = { turns: [] };
+/** ms the next streamed turn holds its reply (GET /__sx/hold); 0 = answer at once. */
+let holdNext = 0;
 const ANSWER = "[로컬 시험 응답] 받았어요. 기대 조건부터 같이 정해 볼까요?";
-const sse = (model) => {
-  const ev = (t, d) => `event: ${t}\ndata: ${JSON.stringify(d)}\n\n`;
-  return ev("message_start", { type: "message_start", message: { id: "sx", type: "message", role: "assistant", model, content: [], usage: { input_tokens: 12, output_tokens: 0 } } })
-    + ev("content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } })
-    + ev("content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: ANSWER } })
+const ev = (t, d) => `event: ${t}\ndata: ${JSON.stringify(d)}\n\n`;
+/** The reply in two parts: the start, and the text with the end. A held turn sends the second part late. */
+const sse = (model) => [
+  ev("message_start", { type: "message_start", message: { id: "sx", type: "message", role: "assistant", model, content: [], usage: { input_tokens: 12, output_tokens: 0 } } })
+    + ev("content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }),
+  ev("content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: ANSWER } })
     + ev("content_block_stop", { type: "content_block_stop", index: 0 })
     + ev("message_delta", { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 9 } })
-    + ev("message_stop", { type: "message_stop" });
-};
+    + ev("message_stop", { type: "message_stop" }),
+];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
@@ -92,7 +97,20 @@ globalThis.fetch = async (input, init) => {
     if (url.pathname.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
     state.turns.push({ at: Date.now(), system_has_mission: JSON.stringify(body.system ?? "").includes(week3.learning.mission) });
     if (!body.stream) return Response.json({ model: body.model, content: [{ type: "text", text: ANSWER }], stop_reason: "end_turn", usage: { input_tokens: 12, output_tokens: 9 } });
-    return new Response(sse(body.model), { headers: { "content-type": "text/event-stream" } });
+    const [start, rest] = sse(body.model);
+    const hold = holdNext;
+    holdNext = 0;
+    if (!hold) return new Response(start + rest, { headers: { "content-type": "text/event-stream" } });
+    const bytes = new TextEncoder();
+    const held = new ReadableStream({
+      async start(c) {
+        c.enqueue(bytes.encode(start));
+        await new Promise((r) => setTimeout(r, hold));
+        c.enqueue(bytes.encode(rest));
+        c.close();
+      },
+    });
+    return new Response(held, { headers: { "content-type": "text/event-stream" } });
   }
   if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") throw new Error(`blocked outbound fetch: ${url.origin}`);
   return realFetch(input, init);
@@ -101,6 +119,10 @@ globalThis.fetch = async (input, init) => {
 const server = createServer(async (req, res) => {
   try {
     if (req.url === "/__sx/state") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ...state, lesson, completion: completion.map((c) => c.id) }));
+    if (req.url?.startsWith("/__sx/hold?")) {
+      holdNext = Math.max(0, Math.min(30_000, Number(new URL(req.url, "http://local").searchParams.get("ms")) || 0));
+      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ hold: holdNext }));
+    }
     const parts = [];
     for await (const p of req) parts.push(p);
     const body = Buffer.concat(parts);
