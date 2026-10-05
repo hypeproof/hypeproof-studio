@@ -20,6 +20,9 @@
 //   - No independence is inferred. Nothing in a share records independent performance, so `independent` is refused, and
 //     `assisted` needs a cited help request or the learner's own record of the help they used. A missing record is
 //     `unknown`, never "did it alone"; a record saying "no help" is the learner's self-report, never independence.
+//   - Content only after the view audit. Besides which parts hold something (structure), the one thing a retrospective reads
+//     out of a share's content is whether its task record names help, and only once the instructor opened that share through
+//     the audited share view; until then the record reads `not_opened` and is no basis (reportedHelpSeen).
 //   - No score. A key shaped like a score is refused by the measurement core's own check (forbidPersonalMetrics).
 import { forbidPersonalMetrics, isHumanEvidence } from './measurement-core/learning-events.ts';
 import { HELP_MODES } from './lesson-help-mode.ts';
@@ -203,10 +206,21 @@ const hasRecord = (content: Record<string, unknown>, part: (typeof RECORD_PARTS)
  * What the learner's task record says about help, as a category and nothing more: `help` (any help named), `no_help` (they
  * wrote that they used none) or null (no record — unknown, never "none"). Self-reported either way.
  */
-export function reportedHelpOf(s: Pick<ShareRow, 'content_json'>): 'help' | 'no_help' | null {
+export type ReportedHelp = 'help' | 'no_help';
+export function reportedHelpOf(s: Pick<ShareRow, 'content_json'>): ReportedHelp | null {
   const t = contentOf(s).independent_task;
   if (!isObject(t) || !Array.isArray(t.help) || !t.help.length) return null;
   return t.help.every((h) => h === 'none') ? 'no_help' : 'help';
+}
+/**
+ * The same category as a retrospective may read it for ONE instructor. It is drawn from the record's content, and no share
+ * content leaves the Service before the view audit (ADM-07; the share detail route writes it first). So it is read only once
+ * `opened`, i.e. this instructor opened the share through that audited view; until then the answer is `not_opened`, whatever
+ * the record says. That a task record exists is structure (shareParts), so it is no leak. Null = no task record.
+ */
+export function reportedHelpSeen(s: Pick<ShareRow, 'content_json'>, opened: boolean): ReportedHelp | 'not_opened' | null {
+  if (!opened) return hasRecord(contentOf(s), 'independent_task') ? 'not_opened' : null;
+  return reportedHelpOf(s);
 }
 
 /** The parts of a share that hold something now, each with whose words they are. Never the content itself. */
@@ -323,8 +337,9 @@ export interface ShareLessonRow { share_id: string; course_id: string; version: 
 /** The version a retrospective is about: its course, its version id and when it was frozen (unix seconds; null = unreadable). */
 export interface RetroBase { course_id: string; version: string; frozen_at: number | null }
 /** A share as a retrospective reads it: the row, the learner's answer as a reader sees it (`responseFor`), whether that answer
- *  is to the feedback as it reads NOW, and the lesson recorded when it was sent (null = none recorded). */
-export interface CitedShare { share: ShareRow; response: ResponseRow | null; response_current: boolean; lesson: ShareLessonRow | null }
+ *  is to the feedback as it reads NOW, the lesson recorded when it was sent (null = none recorded), and whether the reading
+ *  instructor has opened it through the audited view (a `view` row of theirs; see reportedHelpSeen). */
+export interface CitedShare { share: ShareRow; response: ResponseRow | null; response_current: boolean; lesson: ShareLessonRow | null; opened: boolean }
 
 /**
  * Can this share stand behind a finding about `base` at all ('' = yes)? A share sent before the version was frozen is about
@@ -349,21 +364,29 @@ export const answerRefusal = (src: RetroSource, x: Pick<CitedShare, 'response_cu
  * learner's own task record naming help they used, cited by that part (`learner_report`, a self-report). "No help" in a
  * record is no basis for anything: it neither supports `assisted` nor makes the finding `independent`.
  */
-export function assistanceBasis(sources: ReadonlyArray<{ part: string; kind?: string; reported_help?: 'help' | 'no_help' | null }>) {
+export function assistanceBasis(sources: ReadonlyArray<{ part: string; kind?: string; reported_help?: ReportedHelp | 'not_opened' | null }>) {
   const basis: Array<'help_request' | 'learner_report'> = [];
   if (sources.some((s) => s.kind === 'help')) basis.push('help_request');
   if (sources.some((s) => s.part === 'independent_task' && s.reported_help === 'help')) basis.push('learner_report');
   return basis;
 }
-/** `assisted` needs a basis among the shares it cites (assistanceBasis). */
-export const assistanceRefusal = (f: RetroFinding, shareOf: (shareId: string) => { kind: string; reported_help: 'help' | 'no_help' | null } | undefined) =>
-  f.assistance === 'assisted' && !assistanceBasis(f.sources.map((s) => ({ part: s.part, ...shareOf(s.share_id) }))).length ? 'unsupported_assistance' : '';
+/**
+ * `assisted` needs a basis among the shares it cites (assistanceBasis). A cited task record the instructor has not opened is
+ * no basis, and the refusal says so (`record_not_opened`) whatever the record holds, so the answer never tells an unopened
+ * record's content apart.
+ */
+export const assistanceRefusal = (f: RetroFinding, shareOf: (shareId: string) => { kind: string; reported_help: ReportedHelp | 'not_opened' | null } | undefined) => {
+  if (f.assistance !== 'assisted') return '';
+  const sources = f.sources.map((s) => ({ part: s.part, ...shareOf(s.share_id) }));
+  if (assistanceBasis(sources).length) return '';
+  return sources.some((s) => s.part === 'independent_task' && s.reported_help === 'not_opened') ? 'record_not_opened' : 'unsupported_assistance';
+};
 
 export interface ResolvedShare {
   available: boolean; kind?: string; student_id?: string; parts?: ReadonlySet<SharePart>;
   lesson?: 'this_version' | 'unknown'; response_current?: boolean;
-  /** reportedHelpOf the share: what its task record says about help (null = no record). */
-  reported_help?: 'help' | 'no_help' | null;
+  /** reportedHelpSeen the share: what its task record says about help, as this instructor may read it (null = no record). */
+  reported_help?: ReportedHelp | 'not_opened' | null;
 }
 
 /** One finding as it reads NOW, from the shares the instructor can still read. Recomputed on every read, never stored. */
@@ -376,8 +399,10 @@ export function findingView(f: RetroFinding, resolve: (shareId: string) => Resol
       ...(r.available && !available ? { part_empty: true } : {}),
       ...(available ? { kind: r.kind, student_id: r.student_id, lesson: r.lesson ?? 'unknown' } : {}),
       ...(available && s.part === 'learner_response' ? { answers_current_feedback: r.response_current === true } : {}),
-      // The learner's own record, read as a category only: whether it names help (self-reported, never an observation).
-      ...(available && s.part === 'independent_task' && r.reported_help ? { self_reported_help: r.reported_help } : {}),
+      // The learner's own record, read as a category only: whether it names help (self-reported, never an observation), and
+      // only once this instructor opened it through the audited view; before that, only that it is not opened yet.
+      ...(available && s.part === 'independent_task' && (r.reported_help === 'help' || r.reported_help === 'no_help') ? { self_reported_help: r.reported_help } : {}),
+      ...(available && s.part === 'independent_task' && r.reported_help === 'not_opened' ? { record_not_opened: true } : {}),
     };
   });
   const live = sources.filter((s) => s.available);
@@ -405,15 +430,17 @@ export function findingView(f: RetroFinding, resolve: (shareId: string) => Resol
  * cohort's current roster (null = unreadable). The Service keeps no per-turn record of help used or of a learner stopping in
  * a class turn, so those two are reported unobserved rather than counted as zero. What learners WROTE about the help they
  * used, in the task records this retrospective cites, is counted apart (`help_reported`, per learner, self-reported): a learner
- * whose cited records name any help counts once under `with_help`; one whose records all say "no help" under `no_help`; a
- * learner without a cited task record is in neither — unknown, not "no help".
+ * whose cited records name any help counts once under `with_help`; one whose records all say "no help" under `no_help`; one
+ * with a cited record this instructor has not opened (and none opened that names help) under `not_opened` — what that record
+ * says is not read here, so it is neither "help" nor "no help". A learner without a cited task record is in none of the three.
  */
 export function coverageOf(roster: readonly string[] | null, findings: ReturnType<typeof findingView>[]) {
-  const learners = new Set<string>(), help = new Set<string>(), withHelp = new Set<string>(), noHelp = new Set<string>();
+  const learners = new Set<string>(), help = new Set<string>(), withHelp = new Set<string>(), noHelp = new Set<string>(), notOpened = new Set<string>();
   for (const f of findings) for (const s of f.sources) if (s.available) {
     if (s.student_id) learners.add(s.student_id);
     if (s.kind === 'help') help.add(s.share_id);
     if (s.student_id && s.self_reported_help) (s.self_reported_help === 'help' ? withHelp : noHelp).add(s.student_id);
+    if (s.student_id && s.record_not_opened) notOpened.add(s.student_id);
   }
   return {
     roster: roster ? roster.length : null,
@@ -421,7 +448,11 @@ export function coverageOf(roster: readonly string[] | null, findings: ReturnTyp
     learners_without_sources: roster ? roster.filter((u) => !learners.has(u)).length : null,
     help_requests_cited: help.size,
     help_use: 'unobserved' as const,
-    help_reported: { source_state: 'self_reported' as const, with_help: withHelp.size, no_help: [...noHelp].filter((u) => !withHelp.has(u)).length },
+    help_reported: {
+      source_state: 'self_reported' as const, with_help: withHelp.size,
+      no_help: [...noHelp].filter((u) => !withHelp.has(u) && !notOpened.has(u)).length,
+      not_opened: [...notOpened].filter((u) => !withHelp.has(u)).length,
+    },
     stopped: 'unobserved' as const,
   };
 }

@@ -254,15 +254,17 @@ try {
   const card2 = learner2.locator('#records article').filter({ hasText: '내 독립 과제 기록' });
   await card2.waitFor({ timeout: 8000 }).catch(async (e) => { throw Error('learner status: ' + await learner2.locator('#status').innerText() + ' | ' + e.message); });
   const sent = one("SELECT id, content_json FROM classroom_shares WHERE student_id='student-c' ORDER BY created_at DESC LIMIT 1"), sc = JSON.parse(sent.content_json);
-  assert.deepEqual([sc.independent_task.task, sc.independent_task.help, sc.self_reliance.map((i) => [i.work, i.how])], [TASK_TEXT, ['hint', 'person'], [['휴진 공지 문구 수정', 'direct'], ['도메인 연결', 'expert']]]);
+  assert.deepEqual([sc.independent_task.task, sc.independent_task.help, sc.independent_task.help_note, sc.self_reliance.map((i) => [i.work, i.how])], [TASK_TEXT, ['hint', 'person'], '줄바꿈 위치만 강사님께 물었습니다', [['휴진 공지 문구 수정', 'direct'], ['도메인 연결', 'expert']]]);
   const card2Text = await card2.innerText(); results.learner_records = card2Text;
-  assert.match(card2Text, /받은 도움: AI 힌트를 받았습니다, 강사·동료에게 도움을 받았습니다/); assert.match(card2Text, /전문가에게 맡길 일 — 도메인 연결 \(업체에 맡깁니다\)/);
+  assert.match(card2Text, /받은 도움: AI 힌트를 받았습니다, 강사·동료에게 도움을 받았습니다/); assert.match(card2Text, /도움 내용: 줄바꿈 위치만 강사님께 물었습니다/); assert.match(card2Text, /전문가에게 맡길 일 — 도메인 연결 \(업체에 맡깁니다\)/);
   assert.equal(await learner2.locator('#share-records').isHidden(), true, 'the form is reset after sending');
   assert.equal(await learner2.locator('#reliance-rows > li').count(), 0);
   assert.ok(await noOverflow(learner2), 'no horizontal scroll at 390px');
   await card2.scrollIntoViewIfNeeded(); await learner2.screenshot({ path: path.join(out, 'fl-06-learner-records-390.png') });
   // A second learner's record that says "no help" (written through the API, as the other shares of this suite are).
   assert.equal((await api('/v1/classroom/shares', 'POST', { id: 'share-nohelp', recipient_id: 'teacher-a', kind: 'submission', consent: true, duration_minutes: 60, content: { verification: '혼자 10월 16일 공지로 바꿨습니다', independent_task: { task: '시연과 다른 날짜의 휴진 공지', help: ['none'] } } }, studentB)).status, 201);
+  // And one that says the AI made the work (AE-T34's AI 대행).
+  assert.equal((await api('/v1/classroom/shares', 'POST', { id: 'share-aimade', recipient_id: 'teacher-a', kind: 'submission', consent: true, duration_minutes: 60, content: { verification: '시연과 다른 진료 안내 문구를 확인했습니다', independent_task: { task: '시연과 다른 진료 안내 문구', help: ['ai_made'] } } }, studentA)).status, 201);
   ok('learner: on a 결과물 제출 (and only there, only where the Service offers it) the independent task, the help used ("도움 없이" alone) and the self-reliance rows are recorded; nothing pre-selected, an unjudged row refused before sending, shown back on the card');
 
   const board2 = await open('/manage', { width: 1280, height: 720 });
@@ -299,8 +301,22 @@ try {
   assert.match(view5, /관찰 1 · 관찰됨 — 학생이 쓴 말이 근거입니다 · 사람의 피드백 미관찰 · 도움을 받음\(학생이 적은 도움 · 자기 보고\)/);
   assert.match(view5, /관찰 2 · 관찰됨 — 학생이 쓴 말이 근거입니다 · 사람의 피드백 미관찰 · 도움 여부 모름/);
   assert.match(view5, /관찰 3 · 관찰됨 — 학생이 쓴 말이 근거입니다 · 사람의 피드백 미관찰 · 도움 여부 모름/);
-  assert.match(view5, /독립 과제 기록 \(학생이 쓴 말\) — student-b · 결과물 제출 · 자기 보고: 도움 없이 했다고 적음\(혼자 해낸 것을 관찰한 것은 아님\)/);
-  assert.match(view5, /독립 과제 기록에 적은 도움\(학생의 자기 보고\): 받았다고 적은 학생 1명 · 도움 없이 했다고 적은 학생 1명 · 도움 사용과 중간에 멈춤은 Service 기록으로 확인할 수 없습니다\(미관찰\)/);
+  // share-nohelp was never opened by this instructor: nothing of what its record says is shown, and no view was recorded.
+  assert.match(view5, /독립 과제 기록 \(학생이 쓴 말\) — student-b · 결과물 제출 · 아직 열어 보지 않은 기록 — ‘내용 보기’로 연 뒤 다시 열면 학생이 적은 도움이 보입니다/);
+  assert.ok(!view5.includes('도움 없이 했다고 적음'), 'nothing drawn from a record the instructor has not opened');
+  assert.match(view5, /독립 과제 기록에 적은 도움\(학생의 자기 보고\): 받았다고 적은 학생 1명 · 도움 없이 했다고 적은 학생 0명 · 아직 열어 보지 않은 기록의 학생 1명\(도움 여부 모름\) · 도움 사용과/);
+  const viewsOf = (shareId) => one('SELECT count(*) AS n FROM classroom_share_audit WHERE share_id=?', shareId).n;
+  assert.equal(viewsOf('share-nohelp'), 0, 'the retrospective recorded no view and read nothing out');
+  await page.locator('#retro-view').scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(out, 'fl-08a-retrospective-unopened-1280.png') });
+  // The instructor opens it with 내용 보기 (an audited view the learner can see); reopened, the retrospective reads its "no help".
+  await page.locator('#retro-sources li', { hasText: 'student-b · 결과물 제출' }).locator('button').click();
+  await page.locator('#retro-source-view').filter({ hasText: 'student-b' }).filter({ hasText: '받은 도움: 도움 없이 했습니다' }).waitFor();
+  assert.equal(viewsOf('share-nohelp'), 1);
+  const recordsRetro = one('SELECT retro_id FROM lesson_retrospectives WHERE course_id=? ORDER BY created_at DESC, retro_id DESC LIMIT 1', course).retro_id;
+  await page.locator('#retro-pick').selectOption(''); await page.locator('#retro-pick').selectOption(recordsRetro);
+  const view6 = await viewShows(/자기 보고: 도움 없이 했다고 적음/); results.view_records_opened = view6;
+  assert.match(view6, /독립 과제 기록 \(학생이 쓴 말\) — student-b · 결과물 제출 · 자기 보고: 도움 없이 했다고 적음\(혼자 해낸 것을 관찰한 것은 아님\)/);
+  assert.match(view6, /독립 과제 기록에 적은 도움\(학생의 자기 보고\): 받았다고 적은 학생 1명 · 도움 없이 했다고 적은 학생 1명 · 도움 사용과 중간에 멈춤은 Service 기록으로 확인할 수 없습니다\(미관찰\)/);
   await page.locator('#retro-view').scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(out, 'fl-08-retrospective-records-1280.png') });
   // Negative: "no help" is no basis for 도움을 받음 — refused in the instructor's words, nothing written.
   const retrosBefore = one('SELECT count(*) AS n FROM lesson_retrospectives').n;
@@ -310,8 +326,44 @@ try {
   await decision('lesson', 'hold', '근거를 더 본다', []);
   await page.locator('#retro-save').click(); await retroStatus(/‘도움을 받음’은 도움 요청 공유나, 도움을 받았다고 적은 독립 과제 기록을 근거로 고를 때만/);
   assert.equal(one('SELECT count(*) AS n FROM lesson_retrospectives').n, retrosBefore, 'nothing was written');
+  // AE-T34's AI 대행: a record saying the AI made the work. Not opened yet, it is no basis: refused by name, nothing written, no
+  // view recorded. Opened with 내용 보기, it reads "AI가 대신 만들었습니다", and 도움을 받음 stands on it.
+  const cited = page.locator('#retro-findings > li').last();
+  await cited.locator('[data-retro-source][value="share-nohelp|independent_task"]').uncheck(); await cited.locator('[data-retro-source][value="share-aimade|independent_task"]').check();
+  await page.locator('#retro-hypothesis').fill('AI가 대신 만든 결과물도 학생이 그렇다고 적는다');
+  await page.locator('#retro-save').click(); await retroStatus(/근거로 고른 독립 과제 기록을 아직 열어 보지 않았습니다/);
+  assert.deepEqual([one('SELECT count(*) AS n FROM lesson_retrospectives').n, viewsOf('share-aimade')], [retrosBefore, 0], 'nothing was written and no view recorded');
+  await page.locator('#retro-sources li').filter({ hasText: 'student-a · 결과물 제출' }).filter({ hasText: '독립 과제 기록' }).locator('button').click();
+  await page.locator('#retro-source-view').filter({ hasText: '받은 도움: AI가 대신 만들었습니다' }).waitFor();
+  results.source_view_ai_made = await page.locator('#retro-source-view').innerText(); assert.equal(viewsOf('share-aimade'), 1);
+  await page.locator('#retro-save').click(); await retroStatus(/돌아보기를 저장했습니다/);
+  const view7 = await viewShows(/관찰 1 · 관찰됨/); results.view_ai_made = view7;
+  assert.match(view7, /관찰 1 · 관찰됨 — 학생이 쓴 말이 근거입니다 · 사람의 피드백 미관찰 · 도움을 받음\(학생이 적은 도움 · 자기 보고\)/);
+  assert.match(view7, /독립 과제 기록 \(학생이 쓴 말\) — student-a · 결과물 제출 · 자기 보고: 도움을 받았다고 적음/);
+  assert.match(view7, /받았다고 적은 학생 1명 · 도움 없이 했다고 적은 학생 0명 · 도움 사용과/);
   assert.deepEqual(errors, [], 'no page errors');
-  ok('retrospective: the records are cited as the learner\'s words; 도움을 받음 stands on a record naming help, "no help" stays a self-report (never independence, refused as a basis), and reported help is counted apart from what the Service observed');
+  ok('retrospective: the records are cited as the learner\'s words, read only after the instructor opened them (audited); 도움을 받음 stands on a record naming help, AI 대행 included, "no help" stays a self-report (never independence, refused as a basis), and reported help is counted apart from what the Service observed');
+
+  // ── 10. /sharing after a send whose answer was lost (the page's 15-second abort, simulated after the Service stored it): the page
+  //       keeps that request id, so an unchanged retry is the same share. Removing a row changes what will be sent, so the next
+  //       send is a new share, never "기록이 변경됐습니다" on the old id ──
+  await learner2.locator('#kind').selectOption('submission'); await learner2.locator('#share-records').waitFor();
+  await learner2.locator('#recipient').fill('teacher-a'); await learner2.locator('#verification').fill('예약 버튼 문구를 바꿨습니다');
+  await row('예약 버튼 문구 수정', '직접 할 일'); const extra = await row('지도 링크 교체', '도움을 받아 할 일');
+  await learner2.locator('#consent').check();
+  const mine = () => local.db.prepare("SELECT id, content_json FROM classroom_shares WHERE student_id='student-c' ORDER BY created_at, rowid").all().map((r) => ({ id: r.id, rows: JSON.parse(r.content_json).self_reliance?.length ?? 0 }));
+  const before10 = mine().length; let posts = 0;
+  await learner2.route('**/v1/classroom/shares', async (route) => { if (route.request().method() === 'POST' && posts++ === 0) { await route.fetch(); return route.abort('timedout'); } return route.continue(); });
+  await learner2.locator('#submit').click(); await learner2.locator('#status').filter({ hasText: '입력 내용은 유지됩니다' }).waitFor();
+  await learner2.unroute('**/v1/classroom/shares');
+  assert.equal(mine().length, before10 + 1, 'positive control: the Service stored the send whose answer the page lost');
+  await extra.locator('button', { hasText: '항목 삭제' }).click(); await learner2.locator('#submit').click();
+  await learner2.locator('#status').filter({ hasText: '공유 기록 ' + (before10 + 2) + '건' }).waitFor({ timeout: 8000 })
+    .catch(async (e) => { throw Error('learner status: ' + await learner2.locator('#status').innerText() + ' | ' + e.message); });
+  const [lostShare, fresh] = mine().slice(-2);
+  assert.deepEqual([lostShare.rows, fresh.rows, lostShare.id !== fresh.id], [2, 1, true], 'a new share with one row, beside the stored one with two');
+  assert.deepEqual(errors, [], 'no page errors');
+  ok('learner: after a send whose answer was lost, removing a self-reliance row makes the next send a new share, not a 409 on the old request id');
   writeFileSync(path.join(out, 'result.json'), JSON.stringify({ passed: n, ...results }, null, 2));
 } finally { await browser?.close(); chalkServer.close(); globalThis.fetch = realFetch; local.close(); }
 console.log(`${n} feedback-loop browser checks passed`);

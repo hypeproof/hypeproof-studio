@@ -407,10 +407,10 @@ supersedes slice 1's "EDU-04/05 not built"; the human parts below are still NOT 
 | Independent task | On a 결과물 제출 the learner may add `independent_task` to the share content: the task in their words (how it differs from the demonstration; required, at most 2,000 characters), the help they used (one or more of `none`, `demonstrate`, `hint`, `co_edit`, `ai_made`, `person`; the middle three are the lesson's own help strategies, `HELP_MODES` without `independent`, which is a strategy and not help; `none` stands alone) and an optional note (at most 2,000). Nothing is pre-selected. The help list is stored in a fixed order, so the same choice is the same share on a retry | EDU-04, EDU-03 |
 | Self-reliance | `self_reliance`: 1 to 10 items, each a piece of work (at most 500), the learner's judgment `direct` (직접 할 일), `helped` (도움을 받아 할 일) or `expert` (전문가에게 맡길 일), and an optional note (at most 1,000). Nothing is pre-selected; `/sharing` refuses a row without a judgment before anything is sent, and the Service refuses it too (`invalid_how`). A share may carry only this list (L5's 운영 판단 메모) | EDU-05 |
 | One envelope | Both records are part of what the learner consents to send: the share's recipient, view audit, withdrawal, expiry and purge apply unchanged, and a correction is a new share. Credentials are masked before storage. Records go with a submission only (`record_needs_submission` on a help request). Exact keys, every refusal named (`invalid_independent_task`, `invalid_task`, `invalid_help`, `help_none_with_other`, `invalid_help_note`, `invalid_self_reliance`, `invalid_work`, `invalid_how`, `invalid_reliance_note`); score-shaped keys refused (`unsupported_score`). While the switch is on, the student body cap grows by the most the records can add (`RECORDS_BODY_MAX`, six JSON bytes per unit) | ADM-03/07/14 boundaries unchanged |
-| Switch off | A body naming a record is refused exactly as an unknown field was before (400 `select supported content fields`), `GET /v1/classroom/shares` names no `share_records`, the body cap is the old one, and `/sharing` never shows the section | — |
-| Who reads them | The learner on their own `/sharing` card (내 독립 과제 기록 (자기 보고), 내 자립 범위 정리 (내 판단)). The instructor in the `/manage` share detail (독립 과제 기록 · 학생의 자기 보고, 자립 범위 정리 · 학생의 판단) and in `/authoring` 07 "내용 보기", both the audited share view. The instructor list and `/sources` carry no record text, and the retrospective view carries none either: of a cited task record it says only whether it names help (`self_reported_help`, a category derived on each read). The Studio App's help panel reads only its own fields and ignores both keys | AE-43 boundaries |
-| Retrospective | Both are citable parts with origin `learner`, so a finding citing one is observed: the learner's own words. `assisted` now stands on a cited help request or on a cited `independent_task` part that names help (`assistance_basis`: `help_request`, `learner_report`); another part of the same share is no basis. A record that says only `none` reads as the learner's self-report (`self_reported_help: no_help`) and is never a basis for `assisted` or `independent`; `independent` stays refused. Withdrawal or expiry takes the basis with the share (`assistance_basis_unavailable`) | AE-42, EDU-04/05 |
-| Denominator | `coverage.help_reported` counts learners, from the task records this retrospective cites: any record naming help puts a learner under `with_help`, records saying only "no help" under `no_help`, labelled `source_state: self_reported`. A learner without a cited record is in neither (unknown, never "no help"). `help_use`, what the Service itself observed, stays `unobserved` | AE-42 |
+| Switch off | A body naming a record is refused exactly as an unknown field was before (400 `select supported content fields`), `GET /v1/classroom/shares` names no `share_records`, the body cap is the old one, and `/sharing` never shows the section. Turning the switch off after a records share was stored makes that share non-retryable: a retry of the same body is refused the same way (400), while the stored share stays listed for the learner, readable in the instructor's audited view and withdrawable (probed 2026-10-06; accepted as is, review r1) | — |
+| Who reads them | The learner on their own `/sharing` card (내 독립 과제 기록 (자기 보고), 내 자립 범위 정리 (내 판단)). The instructor in the `/manage` share detail (독립 과제 기록 · 학생의 자기 보고, 자립 범위 정리 · 학생의 판단) and in `/authoring` 07 "내용 보기", both the audited share view. The instructor list and `/sources` carry no record text, and the retrospective view carries none either: of a cited task record it says only whether it names help (`self_reported_help`, a category derived on each read), and only once this instructor has opened that share through the audited view (a `view` row of theirs in `classroom_share_audit`, which the learner sees in 누가 열람). Before that the source reads `record_not_opened: true`, and nothing drawn from the record's content is shown or relied on (review r1: the content leaves only after the view audit, as on the share detail route). The Studio App's help panel reads only its own fields and ignores both keys | AE-43 boundaries, ADM-07 |
+| Retrospective | Both are citable parts with origin `learner`, so a finding citing one is observed: the learner's own words. `assisted` now stands on a cited help request or on a cited `independent_task` part that names help (`assistance_basis`: `help_request`, `learner_report`); another part of the same share is no basis. Any help but `none` names help: `ai_made` (the AI made it), the lesson's AI help strategies and `person` all read `self_reported_help: help`, so the finding does not tell AI 대행 from 도움받은 수행; which help the learner named stays in the record, shown in the audited view. A record that says only `none` reads as the learner's self-report (`self_reported_help: no_help`) and is never a basis for `assisted` or `independent`; `independent` stays refused. A record this instructor has not opened is no basis: `assisted` on it is refused `record_not_opened` (409), the same answer whatever it says. Withdrawal or expiry takes the basis with the share (`assistance_basis_unavailable`) | AE-42, EDU-04/05 |
+| Denominator | `coverage.help_reported` counts learners, from the task records this retrospective cites: any opened record naming help puts a learner under `with_help`, opened records all saying only "no help" under `no_help`, and a cited record not opened yet (with none opened that names help) under `not_opened`, labelled `source_state: self_reported`. A learner without a cited record is in none of them (unknown, never "no help"). `help_use`, what the Service itself observed, stays `unobserved` | AE-42 |
 
 ### Run record (slice 2)
 
@@ -477,6 +477,60 @@ checks had to catch them alone. All did except one, marked below.
 | browser | the self-report missing from the source line | "자기 보고: 도움 없이 했다고 적음(혼자 해낸 것을 관찰한 것은 아님)" |
 | browser | "내용 보기" cannot show a record | the wait for "독립 과제 기록 · 학생이 쓴 말" times out |
 
+### Review round 1 (slice 2) · 2026-10-06
+
+- **Content only after the view audit** (major). The retrospective read `self_reported_help`, `coverage.help_reported` and the
+  `learner_report` basis out of a record's content with no view audit, and its write check answered a "help" record and a "no
+  help" record differently, so it could be used as a probe. Now the category is read only for a share this instructor has opened
+  through the audited share view (a `view` row of theirs). Before that the source reads `record_not_opened`, the learner counts
+  under `help_reported.not_opened`, and `assisted` on that record is refused `record_not_opened` (409) whatever it says. The
+  retrospective writes no audit row of its own, so the learner's 누가 열람 list shows exactly the views that released the content.
+- **AE-T34's help sources** (major). `ai_made` and the lesson's AI help strategies now run end to end. Rules: both name help. Route
+  (`share-aimade`, `share-strategies`): refused while unopened; opened through the audited view, with the help kept as the learner
+  named it; then `assisted` stands on each, and both learners count under `with_help`. Browser: 07 "내용 보기" shows "AI가 대신
+  만들었습니다", and 도움을 받음 stands on that record only after it was opened. The finding still reads AI 대행 and 도움받은 수행 alike
+  (`help`); whether it should tell them apart is left open. The AE-T34 note in [AE testing](learning-agent-experience.md) is
+  narrowed to what ran.
+- **Minor.** The `help_note` and `work` limits and a blank self-reliance note are in the rules check, and the two limits in the
+  route's refusal table too. On `/sharing`, the 도움 내용 the learner typed is asserted in the stored record and on the card, and
+  removing a row now resets the request id the way typing does: after a send whose answer was lost, the next send is a new share,
+  not a 409. Accepted as is: the switch-off retry (contract table above). Not changed here: the instructor `PUT /shares/:id`
+  returns the full content without a view audit. That is pre-existing and outside this slice.
+
+Runs on the tree of this round's commit (macOS arm64, Node 24.4.1, Chromium), all green: worker `test:feedback-loop` (32 checks), `test:feedback-loop:d1`
+(3; new: the audit lookup on D1 itself), browser `test:classroom-feedback-loop` (13; new: step 10, the resend after a lost answer),
+worker `npm test` and `typecheck`, chalk `npm test` and `typecheck`, `test:classroom:d1`, `test:authoring:d1`, the browser suites
+`test:classroom`, `-ops`, `-ops-roster`, `-ops-selection`, `-ops-lesson-settings`, `-ops-help`, `-ops-results`, `-ops-g1`,
+`-ops-g1-wrap`, `-authoring-g2`, `-authoring-mission`, `-report` and `test:chalk-authoring`, `scripts/next-work.py --check`,
+`scripts/check-registry.py`, and `align.py check --item feedback-loop` ("chain intact"). Two browser suites fail on this Mac for
+reasons outside this change. `test:classroom-ops-distribution` times out in the worktree because esbuild's directory walk finds
+`/Users/jaylee/node_modules/react` (19.1.0) before the suite's `nodePaths` React (18.3.1); the same tree copied under `/private/tmp`
+passes 7 of 7. `test:chalk-simple` times out at `simple.mjs:45` ("리허설 후보") the same way at the branch base `4eaa3111`.
+
+**Planted defects** (review round 1; the same scripted method; all 20 turned their suite red). The library defects were rerun with
+the two record-rule checks skipped; the route checks caught all but one, marked below.
+
+| Suite | Planted defect | Red at |
+|---|---|---|
+| worker | `help_note` over its limit accepted | rules; route: `invalid_help_note` |
+| worker | the `work` limit raised to the task's 2,000 | rules; route: `invalid_work` |
+| worker | `ai_made` read as no help | rules: help sources; route: `unsupported_assistance` on share-aimade |
+| browser | `ai_made` read as no help | 도움을 받음 on the opened AI-made record refused |
+| worker | the lesson's AI help strategies read as no help | rules; route: `unsupported_assistance` on share-strategies |
+| worker | a blank self-reliance note kept | rules only (cosmetic: a retry still compares equal) |
+| browser | `/sharing` drops the 도움 내용 | the stored record's `help_note` |
+| worker · browser · D1 | the category read without the audited view | rules: `reportedHelpSeen`; route: f3 not opened; browser: "아직 열어 보지 않은 기록"; D1: `record_not_opened` |
+| worker | the write check treats every record as opened | `record_not_opened` expected on share-nohelp |
+| worker | the view treats every record as opened | f3 not opened |
+| worker | the audit lookup dropped (nothing reads as opened) | the citation of the opened share-task refused |
+| worker | the unopened refusal not named | rules; route: share-nohelp |
+| worker | an unopened learner counted as "no help" | rules: the denominator; route: student-b with one record not opened |
+| worker | unopened learners not counted | rules; route: `not_opened: 1` |
+| browser | 07 hides the not-opened source line | "아직 열어 보지 않은 기록 — …" |
+| browser | 07 drops not-opened learners from the 분모 line | the 분모 line |
+| browser | 07 has no words for `record_not_opened` | the refusal in the instructor's words |
+| browser | `/sharing` row delete keeps the request id | step 10: "기록이 변경됐습니다" instead of a new share |
+
 **NOT RUN:** a real learner's independent task, the instructor's evaluation of it (T-20) and a person's review of self-reliance
 cases (T-44); AE-T34 and AE-T37, which need a real class and a real person's counter-argument; the Studio App (the learner records
 these only on the `/sharing` web page; the App's help panel neither offers nor shows them); the model-generated draft (T-28's model
@@ -485,7 +539,8 @@ and the switch in production.
 
 ### Trying it on the dev host (slice 2)
 
-**Fastest check:** `cd e2e && npm run test:classroom-feedback-loop` (step 9 writes `fl-06a` … `fl-08`). **By hand,** after the
+**Fastest check:** `cd e2e && npm run test:classroom-feedback-loop` (step 9 writes `fl-06a` … `fl-08`; `fl-08a` is a record not
+opened yet). **By hand,** after the
 slice 1 setup above (switch on, an adult class, Chalk on :8788, a learner code from "학생 초대"):
 
 | Step | Who · where | Expected |
@@ -494,8 +549,9 @@ slice 1 setup above (switch on, an adult class, Chalk on :8788, a learner code f
 | 2 | Learner: writes the task, ticks "AI 힌트를 받았습니다" and "강사·동료에게 도움을 받았습니다" (ticking "도움 없이 했습니다" clears the others), adds two rows (직접 할 일, 전문가에게 맡길 일), agrees and shares | The card shows "내 독립 과제 기록 (자기 보고)" and "내 자립 범위 정리 (내 판단)" |
 | 3 | Instructor · `/manage` 공유 기록 → "공유 기록 열기" | "독립 과제 기록 · 학생의 자기 보고" and "자립 범위 정리 · 학생의 판단" under the shared content |
 | 4 | Instructor · `/authoring` 07 "돌아보기 불러오기" | The share lists "독립 과제 기록(학생이 쓴 말), 자립 범위 정리(학생이 쓴 말)" |
-| 5 | Instructor: a 관찰 citing 독립 과제 기록 with 도움 = 도움을 받음, saved | "관찰 1 · 관찰됨 … · 도움을 받음(학생이 적은 도움 · 자기 보고)", and the 분모 line says "독립 과제 기록에 적은 도움(학생의 자기 보고): 받았다고 적은 학생 1명 · …" |
-| 6 | A record with only "도움 없이 했습니다", cited with 도움을 받음 | Refused: "‘도움을 받음’은 도움 요청 공유나, 도움을 받았다고 적은 독립 과제 기록을 근거로 고를 때만 적을 수 있습니다." Cited without it: "자기 보고: 도움 없이 했다고 적음(혼자 해낸 것을 관찰한 것은 아님)" |
+| 5 | Instructor: a 관찰 citing that share's 독립 과제 기록 with 도움 = 도움을 받음, saved | Step 3 opened the share (an audited view the learner sees under "누가 열람했는지 확인"), so: "관찰 1 · 관찰됨 … · 도움을 받음(학생이 적은 도움 · 자기 보고)", and the 분모 line says "독립 과제 기록에 적은 도움(학생의 자기 보고): 받았다고 적은 학생 1명 · …" |
+| 6 | A second learner shares a record with only "도움 없이 했습니다"; the instructor cites it in 07 without opening it | With 도움을 받음: refused, "근거로 고른 독립 과제 기록을 아직 열어 보지 않았습니다. …", nothing saved, and that learner's 누가 열람 stays empty. Without it: "아직 열어 보지 않은 기록 — ‘내용 보기’로 연 뒤 다시 열면 학생이 적은 도움이 보입니다", and the 분모 line counts "아직 열어 보지 않은 기록의 학생 1명(도움 여부 모름)" |
+| 7 | Instructor: "내용 보기" on that share, then reopens the retrospective | "자기 보고: 도움 없이 했다고 적음(혼자 해낸 것을 관찰한 것은 아님)". Cited with 도움을 받음 now: refused, "‘도움을 받음’은 도움 요청 공유나, 도움을 받았다고 적은 독립 과제 기록을 근거로 고를 때만 적을 수 있습니다." |
 
 **Where the data is.** Inside `classroom_shares.content_json` (keys `independent_task` and `self_reliance`), deleted with the share.
 No new table.

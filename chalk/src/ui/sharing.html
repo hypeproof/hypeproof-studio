@@ -35,7 +35,10 @@ $('task-help').addEventListener('change',e=>{const i=e.target;if(!i.checked)retu
 function relianceLimit(){$('reliance-add').disabled=$('reliance-rows').children.length>=10;}
 function relianceRow(){const li=document.createElement('li'),wl=document.createElement('label'),w=document.createElement('input'),hl=document.createElement('label'),h=document.createElement('select'),nl=document.createElement('label'),n=document.createElement('input'),del=el('button','항목 삭제');
  wl.textContent='작업';w.maxLength=500;w.dataset.work='';wl.append(w);hl.textContent='내 판단';h.dataset.how='';h.append(new Option('고르세요',''),...Object.entries(RELIANCE_WORDS).map(([v,t])=>new Option(t,v)));hl.append(h);
- nl.textContent='메모 (선택)';n.maxLength=1000;n.dataset.note='';nl.append(n);del.type='button';del.onclick=()=>{li.remove();relianceLimit();};li.append(wl,hl,nl,del);$('reliance-rows').append(li);relianceLimit();return li;}
+ nl.textContent='메모 (선택)';n.maxLength=1000;n.dataset.note='';nl.append(n);del.type='button';
+ // Removing a row changes what will be sent, like typing does (the form's `input` resets the request id): a send after it is a
+ // new request, never a retry of one that may already be stored with the row (that would be a 409 until the learner typed).
+ del.onclick=()=>{li.remove();pendingId=null;relianceLimit();};li.append(wl,hl,nl,del);$('reliance-rows').append(li);relianceLimit();return li;}
 $('reliance-add').onclick=()=>relianceRow().querySelector('input').focus();
 $('kind').addEventListener('change',recordsShown);
 function recordsClear(){$('reliance-rows').replaceChildren();relianceLimit();recordsShown();}

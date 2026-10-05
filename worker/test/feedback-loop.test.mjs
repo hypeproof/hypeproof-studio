@@ -125,6 +125,7 @@ await check('rules — the learner\'s records (EDU-04/05): exact keys, named ref
   bad({ independent_task: { ...task, task: '  ' } }, 'invalid_task');
   bad({ independent_task: { ...task, task: '가'.repeat(L.RECORD_LIMITS.task + 1) } }, 'invalid_task');
   bad({ independent_task: { ...task, help_note: 3 } }, 'invalid_help_note');
+  bad({ independent_task: { ...task, help_note: 'x'.repeat(L.RECORD_LIMITS.help_note + 1) } }, 'invalid_help_note');
   bad({ independent_task: { ...task, grade: 'A' } }, 'unsupported_score');
   bad({ independent_task: { ...task, independent: true } }, 'invalid_independent_task');
   bad({ independent_task: 'did it' }, 'invalid_independent_task');
@@ -133,6 +134,8 @@ await check('rules — the learner\'s records (EDU-04/05): exact keys, named ref
   bad({ self_reliance: Array.from({ length: L.RECORD_LIMITS.items + 1 }, () => items[0]) }, 'invalid_self_reliance');
   bad({ self_reliance: [{ ...items[0], how: 'independent' }] }, 'invalid_how');
   bad({ self_reliance: [{ ...items[0], work: '' }] }, 'invalid_work');
+  bad({ self_reliance: [{ ...items[0], work: 'x'.repeat(L.RECORD_LIMITS.work + 1) }] }, 'invalid_work');
+  assert.deepEqual(L.parseShareRecords({ self_reliance: [{ ...items[0], note: '  ' }] }, 'submission').records.self_reliance, [items[0]], 'a blank self-reliance note is not stored');
   bad({ self_reliance: [{ ...items[0], level: 3 }] }, 'unsupported_score');
   bad({ self_reliance: [{ ...items[0], note: 'x'.repeat(L.RECORD_LIMITS.note + 1) }] }, 'invalid_reliance_note');
   // Masking reaches every learner-written string and nothing else.
@@ -144,11 +147,20 @@ await check('rules — the learner\'s records (EDU-04/05): exact keys, named ref
   // What a task record says about help, as a category: help named → help; only "none" → no_help; no record → null (unknown).
   const as = (c) => L.reportedHelpOf({ content_json: JSON.stringify(c) });
   assert.deepEqual([as({ independent_task: task }), as({ independent_task: { ...task, help: ['none'] } }), as({ verification: 'x' }), as({ self_reliance: items })], ['help', 'no_help', null, null]);
+  // AE-T34's help sources (review r1): the AI doing the work, and the lesson's own AI help strategies, both name help; the stored
+  // list keeps which the learner named, in the fixed order.
+  assert.deepEqual([as({ independent_task: { ...task, help: ['ai_made'] } }), as({ independent_task: { ...task, help: ['co_edit', 'demonstrate'] } })], ['help', 'help']);
+  assert.deepEqual(L.parseShareRecords({ independent_task: { ...task, help: ['co_edit', 'demonstrate'] } }, 'submission').records.independent_task.help, ['demonstrate', 'co_edit']);
+  // As one instructor's retrospective may read it (review r1): only once they opened the share through the audited view;
+  // before that `not_opened`, the same answer whatever the record says. No record stays null.
+  const seen = (c, opened) => L.reportedHelpSeen({ content_json: JSON.stringify(c) }, opened);
+  assert.deepEqual([seen({ independent_task: task }, false), seen({ independent_task: { ...task, help: ['none'] } }, false), seen({ verification: 'x' }, false)], ['not_opened', 'not_opened', null]);
+  assert.deepEqual([seen({ independent_task: { ...task, help: ['ai_made'] } }, true), seen({ independent_task: { ...task, help: ['none'] } }, true), seen({ verification: 'x' }, true)], ['help', 'no_help', null]);
   const row = (content) => ({ id: 's', content_json: JSON.stringify(content), status: 'received', feedback: '' });
   assert.deepEqual(L.shareParts(row({ verification: 'x', independent_task: task, self_reliance: items }), false).map((p) => p.part + ':' + p.origin), ['verification:learner', 'independent_task:learner', 'self_reliance:learner']);
   assert.deepEqual(L.shareParts(row({ verification: 'x', self_reliance: [] }), false).map((p) => p.part), ['verification'], 'an empty list is no part');
 });
-await check('rules — help in a finding (EDU-04, T-44): `assisted` stands on a help request or on the learner\'s own record naming help; "no help" is a self-report, never independence; reported help is counted apart', async () => {
+await check('rules — help in a finding (EDU-04, T-44, AE-T34): `assisted` stands on a help request or on the learner\'s own record naming help (the AI made it, or the lesson\'s AI help, or a person), read only once the instructor opened it; "no help" is a self-report, never independence; reported help is counted apart', async () => {
   const live = (over = {}) => () => ({ available: true, kind: 'submission', student_id: 's1', parts: new Set(['independent_task', 'self_reliance', 'verification']), lesson: 'this_version', response_current: true, ...over });
   const f = (sources, assistance = 'unknown') => ({ id: 'f', text: 't', sources, assistance });
   const helped = L.findingView(f([{ share_id: 'a', part: 'independent_task' }], 'assisted'), live({ reported_help: 'help' }));
@@ -180,7 +192,29 @@ await check('rules — help in a finding (EDU-04, T-44): `assisted` stands on a 
     L.findingView(f([{ share_id: 'c', part: 'independent_task' }]), () => ({ ...live({ reported_help: 'no_help' })(), student_id: 's2' })),
     L.findingView(f([{ share_id: 'd', part: 'verification' }]), () => ({ ...live()(), student_id: 's3' })),
   ]);
-  assert.deepEqual([cov.help_use, cov.help_reported, cov.learners_with_sources], ['unobserved', { source_state: 'self_reported', with_help: 1, no_help: 1 }, 3]);
+  assert.deepEqual([cov.help_use, cov.help_reported, cov.learners_with_sources], ['unobserved', { source_state: 'self_reported', with_help: 1, no_help: 1, not_opened: 0 }, 3]);
+  // AE-T34's help sources (review r1), from a stored record through the same rules: "the AI made it" and "the lesson's AI help
+  // strategies" are each a basis for `assisted`, and each learner counts under with_help. (Both read as `help` here; the record
+  // itself keeps which, for the audited share view.)
+  const fromRecord = (help, student_id) => () => ({ ...live()(), student_id, reported_help: L.reportedHelpSeen({ content_json: JSON.stringify({ independent_task: { task: 't', help } }) }, true) });
+  const aiMade = L.findingView(f([{ share_id: 'm', part: 'independent_task' }], 'assisted'), fromRecord(['ai_made'], 'm1'));
+  const strategies = L.findingView(f([{ share_id: 'k', part: 'independent_task' }], 'assisted'), fromRecord(['demonstrate', 'co_edit'], 'k1'));
+  for (const x of [aiMade, strategies]) assert.deepEqual([x.assistance, x.assistance_basis, x.sources[0].self_reported_help], ['assisted', ['learner_report'], 'help']);
+  assert.deepEqual(L.coverageOf(null, [aiMade, strategies]).help_reported, { source_state: 'self_reported', with_help: 2, no_help: 0, not_opened: 0 });
+  // A record the instructor has not opened (review r1): nothing drawn from it — no category, no basis, a refusal that is the same
+  // whatever it says — and its learner is counted as not opened, never as "no help". A cited help request still stands alone.
+  const shut = L.findingView(f([{ share_id: 'a', part: 'independent_task' }], 'assisted'), live({ reported_help: 'not_opened' }));
+  assert.deepEqual([shut.status, shut.assistance, shut.assistance_basis_unavailable, 'self_reported_help' in shut.sources[0], shut.sources[0].record_not_opened], ['observed', 'unknown', true, false, true]);
+  const unopened = (help) => () => ({ kind: 'submission', reported_help: L.reportedHelpSeen({ content_json: JSON.stringify({ independent_task: { task: 't', help } }) }, false) });
+  for (const help of [['hint'], ['none']]) assert.equal(L.assistanceRefusal(f([{ share_id: 'a', part: 'independent_task' }], 'assisted'), unopened(help)), 'record_not_opened', help.join());
+  assert.equal(L.assistanceRefusal(f([{ share_id: 'a', part: 'independent_task' }, { share_id: 'b', part: 'question' }], 'assisted'), (id) => (id === 'a' ? unopened(['none'])() : { kind: 'help', reported_help: null })), '');
+  const mixed = L.coverageOf(null, [
+    L.findingView(f([{ share_id: 'a', part: 'independent_task' }]), live({ reported_help: 'no_help' })),
+    L.findingView(f([{ share_id: 'b', part: 'independent_task' }]), live({ reported_help: 'not_opened' })),
+    L.findingView(f([{ share_id: 'c', part: 'independent_task' }]), () => ({ ...live({ reported_help: 'help' })(), student_id: 's2' })),
+    L.findingView(f([{ share_id: 'd', part: 'independent_task' }]), () => ({ ...live({ reported_help: 'not_opened' })(), student_id: 's2' })),
+  ]);
+  assert.deepEqual(mixed.help_reported, { source_state: 'self_reported', with_help: 1, no_help: 0, not_opened: 1 }, 's1: an unopened record leaves "no help" unknown; s2: an opened record naming help stands');
 });
 
 // ── HTTP: the whole loop on the real routes ────────────────────────────────────────────────────────────────────
@@ -377,7 +411,7 @@ try {
     assert.deepEqual(['lesson_unconfirmed' in f1, 'stale_learner_response' in f1, f1.sources[2].answers_current_feedback], [false, false, true]);
     assert.deepEqual([f2.status, f2.unobserved_reason, f2.human_feedback], ['unobserved', 'no_person_source', 'unobserved'], 'an AI answer alone is not a person\'s observation');
     assert.deepEqual([f3.status, f3.assistance, f3.human_feedback], ['observed', 'assisted', 'unobserved'], 'no person answered yet: social correction unobserved');
-    assert.deepEqual(retro.coverage, { roster: 4, learners_with_sources: 2, learners_without_sources: 2, help_requests_cited: 1, help_use: 'unobserved', help_reported: { source_state: 'self_reported', with_help: 0, no_help: 0 }, stopped: 'unobserved' });
+    assert.deepEqual(retro.coverage, { roster: 4, learners_with_sources: 2, learners_without_sources: 2, help_requests_cited: 1, help_use: 'unobserved', help_reported: { source_state: 'self_reported', with_help: 0, no_help: 0, not_opened: 0 }, stopped: 'unobserved' });
     assert.deepEqual(retro.decisions.map((d) => [d.target, d.action, d.target_title]), [['build', 'revise', 'build'], ['review', 'keep', 'review'], ['lesson', 'hold', '']]);
     assert.equal(retro.applied, null); assert.equal(retro.next, null);
     const stored = one('SELECT doc_json FROM lesson_retrospectives WHERE retro_id=?', retro.id).doc_json;
@@ -448,6 +482,8 @@ try {
       ['rec-help', { kind: 'help', content: { question: '도와주세요', independent_task: TASK } }, 'record_needs_submission'],
       ['rec-none', { content: { verification: 'x', independent_task: { ...TASK, help: ['none', 'hint'] } } }, 'help_none_with_other'],
       ['rec-how', { content: { verification: 'x', self_reliance: [{ work: '도메인 연결', how: 'independent' }] } }, 'invalid_how'],
+      ['rec-note-long', { content: { verification: 'x', independent_task: { ...TASK, help_note: '가'.repeat(L.RECORD_LIMITS.help_note + 1) } } }, 'invalid_help_note'],
+      ['rec-work-long', { content: { verification: 'x', self_reliance: [{ work: '가'.repeat(L.RECORD_LIMITS.work + 1), how: 'direct' }] } }, 'invalid_work'],
       ['rec-score', { content: { verification: 'x', self_reliance: [{ work: '도메인 연결', how: 'expert', score: 3 }] } }, 'unsupported_score'],
     ]) assert.deepEqual(await share(id, patch).then((x) => [x.status, x.json.reason]), [400, code], code);
     assert.equal(count('classroom_shares'), before, 'every refusal wrote nothing');
@@ -455,7 +491,7 @@ try {
     assert.equal((await share('share-scope-only', { content: { self_reliance: RELY.slice(2) } })).status, 201);
   });
 
-  await check('EDU-04/05 in the retrospective (T-20, T-44, AE-42): the records are the learner\'s words; `assisted` stands on a record naming help; "no help" is a self-report, never independence; reported help is counted apart from what the Service observed', async () => {
+  await check('EDU-04/05 in the retrospective (T-20, T-44, AE-42): the records are the learner\'s words, and what one says is read only after the instructor opened it (audited); `assisted` stands on a record naming help; "no help" is a self-report, never independence; reported help is counted apart from what the Service observed', async () => {
     assert.equal((await share('share-nohelp', { content: { verification: '혼자 10월 16일 공지로 바꿨다', independent_task: { task: '시연과 다른 날짜의 휴진 공지', help: ['none'] } } }, studentB)).status, 201);
     // The same learner as share-task, on another task, without help: counted once, under with_help, while share-task stands.
     assert.equal((await share('share-nohelp-a', { content: { verification: '사진 설명을 혼자 고쳤다', independent_task: { task: '시연과 다른 사진 설명', help: ['none'] } } })).status, 201);
@@ -470,15 +506,40 @@ try {
       { id: 'f4', text: '다른 과제는 도움 없이 했다고 적었다', sources: [{ share_id: 'share-nohelp-a', part: 'independent_task' }] },
     ]);
     assert.equal(r.status, 201, r.raw);
-    const [f1, f2, f3] = r.json.findings;
+    const [f1, f2, f3, f4] = r.json.findings;
+    // share-task was opened through the audited view in the check above, so its record is read.
     assert.deepEqual([f1.status, f1.assistance, f1.assistance_basis, f1.sources[0].self_reported_help], ['observed', 'assisted', ['learner_report'], 'help']);
     assert.deepEqual([f2.status, f2.assistance, 'self_reported_help' in f2.sources[0]], ['observed', 'unknown', false], 'the self-reliance list says nothing about help');
-    assert.deepEqual([f3.status, f3.assistance, 'assistance_basis' in f3, f3.sources[0].self_reported_help], ['observed', 'unknown', false, 'no_help']);
-    assert.deepEqual([r.json.coverage.help_use, r.json.coverage.help_reported], ['unobserved', { source_state: 'self_reported', with_help: 1, no_help: 1 }], 'what the Service observed of help use stays unobserved; what learners wrote is counted apart, each learner once');
-    assert.doesNotThrow(() => forbidPersonalMetrics(r.json), 'no score, level or grade anywhere in the view');
-    assert.ok(!JSON.stringify(r.json).includes('휴진 공지 문구 수정') && !JSON.stringify(r.json).includes('강사님께'), 'the view carries no record content');
-    // Negative controls: "no help" supports neither `assisted` nor `independent`; the basis is the record part itself; a share
-    // without a record has no record part.
+    // Review r1: share-nohelp and share-nohelp-a were never opened by this instructor. Nothing of what their records say leaves
+    // the Service — no category, a source marked not opened, the learner counted as not opened — and no view was audited, so the
+    // learner's 누가 열람 list is as empty as what the instructor learned.
+    for (const x of [f3, f4]) assert.deepEqual([x.status, x.assistance, 'self_reported_help' in x.sources[0], x.sources[0].record_not_opened], ['observed', 'unknown', false, true], x.id);
+    assert.deepEqual(r.json.coverage.help_reported, { source_state: 'self_reported', with_help: 1, no_help: 0, not_opened: 1 }, 'student-a: share-task names help; student-b: not opened — never "no help"');
+    assert.ok(!JSON.stringify(r.json.findings).includes('no_help'), 'no "no help" read out of an unopened record');
+    const viewsOf = (id) => one('SELECT count(*) AS n FROM classroom_share_audit WHERE share_id=?', id).n;
+    assert.deepEqual([viewsOf('share-nohelp'), viewsOf('share-nohelp-a')], [0, 0]);
+    assert.deepEqual((await f.request(`${studentShares}/share-nohelp/audit`, 'GET', undefined, studentB)).json.audit, []);
+    // Nor is the write a probe: `assisted` on an unopened record is refused by name, the same answer whatever the record says.
+    assert.equal((await share('share-help-shut', { content: { verification: '시연과 다른 문구로 바꿨다', independent_task: { task: '시연과 다른 진료 안내', help: ['person'] } } }, studentB)).status, 201);
+    for (const id of ['share-nohelp', 'share-help-shut'])
+      assert.deepEqual(await post([{ id: 'f', text: 't', sources: [{ share_id: id, part: 'independent_task' }], assistance: 'assisted' }]).then((x) => [x.status, x.json.reason]), [409, 'record_not_opened'], id);
+    assert.deepEqual([viewsOf('share-nohelp'), viewsOf('share-help-shut')], [0, 0], 'and still no view');
+    // Opened through the audited view (the learner sees it), the record is read: "no help" as the learner's self-report.
+    for (const [id, token] of [['share-nohelp', studentB], ['share-nohelp-a', studentA]]) {
+      assert.equal((await f.request(`${teacherShares}/${id}`)).status, 200);
+      assert.deepEqual((await f.request(`${studentShares}/${id}/audit`, 'GET', undefined, token)).json.audit.map((x) => [x.actor_id, x.action]), [['teacher-a', 'view']], id);
+    }
+    const read = (await f.request(`${retros}/${r.json.id}`)).json;
+    assert.deepEqual([read.findings[2].status, read.findings[2].assistance, 'assistance_basis' in read.findings[2], read.findings[2].sources[0].self_reported_help, 'record_not_opened' in read.findings[2].sources[0]], ['observed', 'unknown', false, 'no_help', false]);
+    assert.deepEqual([read.coverage.help_use, read.coverage.help_reported], ['unobserved', { source_state: 'self_reported', with_help: 1, no_help: 1, not_opened: 0 }], 'what the Service observed of help use stays unobserved; what learners wrote is counted apart, each learner once');
+    // An opened "no help" beside another record of the same learner not opened yet: that learner's "no help" stays unknown.
+    const partly = await post([{ id: 'f', text: '도움 없이 했다고 적은 기록과 아직 열지 않은 기록', sources: [{ share_id: 'share-nohelp', part: 'independent_task' }, { share_id: 'share-help-shut', part: 'independent_task' }] }]);
+    assert.equal(partly.status, 201, partly.raw);
+    assert.deepEqual(partly.json.coverage.help_reported, { source_state: 'self_reported', with_help: 0, no_help: 0, not_opened: 1 }, 'student-b');
+    assert.doesNotThrow(() => forbidPersonalMetrics(read), 'no score, level or grade anywhere in the view');
+    assert.ok(!JSON.stringify(read).includes('휴진 공지 문구 수정') && !JSON.stringify(read).includes('강사님께'), 'the view carries no record content');
+    // Negative controls (records now opened): "no help" supports neither `assisted` nor `independent`; the basis is the record
+    // part itself; a share without a record has no record part.
     for (const [finding, status, code] of [
       [{ id: 'f', text: 't', sources: [{ share_id: 'share-nohelp', part: 'independent_task' }], assistance: 'assisted' }, 400, 'unsupported_assistance'],
       [{ id: 'f', text: 't', sources: [{ share_id: 'share-nohelp', part: 'independent_task' }], assistance: 'independent' }, 400, 'unsupported_independence'],
@@ -489,7 +550,26 @@ try {
     assert.equal((await f.request(`${studentShares}/share-task`, 'DELETE', undefined, studentA)).status, 200);
     const v = (await f.request(`${retros}/${r.json.id}`)).json;
     assert.deepEqual([v.findings[0].status, v.findings[0].assistance, v.findings[0].assistance_basis_unavailable, v.findings[1].status], ['unobserved', 'unknown', true, 'unobserved']);
-    assert.deepEqual(v.coverage.help_reported, { source_state: 'self_reported', with_help: 0, no_help: 2 }, 'student-a\'s remaining record says "no help"');
+    assert.deepEqual(v.coverage.help_reported, { source_state: 'self_reported', with_help: 0, no_help: 2, not_opened: 0 }, 'student-a\'s remaining record says "no help"');
+  });
+
+  await check('EDU-04 help sources (AE-T34, review r1): a record saying the AI made the work and one naming the lesson\'s AI help strategies each name help — once opened, `assisted` stands on each and each learner counts under with_help; the audited view keeps which help was named', async () => {
+    const rec = (help) => ({ content: { verification: '시연과 다른 날짜로 바꾼 공지를 확인했다', independent_task: { task: '시연과 다른 날짜의 휴진 공지', help } } });
+    assert.equal((await share('share-aimade', rec(['ai_made']), studentB)).status, 201);
+    assert.equal((await share('share-strategies', rec(['co_edit', 'demonstrate']), studentA)).status, 201);
+    const doc = { hypothesis: '도움의 출처를 학생이 스스로 적는다', findings: [
+      { id: 'f1', text: 'AI가 대신 만들었다고 적었다', sources: [{ share_id: 'share-aimade', part: 'independent_task' }], assistance: 'assisted' },
+      { id: 'f2', text: 'AI 시연을 보고 함께 고쳤다고 적었다', sources: [{ share_id: 'share-strategies', part: 'independent_task' }], assistance: 'assisted' },
+    ], decisions: [{ id: 'd1', target: 'lesson', action: 'hold', reason: '도움 출처를 더 본다' }] };
+    const before = count('lesson_retrospectives');
+    assert.deepEqual(await f.request(retros, 'POST', { request_id: KEY(), base_version: V1, doc }).then((x) => [x.status, x.json.reason]), [409, 'record_not_opened'], 'not opened yet');
+    assert.equal(count('lesson_retrospectives'), before, 'nothing written');
+    // The instructor opens both through the audited view, where the help each learner named is kept as they named it.
+    assert.deepEqual((await f.request(`${teacherShares}/share-aimade`)).json.content.independent_task.help, ['ai_made']);
+    assert.deepEqual((await f.request(`${teacherShares}/share-strategies`)).json.content.independent_task.help, ['demonstrate', 'co_edit']);
+    const r = await f.request(retros, 'POST', { request_id: KEY(), base_version: V1, doc }); assert.equal(r.status, 201, r.raw);
+    for (const x of r.json.findings) assert.deepEqual([x.status, x.assistance, x.assistance_basis, x.sources[0].self_reported_help], ['observed', 'assisted', ['learner_report'], 'help'], x.id);
+    assert.deepEqual(r.json.coverage.help_reported, { source_state: 'self_reported', with_help: 2, no_help: 0, not_opened: 0 });
   });
 
   await check('share body with records (EDU-04/05): every field and record at its limit, as escaped control characters, is accepted; past the widened cap is refused by name', async () => {
