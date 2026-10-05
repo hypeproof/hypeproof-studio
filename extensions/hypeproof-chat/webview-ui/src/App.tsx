@@ -21,7 +21,9 @@ import { PublishPanel } from "./PublishPanel";
 import { EvidencePanel } from "./EvidencePanel";
 import { MemoryPanel } from "./MemoryPanel";
 import { SkillsPanel } from "./SkillsPanel";
+import { ReviewPanel } from "./ReviewPanel";
 import type { SkillsView } from "../../src/skillView";
+import type { ReviewView } from "../../src/reviewView";
 import type { MemoryView } from "../../src/memoryView";
 import type { EvidenceView } from "../../src/evidenceView";
 import type { PublishView } from "../../src/publishView";
@@ -54,6 +56,8 @@ interface State {
   memory: { view: MemoryView; error: string | null; done: string | null } | null;
   /** cr-skills — the "커리큘럼 스킬" panel (null = hidden). */
   skills: { view: SkillsView; running: boolean; error: string | null; done: string | null } | null;
+  /** cr-review — the "주간 리뷰" panel, the student's or the director's (null = hidden). */
+  review: { view: ReviewView; error: string | null; done: string | null } | null;
   aiNotice: string | null;          // #320 — AI disclosure at session start (host-gated)
   stopNotice: string | null;        // #497 — Stop 을 눌러 턴이 끊겼음을 알리는 인라인 안내
   /** #649 — 지금 열려 있는 세상 id. 친구 스트립이 이 버튼을 강조한다(aria-pressed). */
@@ -86,6 +90,8 @@ type Action =
   | { type: "memoryClose" }
   | { type: "skillsState"; view: SkillsView | null; running?: boolean; error?: string; done?: string }
   | { type: "skillsClose" }
+  | { type: "reviewState"; view: ReviewView | null; error?: string; done?: string }
+  | { type: "reviewClose" }
   | { type: "verifySent" }
   | { type: "aiDisclosure"; text: string }
   | { type: "streamEnd" }
@@ -116,6 +122,7 @@ const initialState: State = {
   evidence: null,
   memory: null,
   skills: null,
+  review: null,
   verifyError: null,
   verifySend: null,
   aiNotice: null,
@@ -176,6 +183,10 @@ function reducer(state: State, action: Action): State {
       return { ...state, skills: action.view ? { view: action.view, running: action.running === true, error: action.error ?? null, done: action.done ?? null } : null };
     case "skillsClose":
       return { ...state, skills: null };
+    case "reviewState":
+      return { ...state, review: action.view ? { view: action.view, error: action.error ?? null, done: action.done ?? null } : null };
+    case "reviewClose":
+      return { ...state, review: null };
     case "verifySent":
       return { ...state, verifySend: null };
     case "worldOpened":
@@ -298,6 +309,7 @@ export function App() {
         case "evidenceState": dispatch({ type: "evidenceState", view: msg.view, error: msg.error, done: msg.done }); break;
         case "memoryState": dispatch({ type: "memoryState", view: msg.view, error: msg.error, done: msg.done }); break;
         case "skillsState": dispatch({ type: "skillsState", view: msg.view, running: msg.running, error: msg.error, done: msg.done }); break;
+        case "reviewState": dispatch({ type: "reviewState", view: msg.view, error: msg.error, done: msg.done }); break;
         case "aiDisclosure": dispatch({ type: "aiDisclosure", text: msg.text }); break;
         case "worldOpened": dispatch({ type: "worldOpened", id: msg.id }); break;
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
@@ -405,6 +417,20 @@ export function App() {
     />
   ) : null;
 
+  const reviewPanel = state.review ? (
+    <ReviewPanel
+      view={state.review.view}
+      error={state.review.error}
+      done={state.review.done}
+      busy={!!state.streamId}
+      onRefresh={() => postToHost(state.review!.view.mode === "director" ? { type: "reviewDirectorOpen", projectId: state.review!.view.review?.project_id ?? null } : { type: "reviewOpen" })}
+      onPrepare={() => postToHost({ type: "reviewPrepare" })}
+      onOpenTeam={(projectId) => postToHost({ type: "reviewDirectorOpen", projectId })}
+      onDecide={(projectId, week, revision, form) => postToHost({ type: "reviewDecision", projectId, week, revision, form })}
+      onClose={() => dispatch({ type: "reviewClose" })}
+    />
+  ) : null;
+
   const retry = (prompt: string) => {
     if (state.streamId) return;
     // Re-send the same user prompt to get a fresh assistant variant.
@@ -483,6 +509,8 @@ export function App() {
           onReportProblem={() => postToHost({ type: "openReportModal" })}
           onInstallUpdate={() => postToHost({ type: "installUpdate" })}
           onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
+          // cr-review — a director signed in with an issuer token opens the Weekly Review here.
+          verifyPanel={reviewPanel}
         />
       ) : (
       <ChatPanel
@@ -492,7 +520,7 @@ export function App() {
         messages={messages}
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
-        verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}</> : null}
+        verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });

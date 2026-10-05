@@ -391,6 +391,12 @@ export type WebviewMessage = (
   // cr-skills — the curriculum skills panel (CR-43–CR-47; CR switch only, re-checked by the host).
   | { type: "skillsOpen" }
   | { type: "skillRun"; skill: string; form: import("./skillView").SkillForm }
+  // cr-review — the Weekly Review panel (CR-48–CR-53). The student's two messages are behind the CR
+  // switch; the director's two behind the switch as the Service answers the issuer token. Both re-checked by the host.
+  | { type: "reviewOpen"; week?: number }
+  | { type: "reviewPrepare"; week?: number }
+  | { type: "reviewDirectorOpen"; projectId?: string | null; week?: number }
+  | { type: "reviewDecision"; projectId: string; week: number; revision: number; form: import("./reviewView").DirectorDecisionForm }
   | { type: "selectModel"; alias: string }
   // #1298 — instructor-only: free-form model id that bypasses the profile's choices list.
   | { type: "selectModelDirect"; modelId: string }
@@ -545,6 +551,8 @@ export type HostMessage = (
   | { type: "memoryState"; view: import("./memoryView").MemoryView | null; error?: string; done?: string }
   // cr-skills — the "커리큘럼 스킬" panel (null = hidden); `running` while a skill runs.
   | { type: "skillsState"; view: import("./skillView").SkillsView | null; running?: boolean; error?: string; done?: string }
+  // cr-review — the "주간 리뷰" panel, the student's or the director's (null = hidden).
+  | { type: "reviewState"; view: import("./reviewView").ReviewView | null; error?: string; done?: string }
   // #320 — AI disclosure notice (Anthropic Usage Policy: consumer-facing chat
   // must disclose "you are interacting with AI" at minimum at session start).
   // Host posts once per session — first webview mount of this run and again

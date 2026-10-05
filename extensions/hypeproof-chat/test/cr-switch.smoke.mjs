@@ -24,7 +24,7 @@ registerHooks({
   },
 });
 
-const { CR_SURFACES, CR_CONTEXT_KEY, CR_BYTES_CONTEXT_KEY, manifestSwitchProblems, manifestStoredOnlyProblems, isCurriculumRuntimeEnabled, isCrBrowserTool, isCrVerifyTool } = await import("../src/curriculumRuntime.ts");
+const { CR_SURFACES, CR_CONTEXT_KEY, CR_BYTES_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, manifestSwitchProblems, manifestStoredOnlyProblems, isCurriculumRuntimeEnabled, isCrBrowserTool, isCrVerifyTool } = await import("../src/curriculumRuntime.ts");
 const { VerifySession } = await import("../src/verifySession.ts");
 const { permittedMcpToolsFor } = await import("../src/sdkCoachHelpers.ts");
 const { buildHypeproofMcpServer, MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
@@ -69,8 +69,26 @@ assert.match(providerSrc, /async publishTestVersion\(\): Promise<void> \{\s*if \
 assert.match(providerSrc, /async experimentEvidence\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async ventureMemory\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
 assert.match(providerSrc, /async curriculumSkills\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
-assert.deepEqual(CR_SURFACES.commands, ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills"], "every CR command is in the inventory the manifest check walks (cr-verify adds testMyProduct, cr-publish publishTestVersion, cr-evidence experimentEvidence, cr-memory ventureMemory, cr-skills curriculumSkills)");
-ok("commands: the pickElement, browserResults, testMyProduct, publishTestVersion, experimentEvidence, ventureMemory and curriculumSkills handlers re-check the served switch before anything else");
+assert.match(providerSrc, /async weeklyReview\(\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\)/);
+assert.deepEqual(CR_SURFACES.commands, ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills", "hypeproof-chat.weeklyReview"], "every CR command is in the inventory the manifest check walks (cr-verify adds testMyProduct, cr-publish publishTestVersion, cr-evidence experimentEvidence, cr-memory ventureMemory, cr-skills curriculumSkills, cr-review weeklyReview)");
+ok("commands: the pickElement, browserResults, testMyProduct, publishTestVersion, experimentEvidence, ventureMemory, curriculumSkills and weeklyReview handlers re-check the served switch before anything else");
+
+// ── the director's command (cr-review): gated on the switch as the Service answers the issuer token ──
+assert.deepEqual(CR_SURFACES.directorCommands, ["hypeproof-chat.weeklyReviewDirector"]);
+assert.notEqual(CR_DIRECTOR_CONTEXT_KEY, CR_CONTEXT_KEY);
+assert.deepEqual(manifestSwitchProblems(manifest, CR_SURFACES.directorCommands, CR_DIRECTOR_CONTEXT_KEY), [], "the director command is hidden and disabled unless the Service answers the issuer token");
+for (const id of CR_SURFACES.directorCommands) assert.ok(!CR_SURFACES.commands.includes(id) && !CR_SURFACES.switchOffWhileStored.includes(id), "listed once");
+{
+  const dcmd = (m) => m.contributes.commands.find((c) => c.command === "hypeproof-chat.weeklyReviewDirector");
+  const plantD = (fn) => { const m = structuredClone(manifest); fn(m); return manifestSwitchProblems(m, CR_SURFACES.directorCommands, CR_DIRECTOR_CONTEXT_KEY); };
+  assert.ok(plantD((m) => delete dcmd(m).enablement).some((p) => /enablement/.test(p)), "an always-enabled director command is caught");
+  assert.ok(plantD((m) => (dcmd(m).enablement = CR_CONTEXT_KEY)).some((p) => /enablement/.test(p)), "gated on the student's key instead is caught");
+  assert.ok(plantD((m) => (m.contributes.menus.commandPalette.find((x) => x.command === "hypeproof-chat.weeklyReviewDirector").when = "true")).some((p) => /commandPalette/.test(p)));
+}
+// The handler re-checks through the Service before anything, and the key mirrors only that answer.
+assert.match(providerSrc, /async weeklyReviewDirector\(\): Promise<void> \{\s*if \(!\(await this\.refreshCrDirectorContext\(true\)\)\)/);
+assert.match(providerSrc, /const on = token \? await directorAvailable\(\{ base: curriculumBase\(this\.proxyUrl\(\)\), token \}\) : false;[\s\S]{0,200}?executeCommand\("setContext", CR_DIRECTOR_CONTEXT_KEY, on\)/);
+ok("director command: gated on its own key, which mirrors only the Service's answer for the issuer token; planted ungated variants are caught");
 
 // ── the listed exception: delete-only, shown only while the person has bytes stored ──
 assert.deepEqual(CR_SURFACES.switchOffWhileStored, ["hypeproof-chat.clearBrowserResultBytes"], "the delete command is in the inventory as the one allowed exception");
@@ -226,6 +244,12 @@ for (const t of CR_SURFACES.webviewMessages) {
   if (t === "removeElementContext") {
     const handler = new RegExp(`case "${t}":[\\s\\S]{0,200}?this\\.clearElementContext\\(\\)`);
     assert.match(providerSrc, handler, `${t} only removes CR state; it has nothing to reach with the switch off`);
+  } else if (t === "reviewOpen" || t === "reviewPrepare") {
+    // cr-review — the student's review messages go to one handler that checks the switch before anything else.
+    assert.match(providerSrc, new RegExp(`case "${t}":[\\s\\S]{0,200}?await this\\.handleReviewMessage\\(msg\\)`), `${t} is handled by handleReviewMessage`);
+  } else if (t === "reviewDirectorOpen" || t === "reviewDecision") {
+    // cr-review — the director's messages go to one handler that checks the switch through the Service first.
+    assert.match(providerSrc, new RegExp(`case "${t}":[\\s\\S]{0,300}?await this\\.handleReviewDirectorMessage\\(msg\\)`), `${t} is handled by handleReviewDirectorMessage`);
   } else if (t === "skillsOpen" || t === "skillRun") {
     // cr-skills — both skills messages go to one handler that checks the switch before anything else.
     assert.match(providerSrc, new RegExp(`case "${t}":[\\s\\S]{0,200}?await this\\.handleSkillsMessage\\(msg\\)`), `${t} is handled by handleSkillsMessage`);
@@ -246,6 +270,8 @@ for (const t of CR_SURFACES.webviewMessages) {
 assert.match(providerSrc, /private async handlePublishMessage\([\s\S]{0,600}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "publishState", view: null/, "the publish handler re-checks the switch first");
 assert.match(providerSrc, /private async handleVerifyMessage\([^)]*\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "verifyState", view: null/, "the verify handler re-checks the switch first");
 assert.match(providerSrc, /private async handleSkillsMessage\([\s\S]{0,300}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "skillsState", view: null/, "the skills handler re-checks the switch first");
+assert.match(providerSrc, /private async handleReviewMessage\([\s\S]{0,300}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "reviewState", view: null/, "the student's review handler re-checks the switch first");
+assert.match(providerSrc, /private async handleReviewDirectorMessage\([\s\S]{0,500}?\): Promise<void> \{\s*if \(!\(await this\.refreshCrDirectorContext\(\)\)\) \{\s*await this\.post\(\{ type: "reviewState", view: null/, "the director's review handler re-checks the switch through the Service first");
 assert.match(providerSrc, /private async handleMemoryMessage\([\s\S]{0,400}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "memoryState", view: null/, "the memory handler re-checks the switch first");
 assert.match(providerSrc, /private async handleEvidenceMessage\([\s\S]{0,900}?\): Promise<void> \{\s*if \(!this\.isCurriculumRuntimeEnabled\(\)\) \{\s*await this\.post\(\{ type: "evidenceState", view: null/, "the evidence handler re-checks the switch first");
 // The queue's behaviour is test/cr-host.smoke.mjs; here, that the provider uses it: one

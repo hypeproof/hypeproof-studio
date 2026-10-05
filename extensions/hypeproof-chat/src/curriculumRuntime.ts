@@ -22,6 +22,16 @@ export const CR_CONTEXT_KEY = "hypeproof-chat.curriculumRuntimeEnabled";
 /** Context key: the signed-in person has browser-result bytes stored (CR-10). Never the CR switch. */
 export const CR_BYTES_CONTEXT_KEY = "hypeproof-chat.crBrowserBytesStored";
 
+/**
+ * Context key (cr-review, CR-51/CR-53): the stored issuer token directs at least one cohort whose
+ * profile has the CR switch on. A director signs in with an issuer token and has no served
+ * student profile, so the switch reaches the App through the Service instead: the key is true
+ * only while `GET /v1/curriculum/director/projects` answers that token (every CR route answers
+ * the unknown route while the switch is off for all of the director's profiles, CR-02). The
+ * director's commands are gated on this key exactly as the student's are on CR_CONTEXT_KEY.
+ */
+export const CR_DIRECTOR_CONTEXT_KEY = "hypeproof-chat.curriculumRuntimeDirector";
+
 /** The five Experiment Browser tool names shared by both coach runtimes (CR-04, CR-06). */
 export const CR_BROWSER_TOOL_NAMES = [
   "browser_observe",
@@ -65,8 +75,10 @@ export function isCurriculumRuntimeEnabled(
 }
 
 export interface CrSurfaceInventory {
-  /** VS Code command ids contributed by package.json. */
+  /** VS Code command ids contributed by package.json, gated on CR_CONTEXT_KEY. */
   commands: readonly string[];
+  /** The director's command ids (cr-review), gated on CR_DIRECTOR_CONTEXT_KEY: the switch as the Service answers the issuer token. */
+  directorCommands: readonly string[];
   /** Full SDK MCP tool names (`mcp__hypeproof__…`). */
   mcpTools: readonly string[];
   /** Proxy tool names the Worker injects (worker/src/lib/browser-tools.ts). */
@@ -92,11 +104,13 @@ export const CR_TEST_ORIGIN_EVENTS_ROUTE = "POST <test-origin>/l/:link/__hp/even
 export const CR_SURFACES: CrSurfaceInventory = {
   // cr-verify adds "Test my product" (CR-12); cr-publish adds "Publish for user test" (CR-17);
   // cr-evidence adds the experiment evidence panel (CR-24–CR-27, CR-69); cr-memory the Venture Memory panel (CR-35–CR-38);
-  // cr-skills the curriculum skills panel (CR-43–CR-47).
-  commands: ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills"],
+  // cr-skills the curriculum skills panel (CR-43–CR-47); cr-review the Weekly Review (CR-48–CR-50).
+  commands: ["hypeproof-chat.pickElement", "hypeproof-chat.browserResults", "hypeproof-chat.testMyProduct", "hypeproof-chat.publishTestVersion", "hypeproof-chat.experimentEvidence", "hypeproof-chat.ventureMemory", "hypeproof-chat.curriculumSkills", "hypeproof-chat.weeklyReview"],
+  // cr-review: the director's review screen and four-team overview (CR-50, CR-51, CR-53).
+  directorCommands: ["hypeproof-chat.weeklyReviewDirector"],
   mcpTools: [...CR_BROWSER_TOOL_NAMES, ...CR_VERIFY_TOOL_NAMES].map((n) => `mcp__hypeproof__${n}`),
   proxyTools: [...CR_BROWSER_TOOL_NAMES, ...CR_VERIFY_TOOL_NAMES],
-  webviewMessages: ["removeElementContext", "verifyOpen", "verifyStart", "verifyRetest", "verifyFix", "publishOpen", "publishSubmit", "publishLink", "publishRevoke", "evidenceOpen", "evidenceNote", "evidenceDraft", "evidenceReview", "evidenceDelete", "memoryOpen", "memoryDiff", "memoryDecision", "skillsOpen", "skillRun"],
+  webviewMessages: ["removeElementContext", "verifyOpen", "verifyStart", "verifyRetest", "verifyFix", "publishOpen", "publishSubmit", "publishLink", "publishRevoke", "evidenceOpen", "evidenceNote", "evidenceDraft", "evidenceReview", "evidenceDelete", "memoryOpen", "memoryDiff", "memoryDecision", "skillsOpen", "skillRun", "reviewOpen", "reviewPrepare", "reviewDirectorOpen", "reviewDecision"],
   // cr-verify adds no Worker route. cr-publish adds the Publish for User Test routes
   // (worker/src/routes/curriculum.ts `CURRICULUM_ROUTES`) and the test origin's.
   workerRoutes: [
@@ -138,6 +152,12 @@ export const CR_SURFACES: CrSurfaceInventory = {
     "GET /v1/curriculum/skills",
     "POST /v1/curriculum/projects/:id/skills/:skill/prepare",
     "POST /v1/curriculum/projects/:id/skills/:skill/output",
+    // cr-review: the Weekly Review Pack (open, prepare, commit), the director's decision and overview.
+    "GET /v1/curriculum/projects/:id/review",
+    "POST /v1/curriculum/projects/:id/review/prepare",
+    "POST /v1/curriculum/projects/:id/review/commit",
+    "POST /v1/curriculum/projects/:id/review/decision",
+    "GET /v1/curriculum/reviews",
   ],
   switchOffWhileStored: ["hypeproof-chat.clearBrowserResultBytes"],
 };
@@ -163,10 +183,13 @@ export interface ExtensionManifestLike {
  * A command passes only when its `enablement` requires the context key and every menu
  * entry for it (the command palette included, which needs an explicit entry) has a `when`
  * that requires it too. Returns the problems; empty means the manifest gates every one.
+ * `key` is CR_CONTEXT_KEY for the student's commands and CR_DIRECTOR_CONTEXT_KEY for the
+ * director's (`CR_SURFACES.directorCommands`).
  */
 export function manifestSwitchProblems(
   manifest: ExtensionManifestLike,
   commands: readonly string[] = CR_SURFACES.commands,
+  key: string = CR_CONTEXT_KEY,
 ): string[] {
   const problems: string[] = [];
   const requiresKey = (expr: string | undefined): boolean => {
@@ -176,7 +199,7 @@ export function manifestSwitchProblems(
     return expr
       .split("&&")
       .map((part) => part.trim())
-      .some((part) => part === CR_CONTEXT_KEY);
+      .some((part) => part === key);
   };
   const declared = manifest.contributes?.commands ?? [];
   const menus = manifest.contributes?.menus ?? {};
@@ -186,7 +209,7 @@ export function manifestSwitchProblems(
       problems.push(`${id}: not declared`);
       continue;
     }
-    if (!requiresKey(cmd.enablement)) problems.push(`${id}: enablement does not require ${CR_CONTEXT_KEY}`);
+    if (!requiresKey(cmd.enablement)) problems.push(`${id}: enablement does not require ${key}`);
     const palette = (menus.commandPalette ?? []).filter((m) => m.command === id);
     if (palette.length === 0) problems.push(`${id}: no commandPalette entry, so the palette shows it`);
     for (const [menu, items] of Object.entries(menus)) {
