@@ -28,7 +28,7 @@ import { getProfile } from '../profiles';
 import { reusable, templateAdmission } from './authoring';
 import {
   RETROSPECTIVE_FORMAT, RETRO_BODY_MAX, answerRefusal, assistanceRefusal, citeRefusal, citedShareIds, coverageOf, feedbackLoopEnabled,
-  findingView, helpConditions, lessonAttribution, lessonRefusal, responseFor, shareParts, storedFeedback, validateRetrospectiveDoc,
+  findingView, helpConditions, lessonAttribution, lessonRefusal, reportedHelpOf, responseFor, shareParts, storedFeedback, validateRetrospectiveDoc,
   type CitedShare, type RetroBase, type RetroDoc, type RetroSource, type ResponseRow, type ShareLessonRow, type ShareRow,
 } from '../lib/feedback-loop';
 
@@ -133,8 +133,8 @@ async function checkedDoc(env: Env, a: IssuerAuthz, cohort: string, profileId: s
       const x = shares.get(s.share_id), why = standRefusal(s, x, base) || answerRefusal(s, x!);
       if (why) return { refusal: { status: 409 as const, body: { error: 'a cited share part cannot be used', reason: why, share_id: s.share_id, part: s.part, finding: f.id } } };
     }
-    const why = assistanceRefusal(f, (id) => shares.get(id)?.share.kind);
-    if (why) return { refusal: { status: 400 as const, body: { error: 'assisted needs a cited help request', reason: why, finding: f.id } } };
+    const why = assistanceRefusal(f, (id) => { const x = shares.get(id); return x ? { kind: x.share.kind, reported_help: reportedHelpOf(x.share) } : undefined; });
+    if (why) return { refusal: { status: 400 as const, body: { error: 'assisted needs a cited help request or a cited task record that names help', reason: why, finding: f.id } } };
   }
   return { doc };
 }
@@ -149,7 +149,7 @@ async function view(env: Env, a: IssuerAuthz, row: RetroRow, draft: Draft) {
     const x = shares.get(id);
     // A share that is not evidence about this version reads like one that is gone: nothing of it is shown.
     return x && !lessonRefusal(x.share, x.lesson, base)
-      ? { available: true, kind: x.share.kind, student_id: x.share.student_id, parts: new Set(shareParts(x.share, !!x.response).map((p) => p.part)), lesson: lessonAttribution(x.lesson), response_current: x.response_current }
+      ? { available: true, kind: x.share.kind, student_id: x.share.student_id, parts: new Set(shareParts(x.share, !!x.response).map((p) => p.part)), lesson: lessonAttribution(x.lesson), response_current: x.response_current, reported_help: reportedHelpOf(x.share) }
       : { available: false };
   };
   const findings = doc.findings.map((f) => findingView(f, resolve));

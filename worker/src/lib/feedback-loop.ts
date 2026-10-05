@@ -18,9 +18,11 @@
 //     they sent it (`classroom_share_lessons`), that lesson is this course and version. A share with no such record reads
 //     `lesson: unknown`; it is never silently attributed.
 //   - No independence is inferred. Nothing in a share records independent performance, so `independent` is refused, and
-//     `assisted` needs a cited help request. A missing record is `unknown`, never "did it alone".
+//     `assisted` needs a cited help request or the learner's own record of the help they used. A missing record is
+//     `unknown`, never "did it alone"; a record saying "no help" is the learner's self-report, never independence.
 //   - No score. A key shaped like a score is refused by the measurement core's own check (forbidPersonalMetrics).
 import { forbidPersonalMetrics, isHumanEvidence } from './measurement-core/learning-events.ts';
+import { HELP_MODES } from './lesson-help-mode.ts';
 
 /** Off unless the Service sets `HPS_FEEDBACK_LOOP=enabled` (migration 0039 first). Off = the routes answer 404. */
 export const feedbackLoopEnabled = (env: { HPS_FEEDBACK_LOOP?: string }) => env.HPS_FEEDBACK_LOOP === 'enabled';
@@ -28,6 +30,8 @@ export const RETROSPECTIVE_FORMAT = 'hps-lesson-retrospective/1';
 
 /** The six content fields a share may carry (routes/classroom.ts). */
 export const CONTENT_PARTS = ['question', 'prompt', 'response', 'tool_summary', 'artifact_url', 'verification'] as const;
+/** The learner's own records a submission may also carry while the switch is on (EDU-04, EDU-05; see below). */
+export const RECORD_PARTS = ['independent_task', 'self_reliance'] as const;
 /**
  * Whose words each part of a share is. Derived from the part's NAME, never typed by anyone, so an AI answer cannot be
  * cited as a person's feedback: `response` is always `ai`, and `feedback` is only ever the recipient's own text.
@@ -41,6 +45,8 @@ export const PART_ORIGIN = {
   artifact_url: 'artifact',
   feedback: 'human',
   learner_response: 'learner',
+  independent_task: 'learner',
+  self_reliance: 'learner',
 } as const;
 export type SharePart = keyof typeof PART_ORIGIN;
 export type PartOrigin = (typeof PART_ORIGIN)[SharePart];
@@ -111,12 +117,104 @@ export function responseFor(rows: readonly ResponseRow[], feedbackSha: string | 
 export const responseView = (r: ResponseRow | null, currentFeedbackSha: string | null) =>
   r ? { decision: r.decision, reason: r.reason, created_at: r.created_at, answers_current_feedback: currentFeedbackSha !== null && r.feedback_sha256 === currentFeedbackSha } : null;
 
+// ── the learner's own records on a submission (EDU-04, EDU-05) ──────────────────────────────────────────────────
+//
+// While the switch is on, a SUBMISSION may also carry two optional records, in the learner's words and by their choice
+// (nothing is filled in for them). They are part of what the learner consents to send, so the share's recipient, audit,
+// withdrawal and expiry apply to them unchanged, and a correction is a new share. Both are self-reported (the measurement
+// core's `self_reported`): what the learner says about their own work, never an observation of independent performance.
+//   independent_task (EDU-04)  the task, how it differs from the demonstration, and the help the learner says they used.
+//   self_reliance    (EDU-05)  pieces of work the learner sorts into "I do it myself", "I do it with help" and "I hand it
+//                              to an expert" — their judgment of their own scope, not a level or a grade.
+
+/**
+ * Help a learner may say they used on the task: none, the lesson's own AI help strategies (lesson-help-mode HELP_MODES
+ * without `independent`, which is a strategy and not help), the AI doing the work for them, or a person. `none` stands alone.
+ */
+type AiHelp = Exclude<(typeof HELP_MODES)[number], 'independent'>;
+const AI_HELP = HELP_MODES.filter((m): m is AiHelp => m !== 'independent');
+export const TASK_HELP = ['none', ...AI_HELP, 'ai_made', 'person'] as const;
+export type TaskHelp = (typeof TASK_HELP)[number];
+export const SELF_RELIANCE = ['direct', 'helped', 'expert'] as const;
+export type SelfReliance = (typeof SELF_RELIANCE)[number];
+export const RECORD_LIMITS = { task: 2000, help_note: 2000, items: 10, work: 500, note: 1000 } as const;
+export interface TaskRecord { task: string; help: TaskHelp[]; help_note?: string }
+export interface SelfRelianceItem { work: string; how: SelfReliance; note?: string }
+export interface ShareRecords { independent_task?: TaskRecord; self_reliance?: SelfRelianceItem[] }
+/**
+ * The most a share body's records can add: every string at its limit at six JSON bytes per unit (an escaped control
+ * character), the help list, keys and punctuation. The Service widens the share body cap by this while the switch is on.
+ */
+export const RECORDS_BODY_MAX = 6 * (RECORD_LIMITS.task + RECORD_LIMITS.help_note + TASK_HELP.join('').length
+  + RECORD_LIMITS.items * (RECORD_LIMITS.work + RECORD_LIMITS.note)) + 4 * 1024;
+
+/**
+ * The records in a share body as they will be stored (strings as given; the route masks credentials), or the first refusal
+ * by name. Only the record keys are read; the six content fields are the share route's own check. `kind` is the share's:
+ * records go with a submission only, a help request carries none.
+ */
+export function parseShareRecords(content: Record<string, unknown>, kind: string): { ok: true; records: ShareRecords } | { ok: false; code: string } {
+  const fail = (code: string) => ({ ok: false as const, code });
+  const present = RECORD_PARTS.filter((k) => Object.hasOwn(content, k));
+  if (!present.length) return { ok: true, records: {} };
+  if (kind !== 'submission') return fail('record_needs_submission');
+  try { forbidPersonalMetrics(present.map((k) => content[k])); } catch { return fail('unsupported_score'); }
+  const records: ShareRecords = {};
+  if (Object.hasOwn(content, 'independent_task')) {
+    const t = content.independent_task;
+    if (!isObject(t) || !keysOk(t, ['task', 'help'], ['help_note'])) return fail('invalid_independent_task');
+    if (!text(t.task, RECORD_LIMITS.task)) return fail('invalid_task');
+    if (!Array.isArray(t.help) || !t.help.length || t.help.some((h) => !(TASK_HELP as readonly unknown[]).includes(h)) || new Set(t.help).size !== t.help.length) return fail('invalid_help');
+    if (t.help.includes('none') && t.help.length > 1) return fail('help_none_with_other');
+    if (t.help_note !== undefined && (typeof t.help_note !== 'string' || t.help_note.length > RECORD_LIMITS.help_note)) return fail('invalid_help_note');
+    // The help list in a fixed order, so the same choice is the same stored record (a retried share compares it exactly).
+    const help = TASK_HELP.filter((h) => (t.help as unknown[]).includes(h));
+    records.independent_task = { task: t.task, help, ...(typeof t.help_note === 'string' && t.help_note.trim() ? { help_note: t.help_note } : {}) };
+  }
+  if (Object.hasOwn(content, 'self_reliance')) {
+    const items = content.self_reliance;
+    if (!Array.isArray(items) || !items.length || items.length > RECORD_LIMITS.items) return fail('invalid_self_reliance');
+    const out: SelfRelianceItem[] = [];
+    for (const i of items) {
+      if (!isObject(i) || !keysOk(i, ['work', 'how'], ['note'])) return fail('invalid_self_reliance');
+      if (!text(i.work, RECORD_LIMITS.work)) return fail('invalid_work');
+      if (!(SELF_RELIANCE as readonly unknown[]).includes(i.how)) return fail('invalid_how');
+      if (i.note !== undefined && (typeof i.note !== 'string' || i.note.length > RECORD_LIMITS.note)) return fail('invalid_reliance_note');
+      out.push({ work: i.work, how: i.how as SelfReliance, ...(typeof i.note === 'string' && i.note.trim() ? { note: i.note } : {}) });
+    }
+    records.self_reliance = out;
+  }
+  return { ok: true, records };
+}
+
+/** The same records with every learner-written string passed through `mask` (the route's credential masking). */
+export const maskRecords = (r: ShareRecords, mask: (s: string) => string): ShareRecords => ({
+  ...(r.independent_task ? { independent_task: { ...r.independent_task, task: mask(r.independent_task.task), ...(r.independent_task.help_note !== undefined ? { help_note: mask(r.independent_task.help_note) } : {}) } } : {}),
+  ...(r.self_reliance ? { self_reliance: r.self_reliance.map((i) => ({ ...i, work: mask(i.work), ...(i.note !== undefined ? { note: mask(i.note) } : {}) })) } : {}),
+});
+
+const contentOf = (s: Pick<ShareRow, 'content_json'>): Record<string, unknown> => {
+  try { const c = JSON.parse(s.content_json); return isObject(c) ? c : {}; } catch { return {}; }
+};
+/** A record part holds something: the task record is an object, the self-reliance list is not empty. */
+const hasRecord = (content: Record<string, unknown>, part: (typeof RECORD_PARTS)[number]) =>
+  part === 'independent_task' ? isObject(content.independent_task) : Array.isArray(content.self_reliance) && content.self_reliance.length > 0;
+/**
+ * What the learner's task record says about help, as a category and nothing more: `help` (any help named), `no_help` (they
+ * wrote that they used none) or null (no record — unknown, never "none"). Self-reported either way.
+ */
+export function reportedHelpOf(s: Pick<ShareRow, 'content_json'>): 'help' | 'no_help' | null {
+  const t = contentOf(s).independent_task;
+  if (!isObject(t) || !Array.isArray(t.help) || !t.help.length) return null;
+  return t.help.every((h) => h === 'none') ? 'no_help' : 'help';
+}
+
 /** The parts of a share that hold something now, each with whose words they are. Never the content itself. */
 export function shareParts(s: ShareRow, answered: boolean): Array<{ part: SharePart; origin: PartOrigin }> {
-  let content: Record<string, unknown> = {};
-  try { content = JSON.parse(s.content_json) ?? {}; } catch { content = {}; }
+  const content = contentOf(s);
   const out: Array<{ part: SharePart; origin: PartOrigin }> = [];
   for (const part of CONTENT_PARTS) if (typeof content[part] === 'string' && (content[part] as string).trim()) out.push({ part, origin: PART_ORIGIN[part] });
+  for (const part of RECORD_PARTS) if (hasRecord(content, part)) out.push({ part, origin: PART_ORIGIN[part] });
   if (hasFeedback(s)) out.push({ part: 'feedback', origin: PART_ORIGIN.feedback });
   if (answered) out.push({ part: 'learner_response', origin: PART_ORIGIN.learner_response });
   return out;
@@ -246,13 +344,26 @@ export const lessonAttribution = (lesson: ShareLessonRow | null) => (lesson ? 't
 export const answerRefusal = (src: RetroSource, x: Pick<CitedShare, 'response_current'>) =>
   src.part === 'learner_response' && !x.response_current ? 'learner_response_stale' : '';
 
-/** `assisted` stands on a cited help request: the learner asked a person for help. */
-export const assistanceRefusal = (f: RetroFinding, kindOf: (shareId: string) => string | undefined) =>
-  f.assistance === 'assisted' && !f.sources.some((s) => kindOf(s.share_id) === 'help') ? 'unsupported_assistance' : '';
+/**
+ * What `assisted` stands on, among a finding's cited sources: a help request (the learner asked a person for help), or the
+ * learner's own task record naming help they used, cited by that part (`learner_report`, a self-report). "No help" in a
+ * record is no basis for anything: it neither supports `assisted` nor makes the finding `independent`.
+ */
+export function assistanceBasis(sources: ReadonlyArray<{ part: string; kind?: string; reported_help?: 'help' | 'no_help' | null }>) {
+  const basis: Array<'help_request' | 'learner_report'> = [];
+  if (sources.some((s) => s.kind === 'help')) basis.push('help_request');
+  if (sources.some((s) => s.part === 'independent_task' && s.reported_help === 'help')) basis.push('learner_report');
+  return basis;
+}
+/** `assisted` needs a basis among the shares it cites (assistanceBasis). */
+export const assistanceRefusal = (f: RetroFinding, shareOf: (shareId: string) => { kind: string; reported_help: 'help' | 'no_help' | null } | undefined) =>
+  f.assistance === 'assisted' && !assistanceBasis(f.sources.map((s) => ({ part: s.part, ...shareOf(s.share_id) }))).length ? 'unsupported_assistance' : '';
 
 export interface ResolvedShare {
   available: boolean; kind?: string; student_id?: string; parts?: ReadonlySet<SharePart>;
   lesson?: 'this_version' | 'unknown'; response_current?: boolean;
+  /** reportedHelpOf the share: what its task record says about help (null = no record). */
+  reported_help?: 'help' | 'no_help' | null;
 }
 
 /** One finding as it reads NOW, from the shares the instructor can still read. Recomputed on every read, never stored. */
@@ -265,19 +376,23 @@ export function findingView(f: RetroFinding, resolve: (shareId: string) => Resol
       ...(r.available && !available ? { part_empty: true } : {}),
       ...(available ? { kind: r.kind, student_id: r.student_id, lesson: r.lesson ?? 'unknown' } : {}),
       ...(available && s.part === 'learner_response' ? { answers_current_feedback: r.response_current === true } : {}),
+      // The learner's own record, read as a category only: whether it names help (self-reported, never an observation).
+      ...(available && s.part === 'independent_task' && r.reported_help ? { self_reported_help: r.reported_help } : {}),
     };
   });
   const live = sources.filter((s) => s.available);
   const person = live.some((s) => isLearnerEvidence(s.origin));
   const unobserved_reason = person ? null : !f.sources.length ? 'no_source' : !live.length ? 'sources_unavailable' : 'no_person_source';
-  const helpLive = live.some((s) => s.kind === 'help');
+  const basis = f.assistance === 'assisted' ? assistanceBasis(live.map((s) => ({ part: s.part, kind: s.kind, reported_help: s.self_reported_help ?? null }))) : [];
   return {
     id: f.id, text: f.text, sources,
     status: person ? 'observed' as const : 'unobserved' as const,
     ...(unobserved_reason ? { unobserved_reason } : {}),
     human_feedback: live.some((s) => s.part === 'feedback') ? 'present' as const : 'unobserved' as const,
-    assistance: f.assistance === 'assisted' && helpLive ? 'assisted' as const : 'unknown' as const,
-    ...(f.assistance === 'assisted' && !helpLive ? { assistance_basis_unavailable: true } : {}),
+    assistance: basis.length ? 'assisted' as const : 'unknown' as const,
+    // What the assistance stands on now: a help request and/or the learner's own record (self-reported).
+    ...(basis.length ? { assistance_basis: basis } : {}),
+    ...(f.assistance === 'assisted' && !basis.length ? { assistance_basis_unavailable: true } : {}),
     // A live source whose lesson the Service did not record: the finding is not claimed for this version.
     ...(live.some((s) => s.lesson === 'unknown') ? { lesson_unconfirmed: true } : {}),
     // A cited decision that answered feedback which has since been edited or cleared.
@@ -288,17 +403,25 @@ export function findingView(f: RetroFinding, resolve: (shareId: string) => Resol
 /**
  * The denominator a retrospective must not hide (design: "참여 중단·무신호·도움 요청을 분모에서 빼지 않는다"). `roster` is the
  * cohort's current roster (null = unreadable). The Service keeps no per-turn record of help used or of a learner stopping in
- * a class turn, so those two are reported unobserved rather than counted as zero.
+ * a class turn, so those two are reported unobserved rather than counted as zero. What learners WROTE about the help they
+ * used, in the task records this retrospective cites, is counted apart (`help_reported`, per learner, self-reported): a learner
+ * whose cited records name any help counts once under `with_help`; one whose records all say "no help" under `no_help`; a
+ * learner without a cited task record is in neither — unknown, not "no help".
  */
 export function coverageOf(roster: readonly string[] | null, findings: ReturnType<typeof findingView>[]) {
-  const learners = new Set<string>(), help = new Set<string>();
-  for (const f of findings) for (const s of f.sources) if (s.available) { if (s.student_id) learners.add(s.student_id); if (s.kind === 'help') help.add(s.share_id); }
+  const learners = new Set<string>(), help = new Set<string>(), withHelp = new Set<string>(), noHelp = new Set<string>();
+  for (const f of findings) for (const s of f.sources) if (s.available) {
+    if (s.student_id) learners.add(s.student_id);
+    if (s.kind === 'help') help.add(s.share_id);
+    if (s.student_id && s.self_reported_help) (s.self_reported_help === 'help' ? withHelp : noHelp).add(s.student_id);
+  }
   return {
     roster: roster ? roster.length : null,
     learners_with_sources: learners.size,
     learners_without_sources: roster ? roster.filter((u) => !learners.has(u)).length : null,
     help_requests_cited: help.size,
     help_use: 'unobserved' as const,
+    help_reported: { source_state: 'self_reported' as const, with_help: withHelp.size, no_help: [...noHelp].filter((u) => !withHelp.has(u)).length },
     stopped: 'unobserved' as const,
   };
 }
