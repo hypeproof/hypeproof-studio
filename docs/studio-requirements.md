@@ -669,6 +669,12 @@ legacy-seven records, task outcomes and research validity.
 REQ-SS4: Both host tools can read server workbench results with the existing
 connection, preserving review/hold states without submitting reviews. Specific
 server deletion responses prevent recapture and unblock download races across restart.
+REQ-SS5: Known-secret redaction (MC-30) also removes a pasted Lab measurement
+connection token (`hps_sync_` + 43 base64url characters), bare or after `Bearer`,
+before local storage and upload (package 0.3.4, #1377; MC-T18 in
+`worker/test/measurement-core-local-record.test.mjs`). Installation is mandatory
+for every member since 2026-10-01; scope, purpose, score display and read access are
+owned by [measurement-core §멤버 설치 의무](requirements/measurement-core.md#멤버-설치-의무--2026-10-01-결정).
 
 Contract: [SS-01–10](requirements/session-sync.md). Validation:
 `packages/measurement/test/sync.test.mjs`; production acceptance and installed
