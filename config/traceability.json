@@ -1942,6 +1942,9 @@
           "path": "chalk/src/ui/sharing.html"
         },
         {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
           "path": "chalk/src/routes/forward.ts"
         }
       ]

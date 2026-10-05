@@ -1,11 +1,13 @@
 // #1013 feedback-loop — the whole loop in the real pages: a learner's share gets a person's feedback, the learner answers it
-// on /sharing (revise/keep/hold + why), the instructor writes a retrospective of the version that ran on /authoring (07) from
-// the shares they received, a withdrawn share drops out of it, the retrospective starts the next draft from that version,
-// and the next candidate and its learner-condition rehearsal show up as the retrospective's "next".
+// on /sharing (revise/keep/hold + why) and the instructor sees that answer on /manage, the instructor writes a retrospective
+// of the version that ran on /authoring (07) from the shares they received, a withdrawn share drops out of it, the
+// retrospective starts the next draft from that version, and the next candidate and its learner-condition rehearsal show up
+// as the retrospective's "next".
 //
-// Real here: the Chalk /sharing and /authoring pages in Chromium (clicks and typing), Chalk's forwarder, the Service router
-// and SQLite. Synthetic: every account and share; the learner's share and the instructor's feedback are written through the
-// Service API (the help-request and feedback screens have their own suites). No model, no Studio window, no real person.
+// Real here: the Chalk /sharing, /manage and /authoring pages in Chromium (clicks and typing), Chalk's forwarder, the Service
+// router and SQLite. Synthetic: every account and share; the learner's share and the instructor's feedback are written
+// through the Service API (the help-request and feedback screens have their own suites); the learner codes are issued by the
+// existing 학생 초대 route, so each share records the version it was sent under. No model, no Studio window, no real person.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -13,11 +15,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
-import { makeCtx } from '../../worker/test/harness/index.mjs';
+import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { makeCtx, TEST_SECRET } from '../../worker/test/harness/index.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-feedback-loop'); mkdirSync(out, { recursive: true });
 const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts');
+const { issueIssuer } = await import('../../worker/src/lib/tokens.ts');
 local.env.HPS_FEEDBACK_LOOP = 'enabled';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, makeCtx());
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? toService(url, init) : realFetch(url, init);
@@ -29,11 +32,23 @@ const FEEDBACK = '모바일에서 토요일 진료시간이 두 줄로 갈립니
 try {
   const course = local.lesson.course_id, V1 = local.lesson.version, V2 = 'm2026.10.05-7';
   await local.freeze(course, V1, ['intro', 'build', 'review']);
-  const teacher = await local.teacher('teacher-a'), studentA = await local.student('student-a'), studentB = await local.student('student-b');
+  const teacher = await local.teacher('teacher-a');
+  // Learner codes bound to the version that runs, from the existing 학생 초대 route (a 12-hour instructor code: the route
+  // refuses a learner code that would outlive the instructor's own).
+  const teacher12 = (await issueIssuer({ issuer: 'teacher-a', scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: OPS_ALL }] }, 12, TEST_SECRET)).token;
+  const invite = async (user) => { const r = await local.request(`/admin/cohorts/${local.cohort}/authoring/${course}/versions/${V1}/participants`, 'POST', { user, hours: 2 }, teacher12); assert.equal(r.status, 200, r.raw); return r.json.token; };
+  const studentA = await invite('student-a'), studentB = await invite('student-b');
   const api = (p, method, body, token) => local.request(p, method, body, token);
   assert.equal((await api('/v1/classroom/shares', 'POST', { id: 'share-a', recipient_id: 'teacher-a', kind: 'submission', consent: true, duration_minutes: 60, content: { prompt: '진료시간을 바꿔줘', response: 'AI가 쓴 답: 줄바꿈을 넣었습니다', verification: '390px에서 줄바꿈이 깨지는지 직접 봤다' } }, studentA)).status, 201);
   assert.equal((await api('/v1/classroom/shares', 'POST', { id: 'share-b', recipient_id: 'teacher-a', kind: 'help', consent: true, duration_minutes: 60, content: { question: '토요일 진료시간을 어디에 적어야 할지 모르겠어요' } }, studentB)).status, 201);
+  assert.equal((await api('/v1/classroom/shares', 'POST', { id: 'share-rev', recipient_id: 'teacher-a', kind: 'help', consent: true, duration_minutes: 60, content: { question: '예약 버튼 위치가 맞나요?' } }, studentA)).status, 201);
   assert.equal((await api(`/admin/cohorts/${local.cohort}/classroom/shares/share-a`, 'PUT', { expected_revision: 1, status: 'answered', feedback: FEEDBACK, next_action: '모바일에서 다시 확인' }, teacher)).status, 200);
+  // /manage saves "검토 중" by default: the learner sees this text, but it is not yet an answer to decide on.
+  assert.equal((await api(`/admin/cohorts/${local.cohort}/classroom/shares/share-rev`, 'PUT', { expected_revision: 1, status: 'reviewing', feedback: '아직 작성 중인 피드백입니다', next_action: '조금만 기다려 주세요' }, teacher)).status, 200);
+  // An answer the instructor takes back to "검토 중" while the learner's page still shows it (the race the page must name).
+  const FLIP = '버튼 문구를 다시 볼게요';
+  assert.equal((await api('/v1/classroom/shares', 'POST', { id: 'share-flip', recipient_id: 'teacher-a', kind: 'help', consent: true, duration_minutes: 60, content: { question: '버튼 문구가 괜찮나요?' } }, studentA)).status, 201);
+  assert.equal((await api(`/admin/cohorts/${local.cohort}/classroom/shares/share-flip`, 'PUT', { expected_revision: 1, status: 'answered', feedback: FLIP, next_action: '기다려 주세요' }, teacher)).status, 200);
 
   browser = await chromium.launch(); const origin = 'http://127.0.0.1:' + chalkServer.address().port, errors = [];
   const open = async (url, viewport) => { const p = await browser.newPage({ viewport }); p.on('pageerror', (e) => errors.push(e.message)); p.on('dialog', (d) => d.accept()); await p.goto(origin + url); return p; };
@@ -44,6 +59,8 @@ try {
   await learner.locator('#token').fill(studentA); await learner.locator('#login button').first().click();
   const card = learner.locator('#records article').filter({ hasText: '결과물 제출' }); await card.waitFor();
   assert.match(await card.innerText(), new RegExp(FEEDBACK.slice(0, 20)));
+  const pending = learner.locator('#records article').filter({ hasText: '아직 작성 중인 피드백입니다' }); await pending.waitFor();
+  assert.equal(await pending.locator('.decision form').count(), 0, 'feedback still under review offers no decision form (the Service would refuse it)');
   const form = card.locator('.decision form'); await form.waitFor();
   assert.equal(await form.locator('input[type=radio]:checked').count(), 0, 'nothing is pre-selected');
   await form.locator('label.choice', { hasText: '고치기' }).click(); await form.locator('textarea').fill(REASON); await form.locator('button').click();
@@ -53,7 +70,28 @@ try {
   assert.ok(await noOverflow(learner), 'no horizontal scroll at 390px');
   await card.scrollIntoViewIfNeeded(); await learner.screenshot({ path: path.join(out, 'fl-01-learner-decision-390.png') });
   assert.deepEqual([one('SELECT decision, reason FROM classroom_share_responses WHERE share_id=?', 'share-a')].map((r) => [r.decision, r.reason]), [['revise', REASON]]);
-  ok('learner: after a person\'s feedback, revise/keep/hold + why on /sharing (optional, nothing pre-selected, stored once)');
+  // The instructor takes the other answer back to "검토 중" after the page drew its form: the refusal is named, the input kept.
+  const flip = learner.locator('#records article').filter({ hasText: FLIP }), flipForm = flip.locator('.decision form'); await flipForm.waitFor();
+  assert.equal((await api(`/admin/cohorts/${local.cohort}/classroom/shares/share-flip`, 'PUT', { expected_revision: 2, status: 'reviewing', feedback: FLIP, next_action: '기다려 주세요' }, teacher)).status, 200);
+  await flipForm.locator('label.choice', { hasText: '보류' }).click(); await flipForm.locator('textarea').fill('답변을 기다리겠습니다'); await flipForm.locator('button').click();
+  await learner.locator('#status').filter({ hasText: '강사가 아직 답변을 마치지 않았습니다' }).waitFor();
+  assert.match(await learner.locator('#status').innerText(), /입력 내용은 유지됩니다/);
+  assert.equal(await flipForm.locator('textarea').inputValue(), '답변을 기다리겠습니다');
+  assert.equal(one("SELECT count(*) AS n FROM classroom_share_responses WHERE share_id='share-flip'").n, 0);
+  ok('learner: after a person\'s feedback, revise/keep/hold + why on /sharing (optional, nothing pre-selected, stored once); no form while the feedback is still under review, and a named refusal if it went back under review');
+
+  // ── 1b. the instructor sees that answer on the /manage share detail where they wrote the feedback ──
+  const board = await open('/manage', { width: 1280, height: 720 });
+  await board.locator('#token').fill(teacher); await board.locator('#cohort').fill(local.cohort); await board.locator('#connect button').first().click();
+  await board.locator('#status').filter({ hasText: '연결됨' }).waitFor();
+  // The share list sits in the board's folded "공유 기록" section; open it the way the instructor does.
+  await board.locator('#legacy-wrap > summary').click();
+  const shareRow = board.locator('#shares article').filter({ hasText: 'student-a · 결과물 제출' });
+  await shareRow.locator('button', { hasText: '공유 기록 열기' }).click();
+  await board.locator('#content').filter({ hasText: '피드백에 대한 학생의 결정' }).waitFor();
+  assert.match(await board.locator('#content').innerText(), new RegExp('피드백에 대한 학생의 결정\\s*\\n\\s*고치기 — ' + REASON));
+  await board.close();
+  ok('instructor: the learner\'s decision shows in the /manage share detail, under the content they chose to send');
 
   // ── 2. the instructor: open the course, load the retrospective section and the shares they may cite ──
   const page = await open('/authoring', { width: 1280, height: 720 });
@@ -62,19 +100,25 @@ try {
     .catch(async (e) => { throw Error('retro-status: expected ' + re + ', shows: ' + await page.locator('#retro-status').innerText() + ' | ' + e.message); });
   const viewShows = (re) => page.waitForFunction((src) => { const t = document.getElementById('retro-view').innerText; return new RegExp(src).test(t) && !document.getElementById('retro-load').disabled && t; }, re.source, { timeout: 8000 })
     .then((h) => h.jsonValue(), async (e) => { throw Error('retro-view: expected ' + re + ', shows: ' + await page.locator('#retro-view').innerText() + ' | ' + e.message); });
+  // Section 07 exists only where the Service has the loop on: with the switch off, connecting hides it (and its link).
+  local.env.HPS_FEEDBACK_LOOP = undefined;
   await page.locator('#token').fill(teacher); await page.locator('#connect').click(); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
+  await page.locator('#retro').waitFor({ state: 'hidden' }); assert.equal(await page.locator('.page-help a[href="#retro"]').isHidden(), true);
+  local.env.HPS_FEEDBACK_LOOP = 'enabled';
+  await page.locator('#connect').click(); await page.locator('#retro').waitFor({ state: 'visible' }); await page.locator('#connection-status').filter({ hasText: '연결되었습니다' }).waitFor();
   await page.locator('summary', { hasText: '저장한 강의 열기' }).click(); await page.locator('#course').fill(course); await page.locator('#load').click(); await waitStatus(/저장본을 열었습니다/);
-  await page.locator('#retro-load').click(); await retroStatus(/근거로 쓸 수 있는 공유 기록 2개/);
+  await page.locator('#retro-load').click(); await retroStatus(/근거로 쓸 수 있는 공유 기록 4개/);
   const sourcesText = await page.locator('#retro-sources').innerText(); results.sources = sourcesText;
-  assert.match(sourcesText, /student-a · 결과물 제출 .*AI 응답\(AI 응답\).*강사 피드백\(사람의 피드백\).*피드백에 대한 학생의 결정\(학생이 쓴 말\)/);
+  assert.match(sourcesText, /student-a · 결과물 제출 .* · 버전 m2026\.09\.18-1 — .*AI 응답\(AI 응답\).*강사 피드백\(사람의 피드백\).*피드백에 대한 학생의 결정\(학생이 쓴 말\)/);
+  assert.ok(!sourcesText.includes('버전 기록 없음'), 'every share here was sent under a recorded version');
   assert.ok(!sourcesText.includes('390px에서 줄바꿈이'), 'the list carries no learner content');
   const audits = one('SELECT count(*) AS n FROM classroom_share_audit WHERE share_id=?', 'share-a').n;
-  await page.locator('#retro-sources li', { hasText: 'student-a' }).locator('button').click();
+  await page.locator('#retro-sources li', { hasText: 'student-a · 결과물 제출' }).locator('button').click();
   await page.locator('#retro-source-view pre').first().waitFor();
   const content = await page.locator('#retro-source-view').innerText(); results.source_view = content;
   assert.match(content, /AI 응답 · AI 응답\s*\n\s*AI가 쓴 답/); assert.match(content, /강사 피드백 · 사람의 피드백\s*\n\s*모바일에서/); assert.match(content, /피드백에 대한 학생의 결정 · 학생이 쓴 말\s*\n\s*고치기 — 목록으로/);
   assert.equal(one('SELECT count(*) AS n FROM classroom_share_audit WHERE share_id=?', 'share-a').n, audits + 1, 'reading the content is an audited view the learner can see');
-  ok('instructor: only shares sent to them for this class are offered, with whose words each part is; reading one is audited');
+  ok('instructor: 07 hidden while the Service switch is off; only shares sent to them for this class are offered, with the version each was sent under and whose words each part is; reading one is audited');
 
   // ── 3. write the retrospective: hypothesis, three findings, two decisions ──
   await page.locator('#retro-base').selectOption(V1); await retroStatus(/버전 m2026\.09\.18-1 · 도움 조건/);
@@ -84,6 +128,7 @@ try {
   await finding('학생이 390px에서 직접 확인했고, 사람의 피드백 뒤 목록으로 고치기로 했다', ['share-a|verification', 'share-a|feedback', 'share-a|learner_response']);
   await finding('AI는 줄바꿈을 넣었다고 답했다', ['share-a|response']);
   await finding('토요일 시간을 어디에 적을지 도움을 요청했다', ['share-b|question'], true);
+  await finding('내 피드백과 AI 답만 보고 판단했다', ['share-a|response', 'share-a|feedback']);
   const decision = async (target, action, reason, refs) => { await page.locator('#retro-decision-add').click(); const li = page.locator('#retro-decisions > li').last();
     await li.locator('[data-retro-target]').selectOption(target); await li.locator('[data-retro-action]').selectOption(action); await li.locator('[data-retro-reason]').fill(reason); for (const r of refs) await li.locator('.retro-refs label', { hasText: r }).locator('input').check(); };
   await decision('build', 'revise', '모바일 확인을 단계 안에 넣는다', ['관찰 1']);
@@ -94,18 +139,21 @@ try {
   await page.locator('#retro-decisions > li').last().locator('[data-retro-reason]').fill('도움 방식은 한 번 더 보고 정한다');
   await page.locator('#retro-save').click(); await retroStatus(/돌아보기를 저장했습니다/);
   const view1 = await viewShows(/관찰 3 · 관찰됨/); results.view_saved = view1;
-  assert.match(view1, /관찰 1 · 관찰됨 — 사람의 근거가 있습니다 · 사람의 피드백 있음/);
-  assert.match(view1, /관찰 2 · 미관찰 — AI 응답·실행 기록·결과물 주소만으로는 사람의 관찰이 되지 않습니다 · 사람의 피드백 미관찰/);
-  assert.match(view1, /관찰 3 · 관찰됨 — 사람의 근거가 있습니다 · 사람의 피드백 미관찰 · 도움을 받음/);
+  assert.match(view1, /관찰 1 · 관찰됨 — 학생이 쓴 말이 근거입니다 · 사람의 피드백 있음/);
+  assert.match(view1, /관찰 2 · 미관찰 — 학생이 쓴 말이 근거에 없습니다 — AI 응답·실행 기록·결과물 주소나 강사 피드백만으로는 학생을 관찰한 것이 되지 않습니다 · 사람의 피드백 미관찰/);
+  assert.match(view1, /관찰 3 · 관찰됨 — 학생이 쓴 말이 근거입니다 · 사람의 피드백 미관찰 · 도움을 받음/);
+  // The instructor's own feedback beside the AI answer fills the feedback axis, never an observation of the learner.
+  assert.match(view1, /관찰 4 · 미관찰 — 학생이 쓴 말이 근거에 없습니다 — .* · 사람의 피드백 있음/);
+  assert.ok(!view1.includes('확인되지 않음') && !view1.includes('버전 기록 없음'), 'every cited share was sent under this version');
   assert.match(view1, /지금 명단 4명 중 근거가 있는 학생 2명 · 나머지 2명은 이 돌아보기에서 관찰하지 않았습니다/);
   assert.match(view1, /도움 사용과 중간에 멈춤은 Service 기록으로 확인할 수 없습니다\(미관찰\)/);
   assert.match(view1, /결정: 단계 ‘build’ 수정 · 수업 전체 보류/);
   await page.locator('#retro').scrollIntoViewIfNeeded(); await page.locator('#retro-view').scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(out, 'fl-02-retrospective-saved-1280.png') });
-  ok('retrospective: the Service marks each finding — a person\'s words observed, an AI answer alone unobserved, help only on a help request — and states the denominator');
+  ok('retrospective: the Service marks each finding — the learner\'s own words observed, an AI answer alone unobserved, help only on a help request — and states the denominator');
 
   // ── 4. the help request is withdrawn: its finding falls back, and the retrospective cannot start a draft on it ──
   assert.equal((await api('/v1/classroom/shares/share-b', 'DELETE', undefined, studentB)).status, 200);
-  await page.locator('#retro-load').click(); await retroStatus(/공유 기록 1개/);
+  await page.locator('#retro-load').click(); await retroStatus(/공유 기록 3개/);
   const id = one('SELECT retro_id FROM lesson_retrospectives').retro_id; await page.locator('#retro-pick').selectOption(id); await retroStatus(/돌아보기를 열었습니다/);
   const view2 = await viewShows(/관찰 3 · 미관찰/); results.view_withdrawn = view2;
   assert.match(view2, /관찰 3 · 미관찰 — 근거였던 공유가 철회되었거나 만료되어 볼 수 없습니다 · 사람의 피드백 미관찰 · 도움 여부 모름 \(근거였던 도움 요청을 지금 볼 수 없음\)/);

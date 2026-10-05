@@ -6,14 +6,21 @@
 //   - Selective sending (classroom sharing ADM-03/07/14, hps-observation/1). A retrospective cites a share the learner chose
 //     to send to THIS instructor, by id and part. It never copies the learner's content, so a withdrawal or an expiry reaches
 //     it: the reference then resolves to nothing and the finding falls back to unobserved.
-//   - Unobserved stays unobserved. A finding is `observed` only on a person's words: the learner's own (question, prompt,
-//     verification, their answer to feedback) or a person's feedback. An AI answer, a tool line or a URL alone never makes it
-//     observed, the same rule as `missing_human_evidence` in measurement-core/legacy-observation.ts. No person's feedback
-//     cited means the social correction is unobserved, never "there was none".
+//   - Unobserved stays unobserved. A finding is `observed` only on the learner's own words (question, prompt, verification,
+//     their answer to feedback). Which part counts is decided by the measurement core's ONE predicate, `isHumanEvidence`, over
+//     each part read as the event it is (ORIGIN_EVENT) — the rule behind `missing_human_evidence`, not a copy of it (SX-48).
+//     An AI answer, a tool line or a URL never counts, and neither does a person's feedback: the only feedback a retrospective
+//     can cite is the reviewing instructor's own text (actor `teacher`), so it fills the social-correction axis
+//     (`human_feedback`) and is never evidence about the learner. No feedback cited means that axis is unobserved, never
+//     "there was none".
+//   - Evidence about the version that ran, or visibly not. A share stands behind a finding about one frozen version only if
+//     it was sent after that version was frozen and, where the Service recorded which lesson the learner was executing when
+//     they sent it (`classroom_share_lessons`), that lesson is this course and version. A share with no such record reads
+//     `lesson: unknown`; it is never silently attributed.
 //   - No independence is inferred. Nothing in a share records independent performance, so `independent` is refused, and
 //     `assisted` needs a cited help request. A missing record is `unknown`, never "did it alone".
 //   - No score. A key shaped like a score is refused by the measurement core's own check (forbidPersonalMetrics).
-import { forbidPersonalMetrics } from './measurement-core/learning-events.ts';
+import { forbidPersonalMetrics, isHumanEvidence } from './measurement-core/learning-events.ts';
 
 /** Off unless the Service sets `HPS_FEEDBACK_LOOP=enabled` (migration 0039 first). Off = the routes answer 404. */
 export const feedbackLoopEnabled = (env: { HPS_FEEDBACK_LOOP?: string }) => env.HPS_FEEDBACK_LOOP === 'enabled';
@@ -37,7 +44,19 @@ export const PART_ORIGIN = {
 } as const;
 export type SharePart = keyof typeof PART_ORIGIN;
 export type PartOrigin = (typeof PART_ORIGIN)[SharePart];
-const PERSON_ORIGINS: ReadonlySet<PartOrigin> = new Set(['learner', 'human']);
+/**
+ * Each origin as the measurement core reads an event: what kind of record it is and who acted (OBSERVATION_ACTORS).
+ * `human` is the feedback on a share, written by its recipient: the instructor (`teacher`), never the learner.
+ */
+export const ORIGIN_EVENT: Readonly<Record<PartOrigin, { kind: string; actor: string }>> = {
+  learner: { kind: 'user', actor: 'user' },
+  ai: { kind: 'coach', actor: 'ai' },
+  tool: { kind: 'tool_result', actor: 'ai' },
+  artifact: { kind: 'artifact', actor: 'user' },
+  human: { kind: 'external_feedback_received', actor: 'teacher' },
+};
+/** Is this part evidence about the learner? The measurement core's own predicate decides; nothing here re-states it. */
+export const isLearnerEvidence = (origin: PartOrigin) => isHumanEvidence(ORIGIN_EVENT[origin]);
 
 // ── the learner's answer to a person's feedback (AE-43) ───────────────────────────────────────────────────────────
 
@@ -88,6 +107,15 @@ export const ASSISTANCE = ['unknown', 'assisted', 'independent'] as const;
 export const DECISION_ACTIONS = ['keep', 'revise', 'hold'] as const;
 export const LIMITS = { hypothesis: 2000, findings: 20, finding_text: 2000, sources: 8, decisions: 20, decision_reason: 1000, note: 1000 } as const;
 export const NOTE_KEYS = ['no_signal', 'stopped', 'help_use'] as const;
+/**
+ * The largest body a valid retrospective request can be: every string at its limit, each UTF-16 unit costing up to six
+ * JSON bytes (an escaped control character), plus keys and punctuation. Korean alone is three bytes a unit, so a smaller
+ * cap would answer 413 to a doc that every field limit, and the page's maxlength, allows.
+ */
+const ID_UNITS = 64, SHARE_ID_UNITS = 128, PART_UNITS = 32;
+export const RETRO_BODY_MAX = 6 * (128 + 32 + LIMITS.hypothesis + NOTE_KEYS.length * LIMITS.note
+  + LIMITS.findings * (ID_UNITS + LIMITS.finding_text + PART_UNITS + LIMITS.sources * (SHARE_ID_UNITS + PART_UNITS))
+  + LIMITS.decisions * (ID_UNITS + ID_UNITS + PART_UNITS + LIMITS.decision_reason + LIMITS.sources * ID_UNITS)) + 32 * 1024;
 
 export interface RetroSource { share_id: string; part: SharePart }
 export interface RetroFinding { id: string; text: string; sources: RetroSource[]; assistance: (typeof ASSISTANCE)[number] }
@@ -170,20 +198,55 @@ export function citeRefusal(src: RetroSource, share: ShareRow | null, response: 
   return shareParts(share, !!response).some((p) => p.part === src.part) ? '' : 'source_part_empty';
 }
 
+/** What the Service recorded, right after a share was stored, about the lesson its sender was executing (routes/classroom.ts). */
+export interface ShareLessonRow { share_id: string; course_id: string; version: string; lesson_sha256: string; source: string; recorded_at: number }
+/** The version a retrospective is about: its course, its version id and when it was frozen (unix seconds; null = unreadable). */
+export interface RetroBase { course_id: string; version: string; frozen_at: number | null }
+/** A share as a retrospective reads it: the row, the learner's latest answer, whether that answer is to the feedback as it
+ *  reads NOW, and the lesson recorded when it was sent (null = none recorded). */
+export interface CitedShare { share: ShareRow; response: ResponseRow | null; response_current: boolean; lesson: ShareLessonRow | null }
+
+/**
+ * Can this share stand behind a finding about `base` at all ('' = yes)? A share sent before the version was frozen is about
+ * something else (`source_before_version`), and so is a share whose recorded lesson is another course or another version
+ * (`source_other_lesson`). A freeze time that cannot be read refuses rather than guesses. Both times are whole seconds (a
+ * share's stored time has no finer grain), so a share sent in the same second as the freeze counts as after it; where the
+ * lesson was recorded, the course and version check decides whatever the timing.
+ */
+export function lessonRefusal(share: Pick<ShareRow, 'created_at'>, lesson: Pick<ShareLessonRow, 'course_id' | 'version'> | null, base: RetroBase): string {
+  if (base.frozen_at === null || share.created_at < base.frozen_at) return 'source_before_version';
+  if (lesson && (lesson.course_id !== base.course_id || lesson.version !== base.version)) return 'source_other_lesson';
+  return '';
+}
+/** `this_version` only where the Service recorded the lesson; otherwise `unknown`, never assumed to be the version. */
+export const lessonAttribution = (lesson: ShareLessonRow | null) => (lesson ? 'this_version' : 'unknown') as 'this_version' | 'unknown';
+/** Written now, a cited decision must answer the feedback as it reads now: one about an edited or cleared text is refused. */
+export const answerRefusal = (src: RetroSource, x: Pick<CitedShare, 'response_current'>) =>
+  src.part === 'learner_response' && !x.response_current ? 'learner_response_stale' : '';
+
 /** `assisted` stands on a cited help request: the learner asked a person for help. */
 export const assistanceRefusal = (f: RetroFinding, kindOf: (shareId: string) => string | undefined) =>
   f.assistance === 'assisted' && !f.sources.some((s) => kindOf(s.share_id) === 'help') ? 'unsupported_assistance' : '';
 
-export interface ResolvedShare { available: boolean; kind?: string; student_id?: string; parts?: ReadonlySet<SharePart> }
+export interface ResolvedShare {
+  available: boolean; kind?: string; student_id?: string; parts?: ReadonlySet<SharePart>;
+  lesson?: 'this_version' | 'unknown'; response_current?: boolean;
+}
 
 /** One finding as it reads NOW, from the shares the instructor can still read. Recomputed on every read, never stored. */
 export function findingView(f: RetroFinding, resolve: (shareId: string) => ResolvedShare) {
   const sources = f.sources.map((s) => {
     const r = resolve(s.share_id), available = r.available && !!r.parts?.has(s.part);
-    return { share_id: s.share_id, part: s.part, origin: PART_ORIGIN[s.part], available, ...(available ? { kind: r.kind, student_id: r.student_id } : {}) };
+    return {
+      share_id: s.share_id, part: s.part, origin: PART_ORIGIN[s.part], available,
+      // Still readable, but this part holds nothing now (the feedback was cleared): not a withdrawal, and said so.
+      ...(r.available && !available ? { part_empty: true } : {}),
+      ...(available ? { kind: r.kind, student_id: r.student_id, lesson: r.lesson ?? 'unknown' } : {}),
+      ...(available && s.part === 'learner_response' ? { answers_current_feedback: r.response_current === true } : {}),
+    };
   });
   const live = sources.filter((s) => s.available);
-  const person = live.some((s) => PERSON_ORIGINS.has(s.origin));
+  const person = live.some((s) => isLearnerEvidence(s.origin));
   const unobserved_reason = person ? null : !f.sources.length ? 'no_source' : !live.length ? 'sources_unavailable' : 'no_person_source';
   const helpLive = live.some((s) => s.kind === 'help');
   return {
@@ -193,6 +256,10 @@ export function findingView(f: RetroFinding, resolve: (shareId: string) => Resol
     human_feedback: live.some((s) => s.part === 'feedback') ? 'present' as const : 'unobserved' as const,
     assistance: f.assistance === 'assisted' && helpLive ? 'assisted' as const : 'unknown' as const,
     ...(f.assistance === 'assisted' && !helpLive ? { assistance_basis_unavailable: true } : {}),
+    // A live source whose lesson the Service did not record: the finding is not claimed for this version.
+    ...(live.some((s) => s.lesson === 'unknown') ? { lesson_unconfirmed: true } : {}),
+    // A cited decision that answered feedback which has since been edited or cleared.
+    ...(live.some((s) => s.answers_current_feedback === false) ? { stale_learner_response: true } : {}),
   };
 }
 

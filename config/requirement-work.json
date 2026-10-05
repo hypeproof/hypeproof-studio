@@ -1274,6 +1274,7 @@
         "worker/migrations/0039-feedback-loop.sql",
         "chalk/src/ui/authoring.html",
         "chalk/src/ui/sharing.html",
+        "chalk/src/ui/manage.html",
         "chalk/src/routes/forward.ts"
       ],
       "verification_inputs": [

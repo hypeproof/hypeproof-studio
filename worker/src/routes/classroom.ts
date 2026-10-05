@@ -13,6 +13,7 @@ import { opsEnabled } from './classroom-ops';
 import { NOT_FENCED } from '../lib/classroom-distribution-store';
 import { sha256Hex } from '../lib/modules';
 import { feedbackLoopEnabled, hasFeedback, parseResponse, responseView, type ResponseRow } from '../lib/feedback-loop';
+import { resolveEffectiveLesson } from '../lib/lesson-binding-store';
 
 type Row = {id:string;cohort_id:string;profile_id:string;student_id:string;recipient_id:string;session_id:string;kind:string;content_json:string;revision:number;status:string;feedback:string;next_action:string;created_at:number;expires_at:number};
 type StudentEnv = {Bindings:Env;Variables:{student:TokenPayload}};
@@ -37,6 +38,21 @@ async function responsesFor(env:Env,rows:Row[]){
  return out;
 }
 const withResponse=(r:Row,m:Map<string,ReturnType<typeof responseView>>|null)=>m?{...studentView(r),response:m.get(r.id)??null}:studentView(r);
+// #1013 — which lesson the learner was executing when they sent this share, decided by the chat gate's own resolver: their
+// code's lesson, or the setting they are switched to where settings are enforced. Written once, after the share exists,
+// only with the switch on. Identifiers and a hash only; deleted with the share. When nothing is written (no lesson on the
+// code, the lesson unreadable, a storage fault) a retrospective reads this share as "lesson unknown", never as its version.
+async function recordShareLesson(env:Env,p:TokenPayload,share:Row){
+ if(!feedbackLoopEnabled(env)||!p.lesson)return;
+ try{
+  const profile=getProfile(p.p),served=profile?await profileServesCohort(env,profile,p):null;
+  if(!served?.ok)return;
+  const r=await resolveEffectiveLesson(env,p,{classRunId:share.session_id,lessonCohort:served.lessonCohort,mode:'read',now:Date.now()});
+  if(!r.ok)return;
+  await env.HPS_DB.prepare('INSERT INTO classroom_share_lessons(share_id,course_id,version,lesson_sha256,source,recorded_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM classroom_shares WHERE id=? AND student_id=?) ON CONFLICT(share_id) DO NOTHING')
+   .bind(share.id,r.lesson.course_id,r.lesson.version,r.lesson.sha256,r.binding.source,now(),share.id,p.u).run();
+ }catch(err){console.error('share lesson not recorded; a retrospective reads this share as "lesson unknown":',err);}
+}
 
 export const classroomStudent=new Hono<StudentEnv>();
 classroomStudent.use('*',shareLimit);
@@ -187,13 +203,14 @@ classroomStudent.post('/shares',async c=>{
  if(!a){
   const saved=await c.env.HPS_DB.prepare(`INSERT INTO classroom_shares(id,cohort_id,profile_id,student_id,recipient_id,session_id,kind,content_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING RETURNING *`).bind(...values).first<Row>();
   if(!saved)return c.json({error:'request ID conflict; reload'},409);
+  await recordShareLesson(c.env,p,saved);
   return c.json(studentView(saved),201);
  }
  // The assignment is re-evaluated by the INSERT itself. No row = the assignment changed in between (or the id was taken):
  // nothing was written, and the answer says which.
  const at=Date.now(),saved=await c.env.HPS_DB.prepare(`INSERT INTO classroom_shares(id,cohort_id,profile_id,student_id,recipient_id,session_id,kind,content_json,created_at,expires_at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${HELP_WRITE_GUARD} ON CONFLICT(id) DO NOTHING RETURNING *`)
   .bind(...values,a.grant_id,session.session_id,p.c,p.p,p.u,at,a.recipient_id,at,at).first<Row>();
- if(saved)return c.json(studentView(saved),201);
+ if(saved){await recordShareLesson(c.env,p,saved);return c.json(studentView(saved),201);}
  const raced=await c.env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE id=?').bind(b.id).first<Row>();
  if(raced)return same(raced)?c.json(studentView(raced)):conflict(raced);
  const now2=await helpAssignment(c.env,p),no=refuse(now2);if(no)return no;

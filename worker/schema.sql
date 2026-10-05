@@ -1256,6 +1256,15 @@ CREATE TABLE IF NOT EXISTS classroom_share_responses (
  created_at INTEGER NOT NULL,
  PRIMARY KEY (share_id, feedback_sha256)
 );
+-- The lesson the learner was executing when they sent a share (chat-gate resolution), written once after the share; deleted with it.
+CREATE TABLE IF NOT EXISTS classroom_share_lessons (
+ share_id TEXT PRIMARY KEY REFERENCES classroom_shares(id) ON DELETE CASCADE,
+ course_id TEXT NOT NULL,
+ version TEXT NOT NULL,
+ lesson_sha256 TEXT NOT NULL,
+ source TEXT NOT NULL,
+ recorded_at INTEGER NOT NULL
+);
 -- The instructor's retrospective of one frozen version: own words plus share REFERENCES only; immutable once it starts the next draft.
 CREATE TABLE IF NOT EXISTS lesson_retrospectives (
  retro_id TEXT PRIMARY KEY,

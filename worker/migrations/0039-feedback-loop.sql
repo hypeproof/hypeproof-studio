@@ -16,6 +16,19 @@ CREATE TABLE IF NOT EXISTS classroom_share_responses (
  PRIMARY KEY (share_id, feedback_sha256)
 );
 
+-- Which lesson the learner was executing when they sent a share, as the chat gate resolves it (their code's lesson, or the
+-- setting they are switched to where settings are enforced). Written once, right after the share is stored, while the
+-- switch is on: identifiers and a hash, no content. A share without a row is "lesson unknown" to a retrospective, never
+-- attributed to a version on a guess. Deleted with the share (ON DELETE CASCADE).
+CREATE TABLE IF NOT EXISTS classroom_share_lessons (
+ share_id TEXT PRIMARY KEY REFERENCES classroom_shares(id) ON DELETE CASCADE,
+ course_id TEXT NOT NULL,
+ version TEXT NOT NULL,
+ lesson_sha256 TEXT NOT NULL,
+ source TEXT NOT NULL,
+ recorded_at INTEGER NOT NULL
+);
+
 -- The instructor's retrospective of one frozen lesson version (AE-42, CH-05): hypothesis, sourced findings, keep/revise/hold
 -- decisions and the instructor's own notes on what was not observed. `doc_json` holds the instructor's words and REFERENCES
 -- to shares (id + part) only, never a copy of a learner's content, so withdrawal and expiry keep working. Editable while

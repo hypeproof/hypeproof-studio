@@ -4,8 +4,9 @@
 // A retrospective is written about ONE frozen version, the lesson that ran. The instructor writes the hypothesis, findings
 // that cite parts of shares learners chose to send to them, keep/revise/hold decisions per step, and notes on what they
 // could not observe. The Service fills in everything that is not the instructor's to type: the version's digest and help
-// condition, which cited shares are still readable, whose words each cited part is, which findings rest on a person's
-// words, the roster denominator, and the chain next draft → next candidate → its rehearsal.
+// condition, which cited shares are still readable and were sent under that version (or are not known to have been),
+// whose words each cited part is, which findings rest on the learner's own words, the roster denominator, and the chain
+// next draft → next candidate → its rehearsal.
 //
 // "Start the next draft" writes that version's content (Service bindings stripped, exactly what the authoring reuse
 // offers) as a new draft revision and marks the retrospective applied, in ONE batch. The frozen version, its rehearsals and
@@ -26,8 +27,9 @@ import { scrubSecrets } from '../lib/scrub-secrets';
 import { getProfile } from '../profiles';
 import { reusable, templateAdmission } from './authoring';
 import {
-  RETROSPECTIVE_FORMAT, assistanceRefusal, citeRefusal, citedShareIds, coverageOf, feedbackLoopEnabled, findingView,
-  helpConditions, shareParts, validateRetrospectiveDoc, type RetroDoc, type ResponseRow, type ShareRow,
+  RETROSPECTIVE_FORMAT, RETRO_BODY_MAX, answerRefusal, assistanceRefusal, citeRefusal, citedShareIds, coverageOf, feedbackLoopEnabled,
+  findingView, hasFeedback, helpConditions, lessonAttribution, lessonRefusal, shareParts, validateRetrospectiveDoc,
+  type CitedShare, type RetroBase, type RetroDoc, type RetroSource, type ResponseRow, type ShareLessonRow, type ShareRow,
 } from '../lib/feedback-loop';
 
 type Bindings = { Bindings: Env; Variables: { author: IssuerAuthz } };
@@ -58,10 +60,16 @@ const authenticate: MiddlewareHandler<Bindings> = async (c, next) => {
 };
 // Hono's trailing `/*` also matches the bare `root`, so one registration covers every route here exactly once.
 lessonRetrospectives.use(root + '/*', authenticate);
-lessonRetrospectives.use(root + '/*', bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.json({ error: 'request too large' }, 413) }));
+// Sized from the field limits (RETRO_BODY_MAX), so every doc those limits allow fits; the refusal is named for the page.
+lessonRetrospectives.use(root + '/*', bodyLimit({ maxSize: RETRO_BODY_MAX, onError: (c) => c.json({ error: 'request too large', reason: 'too_large' }, 413) }));
 
 const owns = (d: Draft, a: IssuerAuthz) => ownsDraft(d, a.payload.u, a.scope.profiles);
 const json = async (c: any) => { try { return await c.req.json(); } catch { return null; } };
+
+/** When a frozen version was frozen (unix seconds), from its own stored document; null when that cannot be read. */
+const frozenAtOf = (moduleJson: string | null | undefined): number | null => {
+  try { const t = Date.parse(JSON.parse(moduleJson ?? 'null')?.published_at); return Number.isFinite(t) ? Math.floor(t / 1000) : null; } catch { return null; }
+};
 
 /** The frozen version a retrospective is about, readable under the course's profile right now. */
 async function baseOf(env: Env, cohort: string, course: string, version: string, a: IssuerAuthz) {
@@ -71,28 +79,39 @@ async function baseOf(env: Env, cohort: string, course: string, version: string,
   if (!a.scope.profiles.includes(m.profile_id)) return { refusal: { status: 403 as const, body: { error: 'profile not permitted' } } };
   const lesson = await readLesson(env, cohort, course, version, m.profile_id);
   if (!lesson) return { refusal: { status: 409 as const, body: { error: 'this version cannot be opened under the current profile', reason: 'lesson_unavailable' } } };
-  return { version, profileId: m.profile_id as string, sourceRevision: row.source_revision, sha256: lesson.sha256, content: lesson.content };
+  const identity: RetroBase = { course_id: course, version, frozen_at: frozenAtOf(row.module_json) };
+  return { version, profileId: m.profile_id as string, sourceRevision: row.source_revision, sha256: lesson.sha256, content: lesson.content, identity };
 }
 
 /**
  * The shares, among `ids`, that THIS instructor may read now: the same rule as the instructor share routes (same cohort,
- * addressed to them, unexpired, a profile in their scope) narrowed to the course's own profile, so a share from another
- * class never stands behind a lesson it was not sent for. Withdrawn shares no longer exist. With the latest answer each.
+ * addressed to them, unexpired, a profile in their scope) narrowed to the course's own profile. Withdrawn shares no longer
+ * exist. Each with the learner's latest answer, whether it answers the feedback as it reads now, and the lesson recorded
+ * when it was sent — which version it is evidence about is decided against that (lessonRefusal), not assumed.
  */
-async function citable(env: Env, cohort: string, recipient: string, profileId: string, ids: string[]) {
-  const out = new Map<string, { share: ShareRow; response: ResponseRow | null }>();
+async function citable(env: Env, cohort: string, recipient: string, profileId: string, ids: string[]): Promise<Map<string, CitedShare>> {
+  const out = new Map<string, CitedShare>();
   if (!ids.length || !profileId) return out;
   const list = JSON.stringify(ids);
   const shares = (await env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE id IN (SELECT value FROM json_each(?)) AND cohort_id=? AND recipient_id=? AND profile_id=? AND expires_at>?')
     .bind(list, cohort, recipient, profileId, nowS()).all<ShareRow>()).results ?? [];
+  if (!shares.length) return out;
   const responses = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?)) ORDER BY created_at DESC, feedback_revision DESC')
     .bind(list).all<ResponseRow>()).results ?? [];
-  for (const s of shares) out.set(s.id, { share: s, response: responses.find((r) => r.share_id === s.id) ?? null });
+  const lessons = (await env.HPS_DB.prepare('SELECT * FROM classroom_share_lessons WHERE share_id IN (SELECT value FROM json_each(?))').bind(list).all<ShareLessonRow>()).results ?? [];
+  for (const s of shares) {
+    const response = responses.find((r) => r.share_id === s.id) ?? null;
+    const current = !!response && hasFeedback(s) && response.feedback_sha256 === await sha256Hex(s.feedback);
+    out.set(s.id, { share: s, response, response_current: current, lesson: lessons.find((l) => l.share_id === s.id) ?? null });
+  }
   return out;
 }
+/** Why a cited part cannot stand behind a finding about `base` now ('' = it can): gone, another lesson, or empty. */
+const standRefusal = (src: RetroSource, x: CitedShare | undefined, base: RetroBase) =>
+  !x ? 'source_unavailable' : lessonRefusal(x.share, x.lesson, base) || citeRefusal(src, x.share, x.response);
 
 /** The instructor's doc, validated against the base version and the shares it cites. Secrets are masked before storage. */
-async function checkedDoc(env: Env, a: IssuerAuthz, cohort: string, profileId: string, raw: unknown, steps: string[]) {
+async function checkedDoc(env: Env, a: IssuerAuthz, cohort: string, profileId: string, raw: unknown, steps: string[], base: RetroBase) {
   const v = validateRetrospectiveDoc(raw, steps);
   if (!v.ok) return { refusal: { status: 400 as const, body: { error: 'invalid retrospective', reason: v.code } } };
   const doc: RetroDoc = {
@@ -104,7 +123,7 @@ async function checkedDoc(env: Env, a: IssuerAuthz, cohort: string, profileId: s
   const shares = await citable(env, cohort, a.payload.u, profileId, citedShareIds(doc));
   for (const f of doc.findings) {
     for (const s of f.sources) {
-      const x = shares.get(s.share_id), why = citeRefusal(s, x?.share ?? null, x?.response ?? null);
+      const x = shares.get(s.share_id), why = standRefusal(s, x, base) || answerRefusal(s, x!);
       if (why) return { refusal: { status: 409 as const, body: { error: 'a cited share part cannot be used', reason: why, share_id: s.share_id, part: s.part, finding: f.id } } };
     }
     const why = assistanceRefusal(f, (id) => shares.get(id)?.share.kind);
@@ -116,10 +135,15 @@ async function checkedDoc(env: Env, a: IssuerAuthz, cohort: string, profileId: s
 /** What a retrospective says NOW: the instructor's words plus everything the Service derives, recomputed on every read. */
 async function view(env: Env, a: IssuerAuthz, row: RetroRow, draft: Draft) {
   const doc = JSON.parse(row.doc_json) as RetroDoc;
+  const version = await env.HPS_DB.prepare('SELECT module_json FROM authoring_versions WHERE cohort_id=? AND course_id=? AND version=?').bind(row.cohort_id, row.course_id, row.base_version).first<{ module_json: string }>();
+  const base: RetroBase = { course_id: row.course_id, version: row.base_version, frozen_at: frozenAtOf(version?.module_json) };
   const shares = await citable(env, row.cohort_id, a.payload.u, draft.profile_id, citedShareIds(doc));
   const resolve = (id: string) => {
     const x = shares.get(id);
-    return x ? { available: true, kind: x.share.kind, student_id: x.share.student_id, parts: new Set(shareParts(x.share, !!x.response).map((p) => p.part)) } : { available: false };
+    // A share that is not evidence about this version reads like one that is gone: nothing of it is shown.
+    return x && !lessonRefusal(x.share, x.lesson, base)
+      ? { available: true, kind: x.share.kind, student_id: x.share.student_id, parts: new Set(shareParts(x.share, !!x.response).map((p) => p.part)), lesson: lessonAttribution(x.lesson), response_current: x.response_current }
+      : { available: false };
   };
   const findings = doc.findings.map((f) => findingView(f, resolve));
   const lesson = await readLesson(env, row.cohort_id, row.course_id, row.base_version, draft.profile_id);
@@ -158,21 +182,27 @@ async function retroRow(env: Env, c: any, a: IssuerAuthz) {
   return env.HPS_DB.prepare('SELECT * FROM lesson_retrospectives WHERE retro_id=? AND cohort_id=? AND course_id=? AND owner_id=?').bind(id, c.req.param('cohort'), c.req.param('course'), a.payload.u).first<RetroRow>();
 }
 
-// The shares this instructor may cite for this course: metadata and which parts hold something (with whose words they
-// are), never their content. The content is read through the existing instructor share route, which audits the view.
+// The shares this instructor may cite for this course: metadata, the lesson recorded when each was sent (null = none
+// recorded), and which parts hold something (with whose words they are), never their content. A share recorded under
+// another course is not offered at all. The content is read through the existing instructor share route, which audits the view.
 lessonRetrospectives.get(root + '/sources', async (c) => {
   const a = c.get('author'), cohort = c.req.param('cohort')!, course = c.req.param('course')!;
   const d = await readDraft(c.env.HPS_DB, cohort, course);
   if (!d || !owns(d, a)) return c.json({ error: 'course not found' }, 404);
-  const rows = d.profile_id ? (await c.env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE cohort_id=? AND recipient_id=? AND profile_id=? AND expires_at>? ORDER BY created_at DESC, id DESC LIMIT 101')
-    .bind(cohort, a.payload.u, d.profile_id, nowS()).all<ShareRow>()).results ?? [] : [];
+  const rows = d.profile_id ? (await c.env.HPS_DB.prepare(`SELECT s.* FROM classroom_shares s WHERE s.cohort_id=? AND s.recipient_id=? AND s.profile_id=? AND s.expires_at>?
+ AND NOT EXISTS (SELECT 1 FROM classroom_share_lessons l WHERE l.share_id=s.id AND l.course_id<>?) ORDER BY s.created_at DESC, s.id DESC LIMIT 101`)
+    .bind(cohort, a.payload.u, d.profile_id, nowS(), course).all<ShareRow>()).results ?? [] : [];
   const shown = rows.slice(0, 100), ids = JSON.stringify(shown.map((s) => s.id));
   const responses = shown.length ? (await c.env.HPS_DB.prepare('SELECT share_id FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?))').bind(ids).all<{ share_id: string }>()).results ?? [] : [];
+  const lessons = shown.length ? (await c.env.HPS_DB.prepare('SELECT share_id,course_id,version FROM classroom_share_lessons WHERE share_id IN (SELECT value FROM json_each(?))').bind(ids).all<Pick<ShareLessonRow, 'share_id' | 'course_id' | 'version'>>()).results ?? [] : [];
   const answered = new Set(responses.map((r) => r.share_id));
   return c.json({
     recipient_id: a.payload.u, profile_id: d.profile_id || null, has_more: rows.length > 100,
-    sources: shown.map((s) => ({ id: s.id, student_id: s.student_id, session_id: s.session_id, kind: s.kind, status: s.status, created_at: s.created_at, expires_at: s.expires_at,
-      parts: shareParts(s, answered.has(s.id)) })),
+    sources: shown.map((s) => {
+      const l = lessons.find((x) => x.share_id === s.id);
+      return { id: s.id, student_id: s.student_id, session_id: s.session_id, kind: s.kind, status: s.status, created_at: s.created_at, expires_at: s.expires_at,
+        lesson: l ? { course_id: l.course_id, version: l.version } : null, parts: shareParts(s, answered.has(s.id)) };
+    }),
   });
 });
 
@@ -193,7 +223,7 @@ lessonRetrospectives.post(root, async (c) => {
   const base = await baseOf(c.env, cohort, course, b.base_version, a);
   if ('refusal' in base) return c.json(base.refusal!.body, base.refusal!.status);
   if (d.profile_id !== base.profileId) return c.json(PROFILE_CHANGED, 409);
-  const checked = await checkedDoc(c.env, a, cohort, d.profile_id, b.doc, base.content.steps.map((s) => s.id));
+  const checked = await checkedDoc(c.env, a, cohort, d.profile_id, b.doc, base.content.steps.map((s) => s.id), base.identity);
   if ('refusal' in checked) return c.json(checked.refusal!.body, checked.refusal!.status);
   const docJson = JSON.stringify(checked.doc);
   const same = (r: RetroRow) => r.owner_id === a.payload.u && r.base_version === b.base_version && r.doc_json === docJson;
@@ -234,7 +264,7 @@ lessonRetrospectives.put(root + '/:id', async (c) => {
   if ('refusal' in base) return c.json(base.refusal!.body, base.refusal!.status);
   if (base.sha256 !== row.base_sha256) return c.json({ error: 'the version this retrospective is about no longer reads the same', reason: 'lesson_unavailable' }, 409);
   if (d.profile_id !== base.profileId) return c.json(PROFILE_CHANGED, 409);
-  const checked = await checkedDoc(c.env, a, cohort, d.profile_id, b.doc, base.content.steps.map((s) => s.id));
+  const checked = await checkedDoc(c.env, a, cohort, d.profile_id, b.doc, base.content.steps.map((s) => s.id), base.identity);
   if ('refusal' in checked) return c.json(checked.refusal!.body, checked.refusal!.status);
   const saved = await c.env.HPS_DB.prepare('UPDATE lesson_retrospectives SET doc_json=?,revision=revision+1,updated_at=? WHERE retro_id=? AND owner_id=? AND revision=? AND applied_draft_revision IS NULL RETURNING *')
     .bind(JSON.stringify(checked.doc), Date.now(), row.retro_id, a.payload.u, b.expected_revision).first<RetroRow>();
@@ -258,7 +288,7 @@ lessonRetrospectives.post(root + '/:id/next-draft', async (c) => {
   // It must still stand on what it cites: a share withdrawn or expired since it was written stops it here (T-28), and the
   // instructor edits the retrospective first. Nothing from such a share is carried forward.
   const doc = JSON.parse(row.doc_json) as RetroDoc, shares = await citable(c.env, cohort, a.payload.u, d.profile_id, citedShareIds(doc));
-  const gone = [...new Set(doc.findings.flatMap((f) => f.sources.filter((s) => citeRefusal(s, shares.get(s.share_id)?.share ?? null, shares.get(s.share_id)?.response ?? null)).map((s) => s.share_id)))];
+  const gone = [...new Set(doc.findings.flatMap((f) => f.sources.filter((s) => standRefusal(s, shares.get(s.share_id), base.identity)).map((s) => s.share_id)))];
   if (gone.length) return c.json({ error: 'a share this retrospective cites can no longer be read; edit the retrospective first', reason: 'source_unavailable', share_ids: gone }, 409);
   if (d.profile_id !== base.profileId) return c.json(PROFILE_CHANGED, 409);
   if (templateAdmission(!!d.independent, d.profile_id)) return c.json({ error: 'independent course requires a reviewed execution template', reason: 'template_not_reviewed' }, 403);
