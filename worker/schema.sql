@@ -1460,3 +1460,15 @@ CREATE TABLE IF NOT EXISTS cr_deck_slides (
   created_at INTEGER NOT NULL,
   PRIMARY KEY (project_id, number, revision)
 );
+
+-- cr-review (#1398) — migration 0038: Weekly Review Packs (Venture Memory's WeeklyReviews).
+-- One immutable row per prepared revision of one Project's pack for one week; claims name their
+-- sources by reference and the evidence stays in the measurement-core record (SX-48).
+CREATE TABLE IF NOT EXISTS cr_weekly_reviews (
+  project_id TEXT NOT NULL REFERENCES cr_projects(id),
+  week       INTEGER NOT NULL,
+  revision   INTEGER NOT NULL,
+  doc        TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, week, revision)
+);

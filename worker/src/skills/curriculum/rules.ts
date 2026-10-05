@@ -29,7 +29,7 @@ export interface SkillContext {
   project_id: string;
   week: number;
   items: SkillEvidenceItem[];
-  decisions: Array<{ id: string; actor: "student" | "ai"; statement: string; affected_deck_slides: number[]; evidence_refs: string[] }>;
+  decisions: Array<{ id: string; actor: "student" | "ai" | "director"; statement: string; affected_deck_slides: number[]; evidence_refs: string[] }>;
   slides: Array<{ number: number; title: string; body: string; evidence_refs: string[] }>;
   hypotheses: Array<{ id: string; statement: string; status: string }>;
   experiments: Array<{ id: string; hypothesis_id: string; question: string; success_criteria: string[]; week: number }>;
@@ -507,11 +507,12 @@ export const RULES: Record<string, Rule> = {
       return edits.some((e) => String(e.change ?? "").includes(base)) ? [] : [`$.changes[${i}]: add_not_used:${path}`];
     });
   },
-  // Deck Builder (CR-46): only the slides the team's decision names, one patch each.
+  // Deck Builder (CR-46): only the slides a person's decision names (the team's, or the director's
+  // from a review pack, cr-review), one patch each; an AI suggestion never drives a patch.
   deck_patches_affected_only: (ctx, input, out) => {
     const d = ctx.decisions.find((x) => x.id === input.decision_id);
     if (!d) return ["$: decision_unresolved"];
-    if (d.actor !== "student") return ["$: decision_is_ai_suggestion"];
+    if (d.actor === "ai") return ["$: decision_is_ai_suggestion"];
     const seen = new Set<number>();
     return (Array.isArray(out.patches) ? out.patches : []).flatMap((p: Out, i: number) => {
       const out2: string[] = [];
