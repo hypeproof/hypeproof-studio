@@ -249,3 +249,40 @@ It writes `e2e/test-results/cr-app/skills-result.json` (the skill and capability
 | 9 | Restarts the Service with `off` and reloads the window | "커리큘럼 스킬" is not in the palette; the three skill addresses answer like an unknown address |
 
 **Where the data is.** The skills, their contracts and the v5 curriculum are bundled files in `worker/src/skills/curriculum/` (nothing in the workspace is read). Only the Evidence skill writes: one `hps-evidence-draft/1` revision by `ai`, tagged `skill: "evidence@1.0.0"`, at `drafts/<experiment>/<draft>@1` on `HPS_TRACES`. Every other skill's result is shown and stored nowhere. A skill's model request is a `/v1/chat/completions` call with `x-hps-skill` and `x-hps-capability` (and, on a lesson seat, the profile's `x-hps-lesson-binding`) and no `model`, made once with no retry or model substitution; the Service answers with the same two headers and `x-hps-model`, and logs a `skill_request` line. Writing them onto the usage ledgers is `cr-gateway`'s (CR-34). These by-hand rows were written from the code and the executed runs, not executed by hand.
+
+## `cr-review` — Weekly Review (#1398)
+
+**Flag:** the same `curriculum_runtime: { enabled: true }`. With `scripts/dev-stack.sh`, apply `migrations/0038-curriculum-runtime-review.sql` to the local D1 after 0032–0034 (0036 is reserved for #1485 and not part of this). The director needs an issuer token whose scope covers the cohort and the profile; nothing else is new.
+
+**Fastest check (background, no app).**
+
+```bash
+cd worker && node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs   # Service and App session, SQLite
+cd worker && npm run test:cr-review:d1                                                                    # the same on local workerd D1 and R2
+cd extensions/hypeproof-chat && node --experimental-strip-types test/cr-review.smoke.mjs                    # App sessions, timing verdict, panel render
+```
+
+**In the app (background).** The same prepared copy, with this branch's extension and webview injected. `app-service.mjs` also writes a director's issuer token next to the learner's (`<token-file>.issuer`):
+
+```bash
+GATE=idle HPS_APP_PATH="<app copy>" bash scripts/e2e-quiet.sh npx playwright test -c curriculum-runtime/playwright.config.ts review-app
+```
+
+It prepares the pack in the learner's App, writes the director's decision and next experiment from a second App signed in with the issuer token only, reopens the learner's App with its workspace state deleted, and writes `e2e/test-results/cr-app/review-result.json`.
+
+**By hand.** After `cr-memory`'s steps 1–2 (a published kiosk, an accepted draft, a team decision on slides 2–3). The AI's part is the Experiment skill through the coach route, so a class session must be open (`/console`) for the student's App; opening a pack never needs one.
+
+| Step | Who and what | Expected (in student and director terms) |
+|---|---|---|
+| 1 | The student runs "HypeProof: 주간 리뷰" (also the calendar icon on the chat panel) | A "주간 리뷰" box: "N주차 · 아직 준비하지 않았어요" (N is the week of the newest experiment the team ran) and the button "주간 리뷰 준비하기" |
+| 2 | Presses "주간 리뷰 준비하기" | "주간 리뷰를 준비했어요." and "준비 시간 N초 (AI 응답 M초)"; ten sections in order: "N주차 가설", "N주차에 한 실험", "관찰한 것", "해석", "제품·버전 변화", "지표", "바뀌는 발표 슬라이드" (slides 2 and 3 with the team decision, and "아직 제안된 슬라이드 수정이 없어요."), "아직 확인 안 된 가정", "디렉터와 정할 것", "다음 실험 제안 (AI)" with "AI가 기록을 보고 만든 제안이에요. 다음 실험은 디렉터와 팀이 정해요." An empty section says why in words ("정한 지표가 없어요."). Each line has "근거 N개", which opens the records it rests on |
+| 3 | Presses it again with nothing changed | "바뀐 기록이 없어서 다시 만들지 않았어요. 지금 리뷰가 최신이에요."; no AI call |
+| 4 | Accepts one more observation in "실험 증거", then runs "주간 리뷰" again | "준비한 뒤로 바뀐 기록이 있어요"; only the sections that read it say "준비한 뒤로 바뀌었어요" (관찰한 것, 디렉터와 정할 것, 다음 실험 제안). Preparing again remakes those three and asks the AI once |
+| 5 | The director pastes the issuer token with "Chalk: 강사 토큰 입력", then runs "HypeProof: 주간 리뷰 (디렉터)" | "주간 리뷰 · 디렉터": one line per team of the class, "<팀> · N주차 · 최신이에요 / 준비한 뒤로 바뀐 기록이 있어요 / 아직 준비하지 않았어요". No team of another class. Opening is instant: no AI call |
+| 6 | Opens the team, writes "옵션 선택을 한 단계로 줄인다" under 결정, ticks one sentence under "이 결정의 근거", slide 2, keeps "다음 실험도 함께 기록하기", edits the question, method and criteria the AI suggested, presses "결정 기록하기" | "결정과 다음 실험을 프로젝트 기억에 기록했어요."; under the pack: "디렉터 결정: 옵션 선택을 한 단계로 줄인다 · 슬라이드 2" and "다음 실험 초안 (N+1주차): …". Pressing again: "이미 기록된 결정이에요. 다시 저장하지 않았어요." |
+| 7 | The student closes the app, clears the chat, reopens and runs "HypeProof: 프로젝트 기억 보기" | Under 결정: "디렉터 결정: 옵션 선택을 한 단계로 줄인다"; under 실험: the new one with "· 다음 실험 초안" |
+| 8 | Restarts the Service with `off` and reloads the window | Neither "주간 리뷰" command is in the palette, with either token stored; the five review addresses answer like an unknown address |
+
+The director may not cite a sentence the pack does not show, an AI draft the team has not reviewed, or a pack revision older than the one on screen: "고른 근거 중에 이 리뷰에 없는 것이 있어요. 새로 불러온 뒤 다시 골라 주세요." and the matching lines. A student's token cannot reach the director's write at all.
+
+**Where the data is.** D1: migration 0038's `cr_weekly_reviews`, one row per pack revision (`project_id`, `week`, `revision`, the `hps-weekly-review/1` document with each section's digest, the timing the App measured, and who prepared it). The pack quotes stored statements and names its sources; it copies no evidence item. The director's decision is a `cr_decisions` row with `actor: "director"` and `review: {week, revision}`; the next experiment is a `cr_experiments` row with `status: "draft"` and `drafted_from`; a new hypothesis written with it is a `cr_hypotheses` row whose first revision is by `director:<id>`. Deleting a participant session or an experiment's data deletes the Project's packs too. In the App: nothing stored; the director's command follows its own context key, `hypeproof-chat.curriculumRuntimeDirector`. These by-hand rows were written from the code and the executed runs, not executed by hand.

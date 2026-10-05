@@ -3228,6 +3228,34 @@
       ]
     },
     {
+      "id": "ST-IMP-CR-REVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-CR",
+        "ST-REQ-CR",
+        "ST-IMP-CR-MEMORY",
+        "ST-IMP-CR-SKILLS"
+      ],
+      "sources": [
+        {
+          "path": "worker/src/lib/curriculum/review.ts"
+        },
+        {
+          "path": "worker/migrations/0038-curriculum-runtime-review.sql"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reviewSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reviewView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CR",
       "stage": "test",
       "owner": "jayleekr",
@@ -3237,7 +3265,8 @@
         "ST-IMP-CR-PUBLISH",
         "ST-IMP-CR-EVIDENCE",
         "ST-IMP-CR-MEMORY",
-        "ST-IMP-CR-SKILLS"
+        "ST-IMP-CR-SKILLS",
+        "ST-IMP-CR-REVIEW"
       ],
       "sources": [
         {
@@ -3326,6 +3355,18 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-05-unblock.md"
+        },
+        {
+          "path": "worker/test/cr-review.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/cr-review.smoke.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/review-app.spec.ts"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-05-review.md"
         }
       ]
     },
