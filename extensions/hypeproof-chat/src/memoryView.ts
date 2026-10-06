@@ -20,15 +20,18 @@ export interface MemoryItemView {
   /** False when a manual record it cites is not real (simulated, self-reported, unverified): listed, never the team's evidence. */
   sources_real?: boolean;
   assumption_status?: "open" | "observed_later";
-  cited_by?: Array<{ decision_id: string; shown_as: "team_decision" | "ai_suggestion" }>;
+  cited_by?: Array<{ decision_id: string; shown_as: ShownAs }>;
   slides?: number[];
 }
+
+/** The team's decision, a director's from a Weekly Review Pack (cr-review, CR-51), or an AI suggestion that is never a decision (SX-45). */
+export type ShownAs = "team_decision" | "director_decision" | "ai_suggestion";
 
 export interface MemoryDecisionView {
   id: string;
   statement: string;
-  actor: "student" | "ai";
-  shown_as: "team_decision" | "ai_suggestion";
+  actor: "student" | "ai" | "director";
+  shown_as: ShownAs;
   no_evidence: boolean;
   decided_at: number | string;
   resulting_version_id: string | null;
@@ -83,6 +86,7 @@ export const ENTRY_LABEL: Record<string, string> = {
   product_version: "제품 버전",
   evidence_item: "근거",
   decision: "팀 결정",
+  director_decision: "디렉터 결정",
   ai_suggestion: "AI 제안 (팀 결정 아님)",
   deck_slide: "발표 슬라이드",
 };
@@ -118,7 +122,7 @@ export function timelineRecord(m: MemoryAnswer, ref: MemoryAnswer["timeline"][nu
       const d = m.decisions.find((x) => x.id === ref.id);
       if (!d) return null;
       return {
-        title: d.shown_as === "ai_suggestion" ? "AI 제안 (팀 결정 아님)" : "팀 결정",
+        title: d.shown_as === "ai_suggestion" ? "AI 제안 (팀 결정 아님)" : d.shown_as === "director_decision" ? "디렉터 결정" : "팀 결정",
         lines: [d.statement, ...(d.evidence.length ? d.evidence.map((e) => `근거: ${e.statement ?? "찾을 수 없는 근거"}`) : ["근거가 연결되지 않았어요"]), ...d.assumptions.map((a) => `기대는 가정: ${a.statement ?? "찾을 수 없는 가정"}`), ...(d.affected_deck_slides.length ? [`슬라이드 ${d.affected_deck_slides.join(", ")}`] : [])],
       };
     }

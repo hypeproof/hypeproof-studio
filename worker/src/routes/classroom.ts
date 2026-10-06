@@ -11,6 +11,9 @@ import { scrubSecrets } from '../lib/scrub-secrets';
 import { isMinorCohort } from '../lib/moderation';
 import { opsEnabled } from './classroom-ops';
 import { NOT_FENCED } from '../lib/classroom-distribution-store';
+import { sha256Hex } from '../lib/modules';
+import { RECORD_PARTS, RECORDS_BODY_MAX, feedbackLoopEnabled, hasFeedback, maskRecords, parseResponse, parseShareRecords, responseFor, responseView, storedFeedback, type ResponseRow } from '../lib/feedback-loop';
+import { resolveEffectiveLesson } from '../lib/lesson-binding-store';
 
 type Row = {id:string;cohort_id:string;profile_id:string;student_id:string;recipient_id:string;session_id:string;kind:string;content_json:string;revision:number;status:string;feedback:string;next_action:string;created_at:number;expires_at:number};
 type StudentEnv = {Bindings:Env;Variables:{student:TokenPayload}};
@@ -22,11 +25,42 @@ const studentView=(r:Row)=>({...metadata(r),content:JSON.parse(r.content_json),f
 // Six 8,000-code-unit fields may each require six JSON bytes per unit (escaped controls).
 // Include bounded identifiers/consent metadata without changing the field limits.
 const shareLimit=bodyLimit({maxSize:6*8000*6+8192,onError:c=>c.json({error:'share too large',reason:'too_large'},413)});
+// #1013 EDU-04/05 — while the feedback loop is on, a submission may also carry the learner's records, so the cap grows by
+// the most they can add (RECORDS_BODY_MAX). Off, the cap is exactly the one above.
+const shareLimitWithRecords=bodyLimit({maxSize:6*8000*6+8192+RECORDS_BODY_MAX,onError:c=>c.json({error:'share too large',reason:'too_large'},413)});
 const limit=bodyLimit({maxSize:32*1024,onError:c=>c.json({error:'share too large'},413)});
 const json=async(c:any)=>{try{return await c.req.json();}catch{return null;}};
+// #1013 feedback-loop — the learner's answer to a person's feedback as a reader sees it, per share: the one bound to the
+// feedback text as it is stored now (whatever the status), else the newest, marked as answering an earlier text (responseFor).
+// Read only while HPS_FEEDBACK_LOOP is enabled: with it off no field is added and no table is read, so a database without
+// migration 0039 answers as before.
+async function responsesFor(env:Env,rows:Row[]){
+ const out=new Map<string,ReturnType<typeof responseView>>();
+ if(!feedbackLoopEnabled(env))return null;
+ if(!rows.length)return out;
+ const found=(await env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(rows.map(r=>r.id))).all<ResponseRow>()).results??[];
+ for(const r of rows){const text=storedFeedback(r),sha=text===null?null:await sha256Hex(text);out.set(r.id,responseView(responseFor(found.filter(x=>x.share_id===r.id),sha),sha));}
+ return out;
+}
+const withResponse=(r:Row,m:Map<string,ReturnType<typeof responseView>>|null)=>m?{...studentView(r),response:m.get(r.id)??null}:studentView(r);
+// #1013 — which lesson the learner was executing when they sent this share, decided by the chat gate's own resolver: their
+// code's lesson, or the setting they are switched to where settings are enforced. Written once, after the share exists,
+// only with the switch on. Identifiers and a hash only; deleted with the share. When nothing is written (no lesson on the
+// code, the lesson unreadable, a storage fault) a retrospective reads this share as "lesson unknown", never as its version.
+async function recordShareLesson(env:Env,p:TokenPayload,share:Row){
+ if(!feedbackLoopEnabled(env)||!p.lesson)return;
+ try{
+  const profile=getProfile(p.p),served=profile?await profileServesCohort(env,profile,p):null;
+  if(!served?.ok)return;
+  const r=await resolveEffectiveLesson(env,p,{classRunId:share.session_id,lessonCohort:served.lessonCohort,mode:'read',now:Date.now()});
+  if(!r.ok)return;
+  await env.HPS_DB.prepare('INSERT INTO classroom_share_lessons(share_id,course_id,version,lesson_sha256,source,recorded_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM classroom_shares WHERE id=? AND student_id=?) ON CONFLICT(share_id) DO NOTHING')
+   .bind(share.id,r.lesson.course_id,r.lesson.version,r.lesson.sha256,r.binding.source,now(),share.id,p.u).run();
+ }catch(err){console.error('share lesson not recorded; a retrospective reads this share as "lesson unknown":',err);}
+}
 
 export const classroomStudent=new Hono<StudentEnv>();
-classroomStudent.use('*',shareLimit);
+classroomStudent.use('*',(c,next)=>(feedbackLoopEnabled(c.env)?shareLimitWithRecords:shareLimit)(c,next));
 classroomStudent.use('*',async(c,next)=>{
  c.header('cache-control','no-store');
  const token=bearer(c.req.header('authorization'));if(!token)return c.json({error:'student Bearer required'},401);
@@ -116,7 +150,9 @@ classroomStudent.get('/help-recipient',async c=>{
 classroomStudent.get('/shares',async c=>{
  const p=c.get('student'),sid=c.req.query('session_id');if(sid!==undefined&&!idOK(sid))return c.json({error:'invalid session_id'},400);
  const rows=await c.env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE cohort_id=? AND student_id=? AND profile_id=? AND expires_at>?'+(sid===undefined?'':' AND session_id=?')+' ORDER BY created_at DESC LIMIT 100').bind(p.c,p.u,p.p,now(),...(sid===undefined?[]:[sid])).all<Row>();
- return c.json({shares:(rows.results??[]).map(studentView),limit:100,filter:{session_id:sid??null}});
+ const list=rows.results??[],responses=await responsesFor(c.env,list);
+ // #1013 — `share_records` names the records a submission may carry here; absent while the feedback loop is off.
+ return c.json({shares:list.map(r=>withResponse(r,responses)),limit:100,filter:{session_id:sid??null},...(feedbackLoopEnabled(c.env)?{share_records:[...RECORD_PARTS]}:{})});
 });
 classroomStudent.post('/shares',async c=>{
  const p=c.get('student'),b=await json(c);
@@ -124,10 +160,16 @@ classroomStudent.post('/shares',async c=>{
  // `question` = the learner's own words to the instructor, so help can be asked without sharing any conversation. Stored only
  // when sent: a request without it keeps the exact stored shape it had before (its retry still matches).
  const keys=['question','prompt','response','tool_summary','artifact_url','verification'];
- if(!b.content||typeof b.content!=='object'||Array.isArray(b.content)||Object.keys(b.content).some(k=>!keys.includes(k)))return c.json({error:'select supported content fields'},400);
+ // #1013 EDU-04/05 — with the feedback loop on, a submission may also carry the learner's own records (RECORD_PARTS). Off,
+ // a body naming them is refused right here exactly as before, and the stored content keeps its exact shape.
+ const accepted=feedbackLoopEnabled(c.env)?[...keys,...RECORD_PARTS]:keys;
+ if(!b.content||typeof b.content!=='object'||Array.isArray(b.content)||Object.keys(b.content).some(k=>!accepted.includes(k)))return c.json({error:'select supported content fields'},400);
  const content:Record<string,string>={};
  for(const k of keys){if(k==='question'&&b.content.question===undefined)continue;const value=b.content[k]??'';if(typeof value!=='string'||value.length>8000)return c.json({error:'invalid or excessive field'},400);content[k]=scrubSecrets(value);}
- if(!Object.values(content).some(v=>v.trim()))return c.json({error:'select content to share'},400);
+ const parsed=parseShareRecords(b.content,b.kind);
+ if(!parsed.ok)return c.json({error:'invalid record',reason:parsed.code},400);
+ const records=maskRecords(parsed.records,scrubSecrets);
+ if(!Object.values(content).some(v=>v.trim())&&!Object.keys(records).length)return c.json({error:'select content to share'},400);
  if(content.artifact_url){try{const url=new URL(content.artifact_url);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error();}catch{return c.json({error:'artifact must be an http(s) URL without credentials'},400);}}
  if((b.class_run_id!==undefined&&!idOK(b.class_run_id))||(b.grant_id!==undefined&&!idOK(b.grant_id)))return c.json({error:'invalid class or connection id'},400);
  // A native request names its class and connection and carries the Service-signed end time the learner consented to. The
@@ -156,7 +198,8 @@ classroomStudent.post('/shares',async c=>{
   return null;
  };
  if(hasRun){const x=await helpAssignment(c.env,p),no=refuse(x);if(no)return no;a=x as Assignment;}
- const contentJson=JSON.stringify(content);
+ // The records follow the six fields in a fixed order (parseShareRecords), so a retried share compares equal byte for byte.
+ const contentJson=JSON.stringify({...content,...records});
  // A retried id is the same request only with the same consent envelope: learner, class, recipient, kind, exact content and the
  // expiry that was granted (native: the signed end time, or the token's end if that came first; web: the duration counted from
  // creation, capped by the token). Anything else is a conflict, so a retry can neither widen the granted expiry nor pass an earlier class's record off
@@ -173,13 +216,14 @@ classroomStudent.post('/shares',async c=>{
  if(!a){
   const saved=await c.env.HPS_DB.prepare(`INSERT INTO classroom_shares(id,cohort_id,profile_id,student_id,recipient_id,session_id,kind,content_json,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING RETURNING *`).bind(...values).first<Row>();
   if(!saved)return c.json({error:'request ID conflict; reload'},409);
+  await recordShareLesson(c.env,p,saved);
   return c.json(studentView(saved),201);
  }
  // The assignment is re-evaluated by the INSERT itself. No row = the assignment changed in between (or the id was taken):
  // nothing was written, and the answer says which.
  const at=Date.now(),saved=await c.env.HPS_DB.prepare(`INSERT INTO classroom_shares(id,cohort_id,profile_id,student_id,recipient_id,session_id,kind,content_json,created_at,expires_at) SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${HELP_WRITE_GUARD} ON CONFLICT(id) DO NOTHING RETURNING *`)
   .bind(...values,a.grant_id,session.session_id,p.c,p.p,p.u,at,a.recipient_id,at,at).first<Row>();
- if(saved)return c.json(studentView(saved),201);
+ if(saved){await recordShareLesson(c.env,p,saved);return c.json(studentView(saved),201);}
  const raced=await c.env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE id=?').bind(b.id).first<Row>();
  if(raced)return same(raced)?c.json(studentView(raced)):conflict(raced);
  const now2=await helpAssignment(c.env,p),no=refuse(now2);if(no)return no;
@@ -195,6 +239,27 @@ classroomStudent.post('/shares/:id/confirm',async c=>{
  const p=c.get('student'),b=await json(c);if(!Number.isInteger(b?.expected_revision))return c.json({error:'revision required'},400);
  const r=await c.env.HPS_DB.prepare("UPDATE classroom_shares SET status='resolved',revision=revision+1 WHERE id=? AND cohort_id=? AND student_id=? AND profile_id=? AND revision=? AND status='answered' AND expires_at>? RETURNING *").bind(c.req.param('id'),p.c,p.u,p.p,b.expected_revision,now()).first<Row>();
  return r?c.json(studentView(r)):c.json({error:'share changed, unavailable or not answered'},409);
+});
+// #1013 AE-43 — the learner answers a person's feedback on their own share: revise, keep or hold, and why. Optional and never
+// asked for by the Service; the share's status, revision and resolution (the confirm above) are untouched. Bound to the
+// feedback text it answers and written once per text: a different answer to the same text is a conflict, not an edit.
+classroomStudent.post('/shares/:id/response',async c=>{
+ if(!feedbackLoopEnabled(c.env))return c.json({error:'not found',reason:'feedback_loop_unavailable'},404);
+ const p=c.get('student'),b=parseResponse(await json(c));
+ if(!b.ok)return c.json({error:'expected_revision, decision (revise, keep or hold) and a reason are required',reason:b.code},400);
+ const r=await c.env.HPS_DB.prepare('SELECT * FROM classroom_shares WHERE id=? AND cohort_id=? AND student_id=? AND profile_id=? AND expires_at>?').bind(c.req.param('id'),p.c,p.u,p.p,now()).first<Row>();
+ if(!r)return c.json({error:'share not found'},404);
+ if(!hasFeedback(r))return c.json({error:'there is no feedback from a person to answer yet',reason:'no_human_feedback'},409);
+ if(r.revision!==b.expected_revision)return c.json({error:'share changed; reload',reason:'share_changed'},409);
+ const digest=await sha256Hex(r.feedback),reason=scrubSecrets(b.reason),at=now();
+ // The write itself re-checks that the share is still this learner's, unexpired and at the revision they read.
+ const ins=await c.env.HPS_DB.prepare(`INSERT INTO classroom_share_responses(share_id,feedback_sha256,feedback_revision,decision,reason,created_at) SELECT ?,?,?,?,?,?
+ WHERE EXISTS (SELECT 1 FROM classroom_shares WHERE id=? AND cohort_id=? AND student_id=? AND profile_id=? AND revision=? AND expires_at>?) ON CONFLICT(share_id,feedback_sha256) DO NOTHING`)
+  .bind(r.id,digest,r.revision,b.decision,reason,at,r.id,p.c,p.u,p.p,r.revision,at).run() as {meta?:{changes?:number}};
+ const saved=await c.env.HPS_DB.prepare('SELECT * FROM classroom_share_responses WHERE share_id=? AND feedback_sha256=?').bind(r.id,digest).first<ResponseRow>();
+ if(!saved)return c.json({error:'share changed; reload',reason:'share_changed'},409);
+ if(saved.decision!==b.decision||saved.reason!==reason)return c.json({error:'this feedback already has your answer',reason:'already_answered',response:responseView(saved,digest)},409);
+ return c.json({...studentView(r),response:responseView(saved,digest)},(ins.meta?.changes??0)===1?201:200);
 });
 
 export const classroomTeacher=new Hono<TeacherEnv>();
@@ -233,7 +298,7 @@ classroomTeacher.get(root+'/:id',async c=>{
  const r=await authorized(c);if(!r)return c.json({error:'share not found'},404);
  // Fail closed: no content leaves before the view audit is durably recorded.
  await c.env.HPS_DB.prepare('INSERT INTO classroom_share_audit(share_id,actor_id,action,at) VALUES(?,?,?,?)').bind(r.id,c.get('teacher').payload.u,'view',now()).run();
- return c.json(studentView(r));
+ return c.json(withResponse(r,await responsesFor(c.env,[r])));
 });
 classroomTeacher.put(root+'/:id',async c=>{
  const r=await authorized(c);if(!r)return c.json({error:'share not found'},404);

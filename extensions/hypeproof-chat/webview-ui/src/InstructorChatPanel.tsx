@@ -42,6 +42,8 @@ interface Props {
   onReportProblem: () => void;
   onInstallUpdate: () => void;
   onDismissUpdate: (version: string) => void;
+  /** cr-review — the director's Weekly Review panel (null = hidden); passed to the chat panel like the student's CR panels. */
+  verifyPanel?: import("react").ReactNode;
 }
 
 export function InstructorChatPanel(props: Props) {
