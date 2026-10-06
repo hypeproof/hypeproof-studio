@@ -810,7 +810,35 @@
         "extensions/hypeproof-chat/test/student-goal.smoke.mjs",
         "e2e/sx/goal-browser.mjs",
         "e2e/sx/goal-app.spec.ts"
-      ]
+      ],
+      "completion": {
+        "verdict": "PASS",
+        "reviewed_by": "goal:review:acceptance:r3",
+        "report": "docs/evidence/goal.md",
+        "scope_sha256": "0c4a259d20401c6b4014b66c4fd9df17c8b7e0cc61b084e1fb7d774c1c829c3a",
+        "inputs": {
+          "docs/evidence/goal.md": "f74adaaf495a123939c895e6f0947b4d41b3be65570a22847d04322714e6bdbf",
+          "e2e/sx/goal-app.spec.ts": "768bc762c904c2f07153aaa24fcf5beab579ed9c8148b8df5af912f142c42777",
+          "e2e/sx/goal-browser.mjs": "9f0ec0723acb33cfd41a13340ef1de983d62911e8a6f75717b3cbe21f443db7d",
+          "extensions/hypeproof-chat/src/studentGoal.ts": "54ddc840d45707021b47f457004b9ee3c553bffe7d2a9ac4b76e9a392cb0a65c",
+          "extensions/hypeproof-chat/test/student-goal.smoke.mjs": "4474f7451c83599f2bcabd956a6f008990e2d1158d0f0d3b6714c91f24f55ec4",
+          "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx": "e54481e1d976dbc7c84d6606088afab512b1b8ac3f2d95ee05ed640bd5f6d2cc"
+        },
+        "rows": {
+          "docs/requirements/learning-agent-experience.md": {
+            "AE-01": "ab3eb4f5bd60c9905a024c653deb90b3ebcbaed35257401e3839eb9be57675e8"
+          },
+          "docs/testing/learning-agent-experience.md": {
+            "AE-T01": "acf98e9163e7941827b79d29e15a10781953c40e6e478bef374052afcb744fe0"
+          }
+        },
+        "commit": "1e6257f2b101bbd6444c141bd4e790ad545f8f36",
+        "test_ids": [
+          "AE-T01"
+        ],
+        "recorded_at": "2026-10-05T22:57:24Z",
+        "pr": 1555
+      }
     },
     {
       "id": "context",
