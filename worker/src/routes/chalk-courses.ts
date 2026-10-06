@@ -454,7 +454,13 @@ chalkCourses.put(
     });
 
     if (wr.kind === 'ok' || wr.kind === 'idempotent') {
-      const findings = runPlanCheck(wr.draft, b.html as string, parsed.meta.audienceTier);
+      // Read stored input duration_min for G2-9 fallback (#1531).
+      const planInputsRow = await c.env.HPS_DB.prepare(
+        `SELECT cio.duration_min FROM chalk_course_input_options cio
+         WHERE cio.cohort_id=? AND cio.course_id=?`
+      ).bind(cohort, course).first<{ duration_min: number | null }>();
+      const planInputDurationMin: number | null = planInputsRow?.duration_min ?? null;
+      const findings = runPlanCheck(wr.draft, b.html as string, parsed.meta.audienceTier, planInputDurationMin);
       const judged = await mergeStoredJudgements(c.env.HPS_DB, cohort, course, sha256);
       findings.push(...judged);
       appendHumanOnly(findings);
@@ -856,6 +862,7 @@ function runPlanCheck(
   draft: Draft,
   htmlOverride?: string,
   audienceTier?: string | null,
+  inputDurationMin?: number | null,
 ): CheckResultItem[] {
   const results: CheckResultItem[] = [];
 
@@ -863,6 +870,7 @@ function runPlanCheck(
   let parsedSteps: import('../lib/chalk-plan/types.ts').ParsedStep[] | undefined;
   let parsedPlanText: string | undefined;
   let parsedAudienceTier: string | null | undefined;
+  let planDurationMin: number | null = null;
 
   if (htmlOverride !== undefined) {
     const parsed = parsePlan(htmlOverride, 'lesson');
@@ -881,6 +889,8 @@ function runPlanCheck(
     if (audienceTier === undefined && parsed.meta.audienceTier) {
       parsedAudienceTier = parsed.meta.audienceTier;
     }
+    // G2-9 reads lesson length from plan meta first (#1531).
+    planDurationMin = parsed.meta.durationMin ?? null;
   }
 
   const effectiveAudienceTier = audienceTier !== undefined ? audienceTier : (parsedAudienceTier ?? null);
@@ -910,7 +920,7 @@ function runPlanCheck(
   const pedagogyFindings = checkLessonPedagogy(
     checkContent,
     parsedSteps !== undefined
-      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText }
+      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText, planDurationMin, inputDurationMin }
       : undefined,
   );
   for (const f of pedagogyFindings) {
@@ -949,7 +959,14 @@ chalkCourses.post(
       if (fallbackRow) html = fallbackRow.html;
     }
 
-    const results = runPlanCheck(draft, html);
+    // Read stored input duration_min for G2-9 fallback (#1531).
+    const inputsRow = await c.env.HPS_DB.prepare(
+      `SELECT cio.duration_min FROM chalk_course_input_options cio
+       WHERE cio.cohort_id=? AND cio.course_id=?`
+    ).bind(cohort, course).first<{ duration_min: number | null }>();
+    const checkInputDurationMin: number | null = inputsRow?.duration_min ?? null;
+
+    const results = runPlanCheck(draft, html, undefined, checkInputDurationMin);
 
     // Compute current sha to filter stored judgements
     let currentSha: string | null = null;
