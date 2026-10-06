@@ -20,6 +20,22 @@ function sectionHtml(html: string, key: string): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
+// Strip HTML comments and the section's own <h2> from a raw section body.
+// The ops skeleton embeds authoring comments ("고정: …", "자율: …") and each
+// section carries its own <h2> label — both must be absent from derived output.
+function cleanSectionBody(body: string): string {
+  return body
+    .replace(/<!--[\s\S]*?-->/g, '')   // remove HTML comments
+    .replace(/<h2[^>]*>[\s\S]*?<\/h2>/gi, '')  // remove section's own h2
+    .trim();
+}
+
+// Strip HTML comments and tags from a parsed cell value (parsePlan cleanText does not strip HTML).
+function cleanValue(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
 const STYLE = `
   body { font-family: sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
   h1, h2 { margin-top: 1.5rem; }
@@ -40,46 +56,51 @@ export function deriveRunbook(opsHtml: string, opsSha256: string): string {
   const { meta, blocks = [] } = plan;
   const course = meta.course ?? '';
 
-  const headerHtml = sectionHtml(opsHtml, 'header') ?? '';
-  const operationsHtml = sectionHtml(opsHtml, 'operations') ?? '';
-  const outcomesHtml = sectionHtml(opsHtml, 'outcomes') ?? '';
-  const materialsHtml = sectionHtml(opsHtml, 'materials') ?? '';
-  const risksHtml = sectionHtml(opsHtml, 'risks') ?? '';
-  const consentHtml = sectionHtml(opsHtml, 'consent') ?? '';
-  const postHtml = sectionHtml(opsHtml, 'post-deliverables') ?? '';
+  const clean = (key: string) => cleanSectionBody(sectionHtml(opsHtml, key) ?? '');
+  const headerHtml = clean('header');
+  const operationsHtml = clean('operations');
+  const outcomesHtml = clean('outcomes');
+  const materialsHtml = clean('materials');
+  const risksHtml = clean('risks');
+  const consentHtml = clean('consent');
+  const postHtml = clean('post-deliverables');
 
   const assistantHeader = meta.familySession ? '부모 할 일' : '보조 할 일';
 
   const blockRows = blocks.map((b) => {
     const isBreak = b.kind === 'break';
 
+    const activity = cleanValue(b.fields.activity);
+    const asset = cleanValue(b.fields.asset);
+    const artifact = cleanValue(b.fields.artifact);
+
     const blockContent = isBreak
       ? `쉬는 시간 (${b.durationMin ?? ''}분)`
       : [
-          b.fields.activity ? `활동: ${b.fields.activity}` : '',
-          b.fields.asset ? `에셋: ${b.fields.asset}` : '',
-          b.fields.artifact ? `산출물: ${b.fields.artifact}` : '',
+          activity ? `활동: ${activity}` : '',
+          asset ? `에셋: ${asset}` : '',
+          artifact ? `산출물: ${artifact}` : '',
         ].filter(Boolean).join('\n');
 
     const facilitatorContent = isBreak ? '' : [
-      b.fields.exitCriteria ? `종료 기준: ${b.fields.exitCriteria}` : '',
-      b.fields.ifStuck ? `막힐 때: ${b.fields.ifStuck}` : '',
-      b.fields.ifAhead ? `빠를 때: ${b.fields.ifAhead}` : '',
-      b.fields.ifBehind ? `느릴 때: ${b.fields.ifBehind}` : '',
+      cleanValue(b.fields.exitCriteria) ? `종료 기준: ${cleanValue(b.fields.exitCriteria)}` : '',
+      cleanValue(b.fields.ifStuck) ? `막힐 때: ${cleanValue(b.fields.ifStuck)}` : '',
+      cleanValue(b.fields.ifAhead) ? `빠를 때: ${cleanValue(b.fields.ifAhead)}` : '',
+      cleanValue(b.fields.ifBehind) ? `느릴 때: ${cleanValue(b.fields.ifBehind)}` : '',
     ].filter(Boolean).join('\n');
 
     const assistantContent = meta.familySession
-      ? (b.roles.parent?.text ?? '')
-      : (b.roles.assistant ?? '');
+      ? cleanValue(b.roles.parent?.text)
+      : cleanValue(b.roles.assistant);
 
     const cls = isBreak ? ' class="block-break"' : '';
     return `<tr${cls}>
       <td>${esc(b.start ?? '')}</td>
       <td>${esc(blockContent)}</td>
       <td>${esc(facilitatorContent)}</td>
-      <td>${esc(b.roles.learner ?? '')}</td>
+      <td>${esc(cleanValue(b.roles.learner))}</td>
       <td>${esc(assistantContent)}</td>
-      <td>${esc(b.fields.intent ?? '')}</td>
+      <td>${esc(cleanValue(b.fields.intent))}</td>
       <td>${esc(b.stepRefs.join(', '))}</td>
     </tr>`;
   }).join('\n');
@@ -132,11 +153,12 @@ export function deriveHandout(opsHtml: string, opsSha256: string): string {
   const { meta, blocks = [] } = plan;
   const course = meta.course ?? '';
 
-  const headerHtml = sectionHtml(opsHtml, 'header') ?? '';
-  const outcomesHtml = sectionHtml(opsHtml, 'outcomes') ?? '';
-  const materialsSection = sectionHtml(opsHtml, 'materials') ?? '';
-  const consentHtml = sectionHtml(opsHtml, 'consent') ?? '';
-  const postHtml = sectionHtml(opsHtml, 'post-deliverables') ?? '';
+  const clean = (key: string) => cleanSectionBody(sectionHtml(opsHtml, key) ?? '');
+  const headerHtml = clean('header');
+  const outcomesHtml = clean('outcomes');
+  const materialsSection = clean('materials');
+  const consentHtml = clean('consent');
+  const postHtml = clean('post-deliverables');
 
   // Handout schedule: learner only for non-family; learner + parent for family.
   // "보조강사칸" is forbidden in handout (only parent is allowed for family sessions).
@@ -150,14 +172,14 @@ export function deriveHandout(opsHtml: string, opsSha256: string): string {
 
       const blockLabel = isBreak
         ? `쉬는 시간 (${b.durationMin ?? ''}분)`
-        : (b.fields.artifact || b.fields.activity || b.key);
+        : (cleanValue(b.fields.artifact) || cleanValue(b.fields.activity) || b.key);
 
-      const parentContent = b.roles.parent?.text ?? '';
+      const parentContent = cleanValue(b.roles.parent?.text);
 
       const cls = isBreak ? ' class="block-break"' : '';
       return `<tr${cls}>
       <td>${esc(blockLabel)}</td>
-      <td>${esc(b.roles.learner ?? '')}</td>
+      <td>${esc(cleanValue(b.roles.learner))}</td>
       ${showParent ? `<td>${esc(parentContent)}</td>` : ''}
     </tr>`;
     }).join('\n');

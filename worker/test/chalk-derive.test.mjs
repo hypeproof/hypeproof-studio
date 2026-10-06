@@ -1,5 +1,5 @@
 // #1469 (E3-3) — deriveRunbook / deriveHandout pure functions + POST /derive + GET /plan?file=runbook|handout
-// DR-01~DR-15
+// DR-01~DR-16
 import './harness/loader.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -434,6 +434,93 @@ await check('DR-15 handout from generateOpsSkeleton has no forbidden content', (
   assert.ok(html.includes('학습자 할 일'), 'handout must include 학습자 할 일 th');
   // Must contain allowed sections
   assert.ok(html.includes('data-chalk-kind="handout"'), 'handout must have data-chalk-kind=handout');
+});
+
+// DR-16: no HTML comments, no "고정"/"자율" text, no duplicate h2 — skeleton + r6-style fixture
+await check('DR-16 runbook/handout have no HTML comments, no authoring keywords, no duplicate h2', () => {
+  // Test with generateOpsSkeleton output (contains authoring comments in ops HTML)
+  const opsFromSkeleton = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 240, break_min: 20, audience_tier: 'lv1',
+  });
+  // Test with an r6-style fixture that already has filled h2 in every section
+  const opsR6Style = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="dr16-course">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="235">
+</head>
+<body>
+  <section data-chalk-section="header"><h2 data-chalk-fixed>운영 계획 개요</h2><p>일시: 2026-11-01</p></section>
+  <section data-chalk-section="operations"><h2 data-chalk-fixed>운영 방식</h2><p>20명</p></section>
+  <section data-chalk-section="outcomes"><h2 data-chalk-fixed>최종 결과물</h2><ol><li data-chalk-field="outcome">산출물</li></ol></section>
+  <section data-chalk-section="materials"><h2 data-chalk-fixed>사전 준비물</h2><ol><li data-chalk-material="m-1" data-owner="learner">키트</li></ol></section>
+  <section data-chalk-section="schedule">
+    <h2 data-chalk-fixed>진행 큐시트</h2>
+    <table>
+      <thead><tr data-chalk-fixed><th>시작–끝</th><th>블록</th><th>메인 강사 할 일</th><th>학습자 할 일</th><th>보조·부모 할 일</th><th>의도 한 줄</th><th>연결 단계</th></tr></thead>
+      <tbody>
+        <tr data-chalk-block="block-1" data-chalk-step-ref="s-1" data-start="10:00" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">10:00–11:50</td>
+          <td><span data-chalk-field="activity">탐구</span></td>
+          <td data-chalk-role="facilitator"><span data-chalk-field="exit-criteria">완료</span></td>
+          <td data-chalk-role="learner">활동</td>
+          <td data-chalk-role="assistant">보조</td>
+          <td data-chalk-field="intent">의도</td>
+          <td data-chalk-field="step-ref-label">s-1</td>
+        </tr>
+        <tr data-chalk-block="break" data-chalk-block-kind="break" data-start="11:50" data-duration-min="15" data-chalk-fixed>
+          <td data-chalk-fixed data-chalk-field="time-range">11:50–12:05</td>
+          <td colspan="6" data-chalk-field="activity">휴식 15분</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-chalk-section="risks"><h2 data-chalk-fixed>위험·문제 대응</h2>
+    <ul>
+      <li data-chalk-risk="ai-latency"><span data-chalk-field="first-line">대처1</span></li>
+      <li data-chalk-risk="content-guard"><span data-chalk-field="first-line">대처2</span></li>
+      <li data-chalk-risk="pace-gap"><span data-chalk-field="first-line">대처3</span></li>
+      <li data-chalk-risk="parent-overreach"><span data-chalk-field="first-line">대처4</span></li>
+      <li data-chalk-risk="overtime"><span data-chalk-field="first-line">대처5</span></li>
+    </ul>
+  </section>
+  <section data-chalk-section="consent"><h2 data-chalk-fixed>동의</h2><ul><li>동의</li></ul></section>
+  <section data-chalk-section="post-deliverables"><h2 data-chalk-fixed>사후 정리</h2><p>정리</p></section>
+</body>
+</html>`;
+
+  for (const [label, opsHtml] of [['skeleton', opsFromSkeleton], ['r6-style', opsR6Style]]) {
+    const rb = deriveRunbook(opsHtml, `sha-dr16-rb-${label}`);
+    const ho = deriveHandout(opsHtml, `sha-dr16-ho-${label}`);
+
+    for (const [kind, html] of [['runbook', rb], ['handout', ho]]) {
+      // No HTML comments in derived output
+      assert.ok(!html.includes('<!--'), `${label} ${kind} must not contain HTML comments`);
+      // No authoring keywords
+      assert.ok(!html.includes('고정:'), `${label} ${kind} must not contain "고정:" comment text`);
+      assert.ok(!html.includes('자율:'), `${label} ${kind} must not contain "자율:" comment text`);
+
+      // Each h2 title appears exactly once
+      const h2Matches = [...html.matchAll(/<h2[^>]*>/gi)];
+      const h2Texts = h2Matches.map((m) => {
+        const startIdx = html.indexOf(m[0], m.index);
+        const endIdx = html.indexOf('</h2>', startIdx);
+        return html.slice(startIdx + m[0].length, endIdx);
+      });
+      const seen = new Set();
+      for (const title of h2Texts) {
+        const clean = title.replace(/<[^>]*>/g, '').trim();
+        assert.ok(!seen.has(clean), `${label} ${kind} h2 "${clean}" must appear only once, got ${h2Texts.length} h2s`);
+        seen.add(clean);
+      }
+    }
+  }
 });
 
 console.log(`\nAll ${passed} tests passed.`);
