@@ -206,32 +206,47 @@ function generateSkeleton(opts: {
 </html>`;
 }
 
-// #1467 (E3-1) — ops plan skeleton HTML.
+// #1467 (E3-1) — ops plan skeleton HTML (redesigned: 8 sections, visible h2, schedule thead).
 function generateOpsSkeleton(opts: {
   course_id: string; knowledge_version: number; format: string;
   family_session: boolean; duration_min: number; break_min: number;
   audience_tier: string | null;
 }): string {
   const { course_id, knowledge_version, format, family_session, duration_min, break_min, audience_tier } = opts;
-  const parentCell = family_session
-    ? `\n        <td data-chalk-role="parent" data-chalk-parent-role=""></td>` : '';
+
+  // family=true → parent cell (spec.parent_role_missing check); family=false → assistant
+  const assistantOrParentCell = family_session
+    ? `<td data-chalk-role="parent" data-chalk-parent-role=""><!-- 가족 수업: 부모 역할. 고정: data-chalk-role="parent" data-chalk-parent-role 속성 제거 금지 --></td>`
+    : `<td data-chalk-role="assistant"><!-- 자율: 보조 강사 할 일 --></td>`;
 
   const normalBlockRow = (key: string, durationMin: number | null): string => {
     const durAttr = durationMin !== null ? ` data-duration-min="${durationMin}"` : '';
     return `<tr data-chalk-block="${key}" data-chalk-step-ref="" data-start=""${durAttr}>
-        <td data-chalk-field="activity"></td>
-        <td data-chalk-field="asset"></td>
-        <td data-chalk-field="artifact"></td>
-        <td data-chalk-role="facilitator"></td>
-        <td data-chalk-role="learner"></td>${parentCell}
-        <td data-chalk-field="exit-criteria"></td>
-        <td data-chalk-field="if-stuck"></td>
-      </tr>`;
+          <!-- 고정: data-chalk-block, data-chalk-step-ref, data-start, data-duration-min 속성 제거 금지; 자율: 각 칸 내용 -->
+          <td data-chalk-fixed data-chalk-field="time-range"><!-- 고정: 시작–끝 시각 칸; 자율: 값 --></td>
+          <td><!-- 블록 칸 — 고정: span의 data-chalk-field 속성 이름 변경 금지; 자율: span 내용 -->
+            <strong>활동</strong> <span data-chalk-field="activity"></span>
+            / <strong>핵심 에셋</strong> <span data-chalk-field="asset"></span>
+            / <strong>산출물</strong> <span data-chalk-field="artifact"></span>
+          </td>
+          <td data-chalk-role="facilitator"><!-- 고정: data-chalk-role="facilitator" 제거 금지; 자율: 역할 내용과 아래 판정/막힐 때 값 -->
+            <strong>종료 판정</strong> <span data-chalk-field="exit-criteria"></span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck"></span>
+          </td>
+          <td data-chalk-role="learner"><!-- 자율 --></td>
+          ${assistantOrParentCell}
+          <td data-chalk-field="intent"><!-- 자율: 의도 한 줄 --></td>
+          <!-- 고정: 아래 칸 값과 tr의 data-chalk-step-ref 속성 값을 같게 유지한다 -->
+          <td data-chalk-field="step-ref-label"><!-- 자율: 연결 단계 ID(s) --></td>
+        </tr>`;
   };
+
   const breakBlockRow = (key: string, durationMin: number): string =>
-    `<tr data-chalk-block="${key}" data-chalk-block-kind="break" data-start="" data-duration-min="${durationMin}">
-        <td data-chalk-field="activity"></td>
-      </tr>`;
+    `<tr data-chalk-block="${key}" data-chalk-block-kind="break" data-start="" data-duration-min="${durationMin}" data-chalk-fixed>
+          <!-- 고정: 휴식 행 구조와 data-chalk-block-kind="break" 제거 금지 -->
+          <td data-chalk-fixed data-chalk-field="time-range"><!-- 고정: 시작–끝 시각 칸 --></td>
+          <td colspan="6" data-chalk-field="activity">휴식 ${durationMin}분</td>
+        </tr>`;
 
   const WORKSHOP_BLOCKS = ['intro', 'explore', 'first-try', 'improve', 'share'] as const;
   const scheduleRows = format === 'workshop'
@@ -239,10 +254,12 @@ function generateOpsSkeleton(opts: {
     : [normalBlockRow('block-1', 110), breakBlockRow('break', break_min), normalBlockRow('block-2', 110)].join('\n      ');
 
   const style = `body { font-family: sans-serif; background: #fff; color: #111; max-width: 900px; margin: 0 auto; padding: 1rem; font-size: 1rem; }
-    h2 { font-size: 1.1rem; }
+    h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
     table { border-collapse: collapse; width: 100%; }
     td, th { border: 1px solid #ccc; padding: 0.4rem; vertical-align: top; }
-    section { margin-bottom: 1.5rem; }`;
+    thead th { background: #f5f5f5; }
+    section { margin-bottom: 1.5rem; }
+    ol { padding-left: 1.5rem; }`;
 
   return `<!DOCTYPE html>
 <html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
@@ -260,32 +277,99 @@ function generateOpsSkeleton(opts: {
 </head>
 <body>
 
+  <!-- ① 머리 — 고정: 절 제목과 세 칸(일시·시작-끝·목표)을 제거하지 말 것; 자율: 값 -->
+  <section data-chalk-section="header">
+    <h2 data-chalk-fixed>운영 계획 개요</h2>
+    <p><strong>일시:</strong> <span data-chalk-field="date"></span></p>
+    <p><strong>시작–끝:</strong> <span data-chalk-field="time-range"></span></p>
+    <p><strong>한 줄 목표:</strong> <span data-chalk-field="goal"></span></p>
+  </section>
+
+  <!-- ② 운영 방식 — 고정: 절 제목과 다섯 항목 레이블을 제거하지 말 것; 자율: 값 -->
+  <section data-chalk-section="operations">
+    <h2 data-chalk-fixed>운영 방식</h2>
+    <p><strong>대상 / 인원:</strong> <span data-chalk-field="audience-count"></span></p>
+    <p><strong>운영진 — 메인 강사:</strong> <span data-chalk-field="staff-main-count"></span>명, <strong>보조:</strong> <span data-chalk-field="staff-assistant-count"></span>명</p>
+    <p><strong>배치 비율:</strong> <span data-chalk-field="arrangement-ratio"></span></p>
+    <p><strong>진행 방식:</strong></p>
+    <p data-chalk-field="process"></p>
+  </section>
+
+  <!-- ③ 최종 결과물 — 고정: 절 제목과 ol 구조를 제거하지 말 것; 자율: 항목 수·내용 -->
+  <section data-chalk-section="outcomes">
+    <h2 data-chalk-fixed>최종 결과물</h2>
+    <ol>
+      <li data-chalk-field="outcome"></li>
+    </ol>
+  </section>
+
+  <!-- ④ 사전 준비물 — 고정: 절 제목·ol·li의 data-chalk-material 속성을 제거하지 말 것; 자율: 항목 수·이름·설명 -->
+  <section data-chalk-section="materials">
+    <h2 data-chalk-fixed>사전 준비물</h2>
+    <ol>
+      <li data-chalk-material="m-1" data-kind="" data-owner="">
+        <strong data-chalk-field="name"></strong>:
+        <span data-chalk-field="description"></span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ⑤ 진행 큐시트 — 고정: 절 제목, 머리글 행(thead tr), 시작–끝 칸 구조를 제거하지 말 것; 자율: 블록 수·이름·각 칸 내용 -->
   <section data-chalk-section="schedule">
+    <h2 data-chalk-fixed>진행 큐시트</h2>
     <table>
-      ${scheduleRows}
+      <thead>
+        <!-- 고정: 이 행의 열 구조와 th 텍스트를 제거하거나 줄이지 말 것 -->
+        <tr data-chalk-fixed>
+          <th>시작–끝</th>
+          <th>블록</th>
+          <th>메인 강사 할 일</th>
+          <th>학습자 할 일</th>
+          <th>보조·부모 할 일</th>
+          <th>의도 한 줄</th>
+          <!-- 고정: 연결 단계 열 값은 해당 행의 data-chalk-step-ref 속성 값과 같게 유지한다 -->
+          <th>연결 단계</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${scheduleRows}
+      </tbody>
     </table>
   </section>
 
-  <section data-chalk-section="materials">
-    <ul></ul>
-  </section>
-
+  <!-- ⑥ 위험·문제 대응 — 고정: 절 제목, 1순위/2순위 레이블, data-chalk-risk 키 5개, first-line 구조를 제거하지 말 것; 자율: 대응 내용 -->
   <section data-chalk-section="risks">
+    <h2 data-chalk-fixed>위험·문제 대응</h2>
+    <p data-chalk-fixed><strong>1순위 (즉시 대응)</strong></p>
     <ul>
-      <li data-chalk-risk="ai-latency"><span data-chalk-field="first-line"></span></li>
-      <li data-chalk-risk="content-guard"><span data-chalk-field="first-line"></span></li>
-      <li data-chalk-risk="pace-gap"><span data-chalk-field="first-line"></span></li>
-      <li data-chalk-risk="parent-overreach"><span data-chalk-field="first-line"></span></li>
-      <li data-chalk-risk="overtime"><span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="ai-latency"><strong>AI 지연:</strong> <span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="content-guard"><strong>콘텐츠 차단:</strong> <span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="pace-gap"><strong>속도 격차:</strong> <span data-chalk-field="first-line"></span></li>
+    </ul>
+    <p data-chalk-fixed><strong>2순위</strong></p>
+    <ul>
+      <li data-chalk-risk="parent-overreach"><strong>부모 과개입:</strong> <span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="overtime"><strong>시간 초과:</strong> <span data-chalk-field="first-line"></span></li>
     </ul>
   </section>
 
+  <!-- ⑦ 동의 — 고정: 절 제목과 ul 구조를 제거하지 말 것; 자율: 항목 내용. E3-2가 자동으로 채운다 -->
   <section data-chalk-section="consent">
+    <h2 data-chalk-fixed>동의</h2>
     <ul></ul>
   </section>
 
+  <!-- ⑧ 사후 정리 — 고정: 절 제목, 즉시/1주일 레이블, data-chalk-deliverable 속성을 제거하지 말 것; 자율: 항목 내용 -->
   <section data-chalk-section="post-deliverables">
-    <ul></ul>
+    <h2 data-chalk-fixed>사후 정리</h2>
+    <p data-chalk-fixed><strong>즉시</strong></p>
+    <ul>
+      <li data-chalk-deliverable data-owner="" data-when="immediate"></li>
+    </ul>
+    <p data-chalk-fixed><strong>1주일 내</strong></p>
+    <ul>
+      <li data-chalk-deliverable data-owner="" data-when="within-week"></li>
+    </ul>
   </section>
 
 </body>

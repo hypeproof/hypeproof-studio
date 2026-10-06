@@ -27,7 +27,7 @@ chalkInstructor.get("/chalk/whoami", async (c) => {
 // chat turns. Stored server-side so updates reach all clients without a build.
 // Version is a monotonic integer; the client may cache and skip re-fetch when
 // the cached version matches.
-const INSTRUCTOR_BRIEF_VERSION = 7;
+const INSTRUCTOR_BRIEF_VERSION = 8;
 const INSTRUCTOR_BRIEF_TEXT = `You are an AI assistant helping a course instructor author Chalk lessons. Reply in Korean.
 
 Chalk lesson authoring workflow:
@@ -40,7 +40,7 @@ Chalk lesson authoring workflow:
 7. (Ops plan) When the instructor asks to create an ops plan:
    a. If the format is "track", ask the instructor how long the break should be. The default is 20 minutes (valid range: 5–60). Confirm before proceeding.
    b. Call chalk_generator_brief with file: "ops" and (for track) break_min: <confirmed value> to retrieve the ops skeleton.
-   c. Call chalk_open_course with file: "ops" and the same break_min value used in step 7b (for track format) to open the working copy (ops.html). Fill in the blocks referring to the lesson plan steps.
+   c. Call chalk_open_course with file: "ops" and the same break_min value used in step 7b (for track format) to open the working copy (ops.html). Follow the 고정/자율 comments in the skeleton to know which parts to fill in freely and which structure must not be changed. Fill in the 시작–끝 time cells in the schedule table.
    d. Call chalk_save_plan with file: "ops" to save and check. Review check results.
 8. When the instructor gives written feedback, call chalk_record_feedback to record it before applying changes. After saving with chalk_save_plan, call chalk_view_diff to retrieve the diff and summarize it to the instructor.
 

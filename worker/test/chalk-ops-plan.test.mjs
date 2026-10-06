@@ -245,8 +245,8 @@ await check('OP-06 workshop brief with break_min → 400 break_min_track_only', 
   assert.equal(r.json.code, 'break_min_track_only', `must be break_min_track_only: ${JSON.stringify(r.json)}`);
 });
 
-// ── OP-07: file=ops brief → data-chalk-kind="ops", 5 sections, 3 block rows (track) ──
-await check('OP-07 ops brief skeleton_html: data-chalk-kind=ops, 5 sections, 3 blocks (track)', async () => {
+// ── OP-07: file=ops brief → data-chalk-kind="ops", 8 sections, 3 block rows (track) ──
+await check('OP-07 ops brief skeleton_html: data-chalk-kind=ops, 8 sections, 3 blocks (track)', async () => {
   const db = makeDb();
   seedDraft(db);
   const tok = await issuerTok();
@@ -257,7 +257,7 @@ await check('OP-07 ops brief skeleton_html: data-chalk-kind=ops, 5 sections, 3 b
   const html = briefR.json.skeleton_html;
   assert.ok(html.includes('data-chalk-kind="ops"'), 'skeleton must have data-chalk-kind="ops"');
   const sectionMatches = [...html.matchAll(/data-chalk-section="/g)];
-  assert.equal(sectionMatches.length, 5, `must have 5 sections, got ${sectionMatches.length}`);
+  assert.equal(sectionMatches.length, 8, `must have 8 sections, got ${sectionMatches.length}`);
   const blockMatches = [...html.matchAll(/data-chalk-block="/g)];
   assert.equal(blockMatches.length, 3, `track must have 3 block rows, got ${blockMatches.length}`);
 });
@@ -479,6 +479,133 @@ await check('OP-16 PUT /plan file=ops with no lesson → skipped info finding em
   const findings = putR.json.findings ?? [];
   const skipped = findings.find(f => f.skipped === true);
   assert.ok(skipped, `must include a skipped finding when no lesson exists, findings: ${JSON.stringify(findings)}`);
+});
+
+// ── OP-18: new skeleton has 8 h2 elements ────────────────────────────────────
+await check('OP-18 ops brief skeleton_html: 8 h2 elements', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, request_id: 'req-op18-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops&break_min=15`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const html = briefR.json.skeleton_html;
+  const h2Matches = [...html.matchAll(/<h2[^>]*>/g)];
+  assert.equal(h2Matches.length, 8, `must have 8 h2 elements, got ${h2Matches.length}`);
+});
+
+// ── OP-19: new skeleton schedule thead has 7 th columns ──────────────────────
+await check('OP-19 ops brief skeleton_html: schedule thead has 7 th columns', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, request_id: 'req-op19-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops&break_min=15`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const html = briefR.json.skeleton_html;
+  const theadMatch = html.match(/<thead>([\s\S]*?)<\/thead>/);
+  assert.ok(theadMatch, 'skeleton must have a thead');
+  const thMatches = [...theadMatch[1].matchAll(/<th>/g)];
+  assert.equal(thMatches.length, 7, `thead must have 7 th columns, got ${thMatches.length}`);
+});
+
+// ── OP-20: parsePlan on new skeleton → no spec.block_field_missing ────────────
+await check('OP-20 parsePlan on new skeleton_html → no spec.block_field_missing', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, request_id: 'req-op20-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops&break_min=15`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const html = briefR.json.skeleton_html;
+
+  const result = parsePlan(html, 'ops');
+  const fieldMissing = result.violations.filter(v => v.item === 'spec.block_field_missing');
+  assert.equal(fieldMissing.length, 0,
+    `new skeleton must have no spec.block_field_missing, got: ${JSON.stringify(fieldMissing)}`);
+  // blank step-refs → spec.block_step_unlinked expected; buffer → spec.buffer_missing expected
+  const unlinked = result.violations.filter(v => v.item === 'spec.block_step_unlinked');
+  assert.ok(unlinked.length >= 2, `new skeleton must emit spec.block_step_unlinked for blank step-refs, got ${unlinked.length}`);
+});
+
+// ── OP-21: ops-r4.html backward compat — old 5-section format still parses ───
+// Inline copy of ops-r4.html (5-section format, family=false, 3 blocks, 5 risks, no block_field_missing)
+const OPS_R4_HTML = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="review-1791287636">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="235">
+</head>
+<body>
+  <section data-chalk-section="schedule">
+    <table>
+      <tr data-chalk-block="block-1" data-chalk-step-ref="s-1 s-2 s-3 s-4" data-start="00:00" data-duration-min="110">
+        <td data-chalk-field="activity">시연 1(흐릿한 요청) → 짝 활동 1(원한 것 적기) → 시연 2(세 칸 요청문) → 짝 활동 2(첫 시도)</td>
+        <td data-chalk-field="asset">INTENT</td>
+        <td data-chalk-field="artifact">세 칸 요청문 활동지(처음 요청문과 AI 답 붙임)</td>
+        <td data-chalk-role="facilitator">시연하고 타이머를 맞춘다. 돌아다니며 질문만 하고 대신 입력하지 않는다.</td>
+        <td data-chalk-role="learner">짝과 원하는 것을 적고, 세 칸 요청문을 번갈아 입력해 답을 활동지에 붙인다.</td>
+        <td data-chalk-field="exit-criteria">모든 짝이 세 칸을 채운 요청문과 AI 답을 활동지에 붙였다.</td>
+        <td data-chalk-field="if-stuck">"짝에게 먼저 말로 해 볼래?"라고 묻고, 그래도 막히면 선택지 두세 개 중에서 고르게 한다.</td>
+      </tr>
+      <tr data-chalk-block="break" data-chalk-block-kind="break" data-start="01:50" data-duration-min="15">
+        <td data-chalk-field="activity">휴식 15분: 물 마시기, 화장실, 쉬기</td>
+      </tr>
+      <tr data-chalk-block="block-2" data-chalk-step-ref="s-5 s-6 s-7 s-8" data-start="02:05" data-duration-min="110">
+        <td data-chalk-field="activity">시연 3(답 확인하기) → 짝 활동 3(확인표 만들기) → 짝 활동 4(고쳐 쓰기) → 나란히 보고 말하기</td>
+        <td data-chalk-field="asset">VERIFY</td>
+        <td data-chalk-field="artifact">맞음/다름 확인표, 처음과 고친 요청문·답을 나란히 붙인 활동지</td>
+        <td data-chalk-role="facilitator">확인 방법을 시연하고, '다름' 칸을 가리키며 "어느 칸을 바꾸면 될까?"라고 묻는다. 열린 질문만 한다.</td>
+        <td data-chalk-role="learner">답을 줄마다 맞음/다름으로 표시하고, 다른 칸을 고쳐 다시 입력한 뒤 두 결과를 비교해 짝에게 말한다.</td>
+        <td data-chalk-field="exit-criteria">확인표와 나란히 붙인 활동지를 완성해 제출했다.</td>
+        <td data-chalk-field="if-stuck">"원한 것과 다른 줄을 다시 읽어 볼까?"라고 묻는다.</td>
+      </tr>
+    </table>
+  </section>
+  <section data-chalk-section="materials">
+    <ul>
+      <li>세 칸 요청문 활동지와 확인표 (10팀 분량), 타이머, 연필</li>
+      <li>AI를 입력할 기기와 시연용 화면 (10팀 분량)</li>
+    </ul>
+  </section>
+  <section data-chalk-section="risks">
+    <ul>
+      <li data-chalk-risk="ai-latency"><span data-chalk-field="first-line">AI 답이 늦으면 기다리는 동안 짝과 다음 칸의 요청문을 먼저 말로 정해 둔다.</span></li>
+      <li data-chalk-risk="content-guard"><span data-chalk-field="first-line">부적절한 답이 나오면 화면을 바로 닫고 다른 요청으로 바꾼다.</span></li>
+      <li data-chalk-risk="pace-gap"><span data-chalk-field="first-line">빨리 끝낸 짝은 다른 그림 주제로 요청문을 한 번 더 써 보게 하고, 비교하거나 평가하지 않는다.</span></li>
+      <li data-chalk-risk="parent-overreach"><span data-chalk-field="first-line">가족 세션이 아니므로 보호자가 들어오면 관찰만 부탁하고 아이 대신 입력하지 않도록 안내한다.</span></li>
+      <li data-chalk-risk="overtime"><span data-chalk-field="first-line">단계가 5분 넘게 길어지면 확인표는 첫 세 줄까지만 표시하고 다음 단계로 넘어간다.</span></li>
+    </ul>
+  </section>
+  <section data-chalk-section="consent">
+    <ul>
+      <li>수업에서 쓴 활동지와 AI 답을 수업 기록으로 보관하는 것에 대해 보호자 동의를 미리 받는다.</li>
+    </ul>
+  </section>
+  <section data-chalk-section="post-deliverables">
+    <ul>
+      <li>처음 요청문과 고친 요청문, 각 AI 답을 나란히 붙인 활동지 1장</li>
+      <li>AI 답에 맞음/다름을 표시한 확인표 1장</li>
+    </ul>
+  </section>
+</body>
+</html>`;
+
+await check('OP-21 ops-r4.html backward compat: parsePlan → 3 blocks, 5 risks, no spec.block_field_missing', () => {
+  const result = parsePlan(OPS_R4_HTML, 'ops');
+  assert.equal(result.blocks?.length, 3, `r4 must have 3 blocks: ${JSON.stringify(result.blocks?.map(b => b.key))}`);
+  assert.equal(result.risks?.length, 5, `r4 must have 5 risks: ${JSON.stringify(result.risks?.map(r => r.key))}`);
+  const fieldMissing = result.violations.filter(v => v.item === 'spec.block_field_missing');
+  assert.equal(fieldMissing.length, 0,
+    `r4 must have no spec.block_field_missing, got: ${JSON.stringify(fieldMissing)}`);
 });
 
 console.log(`\n${passed} tests passed`);
