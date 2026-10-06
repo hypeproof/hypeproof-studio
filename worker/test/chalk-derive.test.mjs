@@ -1,5 +1,5 @@
 // #1469 (E3-3) — deriveRunbook / deriveHandout pure functions + POST /derive + GET /plan?file=runbook|handout
-// DR-01~DR-13
+// DR-01~DR-15
 import './harness/loader.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -10,12 +10,15 @@ const { issueIssuer } = await import('../src/lib/tokens.ts');
 const { listProfiles } = await import('../src/profiles/index.ts');
 const { deriveRunbook, deriveHandout } = await import('../src/lib/chalk-derive.ts');
 const { sha256Hex } = await import('../src/lib/modules.ts');
+const { generateOpsSkeleton } = await import('../src/routes/chalk-courses.ts');
 
 const app = await bootApp();
 
 const AUTHORING_SCHEMA = readFileSync(new URL('../migrations/0002-chalk-authoring.sql', import.meta.url), 'utf8');
 const PLAN_SCHEMA = readFileSync(new URL('../migrations/0031-chalk-plan-files.sql', import.meta.url), 'utf8');
 const TIER_DURATION_SCHEMA = readFileSync(new URL('../migrations/0035-chalk-course-inputs-tier-duration.sql', import.meta.url), 'utf8');
+const FEEDBACK_SCHEMA = readFileSync(new URL('../migrations/0036-chalk-feedback.sql', import.meta.url), 'utf8');
+const JUDGEMENTS_SCHEMA = readFileSync(new URL('../migrations/0037-chalk-judgements.sql', import.meta.url), 'utf8');
 const KB_SCHEMA = `
 CREATE TABLE IF NOT EXISTS chalk_knowledge_versions (
   version INTEGER PRIMARY KEY, parent_version INTEGER,
@@ -112,6 +115,8 @@ function makeDb() {
   db.exec(AUTHORING_SCHEMA);
   db.exec(PLAN_SCHEMA);
   db.exec(TIER_DURATION_SCHEMA);
+  db.exec(FEEDBACK_SCHEMA);
+  db.exec(JUDGEMENTS_SCHEMA);
   db.prepare(`INSERT INTO chalk_knowledge_versions VALUES(1,NULL,'vault-import',NULL,NULL,'test','tester',0,1,'digest0')`).run();
   db.prepare(
     `INSERT INTO authoring_drafts (cohort_id,course_id,owner_id,profile_id,revision,content_json,request_id,request_hash,updated_at)
@@ -372,6 +377,63 @@ await check('DR-13 no derived files → PUT /plan ops returns derived_stale: []'
   const stale = putR.json.derived_stale;
   assert.ok(Array.isArray(stale), `derived_stale must be array, got: ${JSON.stringify(stale)}`);
   assert.equal(stale.length, 0, `derived_stale must be empty when no derived files exist, got: ${JSON.stringify(stale)}`);
+});
+
+// DR-14: runbook from generateOpsSkeleton — 7-col thead and section h2 titles
+await check('DR-14 runbook from generateOpsSkeleton has 7-col thead and h2 section titles', () => {
+  const opsHtml = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 240, break_min: 20, audience_tier: 'lv1',
+  });
+  const html = deriveRunbook(opsHtml, 'sha-dr14');
+
+  // 7-col thead headers
+  assert.ok(html.includes('시작–끝'), 'runbook must have 시작–끝 th');
+  assert.ok(html.includes('블록'), 'runbook must have 블록 th');
+  assert.ok(html.includes('메인 강사 할 일'), 'runbook must have 메인 강사 할 일 th');
+  assert.ok(html.includes('학습자 할 일'), 'runbook must have 학습자 할 일 th');
+  assert.ok(html.includes('보조 할 일'), 'runbook must have 보조 할 일 th');
+  assert.ok(html.includes('의도 한 줄'), 'runbook must have 의도 한 줄 th');
+  assert.ok(html.includes('연결 단계'), 'runbook must have 연결 단계 th');
+
+  // Section h2 titles
+  assert.ok(html.includes('<h2>운영 계획 개요</h2>'), 'runbook must have h2 운영 계획 개요');
+  assert.ok(html.includes('<h2>운영 방식</h2>'), 'runbook must have h2 운영 방식');
+  assert.ok(html.includes('<h2>최종 결과물</h2>'), 'runbook must have h2 최종 결과물');
+  assert.ok(html.includes('<h2>사전 준비물</h2>'), 'runbook must have h2 사전 준비물');
+  assert.ok(html.includes('<h2>진행 큐시트</h2>'), 'runbook must have h2 진행 큐시트');
+  assert.ok(html.includes('<h2>위험·문제 대응</h2>'), 'runbook must have h2 위험·문제 대응');
+  assert.ok(html.includes('<h2>동의</h2>'), 'runbook must have h2 동의');
+  assert.ok(html.includes('<h2>사후 정리</h2>'), 'runbook must have h2 사후 정리');
+});
+
+// DR-15: handout from generateOpsSkeleton — no forbidden columns
+await check('DR-15 handout from generateOpsSkeleton has no forbidden content', () => {
+  const opsHtml = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 240, break_min: 20, audience_tier: 'lv1',
+  });
+  const html = deriveHandout(opsHtml, 'sha-dr15');
+
+  // Must NOT contain operations section content (배치비율, 운영진)
+  assert.ok(!html.includes('data-chalk-section="operations"'), 'handout must not include operations section attribute');
+  assert.ok(!html.includes('배치 비율'), 'handout must not include 배치 비율');
+  // Must NOT contain facilitator role column
+  assert.ok(!html.includes('data-chalk-role="facilitator"'), 'handout must not include facilitator role');
+  // Must NOT contain exit-criteria/if-stuck/if-ahead/if-behind spans
+  assert.ok(!html.includes('data-chalk-field="exit-criteria"'), 'handout must not include exit-criteria');
+  assert.ok(!html.includes('data-chalk-field="if-stuck"'), 'handout must not include if-stuck');
+  assert.ok(!html.includes('data-chalk-field="if-ahead"'), 'handout must not include if-ahead');
+  assert.ok(!html.includes('data-chalk-field="if-behind"'), 'handout must not include if-behind');
+  // Must NOT contain risks section
+  assert.ok(!html.includes('data-chalk-section="risks"'), 'handout must not include risks section attribute');
+  assert.ok(!html.includes('위험·문제 대응'), 'handout must not include 위험·문제 대응 section');
+  // Must NOT contain intent column header
+  assert.ok(!html.includes('의도 한 줄'), 'handout must not include 의도 한 줄 th');
+  // Must contain learner column
+  assert.ok(html.includes('학습자 할 일'), 'handout must include 학습자 할 일 th');
+  // Must contain allowed sections
+  assert.ok(html.includes('data-chalk-kind="handout"'), 'handout must have data-chalk-kind=handout');
 });
 
 console.log(`\nAll ${passed} tests passed.`);

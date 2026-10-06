@@ -294,15 +294,20 @@ else
   ok "CDP port: --cdp-port gated on HPS_REVIEW_CDP_PORT (absent env → not passed)"
 fi
 
-# 33. cleanup: Dev app shutdown uses TERM → wait loop → KILL (not bare kill).
-# Verify the TERM+wait+KILL pattern exists in cleanup().
+# 33. cleanup: osascript quit by bundle ID, 15 s wait loop, no SIGKILL (#1487).
+# New pattern: osascript "quit app id" → SIGTERM to launcher PID → 15 s pgrep wait → warn if surviving.
+# SIGKILL (kill -9) is forbidden and must be absent.
 CLEANUP_BODY="$(awk '/^cleanup\(\)/{found=1} found{print} found && /^\}/{exit}' "$SCRIPT")"
-if echo "$CLEANUP_BODY" | grep -q 'kill -9.*DEV_APP_PID' && \
+if echo "$CLEANUP_BODY" | grep -qE 'osascript.*quit app id' && \
    echo "$CLEANUP_BODY" | grep -q 'sleep 1' && \
-   echo "$CLEANUP_BODY" | grep -qE 'kill.*DEV_APP_PID' ; then
-  ok "cleanup: TERM → wait loop → SIGKILL pattern present for Dev app"
+   echo "$CLEANUP_BODY" | grep -qE 'pgrep.*STATE_HASH'; then
+  if echo "$CLEANUP_BODY" | grep -q 'kill -9'; then
+    fail "cleanup: SIGKILL (kill -9) present — forbidden (SIGKILL 금지)"
+  else
+    ok "cleanup: osascript quit by bundle ID + 15 s wait + no SIGKILL"
+  fi
 else
-  fail "cleanup: missing TERM→wait→SIGKILL pattern for Dev app (bare 'kill' only?)"
+  fail "cleanup: osascript quit / pgrep wait pattern missing"
 fi
 
 # 34. studio-dev.py _clear_stale_ipc_socket: function defined and called.
@@ -338,6 +343,309 @@ if grep -q 'Waiting 15 s to verify Dev app survival' "$SCRIPT" && \
 else
   fail "review-pr.sh: 거짓 Ready guard missing (need 15 s sleep + exit 1 path)"
 fi
+
+# 37. --student-session arg declared in script
+if grep -q '\-\-student-session' "$SCRIPT"; then
+  ok "--student-session arg declared in script"
+else
+  fail "--student-session arg not found in script"
+fi
+
+# 38. --can-start-session flag on issuer token issuance
+if grep -q '\-\-can-start-session' "$SCRIPT"; then
+  ok "--can-start-session present on issue-issuer-token invocation"
+else
+  fail "--can-start-session not found in script"
+fi
+
+# 39. cleanup includes student-token.txt removal
+if grep -q 'student-token\.txt' "$SCRIPT"; then
+  ok "student-token.txt referenced in cleanup"
+else
+  fail "student-token.txt not found in script (cleanup target missing)"
+fi
+
+# 40. student-token value never echoed to stdout/stderr
+# printf to a file (> file) is allowed; echo/printf to stdout is not.
+# We accept printf that redirects to a file (contains '>') but reject bare echo/printf.
+_STUDENT_LOG_LINES="$(grep -nE 'echo.*_STUDENT_TOKEN|printf.*_STUDENT_TOKEN' "$SCRIPT" | grep -v '>' || true)"
+if [[ -n "$_STUDENT_LOG_LINES" ]]; then
+  fail "student token value echoed to stdout/stderr (security violation): $_STUDENT_LOG_LINES"
+else
+  ok "student token value not echoed to stdout/stderr (only written to file)"
+fi
+
+# 41. session/open curl uses 127.0.0.1 (not localhost or 0.0.0.0)
+CURL_SESSION_LINE="$(grep 'session/open' "$SCRIPT" || true)"
+if echo "$CURL_SESSION_LINE" | grep -q '127\.0\.0\.1'; then
+  ok "session/open curl uses 127.0.0.1 (not localhost)"
+else
+  fail "session/open curl does not use 127.0.0.1"
+fi
+
+# 42. session/open response written to tmp file, not logged directly
+# Verify the response body goes to a temp file variable, not stdout.
+if grep -q '_STUDENT_RESP_TMP' "$SCRIPT"; then
+  ok "session/open response captured in tmp file (not logged directly)"
+else
+  fail "_STUDENT_RESP_TMP not found — response body may be logged"
+fi
+
+# 43. --student-session absent → student-token.txt not created (static check)
+# When STUDENT_SESSION=0, the open block is gated on [[ "$STUDENT_SESSION" -eq 1 ]].
+if grep -q 'STUDENT_SESSION.*-eq.*1' "$SCRIPT"; then
+  ok "student session block gated on STUDENT_SESSION=1 (absent flag → no file)"
+else
+  fail "STUDENT_SESSION guard not found (student-token.txt may be created unconditionally)"
+fi
+
+# 44. --can-start-session must not appear directly in TOKEN_JSON line (must go via _ISSUE_ARGS array)
+# When STUDENT_SESSION=0 the array stays empty and the flag is never passed to issue-issuer-token.ts.
+# Static check: no line that contains both TOKEN_JSON and issue-issuer-token also contains --can-start-session.
+_CAN_TOKEN_DIRECT="$(grep -n -- '--can-start-session' "$SCRIPT" | grep -v '_ISSUE_ARGS' || true)"
+if [[ -z "$_CAN_TOKEN_DIRECT" ]]; then
+  ok "44: --can-start-session only via _ISSUE_ARGS array (not hardcoded in TOKEN_JSON line)"
+else
+  fail "44: --can-start-session still hardcoded outside _ISSUE_ARGS array:"$'\n'"$_CAN_TOKEN_DIRECT"
+fi
+
+# 45. Bearer token must not appear as an inline -H curl arg (ps exposure check).
+# Allowed:  printf 'Authorization: Bearer ...' > tmpfile  then  -H @file
+# Forbidden: -H "Authorization: Bearer ..." directly in the curl invocation.
+# Detection: any line that contains BOTH -H and "Authorization: Bearer" in quotes.
+_BEARER_ARGV_LINES="$(grep -n -- '-H.*"Authorization: Bearer\|-H.*Authorization: Bearer"' "$SCRIPT" 2>/dev/null || true)"
+if [[ -z "$_BEARER_ARGV_LINES" ]]; then
+  ok "45: no '-H Authorization: Bearer' inline in curl argv (token passed via -H @file)"
+else
+  fail "45: Bearer token passed inline via -H curl arg (ps exposure):"$'\n'"$_BEARER_ARGV_LINES"
+fi
+
+# ── activity-bindings 정리 ────────────────────────────────────────────────────
+
+# 46. Dev 폴더 아래 binding 파일이 지워지고 개수가 출력된다.
+{
+  FAKE_STATE="$(mktemp -d)/HypeProof Studio Development/abc123"
+  mkdir -p "$FAKE_STATE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+  touch "$FAKE_STATE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings/aabbcc.json"
+  touch "$FAKE_STATE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings/ddeeff.json"
+
+  # Run the relevant snippet from review-pr.sh in /bin/bash
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    BINDINGS_DIR="'"$FAKE_STATE"'/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+    BINDINGS_DELETED=0
+    STATE_DIR_REAL="$(realpath "'"$FAKE_STATE"'" 2>/dev/null || true)"
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/" && [[ -d "$BINDINGS_DIR" ]]; then
+      while IFS= read -r -d "" f; do
+        rm -f "$f"
+        BINDINGS_DELETED=$((BINDINGS_DELETED + 1))
+      done < <(find "$BINDINGS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+    fi
+    [[ $BINDINGS_DELETED -gt 0 ]] && echo "이전 검수 폴더 연결 ${BINDINGS_DELETED}건 비움" || echo "지울 폴더 연결 없음"
+  ' 2>&1)"
+  REMAINING="$(find "$FAKE_STATE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings" -type f | wc -l | tr -d ' ')"
+  if echo "$OUT" | grep -q "2건 비움" && [[ "$REMAINING" -eq 0 ]]; then
+    ok "46: Dev 폴더 아래 binding 파일 2건 삭제, 출력 확인"
+  else
+    fail "46: binding 삭제 실패 (out='$OUT', remaining=$REMAINING)"
+  fi
+  rm -rf "${FAKE_STATE%%HypeProof*}"
+}
+
+# 47. STATE_DIR 경로가 Development 밖이면 파일을 지우지 않는다.
+{
+  FAKE_OUTSIDE="$(mktemp -d)/Other Folder/abc123"
+  mkdir -p "$FAKE_OUTSIDE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+  touch "$FAKE_OUTSIDE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings/safe.json"
+
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    BINDINGS_DIR="'"$FAKE_OUTSIDE"'/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+    BINDINGS_DELETED=0
+    STATE_DIR_REAL="$(realpath "'"$FAKE_OUTSIDE"'" 2>/dev/null || true)"
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/" && [[ -d "$BINDINGS_DIR" ]]; then
+      while IFS= read -r -d "" f; do
+        rm -f "$f"
+        BINDINGS_DELETED=$((BINDINGS_DELETED + 1))
+      done < <(find "$BINDINGS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+    fi
+    [[ $BINDINGS_DELETED -gt 0 ]] && echo "이전 검수 폴더 연결 ${BINDINGS_DELETED}건 비움" || echo "지울 폴더 연결 없음"
+  ' 2>&1)"
+  REMAINING="$(find "$FAKE_OUTSIDE/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings" -type f | wc -l | tr -d ' ')"
+  if echo "$OUT" | grep -q "지울 폴더 연결 없음" && [[ "$REMAINING" -eq 1 ]]; then
+    ok "47: Development 밖 경로는 파일을 건드리지 않는다"
+  else
+    fail "47: Development 밖인데 파일을 삭제했거나 출력이 잘못됨 (out='$OUT', remaining=$REMAINING)"
+  fi
+  rm -rf "${FAKE_OUTSIDE%%Other*}"
+}
+
+# 48. binding 폴더가 없거나 파일이 없으면 0건 출력, 오류 없음.
+{
+  FAKE_EMPTY="$(mktemp -d)/HypeProof Studio Development/zzz999"
+  mkdir -p "$FAKE_EMPTY/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    BINDINGS_DIR="'"$FAKE_EMPTY"'/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+    BINDINGS_DELETED=0
+    STATE_DIR_REAL="$(realpath "'"$FAKE_EMPTY"'" 2>/dev/null || true)"
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/" && [[ -d "$BINDINGS_DIR" ]]; then
+      while IFS= read -r -d "" f; do
+        rm -f "$f"
+        BINDINGS_DELETED=$((BINDINGS_DELETED + 1))
+      done < <(find "$BINDINGS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+    fi
+    [[ $BINDINGS_DELETED -gt 0 ]] && echo "이전 검수 폴더 연결 ${BINDINGS_DELETED}건 비움" || echo "지울 폴더 연결 없음"
+  ' 2>&1)"
+  RC=$?
+  if [[ $RC -eq 0 ]] && echo "$OUT" | grep -q "지울 폴더 연결 없음"; then
+    ok "48: 빈 폴더 0건, 오류 없음"
+  else
+    fail "48: 빈 폴더 케이스 실패 (rc=$RC, out='$OUT')"
+  fi
+  rm -rf "${FAKE_EMPTY%%HypeProof*}"
+}
+
+# ── workspaceStorage 통째 삭제 (#1487 Step 1.5 redesign) ─────────────────────
+
+# 49. Dev 폴더 아래 workspaceStorage 하위 폴더가 삭제되고 개수가 출력된다.
+{
+  _WS_BASE="$(mktemp -d)/HypeProof Studio Development/abc123"
+  mkdir -p "$_WS_BASE/user-data/User/workspaceStorage/ws-a" \
+            "$_WS_BASE/user-data/User/workspaceStorage/ws-b"
+  echo '{}' > "$_WS_BASE/user-data/User/workspaceStorage/ws-a/state.vscdb"
+
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    STATE_DIR_REAL="$(realpath "'"$_WS_BASE"'" 2>/dev/null || true)"
+    WS_DELETED=0
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/"; then
+      WS_DIR="$STATE_DIR_REAL/user-data/User/workspaceStorage"
+      if [[ -d "$WS_DIR" ]]; then
+        while IFS= read -r -d "" sub; do
+          rm -rf "$sub"
+          WS_DELETED=$(( WS_DELETED + 1 ))
+        done < <(find "$WS_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+      fi
+    fi
+    echo "workspaceStorage 폴더 비움: ${WS_DELETED}개"
+  ' 2>&1)"
+  REMAINING="$(find "$_WS_BASE/user-data/User/workspaceStorage" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  if echo "$OUT" | grep -q "2개" && [[ "$REMAINING" -eq 0 ]]; then
+    ok "49: workspaceStorage 하위 폴더 2개 삭제, 출력 확인"
+  else
+    fail "49: workspaceStorage 삭제 실패 (out='$OUT', remaining=$REMAINING)"
+  fi
+  rm -rf "${_WS_BASE%%HypeProof*}"
+}
+
+# 50. Development 밖 경로는 workspaceStorage를 건드리지 않는다.
+{
+  _WS_OUTSIDE="$(mktemp -d)/Other Folder/abc123"
+  mkdir -p "$_WS_OUTSIDE/user-data/User/workspaceStorage/ws-danger"
+
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    STATE_DIR_REAL="$(realpath "'"$_WS_OUTSIDE"'" 2>/dev/null || true)"
+    WS_DELETED=0
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/"; then
+      WS_DIR="$STATE_DIR_REAL/user-data/User/workspaceStorage"
+      if [[ -d "$WS_DIR" ]]; then
+        while IFS= read -r -d "" sub; do
+          rm -rf "$sub"
+          WS_DELETED=$(( WS_DELETED + 1 ))
+        done < <(find "$WS_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+      fi
+    fi
+    echo "workspaceStorage 폴더 비움: ${WS_DELETED}개"
+  ' 2>&1)"
+  REMAINING="$(find "$_WS_OUTSIDE/user-data/User/workspaceStorage" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  if echo "$OUT" | grep -q "0개" && [[ "$REMAINING" -eq 1 ]]; then
+    ok "50: Development 밖 workspaceStorage 건드리지 않음"
+  else
+    fail "50: Development 밖인데 삭제 발생 (out='$OUT', remaining=$REMAINING)"
+  fi
+  rm -rf "${_WS_OUTSIDE%%Other*}"
+}
+
+# 51. chalk/review-* 폴더가 삭제되고 비-review 폴더는 살아남는다.
+{
+  _CK_BASE="$(mktemp -d)/HypeProof Studio Development/abc123"
+  mkdir -p "$_CK_BASE/workspace/chalk/review-aaa" \
+            "$_CK_BASE/workspace/chalk/review-bbb" \
+            "$_CK_BASE/workspace/chalk/sk-biopharm"
+  echo "data" > "$_CK_BASE/workspace/chalk/sk-biopharm/lesson.html"
+
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    STATE_DIR_REAL="$(realpath "'"$_CK_BASE"'" 2>/dev/null || true)"
+    REVIEW_DELETED=0
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/"; then
+      CHALK_DIR="$STATE_DIR_REAL/workspace/chalk"
+      if [[ -d "$CHALK_DIR" ]]; then
+        while IFS= read -r -d "" rf; do
+          rm -rf "$rf"
+          REVIEW_DELETED=$(( REVIEW_DELETED + 1 ))
+        done < <(find "$CHALK_DIR" -mindepth 1 -maxdepth 1 -type d -name "review-*" -print0 2>/dev/null)
+      fi
+    fi
+    echo "chalk/review-* 폴더 비움: ${REVIEW_DELETED}개"
+  ' 2>&1)"
+  REV_REMAINING="$(find "$_CK_BASE/workspace/chalk" -mindepth 1 -maxdepth 1 -type d -name "review-*" | wc -l | tr -d ' ')"
+  NON_REV_REMAINING="$(find "$_CK_BASE/workspace/chalk" -mindepth 1 -maxdepth 1 -type d -name "sk-biopharm" | wc -l | tr -d ' ')"
+  if echo "$OUT" | grep -q "2개" && [[ "$REV_REMAINING" -eq 0 ]] && [[ "$NON_REV_REMAINING" -eq 1 ]]; then
+    ok "51: review-* 2개 삭제, sk-biopharm 폴더 생존"
+  else
+    fail "51: chalk 정리 실패 (out='$OUT', review=$REV_REMAINING, non-review=$NON_REV_REMAINING)"
+  fi
+  rm -rf "${_CK_BASE%%HypeProof*}"
+}
+
+# 52. Step 1.5 신규 출력 패턴이 스크립트에 있다.
+if grep -q 'workspaceStorage 폴더 비움' "$SCRIPT" && \
+   grep -q 'chalk/review-\* 폴더 비움' "$SCRIPT"; then
+  ok "52: 신규 출력 패턴 (workspaceStorage/chalk/review-*) 스크립트에 존재"
+else
+  fail "52: 신규 출력 패턴 누락 (Step 1.5 미적용 가능성)"
+fi
+
+# 53. 구 sqlite 삭제 패턴이 스크립트에 없다.
+if grep -qE "DELETE FROM ItemTable WHERE key LIKE 'hypeproofChat" "$SCRIPT"; then
+  fail "53: 구 sqlite DELETE 패턴 잔존 (Step 1.5 교체 미완)"
+else
+  ok "53: 구 sqlite DELETE 패턴 없음 (교체 완료)"
+fi
+
+# 54. STATE_HASH가 빈 문자열이면 아무것도 삭제하지 않는다.
+# realpath "" → "." (현재 디렉터리), "HypeProof Studio Development/" 포함 안 됨 → guard 통과 못함.
+{
+  _EMPTY_BASE="$(mktemp -d)"
+  mkdir -p "$_EMPTY_BASE/user-data/User/workspaceStorage/ws-safe"
+
+  OUT="$(/bin/bash -c '
+    set -euo pipefail
+    STATE_DIR_REAL="$(realpath "" 2>/dev/null || true)"
+    WS_DELETED=0
+    if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/"; then
+      WS_DIR="$STATE_DIR_REAL/user-data/User/workspaceStorage"
+      if [[ -d "$WS_DIR" ]]; then
+        while IFS= read -r -d "" sub; do
+          rm -rf "$sub"
+          WS_DELETED=$(( WS_DELETED + 1 ))
+        done < <(find "$WS_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+      fi
+    fi
+    echo "WS_DELETED=$WS_DELETED"
+  ' 2>&1)"
+  REMAINING="$(find "$_EMPTY_BASE/user-data/User/workspaceStorage" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  if echo "$OUT" | grep -q "WS_DELETED=0" && [[ "$REMAINING" -eq 1 ]]; then
+    ok "54: STATE_HASH 빈 경우 guard 통과 안 해 아무것도 삭제 안 됨"
+  else
+    fail "54: STATE_HASH 빈 경우 삭제 발생 (out='$OUT', remaining=$REMAINING)"
+  fi
+  rm -rf "$_EMPTY_BASE"
+}
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed, $WARN warnings"

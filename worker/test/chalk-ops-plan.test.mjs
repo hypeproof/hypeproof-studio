@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS chalk_knowledge_docs (
 const AUTHORING_SCHEMA = readFileSync(new URL('../migrations/0002-chalk-authoring.sql', import.meta.url), 'utf8');
 const PLAN_SCHEMA = readFileSync(new URL('../migrations/0031-chalk-plan-files.sql', import.meta.url), 'utf8');
 const TIER_DURATION_SCHEMA = readFileSync(new URL('../migrations/0035-chalk-course-inputs-tier-duration.sql', import.meta.url), 'utf8');
+const FEEDBACK_SCHEMA = readFileSync(new URL('../migrations/0036-chalk-feedback.sql', import.meta.url), 'utf8');
+const JUDGEMENTS_SCHEMA = readFileSync(new URL('../migrations/0037-chalk-judgements.sql', import.meta.url), 'utf8');
 
 const GOAL_VOCAB = ['inquiry-skills', 'observation', 'creative-thinking'];
 const COND_VOCAB = ['single-session', 'novice-learners'];
@@ -48,6 +50,8 @@ function makeDb() {
   db.exec(AUTHORING_SCHEMA);
   db.exec(PLAN_SCHEMA);
   db.exec(TIER_DURATION_SCHEMA);
+  db.exec(FEEDBACK_SCHEMA);
+  db.exec(JUDGEMENTS_SCHEMA);
   db.prepare(`INSERT INTO chalk_knowledge_versions VALUES(1,NULL,'vault-import',NULL,NULL,'test','tester',0,${BASE_METHODS.length + 3},'digest0')`).run();
   db.prepare('INSERT INTO chalk_knowledge_docs VALUES(?,?,?,?,?,?)').run(1, 'vocab:goal', 'vocab', JSON.stringify({ keys: GOAL_VOCAB.map(k => ({ key: k, label: k })) }), '', null);
   db.prepare('INSERT INTO chalk_knowledge_docs VALUES(?,?,?,?,?,?)').run(1, 'vocab:condition', 'vocab', JSON.stringify({ keys: COND_VOCAB.map(k => ({ key: k, label: k })) }), '', null);
@@ -241,8 +245,8 @@ await check('OP-06 workshop brief with break_min → 400 break_min_track_only', 
   assert.equal(r.json.code, 'break_min_track_only', `must be break_min_track_only: ${JSON.stringify(r.json)}`);
 });
 
-// ── OP-07: file=ops brief → data-chalk-kind="ops", 5 sections, 3 block rows (track) ──
-await check('OP-07 ops brief skeleton_html: data-chalk-kind=ops, 5 sections, 3 blocks (track)', async () => {
+// ── OP-07: file=ops brief → data-chalk-kind="ops", 8 sections, 3 block rows (track) ──
+await check('OP-07 ops brief skeleton_html: data-chalk-kind=ops, 8 sections, 3 blocks (track)', async () => {
   const db = makeDb();
   seedDraft(db);
   const tok = await issuerTok();
@@ -253,7 +257,7 @@ await check('OP-07 ops brief skeleton_html: data-chalk-kind=ops, 5 sections, 3 b
   const html = briefR.json.skeleton_html;
   assert.ok(html.includes('data-chalk-kind="ops"'), 'skeleton must have data-chalk-kind="ops"');
   const sectionMatches = [...html.matchAll(/data-chalk-section="/g)];
-  assert.equal(sectionMatches.length, 5, `must have 5 sections, got ${sectionMatches.length}`);
+  assert.equal(sectionMatches.length, 8, `must have 8 sections, got ${sectionMatches.length}`);
   const blockMatches = [...html.matchAll(/data-chalk-block="/g)];
   assert.equal(blockMatches.length, 3, `track must have 3 block rows, got ${blockMatches.length}`);
 });
@@ -475,6 +479,262 @@ await check('OP-16 PUT /plan file=ops with no lesson → skipped info finding em
   const findings = putR.json.findings ?? [];
   const skipped = findings.find(f => f.skipped === true);
   assert.ok(skipped, `must include a skipped finding when no lesson exists, findings: ${JSON.stringify(findings)}`);
+});
+
+// ── OP-18: new skeleton has 8 h2 elements ────────────────────────────────────
+await check('OP-18 ops brief skeleton_html: 8 h2 elements', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, request_id: 'req-op18-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops&break_min=15`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const html = briefR.json.skeleton_html;
+  const h2Matches = [...html.matchAll(/<h2[^>]*>/g)];
+  assert.equal(h2Matches.length, 8, `must have 8 h2 elements, got ${h2Matches.length}`);
+});
+
+// ── OP-19: new skeleton schedule thead has 7 th columns ──────────────────────
+await check('OP-19 ops brief skeleton_html: schedule thead has 7 th columns', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, request_id: 'req-op19-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops&break_min=15`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const html = briefR.json.skeleton_html;
+  const theadMatch = html.match(/<thead>([\s\S]*?)<\/thead>/);
+  assert.ok(theadMatch, 'skeleton must have a thead');
+  const thMatches = [...theadMatch[1].matchAll(/<th>/g)];
+  assert.equal(thMatches.length, 7, `thead must have 7 th columns, got ${thMatches.length}`);
+});
+
+// ── OP-20: parsePlan on new skeleton → no spec.block_field_missing ────────────
+await check('OP-20 parsePlan on new skeleton_html → no spec.block_field_missing', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, request_id: 'req-op20-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops&break_min=15`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const html = briefR.json.skeleton_html;
+
+  const result = parsePlan(html, 'ops');
+  const fieldMissing = result.violations.filter(v => v.item === 'spec.block_field_missing');
+  assert.equal(fieldMissing.length, 0,
+    `new skeleton must have no spec.block_field_missing, got: ${JSON.stringify(fieldMissing)}`);
+  // blank step-refs → spec.block_step_unlinked expected; buffer → spec.buffer_missing expected
+  const unlinked = result.violations.filter(v => v.item === 'spec.block_step_unlinked');
+  assert.ok(unlinked.length >= 2, `new skeleton must emit spec.block_step_unlinked for blank step-refs, got ${unlinked.length}`);
+});
+
+// ── OP-21: ops-r4.html backward compat — old 5-section format still parses ───
+// Inline copy of ops-r4.html (5-section format, family=false, 3 blocks, 5 risks, no block_field_missing)
+const OPS_R4_HTML = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="review-1791287636">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="235">
+</head>
+<body>
+  <section data-chalk-section="schedule">
+    <table>
+      <tr data-chalk-block="block-1" data-chalk-step-ref="s-1 s-2 s-3 s-4" data-start="00:00" data-duration-min="110">
+        <td data-chalk-field="activity">시연 1(흐릿한 요청) → 짝 활동 1(원한 것 적기) → 시연 2(세 칸 요청문) → 짝 활동 2(첫 시도)</td>
+        <td data-chalk-field="asset">INTENT</td>
+        <td data-chalk-field="artifact">세 칸 요청문 활동지(처음 요청문과 AI 답 붙임)</td>
+        <td data-chalk-role="facilitator">시연하고 타이머를 맞춘다. 돌아다니며 질문만 하고 대신 입력하지 않는다.</td>
+        <td data-chalk-role="learner">짝과 원하는 것을 적고, 세 칸 요청문을 번갈아 입력해 답을 활동지에 붙인다.</td>
+        <td data-chalk-field="exit-criteria">모든 짝이 세 칸을 채운 요청문과 AI 답을 활동지에 붙였다.</td>
+        <td data-chalk-field="if-stuck">"짝에게 먼저 말로 해 볼래?"라고 묻고, 그래도 막히면 선택지 두세 개 중에서 고르게 한다.</td>
+      </tr>
+      <tr data-chalk-block="break" data-chalk-block-kind="break" data-start="01:50" data-duration-min="15">
+        <td data-chalk-field="activity">휴식 15분: 물 마시기, 화장실, 쉬기</td>
+      </tr>
+      <tr data-chalk-block="block-2" data-chalk-step-ref="s-5 s-6 s-7 s-8" data-start="02:05" data-duration-min="110">
+        <td data-chalk-field="activity">시연 3(답 확인하기) → 짝 활동 3(확인표 만들기) → 짝 활동 4(고쳐 쓰기) → 나란히 보고 말하기</td>
+        <td data-chalk-field="asset">VERIFY</td>
+        <td data-chalk-field="artifact">맞음/다름 확인표, 처음과 고친 요청문·답을 나란히 붙인 활동지</td>
+        <td data-chalk-role="facilitator">확인 방법을 시연하고, '다름' 칸을 가리키며 "어느 칸을 바꾸면 될까?"라고 묻는다. 열린 질문만 한다.</td>
+        <td data-chalk-role="learner">답을 줄마다 맞음/다름으로 표시하고, 다른 칸을 고쳐 다시 입력한 뒤 두 결과를 비교해 짝에게 말한다.</td>
+        <td data-chalk-field="exit-criteria">확인표와 나란히 붙인 활동지를 완성해 제출했다.</td>
+        <td data-chalk-field="if-stuck">"원한 것과 다른 줄을 다시 읽어 볼까?"라고 묻는다.</td>
+      </tr>
+    </table>
+  </section>
+  <section data-chalk-section="materials">
+    <ul>
+      <li>세 칸 요청문 활동지와 확인표 (10팀 분량), 타이머, 연필</li>
+      <li>AI를 입력할 기기와 시연용 화면 (10팀 분량)</li>
+    </ul>
+  </section>
+  <section data-chalk-section="risks">
+    <ul>
+      <li data-chalk-risk="ai-latency"><span data-chalk-field="first-line">AI 답이 늦으면 기다리는 동안 짝과 다음 칸의 요청문을 먼저 말로 정해 둔다.</span></li>
+      <li data-chalk-risk="content-guard"><span data-chalk-field="first-line">부적절한 답이 나오면 화면을 바로 닫고 다른 요청으로 바꾼다.</span></li>
+      <li data-chalk-risk="pace-gap"><span data-chalk-field="first-line">빨리 끝낸 짝은 다른 그림 주제로 요청문을 한 번 더 써 보게 하고, 비교하거나 평가하지 않는다.</span></li>
+      <li data-chalk-risk="parent-overreach"><span data-chalk-field="first-line">가족 세션이 아니므로 보호자가 들어오면 관찰만 부탁하고 아이 대신 입력하지 않도록 안내한다.</span></li>
+      <li data-chalk-risk="overtime"><span data-chalk-field="first-line">단계가 5분 넘게 길어지면 확인표는 첫 세 줄까지만 표시하고 다음 단계로 넘어간다.</span></li>
+    </ul>
+  </section>
+  <section data-chalk-section="consent">
+    <ul>
+      <li>수업에서 쓴 활동지와 AI 답을 수업 기록으로 보관하는 것에 대해 보호자 동의를 미리 받는다.</li>
+    </ul>
+  </section>
+  <section data-chalk-section="post-deliverables">
+    <ul>
+      <li>처음 요청문과 고친 요청문, 각 AI 답을 나란히 붙인 활동지 1장</li>
+      <li>AI 답에 맞음/다름을 표시한 확인표 1장</li>
+    </ul>
+  </section>
+</body>
+</html>`;
+
+await check('OP-21 ops-r4.html backward compat: parsePlan → 3 blocks, 5 risks, no spec.block_field_missing', () => {
+  const result = parsePlan(OPS_R4_HTML, 'ops');
+  assert.equal(result.blocks?.length, 3, `r4 must have 3 blocks: ${JSON.stringify(result.blocks?.map(b => b.key))}`);
+  assert.equal(result.risks?.length, 5, `r4 must have 5 risks: ${JSON.stringify(result.risks?.map(r => r.key))}`);
+  const fieldMissing = result.violations.filter(v => v.item === 'spec.block_field_missing');
+  assert.equal(fieldMissing.length, 0,
+    `r4 must have no spec.block_field_missing, got: ${JSON.stringify(fieldMissing)}`);
+});
+
+// ── ops-r6.html inline fixture (comma step-refs, new 8-section format, break=15) ─
+// Inline copy for backward-compat + comma step-ref tests (OP-22~25).
+const OPS_R6_HTML = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="review-1791290281">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="235">
+</head>
+<body>
+  <section data-chalk-section="header"><h2 data-chalk-fixed>운영 계획 개요</h2></section>
+  <section data-chalk-section="operations"><h2 data-chalk-fixed>운영 방식</h2></section>
+  <section data-chalk-section="outcomes"><h2 data-chalk-fixed>최종 결과물</h2><ol></ol></section>
+  <section data-chalk-section="materials"><h2 data-chalk-fixed>사전 준비물</h2><ol></ol></section>
+  <section data-chalk-section="schedule">
+    <h2 data-chalk-fixed>진행 큐시트</h2>
+    <table>
+      <thead><tr data-chalk-fixed><th>시작–끝</th><th>블록</th><th>메인 강사 할 일</th><th>학습자 할 일</th><th>보조·부모 할 일</th><th>의도 한 줄</th><th>연결 단계</th></tr></thead>
+      <tbody>
+        <tr data-chalk-block="block-1" data-chalk-step-ref="s-1, s-2, s-3, s-4, s-5" data-start="10:00" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">10:00–11:50</td>
+          <td><strong>활동</strong> <span data-chalk-field="activity">목표 확인, 시연 1·2, 짝 활동 1·2</span></td>
+          <td data-chalk-role="facilitator">진행
+            <br><strong>종료 판정</strong> <span data-chalk-field="exit-criteria">완료</span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck">힌트</span>
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead"></span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>
+          </td>
+          <td data-chalk-role="learner">활동</td>
+          <td data-chalk-role="assistant">보조</td>
+          <td data-chalk-field="intent">의도</td>
+          <td data-chalk-field="step-ref-label">s-1, s-2, s-3, s-4, s-5</td>
+        </tr>
+        <tr data-chalk-block="break" data-chalk-block-kind="break" data-start="11:50" data-duration-min="15" data-chalk-fixed>
+          <td data-chalk-fixed data-chalk-field="time-range">11:50–12:05</td>
+          <td colspan="6" data-chalk-field="activity">휴식 15분</td>
+        </tr>
+        <tr data-chalk-block="block-2" data-chalk-step-ref="s-6, s-7, s-8, s-9, s-10" data-start="12:05" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">12:05–13:55</td>
+          <td><strong>활동</strong> <span data-chalk-field="activity">심화</span></td>
+          <td data-chalk-role="facilitator">심화 진행
+            <br><strong>종료 판정</strong> <span data-chalk-field="exit-criteria">발표</span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck">질문</span>
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead"></span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>
+          </td>
+          <td data-chalk-role="learner">활동</td>
+          <td data-chalk-role="assistant">보조</td>
+          <td data-chalk-field="intent">의도</td>
+          <td data-chalk-field="step-ref-label">s-6, s-7, s-8, s-9, s-10</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-chalk-section="risks">
+    <h2 data-chalk-fixed>위험·문제 대응</h2>
+    <ul>
+      <li data-chalk-risk="ai-latency"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="content-guard"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="pace-gap"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="parent-overreach"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="overtime"><span data-chalk-field="first-line">대처</span></li>
+    </ul>
+  </section>
+  <section data-chalk-section="consent"><h2 data-chalk-fixed>동의</h2><ul></ul></section>
+  <section data-chalk-section="post-deliverables"><h2 data-chalk-fixed>사후 정리</h2></section>
+</body>
+</html>`;
+
+// ── OP-22: ops-r6.html 쉼표 구분 step-ref → spec.block_step_unlinked 0건 ──────
+await check('OP-22 parsePlan(ops-r6) comma step-refs → no spec.block_step_unlinked', () => {
+  const result = parsePlan(OPS_R6_HTML, 'ops');
+  const unlinked = result.violations.filter(v => v.item === 'spec.block_step_unlinked');
+  assert.equal(unlinked.length, 0,
+    `comma-separated step-refs must be parsed: ${JSON.stringify(unlinked)}`);
+  // Verify step refs were actually parsed
+  const b1 = result.blocks?.find(b => b.key === 'block-1');
+  assert.deepEqual(b1?.stepRefs, ['s-1', 's-2', 's-3', 's-4', 's-5'],
+    `block-1 stepRefs must be 5 items: ${JSON.stringify(b1?.stepRefs)}`);
+});
+
+// ── OP-23: ops-r6.html with no buffer (if-ahead/behind empty) → spec.buffer_missing ─
+await check('OP-23 parsePlan(ops-r6 no buffer, empty if-ahead/behind) → spec.buffer_missing', () => {
+  const result = parsePlan(OPS_R6_HTML, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 1,
+    `ops-r6 with empty if-ahead/behind must emit spec.buffer_missing, got: ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-24: if-ahead filled in one block → no spec.buffer_missing ──────────────
+await check('OP-24 parsePlan with if-ahead filled → no spec.buffer_missing', () => {
+  const htmlWithBuffer = OPS_R6_HTML.replace(
+    '<span data-chalk-field="if-ahead"></span>\n            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>\n          </td>\n          <td data-chalk-role="learner">활동</td>\n          <td data-chalk-role="assistant">보조</td>\n          <td data-chalk-field="intent">의도</td>\n          <td data-chalk-field="step-ref-label">s-1',
+    '<span data-chalk-field="if-ahead">빨리 끝나면 두 번째 주제로 해 보기</span>\n            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>\n          </td>\n          <td data-chalk-role="learner">활동</td>\n          <td data-chalk-role="assistant">보조</td>\n          <td data-chalk-field="intent">의도</td>\n          <td data-chalk-field="step-ref-label">s-1',
+  );
+  const result = parsePlan(htmlWithBuffer, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 0,
+    `if-ahead filled → spec.buffer_missing must NOT fire: ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-25: buffer block present → no spec.buffer_missing ──────────────────────
+await check('OP-25 parsePlan with buffer block → no spec.buffer_missing', () => {
+  const htmlWithBufferBlock = OPS_R6_HTML.replace(
+    '</tbody>',
+    `  <tr data-chalk-block="buffer" data-chalk-block-kind="buffer" data-start="" data-duration-min="5">
+        <td data-chalk-role="facilitator">여유</td>
+      </tr>
+    </tbody>`,
+  );
+  const result = parsePlan(htmlWithBufferBlock, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 0,
+    `buffer block present → spec.buffer_missing must NOT fire: ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-12 회귀: 기존 OP-12 buffer_missing 단언이 약해지지 않음 (⑭) ──────────────
+// OPS_TRACK_HTML에는 if-ahead/if-behind 칸이 없으므로 buffer_missing 이 그대로 발생해야 한다.
+await check('OP-12b OP-12 regression: OPS_TRACK_HTML no if-ahead/behind → spec.buffer_missing still fires', () => {
+  const result = parsePlan(OPS_TRACK_HTML, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 1,
+    `OPS_TRACK_HTML still must emit spec.buffer_missing (⑭): ${JSON.stringify(bufMissing)}`);
 });
 
 console.log(`\n${passed} tests passed`);

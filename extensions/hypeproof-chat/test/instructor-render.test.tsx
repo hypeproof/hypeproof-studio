@@ -18,6 +18,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import { InstructorChatPanel } from "../webview-ui/src/InstructorChatPanel";
 import { HelpRequest } from "../webview-ui/src/HelpRequest";
+import { MarkdownText } from "../webview-ui/src/MarkdownText";
 import type { ChatConfig } from "../src/protocol";
 import type { HelpView } from "../src/classroomHelp";
 
@@ -284,6 +285,58 @@ t("[positive control] student (instructor=false) + view → HelpRequest mounted"
     <InstructorChatPanel {...BASE_PROPS} config={CONFIG_WITH_PROFILE} />
   );
   assertAbsent(instructorHtml, "hp-help", "instructor must NOT see hp-help");
+});
+
+// ── (f) student-slot-first — instructor badge absent when student is active ───
+// Simulates the postConfig outcome when decideMode returns "student":
+//   isInstructor=false is sent in the config, so ChatPanel renders the student view.
+// Regression guard for #1298 A-01: instructor panel must NOT appear while a student
+// token is active, even if an issuer token is stored.
+console.log("=== (f) student-slot-first — instructor badge absent for active student ===");
+
+t("[student priority] ChatPanel with instructor=false, lesson → MissionHeader present", () => {
+  const html = renderToStaticMarkup(
+    <ChatPanel {...BASE_PROPS} config={CONFIG_WITH_LESSON} instructor={false} />
+  );
+  assertContains(html, "hp-mission-growth", "student with lesson must see MissionHeader");
+  assertAbsent(html, "hps-instructor-badge", "instructor badge must be absent when student is active");
+});
+
+t("[student priority] ChatPanel with instructor=false → no instructor strip", () => {
+  const html = renderToStaticMarkup(
+    <ChatPanel {...BASE_PROPS} config={CONFIG_WITH_PROFILE} instructor={false} />
+  );
+  assertAbsent(html, "hps-instructor-badge", "instructor badge must be absent for student panel");
+});
+
+t("[positive control] instructor=true → instructor badge present (confirms (f) is non-vacuous)", () => {
+  const html = renderToStaticMarkup(
+    <InstructorChatPanel {...BASE_PROPS} config={CONFIG_WITH_PROFILE} />
+  );
+  assertContains(html, "hps-instructor-badge", "instructor badge must be present in instructor mode");
+  assertAbsent(html, "hp-mission-growth", "MissionHeader must be absent in instructor mode");
+});
+
+// ── (g) MarkdownText singleTilde:false (#1487) ────────────────────────────────
+// Confirms remark-gfm singleTilde:false: ~text~ must NOT produce <del>, ~~text~~ must.
+console.log("=== (g) MarkdownText singleTilde:false ===");
+
+t("single tilde ~s-1~s-4~ → no <del> (plain text only)", () => {
+  const html = renderToStaticMarkup(<MarkdownText text="s-1~s-4" />);
+  assertAbsent(html, "<del>", "single tilde must NOT produce <del> with singleTilde:false");
+  assertContains(html, "s-1~s-4", "single tilde text must pass through unchanged");
+});
+
+t("double tilde ~~x~~ → <del>x</del>", () => {
+  const html = renderToStaticMarkup(<MarkdownText text="~~x~~" />);
+  assertContains(html, "<del>x</del>", "double tilde must still produce <del> element");
+});
+
+t("[positive control] double tilde present → single tilde absent confirms non-vacuous", () => {
+  const htmlDouble = renderToStaticMarkup(<MarkdownText text="~~ok~~" />);
+  const htmlSingle = renderToStaticMarkup(<MarkdownText text="~ok~" />);
+  assertContains(htmlDouble, "<del>ok</del>", "double tilde must produce <del>");
+  assertAbsent(htmlSingle, "<del>", "single tilde must NOT produce <del>");
 });
 
 // ── summary ───────────────────────────────────────────────────────────────────

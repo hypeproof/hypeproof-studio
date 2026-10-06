@@ -15,19 +15,32 @@ assert.ok(profileId, 'harness sanity: profileId found');
 
 const db = new DatabaseSync(':memory:');
 db.exec('PRAGMA foreign_keys=ON');
-const migration = readFileSync(new URL('../migrations/0002-chalk-authoring.sql', import.meta.url), 'utf8');
-db.exec(migration);
+for (const f of [
+  '0002-chalk-authoring.sql',
+  '0030-chalk-knowledge.sql',
+  '0031-chalk-plan-files.sql',
+  '0035-chalk-course-inputs-tier-duration.sql',
+  '0037-chalk-judgements.sql',
+]) {
+  db.exec(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8'));
+}
 
 const env = createMockEnv();
-env.HPS_DB = { prepare(sql) {
-  let bindings = [];
-  return {
-    bind(...args) { bindings = args; return this; },
-    async first() { return db.prepare(sql).get(...bindings) ?? null; },
-    async run() { const r = db.prepare(sql).run(...bindings); return { success: true, meta: { changes: Number(r.changes) } }; },
-    async all() { return { success: true, results: db.prepare(sql).all(...bindings) }; },
-  };
-}};
+env.HPS_DB = {
+  prepare(sql) {
+    let bindings = [];
+    return {
+      bind(...args) { bindings = args; return this; },
+      async first() { return db.prepare(sql).get(...bindings) ?? null; },
+      async run() { const r = db.prepare(sql).run(...bindings); return { success: true, meta: { changes: Number(r.changes) } }; },
+      async all() { return { success: true, results: db.prepare(sql).all(...bindings) }; },
+    };
+  },
+  async batch(stmts) {
+    for (const s of stmts) await s.run();
+    return stmts.map(() => ({ success: true, results: [], meta: { changes: 0 } }));
+  },
+};
 
 const mkIssuer = (id, opts = {}) =>
   issueIssuer({ issuer: id, scopes: [{ cohort, profiles: [profileId], ...opts }] }, 48, TEST_SECRET)
@@ -101,14 +114,19 @@ await check('T-C3 normal check returns results array with at fields', async () =
   assert.equal(r.status, 200, r.raw);
   assert.ok(Array.isArray(r.json.results), 'results is array');
 
+  const HUMAN_ONLY = ['G2-12', 'G3-6'];
+  let humanCount = 0;
   for (const item of r.json.results) {
     assert.ok('severity' in item, 'item has severity');
     assert.ok('at' in item, 'item has at');
     assert.ok('message' in item, 'item has message');
     assert.ok('source' in item, 'item has source');
     assert.ok('blocks_confirm' in item, 'item has blocks_confirm');
-    assert.equal(item.judge, 'machine');
+    const expectedJudge = HUMAN_ONLY.includes(item.item) ? 'human' : 'machine';
+    assert.equal(item.judge, expectedJudge, `item ${item.item}: expected judge=${expectedJudge}, got ${item.judge}`);
+    if (item.judge === 'human') humanCount++;
   }
+  assert.equal(humanCount, HUMAN_ONLY.length, `expected exactly ${HUMAN_ONLY.length} human-only items`);
 });
 
 // ─── T-C4: HTML 본문 첨부 — 규격 위반이 results에 포함된다 ───────────────────
@@ -195,6 +213,215 @@ await check('T-C7b POST /check invalid-token 256KB+ body returns 401', async () 
     env, makeCtx(),
   );
   assert.equal(res.status, 401, `expected 401 got ${res.status}`);
+});
+
+// ─── T-C8: html-absent fallback — /check reads latest plan row ──────────────
+// Insert a chalk_plan_files row directly, then POST /check without html.
+// G1-* findings (audience-tier=lv1) must appear — same as /check with html supplied.
+await check('T-C8 /check without html falls back to latest plan row (G1 checks fire)', async () => {
+  const planCheckBase = `/admin/chalk/cohorts/${cohort}/courses/site-check/check`;
+
+  // HTML with audience-tier=lv1 so G1-* checks fire.
+  const richHtml = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="lesson">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="site-check">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="workshop">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="90">
+  <meta name="chalk:methods" content="m-001">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:prerequisites" content="없음">
+</head>
+<body>
+  <section data-chalk-section="meta">
+    <table>
+      <tr><th>과목</th><td>테스트</td></tr>
+      <tr><th>형식</th><td>workshop</td></tr>
+      <tr><th>시간</th><td>90분</td></tr>
+      <tr><th>선행 조건</th><td>없음</td></tr>
+    </table>
+  </section>
+  <section data-chalk-section="objectives">
+    <ul><li data-chalk-objective="obj-1">목표. 자격증</li></ul>
+  </section>
+  <section data-chalk-section="essential-question">
+    <p data-chalk-question>질문</p>
+  </section>
+  <section data-chalk-section="evidence">
+    <ul><li data-chalk-evidence="ev-1">제출 증거: 기록지</li></ul>
+  </section>
+  <section data-chalk-section="flow">
+    <table data-chalk-flow>
+      <tr data-chalk-step="s-1" data-duration-min="40" data-chalk-requires="" data-chalk-forbids="">
+        <th data-chalk-field="title">활동</th>
+        <td data-chalk-role="teacher">안내</td>
+        <td data-chalk-role="learner">활동 수행 후 제출 증거: 기록지</td>
+      </tr>
+    </table>
+  </section>
+  <section data-chalk-section="key-questions">
+    <ul><li data-chalk-key-question>핵심 질문</li></ul>
+  </section>
+  <section data-chalk-section="prohibited-moves">
+    <ul><li data-chalk-move="P1" data-chalk-step="s-1">금지 개입</li></ul>
+  </section>
+  <section data-chalk-section="materials">
+    <ul><li data-chalk-material data-kind="physical" data-owner="instructor">기록지</li></ul>
+  </section>
+  <section data-chalk-section="safety" data-chalk-safety="none"></section>
+  <section data-chalk-section="bridging"><p>연결</p></section>
+  <section data-chalk-section="support"></section>
+</body>
+</html>`;
+
+  // Insert plan row directly so we avoid PUT /plan CAS complexity in a shared DB.
+  db.prepare(
+    `INSERT OR REPLACE INTO chalk_plan_files
+     (cohort_id, course_id, ref_kind, ref, file, html, sha256, knowledge_version, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(cohort, 'site-check', 'draft', '99', 'lesson', richHtml, 'sha-tc8', 1, Date.now());
+
+  // POST /check without html — should fall back to the row above.
+  const noHtmlR = await req(planCheckBase, 'POST', {});
+  assert.equal(noHtmlR.status, 200, `POST /check (no html): ${noHtmlR.raw}`);
+  const noHtmlChecks = (noHtmlR.json.results ?? []).map(f => f.check).filter(Boolean);
+
+  // G1-4 (자격증) should fire since the html body contains "자격증".
+  assert.ok(
+    noHtmlChecks.includes('g1_4_credential'),
+    `expected g1_4_credential in /check results (no html): ${JSON.stringify(noHtmlChecks)}`,
+  );
+
+  // POST /check with same html — must produce the same check names.
+  const withHtmlR = await req(planCheckBase, 'POST', { html: richHtml });
+  assert.equal(withHtmlR.status, 200, `POST /check (with html): ${withHtmlR.raw}`);
+  const withHtmlChecks = (withHtmlR.json.results ?? []).map(f => f.check).filter(Boolean).sort();
+
+  assert.deepEqual(
+    noHtmlChecks.slice().sort(),
+    withHtmlChecks,
+    `html-absent vs html-present check sets differ:\nno-html: ${noHtmlChecks}\nwith-html: ${withHtmlChecks}`,
+  );
+});
+
+// ─── T-C9 / T-C10: G2-9 duration source — inputDurationMin path (#1531) ────────
+// Setup: knowledge version row (needed by PUT /plan) + separate course.
+db.prepare(
+  `INSERT OR IGNORE INTO chalk_knowledge_versions
+   (version,parent_version,origin,note,created_by,created_at,doc_count,digest)
+   VALUES (1,NULL,'vault-import','test','test',0,0,'test')`
+).run();
+
+const durAuthBase  = `/admin/cohorts/${cohort}/authoring/dur-check`;
+const durCheckBase = `/admin/chalk/cohorts/${cohort}/courses/dur-check/check`;
+const durPlanBase  = `/admin/chalk/cohorts/${cohort}/courses/dur-check/plan`;
+
+// draft with duration_minutes=60 (the "wrong" fallback source for G2-9 without fix)
+await req(durAuthBase, 'PUT', {
+  expected_revision: 0,
+  request_id: 'dur-check-create',
+  profile_id: profileId,
+  content: { ...draftContent, duration_minutes: 60 },
+});
+
+// Store input duration_min=90 so PUT /plan + POST /check both pick it up via DB (#1531).
+db.prepare(
+  `INSERT OR REPLACE INTO chalk_course_input_options
+   (cohort_id,course_id,audience_tier,duration_min,updated_at)
+   VALUES (?,?,NULL,90,?)`
+).run(cohort, 'dur-check', Date.now());
+
+// Plan HTML: NO chalk:duration-min meta, ONE step with data-duration-min="90".
+// Steps sum = 90 == inputDurationMin=90 → diff=0 → no G2-9 warning.
+// Without fix: target would be content.duration_minutes=60, diff=30>10 → warning.
+const planHtmlInputDur = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="lesson">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="dur-check">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="workshop">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:methods" content="m-001">
+  <meta name="chalk:audience-tier" content="lv2">
+  <meta name="chalk:prerequisites" content="없음">
+</head>
+<body>
+  <section data-chalk-section="meta">
+    <table>
+      <tr><th>과목</th><td>테스트</td></tr>
+      <tr><th>형식</th><td>workshop</td></tr>
+      <tr><th>시간</th><td>90분</td></tr>
+      <tr><th>선행 조건</th><td>없음</td></tr>
+    </table>
+  </section>
+  <section data-chalk-section="objectives">
+    <ul><li data-chalk-objective="obj-1">목표</li></ul>
+  </section>
+  <section data-chalk-section="essential-question">
+    <p data-chalk-question>질문</p>
+  </section>
+  <section data-chalk-section="evidence">
+    <ul><li data-chalk-evidence="ev-1">제출 증거: 기록지</li></ul>
+  </section>
+  <section data-chalk-section="flow">
+    <table data-chalk-flow>
+      <tr data-chalk-step="s-1" data-duration-min="90" data-chalk-requires="" data-chalk-forbids="">
+        <th data-chalk-field="title">활동</th>
+        <td data-chalk-role="teacher">안내</td>
+        <td data-chalk-role="learner">활동 수행 후 제출 증거: 기록지</td>
+      </tr>
+    </table>
+  </section>
+  <section data-chalk-section="key-questions">
+    <ul><li data-chalk-key-question>핵심 질문</li></ul>
+  </section>
+  <section data-chalk-section="prohibited-moves">
+    <ul><li data-chalk-move="P1" data-chalk-step="s-1">금지 개입</li></ul>
+  </section>
+  <section data-chalk-section="materials">
+    <ul><li data-chalk-material data-kind="physical" data-owner="instructor">기록지</li></ul>
+  </section>
+  <section data-chalk-section="safety" data-chalk-safety="none"></section>
+  <section data-chalk-section="bridging"><p>연결</p></section>
+  <section data-chalk-section="support"></section>
+</body>
+</html>`;
+
+// T-C9: PUT /plan — body duration_min=90, plan has no chalk:duration-min meta.
+// Fix: G2-9 uses inputDurationMin=90, steps sum=90 → no non-skipped warning.
+await check('T-C9 PUT /plan body duration_min=90 + no plan meta → G2-9 uses input source (no warning)', async () => {
+  const r = await req(durPlanBase, 'PUT', {
+    file: 'lesson',
+    html: planHtmlInputDur,
+    knowledge_version: 1,
+    expected_revision: 1,
+    request_id: 'dur-check-plan-1',
+  });
+  assert.equal(r.status, 200, r.raw);
+  const durWarn = (r.json.findings ?? []).filter(
+    f => f.check === 'duration_consistency' && !f.skipped
+  );
+  assert.equal(
+    durWarn.length, 0,
+    `G2-9 must not warn when inputDurationMin=90 matches step sum=90; got: ${JSON.stringify(durWarn)}`,
+  );
+});
+
+// T-C10: POST /check — same DB row set before T-C9; /check reads it via DB query.
+await check('T-C10 POST /check DB input duration_min=90 + no plan meta → G2-9 uses input source (no warning)', async () => {
+  const r = await req(durCheckBase, 'POST', {});
+  assert.equal(r.status, 200, r.raw);
+  const durWarn = (r.json.results ?? []).filter(
+    f => f.check === 'duration_consistency' && !f.skipped
+  );
+  assert.equal(
+    durWarn.length, 0,
+    `G2-9 must not warn when DB input duration_min=90 matches step sum=90; got: ${JSON.stringify(durWarn)}`,
+  );
 });
 
 console.log(`\n${passed} tests passed`);

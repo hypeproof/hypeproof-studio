@@ -109,6 +109,12 @@ export interface Experiment {
   declarations?: ExperimentDeclarations;
   /** The stakeholder this experiment concerns (cr-memory, CR-75; additive). */
   stakeholder_id?: string;
+  /**
+   * A draft a director wrote as the next experiment from a Weekly Review Pack (cr-review, CR-52;
+   * additive per decision 8): the decision it was written with and the pack revision. Absent on
+   * every experiment a student started.
+   */
+  drafted_from?: { decision_id: string; week: number; revision: number };
   /** When the experiment's test data was deleted (cr-evidence, CR-69); absent until then. */
   data_deleted_at?: number;
   /**
@@ -347,12 +353,24 @@ export interface Decision {
   /** Deck slides 1–8 this decision affects. */
   affected_deck_slides: number[];
   decided_at: number | string;
-  /** SX-45: a student decision, or an AI suggestion that is never shown as the team's decision. */
-  actor: "student" | "ai";
-  /** SX-24: the team member who recorded a student decision. */
+  /**
+   * SX-45: a student decision, or an AI suggestion that is never shown as the team's decision.
+   * cr-review (CR-51; additive per decision 8): `director`, the final decision a director wrote
+   * from a Weekly Review Pack. A director's and a student's decision are both human decisions
+   * (`isHumanDecision`); only an AI suggestion is never acted on as a decision.
+   */
+  actor: "student" | "ai" | "director";
+  /** SX-24: the team member who recorded a student decision; for a director decision, the director (issuer `u`). */
   decided_by?: string;
   experiment_id?: string;
+  /** cr-review (CR-52; additive): the Weekly Review Pack revision a director decision was written from. */
+  review?: { week: number; revision: number };
+  /** cr-review (CR-52; additive): the Experiment draft written with a director decision (the next experiment). */
+  next_experiment_id?: string;
 }
+
+/** A decision a person made (a student or a director), as opposed to an AI suggestion (SX-45). */
+export const isHumanDecision = (d: Pick<Decision, "actor">): boolean => d.actor === "student" || d.actor === "director";
 
 /** PRD §10.4 (CR-42). HTML is the entry format for every type. */
 export const ARTIFACT_FIELDS = ["artifact_id", "type", "schema_version", "entry_html", "project_id", "version", "source_refs", "evidence_refs"] as const;

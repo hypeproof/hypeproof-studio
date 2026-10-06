@@ -204,6 +204,17 @@
         "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
       },
       {
+        "command": "hypeproof-chat.weeklyReview",
+        "title": "HypeProof: 주간 리뷰",
+        "icon": "$(calendar)",
+        "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
+      },
+      {
+        "command": "hypeproof-chat.weeklyReviewDirector",
+        "title": "HypeProof: 주간 리뷰 (디렉터)",
+        "enablement": "hypeproof-chat.curriculumRuntimeDirector"
+      },
+      {
         "command": "hypeproof-chat.clearBrowserResultBytes",
         "title": "HypeProof: 저장된 실험 브라우저 화면 지우기",
         "enablement": "hypeproof-chat.crBrowserBytesStored"
@@ -260,6 +271,11 @@
           "command": "hypeproof-chat.curriculumSkills",
           "when": "view == hypeproof-chat.panel && hypeproof-chat.curriculumRuntimeEnabled",
           "group": "navigation@10"
+        },
+        {
+          "command": "hypeproof-chat.weeklyReview",
+          "when": "view == hypeproof-chat.panel && hypeproof-chat.curriculumRuntimeEnabled",
+          "group": "navigation@11"
         }
       ],
       "editor/title": [
@@ -308,6 +324,14 @@
         {
           "command": "hypeproof-chat.curriculumSkills",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.weeklyReview",
+          "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.weeklyReviewDirector",
+          "when": "hypeproof-chat.curriculumRuntimeDirector"
         },
         {
           "command": "hypeproof-chat.clearBrowserResultBytes",
@@ -404,7 +428,8 @@
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js",
     "build:webview": "cd webview-ui && npm install && npm run build",
     "typecheck": "tsc --noEmit",
-    "test": "for f in test/*.smoke.mjs; do echo \"— $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-derive && npm run test:instructor-render",
+    "test": "for f in test/*.smoke.mjs; do echo \"— $f\"; node --experimental-strip-types \"$f\" || exit 1; done && npm run test:classroom-ops:review && npm run test:chalk-tools && npm run test:chalk-generator && npm run test:chalk-derive && npm run test:chalk-judge && npm run test:instructor-render && npm run test:activity-resume",
+    "test:activity-resume": "node --experimental-strip-types test/activity-resume.test.mjs",
     "test:instructor-render": "NODE_PATH=webview-ui/node_modules node_modules/.bin/esbuild test/instructor-render.test.tsx --bundle --platform=node --format=cjs --loader:.css=empty --loader:.svg=empty --jsx=automatic --external:vscode --banner:js=\"globalThis.window = globalThis.window ?? { acquireVsCodeApi: undefined };\" --outfile=/tmp/instructor-render.test.cjs && node /tmp/instructor-render.test.cjs",
     "watch:extension": "esbuild src/extension.ts --bundle --platform=node --target=node18 --external:vscode --outfile=dist/extension.js --watch",
     "watch:webview": "cd webview-ui && npm run dev",
@@ -412,7 +437,8 @@
     "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs",
     "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
     "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
-    "test:chalk-derive": "node --experimental-strip-types test/chalk-derive.test.mjs"
+    "test:chalk-derive": "node --experimental-strip-types test/chalk-derive.test.mjs",
+    "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.207",

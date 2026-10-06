@@ -118,6 +118,7 @@ export interface ParsedBlock {
     ifStuck: string | null;
     ifAhead: string | null;
     ifBehind: string | null;
+    intent: string | null;
   };
   roles: {
     facilitator?: string;

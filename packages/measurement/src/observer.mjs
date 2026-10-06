@@ -72,14 +72,14 @@ export function normalizeRecord(r,state,source,host,project,roots=[]){
    else if(['function_call','custom_tool_call'].includes(p.type))blocks=[{type:'tool_use',id:p.call_id,name:p.name,input:p.arguments??p.input}];
    else if(['function_call_output','custom_tool_call_output'].includes(p.type))blocks=[{type:'tool_result',tool_use_id:p.call_id,content:p.output}];
   }else if(host==='claude-code'&&['user','assistant'].includes(r.type)){
-   if(r.isMeta){coverage.omitted++;return {events,coverage}}role=r.message?.role;
+   if(r.isMeta||r.isCompactSummary){coverage.omitted++;return {events,coverage}}role=r.message?.role;
    blocks=typeof r.message?.content==='string'?[{type:'text',text:r.message.content}]:r.message?.content||[];
    if(role==='user'&&blocks.some(b=>b.type==='text')&&!blocks.some(b=>b.type==='tool_result')){state.task=safeId(r.uuid)||task;task=state.task;}
   }
   for(const b of blocks){
    if(['thinking','reasoning','redacted_thinking','encrypted_content'].includes(b.type)){coverage.hidden++;continue}
    if(['text','input_text','output_text'].includes(b.type)&&typeof b.text==='string'&&['user','assistant'].includes(role)){
-    if(role==='user'&&/^\s*(# AGENTS\.md instructions|<environment_context>|<INSTRUCTIONS>|<system-reminder>|<skill>)/.test(b.text)){coverage.omitted++;continue}
+    if(role==='user'&&/^\s*(# AGENTS\.md instructions|<environment_context>|<INSTRUCTIONS>|<system-reminder>|<skill>|<recommended_plugins>|<external_codex_apps_writing_block_edits>)/.test(b.text)){coverage.omitted++;continue}
     const clean=redactText(b.text);coverage.redacted+=clean.exclusions.length;
     if(clean.text.length>OBSERVER_LIMITS.message)coverage.excerpted++;
     emit('message',agentMessage?'delegated':role==='assistant'?'ai':delegated?'delegated':'human-unconfirmed',{message:{text:clean.text.slice(0,OBSERVER_LIMITS.message)}});

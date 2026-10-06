@@ -23,9 +23,10 @@ REVIEW_COHORT_ARG=""
 NO_APP=0
 AFTER_SCRIPT=""
 DEV_APP_PID=""
+STUDENT_SESSION=0
 
 if [[ -z "$INPUT" ]]; then
-  echo "Usage: bash scripts/review-pr.sh <PR-number-or-branch> [--provider claude|codex|service] [--vault <path>] [--profile <id>] [--cohort <id>] [--no-app]" >&2
+  echo "Usage: bash scripts/review-pr.sh <PR-number-or-branch> [--provider claude|codex|service] [--vault <path>] [--profile <id>] [--cohort <id>] [--no-app] [--student-session]" >&2
   exit 1
 fi
 shift
@@ -37,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --cohort) REVIEW_COHORT_ARG="$2"; shift 2 ;;
     --no-app) NO_APP=1; shift ;;
     --after) AFTER_SCRIPT="$2"; shift 2 ;;
+    --student-session) STUDENT_SESSION=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
 done
@@ -105,21 +107,35 @@ cleanup() {
     wait "$SERVER_PID" 2>/dev/null || true
   fi
   pkill -f "wrangler dev.*--port $WRANGLER_PORT" 2>/dev/null || true
-  # Kill only the Dev app we launched (by recorded PID), never by process name.
-  if [[ -n "${DEV_APP_PID:-}" ]] && kill -0 "$DEV_APP_PID" 2>/dev/null; then
-    echo "Closing Dev app (PID $DEV_APP_PID)..."
-    kill "$DEV_APP_PID" 2>/dev/null || true
-    for _i in 1 2 3 4 5 6 7 8 9 10; do
+  # Close Dev app: request quit by bundle ID (graceful), then wait up to 15 s.
+  # The launcher PID (start_new_session=True) may already be gone; rely on bundle ID.
+  if [[ -n "${STATE_HASH:-}" ]]; then
+    DEV_BUNDLE_ID="ai.hypeproof.studio.dev.$STATE_HASH"
+    echo "Requesting quit: $DEV_BUNDLE_ID"
+    osascript -e "quit app id \"$DEV_BUNDLE_ID\"" 2>/dev/null || true
+    # Also send SIGTERM to the launcher PID as a secondary signal (harmless if gone).
+    [[ -n "${DEV_APP_PID:-}" ]] && kill "${DEV_APP_PID}" 2>/dev/null || true
+    _QUIT_WAITED=0
+    while [[ $_QUIT_WAITED -lt 15 ]]; do
       sleep 1
-      kill -0 "$DEV_APP_PID" 2>/dev/null || break
+      _QUIT_WAITED=$(( _QUIT_WAITED + 1 ))
+      # App is gone when no process with that bundle ID remains.
+      if ! pgrep -f "hypeproof-studio-dev-$STATE_HASH" >/dev/null 2>&1; then
+        break
+      fi
     done
-    if kill -0 "$DEV_APP_PID" 2>/dev/null; then
-      echo "Dev app did not exit after SIGTERM; sending SIGKILL (PID $DEV_APP_PID)..."
-      kill -9 "$DEV_APP_PID" 2>/dev/null || true
+    if pgrep -f "hypeproof-studio-dev-$STATE_HASH" >/dev/null 2>&1; then
+      echo "WARNING: Dev app did not exit after 15 s. Remaining PIDs:"
+      pgrep -f "hypeproof-studio-dev-$STATE_HASH" || true
     fi
+  elif [[ -n "${DEV_APP_PID:-}" ]] && kill -0 "$DEV_APP_PID" 2>/dev/null; then
+    echo "Closing Dev app (PID $DEV_APP_PID, no STATE_HASH)..."
+    kill "$DEV_APP_PID" 2>/dev/null || true
   fi
   [[ -n "${KB_SQL:-}" ]] && rm -f "$KB_SQL" 2>/dev/null || true
   [[ -n "${HPS_DEV_ISSUER_TOKEN_FILE:-}" ]] && rm -f "$HPS_DEV_ISSUER_TOKEN_FILE" 2>/dev/null || true
+  # Student token file (--student-session): cleanup target, never survives the session.
+  rm -f "${WORKTREE_DIR}/student-token.txt" 2>/dev/null || true
   if [[ -d "$WORKTREE_DIR" ]]; then
     echo "Removing worktree $WORKTREE_DIR..."
     git -C "$REPO" worktree remove "$WORKTREE_DIR" --force 2>/dev/null || true
@@ -146,12 +162,26 @@ else
   echo "Building: $(git -C "$WORKTREE_DIR" rev-parse HEAD)"
 fi
 
-# ── Step 1.5: clear previous conversation ────────────────────────────────────
-# Clears persisted chat history (chatPanelProvider.ts workspaceState key hypeproofChat.history*)
-# from the Dev state folder so each review starts with a clean slate.
-# The state path mirrors studio-dev.py:19+222 (resolve().parents[1] + sha256[:12]).
+# ── Step 1.5: clear previous state ───────────────────────────────────────────
+# Wipes workspaceStorage (editor tabs/layout + all workspaceState JSON including
+# hypeproofChat.history/draft — instructor and student) and previous chalk/review-*
+# work folders. globalStorage (secrets, coach state) is never touched.
+#
+# Root cause (ac7a7745 investigation):
+#   workspaceState is serialised into a single JSON value under
+#   key='hypeproof.hypeproof-chat' inside state.vscdb — the previous
+#   DELETE WHERE key LIKE 'hypeproofChat.history%' never matched it (0 rows).
+#   Wiping the whole workspaceStorage directory is the reliable fix.
+#
+# chalk/review-* are per-review work folders created by the coach tool
+# resolveCoachCwd() (chalk-courses.ts) inside the Dev workspace folder:
+#   studio-dev.py:53 (STATE_DIR = base_dir / hash) and
+#   studio-dev.py:210–213 (workspace = STATE_DIR / 'workspace').
+# They contain only generated review outputs — safe to delete.
+#
+# State path mirrors studio-dev.py:53+210 (resolve().parents[1] + sha256[:12]).
 echo ""
-echo "=== [1.5/6] Clear previous conversation ==="
+echo "=== [1.5/6] Clear previous state ==="
 STATE_HASH="$(python3 - "$WORKTREE_DIR/scripts/studio-dev.py" <<'PY'
 import sys, hashlib, pathlib
 repo = pathlib.Path(sys.argv[1]).resolve().parents[1]
@@ -159,18 +189,51 @@ print(hashlib.sha256(str(repo).encode()).hexdigest()[:12])
 PY
 )"
 STATE_DIR="$HOME/Library/Application Support/HypeProof Studio Development/$STATE_HASH"
-TOTAL_DELETED=0
-if [[ -d "$STATE_DIR/user-data/User/workspaceStorage" ]]; then
-  while IFS= read -r -d '' db; do
-    COUNT_BEFORE=0
-    COUNT_BEFORE="$(sqlite3 "$db" "SELECT COUNT(*) FROM ItemTable WHERE key LIKE 'hypeproofChat.history%';" 2>/dev/null || echo 0)"
-    if [[ "$COUNT_BEFORE" -gt 0 ]]; then
-      sqlite3 "$db" "DELETE FROM ItemTable WHERE key LIKE 'hypeproofChat.history%';" 2>/dev/null || true
-      TOTAL_DELETED=$((TOTAL_DELETED + COUNT_BEFORE))
-    fi
-  done < <(find "$STATE_DIR/user-data/User/workspaceStorage" -name "state.vscdb" -print0 2>/dev/null)
+STATE_DIR_REAL="$(realpath "$STATE_DIR" 2>/dev/null || true)"
+
+WS_DELETED=0
+REVIEW_DELETED=0
+BINDINGS_DELETED=0
+
+# Safety: only operate inside the Dev state folder.
+# Use STATE_DIR_REAL for both the guard and all derived paths so a symlink in
+# the middle cannot redirect deletions outside the checked boundary.
+if [[ -n "$STATE_DIR_REAL" ]] && echo "$STATE_DIR_REAL" | grep -q "HypeProof Studio Development/"; then
+
+  # 1. Wipe workspaceStorage (editor tabs + all workspaceState JSON blobs).
+  #    Does NOT touch globalStorage (secrets, issuer token, coach state).
+  WS_DIR="$STATE_DIR_REAL/user-data/User/workspaceStorage"
+  if [[ -d "$WS_DIR" ]]; then
+    while IFS= read -r -d '' sub; do
+      rm -rf "$sub"
+      WS_DELETED=$(( WS_DELETED + 1 ))
+    done < <(find "$WS_DIR" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+  fi
+
+  # 2. Remove chalk/review-* work folders (live inside Dev workspace, not user home).
+  #    studio-dev.py:210 sets workspace = STATE_DIR / 'workspace'; chalk sub-folder
+  #    is created by resolveCoachCwd() (chalk-courses.ts).
+  CHALK_DIR="$STATE_DIR_REAL/workspace/chalk"
+  if [[ -d "$CHALK_DIR" ]]; then
+    while IFS= read -r -d '' rf; do
+      rm -rf "$rf"
+      REVIEW_DELETED=$(( REVIEW_DELETED + 1 ))
+    done < <(find "$CHALK_DIR" -mindepth 1 -maxdepth 1 -type d -name "review-*" -print0 2>/dev/null)
+  fi
+
+  # 3. Remove activity-binding files (folder links from previous sessions).
+  BINDINGS_DIR="$STATE_DIR_REAL/user-data/User/globalStorage/hypeproof.hypeproof-chat/activity-bindings"
+  if [[ -d "$BINDINGS_DIR" ]]; then
+    while IFS= read -r -d '' f; do
+      rm -f "$f"
+      BINDINGS_DELETED=$(( BINDINGS_DELETED + 1 ))
+    done < <(find "$BINDINGS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+  fi
 fi
-[[ $TOTAL_DELETED -gt 0 ]] && echo "이전 대화 비움 (${TOTAL_DELETED}행)" || echo "지울 대화 없음"
+
+echo "workspaceStorage 폴더 비움: ${WS_DELETED}개"
+echo "chalk/review-* 폴더 비움: ${REVIEW_DELETED}개"
+[[ $BINDINGS_DELETED -gt 0 ]] && echo "이전 검수 폴더 연결 ${BINDINGS_DELETED}건 비움" || echo "지울 폴더 연결 없음"
 
 # ── Step 2: extension deps ────────────────────────────────────────────────────
 echo ""
@@ -350,13 +413,18 @@ if [[ "$COHORT_LINE_COUNT" -ne 1 || -z "$COHORT_ID" ]]; then
 fi
 echo "Profile: $PROFILE_ID  Cohort: $COHORT_ID"
 
+_ISSUE_ARGS=()
+if [[ "${STUDENT_SESSION:-0}" -eq 1 ]]; then
+  _ISSUE_ARGS+=(--can-start-session --max-session-hours 3)
+fi
 TOKEN_JSON="$(HPS_SIGNING_SECRET="$LOCAL_SECRET" \
   node --experimental-strip-types \
   "$WORKTREE_DIR/worker/scripts/issue-issuer-token.ts" \
   --instructor "jy-review-$$" \
   --cohorts "$COHORT_ID" \
   --profiles "$PROFILE_ID" \
-  --max-hours 4 --days 1 2>&1)"
+  --max-hours 4 --days 1 \
+  ${_ISSUE_ARGS[@]+"${_ISSUE_ARGS[@]}"} 2>&1)"
 
 TOKEN="$(echo "$TOKEN_JSON" | python3 -c "import sys,re; m=re.search(r'\"token\":\s*\"([^\"]+)\"', sys.stdin.read()); print(m.group(1) if m else '')" 2>/dev/null)"
 if [[ -z "$TOKEN" ]]; then
@@ -456,6 +524,43 @@ print(hashlib.sha256(str(Path(sys.argv[1]).resolve()).encode()).hexdigest()[:12]
   echo "  3. chalk_set_inputs 호출 시 로그에 찍힌 강의 ID(${DRAFT_COURSE})를 course 인자로 사용"
   echo ""
   echo "When done reviewing, press Ctrl+C to clean up."
+
+  # ── Student session (--student-session only) ─────────────────────────────────
+  if [[ "$STUDENT_SESSION" -eq 1 ]] && [[ -n "${ISSUER_TOKEN_FILE:-}" ]]; then
+    echo ""
+    echo "[+] Opening student session..."
+    _STUDENT_RESP_TMP="$(mktemp "$WORKTREE_DIR/.student-resp-XXXXXX.json")"
+    chmod 600 "$_STUDENT_RESP_TMP"
+    _AUTH_HEADER_TMP="$(mktemp "$WORKTREE_DIR/.auth-hdr-XXXXXX")"
+    chmod 600 "$_AUTH_HEADER_TMP"
+    printf 'Authorization: Bearer %s\n' "$(cat "$ISSUER_TOKEN_FILE")" > "$_AUTH_HEADER_TMP"
+    _STUDENT_HTTP_STATUS=""
+    _STUDENT_HTTP_STATUS="$(curl -s -X POST \
+      "http://127.0.0.1:${WRANGLER_PORT}/admin/cohorts/${COHORT_ID}/session/open" \
+      -H @"$_AUTH_HEADER_TMP" \
+      -H "Content-Type: application/json" \
+      -d "{\"profile_id\":\"${PROFILE_ID}\",\"user\":\"review-student-$$\",\"token_hours\":3,\"session_hours\":3}" \
+      -w "%{http_code}" -o "$_STUDENT_RESP_TMP" 2>&1)" || true
+    rm -f "$_AUTH_HEADER_TMP"
+    echo "[+] session/open HTTP ${_STUDENT_HTTP_STATUS}"
+    _STUDENT_TOKEN="$(python3 -c "
+import sys, json
+try:
+    d = json.load(open(sys.argv[1]))
+    print(d.get('token', ''))
+except Exception:
+    print('')
+" "$_STUDENT_RESP_TMP" 2>/dev/null)"
+    rm -f "$_STUDENT_RESP_TMP"
+    if [[ -n "$_STUDENT_TOKEN" ]]; then
+      (umask 077; printf '%s' "$_STUDENT_TOKEN" > "${WORKTREE_DIR}/student-token.txt")
+      chmod 0600 "${WORKTREE_DIR}/student-token.txt"
+      echo "[+] Student token written to ${WORKTREE_DIR}/student-token.txt"
+    else
+      echo "[!] Failed to extract student token (HTTP ${_STUDENT_HTTP_STATUS})" >&2
+    fi
+    unset _STUDENT_TOKEN
+  fi
 
   # ── 거짓 Ready guard: 15 s survival + initialization log check ──────────────
   if [[ -n "${DEV_APP_PID:-}" ]]; then
