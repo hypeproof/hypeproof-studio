@@ -4045,6 +4045,9 @@
       "sources": [
         {
           "path": "worker/test/chalk-plan-parser.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-ops-plan.test.mjs"
         }
       ]
     },
@@ -4143,6 +4146,9 @@
         },
         {
           "path": "worker/test/chalk-draft-check.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-ops-plan.test.mjs"
         }
       ]
     },

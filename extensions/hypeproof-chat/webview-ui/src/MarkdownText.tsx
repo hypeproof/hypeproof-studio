@@ -8,7 +8,7 @@ export function MarkdownText({ text }: { text: string }) {
   return (
     <div className="hps-prose">
       <Markdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
         components={{
           a: ({ href, children }) => /^https?:\/\//i.test(href ?? '')
             ? <a href={href} onClick={event => { event.preventDefault(); postToHost({ type: 'openExternal', url: href! }); }}>{children}</a>
