@@ -227,6 +227,7 @@ function generateOpsSkeleton(opts: {
 
   const normalBlockRow = (key: string, durationMin: number | null): string => {
     const durAttr = durationMin !== null ? ` data-duration-min="${durationMin}"` : '';
+    return `<tr data-chalk-block="${key}" data-chalk-step-ref="" data-start=""${durAttr}>
           <!-- 고정: data-chalk-block, data-chalk-step-ref, data-start, data-duration-min 속성 제거 금지; 자율: 각 칸 내용. data-chalk-step-ref 표기 예: "s-1 s-2" (쉼표도 허용: "s-1, s-2") -->
           <td data-chalk-fixed data-chalk-field="time-range"><!-- 고정: 시작–끝 시각 칸; 자율: 값 --></td>
           <td><!-- 블록 칸 — 고정: span의 data-chalk-field 속성 이름 변경 금지; 자율: span 내용 -->
