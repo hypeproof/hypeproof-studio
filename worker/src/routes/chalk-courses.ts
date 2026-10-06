@@ -222,16 +222,19 @@ function generateOpsSkeleton(opts: {
   const normalBlockRow = (key: string, durationMin: number | null): string => {
     const durAttr = durationMin !== null ? ` data-duration-min="${durationMin}"` : '';
     return `<tr data-chalk-block="${key}" data-chalk-step-ref="" data-start=""${durAttr}>
-          <!-- 고정: data-chalk-block, data-chalk-step-ref, data-start, data-duration-min 속성 제거 금지; 자율: 각 칸 내용 -->
+          <!-- 고정: data-chalk-block, data-chalk-step-ref, data-start, data-duration-min 속성 제거 금지; 자율: 각 칸 내용. data-chalk-step-ref 표기 예: "s-1 s-2" (쉼표도 허용: "s-1, s-2") -->
           <td data-chalk-fixed data-chalk-field="time-range"><!-- 고정: 시작–끝 시각 칸; 자율: 값 --></td>
           <td><!-- 블록 칸 — 고정: span의 data-chalk-field 속성 이름 변경 금지; 자율: span 내용 -->
             <strong>활동</strong> <span data-chalk-field="activity"></span>
             / <strong>핵심 에셋</strong> <span data-chalk-field="asset"></span>
             / <strong>산출물</strong> <span data-chalk-field="artifact"></span>
           </td>
-          <td data-chalk-role="facilitator"><!-- 고정: data-chalk-role="facilitator" 제거 금지; 자율: 역할 내용과 아래 판정/막힐 때 값 -->
+          <td data-chalk-role="facilitator"><!-- 고정: data-chalk-role="facilitator" 제거 금지; 자율: 역할 내용과 아래 판정/막힐 때/완충 값 -->
             <strong>종료 판정</strong> <span data-chalk-field="exit-criteria"></span>
             <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck"></span>
+            <!-- 자율: if-ahead·if-behind 중 하나 이상 채우면 완충으로 인정 -->
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead"></span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>
           </td>
           <td data-chalk-role="learner"><!-- 자율 --></td>
           ${assistantOrParentCell}
@@ -624,14 +627,26 @@ chalkCourses.put(
     });
 
     if (wr.kind === 'ok' || wr.kind === 'idempotent') {
-      const planFile = b.file as string ?? 'lesson';
+      const planFile: string = typeof b.file === 'string' ? b.file : 'lesson';
       // Read stored input duration_min for G2-9 fallback (#1531).
       const planInputsRow = await c.env.HPS_DB.prepare(
         `SELECT cio.duration_min FROM chalk_course_input_options cio
          WHERE cio.cohort_id=? AND cio.course_id=?`
       ).bind(cohort, course).first<{ duration_min: number | null }>();
       const planInputDurationMin: number | null = planInputsRow?.duration_min ?? null;
-      const findings = runPlanCheck(wr.draft, b.html as string, planFile, parsed.meta.audienceTier, planInputDurationMin);
+      // G2-9 track 보정: track 지도안이면 ops 계획서의 break 블록 시간을 읽어 비교 기준에서 뺀다.
+      let planBreakDurationMin: number | null = null;
+      if (planFile === 'lesson' && parsed.meta.format === 'track') {
+        const opsRow = await c.env.HPS_DB.prepare(
+          `SELECT html FROM chalk_plan_files WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file='ops' ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
+        ).bind(cohort, course).first<{ html: string }>();
+        if (opsRow) {
+          const bm = /data-chalk-block="break"[^>]*data-duration-min="(\d+)"/.exec(opsRow.html)
+                  ?? /data-duration-min="(\d+)"[^>]*data-chalk-block="break"/.exec(opsRow.html);
+          planBreakDurationMin = bm ? parseInt(bm[1]!, 10) : null;
+        }
+      }
+      const findings = runPlanCheck(wr.draft, b.html as string, planFile, parsed.meta.audienceTier, planInputDurationMin, planBreakDurationMin);
       // Cross-file: spec.step_block_unlinked (ops vs lesson step IDs)
       if (planFile === 'ops') {
         const lessonRow = await c.env.HPS_DB.prepare(
@@ -1106,6 +1121,7 @@ function runPlanCheck(
   file = 'lesson',
   audienceTier?: string | null,
   inputDurationMin?: number | null,
+  breakDurationMin?: number | null,
 ): CheckResultItem[] {
   const results: CheckResultItem[] = [];
 
@@ -1114,6 +1130,7 @@ function runPlanCheck(
   let parsedPlanText: string | undefined;
   let parsedAudienceTier: string | null | undefined;
   let planDurationMin: number | null = null;
+  let planFormat: string | null = null;
 
   if (htmlOverride !== undefined) {
     const parsed = parsePlan(htmlOverride, file);
@@ -1133,6 +1150,7 @@ function runPlanCheck(
     }
     // G2-9 reads lesson length from plan meta first (#1531).
     planDurationMin = parsed.meta.durationMin ?? null;
+    planFormat = parsed.meta.format ?? null;
   }
 
   // Pedagogy findings only apply to lesson files.
@@ -1164,7 +1182,7 @@ function runPlanCheck(
   const pedagogyFindings = checkLessonPedagogy(
     checkContent,
     parsedSteps !== undefined
-      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText, planDurationMin, inputDurationMin }
+      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText, planDurationMin, inputDurationMin, planFormat, breakDurationMin }
       : undefined,
   );
   for (const f of pedagogyFindings) {
@@ -1210,7 +1228,20 @@ chalkCourses.post(
     ).bind(cohort, course).first<{ duration_min: number | null }>();
     const checkInputDurationMin: number | null = inputsRow?.duration_min ?? null;
 
-    const results = runPlanCheck(draft, html, checkFile, undefined, checkInputDurationMin);
+    // G2-9 track 보정: track 지도안이면 ops 계획서의 break 블록 시간을 읽어 비교 기준에서 뺀다.
+    let checkBreakDurationMin: number | null = null;
+    if (checkFile === 'lesson' && html !== undefined && /chalk:format"\s+content="track"/.test(html)) {
+      const opsRow = await c.env.HPS_DB.prepare(
+        `SELECT html FROM chalk_plan_files WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file='ops' ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
+      ).bind(cohort, course).first<{ html: string }>();
+      if (opsRow) {
+        const bm = /data-chalk-block="break"[^>]*data-duration-min="(\d+)"/.exec(opsRow.html)
+                ?? /data-duration-min="(\d+)"[^>]*data-chalk-block="break"/.exec(opsRow.html);
+        checkBreakDurationMin = bm ? parseInt(bm[1]!, 10) : null;
+      }
+    }
+
+    const results = runPlanCheck(draft, html, checkFile, undefined, checkInputDurationMin, checkBreakDurationMin);
 
     // Compute current sha to filter stored judgements
     let currentSha: string | null = null;

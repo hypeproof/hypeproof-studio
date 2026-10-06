@@ -443,6 +443,67 @@ t('#1531 checkDurationConsistency durationLabel이 message에 포함됨', () => 
   assert.ok(findings[0].message.includes('계획서 기준 90분'), `label 없음: ${findings[0].message}`);
 });
 
+// ── G2-9 track format break subtraction (#1487) ──────────────────────────────
+console.log('=== G2-9 track format break subtraction (#1487) ===');
+
+t('#1487 track 220단계합+240수업+20휴식 → warning 없음', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 240 };
+  const steps = [mkParsedStep('s1', 120), mkParsedStep('s2', 100)]; // 합 220
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    planDurationMin: 240,
+    planFormat: 'track',
+    breakDurationMin: 20,
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 0, `track 220 vs 240-20=220 → warning 없어야 함. got: ${JSON.stringify(findings)}`);
+});
+
+t('#1487 track breakDurationMin=15 ops → effective=225 기준', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 240 };
+  const steps = [mkParsedStep('s1', 120), mkParsedStep('s2', 100)]; // 합 220
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    planDurationMin: 240,
+    planFormat: 'track',
+    breakDurationMin: 15, // effective = 240-15 = 225
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  // 220 vs 225 → diff=5 ≤ 10 → warning 없음
+  assert.equal(findings.length, 0, `track 220 vs 240-15=225 → diff=5 → warning 없어야 함. got: ${JSON.stringify(findings)}`);
+});
+
+t('#1487 track breakDurationMin=15: label에 "240분 − 휴식 15분 = 225분" 포함', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 240 };
+  const steps = [mkParsedStep('s1', 100), mkParsedStep('s2', 100)]; // 합 200, 225-200=25 > 10
+  const findings = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    planDurationMin: 240,
+    planFormat: 'track',
+    breakDurationMin: 15,
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  assert.equal(findings.length, 1, `합 200 vs 225 → diff=25 → warning 1개여야 함. got: ${JSON.stringify(findings)}`);
+  assert.ok(findings[0].message.includes('− 휴식 15분 = 225분'), `label 포함 안됨: ${findings[0].message}`);
+});
+
+t('#1487 workshop format → track break 적용 안 함 (변화 없음)', () => {
+  const content = { ...BASE_CONTENT, duration_minutes: 90 };
+  const steps = [mkParsedStep('s1', 50), mkParsedStep('s2', 50)]; // 합 100, diff=10
+  const findingsWorkshop = checkLessonPedagogy(content, {
+    parsedSteps: steps,
+    planDurationMin: 90,
+    planFormat: 'workshop',
+    breakDurationMin: 20,
+  }).filter(f => f.check === 'duration_consistency' && !f.skipped);
+  // workshop → no break subtraction → 100 vs 90 → diff=10 ≤ 10 → 0
+  assert.equal(findingsWorkshop.length, 0, `workshop: 합 100 vs 90 → diff=10 ≤ 10 → warning 없어야 함. got: ${JSON.stringify(findingsWorkshop)}`);
+});
+
+t('#1487 opts 없는 스택 경로 skipped 유지 (⑭)', () => {
+  // opts 없으면 parsedSteps 없어서 skipped
+  const findings = checkLessonPedagogy(BASE_CONTENT);
+  const dc = findings.filter(f => f.check === 'duration_consistency');
+  assert.ok(dc.length === 1 && dc[0].skipped, `opts 없으면 skipped finding 유지 (⑭): ${JSON.stringify(dc)}`);
+});
+
 // ── 요약 ───────────────────────────────────────────────────────────────────────
 const total = pass + fail;
 console.log(`\n${total} tests: ${pass} passed, ${fail} failed`);

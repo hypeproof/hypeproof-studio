@@ -189,6 +189,11 @@ export function checkLessonPedagogy(
     planDurationMin?: number | null;
     /** chalk_course_input_options.duration_min. Fallback when planDurationMin is absent. */
     inputDurationMin?: number | null;
+    /** chalk:format from plan meta — "track" subtracts breakDurationMin from the G2-9 baseline. */
+    planFormat?: string | null;
+    /** Break block duration from the latest ops plan. Used only when planFormat="track".
+     *  Defaults to 20 when absent (track default break). */
+    breakDurationMin?: number | null;
   },
 ): PedagogyFinding[] {
   const findings: PedagogyFinding[] = [];
@@ -252,7 +257,15 @@ export function checkLessonPedagogy(
       (opts.planDurationMin != null) ? { value: opts.planDurationMin, label: `계획서 기준 ${opts.planDurationMin}분` } :
       (opts.inputDurationMin != null) ? { value: opts.inputDurationMin, label: `입력 기준 ${opts.inputDurationMin}분` } :
       { value: content.duration_minutes ?? 0, label: `초안 기준 ${content.duration_minutes ?? 0}분` };
-    for (const f of checkDurationConsistency(opts.parsedSteps, durationSource.value, durationSource.label)) {
+    // G2-9 track 보정: track 형식은 총 수업 시간에 휴식이 포함되어 있으나 지도안 흐름에는 없으므로 제외.
+    let effectiveDuration = durationSource.value;
+    let effectiveLabel = durationSource.label;
+    if (opts.planFormat === 'track') {
+      const breakMin = opts.breakDurationMin ?? 20;
+      effectiveDuration = durationSource.value - breakMin;
+      effectiveLabel = `${durationSource.label} − 휴식 ${breakMin}분 = ${effectiveDuration}분`;
+    }
+    for (const f of checkDurationConsistency(opts.parsedSteps, effectiveDuration, effectiveLabel)) {
       findings.push(f);
     }
   } else {

@@ -608,4 +608,133 @@ await check('OP-21 ops-r4.html backward compat: parsePlan → 3 blocks, 5 risks,
     `r4 must have no spec.block_field_missing, got: ${JSON.stringify(fieldMissing)}`);
 });
 
+// ── ops-r6.html inline fixture (comma step-refs, new 8-section format, break=15) ─
+// Inline copy for backward-compat + comma step-ref tests (OP-22~25).
+const OPS_R6_HTML = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="review-1791290281">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="235">
+</head>
+<body>
+  <section data-chalk-section="header"><h2 data-chalk-fixed>운영 계획 개요</h2></section>
+  <section data-chalk-section="operations"><h2 data-chalk-fixed>운영 방식</h2></section>
+  <section data-chalk-section="outcomes"><h2 data-chalk-fixed>최종 결과물</h2><ol></ol></section>
+  <section data-chalk-section="materials"><h2 data-chalk-fixed>사전 준비물</h2><ol></ol></section>
+  <section data-chalk-section="schedule">
+    <h2 data-chalk-fixed>진행 큐시트</h2>
+    <table>
+      <thead><tr data-chalk-fixed><th>시작–끝</th><th>블록</th><th>메인 강사 할 일</th><th>학습자 할 일</th><th>보조·부모 할 일</th><th>의도 한 줄</th><th>연결 단계</th></tr></thead>
+      <tbody>
+        <tr data-chalk-block="block-1" data-chalk-step-ref="s-1, s-2, s-3, s-4, s-5" data-start="10:00" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">10:00–11:50</td>
+          <td><strong>활동</strong> <span data-chalk-field="activity">목표 확인, 시연 1·2, 짝 활동 1·2</span></td>
+          <td data-chalk-role="facilitator">진행
+            <br><strong>종료 판정</strong> <span data-chalk-field="exit-criteria">완료</span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck">힌트</span>
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead"></span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>
+          </td>
+          <td data-chalk-role="learner">활동</td>
+          <td data-chalk-role="assistant">보조</td>
+          <td data-chalk-field="intent">의도</td>
+          <td data-chalk-field="step-ref-label">s-1, s-2, s-3, s-4, s-5</td>
+        </tr>
+        <tr data-chalk-block="break" data-chalk-block-kind="break" data-start="11:50" data-duration-min="15" data-chalk-fixed>
+          <td data-chalk-fixed data-chalk-field="time-range">11:50–12:05</td>
+          <td colspan="6" data-chalk-field="activity">휴식 15분</td>
+        </tr>
+        <tr data-chalk-block="block-2" data-chalk-step-ref="s-6, s-7, s-8, s-9, s-10" data-start="12:05" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">12:05–13:55</td>
+          <td><strong>활동</strong> <span data-chalk-field="activity">심화</span></td>
+          <td data-chalk-role="facilitator">심화 진행
+            <br><strong>종료 판정</strong> <span data-chalk-field="exit-criteria">발표</span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck">질문</span>
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead"></span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>
+          </td>
+          <td data-chalk-role="learner">활동</td>
+          <td data-chalk-role="assistant">보조</td>
+          <td data-chalk-field="intent">의도</td>
+          <td data-chalk-field="step-ref-label">s-6, s-7, s-8, s-9, s-10</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-chalk-section="risks">
+    <h2 data-chalk-fixed>위험·문제 대응</h2>
+    <ul>
+      <li data-chalk-risk="ai-latency"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="content-guard"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="pace-gap"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="parent-overreach"><span data-chalk-field="first-line">대처</span></li>
+      <li data-chalk-risk="overtime"><span data-chalk-field="first-line">대처</span></li>
+    </ul>
+  </section>
+  <section data-chalk-section="consent"><h2 data-chalk-fixed>동의</h2><ul></ul></section>
+  <section data-chalk-section="post-deliverables"><h2 data-chalk-fixed>사후 정리</h2></section>
+</body>
+</html>`;
+
+// ── OP-22: ops-r6.html 쉼표 구분 step-ref → spec.block_step_unlinked 0건 ──────
+await check('OP-22 parsePlan(ops-r6) comma step-refs → no spec.block_step_unlinked', () => {
+  const result = parsePlan(OPS_R6_HTML, 'ops');
+  const unlinked = result.violations.filter(v => v.item === 'spec.block_step_unlinked');
+  assert.equal(unlinked.length, 0,
+    `comma-separated step-refs must be parsed: ${JSON.stringify(unlinked)}`);
+  // Verify step refs were actually parsed
+  const b1 = result.blocks?.find(b => b.key === 'block-1');
+  assert.deepEqual(b1?.stepRefs, ['s-1', 's-2', 's-3', 's-4', 's-5'],
+    `block-1 stepRefs must be 5 items: ${JSON.stringify(b1?.stepRefs)}`);
+});
+
+// ── OP-23: ops-r6.html with no buffer (if-ahead/behind empty) → spec.buffer_missing ─
+await check('OP-23 parsePlan(ops-r6 no buffer, empty if-ahead/behind) → spec.buffer_missing', () => {
+  const result = parsePlan(OPS_R6_HTML, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 1,
+    `ops-r6 with empty if-ahead/behind must emit spec.buffer_missing, got: ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-24: if-ahead filled in one block → no spec.buffer_missing ──────────────
+await check('OP-24 parsePlan with if-ahead filled → no spec.buffer_missing', () => {
+  const htmlWithBuffer = OPS_R6_HTML.replace(
+    '<span data-chalk-field="if-ahead"></span>\n            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>\n          </td>\n          <td data-chalk-role="learner">활동</td>\n          <td data-chalk-role="assistant">보조</td>\n          <td data-chalk-field="intent">의도</td>\n          <td data-chalk-field="step-ref-label">s-1',
+    '<span data-chalk-field="if-ahead">빨리 끝나면 두 번째 주제로 해 보기</span>\n            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>\n          </td>\n          <td data-chalk-role="learner">활동</td>\n          <td data-chalk-role="assistant">보조</td>\n          <td data-chalk-field="intent">의도</td>\n          <td data-chalk-field="step-ref-label">s-1',
+  );
+  const result = parsePlan(htmlWithBuffer, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 0,
+    `if-ahead filled → spec.buffer_missing must NOT fire: ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-25: buffer block present → no spec.buffer_missing ──────────────────────
+await check('OP-25 parsePlan with buffer block → no spec.buffer_missing', () => {
+  const htmlWithBufferBlock = OPS_R6_HTML.replace(
+    '</tbody>',
+    `  <tr data-chalk-block="buffer" data-chalk-block-kind="buffer" data-start="" data-duration-min="5">
+        <td data-chalk-role="facilitator">여유</td>
+      </tr>
+    </tbody>`,
+  );
+  const result = parsePlan(htmlWithBufferBlock, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 0,
+    `buffer block present → spec.buffer_missing must NOT fire: ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-12 회귀: 기존 OP-12 buffer_missing 단언이 약해지지 않음 (⑭) ──────────────
+// OPS_TRACK_HTML에는 if-ahead/if-behind 칸이 없으므로 buffer_missing 이 그대로 발생해야 한다.
+await check('OP-12b OP-12 regression: OPS_TRACK_HTML no if-ahead/behind → spec.buffer_missing still fires', () => {
+  const result = parsePlan(OPS_TRACK_HTML, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 1,
+    `OPS_TRACK_HTML still must emit spec.buffer_missing (⑭): ${JSON.stringify(bufMissing)}`);
+});
+
 console.log(`\n${passed} tests passed`);
