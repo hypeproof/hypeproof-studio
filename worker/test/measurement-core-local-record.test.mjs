@@ -377,6 +377,22 @@ test("MC-T18 known secrets and excluded paths are removed before storage and the
   await throwsCode(() => record.saveInterpretation("task-a", cite, secretBatch, HOST), "evidence_mismatch");
 });
 
+test("MC-T18 a pasted Lab measurement connection token is excluded, bare or as a header; near-misses are not (#1377)", () => {
+  // Lab mints "hps_sync_" + base64url(32 random bytes): 43 characters, `-` and `_` included.
+  const token = "hps_sync_" + "Ab3-_x".repeat(7) + "Q";
+  assert.equal(token.length, "hps_sync_".length + 43);
+  for (const text of [`my token is ${token}`, `${token}`, `curl -H "Authorization: Bearer ${token}"`, `HPS=${token}.`]) {
+    const r = core.redactText(text);
+    assert.equal(r.text.includes(token), false, text);
+    assert.equal(r.text.includes("hps_sync_"), false, text);
+    assert.deepEqual(r.exclusions, [{ kind: "measurement_connection_token", count: 1 }], text);
+  }
+  // Negative controls: one character short or long, the bare prefix and an identifier stay as typed.
+  for (const text of [`hps_sync_${"a".repeat(42)}`, `hps_sync_${"a".repeat(44)}`, "hps_sync_", "the hps_sync_token field", `xhps_sync_${"a".repeat(43)}`]) {
+    assert.deepEqual(core.redactText(text), { text, exclusions: [] }, text);
+  }
+});
+
 test("MC-T18 a review never edits the interpretation; only the person reviews, and corrections need text", async () => {
   const { record, store } = await seeded();
   const iKey = "interpretations/task-a/interp-1@1";

@@ -100,7 +100,8 @@ function parseOpsBlocks(html: string, file: string, violations: Violation[], fam
     const durStr = /data-duration-min="([^"]*)"/.exec(rowAttrsStr)?.[1] ?? '';
     const durationMin = durStr ? parseInt(durStr, 10) : null;
     const stepRefAttr = /data-chalk-step-ref="([^"]*)"/.exec(rowAttrsStr)?.[1] ?? '';
-    const stepRefs = stepRefAttr.trim().split(/\s+/).filter(Boolean);
+    // Accept space- or comma-separated step IDs (coach may write "s-1, s-2" or "s-1 s-2").
+    const stepRefs = stepRefAttr.trim().split(/[\s,]+/).filter(Boolean);
 
     const getField = (fieldName: string): string | null => {
       const fre = new RegExp(`<[^>]*data-chalk-field="${fieldName}"[^>]*>([\\s\\S]*?)</(?:td|span|div|p)>`, 'i');
@@ -160,9 +161,14 @@ function parseOpsBlocks(html: string, file: string, violations: Violation[], fam
     }
   }
 
-  const hasBuffer = blocks.some(b => b.kind === 'buffer');
+  // Buffer is present if there is a dedicated buffer block OR any normal block has if-ahead/if-behind filled.
+  const hasBuffer = blocks.some(b => b.kind === 'buffer')
+    || blocks.some(b => b.kind === 'normal' && (
+        (b.fields.ifAhead != null && b.fields.ifAhead.trim() !== '')
+        || (b.fields.ifBehind != null && b.fields.ifBehind.trim() !== '')
+    ));
   if (!hasBuffer && blocks.length > 0) {
-    violations.push(violation('spec.buffer_missing', ['PLAN-06'], `완충 블록(data-chalk-block-kind="buffer")이 없다`, file, 'schedule', null));
+    violations.push(violation('spec.buffer_missing', ['PLAN-06'], `완충 블록(data-chalk-block-kind="buffer")이 없고 if-ahead·if-behind 칸도 없다`, file, 'schedule', null));
   }
 
   return blocks;

@@ -27,7 +27,7 @@ import {
 import { PreviewProvider } from "./previewProvider";
 import { runReportProblemCommand } from "./reportProblem";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
-import { looksLikeIssuerTokenUnverified } from "./chatPanelHelpers";
+import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
 import { localRuntimeConfig } from "./localRuntime";
 import {
   scheduleUpdateChecks,
@@ -172,6 +172,8 @@ export async function activate(context: vscode.ExtensionContext) {
   providerRef = provider;
   // CR-10 — show the delete command when an earlier session stored browser-result bytes.
   void provider.refreshCrBytesContext();
+  // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
+  void provider.refreshCrDirectorContext().catch(() => undefined);
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const startPage = new StartPage(context, provider, async (profile, commit) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit);
@@ -635,6 +637,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
+    vscode.commands.registerCommand("hypeproof-chat.weeklyReview", () => provider.weeklyReview()),
+    vscode.commands.registerCommand("hypeproof-chat.weeklyReviewDirector", () => provider.weeklyReviewDirector()),
     // CR-10 — delete the stored browser-result bytes. Gated on "bytes are stored", NOT on
     // the CR switch: what an earlier switch-on stored stays deletable after it goes off.
     vscode.commands.registerCommand("hypeproof-chat.clearBrowserResultBytes", () => provider.clearStoredBrowserResults()),
@@ -724,7 +728,18 @@ export async function activate(context: vscode.ExtensionContext) {
   // start page is shown once (handled in postConfig/refresh via instructorMode.handleAutoReadResult).
   void (async () => {
     const storedIssuer = await context.secrets.get(ISSUER_TOKEN_KEY);
-    if (!storedIssuer || !looksLikeIssuerTokenUnverified(storedIssuer)) {
+    const resume = context.globalState.get<{ id: string; at: number }>(PENDING_ACTIVITY_RESUME_KEY);
+    // Always clear the flag, regardless of which branch is taken below.
+    if (resume !== undefined) await context.globalState.update(PENDING_ACTIVITY_RESUME_KEY, undefined);
+    const branch = resolveActivateBranch(storedIssuer, resume, activityConnections(context)?.current?.serverId);
+    if (branch === "resume") {
+      // Student wins over issuer early-return (#1298 principle: active student slot wins).
+      await startPage.show();
+      await startPage.openChat();
+    } else if (branch === "skip") {
+      // Issuer stored and no pending resume — skip student start page (#1298).
+      return;
+    } else {
       startPage.show();
     }
   })();
@@ -794,6 +809,35 @@ const LEGACY_WORKSPACE_DIRNAME = "HypeProofGames";
  * learner's window would reload forever mid-lecture.
  */
 const WORKSPACE_SWITCH_ATTEMPT_KEY = "hypeproofChat.workspaceSwitchAttempt";
+const PENDING_ACTIVITY_RESUME_KEY = "hypeproofChat.pendingActivityResume";
+
+export function shouldResumeActivity(
+  resume: { id: string; at: number } | undefined,
+  serverId: string | undefined,
+): boolean {
+  if (!resume) return false;
+  if (Date.now() - resume.at >= 60_000) return false;
+  return !!resume.id && resume.id === serverId;
+}
+
+/**
+ * Pure function: given the stored secrets/state at activation time, decide
+ * which branch the activate() start-surface logic should take.
+ *
+ * Returns:
+ *   "resume"   — pending activity resume wins; open chat directly
+ *   "skip"     — issuer stored, no pending resume; skip student start page
+ *   "show"     — neither condition; show the start page normally
+ */
+export function resolveActivateBranch(
+  storedIssuer: string | undefined,
+  resume: { id: string; at: number } | undefined,
+  serverId: string | undefined,
+): "resume" | "skip" | "show" {
+  if (shouldResumeActivity(resume, serverId)) return "resume";
+  if (storedIssuer && looksLikeIssuerTokenUnverified(storedIssuer)) return "skip";
+  return "show";
+}
 
 async function clearWorkspaceSwitchAttempt(context?: vscode.ExtensionContext): Promise<void> {
   if (!context) return;
@@ -995,6 +1039,7 @@ async function openWorkspaceFolder(
   await commit(dir);
 
   // Single-root open (clean Explorer). Reloads the window.
+  await context?.globalState.update(PENDING_ACTIVITY_RESUME_KEY, { id: profile?.activity_id ?? '', at: Date.now() });
   await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(dir), {
     forceReuseWindow: true,
   });
@@ -1017,10 +1062,10 @@ async function applyTestBackdoors(
   // typically <userDataDir>/User/hps-test-state.json. Always wins over env
   // (file is more explicit + more reliable).
   try {
-    const candidates = [
+    const candidates = testStateCandidates(vscode.env.appName,
       path.join(context.globalStorageUri.fsPath, "..", "..", "..", "User", "hps-test-state.json"),
       path.join(os.homedir(), ".hps-test-state.json"),
-    ];
+    );
     for (const f of candidates) {
       if (fs.existsSync(f)) {
         // Regardless of whether parsing succeeds, this is the "test run" marker —

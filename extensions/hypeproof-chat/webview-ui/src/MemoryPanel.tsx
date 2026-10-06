@@ -95,7 +95,7 @@ export function MemoryPanel(props: {
           <h4>실험</h4>
           <ul data-testid="memory-experiments">
             {m.experiments.map((e) => (
-              <li key={e.id} data-testid="memory-experiment" data-id={e.id}>{e.week}주차 · {e.question}</li>
+              <li key={e.id} data-testid="memory-experiment" data-id={e.id} data-status={e.status}>{e.week}주차 · {e.question}{e.status === "draft" && " · 다음 실험 초안"}</li>
             ))}
           </ul>
 
@@ -113,7 +113,7 @@ export function MemoryPanel(props: {
           <ul data-testid="memory-decisions">
             {m.decisions.map((d) => (
               <li key={d.id} data-testid="memory-decision" data-id={d.id} data-shown-as={d.shown_as}>
-                {d.shown_as === "ai_suggestion" ? <em>AI 제안 (팀 결정 아님): </em> : <strong>팀 결정: </strong>}
+                {d.shown_as === "ai_suggestion" ? <em>AI 제안 (팀 결정 아님): </em> : d.shown_as === "director_decision" ? <strong>디렉터 결정: </strong> : <strong>팀 결정: </strong>}
                 {d.statement}
                 {d.no_evidence && <span data-testid="memory-no-evidence"> · 근거가 연결되지 않았어요</span>}
                 {d.evidence.some((e) => e.state === "missing") && <strong> · 근거 확인 필요</strong>}

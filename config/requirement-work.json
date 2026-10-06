@@ -569,7 +569,7 @@
         "MC-48"
       ],
       "inline_prefixes": [],
-      "sha256": "7582ea0ba262581ffba8637b3deab5c024fe232b3590bd43a0b6d430f3e53f72",
+      "sha256": "69d3dd2f9666cd4098fac7ff84e961cb2a611f69e6abb12fa47a0ea81a9132b2",
       "owner": "jayleekr",
       "intent": "docs/intents/measurement-core.md",
       "design": "docs/design/measurement-core.md",
@@ -796,10 +796,49 @@
       "negative_control": "학생 수정으로 공통 기준 삭제·다른 수업 목표 복원·열람만으로 완료 기록 거부.",
       "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
-        "extensions/hypeproof-chat/src",
-        "extensions/hypeproof-chat/webview-ui/src"
+        "extensions/hypeproof-chat/src/studentGoal.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/MissionHeader.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/styles.css"
       ],
-      "verification_inputs": []
+      "verification_inputs": [
+        "extensions/hypeproof-chat/src/studentGoal.ts",
+        "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx",
+        "extensions/hypeproof-chat/test/student-goal.smoke.mjs",
+        "e2e/sx/goal-browser.mjs",
+        "e2e/sx/goal-app.spec.ts"
+      ],
+      "completion": {
+        "verdict": "PASS",
+        "reviewed_by": "goal:review:acceptance:r3",
+        "report": "docs/evidence/goal.md",
+        "scope_sha256": "0c4a259d20401c6b4014b66c4fd9df17c8b7e0cc61b084e1fb7d774c1c829c3a",
+        "inputs": {
+          "docs/evidence/goal.md": "f74adaaf495a123939c895e6f0947b4d41b3be65570a22847d04322714e6bdbf",
+          "e2e/sx/goal-app.spec.ts": "768bc762c904c2f07153aaa24fcf5beab579ed9c8148b8df5af912f142c42777",
+          "e2e/sx/goal-browser.mjs": "9f0ec0723acb33cfd41a13340ef1de983d62911e8a6f75717b3cbe21f443db7d",
+          "extensions/hypeproof-chat/src/studentGoal.ts": "54ddc840d45707021b47f457004b9ee3c553bffe7d2a9ac4b76e9a392cb0a65c",
+          "extensions/hypeproof-chat/test/student-goal.smoke.mjs": "4474f7451c83599f2bcabd956a6f008990e2d1158d0f0d3b6714c91f24f55ec4",
+          "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx": "e54481e1d976dbc7c84d6606088afab512b1b8ac3f2d95ee05ed640bd5f6d2cc"
+        },
+        "rows": {
+          "docs/requirements/learning-agent-experience.md": {
+            "AE-01": "ab3eb4f5bd60c9905a024c653deb90b3ebcbaed35257401e3839eb9be57675e8"
+          },
+          "docs/testing/learning-agent-experience.md": {
+            "AE-T01": "acf98e9163e7941827b79d29e15a10781953c40e6e478bef374052afcb744fe0"
+          }
+        },
+        "commit": "1e6257f2b101bbd6444c141bd4e790ad545f8f36",
+        "test_ids": [
+          "AE-T01"
+        ],
+        "recorded_at": "2026-10-05T22:57:24Z",
+        "pr": 1555
+      }
     },
     {
       "id": "context",
@@ -1268,10 +1307,24 @@
       "negative_control": "공유 철회/만료/타 수업 접근 거부. AI 검토를 사람 피드백으로 표시하거나 누락을 독립 수행으로 채우지 않음.",
       "evidence_required": "제출 SHA·App/Service/모델/OS·실행 조건·명령·기대/관측·파일 hash·화면/이벤트. NOT RUN/BLOCKED와 합성/실기/사람 증거를 구분한다.",
       "implementation_paths": [
-        "worker/src/lib/native-observation.ts",
-        "chalk/src"
+        "worker/src/lib/feedback-loop.ts",
+        "worker/src/routes/lesson-retrospective.ts",
+        "worker/src/routes/classroom.ts",
+        "worker/migrations/0039-feedback-loop.sql",
+        "chalk/src/ui/authoring.html",
+        "chalk/src/ui/sharing.html",
+        "chalk/src/ui/manage.html",
+        "chalk/src/routes/forward.ts"
       ],
-      "verification_inputs": []
+      "verification_inputs": [
+        "worker/src/lib/feedback-loop.ts",
+        "worker/src/routes/lesson-retrospective.ts",
+        "worker/migrations/0039-feedback-loop.sql",
+        "worker/test/feedback-loop.test.mjs",
+        "worker/test/feedback-loop-d1.test.mjs",
+        "chalk/test/feedback-loop-forward.test.mjs",
+        "e2e/classroom/feedback-loop.mjs"
+      ]
     },
     {
       "id": "human-learning",
@@ -2302,7 +2355,7 @@
         "measurement-core-dogfood"
       ],
       "gate": {
-        "reason": "P1·P2. Jay 첫 사용 수용(MC-47·48)과 팀 운영·데이터 정책 준비 전에는 착수하지 않는다."
+        "reason": "P1·P2. 전 멤버 설치는 2026-10-01 결정으로 필수다(#1377): HypeProof 작업 저장소(studio·lab·harness) 최소 1개 등록, 그 이상은 자발; 데이터는 계측기 점검에만 쓰고 평가·보수·KPI에 쓰지 않음; #1249 P2·P3 출시 전에는 프로필 점수 표시·비교 없음; 원시 기록 열람은 운영자(Jay)·연구 담당(조민한·태봉호). 원격 팀 제출·연구 큐 구현은 Jay 첫 사용 수용(MC-47·48)과 남은 데이터 정책(MC-41 철회·삭제·보관·내보내기·지원 책임) 준비 전에는 착수하지 않는다."
       },
       "next_action": "Jay 첫 사용 수용이 확인된 뒤 인증·권한·운영 규칙과 연구 큐 설계를 착수한다.",
       "design_delta": "원격 제출은 서버가 멤버·프로젝트 권한·수집 목적을 검증하고, 로컬 접수와 원격 접수를 분리한다.",
@@ -2433,11 +2486,33 @@
       "implementation_paths": [
         "worker/src/lib",
         "extensions/hypeproof-chat/webview-ui/src",
-        "chalk/src/ui"
+        "chalk/src/ui",
+        "extensions/hypeproof-chat/src/taskFlowHelpers.ts",
+        "extensions/hypeproof-chat/src/learningStateHelpers.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/localReviewService.ts",
+        "extensions/hypeproof-chat/src/localReviewPanel.ts",
+        "extensions/hypeproof-chat/src/localReviewProtocol.ts"
       ],
       "verification_inputs": [
-        "docs/requirements/studio-learning-experience.md",
-        "docs/testing/studio-learning-experience.md"
+        "extensions/hypeproof-chat/test/sx-task-flow.smoke.mjs",
+        "extensions/hypeproof-chat/src/taskFlowHelpers.ts",
+        "extensions/hypeproof-chat/src/learningStateHelpers.ts",
+        "extensions/hypeproof-chat/webview-ui/src/CompletionGate.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/missionHeaderLogic.ts",
+        "extensions/hypeproof-chat/webview-ui/src/MissionHeader.tsx",
+        "extensions/hypeproof-chat/src/localReviewService.ts",
+        "extensions/hypeproof-chat/src/localReviewPanel.ts",
+        "extensions/hypeproof-chat/src/localReviewProtocol.ts",
+        "extensions/hypeproof-chat/webview-ui/src/LocalReview.tsx",
+        "e2e/sx/task-flow-app.spec.ts",
+        "e2e/sx/sx-service.mjs",
+        "e2e/sx/playwright.config.ts",
+        "extensions/hypeproof-chat/test/sx-home.smoke.mjs",
+        "e2e/sx/home-app.spec.ts",
+        "extensions/hypeproof-chat/test/sx-audit.mjs",
+        "extensions/hypeproof-chat/test/sx-audit.smoke.mjs",
+        "extensions/hypeproof-chat/test/sx-mission-header.smoke.mjs"
       ]
     },
     {
@@ -2840,24 +2915,31 @@
       ],
       "completion": {
         "verdict": "PASS",
-        "reviewed_by": "cr-recon:review:regression-conventions:r3",
+        "reviewed_by": "cr-record-sweep:review:r1",
         "report": "docs/evidence/cr-recon.md",
         "scope_sha256": "c50cd5fc0d1e063dff2f1d9f9127dc30917d0fba11395547c1e1ab4c29047ef2",
         "inputs": {
-          "docs/evidence/cr-recon.md": "1ff04653ada22f6ba92a67415e19adae7a12b0019ef7283c27233cda18fc332b",
-          "docs/plan/curriculum-runtime-recon.md": "43da31d03b3973edfeb38f3dd47530eca85363e46b6e7039c38dfe09dfcc4998",
-          "docs/requirements/curriculum-runtime.md": "e8938d83a629d97654f03f7330968dc18895613d6fb9ff7cad91b7a8b27a6b72",
+          "docs/evidence/cr-recon.md": "47e56774a6082dde566ebf258b531927d6f4ec0c9d36ccee4bea814e29fc64ed",
+          "docs/plan/curriculum-runtime-recon.md": "554838ae1b1e6071e2ac1b62bf172f407e8332bac438cb2bab5f74720f56fd76",
           "e2e/curriculum-runtime/cdp-probe-extension/extension.js": "d7a073461def6e68ddd73847e93a27c7580f9f3ea7ff3149b325d40ebacebd3f",
           "e2e/curriculum-runtime/cdp-probe-extension/package.json": "283d4ca9d210e5d5ed6eff580071d8a6d5577a7de4835ad5397cadbc2f1cd8fe",
           "e2e/curriculum-runtime/cdp-probe.mjs": "4e3633f8b5bb49087cb8a7e85e0bafcb0689489908aa732dc85eb4726658f346",
           "worker/test/cr-recon.test.mjs": "2352ce3b318a249fb2c5c24617d857e9f13240ee5a82471a2b69ad84b5cd0bda",
-          "worker/test/fixtures/cr-recon/frozen-inputs.json": "84a9c6cbf1eafee5ec7d162250468bc33e2596b020fb39a8f69bc3e693d68416"
+          "worker/test/fixtures/cr-recon/frozen-inputs.json": "416240c804e256404d76c07b82fa98b9b7380aae68613590bb0cb96177698e1d"
         },
-        "commit": "5e82f590c8200b45b26a97809cf8e289c9df0ac7",
+        "rows": {
+          "docs/requirements/curriculum-runtime.md": {
+            "CR-01": "3549f670ff4753e3b6687827e7f2b4dfd6e86a568bc835ae4d352576f0acd462"
+          },
+          "docs/testing/curriculum-runtime.md": {
+            "CR-T01": "bbccc4d035584ed25a5371752a93cd9564ce882fe79b92390b75a6b32ba8c868"
+          }
+        },
+        "commit": "bed32b895edc5eceb9fcb9c8cd089cc238c02ed0",
         "test_ids": [
           "CR-T01"
         ],
-        "recorded_at": "2026-09-29T09:02:32Z",
+        "recorded_at": "2026-10-05T09:19:31Z",
         "pr": 1420
       }
     },
@@ -2933,8 +3015,6 @@
         "e2e/fixtures/app.ts"
       ],
       "verification_inputs": [
-        "docs/requirements/curriculum-runtime.md",
-        "docs/testing/curriculum-runtime.md",
         "extensions/hypeproof-chat/test/cdp-session.smoke.mjs",
         "extensions/hypeproof-chat/test/experiment-browser.smoke.mjs",
         "extensions/hypeproof-chat/test/artifact-version.smoke.mjs",
@@ -2950,16 +3030,97 @@
         "worker/scripts/cohort-harness/test/fixtures/teen-cr.json",
         "worker/test/cr-switch.test.mjs",
         "e2e/curriculum-runtime/experiment-browser.real.mjs",
-        "e2e/curriculum-runtime/fixtures/kiosk-practice",
+        "e2e/curriculum-runtime/fixtures/kiosk-practice/index.html",
+        "e2e/curriculum-runtime/fixtures/kiosk-practice/style.css",
+        "e2e/curriculum-runtime/fixtures/kiosk-practice/app.js",
+        "e2e/curriculum-runtime/fixtures/kiosk-practice/escape.html",
+        "e2e/curriculum-runtime/fixtures/kiosk-practice/redir.html",
+        "e2e/curriculum-runtime/fixtures/kiosk-practice/typo.html",
         "worker/test/cr-browser-refs.test.mjs",
         "e2e/curriculum-runtime/app-layer.spec.ts",
         "e2e/curriculum-runtime/app-service.mjs",
-        "e2e/curriculum-runtime/playwright.config.ts",
-        "e2e/tests/09-preview.spec.ts",
         "extensions/hypeproof-chat/test/local-record-file.smoke.mjs",
-        "worker/test/measurement-core-local-record.test.mjs",
-        "e2e/fixtures/app.ts"
-      ]
+        "worker/test/measurement-core-local-record.test.mjs"
+      ],
+      "completion": {
+        "verdict": "PASS",
+        "reviewed_by": "cr-record-sweep:review:r1",
+        "report": "docs/evidence/cr-browser.md",
+        "scope_sha256": "18568da22cd2d6e18754648c0e8fe128e344ef1732ef200222c7a00c95e90509",
+        "inputs": {
+          "docs/evidence/cr-browser.md": "067c834d2d95baabcd343bd6169114efe0755eb402de7b7a039f73ff98f2ad2e",
+          "e2e/curriculum-runtime/app-layer.spec.ts": "806be8ffa184af0a340f67253e4193f6c7aeecbd9acbc1874d4c467d633e1605",
+          "e2e/curriculum-runtime/app-service.mjs": "8b86b2897f07aa16b2d557ab0e50b40139832919496ca97e22007a8a142e1126",
+          "e2e/curriculum-runtime/experiment-browser.real.mjs": "41b75766fe7eaa3cbb66fea6a00e012b8e4bf9c2426b2a1f8b53abcc2f51b763",
+          "e2e/curriculum-runtime/fixtures/kiosk-practice/app.js": "44acec8d0dd18465ccbed95a37a79688fd7002438e28d55c5ce4bace93051a5b",
+          "e2e/curriculum-runtime/fixtures/kiosk-practice/escape.html": "3f137cbc567469c87f35d08aa3bb1b27a8e1ca4150b6d2e63480945d53503fb3",
+          "e2e/curriculum-runtime/fixtures/kiosk-practice/index.html": "582fc71f49e333f0384c12a8d540ce5a4b6a0fc638743209ee3c25958a58440b",
+          "e2e/curriculum-runtime/fixtures/kiosk-practice/redir.html": "83af37c575da57e7fc3a4a2a93936ba0ffe0a7bde6ce78ab8efc5b63ee48525e",
+          "e2e/curriculum-runtime/fixtures/kiosk-practice/style.css": "f05e96a84196a8e5124ef5b183c3bbc5ca970a6bc1c1840785bae6b545b72af2",
+          "e2e/curriculum-runtime/fixtures/kiosk-practice/typo.html": "4676e2122fb4101a85fa0172b626ee037a8508a4a151ea92fd5175373d816433",
+          "extensions/hypeproof-chat/test/artifact-version.smoke.mjs": "a2bf2f35a5f4e14401a9acc62cdbd4561bb673c8585ca29ae331954cd5440fa5",
+          "extensions/hypeproof-chat/test/browser-tool-log.smoke.mjs": "e26caa3c5ff83eda5c6bbb711074b20c7a3e1aa70f84a204c49821db3994f952",
+          "extensions/hypeproof-chat/test/cdp-session.smoke.mjs": "94d8aefe26a894dc82e6a6f11db848cc8cda727afc5bd611038fc7d9f5ea28b5",
+          "extensions/hypeproof-chat/test/cr-host.smoke.mjs": "ad4559cb05cfa23b84a5396410565dcc100188010016ac0b0a71572a92600324",
+          "extensions/hypeproof-chat/test/cr-provider-neutral.smoke.mjs": "f4440963f02a00a31a0fe26367573942bad31ffdc555092f9b23b0579b27621e",
+          "extensions/hypeproof-chat/test/cr-switch.smoke.mjs": "8b3820f8ab51de405628feaa2c78da86a893e043ad26b647b3318502a0412e1c",
+          "extensions/hypeproof-chat/test/element-pick.smoke.mjs": "a0ce0343d1e9edf578eaf53efd543cae73668bf0ac56be4010a808c0f7b308ae",
+          "extensions/hypeproof-chat/test/element-preview.smoke.mjs": "4a2fdab53450aaa4ff46ae36858e560d5f0b186066ad28c5e04077bd42b1d594",
+          "extensions/hypeproof-chat/test/experiment-browser.smoke.mjs": "37a0f1ec7d023ea1597ecb3d598058a12a3282407f38a9520c1fc12b1c754ea3",
+          "extensions/hypeproof-chat/test/fixtures/fake-cdp-page.mjs": "4f3009182ec579575f167c947bed32651c845065ce6dcd85e767fcc3e8fd8208",
+          "extensions/hypeproof-chat/test/fixtures/vscode-stub.mjs": "6d832758792b2fa1ee05cf09b90d2f6a8254a77475c6a5a77d0562bdec00c911",
+          "extensions/hypeproof-chat/test/local-record-file.smoke.mjs": "7ba7d4a0577e2f769676baadeb860b306e66265c9f0afe3986e835ace24d27cb",
+          "worker/scripts/cohort-harness/test/fixtures/teen-cr.json": "3133e06e90e2ba78cc1b32741a5dd187a0c23e8f8fccf7582d4ed25b847d8b15",
+          "worker/scripts/cohort-harness/test/run.sh": "dc4d2bfe9519366a4038692b505cc18eaf712900d60aec6adace4c5126633805",
+          "worker/test/cr-browser-refs.test.mjs": "0789c88f5eb13cdde4774be4d3a2cfde9a1454cc28fe8fa7666c8369140247e9",
+          "worker/test/cr-switch.test.mjs": "e167076e520ef827cd69434116ad7e7b5ffaa2103e4f8f215d451d57027f76bc",
+          "worker/test/measurement-core-local-record.test.mjs": "a848606a232a703245e6db9fdc33438b6429e8a421d0b2846720eff70122bb66"
+        },
+        "rows": {
+          "docs/requirements/curriculum-runtime.md": {
+            "CR-02": "c4526dcdd1345a208e0649f21a240f38ad57bb73551a2f49328ff764a47a3a50",
+            "CR-03": "8b418a99aabf4178b980cb27fd9d7adcd0f9977f2ddbc7f8515bda31f5951656",
+            "CR-04": "60bd4a03f3dbb5f7727edd6435e2f5c87fb96f710e34ad289f68af3c837d1f22",
+            "CR-05": "078d51891df79ae6f4083811de81083460b573cdc37e35904d0ae9f773cbbb36",
+            "CR-06": "c0072a6b17cd198c84e922f1e9dff6d8f5696b63522d59d30a155bd0388a2a27",
+            "CR-07": "3a39d66409671ebdcf4a65072fd0312f9d1eb7701bca963bc58250dcf8339391",
+            "CR-08": "52178fbb1db23091428398533780927f8b329ce2029fb5f114a9c70a729fa29c",
+            "CR-09": "0f88239d29a93310b003efe3727134287279a62ce64f841d6af045bfa7692255",
+            "CR-10": "d776e6c7636808eb2dd1df7b35f180e4ba797c8905def06d0a4de51ffb2e9be6",
+            "CR-11": "f50f0068c3c5238ae368e1c3434505244fa5cb53ff53ad537d0b4a11c54b8eb0",
+            "CR-68": "795695ec0cd250b33a888a00d674a5f5480d989746c0b9f2f27341e9aa3c9dac"
+          },
+          "docs/testing/curriculum-runtime.md": {
+            "CR-T02": "ca9f2d01e732122aaea3c1152b41ba07c9e1306595ca962a5cca151781bc64c1",
+            "CR-T03": "29c61f0be649cd6e96a214b63e3a2ddd1889b2666a060d898d017c1bc76f64b9",
+            "CR-T04": "283e55611295355b5c496da10766c6f1c9d4db6efa122272c14917aec05dae36",
+            "CR-T05": "cf634ea84f15e0fc9589654b618df1918e01d27ad7d2f6cf885d546451d86e80",
+            "CR-T06": "b1f609cad86e7297f514d51bbbfb9db8df68f8b61695c89fca5c42e7b3af1c6d",
+            "CR-T07": "13c5363499d2ea77e39e8873b8ac910404575b1e21d803832a06ff247ad412f5",
+            "CR-T08": "a5059d4055891b6193c11f93c8269be1f6c0e5efe106902e331728c525a370c0",
+            "CR-T09": "bdb963a331e26c4d1c14b066f74cedd50d60b694990906eb183c46cc908e0557",
+            "CR-T10": "4e22793c1383edf37fc84b381349aa0ca34694368f5f6e0266df9da00e7669ee",
+            "CR-T11": "3729d9c0dc5fa2c70f5e0265da82baaa419dca61dde0611ab3574ebe82f0314d",
+            "CR-T63": "cbaf001336d0158a1267942e4c30bea2e1e27b5988a2c5879217c10e3eaa188f"
+          }
+        },
+        "commit": "bed32b895edc5eceb9fcb9c8cd089cc238c02ed0",
+        "test_ids": [
+          "CR-T02",
+          "CR-T03",
+          "CR-T04",
+          "CR-T05",
+          "CR-T06",
+          "CR-T07",
+          "CR-T08",
+          "CR-T09",
+          "CR-T10",
+          "CR-T11",
+          "CR-T63"
+        ],
+        "recorded_at": "2026-10-05T09:19:32Z",
+        "pr": 1433
+      }
     },
     {
       "id": "cr-verify",
@@ -3474,14 +3635,44 @@
       "negative_control": "An unlinked factual claim fails; changing one evidence item regenerates only the sections that read it; any model call on open fails; another cohort's team never appears in the overview. With the CR switch off, the review screen, \"Prepare Weekly Review\" and the director overview routes are unreachable (a worker route answers as an unknown route does); they are added to the CR-T02 switch-off inventory.",
       "evidence_required": "Submitted SHA · gates run with exit codes · evidence that each control was red on the pre-implementation tree · the targeted CR-T results with evidence class (synthetic / captured-replay / live-host) · NOT RUN list. If there is no real-device run, say so.",
       "implementation_paths": [
-        "worker/src/lib/classroom-report.ts",
-        "worker/src/lib/classroom-evaluator.ts",
-        "worker/src/lib/classroom-report-html.ts",
-        "worker/src/routes",
-        "extensions/hypeproof-chat/webview-ui/src"
+        "worker/src/lib/curriculum/review.ts",
+        "worker/src/lib/curriculum/store.ts",
+        "worker/src/lib/curriculum/venture.ts",
+        "worker/src/lib/curriculum/memory.ts",
+        "worker/src/lib/curriculum/retention.ts",
+        "worker/src/routes/curriculum.ts",
+        "worker/src/skills/curriculum/rules.ts",
+        "worker/src/lib/measurement-core/local-record.ts",
+        "worker/migrations/0038-curriculum-runtime-review.sql",
+        "worker/schema.sql",
+        "extensions/hypeproof-chat/src/reviewSession.ts",
+        "extensions/hypeproof-chat/src/reviewView.ts",
+        "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+        "extensions/hypeproof-chat/src/chatPanelProvider.ts",
+        "extensions/hypeproof-chat/src/extension.ts",
+        "extensions/hypeproof-chat/src/protocol.ts",
+        "extensions/hypeproof-chat/src/memoryView.ts",
+        "extensions/hypeproof-chat/src/skillSession.ts",
+        "extensions/hypeproof-chat/package.json",
+        "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/InstructorChatPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/MemoryPanel.tsx"
       ],
       "verification_inputs": [
-        "docs/requirements/curriculum-runtime.md"
+        "docs/testing/curriculum-runtime-2026-10-05-review.md",
+        "docs/testing/curriculum-runtime-2026-10-06-review-provider.md",
+        "worker/test/cr-review.test.mjs",
+        "worker/test/fixtures/cr-review/provider-recording.json",
+        "extensions/hypeproof-chat/test/cr-review.smoke.mjs",
+        "e2e/curriculum-runtime/review-app.spec.ts",
+        "worker/src/lib/curriculum/review.ts",
+        "worker/migrations/0038-curriculum-runtime-review.sql",
+        "extensions/hypeproof-chat/src/reviewSession.ts",
+        "extensions/hypeproof-chat/src/reviewView.ts",
+        "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts"
       ]
     },
     {
@@ -3556,18 +3747,36 @@
         "cr-gateway"
       ],
       "curriculum_week": "W1",
-      "next_action": "Script the fifteen PRD §14 steps (the §14 procedure in docs/testing/curriculum-runtime.md) on the kiosk-practice app under e2e/classroom, run it on the dev host, then run it once live on a real Mac with a real phone and record the evidence file. Measure CR-59 (preview refresh after save, CR-T55) and CR-60 (element capture to context, CR-T56) in the Studio app on this Mac, 30 samples each, with the screen unlocked (Jay's decision 9, 2026-10-01: moved here from cr-browser).",
-      "design_delta": "Uses only shipped CR behaviour behind the switch; no test-only shortcuts in product code. Each step reads the previous step's record. The existing preview and HTML regressions are re-run with the switch off, and CR-T02 walks the whole switch-off inventory the earlier items built.",
+      "next_action": "Script the fifteen PRD §14 steps (the §14 procedure in docs/testing/curriculum-runtime.md) on the kiosk-practice app in the Studio app (e2e/curriculum-runtime/loop-app.spec.ts), run it on the dev host, then run it once live on a real Mac with a real phone and record the evidence file. Measure CR-59 (preview refresh after save, CR-T55) and CR-60 (element capture to context, CR-T56) in the Studio app on this Mac, 30 samples each, with the screen unlocked (Jay's decision 9, 2026-10-01: moved here from cr-browser). Blocking CR-71 (2026-10-06): no panel registers a product version without starting a test of it, and none names the version a decision produced (CR-41's control; the Service route POST /v1/curriculum/decisions/:id/version exists). Until a panel does, step 13 runs through e2e/curriculum-runtime/register-version.mjs, a harness script, and is PARTIAL, so this item cannot complete.",
+      "design_delta": "Uses only shipped CR behaviour behind the switch; no test-only shortcuts in product code. Each step reads the previous step's record. The existing preview and HTML regressions are re-run with the switch off (e2e/tests/09-preview.spec.ts, re-run unchanged, so it is not an implementation path), and CR-T02 walks the whole switch-off inventory the earlier items built.",
       "positive_control": "All fifteen steps pass on the dev host; the live run completes with a real phone; the switch-off regressions stay green. With the switch off, CR-T02 walks the full switch-off inventory from every item and finds every entry unreachable. In the Studio app on the reference Mac, preview refresh after save has p50 under 2 s (CR-T55) and element capture to context p50 under 1 s (CR-T56), 30 samples each.",
       "negative_control": "A planted break between steps 8 and 10 stops the loop at step 10; a live-run step satisfied only by synthetic data is NOT RUN, not PASS. Any inventory entry reachable with the switch off fails. A planted 3 s delay in the refresh path, and a full-page screenshot planted in place of the element crop, are each reported as a miss.",
       "evidence_required": "Submitted SHA · app build and machine · phone model and browser · per-step result with evidence class · the live-host run recorded in docs/testing/curriculum-runtime-<date>-evidence.md · CR-T55 and CR-T56 timings from the Studio app on the reference Mac (machine, app build, sample size, p50) with their planted-delay controls · NOT RUN list.",
       "implementation_paths": [
-        "e2e/classroom",
-        "e2e/tests",
-        "docs/testing/curriculum-runtime.md"
+        "e2e/curriculum-runtime/loop-app.spec.ts",
+        "e2e/curriculum-runtime/timing-app.spec.ts",
+        "e2e/curriculum-runtime/switch-app.spec.ts",
+        "e2e/curriculum-runtime/register-version.mjs",
+        "e2e/curriculum-runtime/app-service.mjs",
+        "e2e/curriculum-runtime/loop-coach.mjs",
+        "e2e/curriculum-runtime/service-gate.mjs",
+        "e2e/curriculum-runtime/service-control.mjs",
+        "scripts/cr-dev-kit.sh",
+        "scripts/studio-dev.py",
+        "scripts/test-studio-dev.py",
+        "docs/dev/studio-dev.md",
+        "docs/testing/curriculum-runtime.md",
+        "docs/testing/curriculum-runtime-dev.md"
       ],
       "verification_inputs": [
-        "docs/requirements/curriculum-runtime.md"
+        "e2e/curriculum-runtime/loop-app.spec.ts",
+        "e2e/curriculum-runtime/timing-app.spec.ts",
+        "e2e/curriculum-runtime/switch-app.spec.ts",
+        "e2e/curriculum-runtime/register-version.mjs",
+        "e2e/curriculum-runtime/loop-coach.mjs",
+        "e2e/curriculum-runtime/service-gate.mjs",
+        "e2e/curriculum-runtime/service-control.mjs",
+        "scripts/cr-dev-kit.sh"
       ]
     }
   ]

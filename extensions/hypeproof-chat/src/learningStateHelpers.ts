@@ -24,6 +24,7 @@ import {
   type SourceState,
 } from "../../../worker/src/lib/measurement-core/learning-events.ts";
 import type { ObservationEvent } from "../../../worker/src/lib/measurement-core/legacy-observation.ts";
+import type { CurriculumPhase } from "../../../worker/src/lib/measurement-core/local-record.ts";
 
 /** One row of the session design's `learning.completion[]`. `label` goes to the screen verbatim. */
 export interface CompletionItem {
@@ -69,7 +70,36 @@ export interface LearningStatePayload {
     previous?: PreviousVerification;
   };
   evidence: EvidenceRow[];
+  /**
+   * SX-55 — one line about the task flow that the student must see next to the completion
+   * button: a submit the record could not store, or a progress record that could not be read.
+   * Absent when there is nothing to say. Sent once with the state it explains.
+   */
+  notice?: string;
+  /**
+   * SX-02 — region A's "지난번 이어서": the step the task record holds, sent only while that
+   * record still stands where an earlier session of the app left it, the task is being worked
+   * on, and the student has not acted on it in this session (`FlowSession.resumeFor` in
+   * taskFlowHelpers.ts decides). Absent otherwise, and on every seat without the task flow.
+   */
+  resume?: { step: string };
 }
+
+/**
+ * SX-55 — why completion is closed before any work. It says what starts the task, because a
+ * disabled button that only says "not yet" leaves the student with nothing to do.
+ */
+export const NOT_STARTED_SENTENCE = "아직 시작 전이에요. 코치와 이야기하거나 기록을 남기면 시작돼요";
+
+/**
+ * SX-55 — the one rule for "may this task be submitted now": only while it is being worked on.
+ * Before the first piece of work there is nothing to submit; after submission there is nothing
+ * left to submit. The screen (`learningState` here) and the transition (`decideFlow` in
+ * taskFlowHelpers.ts) both read this function, so the button and the record cannot disagree.
+ * It lives here, not in taskFlowHelpers.ts, because the webview bundles this file and must not
+ * pull the record code in with it.
+ */
+export const submittableIn = (phase: CurriculumPhase): boolean => phase === "working";
 
 /** The kinds the drawer shows. `artifact` comes along because the before/after comparison needs it. */
 const DRAWER_KINDS = new Set<string>([...Object.keys(LEARNING_EVENT_SPEC), "artifact"]);
@@ -151,6 +181,12 @@ function rowOf(event: ObservationEvent): EvidenceRow {
  * An empty `completion` means the session design declared no completion condition for this task,
  * and that fact goes out alongside as `declared: false` (SX-14 exception clause, "that declaration
  * is visible on screen").
+ *
+ * `phase` is the stored task-flow phase (SX-55). A seat that runs no task flow passes none and
+ * reads as `working`: the gate alone decides, exactly as before the flow existed. The completion
+ * button opens only when the gate holds AND the phase is submittable (`submittableIn`). `missing`
+ * stays the gate's own list in every phase, because region A checks its completion items off
+ * from it whatever the phase is.
  */
 export function learningState(input: {
   task: string;
@@ -158,19 +194,26 @@ export function learningState(input: {
   completion?: readonly CompletionItem[];
   phase?: LearningStatePayload["phase"];
   currentStep?: string | null;
+  notice?: string | null;
+  resume?: { step: string } | null;
 }): LearningStatePayload {
   const completion = input.completion ?? [];
   const mine = input.events.filter((e) => e.task === input.task);
   const verdict = gates({ events: mine, task: input.task, completion });
+  const phase = input.phase ?? "working";
+  const gateReasons = verdict.complete.missing.map((m) => gateSentence(m, completion));
   return {
     task: input.task,
-    phase: input.phase ?? "working",
+    phase,
     currentStep: input.currentStep ?? null,
     complete: {
-      ok: verdict.complete.ok,
-      reasons: verdict.complete.missing.map((m) => gateSentence(m, completion)),
+      ok: verdict.complete.ok && submittableIn(phase),
+      // Submitted (or reflected): nothing is missing any more, there is just nothing to press.
+      reasons: phase === "assigned" ? [NOT_STARTED_SENTENCE, ...gateReasons] : submittableIn(phase) ? gateReasons : [],
       missing: verdict.complete.missing,
     },
+    ...(input.notice ? { notice: input.notice } : {}),
+    ...(input.resume ? { resume: { step: input.resume.step } } : {}),
     declared: completion.length > 0,
     verification: {
       state: verdict.verification.state,
