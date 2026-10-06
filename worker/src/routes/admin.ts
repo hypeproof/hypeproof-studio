@@ -26,6 +26,7 @@
 
 import { Hono } from "hono";
 import { authoring } from "./authoring";
+import { lessonRetrospectives } from "./lesson-retrospective";
 import { chalkCourses } from "./chalk-courses";
 import { chalkRecommend } from "./chalk-recommend";
 import { accessAdmin } from './access';
@@ -147,6 +148,8 @@ admin.use("*", async (c, next) => {
 });
 
 admin.route("/", authoring);
+// #1013 — lesson retrospective → next draft; answers 404 unless HPS_FEEDBACK_LOOP=enabled.
+admin.route("/", lessonRetrospectives);
 admin.route("/", chalkCourses);
 admin.route("/", chalkRecommend);
 admin.route('/', accessAdmin);

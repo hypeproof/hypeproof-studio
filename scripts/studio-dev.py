@@ -314,7 +314,7 @@ def _clear_stale_ipc_socket(user_data: Path) -> None:
               file=sys.stderr, flush=True)
 
 
-def launch(app, state, local_runtime=None, cdp_port=None):
+def launch(app, state, local_runtime=None, cdp_port=None, inmemory_secrets=False):
     executable = (app / 'Contents/MacOS' / plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleExecutable']) if is_mac_app(app) else app / 'HypeProof Studio.exe'
     env = dict(os.environ)
     # Tests from another Studio window must not override this copy's local identity.
@@ -343,6 +343,11 @@ def launch(app, state, local_runtime=None, cdp_port=None):
     if cdp_port is not None:
         # Chromium binds --remote-debugging-port to 127.0.0.1 by default; no address flag needed.
         cmd += [f'--remote-debugging-port={cdp_port}']
+    if inmemory_secrets:
+        # The copy is ad-hoc signed, so the OS keychain would ask for the login password before it
+        # hands over the shared "Safe Storage" item. Secrets then live only for this process; the
+        # local participant code is read again from the state directory at every launch.
+        cmd += ['--use-inmemory-secretstorage']
     options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}
     with (state / 'app.log').open('a', encoding='utf-8') as log:
         process = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, **options)
@@ -422,6 +427,7 @@ def main():
                         help='Development funding: local Codex subscription (Windows default), Claude Code subscription (macOS default), or Service API.')
     parser.add_argument('--cli-executable', type=Path, help='Explicit installed native Claude Code or Codex CLI.')
     parser.add_argument('--setup-local', action='store_true', help='Prepare a developer activity/code through an already running local development Service.')
+    parser.add_argument('--inmemory-secrets', action='store_true', help='Launch with --use-inmemory-secretstorage: no OS keychain access (scripts/cr-dev-kit.sh).')
     args = parser.parse_args()
     if not (platform.system() == 'Windows' or (platform.system() == 'Darwin' and platform.machine() == 'arm64')):
         raise RuntimeError('This development launcher supports macOS arm64 and Windows only.')
@@ -467,7 +473,7 @@ def main():
                 setup_local_participant(REPO, state)
             app = prepare(REPO, args.base_app.resolve(), state, args.service)
             if args.action == 'run':
-                launch(app, state, local_runtime, cdp_port=args.cdp_port)
+                launch(app, state, local_runtime, cdp_port=args.cdp_port, inmemory_secrets=args.inmemory_secrets)
 
 
 if __name__ == '__main__':

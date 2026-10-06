@@ -20,8 +20,7 @@ import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
 import {acceptSubmit, learningEventRequest, learningState, type CompletionItem} from './learningStateHelpers';
-import {flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal} from './taskFlowHelpers';
-import type {TaskCurriculum} from '../../../worker/src/lib/measurement-core/local-record.ts';
+import {FlowSession, flowErrorCode, flowLessonOf, flowNotice, learningTaskIdOf, runTaskFlowOn, runsTaskFlow, screenFlow, taskRecordIdOf, type FlowLesson, type FlowOutcome, type FlowSignal, type ShownFlow} from './taskFlowHelpers';
 import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
@@ -29,6 +28,7 @@ import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } fr
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, type ProfileFailure } from "./proxyClientHelpers";
 import { runSdkCoach, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
+import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
@@ -43,6 +43,7 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
+import { ReviewSession, directorAvailable } from "./reviewSession";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
 import {
@@ -56,7 +57,7 @@ import {
   toProxyToolResult,
   isLoopbackUrl,
 } from "./browserControlHelpers";
-import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY } from "./curriculumRuntime";
+import { isCurriculumRuntimeEnabled, isCrVerifyTool, CR_CONTEXT_KEY, CR_DIRECTOR_CONTEXT_KEY, CR_DIRECTOR_REPROBE_MS } from "./curriculumRuntime";
 import { VerifySession, recordChecked, refusalText, verifyContext, verifyToolResult, type VerifyRecorderPort } from "./verifySession";
 import { artifactVersionFor } from "./artifactVersion";
 import type { ElementContext } from "./elementPick";
@@ -374,11 +375,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private async postLearningState() {
     const recorder = await this.currentLearningRecorder();
-    if (!recorder) return;
+    if (!recorder) {
+      this.learningStateOwed = true;
+      return;
+    }
     const profile = await this.ensureProfile();
     const task = this.learningTaskId(profile?.lesson?.sha256, activityConnections(this.context)?.current?.id);
     const target = this.taskFlowTarget(recorder, profile);
     const shown = target ? screenFlow(await this.runTaskFlow({ kind: 'seen' }, recorder, profile), this.taskFlowLast, target.recordId) : null;
+    // SX-02 — "지난번 이어서" for the record shown, decided by this session (`FlowSession`).
+    const resume = this.flowSession.resumeFor(target?.recordId ?? null, shown);
     // A notice is said once, with the state it explains.
     const notice = this.taskFlowNotice;
     this.taskFlowNotice = null;
@@ -388,14 +394,32 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         task,
         events: recorder.batch.events,
         completion: this.learningCompletion(profile),
-        ...(shown ? { phase: shown.phase, currentStep: shown.current_step } : {}),
+        ...(shown ? { phase: shown.curriculum.phase, currentStep: shown.curriculum.current_step, resume } : {}),
         notice,
       }),
     });
+    this.learningStateOwed = false;
   }
 
-  /** SX-55 — the last curriculum this host read, so a busy record does not reopen a submitted task on screen. */
-  private taskFlowLast: { recordId: string; curriculum: TaskCurriculum } | null = null;
+  /**
+   * SX-01/SX-02 — a learning state could not be built (no `/2` recorder: the Service's observation
+   * context did not answer). On a task-flow seat region A's Primary stays busy until a state has
+   * shown the task's record (webview `recordShownBy`), so the next coach turn that answers sends one
+   * (the turn end below) rather than leaving that to the webview being made again (`ready`).
+   */
+  private learningStateOwed = false;
+
+  /** SX-55 — the last record this host read, so a busy record does not reopen a submitted task on screen. */
+  private taskFlowLast: ({ recordId: string } & ShownFlow) | null = null;
+
+  /**
+   * SX-02 — this session of the App, for "지난번 이어서" (`FlowSession`, in memory only). It began
+   * when this host was made, on the extension's activation: a task record last changed before
+   * that was left by an earlier session. Taken once, never per state: a fresh `Date.now()` at each
+   * state would make the record of a moment ago read as "last time". It also holds the records
+   * the student has acted on since, which end the entry whether or not the act wrote anything.
+   */
+  private readonly flowSession = new FlowSession(Date.now());
 
   /**
    * SX-55 — the one task-flow line the student has to see, next to the completion button.
@@ -435,10 +459,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async runTaskFlow(signal: FlowSignal, recorder: NativeObservationRecorder, profile: ResolvedProfile | null): Promise<FlowOutcome | null> {
     const target = this.taskFlowTarget(recorder, profile);
     if (!target) return null;
+    // SX-02 — the student's own signal ends "지난번 이어서" for this record, written or not, and
+    // also when the record cannot be read this time.
+    this.flowSession.noteSignal(target.recordId, signal);
     try {
       const { store, record } = this.crRecordHandle();
       const outcome = await runTaskFlowOn(store, record, { ...target, signal, events: recorder.batch.events, at: Date.now() });
-      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum };
+      this.taskFlowLast = { recordId: target.recordId, curriculum: outcome.curriculum, changed_at: outcome.changed_at };
       this.taskFlowNotice = flowNotice(this.taskFlowNotice, signal, { outcome });
       return outcome;
     } catch (error) {
@@ -451,13 +478,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * SX-55 — the step the learner started (region A's Primary) becomes the task's current step,
    * while the task is being worked on and only past steps whose gate the student met (back is
    * always allowed). A refused move stores no step and says nothing (`flowNotice`); the screen
-   * is redrawn only when the record changed or a notice is waiting.
+   * is redrawn only when the record changed, a notice is waiting, or the "지난번 이어서" it shows
+   * has ended (a start onto the step the record holds writes nothing, yet the student continued).
    */
   private async recordStepStart(stepId: string) {
     const recorder = await this.currentLearningRecorder();
     if (!recorder) return;
     const flow = await this.runTaskFlow({ kind: 'start_step', stepId }, recorder, await this.ensureProfile());
-    if (flow?.changed || this.taskFlowNotice) await this.postLearningState();
+    if (flow?.changed || this.taskFlowNotice || this.flowSession.stale) await this.postLearningState();
   }
 
   private view?: vscode.WebviewView;
@@ -526,6 +554,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private cachedProfile: ResolvedProfile | null = null;
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
+  /**
+   * AE-01 (#554) — goal saves run one after another: the answers come back in the order the saves were sent, and each
+   * save reads, checks and writes as one step. What refuses a second save made from the same revision is the revision
+   * check in `acceptGoalSave`, not this queue.
+   */
+  private goalWrites: Promise<void> = Promise.resolve();
   private profileFetchPromise: Promise<ResolvedProfile | null> | null = null;
   /**
    * #381 — why the last profile fetch failed (null when it succeeded or was
@@ -996,6 +1030,135 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.postSkillsState(r.ok ? { done: "AI의 답이 규칙을 지켰어요." } : { error: r.message });
   }
 
+  // ── Weekly Review (cr-review, #1398) ────────────────────────────────────────
+  /**
+   * The student's "주간 리뷰" over the same Project the publish panel remembers, and, with the
+   * issuer token, the director's overview, pack and decision. The model call goes through the
+   * existing coach route with the Experiment skill's tag and capability (CR-45), never a model
+   * id, and only for a stale model section (CR-49); opening never calls a model (CR-50).
+   */
+  private readonly reviewSession = new ReviewSession({
+    switchOn: () => this.isCurriculumRuntimeEnabled(),
+    token: () => this.crProjectMemory.refresh(),
+    directorToken: async () => (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null,
+    base: () => curriculumBase(this.proxyUrl()),
+    projectId: () => this.crProjectMemory.projectId(),
+    complete: (prompt, headers) => this.completeSkill(prompt, headers),
+  });
+
+  /** CR_DIRECTOR_CONTEXT_KEY as last answered, per issuer token. */
+  private crDirector: { token: string | null; on: boolean; at: number } = { token: null, on: false, at: 0 };
+
+  /**
+   * CR-02 for the director (cr-review): mirror "the stored issuer token directs a cohort whose
+   * profile has the switch on" to CR_DIRECTOR_CONTEXT_KEY, from the Service's answer (a director
+   * has no served student profile). Asked again when the token changes, after five minutes, or
+   * when `force`d, and, while the key is on, every five minutes by the constructor's timer, so the
+   * palette entry goes within five minutes of the Service's switch going off; false without an
+   * issuer token or with any refusal.
+   */
+  async refreshCrDirectorContext(force = false): Promise<boolean> {
+    const token = (await resolveInstructorTokenFromSecrets(this.context.secrets)) ?? null;
+    if (!force && token === this.crDirector.token && Date.now() - this.crDirector.at < 5 * 60_000) return this.crDirector.on;
+    const on = token ? await directorAvailable({ base: curriculumBase(this.proxyUrl()), token }) : false;
+    this.crDirector = { token, on, at: Date.now() };
+    void vscode.commands.executeCommand("setContext", CR_DIRECTOR_CONTEXT_KEY, on);
+    return on;
+  }
+
+  /** Post the review panel state, the student's or the director's (null hides it with the switch off). */
+  private async postReviewState(mode: "student" | "director", extra: { error?: string; done?: string } = {}, week?: number): Promise<void> {
+    if (mode === "student") {
+      if (!this.isCurriculumRuntimeEnabled()) {
+        await this.post({ type: "reviewState", view: null, ...extra });
+        return;
+      }
+      await this.post({ type: "reviewState", view: await this.reviewSession.studentView(week), ...extra });
+      return;
+    }
+    if (!(await this.refreshCrDirectorContext())) {
+      await this.post({ type: "reviewState", view: null, ...extra });
+      return;
+    }
+    await this.post({ type: "reviewState", view: await this.reviewSession.directorView(), ...extra });
+  }
+
+  /** CR-49 — "주간 리뷰" (the student's): re-checks the served switch, then opens the panel. */
+  async weeklyReview(): Promise<void> {
+    if (!this.isCurriculumRuntimeEnabled()) {
+      this.postPageNotice("이 수업에서는 주간 리뷰를 쓸 수 없어요.");
+      return;
+    }
+    await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    await this.postReviewState("student");
+  }
+
+  /** CR-50, CR-53 — "주간 리뷰 (디렉터)": re-checks the switch through the Service for the issuer token, then opens the overview. */
+  async weeklyReviewDirector(): Promise<void> {
+    if (!(await this.refreshCrDirectorContext(true))) {
+      this.postPageNotice("이 수업에서는 주간 리뷰를 쓸 수 없어요.");
+      return;
+    }
+    this.reviewSession.select(null);
+    await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+    await this.postReviewState("director");
+  }
+
+  /** The student's review actions, behind the served switch (a message can be posted without the panel). */
+  private async handleReviewMessage(msg: { type: "reviewOpen"; week?: number } | { type: "reviewPrepare"; week?: number }): Promise<void> {
+    if (!this.isCurriculumRuntimeEnabled()) {
+      await this.post({ type: "reviewState", view: null, error: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+      return;
+    }
+    const week = Number.isInteger(msg.week) ? msg.week : undefined;
+    if (msg.type === "reviewOpen") return this.postReviewState("student", {}, week);
+    void this.post({ type: "reviewState", view: { ...(await this.reviewSession.studentView(week)), running: true } });
+    const r = await this.reviewSession.prepare(week);
+    if (!r.ok) return this.postReviewState("student", { error: r.message }, week);
+    const refused = this.reviewSession.lastRefusal() !== null;
+    const done = r.unchanged
+      ? "바뀐 기록이 없어서 다시 만들지 않았어요. 지금 리뷰가 최신이에요."
+      : refused
+        ? r.regenerated.length
+          ? "바뀐 부분은 다시 준비했어요. 다음 실험 제안은 만들지 못했어요."
+          : "다음 실험 제안을 만들지 못했어요. 다시 준비해 주세요."
+        : "주간 리뷰를 준비했어요.";
+    return this.postReviewState("student", { done }, week);
+  }
+
+  /** The director's review actions, behind the switch as the Service answers the issuer token. */
+  private async handleReviewDirectorMessage(
+    msg: { type: "reviewDirectorOpen"; projectId?: string | null; week?: number } | { type: "reviewDecision"; projectId: string; week: number; revision: number; form: import("./reviewView").DirectorDecisionForm },
+  ): Promise<void> {
+    if (!(await this.refreshCrDirectorContext())) {
+      await this.post({ type: "reviewState", view: null, error: "이 수업에서는 주간 리뷰를 쓸 수 없어요." });
+      return;
+    }
+    if (msg.type === "reviewDirectorOpen") {
+      this.reviewSession.select(typeof msg.projectId === "string" && msg.projectId ? msg.projectId : null, Number.isInteger(msg.week) ? msg.week : undefined);
+      return this.postReviewState("director");
+    }
+    const f = msg.form ?? ({} as import("./reviewView").DirectorDecisionForm);
+    const n = f.next;
+    const r = await this.reviewSession.decide(String(msg.projectId ?? ""), { week: Number(msg.week), revision: Number(msg.revision) }, {
+      statement: String(f.statement ?? ""),
+      evidence_refs: Array.isArray(f.evidence_refs) ? f.evidence_refs.map(String) : [],
+      assumption_refs: Array.isArray(f.assumption_refs) ? f.assumption_refs.map(String) : [],
+      affected_deck_slides: Array.isArray(f.affected_deck_slides) ? f.affected_deck_slides.map(Number) : [],
+      next: n
+        ? {
+            ...(typeof n.hypothesis_id === "string" && n.hypothesis_id ? { hypothesis_id: n.hypothesis_id } : { hypothesis: String(n.hypothesis ?? "") }),
+            question: String(n.question ?? ""),
+            method: String(n.method ?? ""),
+            success_criteria: Array.isArray(n.success_criteria) ? n.success_criteria.map(String) : [],
+          }
+        : null,
+    });
+    // A second press while the first decision is being written sent nothing; the first one's answer redraws the panel.
+    if (!r.ok && r.busy) return;
+    return this.postReviewState("director", r.ok ? { done: r.reused ? "이미 기록된 결정이에요. 다시 저장하지 않았어요." : "결정과 다음 실험을 프로젝트 기억에 기록했어요." } : { error: r.message });
+  }
+
   /** One memory action from the panel, behind the served switch (a message can be posted without the panel). */
   private async handleMemoryMessage(
     msg: { type: "memoryOpen" } | { type: "memoryDiff"; from: string; to: string } | { type: "memoryDecision"; form: import("./memoryView").DecisionForm },
@@ -1059,8 +1222,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.crProjectMemory.refresh().catch(() => undefined);
     const sub = context.secrets.onDidChange?.((e) => {
       if (e.key === TOKEN_KEY) void this.crProjectMemory.refresh().catch(() => undefined);
+      // cr-review — the director's command follows the stored issuer token (set, replaced or forgotten).
+      if (e.key === ISSUER_TOKEN_KEY) void this.refreshCrDirectorContext(true).catch(() => undefined);
     });
     if (sub) context.subscriptions.push(sub);
+    // cr-review (CR-02) — the Service's switch can go off while the App stays open: while the
+    // director's key is on, it is asked again every five minutes, so the palette entry outlives the
+    // switch by at most that long. While the key is off the timer sends nothing, so an instructor
+    // whose cohorts never use the runtime makes no standing request; the key turns on at activation,
+    // when the issuer token changes, or when the panel's settings are sent (at most once per five
+    // minutes, `refreshCrDirectorContext`). The command itself asks again on every use.
+    const directorProbe = setInterval(() => {
+      if (this.crDirector.on) void this.refreshCrDirectorContext(true).catch(() => undefined);
+    }, CR_DIRECTOR_REPROBE_MS);
+    context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
   }
 
   /**
@@ -3373,6 +3548,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // cr-skills — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
         await this.handleSkillsMessage(msg);
         break;
+      case "reviewOpen":
+      case "reviewPrepare":
+        // cr-review — CR-only messages (CR-T02 inventory); the handler re-checks the switch first.
+        await this.handleReviewMessage(msg);
+        break;
+      case "reviewDirectorOpen":
+      case "reviewDecision":
+        // cr-review — the director's messages (CR-T02 inventory); the handler re-checks the switch through the Service first.
+        await this.handleReviewDirectorMessage(msg);
+        break;
       case "clearHistory":
         void this.clearHistory();
         return;
@@ -3440,6 +3625,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.context.workspaceState.update("hps.lessonWork", { ...all, [lesson.sha256]: { ...(all[lesson.sha256] ?? {}), [saved.stepId]: saved.work } });
         this.spool?.recordWorkflow({ event: "lesson_work_saved", payload: { lesson_version: lesson.version, step_id: saved.stepId, kind: saved.work.kind } });
         await this.post({ type: "lessonWorkState", sha256: lesson.sha256, work: this.lessonWorkFor(lesson.sha256) });
+        return;
+      }
+      // AE-01 (#554) — the learner's own goal and completion criteria for this lesson revision. Kept on this device beside
+      // the lesson's criteria, which this path never reads from the message or stores; it moves no task and records no event.
+      case "goalSave": {
+        const save = this.goalWrites.then(() => this.saveGoal(msg));
+        this.goalWrites = save.catch(() => undefined);
+        await save;
         return;
       }
       // #751 G2 — rehearsal only: send what the panel drew, with this App's identity, under the rehearsal code.
@@ -4378,7 +4571,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // own path: the turn has ended either way, and the flow reports its own failure.
       if (observation?.batch.format === 'hps-observation/2' && finalSpoolStatus === 'ok' && assistantText.length > 0) {
         void this.runTaskFlow({ kind: 'work' }, observation, profile)
-          .then((flow) => (flow?.changed || this.taskFlowNotice ? this.postLearningState() : undefined))
+          .then((flow) => (flow?.changed || this.taskFlowNotice || this.flowSession.stale || this.learningStateOwed ? this.postLearningState() : undefined))
           .catch(() => undefined);
       }
       if (assistantText.length > 0) {
@@ -4887,6 +5080,35 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * AE-01 (#554) — one goal save, judged against the served lesson and the stored goal (`acceptGoalSave`), then
+   * answered to every chat view with the id of the save it answers, so only the view that sent it shows the note. A
+   * stored save carries the goal as stored. A refused or failed save stores nothing and carries no goal, so every view
+   * keeps the goal and the typed text it shows (the host may have no lesson at hand while the screen still draws one);
+   * only a `stale` refusal brings the newer goal the save lost to.
+   */
+  private async saveGoal(msg: unknown): Promise<void> {
+    const lesson = this.cachedProfile?.lesson;
+    const activity = activityConnections(this.context)?.scope ?? null;
+    const all = this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY);
+    const requestId = goalRequestIdOf(msg);
+    const echo = requestId ? { requestId } : {};
+    const saved = acceptGoalSave(lesson, activity, msg, all, Date.now());
+    if (!saved.ok) {
+      const newer = saved.code === "stale" ? goalViewOf(lesson, activity, all) : null;
+      await this.post({ type: "goalState", ...(newer ? { view: newer } : {}), error: GOAL_REFUSAL_SENTENCES[saved.code], ...echo });
+      return;
+    }
+    try {
+      await this.context.workspaceState.update(STUDENT_GOAL_KEY, saved.all);
+    } catch {
+      await this.post({ type: "goalState", error: GOAL_REFUSAL_SENTENCES.not_stored, ...echo });
+      return;
+    }
+    const view = goalViewOf(lesson, activity, saved.all);
+    await this.post({ type: "goalState", ...(view ? { view } : {}), saved: true, ...echo });
+  }
+
+  /**
    * #751 G2 — the rehearsal report. The panel's own read-back of what it drew goes out unchanged (only steps of this lesson);
    * the Service compares it with the candidate AND with its own records of the requests made under this code.
    */
@@ -4944,6 +5166,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const panelMode = decideMode({ studentToken: token ?? undefined, studentProfileStatus });
     // Instructor auth always uses the issuer token slot, never the student token.
     const issuerToken = await resolveInstructorTokenFromSecrets(this.context.secrets);
+    // cr-review — the director's Weekly Review command follows the switch as the Service answers this token.
+    void this.refreshCrDirectorContext();
     let isInstructor: boolean;
     if (panelMode === "instructor") {
       isInstructor = await this._instructorMode.checkInstructorMode(issuerToken, proxyUrl);
@@ -4977,6 +5201,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         hasToken: !!token,
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile},
           activityDraft:this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
+        // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
+        studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         coach: this.getCoach(),
