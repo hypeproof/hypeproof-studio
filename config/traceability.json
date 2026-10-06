@@ -4222,6 +4222,8 @@
       "label": "Chalk 런북·안내문 뽑기 — 서버·앱 측 (E3-3 / #1469)",
       "owner": "JinyongShin",
       "depends_on": [
+        "ST-REQ-CHALK-OUT",
+        "ST-DES-CHALK-OUTPUT",
         "ST-IMP-CHALK-GEN-SERVER",
         "ST-IMP-CHALK-GEN-APP"
       ],
@@ -4249,6 +4251,7 @@
       "label": "Chalk 런북·안내문 뽑기 시험 (E3-3 / #1469)",
       "owner": "JinyongShin",
       "depends_on": [
+        "ST-REQ-CHALK-OUT",
         "ST-IMP-CHALK-DERIVE"
       ],
       "sources": [
