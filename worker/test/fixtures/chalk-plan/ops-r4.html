@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="review-1791373856">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="235">
+  <style>
+    body { font-family: sans-serif; background: #fff; color: #111; max-width: 900px; margin: 0 auto; padding: 1rem; font-size: 1rem; }
+    h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #ccc; padding: 0.4rem; vertical-align: top; }
+    thead th { background: #f5f5f5; }
+    section { margin-bottom: 1.5rem; }
+    ol { padding-left: 1.5rem; }
+  </style>
+</head>
+<body>
+
+  <!-- ① 머리 — 고정: 절 제목과 세 칸(일시·시작-끝·목표)을 제거하지 말 것; 자율: 값 -->
+  <section data-chalk-section="header">
+    <h2 data-chalk-fixed>운영 계획 개요</h2>
+    <p><strong>일시:</strong> <span data-chalk-field="date">추후 확정 (강사 확인 필요)</span></p>
+    <p><strong>시작–끝:</strong> <span data-chalk-field="time-range">10:00–13:55</span></p>
+    <p><strong>한 줄 목표:</strong> <span data-chalk-field="goal">AI에게 세 칸으로 요청하고, 체크표로 답을 확인해 고쳐 쓸 수 있다.</span></p>
+  </section>
+
+  <!-- ② 운영 방식 — 고정: 절 제목과 다섯 항목 레이블을 제거하지 말 것; 자율: 값 -->
+  <section data-chalk-section="operations">
+    <h2 data-chalk-fixed>운영 방식</h2>
+    <p><strong>대상 / 인원:</strong> <span data-chalk-field="audience-count">초등 3~4학년 20명 (짝 10팀)</span></p>
+    <p><strong>운영진 — 메인 강사:</strong> <span data-chalk-field="staff-main-count">1</span>명, <strong>보조:</strong> <span data-chalk-field="staff-assistant-count">2</span>명</p>
+    <p><strong>배치 비율:</strong> <span data-chalk-field="arrangement-ratio">운영진 1인당 학습자 약 7명 (보조 2명이 짝 활동 때 구역별 순회)</span></p>
+    <p><strong>진행 방식:</strong></p>
+    <p data-chalk-field="process">강사가 시연한 뒤 짝 활동으로 이어지는 방식으로 진행한다. 각 활동은 30분을 넘기지 않고, 활동마다 타이머를 켠다. 강사는 질문만 하고 대신 입력하지 않는다.</p>
+  </section>
+
+  <!-- ③ 최종 결과물 — 고정: 절 제목과 ol 구조를 제거하지 말 것; 자율: 항목 수·내용 -->
+  <section data-chalk-section="outcomes">
+    <h2 data-chalk-fixed>최종 결과물</h2>
+    <ol>
+      <li data-chalk-field="outcome">세 칸 요청문 카드 2장 (처음 것, 고친 것)</li>
+      <li data-chalk-field="outcome">체크표로 판정한 AI 답 인쇄물</li>
+      <li data-chalk-field="outcome">처음 답과 고친 답을 나란히 놓은 대조 표</li>
+    </ol>
+  </section>
+
+  <!-- ④ 사전 준비물 — 고정: 절 제목·ol·li의 data-chalk-material 속성을 제거하지 말 것; 자율: 항목 수·이름·설명 -->
+  <section data-chalk-section="materials">
+    <h2 data-chalk-fixed>사전 준비물</h2>
+    <ol>
+      <li data-chalk-material="m-1" data-kind="physical" data-owner="instructor">
+        <strong data-chalk-field="name">인쇄물 세트</strong>:
+        <span data-chalk-field="description">세 칸 요청 카드, 체크표, 대조 표를 20명분 이상 준비한다.</span>
+      </li>
+      <li data-chalk-material="m-2" data-kind="physical" data-owner="instructor">
+        <strong data-chalk-field="name">입력용 기기와 시연 화면</strong>:
+        <span data-chalk-field="description">짝당 1대, 시연용 화면 1대, 타이머를 준비한다.</span>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ⑤ 진행 큐시트 — 고정: 절 제목, 머리글 행(thead tr), 시작–끝 칸 구조를 제거하지 말 것; 자율: 블록 수·이름·각 칸 내용 -->
+  <section data-chalk-section="schedule">
+    <h2 data-chalk-fixed>진행 큐시트</h2>
+    <table>
+      <thead>
+        <!-- 고정: 이 행의 열 구조와 th 텍스트를 제거하거나 줄이지 말 것 -->
+        <tr data-chalk-fixed>
+          <th>시작–끝</th>
+          <th>블록</th>
+          <th>메인 강사 할 일</th>
+          <th>학습자 할 일</th>
+          <th>보조·부모 할 일</th>
+          <th>의도 한 줄</th>
+          <!-- 고정: 연결 단계 열 값은 해당 행의 data-chalk-step-ref 속성 값과 같게 유지한다 -->
+          <th>연결 단계</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-chalk-block="block-1" data-chalk-step-ref="s-1 s-2 s-3 s-4" data-start="10:00" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">10:00–11:50</td>
+          <td>
+            <strong>활동</strong> <span data-chalk-field="activity">시연 후 짝 활동으로 세 칸 요청 카드 쓰기, 첫 입력, 체크표 시연</span>
+            / <strong>핵심 에셋</strong> <span data-chalk-field="asset">INTENT</span>
+            / <strong>산출물</strong> <span data-chalk-field="artifact">세 칸 요청 카드 1장과 AI 답 인쇄물</span>
+          </td>
+          <td data-chalk-role="facilitator">시연하고 타이머를 맞춘 뒤 질문만 한다.
+            <br><strong>종료 판정</strong> <span data-chalk-field="exit-criteria">모든 짝이 세 칸을 채운 카드와 AI 답 인쇄물을 가지고 있다.</span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck">시연 때 본 두 답을 떠올리게 하는 질문 하나만 한다.</span>
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead">다른 주제로 한 번 더 써 본다.</span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind">체크표 시연을 줄이고 블록 2 첫머리에서 다시 보여 준다.</span>
+          </td>
+          <td data-chalk-role="learner">짝과 번갈아 카드를 쓰고 직접 입력한다.</td>
+          <td data-chalk-role="assistant">구역별로 돌며 막힌 짝을 찾아 강사에게 알린다. 대신 입력하지 않는다.</td>
+          <td data-chalk-field="intent">내 말이 달라지면 답도 달라진다는 것을 직접 겪는다.</td>
+          <td data-chalk-field="step-ref-label">s-1 s-2 s-3 s-4</td>
+        </tr>
+      <tr data-chalk-block="break" data-chalk-block-kind="break" data-start="11:50" data-duration-min="15" data-chalk-fixed>
+          <!-- 고정: 휴식 행 구조와 data-chalk-block-kind="break" 제거 금지 -->
+          <td data-chalk-fixed data-chalk-field="time-range">11:50–12:05</td>
+          <td colspan="6" data-chalk-field="activity">휴식 15분</td>
+        </tr>
+      <tr data-chalk-block="block-2" data-chalk-step-ref="s-5 s-6 s-7 s-8" data-start="12:05" data-duration-min="110">
+          <td data-chalk-fixed data-chalk-field="time-range">12:05–13:55</td>
+          <td>
+            <strong>활동</strong> <span data-chalk-field="activity">짝의 답 판정, 요청문 고쳐 쓰기, 나란히 대조, 공유와 연결</span>
+            / <strong>핵심 에셋</strong> <span data-chalk-field="asset">VERIFY, INTENT</span>
+            / <strong>산출물</strong> <span data-chalk-field="artifact">체크표, 고친 카드, 대조 표</span>
+          </td>
+          <td data-chalk-role="facilitator">타이머를 켜고 "AI가 무엇을 몰랐을까?"만 묻는다.
+            <br><strong>종료 판정</strong> <span data-chalk-field="exit-criteria">모든 학습자가 고친 카드와 대조 표를 완성하고 짝에게 달라진 점을 말했다.</span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck">체크표에서 걸린 항목이 어디인지 묻는다.</span>
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead">체크표 항목을 하나 더 만들어 본다.</span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind">발표를 대표 3팀으로 줄이고 나머지는 카드를 전시한다.</span>
+          </td>
+          <td data-chalk-role="learner">짝의 답을 판정하고 카드를 고쳐 쓴 뒤 두 답을 비교해 설명한다.</td>
+          <td data-chalk-role="assistant">구역을 돌며 체크표 사용을 확인하고 산출물을 수거 상자에 모은다.</td>
+          <td data-chalk-field="intent">AI 답을 확인하고 스스로 고치는 경험을 남긴다.</td>
+          <td data-chalk-field="step-ref-label">s-5 s-6 s-7 s-8</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ⑥ 위험·문제 대응 — 고정: 절 제목, 1순위/2순위 레이블, data-chalk-risk 키 5개, first-line 구조를 제거하지 말 것; 자율: 대응 내용 -->
+  <section data-chalk-section="risks">
+    <h2 data-chalk-fixed>위험·문제 대응</h2>
+    <p data-chalk-fixed><strong>1순위 (즉시 대응)</strong></p>
+    <ul>
+      <li data-chalk-risk="ai-latency"><strong>AI 지연:</strong> <span data-chalk-field="first-line">미리 인쇄해 둔 예시 답 용지로 체크표 활동을 먼저 한다.</span></li>
+      <li data-chalk-risk="content-guard"><strong>콘텐츠 차단:</strong> <span data-chalk-field="first-line">요청 주제를 바꿔 다시 쓰게 하고, 안 되면 보조가 짝과 함께 확인한다.</span></li>
+      <li data-chalk-risk="pace-gap"><strong>속도 격차:</strong> <span data-chalk-field="first-line">빠른 짝은 추가 과제를 하고 느린 짝은 보조가 질문으로 돕는다.</span></li>
+    </ul>
+    <p data-chalk-fixed><strong>2순위</strong></p>
+    <ul>
+      <li data-chalk-risk="parent-overreach"><strong>부모 과개입:</strong> <span data-chalk-field="first-line">이번 수업은 부모 참관이 없다. 문의가 오면 보조가 안내문 내용으로 답한다.</span></li>
+      <li data-chalk-risk="overtime"><strong>시간 초과:</strong> <span data-chalk-field="first-line">블록마다 '시간이 모자라면' 줄에 적힌 대로 줄인다.</span></li>
+    </ul>
+  </section>
+
+  <!-- ⑦ 동의 — 고정: 절 제목과 ul 구조를 제거하지 말 것; 자율: 항목 내용. E3-2가 자동으로 채운다 -->
+  <section data-chalk-section="consent">
+    <h2 data-chalk-fixed>동의</h2>
+    <ul>
+      <li data-chalk-consent="model" data-auto="pending"></li>
+      <li data-chalk-consent="account" data-auto="pending"></li>
+      <li data-chalk-consent="log-collection" data-auto="pending"></li>
+      <li data-chalk-consent="publishing" data-auto="pending"></li>
+    </ul>
+  </section>
+
+  <!-- ⑧ 사후 정리 — 고정: 절 제목, 즉시/1주일 레이블, data-chalk-deliverable 속성을 제거하지 말 것; 자율: 항목 내용 -->
+  <section data-chalk-section="post-deliverables">
+    <h2 data-chalk-fixed>사후 정리</h2>
+    <p data-chalk-fixed><strong>즉시</strong></p>
+    <ul>
+      <li data-chalk-deliverable data-owner="assistant" data-when="immediate">학습자 산출물(카드, 체크표, 대조 표)을 수거해 사진으로 기록한다.</li>
+    </ul>
+    <p data-chalk-fixed><strong>1주일 내</strong></p>
+    <ul>
+      <li data-chalk-deliverable data-owner="instructor" data-when="within-week">수업 회고를 정리하고 다음 기수에 반영할 점을 적는다.</li>
+    </ul>
+  </section>
+
+</body>
+</html>

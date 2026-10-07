@@ -51,6 +51,41 @@ const STYLE = `
   .schedule-wrap table th:nth-child(7), .schedule-wrap table td:nth-child(7) { white-space: nowrap; }
 `.trim();
 
+// Compute a time-range string from start (HH:MM) and durationMin.
+function calcTimeRange(start: string | null, durationMin: number | null): string {
+  if (!start) return '';
+  if (durationMin === null) return start;
+  const [hStr, mStr] = start.split(':');
+  const h = parseInt(hStr ?? '0', 10);
+  const m = parseInt(mStr ?? '0', 10);
+  if (isNaN(h) || isNaN(m)) return start;
+  const totalMin = h * 60 + m + durationMin;
+  const endH = Math.floor(totalMin / 60) % 24;
+  const endM = totalMin % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${start}–${pad(endH)}:${pad(endM)}`;
+}
+
+// Map consent key to human-readable label for pending items.
+const CONSENT_KEY_LABELS: Record<string, string> = {
+  'model': '모델',
+  'account': '계정 구조',
+  'log-collection': '대화 기록 수집',
+  'publishing': '결과물 공개',
+};
+
+// Replace data-auto="pending" li items with labeled placeholders for the runbook.
+// Handout skips pending consent entirely (caller responsibility).
+function renderConsentForRunbook(consentHtml: string): string {
+  return consentHtml.replace(
+    /<li([^>]*data-chalk-consent="([^"]*)"[^>]*)data-auto="pending"[^>]*>\s*<\/li>/gi,
+    (_match, _attrs, key) => {
+      const label = CONSENT_KEY_LABELS[key] ?? key;
+      return `<li data-chalk-consent="${esc(key)}">${esc(label)}: 미정 — 강사 확인 필요</li>`;
+    },
+  );
+}
+
 // Extract human-readable course title from lesson HTML.
 // Source: <section data-chalk-section="meta"> → <th>과목</th><td>TITLE</td>
 // Returns "(강의 이름 미정)" when not found or empty.
@@ -76,7 +111,8 @@ export function deriveRunbook(opsHtml: string, opsSha256: string, courseTitle: s
   const outcomesHtml = clean('outcomes');
   const materialsHtml = clean('materials');
   const risksHtml = clean('risks');
-  const consentHtml = clean('consent');
+  const rawConsentHtml = clean('consent');
+  const consentHtml = renderConsentForRunbook(rawConsentHtml);
   const postHtml = clean('post-deliverables');
 
   const assistantHeader = meta.familySession ? '부모 할 일' : '보조 할 일';
@@ -107,9 +143,11 @@ export function deriveRunbook(opsHtml: string, opsSha256: string, courseTitle: s
       ? cleanValue(b.roles.parent?.text)
       : cleanValue(b.roles.assistant);
 
+    const timeCell = cleanValue(b.fields.timeRange) || calcTimeRange(b.start, b.durationMin);
+
     const cls = isBreak ? ' class="block-break"' : '';
     return `<tr${cls}>
-      <td>${esc(b.start ?? '')}</td>
+      <td>${esc(timeCell)}</td>
       <td>${esc(blockContent)}</td>
       <td>${esc(facilitatorContent)}</td>
       <td>${esc(cleanValue(b.roles.learner))}</td>

@@ -1,5 +1,5 @@
 // #1469 (E3-3) — deriveRunbook / deriveHandout pure functions + POST /derive + GET /plan?file=runbook|handout
-// DR-01~DR-20
+// DR-01~DR-22
 import './harness/loader.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -600,6 +600,42 @@ await check('DR-20 runbook schedule table wrapped in .schedule-wrap; style inclu
   assert.ok(rb.includes('class="schedule-wrap"'), 'runbook must wrap schedule table in div.schedule-wrap');
   assert.ok(rb.includes('overflow-x: auto'), 'runbook style must include overflow-x: auto');
   assert.ok(rb.includes('white-space: nowrap'), 'runbook style must include white-space: nowrap for narrow columns');
+});
+
+// DR-21: runbook cuesheet shows full time range (start–end); falls back to calcTimeRange when no time-range cell
+await check('DR-21 runbook cuesheet shows start–end time range from ops-r4 fixture', () => {
+  const opsR4Html = readFileSync(new URL('./fixtures/chalk-plan/ops-r4.html', import.meta.url), 'utf8');
+  const rb = deriveRunbook(opsR4Html, 'sha-dr21', 'テスト');
+  // ops-r4 has data-chalk-field="time-range" cells with values like "10:00–11:50"
+  assert.ok(rb.includes('10:00–11:50'), 'runbook must show start–end from time-range cell (block-1)');
+  assert.ok(rb.includes('11:50–12:05'), 'runbook must show start–end from time-range cell (break)');
+  assert.ok(rb.includes('12:05–13:55'), 'runbook must show start–end from time-range cell (block-2)');
+
+  // Skeleton has no time-range cell — calcTimeRange must compute it from data-start + data-duration-min
+  const skeletonOps = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 120, break_min: 10, audience_tier: 'lv1',
+  });
+  const rbSkeleton = deriveRunbook(skeletonOps, 'sha-dr21-skeleton', '');
+  // Skeleton blocks start at 10:00 with 110 min + 10 min break; check "–" separator appears in at least one cell
+  assert.ok(rbSkeleton.includes('–'), 'runbook from skeleton must include em-dash in time cell (calcTimeRange fallback)');
+});
+
+// DR-22: runbook shows pending consent as labeled placeholders; handout still skips empty consent
+await check('DR-22 runbook renders pending consent as labeled placeholders; handout skips empty consent', () => {
+  const opsR4Html = readFileSync(new URL('./fixtures/chalk-plan/ops-r4.html', import.meta.url), 'utf8');
+  const rb = deriveRunbook(opsR4Html, 'sha-dr22', '');
+  // ops-r4 has 4 pending consent li items (model, account, log-collection, publishing)
+  assert.ok(rb.includes('모델: 미정 — 강사 확인 필요'), 'runbook must render pending model consent as labeled placeholder');
+  assert.ok(rb.includes('계정 구조: 미정 — 강사 확인 필요'), 'runbook must render pending account consent');
+  assert.ok(rb.includes('대화 기록 수집: 미정 — 강사 확인 필요'), 'runbook must render pending log-collection consent');
+  assert.ok(rb.includes('결과물 공개: 미정 — 강사 확인 필요'), 'runbook must render pending publishing consent');
+  // No empty <li></li> for pending items
+  assert.ok(!rb.includes('data-auto="pending"></li>'), 'runbook must not contain empty pending li elements');
+
+  // Handout from ops-r4 should skip consent section (all 4 items are pending → cleanValue gives empty string)
+  const ho = deriveHandout(opsR4Html, 'sha-dr22-ho', '');
+  assert.ok(!ho.includes('<h2>동의</h2>'), 'handout with all-pending consent must not show 동의 section');
 });
 
 console.log(`\nAll ${passed} tests passed.`);

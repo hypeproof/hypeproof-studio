@@ -127,6 +127,7 @@ function parseOpsBlocks(html: string, file: string, violations: Violation[], fam
       durationMin: durationMin !== null && !isNaN(durationMin) ? durationMin : null,
       stepRefs,
       fields: {
+        timeRange: getField('time-range'),
         activity: getField('activity'),
         asset: getField('asset'),
         artifact: getField('artifact'),

@@ -120,6 +120,7 @@ export interface ParsedBlock {
     activity: string | null;
     asset: string | null;
     artifact: string | null;
+    timeRange: string | null;
     exitCriteria: string | null;
     ifStuck: string | null;
     ifAhead: string | null;
