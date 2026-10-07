@@ -46,15 +46,29 @@ const STYLE = `
   td { white-space: pre-line; }
   .block-break { background: #fafafa; }
   .stale-warning { background: #fff3cd; border: 1px solid #ffc107; padding: 0.5rem; border-radius: 4px; margin-bottom: 1rem; }
+  .schedule-wrap { overflow-x: auto; }
+  .schedule-wrap table th:nth-child(1), .schedule-wrap table td:nth-child(1),
+  .schedule-wrap table th:nth-child(7), .schedule-wrap table td:nth-child(7) { white-space: nowrap; }
 `.trim();
+
+// Extract human-readable course title from lesson HTML.
+// Source: <section data-chalk-section="meta"> → <th>과목</th><td>TITLE</td>
+// Returns "(강의 이름 미정)" when not found or empty.
+export function extractCourseTitleFromLesson(lessonHtml: string): string {
+  if (!lessonHtml) return '(강의 이름 미정)';
+  const m = /과목<\/th>\s*<td[^>]*>([\s\S]*?)<\/td>/i.exec(lessonHtml);
+  if (!m) return '(강의 이름 미정)';
+  const title = cleanValue(m[1]);
+  return title || '(강의 이름 미정)';
+}
 
 // ── Runbook (진행자 런북) ──────────────────────────────────────────────────────
 // Includes all 8 sections. Schedule thead has 7 columns:
 // 시작–끝 | 블록 | 메인 강사 할 일 | 학습자 할 일 | 보조·부모 할 일 | 의도 한 줄 | 연결 단계
-export function deriveRunbook(opsHtml: string, opsSha256: string): string {
+export function deriveRunbook(opsHtml: string, opsSha256: string, courseTitle: string): string {
   const plan = parsePlan(opsHtml, 'ops');
   const { meta, blocks = [] } = plan;
-  const course = meta.course ?? '';
+  const course = courseTitle || meta.course || '';
 
   const clean = (key: string) => cleanSectionBody(sectionHtml(opsHtml, key) ?? '');
   const headerHtml = clean('header');
@@ -124,12 +138,14 @@ ${outcomesHtml}
 ${materialsHtml}
 
 <h2>진행 큐시트</h2>
+<div class="schedule-wrap">
 <table>
 <thead><tr><th>시작–끝</th><th>블록</th><th>메인 강사 할 일</th><th>학습자 할 일</th><th>${esc(assistantHeader)}</th><th>의도 한 줄</th><th>연결 단계</th></tr></thead>
 <tbody>
 ${blockRows}
 </tbody>
 </table>
+</div>
 
 <h2>위험·문제 대응</h2>
 ${risksHtml}
@@ -148,15 +164,15 @@ ${postHtml}
 // learner/parent materials, consent, post-deliverables.
 // Forbidden: operations, facilitator col, exit-criteria/if-stuck/if-ahead/if-behind,
 //            risks, instructor materials, block start times (시각).
-export function deriveHandout(opsHtml: string, opsSha256: string): string {
+export function deriveHandout(opsHtml: string, opsSha256: string, courseTitle: string): string {
   const plan = parsePlan(opsHtml, 'ops');
   const { meta, blocks = [] } = plan;
-  const course = meta.course ?? '';
+  const course = courseTitle || meta.course || '';
 
   const clean = (key: string) => cleanSectionBody(sectionHtml(opsHtml, key) ?? '');
   const headerHtml = clean('header');
   const outcomesHtml = clean('outcomes');
-  const materialsSection = clean('materials');
+  const rawMaterialsHtml = clean('materials');
   const consentHtml = clean('consent');
   const postHtml = clean('post-deliverables');
 
@@ -186,8 +202,13 @@ export function deriveHandout(opsHtml: string, opsSha256: string): string {
 
   const scheduleHeader = `<tr><th>활동 / 산출물</th><th>학습자 할 일</th>${showParent ? '<th>보호자 할 일</th>' : ''}</tr>`;
 
-  // Materials: learner and parent only.
-  const learnerMaterialsHtml = extractMaterialsByOwner(materialsSection, ['learner', 'parent']);
+  // Materials: learner and parent only. Skip section if empty.
+  const learnerMaterialsHtml = extractMaterialsByOwner(rawMaterialsHtml, ['learner', 'parent']);
+  const materialsSection = learnerMaterialsHtml
+    ? `\n<h2>준비물</h2>\n${learnerMaterialsHtml}` : '';
+  // Consent: skip section if empty (no li items).
+  const consentIsEmpty = !cleanValue(consentHtml);
+  const consentSection = consentIsEmpty ? '' : `\n<h2>동의</h2>\n${consentHtml}`;
 
   return `<!DOCTYPE html>
 <html lang="ko" data-chalk-kind="handout" data-chalk-derived-from="${esc(opsSha256)}">
@@ -195,7 +216,7 @@ export function deriveHandout(opsHtml: string, opsSha256: string): string {
 <body>
 <h1>참가자 안내문 — ${esc(course)}</h1>
 
-<h2>운영 계획 개요</h2>
+<h2>수업 안내</h2>
 ${headerHtml}
 
 <h2>최종 결과물</h2>
@@ -208,12 +229,8 @@ ${outcomesHtml}
 ${scheduleRows}
 </tbody>
 </table>
-
-<h2>준비물</h2>
-${learnerMaterialsHtml || '<p>(없음)</p>'}
-
-<h2>동의</h2>
-${consentHtml}
+${materialsSection}
+${consentSection}
 
 <h2>사후 정리</h2>
 ${postHtml}

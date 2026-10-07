@@ -481,6 +481,19 @@ await check('OP-16 PUT /plan file=ops with no lesson → skipped info finding em
   assert.ok(skipped, `must include a skipped finding when no lesson exists, findings: ${JSON.stringify(findings)}`);
 });
 
+// ── OP-17: brief(file=ops) no profile_id → auto_materials=[] ─────────────────
+await check('OP-17 brief(file=ops) no profile_id → auto_materials empty array', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, profile_id: '', request_id: 'req-op17-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  assert.ok(Array.isArray(briefR.json.auto_materials), 'auto_materials must be array');
+  assert.equal(briefR.json.auto_materials.length, 0, `no profile → auto_materials must be empty, got: ${JSON.stringify(briefR.json.auto_materials)}`);
+});
+
 // ── OP-18: new skeleton has 8 h2 elements ────────────────────────────────────
 await check('OP-18 ops brief skeleton_html: 8 h2 elements', async () => {
   const db = makeDb();
@@ -735,6 +748,143 @@ await check('OP-12b OP-12 regression: OPS_TRACK_HTML no if-ahead/behind → spec
   const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
   assert.equal(bufMissing.length, 1,
     `OPS_TRACK_HTML still must emit spec.buffer_missing (⑭): ${JSON.stringify(bufMissing)}`);
+});
+
+// ── OP-26: brief(file=ops) with profile_id → auto_materials has auto-token + auto-studio ──
+await check('OP-26 brief(file=ops) with profile_id → auto_materials includes auto-token and auto-studio', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, profile_id: profileId, request_id: 'req-op26-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const ams = briefR.json.auto_materials;
+  assert.ok(Array.isArray(ams) && ams.length > 0, `auto_materials must be non-empty with a profile, got: ${JSON.stringify(ams)}`);
+  assert.ok(ams.some(m => m.id === 'auto-token'), `auto-token must be present, got ids: ${JSON.stringify(ams.map(m => m.id))}`);
+  assert.ok(ams.some(m => m.id === 'auto-studio'), `auto-studio must be present, got ids: ${JSON.stringify(ams.map(m => m.id))}`);
+});
+
+// ── OP-27: brief(file=ops) no profile_id → all 4 keys in consent_pending ────
+await check('OP-27 brief(file=ops) no profile_id → consent_pending has all 4 keys', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, profile_id: '', request_id: 'req-op27-inputs' }, tok, db);
+
+  const briefR = await req('GET', `${base}/brief?file=ops`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const pending = briefR.json.consent_pending;
+  assert.ok(Array.isArray(pending), 'consent_pending must be array');
+  const REQUIRED = ['model', 'account', 'log-collection', 'publishing'];
+  for (const key of REQUIRED) {
+    assert.ok(pending.includes(key), `consent_pending must include ${key}, got: ${JSON.stringify(pending)}`);
+  }
+});
+
+// ── OP-28: PUT /plan ops with stale auto materials → spec.auto_material_stale warn ──
+await check('OP-28 PUT /plan ops stale auto materials → spec.auto_material_stale warning', async () => {
+  const db = makeDb();
+  seedDraft(db);
+  const tok = await issuerTok();
+  const inputsR = await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, profile_id: profileId, request_id: 'req-op28-inputs' }, tok, db);
+  assert.equal(inputsR.status, 200, `PUT /inputs must succeed: ${JSON.stringify(inputsR.json)}`);
+  const revision = inputsR.json.revision;
+
+  // Replace the empty materials section with a stale set: extra auto-skill-quiz
+  // that the real profile (no skills) would not produce → diffAutoMaterials returns true.
+  const staleHtml = OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="materials"><ul></ul></section>',
+    `<section data-chalk-section="materials"><ul>
+      <li data-chalk-material="auto-token" data-kind="account" data-owner="instructor" data-auto="true">학생 토큰</li>
+      <li data-chalk-material="auto-skill-quiz" data-kind="digital" data-owner="instructor" data-auto="true">스킬 quiz</li>
+      <li data-chalk-material="auto-studio" data-kind="account" data-owner="learner" data-auto="true">Studio 설치</li>
+    </ul></section>`,
+  );
+
+  const putR = await req('PUT', `${base}/plan`, {
+    html: staleHtml,
+    file: 'ops',
+    knowledge_version: 1,
+    expected_revision: revision,
+    request_id: 'req-op28-plan',
+  }, tok, db);
+  assert.equal(putR.status, 200, `PUT /plan must succeed: ${JSON.stringify(putR.json)}`);
+  const findings = putR.json.findings ?? [];
+  const stale = findings.find(f => f.item === 'spec.auto_material_stale');
+  assert.ok(stale, `spec.auto_material_stale must be emitted when stored auto ids differ from live, findings: ${JSON.stringify(findings.map(f => f.item))}`);
+  assert.equal(stale.severity, 'warn', 'spec.auto_material_stale must be warn severity');
+});
+
+// ── OP-29: parsePlan material missing kind/owner → violations ─────────────────
+await check('OP-29 parsePlan ops material missing kind/owner → spec.material_kind_missing + spec.material_owner_missing', () => {
+  const htmlBadMaterial = OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="materials"><ul></ul></section>',
+    `<section data-chalk-section="materials"><ul>
+      <li data-chalk-material="m-bad">준비물 (kind/owner 없음)</li>
+    </ul></section>`,
+  );
+  const result = parsePlan(htmlBadMaterial, 'ops');
+  const kindV = result.violations.find(v => v.item === 'spec.material_kind_missing');
+  const ownerV = result.violations.find(v => v.item === 'spec.material_owner_missing');
+  assert.ok(kindV, `spec.material_kind_missing must be emitted, violations: ${JSON.stringify(result.violations.map(v => v.item))}`);
+  assert.ok(ownerV, `spec.material_owner_missing must be emitted, violations: ${JSON.stringify(result.violations.map(v => v.item))}`);
+});
+
+// ── Helper: build consent section html with given keys present ─────────────────
+const ALL_CONSENT_KEYS = ['model', 'account', 'log-collection', 'publishing'];
+function consentSectionWith(keys) {
+  const lis = keys.map(k => `<li data-chalk-consent="${k}">동의 텍스트 ${k}</li>`).join('\n      ');
+  return `<section data-chalk-section="consent"><ul>\n      ${lis}\n    </ul></section>`;
+}
+function opsHtmlWithConsent(keys) {
+  return OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="consent"><ul></ul></section>',
+    consentSectionWith(keys),
+  );
+}
+
+// ── OP-30: each required key missing one at a time → exactly that key spec.consent_missing ──
+for (const missingKey of ALL_CONSENT_KEYS) {
+  const presentKeys = ALL_CONSENT_KEYS.filter(k => k !== missingKey);
+  await check(`OP-30 parsePlan ops consent missing ${missingKey} → spec.consent_missing for ${missingKey} only`, () => {
+    const result = parsePlan(opsHtmlWithConsent(presentKeys), 'ops');
+    const consentViolations = result.violations.filter(v => v.item === 'spec.consent_missing');
+    assert.strictEqual(consentViolations.length, 1,
+      `must emit exactly 1 spec.consent_missing for missing ${missingKey}, got ${consentViolations.length}: ${JSON.stringify(consentViolations)}`);
+    assert.strictEqual(consentViolations[0].at?.field, missingKey,
+      `violation must name ${missingKey}, got: ${JSON.stringify(consentViolations[0].at)}`);
+  });
+}
+
+// ── OP-31: all four keys present → no spec.consent_missing ─────────────────────
+await check('OP-31 parsePlan ops consent all four keys present → no spec.consent_missing', () => {
+  const result = parsePlan(opsHtmlWithConsent(ALL_CONSENT_KEYS), 'ops');
+  const consentViolations = result.violations.filter(v => v.item === 'spec.consent_missing');
+  assert.strictEqual(consentViolations.length, 0,
+    `must emit 0 spec.consent_missing when all four keys present, got: ${JSON.stringify(consentViolations)}`);
+});
+
+// ── OP-32: pending li counts as present (no consent_missing), but consent_pending fires ──
+await check('OP-32 parsePlan ops consent pending li → no consent_missing, consent_pending emitted', () => {
+  const pendingHtml = OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="consent"><ul></ul></section>',
+    `<section data-chalk-section="consent"><ul>
+      <li data-chalk-consent="model" data-auto="pending"></li>
+      <li data-chalk-consent="account">계정 동의</li>
+      <li data-chalk-consent="log-collection">기록 수집 동의</li>
+      <li data-chalk-consent="publishing">결과물 공개 동의</li>
+    </ul></section>`,
+  );
+  const result = parsePlan(pendingHtml, 'ops');
+  const consentMissing = result.violations.filter(v => v.item === 'spec.consent_missing');
+  assert.strictEqual(consentMissing.length, 0,
+    `pending li must not trigger spec.consent_missing, got: ${JSON.stringify(consentMissing)}`);
+  const consentItems = result.consentItems ?? [];
+  const pendingItem = consentItems.find(i => i.key === 'model');
+  assert.ok(pendingItem, 'model consent item must exist');
+  assert.strictEqual(pendingItem.auto, true, 'pending item must have auto=true');
+  assert.strictEqual(pendingItem.text, null, 'pending item text must be null');
 });
 
 console.log(`\n${passed} tests passed`);

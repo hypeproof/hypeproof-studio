@@ -1,5 +1,5 @@
 // #1469 (E3-3) — deriveRunbook / deriveHandout pure functions + POST /derive + GET /plan?file=runbook|handout
-// DR-01~DR-16
+// DR-01~DR-20
 import './harness/loader.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { bootApp, createMockEnv, makeCtx, TEST_SECRET, COHORT } from './harness/
 
 const { issueIssuer } = await import('../src/lib/tokens.ts');
 const { listProfiles } = await import('../src/profiles/index.ts');
-const { deriveRunbook, deriveHandout } = await import('../src/lib/chalk-derive.ts');
+const { deriveRunbook, deriveHandout, extractCourseTitleFromLesson } = await import('../src/lib/chalk-derive.ts');
 const { sha256Hex } = await import('../src/lib/modules.ts');
 const { generateOpsSkeleton } = await import('../src/routes/chalk-courses.ts');
 
@@ -190,31 +190,31 @@ async function check(name, fn) { await fn(); passed++; console.log(`PASS ${name}
 
 // DR-01: runbook has data-chalk-kind="runbook" and data-chalk-derived-from=sha
 await check('DR-01 deriveRunbook → data-chalk-kind="runbook", data-chalk-derived-from=sha', () => {
-  const html = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const html = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   assert.ok(html.includes('data-chalk-kind="runbook"'), 'must have kind=runbook');
   assert.ok(html.includes(`data-chalk-derived-from="${SAMPLE_OPS_SHA}"`), 'must have derived-from sha');
 });
 
 // DR-02: handout has data-chalk-kind="handout" and same derived-from
 await check('DR-02 deriveHandout → data-chalk-kind="handout", data-chalk-derived-from=sha', () => {
-  const html = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const html = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   assert.ok(html.includes('data-chalk-kind="handout"'), 'must have kind=handout');
   assert.ok(html.includes(`data-chalk-derived-from="${SAMPLE_OPS_SHA}"`), 'must have derived-from sha');
 });
 
 // DR-03: deterministic — same input → same output
 await check('DR-03 deriveRunbook and deriveHandout are deterministic', () => {
-  const r1 = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
-  const r2 = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const r1 = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
+  const r2 = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   assert.equal(r1, r2, 'runbook must be deterministic');
-  const h1 = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
-  const h2 = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const h1 = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
+  const h2 = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   assert.equal(h1, h2, 'handout must be deterministic');
 });
 
 // DR-04: handout excludes facilitator, assistant, exit-criteria, if-stuck, if-ahead, buffer blocks, instructor materials
 await check('DR-04 handout excludes facilitator/assistant/exit-criteria/if-stuck/if-ahead/buffer/instructor-materials', () => {
-  const html = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const html = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   // These should NOT appear in the handout
   assert.ok(!html.includes('진행자 안내'), 'facilitator text must be excluded');
   assert.ok(!html.includes('보조 지원'), 'assistant text must be excluded');
@@ -232,10 +232,10 @@ await check('DR-04 handout excludes facilitator/assistant/exit-criteria/if-stuck
 
 // DR-05: no <script> and no external URLs in handout
 await check('DR-05 handout has no <script> and no external http URLs', () => {
-  const html = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const html = deriveHandout(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   assert.ok(!/<script/i.test(html), 'must not have <script> tags');
   assert.ok(!/https?:\/\//.test(html), 'must not have external URLs');
-  const runbook = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA);
+  const runbook = deriveRunbook(SAMPLE_OPS_HTML, SAMPLE_OPS_SHA, '');
   assert.ok(!/<script/i.test(runbook), 'runbook must not have <script> tags');
   assert.ok(!/https?:\/\//.test(runbook), 'runbook must not have external URLs');
 });
@@ -385,7 +385,7 @@ await check('DR-14 runbook from generateOpsSkeleton has 7-col thead and h2 secti
     course_id: 'test-course', knowledge_version: 1, format: 'track',
     family_session: false, duration_min: 240, break_min: 20, audience_tier: 'lv1',
   });
-  const html = deriveRunbook(opsHtml, 'sha-dr14');
+  const html = deriveRunbook(opsHtml, 'sha-dr14', '');
 
   // 7-col thead headers
   assert.ok(html.includes('시작–끝'), 'runbook must have 시작–끝 th');
@@ -413,7 +413,7 @@ await check('DR-15 handout from generateOpsSkeleton has no forbidden content', (
     course_id: 'test-course', knowledge_version: 1, format: 'track',
     family_session: false, duration_min: 240, break_min: 20, audience_tier: 'lv1',
   });
-  const html = deriveHandout(opsHtml, 'sha-dr15');
+  const html = deriveHandout(opsHtml, 'sha-dr15', '');
 
   // Must NOT contain operations section content (배치비율, 운영진)
   assert.ok(!html.includes('data-chalk-section="operations"'), 'handout must not include operations section attribute');
@@ -496,8 +496,8 @@ await check('DR-16 runbook/handout have no HTML comments, no authoring keywords,
 </html>`;
 
   for (const [label, opsHtml] of [['skeleton', opsFromSkeleton], ['r6-style', opsR6Style]]) {
-    const rb = deriveRunbook(opsHtml, `sha-dr16-rb-${label}`);
-    const ho = deriveHandout(opsHtml, `sha-dr16-ho-${label}`);
+    const rb = deriveRunbook(opsHtml, `sha-dr16-rb-${label}`, '');
+    const ho = deriveHandout(opsHtml, `sha-dr16-ho-${label}`, '');
 
     for (const [kind, html] of [['runbook', rb], ['handout', ho]]) {
       // No HTML comments in derived output
@@ -521,6 +521,73 @@ await check('DR-16 runbook/handout have no HTML comments, no authoring keywords,
       }
     }
   }
+});
+
+// DR-17: course title from lesson "과목" cell; no course ID in derived title
+await check('DR-17 extractCourseTitleFromLesson returns 과목 cell value; fallback when absent', () => {
+  const lessonWithTitle = `<section data-chalk-section="meta"><table><tr><th>과목</th><td>초등학교 AI 기초</td></tr></table></section>`;
+  const lessonEmptyCell = `<section data-chalk-section="meta"><table><tr><th>과목</th><td></td></tr></table></section>`;
+
+  assert.equal(extractCourseTitleFromLesson(lessonWithTitle), '초등학교 AI 기초');
+  assert.equal(extractCourseTitleFromLesson(lessonEmptyCell), '(강의 이름 미정)');
+  assert.equal(extractCourseTitleFromLesson(''), '(강의 이름 미정)');
+
+  // Course ID like "review-1791370926" must not appear when courseTitle is provided
+  const opsHtml = generateOpsSkeleton({
+    course_id: 'review-1791370926', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 120, break_min: 10, audience_tier: 'lv1',
+  });
+  const rbWithTitle = deriveRunbook(opsHtml, 'sha-dr17', '초등학교 AI 기초');
+  assert.ok(!rbWithTitle.includes('review-1791370926'), 'runbook with lesson title must not contain course ID');
+  assert.ok(rbWithTitle.includes('초등학교 AI 기초'), 'runbook must show lesson title');
+
+  const rbFallback = deriveRunbook(opsHtml, 'sha-dr17-fallback', '(강의 이름 미정)');
+  assert.ok(rbFallback.includes('(강의 이름 미정)'), 'runbook without lesson title must use fallback text');
+  assert.ok(!rbFallback.includes('review-1791370926'), 'fallback runbook must not contain raw course ID either');
+});
+
+// DR-18: handout first <h2> is "수업 안내"
+await check('DR-18 handout first <h2> is "수업 안내"', () => {
+  const opsHtml = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 120, break_min: 10, audience_tier: 'lv1',
+  });
+  const ho = deriveHandout(opsHtml, 'sha-dr18', '');
+  const firstH2Match = ho.match(/<h2[^>]*>([\s\S]*?)<\/h2>/);
+  const firstH2 = firstH2Match?.[1]?.replace(/<[^>]*>/g, '').trim();
+  assert.equal(firstH2, '수업 안내', `handout first h2 must be "수업 안내", got "${firstH2}"`);
+});
+
+// DR-19: handout skips empty sections; shows section when content exists
+await check('DR-19 handout skips empty 준비물 and 동의 sections; shows them when content exists', () => {
+  const opsEmpty = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 120, break_min: 10, audience_tier: 'lv1',
+  });
+  const hoEmpty = deriveHandout(opsEmpty, 'sha-dr19-empty', '');
+  assert.ok(!hoEmpty.includes('<h2>준비물</h2>'), 'handout with no materials must not have 준비물 section');
+  assert.ok(!hoEmpty.includes('<h2>동의</h2>'), 'handout with empty consent must not have 동의 section');
+
+  const opsWithConsent = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 120, break_min: 10, audience_tier: 'lv1',
+    autoConsentHtml: '<li data-chalk-consent="model_policy" data-auto>Claude 모델을 사용합니다.</li>',
+  });
+  const hoWithConsent = deriveHandout(opsWithConsent, 'sha-dr19-consent', '');
+  assert.ok(hoWithConsent.includes('<h2>동의</h2>'), 'handout with consent content must include 동의 section');
+  assert.ok(hoWithConsent.includes('Claude 모델을 사용합니다.'), 'consent text must be visible in handout');
+});
+
+// DR-20: runbook schedule table is wrapped in .schedule-wrap with overflow-x and nowrap styles
+await check('DR-20 runbook schedule table wrapped in .schedule-wrap; style includes overflow-x:auto and white-space:nowrap', () => {
+  const opsHtml = generateOpsSkeleton({
+    course_id: 'test-course', knowledge_version: 1, format: 'track',
+    family_session: false, duration_min: 120, break_min: 10, audience_tier: 'lv1',
+  });
+  const rb = deriveRunbook(opsHtml, 'sha-dr20', '');
+  assert.ok(rb.includes('class="schedule-wrap"'), 'runbook must wrap schedule table in div.schedule-wrap');
+  assert.ok(rb.includes('overflow-x: auto'), 'runbook style must include overflow-x: auto');
+  assert.ok(rb.includes('white-space: nowrap'), 'runbook style must include white-space: nowrap for narrow columns');
 });
 
 console.log(`\nAll ${passed} tests passed.`);
