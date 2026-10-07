@@ -604,9 +604,9 @@ await check('DR-20 runbook schedule table wrapped in .schedule-wrap; style inclu
 
 // DR-21: runbook cuesheet shows full time range (start–end); falls back to calcTimeRange when no time-range cell
 await check('DR-21 runbook cuesheet shows start–end time range from ops-r4 fixture', () => {
-  const opsR4Html = readFileSync(new URL('./fixtures/chalk-plan/ops-r4.html', import.meta.url), 'utf8');
+  const opsR4Html = readFileSync(new URL('./fixtures/chalk-plan/ops-1563-r4.html', import.meta.url), 'utf8');
   const rb = deriveRunbook(opsR4Html, 'sha-dr21', 'テスト');
-  // ops-r4 has data-chalk-field="time-range" cells with values like "10:00–11:50"
+  // ops-1563-r4.html has data-chalk-field="time-range" cells with values like "10:00–11:50"
   assert.ok(rb.includes('10:00–11:50'), 'runbook must show start–end from time-range cell (block-1)');
   assert.ok(rb.includes('11:50–12:05'), 'runbook must show start–end from time-range cell (break)');
   assert.ok(rb.includes('12:05–13:55'), 'runbook must show start–end from time-range cell (block-2)');
@@ -623,9 +623,9 @@ await check('DR-21 runbook cuesheet shows start–end time range from ops-r4 fix
 
 // DR-22: runbook shows pending consent as labeled placeholders; handout still skips empty consent
 await check('DR-22 runbook renders pending consent as labeled placeholders; handout skips empty consent', () => {
-  const opsR4Html = readFileSync(new URL('./fixtures/chalk-plan/ops-r4.html', import.meta.url), 'utf8');
+  const opsR4Html = readFileSync(new URL('./fixtures/chalk-plan/ops-1563-r4.html', import.meta.url), 'utf8');
   const rb = deriveRunbook(opsR4Html, 'sha-dr22', '');
-  // ops-r4 has 4 pending consent li items (model, account, log-collection, publishing)
+  // ops-1563-r4.html has 4 pending consent li items (model, account, log-collection, publishing)
   assert.ok(rb.includes('모델: 미정 — 강사 확인 필요'), 'runbook must render pending model consent as labeled placeholder');
   assert.ok(rb.includes('계정 구조: 미정 — 강사 확인 필요'), 'runbook must render pending account consent');
   assert.ok(rb.includes('대화 기록 수집: 미정 — 강사 확인 필요'), 'runbook must render pending log-collection consent');
@@ -633,7 +633,7 @@ await check('DR-22 runbook renders pending consent as labeled placeholders; hand
   // No empty <li></li> for pending items
   assert.ok(!rb.includes('data-auto="pending"></li>'), 'runbook must not contain empty pending li elements');
 
-  // Handout from ops-r4 should skip consent section (all 4 items are pending → cleanValue gives empty string)
+  // Handout from ops-1563-r4 should skip consent section (all 4 items are pending → cleanValue gives empty string)
   const ho = deriveHandout(opsR4Html, 'sha-dr22-ho', '');
   assert.ok(!ho.includes('<h2>동의</h2>'), 'handout with all-pending consent must not show 동의 section');
 });
