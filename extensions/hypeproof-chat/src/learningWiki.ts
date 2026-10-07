@@ -17,20 +17,9 @@ import * as path from "path";
 import { createHash } from "crypto";
 
 /** The cohort's specialization, as /v1/profile serves it under `learning_wiki.plan`. Every field is optional. */
-export interface LearningWikiPlan {
-  /** What students call the wiki in the chat and in the copy (default "팀 브레인"). */
-  name?: string;
-  /** Folder in the workspace (default "wiki"). */
-  dir?: string;
-  /** Who the learners are, in the prompt's words (default "학습 팀"). */
-  audience?: string;
-  /** What one session is called (default "회차"; the founder course says "주차"). */
-  session_label?: string;
-  /** Deck template for the deck skill; `hint` tells the skill what the slide must and must not show. */
-  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
-  /** Per session: the slides the deck skill drafts that session and the session's question. */
-  sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
-}
+// The plan shape lives in protocol.ts (the webview build imports protocol.ts and has no Node types).
+import type { LearningWikiPlan } from "./protocol";
+export type { LearningWikiPlan };
 
 export const DEFAULT_WIKI_DIR = "wiki";
 export const DEFAULT_BRAIN_NAME = "팀 브레인";

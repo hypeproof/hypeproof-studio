@@ -1,0 +1,345 @@
+{
+  "first_session": {
+    "lesson": {
+      "course_id": "sx-week3",
+      "version": "m2026.10.05-1",
+      "sha256": "94c9aced1b5f39d3ce1486db707619698ba3c59629a95445f3e19cd8b477313a"
+    },
+    "phase": "assigned",
+    "before": {
+      "headerGoal": null,
+      "headerGoalOnScreen": false,
+      "summary": "내 목표와 완료 기준 적기",
+      "railGoal": "내 목표 · 아직 적지 않았어요",
+      "criteria": [],
+      "lesson": [
+        "기대 조건을 시험 전에 적었다",
+        "발견한 차이를 근거로 수정을 요청했다",
+        "같은 조건으로 다시 확인했다"
+      ],
+      "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+      "met": 0,
+      "completeEnabled": false,
+      "goalFields": 0,
+      "firstFieldIsGoal": false,
+      "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+    },
+    "layout_control": [
+      "the closed goal block holds 1 field(s), first field is the goal editor's=true, first .hp-rail-lesson reads \"이번 단계 안내 · 1. 기대 조건\"",
+      "the closed goal block holds 0 field(s), first field is the goal editor's=false, first .hp-rail-lesson reads \"내 목표와 완료 기준 적기\""
+    ],
+    "shot": {
+      "file": "e2e/test-results/sx-app/goal-1-before.png",
+      "sha256": "11ea3c282ed407a200ef15fa41211cda45740781f8204d14f5b675643bf0e95e"
+    }
+  },
+  "saved": {
+    "first": {
+      "headerGoal": "내 목표 · 예약 버튼이 첫 화면에서 바로 보이게 만들기",
+      "headerGoalOnScreen": true,
+      "summary": "내 목표와 완료 기준 보기·고치기",
+      "railGoal": "내 목표 · 예약 버튼이 첫 화면에서 바로 보이게 만들기",
+      "criteria": [
+        "휴대폰 화면에서도 예약 버튼이 보인다",
+        "원래 진료 시간과 같다"
+      ],
+      "lesson": [
+        "기대 조건을 시험 전에 적었다",
+        "발견한 차이를 근거로 수정을 요청했다",
+        "같은 조건으로 다시 확인했다"
+      ],
+      "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+      "met": 0,
+      "completeEnabled": false,
+      "goalFields": 2,
+      "firstFieldIsGoal": true,
+      "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+    },
+    "changed": {
+      "headerGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+      "headerGoalOnScreen": true,
+      "summary": "내 목표와 완료 기준 보기·고치기",
+      "railGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+      "criteria": [
+        "휴대폰 화면에서도 예약 버튼이 보인다",
+        "예약 화면에 진료 시간이 그대로 나온다"
+      ],
+      "lesson": [
+        "기대 조건을 시험 전에 적었다",
+        "발견한 차이를 근거로 수정을 요청했다",
+        "같은 조건으로 다시 확인했다"
+      ],
+      "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+      "met": 0,
+      "completeEnabled": false,
+      "goalFields": 2,
+      "firstFieldIsGoal": true,
+      "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+    },
+    "phase": "assigned",
+    "controls": [
+      "region A's lesson criteria changed: {\"lesson\":[\"기대 조건을 시험 전에 적었다 (학생이 고침)\",\"발견한 차이를 근거로 수정을 요청했다\",\"같은 조건으로 다시 확인했다\"],\"acceptance\":\"이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.\"} vs {\"lesson\":[\"기대 조건을 시험 전에 적었다\",\"발견한 차이를 근거로 수정을 요청했다\",\"같은 조건으로 다시 확인했다\"],\"acceptance\":\"이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.\"}",
+      "something completed: 1 condition(s) checked off, completion button enabled=false",
+      "goal reads \"내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기 다른 목표\" in region A and \"내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기\" with [\"휴대폰 화면에서도 예약 버튼이 보인다\",\"예약 화면에 진료 시간이 그대로 나온다\"] in the rail, expected \"예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기\" with [\"휴대폰 화면에서도 예약 버튼이 보인다\",\"예약 화면에 진료 시간이 그대로 나온다\"]",
+      "region A's goal line is not on screen (\"내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기\")"
+    ],
+    "shot": {
+      "file": "e2e/test-results/sx-app/goal-2-changed.png",
+      "sha256": "8365e3e885934565ff69580fa8f5e0e4e94af493d22482a289f4aa548be38e2d"
+    }
+  },
+  "short_window": {
+    "probe": {
+      "viewport": {
+        "width": 1280,
+        "height": 387
+      },
+      "parts": {
+        "week": true,
+        "mission": true,
+        "completion": true,
+        "remaining": true,
+        "primary": true
+      },
+      "goalInHeader": true,
+      "goalAfterConditions": true,
+      "goalOnScreenNow": true,
+      "goalReachable": true
+    },
+    "control": "the goal line is not after the completion conditions"
+  },
+  "result_screen": {
+    "preview": "http://127.0.0.1:53358/",
+    "beside": {
+      "headerGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+      "headerGoalOnScreen": true,
+      "summary": "내 목표와 완료 기준 보기·고치기",
+      "railGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+      "criteria": [
+        "휴대폰 화면에서도 예약 버튼이 보인다",
+        "예약 화면에 진료 시간이 그대로 나온다"
+      ],
+      "lesson": [
+        "기대 조건을 시험 전에 적었다",
+        "발견한 차이를 근거로 수정을 요청했다",
+        "같은 조건으로 다시 확인했다"
+      ],
+      "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+      "met": 0,
+      "completeEnabled": false,
+      "goalFields": 2,
+      "firstFieldIsGoal": true,
+      "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+    },
+    "scrolled": {
+      "shellScrollTop": 1235,
+      "shellScrolls": true,
+      "probe": {
+        "headerGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+        "headerGoalOnScreen": true,
+        "summary": "내 목표와 완료 기준 보기·고치기",
+        "railGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+        "criteria": [
+          "휴대폰 화면에서도 예약 버튼이 보인다",
+          "예약 화면에 진료 시간이 그대로 나온다"
+        ],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": false,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      }
+    },
+    "shot": {
+      "file": "e2e/test-results/sx-app/goal-3-result-beside.png",
+      "sha256": "b7bb2ff3ec7a1ca5dbea85b4d777d2c519e8afb4e89b8112b7d010280242aa1c"
+    },
+    "shot_scrolled": {
+      "file": "e2e/test-results/sx-app/goal-3b-scrolled.png",
+      "sha256": "a475f31ebc28aa079db80387b10d31372d15552e6f8d40d0ff08749433010ffb"
+    }
+  },
+  "reopened": {
+    "probe": {
+      "headerGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+      "headerGoalOnScreen": true,
+      "summary": "내 목표와 완료 기준 보기·고치기",
+      "railGoal": "내 목표 · 예약 버튼을 눌렀을 때 예약 화면이 바로 열리게 만들기",
+      "criteria": [
+        "휴대폰 화면에서도 예약 버튼이 보인다",
+        "예약 화면에 진료 시간이 그대로 나온다"
+      ],
+      "lesson": [
+        "기대 조건을 시험 전에 적었다",
+        "발견한 차이를 근거로 수정을 요청했다",
+        "같은 조건으로 다시 확인했다"
+      ],
+      "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+      "met": 0,
+      "completeEnabled": false,
+      "goalFields": 0,
+      "firstFieldIsGoal": false,
+      "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+    },
+    "phase": "assigned",
+    "short_window": {
+      "probe": {
+        "viewport": {
+          "width": 640,
+          "height": 387
+        },
+        "parts": {
+          "week": true,
+          "mission": true,
+          "completion": true,
+          "remaining": true,
+          "primary": true
+        },
+        "goalInHeader": true,
+        "goalAfterConditions": true,
+        "goalOnScreenNow": false,
+        "goalReachable": true
+      },
+      "control": "completion not on screen; the goal line is not after the completion conditions"
+    },
+    "shot": {
+      "file": "e2e/test-results/sx-app/goal-4-reopened.png",
+      "sha256": "4c42017b6fa659635945aca8683c68f7230603ff942feb8258819e3ab6f6f882"
+    }
+  },
+  "two_views": {
+    "cleared": {
+      "editor": {
+        "headerGoal": null,
+        "headerGoalOnScreen": false,
+        "summary": "내 목표와 완료 기준 적기",
+        "railGoal": "내 목표 · 아직 적지 않았어요",
+        "criteria": [],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": false,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      },
+      "sidebar": {
+        "headerGoal": null,
+        "headerGoalOnScreen": false,
+        "summary": "내 목표와 완료 기준 적기",
+        "railGoal": "내 목표 · 아직 적지 않았어요",
+        "criteria": [],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": null,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      }
+    },
+    "typed_kept": {
+      "editor": {
+        "headerGoal": "내 목표 · 예약 화면에서 날짜를 먼저 고르게 만들기",
+        "headerGoalOnScreen": true,
+        "summary": "내 목표와 완료 기준 보기·고치기",
+        "railGoal": "내 목표 · 예약 화면에서 날짜를 먼저 고르게 만들기",
+        "criteria": [],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": false,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      },
+      "sidebar": {
+        "headerGoal": "내 목표 · 예약 화면에서 날짜를 먼저 고르게 만들기",
+        "headerGoalOnScreen": true,
+        "summary": "내 목표와 완료 기준 보기·고치기",
+        "railGoal": "내 목표 · 예약 화면에서 날짜를 먼저 고르게 만들기",
+        "criteria": [],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": null,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      },
+      "shot": {
+        "file": "e2e/test-results/sx-app/goal-6-two-views-typed-kept.png",
+        "sha256": "a9ff5a302d3492f9d92ce4939a9519b763a023a1335bc8bcd20d81c99809f523"
+      }
+    },
+    "replaced": {
+      "editor": {
+        "headerGoal": "내 목표 · 예약을 마치면 확인 문장이 보이게 만들기",
+        "headerGoalOnScreen": true,
+        "summary": "내 목표와 완료 기준 보기·고치기",
+        "railGoal": "내 목표 · 예약을 마치면 확인 문장이 보이게 만들기",
+        "criteria": [],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": false,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      },
+      "sidebar": {
+        "headerGoal": "내 목표 · 예약을 마치면 확인 문장이 보이게 만들기",
+        "headerGoalOnScreen": true,
+        "summary": "내 목표와 완료 기준 보기·고치기",
+        "railGoal": "내 목표 · 예약을 마치면 확인 문장이 보이게 만들기",
+        "criteria": [],
+        "lesson": [
+          "기대 조건을 시험 전에 적었다",
+          "발견한 차이를 근거로 수정을 요청했다",
+          "같은 조건으로 다시 확인했다"
+        ],
+        "acceptance": "이번 단계가 끝났다고 볼 조건: 기대 조건이 학생의 말로 1개 이상 적혀 있다.",
+        "met": 0,
+        "completeEnabled": null,
+        "goalFields": 2,
+        "firstFieldIsGoal": true,
+        "firstRailCard": "이번 단계 안내 · 1. 기대 조건"
+      }
+    },
+    "phase": "assigned",
+    "shot": {
+      "file": "e2e/test-results/sx-app/goal-5-two-views-cleared.png",
+      "sha256": "57d2b10ced3b5f4cdd4ccb31166005d54f00cf4fb1a141a53db59181be36373f"
+    },
+    "shot_replaced": {
+      "file": "e2e/test-results/sx-app/goal-7-two-views-replaced.png",
+      "sha256": "2c9fa6b97dca8547d999eaa2b5779aa3d3f6119e29e3093156b5490d2868b8e9"
+    }
+  }
+}

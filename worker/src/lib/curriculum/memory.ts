@@ -19,6 +19,7 @@ import {
   artifactOfVersion,
   evidenceItemRef,
   hypothesisRevisions,
+  isHumanDecision,
   parseEvidenceItemRef,
   type Artifact,
   type Confidence,
@@ -171,12 +172,14 @@ export function decisionRefProblems(
  */
 export function evidenceRefProblems(refs: readonly string[], items: ReadonlyMap<string, EvidenceItemView>, actor?: Decision["actor"]): string[] {
   const problems: string[] = [];
+  // A director's decision (cr-review, CR-51) rests on evidence by the same rules as the team's.
+  const human = actor !== undefined && isHumanDecision({ actor });
   for (const ref of refs) {
     const it = items.get(ref);
     if (!it) problems.push(`unresolved_evidence_ref:${ref}`);
     else if (it.confidence === "assumed") problems.push(`evidence_ref_is_assumption:${ref}`);
-    else if (actor === "student" && it.pending_review) problems.push(`evidence_ref_not_reviewed:${ref}`);
-    else if (actor === "student" && it.sources_real === false) problems.push(`evidence_ref_not_real:${ref}`);
+    else if (human && it.pending_review) problems.push(`evidence_ref_not_reviewed:${ref}`);
+    else if (human && it.sources_real === false) problems.push(`evidence_ref_not_real:${ref}`);
   }
   return problems;
 }
@@ -184,9 +187,13 @@ export function evidenceRefProblems(refs: readonly string[], items: ReadonlyMap<
 /** An item the team's own claim may rest on as evidence: every rule of `evidenceRefProblems` holds. */
 export const supportsTeamEvidence = (it: Pick<EvidenceItemView, "confidence" | "pending_review" | "sources_real"> | undefined) => !!it && it.confidence !== "assumed" && !it.pending_review && it.sources_real !== false;
 
+/** How a decision is shown: the team's, a director's (cr-review, CR-51), or an AI suggestion that is never a decision (SX-45). */
+export type ShownAs = "team_decision" | "director_decision" | "ai_suggestion";
+export const shownAs = (d: Pick<Decision, "actor">): ShownAs => (d.actor === "student" ? "team_decision" : d.actor === "director" ? "director_decision" : "ai_suggestion");
+
 /** A decision as shown: an AI suggestion is never the team's decision (SX-45); no evidence is marked, not hidden (CR-38). */
 export interface DecisionView extends Decision {
-  shown_as: "team_decision" | "ai_suggestion";
+  shown_as: ShownAs;
   no_evidence: boolean;
   evidence: Array<{ ref: string; state: "ok" | "missing"; statement?: string; confidence?: Confidence }>;
   assumptions: Array<{ ref: string; state: "ok" | "missing"; statement?: string; confidence?: Confidence }>;
@@ -200,7 +207,7 @@ function cite(refs: readonly string[], items: ReadonlyMap<string, EvidenceItemVi
 }
 
 export function decisionView(d: Decision, items: ReadonlyMap<string, EvidenceItemView>): DecisionView {
-  return { ...d, shown_as: d.actor === "student" ? "team_decision" : "ai_suggestion", no_evidence: d.evidence_refs.length === 0, evidence: cite(d.evidence_refs, items), assumptions: cite(d.assumption_refs, items) };
+  return { ...d, shown_as: shownAs(d), no_evidence: d.evidence_refs.length === 0, evidence: cite(d.evidence_refs, items), assumptions: cite(d.assumption_refs, items) };
 }
 
 const timeOf = (t: number | string) => (typeof t === "number" ? t : Date.parse(t));
@@ -225,9 +232,9 @@ export function factRegister(items: readonly EvidenceItemView[], decisions: read
   for (const it of items) {
     const citing = decisions.filter((d) => d.evidence_refs.includes(it.id) || d.assumption_refs.includes(it.id));
     const slideNums = new Set<number>();
-    for (const d of citing) if (d.actor === "student") for (const n of d.affected_deck_slides) slideNums.add(n);
+    for (const d of citing) if (isHumanDecision(d)) for (const n of d.affected_deck_slides) slideNums.add(n);
     for (const s of latestSlides) if (s.evidence_refs.includes(it.id)) slideNums.add(s.number);
-    out[it.confidence].push({ ...it, cited_by: citing.map((d) => ({ decision_id: d.id, shown_as: d.actor === "student" ? "team_decision" : "ai_suggestion" })), slides: [...slideNums].sort((a, b) => a - b) });
+    out[it.confidence].push({ ...it, cited_by: citing.map((d) => ({ decision_id: d.id, shown_as: shownAs(d) })), slides: [...slideNums].sort((a, b) => a - b) });
   }
   return out;
 }
@@ -264,7 +271,7 @@ export function versionDiff(projectId: string, a: ProductVersion, b: ProductVers
   else if (before.get(p) !== sha) files.push({ path: p, change: "modified" });
   for (const p of before.keys()) if (!after.has(p)) files.push({ path: p, change: "removed" });
   files.sort((x, y) => x.path.localeCompare(y.path));
-  const behind = decisions.filter((d) => d.actor === "student" && d.resulting_version_id === newer.id).map((d) => decisionView(d, items));
+  const behind = decisions.filter((d) => isHumanDecision(d) && d.resulting_version_id === newer.id).map((d) => decisionView(d, items));
   return { ok: true, from: { id: older.id, created_at: older.created_at }, to: { id: newer.id, created_at: newer.created_at }, files, decisions: behind, reason: behind.length ? "recorded" : "no_recorded_decision" };
 }
 
@@ -290,7 +297,7 @@ export function beliefChanges(hypotheses: readonly Hypothesis[], decisions: read
       const prev = revs[i - 1]!;
       const cur = revs[i]!;
       const d = cur.decision_id ? byId.get(cur.decision_id) : undefined;
-      const decision = d && d.actor === "student" ? d : undefined;
+      const decision = d && isHumanDecision(d) ? d : undefined;
       const refs = [...new Set([...(cur.evidence_refs ?? []), ...(decision?.evidence_refs ?? [])])];
       // Only what the team may rest a claim on is "what we saw" (CR-79): an assumption, an AI
       // item the student never reviewed, or an item on a record that is not real is left out,
@@ -392,7 +399,7 @@ export type RecordRef =
 export interface TimelineEntry {
   at: number;
   /** An AI suggestion is its own entry kind, never "decision" (SX-45). */
-  entry: "hypothesis" | "hypothesis_revised" | "experiment" | "product_version" | "evidence_item" | "decision" | "ai_suggestion" | "deck_slide";
+  entry: "hypothesis" | "hypothesis_revised" | "experiment" | "product_version" | "evidence_item" | "decision" | "director_decision" | "ai_suggestion" | "deck_slide";
   label: string;
   record: RecordRef;
 }
@@ -407,6 +414,15 @@ export interface MemoryRecords {
   metrics: Metric[];
   slides: DeckSlide[];
   items: EvidenceItemView[];
+  /** The prepared Weekly Review Packs, latest revision per week (cr-review; read from their D1 rows, no section content). */
+  reviews?: WeeklyReviewSummary[];
+}
+
+/** One week's latest prepared Weekly Review Pack, as Venture Memory lists it (CR-35 WeeklyReviews, cr-review). */
+export interface WeeklyReviewSummary {
+  week: number;
+  revision: number;
+  prepared_at: number;
 }
 
 /** The project's timeline in time order, every entry naming the stored record it opens. No model call. */
@@ -418,7 +434,7 @@ export function timeline(r: MemoryRecords): TimelineEntry[] {
   for (const e of r.experiments) out.push({ at: e.created_at, entry: "experiment", label: e.question, record: { kind: "experiment", id: e.id } });
   for (const v of r.versions) out.push({ at: v.created_at, entry: "product_version", label: v.entry_html, record: { kind: "product_version", id: v.id } });
   for (const it of r.items) out.push({ at: it.created_at, entry: "evidence_item", label: it.statement, record: { kind: "evidence_item", id: it.id } });
-  for (const d of r.decisions) out.push({ at: timeOf(d.decided_at), entry: d.actor === "student" ? "decision" : "ai_suggestion", label: d.statement, record: { kind: "decision", id: d.id } });
+  for (const d of r.decisions) out.push({ at: timeOf(d.decided_at), entry: d.actor === "student" ? "decision" : d.actor === "director" ? "director_decision" : "ai_suggestion", label: d.statement, record: { kind: "decision", id: d.id } });
   for (const s of r.slides) out.push({ at: s.at, entry: "deck_slide", label: `${s.number}. ${s.title}`, record: { kind: "deck_slide", id: String(s.number), revision: s.revision } });
   return out.sort((a, b) => a.at - b.at || a.entry.localeCompare(b.entry));
 }
@@ -449,7 +465,7 @@ export interface Chain {
   hypothesis: { id: string; statement: string; status: string };
   experiments: Array<{ id: string; question: string; status: string }>;
   evidence: Array<{ ref: string; statement: string; confidence: Confidence }>;
-  decisions: Array<{ id: string; statement: string; shown_as: DecisionView["shown_as"]; resulting_version_id: string | null }>;
+  decisions: Array<{ id: string; statement: string; shown_as: ShownAs; resulting_version_id: string | null }>;
   versions: string[];
 }
 
@@ -466,8 +482,8 @@ export function chains(r: MemoryRecords): Chain[] {
       hypothesis: { id: h.id, statement: h.statement, status: h.status },
       experiments: exps.map((e) => ({ id: e.id, question: e.question, status: e.status })),
       evidence: ev.map((i) => ({ ref: i.id, statement: i.statement, confidence: i.confidence })),
-      decisions: decs.map((d) => ({ id: d.id, statement: d.statement, shown_as: d.actor === "student" ? ("team_decision" as const) : ("ai_suggestion" as const), resulting_version_id: d.resulting_version_id })),
-      versions: [...new Set(decs.filter((d) => d.actor === "student" && d.resulting_version_id).map((d) => d.resulting_version_id!))],
+      decisions: decs.map((d) => ({ id: d.id, statement: d.statement, shown_as: shownAs(d), resulting_version_id: d.resulting_version_id })),
+      versions: [...new Set(decs.filter((d) => isHumanDecision(d) && d.resulting_version_id).map((d) => d.resulting_version_id!))],
     };
   });
 }
@@ -493,8 +509,13 @@ export interface MemoryState {
   timeline: TimelineEntry[];
   belief_changes: BeliefChange[];
   chains: Chain[];
+  /**
+   * The Weekly Review Packs prepared for this project, latest revision per week (cr-review,
+   * CR-35 WeeklyReviews). Their sections and freshness are read by the review route, not here.
+   */
+  weekly_reviews: WeeklyReviewSummary[];
   /** Entities whose records belong to later items: their absence here is a fact, not an empty result. */
-  not_in_this_read: Array<"weekly_reviews" | "ai_usage">;
+  not_in_this_read: Array<"ai_usage">;
 }
 
 /** Everything Venture Memory holds for one Project, assembled from stored records with no model call. */
@@ -513,7 +534,7 @@ export function memoryState(r: MemoryRecords, events: ReadonlyMap<string, readon
     evidence_items: r.items,
     decisions,
     versions: versionsByTime,
-    artifacts: versionsByTime.map((v, i) => artifactOfVersion(v, i, [...new Set(r.decisions.filter((d) => d.actor === "student" && d.resulting_version_id === v.id).flatMap((d) => d.evidence_refs))])),
+    artifacts: versionsByTime.map((v, i) => artifactOfVersion(v, i, [...new Set(r.decisions.filter((d) => isHumanDecision(d) && d.resulting_version_id === v.id).flatMap((d) => d.evidence_refs))])),
     metrics: r.metrics.map((m) => ({ ...m, value: metricValue(m, { experiments, events, items }) })),
     deck_slides: latestSlideRevisions(r.slides),
     slide_revisions: [...r.slides].sort((a, b) => a.number - b.number || a.revision - b.revision),
@@ -521,7 +542,8 @@ export function memoryState(r: MemoryRecords, events: ReadonlyMap<string, readon
     timeline: timeline(r),
     belief_changes: beliefChanges(r.hypotheses, r.decisions, items),
     chains: chains(r),
-    not_in_this_read: ["weekly_reviews", "ai_usage"],
+    weekly_reviews: [...(r.reviews ?? [])].sort((a, b) => a.week - b.week),
+    not_in_this_read: ["ai_usage"],
   };
 }
 

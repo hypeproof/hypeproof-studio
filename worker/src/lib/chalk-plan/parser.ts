@@ -1,7 +1,8 @@
 import { tokenize } from './tokenizer.ts';
 import type {
   ParsedPlan, PlanMeta, ParsedStep, ParsedStuck, ParsedSection, Violation, ViolationCode,
-  ProhibitedMove, KeyQuestion, Objective, Evidence,
+  ProhibitedMove, KeyQuestion, Objective, Evidence, ParsedBlock, ParsedRisk,
+  ParsedMaterial, ParsedConsentItem, ParsedPostDeliverable,
 } from './types.ts';
 
 const MAX_SIZE_BYTES = 256 * 1024;
@@ -66,13 +67,244 @@ function violation(
   return { item, severity: 'warn', at: { file, section, step, field }, message, refs };
 }
 
+// #1467 (E3-1) — ops-specific section extractor (regex, post-token-loop).
+function sectionHtml(html: string, key: string): string | null {
+  const re = new RegExp(
+    `<[^>]*data-chalk-section=["']${key}["'][^>]*>([\\s\\S]*?)</section>`,
+    'i',
+  );
+  const m = re.exec(html);
+  return m ? (m[1] ?? null) : null;
+}
+
+const OPS_REQUIRED_RISK_KEYS = ['ai-latency', 'content-guard', 'pace-gap', 'parent-overreach', 'overtime'] as const;
+
+function parseOpsBlocks(html: string, file: string, violations: Violation[], familySession: boolean): ParsedBlock[] {
+  const schedHtml = sectionHtml(html, 'schedule');
+  if (!schedHtml) return [];
+
+  const blocks: ParsedBlock[] = [];
+  const rowRe = /<tr([^>]*data-chalk-block="([^"]*)"[^>]*)>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = rowRe.exec(schedHtml)) !== null) {
+    const rowAttrsStr = m[1] ?? '';
+    const blockKey = m[2] ?? '';
+    const rowHtml = m[3] ?? '';
+
+    const kindAttr = /data-chalk-block-kind="([^"]*)"/.exec(rowAttrsStr)?.[1] ?? '';
+    const kind = (['buffer', 'break', 'wrap-up'] as const).includes(kindAttr as any)
+      ? (kindAttr as 'buffer' | 'break' | 'wrap-up')
+      : 'normal';
+    const startAttr = /data-start="([^"]*)"/.exec(rowAttrsStr)?.[1] ?? null;
+    const durStr = /data-duration-min="([^"]*)"/.exec(rowAttrsStr)?.[1] ?? '';
+    const durationMin = durStr ? parseInt(durStr, 10) : null;
+    const stepRefAttr = /data-chalk-step-ref="([^"]*)"/.exec(rowAttrsStr)?.[1] ?? '';
+    // Accept space- or comma-separated step IDs (coach may write "s-1, s-2" or "s-1 s-2").
+    const stepRefs = stepRefAttr.trim().split(/[\s,]+/).filter(Boolean);
+
+    const getField = (fieldName: string): string | null => {
+      const fre = new RegExp(`<[^>]*data-chalk-field="${fieldName}"[^>]*>([\\s\\S]*?)</(?:td|span|div|p)>`, 'i');
+      const fm = fre.exec(rowHtml);
+      return fm ? cleanText(fm[1] ?? '', violations, file, 'schedule', blockKey) : null;
+    };
+    const getRole = (role: string): string | null => {
+      const rre = new RegExp(`<td[^>]*data-chalk-role="${role}"[^>]*>([\\s\\S]*?)</td>`, 'i');
+      const rm = rre.exec(rowHtml);
+      return rm ? cleanText(rm[1] ?? '', violations, file, 'schedule', blockKey) : null;
+    };
+    const getParentRole = (): { text: string; role: string } | undefined => {
+      const pre = /<td[^>]*data-chalk-role="parent"[^>]*data-chalk-parent-role="([^"]*)"[^>]*>([\s\S]*?)<\/td>/i;
+      const pm = pre.exec(rowHtml);
+      if (!pm) return undefined;
+      return { text: cleanText(pm[2] ?? '', violations, file, 'schedule', blockKey), role: pm[1] ?? '' };
+    };
+
+    const block: ParsedBlock = {
+      key: blockKey,
+      kind,
+      start: startAttr || null,
+      durationMin: durationMin !== null && !isNaN(durationMin) ? durationMin : null,
+      stepRefs,
+      fields: {
+        activity: getField('activity'),
+        asset: getField('asset'),
+        artifact: getField('artifact'),
+        exitCriteria: getField('exit-criteria'),
+        ifStuck: getField('if-stuck'),
+        ifAhead: getField('if-ahead'),
+        ifBehind: getField('if-behind'),
+      },
+      roles: {
+        facilitator: getRole('facilitator') ?? undefined,
+        assistant: getRole('assistant') ?? undefined,
+        learner: getRole('learner') ?? undefined,
+        parent: getParentRole(),
+      },
+    };
+    blocks.push(block);
+
+    // Violations — skip break blocks (they have no step-ref, roles or exit-criteria requirements).
+    if (kind !== 'break') {
+      if (block.roles.facilitator === undefined) {
+        violations.push(violation('spec.block_field_missing', ['PLAN-04'], `블록 ${blockKey} 에 facilitator 칸이 없다`, file, 'schedule', blockKey, 'facilitator'));
+      }
+      if (kind !== 'buffer' && block.roles.learner === undefined) {
+        violations.push(violation('spec.block_field_missing', ['PLAN-04'], `블록 ${blockKey} 에 learner 칸이 없다`, file, 'schedule', blockKey, 'learner'));
+      }
+      if (familySession && block.roles.parent === undefined) {
+        violations.push(violation('spec.parent_role_missing', ['결정 9', 'PLAN-04'], `가족 수업인데 블록 ${blockKey} 에 parent 칸이 없다`, file, 'schedule', blockKey, 'parent'));
+      }
+      if (kind === 'normal' && stepRefs.length === 0) {
+        violations.push(violation('spec.block_step_unlinked', ['PLAN-02'], `블록 ${blockKey} 에 step-ref 가 없다`, file, 'schedule', blockKey, 'data-chalk-step-ref'));
+      }
+    }
+  }
+
+  // Buffer is present if there is a dedicated buffer block OR any normal block has if-ahead/if-behind filled.
+  const hasBuffer = blocks.some(b => b.kind === 'buffer')
+    || blocks.some(b => b.kind === 'normal' && (
+        (b.fields.ifAhead != null && b.fields.ifAhead.trim() !== '')
+        || (b.fields.ifBehind != null && b.fields.ifBehind.trim() !== '')
+    ));
+  if (!hasBuffer && blocks.length > 0) {
+    violations.push(violation('spec.buffer_missing', ['PLAN-06'], `완충 블록(data-chalk-block-kind="buffer")이 없고 if-ahead·if-behind 칸도 없다`, file, 'schedule', null));
+  }
+
+  return blocks;
+}
+
+// #1468 (E3-2) — materials/consent/post-deliverables section extractors.
+
+const VALID_MATERIAL_KINDS = new Set(['physical', 'digital', 'account']);
+const VALID_MATERIAL_OWNERS = new Set(['instructor', 'learner', 'parent']);
+
+function parseOpsMaterials(html: string, file: string, violations: Violation[]): ParsedMaterial[] {
+  const mHtml = sectionHtml(html, 'materials');
+  if (!mHtml) return [];
+
+  const materials: ParsedMaterial[] = [];
+  const liRe = /<li([^>]*data-chalk-material[^>]*)>([\s\S]*?)<\/li>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = liRe.exec(mHtml)) !== null) {
+    const attrsStr = m[1] ?? '';
+    const liHtml = m[2] ?? '';
+
+    const idAttr = /data-chalk-material="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const id = idAttr || null;
+    const kind = /data-kind="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const owner = /data-owner="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const autoAttr = /data-auto="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const auto = autoAttr === 'true';
+
+    const rawText = liHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (!kind || !VALID_MATERIAL_KINDS.has(kind)) {
+      violations.push(violation('spec.material_kind_missing', ['PLAN-05'], `준비물 항목 ${id ?? '(id없음)'} 에 kind(physical|digital|account) 가 없거나 어휘 밖이다`, file, 'materials', null, 'data-kind'));
+    }
+    if (!owner || !VALID_MATERIAL_OWNERS.has(owner)) {
+      violations.push(violation('spec.material_owner_missing', ['PLAN-05'], `준비물 항목 ${id ?? '(id없음)'} 에 owner(instructor|learner|parent) 가 없거나 어휘 밖이다`, file, 'materials', null, 'data-owner'));
+    }
+
+    materials.push({ id, kind, owner, text: rawText, auto });
+  }
+
+  return materials;
+}
+
+const REQUIRED_CONSENT_KEYS = ['model', 'account', 'log-collection', 'publishing'] as const;
+
+function parseOpsConsent(html: string, file: string, violations: Violation[]): ParsedConsentItem[] {
+  const cHtml = sectionHtml(html, 'consent');
+  if (!cHtml) return [];
+
+  const items: ParsedConsentItem[] = [];
+  const liRe = /<li([^>]*data-chalk-consent[^>]*)>([\s\S]*?)<\/li>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = liRe.exec(cHtml)) !== null) {
+    const attrsStr = m[1] ?? '';
+    const liHtml = m[2] ?? '';
+
+    const key = /data-chalk-consent="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const autoAttr = /data-auto="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const auto = autoAttr === 'true' || autoAttr === 'pending';
+    const pending = autoAttr === 'pending';
+
+    const rawText = liHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const text = pending || rawText === '' ? null : rawText;
+
+    items.push({ key, text, auto });
+  }
+
+  const foundKeys = new Set(items.map(i => i.key));
+  for (const key of REQUIRED_CONSENT_KEYS) {
+    if (!foundKeys.has(key)) {
+      violations.push(violation('spec.consent_missing', ['PLAN-08'], `필수 동의 항목 ${key} 가 없다`, file, 'consent', null, key));
+    }
+  }
+
+  return items;
+}
+
+function parseOpsPostDeliverables(html: string, _file: string, _violations: Violation[]): ParsedPostDeliverable[] {
+  const pdHtml = sectionHtml(html, 'post-deliverables');
+  if (!pdHtml) return [];
+
+  const items: ParsedPostDeliverable[] = [];
+  const liRe = /<li([^>]*data-chalk-deliverable[^>]*)>([\s\S]*?)<\/li>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = liRe.exec(pdHtml)) !== null) {
+    const attrsStr = m[1] ?? '';
+    const liHtml = m[2] ?? '';
+
+    const idAttr = /data-chalk-deliverable="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const id = idAttr || null;
+    const owner = /data-owner="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const rawText = liHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    items.push({ id, owner, text: rawText });
+  }
+
+  return items;
+}
+
+function parseOpsRisks(html: string, file: string, violations: Violation[]): ParsedRisk[] {
+  const risksHtml = sectionHtml(html, 'risks');
+  if (!risksHtml) return [];
+
+  const risks: ParsedRisk[] = [];
+  const riskRe = /<li[^>]*data-chalk-risk="([^"]*)"[^>]*>([\s\S]*?)<\/li>/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = riskRe.exec(risksHtml)) !== null) {
+    const riskKey = m[1] ?? '';
+    const liHtml = m[2] ?? '';
+    const flRe = /<[^>]*data-chalk-field="first-line"[^>]*>([\s\S]*?)<\/(?:span|td|p|div)>/i;
+    const flm = flRe.exec(liHtml);
+    const firstLine = flm ? cleanText(flm[1] ?? '', violations, file, 'risks', null) : null;
+    risks.push({ key: riskKey, firstLine });
+  }
+
+  const foundKeys = new Set(risks.map(r => r.key));
+  for (const key of OPS_REQUIRED_RISK_KEYS) {
+    if (!foundKeys.has(key)) {
+      violations.push(violation('spec.risk_missing', ['PLAN-07'], `필수 위험 항목 ${key} 이 없다`, file, 'risks', null, key));
+    }
+  }
+
+  return risks;
+}
+
 export function parsePlan(html: string, file = 'lesson'): ParsedPlan {
   const violations: Violation[] = [];
 
   const enc = new TextEncoder();
   if (enc.encode(html).length > MAX_SIZE_BYTES) {
     violations.push(violation('markup.too_large', ['HTML-03'], `파일 크기가 256KB 를 초과한다`, file, null, null));
-    return { meta: { kind: null, course: null, knowledgeVersion: null, format: null, audienceTier: null, familySession: false, durationMin: null, methods: [], prerequisites: null }, sections: [], steps: [], stucks: [], objectives: [], essentialQuestion: null, evidence: [], keyQuestions: [], prohibitedMoves: [], safety: null, bridgingOpener: null, violations };
+    return { meta: { kind: null, course: null, knowledgeVersion: null, format: null, audienceTier: null, familySession: false, durationMin: null, methods: [], prerequisites: null }, sections: [], steps: [], stucks: [], objectives: [], essentialQuestion: null, evidence: [], keyQuestions: [], prohibitedMoves: [], safety: null, bridgingOpener: null, violations, blocks: undefined, risks: undefined };
   }
 
   // 잘못된 수치 참조를 전체 HTML에서 사전 스캔 (텍스트 수집 경로와 무관하게 감지)
@@ -495,6 +727,28 @@ export function parsePlan(html: string, file = 'lesson'): ParsedPlan {
     }
   }
 
+  // ops-specific section checks and block/risk/materials/consent/post-deliverables extraction
+  let blocks: ParsedBlock[] | undefined;
+  let risks: ParsedRisk[] | undefined;
+  let materials: ReturnType<typeof parseOpsMaterials> | undefined;
+  let consentItems: ReturnType<typeof parseOpsConsent> | undefined;
+  let postDeliverables: ReturnType<typeof parseOpsPostDeliverables> | undefined;
+  if (meta.kind === 'ops') {
+    if (!sections.has('schedule')) {
+      sections.set('schedule', { key: 'schedule', present: false });
+      violations.push(violation('spec.section_missing', ['PLAN-01'], `필수 절 schedule 이 없다`, file, 'schedule', null));
+    }
+    if (!sections.has('risks')) {
+      sections.set('risks', { key: 'risks', present: false });
+      violations.push(violation('spec.section_missing', ['PLAN-07'], `필수 절 risks 이 없다`, file, 'risks', null));
+    }
+    blocks = parseOpsBlocks(html, file, violations, meta.familySession);
+    risks = parseOpsRisks(html, file, violations);
+    materials = parseOpsMaterials(html, file, violations);
+    consentItems = parseOpsConsent(html, file, violations);
+    postDeliverables = parseOpsPostDeliverables(html, file, violations);
+  }
+
   return {
     meta,
     sections: Array.from(sections.values()),
@@ -508,9 +762,14 @@ export function parsePlan(html: string, file = 'lesson'): ParsedPlan {
     safety,
     bridgingOpener,
     violations,
+    blocks,
+    risks,
+    materials,
+    consentItems,
+    postDeliverables,
   };
   } catch (err) {
     violations.push(violation('markup.internal', ['HTML-02'], `내부 오류: ${err instanceof Error ? err.message : String(err)}`, file, null, null));
-    return { meta: { kind: null, course: null, knowledgeVersion: null, format: null, audienceTier: null, familySession: false, durationMin: null, methods: [], prerequisites: null }, sections: [], steps: [], stucks: [], objectives: [], essentialQuestion: null, evidence: [], keyQuestions: [], prohibitedMoves: [], safety: null, bridgingOpener: null, violations };
+    return { meta: { kind: null, course: null, knowledgeVersion: null, format: null, audienceTier: null, familySession: false, durationMin: null, methods: [], prerequisites: null }, sections: [], steps: [], stucks: [], objectives: [], essentialQuestion: null, evidence: [], keyQuestions: [], prohibitedMoves: [], safety: null, bridgingOpener: null, violations, blocks: undefined, risks: undefined };
   }
 }

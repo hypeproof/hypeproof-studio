@@ -216,6 +216,17 @@
         "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
       },
       {
+        "command": "hypeproof-chat.weeklyReview",
+        "title": "HypeProof: 주간 리뷰",
+        "icon": "$(calendar)",
+        "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
+      },
+      {
+        "command": "hypeproof-chat.weeklyReviewDirector",
+        "title": "HypeProof: 주간 리뷰 (디렉터)",
+        "enablement": "hypeproof-chat.curriculumRuntimeDirector"
+      },
+      {
         "command": "hypeproof-chat.clearBrowserResultBytes",
         "title": "HypeProof: 저장된 실험 브라우저 화면 지우기",
         "enablement": "hypeproof-chat.crBrowserBytesStored"
@@ -272,6 +283,11 @@
           "command": "hypeproof-chat.curriculumSkills",
           "when": "view == hypeproof-chat.panel && hypeproof-chat.curriculumRuntimeEnabled",
           "group": "navigation@10"
+        },
+        {
+          "command": "hypeproof-chat.weeklyReview",
+          "when": "view == hypeproof-chat.panel && hypeproof-chat.curriculumRuntimeEnabled",
+          "group": "navigation@11"
         }
       ],
       "editor/title": [
@@ -328,6 +344,14 @@
         {
           "command": "hypeproof-chat.curriculumSkills",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.weeklyReview",
+          "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.weeklyReviewDirector",
+          "when": "hypeproof-chat.curriculumRuntimeDirector"
         },
         {
           "command": "hypeproof-chat.clearBrowserResultBytes",

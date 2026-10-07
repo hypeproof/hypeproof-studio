@@ -65,6 +65,12 @@ export const COMPONENTS = {
   MemoryPanel: { from: "./src/MemoryPanel.tsx", exportName: "MemoryPanel" },
   // cr-skills (#1396) — the curriculum skills panel; draws the SkillsView the host read.
   SkillsPanel: { from: "./src/SkillsPanel.tsx", exportName: "SkillsPanel" },
+  // cr-review (#1398) — the Weekly Review panel, the student's and the director's; draws the ReviewView the host read.
+  ReviewPanel: { from: "./src/ReviewPanel.tsx", exportName: "ReviewPanel" },
+  // AE-01 (#554) — the learner's goal block (closed, as it renders first) and its editor (drawn only while the block is
+  // open, which a server render never is). Both live on props: the goal the host sent, this view's note, the fields.
+  StudentGoal: { from: "./src/StudentGoal.tsx", exportName: "StudentGoal" },
+  GoalEditor: { from: "./src/StudentGoal.tsx", exportName: "GoalEditor" },
 };
 
 /**

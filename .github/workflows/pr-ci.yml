@@ -110,6 +110,10 @@ jobs:
       - name: Run classroom sharing against local D1
         working-directory: worker
         run: npm run test:classroom:d1
+      # #1013 — the learner's answer to feedback and the lesson retrospective → next draft on local workerd/D1.
+      - name: Run the feedback loop against local D1
+        working-directory: worker
+        run: npm run test:feedback-loop:d1
       - name: Run individual trials against local D1
         working-directory: worker
         run: npm run test:native-trial:d1
@@ -130,6 +134,10 @@ jobs:
       - name: Run Curriculum skills against local D1 and R2
         working-directory: worker
         run: npm run test:cr-skills:d1
+      # cr-review (#1398) — the Weekly Review Pack (staleness, section regeneration, zero-call open, director write-back, overview) on local workerd D1 and R2.
+      - name: Run Weekly Review against local D1 and R2
+        working-directory: worker
+        run: npm run test:cr-review:d1
       # cr-evidence (#1394) — participant evidence, notes, drafts, deletion and controls on local workerd D1 and R2.
       # Keep this step LAST in the job: its Miniflare round trips (the 120-session and 30x120 cases)
       # leave several thousand sockets in TIME_WAIT for about a minute, and a local D1 suite started right

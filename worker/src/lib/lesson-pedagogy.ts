@@ -181,7 +181,20 @@ const blank = (v: unknown): boolean => typeof v !== 'string' || !v.trim();
  */
 export function checkLessonPedagogy(
   content: SessionDesign,
-  opts?: { parsedSteps?: ParsedStep[]; audienceTier?: string | null; planText?: string },
+  opts?: {
+    parsedSteps?: ParsedStep[];
+    audienceTier?: string | null;
+    planText?: string;
+    /** Plan meta duration (chalk:duration-min). Takes precedence over inputDurationMin and content.duration_minutes for G2-9. */
+    planDurationMin?: number | null;
+    /** chalk_course_input_options.duration_min. Fallback when planDurationMin is absent. */
+    inputDurationMin?: number | null;
+    /** chalk:format from plan meta — "track" subtracts breakDurationMin from the G2-9 baseline. */
+    planFormat?: string | null;
+    /** Break block duration from the latest ops plan. Used only when planFormat="track".
+     *  Defaults to 20 when absent (track default break). */
+    breakDurationMin?: number | null;
+  },
 ): PedagogyFinding[] {
   const findings: PedagogyFinding[] = [];
   const steps = Array.isArray(content.steps) ? content.steps : [];
@@ -238,7 +251,21 @@ export function checkLessonPedagogy(
   // v0: duration_consistency — parsedSteps 있으면 G2-9 판정, 없으면 항상 skip.
   // opts 없는 호출(스택 확정 경로)에서도 이 skipped finding은 v0 동작을 그대로 유지한다.
   if (opts?.parsedSteps) {
-    for (const f of checkDurationConsistency(opts.parsedSteps, content.duration_minutes ?? 0)) {
+    // Priority: plan meta > input option > content field (검수 스크립트가 content를 60분으로 만들어도
+    // 계획서 meta가 있으면 그 값을 쓴다).
+    const durationSource =
+      (opts.planDurationMin != null) ? { value: opts.planDurationMin, label: `계획서 기준 ${opts.planDurationMin}분` } :
+      (opts.inputDurationMin != null) ? { value: opts.inputDurationMin, label: `입력 기준 ${opts.inputDurationMin}분` } :
+      { value: content.duration_minutes ?? 0, label: `초안 기준 ${content.duration_minutes ?? 0}분` };
+    // G2-9 track 보정: track 형식은 총 수업 시간에 휴식이 포함되어 있으나 지도안 흐름에는 없으므로 제외.
+    let effectiveDuration = durationSource.value;
+    let effectiveLabel = durationSource.label;
+    if (opts.planFormat === 'track') {
+      const breakMin = opts.breakDurationMin ?? 20;
+      effectiveDuration = durationSource.value - breakMin;
+      effectiveLabel = `${durationSource.label} − 휴식 ${breakMin}분 = ${effectiveDuration}분`;
+    }
+    for (const f of checkDurationConsistency(opts.parsedSteps, effectiveDuration, effectiveLabel)) {
       findings.push(f);
     }
   } else {
@@ -310,10 +337,12 @@ export function checkLessonPedagogy(
 
 // ─── 순수 함수 (E3-1 ops 블록 재사용 대비) ────────────────────────────────────
 
-/** G2-9: 단계 시간 합계가 수업 시간과 ±10분 내인지. 모든 단계에 durationMin 있을 때만 판정. */
+/** G2-9: 단계 시간 합계가 수업 시간과 ±10분 내인지. 모든 단계에 durationMin 있을 때만 판정.
+ * @param durationLabel 어느 출처의 수업 시간을 썼는지 finding message에 표시 (예: "계획서 기준 90분"). */
 export function checkDurationConsistency(
   steps: ParsedStep[],
   durationMinutes: number,
+  durationLabel?: string,
 ): PedagogyFinding[] {
   if (steps.length === 0) {
     return [{
@@ -336,11 +365,12 @@ export function checkDurationConsistency(
   }
   const total = steps.reduce((s, step) => s + (step.durationMin ?? 0), 0);
   const diff = Math.abs(total - durationMinutes);
+  const label = durationLabel ?? `${durationMinutes}분`;
   if (diff > DURATION_TOLERANCE_MIN) {
     return [{
       check: 'duration_consistency',
       severity: 'warn',
-      message: `단계 시간 합(${total}분)이 수업 시간(${durationMinutes}분)과 ${diff}분 차이납니다 (허용 ±${DURATION_TOLERANCE_MIN}분).`,
+      message: `단계 시간 합(${total}분)이 수업 시간(${label})과 ${diff}분 차이납니다 (허용 ±${DURATION_TOLERANCE_MIN}분).`,
       remedy: '단계 시간 합이 수업 시간과 ±10분 내가 되도록 조정하세요.',
       source: SRC_DURATION,
     }];
