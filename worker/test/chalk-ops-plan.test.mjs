@@ -894,4 +894,41 @@ await check('OP-32 parsePlan ops consent pending li → no consent_missing, cons
   assert.strictEqual(pendingItem.text, null, 'pending item text must be null');
 });
 
+// ── OP-33: comment-only if-ahead in block-1 → buffer_missing fires (regression guard) ─
+// TJ review (c5f2a9eb): verify that the fix is the actual cause of passing tests,
+// not pre-existing lesson-skeleton tokenizer behavior.
+// OPS_TRACK_HTML + comment-only if-ahead in block-1; block-2 has no if-ahead/if-behind.
+// Before fix: cleanText("<!-- placeholder -->") → non-empty → hasBuffer=true → no buffer_missing.
+// After fix:  cleanText("<!-- placeholder -->") → ""         → hasBuffer=false → buffer_missing.
+await check('OP-33 comment-only if-ahead suppresses buffer_missing before fix, fires after fix', () => {
+  const htmlWithCommentIfAhead = OPS_TRACK_HTML.replace(
+    '<td data-chalk-field="if-stuck">힌트</td>\n      </tr>',
+    '<td data-chalk-field="if-stuck">힌트</td>\n        <td data-chalk-field="if-ahead"><!-- placeholder --></td>\n      </tr>'
+  );
+  const result = parsePlan(htmlWithCommentIfAhead, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 1,
+    `comment-only if-ahead must NOT count as buffer content → buffer_missing must fire: ${JSON.stringify(result.violations.map(v => v.item))}`);
+});
+
+// ── OP-34: comment + real text in if-ahead → no buffer_missing, value is text only ──
+await check('OP-34 comment+text if-ahead → no buffer_missing, extracted value is text only', () => {
+  const htmlWithMixedIfAhead = OPS_TRACK_HTML.replace(
+    '<td data-chalk-field="if-stuck">힌트</td>\n      </tr>',
+    '<td data-chalk-field="if-stuck">힌트</td>\n        <td data-chalk-field="if-ahead"><!-- 고정 주석 -->여유 활동 추가</td>\n      </tr>'
+  );
+  const result = parsePlan(htmlWithMixedIfAhead, 'ops');
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.equal(bufMissing.length, 0,
+    `comment+text if-ahead → buffer_missing must NOT fire: ${JSON.stringify(bufMissing)}`);
+  // Verify the extracted value is text only, not "<!-- 고정 주석 -->여유 활동 추가"
+  const b1 = result.blocks?.find(b => b.key === 'block-1');
+  const ifAhead = b1?.roles?.facilitator?.ifAhead ?? b1?.ifAhead;
+  if (ifAhead !== undefined) {
+    assert.ok(!ifAhead.includes('<!--'),
+      `extracted if-ahead must not contain HTML comment: "${ifAhead}"`);
+    assert.ok(ifAhead.includes('여유 활동'), `extracted if-ahead must contain real text: "${ifAhead}"`);
+  }
+});
+
 console.log(`\n${passed} tests passed`);
