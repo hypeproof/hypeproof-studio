@@ -511,8 +511,12 @@ await check('OP-19 ops brief skeleton_html: schedule thead has 7 th columns', as
   assert.equal(thMatches.length, 7, `thead must have 7 th columns, got ${thMatches.length}`);
 });
 
-// ── OP-20: parsePlan on new skeleton → no spec.block_field_missing ────────────
-await check('OP-20 parsePlan on new skeleton_html → no spec.block_field_missing', async () => {
+// ── OP-20: parsePlan on new skeleton (empty) → buffer_missing + step_unlinked, no block_field_missing ─
+// Correction (리드 승인: chalk-engineer, 단언 약화가 아니라 기대 정정):
+// Previously passed because HTML comments in if-ahead/if-behind cells were read as values
+// (suppressing buffer_missing). After fix to cleanText(), comments are stripped → cells are
+// empty → buffer_missing fires. block_field_missing still must NOT fire (td elements exist).
+await check('OP-20 빈 뼈대에서는 buffer_missing + step_unlinked 경고가 나온다', async () => {
   const db = makeDb();
   seedDraft(db);
   const tok = await issuerTok();
@@ -526,9 +530,12 @@ await check('OP-20 parsePlan on new skeleton_html → no spec.block_field_missin
   const fieldMissing = result.violations.filter(v => v.item === 'spec.block_field_missing');
   assert.equal(fieldMissing.length, 0,
     `new skeleton must have no spec.block_field_missing, got: ${JSON.stringify(fieldMissing)}`);
-  // blank step-refs → spec.block_step_unlinked expected; buffer → spec.buffer_missing expected
   const unlinked = result.violations.filter(v => v.item === 'spec.block_step_unlinked');
   assert.ok(unlinked.length >= 2, `new skeleton must emit spec.block_step_unlinked for blank step-refs, got ${unlinked.length}`);
+  // After fix: HTML comments in if-ahead/if-behind stripped → buffer_missing must fire
+  const bufMissing = result.violations.filter(v => v.item === 'spec.buffer_missing');
+  assert.ok(bufMissing.length > 0,
+    `empty skeleton (comments stripped) must emit spec.buffer_missing, got: ${JSON.stringify(result.violations.map(v => v.item))}`);
 });
 
 // ── OP-21: ops-r4.html backward compat — old 5-section format still parses ───

@@ -446,4 +446,77 @@ const EVIDENCE_TABLE_PREREQ = 'AI 사용 경험·바이오 지식 불필요 (선
   console.log('T-P23 PASS: head meta = 표 행 → mismatch 없음');
 }
 
-console.log('\nchalk-plan-parser: 모든 테스트 통과 (28개)');
+// ── T-P24: lesson skeleton cell with HTML comment only → not counted as value ──
+// Regression guard for #1568 fix: even if a lesson plan cell contains only an
+// HTML comment, cleanText() strips it → empty string → no false field value.
+{
+  const LESSON_WITH_COMMENT_CELL = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="lesson">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="test-c1">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="90">
+  <meta name="chalk:prerequisites" content="">
+  <meta name="chalk:methods" content="m-test">
+</head>
+<body>
+  <section data-chalk-section="flow">
+    <table data-chalk-flow>
+      <tr data-chalk-step="s-1" data-duration-min="90" data-chalk-requires="" data-chalk-forbids="">
+        <th data-chalk-field="title"><!-- 자율: 제목 --></th>
+        <td data-chalk-role="teacher"><!-- 자율: 교사 할 일 --></td>
+        <td data-chalk-role="learner"><!-- 자율 --></td>
+      </tr>
+    </table>
+  </section>
+</body>
+</html>`;
+  const r = parsePlan(LESSON_WITH_COMMENT_CELL, 'lesson');
+  // Comments stripped → cells effectively empty. Must NOT appear as a non-empty field value.
+  // (field-missing violations may fire; what must NOT happen is comment text being a value)
+  assert.ok(r.steps.length > 0, 'T-P24: at least one step parsed');
+  const step = r.steps[0];
+  // title field must be empty (comment stripped), not "<!-- 자율: 제목 -->"
+  assert.equal(step.title, '', `T-P24: title must be empty after comment stripped, got: "${step.title}"`);
+  console.log('T-P24 PASS: 지도안 뼈대 칸에 주석만 있으면 값으로 읽히지 않음');
+}
+
+// ── T-P25: comment + text mixed → only text survives ──────────────────────────
+{
+  const MIXED_HTML = `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="lesson">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="test-c2">
+  <meta name="chalk:knowledge-version" content="1">
+  <meta name="chalk:format" content="track">
+  <meta name="chalk:audience-tier" content="lv1">
+  <meta name="chalk:family-session" content="false">
+  <meta name="chalk:duration-min" content="90">
+  <meta name="chalk:prerequisites" content="">
+  <meta name="chalk:methods" content="m-test">
+</head>
+<body>
+  <section data-chalk-section="flow">
+    <table data-chalk-flow>
+      <tr data-chalk-step="s-1" data-duration-min="90" data-chalk-requires="" data-chalk-forbids="">
+        <th data-chalk-field="title"><!-- 고정 주석 -->실제 제목</th>
+        <td data-chalk-role="teacher"><!-- 고정 주석 -->교사 내용</td>
+        <td data-chalk-role="learner">학습자 내용<!-- 뒤 주석 --></td>
+      </tr>
+    </table>
+  </section>
+</body>
+</html>`;
+  const r = parsePlan(MIXED_HTML, 'lesson');
+  assert.ok(r.steps.length > 0, 'T-P25: at least one step parsed');
+  const step = r.steps[0];
+  assert.equal(step.title, '실제 제목', `T-P25: comment stripped, text remains. got: "${step.title}"`);
+  console.log('T-P25 PASS: 주석과 글이 섞인 칸은 글만 남음');
+}
+
+console.log('\nchalk-plan-parser: 모든 테스트 통과 (30개)');
