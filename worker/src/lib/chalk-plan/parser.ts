@@ -197,6 +197,8 @@ function parseOpsMaterials(html: string, file: string, violations: Violation[]):
     const owner = /data-owner="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
     const autoAttr = /data-auto="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
     const auto = autoAttr === 'true';
+    const chalkStatus = /data-chalk-status="([^"]*)"/.exec(attrsStr)?.[1] ?? null;
+    const proposed = chalkStatus === 'proposed';
 
     const rawText = liHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -206,8 +208,17 @@ function parseOpsMaterials(html: string, file: string, violations: Violation[]):
     if (!owner || !VALID_MATERIAL_OWNERS.has(owner)) {
       violations.push(violation('spec.material_owner_missing', ['PLAN-05'], `준비물 항목 ${id ?? '(id없음)'} 에 owner(instructor|learner|parent) 가 없거나 어휘 밖이다`, file, 'materials', null, 'data-owner'));
     }
+    if (proposed) {
+      violations.push({
+        item: 'spec.material_proposed_pending',
+        severity: 'info',
+        at: { file, section: 'materials', step: null, field: id ?? null },
+        message: `준비물 항목 ${id ?? '(id없음)'} 이 코치 제안 상태입니다 (강사 확인 필요)`,
+        refs: ['PLAN-05'],
+      });
+    }
 
-    materials.push({ id, kind, owner, text: rawText, auto });
+    materials.push({ id, kind, owner, text: rawText, auto, proposed });
   }
 
   return materials;

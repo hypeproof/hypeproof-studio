@@ -25,7 +25,9 @@ export type ViolationCode =
   | 'spec.material_owner_missing'
   | 'spec.consent_missing'
   | 'spec.material_ref_unknown'
-  | 'spec.auto_material_stale';
+  | 'spec.auto_material_stale'
+  // #1571 (E3-2 fix) — proposed materials not yet confirmed by instructor
+  | 'spec.material_proposed_pending';
 
 export interface ViolationAt {
   file: string;
@@ -145,6 +147,7 @@ export interface ParsedMaterial {
   owner: string | null;
   text: string;
   auto: boolean;
+  proposed: boolean;
 }
 
 export interface ParsedConsentItem {

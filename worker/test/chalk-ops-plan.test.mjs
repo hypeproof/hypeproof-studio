@@ -887,4 +887,71 @@ await check('OP-32 parsePlan ops consent pending li → no consent_missing, cons
   assert.strictEqual(pendingItem.text, null, 'pending item text must be null');
 });
 
+// ── Helper: build materials section html with proposed item ────────────────────
+function opsHtmlWithProposedMaterial(proposed) {
+  const liAttrs = proposed
+    ? 'data-chalk-material="m-3" data-kind="physical" data-owner="instructor" data-chalk-status="proposed"'
+    : 'data-chalk-material="m-3" data-kind="physical" data-owner="instructor"';
+  return OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="materials"><ul></ul></section>',
+    `<section data-chalk-section="materials"><ul>
+      <li ${liAttrs}><strong data-chalk-field="name">제안 준비물</strong>: <span data-chalk-field="description">설명.</span></li>
+    </ul></section>`,
+  );
+}
+
+// ── OP-33: proposed material → spec.material_proposed_pending (info, non-blocking) ──
+await check('OP-33 parsePlan ops proposed material → spec.material_proposed_pending info violation, non-blocking', () => {
+  const result = parsePlan(opsHtmlWithProposedMaterial(true), 'ops');
+  const proposed = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
+  assert.strictEqual(proposed.length, 1,
+    `must emit exactly 1 spec.material_proposed_pending, got ${proposed.length}: ${JSON.stringify(proposed)}`);
+  assert.strictEqual(proposed[0].severity, 'info',
+    `spec.material_proposed_pending must be info severity, got: ${proposed[0].severity}`);
+  const materials = result.materials ?? [];
+  const proposedItem = materials.find(m => m.id === 'm-3');
+  assert.ok(proposedItem, 'proposed material item m-3 must be in materials array');
+  assert.strictEqual(proposedItem.proposed, true, 'item must have proposed=true');
+});
+
+// ── OP-34: confirmed material (no data-chalk-status) → no spec.material_proposed_pending ──
+await check('OP-34 parsePlan ops confirmed material → no spec.material_proposed_pending', () => {
+  const result = parsePlan(opsHtmlWithProposedMaterial(false), 'ops');
+  const proposed = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
+  assert.strictEqual(proposed.length, 0,
+    `confirmed material must not emit spec.material_proposed_pending, got: ${JSON.stringify(proposed)}`);
+  const materials = result.materials ?? [];
+  const item = materials.find(m => m.id === 'm-3');
+  assert.ok(item, 'material m-3 must be in materials array');
+  assert.strictEqual(item.proposed, false, 'confirmed item must have proposed=false');
+});
+
+// ── OP-35: data-auto item alongside proposed → spec.auto_material_stale only if auto ids differ ──
+await check('OP-35 parsePlan ops data-auto item is parsed with auto=true, proposed=false', () => {
+  const html = OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="materials"><ul></ul></section>',
+    `<section data-chalk-section="materials"><ul>
+      <li data-chalk-material="auto-token" data-kind="account" data-owner="learner" data-auto="true">자동 준비물</li>
+    </ul></section>`,
+  );
+  const result = parsePlan(html, 'ops');
+  const materials = result.materials ?? [];
+  const autoItem = materials.find(m => m.id === 'auto-token');
+  assert.ok(autoItem, 'auto material must be parsed');
+  assert.strictEqual(autoItem.auto, true, 'auto item must have auto=true');
+  assert.strictEqual(autoItem.proposed, false, 'auto item must have proposed=false (not proposed)');
+  const proposedViolations = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
+  assert.strictEqual(proposedViolations.length, 0, 'data-auto item must not trigger spec.material_proposed_pending');
+});
+
+// ── OP-36: new draft path — parsePlan does not break when materials section is empty ──
+await check('OP-36 parsePlan ops empty materials section → no material violations, proposed=[] implicit', () => {
+  const result = parsePlan(OPS_TRACK_HTML, 'ops');
+  const proposedViolations = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
+  assert.strictEqual(proposedViolations.length, 0,
+    `empty materials must not emit spec.material_proposed_pending: ${JSON.stringify(proposedViolations)}`);
+  const materials = result.materials ?? [];
+  assert.strictEqual(materials.length, 0, 'empty materials section must yield no material items');
+});
+
 console.log(`\n${passed} tests passed`);

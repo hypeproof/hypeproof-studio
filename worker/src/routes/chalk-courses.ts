@@ -421,7 +421,8 @@ chalkCourses.put(
       return c.json({ code: "invalid_request", error: "expected_revision required (≥1; use the draft save endpoint to create a new course)" }, 400);
     if (typeof b.request_id !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(b.request_id))
       return c.json({ code: "invalid_request", error: "request_id required" }, 400);
-    const profile_id = typeof b.profile_id === "string" ? b.profile_id : "";
+    // profile_id resolved after prior is loaded (line ~466); placeholder here.
+    const profile_id_input: string | null = (typeof b.profile_id === "string" && b.profile_id !== "") ? b.profile_id : null;
 
     if (b.audience_tier != null && (typeof b.audience_tier !== 'string' || !['lv1', 'lv2', 'adult'].includes(b.audience_tier as string)))
       return c.json({ code: 'invalid_request', error: 'audience_tier must be one of: lv1, lv2, adult' }, 400);
@@ -466,6 +467,11 @@ chalkCourses.put(
     const prior = await readDraft(c.env.HPS_DB, cohort, course);
     if (!prior || !owns(prior, auth.payload.u, auth.scope.profiles))
       return c.json({ error: "course not found" }, 404);
+
+    // Keep existing profile_id when the body omits it or sends "".
+    // This prevents PUT /inputs (which has no profile_id field in the tool schema)
+    // from overwriting the profile_id set during course creation.
+    const profile_id = profile_id_input ?? prior.profile_id;
 
     // Content for new drafts: minimal valid SessionDesign
     const existingContent = prior ? prior.content_json : JSON.stringify({
