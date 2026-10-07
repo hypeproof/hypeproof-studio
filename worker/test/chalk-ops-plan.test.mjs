@@ -123,6 +123,18 @@ function seedDraft(db) {
   );
 }
 
+function seedDraftWithProfile(db, pid) {
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO authoring_drafts (cohort_id,course_id,owner_id,profile_id,revision,content_json,request_id,request_hash,updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`
+  ).run(
+    COHORT, 'test-course', 'tester', pid, 1,
+    '{"schema":"hps-session-design/1","title":"","audience":"","duration_minutes":120,"objective":"","prerequisites":"","starter":"","steps":[]}',
+    'req-seed-with-profile', 'hash-seed-with-profile', now,
+  );
+}
+
 const VALID_INPUTS_WORKSHOP = {
   audience: '초등학교 3-4학년',
   assets: ['INTENT', 'VERIFY'],
@@ -900,8 +912,8 @@ function opsHtmlWithProposedMaterial(proposed) {
   );
 }
 
-// ── OP-33: proposed material → spec.material_proposed_pending (info, non-blocking) ──
-await check('OP-33 parsePlan ops proposed material → spec.material_proposed_pending info violation, non-blocking', () => {
+// ── OP-40: proposed material → spec.material_proposed_pending (info, non-blocking) ──
+await check('OP-40 parsePlan ops proposed material → spec.material_proposed_pending info violation, non-blocking', () => {
   const result = parsePlan(opsHtmlWithProposedMaterial(true), 'ops');
   const proposed = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
   assert.strictEqual(proposed.length, 1,
@@ -914,8 +926,8 @@ await check('OP-33 parsePlan ops proposed material → spec.material_proposed_pe
   assert.strictEqual(proposedItem.proposed, true, 'item must have proposed=true');
 });
 
-// ── OP-34: confirmed material (no data-chalk-status) → no spec.material_proposed_pending ──
-await check('OP-34 parsePlan ops confirmed material → no spec.material_proposed_pending', () => {
+// ── OP-41: confirmed material (no data-chalk-status) → no spec.material_proposed_pending ──
+await check('OP-41 parsePlan ops confirmed material → no spec.material_proposed_pending', () => {
   const result = parsePlan(opsHtmlWithProposedMaterial(false), 'ops');
   const proposed = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
   assert.strictEqual(proposed.length, 0,
@@ -926,8 +938,8 @@ await check('OP-34 parsePlan ops confirmed material → no spec.material_propose
   assert.strictEqual(item.proposed, false, 'confirmed item must have proposed=false');
 });
 
-// ── OP-35: data-auto item alongside proposed → spec.auto_material_stale only if auto ids differ ──
-await check('OP-35 parsePlan ops data-auto item is parsed with auto=true, proposed=false', () => {
+// ── OP-42: data-auto item alongside proposed → spec.auto_material_stale only if auto ids differ ──
+await check('OP-42 parsePlan ops data-auto item is parsed with auto=true, proposed=false', () => {
   const html = OPS_TRACK_HTML.replace(
     '<section data-chalk-section="materials"><ul></ul></section>',
     `<section data-chalk-section="materials"><ul>
@@ -944,14 +956,100 @@ await check('OP-35 parsePlan ops data-auto item is parsed with auto=true, propos
   assert.strictEqual(proposedViolations.length, 0, 'data-auto item must not trigger spec.material_proposed_pending');
 });
 
-// ── OP-36: new draft path — parsePlan does not break when materials section is empty ──
-await check('OP-36 parsePlan ops empty materials section → no material violations, proposed=[] implicit', () => {
+// ── OP-43: new draft path — parsePlan does not break when materials section is empty ──
+await check('OP-43 parsePlan ops empty materials section → no material violations, proposed=[] implicit', () => {
   const result = parsePlan(OPS_TRACK_HTML, 'ops');
   const proposedViolations = result.violations.filter(v => v.item === 'spec.material_proposed_pending');
   assert.strictEqual(proposedViolations.length, 0,
     `empty materials must not emit spec.material_proposed_pending: ${JSON.stringify(proposedViolations)}`);
   const materials = result.materials ?? [];
   assert.strictEqual(materials.length, 0, 'empty materials section must yield no material items');
+});
+
+// ── OP-44: (scope 1) coach path — draft with profile_id, PUT /inputs without profile_id → profile_id kept ──
+// Verifies the fix: PUT /inputs (body has no profile_id) must not clear the draft's profile_id.
+// After the call, brief?file=ops must return auto_materials and filled consent (not all-pending).
+await check('OP-44 PUT /inputs no profile_id → draft profile_id preserved, brief returns auto_materials + filled consent', async () => {
+  const db = makeDb();
+  seedDraftWithProfile(db, profileId);
+  const tok = await issuerTok();
+  // PUT /inputs without profile_id — mirrors what chalk_set_inputs tool sends
+  const inputsBody = { ...VALID_INPUTS_TRACK, request_id: 'req-op44-inputs' };
+  delete inputsBody.profile_id;
+  const inputsR = await req('PUT', `${base}/inputs`, inputsBody, tok, db);
+  assert.equal(inputsR.status, 200, `PUT /inputs must succeed: ${JSON.stringify(inputsR.json)}`);
+
+  const briefR = await req('GET', `${base}/brief?file=ops`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const ams = briefR.json.auto_materials;
+  assert.ok(Array.isArray(ams) && ams.length > 0,
+    `auto_materials must be non-empty when profile_id is preserved, got: ${JSON.stringify(ams)}`);
+  assert.ok(ams.some(m => m.id === 'auto-token'),
+    `auto-token must be present, ids: ${JSON.stringify(ams.map(m => m.id))}`);
+  const pending = briefR.json.consent_pending ?? [];
+  assert.equal(pending.length, 0,
+    `consent_pending must be empty when opsProfile is non-null, got: ${JSON.stringify(pending)}`);
+});
+
+// ── OP-45: (scope 1) profile_id: "" in body → same result as omitting it ──
+await check('OP-45 PUT /inputs profile_id="" → draft profile_id preserved, brief returns auto_materials', async () => {
+  const db = makeDb();
+  seedDraftWithProfile(db, profileId);
+  const tok = await issuerTok();
+  const inputsR = await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, profile_id: '', request_id: 'req-op45-inputs' }, tok, db);
+  assert.equal(inputsR.status, 200, `PUT /inputs must succeed: ${JSON.stringify(inputsR.json)}`);
+
+  const briefR = await req('GET', `${base}/brief?file=ops`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const ams = briefR.json.auto_materials;
+  assert.ok(Array.isArray(ams) && ams.length > 0,
+    `auto_materials must be non-empty when profile_id="" keeps prior.profile_id, got: ${JSON.stringify(ams)}`);
+});
+
+// ── OP-46: (scope 1, chalk-po req) new draft (profile_id="") + PUT /inputs no profile_id → prior.profile_id="" kept, behavior unchanged ──
+await check('OP-46 new draft profile_id="" + PUT /inputs no profile_id → prior.profile_id="" kept, auto_materials empty', async () => {
+  const db = makeDb();
+  seedDraft(db); // profile_id = "" (no profile set)
+  const tok = await issuerTok();
+  const inputsBody = { ...VALID_INPUTS_TRACK, request_id: 'req-op46-inputs' };
+  delete inputsBody.profile_id;
+  const inputsR = await req('PUT', `${base}/inputs`, inputsBody, tok, db);
+  assert.equal(inputsR.status, 200, `PUT /inputs must succeed: ${JSON.stringify(inputsR.json)}`);
+
+  const briefR = await req('GET', `${base}/brief?file=ops`, null, tok, db);
+  assert.equal(briefR.status, 200, JSON.stringify(briefR.json));
+  const ams = briefR.json.auto_materials;
+  assert.ok(Array.isArray(ams) && ams.length === 0,
+    `no profile → auto_materials must be empty (new draft path unchanged), got: ${JSON.stringify(ams)}`);
+});
+
+// ── OP-47: (auto material protection) data-auto item removed in saved plan → spec.auto_material_stale emitted ──
+await check('OP-47 PUT /plan auto material removed → spec.auto_material_stale warning', async () => {
+  const db = makeDb();
+  seedDraftWithProfile(db, profileId);
+  const tok = await issuerTok();
+  const inputsR = await req('PUT', `${base}/inputs`, { ...VALID_INPUTS_TRACK, profile_id: profileId, request_id: 'req-op47-inputs' }, tok, db);
+  assert.equal(inputsR.status, 200, `PUT /inputs must succeed: ${JSON.stringify(inputsR.json)}`);
+  const revision = inputsR.json.revision;
+
+  // Save plan with empty materials section — auto items were removed by the coach
+  const htmlNoAuto = OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="materials"><ul></ul></section>',
+    '<section data-chalk-section="materials"><ul></ul></section>',
+  );
+  const putR = await req('PUT', `${base}/plan`, {
+    html: htmlNoAuto,
+    file: 'ops',
+    knowledge_version: 1,
+    expected_revision: revision,
+    request_id: 'req-op47-plan',
+  }, tok, db);
+  assert.equal(putR.status, 200, `PUT /plan must succeed: ${JSON.stringify(putR.json)}`);
+  const findings = putR.json.findings ?? [];
+  const stale = findings.find(f => f.item === 'spec.auto_material_stale');
+  assert.ok(stale,
+    `spec.auto_material_stale must fire when auto materials are absent from saved plan, findings: ${JSON.stringify(findings.map(f => f.item))}`);
+  assert.equal(stale.severity, 'warn', 'spec.auto_material_stale must be warn severity');
 });
 
 console.log(`\n${passed} tests passed`);
