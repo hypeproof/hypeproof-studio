@@ -213,7 +213,7 @@ function parseOpsMaterials(html: string, file: string, violations: Violation[]):
   return materials;
 }
 
-const REQUIRED_CONSENT_KEYS = ['model', 'account'] as const;
+const REQUIRED_CONSENT_KEYS = ['model', 'account', 'log-collection', 'publishing'] as const;
 
 function parseOpsConsent(html: string, file: string, violations: Violation[]): ParsedConsentItem[] {
   const cHtml = sectionHtml(html, 'consent');

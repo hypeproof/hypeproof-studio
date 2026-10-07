@@ -831,21 +831,60 @@ await check('OP-29 parsePlan ops material missing kind/owner → spec.material_k
   assert.ok(ownerV, `spec.material_owner_missing must be emitted, violations: ${JSON.stringify(result.violations.map(v => v.item))}`);
 });
 
-// ── OP-30: parsePlan consent section missing model+account → 2x spec.consent_missing ──
-await check('OP-30 parsePlan ops consent missing model/account → spec.consent_missing x2', () => {
-  const htmlMissingConsent = OPS_TRACK_HTML.replace(
+// ── Helper: build consent section html with given keys present ─────────────────
+const ALL_CONSENT_KEYS = ['model', 'account', 'log-collection', 'publishing'];
+function consentSectionWith(keys) {
+  const lis = keys.map(k => `<li data-chalk-consent="${k}">동의 텍스트 ${k}</li>`).join('\n      ');
+  return `<section data-chalk-section="consent"><ul>\n      ${lis}\n    </ul></section>`;
+}
+function opsHtmlWithConsent(keys) {
+  return OPS_TRACK_HTML.replace(
+    '<section data-chalk-section="consent"><ul></ul></section>',
+    consentSectionWith(keys),
+  );
+}
+
+// ── OP-30: each required key missing one at a time → exactly that key spec.consent_missing ──
+for (const missingKey of ALL_CONSENT_KEYS) {
+  const presentKeys = ALL_CONSENT_KEYS.filter(k => k !== missingKey);
+  await check(`OP-30 parsePlan ops consent missing ${missingKey} → spec.consent_missing for ${missingKey} only`, () => {
+    const result = parsePlan(opsHtmlWithConsent(presentKeys), 'ops');
+    const consentViolations = result.violations.filter(v => v.item === 'spec.consent_missing');
+    assert.strictEqual(consentViolations.length, 1,
+      `must emit exactly 1 spec.consent_missing for missing ${missingKey}, got ${consentViolations.length}: ${JSON.stringify(consentViolations)}`);
+    assert.strictEqual(consentViolations[0].at?.field, missingKey,
+      `violation must name ${missingKey}, got: ${JSON.stringify(consentViolations[0].at)}`);
+  });
+}
+
+// ── OP-31: all four keys present → no spec.consent_missing ─────────────────────
+await check('OP-31 parsePlan ops consent all four keys present → no spec.consent_missing', () => {
+  const result = parsePlan(opsHtmlWithConsent(ALL_CONSENT_KEYS), 'ops');
+  const consentViolations = result.violations.filter(v => v.item === 'spec.consent_missing');
+  assert.strictEqual(consentViolations.length, 0,
+    `must emit 0 spec.consent_missing when all four keys present, got: ${JSON.stringify(consentViolations)}`);
+});
+
+// ── OP-32: pending li counts as present (no consent_missing), but consent_pending fires ──
+await check('OP-32 parsePlan ops consent pending li → no consent_missing, consent_pending emitted', () => {
+  const pendingHtml = OPS_TRACK_HTML.replace(
     '<section data-chalk-section="consent"><ul></ul></section>',
     `<section data-chalk-section="consent"><ul>
-      <li data-chalk-consent="log-collection">대화 본문을 저장하지 않습니다</li>
-      <li data-chalk-consent="publishing">결과물을 공개하지 않습니다</li>
+      <li data-chalk-consent="model" data-auto="pending"></li>
+      <li data-chalk-consent="account">계정 동의</li>
+      <li data-chalk-consent="log-collection">기록 수집 동의</li>
+      <li data-chalk-consent="publishing">결과물 공개 동의</li>
     </ul></section>`,
   );
-  const result = parsePlan(htmlMissingConsent, 'ops');
-  const consentViolations = result.violations.filter(v => v.item === 'spec.consent_missing');
-  assert.ok(consentViolations.length >= 2, `must emit 2 spec.consent_missing violations for model+account, got ${consentViolations.length}: ${JSON.stringify(consentViolations.map(v => v.at))}`);
-  const missingKeys = consentViolations.map(v => v.at?.field);
-  assert.ok(missingKeys.includes('model'), `model must be in missing keys, got: ${JSON.stringify(missingKeys)}`);
-  assert.ok(missingKeys.includes('account'), `account must be in missing keys, got: ${JSON.stringify(missingKeys)}`);
+  const result = parsePlan(pendingHtml, 'ops');
+  const consentMissing = result.violations.filter(v => v.item === 'spec.consent_missing');
+  assert.strictEqual(consentMissing.length, 0,
+    `pending li must not trigger spec.consent_missing, got: ${JSON.stringify(consentMissing)}`);
+  const consentItems = result.consentItems ?? [];
+  const pendingItem = consentItems.find(i => i.key === 'model');
+  assert.ok(pendingItem, 'model consent item must exist');
+  assert.strictEqual(pendingItem.auto, true, 'pending item must have auto=true');
+  assert.strictEqual(pendingItem.text, null, 'pending item text must be null');
 });
 
 console.log(`\n${passed} tests passed`);
