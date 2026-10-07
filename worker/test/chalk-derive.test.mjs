@@ -527,10 +527,22 @@ await check('DR-16 runbook/handout have no HTML comments, no authoring keywords,
 await check('DR-17 extractCourseTitleFromLesson returns 과목 cell value; fallback when absent', () => {
   const lessonWithTitle = `<section data-chalk-section="meta"><table><tr><th>과목</th><td>초등학교 AI 기초</td></tr></table></section>`;
   const lessonEmptyCell = `<section data-chalk-section="meta"><table><tr><th>과목</th><td></td></tr></table></section>`;
+  // Skeleton 과목 cell may contain HTML comments before #1568; cleanValue must strip them.
+  const lessonCommentOnly = `<section data-chalk-section="meta"><table><tr><th>과목</th><td><!-- 강의 제목 --></td></tr></table></section>`;
 
   assert.equal(extractCourseTitleFromLesson(lessonWithTitle), '초등학교 AI 기초');
   assert.equal(extractCourseTitleFromLesson(lessonEmptyCell), '(강의 이름 미정)');
+  assert.equal(extractCourseTitleFromLesson(lessonCommentOnly), '(강의 이름 미정)',
+    'cleanValue must strip HTML comments so comment-only cell → fallback');
   assert.equal(extractCourseTitleFromLesson(''), '(강의 이름 미정)');
+
+  // Real saved lesson fixture (r3.html, data-chalk-kind="lesson")
+  const r3Html = readFileSync(new URL('./fixtures/chalk-plan/r3.html', import.meta.url), 'utf8');
+  assert.equal(
+    extractCourseTitleFromLesson(r3Html),
+    'AI에게 분명하게 말하고 결과 확인하기 (바이오·제약 주제)',
+    'r3.html lesson fixture must return 과목 cell value',
+  );
 
   // Course ID like "review-1791370926" must not appear when courseTitle is provided
   const opsHtml = generateOpsSkeleton({
