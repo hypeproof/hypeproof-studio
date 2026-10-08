@@ -27,7 +27,7 @@ import {
 import { PreviewProvider } from "./previewProvider";
 import { runReportProblemCommand } from "./reportProblem";
 import { runMintStudentToken, ISSUER_TOKEN_KEY } from "./mintStudentToken";
-import { looksLikeIssuerTokenUnverified } from "./chatPanelHelpers";
+import { looksLikeIssuerTokenUnverified, testStateCandidates } from "./chatPanelHelpers";
 import { localRuntimeConfig } from "./localRuntime";
 import {
   scheduleUpdateChecks,
@@ -172,6 +172,8 @@ export async function activate(context: vscode.ExtensionContext) {
   providerRef = provider;
   // CR-10 — show the delete command when an earlier session stored browser-result bytes.
   void provider.refreshCrBytesContext();
+  // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
+  void provider.refreshCrDirectorContext().catch(() => undefined);
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const startPage = new StartPage(context, provider, async (profile, commit) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit);
@@ -635,6 +637,8 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
+    vscode.commands.registerCommand("hypeproof-chat.weeklyReview", () => provider.weeklyReview()),
+    vscode.commands.registerCommand("hypeproof-chat.weeklyReviewDirector", () => provider.weeklyReviewDirector()),
     // CR-10 — delete the stored browser-result bytes. Gated on "bytes are stored", NOT on
     // the CR switch: what an earlier switch-on stored stays deletable after it goes off.
     vscode.commands.registerCommand("hypeproof-chat.clearBrowserResultBytes", () => provider.clearStoredBrowserResults()),
@@ -1058,10 +1062,10 @@ async function applyTestBackdoors(
   // typically <userDataDir>/User/hps-test-state.json. Always wins over env
   // (file is more explicit + more reliable).
   try {
-    const candidates = [
+    const candidates = testStateCandidates(vscode.env.appName,
       path.join(context.globalStorageUri.fsPath, "..", "..", "..", "User", "hps-test-state.json"),
       path.join(os.homedir(), ".hps-test-state.json"),
-    ];
+    );
     for (const f of candidates) {
       if (fs.existsSync(f)) {
         // Regardless of whether parsing succeeds, this is the "test run" marker —

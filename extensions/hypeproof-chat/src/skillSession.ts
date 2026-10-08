@@ -120,7 +120,8 @@ export class SkillSession {
       skills: reg.body.skills,
       pickers: {
         experiments: m.experiments.map((e) => ({ id: e.id, label: `${e.week}주차 · ${e.question}` })),
-        decisions: m.decisions.filter((d) => d.shown_as === "team_decision" && d.affected_deck_slides.length).map((d) => ({ id: d.id, label: d.statement, slides: d.affected_deck_slides })),
+        // A person's decision (the team's, or a director's from a review pack) drives a deck patch; an AI suggestion never does.
+        decisions: m.decisions.filter((d) => d.shown_as !== "ai_suggestion" && d.affected_deck_slides.length).map((d) => ({ id: d.id, label: d.statement, slides: d.affected_deck_slides })),
         evidence: (run?.team_evidence ?? []).map((i) => ({ id: i.id, label: i.statement })),
       },
       result: this.result,

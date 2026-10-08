@@ -4,6 +4,8 @@
 // GET  /chalk/cohorts/:cohort/courses/:course/brief        — generation brief bundle
 // GET  /chalk/cohorts/:cohort/courses/:course/plan         — read plan file (issuer only)
 // POST /chalk/cohorts/:cohort/courses/:course/check        — pedagogy + parser check (#1294)
+// POST /chalk/cohorts/:cohort/courses/:course/feedback     — record feedback (#1466 E2-7)
+// GET  /chalk/cohorts/:cohort/courses/:course/diff         — revision diff (#1466 E2-7)
 // GET  /chalk/cohorts/:cohort/courses/:course/judge-brief  — prompt+excerpt bundle for 5 model items (#1465)
 // POST /chalk/cohorts/:cohort/courses/:course/judgements   — store model judgement (#1465)
 import { Hono } from "hono";
@@ -16,7 +18,11 @@ import { readDraft, owns, writeDraft, type Draft } from "../lib/authoring-draft-
 import { recommendMethods, VocabError, KnowledgeIncompatibleError, type MethodFields } from "../lib/chalk-recommend";
 import { checkLessonPedagogy, type PedagogyFinding } from "../lib/lesson-pedagogy";
 import { parsePlan, type Violation } from "../lib/chalk-plan";
+import { planUnits, diffUnits } from "../lib/chalk-plan/units.ts";
 import type { SessionDesign } from "../lib/session-design";
+import { getProfile } from "../profiles/index";
+import { isKnownSkill } from "../skills/index";
+import { buildAutoMaterials, buildAutoConsent, consentPendingKeys, diffAutoMaterials } from "../lib/chalk-ops";
 import {
   getJudgePrompt, MODEL_JUDGED_KEYS as JUDGE_CHECK_NAMES, VALID_VERDICTS,
   HUMAN_ONLY_KEYS, isKnownPromptVersion,
@@ -197,6 +203,182 @@ function generateSkeleton(opts: {
       <p data-chalk-field="min-support"></p>
       <p data-chalk-field="expected-response"></p>
     </div>
+  </section>
+
+</body>
+</html>`;
+}
+
+// #1467 (E3-1) / #1468 (E3-2) — ops plan skeleton HTML (redesigned: 8 sections, visible h2, schedule thead).
+function generateOpsSkeleton(opts: {
+  course_id: string; knowledge_version: number; format: string;
+  family_session: boolean; duration_min: number; break_min: number;
+  audience_tier: string | null;
+  autoMaterialsHtml?: string;
+  autoConsentHtml?: string;
+}): string {
+  const { course_id, knowledge_version, format, family_session, duration_min, break_min, audience_tier,
+    autoMaterialsHtml = '', autoConsentHtml = '' } = opts;
+
+  // family=true → parent cell (spec.parent_role_missing check); family=false → assistant
+  const assistantOrParentCell = family_session
+    ? `<td data-chalk-role="parent" data-chalk-parent-role=""><!-- 가족 수업: 부모 역할. 고정: data-chalk-role="parent" data-chalk-parent-role 속성 제거 금지 --></td>`
+    : `<td data-chalk-role="assistant"><!-- 자율: 보조 강사 할 일 --></td>`;
+
+  const normalBlockRow = (key: string, durationMin: number | null): string => {
+    const durAttr = durationMin !== null ? ` data-duration-min="${durationMin}"` : '';
+    return `<tr data-chalk-block="${key}" data-chalk-step-ref="" data-start=""${durAttr}>
+          <!-- 고정: data-chalk-block, data-chalk-step-ref, data-start, data-duration-min 속성 제거 금지; 자율: 각 칸 내용. data-chalk-step-ref 표기 예: "s-1 s-2" (쉼표도 허용: "s-1, s-2") -->
+          <td data-chalk-fixed data-chalk-field="time-range"><!-- 고정: 시작–끝 시각 칸; 자율: 값 --></td>
+          <td><!-- 블록 칸 — 고정: span의 data-chalk-field 속성 이름 변경 금지; 자율: span 내용 -->
+            <strong>활동</strong> <span data-chalk-field="activity"></span>
+            / <strong>핵심 에셋</strong> <span data-chalk-field="asset"></span>
+            / <strong>산출물</strong> <span data-chalk-field="artifact"></span>
+          </td>
+          <td data-chalk-role="facilitator"><!-- 고정: data-chalk-role="facilitator" 제거 금지; 자율: 역할 내용과 아래 판정/막힐 때/완충 값 -->
+            <strong>종료 판정</strong> <span data-chalk-field="exit-criteria"></span>
+            <br><strong>막힐 때</strong> <span data-chalk-field="if-stuck"></span>
+            <!-- 자율: if-ahead·if-behind 중 하나 이상 채우면 완충으로 인정 -->
+            <br><strong>시간이 남으면</strong> <span data-chalk-field="if-ahead"></span>
+            <br><strong>시간이 모자라면</strong> <span data-chalk-field="if-behind"></span>
+          </td>
+          <td data-chalk-role="learner"><!-- 자율 --></td>
+          ${assistantOrParentCell}
+          <td data-chalk-field="intent"><!-- 자율: 의도 한 줄 --></td>
+          <!-- 고정: 아래 칸 값과 tr의 data-chalk-step-ref 속성 값을 같게 유지한다 -->
+          <td data-chalk-field="step-ref-label"><!-- 자율: 연결 단계 ID(s) --></td>
+        </tr>`;
+  };
+
+  const breakBlockRow = (key: string, durationMin: number): string =>
+    `<tr data-chalk-block="${key}" data-chalk-block-kind="break" data-start="" data-duration-min="${durationMin}" data-chalk-fixed>
+          <!-- 고정: 휴식 행 구조와 data-chalk-block-kind="break" 제거 금지 -->
+          <td data-chalk-fixed data-chalk-field="time-range"><!-- 고정: 시작–끝 시각 칸 --></td>
+          <td colspan="6" data-chalk-field="activity">휴식 ${durationMin}분</td>
+        </tr>`;
+
+  const WORKSHOP_BLOCKS = ['intro', 'explore', 'first-try', 'improve', 'share'] as const;
+  const scheduleRows = format === 'workshop'
+    ? WORKSHOP_BLOCKS.map(k => normalBlockRow(k, null)).join('\n      ')
+    : [normalBlockRow('block-1', 110), breakBlockRow('break', break_min), normalBlockRow('block-2', 110)].join('\n      ');
+
+  const style = `body { font-family: sans-serif; background: #fff; color: #111; max-width: 900px; margin: 0 auto; padding: 1rem; font-size: 1rem; }
+    h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #ccc; padding: 0.4rem; vertical-align: top; }
+    thead th { background: #f5f5f5; }
+    section { margin-bottom: 1.5rem; }
+    ol { padding-left: 1.5rem; }`;
+
+  return `<!DOCTYPE html>
+<html lang="ko" data-chalk-plan="1" data-chalk-kind="ops">
+<head>
+  <meta charset="utf-8">
+  <meta name="chalk:course" content="${course_id}">
+  <meta name="chalk:knowledge-version" content="${knowledge_version}">
+  <meta name="chalk:format" content="${format}">
+  <meta name="chalk:audience-tier" content="${audience_tier ?? ''}">
+  <meta name="chalk:family-session" content="${family_session}">
+  <meta name="chalk:duration-min" content="${duration_min}">
+  <style>
+    ${style}
+  </style>
+</head>
+<body>
+
+  <!-- ① 머리 — 고정: 절 제목과 세 칸(일시·시작-끝·목표)을 제거하지 말 것; 자율: 값 -->
+  <section data-chalk-section="header">
+    <h2 data-chalk-fixed>운영 계획 개요</h2>
+    <p><strong>일시:</strong> <span data-chalk-field="date"></span></p>
+    <p><strong>시작–끝:</strong> <span data-chalk-field="time-range"></span></p>
+    <p><strong>한 줄 목표:</strong> <span data-chalk-field="goal"></span></p>
+  </section>
+
+  <!-- ② 운영 방식 — 고정: 절 제목과 다섯 항목 레이블을 제거하지 말 것; 자율: 값 -->
+  <section data-chalk-section="operations">
+    <h2 data-chalk-fixed>운영 방식</h2>
+    <p><strong>대상 / 인원:</strong> <span data-chalk-field="audience-count"></span></p>
+    <p><strong>운영진 — 메인 강사:</strong> <span data-chalk-field="staff-main-count"></span>명, <strong>보조:</strong> <span data-chalk-field="staff-assistant-count"></span>명</p>
+    <p><strong>배치 비율:</strong> <span data-chalk-field="arrangement-ratio"></span></p>
+    <p><strong>진행 방식:</strong></p>
+    <p data-chalk-field="process"></p>
+  </section>
+
+  <!-- ③ 최종 결과물 — 고정: 절 제목과 ol 구조를 제거하지 말 것; 자율: 항목 수·내용 -->
+  <section data-chalk-section="outcomes">
+    <h2 data-chalk-fixed>최종 결과물</h2>
+    <ol>
+      <li data-chalk-field="outcome"></li>
+    </ol>
+  </section>
+
+  <!-- ④ 사전 준비물 — 고정: 절 제목·ol·li의 data-chalk-material 속성을 제거하지 말 것; 자율: 항목 수·이름·설명 -->
+  <section data-chalk-section="materials">
+    <h2 data-chalk-fixed>사전 준비물</h2>
+    <ol>
+      <li data-chalk-material="m-1" data-kind="" data-owner="">
+        <strong data-chalk-field="name"></strong>:
+        <span data-chalk-field="description"></span>
+      </li>${autoMaterialsHtml ? '\n      ' + autoMaterialsHtml : ''}
+    </ol>
+  </section>
+
+  <!-- ⑤ 진행 큐시트 — 고정: 절 제목, 머리글 행(thead tr), 시작–끝 칸 구조를 제거하지 말 것; 자율: 블록 수·이름·각 칸 내용 -->
+  <section data-chalk-section="schedule">
+    <h2 data-chalk-fixed>진행 큐시트</h2>
+    <table>
+      <thead>
+        <!-- 고정: 이 행의 열 구조와 th 텍스트를 제거하거나 줄이지 말 것 -->
+        <tr data-chalk-fixed>
+          <th>시작–끝</th>
+          <th>블록</th>
+          <th>메인 강사 할 일</th>
+          <th>학습자 할 일</th>
+          <th>보조·부모 할 일</th>
+          <th>의도 한 줄</th>
+          <!-- 고정: 연결 단계 열 값은 해당 행의 data-chalk-step-ref 속성 값과 같게 유지한다 -->
+          <th>연결 단계</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${scheduleRows}
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ⑥ 위험·문제 대응 — 고정: 절 제목, 1순위/2순위 레이블, data-chalk-risk 키 5개, first-line 구조를 제거하지 말 것; 자율: 대응 내용 -->
+  <section data-chalk-section="risks">
+    <h2 data-chalk-fixed>위험·문제 대응</h2>
+    <p data-chalk-fixed><strong>1순위 (즉시 대응)</strong></p>
+    <ul>
+      <li data-chalk-risk="ai-latency"><strong>AI 지연:</strong> <span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="content-guard"><strong>콘텐츠 차단:</strong> <span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="pace-gap"><strong>속도 격차:</strong> <span data-chalk-field="first-line"></span></li>
+    </ul>
+    <p data-chalk-fixed><strong>2순위</strong></p>
+    <ul>
+      <li data-chalk-risk="parent-overreach"><strong>부모 과개입:</strong> <span data-chalk-field="first-line"></span></li>
+      <li data-chalk-risk="overtime"><strong>시간 초과:</strong> <span data-chalk-field="first-line"></span></li>
+    </ul>
+  </section>
+
+  <!-- ⑦ 동의 — 고정: 절 제목과 ul 구조를 제거하지 말 것; 자율: 항목 내용. E3-2가 자동으로 채운다 -->
+  <section data-chalk-section="consent">
+    <h2 data-chalk-fixed>동의</h2>
+    <ul>${autoConsentHtml ? '\n      ' + autoConsentHtml + '\n    ' : ''}</ul>
+  </section>
+
+  <!-- ⑧ 사후 정리 — 고정: 절 제목, 즉시/1주일 레이블, data-chalk-deliverable 속성을 제거하지 말 것; 자율: 항목 내용 -->
+  <section data-chalk-section="post-deliverables">
+    <h2 data-chalk-fixed>사후 정리</h2>
+    <p data-chalk-fixed><strong>즉시</strong></p>
+    <ul>
+      <li data-chalk-deliverable data-owner="" data-when="immediate"></li>
+    </ul>
+    <p data-chalk-fixed><strong>1주일 내</strong></p>
+    <ul>
+      <li data-chalk-deliverable data-owner="" data-when="within-week"></li>
+    </ul>
   </section>
 
 </body>
@@ -394,7 +576,7 @@ chalkCourses.put(
     const newRevision = (b.expected_revision as number) + 1;
 
     // Parse plan to extract method IDs (avoids fragile regex on raw HTML)
-    const parsed = parsePlan(b.html as string, 'lesson');
+    const parsed = parsePlan(b.html as string, b.file as string ?? 'lesson');
     const methodIds = parsed.meta.methods;
 
     // Build updated plan_ref
@@ -413,6 +595,21 @@ chalkCourses.put(
     const hash = await sha256Hex(JSON.stringify([b.expected_revision, prior!.profile_id, newContent]));
     const now = new Date().toISOString();
 
+    // Optional feedback link: feedback_id must belong to this cohort/course.
+    let feedbackLinkStmt: ReturnType<typeof c.env.HPS_DB.prepare> | null = null;
+    if (typeof b.feedback_id === "string") {
+      const fbRow = await c.env.HPS_DB.prepare(
+        "SELECT feedback_id FROM chalk_feedback WHERE feedback_id=? AND cohort_id=? AND course_id=?"
+      ).bind(b.feedback_id, cohort, course).first<{ feedback_id: string }>();
+      if (!fbRow) return c.json({ code: "invalid_request", error: "feedback_id not found for this course" }, 400);
+      feedbackLinkStmt = c.env.HPS_DB.prepare(
+        `INSERT INTO chalk_feedback_revisions (feedback_id,revision,file,cohort_id,course_id,created_at)
+         SELECT ?,?,?,?,?,?
+         WHERE EXISTS (SELECT 1 FROM authoring_drafts WHERE cohort_id=? AND course_id=? AND revision=? AND request_id=? AND request_hash=?)`
+      ).bind(b.feedback_id as string, newRevision, b.file, cohort, course, nowMs,
+             cohort, course, newRevision, b.request_id as string, hash);
+    }
+
     // Plan file insert: conditional on the draft UPDATE succeeding (SELECT WHERE EXISTS).
     // This is a no-op if the CAS UPDATE matched 0 rows, preserving data integrity.
     const planFileInsert = c.env.HPS_DB.prepare(
@@ -422,6 +619,8 @@ chalkCourses.put(
     ).bind(cohort, course, 'draft', String(newRevision), b.file, b.html, sha256, b.knowledge_version, nowMs,
            cohort, course, newRevision, b.request_id as string, hash);
 
+    const extraBatch = feedbackLinkStmt ? [planFileInsert, feedbackLinkStmt] : [planFileInsert];
+
     const wr = await writeDraft(c.env.HPS_DB, prior!, {
       cohort, course, owner_id: auth.payload.u,
       expected_revision: b.expected_revision as number,
@@ -430,11 +629,60 @@ chalkCourses.put(
       content_json: newContent, hash, now,
       independent: !!prior!.independent,
       profile_scope: auth.scope.profiles ?? [],
-      extra_batch_stmts: [planFileInsert],
+      extra_batch_stmts: extraBatch,
     });
 
     if (wr.kind === 'ok' || wr.kind === 'idempotent') {
-      const findings = runPlanCheck(wr.draft, b.html as string, parsed.meta.audienceTier);
+      const planFile: string = typeof b.file === 'string' ? b.file : 'lesson';
+      // Read stored input duration_min for G2-9 fallback (#1531).
+      const planInputsRow = await c.env.HPS_DB.prepare(
+        `SELECT cio.duration_min FROM chalk_course_input_options cio
+         WHERE cio.cohort_id=? AND cio.course_id=?`
+      ).bind(cohort, course).first<{ duration_min: number | null }>();
+      const planInputDurationMin: number | null = planInputsRow?.duration_min ?? null;
+      // G2-9 track 보정: track 지도안이면 ops 계획서의 break 블록 시간을 읽어 비교 기준에서 뺀다.
+      let planBreakDurationMin: number | null = null;
+      if (planFile === 'lesson' && parsed.meta.format === 'track') {
+        const opsRow = await c.env.HPS_DB.prepare(
+          `SELECT html FROM chalk_plan_files WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file='ops' ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
+        ).bind(cohort, course).first<{ html: string }>();
+        if (opsRow) {
+          const bm = /data-chalk-block="break"[^>]*data-duration-min="(\d+)"/.exec(opsRow.html)
+                  ?? /data-duration-min="(\d+)"[^>]*data-chalk-block="break"/.exec(opsRow.html);
+          planBreakDurationMin = bm ? parseInt(bm[1]!, 10) : null;
+        }
+      }
+      const findings = runPlanCheck(wr.draft, b.html as string, planFile, parsed.meta.audienceTier, planInputDurationMin, planBreakDurationMin);
+      // Cross-file: spec.step_block_unlinked (ops vs lesson step IDs)
+      if (planFile === 'ops') {
+        const lessonRow = await c.env.HPS_DB.prepare(
+          `SELECT html FROM chalk_plan_files WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file='lesson' ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
+        ).bind(cohort, course).first<{ html: string }>();
+        if (!lessonRow) {
+          findings.push({ item: null, severity: 'info', judge: 'machine', at: { file: 'ops', section: 'schedule', step: null, field: null }, message: '지도안이 아직 없어 지도안↔블록 연결 검사를 건너뜁니다', skipped: true, source: 'chalk-plan/1 parser (spec.step_block_unlinked)', blocks_confirm: false });
+        } else {
+          const lessonParsed = parsePlan(lessonRow.html, 'lesson');
+          const lessonStepIds = new Set(lessonParsed.steps.map(s => s.id));
+          const opsParsed = parsePlan(b.html as string, 'ops');
+          const referencedSteps = new Set((opsParsed.blocks ?? []).flatMap(bl => bl.stepRefs));
+          for (const stepId of lessonStepIds) {
+            if (!referencedSteps.has(stepId)) {
+              findings.push({ item: null, severity: 'info', judge: 'machine', at: { file: 'ops', section: 'schedule', step: stepId, field: 'data-chalk-step-ref' }, message: `지도안 단계 ${stepId} 를 가리키는 블록이 없다`, source: 'chalk-plan/1 parser (spec.step_block_unlinked)', blocks_confirm: false });
+            }
+          }
+        }
+
+        // #1468 (E3-2) spec.auto_material_stale: compare stored auto materials with current profile config.
+        const opsProfile = wr.draft.profile_id ? getProfile(wr.draft.profile_id) : null;
+        if (opsProfile) {
+          const opsParsed2 = parsePlan(b.html as string, 'ops');
+          const storedAutoIds = (opsParsed2.materials ?? []).filter(m => m.auto).map(m => m.id ?? '');
+          const liveAutoIds = buildAutoMaterials(opsProfile, isKnownSkill).map(m => m.id);
+          if (diffAutoMaterials(storedAutoIds, liveAutoIds)) {
+            findings.push({ item: 'spec.auto_material_stale', severity: 'warn', judge: 'machine', at: { file: 'ops', section: 'materials', step: null, field: 'data-auto' }, message: '저장된 자동 준비물이 현재 프로필 설정과 다릅니다. 운영 계획안 뼈대를 다시 받아 준비물 절을 갱신하세요', source: 'chalk-ops auto_material_stale', blocks_confirm: false });
+          }
+        }
+      }
       const judged = await mergeStoredJudgements(c.env.HPS_DB, cohort, course, sha256);
       findings.push(...judged);
       appendHumanOnly(findings);
@@ -453,7 +701,7 @@ chalkCourses.get(
   async (c) => {
     const cohort = c.req.param("cohort")!;
     const course = c.req.param("course")!;
-    const { err } = await authAndOwn(c, cohort, course) as any;
+    const { err, draft: briefDraft } = await authAndOwn(c, cohort, course) as any;
     if (err) return err;
 
     c.header("cache-control", "no-store");
@@ -552,7 +800,84 @@ chalkCourses.get(
     const familySession = inputs.family_session === 1;
 
     // Duration: use stored value if set; fall back to format default.
-    const durationMin = inputs.duration_min ?? (inputs.format === 'workshop' ? 240 : 120);
+    // Track default changed to 240 (E3-1 §3-1); workshop stays 240 (same as before).
+    const durationMin = inputs.duration_min ?? 240;
+    const WORKSHOP_CORE = ['intro', 'explore', 'first-try', 'improve', 'share'] as const;
+
+    // ops brief: simpler response + break_min handling
+    if (file === 'ops') {
+      const breakMinStr = c.req.query('break_min');
+      let break_min = 20;
+      if (breakMinStr !== undefined) {
+        if (inputs.format === 'workshop') {
+          return c.json({ code: 'break_min_track_only', error: 'break_min is only valid for track format' }, 400);
+        }
+        const parsedBreak = parseInt(breakMinStr, 10);
+        if (isNaN(parsedBreak) || parsedBreak < 5 || parsedBreak > 60) {
+          return c.json({ code: 'invalid_request', error: 'break_min must be an integer between 5 and 60' }, 400);
+        }
+        break_min = parsedBreak;
+      }
+
+      const opsTotalMin = inputs.format === 'workshop'
+        ? durationMin
+        : inputs.duration_min ?? (110 + break_min + 110);
+      const ops_time_spec = inputs.format === 'workshop'
+        ? { format: 'workshop', core: [...WORKSHOP_CORE], blocks: WORKSHOP_CORE.map(k => ({ key: k })), total_min: opsTotalMin }
+        : { format: 'track', blocks: [{ key: 'block-1', min: 110 }, { key: 'break', min: break_min, kind: 'break' }, { key: 'block-2', min: 110 }], total_min: opsTotalMin };
+
+      // #1468 (E3-2) — build auto materials and consent items from cohort profile.
+      const opsProfile = briefDraft?.profile_id ? getProfile(briefDraft.profile_id) : null;
+      let opsContent: any = null;
+      try { opsContent = briefDraft ? JSON.parse(briefDraft.content_json) : null; } catch { /* ignore */ }
+      const lessonModelPolicy = opsContent?.model ?? null;
+
+      const autoMaterials = opsProfile ? buildAutoMaterials(opsProfile, isKnownSkill) : [];
+      const autoConsent = buildAutoConsent(opsProfile, lessonModelPolicy);
+      const consent_pending = consentPendingKeys(autoConsent);
+
+      const autoMaterialsHtml = autoMaterials.map(m =>
+        `<li data-chalk-material="${m.id}" data-kind="${m.kind}" data-owner="${m.owner}" data-auto="true"><strong data-chalk-field="name">${m.text}</strong>: <span data-chalk-field="description"></span></li>`
+      ).join('\n      ');
+
+      const autoConsentHtml = autoConsent.map(c2 => {
+        const pending = c2.text === null;
+        const dataAuto = pending ? 'data-auto="pending"' : 'data-auto="true"';
+        return `<li data-chalk-consent="${c2.key}" ${dataAuto}>${c2.text ?? ''}</li>`;
+      }).join('\n      ');
+
+
+      const ops_skeleton_html = generateOpsSkeleton({
+        course_id: course,
+        knowledge_version: kbVersion,
+        format: inputs.format,
+        family_session: familySession,
+        duration_min: opsTotalMin,
+        break_min,
+        audience_tier: inputs.audience_tier,
+        autoMaterialsHtml,
+        autoConsentHtml,
+      });
+
+      return c.json({
+        knowledge_version: kbVersion,
+        inputs: {
+          audience: inputs.audience,
+          assets,
+          teaching_style: inputs.teaching_style,
+          requirements: inputs.requirements,
+          format: inputs.format,
+          family_session: familySession,
+          audience_tier: inputs.audience_tier,
+          duration_min: opsTotalMin,
+        },
+        time_spec: ops_time_spec,
+        skeleton_html: ops_skeleton_html,
+        family_session: familySession,
+        auto_materials: autoMaterials,
+        consent_pending,
+      });
+    }
 
     const skeleton_html = generateSkeleton({
       course_id: course,
@@ -565,8 +890,8 @@ chalkCourses.get(
     });
 
     const time_spec = inputs.format === 'workshop'
-      ? { format: 'workshop', core: ['intro', 'explore', 'first-try', 'improve', 'share'], total_min: durationMin }
-      : { format: 'track', core: ['intro', 'practice', 'reflect'], total_min: durationMin };
+      ? { format: 'workshop', core: [...WORKSHOP_CORE], blocks: WORKSHOP_CORE.map(k => ({ key: k })), total_min: durationMin }
+      : { format: 'track', blocks: [{ key: 'block-1', min: 110 }, { key: 'break', min: 20, kind: 'break' }, { key: 'block-2', min: 110 }], total_min: durationMin };
 
     return c.json({
       knowledge_version: kbVersion,
@@ -835,7 +1160,10 @@ function appendHumanOnly(results: CheckResultItem[]): void {
 function runPlanCheck(
   draft: Draft,
   htmlOverride?: string,
+  file = 'lesson',
   audienceTier?: string | null,
+  inputDurationMin?: number | null,
+  breakDurationMin?: number | null,
 ): CheckResultItem[] {
   const results: CheckResultItem[] = [];
 
@@ -843,15 +1171,16 @@ function runPlanCheck(
   let parsedSteps: import('../lib/chalk-plan/types.ts').ParsedStep[] | undefined;
   let parsedPlanText: string | undefined;
   let parsedAudienceTier: string | null | undefined;
+  let planDurationMin: number | null = null;
+  let planFormat: string | null = null;
 
   if (htmlOverride !== undefined) {
-    const parsed = parsePlan(htmlOverride, 'lesson');
+    const parsed = parsePlan(htmlOverride, file);
     for (const v of parsed.violations) {
       results.push(fromParserViolation(v));
     }
-    // Derive prerequisites from parsed plan for gate checks only.
-    // Not stored back to content — plan→lesson derivation is E5-1 (freeze time).
-    if (parsed.meta.prerequisites) {
+    // Derive prerequisites from parsed plan for gate checks only (lesson only).
+    if (file === 'lesson' && parsed.meta.prerequisites) {
       derivedPrerequisites = parsed.meta.prerequisites;
     }
     parsedSteps = parsed.steps;
@@ -861,8 +1190,13 @@ function runPlanCheck(
     if (audienceTier === undefined && parsed.meta.audienceTier) {
       parsedAudienceTier = parsed.meta.audienceTier;
     }
+    // G2-9 reads lesson length from plan meta first (#1531).
+    planDurationMin = parsed.meta.durationMin ?? null;
+    planFormat = parsed.meta.format ?? null;
   }
 
+  // Pedagogy findings only apply to lesson files.
+  if (file !== 'lesson') return results;
   const effectiveAudienceTier = audienceTier !== undefined ? audienceTier : (parsedAudienceTier ?? null);
 
   let content: SessionDesign | null = null;
@@ -873,7 +1207,7 @@ function runPlanCheck(
       item: null,
       severity: 'warn',
       judge: 'machine',
-      at: { file: 'lesson', section: null, step: null, field: 'content_json' },
+      at: { file, section: null, step: null, field: 'content_json' },
       message: '저장된 초안을 읽지 못해 관문 검사를 건너뜀',
       skipped: true,
       source: 'chalk-draft-check',
@@ -890,7 +1224,7 @@ function runPlanCheck(
   const pedagogyFindings = checkLessonPedagogy(
     checkContent,
     parsedSteps !== undefined
-      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText }
+      ? { parsedSteps, audienceTier: effectiveAudienceTier, planText: parsedPlanText, planDurationMin, inputDurationMin, planFormat, breakDurationMin }
       : undefined,
   );
   for (const f of pedagogyFindings) {
@@ -917,19 +1251,39 @@ chalkCourses.post(
 
     const rawBody = await c.req.json().catch(() => null) as Record<string, unknown> | null;
     let html: string | undefined = typeof rawBody?.html === 'string' ? rawBody.html : undefined;
+    const checkFile = typeof rawBody?.file === 'string' && VALID_FILES.includes(rawBody.file as any) ? rawBody.file as string : 'lesson';
 
-    // When html is absent, fall back to the latest draft lesson row in chalk_plan_files.
-    // This ensures G1/G2-9/G3-* checks run consistently regardless of call path.
+    // When html is absent, fall back to the latest draft row for the requested file.
     if (html === undefined) {
       const fallbackRow = await c.env.HPS_DB.prepare(
         `SELECT html FROM chalk_plan_files
-         WHERE cohort_id=? AND course_id=? AND file='lesson' AND ref_kind='draft'
+         WHERE cohort_id=? AND course_id=? AND file=? AND ref_kind='draft'
          ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
-      ).bind(cohort, course).first<{ html: string }>();
+      ).bind(cohort, course, checkFile).first<{ html: string }>();
       if (fallbackRow) html = fallbackRow.html;
     }
 
-    const results = runPlanCheck(draft, html);
+    // Read stored input duration_min for G2-9 fallback (#1531).
+    const inputsRow = await c.env.HPS_DB.prepare(
+      `SELECT cio.duration_min FROM chalk_course_input_options cio
+       WHERE cio.cohort_id=? AND cio.course_id=?`
+    ).bind(cohort, course).first<{ duration_min: number | null }>();
+    const checkInputDurationMin: number | null = inputsRow?.duration_min ?? null;
+
+    // G2-9 track 보정: track 지도안이면 ops 계획서의 break 블록 시간을 읽어 비교 기준에서 뺀다.
+    let checkBreakDurationMin: number | null = null;
+    if (checkFile === 'lesson' && html !== undefined && /chalk:format"\s+content="track"/.test(html)) {
+      const opsRow = await c.env.HPS_DB.prepare(
+        `SELECT html FROM chalk_plan_files WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file='ops' ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
+      ).bind(cohort, course).first<{ html: string }>();
+      if (opsRow) {
+        const bm = /data-chalk-block="break"[^>]*data-duration-min="(\d+)"/.exec(opsRow.html)
+                ?? /data-duration-min="(\d+)"[^>]*data-chalk-block="break"/.exec(opsRow.html);
+        checkBreakDurationMin = bm ? parseInt(bm[1]!, 10) : null;
+      }
+    }
+
+    const results = runPlanCheck(draft, html, checkFile, undefined, checkInputDurationMin, checkBreakDurationMin);
 
     // Compute current sha to filter stored judgements
     let currentSha: string | null = null;
@@ -938,9 +1292,9 @@ chalkCourses.post(
     } else {
       const planRow = await c.env.HPS_DB.prepare(
         `SELECT sha256 FROM chalk_plan_files
-         WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file='lesson'
+         WHERE cohort_id=? AND course_id=? AND ref_kind='draft' AND file=?
          ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
-      ).bind(cohort, course).first<{ sha256: string }>();
+      ).bind(cohort, course, checkFile).first<{ sha256: string }>();
       currentSha = planRow?.sha256 ?? null;
     }
 
@@ -949,6 +1303,7 @@ chalkCourses.post(
       results.push(...judged);
     }
     appendHumanOnly(results);
+
 
     return c.json({ results });
   },
@@ -1014,3 +1369,146 @@ function fromPedagogyFinding(f: PedagogyFinding): CheckResultItem {
     blocks_confirm: f.severity === 'fail',
   };
 }
+
+// ── POST /feedback ────────────────────────────────────────────────────────────
+
+const FEEDBACK_MAX_BYTES = 16 * 1024;
+
+interface FeedbackBody {
+  text: string;
+  model: string;
+  base_revision: number;
+  request_id: string;
+}
+
+chalkCourses.post(
+  "/chalk/cohorts/:cohort/courses/:course/feedback",
+  bodyLimit({ maxSize: FEEDBACK_MAX_BYTES + 4 * 1024, onError: c => c.json({ error: "피드백이 너무 깁니다", max_bytes: FEEDBACK_MAX_BYTES }, 413) }),
+  async (c) => {
+    const cohort = c.req.param("cohort")!;
+    const course = c.req.param("course")!;
+    const { err, auth } = await authAndOwn(c, cohort, course) as any;
+    if (err) return err;
+
+    c.header("cache-control", "no-store");
+
+    let body: unknown;
+    try { body = await c.req.json(); } catch { return c.json({ code: "invalid_request", error: "invalid JSON" }, 400); }
+    if (typeof body !== "object" || body === null) return c.json({ code: "invalid_request", error: "request body must be a JSON object" }, 400);
+    const b = body as Record<string, unknown>;
+
+    if (typeof b.text !== "string" || b.text.length === 0)
+      return c.json({ code: "invalid_request", error: "text is required" }, 400);
+    if (new TextEncoder().encode(b.text).length > FEEDBACK_MAX_BYTES)
+      return c.json({ error: "피드백이 너무 깁니다", max_bytes: FEEDBACK_MAX_BYTES }, 413);
+    if (typeof b.model !== "string" || b.model.length === 0)
+      return c.json({ code: "invalid_request", error: "model is required" }, 400);
+    if (!Number.isSafeInteger(b.base_revision) || (b.base_revision as number) < 1)
+      return c.json({ code: "invalid_request", error: "base_revision must be a positive integer" }, 400);
+    if (typeof b.request_id !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(b.request_id))
+      return c.json({ code: "invalid_request", error: "request_id required" }, 400);
+
+    const fb = b as unknown as FeedbackBody;
+    const nowMs = Date.now();
+    // Server-generated ID: avoids PK collision when two courses use the same request_id.
+    const feedbackId = `fb_${crypto.randomUUID().replace(/-/g, '')}`;
+
+    // Idempotent: INSERT … ON CONFLICT DO NOTHING, then SELECT — safe under concurrent requests.
+    await c.env.HPS_DB.prepare(
+      `INSERT INTO chalk_feedback (feedback_id,cohort_id,course_id,base_revision,text,model,actor,request_id,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(cohort_id,course_id,request_id) DO NOTHING`
+    ).bind(feedbackId, cohort, course, fb.base_revision, fb.text, fb.model, auth.payload.u, fb.request_id, nowMs).run();
+
+    const row = await c.env.HPS_DB.prepare(
+      "SELECT feedback_id, base_revision, created_at FROM chalk_feedback WHERE cohort_id=? AND course_id=? AND request_id=?"
+    ).bind(cohort, course, fb.request_id).first<{ feedback_id: string; base_revision: number; created_at: number }>();
+    if (!row) return c.json({ code: "internal_error", error: "failed to read feedback row" }, 500);
+
+    return c.json({ feedback_id: row.feedback_id, base_revision: row.base_revision, created_at: row.created_at });
+  },
+);
+
+// ── GET /diff ─────────────────────────────────────────────────────────────────
+// "File F at revision R" = latest chalk_plan_files row where ref ≤ R (not exact match).
+// This means if lesson was saved at r1 and inputs at r2, asking for to=2 gives the r1 content.
+
+interface PlanFileRowWithSha { html: string; sha256: string }
+
+async function planFileAtOrBefore(
+  db: D1Database,
+  cohort: string, course: string, file: string, revision: number,
+): Promise<PlanFileRowWithSha | null> {
+  return db.prepare(
+    `SELECT html, sha256 FROM chalk_plan_files
+     WHERE cohort_id=? AND course_id=? AND file=? AND ref_kind='draft' AND CAST(ref AS INTEGER) <= ?
+     ORDER BY CAST(ref AS INTEGER) DESC LIMIT 1`
+  ).bind(cohort, course, file, revision).first<PlanFileRowWithSha>();
+}
+
+chalkCourses.get(
+  "/chalk/cohorts/:cohort/courses/:course/diff",
+  async (c) => {
+    const cohort = c.req.param("cohort")!;
+    const course = c.req.param("course")!;
+    const { err } = await authAndOwn(c, cohort, course) as any;
+    if (err) return err;
+
+    c.header("cache-control", "no-store");
+
+    const toStr = c.req.query("to");
+    const fromStr = c.req.query("from");
+    const file = c.req.query("file") ?? "lesson";
+
+    if (!VALID_FILES.includes(file as any))
+      return c.json({ code: "invalid_request", error: `file must be one of: ${VALID_FILES.join(", ")}` }, 400);
+
+    // Resolve 'to' revision (default: latest for this file).
+    let toRevision: number;
+    if (toStr !== undefined) {
+      const parsed = parseInt(toStr, 10);
+      if (!Number.isFinite(parsed) || parsed < 1) return c.json({ code: "invalid_request", error: "to must be a positive integer" }, 400);
+      toRevision = parsed;
+    } else {
+      const latest = await c.env.HPS_DB.prepare(
+        "SELECT MAX(CAST(ref AS INTEGER)) AS rev FROM chalk_plan_files WHERE cohort_id=? AND course_id=? AND file=? AND ref_kind='draft'"
+      ).bind(cohort, course, file).first<{ rev: number | null }>();
+      if (!latest?.rev) return c.json({ code: "not_found", error: "no plan file found" }, 404);
+      toRevision = latest.rev;
+    }
+
+    // Resolve 'from' revision (optional: absent → find previous file save before toRevision).
+    let fromRevision: number | null = null;
+    if (fromStr !== undefined) {
+      const parsed = parseInt(fromStr, 10);
+      if (!Number.isFinite(parsed) || parsed < 1) return c.json({ code: "invalid_request", error: "from must be a positive integer" }, 400);
+      if (parsed >= toRevision) return c.json({ code: "invalid_request", error: "from must be less than to" }, 400);
+      fromRevision = parsed;
+    } else {
+      // Previous file save strictly before toRevision.
+      const prevRow = await c.env.HPS_DB.prepare(
+        `SELECT MAX(CAST(ref AS INTEGER)) AS rev FROM chalk_plan_files
+         WHERE cohort_id=? AND course_id=? AND file=? AND ref_kind='draft' AND CAST(ref AS INTEGER) < ?`
+      ).bind(cohort, course, file, toRevision).first<{ rev: number | null }>();
+      fromRevision = prevRow?.rev ?? null;
+    }
+
+    const toRow = await planFileAtOrBefore(c.env.HPS_DB, cohort, course, file, toRevision);
+    if (!toRow) return c.json({ code: "not_found", error: "to revision not found" }, 404);
+
+    if (fromRevision === null) {
+      return c.json({ from_revision: null, to_revision: toRevision, file, from_sha256: null, to_sha256: toRow.sha256, changes: [] });
+    }
+
+    const fromRow = await planFileAtOrBefore(c.env.HPS_DB, cohort, course, file, fromRevision);
+    if (!fromRow) return c.json({ code: "not_found", error: "from revision not found" }, 404);
+
+    // Same content → skip diff.
+    if (fromRow.sha256 === toRow.sha256) {
+      return c.json({ from_revision: fromRevision, to_revision: toRevision, file, from_sha256: fromRow.sha256, to_sha256: toRow.sha256, changes: [] });
+    }
+
+    const changes = diffUnits(planUnits(fromRow.html, file), planUnits(toRow.html, file));
+    return c.json({ from_revision: fromRevision, to_revision: toRevision, file, from_sha256: fromRow.sha256, to_sha256: toRow.sha256, changes });
+  },
+);

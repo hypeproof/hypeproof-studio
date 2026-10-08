@@ -484,4 +484,259 @@ await check('T-G20 runBrowserOpen #507: wrong loopback port corrected to live se
   assert.equal(openedWith, null, 'openBrowser must NOT be called when #507 startLivePreview handles it');
 });
 
+// ─── T-G21: chalk_generator_brief break_min 있으면 쿼리에 포함 ───────────────
+await check('T-G21 execGeneratorBrief: break_min present → included in query string', async () => {
+  let capturedUrl = null;
+  const mockSecrets = { get: async () => 'issuer-token-abc' };
+  const server = createServer((req, res) => {
+    capturedUrl = req.url;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ skeleton_html: '<div></div>', time_spec: {} }));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const ctx = { serverUrl: `http://127.0.0.1:${port}`, secrets: mockSecrets };
+    await execGeneratorBrief(ctx, { cohort: 'c1', course: 'cr1', file: 'ops', break_min: 15 });
+    assert.ok(capturedUrl?.includes('break_min=15'), `break_min=15 must be in query: ${capturedUrl}`);
+    assert.ok(capturedUrl?.includes('file=ops'), `file=ops must be in query: ${capturedUrl}`);
+  } finally {
+    server.close();
+  }
+});
+
+// ─── T-G22: chalk_generator_brief break_min 없으면 쿼리에서 생략 ─────────────
+await check('T-G22 execGeneratorBrief: break_min absent → not in query string', async () => {
+  let capturedUrl = null;
+  const mockSecrets = { get: async () => 'issuer-token-abc' };
+  const server = createServer((req, res) => {
+    capturedUrl = req.url;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ skeleton_html: '<div></div>' }));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const ctx = { serverUrl: `http://127.0.0.1:${port}`, secrets: mockSecrets };
+    await execGeneratorBrief(ctx, { cohort: 'c1', course: 'cr1', file: 'ops' });
+    assert.ok(!capturedUrl?.includes('break_min'), `break_min must NOT be in query: ${capturedUrl}`);
+  } finally {
+    server.close();
+  }
+});
+
+// ─── T-G23: chalk_generator_brief 서버 400(break_min_track_only) → error 객체 반환 ─
+await check('T-G23 execGeneratorBrief: server 400 break_min_track_only → error object returned', async () => {
+  const mockSecrets = { get: async () => 'issuer-token-abc' };
+  const server = createServer((_req, res) => {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ code: 'break_min_track_only', error: 'workshop 형식에 break_min을 지정할 수 없습니다.' }));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const ctx = { serverUrl: `http://127.0.0.1:${port}`, secrets: mockSecrets };
+    const result = await execGeneratorBrief(ctx, { cohort: 'c1', course: 'cr1', file: 'ops', break_min: 20 });
+    assert.equal(result.error, 'break_min_track_only', `error code must be break_min_track_only: ${JSON.stringify(result)}`);
+    assert.ok(typeof result.message === 'string' && result.message.length > 0, `message must be present: ${JSON.stringify(result)}`);
+  } finally {
+    server.close();
+  }
+});
+
+// ─── T-G24: chalk_open_course 404 경로에서 break_min이 brief 쿼리에 포함 ──────
+await check('T-G24 execOpenCourse 404 path: break_min forwarded to brief query', async () => {
+  let briefUrl = null;
+  const mockSecrets = { get: async () => 'issuer-token-abc' };
+  const tmpDir = join(tmpdir(), `tg24-${Date.now()}`);
+  await mkdir(tmpDir, { recursive: true });
+  const server = createServer((req, res) => {
+    if (req.url?.includes('/plan')) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not_found' }));
+    } else {
+      briefUrl = req.url;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ skeleton_html: '<html><body></body></html>' }));
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const ctx = { serverUrl: `http://127.0.0.1:${port}`, secrets: mockSecrets, cwd: tmpDir };
+    await execOpenCourse(ctx, { cohort: 'c1', course: 'cr1', file: 'ops', break_min: 25 });
+    assert.ok(briefUrl?.includes('break_min=25'), `break_min=25 must be in brief query: ${briefUrl}`);
+  } finally {
+    server.close();
+  }
+});
+
+// ─── T-G25: chalk_open_course 404→brief 400(break_min_track_only) → error 객체 반환 ─
+await check('T-G25 execOpenCourse: brief 400 break_min_track_only → error object returned', async () => {
+  const mockSecrets = { get: async () => 'issuer-token-abc' };
+  const server = createServer((req, res) => {
+    if (req.url?.includes('/plan')) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not_found' }));
+    } else {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ code: 'break_min_track_only', error: 'workshop 형식에 break_min을 지정할 수 없습니다.' }));
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  try {
+    const ctx = { serverUrl: `http://127.0.0.1:${port}`, secrets: mockSecrets, cwd: null };
+    const result = await execOpenCourse(ctx, { cohort: 'c1', course: 'cr1', file: 'ops', break_min: 20 });
+    assert.equal(result.error, 'break_min_track_only', `error code must be break_min_track_only: ${JSON.stringify(result)}`);
+    assert.ok(typeof result.message === 'string' && result.message.length > 0, `message must be present: ${JSON.stringify(result)}`);
+  } finally {
+    server.close();
+  }
+});
+
+// ─── T-G26: chalk_record_feedback in CHALK_TOOL_DEFINITIONS ──────────────────
+await check('T-G26 chalk_record_feedback present in CHALK_TOOL_DEFINITIONS', async () => {
+  const def = CHALK_TOOL_DEFINITIONS.find(d => d.name === 'chalk_record_feedback');
+  assert.ok(def, 'chalk_record_feedback must be in CHALK_TOOL_DEFINITIONS');
+  // request_id is tool-generated — not in schema required (coach must not supply it).
+  assert.deepEqual(def.inputSchema.required.sort(), ['cohort_id', 'course_id', 'text'].sort());
+  assert.ok(!def.inputSchema.required.includes('request_id'), 'request_id must not be in required (tool-generated)');
+  assert.equal(def.inputSchema.additionalProperties, false);
+});
+
+// ─── T-G27: chalk_view_diff in CHALK_TOOL_DEFINITIONS ────────────────────────
+await check('T-G27 chalk_view_diff present in CHALK_TOOL_DEFINITIONS', async () => {
+  const def = CHALK_TOOL_DEFINITIONS.find(d => d.name === 'chalk_view_diff');
+  assert.ok(def, 'chalk_view_diff must be in CHALK_TOOL_DEFINITIONS');
+  assert.deepEqual(def.inputSchema.required.sort(), ['cohort_id', 'course_id'].sort());
+  assert.equal(def.inputSchema.additionalProperties, false);
+});
+
+// ─── T-G28: chalk_record_feedback calls POST /feedback with auto-filled base_revision + request_id ──
+await check('T-G28 chalk_record_feedback: POST /feedback auto-fills base_revision and request_id', async () => {
+  let capturedPath = null;
+  let capturedBodies = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', d => body += d);
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      if (req.url.includes('/authoring/')) {
+        // fetchExpectedRevision GET — no body
+        res.end(JSON.stringify({ revision: 5 }));
+      } else {
+        // POST /feedback
+        capturedPath = req.url;
+        const parsed = JSON.parse(body);
+        capturedBodies.push(parsed);
+        res.end(JSON.stringify({ feedback_id: `fb_${parsed.request_id}`, base_revision: 5, created_at: 12345 }));
+      }
+    });
+  });
+  await new Promise(r => server.listen(0, r));
+  const { port } = server.address();
+
+  const ctx = {
+    serverUrl: `http://127.0.0.1:${port}`,
+    secrets: { get: async () => 'fake-issuer-token' },
+    currentModel: 'claude-sonnet-5',
+  };
+
+  // Call twice with the same text — each call gets a distinct server-generated request_id.
+  const result1 = await callChalkTool(ctx, 'chalk_record_feedback', { cohort_id: 'c1', course_id: 'crs1', text: '피드백 내용' });
+  const result2 = await callChalkTool(ctx, 'chalk_record_feedback', { cohort_id: 'c1', course_id: 'crs1', text: '피드백 내용' });
+  const parsed1 = JSON.parse(result1);
+  const parsed2 = JSON.parse(result2);
+
+  assert.ok(parsed1.feedback_id, 'feedback_id must be returned on first call');
+  assert.ok(parsed2.feedback_id, 'feedback_id must be returned on second call');
+  assert.notEqual(parsed1.feedback_id, parsed2.feedback_id, 'same text → two calls → different feedback_ids');
+
+  assert.equal(capturedBodies.length, 2, 'two POST /feedback requests must reach server');
+  assert.notEqual(capturedBodies[0].request_id, capturedBodies[1].request_id, 'tool-generated request_ids must differ');
+  assert.equal(capturedBodies[0].base_revision, 5, 'base_revision must be auto-filled from fetchExpectedRevision');
+  assert.equal(capturedBodies[0].model, 'claude-sonnet-5', 'model must be auto-filled from ctx.currentModel');
+
+  server.close();
+});
+
+// ─── T-G29: chalk_view_diff calls GET /diff with optional params ─────────────
+await check('T-G29 chalk_view_diff: GET /diff with from+to params', async () => {
+  let capturedUrl = null;
+  const server = createServer((req, res) => {
+    capturedUrl = req.url;
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ from_revision: 2, to_revision: 3, file: 'lesson', changes: [] }));
+  });
+  await new Promise(r => server.listen(0, r));
+  const { port } = server.address();
+
+  const ctx = {
+    serverUrl: `http://127.0.0.1:${port}`,
+    secrets: { get: async () => 'fake-issuer-token' },
+  };
+
+  const result = await callChalkTool(ctx, 'chalk_view_diff', {
+    cohort_id: 'c1', course_id: 'crs1', from: 2, to: 3, file: 'lesson',
+  });
+  const parsed = JSON.parse(result);
+
+  assert.ok(capturedUrl.includes('from=2'), `URL must include from=2: ${capturedUrl}`);
+  assert.ok(capturedUrl.includes('to=3'), `URL must include to=3: ${capturedUrl}`);
+  assert.ok(capturedUrl.includes('file=lesson'), `URL must include file=lesson: ${capturedUrl}`);
+  assert.deepEqual(parsed.changes, []);
+
+  server.close();
+});
+
+// ─── T-G30: feedback_id 있으면 PUT body에 포함, 없으면 키 없음 (#1485) ────────
+await check('T-G30 execSavePlan includes feedback_id in PUT body when given; omits key when absent', async () => {
+  const tmpDir = join(tmpdir(), `chalk-test-feedback-${Date.now()}`);
+  const course = 'lesson-01';
+  const filePath = workingCopyPath(tmpDir, course, 'lesson');
+  await mkdir(join(tmpDir, 'chalk', course), { recursive: true });
+  await writeFile(filePath, '<html>draft</html>', 'utf-8');
+
+  // Case A: feedback_id provided → must appear in PUT body
+  let bodyA = '';
+  await withMockServer((req, res) => {
+    if (req.method === 'GET' && req.url?.includes('/authoring/')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ revision: 1 }));
+      return;
+    }
+    let b = '';
+    req.on('data', c => b += c);
+    req.on('end', () => { bodyA = b; });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ revision: 2, sha256: 'abc', findings: [] }));
+  }, async (port) => {
+    await execSavePlan(fakeCtx(port, { cwd: tmpDir }), { cohort: 'c1', course, knowledge_version: 3, feedback_id: 'fb-abc123' });
+    const parsedA = JSON.parse(bodyA);
+    assert.equal(parsedA.feedback_id, 'fb-abc123', 'feedback_id must be in PUT body when given');
+  });
+
+  // Case B: feedback_id absent → key must not appear in PUT body
+  const filePath2 = workingCopyPath(tmpDir, course, 'lesson');
+  await writeFile(filePath2, '<html>draft</html>', 'utf-8');
+  let bodyB = '';
+  await withMockServer((req, res) => {
+    if (req.method === 'GET' && req.url?.includes('/authoring/')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ revision: 1 }));
+      return;
+    }
+    let b = '';
+    req.on('data', c => b += c);
+    req.on('end', () => { bodyB = b; });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ revision: 2, sha256: 'abc', findings: [] }));
+  }, async (port) => {
+    await execSavePlan(fakeCtx(port, { cwd: tmpDir }), { cohort: 'c1', course, knowledge_version: 3 });
+    const parsedB = JSON.parse(bodyB);
+    assert.ok(!('feedback_id' in parsedB), `feedback_id must NOT be in PUT body when absent, got: ${JSON.stringify(parsedB)}`);
+  });
+});
+
 console.log(`\n${passed} tests passed`);

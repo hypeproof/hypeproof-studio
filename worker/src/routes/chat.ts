@@ -327,9 +327,10 @@ chat.get("/profile", async (c) => {
   // truthiness and falls back to `sha256(token)` for the chat-history bucket
   // (v0.1.56 chatPanelProvider.ts:660), which moves every existing
   // conversation out of view and moves it again on each token reissue.
-  // Identical for all 9 profiles today — the two recording cohorts are exactly
-  // the two that declare `requires_open_session`, so the serving snapshot's 36
-  // cells do not move. It is a guard against a future step, not a change.
+  // Identical for all 10 profiles today — the three recording cohorts are exactly
+  // the three that declare `requires_open_session` (the third is #1404's
+  // synthetic acceptance cohort), so the serving snapshot's cells do not move.
+  // It is a guard against a future step, not a change.
   const observationCapabilities = observationCapability(profile.observation);
   const servedObservation = observationCapabilities.record && observationScope
     ? {

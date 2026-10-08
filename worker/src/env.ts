@@ -14,6 +14,8 @@ export interface Env {
   HPS_LESSON_BINDINGS?: string;
   /** #1012 · #751 G2 — `require` makes a confirmation on a passed learner-condition rehearsal the condition for inviting learners to, or switching them to, a lesson version. Unset (default): versions stay usable as before, and Chalk still shows their rehearsal state. */
   HPS_LESSON_CONFIRMATION?: string;
+  /** #1013 — `enabled` opens the learner's answer to a person's feedback and the instructor's lesson retrospective → next draft. Migration 0039 must precede activation. Unset (default): those routes answer 404 and no share read changes. */
+  HPS_FEEDBACK_LOOP?: string;
   HPS_CLASSROOM_EVALUATOR?: string;
   HPS_CLASSROOM_EVALUATOR_MODEL?: string;
   /** #751 — scheduled retention. Unset days (default) = the run does nothing. With days set it only reports (dry-run) until HPS_CLASSROOM_RETENTION='enforce'. */

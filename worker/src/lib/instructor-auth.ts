@@ -100,6 +100,11 @@ export function isIssuerAllowedEndpoint(path: string, method: string): boolean {
   // #1012 · #751 G2 — reuse/review reads, learner-condition rehearsal codes and confirmation. Same owner/scope checks in the handlers.
   if (method === 'GET' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/(?:versions|impact|versions\/[^/]+\/readiness)$/.test(path)) return true;
   if (method === 'POST' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/versions\/[^/]+\/(?:rehearsals|confirmation)$/.test(path)) return true;
+  // #1013 — lesson retrospective → next draft. Handlers re-check issuer, cohort scope, course owner and HPS_FEEDBACK_LOOP.
+  if ((method === 'GET' || method === 'POST') && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives$/.test(path)) return true;
+  if (method === 'GET' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives\/[^/]+$/.test(path)) return true;
+  if (method === 'PUT' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives\/rt-[^/]+$/.test(path)) return true;
+  if (method === 'POST' && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+\/retrospectives\/rt-[^/]+\/next-draft$/.test(path)) return true;
   if ((method === "GET" || method === "PUT") && /^\/admin\/cohorts\/[^/]+\/classroom\/shares(?:\/[^/]+)?$/.test(path)) return true;
   // Chalk authoring: handlers still enforce issuer identity, cohort/profile and owner.
   if ((method === "GET" || method === "PUT") && /^\/admin\/cohorts\/[^/]+\/authoring\/[^/]+(?:\/versions\/[^/]+)?$/.test(path)) return true;
@@ -132,6 +137,9 @@ export function isIssuerAllowedEndpoint(path: string, method: string): boolean {
     (method === "PUT" && /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/(inputs|plan)$/.test(path)) ||
     (method === "GET" && /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/(plan|brief)$/.test(path))
   ) return true;
+  // #1466 — Chalk feedback record (POST) and revision diff (GET).
+  if (method === "POST" && /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/feedback$/.test(path)) return true;
+  if (method === "GET" && /^\/admin\/chalk\/cohorts\/[^/]+\/courses\/[^/]+\/diff$/.test(path)) return true;
   // GET /admin/cohorts/:id/state (#352) is deliberately ABSENT: it moved to
   // Chalk with plan task F and is answered there, never forwarded.
   // #1298 — instructor-mode identity check. No cohort required: any valid issuer

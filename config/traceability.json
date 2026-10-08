@@ -133,6 +133,24 @@
       ]
     },
     {
+      "id": "REQ-STUDIO-DEV-SUBSCRIPTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/studio-dev.md",
+          "section": "### Windows"
+        },
+        {
+          "path": "docs/dev/studio-dev.md",
+          "section": "## Local subscriptions"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-COACH-SESSION",
       "stage": "test",
       "owner": "JinyongShin",
@@ -276,6 +294,7 @@
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME",
+        "REQ-STUDIO-DEV-SUBSCRIPTION",
         "ST-REQ-NATIVE"
       ],
       "sources": [
@@ -296,6 +315,9 @@
         },
         {
           "path": "scripts/test-studio-dev.py"
+        },
+        {
+          "path": "docs/testing/studio-dev-windows-2026-10-02.md"
         }
       ]
     },
@@ -1328,7 +1350,19 @@
           "path": "e2e/unified-release/public.mjs"
         },
         {
+          "path": "worker/src/lib/synthetic-cohort.ts"
+        },
+        {
+          "path": "worker/src/profiles/synthetic-release-acceptance.ts"
+        },
+        {
+          "path": "scripts/check-live-sessions.mjs"
+        },
+        {
           "path": "e2e/unified-release/install-windows.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.mjs"
         },
         {
           "path": ".github/workflows/build-mac.yml"
@@ -1364,6 +1398,15 @@
         },
         {
           "path": "e2e/unified-release/gate.test.mjs"
+        },
+        {
+          "path": "worker/test/synthetic-cohort.test.mjs"
+        },
+        {
+          "path": "scripts/test-check-live-sessions.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.test.mjs"
         },
         {
           "path": "e2e/tests/native-public-activity.spec.ts"
@@ -1838,6 +1881,111 @@
       "sources": [
         {
           "path": "docs/testing/learning-agent-experience.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-FEEDBACK-LOOP",
+      "stage": "test",
+      "label": "Feedback loop — learner answer, retrospective and next draft tests (#1013)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-TEST-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "worker/test/feedback-loop.test.mjs"
+        },
+        {
+          "path": "worker/test/feedback-loop-d1.test.mjs"
+        },
+        {
+          "path": "chalk/test/feedback-loop-forward.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/feedback-loop.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-FEEDBACK-LOOP",
+      "stage": "implementation",
+      "label": "Feedback loop — learner answer to feedback, lesson retrospective → next draft (#1013)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-DES-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-DES-CHALK-AUTHORING",
+        "ST-TEST-FEEDBACK-LOOP"
+      ],
+      "sources": [
+        {
+          "path": "worker/src/lib/feedback-loop.ts"
+        },
+        {
+          "path": "worker/src/routes/lesson-retrospective.ts"
+        },
+        {
+          "path": "worker/src/routes/classroom.ts"
+        },
+        {
+          "path": "worker/migrations/0039-feedback-loop.sql"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-AE-GOAL",
+      "stage": "test",
+      "label": "Learner goal beside the lesson criteria — rules, host, screen, browser and App tests (AE-01, #554)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-LEARNING-AGENT-EXPERIENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/student-goal.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/goal-browser.mjs"
+        },
+        {
+          "path": "e2e/sx/goal-app.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-AE-GOAL",
+      "stage": "implementation",
+      "label": "Learner goal beside the lesson criteria (AE-01, #554)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-DES-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-AE-GOAL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studentGoal.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx"
         }
       ]
     },
@@ -2824,6 +2972,12 @@
         },
         {
           "path": "e2e/sx/playwright.config.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sx-home.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/home-app.spec.ts"
         }
       ]
     },
@@ -2992,7 +3146,7 @@
     {
       "id": "ST-REQ-CR",
       "stage": "requirement",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-INT-CR",
         "ST-REQ-SX",
@@ -3017,7 +3171,7 @@
     {
       "id": "ST-DES-CR",
       "stage": "design",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR"
       ],
@@ -3033,7 +3187,7 @@
     {
       "id": "ST-IMP-CR-PUBLISH",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR"
@@ -3089,7 +3243,7 @@
     {
       "id": "ST-IMP-CR-EVIDENCE",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3122,7 +3276,7 @@
     {
       "id": "ST-IMP-CR-MEMORY",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3150,7 +3304,7 @@
     {
       "id": "ST-IMP-CR-SKILLS",
       "stage": "implementation",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-DES-CR",
         "ST-REQ-CR",
@@ -3185,16 +3339,48 @@
       ]
     },
     {
+      "id": "ST-IMP-CR-REVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-CR",
+        "ST-REQ-CR",
+        "ST-IMP-CR-MEMORY",
+        "ST-IMP-CR-SKILLS"
+      ],
+      "sources": [
+        {
+          "path": "worker/src/lib/curriculum/review.ts"
+        },
+        {
+          "path": "worker/migrations/0038-curriculum-runtime-review.sql"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reviewSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reviewView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CR",
       "stage": "test",
-      "owner": "xoqhdgh1002",
+      "owner": "jayleekr",
       "depends_on": [
         "ST-REQ-CR",
         "ST-DES-CR",
         "ST-IMP-CR-PUBLISH",
         "ST-IMP-CR-EVIDENCE",
         "ST-IMP-CR-MEMORY",
-        "ST-IMP-CR-SKILLS"
+        "ST-IMP-CR-SKILLS",
+        "ST-IMP-CR-REVIEW"
       ],
       "sources": [
         {
@@ -3283,6 +3469,54 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-05-unblock.md"
+        },
+        {
+          "path": "worker/test/cr-review.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/cr-review.smoke.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/review-app.spec.ts"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-05-review.md"
+        },
+        {
+          "path": "worker/test/fixtures/cr-review/provider-recording.json"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-06-review-provider.md"
+        },
+        {
+          "path": "e2e/curriculum-runtime/app-service.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/loop-coach.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-gate.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-control.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/loop-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/timing-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/switch-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/register-version.mjs"
+        },
+        {
+          "path": "scripts/cr-dev-kit.sh"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-06-e2e.md"
         }
       ]
     },
@@ -3634,8 +3868,12 @@
         "ST-DES-CHALK-INSTRUCTOR"
       ],
       "sources": [
-        { "path": "worker/src/routes/chalk-instructor.ts" },
-        { "path": "extensions/hypeproof-chat/src/chalk/instructorMode.ts" }
+        {
+          "path": "worker/src/routes/chalk-instructor.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalk/instructorMode.ts"
+        }
       ]
     },
     {
@@ -3648,10 +3886,18 @@
         "ST-IMP-CHALK-INSTRUCTOR-MODE"
       ],
       "sources": [
-        { "path": "worker/test/chalk-instructor-whoami.test.mjs" },
-        { "path": "worker/test/chalk-instructor-brief.test.mjs" },
-        { "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs" },
-        { "path": "extensions/hypeproof-chat/test/instructor-render.test.tsx" }
+        {
+          "path": "worker/test/chalk-instructor-whoami.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-instructor-brief.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-render.test.tsx"
+        }
       ]
     },
     {
@@ -3799,6 +4045,12 @@
       "sources": [
         {
           "path": "worker/test/chalk-plan-parser.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-ops-plan.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-ops.test.mjs"
         }
       ]
     },
@@ -3872,9 +4124,18 @@
         "ST-IMP-CHALK-KB-STORE"
       ],
       "sources": [
-        {"path": "worker/src/routes/chalk-courses.ts"},
-        {"path": "worker/src/lib/authoring-draft-write.ts"},
-        {"path": "worker/migrations/0031-chalk-plan-files.sql"}
+        {
+          "path": "worker/src/routes/chalk-courses.ts"
+        },
+        {
+          "path": "worker/src/lib/authoring-draft-write.ts"
+        },
+        {
+          "path": "worker/migrations/0031-chalk-plan-files.sql"
+        },
+        {
+          "path": "worker/src/lib/chalk-ops.ts"
+        }
       ]
     },
     {
@@ -3886,8 +4147,15 @@
         "ST-REQ-CHALK-KB"
       ],
       "sources": [
-        {"path": "worker/test/chalk-courses.test.mjs"},
-        {"path": "worker/test/chalk-draft-check.test.mjs"}
+        {
+          "path": "worker/test/chalk-courses.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-draft-check.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-ops-plan.test.mjs"
+        }
       ]
     },
     {
@@ -3949,6 +4217,59 @@
         "ST-IMP-CHALK-GEN-APP"
       ],
       "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CHALK-FEEDBACK",
+      "stage": "implementation",
+      "label": "Chalk 피드백 기록·비교·이력 구현 (E2-7 / #1466)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "worker/migrations/0036-chalk-feedback.sql"
+        },
+        {
+          "path": "worker/src/lib/chalk-plan/units.ts"
+        },
+        {
+          "path": "worker/src/routes/chalk-courses.ts"
+        },
+        {
+          "path": "worker/src/routes/chalk-instructor.ts"
+        },
+        {
+          "path": "worker/src/lib/instructor-auth.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-FEEDBACK",
+      "stage": "test",
+      "label": "Chalk 피드백 라우트·도구 시험 (E2-7 / #1466)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-IMP-CHALK-FEEDBACK"
+      ],
+      "sources": [
+        {
+          "path": "worker/test/chalk-feedback.test.mjs"
+        },
+        {
+          "path": "worker/test/chalk-plan-units.test.mjs"
+        },
         {
           "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
         }

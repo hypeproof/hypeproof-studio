@@ -1876,10 +1876,15 @@ const TINY_PNG =
           `profile ${p.id}: sdk_tools.write=true 인데 coach_runtime 이 agent-sdk 가 아니다`,
         );
       }
-      if (p.id === 'homepage-practice-s1' || p.id === 'studio-native-trial') {
+      // #1404 — the synthetic release-acceptance cohort is the trial profile
+      // under another identity. It keeps the trial's browser grant on purpose:
+      // acceptance must check the candidate App against the tool policy a real
+      // trial seat is served, not a narrower one.
+      const adultWebsiteCohort = { 'homepage-practice-s1': 'homepage-practice', 'studio-native-trial': 'studio-native-trial', 'synthetic-release-acceptance': 'synthetic-release-acceptance' };
+      if (Object.hasOwn(adultWebsiteCohort, p.id)) {
         assert.ok(p.audience.age_range[0] >= 19);
         assert.equal(p.audience.parent_coaching, false);
-        assert.equal(p.session.cohort_id, p.id === 'studio-native-trial' ? 'studio-native-trial' : 'homepage-practice');
+        assert.equal(p.session.cohort_id, adultWebsiteCohort[p.id]);
         assert.notEqual(p.sandbox.workspace_root, copyclone.sandbox.workspace_root);
         assert.equal(p.analytics.log_user_messages, false);
         assert.equal(p.analytics.upload_session_logs, false);

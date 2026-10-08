@@ -56,6 +56,19 @@ export interface Profile {
    */
   dashboard_hidden?: boolean;
   dashboard_order?: number;
+  /**
+   * #1404 — this cohort exists only for automated checks and can never hold a
+   * real participant. Two things read it (lib/synthetic-cohort.ts):
+   *   - every roster write and token mint on the cohort must name a
+   *     `synthetic-` handle, so no real student can be put on it;
+   *   - `GET /admin/cohorts` reports the cohort as `synthetic: true`, which is
+   *     the only signal the live-session freeze (scripts/check-live-sessions.mjs)
+   *     uses to ignore its sessions.
+   * A cohort is synthetic only when EVERY profile on it declares this, so a
+   * real track added to the same cohort id turns the exemption off.
+   * Absent → false.
+   */
+  synthetic?: boolean;
   audience: {
     age_range?: [number, number];
     language: "ko" | "en";
