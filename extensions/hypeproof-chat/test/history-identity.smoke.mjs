@@ -88,11 +88,12 @@ const roleLabel = (message, coachName) =>
     "커밋 지점이 그 턴을 돌린 이름을 넘긴다",
   );
 
-  // 앱이 직접 쓴 답변 두 곳도 찍는다 — 화면에는 똑같이 코치 이름으로 붙는다.
+  // 앱이 직접 쓴 답변 세 곳도 찍는다 — 화면에는 똑같이 코치 이름으로 붙는다.
+  // (The third is the learning wiki answering a call by name, "팀 브레인에 정리해 줘".)
   assert.equal(
     (host.match(/assistantName: this\.coachDisplayName\(\)/g) || []).length,
-    2,
-    "앱이 만든 답변(보여주기·게스트 목록)도 이름을 남긴다",
+    3,
+    "앱이 만든 답변(보여주기·게스트 목록·팀 브레인)도 이름을 남긴다",
   );
 }
 

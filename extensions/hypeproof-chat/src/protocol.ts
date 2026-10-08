@@ -252,6 +252,11 @@ export interface ResolvedProfile {
   /** CR-02 — Curriculum Runtime switch (`curriculum_runtime.enabled`), off when absent. */
   curriculum_runtime?: { enabled: boolean };
   /**
+   * Learning wiki and deck generator (App-side generic skills), off when absent. `plan` is the
+   * cohort's specialization: folder, audience, session label, deck template and per-session focus.
+   */
+  learning_wiki?: { enabled: boolean; plan?: LearningWikiPlan };
+  /**
    * #306 — hardened native-browser session for minor cohorts. `mode: "safe"`
    * makes the host enable the locked-down `persist:hp-safe` integrated-browser
    * session (via the hypeproof.browser.safeSession setting). Absent / "browse"
@@ -636,4 +641,20 @@ export interface ElementPreview {
   sentText: string;
   /** The element crop as it will be sent, or null when the cohort sends no images. */
   imageDataUrl: string | null;
+}
+
+/** Cohort plan for the learning wiki and deck skills (served as `learning_wiki.plan`; learningWiki.ts re-exports it). */
+export interface LearningWikiPlan {
+  /** What students call the wiki in the chat and in the copy (default "팀 브레인"). */
+  name?: string;
+  /** Folder in the workspace (default "wiki"). */
+  dir?: string;
+  /** Who the learners are, in the prompt's words (default "학습 팀"). */
+  audience?: string;
+  /** What one session is called (default "회차"; the founder course says "주차"). */
+  session_label?: string;
+  /** Deck template for the deck skill; `hint` tells the skill what the slide must and must not show. */
+  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
+  /** Per session: the slides the deck skill drafts that session and the session's question. */
+  sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }
