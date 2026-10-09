@@ -198,6 +198,18 @@
         "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
       },
       {
+        "command": "hypeproof-chat.wikiIngest",
+        "title": "HypeProof: 팀 브레인에 정리하기",
+        "icon": "$(notebook)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
+        "command": "hypeproof-chat.deckDraft",
+        "title": "HypeProof: 팀 브레인으로 덱 만들기",
+        "icon": "$(preview)",
+        "enablement": "hypeproof-chat.learningWikiEnabled"
+      },
+      {
         "command": "hypeproof-chat.curriculumSkills",
         "title": "HypeProof: 커리큘럼 스킬",
         "icon": "$(lightbulb)",
@@ -320,6 +332,14 @@
         {
           "command": "hypeproof-chat.ventureMemory",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.wikiIngest",
+          "when": "hypeproof-chat.learningWikiEnabled"
+        },
+        {
+          "command": "hypeproof-chat.deckDraft",
+          "when": "hypeproof-chat.learningWikiEnabled"
         },
         {
           "command": "hypeproof-chat.curriculumSkills",
