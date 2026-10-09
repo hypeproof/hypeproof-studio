@@ -307,6 +307,17 @@ export interface Profile {
     enabled: boolean;
   };
   /**
+   * Learning wiki and deck generator: App-side generic skills that keep a team's record under the
+   * workspace and draft deck slides from it. Absent = off. Served by /v1/profile. `plan` specializes
+   * them for a cohort (student-facing name, folder, audience, session label, deck template,
+   * per-session focus and question); the AI for Good founder course uses `FOUNDER_AI_FOR_GOOD_V5`
+   * (plans/). Nothing is stored on the Service.
+   */
+  learning_wiki?: {
+    enabled: boolean;
+    plan?: LearningWikiPlan;
+  };
+  /**
    * #306 — hardened native-browser session for minor cohorts. When `mode` is
    * `"safe"`, the Studio core (patches/62-hp-safe-session.patch in the
    * vscodium-base fork) backs the integrated browser with the locked-down
@@ -514,6 +525,17 @@ export function explicitModelProvider(key: string): LLMProvider | undefined {
   if (Object.hasOwn(OPENAI_MODELS, key)) return 'openai';
   if (Object.hasOwn(GEMINI_MODELS, key)) return 'gemini';
   if (Object.hasOwn(GLM_MODELS, key)) return 'glm';
+}
+
+/** A cohort's specialization of the learning wiki and deck generator skills (see `Profile.learning_wiki`). */
+export interface LearningWikiPlan {
+  /** What students call the wiki in the chat and the App's copy (the App defaults to "팀 브레인"). */
+  name?: string;
+  dir?: string;
+  audience?: string;
+  session_label?: string;
+  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
+  sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }
 
 export function crossProviderEnabled(profile: Profile): boolean {
