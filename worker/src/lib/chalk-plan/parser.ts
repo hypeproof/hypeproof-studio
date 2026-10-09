@@ -40,7 +40,11 @@ function decodeEntities(s: string, violations: Violation[], file: string, sectio
 }
 
 function cleanText(s: string, violations: Violation[], file: string, section: string | null, step: string | null): string {
-  return decodeEntities(s.replace(/\s+/g, ' ').trim(), violations, file, section, step);
+  // Strip HTML comments before any other processing so skeleton placeholders
+  // (e.g. <!-- 자율: if-ahead·if-behind 중 하나 이상 채우면 완충으로 인정 -->)
+  // are not counted as field values and do not suppress field-missing checks.
+  const stripped = s.replace(/<!--[\s\S]*?-->/g, '');
+  return decodeEntities(stripped.replace(/\s+/g, ' ').trim(), violations, file, section, step);
 }
 
 function hasExternalUrl(attrs: Record<string, string>): string | null {
