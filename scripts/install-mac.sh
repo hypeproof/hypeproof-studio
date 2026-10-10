@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # One-line installer for HypeProof Studio on macOS.
 #
-# Usage (family members / workshop participants run this in Terminal):
-#   curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install-mac.sh | bash
-#
-# Canonical copy lives in the public mirror repo (jayleekr/hypeproof-studio-releases).
-# This file in the private studio repo is a dev convenience — keep it in sync.
+# Requires GitHub CLI (gh) and a member login with release repository access.
+# Bootstrap after gh auth login:
+#   gh api repos/hypeproof/hypeproof-studio-releases/contents/install-mac.sh \
+#     -H 'Accept: application/vnd.github.raw' > /tmp/hps-install.sh
+#   bash /tmp/hps-install.sh
+# Canonical source is scripts/install-mac.sh; publish the same file to the release repo.
 
 set -euo pipefail
 
-REPO="jayleekr/hypeproof-studio-releases"
+REPO="hypeproof/hypeproof-studio-releases"
 APP_NAME="HypeProof Studio"
 TAG="${HPS_VERSION:-latest}"
 TMP="$(mktemp -d)"
@@ -32,25 +33,27 @@ case "$ARCH" in
   *) err "Unsupported architecture: $ARCH" ;;
 esac
 
-# 2. Resolve download URL
+# 2. Resolve the private release through the member's GitHub CLI login.
+command -v gh >/dev/null 2>&1 || err "GitHub CLI(gh)를 설치하고 gh auth login을 실행해 주세요."
+if [[ -n "${HPS_RELEASE_TOKEN:-}" ]]; then export GH_TOKEN="$HPS_RELEASE_TOKEN"; fi
 if [[ "$TAG" == "latest" ]]; then
-  API="https://api.github.com/repos/$REPO/releases/latest"
+  API="repos/$REPO/releases/latest"
 else
-  API="https://api.github.com/repos/$REPO/releases/tags/$TAG"
+  API="repos/$REPO/releases/tags/$TAG"
 fi
-
 say "Looking up release ($TAG)..."
-URL=$(curl -fsSL "$API" \
-  | grep "browser_download_url" \
-  | grep "$ASSET_SUFFIX" \
-  | head -1 \
-  | sed -E 's/.*"(https[^"]+)".*/\1/') || true
+RELEASE_TAG=$(gh api "$API" --jq '.tag_name') || err "릴리스 접근 실패: 조직 멤버 계정으로 gh auth login을 실행해 주세요."
+ASSET=$(gh api "$API" --jq '.assets[] | select(.name | endswith("darwin-arm64.zip")) | [.name, .digest] | @tsv' | head -1)
+IFS=$'\t' read -r ASSET_NAME DIGEST <<< "$ASSET"
+[[ "$ASSET_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || err "Invalid release asset name"
+[[ "$DIGEST" =~ ^sha256:[a-fA-F0-9]{64}$ ]] || err "Release SHA-256 digest is missing"
 
-[[ -n "$URL" ]] || err "Could not find $ASSET_SUFFIX in $TAG release. Visit https://github.com/$REPO/releases"
-
-# 3. Download
-say "Downloading $URL"
-curl -fL "$URL" -o "$TMP/hps.zip"
+# 3. gh uses the authenticated API and safely follows the signed asset URL.
+say "Downloading $ASSET_NAME"
+gh release download "$RELEASE_TAG" --repo "$REPO" --pattern "$ASSET_NAME" --dir "$TMP"
+ACTUAL=$(shasum -a 256 "$TMP/$ASSET_NAME" | awk '{print $1}')
+[[ "$ACTUAL" == "${DIGEST#sha256:}" ]] || err "Release SHA-256 mismatch"
+mv "$TMP/$ASSET_NAME" "$TMP/hps.zip"
 
 # 4. Extract
 say "Extracting..."

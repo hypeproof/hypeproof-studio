@@ -1,0 +1,44 @@
+name: Private release installers
+on:
+  pull_request:
+    paths:
+      - 'scripts/install-win.ps1'
+      - 'scripts/install.ps1'
+      - 'scripts/tests/bootstrap-win-private-fixture.ps1'
+      - 'scripts/tests/install-win-fixture.ps1'
+      - '.github/workflows/private-installers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/install-win.ps1'
+      - 'scripts/install.ps1'
+      - 'scripts/tests/bootstrap-win-private-fixture.ps1'
+      - 'scripts/tests/install-win-fixture.ps1'
+      - '.github/workflows/private-installers.yml'
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows PowerShell 5.1 authentication and integrity controls
+        shell: pwsh
+        run: |
+          foreach ($scenario in @('success', 'auth-failed', 'bad-digest', 'bad-name')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/install-win-fixture.ps1 -Scenario $scenario
+            $code = $LASTEXITCODE
+            if ($scenario -eq 'success' -and $code -ne 0) { throw 'Authenticated installer fixture failed' }
+            if ($scenario -ne 'success' -and $code -eq 0) { throw "Negative control failed: $scenario" }
+          }
+          exit 0
+      - name: Windows PowerShell 5.1 private bootstrap functions
+        shell: pwsh
+        run: |
+          foreach ($scenario in @('success', 'auth-failed', 'bad-digest', 'bad-name', 'missing-digest')) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/bootstrap-win-private-fixture.ps1 -Scenario $scenario
+            $code = $LASTEXITCODE
+            if ($scenario -eq 'success' -and $code -ne 0) { throw 'Authenticated bootstrap fixture failed' }
+            if ($scenario -ne 'success' -and $code -eq 0) { throw "Negative control failed: $scenario" }
+          }
+          exit 0

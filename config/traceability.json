@@ -4750,6 +4750,88 @@
           "path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-PRIVATE-RELEASE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "section": "## Requirements"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PRIVATE-RELEASE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PRIVATE-RELEASE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/updateTransport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateChecker.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateCheckerHelpers.ts"
+        },
+        {
+          "path": "scripts/install-mac.sh"
+        },
+        {
+          "path": "scripts/install-win.ps1"
+        },
+        {
+          "path": ".github/workflows/requirement-work.yml"
+        },
+        {
+          "path": "scripts/install.sh"
+        },
+        {
+          "path": "scripts/install.ps1"
+        },
+        {
+          "path": "dependencies.yaml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PRIVATE-RELEASE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PRIVATE-RELEASE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/private-release-access.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-transport.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-checker.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-orchestration.smoke.mjs"
+        },
+        {
+          "path": "scripts/tests/install-win-fixture.ps1"
+        },
+        {
+          "path": ".github/workflows/private-installers.yml"
+        },
+        {
+          "path": "scripts/tests/bootstrap-win-private-fixture.ps1"
+        }
+      ]
     }
   ]
 }

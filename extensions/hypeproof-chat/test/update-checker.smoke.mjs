@@ -63,6 +63,7 @@ const REAL_RELEASE = {
   assets: [
     {
       name: "HypeProof-Studio-darwin-arm64.zip",
+      url: "https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123",
       browser_download_url: "https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.2/HypeProof-Studio-darwin-arm64.zip",
       size: 228 * 1024 * 1024,
     },
@@ -73,7 +74,7 @@ check("parseLatestRelease: newer release → available", () => {
   const info = parseLatestRelease(REAL_RELEASE, "0.1.1");
   assert.equal(info.available, true);
   assert.equal(info.version, "0.1.2");
-  assert.match(info.downloadUrl, /darwin-arm64\.zip$/);
+  assert.equal(info.downloadUrl, REAL_RELEASE.assets[0].url);
   assert.equal(info.sizeBytes, 228 * 1024 * 1024);
 });
 check("parseLatestRelease: same version → not available", () => {
@@ -122,6 +123,7 @@ const WIN_ASSETS = [
   { name: "HypeProof.StudioSetup-x64-1.116.04919.exe", browser_download_url: `${WIN_DL}/HypeProof.StudioSetup-x64-1.116.04919.exe`, size: 126 * 1024 * 1024 },
   { name: "HypeProof.StudioUserSetup-x64-1.116.04919.exe", browser_download_url: `${WIN_DL}/HypeProof.StudioUserSetup-x64-1.116.04919.exe`, size: 126 * 1024 * 1024 },
 ];
+WIN_ASSETS.forEach((asset, index) => { asset.url = `https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/${index + 1}`; });
 const WIN_RELEASE = { ...REAL_RELEASE, assets: WIN_ASSETS };
 
 check("pickWindowsInstaller: prefers the per-user Setup .exe", () => {
@@ -144,7 +146,7 @@ check("parseLatestRelease: win32 picker → resolves the UserSetup .exe download
   const info = parseLatestRelease(WIN_RELEASE, "0.1.1", pickWindowsInstaller);
   assert.equal(info.available, true);
   assert.equal(info.version, "0.1.2");
-  assert.match(info.downloadUrl, /UserSetup-x64-.*\.exe$/);
+  assert.equal(info.downloadUrl, pickWindowsInstaller(WIN_ASSETS).url);
   assert.equal(info.sizeBytes, 126 * 1024 * 1024);
 });
 check("parseLatestRelease: win32 picker + no installer asset → not available", () => {

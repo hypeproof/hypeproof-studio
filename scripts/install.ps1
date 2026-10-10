@@ -1,9 +1,10 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
     install.ps1 - HypeProof Windows one-line bootstrap.
 
     Usage (one-liner):
-        irm https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install.ps1 | iex
+        gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.ps1 -H "Accept: application/vnd.github.raw" | Out-File "$env:TEMP/hps-bootstrap.ps1" -Encoding utf8
+        if ($LASTEXITCODE -eq 0) { & "$env:TEMP/hps-bootstrap.ps1" }
 
     With flags (download first, then run):
         iwr -useb https://.../install.ps1 -OutFile install.ps1
@@ -61,12 +62,12 @@ param(
     # because workshop-setup only runs the installer on Windows.
     [switch]$SkipStudio,
     # Remote manifest refresh is best-effort (falls back to the embedded pins).
-    [string]$ManifestUrl = 'https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/hypeproof-deps.yaml',
+    [string]$ManifestUrl = 'https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/dependencies.yaml',
     # Raw base for the bootstrap (irm | iex) path, where no sibling script exists.
     # It must point at a tree that ACTUALLY hosts scripts/seed-sdk-binary.ps1:
     # this repo, not the releases repo (Studio binaries only). Deriving it from
     # $ManifestUrl gave a 404 seeder URL, which is fail-closed on Windows.
-    [string]$ScriptsBaseUrl = 'https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/'
+    [string]$ScriptsBaseUrl = 'https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/'
 )
 
 # ----------------------------------------------------------------------------
@@ -134,7 +135,7 @@ function Confirm-Or([string]$prompt, [bool]$default = $true) {
 $EMBEDDED_MANIFEST = [ordered]@{
     schema = 1
     studio = [ordered]@{
-        releases_repo = 'jayleekr/hypeproof-studio-releases'
+        releases_repo = 'hypeproof/hypeproof-studio-releases'
         # 'latest' resolves from the releases API at run time. A hard pin goes
         # stale the moment a release ships (it sat at 0.1.33 while the repo
         # served v0.1.34). Override with -StudioVersion / HPS_STUDIO_VERSION.
@@ -181,10 +182,23 @@ $EMBEDDED_MANIFEST = [ordered]@{
 
 # Try to refresh the volatile version fields from the remote manifest so the
 # pinned SoT wins even if this embedded copy has drifted. Best-effort only.
+# Authenticate only our source repository; custom mirrors get no credentials.
+function Get-PrivateSourceText([string]$url) {
+    $prefix = 'https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/'
+    if ($url.StartsWith($prefix)) {
+        $path = $url.Substring($prefix.Length)
+        if ($path -notmatch '^(scripts/)?[A-Za-z0-9._-]+$') { throw 'Invalid private source path' }
+        $raw = & gh api "repos/hypeproof/hypeproof-studio/contents/$path" -H 'Accept: application/vnd.github.raw'
+        if ($LASTEXITCODE -ne 0) { throw 'Private source access failed; run gh auth login with a member account.' }
+        return ($raw -join "`n")
+    }
+    return (Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 15).Content
+}
+
 function Sync-ManifestVersions {
     param($manifest, [string]$url)
     try {
-        $raw = (Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 15).Content
+        $raw = Get-PrivateSourceText $url
         $sv = [regex]::Match($raw, '(?ms)^studio:.*?^\s*version:\s*"?([0-9][^"\r\n]*)"?')
         if ($sv.Success) { $manifest.studio.version = $sv.Groups[1].Value.Trim() }
         # The SDK version is owned entirely by seed-sdk-binary.ps1 (pinned there);
@@ -642,15 +656,16 @@ function Configure-Git {
 function Resolve-StudioAsset {
     param($manifest)
     $repo = $manifest.studio.releases_repo
+    if ($repo -eq 'jayleekr/hypeproof-studio-releases') { $repo = 'hypeproof/hypeproof-studio-releases' }
+    if ($repo -ne 'hypeproof/hypeproof-studio-releases') { throw 'Untrusted Studio release repository' }
     $ver  = $manifest.studio.version
     $tag  = "v$ver"
-    $headers = Get-GhHeaders
     $rel = $null
     foreach ($u in @(
         "https://api.github.com/repos/$repo/releases/tags/$tag",
         "https://api.github.com/repos/$repo/releases/latest"
     )) {
-        try { $rel = Invoke-RestMethod -UseBasicParsing -Uri $u -Headers $headers; if ($rel) { break } } catch { }
+        try { $raw = & gh api $u; if ($LASTEXITCODE -eq 0) { $rel = ($raw -join "`n") | ConvertFrom-Json; if ($rel) { break } } } catch { }
     }
     if (-not $rel) { throw "No release found for $repo ($tag / latest)." }
 
@@ -737,7 +752,11 @@ function Install-Studio {
     New-Item -ItemType Directory -Force -Path $script:TempRoot | Out-Null
     $exe = Join-Path $script:TempRoot $asset.name
     Write-Info "Downloading $($asset.name) ..."
-    Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $exe
+    if ($asset.name -notmatch '^[A-Za-z0-9._-]+$') { throw 'Invalid asset name' }
+    if ($asset.digest -notmatch '^sha256:[a-fA-F0-9]{64}$') { throw 'Missing release SHA-256' }
+    & gh release download "v$($manifest.studio.version)" --repo 'hypeproof/hypeproof-studio-releases' --pattern $asset.name --dir $script:TempRoot --clobber
+    if ($LASTEXITCODE -ne 0) { throw 'Private release download failed' }
+    if ((Get-FileHash $exe -Algorithm SHA256).Hash -ne ($asset.digest -replace '^sha256:', '')) { throw 'Release SHA-256 mismatch' }
 
     # Unblock the download (bypass the MOTW/SmartScreen prompt for our own signed setup).
     try { Unblock-File -LiteralPath $exe } catch { }
@@ -817,7 +836,7 @@ function Seed-Sdk {
         New-Item -ItemType Directory -Force -Path $script:TempRoot | Out-Null
         $seedScript = Join-Path $script:TempRoot $seedName
         try {
-            Invoke-WebRequest -UseBasicParsing -Uri $seedUrl -OutFile $seedScript
+            Get-PrivateSourceText $seedUrl | Out-File -FilePath $seedScript -Encoding utf8
         } catch {
             Write-Err2 "Could not fetch $seedName from $seedUrl : $($_.Exception.Message)"
             return $false

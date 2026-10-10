@@ -24,9 +24,10 @@ jobs:
           python-version: '3.11'
       - uses: actions/checkout@v4
         with:
-          repository: jayleekr/hypeproof-harness
+          repository: hypeproof/hypeproof-harness
           ref: 539560f1c85ba6d644241b998c159806d2cca617
           path: .work-discovery-harness
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
           persist-credentials: false
       - name: Detect missing or changed requirements and unassigned work
         env:
