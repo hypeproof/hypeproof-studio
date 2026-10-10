@@ -41,6 +41,7 @@ import { classroomDeliveryOperator, classroomDeliveryTeacher } from "./classroom
 import {nativeTrials} from './native-trials';
 import { chalkKnowledge } from './chalk-knowledge';
 import { chalkInstructor } from './chalk-instructor';
+import { chalkState } from './chalk-state';
 import type { Env } from "../env";
 import { listProfiles, getProfile } from "../profiles";
 import { isSyntheticCohort, refusedSyntheticHandles, syntheticHandleError } from "../lib/synthetic-cohort";
@@ -117,6 +118,15 @@ async function persistSessionStart(
   }
 }
 
+// This read requires issuer Bearer even when an operator credential is present.
+admin.use('/chalk/cohorts/:id/state', async (c, next) => {
+  c.header('cache-control', 'no-store');
+  if (!/^Bearer\s+\S/i.test((c.req.header('authorization') ?? '').trim())) {
+    return c.json({ error: 'instructor issuer token required (Authorization: Bearer …)' }, 401);
+  }
+  await next();
+});
+
 admin.use("*", async (c, next) => {
   // Cloudflare Access injects this header for authenticated requests.
   if (c.req.header("cf-access-authenticated-user-email")) return next();
@@ -167,6 +177,7 @@ admin.route("/", classroomCollectOperator);
 admin.route('/',nativeTrials);
 admin.route('/', chalkKnowledge);
 admin.route('/', chalkInstructor);
+admin.route('/', chalkState);
 
 // ---- cohort list ------------------------------------------------------------
 

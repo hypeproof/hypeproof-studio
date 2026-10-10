@@ -1,6 +1,6 @@
 {
   "updated": "2026-10-10",
-  "phase": "Studio 패키지 전환 · PR 준비 및 전체 Worker 회귀 검증",
+  "phase": "Studio PR CI 확인 · Chalk 상태 조회 Service API 구현",
   "steps": [
     {
       "name": "현재 상태·의존성 조사",
@@ -12,11 +12,11 @@
     },
     {
       "name": "Studio·측정 도구 패키지 전환",
-      "status": "독립 설치·확장 전체 테스트·빌드 통과 · Worker 전체 재검증 중"
+      "status": "PR #1580 게시 · 원격 CI 최종 확인 중"
     },
     {
       "name": "Chalk API 경계 전환",
-      "status": "대기"
+      "status": "상태 조회 HTTP 전환 구현·Chalk 전체 검증 통과 · board·로그 미전환"
     },
     {
       "name": "Service 독립 레포 추출",
@@ -58,7 +58,9 @@
     "기존 CLI 실행 코드와 어댑터 런타임 본문을 Studio 기준 커밋과 대조; Lab 동기화 경로 보존",
     "칸반 #1–#14 실제 상태 재조회: 완료 3개, 진행 중 4개, 대기 7개; 소스·Release·CI 근거와 미실행 범위 반영",
     "최종 확장 전체 테스트 및 Worker·Service·옛 CLI 소스 없는 별도 경로의 확장·webview 빌드 통과; #1 이슈 검증 근거 갱신",
-    "feat/service-package-consumers 브랜치에서 Studio 소비자 전환 PR 준비; Worker CI에 교차 제품 계약 테스트용 App 의존 설치 추가"
+    "feat/service-package-consumers 브랜치에서 Studio 소비자 전환 PR 준비; Worker CI에 교차 제품 계약 테스트용 App 의존 설치 추가",
+    "상태 조회는 Service가 issuer 범위·폐기·KV·프로필을 확인; 한 번의 HTTP 호출·8초 제한·헤더 제한·502 실패 표시 검증",
+    "칸반 #5 진행 중으로 전환: Done 3 / In Progress 5 / Backlog 6"
   ],
   "kanban": "https://github.com/orgs/hypeproof/projects/1"
 }

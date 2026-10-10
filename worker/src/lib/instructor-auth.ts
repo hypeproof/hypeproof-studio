@@ -87,6 +87,7 @@ async function verifyIssuerBearer(
 // Chalk consumes the SAME predicate as its forwarding allowlist: the set of
 // Service endpoints an instructor Bearer may reach is defined exactly once.
 export function isIssuerAllowedEndpoint(path: string, method: string): boolean {
+  if (method === 'GET' && /^\/admin\/chalk\/cohorts\/[^/]+\/state$/.test(path)) return true;
   if (method === 'GET' && /^\/admin\/cohorts\/[^/]+\/access$/.test(path)) return true;
   if(method==='GET'&&/^\/admin\/cohorts\/[^/]+\/budgets$/.test(path))return true;
   if(method==='POST'&&/^\/admin\/cohorts\/[^/]+\/budgets\/children$/.test(path))return true;

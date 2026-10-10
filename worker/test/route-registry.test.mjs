@@ -30,6 +30,7 @@ const ROUTES_DIR = 'worker/src/routes';
  * 요구·시험 부모 없이 구현 노드를 만들면 owner·부모를 발명하는 것이라 하지 않았다.
  */
 export const KNOWN_UNMAPPED = {
+  'chalk-state.ts': '기존 Chalk state 읽기의 Service API 이전. chalk/test/board-contract.test.mjs, instructor-auth-drift.test.mjs 및 worker/test/chalk-state.test.mjs가 검증하지만 기존 state 요구·시험 노드는 레지스트리에 없다. Service 분리 #5의 구현이며 #9에서 외부 참조와 함께 부모·소유 등록 필요',
   'admin.ts': '레지스트리 테스트 노드 10여 개가 /admin 을 호출하지만 대부분 픽스처 준비 호출이다 — 전부 부모로 달면 admin 변경마다 무관한 노드가 깨어난다. 관리 기능 자체의 요구 노드 결정 필요 (#996)',
   'authoring.ts': '/admin 아래 하위 라우터(admin.ts:137). authoring.test.mjs 가 호출하지만 그 테스트가 레지스트리에 없다 (#996)',
   'logs.ts': 'logs-upload.test.mjs 가 호출하지만 레지스트리에 없다. 업로드 허용 목록 계약의 요구 노드 결정 필요 (#996)',

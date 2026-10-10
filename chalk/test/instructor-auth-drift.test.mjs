@@ -25,7 +25,9 @@ import assert from "node:assert/strict";
 import { bootApp, createMockEnv, makeCtx, TEST_SECRET } from "../../worker/test/harness/index.mjs";
 
 const service = await bootApp();                                   // worker/src/index.ts
-const { default: chalk } = await import("../src/index.ts");        // chalk/src/index.ts
+const { default: localChalk } = await import("../src/index.ts");
+const { bridgeStateToService } = await import("./harness/service-state.mjs");
+const chalk = bridgeStateToService(localChalk);        // chalk/src/index.ts
 const tokens = await import("../../worker/src/lib/tokens.ts");
 const auth = await import("../../worker/src/lib/instructor-auth.ts");
 const shared = await import("../src/shared.ts");

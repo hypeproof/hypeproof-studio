@@ -20,7 +20,9 @@ import assert from "node:assert/strict";
 import "../../worker/test/harness/loader.mjs";
 
 const SECRET = "test-secret-" + "x".repeat(20);
-const { default: chalk } = await import("../src/index.ts");
+const { default: localChalk } = await import("../src/index.ts");
+const { bridgeStateToService } = await import("./harness/service-state.mjs");
+const chalk = bridgeStateToService(localChalk);
 const { issueIssuer } = await import("../../worker/src/lib/tokens.ts");
 const { listProfiles } = await import("../../worker/src/profiles/index.ts");
 const { setRoster, startSession, pauseCohort } = await import("../../worker/src/lib/kv.ts");

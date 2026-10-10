@@ -14,7 +14,9 @@ import assert from "node:assert/strict";
 import "../../worker/test/harness/loader.mjs";
 
 const SECRET = "test-secret-" + "x".repeat(20);
-const { default: chalk } = await import("../src/index.ts");
+const { default: localChalk } = await import("../src/index.ts");
+const { bridgeStateToService } = await import("./harness/service-state.mjs");
+const chalk = bridgeStateToService(localChalk);
 // Test-side minting only. Chalk itself imports NO signing code (src/shared.ts).
 const { issue, issueIssuer } = await import("../../worker/src/lib/tokens.ts");
 const { startSession } = await import("../../worker/src/lib/kv.ts");
