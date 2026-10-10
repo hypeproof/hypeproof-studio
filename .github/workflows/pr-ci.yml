@@ -186,6 +186,9 @@ jobs:
       - name: Install chalk deps
         working-directory: chalk
         run: npm ci
+      - name: Install App dependencies for cross-product contract tests
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --ignore-scripts --omit=optional
       - name: Run chalk tests
         working-directory: chalk
         run: npm test
