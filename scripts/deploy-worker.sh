@@ -68,7 +68,7 @@ fi
 
 # 3. Deploy -------------------------------------------------------------------
 note "deploy (top-level env)"
-cd worker
+cd "$(node "$REPO_ROOT/scripts/service-tooling.mjs")"
 # --env="" targets the top-level wrangler.toml env (silences the multi-env
 # warning that wrangler 4.x prints).
 if ! npx wrangler deploy --env="" 2>&1 | tee /tmp/hps-deploy.log; then

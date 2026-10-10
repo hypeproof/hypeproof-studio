@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import '../../worker/test/harness/loader.mjs';
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import { state } from '../src/routes/state.ts';
 
 const request = () => new Request('https://chalk.test/cohorts/cohort-one/state', { headers: {
@@ -19,8 +19,8 @@ test('one bounded HTTP read forwards only Bearer and preserves Service auth fail
     assert.equal(url, 'https://service.test/admin/chalk/cohorts/cohort-one/state');
     assert.equal(init.redirect, 'error');
     assert.ok(init.signal instanceof AbortSignal);
-    assert.deepEqual(Object.keys(init.headers).sort(), ['authorization', 'x-request-id']);
-    assert.equal(init.headers.authorization, 'Bearer fixture-token');
+    assert.deepEqual([...init.headers.keys()].sort(), ['authorization', 'x-request-id']);
+    assert.equal(init.headers.get('authorization'), 'Bearer fixture-token');
     return Response.json({ error: 'issuer not scoped' }, { status: 403, headers: { 'x-request-id': 'service-rid' } });
   };
   try {

@@ -34,15 +34,13 @@
 //       "상위 N(%/위/명/등)" with a number, and "상위 랭킹/순위". The narrowing is recorded
 //       in the RANK_PATTERNS comment and in the report.
 
-import { ANTHROPIC_MODELS, GEMINI_MODELS, GLM_MODELS, OPENAI_MODELS } from "../../../worker/src/profiles/types.ts";
+import { SERVICE_CONTRACT_FIXTURES } from "./fixtures/service-contracts/index.mjs";
 
 /**
- * The model names the work screen's model picker shows ("Claude Sonnet 4.6"). Read from the
- * Service's catalogue, which is where those labels come from (lesson-model-policy.ts gives each
- * choice `label` from these four tables), so the allowance below names exactly what the product
- * draws and nothing else: a version-like number anywhere else is still a bare number.
+ * The model names the work screen's model picker shows ("Claude Sonnet 4.6"). Captured as synthetic Service catalogue response data in the App fixture,
+ * so the allowance below uses the response labels rendered by the picker: a version-like number anywhere else is still a bare number.
  */
-export const MODEL_NAMES = Object.values({ ...ANTHROPIC_MODELS, ...OPENAI_MODELS, ...GEMINI_MODELS, ...GLM_MODELS });
+export const MODEL_NAMES = SERVICE_CONTRACT_FIXTURES.modelNames;
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ─── Rule table ──────────────────────────────────────────────────────────

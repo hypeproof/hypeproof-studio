@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mac laptop rehearsal. No full Studio build, deployment or production cohort.
-# Run from this checkout; inputs: installed Studio app + worker/.dev.vars API key.
+# Run from this checkout; inputs: installed Studio app + the explicit Service development environment file API key.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -17,8 +17,9 @@ if [[ "${HPS_NATIVE_RELEASE_VERIFY:-}" == 1 && -z "${HPS_NATIVE_REUSE_DIR:-}" ]]
   exit 2
 fi
 [[ -d "$SOURCE_APP/Contents" ]] || { echo 'BLOCKED: set HPS_APP_PATH to an installed Studio .app bundle.' >&2; exit 2; }
-[[ -f worker/.dev.vars ]] || { echo 'BLOCKED: worker/.dev.vars is missing; use the existing scripts/dev-secrets.sh setup.' >&2; exit 2; }
-node --env-file=worker/.dev.vars -e 'if (process.env.HPS_CODEX_REHEARSAL !== "1" && !process.env.ANTHROPIC_API_KEY) { console.error("BLOCKED: this SDK rehearsal requires ANTHROPIC_API_KEY in worker/.dev.vars"); process.exit(2) }'
+DEV_VARS="${HPS_SERVICE_DEV_VARS:-${HOME}/.hypeproof/service-dev.vars}"
+[[ -f "$DEV_VARS" ]] || { echo 'BLOCKED: the explicit Service development environment file is missing; use the existing scripts/dev-secrets.sh setup.' >&2; exit 2; }
+node --env-file="$DEV_VARS" -e 'if (process.env.HPS_CODEX_REHEARSAL !== "1" && !process.env.ANTHROPIC_API_KEY) { console.error("BLOCKED: this SDK rehearsal requires ANTHROPIC_API_KEY in the explicit Service development environment file"); process.exit(2) }'
 if curl --max-time 2 -fsS "http://127.0.0.1:$GATEWAY_PORT/v1/health" >/dev/null 2>&1; then
   echo "BLOCKED: port $GATEWAY_PORT already has a gateway. Set HPS_NATIVE_PORT to an unused test port; this script will not kill it." >&2
   exit 2
@@ -26,7 +27,7 @@ fi
 
 node e2e/native-trial-checks.test.mjs
 if [[ -z "${HPS_NATIVE_REUSE_DIR:-}" ]]; then
-npm ci --prefix worker
+npm ci
 npm ci --prefix e2e
 npm ci --prefix extensions/hypeproof-chat
 npm ci --prefix extensions/hypeproof-chat/webview-ui
@@ -107,13 +108,14 @@ if [[ -n "${HPS_NATIVE_COMPAT_APP:-}" ]]; then
   [[ "${HPS_NATIVE_FAULTS:-}" == 1 && "${HPS_NATIVE_CASE:-}" == old-client ]] || { echo 'compatibility app requires the old-client test' >&2; exit 2; }
   export HPS_APP_PATH="$HPS_NATIVE_COMPAT_APP"
 fi
+SERVICE_ENTRY="$(node scripts/service-tooling.mjs test/native-trial-live-server.mjs)"
 export HPS_E2E_TOKEN_FILE="$NATIVE_TMP/token"
 export HPS_E2E_PROXY_URL="http://127.0.0.1:$GATEWAY_PORT/v1"
 export HPS_NATIVE_LIVE=1
 export HPS_NATIVE_EVIDENCE_DIR="$ROOT/e2e/test-results/native-trial/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$HPS_NATIVE_EVIDENCE_DIR"
 node e2e/native-trial-manifest.mjs
-node --env-file=worker/.dev.vars --experimental-strip-types worker/test/native-trial-live-server.mjs > "$NATIVE_TMP/gateway.log" 2>&1 &
+HPS_CODEX_ADAPTER_MODULE="file://$PWD/scripts/lib/codex-local-client.mjs" node --env-file="$DEV_VARS" --experimental-strip-types "$SERVICE_ENTRY" > "$NATIVE_TMP/gateway.log" 2>&1 &
 GATEWAY_PID=$!
 ready=0
 for attempt in {1..30}; do

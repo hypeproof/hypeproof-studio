@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751, U3) — AT-46 M2: a prompt and lesson settings from the REAL Chalk UI to REAL Studio windows on this Mac.
 //
 //   HPS_DEVHOST_SOURCE="<official shell>.app" HPS_DEVHOST_DIR=e2e/test-results/classroom-devhost-u3 node e2e/classroom/mac-devhost.mjs prepare
@@ -31,7 +32,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
@@ -50,7 +51,7 @@ assert.ok(manifest.agent_sdk?.vendored === true && manifest.agent_sdk.binary, 't
 const steps = []; const step = (name, detail = {}) => { steps.push({ at: new Date().toISOString(), name, ...detail }); console.log('STEP ' + name + (Object.keys(detail).length ? ' ' + JSON.stringify(detail) : '')); };
 
 // ── Service: real router + SQLite. The class and its tokens last HOURS so that a person can keep using what is left running. ──
-const local = await localOps(MODE === 'proxy' ? { profile: 'boah-dental-teaser-2026-s1' /* same synthetic cohort, proxy runtime */ } : {}), { setRoster, startSession } = await import('../../worker/src/lib/kv.ts'), { readLesson } = await import('../../worker/src/lib/lesson-delivery.ts');
+const local = await localOps(MODE === 'proxy' ? { profile: 'boah-dental-teaser-2026-s1' /* same synthetic cohort, proxy runtime */ } : {}), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { readLesson } = await import('@hypeproof/service-testkit/src/lib/lesson-delivery.ts');
 const endsAt = new Date(Date.now() + HOURS * 3600_000).toISOString();
 await startSession(local.env.HPS_KV, local.cohort, { session_id: local.run, profile_id: local.profile, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: endsAt }); local.db.prepare('UPDATE sessions SET ends_at=? WHERE id=?').run(endsAt, local.run);
 const seats = ['A1', 'A2'].map((id, i) => ({ seat_id: id, student_id: prefix + (i + 1) })), KEY = () => crypto.randomUUID();
@@ -63,7 +64,7 @@ await setRoster(local.env.HPS_KV, local.cohort, seats.map((s) => s.student_id));
 const lessonSha = {}; for (const v of [V1, V2, V3]) lessonSha[v] = (await readLesson(local.env, local.cohort, course, v, local.profile)).sha256;
 // Stage 0 runs with U3 OFF (no enforcement, no switch): what U1/U2 users have today.
 assert.equal((await local.configure(seats, 0, { flags: { ops_observe: true, ops_commands: true, ops_distribute: true } })).status, 201); let roster = 1;
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const teacherToken = (await issueIssuer({ issuer: 'teacher-a' /* the lesson was drafted and frozen by this instructor id */, scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: [...OPS_ALL, 'distribute', 'lesson_settings'] }] }, HOURS + 1, TEST_SECRET)).token;
 const invite = async (user) => { const r = await local.request(`/admin/cohorts/${local.cohort}/authoring/${course}/versions/${V1}/participants`, 'POST', { user, hours: HOURS }, teacherToken); assert.equal(r.status, 200, r.raw); return r.json.token; };
 const token = await invite(seats[0].student_id), tokenA2 = await invite(seats[1].student_id);

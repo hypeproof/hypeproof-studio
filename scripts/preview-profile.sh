@@ -15,13 +15,14 @@
 #   bash scripts/preview-profile.sh --profile <id> --cohort <id> --user <name> --port 8787
 #   bash scripts/preview-profile.sh --print-token                    # local manual paste only
 #
-# Secret: reads HPS_SIGNING_SECRET from worker/.dev.vars (the same secret the
+# Secret: reads HPS_SIGNING_SECRET from the Service development .dev.vars (the same secret the
 # running wrangler dev verifies with) or the env. Run `bash scripts/dev-secrets.sh`
 # first if .dev.vars is empty.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/worker"
+SERVICE_WORKER_ROOT="$(node "$ROOT/scripts/service-tooling.mjs")"
+cd "$SERVICE_WORKER_ROOT"
 
 # Pin Node 22 (issue-token.ts / dump-profiles.ts use --experimental-strip-types).
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
@@ -53,7 +54,7 @@ if [[ -z "$SIGNING" && -f .dev.vars ]]; then
   SIGNING="$(grep -E '^HPS_SIGNING_SECRET=' .dev.vars | head -n1 | cut -d= -f2- || true)"
 fi
 if [[ -z "$SIGNING" ]]; then
-  echo "✗ HPS_SIGNING_SECRET not set and not found in worker/.dev.vars" >&2
+  echo "✗ HPS_SIGNING_SECRET not set and not found in the Service development .dev.vars" >&2
   echo "  Run: bash scripts/dev-secrets.sh  (and set HPS_SIGNING_SECRET there)" >&2
   exit 1
 fi
@@ -83,14 +84,14 @@ fi
 
 # --- derive cohort_id from the registry if not provided --------------------
 if [[ -z "$COHORT" ]]; then
-  COHORT="$(node --experimental-strip-types scripts/dump-profiles.ts 2>/dev/null \
+  COHORT="$(node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types scripts/dump-profiles.ts 2>/dev/null \
     | node -e 'const a=JSON.parse(require("fs").readFileSync(0,"utf8"));const p=a.find(x=>x.id===process.argv[1]);if(!p){console.error("profile not in registry: "+process.argv[1]);process.exit(3)}process.stdout.write(p.session.cohort_id)' "$PROFILE")"
   echo "• derived cohort_id: ${COHORT}"
 fi
 
 # --- mint a local token ----------------------------------------------------
 echo "▶ minting token (user=${USER_ID} cohort=${COHORT} profile=${PROFILE})…"
-TOKEN="$(HPS_SIGNING_SECRET="$SIGNING" node --experimental-strip-types scripts/issue-token.ts \
+TOKEN="$(HPS_SIGNING_SECRET="$SIGNING" node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types scripts/issue-token.ts \
   --user "$USER_ID" --cohort "$COHORT" --profile "$PROFILE" --hours 2 2>/dev/null)"
 if [[ -z "$TOKEN" ]]; then echo "✗ token mint failed" >&2; exit 1; fi
 

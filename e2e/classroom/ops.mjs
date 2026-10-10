@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps } from './service-fixture.mjs';
 const local = await localOps(); const { default: chalk } = await import('../../chalk/src/index.ts');
 const realFetch = globalThis.fetch;
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);

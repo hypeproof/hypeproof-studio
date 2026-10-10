@@ -26,7 +26,7 @@
 #                                            stored results (the previous workspace and app state are kept as *.previous)
 #   bash scripts/cr-dev-kit.sh --phone       + an ngrok tunnel: published links open on a phone
 #   bash scripts/cr-dev-kit.sh --real-model  the coach and the skills ask a real model (ANTHROPIC_API_KEY
-#                                            from worker/.dev.vars, into the Service process only; spends credit)
+#                                            from explicit local Service environment file (HPS_SERVICE_DEV_VARS), into the Service process only; spends credit)
 #   bash scripts/cr-dev-kit.sh --no-app      the Service (and tunnel) only
 #   bash scripts/cr-dev-kit.sh --dry-run     print what would start; start nothing
 #   --state-dir DIR                          default: one directory per checkout, ~/Library/Application Support/
@@ -77,7 +77,7 @@ fail() { echo "✗ $*" >&2; exit 1; }
 [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || fail "this kit is for an Apple-silicon Mac (scripts/studio-dev.py builds the development app there)"
 command -v node >/dev/null || fail "node is not on PATH"
 node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' || fail "node 22 or newer is needed (--experimental-strip-types, node:sqlite)"
-[[ -d "$ROOT/worker/node_modules" ]] || fail "worker dependencies are missing: npm ci --prefix worker"
+[[ -d "$ROOT/e2e/node_modules/@hypeproof/service-testkit" ]] || fail "public Service testkit missing: npm ci --prefix e2e"
 if [[ $APP -eq 1 ]]; then
   [[ -f "$ROOT/extensions/hypeproof-chat/node_modules/esbuild/lib/main.js" && -f "$ROOT/extensions/hypeproof-chat/webview-ui/node_modules/vite/bin/vite.js" ]] \
     || fail "extension dependencies are missing: npm ci --prefix extensions/hypeproof-chat && npm ci --prefix extensions/hypeproof-chat/webview-ui"
@@ -91,9 +91,9 @@ if [[ $PHONE -eq 1 ]]; then
 fi
 KEY=""
 if [[ $REAL -eq 1 ]]; then
-  [[ -f "$ROOT/worker/.dev.vars" ]] || fail "--real-model reads ANTHROPIC_API_KEY from worker/.dev.vars, which is missing"
-  KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' "$ROOT/worker/.dev.vars" | head -1)"
-  [[ -n "$KEY" ]] || fail "worker/.dev.vars has no ANTHROPIC_API_KEY"
+  [[ -f "${HPS_SERVICE_DEV_VARS:-$STATE/service.dev.vars}" ]] || fail "--real-model reads ANTHROPIC_API_KEY from explicit local Service environment file (HPS_SERVICE_DEV_VARS), which is missing"
+  KEY="$(sed -n 's/^ANTHROPIC_API_KEY=//p' "${HPS_SERVICE_DEV_VARS:-$STATE/service.dev.vars}" | head -1)"
+  [[ -n "$KEY" ]] || fail "explicit local Service environment file (HPS_SERVICE_DEV_VARS) has no ANTHROPIC_API_KEY"
 fi
 
 TOKEN_FILE="$STATE/local-participant-token.txt"
@@ -106,7 +106,7 @@ if [[ $DRY -eq 1 ]]; then
   [[ $FRESH -eq 1 ]] && echo "fresh:   $STATE/workspace and $STATE/user-data → *.previous; the kiosk fixture copied in"
   [[ $PHONE -eq 1 ]] && echo "tunnel:  ${NGROK_CMD[*]}  (its log read for the address only, kept nowhere)  →  HPS_TEST_ORIGIN=https://<ngrok host>, checked before the address is printed"
   [[ $PHONE -eq 0 ]] && echo "origin:  HPS_TEST_ORIGIN=http://{project}.localhost:$PORT"
-  echo "service: HPS_CR_CONTROL=0 ${SERVICE_CMD[*]}$([[ $REAL -eq 1 ]] && echo "   (HPS_CR_MODEL=real, key from worker/.dev.vars)")"
+  echo "service: HPS_CR_CONTROL=0 ${SERVICE_CMD[*]}$([[ $REAL -eq 1 ]] && echo "   (HPS_CR_MODEL=real, key from explicit local Service environment file (HPS_SERVICE_DEV_VARS))")"
   [[ $APP -eq 1 ]] && echo "app:     ${APP_CMD[*]}"
   exit 0
 fi

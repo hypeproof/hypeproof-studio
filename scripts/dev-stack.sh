@@ -11,7 +11,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/worker"
+SERVICE_WORKER_ROOT="$(node "$ROOT/scripts/service-tooling.mjs")"
+cd "$SERVICE_WORKER_ROOT"
 
 # Pin Node 22
 export NVM_DIR="$HOME/.nvm"
@@ -21,7 +22,7 @@ nvm use 22.22.1 --silent >/dev/null 2>&1
 
 # Ensure .dev.vars exists with real Anthropic key
 if [[ ! -f .dev.vars ]]; then
-  echo "ERROR: worker/.dev.vars missing. Run: source ~/.env && create .dev.vars" >&2
+  echo "ERROR: the Service development .dev.vars missing. Run: source ~/.env && create .dev.vars" >&2
   exit 1
 fi
 
@@ -79,7 +80,7 @@ curl -fsS -X POST "http://localhost:8787/admin/cohorts/$HPS_COHORT/session" \
   -d "{\"profile_id\":\"$HPS_PROFILE\",\"starts_at\":\"$NOW\",\"ends_at\":\"$END\"}" >/dev/null
 
 echo "▶ issuing token for '$HPS_USER'…"
-TOKEN=$(HPS_SIGNING_SECRET="$SIGNING" node --experimental-strip-types scripts/issue-token.ts \
+TOKEN=$(HPS_SIGNING_SECRET="$SIGNING" node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types scripts/issue-token.ts \
   --user "$HPS_USER" --cohort "$HPS_COHORT" --profile "$HPS_PROFILE" --hours 2)
 
 # e2e global-setup + the extension's local-dev auto-import both read this file.

@@ -3,7 +3,7 @@
 // field must round-trip through content()/render() and be omitted when blank,
 // so a draft never stores an ambiguous empty name (the Service rejects one).
 import assert from 'node:assert/strict';
-import '../../worker/test/harness/loader.mjs';
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 const { default: chalk } = await import('../src/index.ts');
 const env = { HPS_SIGNING_SECRET: 'test-secret-0123456789abcdef', ENVIRONMENT: 'dev', HPS_SERVICE_ORIGIN: 'https://service.test' };
 const page = async (path) => { const r = await chalk.fetch(new Request('https://chalk.test' + path), env, {}); assert.equal(r.status, 200, path); return r.text(); };

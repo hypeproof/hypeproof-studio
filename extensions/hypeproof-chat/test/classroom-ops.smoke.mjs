@@ -1,24 +1,35 @@
 // Remote classroom operations client (#751): outbox durability, ack-only deletion,
 // single-flight/backoff, cause classification, and the drift lock against the
-// Service validator. Plain Node — no VS Code, no network.
+// pinned Service payload contract. Plain Node — no VS Code, no network.
 import assert from "node:assert/strict";
 import * as ops from "../src/classroomOps.ts";
-const svc = await import("../../../worker/src/lib/classroom-ops.ts");
+const { SERVICE_CONTRACT_FIXTURES } = await import("./fixtures/service-contracts/index.mjs");
+const contract = SERVICE_CONTRACT_FIXTURES.ops;
 let n = 0; const ok = (name) => { n++; console.log("  ✓ " + name); };
 const memoryStore = () => { let saved = null; return { saves: 0, async load() { return saved ? JSON.parse(saved) : null; }, async save(s) { this.saves++; saved = JSON.stringify(s); } }; };
 let id = 0; const uuid = () => `event-${String(++id).padStart(8, "0")}`;
 
-// ── drift lock: every builder output passes the Service validator; its key set is the Service's ──
+// ── drift lock: every builder output matches a Service-accepted fixture; a planted extra key is caught ──
 {
   const samples = { activation: [ops.activationPayload("token_verified", { tokenJti: "11111111-2222-4333-8444-555555555555", tokenExp: 1790000000 }), ops.activationPayload("token_rejected", { reason: "auth_signature", httpStatus: 401 })], step: [ops.stepPayload("m2026.09.18-1", "in_progress", "build"), ops.stepPayload("m2026.09.18-1", "free_activity")], runtime: [ops.runtimePayload("waiting_approval")], error: [ops.errorPayload("network", { blocking: false }), ops.errorPayload("auth_expired", { code: "http_401", requestId: "req-1234-abcd", blocking: true, cleared: true })], upload: [ops.uploadPayload("uploaded", 2)], evidence: [ops.evidencePayload("decision"), ops.evidencePayload("change", { sourceState: "real", stepId: "build", before: "a".repeat(64), after: "b".repeat(64) })] };
   assert.equal(ops.evidencePayload("action").source_state, "unverified", "an unstated source is never reported as real"); assert.deepEqual(Object.keys(ops.evidencePayload("change", { before: "index.html", stepId: "../x" })), ["evidence_type", "source_state"], "names and paths cannot ride in a digest field");
-  for (const [kind, list] of Object.entries(samples)) for (const p of list) { const v = svc.validatePayload(kind, p); assert.ok(v.ok, `${kind} ${JSON.stringify(p)} → ${v.error}`); assert.ok(Object.keys(p).every((k) => ops.CLIENT_OPS_PAYLOAD_KEYS[kind].includes(k))); }
-  // Negative control: the Service refuses a key the client list does not know, so the lists cannot drift silently.
-  for (const kind of Object.keys(ops.CLIENT_OPS_PAYLOAD_KEYS)) assert.equal(svc.validatePayload(kind, { ...samples[kind][0], extra_field: "x" }).ok, false);
+  const matchesContract = (kind, payload, expected) => {
+    assert.deepEqual(payload, expected.payload, `${kind}: App builder changed the accepted wire payload`);
+    assert.equal(expected.verdict.ok, true, "the captured Service validator accepted this example");
+    assert.ok(Object.keys(payload).every((key) => ops.CLIENT_OPS_PAYLOAD_KEYS[kind].includes(key)));
+  };
+  for (const [kind, list] of Object.entries(samples)) {
+    const expected = contract.payloadCases.filter((entry) => entry.kind === kind);
+    assert.equal(list.length, expected.length);
+    list.forEach((payload, i) => matchesContract(kind, payload, expected[i]));
+    // The same comparator must catch a client that adds an undeclared field.
+    assert.equal(expected[0].extraFieldVerdict.ok, false);
+    assert.throws(() => matchesContract(kind, { ...list[0], extra_field: "x" }, expected[0]), /App builder changed/);
+  }
   // Unsafe text never reaches a payload: it is dropped, not sent.
   const e = ops.errorPayload("unknown", { code: "/Users/kid/내 파일.html", requestId: "학생이 쓴 글", blocking: true }); assert.deepEqual(Object.keys(e).sort(), ["blocking", "class"]);
-  assert.deepEqual([...ops.OPS_CLIENT_CAPABILITIES], ["observe", "observe_step", "observe_runtime", "observe_evidence"], "review F4: the build declares what it reports from its real runtime path"); assert.equal(ops.OPS_SCHEMA_VERSION, svc.OPS_SCHEMA_VERSION);
-  ok("payload builders match the Service allowlist; unsafe strings are dropped");
+  assert.deepEqual([...ops.OPS_CLIENT_CAPABILITIES], ["observe", "observe_step", "observe_runtime", "observe_evidence"], "review F4: the build declares what it reports from its real runtime path"); assert.equal(ops.OPS_SCHEMA_VERSION, contract.schemaVersion);
+  ok("payload builders match the pinned Service contract; unsafe strings are dropped");
 }
 // ── cause classification: a bare 401 is never "expired" ──
 {
@@ -26,7 +37,7 @@ let id = 0; const uuid = () => `event-${String(++id).padStart(8, "0")}`;
   assert.equal(c({ status: 401 }), "auth_rejected"); assert.equal(c({ status: 401, code: "expired" }), "auth_expired"); assert.equal(c({ status: 401, code: "signature" }), "auth_signature"); assert.equal(c({ status: 401, code: "revoked" }), "auth_revoked");
   assert.equal(c({ status: 403, code: "session_inactive" }), "class_not_open"); assert.equal(c({ status: 403, code: "not_in_roster" }), "roster_missing"); assert.equal(c({ status: 403 }), "unknown");
   assert.equal(c({ status: 429 }), "provider_rate_limit"); assert.equal(c({ status: 503 }), "provider_5xx"); assert.equal(c({ networkError: true }), "network"); assert.equal(c({ status: 0 }), "network");
-  for (const v of [c({ status: 401 }), c({ status: 418 })]) assert.ok(svc.ERROR_CLASSES.includes(v));
+  for (const v of [c({ status: 401 }), c({ status: 418 })]) assert.ok(contract.errorClasses.includes(v));
   ok("classification names only what was observed");
 }
 // ── outbox: persisted before send, deleted only by the contiguous cursor, survives restart, refuses loudly at the cap ──

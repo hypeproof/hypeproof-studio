@@ -363,13 +363,8 @@ await test("CR-08/CR-10: the stored record keeps the earlier-request mark, so th
 });
 
 await test("CR-10 shared PC: one person's count and delete never reach another person's stored screens", async () => {
-  const { issue } = await import("../../../worker/src/lib/tokens.ts");
-  const secret = "cr-host-smoke-signing-secret-0123456789abcdef";
-  const tok = async (u, c) => (await issue({ u, c, p: "p" }, 6, secret)).token;
-  const a1 = await tok("kid01", "cohort-a");
-  const a2 = await tok("kid01", "cohort-a");
-  const b = await tok("kid02", "cohort-a");
-  const other = await tok("kid01", "cohort-b");
+  const { SERVICE_CONTRACT_FIXTURES } = await import("./fixtures/service-contracts/index.mjs");
+  const [a1, a2, b, other] = SERVICE_CONTRACT_FIXTURES.tokens.owners;
   const ownerA = w.crBytesOwner(a1);
   assert.match(ownerA, /^o-[a-f0-9]{32}$/);
   assert.equal(w.crBytesOwner(a2), ownerA, "the same person on a reissued token is the same owner");

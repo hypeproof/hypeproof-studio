@@ -73,7 +73,7 @@ const MISSION = "AI가 만든 걸 내가 확인했나?";
 const PREVIEW = "HypeProof: HTML 미리보기 (옆 패널)";
 const FIXTURE = path.join(repo, "e2e/curriculum-runtime/fixtures/kiosk-practice");
 /** The design the Service serves (sx-service.mjs), every completion condition kept: the header as it ships. */
-const WEEK3 = JSON.parse(fs.readFileSync(path.join(repo, "worker/test/fixtures/session-design/week-3.json"), "utf8")) as {
+const WEEK3 = JSON.parse(fs.readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/test/fixtures/session-design/week-3.json")), "utf8")) as {
   steps: Array<{ id: string; title: string }>;
   learning: { completion: Array<{ id: string; text: string }> };
 };

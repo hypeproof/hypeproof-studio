@@ -23,7 +23,7 @@ import { rendererStatus, renderComponent, visibleText } from "./sx-render.mjs";
 import { MAX_ACTIONS, actionsFrom, stepsRemaining } from "../webview-ui/src/missionHeaderLogic.ts";
 
 const week3 = JSON.parse(
-  readFileSync(new URL("../../../worker/test/fixtures/session-design/week-3.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./fixtures/session-design/week-3.json", import.meta.url), "utf8"),
 );
 const lesson = { course_id: "globalbuddy", version: "m2026.09.20-1", sha256: "f".repeat(64), content: week3 };
 const noop = () => {};

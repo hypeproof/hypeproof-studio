@@ -25,11 +25,14 @@ const cardsOf = async (dir) => (await new InboxStore(dir).read()).cards.map((c) 
 const journalOf = async (dir) => (await new InboxStore(dir).current()).index.journal.map((j) => j.type === "offer" ? `${j.stage}:r${j.revision}${j.result_code ? ":" + j.result_code : ""}` : `withdraw:${j.result}`);
 
 try {
-  await check("controls: the hash is the Service's hash, the limits are the Service's limits, text is kept as text", async () => {
-    const svc = await import("../../../worker/src/lib/classroom-distribution.ts"), c = { kind: "material", title: "제목", body: "<script>alert(1)</script> [x](javascript:alert(1)) rm -rf ~", links: [{ label: "문서", url: "https://docs.example.org/a" }] };
-    assert.equal(inbox.contentCanonical(c), svc.contentCanonical(c)); assert.equal(sha(inbox.contentCanonical(c)), await svc.contentHash(c));
-    for (const k of ["MAX_TITLE_CHARS", "MAX_BODY_CHARS", "MAX_BODY_BYTES", "MAX_LINKS", "MAX_LINK_LABEL_CHARS", "MAX_LINK_URL_CHARS", "MAX_SYNC_RECEIPTS", "MAX_SYNC_WITHDRAWS", "APPLY_WITHIN_MS", "CONTENT_SCHEMA"]) assert.equal(inbox[k], svc[k], k);
-    assert.equal(inbox.INBOX_CAPABILITY, svc.DIST_CLIENT_CAPABILITY);
+  await check("controls: canonical bytes and limits match the pinned Service contract; text is kept as text", async () => {
+    const { SERVICE_CONTRACT_FIXTURES } = await import("./fixtures/service-contracts/index.mjs");
+    const contract = SERVICE_CONTRACT_FIXTURES.distribution;
+    const { input: c, canonical, sha256 } = contract.contents.find((entry) => entry.input.kind === "material");
+    assert.equal(inbox.contentCanonical(c), canonical); assert.equal(sha(inbox.contentCanonical(c)), sha256);
+    for (const k of ["MAX_TITLE_CHARS", "MAX_BODY_CHARS", "MAX_BODY_BYTES", "MAX_LINKS", "MAX_LINK_LABEL_CHARS", "MAX_LINK_URL_CHARS", "MAX_SYNC_RECEIPTS", "MAX_SYNC_WITHDRAWS", "APPLY_WITHIN_MS", "CONTENT_SCHEMA"]) assert.equal(inbox[k], contract.limits[k], k);
+    assert.equal(inbox.INBOX_CAPABILITY, contract.limits.DIST_CLIENT_CAPABILITY);
+    assert.notEqual(inbox.contentCanonical({ ...c, title: "changed" }), canonical, "a planted wire-content change is caught");
     const v = inbox.validateItem(item(1, 1, { content: c })); assert.equal(v.ok, true); assert.equal(v.value.body, c.body, "markup is not stripped, escaped or interpreted here — it is data, and it is drawn as text");
     for (const [bad, code] of [[{ kind: "video" }, "unsupported_kind"], [{ kind: "setting" }, "schema"] /* U3: a setting without its lesson reference */, [{ schema: "hps-classroom-content/9" }, "unsupported_kind"], [{ title: "" }, "schema"], [{ body: "가".repeat(2001) }, "schema"], [{ links: [{ label: "a", url: "http://docs.example.org/" }] }, "schema"], [{ links: [{ label: "a", url: "javascript:alert(1)" }] }, "schema"], [{ links: [{ label: "a", url: "file:///etc/passwd" }] }, "schema"], [{ links: [{ label: "a", url: "https://u:p@docs.example.org/" }] }, "schema"], [{ apply_within_ms: 0 }, "schema"], [{ apply_within_ms: 30001 }, "schema"], [{ offer_key: "short" }, "schema"]]) assert.equal(inbox.validateItem({ ...item(1, 1), ...bad }).code, code, JSON.stringify(bad));
   });

@@ -17,8 +17,7 @@ class DevLauncherTests(unittest.TestCase):
     def test_local_setup_preserves_active_session_and_validates_before_saving(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)/'repo'; state = Path(tmp)/'state'; state.mkdir()
-            (repo/'worker').mkdir(parents=True)
-            (repo/'worker/.dev.vars').write_text('HPS_ADMIN_PASSWORD=synthetic-password', encoding='utf-8')
+            (state/'service.dev.vars').write_text('HPS_ADMIN_PASSWORD=synthetic-password', encoding='utf-8')
             calls = []
             def fetch(req, timeout):
                 calls.append((req.method, req.full_url.removeprefix('http://127.0.0.1:8787')))

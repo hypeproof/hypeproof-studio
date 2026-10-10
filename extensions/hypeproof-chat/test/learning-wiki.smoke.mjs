@@ -1,4 +1,4 @@
-// Learning wiki and deck generator skills (generic), and the founder plan that specializes them.
+// Learning wiki and deck generator skills (generic), and an example Service plan response that specializes them.
 // Each check has a positive case and a planted defect that must be caught.
 //
 // Run: node --experimental-strip-types test/learning-wiki.smoke.mjs
@@ -10,7 +10,8 @@ import { join } from "node:path";
 const wiki = await import("../src/learningWiki.ts");
 const deck = await import("../src/deckGenerator.ts");
 const hz = await import("../src/humanizer.ts");
-const { FOUNDER_AI_FOR_GOOD_V5: PLAN } = await import("../../../worker/src/profiles/plans/founder-ai-for-good-v5.ts");
+const { SERVICE_CONTRACT_FIXTURES } = await import("./fixtures/service-contracts/index.mjs");
+const PLAN = SERVICE_CONTRACT_FIXTURES.plan;
 let passed = 0;
 const ok = (name) => { passed++; console.log(`✓ ${name}`); };
 

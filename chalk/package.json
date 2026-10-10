@@ -9,18 +9,21 @@
     "dev": "wrangler dev --port 8788",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "test": "node --experimental-strip-types test/instructor-console.test.mjs && node --experimental-strip-types test/instructor-auth-drift.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-contract.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-threshold.test.mjs && node --experimental-strip-types test/deploy-isolation.test.mjs && node --experimental-strip-types test/logs-read-path.test.mjs && node --experimental-strip-types test/authoring-forward.test.mjs && node --experimental-strip-types test/authoring-ui.test.mjs && node --experimental-strip-types test/feedback-loop-forward.test.mjs && npm run test:classroom && npm run test:classroom-ops && npm run test:budgets && node --experimental-strip-types --test test/state-forward.test.mjs",
+    "test": "node --experimental-strip-types test/instructor-console.test.mjs && node --experimental-strip-types test/instructor-auth-drift.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-contract.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-threshold.test.mjs && node --experimental-strip-types test/deploy-isolation.test.mjs && node --experimental-strip-types test/logs-read-path.test.mjs && node --experimental-strip-types test/authoring-forward.test.mjs && node --experimental-strip-types test/authoring-ui.test.mjs && node --experimental-strip-types test/feedback-loop-forward.test.mjs && npm run test:classroom && npm run test:classroom-ops && npm run test:budgets && node --experimental-strip-types --test test/state-forward.test.mjs && node --experimental-strip-types --test test/service-read-forward.test.mjs",
     "typecheck": "tsc --noEmit",
     "test:classroom": "node --experimental-strip-types --experimental-sqlite test/classroom.test.mjs",
     "test:classroom-ops": "node --experimental-strip-types --experimental-sqlite test/classroom-ops.test.mjs",
-    "test:budgets": "node --experimental-strip-types --experimental-sqlite test/budgets.test.mjs"
+    "test:budgets": "node --experimental-strip-types --experimental-sqlite test/budgets.test.mjs",
+    "build": "wrangler deploy --dry-run --outdir dist"
   },
   "dependencies": {
-    "hono": "^4.13.7"
+    "hono": "^4.13.7",
+    "@hypeproof/service-contracts": "https://github.com/hypeproof/hypeproof-service/releases/download/service-contracts-v0.1.1/hypeproof-service-contracts-0.1.1.tgz"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260801.1",
     "typescript": "^5.4.0",
-    "wrangler": "^4.147.0"
+    "wrangler": "^4.147.0",
+    "@hypeproof/service-testkit": "https://github.com/hypeproof/hypeproof-service/releases/download/service-testkit-v0.1.1/hypeproof-service-testkit-0.1.1.tgz"
   }
 }

@@ -18,13 +18,12 @@ import budgetsHtml from './ui/budgets.html';
 //
 // What is NOT here, on purpose: any write to session/roster/pause/revocation
 // state, any token signing, any admin-password path, any cron. Those are the
-// Service's. See chalk/src/shared.ts for the one import boundary and
-// chalk/README.md for the deploy order.
+// Service's. The public HTTP contract keeps participant state and keys
+// outside the instructor surface.
 
 import { Hono } from "hono";
 import { resolveChalkVersion, type ChalkEnv } from "./env.ts";
-import { makeErrorBody, requestId, signingSecretGuard } from "./middleware.ts";
-import { TokenError } from "./shared.ts";
+import { makeErrorBody, requestId } from "./middleware.ts";
 import { state } from "./routes/state.ts";
 import { board } from "./routes/board.ts";
 import { logsAdmin } from "./routes/logs-admin.ts";
@@ -64,9 +63,8 @@ const page = (html: unknown) =>
 
 app.get("/", (c) => c.redirect("/console", 302));
 // Pages are public; every API call they make carries the instructor's Bearer
-// issuer token and is scope-checked server-side (here for reads, in the
-// Service for writes). Outside the guard so a misconfigured secret shows a
-// page with a clear API error instead of a bare 503.
+// issuer token and is scope-checked by the Service for reads and writes.
+// Pages remain reachable when Service configuration is unavailable.
 app.get("/console", () => page(consoleHtml));
 app.get("/start", () => page(startHtml));
 app.get("/issuer", () => page(issuerHtml));
@@ -76,16 +74,13 @@ app.get("/manage", () => page(manageHtml));
 app.get("/budgets", () => page(budgetsHtml));
 app.get("/sharing", () => page(sharingHtml));
 app.get('/learn', () => page(learnHtml));
-app.use('/v1/profile', signingSecretGuard);
 app.get('/v1/profile', forwardInstructorWrite);
-app.use("/v1/classroom/*", signingSecretGuard);
 app.all("/v1/classroom/*", forwardInstructorWrite);
 
-app.use("/admin/*", signingSecretGuard);
 app.route("/admin", state);
 app.route("/admin", board);
 // #680 — studio-logs read path. Mounted before the forwarder so these reads are
-// answered here and never proxied to the Service (which has no such route).
+// forwarded through the dedicated read contract before instructor writes.
 app.route("/admin", logsAdmin);
 app.all("/admin/*", forwardInstructorWrite);
 
@@ -95,9 +90,6 @@ app.notFound((c) =>
 app.onError((err, c) => {
   const rid = c.get("requestId") ?? "no-request-id";
   console.error(`[${rid}] chalk error:`, err);
-  if (err instanceof TokenError) {
-    return c.json(makeErrorBody(c, "auth", err.message, { code: err.code }), 401);
-  }
   return c.json(
     makeErrorBody(c, "internal", "unexpected server error — quote this request_id to the operator"),
     500,

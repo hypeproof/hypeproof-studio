@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751, U3) — AT-45/46 in a real browser: a prompt and a lesson setting sent from Chalk /manage.
 //
 // Real here: the Chalk page and its script in Chromium (the instructor drives everything through the UI), the Service router +
@@ -16,8 +17,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
-import { makeCtx, withMockUpstream, anthropicJsonBody, TEST_SECRET } from '../../worker/test/harness/index.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
+import { makeCtx, withMockUpstream, anthropicJsonBody, TEST_SECRET } from '@hypeproof/service-testkit/test/harness/index.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY, markSettingBound, pendingSetting } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir, inboxView } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
@@ -25,7 +26,7 @@ import { tokenLessonSha } from '../../extensions/hypeproof-chat/src/lessonBindin
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-lesson-settings'); mkdirSync(out, { recursive: true });
 const dist = path.join(repo, 'extensions/hypeproof-chat/webview-ui/dist'); assert.ok(existsSync(path.join(dist, 'index.html')), 'build the webview first: npm --prefix extensions/hypeproof-chat/webview-ui run build');
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts'), { readLesson } = await import('../../worker/src/lib/lesson-delivery.ts'), { issue } = await import('../../worker/src/lib/tokens.ts');
+const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { readLesson } = await import('@hypeproof/service-testkit/src/lib/lesson-delivery.ts'), { issue } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 local.env.HPS_LESSON_BINDINGS = 'enforce'; local.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }); globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? toService(url, init) : realFetch(url, init);
 const serve = async (handler) => { const s = createServer(handler); s.listen(0, '127.0.0.1'); await once(s, 'listening'); return s; };

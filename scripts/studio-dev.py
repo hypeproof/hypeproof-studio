@@ -373,7 +373,7 @@ def setup_local_participant(repo, state):
     health = request('GET', '/v1/health')
     if health.get('service') != 'hypeproof-studio-api' or health.get('env') != 'dev':
         raise RuntimeError('--setup-local requires a development Service on 127.0.0.1:8787.')
-    vars_path = repo / 'worker/.dev.vars'
+    vars_path = Path(os.environ.get('HPS_SERVICE_DEV_VARS', str(state / 'service.dev.vars')))
     variables = {}
     if vars_path.is_file():
         for line in vars_path.read_text(encoding='utf-8-sig').splitlines():
@@ -382,7 +382,7 @@ def setup_local_participant(repo, state):
                 variables[name.strip()] = value.strip().strip('"').strip("'")
     password = os.environ.get('HPS_ADMIN_PASSWORD') or variables.get('HPS_ADMIN_PASSWORD')
     if not password:
-        raise RuntimeError('Set the local HPS_ADMIN_PASSWORD in worker/.dev.vars before --setup-local.')
+        raise RuntimeError('Set local HPS_ADMIN_PASSWORD in the environment or HPS_SERVICE_DEV_VARS before --setup-local.')
     auth = 'Basic ' + base64.b64encode((':' + password).encode('utf-8')).decode('ascii')
     cohort, profile = 'homepage-practice', 'homepage-practice-s1'
     user = 'dev-' + hashlib.sha256(str(repo.resolve()).encode()).hexdigest()[:12]

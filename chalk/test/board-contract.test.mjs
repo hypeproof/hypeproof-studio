@@ -17,15 +17,15 @@
 // Run: node --experimental-strip-types chalk/test/board-contract.test.mjs
 
 import assert from "node:assert/strict";
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 
 const SECRET = "test-secret-" + "x".repeat(20);
 const { default: localChalk } = await import("../src/index.ts");
 const { bridgeStateToService } = await import("./harness/service-state.mjs");
 const chalk = bridgeStateToService(localChalk);
-const { issueIssuer } = await import("../../worker/src/lib/tokens.ts");
-const { listProfiles } = await import("../../worker/src/profiles/index.ts");
-const { setRoster, startSession, pauseCohort } = await import("../../worker/src/lib/kv.ts");
+const { issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { setRoster, startSession, pauseCohort } = await import("@hypeproof/service-testkit/src/lib/kv.ts");
 
 const COHORT = "boah-dental-2026-a";
 const COPYCLONE = "boah-dental-director-copyclone-2026-s1";
@@ -126,7 +126,7 @@ console.log("✓ board-contract: no member handles, no prompt text — operation
 // ===========================================================================
 
 const { DatabaseSync } = await import("node:sqlite");
-const { d1Timestamp } = await import("../src/routes/board.ts");
+const { d1Timestamp } = await import("@hypeproof/service-testkit/src/routes/chalk-board.ts");
 
 // A D1-shaped adapter over a real SQLite, so the route's SQL actually executes
 // rather than being answered by a stub that agrees with whatever it is sent.

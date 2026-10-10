@@ -8,6 +8,7 @@ import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {appIdentity,treeHash,sha256,assertReceipt} from './artifact.mjs';
 import {checkSeededSdk} from './sdk-seed.mjs';
+import {serviceSourceManifest} from '../service-provenance.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const [appDirectory,assetDirectory,outputDirectory,sourceSha,version,publicAppSha]=process.argv.slice(2);
 const serviceOnly=!!publicAppSha;
@@ -31,14 +32,14 @@ try{
  const assets=Object.fromEntries(fs.readdirSync(assetDirectory).filter(n=>/\.(zip|exe)$/.test(n)).map(n=>[n,sha256(path.join(assetDirectory,n))]));
  fs.mkdirSync(outputDirectory,{recursive:true});
  temporary=fs.mkdtempSync(path.join(os.tmpdir(),'hps-unified-acceptance-'));
- const activities=[];
+ const activities=[],servicePackage=serviceSourceManifest();
  for(const kind of ['trial','classroom']){
   const evidence=path.resolve(outputDirectory,kind);fs.mkdirSync(evidence,{recursive:true});
   const server=net.createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));
   const token=path.join(temporary,kind+'-token');
   const env={...process.env,HPS_APP_PATH:path.resolve(appDirectory),HPS_E2E_TOKEN_FILE:token,HPS_E2E_PROXY_URL:`http://127.0.0.1:${port}/v1`,HPS_NATIVE_PORT:String(port),HPS_NATIVE_EVIDENCE_DIR:evidence,HPS_UNIFIED_SWITCH:serviceOnly?'0':'1',HPS_SERVICE_ACCEPTANCE:serviceOnly?'1':'0',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_LIVE:'1',HPS_NATIVE_MANAGED:kind==='trial'?'1':'0',HPS_TEST_REAL_WORKSPACE:'1',HPS_QUIET:'1',HPS_QUIET_NO_HIDE:'1'};
   log=fs.openSync(path.join(temporary,kind+'-gateway.log'),'w',0o600);
-  gateway=spawn(process.execPath,['--experimental-strip-types','worker/test/native-trial-live-server.mjs'],{cwd:root,env,stdio:['ignore',log,log]});
+  gateway=spawn(process.execPath,['--experimental-strip-types','--import','@hypeproof/service-testkit/test/harness/loader.mjs',fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/test/native-trial-live-server.mjs'))],{cwd:path.join(root,'e2e'),env:{...env,HPS_CODEX_ADAPTER_MODULE:new URL('../../scripts/lib/codex-local-client.mjs',import.meta.url).href},stdio:['ignore',log,log]});
   let launchError;gateway.on('error',error=>{launchError=error;});
   let ready=false;
   for(let attempt=0;attempt<60;attempt++){
@@ -54,10 +55,11 @@ try{
   if(serviceOnly){
    const calls=JSON.parse(fs.readFileSync(path.join(evidence,'api-evidence.json'),'utf8')).calls;
    if(result.status!=='PASS'||!result.initial_file_created||!result.revised_file_created||!result.original_preserved||!calls.length||calls.length>8||calls.some(c=>c.status!==200))throw Error('Service compatibility acceptance failed');
-   activities.push({kind,serviceSha:sourceSha,result,modelCalls:calls.length});
+   // serviceSha is the legacy release gate's acceptance-driver SHA; package metadata identifies the Service implementation.
+   activities.push({kind,serviceSha:sourceSha,servicePackage,result,modelCalls:calls.length});
   }else{
    const turns=JSON.parse(fs.readFileSync(path.join(evidence,'unified-live-turns.json'),'utf8'));
-   activities.push({kind,serviceSha:sourceSha,payloadIsolation:turns.payload_isolation===true,result});
+   activities.push({kind,serviceSha:sourceSha,servicePackage,payloadIsolation:turns.payload_isolation===true,result});
   }
   const stopped=new Promise(resolve=>gateway.once('exit',resolve));gateway.kill();await stopped;gateway=null;fs.closeSync(log);log=undefined;
  }

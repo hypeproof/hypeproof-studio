@@ -20,7 +20,7 @@
 // Run (from e2e/): node --experimental-strip-types --experimental-sqlite curriculum-runtime/evidence-runtime.real.mjs [--out result.json]
 // Exit: 0 every check and control held · 1 a check or a control failed · 2 could not run.
 
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 import { chromium, devices } from "@playwright/test";
 import { createServer } from "node:http";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -28,9 +28,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { localCurriculum } = await import("../../worker/test/harness/curriculum.mjs");
-const { PARTICIPANT_EVENTS_SNIPPET } = await import("../../worker/src/lib/curriculum/participant-snippet.ts");
-const { participantRecord, PUBLISHED_HOST } = await import("../../worker/src/lib/curriculum/participant-record.ts");
+const { localCurriculum } = await import("@hypeproof/service-testkit/test/harness/curriculum.mjs");
+const { PARTICIPANT_EVENTS_SNIPPET } = await import("@hypeproof/service-testkit/src/lib/curriculum/participant-snippet.ts");
+const { participantRecord, PUBLISHED_HOST } = await import("@hypeproof/service-testkit/src/lib/curriculum/participant-record.ts");
 const outArg = process.argv.indexOf("--out");
 const OUT = outArg > 0 ? process.argv[outArg + 1] : null;
 
