@@ -6,20 +6,14 @@ and update checks are available to members with repository read access.
 
 ## Requirements
 
-- Resolve the latest release and download assets using the member's existing
-  GitHub CLI login or explicit `GH_TOKEN`, `GITHUB_TOKEN`. The app updater and
-  app-only release installers additionally accept `HPS_RELEASE_TOKEN`.
-  Never embed or persist a shared credential in the app or installer.
-- Authenticate only the exact organization release API. An asset redirect may
-  receive no Authorization header and must target a known GitHub asset host.
-- Keep byte count, SHA-256, timeout, partial-file cleanup and existing-file guards.
-  Missing credentials, missing digest, or a denied API response fail explicitly.
-- Private source scripts and SDK seed scripts use the member GitHub CLI login.
-  Custom script mirrors never receive a repository credential.
-- Windows and macOS bootstrap scripts require GitHub CLI and verify SHA-256
-  before launching or installing. Preserve the existing platform restrictions.
-- The private cross-repository requirement workflow passes a Contents-read token
-  to the Harness checkout; it does not widen the normal workflow token.
+| ID | Acceptance |
+|---|---|
+| PRA-01 | Resolve release metadata and assets with the member GitHub CLI login or explicit GH_TOKEN/GITHUB_TOKEN. The updater and app-only installers also accept HPS_RELEASE_TOKEN. Never embed or persist shared credentials. |
+| PRA-02 | Authenticate only the exact organization release API. Updater asset redirects receive no Authorization header and must target a known GitHub asset host. |
+| PRA-03 | Preserve updater byte count, SHA-256, timeout, partial-file cleanup and existing-file guards. Missing credentials/digest and denied API access fail explicitly. |
+| PRA-04 | Private source and SDK seed scripts use the member GitHub CLI login; custom script mirrors receive no repository credential. |
+| PRA-05 | Windows/macOS bootstrap scripts require GitHub CLI and verify SHA-256 before installing. Preserve platform restrictions. |
+| PRA-06 | The requirement workflow supplies a Contents-read credential to the private Harness checkout without widening its normal workflow token. |
 
 ## Validation
 
