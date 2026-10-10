@@ -55,12 +55,6 @@ jobs:
       sha: ${{ steps.sha.outputs.value }}
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout pinned Service source (deployment ownership unchanged)
-        uses: actions/checkout@v4
-        with:
-          repository: hypeproof/hypeproof-service
-          ref: service-testkit-v0.1.1
-          path: .service-source
         with:
           ref: ${{ inputs.ref }}
       - id: sha
@@ -90,6 +84,13 @@ jobs:
           # `git describe --tags` to see w* tags, which the default shallow
           # (depth-1, no-tags) checkout would hide.
           fetch-depth: 0
+
+      - name: Checkout pinned Service source (deployment ownership unchanged)
+        uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: service-testkit-v0.1.2
+          path: .service-source
 
       - uses: actions/setup-node@v4
         with:

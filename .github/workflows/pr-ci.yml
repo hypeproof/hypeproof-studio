@@ -98,7 +98,7 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci
-      - run: npm ci --omit=optional
+      - run: npm ci
         working-directory: extensions/hypeproof-chat
       - run: npm ci
         working-directory: extensions/hypeproof-chat/webview-ui
@@ -120,9 +120,8 @@ jobs:
         run: node node_modules/typescript/bin/tsc -p "$(node scripts/service-tooling.mjs)/tsconfig.json"
 
   # Chalk (chalk/) — the instructor surface, its own Worker on the c* train
-  # (plan task F). It re-exports the Service's token verifier and its
-  # drift-lock test boots the Service app in-process, so both dependency
-  # trees are installed. `npm test` here includes the two task-F controls:
+  # (plan task F). HTTP clients use the public contract; tests install the
+  # pinned public Service reference artifact. `npm test` includes controls:
   # instructor-auth-drift (one verifier, two workers) and deploy-isolation
   # (a c* deploy cannot move the Service's version).
   chalk-test:
@@ -176,7 +175,7 @@ jobs:
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
         # `claude` binary package (#282) — typecheck/smoke never spawn it.
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       - name: Typecheck extension
         working-directory: extensions/hypeproof-chat
         run: npm run typecheck
@@ -215,7 +214,7 @@ jobs:
           python-version: "3.12"
       - name: Install extension dependencies without native model binaries
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       - name: Verify isolated launcher and subscription lifecycle controls
         shell: bash
         env:
@@ -239,7 +238,7 @@ jobs:
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
         # `claude` binary package (#282) — typecheck/smoke never spawn it.
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       # The render instrument (`test/sx-render.mjs`) resolves react from
       # webview-ui. Without these deps `rendererStatus()` reports
       # `webview-deps-missing` and EVERY screen test skips — which is what was
@@ -267,7 +266,7 @@ jobs:
           node-version: "22"
       - name: Install extension deps
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       - name: Install e2e deps
         working-directory: e2e
         run: npm ci

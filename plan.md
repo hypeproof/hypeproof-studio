@@ -1,8 +1,28 @@
 # Extract Worker into an independent HypeProof Service repository
 
-상태: 구현 진행 중. measurement-core·service-contracts 0.1.0과 measurement CLI
-0.3.5를 Service 레포에서 공개 배포했습니다. Studio 소비자 전환은 로컬 검증을
-마쳤으며 PR·CI 확인 단계입니다. Worker 런타임과 운영 배포 주체는 아직 Studio에 있습니다.
+상태(2026-10-10): 공개 Service `feat/issue-3-independent-worker` 최신
+`6a2a769`에서 Worker 본체·측정 엔진·기준·SQL·기존 historical HAIN7을 소유하고,
+Studio 없는 독립 설치·빌드 및 Node22/24 Worker/패키지 CI가 통과했습니다.
+공개 core 0.1.0·CLI 0.3.5·contracts 0.1.1·개발 testkit 0.1.2를 버전 고정해 소비합니다.
+Studio `feat/issue-1582-worker-free-consumers`는 App/Chalk/E2E/도구/CI 연결을
+공개 패키지·HTTP 계약으로 전환하고 tracked `worker/` 478파일을 제거했습니다.
+기존 로컬 비밀·설치 상태는 레포 밖 복구 위치에 보존했으며 운영을 변경하지 않았습니다.
+
+최종 수용 명령은 `npm run test:worker-free`입니다. `worker/` 및 형제 Service
+소스 없는 별도 Studio 체크아웃을 만들고 npm ci, App·webview·Chalk 빌드,
+요구사항 기반 App↔Service 검증과 실제 Chromium/SDK 흐름을 실행합니다.
+최종 수용 테스트는 PASS했습니다. 설치·빌드·App/Chalk 전체 회귀·공개 계약/측정/
+실제 스냅샷과 Chromium/SDK 핵심 흐름이 모두 통과했습니다. 근거는
+`docs/dev/worker-separation-acceptance.json`입니다. 원격 PR 병합·운영 배포·
+실제 GUI 수동 동작·구독/유료 모델 요청은 별도 미실행 상태입니다.
+
+최신 인간 확정 범위와 종료 기준은 [AGENTS.md](AGENTS.md)의 DEC-013~016입니다.
+Worker 연결 제거는 지금 구현하며, Chalk 웹을 App 화면으로 옮기거나 비Worker
+역할을 리팩터링하는 작업은 이 미션 밖입니다. 과거 아래 세부 계획은 추가
+종료 조건이 아닙니다. 후속 추적은 [backlog 목록](docs/plan/worker-separation-backlog.md)
+및 [hype-luwak](https://github.com/hypeproof/hype-luwak/issues)에서 관리합니다.
+정본 Service inventory 등록은 Harness #291에서 진행하되 전체 change-impact
+onboarding 완료로 과장하지 않습니다. 운영 이전과 전체 Git 이력은 별도 backlog입니다.
 Date: 2026-10-10.
 Baseline inspected: Studio commit `2a21b44468806a66862d4ceb5389addede9eef11`.
 Selected destination: `hypeproof/hypeproof-service` (public repository and public packages, confirmed 2026-10-10).

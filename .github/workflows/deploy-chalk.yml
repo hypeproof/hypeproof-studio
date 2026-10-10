@@ -6,7 +6,7 @@ name: deploy-chalk
 #   git tag c0.1.0 && git push origin c0.1.0      → real deploy
 #   workflow_dispatch (dry_run=true by default)    → tests + typecheck only
 #
-# The Service (worker/, w* tags, deploy-worker.yml) is a different artifact
+# The Service (hypeproof-service, w* tags, deploy-worker.yml) is a different artifact
 # on a different train. This workflow proves that on every real deploy: it
 # reads the Service's version (task C, GET /v1/health) before and after and
 # fails if it moved. chalk/test/deploy-isolation.test.mjs pins the static
@@ -62,14 +62,8 @@ jobs:
           cache: npm
           cache-dependency-path: chalk/package-lock.json
 
-      # Chalk re-exports the Service's token verifier (chalk/src/shared.ts)
-      # and its drift-lock test boots the Service app in-process, so the
-      # Service's dependencies must be installed too. Nothing here deploys
-      # from worker/.
-      - name: Install worker dependencies (shared auth module + drift lock)
-        working-directory: worker
-        run: npm ci
-
+      # Chalk's declared public packages include its API contracts and the
+      # development Service harness used by integration tests.
       - name: Install chalk dependencies
         working-directory: chalk
         run: npm ci

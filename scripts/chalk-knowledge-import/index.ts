@@ -23,7 +23,9 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { checkVocab, type KnowledgeDoc } from "../../worker/src/lib/chalk-vocab-check.ts";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
+import type { KnowledgeDoc } from "@hypeproof/service-testkit/src/lib/chalk-vocab-check.ts";
+const { checkVocab } = await import("@hypeproof/service-testkit/src/lib/chalk-vocab-check.ts");
 
 // --- CLI ---------------------------------------------------------------
 

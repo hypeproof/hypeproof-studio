@@ -22,6 +22,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVICE_WORKER_ROOT="$(node "$ROOT/scripts/service-tooling.mjs")"
+DEV_VARS="$(node "$ROOT/scripts/service-tooling.mjs" --dev-vars)"
 cd "$SERVICE_WORKER_ROOT"
 
 # Pin Node 22 (issue-token.ts / dump-profiles.ts use --experimental-strip-types).
@@ -50,8 +51,8 @@ BASE="http://localhost:${PORT}"
 
 # --- signing secret --------------------------------------------------------
 SIGNING="${HPS_SIGNING_SECRET:-}"
-if [[ -z "$SIGNING" && -f .dev.vars ]]; then
-  SIGNING="$(grep -E '^HPS_SIGNING_SECRET=' .dev.vars | head -n1 | cut -d= -f2- || true)"
+if [[ -z "$SIGNING" && -f "$DEV_VARS" ]]; then
+  SIGNING="$(grep -E '^HPS_SIGNING_SECRET=' "$DEV_VARS" | head -n1 | cut -d= -f2- || true)"
 fi
 if [[ -z "$SIGNING" ]]; then
   echo "✗ HPS_SIGNING_SECRET not set and not found in the Service development .dev.vars" >&2
@@ -68,7 +69,9 @@ if curl -fsS "${BASE}/v1/health" >/dev/null 2>&1; then
   echo "✓ wrangler dev already reachable at ${BASE}"
 else
   echo "▶ wrangler dev not up — starting (npx wrangler dev --local --port ${PORT})…"
-  nohup npx wrangler dev --local --port "${PORT}" > /tmp/hps-preview-wrangler.log 2>&1 &
+  ENV_ARGS=()
+  [[ ! -f "$DEV_VARS" ]] || ENV_ARGS=(--env-file "$DEV_VARS")
+  nohup npm exec -- wrangler dev --local --port "${PORT}" "${ENV_ARGS[@]}" > /tmp/hps-preview-wrangler.log 2>&1 &
   STARTED_BY_US=1
   for _ in $(seq 1 30); do
     curl -fsS "${BASE}/v1/health" >/dev/null 2>&1 && break

@@ -12,7 +12,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${HOME}/.env"
 SERVICE_WORKER_ROOT="$(node "$ROOT/scripts/service-tooling.mjs")"
-DEV_VARS="${HPS_SERVICE_DEV_VARS:-${SERVICE_WORKER_ROOT}/.dev.vars}"
+DEV_VARS="$(node "$ROOT/scripts/service-tooling.mjs" --dev-vars)"
 EXAMPLE="${SERVICE_WORKER_ROOT}/.dev.vars.example"
 
 [ -f "$ENV_FILE" ] || { echo "✗ ${ENV_FILE} not found"; exit 1; }
@@ -32,6 +32,7 @@ val="$(printf '%s' "$val" | tr -d '[:space:]')"
 
 # Seed .dev.vars from the example (empty values) if missing.
 if [ ! -f "$DEV_VARS" ]; then
+  mkdir -p "$(dirname "$DEV_VARS")"
   if [ -f "$EXAMPLE" ]; then cp "$EXAMPLE" "$DEV_VARS"; else : > "$DEV_VARS"; fi
 fi
 
@@ -43,7 +44,7 @@ mv "$tmp" "$DEV_VARS"
 chmod 600 "$DEV_VARS"
 
 echo "✓ GEMINI_API_KEY written to Service development .dev.vars (${#val} chars, value not shown)"
-echo "  Service development .dev.vars is gitignored — never commit it."
+echo "  Local secret file: $DEV_VARS — never commit it."
 grep -qE '^[[:space:]]*HPS_SIGNING_SECRET[[:space:]]*=[^[:space:]]' "$DEV_VARS" \
   || echo "  ⚠ HPS_SIGNING_SECRET is empty — set it to the secret your test tokens were signed with."
 echo "  Next:  bash scripts/dev-stack.sh"

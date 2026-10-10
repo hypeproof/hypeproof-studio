@@ -9,6 +9,6 @@
     "test:worker-free": "node scripts/verify-worker-free.mjs"
   },
   "devDependencies": {
-    "@hypeproof/service-testkit": "https://github.com/hypeproof/hypeproof-service/releases/download/service-testkit-v0.1.1/hypeproof-service-testkit-0.1.1.tgz"
+    "@hypeproof/service-testkit": "https://github.com/hypeproof/hypeproof-service/releases/download/service-testkit-v0.1.2/hypeproof-service-testkit-0.1.2.tgz"
   }
 }

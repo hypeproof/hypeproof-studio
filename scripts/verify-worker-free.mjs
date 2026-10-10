@@ -25,7 +25,7 @@ const receipt = { schema: 'hps-worker-separation-acceptance/1', sourceCommit: ex
 const env = { ...process.env, HYPEPROOF_HARNESS: '', NODE_PATH: '', npm_config_cache: process.env.npm_config_cache || '/tmp/hypeproof-public-npm-cache' };
 const steps = [
   ['tooling install', '.', 'npm', ['ci', '--ignore-scripts']],
-  ['App install', 'extensions/hypeproof-chat', 'npm', ['ci', '--omit=optional']],
+  ['App install', 'extensions/hypeproof-chat', 'npm', ['ci']],
   ['webview install', 'extensions/hypeproof-chat/webview-ui', 'npm', ['ci']],
   ['Chalk install', 'chalk', 'npm', ['ci']],
   ['integration install', 'e2e', 'npm', ['ci']],
@@ -36,12 +36,15 @@ const steps = [
   ['Chalk production bundle', 'chalk', 'npm', ['exec', '--', 'wrangler', 'deploy', '--dry-run', '--outdir', 'dist']],
   ['App feature and failure regression', 'extensions/hypeproof-chat', 'npm', ['test']],
   ['Chalk authorization, reads and transport', 'chalk', 'npm', ['test']],
+  ['App to Service contracts, measurements, snapshots and deployment boundaries', '.', 'npm', ['run', 'test:service-integration']],
   ['launcher isolation and subscription lifecycle', '.', 'python3', ['scripts/test-studio-dev.py']],
   ['Chromium install', 'e2e', 'npm', ['exec', '--', 'playwright', 'install', 'chromium']],
   ['App to Service classroom results', 'e2e', 'npm', ['run', 'test:classroom-ops-results']],
   ['published runtime in real Chromium', 'e2e', 'npm', ['run', 'test:cr-publish']],
   ['participant evidence in real Chromium', 'e2e', 'npm', ['run', 'test:cr-evidence']],
   ['budget isolation in real Chromium', 'e2e', 'npm', ['run', 'test:budgets:browser']],
+  ['API gateway and SDK credential isolation', 'e2e', 'npm', ['run', 'test:budgets:sdk']],
+  ['published classroom flows and App results', 'e2e', 'npm', ['run', 'test:trial-ux']],
 ];
 console.log('Acceptance checkout (Worker absent, siblings absent): ' + isolated);
 for (const [name, directory, command, args] of steps) {

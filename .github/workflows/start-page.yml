@@ -6,9 +6,9 @@ on:
       - 'extensions/hypeproof-chat/**'
       - 'e2e/start-page/**'
       - 'e2e/trial-ux/**'
+      - 'e2e/service-provenance.mjs'
       - 'e2e/voice-conversation/**'
       - 'e2e/sx/goal-browser.mjs'
-      - 'worker/src/profiles/**'
       - 'e2e/package*.json'
       - '.github/workflows/start-page.yml'
 permissions:

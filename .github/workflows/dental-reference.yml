@@ -9,12 +9,7 @@ on:
       - 'extensions/hypeproof-chat/src/nativeBrowser.ts'
       - 'e2e/chalk-authoring/**'
       - 'e2e/classroom/**'
-      - 'worker/src/routes/classroom.ts'
-      - 'worker/test/harness/classroom.mjs'
-      - 'worker/src/lib/lesson-delivery.ts'
       - 'chalk/**'
-      - 'worker/src/routes/authoring.ts'
-      - 'worker/src/lib/session-design.ts'
       - 'e2e/package*.json'
       - '.github/workflows/dental-reference.yml'
 permissions:
@@ -34,8 +29,6 @@ jobs:
         working-directory: e2e
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
-      - run: npm ci
-        working-directory: worker
       - run: npm ci
         working-directory: chalk
       - run: npm run test:chalk-authoring

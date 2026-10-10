@@ -1,0 +1,1047 @@
+{
+  "schema": "hps-studio-service-integration/1",
+  "source": {
+    "repository": "hypeproof/hypeproof-studio",
+    "commit": "fb8101da13ece2046ef17db8a9b5a02ac3577875"
+  },
+  "testkit": "@hypeproof/service-testkit",
+  "assertionsPreserved": true,
+  "execution": "Compatibility inventory; executed requirements and commands are recorded separately. Inventory is not a pass result.",
+  "tests": [
+    {
+      "id": "route-registry.test",
+      "classification": "studio-integration",
+      "reason": "Reads Studio config/traceability.json; registry ownership is tracked separately in extraction issue #9.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/route-registry.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/route-registry.test.mjs",
+      "sourceSha256": "7ab6a2f635d9585fe5cff64cd0e5da0effdc833f5a848207f21d6a39575c0c90",
+      "file": "route-registry.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "route-registry.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "ad112e6706656f762a787aa58fedb6ad1fb75d66beebf90ccd44f585c499e5ce"
+    },
+    {
+      "id": "browser-contract.test",
+      "classification": "studio-integration",
+      "reason": "Runtime tool names are read from the Studio browser MCP implementation; retain the complete cross-product drift lock in Studio.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/browser-contract.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/browser-contract.test.mjs",
+      "sourceSha256": "628e29e23366194107009934f0c045f152e37a14684a8b45a85e1c6c721a542c",
+      "file": "browser-contract.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "browser-contract.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "872976ed3929a5c937e958a31c76b621e226d66c1f3072966ef68fc331ee2aaa"
+    },
+    {
+      "id": "logs-upload.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/logs-upload.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/logs-upload.test.mjs",
+      "sourceSha256": "c191f31b992d79c6314f4c283dfb69d509da1798e706a5eb0806f166fa1980b7",
+      "file": "logs-upload.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "logs-upload.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "App spoolUploader upload filename equality remains in Studio"
+      ],
+      "consumerSha256": "209289ec913fbcfef3adb54d25ddafb188fc76adbdcbd34a5ac82a9789b99053"
+    },
+    {
+      "id": "quest-result-contract.test",
+      "classification": "studio-integration",
+      "reason": "Runs Studio questResultHelpers against Worker skeleton messages; the client sanitizer is owned by Studio.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/quest-result-contract.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/quest-result-contract.test.mjs",
+      "sourceSha256": "6cb962eebf5e66582bd9294ff9d83ee882c778db5802fe4a5c025ed15d5776e5",
+      "file": "quest-result-contract.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "quest-result-contract.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "bc1563b57bb0888394766280dac2670ae0a4346469d709db3e20d838f77f6b62"
+    },
+    {
+      "id": "liveness-trace.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/liveness-trace.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/liveness-trace.test.mjs",
+      "sourceSha256": "741149367f351ed421b98116c513f63e9cd54e76591a4f5edef37da62239932a",
+      "file": "liveness-trace.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "liveness-trace.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "App heartbeat interval and heartbeat/artifact payload builder drift checks remain in Studio"
+      ],
+      "consumerSha256": "352be89824e2fab314bf26d83618d57e2af1c72ff42d68ce906757a4edee35a6"
+    },
+    {
+      "id": "native-observation.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test",
+        "test:native-trial"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --test test/native-observation.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/native-observation.test.mjs",
+      "sourceSha256": "6b0ffb7c3ad87e60b29b3da23dfbbab7da23fba8a437b7bedb3fb54c1d180657",
+      "file": "native-observation.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "native-observation.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "App released observation parity and App shim purity remain in Studio",
+        "App and Service preserve released observation behavior"
+      ],
+      "consumerSha256": "354c3a450e8630a913c84fb742bf800d24b99104d38461f26016e80e2943e13e"
+    },
+    {
+      "id": "measurement-core.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --test test/measurement-core.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/measurement-core.test.mjs",
+      "sourceSha256": "2e089a30163a805838a710dab5810392d85575c12f26771d9249e976b46b1152",
+      "file": "measurement-core.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "measurement-core.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "MC-T01/MC-T02 App golden parity, App shim purity and App/Worker lockfile equality remain in Studio"
+      ],
+      "consumerSha256": "f19114e591be9b1f0372adc165a865fc76c7ec777adf93ba18899f734fa862ae"
+    },
+    {
+      "id": "sx-traceability.test",
+      "classification": "studio-integration",
+      "reason": "Reads Studio requirements, testing specifications and traceability registry.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/sx-traceability.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/sx-traceability.test.mjs",
+      "sourceSha256": "c27a35df78501fa59a362c5207d516a57841b47538e5e8b6b576671a389e9670",
+      "file": "sx-traceability.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "sx-traceability.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "c00b9d9837e483f9ed8325eab979c92c8c62322489a1ca9bc2bcb7d0276c3b72"
+    },
+    {
+      "id": "cr-traceability.test",
+      "classification": "studio-integration",
+      "reason": "Reads Studio curriculum requirements, tests and intent documents.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/cr-traceability.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-traceability.test.mjs",
+      "sourceSha256": "74bcd21eb553540ce55783bf401fc27de37a1ef1ba8f5331203ca1ab60481a41",
+      "file": "cr-traceability.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "cr-traceability.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "78748a92f4565901d49e0b7ae6f8103578f8e7c9385de7f6f9dd4459a58efc36"
+    },
+    {
+      "id": "cr-recon.test",
+      "classification": "studio-integration",
+      "reason": "Checks Studio Git history, frozen recon metadata and App implementation symbols.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types test/cr-recon.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-recon.test.mjs",
+      "sourceSha256": "2352ce3b318a249fb2c5c24617d857e9f13240ee5a82471a2b69ad84b5cd0bda",
+      "file": "cr-recon.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "cr-recon.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "e2a56c35dce9611c6cb72a6cb8da30186201cd059018d67a36112e7007b1bd00"
+    },
+    {
+      "id": "cr-switch.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/cr-switch.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-switch.test.mjs",
+      "sourceSha256": "e167076e520ef827cd69434116ad7e7b5ffaa2103e4f8f215d451d57027f76bc",
+      "file": "cr-switch.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "cr-switch.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "App MCP/proxy tool equality remains in Studio; Service switch-off inventory derives from Service route exports and test-origin router",
+        "inventory: the App's CR tool lists are exactly the Worker's (one name set, both runtimes)"
+      ],
+      "consumerSha256": "0831d3548f080de6090b05d8ec843ee97836a5f9a2ecce99cf48a10927b40b46"
+    },
+    {
+      "id": "cr-verify.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --test test/cr-verify.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-verify.test.mjs",
+      "sourceSha256": "95c7e95cfd57eb0bf16696e913083ee4f2c452edb1de401a89e310fe22bf4bcd",
+      "file": "cr-verify.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "cr-verify.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T13 App verifyRunner/verifySession/verifyView store scan remains in Studio"
+      ],
+      "consumerSha256": "be17494ec8a51953e333d75850c30c78a0a368d383f51b3b885cc329b19b54fa"
+    },
+    {
+      "id": "cr-publish.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-publish.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-publish.test.mjs",
+      "sourceSha256": "205795a9c1070e035a75ec4c7ba85d469633c05fb61b1d19adb1cc4ec919f281",
+      "file": "cr-publish.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-publish.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App curriculum/test-origin inventory equality remains in Studio",
+        "CR-T17 App half (synthetic, real Service): the publish action shows verified only for an all-pass report bound to this version; .env, dot-files, unreachable files and an out-of-root symlink are never uploaded; a planted key refuses before any request",
+        "CR-T11 published-origin cases: agent actions and runner steps may act on the project's own test origin; another project's origin is refused with a reason",
+        "App project: a transient failure aborts instead of creating a second Project; a switch-off answer keeps the remembered id; a teammate adopts the team's Project; a solo Project with a live link is kept until its links are off; a declared device reaches the served policy",
+        "CR-64 timing instrument: a publish under 10 s is a pass; a planted slow upload is a recorded miss with its cause"
+      ],
+      "consumerSha256": "67790bf4f5049cfe63e5286af2b27a6b760de2481425eff6eb5a30f5922e56a8"
+    },
+    {
+      "id": "cr-evidence.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-evidence.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-evidence.test.mjs",
+      "sourceSha256": "05f3bc44031502e09fe27135908e7595bc561b9ade90018796cd4f7b0d729825",
+      "file": "cr-evidence.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-evidence.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App evidence/admin/test-origin inventory equality remains in Studio",
+        "CR-T27 (App view against the real Service): the panel's session reads the experiment, a claim opens its three sessions, a deleted one reads 확인 필요"
+      ],
+      "consumerSha256": "ac314318b63bc41bdbb177f56d2e9db9f5362e477b9cf6a5965fadee10c1a226"
+    },
+    {
+      "id": "cr-memory.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-memory.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-memory.test.mjs",
+      "sourceSha256": "4a77d92d18ad4ee4c6bc57f07cc9b639101fdb9e4d907aed26f5ba631b05e233",
+      "file": "cr-memory.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-memory.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App route/command/webview inventory equality remains in Studio",
+        "CR-T73: the Week 1 → 2 fixture's timeline is time-ordered and every entry opens its record, with zero model calls; a planted entry with no record and an AI suggestion shown as a decision are caught"
+      ],
+      "consumerSha256": "7dd117b46940408395bb9825a742227e7e666ba0d8c25c53c62296aca05e1f7b"
+    },
+    {
+      "id": "cr-skills.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-skills.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-skills.test.mjs",
+      "sourceSha256": "64726314cdcbbede69222855ebf610f5388ae7404d73c6857d2befe6b0a9a6d5",
+      "file": "cr-skills.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-skills.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App route/command/webview inventory equality remains in Studio",
+        "CR-T42 positive: the v5 data file validates, its weeks are the PRD §4 table verbatim, and no week string sits in Service or App source",
+        "CR-T42 negative: a week string planted in extension source is caught by the scan; so is the heading the pre-change tree hard-coded; invalid curriculum data is refused",
+        "CR-T41/CR-T42 end to end: the App's SkillSession sends the prompt through `complete` with the skill tag and capability, and the Service stores the Evidence draft; a planted bad answer is refused and nothing is stored"
+      ],
+      "consumerSha256": "10aa4003f4031f3aaa7352d0271841e4597b8f81f2e19e70479086d194c160ca"
+    },
+    {
+      "id": "cr-review.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-review.test.mjs",
+      "sourceSha256": "5e8ef67cf6a58d03e4c5f2725f58f32dda7a16decedaa8ebe34427e957dd13f7",
+      "file": "cr-review.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-review.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App route/command/webview inventory equality remains in Studio",
+        "CR-T45 positive: the Week 2 fixture yields the ten sections in order, every factual claim with a source, interpretation apart from observed evidence; with no patch pending 'deck slides affected' names the decisions' slides 2 and 3 and says 'no proposal'",
+        "CR-T45 negative: a factual claim without a source, a claim in the wrong section, a 'deck slides affected' section that does not say 'no proposal', and a missing section are each caught exactly once; nothing is stored from a pack that fails",
+        "CR-T45 weeks and sources: a pack reads only its own week (a week-1 observation is in no week-2 section, and the other way round), and lists only the director decisions written from that week's pack; a source deleted after preparing opens as not found while the rest still resolve",
+        "CR-T46: changing one evidence item marks only the sections that read it stale; preparing again regenerates exactly those and asks the model once per stale model section; a metric marks only the metrics stale and costs no model call; nothing stale writes nothing",
+        "CR-T46 the model section: an answer to other records than the ones now is refused (409 inputs_changed), the press ends with its one model call and the next press stores the pack; an answer the skill gate refuses stores the facts and keeps the AI section not generated, with the problems shown",
+        "CR-T46 nothing to regenerate, at the Service (CR-49): with only the AI's section stale and its answer missing, refused by the skill gate or failed in the App, a commit regenerates nothing and stores no revision (200 unchanged), so a director who read the pack still decides on it; an accepted answer stores the next revision (control)",
+        "CR-T47: opening the latest pack, fresh or stale, as a member or a director, makes zero model calls on every path the pack builder can reach and writes nothing; the spy counts a planted call",
+        "CR-T48 Service half: the director writes the final decision and the next experiment from the pack; after reopening, the Decision (director actor, evidence of the pack linked) and the Experiment draft are in Venture Memory; a retry writes nothing more",
+        "CR-T48 Service half, negatives: a student token cannot write a director decision (unknown route, nothing written); an unreviewed AI item and an item on a record that is not real are refused although the pack shows them, as for a team decision; evidence and assumptions outside the pack, a revision the director did not read, and a director outside the scope are refused; the decision is never stored without the director actor",
+        "CR-T48 Service half, retries and corrections: the same submission sent again is the stored decision (200 reused, nothing written), whatever the order of its refs; the same statement with other evidence, slides, assumptions or next experiment is a decision of its own, with its own draft",
+        "CR-T48 Service half, at the same time: two identical submissions sent together (a double press) store one decision and one draft; the one that loses answers that decision and takes back nothing it names; the store never takes back a draft a decision names",
+        "CR-T48 Service half, the Project's decision bound: a full Project refuses the director's decision (409 decision_limit) before writing anything; filled while the submission is being written, it keeps nothing of it (the draft and the hypothesis it wrote are taken back)",
+        "director decisions downstream: a director's decision drives a Deck Builder patch and a hypothesis revision as the team's does; an AI suggestion still drives neither",
+        "CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls, for their own review week or the week asked; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes; a revoked director token is refused (401 revoked)",
+        "CR-69 with packs: deleting a participant session or an experiment's data deletes the Project's packs (the receipt counts them); a pack stored while its evidence was being deleted is taken back (409 evidence_changed)",
+        "CR-69 with packs, the AI's suggestion: when another week's data is deleted after the commit read the records and before its insert, a pack whose suggestion quotes a statement the deletion removed is taken back (409 evidence_changed) although no section cites that statement; with nothing deleted the same preparation stores its pack (control); a suggestion kept, stale, from an earlier revision goes with that revision (the insert on top of it fails, 409 review_changed)",
+        "CR-69 with packs, the retention sweep (decision 6): an experiment with no link and only manual records, deleted 30 days after its last record, takes the Project's packs with it; at 29 days the pack stays",
+        "CR-69 with packs, a drop that fails once: the deletion is not marked done, so the next sweep removes the pack (the delete action, the no-link sweep); a session erase answers 500 and repeating it removes the pack; a session that never was still drops nothing, nor does the erased session repeated under another experiment of the Project",
+        "CR-T58 (synthetic provider latency): ten full regenerations through the App session with a normal planted provider latency pass the 30 s target and report Studio's time apart; a slow provider is a provider-caused miss, never a Studio pass; the stored revision carries the Service's own commit time, measured (a held commit stores at least the hold)",
+        "CR-T58 (recorded provider): ten full regenerations replaying the real provider's ten recorded answers at their recorded times, to the prompt the product sends now (a changed prompt fails until it is recorded again), pass the 30 s target with Studio's time apart; each answer meets the Experiment skill's gate against this run's records as it did live; a recorded answer that comes back slow is a provider-caused miss, never a Studio pass",
+        "CR-T02 switch OFF: every review route, with real ids and a student, a director or no token, answers as an unknown route and writes nothing; ON they answer; the director probe the App uses follows the switch"
+      ],
+      "consumerSha256": "9a08fed8c1e21e64a8379b1aef625ff19740b70ce8c24ff2b573928426d696aa"
+    },
+    {
+      "id": "observation-format-served.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/observation-format-served.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/observation-format-served.test.mjs",
+      "sourceSha256": "9906accb4437b141070ce3050d6a32345ecf1482b33192ef8d8ee5f272422c81",
+      "file": "observation-format-served.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "observation-format-served.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "실측: 확장이 쓰는 헤더로 두 라우트를 부르면 같은 포맷이 나온다",
+        "실측: 신버전 앱이 /1 코호트에서 \"업데이트하세요\" 배너를 받지 않는다"
+      ],
+      "consumerSha256": "684d65e6725e60183998998266cd701adad52e23764eef46516b0f732fb75fdb"
+    },
+    {
+      "id": "session-design-learning.test",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/session-design-learning.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/session-design-learning.test.mjs",
+      "sourceSha256": "2b320c9b9fae71ae0b9bf22f4aa16531fe783a4e72665345c654f8e560073d4a",
+      "file": "session-design-learning.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "session-design-learning.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "여섯 주차의 미션·목표·금지 문장이 보존 원문에 그대로 있다 (SX-56·SX-58)"
+      ],
+      "consumerSha256": "4a89d29bdc29e6b0f16c006765dde8f24ebbb40f1e4a6fa8ae7fcc7b8ceb21bd"
+    },
+    {
+      "id": "codex-rehearsal.test",
+      "classification": "studio-integration",
+      "reason": "Imports scripts/lib/codex-local-client.mjs, which re-exports the Studio App client.",
+      "groups": [
+        "test",
+        "test:gpt-practice"
+      ],
+      "originalCommands": [
+        "node --test test/codex-rehearsal.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/codex-rehearsal.test.mjs",
+      "sourceSha256": "e1b15bda5c308edc15ae20f21b6bcf4deebf283d8934ca308bcc2f65754f69f3",
+      "file": "codex-rehearsal.test.mjs",
+      "args": [
+        "--test",
+        "codex-rehearsal.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "a2d6497e466f01c51c3d1d2cf05dfba52adcb639fd78ef00eb312bd8515a2ce1"
+    },
+    {
+      "id": "classroom-ops-device.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-device.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-device.test.mjs",
+      "sourceSha256": "a98ca794670386014d46c3e60c1ec83c7b11878886d8dc2516821afebf45d235",
+      "file": "classroom-ops-device.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-device.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "16d3c57e37abae75a9763b8407ee0307c245b6356a1dc7a017439bab92051b79"
+    },
+    {
+      "id": "classroom-ops-spool-seq.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-spool-seq.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-spool-seq.test.mjs",
+      "sourceSha256": "6ac7ed67bb13331f002edc0f9b00c6824a4ba0ea646294adfa89f3a49be2cb15",
+      "file": "classroom-ops-spool-seq.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-spool-seq.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "b5c10b762483834f2009f6a6e4c31c910bb1a6907987f0e30d93eefbff91ad93"
+    },
+    {
+      "id": "classroom-ops-collect.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-collect.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-collect.test.mjs",
+      "sourceSha256": "4c6bd9e5a17162674a4d323015726bb642543342992b2287ad782b7226484048",
+      "file": "classroom-ops-collect.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-collect.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "2983883b50c3c2df8c785f73feaff1f9596b5e572b78b0deb630311a81db8717"
+    },
+    {
+      "id": "classroom-ops-selected-collect.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-selected-collect.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-selected-collect.test.mjs",
+      "sourceSha256": "8e467189906d6e8cbb32e2f7ee2ada28045dc40480dc138405e4930bf349474f",
+      "file": "classroom-ops-selected-collect.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-selected-collect.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "b94eaf2fa75c0d2cbddfc4fa49eefee81c90348ad10b8d39e3f7c4b6283be437"
+    },
+    {
+      "id": "classroom-ops-collect-kinds.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service. Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-collect-kinds.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-collect-kinds.test.mjs",
+      "sourceSha256": "cdd28a0372caf713961d2c035f3669dd7a8386e039ddae374f27a36c2c5f7293",
+      "file": "classroom-ops-collect-kinds.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-collect-kinds.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "2dac98832bfdb8bd5ec57268cbc9bb7464a239131a09c173fac4bdbe74dbb08c"
+    },
+    {
+      "id": "classroom-ops-distribution-device.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-distribution-device.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-distribution-device.test.mjs",
+      "sourceSha256": "c4039837b893f6d73b71102b8d3d069a27edef5c59fa50909d1be59e05075f01",
+      "file": "classroom-ops-distribution-device.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-distribution-device.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "1d59274a7e24c6e4c9b165bfa41bae609a32442a801e5797772e347412b9b6bd"
+    },
+    {
+      "id": "classroom-ops-lesson-basis.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-lesson-basis.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-lesson-basis.test.mjs",
+      "sourceSha256": "cee9fbb7f4937a804a69c06f4044975978c38a24b951d80b03dcaab9c9052b77",
+      "file": "classroom-ops-lesson-basis.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-lesson-basis.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "e8b62fb9eccd9206bcdc98d2162c04e687bb4a8277580fc5ee8e87868d79e880"
+    },
+    {
+      "id": "classroom-ops-lesson-settings-device.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-lesson-settings-device.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-lesson-settings-device.test.mjs",
+      "sourceSha256": "dc84f731b2890ae9183cc0a6b645b4ec8c9a66d36dc161808e18dcc48b4a3cfa",
+      "file": "classroom-ops-lesson-settings-device.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-lesson-settings-device.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "fa938251beac8f24acc7a367d3adb19248210271509607610385302460827292"
+    },
+    {
+      "id": "classroom-ops-reports.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-reports.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-reports.test.mjs",
+      "sourceSha256": "58e23fbacfaeaf5cdc1308a8076fb5465e5b2b47d97bbdf72a047d99c7d6ce8b",
+      "file": "classroom-ops-reports.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-reports.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "3d82a91c6a67422fba0a5f0c5690d3a0fdb4ef0e2d8a85e5cc1ca98614d8bff2"
+    },
+    {
+      "id": "classroom-ops-report-sessions.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-report-sessions.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-report-sessions.test.mjs",
+      "sourceSha256": "84c9ca19dff1ec255c8d869dd5e6b7e12fd402406403a41268e5f311cc56783a",
+      "file": "classroom-ops-report-sessions.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-report-sessions.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "a5a58e34a82a196d45ebccba93974807965d067b9bc64570632f0acaba97f6fe"
+    },
+    {
+      "id": "classroom-ops-delivery.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-delivery.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-delivery.test.mjs",
+      "sourceSha256": "1d7e628eb928f8d8b3bf5fa802e7ed7661724cbc80282a09c55d0dbe8d8ca6ea",
+      "file": "classroom-ops-delivery.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-delivery.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "c43ec824bef5067747efe53fe89655ac8a6a86a305a831475c1035e3cf17c0be"
+    },
+    {
+      "id": "classroom-ops-snapshot-device.test",
+      "classification": "studio-integration",
+      "reason": "Imports or reads Studio App source; no App implementation is copied into Service.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-snapshot-device.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-snapshot-device.test.mjs",
+      "sourceSha256": "152e17cba1751e967065dbbb2c86747c27eaa9c1d90d1169ef43dde662c5d739",
+      "file": "classroom-ops-snapshot-device.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-snapshot-device.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "b7db0108828432750855f3e0521ce04424ae36a9ef75bb41b52968b941d88490"
+    },
+    {
+      "id": "classroom-ops-evaluator.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --test test/classroom-ops-evaluator.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-evaluator.test.mjs",
+      "sourceSha256": "3ef0cdfd49ed01b92fc8036663c87c781bca909321f8886244481396b09aa541",
+      "file": "classroom-ops-evaluator.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--test",
+        "classroom-ops-evaluator.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "93deb93edc8a2dab8f165cb34d2b3c696dd7f24690e52b451a7ec723b772b1cd"
+    },
+    {
+      "id": "classroom-ops-provider.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --test test/classroom-ops-provider.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-provider.test.mjs",
+      "sourceSha256": "d22a2095328516694f58c58898ea16f5d6a6adf07f9ceb5178e81192d1efa74d",
+      "file": "classroom-ops-provider.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--test",
+        "classroom-ops-provider.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "595f673e032bd3c2819046ff58defe54a5c81f5c89bec868eb0bf0738d816483"
+    },
+    {
+      "id": "classroom-ops-erasure.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --test test/classroom-ops-erasure.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-erasure.test.mjs",
+      "sourceSha256": "0fd4bd3bce030f6c5bfe8f58285b46568c64c5f3e3a8f6a9744c15a54fd9d844",
+      "file": "classroom-ops-erasure.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--test",
+        "classroom-ops-erasure.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "2bddc59aa3d717b9ea9976854d97dbf319342ef9a6f4752ec2d3b85aa582ed6c"
+    },
+    {
+      "id": "classroom-ops-review.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops",
+        "test:classroom-ops:review"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --test test/classroom-ops-review.test.mjs test/classroom-ops-staging-config.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-review.test.mjs",
+      "sourceSha256": "9f0ed819b246938f97fbf327b39bc55914dcdae2666ca65b8221b8b439479834",
+      "file": "classroom-ops-review.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--test",
+        "classroom-ops-review.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "4c614c4621aef593fd88352ef5a5703fa54d13b0152473d370cef7c1c0b6e452"
+    },
+    {
+      "id": "classroom-ops-staging-config.test",
+      "classification": "studio-integration",
+      "reason": "Validates the joint Studio Worker/Chalk staging configuration; Chalk configuration remains owned by Studio.",
+      "groups": [
+        "test",
+        "test:classroom-ops",
+        "test:classroom-ops:review"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --test test/classroom-ops-review.test.mjs test/classroom-ops-staging-config.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-staging-config.test.mjs",
+      "sourceSha256": "b87eb3aecd2551e8e9dabebe88e353a17e9631a44ebf0023f83b102690dc9bc7",
+      "file": "classroom-ops-staging-config.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--test",
+        "classroom-ops-staging-config.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "b9291f9564e6bb1c367c1c147f1046b1a01ccd4fe0ada71c924f7720a4a2a353",
+      "ownershipAdaptation": "Production isolation and provisioning controls remain. Chalk shared-store equality is replaced by explicit rejection of Chalk D1/KV/R2/analytics bindings under the Service HTTP boundary."
+    },
+    {
+      "id": "classroom-ops-d1.test",
+      "classification": "studio-integration",
+      "reason": "Uses the real App snapshot/freezer path through the classroom fixture; retain the existing cross-product test in Studio.",
+      "groups": [
+        "test:classroom-ops:d1"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite test/classroom-ops-d1.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/classroom-ops-d1.test.mjs",
+      "sourceSha256": "f8fd740b847fee2132f318cb14fc5dc7aeec4ce49f1d41835ac5889a4fd04c99",
+      "file": "classroom-ops-d1.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "classroom-ops-d1.test.mjs"
+      ],
+      "retainedStudioAssertions": [],
+      "consumerSha256": "0b51cf89e0c00c62f4284a1c65d7a99204542b42517d81fc59e49e033854c2b3"
+    },
+    {
+      "id": "cr-publish.test--d1",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test:cr-publish:d1"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-publish.test.mjs --d1"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-publish.test.mjs",
+      "sourceSha256": "205795a9c1070e035a75ec4c7ba85d469633c05fb61b1d19adb1cc4ec919f281",
+      "file": "cr-publish.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-publish.test.mjs",
+        "--d1"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App curriculum/test-origin inventory equality remains in Studio",
+        "CR-T17 App half (synthetic, real Service): the publish action shows verified only for an all-pass report bound to this version; .env, dot-files, unreachable files and an out-of-root symlink are never uploaded; a planted key refuses before any request",
+        "CR-T11 published-origin cases: agent actions and runner steps may act on the project's own test origin; another project's origin is refused with a reason",
+        "App project: a transient failure aborts instead of creating a second Project; a switch-off answer keeps the remembered id; a teammate adopts the team's Project; a solo Project with a live link is kept until its links are off; a declared device reaches the served policy",
+        "CR-64 timing instrument: a publish under 10 s is a pass; a planted slow upload is a recorded miss with its cause"
+      ],
+      "consumerSha256": "67790bf4f5049cfe63e5286af2b27a6b760de2481425eff6eb5a30f5922e56a8"
+    },
+    {
+      "id": "cr-evidence.test--d1",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test:cr-evidence:d1"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-evidence.test.mjs --d1"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-evidence.test.mjs",
+      "sourceSha256": "05f3bc44031502e09fe27135908e7595bc561b9ade90018796cd4f7b0d729825",
+      "file": "cr-evidence.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-evidence.test.mjs",
+        "--d1"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App evidence/admin/test-origin inventory equality remains in Studio",
+        "CR-T27 (App view against the real Service): the panel's session reads the experiment, a claim opens its three sessions, a deleted one reads 확인 필요"
+      ],
+      "consumerSha256": "ac314318b63bc41bdbb177f56d2e9db9f5362e477b9cf6a5965fadee10c1a226"
+    },
+    {
+      "id": "cr-memory.test--d1",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test:cr-memory:d1"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-memory.test.mjs --d1"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-memory.test.mjs",
+      "sourceSha256": "4a77d92d18ad4ee4c6bc57f07cc9b639101fdb9e4d907aed26f5ba631b05e233",
+      "file": "cr-memory.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-memory.test.mjs",
+        "--d1"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App route/command/webview inventory equality remains in Studio",
+        "CR-T73: the Week 1 → 2 fixture's timeline is time-ordered and every entry opens its record, with zero model calls; a planted entry with no record and an AI suggestion shown as a decision are caught"
+      ],
+      "consumerSha256": "7dd117b46940408395bb9825a742227e7e666ba0d8c25c53c62296aca05e1f7b"
+    },
+    {
+      "id": "cr-skills.test--d1",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test:cr-skills:d1"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-skills.test.mjs --d1"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-skills.test.mjs",
+      "sourceSha256": "64726314cdcbbede69222855ebf610f5388ae7404d73c6857d2befe6b0a9a6d5",
+      "file": "cr-skills.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-skills.test.mjs",
+        "--d1"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App route/command/webview inventory equality remains in Studio",
+        "CR-T42 positive: the v5 data file validates, its weeks are the PRD §4 table verbatim, and no week string sits in Service or App source",
+        "CR-T42 negative: a week string planted in extension source is caught by the scan; so is the heading the pre-change tree hard-coded; invalid curriculum data is refused",
+        "CR-T41/CR-T42 end to end: the App's SkillSession sends the prompt through `complete` with the skill tag and capability, and the Service stores the Evidence draft; a planted bad answer is refused and nothing is stored"
+      ],
+      "consumerSha256": "10aa4003f4031f3aaa7352d0271841e4597b8f81f2e19e70479086d194c160ca"
+    },
+    {
+      "id": "cr-review.test--d1",
+      "classification": "independent",
+      "reason": "Runs Service source and local synthetic fixtures only.",
+      "groups": [
+        "test:cr-review:d1"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --experimental-sqlite --no-warnings test/cr-review.test.mjs --d1"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/cr-review.test.mjs",
+      "sourceSha256": "5e8ef67cf6a58d03e4c5f2725f58f32dda7a16decedaa8ebe34427e957dd13f7",
+      "file": "cr-review.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--experimental-sqlite",
+        "--no-warnings",
+        "cr-review.test.mjs",
+        "--d1"
+      ],
+      "retainedStudioAssertions": [
+        "CR-T02 App route/command/webview inventory equality remains in Studio",
+        "CR-T45 positive: the Week 2 fixture yields the ten sections in order, every factual claim with a source, interpretation apart from observed evidence; with no patch pending 'deck slides affected' names the decisions' slides 2 and 3 and says 'no proposal'",
+        "CR-T45 negative: a factual claim without a source, a claim in the wrong section, a 'deck slides affected' section that does not say 'no proposal', and a missing section are each caught exactly once; nothing is stored from a pack that fails",
+        "CR-T45 weeks and sources: a pack reads only its own week (a week-1 observation is in no week-2 section, and the other way round), and lists only the director decisions written from that week's pack; a source deleted after preparing opens as not found while the rest still resolve",
+        "CR-T46: changing one evidence item marks only the sections that read it stale; preparing again regenerates exactly those and asks the model once per stale model section; a metric marks only the metrics stale and costs no model call; nothing stale writes nothing",
+        "CR-T46 the model section: an answer to other records than the ones now is refused (409 inputs_changed), the press ends with its one model call and the next press stores the pack; an answer the skill gate refuses stores the facts and keeps the AI section not generated, with the problems shown",
+        "CR-T46 nothing to regenerate, at the Service (CR-49): with only the AI's section stale and its answer missing, refused by the skill gate or failed in the App, a commit regenerates nothing and stores no revision (200 unchanged), so a director who read the pack still decides on it; an accepted answer stores the next revision (control)",
+        "CR-T47: opening the latest pack, fresh or stale, as a member or a director, makes zero model calls on every path the pack builder can reach and writes nothing; the spy counts a planted call",
+        "CR-T48 Service half: the director writes the final decision and the next experiment from the pack; after reopening, the Decision (director actor, evidence of the pack linked) and the Experiment draft are in Venture Memory; a retry writes nothing more",
+        "CR-T48 Service half, negatives: a student token cannot write a director decision (unknown route, nothing written); an unreviewed AI item and an item on a record that is not real are refused although the pack shows them, as for a team decision; evidence and assumptions outside the pack, a revision the director did not read, and a director outside the scope are refused; the decision is never stored without the director actor",
+        "CR-T48 Service half, retries and corrections: the same submission sent again is the stored decision (200 reused, nothing written), whatever the order of its refs; the same statement with other evidence, slides, assumptions or next experiment is a decision of its own, with its own draft",
+        "CR-T48 Service half, at the same time: two identical submissions sent together (a double press) store one decision and one draft; the one that loses answers that decision and takes back nothing it names; the store never takes back a draft a decision names",
+        "CR-T48 Service half, the Project's decision bound: a full Project refuses the director's decision (409 decision_limit) before writing anything; filled while the submission is being written, it keeps nothing of it (the draft and the hypothesis it wrote are taken back)",
+        "director decisions downstream: a director's decision drives a Deck Builder patch and a hypothesis revision as the team's does; an AI suggestion still drives neither",
+        "CR-T49: four directed teams show fresh, stale and missing correctly with zero model calls, for their own review week or the week asked; another cohort's team never appears, nor a team of the directed cohort under a profile the scope does not list, under a listed profile whose switch is off, or under a minors profile; the instrument catches a planted foreign team, and each filtered team appears once its own check passes; a revoked director token is refused (401 revoked)",
+        "CR-69 with packs: deleting a participant session or an experiment's data deletes the Project's packs (the receipt counts them); a pack stored while its evidence was being deleted is taken back (409 evidence_changed)",
+        "CR-69 with packs, the AI's suggestion: when another week's data is deleted after the commit read the records and before its insert, a pack whose suggestion quotes a statement the deletion removed is taken back (409 evidence_changed) although no section cites that statement; with nothing deleted the same preparation stores its pack (control); a suggestion kept, stale, from an earlier revision goes with that revision (the insert on top of it fails, 409 review_changed)",
+        "CR-69 with packs, the retention sweep (decision 6): an experiment with no link and only manual records, deleted 30 days after its last record, takes the Project's packs with it; at 29 days the pack stays",
+        "CR-69 with packs, a drop that fails once: the deletion is not marked done, so the next sweep removes the pack (the delete action, the no-link sweep); a session erase answers 500 and repeating it removes the pack; a session that never was still drops nothing, nor does the erased session repeated under another experiment of the Project",
+        "CR-T58 (synthetic provider latency): ten full regenerations through the App session with a normal planted provider latency pass the 30 s target and report Studio's time apart; a slow provider is a provider-caused miss, never a Studio pass; the stored revision carries the Service's own commit time, measured (a held commit stores at least the hold)",
+        "CR-T58 (recorded provider): ten full regenerations replaying the real provider's ten recorded answers at their recorded times, to the prompt the product sends now (a changed prompt fails until it is recorded again), pass the 30 s target with Studio's time apart; each answer meets the Experiment skill's gate against this run's records as it did live; a recorded answer that comes back slow is a provider-caused miss, never a Studio pass",
+        "CR-T02 switch OFF: every review route, with real ids and a student, a director or no token, answers as an unknown route and writes nothing; ON they answer; the director probe the App uses follows the switch"
+      ],
+      "consumerSha256": "9a08fed8c1e21e64a8379b1aef625ff19740b70ce8c24ff2b573928426d696aa"
+    }
+  ]
+}
