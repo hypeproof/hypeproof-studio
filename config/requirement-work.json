@@ -769,6 +769,23 @@
       "intent": "docs/intents/curriculum-runtime.md",
       "design": "docs/plan/curriculum-runtime.md",
       "test": "docs/testing/curriculum-runtime.md"
+    },
+    {
+      "path": "docs/requirements/private-release-access.md",
+      "ids": [
+        "PRA-01",
+        "PRA-02",
+        "PRA-03",
+        "PRA-04",
+        "PRA-05",
+        "PRA-06"
+      ],
+      "inline_prefixes": [],
+      "sha256": "a3f328b137fc20fb99e7681aa8ecdc278d71cb8088da08c2c80380e5259eb2d0",
+      "owner": "jayleekr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/private-release-access.md",
+      "test": "docs/requirements/private-release-access.md"
     }
   ],
   "work_items": [
@@ -3777,6 +3794,46 @@
         "e2e/curriculum-runtime/service-gate.mjs",
         "e2e/curriculum-runtime/service-control.mjs",
         "scripts/cr-dev-kit.sh"
+      ]
+    },
+    {
+      "id": "private-org-release-access",
+      "title": "Authenticated member release and bootstrap access",
+      "issue": 1584,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-01",
+            "PRA-02",
+            "PRA-03",
+            "PRA-04",
+            "PRA-05",
+            "PRA-06"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Merge authenticated member updater/bootstrap source and verify private API access; publish installer scripts separately from a rebuilt App release.",
+      "design_delta": "Use existing gh identity or scoped environment credential and exact organization API; strip credential on updater CDN redirect; retain integrity gates.",
+      "positive_control": "Authorized member metadata and asset download succeeds and published SHA-256 matches; Windows PS5.1 and Bash fixtures reach verified installation boundary.",
+      "negative_control": "Missing/denied credential, foreign API/redirect, missing or bad digest, truncated file and download error cannot install.",
+      "evidence_required": "Current source SHA, focused control results, real private artifact digest, supported-OS fixture evidence. Rebuilt signed App and installed-user restart remain NOT RUN until release acceptance.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/updateTransport.ts",
+        "extensions/hypeproof-chat/src/updateCheckerHelpers.ts",
+        "scripts/install.sh",
+        "scripts/install.ps1",
+        "scripts/install-mac.sh",
+        "scripts/install-win.ps1",
+        ".github/workflows/requirement-work.yml"
+      ],
+      "verification_inputs": [
+        "extensions/hypeproof-chat/test/update-transport.smoke.mjs",
+        "scripts/tests/install-win-fixture.ps1",
+        "scripts/tests/bootstrap-win-private-fixture.ps1"
       ]
     }
   ]
