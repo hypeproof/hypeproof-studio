@@ -1,23 +1,58 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createWriteStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-export const RELEASES_API = "https://api.github.com/repos/jayleekr/hypeproof-studio-releases/releases/latest";
-const RELEASE_PATH = "/jayleekr/hypeproof-studio-releases/releases/download/";
+const RELEASE_REPO = "hypeproof/hypeproof-studio-releases";
+export const RELEASES_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
+const ASSET_PATH = `/repos/${RELEASE_REPO}/releases/assets/`;
 
 export function trustedUpdateUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.origin === "https://github.com" && !url.username && !url.password &&
-      url.pathname.startsWith(RELEASE_PATH) && !url.search && !url.hash;
+    return url.origin === "https://api.github.com" && !url.username && !url.password &&
+      url.pathname.startsWith(ASSET_PATH) && /^\d+$/.test(url.pathname.slice(ASSET_PATH.length)) &&
+      !url.search && !url.hash;
   } catch { return false; }
+}
+
+/** Use the member's existing GitHub login; never bundle a shared release token. */
+export async function releaseToken(): Promise<string> {
+  const configured = process.env.HPS_RELEASE_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+  if (configured?.trim()) return configured.trim();
+  try {
+    const { stdout } = await promisify(execFile)("gh", ["auth", "token", "--hostname", "github.com"], {
+      timeout: 5_000, maxBuffer: 8192, windowsHide: true,
+    });
+    if (stdout.trim()) return stdout.trim();
+  } catch { /* Do not surface command output: it can contain credentials. */ }
+  throw new Error("비공개 릴리스 접근 권한이 필요합니다. GitHub CLI에서 gh auth login을 실행하거나 HPS_RELEASE_TOKEN을 설정한 뒤 Studio를 다시 시작해 주세요.");
+}
+
+async function fetchAsset(url: string, signal: AbortSignal): Promise<Response> {
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${await releaseToken()}`, accept: "application/octet-stream" },
+    redirect: "manual", signal,
+  });
+  if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+  const location = response.headers.get("location");
+  let target: URL;
+  try { target = new URL(location ?? ""); } catch { throw new Error("Invalid update redirect"); }
+  if (target.protocol !== "https:" || target.username || target.password || target.port ||
+      !["release-assets.githubusercontent.com", "objects.githubusercontent.com"].includes(target.hostname)) {
+    throw new Error("Untrusted update redirect");
+  }
+  // Signed asset URLs authenticate themselves. Never forward the GitHub token.
+  return fetch(target.href, { redirect: "error", signal });
 }
 
 export async function fetchLatestRelease(): Promise<unknown> {
   const response = await fetch(RELEASES_API, {
-    headers: { accept: "application/vnd.github+json" },
+    headers: { accept: "application/vnd.github+json", authorization: `Bearer ${await releaseToken()}` },
+    redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) throw new Error(`Update check failed: HTTP ${response.status}`);
@@ -42,7 +77,7 @@ export async function downloadVerifiedUpdate(
   let idle = setTimeout(abort, options.idleTimeoutMs ?? 60_000);
   let created = false;
   try {
-    const response = await fetch(asset.downloadUrl, { redirect: "follow", signal: controller.signal });
+    const response = await fetchAsset(asset.downloadUrl, controller.signal);
     if (!response.ok || !response.body) throw new Error(`Update download failed: HTTP ${response.status}`);
     const hash = createHash("sha256");
     let bytes = 0;
