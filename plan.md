@@ -22,7 +22,9 @@ Worker 연결 제거는 지금 구현하며, Chalk 웹을 App 화면으로 옮�
 종료 조건이 아닙니다. 후속 추적은 [backlog 목록](docs/plan/worker-separation-backlog.md)
 및 [hype-luwak](https://github.com/hypeproof/hype-luwak/issues)에서 관리합니다.
 정본 Service inventory 등록은 Harness #291에서 진행하되 전체 change-impact
-onboarding 완료로 과장하지 않습니다. 운영 이전과 전체 Git 이력은 별도 backlog입니다.
+onboarding 완료로 과장하지 않습니다. Studio guarded PR inspect는 옛
+`config/traceability.json`의 삭제된 `worker/test` 정본 경로를 읽어 차단됐습니다.
+기준 소유권·정본 매핑 이전은 #9 후속이며 가짜 source/receipt로 우회하지 않습니다. 운영 이전과 전체 Git 이력은 별도 backlog입니다.
 Date: 2026-10-10.
 Baseline inspected: Studio commit `2a21b44468806a66862d4ceb5389addede9eef11`.
 Selected destination: `hypeproof/hypeproof-service` (public repository and public packages, confirmed 2026-10-10).

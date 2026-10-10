@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-10T12:21:09.438157+00:00",
-  "phase": "Worker–Studio 분리 최종 수용 PASS · commit/push 및 칸반 근거 반영 중 · 운영/병합 미실행",
+  "updated": "2026-10-10T12:25:05.061716+00:00",
+  "phase": "Worker–Studio 분리 완료: worker/ 없는 최종 수용 PASS · ac73a70 push 완료 · 운영/병합 별도",
   "steps": [
     {
       "name": "현재 상태·의존성 조사",
@@ -82,7 +82,10 @@
     "칸반 sync: Service Done#2/#12/#13; InProgress#1/#3~#9/#11; Backlog#10/#14. Studio#1582 InProgress. 전체 수용gate 아직 PASS 아님.",
     "공개 testkit0.1.2 실제 staging4controls PASS/skip0. 소비자 기존38소스/43명령 보존, 기본5개 요구사항 lane PASS; 전체43명령 PASS로 주장하지 않는다.",
     "hype-luwak 후속6issue/Backlog: https://github.com/hypeproof/hype-luwak/issues/1 ~ /6; 활성코드 미삭제/미이동.",
-    "최종 npm run test:worker-free PASS, 204.966초. 실제구독/유료API/GUI수동/운영/merge는미실행. 남은 기록/원격 리뷰 절차는 미션 수용 완료와 구분한다."
+    "최종 npm run test:worker-free PASS, 204.966초. 실제구독/유료API/GUI수동/운영/merge는미실행. 남은 기록/원격 리뷰 절차는 미션 수용 완료와 구분한다.",
+    "최종consumer ac73a70 commit/push 완료. parent AGENTS/manual guide/boundary/backlog 문서는 임의stage하지않고보존했다.",
+    "최종칸반 Service Done11, InProgress#9, Backlog#10/#14; Studio#1582 Done. 완료는 코드/최종수용범위이며 운영·PR채택 미실행.",
+    "Guarded Studio PR inspect는 옛 config/traceability.json의 worker/test 소스정본 경로가남아실패. Service criteria onboarding#9로추적하며 가짜shim/receipt우회하지않았다."
   ],
   "kanban": "https://github.com/orgs/hypeproof/projects/1"
 }
