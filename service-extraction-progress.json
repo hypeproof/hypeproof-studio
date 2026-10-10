@@ -1,6 +1,6 @@
 {
-  "updated": "2026-10-10T13:03:38.977739+00:00",
-  "phase": "최종 PR CI 보정: Service #16 전체 PASS · Studio #1587 registry/독립 job 공개 testkit 설치 수정",
+  "updated": "2026-10-10T13:13:57.469298+00:00",
+  "phase": "Service #16 병합 · Studio #1587 마지막 CI 경쟁조건 교정 후 원격 재검증",
   "steps": [
     {
       "name": "현재 상태·의존성 조사",
@@ -36,7 +36,7 @@
     },
     {
       "name": "최종 PR 원격 검사와 머지 준비",
-      "status": "Service #16 ready/CI 전체 PASS. Studio #1587 기존24개 중20PASS, registry·Dev/macOS·extension smoke 실패 수정중; Windows Dev는 fail-fast 취소. 실제 CI PASS 전 머지 금지."
+      "status": "Service #16 인간 병합 완료. Studio 03af1c5 CI23/24PASS: registry·Dev macOS/Windows 모두PASS. F5 withdrawal 테스트의 고정150ms 완료가정을 실제background 작업완료await로수정, 요구사항assertion보존. 새head 원격검증대기."
     }
   ],
   "notes": [
@@ -91,7 +91,8 @@
     "최종칸반 Service Done11, InProgress#9, Backlog#10/#14; Studio#1582 Done. 완료는 코드/최종수용범위이며 운영·PR채택 미실행.",
     "Guarded Studio PR inspect는 옛 config/traceability.json의 worker/test 소스정본 경로가남아실패. Service criteria onboarding#9로추적하며 가짜shim/receipt우회하지않았다.",
     "Studio #1587 CI의 두 독립 job은 root 공개 testkit 설치 누락으로 ERR_MODULE_NOT_FOUND, registry는 이전된 테스트 경로와 test/ 미등록. 로컬 registry 양성/음성 및 이전 drift lock 전체 PASS, 공개 패키지/원본 assertion 유지. 수정은 최종 PR에 push 후 원격 재검증한다.",
-    "CI 보정 로컬 검증: Node22.23.3 fresh Worker-free archive에서 Devjob 실제3명령·확장 전체 npmtest PASS. registry 기존 drift lock10파일 모두 Node22/24 PASS, checker 양성·음성2controls PASS, workflow shells/timeouts PASS. 원격 CI 재실행 결과는 대기."
+    "CI 보정 로컬 검증: Node22.23.3 fresh Worker-free archive에서 Devjob 실제3명령·확장 전체 npmtest PASS. registry 기존 drift lock10파일 모두 Node22/24 PASS, checker 양성·음성2controls PASS, workflow shells/timeouts PASS. 원격 CI 재실행 결과는 대기.",
+    "F5 거부응답을150ms뒤에명시해제하는대조군으로경쟁조건확인. 실제upload완료/저장await후 withdrawn·현재seal/retry차단·다음activation재시도없음assertion확인. App소스무변경. focusedNode22 PASS, 원격재검증대기."
   ],
   "kanban": "https://github.com/orgs/hypeproof/projects/1"
 }
