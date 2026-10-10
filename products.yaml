@@ -41,6 +41,7 @@ non_product_directories:
   - scripts
   - skills
   - tests
+  - test                # consumer integration and contract checks
   - vscodium-base      # submodule — upstream VSCodium fork
   - proxy-poc          # pre-SDK proxy; superseded, kept for reference
   - extensions         # container dir; the product is extensions/hypeproof-chat
@@ -75,7 +76,7 @@ entries:
       # The extension talks to the worker over the OpenAI-compatible and
       # Anthropic-compatible HTTP surfaces. That is the format.
       format: "HTTP — POST /v1/chat/completions, POST /v1/messages, GET /v1/profile"
-    drift_lock: worker/test/logs-upload.test.mjs
+    drift_lock: test/service-integration/logs-upload.test.mjs
     exit_plan: null          # TODO — the vessel itself; exit plan is n/a but say so explicitly
     owner: jay
     notes: >-
@@ -85,21 +86,25 @@ entries:
   - name: worker
     layer: w
     tag_prefix: w
-    directory: worker
+    directory: null
+    repository: hypeproof/hypeproof-service
+    reference_artifact: service-testkit-v0.1.2
     deploys_to: cloudflare://hypeproof-studio-api
     contract:
       format: "HTTP — see hypeproof-chat entry (same surface, other side)"
-    drift_lock: worker/test/quest-result-contract.test.mjs
+    drift_lock: test/service-integration/quest-result-contract.test.mjs
     drift_lock_extra:
-      - worker/test/authoring.test.mjs
-      - worker/test/dental-course-automation.test.mjs
-      - worker/test/classroom.test.mjs
-      - worker/test/native-observation.test.mjs
-      - worker/test/native-trial-grants.test.mjs
+      - node_modules/@hypeproof/service-testkit/dist/worker/test/authoring.test.mjs
+      - node_modules/@hypeproof/service-testkit/dist/worker/test/dental-course-automation.test.mjs
+      - node_modules/@hypeproof/service-testkit/dist/worker/test/classroom.test.mjs
+      - test/service-integration/native-observation.test.mjs
+      - node_modules/@hypeproof/service-testkit/dist/worker/test/native-trial-grants.test.mjs
     exit_plan: null
     owner: jay
     notes: >-
-      Grandfathered. The runtime. Version identifier lands with plan task C.
+      The runtime is owned by the public Service repository. Studio tests its
+      pinned public artifact and App contracts; no Worker source lives here.
+      Service CI retains the complete independent server regression lane.
 
   - name: chalk
     layer: c
@@ -136,10 +141,10 @@ entries:
       are NOT a Chalk contract — Chalk forwards them to the Service's existing
       /admin/* HTTP surface as one more client of it (same as the hype-session
       skill); the Service stays byte-identical on those paths. Instructor
-      token verification is RE-EXPORTED from worker/src/lib (chalk/src/shared.ts),
-      never reimplemented; chalk/test/instructor-auth-drift.test.mjs runs the
-      same fixtures through both workers. Until task H the profile registry is
-      imported from worker/src/profiles for display names only.
+      token verification, profile resolution and storage authorization are
+      performed by Service over HTTP. Chalk consumes public contracts and
+      keeps no Service signing secret or storage bindings. The drift checks
+      exercise the pinned public Service runtime through the same HTTP boundary.
       Task G added GET /admin/cohorts/:id/board under the same contract. Its
       thresholds are SERVED in the response rather than compiled into any
       client (spec §1) and are calibrated by replaying the labelled 2026-08-22
@@ -153,14 +158,16 @@ entries:
     # of the same text (the floor the worker serves when nothing is pinned or
     # the pin is unservable); the Module layer proper is what
     # `worker/scripts/publish-module.ts` writes.
-    directory: worker/src/prompts
+    directory: null
+    repository: hypeproof/hypeproof-service
+    reference_artifact: service-testkit-v0.1.2
     deploys_to: kv://HPS_KV/module:curriculum:<profile_id>:{v:<version>,pin}
     contract:
       # One JSON document shape, shared by the publisher and the worker
       # (worker/src/lib/modules.ts makeModuleDoc / validateModuleDoc). The
       # envelope is kind-agnostic; kind "session-design" (Chalk) reuses it.
       format: "JSON — hps-module/1 {format, kind, profile_id, version m*, sha256, published_at, content:{system_prompt}}"
-    drift_lock: worker/test/module-distribution.test.mjs
+    drift_lock: node_modules/@hypeproof/service-testkit/dist/worker/test/module-distribution.test.mjs
     exit_plan: >-
       `npm run module -- unpin <profile>` for every profile returns the worker
       to its compiled text with zero code change (that path is the tested
@@ -180,7 +187,7 @@ entries:
     deploys_to: static://hypeprooflab/studio/trial
     contract:
       format: "JSON — hps-trial/1 curriculum and structured observations"
-    drift_lock: worker/test/trial-evidence.test.mjs
+    drift_lock: test/service-integration/trial-evidence.test.mjs
     exit_plan: docs/requirements/studio-trial.md
     owner: jay
     notes: >-
@@ -188,13 +195,15 @@ entries:
       policy is a portable Service library; no HTTP or cohort policy changes.
 
   - name: native-observation-rubric
+    repository: hypeproof/hypeproof-service
+    reference_artifact: service-testkit-v0.1.2
     layer: m
     tag_prefix: m
     directory: null
     deploys_to: kv://HPS_KV/module:observation-rubric:<profile_id>:{v:<version>,pin}
     contract:
       format: "JSON — hps-module/1, kind observation-rubric, content hps-observation-rubric/1"
-    drift_lock: worker/test/native-trial.test.mjs
+    drift_lock: node_modules/@hypeproof/service-testkit/dist/worker/test/native-trial.test.mjs
     exit_plan: >-
       Disable observation on the Service profile and stop new native grants.
       Remove rubric pins, the observation routes and the App panel/recorder in

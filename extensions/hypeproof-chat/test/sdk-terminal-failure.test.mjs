@@ -1,7 +1,7 @@
 // #751 U4 — a turn the Agent SDK ended with an error is a FAILED turn for every consumer, and its cause is only what THIS
 // turn's stream said. The real runSdkCoach (bundled, `vscode` stubbed) runs against a scripted SDK `query()` — no binary, no
 // network, no model. The provider's mapping (sdkTurnEndFailure / the catch that reads `status`), the real RecoveryWatch and
-// the Service's real recoveryOutcome finish the chain. Not a Studio window: the real-window check is mac-recovery.mjs R3.
+// recorded Service recovery responses finish the consumer contract check. Not a Studio window: the real-window check is mac-recovery.mjs R3.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
@@ -12,7 +12,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RecoveryWatch, turnObservations } from '../src/classroomOps.ts';
 import { classifyTurnError, sdkTurnEndFailure } from '../src/chatPanelHelpers.ts';
-import { recoveryOutcome } from '../../../worker/src/lib/classroom-recovery.ts';
+import { isDeepStrictEqual } from 'node:util';
+import { SERVICE_CONTRACT_FIXTURES } from './fixtures/service-contracts/index.mjs';
 
 let dir, runSdkCoach;
 test.before(async () => {
@@ -47,11 +48,14 @@ async function turn(events, { hang = false, throws = null } = {}) {
   }
   return { outcome: { ok, runtime: 'agent-sdk', ...(errorKind ? { errorKind } : {}), ...failure }, shown };
 }
-/** The learner's next turn after an instructor's reset, as the board judges it. */
+/** Replay a recorded Service response for the exact follow-up emitted by the App. */
 function judged(outcome) {
   const w = new RecoveryWatch(); w.arm('cmd-reset-0001', 1);
   const f = w.onTurn(outcome, 1);
-  return { followup: f, verdict: recoveryOutcome({ action: 'reset_runtime', state: 'succeeded', result_code: 'reset_ready', receipt: { observed_at: 1 }, followups: [{ ...f, observed_at: 2, received_at: 2 }], reports_followup: true }) };
+  const request = { action: 'reset_runtime', state: 'succeeded', result_code: 'reset_ready', receipt: { observed_at: 1 }, followups: [{ ...f, observed_at: 2, received_at: 2 }], reports_followup: true };
+  const captured = SERVICE_CONTRACT_FIXTURES.recoveryCases.find((entry) => isDeepStrictEqual(entry.input, request));
+  assert.ok(captured, 'App follow-up must match a recorded Service request; an unknown wire shape is refused');
+  return { followup: f, verdict: structuredClone(captured.response) };
 }
 
 test('control: a normal SDK turn is completed and resolves the reset', async () => {
@@ -59,6 +63,7 @@ test('control: a normal SDK turn is completed and resolves the reset', async () 
   assert.equal(outcome.ok, true); assert.deepEqual(shown, ['안녕']);
   const { followup, verdict } = judged(outcome);
   assert.equal(followup.check, 'turn_completed'); assert.equal(verdict.verdict, 'resolved');
+  assert.throws(() => judged({ ...outcome, runtime: 'planted-unknown-runtime' }), /unknown wire shape is refused/, 'a changed App request cannot borrow a success response');
 });
 
 test('terminal error result: the learner reads one notice; every consumer gets the same failure; the cause is the result\'s own status', async () => {

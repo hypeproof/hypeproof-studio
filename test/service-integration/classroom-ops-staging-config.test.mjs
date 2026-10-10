@@ -1,0 +1,47 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
+// Remote classroom operations (#751) — the staging target must be its own. Controls for the checker itself:
+// the committed placeholder pair is "not provisioned" (never "independent"), a filled pair of its own passes, and every
+// way of leaning on production is refused. Service owns the stores; Chalk must use HTTP without store bindings.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { checkStaging, parseToml } from '@hypeproof/service-testkit/scripts/classroom-ops-staging-check.mjs';
+
+const read = (p) => readFileSync(p.startsWith('worker/')
+  ? new URL(import.meta.resolve('@hypeproof/service-testkit/repository/' + p))
+  : new URL('../../' + p, import.meta.url), 'utf8');
+const committed = { workerProd: read('worker/wrangler.toml'), workerStaging: read('worker/wrangler.staging.toml'), chalkProd: read('chalk/wrangler.toml'), chalkStaging: read('chalk/wrangler.staging.toml') };
+const fill = (t) => t.replaceAll('REPLACE_WITH_STAGING_KV_ID', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa').replaceAll('REPLACE_WITH_STAGING_D1_ID', '11111111-2222-4333-8444-555555555555').replaceAll('REPLACE_WITH_STAGING_CHALK_ORIGIN', 'https://hypeproof-chalk-staging.example.workers.dev').replaceAll('REPLACE_WITH_STAGING_SERVICE_ORIGIN', 'https://hypeproof-studio-api-staging.example.workers.dev');
+const filled = { ...committed, workerStaging: fill(committed.workerStaging), chalkStaging: fill(committed.chalkStaging) };
+const prodD1 = parseToml(committed.workerProd).d1_databases[0].database_id, prodKv = parseToml(committed.workerProd).kv_namespaces[0].id;
+
+test('the committed staging pair cannot be deployed by accident and shares nothing with production', () => {
+  const r = checkStaging(committed); assert.equal(r.status, 'not_provisioned'); assert.deepEqual(r.unsafe, []);
+  assert.deepEqual(r.pending.sort(), ['chalk: REPLACE_WITH_STAGING_SERVICE_ORIGIN', 'worker: REPLACE_WITH_STAGING_CHALK_ORIGIN', 'worker: REPLACE_WITH_STAGING_D1_ID', 'worker: REPLACE_WITH_STAGING_KV_ID']);
+  for (const kind of ['d1', 'kv', 'r2', 'analytics']) assert.deepEqual(r.staging.chalk[kind], [], `committed Chalk must not own ${kind}`);
+});
+test('positive control: a provisioned pair with its own resources is independent', () => { const r = checkStaging(filled); assert.equal(r.status, 'independent', JSON.stringify(r.unsafe)); });
+test('negative controls: every way of leaning on production is unsafe, and unsafe wins over pending', () => {
+  const bad = (edit, expected) => { const r = checkStaging(edit(structuredClone(filled))); assert.equal(r.status, 'unsafe'); assert.ok(r.unsafe.some((u) => u.includes(expected)), expected + ' ← ' + JSON.stringify(r.unsafe)); };
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace('11111111-2222-4333-8444-555555555555', prodD1) }), "PRODUCTION's");
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', prodKv) }), "PRODUCTION's");
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace('bucket_name = "hps-traces-staging"', 'bucket_name = "hps-traces"') }), 'r2 hps-traces');
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace('workers_dev = true', 'routes = [{ pattern = "api.hypeproof-ai.xyz", custom_domain = true }]') }), 'routes');
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace('ENVIRONMENT = "staging"', 'ENVIRONMENT = "production"') }), 'ENVIRONMENT');
+  bad((f) => ({ ...f, chalkStaging: f.chalkStaging.replace('https://hypeproof-studio-api-staging.example.workers.dev', 'https://api.hypeproof-ai.xyz') }), 'production host');
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace('name = "hypeproof-studio-api-staging"', 'name = "hypeproof-studio-api"') }), 'name must be its own');
+  // The old pair compared shared store IDs. At the HTTP boundary, even a distinct staging store in Chalk is unsafe.
+  for (const binding of [
+    '\n[[d1_databases]]\nbinding = "HPS_LOG"\ndatabase_name = "chalk-private-staging"\ndatabase_id = "99999999-2222-4333-8444-555555555555"\n',
+    '\n[[kv_namespaces]]\nbinding = "HPS_KV"\nid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"\n',
+    '\n[[r2_buckets]]\nbinding = "HPS_TRACES"\nbucket_name = "chalk-private-staging"\n',
+    '\n[[analytics_engine_datasets]]\nbinding = "HPS_ANALYTICS"\ndataset = "chalk_private_staging"\n',
+  ]) bad((f) => ({ ...f, chalkStaging: f.chalkStaging + binding }), 'consumer must have no Service storage or analytics bindings');
+  bad((f) => ({ ...f, workerStaging: f.workerStaging.replace(/\[\[r2_buckets\]\]\nbinding = "HPS_TRACES"\nbucket_name = "hps-traces-staging"\n/, '') }), 'must declare its own');
+  assert.equal(checkStaging({ ...committed, workerStaging: committed.workerStaging.replace('REPLACE_WITH_STAGING_D1_ID', prodD1) }).status, 'unsafe', 'a half-filled file that names production is unsafe, not merely pending');
+});
+
+test('every staging URL variable is checked, including gallery upload destinations', () => {
+  const r = checkStaging({ ...committed, workerStaging: committed.workerStaging.replace('[vars]', '[vars]\nGALLERY_LOGS_BASE = "https://api.hypeproof-ai.xyz/session-logs"') });
+  assert.equal(r.status, 'unsafe'); assert.ok(r.unsafe.some((x) => x.includes('GALLERY_LOGS_BASE')));
+});

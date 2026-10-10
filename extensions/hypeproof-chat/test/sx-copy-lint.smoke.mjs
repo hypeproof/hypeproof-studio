@@ -139,7 +139,7 @@ if (!status.available) {
 {
   // The actual render result. Real screen copy, conditional branches included.
   const week3 = JSON.parse(
-    readFileSync(new URL("../../../worker/test/fixtures/session-design/week-3.json", import.meta.url), "utf8"),
+    readFileSync(new URL("./fixtures/session-design/week-3.json", import.meta.url), "utf8"),
   );
   const noop = () => {};
   const text = visibleText(await renderComponent("MissionHeader", {

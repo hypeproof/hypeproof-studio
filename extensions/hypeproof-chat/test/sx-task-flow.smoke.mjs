@@ -58,7 +58,7 @@ async function load(path) {
   }
 }
 
-const week3 = JSON.parse(readFileSync(new URL("../../../worker/test/fixtures/session-design/week-3.json", import.meta.url), "utf8"));
+const week3 = JSON.parse(readFileSync(new URL("./fixtures/session-design/week-3.json", import.meta.url), "utf8"));
 const LESSON = { course_id: "globalbuddy", version: "m2026.09.20-1", sha256: "f".repeat(64), content: week3 };
 const COMPLETION = week3.learning.completion.map((c) => ({ id: c.id, event: c.event, label: c.text }));
 const TASK = "task-ffffffffffffffff-a1b2c3d4";
@@ -510,7 +510,7 @@ if (flow) {
 // ── 5. The same rules on the App's real record store ──────────────────────────
 
 const { FileRecordStorage } = await import("../src/localRecordFile.ts");
-const { LocalRecord } = await import("../../../worker/src/lib/measurement-core/index.ts");
+const { LocalRecord } = await import("@hypeproof/measurement-core");
 const root = await mkdtemp(join(tmpdir(), "hps-task-flow-"));
 try {
   if (flow && lesson) {

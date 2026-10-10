@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 const D = await import("../webview-ui/src/draftImport.ts");
 const L = await import("../src/lessonBinding.ts");
 const I = await import("../src/classroomInbox.ts");
-const S = await import("../../../worker/src/lib/classroom-distribution.ts");
+const { SERVICE_CONTRACT_FIXTURES } = await import("./fixtures/service-contracts/index.mjs");
+const contract = SERVICE_CONTRACT_FIXTURES.distribution;
 const { validActivityDraft } = await import("../src/activityDraft.ts");
 let n = 0; const ok = (name) => { n++; console.log("PASS " + name); };
 
@@ -75,7 +76,7 @@ let n = 0; const ok = (name) => { n++; console.log("PASS " + name); };
   ok("refused turn: restore only on the Service's 'nothing dispatched'; partial/unknown are never re-sent; the SDK's text form is recognised; close is bounded");
 }
 
-// ── inbox: the two new kinds, the setting state, and hash parity with the Service ──
+// ── inbox: the two new kinds, the setting state, and hash parity with the pinned Service wire contract ──
 {
   const base = { offer_key: "a".repeat(32), distribution_id: "dist-aaaaaaaa", seq: 1, object_id: "obj-aaaaaaaa", revision: 1, schema: I.CONTENT_SCHEMA, title: "제목", body: "본문", links: [], content_hash: "0".repeat(64), issued_at: 1, expires_at: 2, apply_within_ms: 1000 };
   const ref = { course_id: "course", version: "m2026.09.18-2", sha256: "b".repeat(64) };
@@ -83,8 +84,11 @@ let n = 0; const ok = (name) => { n++; console.log("PASS " + name); };
   assert.deepEqual(I.validateItem({ ...base, kind: "setting", lesson: ref }).value.lesson, ref); assert.equal(I.validateItem({ ...base, kind: "setting", lesson: "base" }).value.lesson, "base");
   for (const bad of [{ kind: "setting" }, { kind: "setting", lesson: { ...ref, tools: ["Bash"] } }, { kind: "setting", lesson: { ...ref, sha256: "short" } }, { kind: "notice", lesson: ref }]) assert.equal(I.validateItem({ ...base, ...bad }).ok, false, JSON.stringify(bad));
   assert.deepEqual(I.validateItem({ ...base, kind: "video" }), { ok: false, code: "unsupported_kind" });
-  for (const c of [{ kind: "notice", title: "제목", body: "본문", links: [] }, { kind: "prompt", title: "제목", body: "본문", links: [] }, { kind: "setting", title: "제목", body: "본문", links: [], lesson: ref }, { kind: "setting", title: "제목", body: "본문", links: [], lesson: "base" }]) assert.equal(I.contentCanonical(c), S.contentCanonical(c), "device and Service hash the same bytes: " + c.kind);
-  assert.deepEqual([S.KIND_CLIENT_CAPABILITY.prompt, S.KIND_CLIENT_CAPABILITY.setting], [I.INBOX_PROMPT_CAPABILITY, I.LESSON_BINDING_CAPABILITY]);
+  for (const { input, canonical } of contract.contents.filter((entry) => entry.input.kind !== "material")) {
+    assert.equal(I.contentCanonical(input), canonical, "App canonical bytes match the pinned Service contract: " + input.kind);
+    assert.notEqual(I.contentCanonical({ ...input, body: input.body + " changed" }), canonical, "a planted byte change is caught");
+  }
+  assert.deepEqual([contract.limits.KIND_CLIENT_CAPABILITY.prompt, contract.limits.KIND_CLIENT_CAPABILITY.setting], [I.INBOX_PROMPT_CAPABILITY, I.LESSON_BINDING_CAPABILITY]);
   const item = I.validateItem({ ...base, kind: "setting", lesson: ref }).value;
   let index = I.applyOffer(I.emptyIndex(), item, "rev.json", 10, 100);
   assert.deepEqual(I.pendingSetting(index), { state: "pending", offer_key: item.offer_key, distribution_id: item.distribution_id, content_hash: item.content_hash, lesson: ref, object_id: item.object_id, revision: 1 }, "arrival is PENDING — never switched on arrival"); assert.equal(I.boundSetting(index), null);
@@ -93,6 +97,6 @@ let n = 0; const ok = (name) => { n++; console.log("PASS " + name); };
   const v2 = I.applyOffer(index, { ...item, revision: 2, seq: 2, content_hash: "1".repeat(64), offer_key: "d".repeat(32) }, "rev2.json", 10, 300); assert.equal(I.pendingSetting(v2).revision, 2, "a newer revision is pending again");
   assert.equal(I.markSettingBound(v2, { object_id: item.object_id, revision: 1, content_hash: item.content_hash, key: "z".repeat(32), seq: 9 }), v2, "a late confirmation of the OLD revision marks nothing");
   const gone = I.applyWithdraw(index, { withdraw_key: "w".repeat(32), object_id: item.object_id, seq: 5, revision: 1, reason: "revoked" }, 400); assert.equal(I.pendingSetting(gone), null); assert.equal(I.boundSetting(gone), null, "a withdrawn card carries no binding note (the Service's binding is NOT undone by this)");
-  ok("inbox: prompt and setting kinds validate strictly, hash exactly as the Service does, and a setting is pending until this device switched");
+  ok("inbox: prompt and setting kinds validate strictly, match the pinned Service canonical bytes, and a setting is pending until this device switched");
 }
 console.log(`\n${n} passed`);

@@ -25,17 +25,17 @@
 // request that arrives from now on waits N ms before it is answered (at most 30 s; 0 ends it), so a
 // spec can look at the screen before the host's first learning state (the App gives up on that
 // request after 5 s, so a spec that wants the state keeps N under that).
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const [portArg, tokenFile, completionArg = "c1"] = process.argv.slice(2);
 if (!portArg || !tokenFile) throw new Error("usage: sx-service.mjs <port> <token-file> [completion ids]");
-const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("../../worker/test/harness/index.mjs");
-const { sqliteBinding } = await import("../../worker/test/harness/curriculum.mjs");
-const { getProfile } = await import("../../worker/src/profiles/index.ts");
-const { issue } = await import("../../worker/src/lib/tokens.ts");
-const { makeModuleDoc } = await import("../../worker/src/lib/modules.ts");
+const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("@hypeproof/service-testkit/test/harness/index.mjs");
+const { sqliteBinding } = await import("@hypeproof/service-testkit/test/harness/curriculum.mjs");
+const { getProfile } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { issue } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+const { makeModuleDoc } = await import("@hypeproof/service-testkit/src/lib/modules.ts");
 const { DatabaseSync } = await import("node:sqlite");
 
 const profile = getProfile("canary-sdk-contract");
@@ -46,7 +46,7 @@ const USER = "sx-learner";
 const COURSE = "sx-week3";
 const VERSION = "m2026.10.05-1";
 
-const week3 = JSON.parse(readFileSync(new URL("../../worker/test/fixtures/session-design/week-3.json", import.meta.url), "utf8"));
+const week3 = JSON.parse(readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/test/fixtures/session-design/week-3.json")), "utf8"));
 const keep = new Set(completionArg.split(",").map((s) => s.trim()).filter(Boolean));
 const completion = week3.learning.completion.filter((c) => keep.has(c.id));
 if (!completion.length) throw new Error(`no completion item matches ${completionArg}`);
@@ -54,7 +54,7 @@ const content = { ...week3, learning: { ...week3.learning, completion } };
 
 const db = new DatabaseSync(":memory:");
 db.exec("PRAGMA foreign_keys=ON");
-db.exec(readFileSync(new URL("../../worker/schema.sql", import.meta.url), "utf8"));
+db.exec(readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/schema.sql")), "utf8"));
 const now = Date.now();
 const startsAt = new Date(now - 60_000).toISOString();
 const endsAt = new Date(now + 6 * 3600_000).toISOString();

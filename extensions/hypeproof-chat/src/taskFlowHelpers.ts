@@ -40,7 +40,7 @@ import {
   type ObservationEvent,
   type Task,
   type TaskCurriculum,
-} from "../../../worker/src/lib/measurement-core/index.ts";
+} from "@hypeproof/measurement-core";
 import { submittableIn } from "./learningStateHelpers.ts";
 
 /**

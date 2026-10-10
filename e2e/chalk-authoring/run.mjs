@@ -1,14 +1,15 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Actual browser UI -> Chalk HTTP -> Service routing/SQLite. No live classroom.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
-import { localAuthoring } from '../../worker/test/harness/dental-authoring.mjs';
+import { localAuthoring } from '@hypeproof/service-testkit/test/harness/dental-authoring.mjs';
 const models=process.env.HPS_CHALK_MODEL_SELECTION==='1';
 const local=await localAuthoring(models?{profileId:'studio-native-trial'}:{});
 const {default:chalk}=await import('../../chalk/src/index.ts');
-const {TEST_SECRET}=await import('../../worker/test/harness/index.mjs');
+const {TEST_SECRET}=await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const env={HPS_SIGNING_SECRET:TEST_SECRET,ENVIRONMENT:'dev',HPS_SERVICE_ORIGIN:local.origin};
 const realFetch=globalThis.fetch;
 globalThis.fetch=(url,options)=>String(url).startsWith(local.origin)?local.fetcher(url,options):realFetch(url,options);
@@ -39,7 +40,7 @@ try {
  await page.reload();await page.locator('details').evaluateAll(es=>es.forEach(e=>e.open=true));await page.locator('#token').fill(local.token);await page.locator('#cohort').fill(local.cohort);await page.locator('#profile').fill(local.profileId);await page.locator('#course').fill('dental-ownership-l1');await page.locator('#load').click();await wait('revision 1');assert.equal(await page.locator('#title').inputValue(),'합성 강사 수정 제목');assert.equal(await page.locator('#assistant_name').inputValue(),'제작 파트너');
  if(models){assert.equal(await page.locator('#model-mode').inputValue(),'choice');await page.locator('#models-load').click();await page.locator('#models-status').filter({hasText:'사용 가능한 모델 9개'}).waitFor();assert.equal(await page.locator('#model-default').inputValue(),'claude-sonnet-5');assert.equal(await page.locator('#effort-mode').inputValue(),'choice');assert.equal(await page.locator('#effort-default').inputValue(),'low');assert.equal(await page.locator('#effort-allowed input[value=high]').isChecked(),false);}
  // Real instructor delivery -> signed student credential -> student UI, using production SQLite routes.
- const {setRoster,startSession}=await import('../../worker/src/lib/kv.ts');
+ const {setRoster,startSession}=await import('@hypeproof/service-testkit/src/lib/kv.ts');
  await setRoster(local.env.HPS_KV,local.cohort,['synthetic-student']);
  await startSession(local.env.HPS_KV,local.cohort,{session_id:'synthetic-lesson',profile_id:local.profileId,starts_at:new Date(Date.now()-1000).toISOString(),ends_at:new Date(Date.now()+3600000).toISOString()});
  await page.locator('#version').fill('m2026.09.06-1');await page.locator('#student').fill('synthetic-student');await page.locator('#hours').fill('1');await page.locator('#deliver').click();await wait('참여 코드를 발급');
@@ -61,7 +62,7 @@ try {
  if(models){const frozen=JSON.parse(await page.locator('#version-view').innerText());assert.equal(frozen.module.content.model.default,'claude-sonnet-5');assert.equal(frozen.module.content.model.allowed.length,9);assert.equal(frozen.module.content.model.binding.choices[0].id,'claude-sonnet-5');assert.deepEqual(frozen.module.content.model.effort,{default:'low',allowed:['low','medium']});assert.equal(frozen.module.content.model.binding.effort.revision,'hps-effort/1');console.log('PASS Chalk model choice save/reopen/freeze; later fixed-model draft preserves original version');}
  // Authentication failure must not overwrite the form or be called an expiry.
  await page.locator('#token').fill('invalid');await page.locator('#cohort').fill(local.cohort);await page.locator('#profile').fill(local.profileId);await page.locator('#load').click();await wait('HTTP 401');assert.equal(await page.locator('#title').inputValue(),'충돌 후 보존할 내용');assert.equal(await page.locator('#assistant_name').inputValue(),'충돌 뒤 남아야 할 이름');
- const {issue}=await import('../../worker/src/lib/tokens.ts');const student=(await issue({u:'synthetic-student',c:local.cohort,p:local.profileId},1,TEST_SECRET)).token;await page.locator('#token').fill(student);await page.locator('#cohort').fill(local.cohort);await page.locator('#profile').fill(local.profileId);await page.locator('#load').click();await wait('HTTP 403');assert.equal(await page.locator('#title').inputValue(),'충돌 후 보존할 내용');assert.equal(await page.locator('#assistant_name').inputValue(),'충돌 뒤 남아야 할 이름');
+ const {issue}=await import('@hypeproof/service-testkit/src/lib/tokens.ts');const student=(await issue({u:'synthetic-student',c:local.cohort,p:local.profileId},1,TEST_SECRET)).token;await page.locator('#token').fill(student);await page.locator('#cohort').fill(local.cohort);await page.locator('#profile').fill(local.profileId);await page.locator('#load').click();await wait('HTTP 403');assert.equal(await page.locator('#title').inputValue(),'충돌 후 보존할 내용');assert.equal(await page.locator('#assistant_name').inputValue(),'충돌 뒤 남아야 할 이름');
  await page.locator('#need').fill('390px 화면 검수');await page.locator('#request').click();assert.match(await page.locator('#request-status').innerText(),/미접수/);const href=await page.locator('#request-link').getAttribute('href');assert.ok(!href.includes(student));assert.equal(new URL(href).hostname,'github.com');
  assert.equal(await page.evaluate(()=>localStorage.length+sessionStorage.length),0);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  const out=process.env.HPS_CHALK_AUTHORING_OUT||'test-results/chalk-authoring';mkdirSync(out,{recursive:true});await page.locator('#forget').click();await page.screenshot({path:out+'/authoring-mobile.png',fullPage:true});

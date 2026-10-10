@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Real installed Mac shell + development extension + local Service/SQLite.
 // Synthetic lessons. Navigation makes no model claim; the opt-in identity/live
 // cases record their real provider requests separately.
@@ -11,7 +12,7 @@ import {tmpdir} from 'node:os';
 import {resolve,dirname} from 'node:path';
 import {pathToFileURL,fileURLToPath} from 'node:url';
 import {_electron as electron} from '@playwright/test';
-import {localAuthoring} from '../../worker/test/harness/dental-authoring.mjs';
+import {localAuthoring} from '@hypeproof/service-testkit/test/harness/dental-authoring.mjs';
 import {prepareIdentity,verifyIdentity} from './identity.mjs';
 import {surfaceAcceptance} from './surfaces.mjs';
 import {prepareModels,verifyModels} from './models.mjs';
@@ -24,7 +25,7 @@ const sourceRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const sourceSha=execFileSync('git',['rev-parse','HEAD'],{cwd:sourceRoot,encoding:'utf8'}).trim();
 if(process.env.HPS_LESSON_EXPECT_SHA)assert.equal(sourceSha,process.env.HPS_LESSON_EXPECT_SHA,'candidate SHA differs from the handoff');
 if(process.env.HPS_LESSON_PRODUCT_SHA){
- const changed=execFileSync('git',['diff',process.env.HPS_LESSON_PRODUCT_SHA,'--','worker/src','chalk/src','extensions/hypeproof-chat/src','extensions/hypeproof-chat/webview-ui/src'],{cwd:sourceRoot,encoding:'utf8'});
+ const changed=execFileSync('git',['diff',process.env.HPS_LESSON_PRODUCT_SHA,'--','e2e/package.json','e2e/package-lock.json','chalk/src','extensions/hypeproof-chat/src','extensions/hypeproof-chat/webview-ui/src'],{cwd:sourceRoot,encoding:'utf8'});
  assert.equal(changed,'','product sources differ from the submitted implementation');
 }
 if(process.env.HPS_LESSON_BUNDLED_EXTENSION==='1'){
@@ -35,11 +36,11 @@ if(process.env.HPS_LESSON_BUNDLED_EXTENSION==='1'){
  }
 }
 const local=await localAuthoring({profileId:surfaces||models?'studio-native-trial':'homepage-practice-s1'});
-if(models){const {getProfile}=await import('../../worker/src/profiles/index.ts');getProfile(local.profileId).coach_runtime=modelRuntime;} // isolated fixture runtime; recorded below
+if(models){const {getProfile}=await import('@hypeproof/service-testkit/src/profiles/index.ts');getProfile(local.profileId).coach_runtime=modelRuntime;} // isolated fixture runtime; recorded below
 // The navigation fixture only creates authoring tables. A real model turn also
 // records usage; use the repository's fresh schema, never a made-up table.
 if(live){
- local.db.exec(readFileSync(resolve(sourceRoot,'worker/schema.sql'),'utf8'));
+ local.db.exec(readFileSync(new URL(import.meta.resolve('@hypeproof/service-testkit/schema.sql')),'utf8'));
  local.db.prepare('INSERT INTO cohorts(id,display_name) VALUES (?,?)').run(local.cohort,'Synthetic acceptance');
  local.db.prepare('INSERT INTO sessions(id,cohort_id,profile_id,starts_at,ends_at) VALUES (?,?,?,?,?)').run('synthetic-lesson',local.cohort,local.profileId,new Date(Date.now()-1000).toISOString(),new Date(Date.now()+3600000).toISOString());
 }
@@ -47,7 +48,7 @@ if(live){
  assert.ok(process.env.ANTHROPIC_API_KEY,'live acceptance requires the existing dev Anthropic key');
  Object.assign(local.env,{LLM_PROVIDER:'anthropic',ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY,OPENAI_API_KEY:undefined,ANTHROPIC_PROXY_URL:undefined});
 }
-const {setRoster,startSession}=await import('../../worker/src/lib/kv.ts');
+const {setRoster,startSession}=await import('@hypeproof/service-testkit/src/lib/kv.ts');
 await setRoster(local.env.HPS_KV,local.cohort,['synthetic-lesson-student']);
 await startSession(local.env.HPS_KV,local.cohort,{session_id:'synthetic-lesson',profile_id:local.profileId,starts_at:new Date(Date.now()-1000).toISOString(),ends_at:new Date(Date.now()+3600000).toISOString()});
 const base=local.origin+'/admin/cohorts/'+local.cohort+'/authoring/synthetic-lesson';
@@ -86,7 +87,7 @@ if(process.env.HPS_LESSON_BUNDLED_EXTENSION==='1'){
  execFileSync(process.execPath,[resolve(sourceRoot,'e2e/native-trial-manifest.mjs')],{cwd:sourceRoot,env:{...process.env,HPS_APP_PATH:process.env.HPS_APP_PATH.split('/Contents/MacOS/')[0],HPS_NATIVE_EVIDENCE_DIR:out}});
  const manifest=JSON.parse(readFileSync(out+'/environment.json','utf8'));
  manifest.execution_cwd=process.cwd();
- manifest.lesson_contract_sha256=createHash('sha256').update(readFileSync(resolve(sourceRoot,'worker/src/lib/session-design.ts'))).digest('hex');
+ manifest.lesson_contract_sha256=createHash('sha256').update(readFileSync(new URL(import.meta.resolve('@hypeproof/service-testkit/src/lib/session-design.ts')))).digest('hex');
  manifest.runner_sha256=createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex');
  if(models){manifest.synthetic_profile_runtime=modelRuntime;manifest.model_runner_sha256=createHash('sha256').update(readFileSync(new URL('./models.mjs',import.meta.url))).digest('hex');}
  manifest.expected_candidate_sha=process.env.HPS_LESSON_EXPECT_SHA||null;

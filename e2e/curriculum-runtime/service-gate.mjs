@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // cr-e2e (#1400) — which requests may reach the local Service of app-service.mjs, decided before the
 // Service router sees them.
 //
@@ -25,7 +26,7 @@
 //
 // A refusal is a 404 carrying `x-hps-dev-gate: refused`, so a check can tell the gate's answer from the
 // router's (cr-dev-kit.sh probes its tunnel this way before it prints the address).
-import { matchTestOrigin, parseTestOrigin } from "../../worker/src/lib/curriculum/test-origin.ts";
+const { matchTestOrigin, parseTestOrigin } = await import("@hypeproof/service-testkit/src/lib/curriculum/test-origin.ts");
 
 export const GATE_HEADER = "x-hps-dev-gate";
 const LOOPBACK = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d{1,5})?$/;

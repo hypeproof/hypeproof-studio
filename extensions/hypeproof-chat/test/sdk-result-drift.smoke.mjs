@@ -201,7 +201,7 @@ if (declared) {
 // 워커는 다른 패키지라 import 하지 않고 소스를 읽어 대조한다.
 {
   const workerSse = readFileSync(
-    join(here, "..", "..", "..", "worker", "src", "lib", "sse.ts"),
+    new URL(import.meta.resolve("@hypeproof/service-testkit/src/lib/sse.ts")),
     "utf8",
   );
   const shared = "응답이 길이 제한에 걸려 잘렸습니다 — 문서가 완성되지 않았어요.";

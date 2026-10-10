@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751) — LIMITED real-mail trial of report delivery (Resend). Sends real e-mail when it really runs.
 //
 //   node --experimental-strip-types --experimental-sqlite e2e/classroom/delivery-trial.mjs     # plan + local controls, no network
@@ -17,8 +18,8 @@ import { createHmac } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
-const { setEvaluatorTransport } = await import('../../worker/src/routes/classroom-reports.ts'), { setResendFetch } = await import('../../worker/src/routes/classroom-delivery.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts');
+import { localOps } from './service-fixture.mjs';
+const { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts'), { setResendFetch } = await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 
 const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '../test-results/classroom-delivery-trial'); mkdirSync(out, { recursive: true });
 const PROVIDER_TEST = ['delivered@resend.dev', 'bounced@resend.dev', 'complained@resend.dev'], MAX_SENDS = 10, MAX_OPERATOR = 2, TEMPLATE = 'report-link-ko-1';

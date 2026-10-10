@@ -55,7 +55,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ANTHROPIC_API_KEY" || { echo 'BLOCKED missing acceptance credential'; exit 1; }
-          npm ci --prefix worker
           npm ci --prefix e2e
           mkdir -p "$RUNNER_TEMP/public-assets" "$RUNNER_TEMP/public-app" "$RUNNER_TEMP/service-evidence"
           gh release download "$TAG" --dir "$RUNNER_TEMP/public-assets" --pattern '*.zip'

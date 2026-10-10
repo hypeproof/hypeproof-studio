@@ -2,7 +2,7 @@
 // Run: node --experimental-strip-types test/sx-before-after.smoke.mjs
 //
 // Written before the implementation (ux-dag.yaml P1-C control). The samples are **the
-// worker's real fixtures** — so that what measures the gate and what measures the screen
+// App-owned synthetic observation fixtures** — so that what measures the gate and what measures the screen
 // look at the same data. Build a separate sample for the screen side only and nobody will
 // know when the two drift apart (verification.md rule 1).
 
@@ -11,7 +11,7 @@ import { auditRegionText } from "./sx-audit.mjs";
 import { rendererStatus, renderComponent, visibleText } from "./sx-render.mjs";
 import { learningState } from "../src/learningStateHelpers.ts";
 import { beforeAfterOf, NO_AI_DRAFT } from "../webview-ui/src/evidenceDrawerLogic.ts";
-import * as F from "../../../worker/test/fixtures/measurement-core/learning-cases.mjs";
+import * as F from "./fixtures/measurement-core/learning-cases.mjs";
 
 const stateOf = (caseName) =>
   learningState({ task: "task-1", events: F.gateCases[caseName]().events, completion: [] });

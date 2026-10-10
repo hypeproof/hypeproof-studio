@@ -27,12 +27,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 
 const SECRET = "test-secret-" + "x".repeat(20);
 const OPERATOR_SECRET = "operator-secret-" + "y".repeat(20);
 
-const { default: chalk } = await import("../src/index.ts");
+const { default: localChalk } = await import("../src/index.ts");
+const { bridgeStateToService } = await import("./harness/service-state.mjs");
+const chalk = bridgeStateToService(localChalk);
 const {
   logObjectKey,
   logsPrefix,
@@ -41,10 +43,10 @@ const {
   summarizeSeatSessions,
   operatorVerdict,
   READABLE_FILENAMES,
-} = await import("../src/routes/logs-admin.ts");
-const { uploadObjectKey, ALLOWED_UPLOAD_FILENAMES } = await import("../../worker/src/routes/logs.ts");
-const { issueIssuer } = await import("../../worker/src/lib/tokens.ts");
-const { setRoster } = await import("../../worker/src/lib/kv.ts");
+} = await import("@hypeproof/service-testkit/src/routes/chalk-logs.ts");
+const { uploadObjectKey, ALLOWED_UPLOAD_FILENAMES } = await import("@hypeproof/service-testkit/src/routes/logs.ts");
+const { issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+const { setRoster } = await import("@hypeproof/service-testkit/src/lib/kv.ts");
 
 // ---------------------------------------------------------------------------
 // 1. Key-layout drift against the write path
@@ -253,6 +255,7 @@ const bucket = {
 };
 
 const env = {
+  HPS_CHALK_SERVICE_SECRET: "chalk-transport-" + "z".repeat(32),
   HPS_SIGNING_SECRET: SECRET,
   ENVIRONMENT: "production",
   HPS_KV: kv,
@@ -452,7 +455,7 @@ assert.equal(r2Writes, 0, "no R2 write or delete was attempted by any request in
 // ---------------------------------------------------------------------------
 
 {
-  const src = readFileSync(fileURLToPath(new URL("../src/routes/logs-admin.ts", import.meta.url)), "utf8");
+  const src = readFileSync(fileURLToPath(new URL(import.meta.resolve("@hypeproof/service-testkit/src/routes/chalk-logs.ts"))), "utf8");
   const code = src
     .split("\n")
     .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*") && !l.trimStart().startsWith("/*"))

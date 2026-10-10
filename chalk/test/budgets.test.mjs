@@ -1,7 +1,7 @@
-import '../../worker/test/harness/loader.mjs';
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import assert from 'node:assert/strict';
-import {budgetHarness} from '../../worker/test/harness/budgets.mjs';
-import {TEST_SECRET} from '../../worker/test/harness/index.mjs';
+import {budgetHarness} from '@hypeproof/service-testkit/test/harness/budgets.mjs';
+import {TEST_SECRET} from '@hypeproof/service-testkit/test/harness/index.mjs';
 const {default:chalk}=await import('../src/index.ts');
 const h=await budgetHarness(),original=globalThis.fetch,seen=[];
 try{

@@ -2,7 +2,7 @@
 // retrospective → next draft. The allowlist is the Service's own (isIssuerAllowedEndpoint, re-exported), so the exact set
 // below is what an instructor Bearer may reach; anything else stops here with 404 and never reaches the Service.
 import assert from 'node:assert/strict';
-import '../../worker/test/harness/loader.mjs';
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 const { default: chalk } = await import('../src/index.ts');
 const env = { HPS_SIGNING_SECRET: 'test-secret-0123456789abcdef', ENVIRONMENT: 'dev', HPS_SERVICE_ORIGIN: 'https://service.test' };
 const retros = '/admin/cohorts/test-cohort/authoring/course-1/retrospectives', rt = retros + '/rt-0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';

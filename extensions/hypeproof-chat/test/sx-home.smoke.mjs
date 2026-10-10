@@ -54,7 +54,7 @@ async function check(name, fn) {
   }
 }
 
-const week3 = JSON.parse(readFileSync(new URL("../../../worker/test/fixtures/session-design/week-3.json", import.meta.url), "utf8"));
+const week3 = JSON.parse(readFileSync(new URL("./fixtures/session-design/week-3.json", import.meta.url), "utf8"));
 const LESSON = { course_id: "globalbuddy", version: "m2026.09.20-1", sha256: "f".repeat(64), content: week3 };
 const TASK = "task-ffffffffffffffff-a1b2c3d4";
 const SEAT_A = { workspace: "file:///ws/globalbuddy", format: "hps-observation/2", scope: "a".repeat(64), program: "canary-sdk-contract" };
@@ -148,7 +148,7 @@ await check("FlowSession.stale: true only while the screen shows an entry the st
 // ── 2. The same rule over the App's real record store, across a restart ─────────
 
 const { FileRecordStorage } = await import("../src/localRecordFile.ts");
-const { LocalRecord } = await import("../../../worker/src/lib/measurement-core/index.ts");
+const { LocalRecord } = await import("@hypeproof/measurement-core");
 const root = await mkdtemp(join(tmpdir(), "hps-home-resume-"));
 try {
   // A fresh store and record per call: what a reopened App reads.

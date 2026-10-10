@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // G4 continuation of mac-curriculum: the authored/rehearsed lesson is used for
 // one whole local class, including restart, help, distribution, recovery and wrap-up.
 // Real Mac window and HTTP; synthetic people, recorder model and delivery adapter.
@@ -40,10 +41,10 @@ export async function journey(x) {
   await wait(async()=>{await page.locator('#ops-dist-refresh').click();return /A1 · .*보관함/.test(await page.locator('#ops-dist-items').innerText());},'G4 notice applied',90000);
   assert.equal(local.db.prepare("SELECT count(*) n FROM classroom_distribution_targets WHERE seat_id<>'A1'").get().n,0);
   // Evaluation and external delivery seams are synthetic. They do not exercise credentials or send mail.
-  const {setEvaluatorTransport}=await import('../../worker/src/routes/classroom-reports.ts');
+  const {setEvaluatorTransport}=await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts');
   local.env.HPS_CLASSROOM_EVALUATOR='service-anthropic';
   setEvaluatorTransport(async req=>{const qs=JSON.parse(req.messages[0].content).evidence_catalog.filter(q=>q.basis&&/Q-G4/.test(q.quote));return Response.json({content:[{type:'text',text:JSON.stringify({findings:[{capability:'VERIFY',status:'observed',claim:'확인할 기준을 정하고 다시 확인했다',evidence:qs.map(q=>({quote_id:q.quote_id})),assistance:'assisted'}],next_experiment:'다음에는 다른 화면 크기에서도 확인하기'})}]});});
-  const {registerDeliveryAdapter}=await import('../../worker/src/routes/classroom-delivery.ts');let sent=0;
+  const {registerDeliveryAdapter}=await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts');let sent=0;
   registerDeliveryAdapter({id:'sandbox',external:true,send:async()=>{sent++;return{status:'accepted',provider_message_id:'g4-message'};}});local.env.HPS_DELIVERY_PROVIDER='sandbox';
   const admin={authorization:'Basic '+Buffer.from('x:pw').toString('base64')};assert.equal((await local.request('/admin/classroom/recipients','POST',{class_run_id:local.run,source_ref:'synthetic-g4',recipients:[{student_id:seats[0].student_id,recipient_ref:'guardian-g4',channel:'email',address:'guardian@example.test',viewer_check:{kind:'phone_last4',value:'4821'}}]},null,admin)).status,201);
   await page.locator('#ops-finish-dry').uncheck();await page.locator('#ops-finish-go').click();

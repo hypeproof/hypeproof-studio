@@ -81,7 +81,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm ci --prefix worker
           npm ci --prefix e2e
       - name: Download untouched candidate
         shell: bash

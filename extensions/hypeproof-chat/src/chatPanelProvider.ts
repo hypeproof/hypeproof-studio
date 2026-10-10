@@ -90,7 +90,7 @@ import {
   type BlobSink,
 } from "./crHostWiring";
 import { FileRecordStorage, LOCAL_RECORD_DIR } from "./localRecordFile";
-import { LocalRecord } from "../../../worker/src/lib/measurement-core/local-record";
+import { LocalRecord } from "@hypeproof/measurement-core/local-record";
 import { isMinorTier } from "./sdkCoachHelpers";
 import {
   toMcpToolResult,

@@ -85,22 +85,29 @@ jobs:
           # (depth-1, no-tags) checkout would hide.
           fetch-depth: 0
 
+      - name: Checkout pinned Service source (deployment ownership unchanged)
+        uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: service-testkit-v0.1.2
+          path: .service-source
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: .service-source/worker/package-lock.json
 
       - name: Install worker dependencies
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npm ci
 
       - name: Worker smoke tests
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npm test
 
       - name: Worker typecheck
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npm run typecheck
 
       - name: Dry-run stop
@@ -167,34 +174,34 @@ jobs:
 
       - name: Apply additive course authoring schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0002-chalk-authoring.sql
 
       - name: Apply additive classroom sharing schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0003-classroom-sharing.sql
 
       - name: Apply additive native trial schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0004-native-trials.sql
 
       - name: Apply additive model usage admission schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0006-model-usage.sql
 
       - name: Apply additive request settings schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0005-request-settings.sql
 
       # Additive preparation only. Applying schema does not publish a plan,
       # approve rates or opt any class into paid admission.
       - name: Apply additive access, cost and budget schemas
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: |
           set -euo pipefail
           for migration in migrations/0007-access-contracts.sql migrations/0008-usage-costs.sql migrations/0009-budget-admission.sql migrations/0010-budget-surfaces.sql; do
@@ -206,7 +213,7 @@ jobs:
       # All seven are CREATE ... IF NOT EXISTS, safe to replay on every deploy.
       - name: Apply additive classroom operation schemas
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: |
           set -euo pipefail
           for migration in migrations/0011-classroom-ops.sql migrations/0012-classroom-ops-commands.sql migrations/0013-classroom-ops-control.sql migrations/0014-classroom-ops-evidence-review.sql migrations/0015-classroom-collection.sql migrations/0016-classroom-report-jobs.sql migrations/0017-classroom-delivery.sql; do
@@ -216,7 +223,7 @@ jobs:
       # Additive tables only. No flag is set by this: HPS_CLASSROOM_OPS stays unset and every class run's ops flags stay off.
       - name: Apply additive remote classroom operations schema (0011–0026; 0026 = authoring rehearsal/confirmation, #1012)
         if: ${{ !inputs.dry_run && inputs.apply_classroom_ops_schema }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: |
           set -euo pipefail
           for migration in migrations/0011-classroom-ops.sql migrations/0012-classroom-ops-commands.sql migrations/0013-classroom-ops-control.sql migrations/0014-classroom-ops-evidence-review.sql migrations/0015-classroom-collection.sql migrations/0016-classroom-report-jobs.sql migrations/0017-classroom-delivery.sql migrations/0018-classroom-snapshot-binding.sql migrations/0019-classroom-report-attempts.sql migrations/0020-classroom-viewer-check.sql migrations/0021-classroom-erasure-log.sql migrations/0022-classroom-collect-scope.sql migrations/0023-classroom-distribution.sql migrations/0024-classroom-lesson-bindings.sql migrations/0025-classroom-collect-kinds.sql migrations/0026-authoring-rehearsal.sql; do
@@ -226,7 +233,7 @@ jobs:
 
       - name: Deploy Worker
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         env:
           WORKER_VERSION: ${{ steps.version.outputs.version }}
         run: |

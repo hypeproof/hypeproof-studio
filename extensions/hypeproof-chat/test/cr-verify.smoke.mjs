@@ -38,7 +38,7 @@ const { NativeObservationRecorder } = await import("../src/nativeObservationReco
 const { validateObservation } = await import("../src/nativeObservationContract.ts");
 const { toMcpToolResult } = await import("../src/browserMcp.ts");
 const { toProxyToolResult } = await import("../src/browserControlHelpers.ts");
-const { gates } = await import("../../../worker/src/lib/measurement-core/learning-events.ts");
+const { gates } = await import("@hypeproof/measurement-core/learning-events");
 
 const ORIGIN = "http://127.0.0.1:5173";
 const START = `${ORIGIN}/index.html`;
@@ -830,7 +830,7 @@ await test("a plan with no steps that only expects an absence is refused (plan_u
   }
   assert.equal(s.recorder.batch.events.length, before, "nothing recorded");
   // Controls: a zero-step plan with a positive expectation, and a plan with a step, are taken.
-  const { parsePlan } = await import("../../../worker/src/lib/measurement-core/verification.ts");
+  const { parsePlan } = await import("@hypeproof/measurement-core/verification");
   assert.equal(parsePlan({ steps: [], expect: [{ kind: "element", role: "button", name: "주문 시작" }] }).ok, true);
   assert.equal(parsePlan({ steps: [{ action: "reload" }], expect: [{ kind: "no_errors" }] }).ok, true);
 });

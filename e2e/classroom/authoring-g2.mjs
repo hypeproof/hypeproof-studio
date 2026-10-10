@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // #751 G2 · #1012 — the teacher journey in a real browser: edit a reusable curriculum (audience, example, step help, work
 // surface, allowed features) → concrete difference review → freeze a candidate → learner-condition rehearsal → deliberate
 // confirmation → the class setting picker offers only the confirmed version.
@@ -15,14 +16,14 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
-import { makeCtx, withMockUpstream, anthropicJsonBody, TEST_SECRET } from '../../worker/test/harness/index.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
+import { makeCtx, withMockUpstream, anthropicJsonBody, TEST_SECRET } from '@hypeproof/service-testkit/test/harness/index.mjs';
 import { rehearsalReport, turnLesson, acceptFocus } from '../../extensions/hypeproof-chat/src/lessonFocus.ts';
 import { permittedToolsFor } from '../../extensions/hypeproof-chat/src/sdkCoachHelpers.ts';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-authoring-g2'); mkdirSync(out, { recursive: true });
 const dist = path.join(repo, 'extensions/hypeproof-chat/webview-ui/dist'); assert.ok(existsSync(path.join(dist, 'index.html')), 'build the webview first: npm --prefix extensions/hypeproof-chat/webview-ui run build');
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts'), { issueIssuer } = await import('../../worker/src/lib/tokens.ts');
+const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 local.env.HPS_LESSON_BINDINGS = 'enforce'; local.env.ANTHROPIC_API_KEY = 'test-anthropic-key'; local.env.HPS_LESSON_CONFIRMATION = 'require';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, makeCtx());
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? toService(url, init) : realFetch(url, init);

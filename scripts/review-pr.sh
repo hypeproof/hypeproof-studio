@@ -249,7 +249,8 @@ echo ""
 echo "=== [3/6] Local server (port $WRANGLER_PORT) ==="
 
 # .dev.vars: always generate a fresh local-only signing secret
-WORKER_DIR="$WORKTREE_DIR/worker"
+(cd "$WORKTREE_DIR" && npm ci --prefer-offline --silent)
+WORKER_DIR="$(node "$WORKTREE_DIR/scripts/service-tooling.mjs")"
 DEV_VARS="$WORKER_DIR/.dev.vars"
 
 # Generate a random 20-char hex secret (never production value).
@@ -264,7 +265,7 @@ EOF
 echo "Created $DEV_VARS with local random signing secret."
 
 # Worker deps
-(cd "$WORKER_DIR" && npm ci --prefer-offline --silent 2>&1)
+
 
 # Init D1 (idempotent: schema uses CREATE TABLE IF NOT EXISTS)
 echo "Initialising local D1..."
@@ -306,7 +307,7 @@ if [[ -f "$IMPORT_SCRIPT" ]]; then
   else
     KB_SQL="$(mktemp /tmp/chalk-kb-XXXXXX.sql)"
     echo "볼트: $VAULT"
-    if node --experimental-strip-types "$IMPORT_SCRIPT" \
+    if node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types "$IMPORT_SCRIPT" \
         --vault-path "$VAULT" \
         --version 1 \
         --note "review-pr auto-import" \
@@ -376,7 +377,7 @@ echo "=== [4/6] Instructor token ==="
 # Reading all *.ts files with grep -m1 emits one line per file; instead we
 # read only the specific profile file so the value is always exactly one line.
 DEFAULT_PROFILE="sk-biopharm-kids-2026-grade-3-4-s1"
-DEFAULT_PROFILE_FILE="$WORKTREE_DIR/worker/src/profiles/sk-biopharm-kids-s1.ts"
+DEFAULT_PROFILE_FILE="$WORKER_DIR/src/profiles/sk-biopharm-kids-s1.ts"
 
 if [[ -n "$REVIEW_PROFILE_ARG" ]]; then
   PROFILE_ID="$REVIEW_PROFILE_ARG"
@@ -385,7 +386,7 @@ if [[ -n "$REVIEW_PROFILE_ARG" ]]; then
     COHORT_ID="$REVIEW_COHORT_ARG"
   else
     # Search for a profile file whose id: line matches the given profile.
-    PROFILE_FILE="$(grep -rl "id: ['\"]${REVIEW_PROFILE_ARG}['\"]" "$WORKTREE_DIR/worker/src/profiles/" 2>/dev/null | head -1)"
+    PROFILE_FILE="$(grep -rl "id: ['\"]${REVIEW_PROFILE_ARG}['\"]" "$WORKER_DIR/src/profiles/" 2>/dev/null | head -1)"
     if [[ -z "$PROFILE_FILE" ]]; then
       echo "ERROR: profile '${REVIEW_PROFILE_ARG}' not found in worker/src/profiles/*.ts" >&2
       exit 1
@@ -418,8 +419,8 @@ if [[ "${STUDENT_SESSION:-0}" -eq 1 ]]; then
   _ISSUE_ARGS+=(--can-start-session --max-session-hours 3)
 fi
 TOKEN_JSON="$(HPS_SIGNING_SECRET="$LOCAL_SECRET" \
-  node --experimental-strip-types \
-  "$WORKTREE_DIR/worker/scripts/issue-issuer-token.ts" \
+  node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types \
+  "$WORKER_DIR/scripts/issue-issuer-token.ts" \
   --instructor "jy-review-$$" \
   --cohorts "$COHORT_ID" \
   --profiles "$PROFILE_ID" \

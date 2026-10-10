@@ -47,7 +47,7 @@ const row = (extra = {}) => ({
 {
   // Straight from the spec, not from a guess about which kinds are affected.
   const spec = await import(
-    "../../../worker/src/lib/measurement-core/learning-events.ts"
+    "@hypeproof/measurement-core/learning-events"
   );
   const textless = Object.entries(spec.LEARNING_EVENT_SPEC)
     .filter(([, s]) => !s.required.includes("student_text"))

@@ -1,10 +1,11 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Browser -> actual Chalk forwarding/board -> actual Service auth + SQLite.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {mkdirSync} from 'node:fs';
 import {chromium} from '@playwright/test';
-import {localClassroom} from '../../worker/test/harness/classroom.mjs';
+import {localClassroom} from '@hypeproof/service-testkit/test/harness/classroom.mjs';
 const local=await localClassroom();const {default:chalk}=await import('../../chalk/src/index.ts');
 const realFetch=globalThis.fetch;
 globalThis.fetch=(url,init)=>String(url).startsWith('https://service.test')?local.app.fetch(new Request(url,init),local.env,{waitUntil(){}}):realFetch(url,init);

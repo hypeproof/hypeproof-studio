@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { isLearningEventKind } from "../../../worker/src/lib/measurement-core/learning-events.ts";
+import { isLearningEventKind } from "@hypeproof/measurement-core/learning-events";
 import {
   OBSERVATION_FORMAT,
   validateObservation,

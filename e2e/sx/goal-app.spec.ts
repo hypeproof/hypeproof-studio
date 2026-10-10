@@ -69,7 +69,7 @@ const GOAL3 = "예약 화면에서 날짜를 먼저 고르게 만들기";
 const TYPED = "예약을 마치면 확인 문장이 보이게 만들기";
 /** The sidebar's sentence (studentGoal.ts `GOAL_CHANGED_ELSEWHERE`; this e2e package cannot import the extension's CommonJS source). */
 const CHANGED_ELSEWHERE = /^다른 화면에서 목표가 바뀌었어요\. 적던 내용은 그대로 있으니, 저장하면 이 내용으로 바뀌어요\.$/;
-const WEEK3 = JSON.parse(fs.readFileSync(path.join(repo, "worker/test/fixtures/session-design/week-3.json"), "utf8")) as {
+const WEEK3 = JSON.parse(fs.readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/test/fixtures/session-design/week-3.json")), "utf8")) as {
   learning: { completion: Array<{ id: string; text: string }> };
 };
 

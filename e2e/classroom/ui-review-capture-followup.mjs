@@ -21,7 +21,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const info = JSON.parse(readFileSync(path.join(pre, 'preview.json'), 'utf8')), token = readFileSync(info.token_file, 'utf8').trim(), origin = new URL(info.url).origin;
 const out = path.resolve(process.env.HPS_UI_REVIEW_OUT || path.join(pre, 'captures-followup')); mkdirSync(out, { recursive: true });
 const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
-const source = { head: git('rev-parse', 'HEAD'), dirty_product: !!git('status', '--porcelain', '--', 'chalk/src', 'worker/src', 'extensions/hypeproof-chat/src') };
+const source = { head: git('rev-parse', 'HEAD'), dirty_product: !!git('status', '--porcelain', '--', 'chalk/src', 'e2e/package.json', 'e2e/package-lock.json', 'extensions/hypeproof-chat/src') };
 const shots = [], facts = {};
 const badge = (label) => { const add = () => { if (document.getElementById('hps-synthetic-badge')) return; const b = document.createElement('div'); b.id = 'hps-synthetic-badge'; b.textContent = label; b.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;background:#fde68a;color:#1f2937;font:12px/1.3 system-ui;padding:4px 8px;border-radius:4px;pointer-events:none;max-width:70vw'; document.body.append(b); }; document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', add) : add(); };
 const LABEL = '합성 데이터 · 로컬 미리보기 (실제 수업 아님) · ' + source.head.slice(0, 7) + (source.dirty_product ? '+작업본' : '');

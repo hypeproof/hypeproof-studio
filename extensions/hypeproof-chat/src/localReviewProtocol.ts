@@ -1,7 +1,8 @@
-import type { Task, Review, Receipt, SubmissionBundle, Improvement } from '../../../worker/src/lib/measurement-core/local-record.ts';
-import type { Interpretation } from '../../../worker/src/lib/measurement-core/interpretation.ts';
-import type { ObservationEvent } from '../../../worker/src/lib/measurement-core/legacy-observation.ts';
-export type ReviewHost = 'claude-code' | 'codex';
+import type { Task, Review, Receipt, SubmissionBundle, Improvement } from '@hypeproof/measurement-core/local-record';
+import type { Interpretation } from '@hypeproof/measurement-core/interpretation';
+import type { ObservationEvent } from '@hypeproof/measurement-core/legacy-observation';
+import type { ReviewHost } from '@hypeproof/measurement/adapters';
+export type { ReviewHost } from '@hypeproof/measurement/adapters';
 export interface TaskCard {
   task: Task;
   source: { host: ReviewHost; session: string; digest: string; evidence: 'captured-replay'; limitations: string[]; exclusions: string[]; conditions?: Array<{ line: number; at: string | null; model: string; reasoning: string | null }>; snapshots?: Array<{ digest: string; at: number; messages: number }> };

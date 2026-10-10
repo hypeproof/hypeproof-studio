@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { serviceSourceManifest } from '../service-provenance.mjs';
 
 // This reuses start-page/run.mjs's built React + controlled extension-host
 // boundary. Outbound messages are assertions, not real API/OS operations.
@@ -14,7 +15,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const dist = path.join(repo, 'extensions/hypeproof-chat/webview-ui/dist');
 const out = path.resolve(process.env.HPS_TRIAL_UX_OUT || path.join(repo, 'e2e/test-results/trial-ux', new Date().toISOString().replace(/[:.]/g, '-')));
 await fs.mkdir(out, { recursive: true });
-const bundled = await build({ entryPoints: [path.join(repo, 'worker/src/profiles/studio-native-trial.ts')], bundle: true, write: false, platform: 'node', format: 'esm', loader: { '.md': 'text' } });
+const bundled = await build({ entryPoints: [fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/src/profiles/studio-native-trial.ts'))], bundle: true, write: false, platform: 'node', format: 'esm', loader: { '.md': 'text' } });
 const { profile: sourceProfile } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
 const native = {
   ...sourceProfile, profile_id: sourceProfile.id,
@@ -348,7 +349,7 @@ try {
   await browser.close(); await new Promise(resolve => server.close(resolve));
   const assets = (await fs.readdir(path.join(dist, 'assets'))).filter(f => f.endsWith('.js'));
   const hashes = Object.fromEntries(await Promise.all(assets.map(async f => [f, createHash('sha256').update(await fs.readFile(path.join(dist, 'assets', f))).digest('hex')])));
-  const report = { schema: 'hps-trial-ux/1', executedAt: new Date().toISOString(), codeSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDirty: !!execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), browser: 'Chromium', platform: process.platform, arch: process.arch, bundleSha256: hashes, profileSource: 'worker/src/profiles/studio-native-trial.ts (actual bundled registry profile)', scope: 'Built React. Host messages, findings, artifacts and API outcomes are controlled synthetic fixtures. No real authentication, provider, native dialog, URL open, update, disk restore or deployment is claimed.', evaluatorControls: { positive: 'PASS', negativeMismatch: 'PASS', negativeMissing: 'PASS' }, counts: { pass: results.filter(r => r.status === 'PASS').length, fail: results.filter(r => r.status === 'FAIL').length }, results };
+  const report = { schema: 'hps-trial-ux/1', executedAt: new Date().toISOString(), codeSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDirty: !!execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), browser: 'Chromium', platform: process.platform, arch: process.arch, bundleSha256: hashes, profileSource: '@hypeproof/service-testkit/src/profiles/studio-native-trial.ts (actual public package registry profile)', servicePackage: serviceSourceManifest(), scope: 'Built React. Host messages, findings, artifacts and API outcomes are controlled synthetic fixtures. No real authentication, provider, native dialog, URL open, update, disk restore or deployment is claimed.', evaluatorControls: { positive: 'PASS', negativeMismatch: 'PASS', negativeMissing: 'PASS' }, counts: { pass: results.filter(r => r.status === 'PASS').length, fail: results.filter(r => r.status === 'FAIL').length }, results };
   await fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
   console.log(`Report: ${path.join(out, 'report.json')}`);
   if (report.counts.fail) process.exitCode = 1;

@@ -1,13 +1,13 @@
-import '../../worker/test/harness/loader.mjs';
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
-import {accessHarness,syntheticPlan,syntheticEvent} from '../../worker/test/harness/access.mjs';
-import {syntheticPrice,nativeRaw,openaiRaw} from '../../worker/test/harness/usage-costs.mjs';
-import {makeCtx,TEST_SECRET} from '../../worker/test/harness/index.mjs';
-const {default:service}=await import('../../worker/src/index.ts');
+import {accessHarness,syntheticPlan,syntheticEvent} from '@hypeproof/service-testkit/test/harness/access.mjs';
+import {syntheticPrice,nativeRaw,openaiRaw} from '@hypeproof/service-testkit/test/harness/usage-costs.mjs';
+import {makeCtx,TEST_SECRET} from '@hypeproof/service-testkit/test/harness/index.mjs';
+const {default:service}=await import('@hypeproof/service-testkit/src/index.ts');
 const {default:chalk}=await import('../../chalk/src/index.ts');
-const {issue,issueIssuer}=await import('../../worker/src/lib/tokens.ts');
+const {issue,issueIssuer}=await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 export async function budgetFixture({sdk=false,providerResponse}={}){
  const h=await accessHarness(),cohort=sdk==='read'?'boah-dental-2026-a':sdk?'canary-internal':'studio-model-practice',profile=sdk==='read'?'boah-dental-director-copyclone-2026-s1':sdk?'canary-sdk-contract':cohort,issuer='synthetic-teacher';
  const roster=['student-a','student-b'];

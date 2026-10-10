@@ -1,0 +1,42 @@
+{
+  "repository": "hypeproof/hypeproof-service",
+  "sourceCommit": "f9a9ce0",
+  "purpose": "Synthetic App consumer inputs; no Worker implementation is copied.",
+  "files": [
+    {
+      "fixture": "session-design/week-1.json",
+      "source": "worker/test/fixtures/session-design/week-1.json",
+      "sha256": "150054574bc7645c52792c537c9148058d2b42ae55df39a7ddef402095eddf6f"
+    },
+    {
+      "fixture": "session-design/week-2.json",
+      "source": "worker/test/fixtures/session-design/week-2.json",
+      "sha256": "b659625919db3615da5c8f8c4529fa35ebd1b0c8f59ec010fc85fa10d8afb711"
+    },
+    {
+      "fixture": "session-design/week-3.json",
+      "source": "worker/test/fixtures/session-design/week-3.json",
+      "sha256": "c7c1e59a0130c512143a9da254fa007c1d2b9d9b887390a70565ffd6e43bd206"
+    },
+    {
+      "fixture": "session-design/week-4.json",
+      "source": "worker/test/fixtures/session-design/week-4.json",
+      "sha256": "344437d199f0baed64161535ad4f24f5ccd4c686f3728c8514d5be8b428b3a96"
+    },
+    {
+      "fixture": "session-design/week-5.json",
+      "source": "worker/test/fixtures/session-design/week-5.json",
+      "sha256": "e7845b4dbc6a973551774e2966b469f30b45b29b621ded0654446b3fd7efeb83"
+    },
+    {
+      "fixture": "session-design/week-6.json",
+      "source": "worker/test/fixtures/session-design/week-6.json",
+      "sha256": "3fa1d49f268539429f0828ac1b2b1bca2e836d0245d6a8736cd7d07299d79f3c"
+    },
+    {
+      "fixture": "measurement-core/learning-cases.mjs",
+      "source": "worker/test/fixtures/measurement-core/learning-cases.mjs",
+      "sha256": "4a9d2f4401e2b14a731cb00f8b5336ac63d0f73656d118f1c93cefc104e55943"
+    }
+  ]
+}

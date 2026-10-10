@@ -27,7 +27,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 
 const {
   BOARD_THRESHOLDS,
@@ -38,7 +38,7 @@ const {
   boardDegradations,
   compareSeats,
   NO_LIVENESS,
-} = await import("../src/lib/board-verdict.ts");
+} = await import("@hypeproof/service-testkit/src/lib/board-verdict.ts");
 const {
   BOARD_SESSION_SQL,
   BOARD_WINDOW_SQL,
@@ -47,7 +47,7 @@ const {
   d1Timestamp,
   d1ToMs,
   resolveSeatSet,
-} = await import("../src/routes/board.ts");
+} = await import("@hypeproof/service-testkit/src/routes/chalk-board.ts");
 
 const FX = JSON.parse(
   readFileSync(new URL("./fixtures/session-2026-08-22.json", import.meta.url), "utf8"),

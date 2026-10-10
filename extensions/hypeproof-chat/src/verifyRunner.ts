@@ -27,7 +27,7 @@ import {
   type PlanStep,
   type StepLog,
   type VerifyPlan,
-} from "../../../worker/src/lib/measurement-core/verification.ts";
+} from "@hypeproof/measurement-core/verification";
 
 /** What the runner needs: the CR executor (BrowserControl.crExecutor() in the App). */
 export interface VerifyExecutor {

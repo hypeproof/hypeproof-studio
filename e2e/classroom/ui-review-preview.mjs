@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Instructor UI review preview (#751) — a local, SYNTHETIC classroom for looking at the Chalk instructor pages.
 //
 //   node --experimental-strip-types --experimental-sqlite e2e/classroom/ui-review-preview.mjs   # stays up until Control-C
@@ -17,15 +18,15 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { CommandRunner } from '../../extensions/hypeproof-chat/src/classroomOpsCommands.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/ui-review-preview'); mkdirSync(out, { recursive: true });
 const port = Number(process.env.HPS_UI_PREVIEW_PORT || 18951);
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts');
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs');
+const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const realFetch = globalThis.fetch; globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);
 
 const rows = ['A', 'B', 'C', 'D'], seats = rows.flatMap((r, ri) => Array.from({ length: 6 }, (_, i) => ({ seat_id: r + (i + 1), student_id: 'synth-' + String(ri * 6 + i + 1).padStart(2, '0') })));
