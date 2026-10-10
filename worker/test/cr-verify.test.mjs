@@ -219,7 +219,7 @@ const storeHits = (src) => src.split("\n").filter((l) => !/^\s*(?:\/\/|\*)/.test
 
 test("CR-T13 store inventory: the verify modules write nowhere but the record they are handed (SX-48)", () => {
   const files = [
-    new URL("../src/lib/measurement-core/verification.ts", import.meta.url),
+    new URL(import.meta.resolve("@hypeproof/measurement-core/verification")),
     new URL("../../extensions/hypeproof-chat/src/verifyRunner.ts", import.meta.url),
     new URL("../../extensions/hypeproof-chat/src/verifySession.ts", import.meta.url),
     new URL("../../extensions/hypeproof-chat/src/verifyView.ts", import.meta.url),

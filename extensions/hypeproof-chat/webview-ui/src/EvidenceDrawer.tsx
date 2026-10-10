@@ -17,7 +17,7 @@ import {
   sourceStateLabel,
   type EvidenceRowView,
 } from "./evidenceDrawerLogic";
-import type { SourceKind } from "../../../../worker/src/lib/measurement-core/learning-events.ts";
+import type { SourceKind } from "@hypeproof/measurement-core/learning-events";
 
 /**
  * Area D — Evidence drawer (SX-17·18·20·22·23).

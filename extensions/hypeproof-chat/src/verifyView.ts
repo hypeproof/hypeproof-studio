@@ -1,7 +1,7 @@
 // The "Test my product" panel state (cr-verify, #1392). Types only, shared by the host
 // (verifySession.ts) and the webview (VerifyPanel.tsx): no node or vscode imports, so the
 // webview build can read it.
-import type { ProductVerification, ReportCriterion, VerificationReport } from "../../../worker/src/lib/measurement-core/verification.ts";
+import type { ProductVerification, ReportCriterion, VerificationReport } from "@hypeproof/measurement-core/verification";
 
 export interface VerifyCriterion {
   id: string;

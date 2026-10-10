@@ -35,12 +35,13 @@ const findings = () =>
   }));
 // #1042: the former textual twin lock became a same-implementation lock. App and
 // Service no longer carry copies; both re-export the common measurement core.
-test("App and Service share one implementation (drift lock)", async () => {
+test("App and Service preserve released observation behavior", async () => {
   const app = await import("../../extensions/hypeproof-chat/src/nativeObservationContract.ts");
-  assert.equal(app.validateObservation, validateObservation);
-  assert.equal(app.validateFindings, validateFindings);
+  const { runLegacyCases } = await import("./fixtures/measurement-core/legacy-cases.mjs");
+  const service = await import("../src/lib/native-observation.ts");
+  assert.deepEqual(runLegacyCases(app), runLegacyCases(service));
   assert.equal(app.OBSERVATION_FORMAT, OBSERVATION_FORMAT);
-  assert.equal(app.OBSERVATION_ASSETS, OBSERVATION_ASSETS);
+  assert.deepEqual(app.OBSERVATION_ASSETS, OBSERVATION_ASSETS);
   // Code lines only — the shim's explanatory comment is allowed to say "function".
   const appCode = readFileSync(new URL("../../extensions/hypeproof-chat/src/nativeObservationContract.ts", import.meta.url), "utf8")
     .split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("//"));

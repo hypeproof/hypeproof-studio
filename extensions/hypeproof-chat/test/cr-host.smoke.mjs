@@ -18,7 +18,7 @@ import { makeFakePage, fakePort, FAKE_VERSION } from "./fixtures/fake-cdp-page.m
 
 const w = await import("../src/crHostWiring.ts");
 const { readBrowserResultEvent } = await import("../src/browserResult.ts");
-const { LocalRecord, validateObservation } = await import("../../../worker/src/lib/measurement-core/index.ts");
+const { LocalRecord, validateObservation } = await import("@hypeproof/measurement-core");
 const { CrExecutor, checkAgentOrigin } = await import("../src/experimentBrowser.ts");
 const { buildHypeproofMcpServer, crBrowserOpenRefusal, MCP_CR_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
 const providerSrc = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");

@@ -148,7 +148,7 @@ await check("FlowSession.stale: true only while the screen shows an entry the st
 // ── 2. The same rule over the App's real record store, across a restart ─────────
 
 const { FileRecordStorage } = await import("../src/localRecordFile.ts");
-const { LocalRecord } = await import("../../../worker/src/lib/measurement-core/index.ts");
+const { LocalRecord } = await import("@hypeproof/measurement-core");
 const root = await mkdtemp(join(tmpdir(), "hps-home-resume-"));
 try {
   // A fresh store and record per call: what a reopened App reads.

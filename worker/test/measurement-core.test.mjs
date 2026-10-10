@@ -15,7 +15,7 @@ const serviceEvidence = await import("../src/lib/native-evidence.ts");
 const appContract = await import("../../extensions/hypeproof-chat/src/nativeObservationContract.ts");
 const { runLegacyCases, batchCases } = await import("./fixtures/measurement-core/legacy-cases.mjs");
 const golden = JSON.parse(readFileSync(new URL("./fixtures/measurement-core/legacy-verdicts.json", import.meta.url), "utf8"));
-const CORE_DIR = new URL("../src/lib/measurement-core/", import.meta.url);
+const CORE_DIR = new URL("./", import.meta.resolve("@hypeproof/measurement-core"));
 
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
@@ -60,11 +60,17 @@ test("MC-T01 extracted core reproduces every legacy verdict, via core, Service a
 });
 
 // ── MC-T02 — one implementation, host-independent ────────────────────────────
-test("MC-T02 App and Service resolve to the same implementation (no copied validator)", () => {
+test("MC-T02 App and Service retain the released contract and legacy verdicts", () => {
   for (const name of ["validateObservation", "validateFindings", "observableAssets", "OBSERVATION_FORMAT", "OBSERVATION_ASSETS"]) {
-    assert.equal(appContract[name], core[name], `App ${name} is not the core export`);
+    if (typeof core[name] !== "function") assert.deepEqual(appContract[name], core[name], `App ${name} contract differs`);
     assert.equal(serviceLegacy[name], core[name], `Service ${name} is not the core export`);
   }
+  assert.deepEqual(runLegacyCases(appContract), runLegacyCases(core));
+  const workerLock = JSON.parse(readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"));
+  const appLock = JSON.parse(readFileSync(new URL("../../extensions/hypeproof-chat/package-lock.json", import.meta.url), "utf8"));
+  const key = "node_modules/@hypeproof/measurement-core";
+  assert.equal(appLock.packages[key].integrity, workerLock.packages[key].integrity);
+  assert.equal(appLock.packages[key].resolved, workerLock.packages[key].resolved);
   assert.equal(serviceEvidence.makeEvidenceCatalog, core.makeEvidenceCatalog);
   assert.equal(serviceEvidence.resolveEvidenceSelections, core.resolveEvidenceSelections);
 });
@@ -76,34 +82,34 @@ test("MC-T02 shim files carry no logic of their own", () => {
     new URL("../../extensions/hypeproof-chat/src/nativeObservationContract.ts", import.meta.url),
   ]) {
     const code = readFileSync(url, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("//"));
-    assert.ok(code.length > 0 && code.every((l) => /^export \* from "[^"]+measurement-core\/[a-z-]+\.ts";$/.test(l)), `${url.pathname} is not a pure re-export`);
+    assert.ok(code.length > 0 && code.every((l) => /^export \* from "[^"]+measurement-core\/[a-z-]+(?:\.ts)?";$/.test(l)), `${url.pathname} is not a pure re-export`);
   }
 });
 
 test("MC-T02 core imports only its own files (no VS Code, Worker, Chalk, node or network modules)", () => {
-  const files = readdirSync(CORE_DIR).filter((f) => f.endsWith(".ts"));
+  const files = readdirSync(CORE_DIR).filter((f) => f.endsWith(".js"));
   // Still an exact list, one name longer: learning-events.ts joined the core with
   // hps-observation/2 (P1-A). A new file here is a deliberate act, so it is named
   // here or the suite fails. verification.ts joined with cr-verify (#1392): the
   // hps-verification/1 report is a view over the record's events, not a store (SX-48).
   // participant-evidence.ts joined with cr-evidence (#1394): returns, per-variant results and
   // the review input are views over the participant events and notes, not a store or a scorer.
-  assert.deepEqual(files.sort(), ["capability-models.ts", "evidence.ts", "index.ts", "interpretation.ts", "learning-events.ts", "legacy-observation.ts", "local-record.ts", "normalize.ts", "participant-evidence.ts", "verification.ts"]);
+  assert.deepEqual(files.sort(), ["capability-models.js", "evidence.js", "index.js", "interpretation.js", "learning-events.js", "legacy-observation.js", "local-record.js", "normalize.js", "participant-evidence.js", "verification.js"]);
   for (const f of files) {
     const src = readFileSync(new URL(f, CORE_DIR), "utf8");
     const specs = [...src.matchAll(/(?:import|export)[^'"]*?from\s+["']([^"']+)["']/g)].map((m) => m[1]);
-    for (const s of specs) assert.match(s, /^\.\/[a-z-]+\.ts$/, `${f} imports ${s}`);
+    for (const s of specs) assert.match(s, /^\.\/[a-z-]+\.js$/, `${f} imports ${s}`);
     assert.doesNotMatch(src, /\bfetch\(|XMLHttpRequest|WebSocket|process\.env|require\(/, `${f} reaches outside the core`);
   }
   // Negative control for the scan itself: a Service file that does import outside must be caught by the same regex.
   const outside = readFileSync(new URL("../src/lib/native-assessment.ts", import.meta.url), "utf8");
-  assert.ok([...outside.matchAll(/(?:import|export)[^'"]*?from\s+["']([^"']+)["']/g)].some((m) => !/^\.\/[a-z-]+\.ts$/.test(m[1])));
+  assert.ok([...outside.matchAll(/(?:import|export)[^'"]*?from\s+["']([^"']+)["']/g)].some((m) => !/^\.\/[a-z-]+\.js$/.test(m[1])));
 });
 
 test("MC-T02 core runs in a bare process without network, credentials or host APIs", () => {
   const script = `
     delete globalThis.fetch; delete globalThis.WebSocket;
-    const core = await import(${JSON.stringify(new URL("index.ts", CORE_DIR).href)});
+    const core = await import(${JSON.stringify(new URL("index.js", CORE_DIR).href)});
     const { batchCases } = await import(${JSON.stringify(new URL("./fixtures/measurement-core/legacy-cases.mjs", import.meta.url).href)});
     const { batch } = core.validateObservation(batchCases.normal_chain());
     // Local-record digests use the platform WebCrypto global, not a node module (#1020 unit 2).

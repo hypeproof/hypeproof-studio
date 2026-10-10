@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   measurement-package:
-    name: measurement / package and sync
+    name: measurement / released package compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,8 +28,6 @@ jobs:
       - run: npm ci
         working-directory: packages/measurement
       - run: npm test
-        working-directory: packages/measurement
-      - run: npm pack
         working-directory: packages/measurement
 
   workflow-shells:
@@ -100,6 +98,9 @@ jobs:
       - name: Install worker deps
         working-directory: worker
         run: npm ci
+      - name: Install App dependencies for cross-product contract tests
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --ignore-scripts --omit=optional
       - name: Run worker tests
         working-directory: worker
         run: npm test

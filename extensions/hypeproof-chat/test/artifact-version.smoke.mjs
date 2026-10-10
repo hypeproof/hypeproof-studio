@@ -13,7 +13,7 @@ import { join } from "node:path";
 const { artifactVersionFor, staticReferences } = await import("../src/artifactVersion.ts");
 const { browserResultRecord, browserResultEventText, readBrowserResultEvent, labelByVersion, MAX_RECORD_TEXT } = await import("../src/browserResult.ts");
 const { observationProblems } = await import("../src/experimentBrowser.ts");
-const { LocalRecord, canonicalJson } = await import("../../../worker/src/lib/measurement-core/local-record.ts");
+const { LocalRecord, canonicalJson } = await import("@hypeproof/measurement-core/local-record");
 
 let passed = 0;
 const ok = (name) => { passed++; console.log(`✓ ${name}`); };

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalReviewService } from '../src/localReviewService.ts';
 import { FileRecordStorage } from '../src/localRecordFile.ts';
-import { confirmPurpose } from '../../../worker/src/lib/measurement-core/index.ts';
+import { confirmPurpose } from '@hypeproof/measurement-core';
 const root = await mkdtemp(join(tmpdir(), 'hps-recovery-'));
 const raw = [
  { type:'session_meta', payload:{id:'recovery-session',cwd:'/project'} },

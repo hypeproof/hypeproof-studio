@@ -27,8 +27,8 @@ import {
   type BrowserResultBlobs,
   type BrowserResultRecord,
 } from "./browserResult.ts";
-import type { BlobMediaType } from "../../../worker/src/lib/measurement-core/local-record.ts";
-import { BROWSER_RESULT_REF_KEYS } from "../../../worker/src/lib/measurement-core/learning-events.ts";
+import type { BlobMediaType } from "@hypeproof/measurement-core/local-record";
+import { BROWSER_RESULT_REF_KEYS } from "@hypeproof/measurement-core/learning-events";
 import { failuresOf, type Observation } from "./experimentBrowser.ts";
 import { decodeTokenPayloadUnverified } from "./chatPanelHelpers.ts";
 import { createHash } from "node:crypto";

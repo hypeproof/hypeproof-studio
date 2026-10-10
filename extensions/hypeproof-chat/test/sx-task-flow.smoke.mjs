@@ -510,7 +510,7 @@ if (flow) {
 // ── 5. The same rules on the App's real record store ──────────────────────────
 
 const { FileRecordStorage } = await import("../src/localRecordFile.ts");
-const { LocalRecord } = await import("../../../worker/src/lib/measurement-core/index.ts");
+const { LocalRecord } = await import("@hypeproof/measurement-core");
 const root = await mkdtemp(join(tmpdir(), "hps-task-flow-"));
 try {
   if (flow && lesson) {

@@ -1,8 +1,8 @@
-import rubricCandidate from "../../../docs/curriculum/studio-trial/native-rubric.json" with { type: "json" };
+import rubricCandidate from "../../data/rubrics/native-rubric.json" with { type: "json" };
 // Kept, not archived. An installed Studio bundles a seven-key validator, so the
 // seven-Asset prompt is what its seat still has to be assessed with until it
 // updates (`servedCapabilityModel`).
-import rubricLegacy from "../../../docs/curriculum/studio-trial/native-rubric-legacy-seven.json" with { type: "json" };
+import rubricLegacy from "../../data/rubrics/native-rubric-legacy-seven.json" with { type: "json" };
 import {
   makeModuleDoc,
   moduleDocKey,

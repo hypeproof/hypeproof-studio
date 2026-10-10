@@ -2,7 +2,7 @@
 // plain data, and the same tool calls give identical results through the SDK coach's
 // adapter (`toMcpToolResult`) and the proxy coach's (`toProxyToolResult`).
 // cr-verify (#1392) adds its runner, session and view modules to BROWSER_TOOL_MODULES (the
-// scan follows them into measurement-core verification.ts) and re-runs this; the planted
+// scan follows them into the released measurement-core verification.js) and re-runs this; the planted
 // import below is planted in the verify runner too.
 //
 // Run: node --experimental-strip-types test/cr-provider-neutral.smoke.mjs
@@ -40,7 +40,7 @@ export function providerImports(source) {
   return hits;
 }
 
-/** The modules and every relative module they reach, with their provider imports. */
+/** Local modules and released portable packages they reach, with provider imports. */
 function scan(entries) {
   const seen = new Map();
   const queue = entries.map((f) => resolve(src, f));
@@ -51,9 +51,13 @@ function scan(entries) {
     seen.set(file, providerImports(text));
     IMPORT_RE.lastIndex = 0;
     for (let m = IMPORT_RE.exec(text); m; m = IMPORT_RE.exec(text)) {
+      if (m[1].startsWith("@hypeproof/")) {
+        queue.push(fileURLToPath(import.meta.resolve(m[1])));
+        continue;
+      }
       if (!m[1].startsWith(".")) continue;
       const base = resolve(dirname(file), m[1]);
-      const next = [base, `${base}.ts`].find((p) => existsSync(p) && /\.ts$/.test(p));
+      const next = [base, `${base}.ts`, `${base}.js`].find((p) => existsSync(p) && /\.(?:ts|js)$/.test(p));
       if (next) queue.push(next);
     }
   }
@@ -75,7 +79,9 @@ ok(`CR-T03 positive: ${graph.size} modules in the browser-tool graph import no p
 const runner = readFileSync(resolve(src, "experimentBrowser.ts"), "utf8");
 const verifyRunner = readFileSync(resolve(src, "verifyRunner.ts"), "utf8");
 assert.equal(providerImports(`import Anthropic from "@anthropic-ai/sdk";\n${verifyRunner}`).length, 1, "planted in the verify runner");
-assert.ok([...graph.keys()].some((f) => f.endsWith("measurement-core/verification.ts")), "the scan reached the verify core");
+const releasedVerification = fileURLToPath(import.meta.resolve("@hypeproof/measurement-core/verification"));
+assert.ok(graph.has(releasedVerification), "the scan reached the released verify core");
+assert.deepEqual(providerImports(`import OpenAI from "openai";\n${readFileSync(releasedVerification, "utf8")}`), ["openai"], "a planted provider import in the released core is caught");
 for (const planted of [
   `import Anthropic from "@anthropic-ai/sdk";`,
   `import type { Message } from "@anthropic-ai/sdk/resources";`,

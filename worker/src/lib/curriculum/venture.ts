@@ -10,6 +10,7 @@
 // ProductVersion (the R4 published file set) and TestLink. Pure: no env, no storage.
 
 import { identityFieldProblems } from "../measurement-core/learning-events.ts";
+import { publishPathProblem } from "@hypeproof/service-contracts/publish-path";
 
 export const VENTURE_SCHEMA = "hps-venture/1";
 
@@ -256,15 +257,7 @@ export function validateHypothesisStatement(v: unknown): string | null {
   return str(v, 500) ? v.trim() : null;
 }
 
-/** The R4 published-file-set path rule, shared by the App's set builder and the Worker. */
-export function publishPathProblem(p: unknown): string | null {
-  if (typeof p !== "string" || !p || p.length > 300) return "invalid_path";
-  if (p.includes("\\") || p.startsWith("/") || /[\u0000-\u001f\u007f]/.test(p)) return "invalid_path";
-  const segs = p.split("/");
-  if (segs.some((s) => s === "" || s === "." || s === "..")) return "invalid_path";
-  if (segs.some((s) => s.startsWith(".") || s === "node_modules")) return "excluded_path";
-  return null;
-}
+export { publishPathProblem } from "@hypeproof/service-contracts/publish-path";
 
 /** A Service-made id: prefix + 16 random hex characters, also a DNS label. */
 export function newVentureId(prefix: "prj" | "hyp" | "exp" | "drf" | "note" | "dec" | "stk" | "met"): string {

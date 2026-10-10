@@ -1,0 +1,16 @@
+{
+  "rubrics": [
+    {
+      "file": "native-rubric.json",
+      "source_path": "docs/curriculum/studio-trial/native-rubric.json",
+      "source_commit": "2a21b44468806a66862d4ceb5389addede9eef11",
+      "sha256": "c625f53b4765dddd30f2241d6ace7ee11b9a58599e1e3f9616eb48a4bc2fcb88"
+    },
+    {
+      "file": "native-rubric-legacy-seven.json",
+      "source_path": "docs/curriculum/studio-trial/native-rubric-legacy-seven.json",
+      "source_commit": "2a21b44468806a66862d4ceb5389addede9eef11",
+      "sha256": "9514c24634677129db7264875b8da12ad1b3dd19e7291b327fe67ef738a8fac5"
+    }
+  ]
+}

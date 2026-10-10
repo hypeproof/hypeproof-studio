@@ -16,9 +16,9 @@
 import { createHash } from "node:crypto";
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
-import { digestOf } from "../../../worker/src/lib/measurement-core/local-record.ts";
-import { publishPathProblem } from "../../../worker/src/lib/curriculum/venture.ts";
-import { scanFile, type ScanContext, type ScanHit } from "../../../worker/src/lib/curriculum/publish-scan.ts";
+import { digestOf } from "@hypeproof/measurement-core/local-record";
+import { publishPathProblem } from "@hypeproof/service-contracts/publish-path";
+import { scanFile, type ScanContext, type ScanHit } from "@hypeproof/service-contracts/publish-scan";
 import { ArtifactSetError, artifactVersionFor } from "./artifactVersion.ts";
 import { resolveWithinRoot } from "./liveServerHelpers.ts";
 
