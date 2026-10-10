@@ -89,9 +89,11 @@
 - Dev 앱 빌드·서명 검사, 로컬 Service와 참여 프로필 조회를 확인했고 실제 앱 프로세스를
   실행했다. 사용자가 앱을 닫은 뒤 요청에 따라 해당 App·Service 프로세스를 종료했다.
   구독 AI의 실제 응답과 사용자 수동 기능 검수·운영 배포·병합은 통과로 주장하지 않는다.
-- 최종 PR은 아직 생성 전이다. PR 검토 설정의 옛 Worker 소스 참조를 Service 고정 커밋으로
-  연결하고 검토 도구의 외부 소스 검증 지원을 정상화 중이다. DEC-022에 따라 머지 준비가
-  끝난 최종 PR 주소를 보고한다.
+- 최종 Studio PR #1587과 Service PR #16이 생성됐다. Service는 원격 CI가 모두 통과했다.
+  Studio는 이전된 registry 경로와 두 독립 CI job의 공개 testkit 설치 누락을 수정했다.
+  같은 Node22의 격리 체크아웃에서 해당 명령이 통과했으며 원격 재검증 결과를 기다린다.
+  외부 소스 검토 도구 지원은 Harness #308의 별도 후속이며 런타임 병합 전제가 아니다.
+  DEC-022에 따라 필요한 원격 검사 통과와 머지 상태를 확인한 뒤 최종 주소를 보고한다.
 - Luwak 후속 이슈 6개는 backlog로 추적하며 추가 패키징 작업은 중단했다.
 - 진행 기록: `service-extraction-progress.json`.
   칸반: https://github.com/orgs/hypeproof/projects/1.

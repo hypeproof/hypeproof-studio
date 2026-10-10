@@ -37,3 +37,9 @@ lane, or `npm run test:service-integration -- --all` for the complete preserved
 inventory. Individual commands may be run directly with Node's
 `--experimental-strip-types`; a passing focused result does not establish that
 unexecuted inventory entries passed.
+
+`npm run test:registry-contracts` executes the former product registry drift
+locks from their actual consumer paths or the integrity-pinned public Service
+package. The trial evidence check keeps every original assertion against
+Studio-owned curriculum/personas and the public evaluator. Registry existence
+and missing-file negative controls remain enforced by the registry workflow.

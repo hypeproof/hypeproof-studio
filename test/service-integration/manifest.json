@@ -1042,6 +1042,30 @@
         "CR-T02 switch OFF: every review route, with real ids and a student, a director or no token, answers as an unknown route and writes nothing; ON they answer; the director probe the App uses follows the switch"
       ],
       "consumerSha256": "9a08fed8c1e21e64a8379b1aef625ff19740b70ce8c24ff2b573928426d696aa"
+    },
+    {
+      "id": "trial-evidence.test",
+      "classification": "studio-integration",
+      "reason": "Validates Studio-owned trial curriculum/personas against the pinned public Service evaluator; preserves every former trial evidence assertion.",
+      "groups": [
+        "test",
+        "test:trial"
+      ],
+      "originalCommands": [
+        "node --experimental-strip-types --test test/trial-evidence.test.mjs"
+      ],
+      "originalSourceUrl": "https://github.com/hypeproof/hypeproof-studio/blob/fb8101da13ece2046ef17db8a9b5a02ac3577875/worker/test/trial-evidence.test.mjs",
+      "sourceSha256": "9d4b438da38848700d68fe4be452ac8ce3f00a8bbee6d51354c11df791a385bb",
+      "file": "trial-evidence.test.mjs",
+      "args": [
+        "--experimental-strip-types",
+        "--test",
+        "trial-evidence.test.mjs"
+      ],
+      "retainedStudioAssertions": [
+        "Trial curriculum validity, persona verdicts, unobserved/coached/transfer evidence and invalid input refusal"
+      ],
+      "consumerSha256": "d792ca9a7b5ab1658a49337116e55315d9575076e44f8df893589492e4f6370a"
     }
   ]
 }

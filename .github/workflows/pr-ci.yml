@@ -212,6 +212,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install pinned public Service testkit
+        run: npm ci
       - name: Install extension dependencies without native model binaries
         working-directory: extensions/hypeproof-chat
         run: npm ci
@@ -234,6 +236,8 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: extensions/hypeproof-chat/package-lock.json
+      - name: Install pinned public Service testkit
+        run: npm ci
       - name: Install extension deps
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
         # `claude` binary package (#282) — typecheck/smoke never spawn it.
