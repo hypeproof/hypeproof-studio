@@ -2,7 +2,7 @@
 # =============================================================================
 # HypeProof one-line bootstrap (macOS / Linux)
 #
-#   curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install.sh | bash
+#   gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > /tmp/hps-bootstrap.sh && bash /tmp/hps-bootstrap.sh
 #
 # This is the POSIX-sh sibling of install.ps1 (Windows). Both read ONE
 # versioned dependency manifest (hypeproof-deps.yaml) as the single source of
@@ -33,7 +33,7 @@ set -eu
 # ----------------------------------------------------------------------------- #
 MANIFEST_SCHEMA=1
 
-STUDIO_RELEASES_REPO="jayleekr/hypeproof-studio-releases"
+STUDIO_RELEASES_REPO="hypeproof/hypeproof-studio-releases"
 # "latest" resolves from the releases API at run time. A hard pin here goes stale
 # the moment a release ships (it sat at 0.1.33 while the repo served v0.1.34),
 # and every participant would then install a version behind. Override with
@@ -56,7 +56,7 @@ SEED_SCRIPT_NAME="seed-sdk-binary.sh"
 # It must point at a tree that ACTUALLY hosts scripts/seed-sdk-binary.sh: that is
 # this repo, not the releases repo (which carries the Studio binaries only).
 # Override with HPS_RAW_BASE once a mirror is published.
-RAW_BASE="${HPS_RAW_BASE:-https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts}"
+RAW_BASE="${HPS_RAW_BASE:-https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts}"
 
 HPS_HOME="${HOME}/.hypeproof"
 RECEIPT="${HPS_HOME}/receipt.json"
@@ -117,9 +117,20 @@ _hps_is_piped() {
   [ -r "$0" ] || return 0
   return 1
 }
+# Private scripts use the member login; a custom mirror never receives a token.
+fetch_bootstrap_script() {
+  _file="$1"; _dest="$2"
+  if [ "$RAW_BASE" = "https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts" ]; then
+    command -v gh >/dev/null 2>&1 || die "Install GitHub CLI and run gh auth login before bootstrapping."
+    gh api "repos/hypeproof/hypeproof-studio/contents/scripts/$_file" -H 'Accept: application/vnd.github.raw' > "$_dest"
+  else
+    curl -fsSL "${RAW_BASE}/$_file" -o "$_dest"
+  fi
+}
+
 if [ -z "${HPS_REEXEC:-}" ] && _hps_is_piped; then
   _self="$(mktemp -t hps-install)" || die "mktemp failed"
-  curl -fsSL "${RAW_BASE}/install.sh" -o "$_self" \
+  fetch_bootstrap_script install.sh "$_self" \
     || die "installer re-fetch failed: ${RAW_BASE}/install.sh"
   HPS_REEXEC=1 exec bash "$_self" "$@"
 fi
@@ -441,66 +452,19 @@ resolve_studio_version() {
   if have gh; then
     _tag="$(gh release view --repo "$STUDIO_RELEASES_REPO" --json tagName --jq .tagName 2>/dev/null || true)"
   fi
-  if [ -z "$_tag" ]; then
-    _tag="$(curl -fsSL "https://api.github.com/repos/${STUDIO_RELEASES_REPO}/releases/latest" 2>/dev/null \
-      | grep -o '"tag_name": *"[^"]*"' | head -n1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')"
-  fi
   [ -n "$_tag" ] || die "could not resolve the latest Studio release from ${STUDIO_RELEASES_REPO} (set HPS_STUDIO_VERSION=<x.y.z>)"
   STUDIO_VERSION="${_tag#v}"
   info "Studio version: ${STUDIO_VERSION} (resolved from latest)"
 }
 
-gh_asset_url() {  # gh_asset_url <glob> -> download URL of first matching asset for STUDIO_VERSION
+gh_asset_url() {
   _glob="$1"
-  _api="https://api.github.com/repos/${STUDIO_RELEASES_REPO}/releases/tags/v${STUDIO_VERSION}"
-  _auth=""; [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && _auth="-H \"Authorization: Bearer ${GH_TOKEN:-$GITHUB_TOKEN}\""
-  # Prefer gh (handles auth + pagination) when available; else curl the API.
-  # Match on the asset NAME, never on a URL basename.
-  #
-  # The two sources spell the download URL differently and mixing them up yields
-  # the literal string "null":
-  #   gh release view --json assets  ->  .url      (browser download)  /  .apiUrl
-  #   REST /releases/tags/<tag>      ->  .browser_download_url         /  .url (api)
-  #
-  # `have gh` is NOT proof gh can talk to the API. check_deps brew-installs gh
-  # from the manifest and only WARNS when it is unauthenticated, so on every
-  # fresh machine install_studio reaches here with a gh that exits 4 and prints
-  # nothing to stdout ("please run: gh auth login"). The old code returned
-  # unconditionally after the gh pipeline, so an empty result skipped the
-  # anonymous curl fallback entirely and the caller reported the asset as missing —
-  # "No Studio asset matching 'HypeProof-Studio-darwin-arm64*.zip' … build may
-  # not exist yet" — while the asset was in fact published and downloadable
-  # without auth. Only return when gh actually produced a URL; otherwise fall
-  # through, exactly as resolve_studio_version() already does for the tag.
-  # NOTE: the `case … in $_glob)` below must never sit inside a $(…) — macOS
-  # /bin/bash is 3.2, which cannot parse an unquoted glob pattern in a case arm
-  # inside a command substitution ("syntax error near unexpected token
-  # `newline'"). `curl … | bash` runs under exactly that shell, so capture gh's
-  # output FIRST and match outside the substitution.
-  if have gh; then
-    # `|| _assets=""` is load-bearing under `set -e` (line 29): assigning from a
-    # command substitution that exits non-zero (unauthenticated gh exits 4)
-    # aborts the whole script right here, before die() can ever report why.
-    _assets="$(gh release view "v${STUDIO_VERSION}" --repo "$STUDIO_RELEASES_REPO" \
-      --json assets --jq '.assets[] | "\(.name)\t\(.url)"' 2>/dev/null)" || _assets=""
-    # Non-empty means gh reached the API and we saw the authoritative asset
-    # list — match against it and return, even if nothing matches.
-    if [ -n "$_assets" ]; then
-      printf '%s\n' "$_assets" | while IFS="$(printf '\t')" read -r _name _dl; do
-        # shellcheck disable=SC2254  # $_glob is INTENDED as a glob pattern here
-        case "$_name" in $_glob) echo "$_dl"; break ;; esac
-      done
-      return 0
-    fi
-    # Empty means gh could not talk to the API at all — fall through to curl.
-  fi
-  # curl fallback: match browser_download_url lines against the glob.
-  curl -fsSL "$_api" 2>/dev/null | grep -o '"browser_download_url": *"[^"]*"' | \
-    sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/' | \
-    while IFS= read -r u; do
-      # shellcheck disable=SC2254  # $_glob is INTENDED as a glob pattern here
-      case "$(basename "$u")" in $_glob) echo "$u"; break ;; esac
-    done
+  have gh || die "Install GitHub CLI and run gh auth login with your member account."
+  _assets="$(gh api "repos/${STUDIO_RELEASES_REPO}/releases/tags/v${STUDIO_VERSION}" \
+    --jq '.assets[] | "\(.name)\t\(.url)"')" || die "Private release access denied; run gh auth login."
+  printf '%s\n' "$_assets" | while IFS="$(printf '\t')" read -r _name _dl; do
+    case "$_name" in $_glob) echo "$_dl"; break ;; esac
+  done
 }
 
 install_studio_mac() {
@@ -524,12 +488,13 @@ install_studio_mac() {
   _url="$(gh_asset_url "$_glob")"
   [ -n "$_url" ] || die "No Studio asset matching '${_glob}' in ${STUDIO_RELEASES_REPO} v${STUDIO_VERSION} (fail-closed: ${PLATFORM} build may not exist yet)"
   _tmp="$(mktemp -d)"; _zip="${_tmp}/studio.zip"
-  info "Downloading $(basename "$_url")…"
-  if have gh && printf '%s' "$_url" | grep -q 'api.github.com'; then
-    gh api "$_url" > "$_zip" 2>/dev/null || curl -fsSL -o "$_zip" "$_url"
-  else
-    curl -fsSL -o "$_zip" "$_url" || die "download failed: $_url"
-  fi
+  printf '%s' "$_url" | grep -Eq '^https://api\.github\.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/[0-9]+$' || die "Untrusted release asset URL"
+  _digest="$(gh api "$_url" --jq '.digest')" || die "Cannot read asset digest"
+  printf '%s' "$_digest" | grep -Eq '^sha256:[a-fA-F0-9]{64}$' || die "Missing release SHA-256"
+  info "Downloading verified private release…"
+  gh api "$_url" -H 'Accept: application/octet-stream' > "$_zip" || die "Private release download failed"
+  _actual="$(shasum -a 256 "$_zip" | awk '{print $1}')"
+  [ "$_actual" = "${_digest#sha256:}" ] || die "Release SHA-256 mismatch"
   info "Unzipping to /Applications…"
   ( cd "$_tmp" && unzip -q -o "$_zip" ) || die "unzip failed"
   _app="$(cd "$_tmp" && find . -maxdepth 2 -name '*.app' -type d | head -n1)"
@@ -556,7 +521,7 @@ resolve_seed_script() {
     printf '%s\n' "${_self_dir}/${SEED_SCRIPT_NAME}"; return 0
   fi
   _dl="$(mktemp -d)/${SEED_SCRIPT_NAME}"
-  if curl -fsSL -o "$_dl" "${RAW_BASE}/${SEED_SCRIPT_NAME}" 2>/dev/null; then
+  if fetch_bootstrap_script "$SEED_SCRIPT_NAME" "$_dl"; then
     printf '%s\n' "$_dl"; return 0
   fi
   return 1

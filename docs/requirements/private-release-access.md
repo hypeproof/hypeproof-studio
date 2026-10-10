@@ -7,12 +7,15 @@ and update checks are available to members with repository read access.
 ## Requirements
 
 - Resolve the latest release and download assets using the member's existing
-  GitHub CLI login or explicit `HPS_RELEASE_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`.
+  GitHub CLI login or explicit `GH_TOKEN`, `GITHUB_TOKEN`. The app updater and
+  app-only release installers additionally accept `HPS_RELEASE_TOKEN`.
   Never embed or persist a shared credential in the app or installer.
 - Authenticate only the exact organization release API. An asset redirect may
   receive no Authorization header and must target a known GitHub asset host.
 - Keep byte count, SHA-256, timeout, partial-file cleanup and existing-file guards.
   Missing credentials, missing digest, or a denied API response fail explicitly.
+- Private source scripts and SDK seed scripts use the member GitHub CLI login.
+  Custom script mirrors never receive a repository credential.
 - Windows and macOS bootstrap scripts require GitHub CLI and verify SHA-256
   before launching or installing. Preserve the existing platform restrictions.
 - The private cross-repository requirement workflow passes a Contents-read token
