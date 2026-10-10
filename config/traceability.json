@@ -172,7 +172,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/lesson-feature-policy.test.mjs"
+          "path": "worker/test/lesson-feature-policy.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -185,7 +187,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/lesson-help-mode.test.mjs"
+          "path": "worker/test/lesson-help-mode.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -269,7 +273,9 @@
           "path": "docs/testing/lesson-effort.md"
         },
         {
-          "path": "worker/test/lesson-effort-policy.test.mjs"
+          "path": "worker/test/lesson-effort-policy.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/model-selection.smoke.mjs"
@@ -284,7 +290,9 @@
           "path": "e2e/tests/native-effort-old-client.spec.ts"
         },
         {
-          "path": "worker/test/request-settings-d1.test.mjs"
+          "path": "worker/test/request-settings-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -302,10 +310,12 @@
           "path": "docs/testing/studio-personas-gpt.md"
         },
         {
-          "path": "worker/test/gpt-model-policy.test.mjs"
+          "path": "worker/test/gpt-model-policy.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/codex-rehearsal.test.mjs"
+          "path": "test/service-integration/codex-rehearsal.test.mjs"
         },
         {
           "path": "e2e/tests/native-personas.spec.ts"
@@ -347,13 +357,19 @@
           "path": "docs/testing/usage-observation.md"
         },
         {
-          "path": "worker/test/usage-observation.test.mjs"
+          "path": "worker/test/usage-observation.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/usage-report.test.mjs"
+          "path": "worker/test/usage-report.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/usage-log-status.test.mjs"
+          "path": "worker/test/usage-log-status.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/admin-usage/run.mjs"
@@ -413,7 +429,9 @@
           "path": "docs/testing/model-access-usage.md"
         },
         {
-          "path": "worker/test/model-usage.test.mjs"
+          "path": "worker/test/model-usage.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/tests/native-models.spec.ts"
@@ -453,7 +471,9 @@
           "path": "extensions/hypeproof-chat/test/workspace-preparation.smoke.mjs"
         },
         {
-          "path": "worker/test/trial-entry.test.mjs"
+          "path": "worker/test/trial-entry.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/tests/native-trial-guidance.spec.ts"
@@ -549,10 +569,12 @@
       ],
       "sources": [
         {
-          "path": "worker/test/measurement-core.test.mjs"
+          "path": "test/service-integration/measurement-core.test.mjs"
         },
         {
-          "path": "worker/test/fixtures/measurement-core/legacy-verdicts.json"
+          "path": "worker/test/fixtures/measurement-core/legacy-verdicts.json",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/measurement-core-shim.smoke.mjs"
@@ -569,7 +591,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/measurement-core-local-record.test.mjs"
+          "path": "worker/test/measurement-core-local-record.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -583,13 +607,19 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/access-contracts.ts"
+          "path": "worker/src/lib/access-contracts.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/access.ts"
+          "path": "worker/src/routes/access.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0007-access-contracts.sql"
+          "path": "worker/migrations/0007-access-contracts.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -603,10 +633,14 @@
       ],
       "sources": [
         {
-          "path": "worker/test/access-contracts.test.mjs"
+          "path": "worker/test/access-contracts.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/access-contracts-d1.test.mjs"
+          "path": "worker/test/access-contracts-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -620,10 +654,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/usage-costs.ts"
+          "path": "worker/src/lib/usage-costs.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0008-usage-costs.sql"
+          "path": "worker/migrations/0008-usage-costs.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -637,16 +675,24 @@
       ],
       "sources": [
         {
-          "path": "worker/test/usage-costs.test.mjs"
+          "path": "worker/test/usage-costs.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/usage-costs-d1.test.mjs"
+          "path": "worker/test/usage-costs-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/sse-cost-receipts.test.mjs"
+          "path": "worker/test/sse-cost-receipts.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/openai-usage-shape.test.mjs"
+          "path": "worker/test/openai-usage-shape.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -662,13 +708,19 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/budgets.ts"
+          "path": "worker/src/lib/budgets.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/budget-admission.ts"
+          "path": "worker/src/lib/budget-admission.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0009-budget-admission.sql"
+          "path": "worker/migrations/0009-budget-admission.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -682,13 +734,19 @@
       ],
       "sources": [
         {
-          "path": "worker/test/budget-admission.test.mjs"
+          "path": "worker/test/budget-admission.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/budget-admission-d1.test.mjs"
+          "path": "worker/test/budget-admission-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/harness/budgets.mjs"
+          "path": "worker/test/harness/budgets.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -703,13 +761,19 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/budget-views.ts"
+          "path": "worker/src/lib/budget-views.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0010-budget-surfaces.sql"
+          "path": "worker/migrations/0010-budget-surfaces.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/ui/budgets-admin.html"
+          "path": "worker/src/ui/budgets-admin.html",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/src/ui/budgets.html"
@@ -732,10 +796,14 @@
       ],
       "sources": [
         {
-          "path": "worker/test/budget-surfaces.test.mjs"
+          "path": "worker/test/budget-surfaces.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/budget-surfaces-d1.test.mjs"
+          "path": "worker/test/budget-surfaces-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/test/budgets.test.mjs"
@@ -765,7 +833,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/budget-recovery.test.mjs"
+          "path": "worker/test/budget-recovery.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/access-budgets/sdk.mjs"
@@ -864,7 +934,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/audio-refusal-contract.test.mjs"
+          "path": "worker/test/audio-refusal-contract.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -877,7 +949,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/inbound-images.test.mjs"
+          "path": "worker/test/inbound-images.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -894,10 +968,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/messages.ts"
+          "path": "worker/src/routes/messages.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/inbound-images.ts"
+          "path": "worker/src/lib/inbound-images.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -910,7 +988,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/voice-linkage-contract.test.mjs"
+          "path": "worker/test/voice-linkage-contract.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -924,7 +1004,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/voice-linkage-contract.ts"
+          "path": "worker/src/lib/voice-linkage-contract.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1097,7 +1179,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/deep-health-auth.test.mjs"
+          "path": "worker/test/deep-health-auth.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1126,7 +1210,9 @@
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
         },
         {
-          "path": "worker/src/routes/chat.ts"
+          "path": "worker/src/routes/chat.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1216,7 +1302,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/profiles/types.ts"
+          "path": "worker/src/profiles/types.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1257,7 +1345,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chat.ts"
+          "path": "worker/src/routes/chat.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1295,7 +1385,9 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/vscode.ts"
         },
         {
-          "path": "worker/src/lib/activity-identity.ts"
+          "path": "worker/src/lib/activity-identity.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1315,7 +1407,9 @@
           "path": "extensions/hypeproof-chat/test/activity-draft.smoke.mjs"
         },
         {
-          "path": "worker/test/activity-identity.test.mjs"
+          "path": "worker/test/activity-identity.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/tests/native-unified-switch.spec.ts"
@@ -1350,10 +1444,14 @@
           "path": "e2e/unified-release/public.mjs"
         },
         {
-          "path": "worker/src/lib/synthetic-cohort.ts"
+          "path": "worker/src/lib/synthetic-cohort.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/profiles/synthetic-release-acceptance.ts"
+          "path": "worker/src/profiles/synthetic-release-acceptance.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "scripts/check-live-sessions.mjs"
@@ -1400,7 +1498,9 @@
           "path": "e2e/unified-release/gate.test.mjs"
         },
         {
-          "path": "worker/test/synthetic-cohort.test.mjs"
+          "path": "worker/test/synthetic-cohort.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "scripts/test-check-live-sessions.mjs"
@@ -1486,7 +1586,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/model-substitution.test.mjs"
+          "path": "worker/test/model-substitution.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1500,7 +1602,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/translate.ts"
+          "path": "worker/src/lib/translate.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -1897,10 +2001,14 @@
       ],
       "sources": [
         {
-          "path": "worker/test/feedback-loop.test.mjs"
+          "path": "worker/test/feedback-loop.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/feedback-loop-d1.test.mjs"
+          "path": "worker/test/feedback-loop-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/test/feedback-loop-forward.test.mjs"
@@ -1924,16 +2032,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/feedback-loop.ts"
+          "path": "worker/src/lib/feedback-loop.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/lesson-retrospective.ts"
+          "path": "worker/src/routes/lesson-retrospective.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/classroom.ts"
+          "path": "worker/src/routes/classroom.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0039-feedback-loop.sql"
+          "path": "worker/migrations/0039-feedback-loop.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/src/ui/authoring.html"
@@ -2115,10 +2231,14 @@
       ],
       "sources": [
         {
-          "path": "worker/test/authoring-rehearsal.test.mjs"
+          "path": "worker/test/authoring-rehearsal.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/authoring-mission.test.mjs"
+          "path": "worker/test/authoring-mission.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/lesson-focus.smoke.mjs"
@@ -2145,16 +2265,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/lesson-rehearsal.ts"
+          "path": "worker/src/lib/lesson-rehearsal.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-rehearsal-store.ts"
+          "path": "worker/src/lib/lesson-rehearsal-store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/rehearsal-report.ts"
+          "path": "worker/src/routes/rehearsal-report.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0026-authoring-rehearsal.sql"
+          "path": "worker/migrations/0026-authoring-rehearsal.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/src/ui/authoring.html"
@@ -2209,7 +2337,7 @@
           "path": "docs/testing/classroom-admin.md"
         },
         {
-          "path": "worker/test/classroom-ops-review.test.mjs"
+          "path": "test/service-integration/classroom-ops-review.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/classroom-ops-review.test.mjs"
@@ -2218,7 +2346,7 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops-expiry-review.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-report-sessions.test.mjs"
+          "path": "test/service-integration/classroom-ops-report-sessions.test.mjs"
         },
         {
           "path": "e2e/classroom/g4-journey.mjs"
@@ -2243,19 +2371,27 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/classroom-ops.ts"
+          "path": "worker/src/routes/classroom-ops.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-ops.ts"
+          "path": "worker/src/lib/classroom-ops.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0011-classroom-ops.sql"
+          "path": "worker/migrations/0011-classroom-ops.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops.test.mjs"
+          "path": "worker/test/classroom-ops.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-d1.test.mjs"
+          "path": "test/service-integration/classroom-ops-d1.test.mjs"
         },
         {
           "path": "chalk/src/ui/manage.html"
@@ -2276,16 +2412,22 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops.smoke.mjs"
         },
         {
-          "path": "worker/migrations/0012-classroom-ops-commands.sql"
+          "path": "worker/migrations/0012-classroom-ops-commands.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-commands.test.mjs"
+          "path": "worker/test/classroom-ops-commands.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-device.test.mjs"
         },
         {
-          "path": "worker/test/fixtures/schema-pre-0011.sql"
+          "path": "worker/test/fixtures/schema-pre-0011.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomOpsCommands.ts"
@@ -2294,13 +2436,19 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs"
         },
         {
-          "path": "worker/migrations/0013-classroom-ops-control.sql"
+          "path": "worker/migrations/0013-classroom-ops-control.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-ops-control.ts"
+          "path": "worker/src/lib/classroom-ops-control.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-control.test.mjs"
+          "path": "worker/test/classroom-ops-control.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/runtimeReset.ts"
@@ -2309,67 +2457,95 @@
           "path": "extensions/hypeproof-chat/test/runtime-reset.smoke.mjs"
         },
         {
-          "path": "worker/migrations/0014-classroom-ops-evidence-review.sql"
+          "path": "worker/migrations/0014-classroom-ops-evidence-review.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-coaching.test.mjs"
+          "path": "worker/test/classroom-ops-coaching.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/classroom-collect.ts"
+          "path": "worker/src/routes/classroom-collect.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-collect.ts"
+          "path": "worker/src/lib/classroom-collect.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0015-classroom-collection.sql"
+          "path": "worker/migrations/0015-classroom-collection.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-collect.test.mjs"
+          "path": "test/service-integration/classroom-ops-collect.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/src/evidenceSnapshot.ts"
         },
         {
-          "path": "worker/test/classroom-ops-snapshot-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-snapshot-device.test.mjs"
         },
         {
-          "path": "worker/src/routes/classroom-reports.ts"
+          "path": "worker/src/routes/classroom-reports.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-report.ts"
+          "path": "worker/src/lib/classroom-report.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0016-classroom-report-jobs.sql"
+          "path": "worker/migrations/0016-classroom-report-jobs.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-reports.test.mjs"
+          "path": "test/service-integration/classroom-ops-reports.test.mjs"
         },
         {
-          "path": "worker/src/routes/classroom-delivery.ts"
+          "path": "worker/src/routes/classroom-delivery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-delivery.ts"
+          "path": "worker/src/lib/classroom-delivery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0017-classroom-delivery.sql"
+          "path": "worker/migrations/0017-classroom-delivery.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-delivery.test.mjs"
+          "path": "test/service-integration/classroom-ops-delivery.test.mjs"
         },
         {
           "path": "scripts/classroom-report-runner.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-regression.test.mjs"
+          "path": "worker/test/classroom-ops-regression.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0018-classroom-snapshot-binding.sql"
+          "path": "worker/migrations/0018-classroom-snapshot-binding.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-evaluator.ts"
+          "path": "worker/src/lib/classroom-evaluator.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-evaluator.test.mjs"
+          "path": "test/service-integration/classroom-ops-evaluator.test.mjs"
         },
         {
           "path": "scripts/classroom-legacy-hain7.mjs"
@@ -2378,7 +2554,7 @@
           "path": "extensions/hypeproof-chat/src/evidenceSnapshotStore.ts"
         },
         {
-          "path": "worker/test/classroom-ops-review.test.mjs"
+          "path": "test/service-integration/classroom-ops-review.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/classroom-ops-review.test.mjs"
@@ -2387,13 +2563,17 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops-expiry-review.test.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-report-html.ts"
+          "path": "worker/src/lib/classroom-report-html.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-delivery-resend.ts"
+          "path": "worker/src/lib/classroom-delivery-resend.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-provider.test.mjs"
+          "path": "test/service-integration/classroom-ops-provider.test.mjs"
         },
         {
           "path": "scripts/classroom-report-pdf.mjs"
@@ -2402,25 +2582,33 @@
           "path": "e2e/classroom/report-page.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-erasure.ts"
+          "path": "worker/src/lib/classroom-erasure.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-erasure.test.mjs"
+          "path": "test/service-integration/classroom-ops-erasure.test.mjs"
         },
         {
           "path": "e2e/classroom/ops-roster.mjs"
         },
         {
-          "path": "worker/migrations/0019-classroom-report-attempts.sql"
+          "path": "worker/migrations/0019-classroom-report-attempts.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": ".github/workflows/classroom-ops.yml"
         },
         {
-          "path": "worker/migrations/0021-classroom-erasure-log.sql"
+          "path": "worker/migrations/0021-classroom-erasure-log.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0020-classroom-viewer-check.sql"
+          "path": "worker/migrations/0020-classroom-viewer-check.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/classroom/mac-devhost.mjs"
@@ -2435,7 +2623,9 @@
           "path": "e2e/classroom/evaluator-trial.mjs"
         },
         {
-          "path": "worker/scripts/classroom-ops-d1-check.mjs"
+          "path": "worker/scripts/classroom-ops-d1-check.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/classroom/mac-demo.mjs"
@@ -2447,10 +2637,12 @@
           "path": "e2e/classroom/ops-selection.mjs"
         },
         {
-          "path": "worker/migrations/0022-classroom-collect-scope.sql"
+          "path": "worker/migrations/0022-classroom-collect-scope.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-selected-collect.test.mjs"
+          "path": "test/service-integration/classroom-ops-selected-collect.test.mjs"
         },
         {
           "path": "e2e/classroom/delivery-trial.mjs"
@@ -2468,43 +2660,59 @@
           "path": "e2e/classroom/win-field/README.md"
         },
         {
-          "path": "worker/scripts/classroom-ops-staging-check.mjs"
+          "path": "worker/scripts/classroom-ops-staging-check.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/wrangler.staging.toml"
+          "path": "worker/wrangler.staging.toml",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/wrangler.staging.toml"
         },
         {
-          "path": "worker/test/classroom-ops-spool-seq.test.mjs"
+          "path": "test/service-integration/classroom-ops-spool-seq.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-staging-config.test.mjs"
+          "path": "test/service-integration/classroom-ops-staging-config.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/session-spool-seq.smoke.mjs"
         },
         {
-          "path": "worker/src/routes/classroom-distribution.ts"
+          "path": "worker/src/routes/classroom-distribution.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-distribution.ts"
+          "path": "worker/src/lib/classroom-distribution.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-distribution-store.ts"
+          "path": "worker/src/lib/classroom-distribution-store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0023-classroom-distribution.sql"
+          "path": "worker/migrations/0023-classroom-distribution.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-distribution.test.mjs"
+          "path": "worker/test/classroom-ops-distribution.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-distribution-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-distribution-device.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-distribution-d1.test.mjs"
+          "path": "worker/test/classroom-ops-distribution-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomInbox.ts"
@@ -2525,37 +2733,55 @@
           "path": "e2e/classroom/ops-distribution.mjs"
         },
         {
-          "path": "worker/src/lib/lesson-binding.ts"
+          "path": "worker/src/lib/lesson-binding.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-binding-store.ts"
+          "path": "worker/src/lib/lesson-binding-store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-binding-activate.ts"
+          "path": "worker/src/lib/lesson-binding-activate.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-basis.ts"
+          "path": "worker/src/lib/lesson-basis.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0024-classroom-lesson-bindings.sql"
+          "path": "worker/migrations/0024-classroom-lesson-bindings.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/lesson-binding.test.mjs"
+          "path": "worker/test/lesson-binding.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-settings.test.mjs"
+          "path": "worker/test/classroom-ops-lesson-settings.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-basis.test.mjs"
+          "path": "test/service-integration/classroom-ops-lesson-basis.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-settings-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-lesson-settings-device.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-settings-d1.test.mjs"
+          "path": "worker/test/classroom-ops-lesson-settings-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-review.test.mjs"
+          "path": "worker/test/classroom-ops-lesson-review.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/lessonBinding.ts"
@@ -2573,10 +2799,14 @@
           "path": "e2e/classroom/mac-lesson-settings.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-recovery.ts"
+          "path": "worker/src/lib/classroom-recovery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-recovery.test.mjs"
+          "path": "worker/test/classroom-ops-recovery.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/previewRecovery.ts"
@@ -2591,10 +2821,14 @@
           "path": "e2e/classroom/mac-window.mjs"
         },
         {
-          "path": "worker/src/routes/classroom.ts"
+          "path": "worker/src/routes/classroom.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-help.test.mjs"
+          "path": "worker/test/classroom-help.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomHelp.ts"
@@ -2627,7 +2861,9 @@
           "path": "e2e/classroom/mac-help-windows.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-report-input.ts"
+          "path": "worker/src/lib/classroom-report-input.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -2914,10 +3150,12 @@
           "path": ".claude/evals/STUDIO_UX_EVAL.md"
         },
         {
-          "path": "worker/test/session-design-learning.test.mjs"
+          "path": "test/service-integration/session-design-learning.test.mjs"
         },
         {
-          "path": "worker/test/learning-prompt.test.mjs"
+          "path": "worker/test/learning-prompt.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/sx-audit.mjs"
@@ -2944,10 +3182,14 @@
           "path": "extensions/hypeproof-chat/test/sx-mission-header.smoke.mjs"
         },
         {
-          "path": "worker/test/learning-events.test.mjs"
+          "path": "worker/test/learning-events.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/measurement-core/learning-cases.mjs"
+          "path": "worker/test/fixtures/measurement-core/learning-cases.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/sx-evidence-gate.smoke.mjs"
@@ -2991,16 +3233,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/learning-design.ts"
+          "path": "worker/src/lib/learning-design.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/learning-prompt.ts"
+          "path": "worker/src/lib/learning-prompt.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/session-design.ts"
+          "path": "worker/src/lib/session-design.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chat-gate.ts"
+          "path": "worker/src/lib/chat-gate.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/MissionHeader.tsx"
@@ -3029,13 +3279,19 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/session-design.ts"
+          "path": "worker/src/lib/session-design.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/learning-prompt.ts"
+          "path": "worker/src/lib/learning-prompt.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-delivery.ts"
+          "path": "worker/src/lib/lesson-delivery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3052,7 +3308,9 @@
           "path": "docs/testing/chalk-mvp.md"
         },
         {
-          "path": "worker/test/chalk-session-design-fields.test.mjs"
+          "path": "worker/test/chalk-session-design-fields.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3065,7 +3323,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-pedagogy-machine.test.mjs"
+          "path": "worker/test/chalk-pedagogy-machine.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3080,22 +3340,34 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/measurement-core/learning-events.ts"
+          "path": "worker/src/lib/measurement-core/learning-events.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/legacy-observation.ts"
+          "path": "worker/src/lib/measurement-core/legacy-observation.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/interpretation.ts"
+          "path": "worker/src/lib/measurement-core/interpretation.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/local-record.ts"
+          "path": "worker/src/lib/measurement-core/local-record.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/normalize.ts"
+          "path": "worker/src/lib/measurement-core/normalize.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/index.ts"
+          "path": "worker/src/lib/measurement-core/index.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3194,34 +3466,54 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/curriculum.ts"
+          "path": "worker/src/routes/curriculum.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/curriculum-test-origin.ts"
+          "path": "worker/src/routes/curriculum-test-origin.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/venture.ts"
+          "path": "worker/src/lib/curriculum/venture.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/store.ts"
+          "path": "worker/src/lib/curriculum/store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/publish-scan.ts"
+          "path": "worker/src/lib/curriculum/publish-scan.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/test-origin.ts"
+          "path": "worker/src/lib/curriculum/test-origin.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/session-token.ts"
+          "path": "worker/src/lib/curriculum/session-token.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/participant-record.ts"
+          "path": "worker/src/lib/curriculum/participant-record.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/participant-snippet.ts"
+          "path": "worker/src/lib/curriculum/participant-snippet.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0032-curriculum-runtime-publish.sql"
+          "path": "worker/migrations/0032-curriculum-runtime-publish.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/publishSet.ts"
@@ -3251,16 +3543,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/measurement-core/participant-evidence.ts"
+          "path": "worker/src/lib/measurement-core/participant-evidence.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/retention.ts"
+          "path": "worker/src/lib/curriculum/retention.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/curriculum-admin.ts"
+          "path": "worker/src/routes/curriculum-admin.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0033-curriculum-runtime-evidence.sql"
+          "path": "worker/migrations/0033-curriculum-runtime-evidence.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/evidenceSession.ts"
@@ -3285,10 +3585,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/curriculum/memory.ts"
+          "path": "worker/src/lib/curriculum/memory.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0034-curriculum-runtime-memory.sql"
+          "path": "worker/migrations/0034-curriculum-runtime-memory.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/memorySession.ts"
@@ -3313,19 +3617,29 @@
       ],
       "sources": [
         {
-          "path": "worker/src/skills/curriculum/registry.ts"
+          "path": "worker/src/skills/curriculum/registry.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/skills/curriculum/contract.ts"
+          "path": "worker/src/skills/curriculum/contract.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/skills/curriculum/rules.ts"
+          "path": "worker/src/skills/curriculum/rules.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/skills/curriculum/curriculum-v5.json"
+          "path": "worker/src/skills/curriculum/curriculum-v5.json",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/skill-run.ts"
+          "path": "worker/src/lib/curriculum/skill-run.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/skillSession.ts"
@@ -3350,10 +3664,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/curriculum/review.ts"
+          "path": "worker/src/lib/curriculum/review.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0038-curriculum-runtime-review.sql"
+          "path": "worker/migrations/0038-curriculum-runtime-review.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/reviewSession.ts"
@@ -3387,10 +3705,10 @@
           "path": "docs/testing/curriculum-runtime.md"
         },
         {
-          "path": "worker/test/cr-traceability.test.mjs"
+          "path": "test/service-integration/cr-traceability.test.mjs"
         },
         {
-          "path": "worker/test/cr-recon.test.mjs"
+          "path": "test/service-integration/cr-recon.test.mjs"
         },
         {
           "path": "e2e/curriculum-runtime/cdp-probe.mjs"
@@ -3411,10 +3729,12 @@
           "path": "e2e/curriculum-runtime/publish-app.spec.ts"
         },
         {
-          "path": "worker/test/cr-publish.test.mjs"
+          "path": "test/service-integration/cr-publish.test.mjs"
         },
         {
-          "path": "worker/test/harness/curriculum.mjs"
+          "path": "worker/test/harness/curriculum.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-publish.smoke.mjs"
@@ -3429,7 +3749,7 @@
           "path": "e2e/curriculum-runtime/publish-runtime.real.mjs"
         },
         {
-          "path": "worker/test/cr-evidence.test.mjs"
+          "path": "test/service-integration/cr-evidence.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-evidence.smoke.mjs"
@@ -3444,7 +3764,7 @@
           "path": "docs/testing/curriculum-runtime-2026-10-02-evidence-capture.md"
         },
         {
-          "path": "worker/test/cr-memory.test.mjs"
+          "path": "test/service-integration/cr-memory.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-memory.smoke.mjs"
@@ -3456,7 +3776,7 @@
           "path": "docs/testing/curriculum-runtime-2026-10-02-memory.md"
         },
         {
-          "path": "worker/test/cr-skills.test.mjs"
+          "path": "test/service-integration/cr-skills.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-skills.smoke.mjs"
@@ -3471,7 +3791,7 @@
           "path": "docs/testing/curriculum-runtime-2026-10-05-unblock.md"
         },
         {
-          "path": "worker/test/cr-review.test.mjs"
+          "path": "test/service-integration/cr-review.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-review.smoke.mjs"
@@ -3483,7 +3803,9 @@
           "path": "docs/testing/curriculum-runtime-2026-10-05-review.md"
         },
         {
-          "path": "worker/test/fixtures/cr-review/provider-recording.json"
+          "path": "worker/test/fixtures/cr-review/provider-recording.json",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-06-review-provider.md"
@@ -3543,16 +3865,24 @@
       ],
       "sources": [
         {
-          "path": "worker/test/module-distribution.test.mjs"
+          "path": "worker/test/module-distribution.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/module-child-guard.test.mjs"
+          "path": "worker/test/module-child-guard.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/scripts/cohort-harness/validate.py"
+          "path": "worker/scripts/cohort-harness/validate.py",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/scripts/cohort-harness/rules.yaml"
+          "path": "worker/scripts/cohort-harness/rules.yaml",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3566,10 +3896,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/modules.ts"
+          "path": "worker/src/lib/modules.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/harness-rules.ts"
+          "path": "worker/src/lib/harness-rules.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3756,7 +4090,9 @@
           "path": "scripts/chalk-knowledge-import/index.ts"
         },
         {
-          "path": "worker/src/lib/chalk-vocab-check.ts"
+          "path": "worker/src/lib/chalk-vocab-check.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3770,43 +4106,69 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-knowledge-import.test.mjs"
+          "path": "worker/test/chalk-knowledge-import.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/_templates/lesson-plan.md"
+          "path": "worker/test/fixtures/chalk-vault/_templates/lesson-plan.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/activity-acceptance-checklist.md"
+          "path": "worker/test/fixtures/chalk-vault/design/activity-acceptance-checklist.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-authoring-guide.md"
+          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-authoring-guide.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-quality-checklist.md"
+          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-quality-checklist.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-to-steps-mapping.md"
+          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-to-steps-mapping.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/methods/m-explicit-instruction.md"
+          "path": "worker/test/fixtures/chalk-vault/methods/m-explicit-instruction.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/curriculum-schema.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/curriculum-schema.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/edu-11-16-session-format.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/edu-11-16-session-format.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/edu-constitution.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/edu-constitution.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/measurement-axes.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/measurement-axes.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/placement-rules.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/placement-rules.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/prohibited-moves.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/prohibited-moves.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3869,7 +4231,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chalk-instructor.ts"
+          "path": "worker/src/routes/chalk-instructor.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/chalk/instructorMode.ts"
@@ -3887,10 +4251,14 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-instructor-whoami.test.mjs"
+          "path": "worker/test/chalk-instructor-whoami.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/chalk-instructor-brief.test.mjs"
+          "path": "worker/test/chalk-instructor-brief.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs"
@@ -3992,7 +4360,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chalk-knowledge.ts"
+          "path": "worker/src/routes/chalk-knowledge.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4007,7 +4377,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-knowledge.test.mjs"
+          "path": "worker/test/chalk-knowledge.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4021,16 +4393,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/chalk-plan/parser.ts"
+          "path": "worker/src/lib/chalk-plan/parser.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/tokenizer.ts"
+          "path": "worker/src/lib/chalk-plan/tokenizer.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/types.ts"
+          "path": "worker/src/lib/chalk-plan/types.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/index.ts"
+          "path": "worker/src/lib/chalk-plan/index.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4044,13 +4424,19 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-plan-parser.test.mjs"
+          "path": "worker/test/chalk-plan-parser.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/chalk-ops-plan.test.mjs"
+          "path": "worker/test/chalk-ops-plan.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/chalk-ops.test.mjs"
+          "path": "worker/test/chalk-ops.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4064,7 +4450,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chalk-courses.ts"
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4079,10 +4467,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/chalk-recommend.ts"
+          "path": "worker/src/lib/chalk-recommend.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/chalk-recommend.ts"
+          "path": "worker/src/routes/chalk-recommend.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4096,7 +4488,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-draft-check.test.mjs"
+          "path": "worker/test/chalk-draft-check.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4110,7 +4504,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-recommend.test.mjs"
+          "path": "worker/test/chalk-recommend.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4125,16 +4521,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chalk-courses.ts"
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/authoring-draft-write.ts"
+          "path": "worker/src/lib/authoring-draft-write.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0031-chalk-plan-files.sql"
+          "path": "worker/migrations/0031-chalk-plan-files.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-ops.ts"
+          "path": "worker/src/lib/chalk-ops.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4148,13 +4552,19 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-courses.test.mjs"
+          "path": "worker/test/chalk-courses.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/chalk-draft-check.test.mjs"
+          "path": "worker/test/chalk-draft-check.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/chalk-ops-plan.test.mjs"
+          "path": "worker/test/chalk-ops-plan.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -4232,19 +4642,29 @@
       ],
       "sources": [
         {
-          "path": "worker/migrations/0036-chalk-feedback.sql"
+          "path": "worker/migrations/0036-chalk-feedback.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/units.ts"
+          "path": "worker/src/lib/chalk-plan/units.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/chalk-courses.ts"
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/chalk-instructor.ts"
+          "path": "worker/src/routes/chalk-instructor.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/instructor-auth.ts"
+          "path": "worker/src/lib/instructor-auth.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
@@ -4265,10 +4685,14 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-feedback.test.mjs"
+          "path": "worker/test/chalk-feedback.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/chalk-plan-units.test.mjs"
+          "path": "worker/test/chalk-plan-units.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
@@ -4285,10 +4709,26 @@
         "ST-IMP-CHALK-GEN-SERVER"
       ],
       "sources": [
-        {"path": "worker/src/routes/chalk-courses.ts"},
-        {"path": "worker/src/lib/chalk-judge-prompts.ts"},
-        {"path": "worker/src/lib/instructor-auth.ts"},
-        {"path": "worker/migrations/0037-chalk-judgements.sql"}
+        {
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/chalk-judge-prompts.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/instructor-auth.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/migrations/0037-chalk-judgements.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        }
       ]
     },
     {
@@ -4301,8 +4741,14 @@
         "ST-IMP-CHALK-JUDGEMENTS"
       ],
       "sources": [
-        {"path": "worker/test/chalk-judgements.test.mjs"},
-        {"path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"}
+        {
+          "path": "worker/test/chalk-judgements.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"
+        }
       ]
     }
   ]
