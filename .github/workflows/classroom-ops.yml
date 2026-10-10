@@ -30,6 +30,9 @@ jobs:
         working-directory: worker
       - run: npm ci
         working-directory: chalk
+      # Webview typechecks shared App protocols, which consume Service packages.
+      - run: npm ci --ignore-scripts --omit=optional
+        working-directory: extensions/hypeproof-chat
       - run: npm ci
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm run build
