@@ -15,6 +15,9 @@
 export interface PassProduct {
   id: string;
   label: string;
+  /** Who the pass is for, one short line. Optional; the Service sends it when configured. */
+  tagline?: string;
+  recommended?: boolean;
   amount: number;
   durationDays: number;
   requestLimit: number;
@@ -46,19 +49,23 @@ export interface PurchaseView {
 export const SETTLE_GRACE_MS = 10 * 60 * 1000;
 export const POLL_INTERVAL_MS = 3000;
 
+/**
+ * Purchase copy is written in 해요체 (2026-10-12 Jay): spoken, active, and saying what
+ * happened to the money. The rest of the start screen keeps its own voice.
+ */
 export const PURCHASE_COPY = {
-  unavailable: "지금은 이용권을 구매할 수 없습니다. 잠시 후 다시 시도해 주세요.",
-  orderFailed: "주문을 만들지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.",
-  badCheckout: "결제 페이지 주소를 확인하지 못해 열지 않았습니다. 앱을 업데이트한 뒤 다시 시도해 주세요.",
-  waiting: "브라우저에서 결제를 마치면 여기서 자동으로 이어집니다.",
-  confirming: "결제를 확인하고 있습니다. 잠시만 기다려 주세요.",
-  connecting: "결제가 확인되었습니다. 이용권을 연결하고 있습니다.",
-  failed: "결제되지 않았습니다. 카드에서 금액이 빠져나가지 않았습니다. 다시 시도할 수 있습니다.",
-  expired: "주문 시간이 지났습니다. 결제하지 않았다면 다시 시작해 주세요.",
-  refunded: "환불된 주문입니다. 다시 쓰려면 새로 구매해 주세요.",
-  claimFailed: "결제는 확인되었지만 이용권을 연결하지 못했습니다. 잠시 후 다시 연결을 누르거나 문의해 주세요. 결제 내역은 보존됩니다.",
-  cancelled: "구매를 멈췄습니다. 이미 결제했다면 다시 연결을 눌러 주세요.",
-  unfinished: "결제한 이용권이 아직 연결되지 않았습니다. 다시 연결을 눌러 주세요.",
+  unavailable: "지금은 이용권을 살 수 없어요. 잠시 뒤에 다시 해 주세요.",
+  orderFailed: "주문을 만들지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요.",
+  badCheckout: "결제 페이지 주소가 이상해서 열지 않았어요. 앱을 업데이트하고 다시 해 주세요.",
+  waiting: "결제를 마치면 이 화면이 저절로 바뀌어요.",
+  confirming: "결제를 확인하고 있어요. 잠시만 기다려 주세요.",
+  connecting: "결제를 확인했어요. 이용권을 넣고 있어요.",
+  failed: "결제하지 못했어요. 카드에서 돈이 나가지 않았어요.",
+  expired: "주문 시간이 지났어요. 결제하지 않았다면 다시 시작하면 돼요.",
+  refunded: "환불한 주문이에요. 다시 쓰려면 새로 구매하면 돼요.",
+  claimFailed: "결제는 확인했는데 이용권을 넣지 못했어요. 다시 연결을 눌러 주세요. 결제 내역은 그대로 있어요.",
+  cancelled: "구매를 멈췄어요. 이미 결제했다면 다시 연결을 눌러 주세요.",
+  unfinished: "결제한 이용권을 아직 넣지 못했어요. 다시 연결을 눌러 주세요.",
 } as const;
 
 const ORDER_ID = /^ord_[0-9a-f]{32}$/;
@@ -73,7 +80,9 @@ export function parseProducts(input: unknown): PassProduct[] | null {
     if (!isRecord(raw) || typeof raw.id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(raw.id)) return null;
     if (typeof raw.label !== "string" || !raw.label || raw.label.length > 80 || raw.currency !== "KRW") return null;
     if (!positiveInt(raw.amount) || !positiveInt(raw.duration_hours) || !positiveInt(raw.request_limit)) return null;
-    out.push({ id: raw.id, label: raw.label, amount: raw.amount, durationDays: Math.max(1, Math.round(raw.duration_hours / 24)), requestLimit: raw.request_limit });
+    if (raw.tagline !== undefined && (typeof raw.tagline !== "string" || raw.tagline.length > 80)) return null;
+    out.push({ id: raw.id, label: raw.label, ...(typeof raw.tagline === "string" && raw.tagline ? { tagline: raw.tagline } : {}), ...(raw.recommended === true ? { recommended: true } : {}),
+      amount: raw.amount, durationDays: Math.max(1, Math.round(raw.duration_hours / 24)), requestLimit: raw.request_limit });
   }
   return out;
 }
@@ -169,3 +178,7 @@ export function waitDecision(state: OrderState | null, order: PendingOrder, now:
 }
 
 export const formatWon = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
+/** Requests per day if the count is spread evenly over the period. */
+export const requestsPerDay = (product: PassProduct) => Math.floor(product.requestLimit / product.durationDays);
+/** The pass a buyer sees selected first: the one the Service suggests, else the first. */
+export const defaultProduct = (products: PassProduct[]) => products.find(p => p.recommended) ?? products[0];

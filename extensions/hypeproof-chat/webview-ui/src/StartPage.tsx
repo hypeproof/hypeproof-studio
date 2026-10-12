@@ -41,7 +41,8 @@ export function StartPage() {
   const showProfile = !!state.profile && !editing && !purchaseHeld;
   const buying = !showProfile && (entry === "purchase" || purchaseHeld);
   const products = purchase?.products ?? [];
-  const chosen = products.find(p => p.id === picked) ?? products[0];
+  const chosen = products.find(p => p.id === picked) ?? products.find(p => p.recommended) ?? products[0];
+  const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? "구매를 마치지 못했어요" : "어떤 이용권으로 시작할까요?";
   const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
   const leavePurchase = () => { postToHost({ type: "purchaseCancel" }); setEntry(null); };
 
@@ -60,8 +61,8 @@ export function StartPage() {
       </section>
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
         <div className="studio-card-top"><span className="studio-step">GET STARTED</span><span className="studio-dot"/></div>
-        <h2 id="connect-title">{showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? "이용권 구매하기" : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? "수업에 참여하기" : "어떻게 시작할까요?"}</h2>
-        <p className="studio-card-description">{showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? "카드로 결제하면 코드를 받지 않아도 바로 시작할 수 있습니다." : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? "발급받은 참여 코드로 수업을 확인하세요." : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
+        <h2 id="connect-title">{showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? "수업에 참여하기" : "어떻게 시작할까요?"}</h2>
+        <p className="studio-card-description">{showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? "발급받은 참여 코드로 수업을 확인하세요." : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
         {state.profile && !editing ? <>
           <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
           <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <span aria-hidden="true">↗</span></button>
@@ -71,22 +72,27 @@ export function StartPage() {
           <div className="studio-course-actions"><button className="studio-text-button" onClick={() => { setEditing(true); setEntry(null); setToken(""); }} disabled={state.checking}>다른 활동 선택</button><button className="studio-text-button" onClick={() => postToHost({ type: state.candidate ? "cancelCandidate" : "disconnectCourse" })} disabled={state.checking}>{state.candidate ? "선택 취소" : "연결 해제"}</button></div>
         </> : buying ? <div className="studio-purchase">
           {purchase?.stage === "waiting" || purchase?.stage === "connecting" ? <>
-            {purchase.order && <div className="studio-course"><span className="studio-verified">결제 진행 중</span><h3>{purchase.order.label}</h3><dl><div><dt>결제 금액</dt><dd>{won(purchase.order.amount)}</dd></div></dl></div>}
+            {purchase.order && <div className="studio-course"><span className="studio-verified">{purchase.stage === "connecting" ? "결제 확인" : "결제 기다리는 중"}</span><h3>{purchase.order.label}</h3><dl><div><dt>결제할 금액</dt><dd>{won(purchase.order.amount)}</dd></div></dl></div>}
             <p className="studio-help" role="status">{purchase.message}</p>
-            {purchase.stage === "waiting" && <div className="studio-course-actions"><button className="studio-text-button" onClick={() => postToHost({ type: "purchaseReopen" })}>결제 페이지 다시 열기</button><button className="studio-text-button" onClick={leavePurchase}>구매 멈추기</button></div>}
+            {/* The way out when the browser says paid and this screen has not moved: ask the Service again. */}
+            {purchase.stage === "waiting" && <div className="studio-purchase-actions"><button className="studio-text-button" onClick={() => postToHost({ type: "purchaseReopen" })}>결제 창 다시 열기</button><button className="studio-text-button" onClick={() => postToHost({ type: "purchaseRetry" })}>결제했는데 그대로예요</button><button className="studio-text-button" onClick={leavePurchase}>그만두기</button></div>}
           </> : purchase?.stage === "stopped" ? <>
             <p className="studio-help" role="status">{purchase.message}</p>
             {purchase.order && <button className="studio-primary" disabled={state.checking} onClick={() => postToHost({ type: "purchaseRetry" })}>다시 연결 <span aria-hidden="true">→</span></button>}
             <button className="studio-text-button" disabled={state.checking} onClick={() => { if (!purchase.order) postToHost({ type: "purchaseCancel" }); setEntry(null); }}>시작 방법 다시 선택</button>
           </> : chosen ? <>
-            {/* SX-04 — one Primary. With more than one product the list is a plain choice and the button follows it. */}
-            {products.length > 1 && <div role="radiogroup" aria-label="이용권 고르기" className="studio-entry-options">{products.map(p => <button key={p.id} role="radio" aria-checked={p.id === chosen.id} className="studio-choice" disabled={state.checking} onClick={() => setPicked(p.id)}>{p.label} · {won(p.amount)}</button>)}</div>}
-            <div className="studio-course"><span className="studio-verified">이용권</span><h3>{chosen.label}</h3><dl><div><dt>결제 금액</dt><dd>{won(chosen.amount)} (부가세 포함)</dd></div><div><dt>이용 기간</dt><dd>첫 요청부터 {chosen.durationDays}일</dd></div><div><dt>포함 사용량</dt><dd>AI 요청 {chosen.requestLimit.toLocaleString("ko-KR")}회</dd></div></dl></div>
-            <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id }); }}>{state.checking ? "주문 만드는 중…" : "카드로 결제하기"} <span aria-hidden="true">↗</span></button>
-            <p className="studio-help">결제는 브라우저에서 진행합니다. 카드 정보는 Studio에 저장되지 않습니다. 자동으로 다시 결제되지 않습니다.</p>
+            {/* SX-04 — the passes are a plain list of choices; the one Primary follows the list. */}
+            <div role="radiogroup" aria-label="이용권 고르기" className="studio-plans">{products.map(p => <button key={p.id} type="button" role="radio" aria-checked={p.id === chosen.id} className="studio-plan" disabled={state.checking} onClick={() => setPicked(p.id)}>
+              <span className="studio-plan-name">{p.label}{p.recommended && <em>추천</em>}</span>
+              <span className="studio-plan-price">{won(p.amount)}</span>
+              {p.tagline && <span className="studio-plan-for">{p.tagline}</span>}
+              <span className="studio-plan-what">AI 요청 {p.requestLimit.toLocaleString("ko-KR")}번 · 하루 {Math.floor(p.requestLimit / p.durationDays)}번꼴</span>
+            </button>)}</div>
+            <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id }); }}>{state.checking ? "결제 창을 열고 있어요" : `${won(chosen.amount)} 결제하러 가기`} <span aria-hidden="true">↗</span></button>
+            <p className="studio-help">브라우저가 열려요. 결제하고 돌아오면 바로 쓸 수 있어요.</p>
             <button className="studio-text-button" disabled={state.checking} onClick={leavePurchase}>시작 방법 다시 선택</button>
           </> : <>
-            <p className="studio-help" role="status">{purchase?.message ?? "이용권 정보를 불러오고 있습니다."}</p>
+            <p className="studio-help" role="status">{purchase?.message ?? "이용권을 불러오고 있어요."}</p>
             <button className="studio-text-button" onClick={leavePurchase}>시작 방법 다시 선택</button>
           </>}
         </div> : entry === null ? <div className="studio-entry-options" role="group" aria-label="시작 방법 고르기">
@@ -98,7 +104,7 @@ export function StartPage() {
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("trial")}>AI 체험하기 <span aria-hidden="true">→</span></button>
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("classroom")}>수업에 참여하기 <span aria-hidden="true">→</span></button>
           {/* REQ-L12 — a third peer choice, drawn only when the Service sells passes. Chosen by the person; never opened for them. */}
-          {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); }}>이용권 구매하기 <span aria-hidden="true">→</span></button>}
+          {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); }}>이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
           {state.profile && <button className="studio-text-button" onClick={() => setEditing(false)}>기존 활동으로 돌아가기</button>}
         </div> : <form onSubmit={connect}>
           <label htmlFor="course-code">{entry === "trial" ? "체험 참여 코드" : "수업 참여 코드"}</label>
@@ -113,7 +119,7 @@ export function StartPage() {
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}
         <div aria-live="polite" role="status" className="studio-status">{state.checking ? "연결 정보를 확인하고 있습니다." : ""}</div>
         {state.error && <div className="studio-error" id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>}
-        <div className="studio-card-footer">{buying ? "시작 전에는 전액 환불하고, 시작한 뒤에는 쓰지 않은 만큼 환불합니다." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 공개 가입은 아직 지원하지 않습니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
+        <div className="studio-card-footer">{buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 공개 가입은 아직 지원하지 않습니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
     <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <span aria-hidden="true">↗</span></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">MAKE · VERIFY · OWN</span></footer>

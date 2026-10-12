@@ -14,6 +14,12 @@ const created = { order_id: ID, order_secret: SECRET, amount: 50000, currency: '
 // ── Products: only the documented shape is shown to a buyer ───────────────────────────────
 const catalogue = { products: [{ id: 'pass-30d', label: '30일 이용권', amount: 50000, currency: 'KRW', duration_hours: 720, request_limit: 600 }] };
 assert.deepEqual(p.parseProducts(catalogue), [{ id: 'pass-30d', label: '30일 이용권', amount: 50000, durationDays: 30, requestLimit: 600 }]);
+// The optional line and mark come through; the suggested pass is the one selected first.
+const tiers = p.parseProducts({ products: [{ ...catalogue.products[0], id: 'pass-lite', request_limit: 300 }, { ...catalogue.products[0], id: 'pass-basic', tagline: '한 달 동안 내 일에 써 볼 때', recommended: true }] });
+assert.equal(tiers[1].tagline, '한 달 동안 내 일에 써 볼 때'); assert.equal(tiers[1].recommended, true); assert.equal(tiers[0].recommended, undefined);
+assert.equal(p.defaultProduct(tiers).id, 'pass-basic'); assert.equal(p.defaultProduct([tiers[0]]).id, 'pass-lite');
+assert.equal(p.requestsPerDay(tiers[1]), 20); assert.equal(p.requestsPerDay(tiers[0]), 10);
+assert.equal(p.parseProducts({ products: [{ ...catalogue.products[0], tagline: 7 }] }), null);
 for (const bad of [null, {}, { products: [] }, { products: [{ ...catalogue.products[0], amount: 0 }] }, { products: [{ ...catalogue.products[0], currency: 'USD' }] }, { products: [{ ...catalogue.products[0], request_limit: 1.5 }] }, { products: [{ ...catalogue.products[0], id: 'a b' }] }])
   assert.equal(p.parseProducts(bad), null, JSON.stringify(bad));
 
@@ -114,8 +120,10 @@ try {
 
 // ── Copy: only a confirmed payment says so, and every stop explains what happened to the money ─
 for (const [key, text] of Object.entries(p.PURCHASE_COPY)) assert.ok(text.length > 10, key);
-assert.match(p.PURCHASE_COPY.failed, /빠져나가지 않았습니다/);
-assert.match(p.PURCHASE_COPY.claimFailed, /결제 내역은 보존됩니다/);
-for (const key of ['waiting', 'failed', 'expired', 'cancelled', 'unavailable']) assert.doesNotMatch(p.PURCHASE_COPY[key], /결제가 확인되었습니다/, key);
+assert.match(p.PURCHASE_COPY.failed, /돈이 나가지 않았어요/);
+assert.match(p.PURCHASE_COPY.claimFailed, /결제 내역은 그대로 있어요/);
+for (const key of ['waiting', 'failed', 'expired', 'cancelled', 'unavailable']) assert.doesNotMatch(p.PURCHASE_COPY[key], /결제를 확인했어요/, key);
+// 해요체 only on the purchase surface: no 합니다체 ending slipped back in.
+for (const [key, text] of Object.entries(p.PURCHASE_COPY)) assert.doesNotMatch(text, /(습니다|됩니다|합니다)[.]/, key);
 
 console.log('PASS pass purchase: product and order shapes, checkout origin, saved-order restore, wait decisions, secret-bound requests, lost-answer recovery, copy');

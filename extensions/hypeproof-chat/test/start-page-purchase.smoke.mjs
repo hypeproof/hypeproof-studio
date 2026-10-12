@@ -83,7 +83,7 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   await page.purchaseTick();
   assert.equal(view().stage, 'waiting');
   world.poll = 'confirming'; await page.purchaseTick();
-  assert.match(view().message, /확인하고 있습니다/);
+  assert.match(view().message, /확인하고 있어요/);
   assert.equal(world.calls.filter(c => c.path.endsWith('/claim')).length, 0, 'nothing is claimed before the Service says paid');
 
   world.poll = 'paid'; world.claims = [{ status: 200, body: { code: CODE } }];
@@ -110,7 +110,7 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   await page.purchaseTick();
   assert.equal(page.candidate, undefined);
   assert.equal(view().stage, 'stopped');
-  assert.match(view().message, /결제 내역은 보존됩니다/);
+  assert.match(view().message, /결제 내역은 그대로 있어요/);
   assert.equal(JSON.parse(world.secrets.get(KEY)).claimed, true);
   // "다시 연결" asks for a replacement code instead of a second payment.
   world.profileStatus = 200; world.claims = [{ status: 200, body: { code: CODE + '2' } }];
@@ -143,7 +143,7 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   await page.handle({ type: 'purchaseRetry' });
   assert.equal(view().stage, 'waiting');
   world.poll = 'failed'; await page.purchaseTick();
-  assert.match(view().message, /빠져나가지 않았습니다/);
+  assert.match(view().message, /돈이 나가지 않았어요/);
   assert.equal(world.secrets.has(KEY), false);
   assert.equal(view().order, undefined);
 
@@ -152,7 +152,7 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   await forged.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
   assert.equal(forged.world.opened.length, 0);
   assert.equal(forged.world.secrets.has(KEY), false);
-  assert.match(forged.view().message, /주소를 확인하지 못해/);
+  assert.match(forged.view().message, /주소가 이상해서 열지 않았어요/);
   console.log('PASS purchase stops: cancel keeps the order, a failed payment ends it, an unknown checkout address is never opened');
 }
 
@@ -168,7 +168,7 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   const claimed = harness({ saved: { ...saved, claimed: true } });
   await claimed.page.resumePurchase();
   assert.equal(claimed.view().stage, 'stopped');
-  assert.match(claimed.view().message, /아직 연결되지 않았습니다/);
+  assert.match(claimed.view().message, /아직 넣지 못했어요/);
   assert.equal(claimed.world.calls.length, 0);
   assert.equal(claimed.world.timers, 0);
 
