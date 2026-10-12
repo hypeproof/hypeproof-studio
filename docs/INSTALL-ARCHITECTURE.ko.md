@@ -330,4 +330,5 @@ unsigned installer를 받아 OS 경고를 클릭으로 넘기고 토큰을 붙�
 | `install.sh` | macOS/Linux 부트스트래퍼 |
 | `install.ps1` | Windows 부트스트래퍼 |
 | `docs/INSTALL.md` | 워크숍 사용자용 5분 설치 가이드 |
+| `docs/INSTALL-CLASS-KIT.ko.md` | 조직 멤버가 아닌 수업 참가자용 설치 키트 (강사 전달, `make-class-kit.sh`) |
 | `docs/MEMBER-GUIDE.ko.md` | 멤버 온보딩(플랫폼 정책 §0) |
