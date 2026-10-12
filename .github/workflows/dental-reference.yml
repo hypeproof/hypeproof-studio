@@ -14,6 +14,11 @@ on:
       - '.github/workflows/dental-reference.yml'
 permissions:
   contents: read
+
+# Pull request only: a newer push replaces the run in progress.
+concurrency:
+  group: dental-reference-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   reference-browser:
     runs-on: ubuntu-latest
