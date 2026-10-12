@@ -16,76 +16,71 @@ on:
 permissions:
   contents: read
 
-jobs:
-  measurement-package:
-    name: measurement / released package compatibility
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/measurement/package-lock.json
-      - run: npm ci
-        working-directory: packages/measurement
-      - run: npm test
-        working-directory: packages/measurement
+# A newer push to the same pull request replaces the run in progress. Runs on
+# main are never cancelled.
+concurrency:
+  group: pr-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-  workflow-shells:
-    name: workflows / windows shell
+jobs:
+  # Four groups of controls that need no Service install and finish in seconds.
+  # They were four jobs, each billed as a whole minute. Every step runs even
+  # when an earlier one fails, so one failure does not hide another.
+  repo-controls:
+    name: repo / release and measurement controls
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+          cache: npm
+          cache-dependency-path: packages/measurement/package-lock.json
       - run: pip install --quiet pyyaml
       # A bash body on a Windows runner without `shell: bash` parses as
       # PowerShell and dies on its first POSIX token. v0.0.0-rc.2 published a
       # release and then failed exactly that way.
-      - run: python3 scripts/check-workflow-shells.py
+      - name: Workflow shells declare bash on Windows runners
+        if: ${{ !cancelled() }}
+        run: python3 scripts/check-workflow-shells.py
       # #632 sized the mirror's asset wait for two 1-2h builds and then
       # wrapped it in a 20-minute job. Both numbers looked deliberate;
       # nobody compared them until v0.0.0-rc.3 was cancelled mid-wait.
-      - run: python3 scripts/check-mirror-timeout.py
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22.22.1'
+      - name: Mirror wait fits inside its job timeout
+        if: ${{ !cancelled() }}
+        run: python3 scripts/check-mirror-timeout.py
       - name: Unified release verdict and launcher recovery controls
+        if: ${{ !cancelled() }}
         run: |
           node e2e/unified-release/gate.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
           node scripts/test-unified-launcher.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
+        if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
-
-  dev-channel-tag-classifier:
-    name: dev-channel / tag-is-prerelease
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       # dag.yaml task A control: the --prerelease decision used by
       # build-mac.yml / build-windows.yml must be testable without cutting a
       # real tag. Runs in milliseconds, no build/app required.
       - name: Regression — tag-is-prerelease positive + negative controls
+        if: ${{ !cancelled() }}
         run: bash scripts/test-tag-is-prerelease.sh
-
-  live-session-freeze:
-    name: deploy-freeze / live-session controls
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       # dag.yaml task D control (#676): the live-class freeze used by
       # deploy-worker.yml / build-mac.yml / build-windows.yml must be
       # exercisable with no live class and no real deploy. Fixtures + a
       # planted clock; milliseconds, no network. Includes the fail-closed
       # cases, which are the ones nobody would otherwise ever see run.
       - name: Regression — live-session freeze positive/negative/override controls
+        if: ${{ !cancelled() }}
         run: node scripts/test-check-live-sessions.mjs
+      - name: Measurement — released package compatibility
+        if: ${{ !cancelled() }}
+        working-directory: packages/measurement
+        run: |
+          npm ci
+          npm test
 
   # Context names stay compatible with existing protection until canonical policy adoption.
   # Server-only validation lives in hypeproof-service; this lane preserves App integration.
@@ -125,7 +120,7 @@ jobs:
   # instructor-auth-drift (one verifier, two workers) and deploy-isolation
   # (a c* deploy cannot move the Service's version).
   chalk-test:
-    name: chalk / test
+    name: chalk / typecheck + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -135,31 +130,22 @@ jobs:
           cache: npm
           cache-dependency-path: chalk/package-lock.json
       - name: Install chalk deps
-        working-directory: chalk
-        run: npm ci
-      - name: Install App dependencies for cross-product contract tests
-        working-directory: extensions/hypeproof-chat
-        run: npm ci --ignore-scripts --omit=optional
-      - name: Run chalk tests
-        working-directory: chalk
-        run: npm test
-
-  chalk-typecheck:
-    name: chalk / typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: chalk/package-lock.json
-      - name: Install chalk deps
+        id: chalk_install
         working-directory: chalk
         run: npm ci
       - name: Typecheck chalk
         working-directory: chalk
         run: npm run typecheck
+      # The tests still run when the typecheck fails, so one report shows both.
+      - name: Install App dependencies for cross-product contract tests
+        id: app_install
+        if: ${{ !cancelled() && steps.chalk_install.outcome == 'success' }}
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --ignore-scripts --omit=optional
+      - name: Run chalk tests
+        if: ${{ !cancelled() && steps.app_install.outcome == 'success' }}
+        working-directory: chalk
+        run: npm test
 
   extension-typecheck:
     name: extension / typecheck

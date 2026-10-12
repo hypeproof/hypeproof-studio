@@ -13,6 +13,11 @@ on:
       - '.github/workflows/start-page.yml'
 permissions:
   contents: read
+
+# Pull request only: a newer push replaces the run in progress.
+concurrency:
+  group: start-page-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   start-page-browser:
     runs-on: ubuntu-latest

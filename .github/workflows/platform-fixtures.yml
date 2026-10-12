@@ -1,13 +1,19 @@
 name: studio-platform-fixtures
 
-# The macOS and Windows legs of PR CI. They lived in pr-ci.yml and ran on every
-# pull request. A macOS minute is billed at about ten times a Linux minute and a
-# Windows minute at about 1.7 times, so these four one-minute jobs cost more than
-# the ten Linux jobs beside them. They exercise the updater, the local runtime,
-# the dev launcher and the Codex rehearsal client, so they now run only when a
-# pull request or a push to main touches what those tests read.
+# The macOS and Windows legs of CI. They exercise the updater, the local
+# runtime, the dev launcher and the Codex rehearsal client.
 #
-# Add a path here when one of the jobs below starts reading a new place.
+# Billing shapes this file. GitHub rounds every job up to a whole minute, a
+# macOS minute costs about ten Linux minutes and a Windows minute about 1.7.
+# The macOS work here takes under 30 seconds, so:
+#   - there is one job per operating system, not one per test group;
+#   - the macOS leg runs after merge (push to main) and on manual dispatch, not
+#     on pull requests. A break that only shows on macOS is therefore found on
+#     main. Run this workflow by hand on a branch when a change is likely to
+#     behave differently there (launcher, updater, shell scripts).
+#   - the Windows leg also runs on pull requests that touch what the tests read.
+#
+# Add a path here when one of the steps below starts reading a new place.
 
 on:
   pull_request:
@@ -39,35 +45,26 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  update-platform-fixtures:
-    name: updater / ${{ matrix.os }} fixtures
+  platform-fixtures:
+    name: platform / ${{ matrix.os }} fixtures
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # Needs no install, so it runs first and reports even when an install
+      # below fails.
       - name: Execute installer failure controls (no real app installation)
         shell: bash
         working-directory: extensions/hypeproof-chat
         run: |
           node --experimental-strip-types test/update-installer.smoke.mjs
           node --experimental-strip-types test/update-windows-wrapper.smoke.mjs
-
-  studio-dev-platform-fixtures:
-    name: studio dev / ${{ matrix.os }} fixtures
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

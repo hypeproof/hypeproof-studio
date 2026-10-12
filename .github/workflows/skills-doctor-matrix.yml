@@ -5,8 +5,9 @@
 #   that assumption only ever got exercised on tag/dispatch builds
 #   (build-windows.yml), never in PR CI — so a regression in the Windows
 #   runtime path could merge unseen. This job runs the fail-closed doctor plus
-#   a shell-assumption smoke on BOTH windows-2022 and macos-14 for every PR,
-#   finally testing the Windows path pre-merge.
+#   a shell-assumption smoke on windows-2022 for pull requests that touch the
+#   installers, testing the Windows path pre-merge, and on BOTH windows-2022
+#   and macos-14 after merge.
 #
 # Grounded in the installer plan (hypeproof-deps.yaml is the single source of
 # truth; scripts/hps-doctor.sh re-verifies that same manifest, fail-closed).
@@ -14,10 +15,20 @@
 name: skills-doctor-matrix
 
 # Both legs run on paid-multiplier runners (macOS about 10x, Windows about 1.7x a
-# Linux minute), so the gate runs only when a pull request touches what it
-# reads: the installers and their tests under scripts/, and the manifest.
+# Linux minute) and each is billed as a whole minute for a few seconds of work.
+# So the gate runs only when a change touches what it reads (the installers and
+# their tests under scripts/, and the manifest), and the macOS leg runs after
+# merge and on manual dispatch, not on pull requests. A break that only shows on
+# macOS is therefore found on main.
 on:
   pull_request:
+    paths:
+      - 'scripts/**'
+      - 'dependencies.yaml'
+      - 'config/dependencies.yaml'
+      - '.github/workflows/skills-doctor-matrix.yml'
+  push:
+    branches: [main]
     paths:
       - 'scripts/**'
       - 'dependencies.yaml'
@@ -28,9 +39,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request replaces the run in progress. Runs on
+# main are never cancelled.
 concurrency:
   group: skills-doctor-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -46,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, macos-14]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-2022"]' || '["windows-2022", "macos-14"]') }}
 
     steps:
       - name: Checkout
