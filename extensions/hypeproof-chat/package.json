@@ -469,8 +469,8 @@
     "typescript": "^5.4.0"
   },
   "dependencies": {
-    "@hypeproof/measurement-core": "https://github.com/hypeproof/hypeproof-service/releases/download/packages-v0.1.0/hypeproof-measurement-core-0.1.0.tgz",
-    "@hypeproof/service-contracts": "https://github.com/hypeproof/hypeproof-service/releases/download/packages-v0.1.0/hypeproof-service-contracts-0.1.0.tgz",
-    "@hypeproof/measurement": "https://github.com/hypeproof/hypeproof-service/releases/download/measurement-v0.3.5/hypeproof-measurement-0.3.5.tgz"
+    "@hypeproof/measurement-core": "file:../../.private-service-cache/hypeproof-measurement-core-0.1.0.tgz",
+    "@hypeproof/service-contracts": "file:../../.private-service-cache/hypeproof-service-contracts-0.1.0.tgz",
+    "@hypeproof/measurement": "file:../../.private-service-cache/hypeproof-measurement-0.3.5.tgz"
   }
 }

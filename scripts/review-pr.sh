@@ -239,6 +239,7 @@ echo "chalk/review-* 폴더 비움: ${REVIEW_DELETED}개"
 echo ""
 echo "=== [2/6] npm ci ==="
 T2=$(ms)
+node "$WORKTREE_DIR/scripts/bootstrap-service-packages.mjs"
 (cd "$WORKTREE_DIR/extensions/hypeproof-chat" && npm ci --prefer-offline --silent 2>&1)
 (cd "$WORKTREE_DIR/extensions/hypeproof-chat/webview-ui" && npm ci --prefer-offline --silent 2>&1)
 T2_END=$(ms)

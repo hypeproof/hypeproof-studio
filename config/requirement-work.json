@@ -778,10 +778,11 @@
         "PRA-03",
         "PRA-04",
         "PRA-05",
-        "PRA-06"
+        "PRA-06",
+        "PRA-07"
       ],
       "inline_prefixes": [],
-      "sha256": "a3f328b137fc20fb99e7681aa8ecdc278d71cb8088da08c2c80380e5259eb2d0",
+      "sha256": "4b47197886b4f63739284c590777acdd6c022c8da44fa4dc4fa2495dd9c80eaa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3834,6 +3835,39 @@
         "extensions/hypeproof-chat/test/update-transport.smoke.mjs",
         "scripts/tests/install-win-fixture.ps1",
         "scripts/tests/bootstrap-win-private-fixture.ps1"
+      ]
+    },
+    {
+      "id": "private-service-development-access",
+      "title": "Authenticated private Service development package access",
+      "issue": 1588,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-07"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Verify authenticated immutable private Service artifacts and existing Contents-read CI access, install pinned package consumers, and retain separate release/deployment evidence.",
+      "design_delta": "Acquire private immutable assets with gh read access, verify SHA256, and stage only ignored local cache; preserve canonical implementation bytes across bundled module instances without a custom registry or new credentials.",
+      "positive_control": "Pinned private artifacts verify before install; cached verified bytes require no additional download; consumer package builds and preserved Service authentication contracts pass.",
+      "negative_control": "Missing access, changed digest, unsafe asset/tag names, cache/artifact symlinks and download failure cannot install or fall back. No Service tarball or source is tracked in Studio.",
+      "evidence_required": "Exact Studio/Service commits, immutable private asset SHA256, authenticated fresh-cache acquisition and remote CI result; local fixtures are not installed-App or production evidence.",
+      "implementation_paths": [
+        "scripts/bootstrap-service-packages.mjs",
+        "config/service-packages.json",
+        "package.json",
+        ".github/workflows/deploy-worker.yml",
+        "scripts/setup.sh"
+      ],
+      "verification_inputs": [
+        "scripts/test/bootstrap-service-packages.test.mjs",
+        "chalk/test/instructor-auth-drift.test.mjs",
+        "test/service-integration/measurement-core.test.mjs"
       ]
     }
   ]

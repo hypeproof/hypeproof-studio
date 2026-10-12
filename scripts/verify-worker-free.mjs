@@ -1,5 +1,5 @@
 // Worker separation acceptance gate. Copies consumer files only; all Service
-// reference implementation comes from a pinned public package, never siblings.
+// reference implementation comes from a pinned private package, never siblings.
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -24,6 +24,7 @@ execFileSync('git', ['-c', 'user.name=Worker separation acceptance', '-c', 'user
 const receipt = { schema: 'hps-worker-separation-acceptance/1', sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8' }).trim(), sourceDirty: !!execFileSync('git', ['status', '--porcelain'], { cwd: source, encoding: 'utf8' }).trim(), checkout: isolated, workerExcluded: true, siblingSourceUsed: false, productionDeployed: false, checks: [] };
 const env = { ...process.env, HYPEPROOF_HARNESS: '', NODE_PATH: '', npm_config_cache: process.env.npm_config_cache || '/tmp/hypeproof-public-npm-cache' };
 const steps = [
+  ['private Service acquisition', '.', 'node', ['scripts/bootstrap-service-packages.mjs']],
   ['tooling install', '.', 'npm', ['ci', '--ignore-scripts']],
   ['App install', 'extensions/hypeproof-chat', 'npm', ['ci']],
   ['webview install', 'extensions/hypeproof-chat/webview-ui', 'npm', ['ci']],

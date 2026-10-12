@@ -5,6 +5,10 @@
 // Administrator Basic remains a direct Service capability and is refused here.
 
 import assert from "node:assert/strict";
+import { readFileSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { bootApp, createMockEnv, makeCtx, TEST_SECRET } from "@hypeproof/service-testkit/test/harness/index.mjs";
 
 const service = await bootApp();                                   // worker/src/index.ts
@@ -18,7 +22,22 @@ const shared = await import("../src/shared.ts");
 // --- identity: re-export, not copy ------------------------------------------
 assert.equal("verify" in shared, false, "Chalk has no verifier: the Service makes the HTTP authorization verdict");
 assert.equal("authorizeIssuerForCohort" in shared, false, "Chalk does not implement issuer authorization");
-assert.strictEqual(shared.isIssuerAllowedEndpoint, auth.isIssuerAllowedEndpoint, "isIssuerAllowedEndpoint re-exported, not copied");
+// A self-contained private testkit has its own installed contracts instance.
+// Object identity is therefore not a drift control across these package roots:
+// require the exact canonical module bytes and both explicit re-export boundaries.
+const serviceAuthUrl = import.meta.resolve("@hypeproof/service-testkit/src/lib/instructor-auth.ts");
+const candidates = createRequire(serviceAuthUrl).resolve.paths("@hypeproof/service-contracts");
+const packageRoot = candidates.map(path => join(path, "@hypeproof/service-contracts"))
+  .find(path => existsSync(join(path, "package.json")));
+assert.ok(packageRoot, "Service uses an installed canonical contracts package");
+const contractManifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+const canonical = join(packageRoot, contractManifest.exports["./instructor-endpoints"].import);
+const localCanonical = fileURLToPath(import.meta.resolve("@hypeproof/service-contracts/instructor-endpoints"));
+assert.deepEqual(readFileSync(localCanonical), readFileSync(canonical), "Chalk and Service use identical canonical predicate implementation bytes");
+const reexport = /^export \{ isIssuerAllowedEndpoint \} from ["']@hypeproof\/service-contracts["'];$/m;
+assert.match(readFileSync(new URL("../src/shared.ts", import.meta.url), "utf8"), reexport, "Chalk explicitly re-exports the canonical predicate");
+assert.match(readFileSync(new URL(serviceAuthUrl), "utf8"), reexport, "Service explicitly re-exports the canonical predicate");
+assert.equal(shared.isIssuerAllowedEndpoint.toString(), auth.isIssuerAllowedEndpoint.toString(), "Both module instances expose the same canonical implementation");
 assert.equal("TokenError" in shared, false, "Token verification errors stay in the Service");
 console.log("✓ drift-lock: one public routing predicate; token verifier and cohort authorization remain in the Service");
 

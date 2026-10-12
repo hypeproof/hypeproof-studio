@@ -6,6 +6,8 @@ on:
         required: true
         type: string
     secrets:
+      HYPEPROOF_READ_TOKEN:
+        required: true
       HPS_ACCEPTANCE_ANTHROPIC_API_KEY:
         required: true
 permissions:
@@ -46,6 +48,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Prepare public App and test dependencies
         shell: bash
         env:

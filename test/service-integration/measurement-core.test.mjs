@@ -6,7 +6,9 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // validator that accepted (or refused) everything fails here. Synthetic fixtures
 // only: this is not a live-host, installed-App or Jay-dogfood result.
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -67,11 +69,24 @@ test("MC-T02 App and Service retain the released contract and legacy verdicts", 
     assert.equal(serviceLegacy[name], core[name], `Service ${name} is not the core export`);
   }
   assert.deepEqual(runLegacyCases(appContract), runLegacyCases(core));
-  const workerLock = JSON.parse(readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/repository/worker/package-lock.json")), "utf8"));
-  const appLock = JSON.parse(readFileSync(new URL("../../extensions/hypeproof-chat/package-lock.json", import.meta.url), "utf8"));
-  const key = "node_modules/@hypeproof/measurement-core";
-  assert.equal(appLock.packages[key].integrity, workerLock.packages[key].integrity);
-  assert.equal(appLock.packages[key].resolved, workerLock.packages[key].resolved);
+  // Service source links local packages, while the private testkit bundles them.
+  // Lock URL/object identity cannot prove drift across these installation roots.
+  // Compare the exact installed canonical implementation, retaining golden and
+  // pure re-export controls below instead of treating different packaging as drift.
+  const serviceShim = import.meta.resolve("@hypeproof/service-testkit/src/lib/measurement-core/index.ts");
+  const lookup = createRequire(serviceShim).resolve.paths("@hypeproof/measurement-core");
+  const serviceCore = lookup.map(path => join(path, "@hypeproof/measurement-core"))
+    .find(path => existsSync(join(path, "package.json")));
+  assert.ok(serviceCore, "Service resolves its canonical installed measurement core");
+  const directCore = new URL("../", CORE_DIR);
+  const directManifest = JSON.parse(readFileSync(new URL("package.json", directCore), "utf8"));
+  const serviceManifest = JSON.parse(readFileSync(join(serviceCore, "package.json"), "utf8"));
+  assert.equal(directManifest.name, serviceManifest.name);
+  assert.equal(directManifest.version, serviceManifest.version);
+  const directFiles = readdirSync(CORE_DIR).filter(file => file.endsWith(".js")).sort();
+  const serviceFiles = readdirSync(join(serviceCore, "dist")).filter(file => file.endsWith(".js")).sort();
+  assert.deepEqual(directFiles, serviceFiles, "Both installations contain the same core implementation modules");
+  for (const file of directFiles) assert.deepEqual(readFileSync(new URL(file, CORE_DIR)), readFileSync(join(serviceCore, "dist", file)), `Canonical core implementation drift: ${file}`);
   assert.equal(serviceEvidence.makeEvidenceCatalog, core.makeEvidenceCatalog);
   assert.equal(serviceEvidence.resolveEvidenceSelections, core.resolveEvidenceSelections);
 });

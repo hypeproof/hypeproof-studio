@@ -4799,6 +4799,18 @@
         },
         {
           "path": "dependencies.yaml"
+        },
+        {
+          "path": "scripts/bootstrap-service-packages.mjs"
+        },
+        {
+          "path": "config/service-packages.json"
+        },
+        {
+          "path": "scripts/setup.sh"
+        },
+        {
+          "path": ".github/workflows/deploy-worker.yml"
         }
       ]
     },
@@ -4830,6 +4842,9 @@
         },
         {
           "path": "scripts/tests/bootstrap-win-private-fixture.ps1"
+        },
+        {
+          "path": "scripts/test/bootstrap-service-packages.test.mjs"
         }
       ]
     }

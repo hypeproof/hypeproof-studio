@@ -68,6 +68,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install pinned public Service testkit
         run: npm ci
       - name: Install extension dependencies without native model binaries
