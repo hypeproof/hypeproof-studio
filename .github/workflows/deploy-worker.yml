@@ -90,7 +90,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hypeproof/hypeproof-service
-          ref: f8d0496630b3407cb68ec1da79719d1b95640984
+          ref: ea6da81c37085cfc098dc234c83360bd87fe8bad
           token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
           path: .service-source
 
