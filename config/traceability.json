@@ -4847,6 +4847,91 @@
           "path": "scripts/test/bootstrap-service-packages.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-EMAIL-AUTOMATION",
+      "stage": "requirement",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/email-automation.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EMAIL-AUTOMATION",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/email-automation.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/google-automation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-store-client.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-render.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-ledger.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EMAIL-AUTOMATION",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION",
+        "ST-TEST-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/googleAutomation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/googleAutomationMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationPanel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationStoreClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationLedger.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AutomationSurface.tsx"
+        }
+      ]
     }
   ]
 }

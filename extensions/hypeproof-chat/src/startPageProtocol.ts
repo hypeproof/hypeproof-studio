@@ -7,6 +7,7 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  automationsEnabled?: boolean;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;
@@ -29,6 +30,7 @@ export type StartRequest =
   | { type: "selectActivity"; ref: string }
   | { type: "chooseActivityFolder" }
   | { type: "openLocalReview" }
+  | { type: "openEmailAutomation" }
   | { type: "openStudioFiles" }
   | { type: "openStudioSettings" }
   | { type: "connectCourse"; token: string }

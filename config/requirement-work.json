@@ -787,6 +787,28 @@
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
       "test": "docs/requirements/private-release-access.md"
+    },
+    {
+      "path": "docs/requirements/email-automation.md",
+      "ids": [
+        "EA-01",
+        "EA-02",
+        "EA-03",
+        "EA-04",
+        "EA-05",
+        "EA-06",
+        "EA-07",
+        "EA-08",
+        "EA-09"
+      ],
+      "inline_prefixes": [
+        "EA"
+      ],
+      "sha256": "b8a15192fc04a94a923d1ca4d73bb3a5cddae4c0afe21606c0aefbc0fee5b380",
+      "owner": "TJ-kr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/email-automation.md",
+      "test": "docs/testing/email-automation.md"
     }
   ],
   "work_items": [

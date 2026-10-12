@@ -36,7 +36,7 @@ export function StartPage() {
   const showProfile = !!state.profile && !editing;
 
   return <main className="studio-start">
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색"><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "openStudioSettings" })}>설정</button></nav></header>
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.automationsEnabled && <button onClick={() => postToHost({ type: "openEmailAutomation" })}>업무 자동화</button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "openStudioSettings" })}>설정</button></nav></header>
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
         <p className="studio-eyebrow"><span/> 생각에서, 나의 결과물로</p>

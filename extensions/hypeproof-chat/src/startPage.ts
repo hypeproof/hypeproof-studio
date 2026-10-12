@@ -86,6 +86,7 @@ export class StartPage {
     catch { this.error ??= "저장된 활동 목록을 읽지 못했습니다. 참여 코드를 다시 입력해 주세요."; }
     const legacyHistory=this.context.workspaceState?.keys?.().some(isLegacyHistoryKey);
     const state: StartState = {
+      automationsEnabled: !this.candidate && p?.automations?.enabled === true,
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),
       legacyHistory,
       activities,
@@ -109,6 +110,7 @@ export class StartPage {
 
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object") return;
+    if (msg.type === "openEmailAutomation") { await vscode.commands.executeCommand("hypeproof-chat.emailAutomation"); return; }
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") { await this.refresh(); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }

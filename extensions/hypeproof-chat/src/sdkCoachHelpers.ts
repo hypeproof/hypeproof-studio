@@ -35,6 +35,7 @@ import {
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
+import { GOOGLE_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
@@ -225,13 +226,16 @@ export function permittedToolsFor(profile: ResolvedProfile): string[] {
  *   harness's child_sdk_browser FAIL. When in doubt, deny for minors.
  */
 export function permittedMcpToolsFor(profile: ResolvedProfile): string[] {
-  if (profile.sdk_tools?.browser === true && !isMinorTier(profile)) {
-    // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
-    return isCurriculumRuntimeEnabled(profile)
-      ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-      : [...MCP_BROWSER_TOOLS];
+  if (isMinorTier(profile)) return [];
+  const tools: string[] = [];
+  if (profile.sdk_tools?.browser === true) {
+    tools.push(...MCP_BROWSER_TOOLS);
+    if (isCurriculumRuntimeEnabled(profile)) tools.push(...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS);
   }
-  return [];
+  if (profile.automations?.enabled === true && profile.automations.provider === "gmail") {
+    tools.push(...GOOGLE_AUTOMATION_MCP_TOOLS);
+  }
+  return tools;
 }
 
 // ── SDK subagents (#282 P2 slice 3, REQ-M22/M23) ─────────────────────────────
@@ -1884,7 +1888,8 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
-    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName)
+    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    (GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)
   );
 }
 
@@ -2262,6 +2267,12 @@ export function evaluateSdkToolUse(args: {
     // subagent's own tool calls come back through this same function
     // (sdk.d.ts: CanUseTool options carry agentID for sub-agent context).
     return { decision: "ask" };
+  }
+
+  // The registered host rechecks capability and requires an exact-preview native
+  // confirmation for every send. This dispatch grant cannot approve delivery.
+  if ((GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)) {
+    return { decision: "allow" };
   }
 
   // ── hypeproof MCP browser tools (#282 P2 slice 2, REQ-M20) ────────────────

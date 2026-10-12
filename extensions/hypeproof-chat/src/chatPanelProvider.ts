@@ -2075,6 +2075,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const status = (this.pendingApprovals?.size ?? 0) > 0 ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
     return { idleMs: Date.now() - this.lastActivityAt, status };
   }
+  private emailAutomationHost?: () => Promise<import('./googleAutomationMcp').GoogleAutomationMcpHost | undefined>;
+  setEmailAutomationHost(getHost: () => Promise<import('./googleAutomationMcp').GoogleAutomationMcpHost | undefined>): void { this.emailAutomationHost = getHost; }
+
+  /** Starts recipe authoring through the existing metered coach; never includes a sheet or credentials. */
+  async authorAutomationRecipe(recipe: import('./automationProtocol').AutomationRecipe, goal: string): Promise<void> {
+    if (this.hasActiveStream()) throw new Error('진행 중인 AI 작업이 끝난 뒤 다시 시작해 주세요.');
+    if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}/i.test(goal + JSON.stringify(recipe))) throw new Error('실제 이메일 주소나 비밀값을 지운 뒤 AI에게 요청해 주세요.');
+    if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
+    const prompt = [
+      '이메일 자동화 템플릿을 만들고 싶어요. 아래 요청에 맞춰 recipe.json 파일 하나를 만들어 주세요.',
+      '작업: ' + goal,
+      '출력은 아래 스키마의 JSON만 사용해요. 이메일을 보내거나 외부 서비스에 접속하지 마세요.',
+      '실제 사람 이름, 이메일 주소, 회사 정보, 비밀값은 넣지 마세요. 변수는 {{name}}, {{document}}, {{dueDate}}만 허용돼요.',
+      '범주 email과 스키마 hps-email-automation/1을 유지해 주세요. 알 수 없는 필드를 추가하지 마세요.',
+      JSON.stringify(recipe),
+    ].join('\n\n');
+    await this.handleSend(prompt, []);
+  }
+
   hasActiveStream(): boolean { return this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
 
   refreshConfig(): Promise<void> {
@@ -4613,7 +4632,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           throw new ProxyAuthError("missing", TOKEN_MISSING_FRIENDLY);
         }
         try {
+          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
           const sdkEnd = await runSdkCoach({
+            emailAutomationHost,
             gatewayUrl: proxyUrl,
             effort,
             turnId: streamId,

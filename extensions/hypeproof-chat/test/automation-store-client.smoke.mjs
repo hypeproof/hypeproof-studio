@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { createAutomationStoreClient } from '../src/automationStoreClient.ts';
+let request;
+const client = createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'test-participant',fetchImpl:async(url,init)=>{request={url,init};return new Response(JSON.stringify({items:[]}),{status:200});}});
+await client.list();assert.equal(request.url,'https://service.example.test/v1/automations');assert.equal(request.init.headers.Authorization,'Bearer test-participant');assert.equal(request.init.redirect,'error','bearer must not follow remote redirects');
+const denied = createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'test',fetchImpl:async()=>new Response('server details must not leak',{status:404})});
+await assert.rejects(()=>denied.detail('foreign'),/우리 반/);
+assert.throws(()=>createAutomationStoreClient({baseUrl:'http://remote.example.test',getToken:async()=>''}));
+assert.throws(()=>createAutomationStoreClient({baseUrl:'https://name:pass@remote.example.test',getToken:async()=>''}));
+console.log('PASS store client: authenticated private route, no redirect, safe errors and trusted URL');

@@ -82,7 +82,7 @@ const sdk = await import("@anthropic-ai/claude-agent-sdk");
     "hasFactory 게이트가 이 테스트가 재는 두 이름을 본다",
   );
   // 그리고 그 게이트가 실패했을 때 조용하지 않아야 한다 — 로그 한 줄이라도 남는다.
-  assert.match(coach, /browser MCP tools but the SDK\/zod factory is unavailable/, "게이트 실패가 로그로 남는다");
+  assert.match(coach, /managed MCP factory unavailable; capabilities remain disabled/, "게이트 실패가 로그로 남는다");
 }
 
 console.log("sdk-surface-drift smoke OK");

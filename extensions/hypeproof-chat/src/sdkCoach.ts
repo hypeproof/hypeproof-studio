@@ -30,6 +30,7 @@ import {
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
+import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
 import type { AssetScoreChunk, Citation, ResolvedProfile } from "./protocol";
 import { ProxyAuthError } from "./proxyClient";
 import {
@@ -161,6 +162,7 @@ export interface SdkCoachArgs {
    * browser-less. Implemented by chatPanelProvider (it has the vscode API).
    */
   browserHost?: BrowserMcpHost;
+  emailAutomationHost?: GoogleAutomationMcpHost;
   /**
    * #282 W4a — the hypeproofChat.sdkBinaryPath setting (highest-priority
    * binary override). Undefined/empty = unset; resolution then walks
@@ -538,26 +540,41 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
 
   let mcpServers: Options["mcpServers"];
   let grantedMcpTools: readonly string[] = [];
-  if (opts.permittedMcpTools.length > 0 && args.browserHost) {
-    const hasFactory =
-      typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
+  if (opts.permittedMcpTools.length > 0 && (args.browserHost || args.emailAutomationHost)) {
+    const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
     if (hasFactory && z) {
-      const server = buildHypeproofMcpServer(
-        { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! },
-        z,
-        args.browserHost,
-        // CR-02 — register the Experiment Browser tools only where they were granted.
-        crMcpRegistration(opts.permittedMcpTools),
-      );
-      mcpServers = {
-        [HYPEPROOF_MCP_SERVER_NAME]: server as NonNullable<Options["mcpServers"]>[string],
-      };
-      grantedMcpTools = opts.permittedMcpTools;
+      const factory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
+      const servers: NonNullable<Options["mcpServers"]> = {};
+      const grants: string[] = [];
+      const emailNames: readonly string[] = GOOGLE_AUTOMATION_MCP_TOOLS;
+      const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name));
+      if (args.browserHost && browserGrants.length) {
+        servers[HYPEPROOF_MCP_SERVER_NAME] = buildHypeproofMcpServer(factory, z, args.browserHost,
+          crMcpRegistration(browserGrants)) as NonNullable<Options["mcpServers"]>[string];
+        grants.push(...browserGrants);
+      }
+      if (args.emailAutomationHost && emailNames.every(name => opts.permittedMcpTools.includes(name))) {
+        const host = args.emailAutomationHost;
+        const server = buildGoogleAutomationMcpServer(factory, z, {
+          runtime: host.runtime,
+          isAllowed: () => host.isAllowed(),
+          refreshAuthorization: host.refreshAuthorization ? () => host.refreshAuthorization!() : undefined,
+          confirmSend: async preview => {
+            awaitingUser++;
+            try { return await host.confirmSend(preview); }
+            finally { awaitingUser--; }
+          },
+        });
+        if (server) {
+          servers[GOOGLE_AUTOMATION_MCP_SERVER] = server as NonNullable<Options["mcpServers"]>[string];
+          grants.push(...emailNames);
+        }
+      }
+      if (grants.length) mcpServers = servers;
+      grantedMcpTools = grants;
     } else {
-      console.warn(
-        "[coach] profile grants browser MCP tools but the SDK/zod factory is unavailable — running browser-less",
-      );
+      console.warn("[coach] managed MCP factory unavailable; capabilities remain disabled");
     }
   }
 

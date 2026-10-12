@@ -1,3 +1,4 @@
+import { registerAutomationHost } from "./automationHost";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -174,6 +175,8 @@ export async function activate(context: vscode.ExtensionContext) {
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
+  const automationHost = registerAutomationHost(context, provider);
+  provider.setEmailAutomationHost(() => automationHost.getMcpHost());
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const startPage = new StartPage(context, provider, async (profile, commit) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit);

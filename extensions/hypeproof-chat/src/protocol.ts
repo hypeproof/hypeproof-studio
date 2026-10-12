@@ -147,6 +147,8 @@ export interface CoachInfo {
 /** Kept in this file (not in lessonBinding.ts) because the webview build type-checks protocol.ts and must not follow Node-side imports. */
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
+  /** Service-owned opt-in, never inferred from a local setting. */
+  automations?: { enabled: boolean; provider: 'gmail'; maxRecipients?: number; oauthClientId?: string };
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */
@@ -337,6 +339,8 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
+  | { type: 'automationClose' }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
@@ -494,6 +498,7 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
   | {type:'inputRejected';text:string;images?:string[]}
   | {type:'activityFreeze';frozen:boolean;nonce?:string}
   | {type:'activityDraftError';error:string}

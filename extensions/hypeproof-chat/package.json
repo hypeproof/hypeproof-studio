@@ -230,6 +230,10 @@
         "command": "hypeproof-chat.clearBrowserResultBytes",
         "title": "HypeProof: 저장된 실험 브라우저 화면 지우기",
         "enablement": "hypeproof-chat.crBrowserBytesStored"
+      },
+      {
+        "command": "hypeproof-chat.emailAutomation",
+        "title": "HypeProof: 업무 자동화"
       }
     ],
     "menus": {
@@ -422,6 +426,12 @@
           "default": "https://hypeproof-ai.xyz",
           "description": "HypeProof Lab 사이트 주소. '갤러리에 올리기'가 여기로 보냅니다. 로컬 개발 서버에 붙여 볼 때만 바꾸세요 (예: http://localhost:3000). 아이 작품이 실제로 올라가는 목적지이므로 워크스페이스 설정이 아니라 머신 설정입니다 — proxyUrl 과 같은 범위입니다 (#748).",
           "scope": "machine"
+        },
+        "hypeproofChat.automationGoogleClientId": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Google Desktop OAuth client ID for opted-in email workshops. The Service profile must enable email automation."
         }
       }
     },
@@ -457,7 +467,8 @@
     "test:classroom-ops:review": "node --experimental-strip-types --test test/classroom-ops-review.test.mjs test/classroom-ops-expiry-review.test.mjs test/classroom-ops-recovery.test.mjs test/sdk-terminal-failure.test.mjs",
     "test:chalk-tools": "node --experimental-strip-types test/chalk-tools.test.mjs",
     "test:chalk-generator": "node --experimental-strip-types test/chalk-generator.test.mjs",
-    "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs"
+    "test:chalk-judge": "node --experimental-strip-types test/chalk-judge.test.mjs",
+    "test:automation": "node --experimental-strip-types --test test/automation*.smoke.mjs test/google-automation.smoke.mjs"
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.207",
