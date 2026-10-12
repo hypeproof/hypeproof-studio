@@ -477,9 +477,7 @@
     "esbuild": "^0.28.1",
     "jsqr": "^1.4.0",
     "qrcode-generator": "^2.0.4",
-    "typescript": "^5.4.0"
-  },
-  "dependencies": {
+    "typescript": "^5.4.0",
     "@hypeproof/measurement-core": "file:../../.private-service-cache/hypeproof-measurement-core-0.1.0.tgz",
     "@hypeproof/service-contracts": "file:../../.private-service-cache/hypeproof-service-contracts-0.1.0.tgz",
     "@hypeproof/measurement": "file:../../.private-service-cache/hypeproof-measurement-0.3.5.tgz"
