@@ -28,7 +28,7 @@ if [ -f vscodium-base/.git ] || [ -d vscodium-base/.git ]; then ok "vscodium-bas
 else todo "git submodule update --init"; git submodule update --init && ok "submodule initialised"; fi
 
 hdr "3. Dependencies"
-( npm ci --silent >/dev/null 2>&1 ) && ok "public Service development artifact" || todo "npm ci"
+( node scripts/bootstrap-service-packages.mjs && npm ci --silent >/dev/null 2>&1 ) && ok "private Service development artifact" || todo "node scripts/bootstrap-service-packages.mjs && npm ci"
 ( cd extensions/hypeproof-chat && npm ci --omit=optional --silent >/dev/null 2>&1 ) && ok "App dependencies" || todo "npm ci --prefix extensions/hypeproof-chat --omit=optional"
 ( cd extensions/hypeproof-chat/webview-ui && npm ci --silent >/dev/null 2>&1 ) && ok "webview dependencies" || todo "npm ci --prefix extensions/hypeproof-chat/webview-ui"
 ( cd chalk && npm ci --silent >/dev/null 2>&1 ) && ok "Chalk consumer dependencies" || todo "npm ci --prefix chalk"

@@ -57,7 +57,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install pinned public Service contract fixtures
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install pinned private Service contract fixtures
         run: npm ci --ignore-scripts
 
       - name: Check product registry
@@ -94,5 +98,5 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: npm ci --ignore-scripts
 
-      - name: Execute preserved registry contracts against the public Service
+      - name: Execute preserved registry contracts against the private Service
         run: npm run test:registry-contracts

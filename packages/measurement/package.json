@@ -11,7 +11,7 @@
     "test": "npm run build && node --test test/sync.test.mjs test/observer*.test.mjs"
   },
   "dependencies": {
-    "@hypeproof/measurement": "https://github.com/hypeproof/hypeproof-service/releases/download/measurement-v0.3.5/hypeproof-measurement-0.3.5.tgz"
+    "@hypeproof/measurement": "file:../../.private-service-cache/hypeproof-measurement-0.3.5.tgz"
   },
   "private": true
 }

@@ -45,6 +45,6 @@
     "@playwright/test": "^1.49.0",
     "esbuild": "^0.28.2",
     "typescript": "^5.4.0",
-    "@hypeproof/service-testkit": "https://github.com/hypeproof/hypeproof-service/releases/download/service-testkit-v0.1.2/hypeproof-service-testkit-0.1.2.tgz"
+    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.2.tgz"
   }
 }

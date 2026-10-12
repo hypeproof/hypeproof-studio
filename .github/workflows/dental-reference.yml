@@ -30,6 +30,10 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: e2e/package-lock.json
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
         working-directory: e2e
       - run: npx playwright install --with-deps chromium

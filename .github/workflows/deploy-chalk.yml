@@ -64,6 +64,10 @@ jobs:
 
       # Chalk's declared public packages include its API contracts and the
       # development Service harness used by integration tests.
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install chalk dependencies
         working-directory: chalk
         run: npm ci

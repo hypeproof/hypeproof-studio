@@ -67,6 +67,7 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
     secrets:
       HPS_ACCEPTANCE_ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+      HYPEPROOF_READ_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
   deploy:
     needs: [resolve, activity-compatibility]
     if: ${{ always() && needs.resolve.result == 'success' && (inputs.dry_run || inputs.skip_activity_compatibility || needs.activity-compatibility.result == 'success') }}
@@ -89,7 +90,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hypeproof/hypeproof-service
-          ref: service-testkit-v0.1.2
+          ref: f8d0496630b3407cb68ec1da79719d1b95640984
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
           path: .service-source
 
       - uses: actions/setup-node@v4
@@ -99,8 +101,8 @@ jobs:
           cache-dependency-path: .service-source/worker/package-lock.json
 
       - name: Install worker dependencies
-        working-directory: .service-source/worker
-        run: npm ci
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
 
       - name: Worker smoke tests
         working-directory: .service-source/worker

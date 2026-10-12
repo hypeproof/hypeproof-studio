@@ -8,6 +8,9 @@ on:
       - 'packages/measurement/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'config/service-packages.json'
+      - 'scripts/bootstrap-service-packages.mjs'
+      - 'scripts/test/bootstrap-service-packages.test.mjs'
       - 'test/service-integration/**'
       - 'chalk/**'
       - 'extensions/hypeproof-chat/**'
@@ -75,6 +78,14 @@ jobs:
       - name: Regression — live-session freeze positive/negative/override controls
         if: ${{ !cancelled() }}
         run: node scripts/test-check-live-sessions.mjs
+      - name: Private Service package integrity and boundary controls
+        if: ${{ !cancelled() }}
+        run: npm run test:private-service-packages
+      - name: Bootstrap pinned private Service packages
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Measurement — released package compatibility
         if: ${{ !cancelled() }}
         working-directory: packages/measurement
@@ -92,6 +103,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
       - run: npm ci
         working-directory: extensions/hypeproof-chat
@@ -99,7 +114,7 @@ jobs:
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm ci
         working-directory: e2e
-      - name: Cross-product checks against the pinned public Service runtime
+      - name: Cross-product checks against the pinned private Service runtime
         run: npm run test:service-integration
 
   worker-typecheck:
@@ -110,13 +125,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
-      - name: Typecheck the pinned public Service reference source
+      - name: Typecheck the pinned private Service reference source
         run: node node_modules/typescript/bin/tsc -p "$(node scripts/service-tooling.mjs)/tsconfig.json"
 
   # Chalk (chalk/) — the instructor surface, its own Worker on the c* train
   # (plan task F). HTTP clients use the public contract; tests install the
-  # pinned public Service reference artifact. `npm test` includes controls:
+  # pinned private Service reference artifact. `npm test` includes controls:
   # instructor-auth-drift (one verifier, two workers) and deploy-isolation
   # (a c* deploy cannot move the Service's version).
   chalk-test:
@@ -129,6 +148,10 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: chalk/package-lock.json
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install chalk deps
         id: chalk_install
         working-directory: chalk
@@ -157,6 +180,10 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: extensions/hypeproof-chat/package-lock.json
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install extension deps
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
         # `claude` binary package (#282) — typecheck/smoke never spawn it.
@@ -176,7 +203,11 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: extensions/hypeproof-chat/package-lock.json
-      - name: Install pinned public Service testkit
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install pinned private Service testkit
         run: npm ci
       - name: Install extension deps
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
@@ -208,6 +239,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install extension deps
         working-directory: extensions/hypeproof-chat
         run: npm ci

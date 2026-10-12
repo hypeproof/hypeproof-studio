@@ -27,6 +27,7 @@ fi
 
 node e2e/native-trial-checks.test.mjs
 if [[ -z "${HPS_NATIVE_REUSE_DIR:-}" ]]; then
+node scripts/bootstrap-service-packages.mjs
 npm ci
 npm ci --prefix e2e
 npm ci --prefix extensions/hypeproof-chat
