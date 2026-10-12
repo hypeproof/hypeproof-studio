@@ -3891,6 +3891,50 @@
         "chalk/test/instructor-auth-drift.test.mjs",
         "test/service-integration/measurement-core.test.mjs"
       ]
+    },
+    {
+      "id": "email-automation-workshop",
+      "title": "Reviewed Google email automation and cohort recipe sharing",
+      "issue": 1604,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/email-automation.md",
+          "ids": [
+            "EA-01",
+            "EA-02",
+            "EA-03",
+            "EA-04",
+            "EA-05",
+            "EA-06",
+            "EA-07",
+            "EA-08",
+            "EA-09"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "Complete Google OAuth and delivered synthetic-email acceptance, Windows installation, and cohort A/B rerun against the linked Service and Ops changes; retain draft until external evidence exists.",
+      "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
+      "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
+      "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",
+      "evidence_required": "Pinned App/Service/Ops revisions, automated controls, actual Google OAuth and receipt, Windows installed-app execution, A/B sharing and measured model usage with price basis.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/automationHost.ts",
+        "extensions/hypeproof-chat/src/googleAutomation.ts",
+        "extensions/hypeproof-chat/src/googleAutomationMcp.ts",
+        "extensions/hypeproof-chat/src/automationPanel.ts",
+        "extensions/hypeproof-chat/src/sdkCoach.ts",
+        "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx"
+      ],
+      "verification_inputs": [
+        "docs/testing/email-automation.md",
+        "extensions/hypeproof-chat/test/google-automation.smoke.mjs",
+        "extensions/hypeproof-chat/test/automation-panel-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs",
+        ".github/workflows/platform-fixtures.yml"
+      ]
     }
   ]
 }
