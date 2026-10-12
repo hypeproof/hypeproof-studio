@@ -1,0 +1,23 @@
+# Security updates only. Version updates stay off (open-pull-requests-limit: 0).
+#
+# Without this file every alert opened its own pull request, and each of those
+# ran the whole PR CI, some of it on macOS and Windows runners. The group folds
+# the open security updates of all npm manifests into one pull request.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/chalk"
+      - "/e2e"
+      - "/extensions/hypeproof-chat"
+      - "/extensions/hypeproof-chat/webview-ui"
+      - "/packages/measurement"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    groups:
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"

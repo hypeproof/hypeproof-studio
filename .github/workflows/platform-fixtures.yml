@@ -1,0 +1,86 @@
+name: studio-platform-fixtures
+
+# The macOS and Windows legs of PR CI. They lived in pr-ci.yml and ran on every
+# pull request. A macOS minute is billed at about ten times a Linux minute and a
+# Windows minute at about 1.7 times, so these four one-minute jobs cost more than
+# the ten Linux jobs beside them. They exercise the updater, the local runtime,
+# the dev launcher and the Codex rehearsal client, so they now run only when a
+# pull request or a push to main touches what those tests read.
+#
+# Add a path here when one of the jobs below starts reading a new place.
+
+on:
+  pull_request:
+    paths:
+      - 'extensions/hypeproof-chat/**'
+      - 'scripts/**'
+      - 'test/service-integration/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/platform-fixtures.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/hypeproof-chat/**'
+      - 'scripts/**'
+      - 'test/service-integration/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/platform-fixtures.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces the run in progress. Runs on
+# main are never cancelled.
+concurrency:
+  group: platform-fixtures-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  update-platform-fixtures:
+    name: updater / ${{ matrix.os }} fixtures
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Execute installer failure controls (no real app installation)
+        shell: bash
+        working-directory: extensions/hypeproof-chat
+        run: |
+          node --experimental-strip-types test/update-installer.smoke.mjs
+          node --experimental-strip-types test/update-windows-wrapper.smoke.mjs
+
+  studio-dev-platform-fixtures:
+    name: studio dev / ${{ matrix.os }} fixtures
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned public Service testkit
+        run: npm ci
+      - name: Install extension dependencies without native model binaries
+        working-directory: extensions/hypeproof-chat
+        run: npm ci
+      - name: Verify isolated launcher and subscription lifecycle controls
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python scripts/test-studio-dev.py
+          node --experimental-strip-types extensions/hypeproof-chat/test/local-runtime.smoke.mjs
+          node --experimental-strip-types --test test/service-integration/codex-rehearsal.test.mjs
