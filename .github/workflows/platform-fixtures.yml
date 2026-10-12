@@ -85,3 +85,9 @@ jobs:
           python scripts/test-studio-dev.py
           node --experimental-strip-types extensions/hypeproof-chat/test/local-runtime.smoke.mjs
           node --experimental-strip-types --test test/service-integration/codex-rehearsal.test.mjs
+
+      - name: Verify email automation runtime and durable credential/send lock
+        shell: bash
+        working-directory: extensions/hypeproof-chat
+        run: |
+          node --experimental-strip-types --test test/google-automation.smoke.mjs test/automation-panel-ledger.smoke.mjs test/automation-store-client.smoke.mjs
