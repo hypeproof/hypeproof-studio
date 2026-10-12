@@ -58,3 +58,11 @@ test('a long SDK turn refreshes expired authorization before MCP dispatch',async
  assert.equal(result.isError,undefined);assert.equal(reads,1);assert.equal(refreshed,1);
  host.refreshAuthorization=async()=>false;await read.handler({spreadsheetId:'synthetic',range:'A1:A2'});assert.equal(reads,1);
 });
+
+
+test('browser registration cannot grant email tools when the email host is missing',async()=>{
+ const opts=await turn({profile:{game:{template_tier:'website'},sdk_tools:{browser:true},automations:capability},browserHost:{openBrowser:async()=>{},screenshot:async()=>null,startLivePreview:async()=>null}});
+ assert.deepEqual(Object.keys(opts.mcpServers),['hypeproof']);
+ assert.equal((await opts.canUseTool(names[2],{}, {signal:new AbortController().signal})).behavior,'deny');
+ assert.equal((await opts.canUseTool('mcp__hypeproof__browser_read',{}, {signal:new AbortController().signal})).behavior,'allow');
+});

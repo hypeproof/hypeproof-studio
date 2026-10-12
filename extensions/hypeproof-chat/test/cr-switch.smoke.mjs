@@ -153,7 +153,7 @@ assert.deepEqual(crMcpRegistration(on), { curriculumRuntime: true });
 assert.deepEqual(crMcpRegistration([]), { curriculumRuntime: false });
 assert.deepEqual(registered(crMcpRegistration(off)).filter((n) => short.includes(n)), [], "end to end: the off grant registers no CR tool");
 // …and it is what sdkCoach passes to the server, not a constant.
-assert.match(sdkCoachSrc, /buildHypeproofMcpServer\([\s\S]{0,400}?crMcpRegistration\(opts\.permittedMcpTools\),?\s*\)/);
+assert.match(sdkCoachSrc, /buildHypeproofMcpServer\([\s\S]{0,400}?crMcpRegistration\(browserGrants\),?\s*\)/);
 // The context-key mirror: false for every off profile, true only for an explicit true.
 for (const p of [undefined, {}, { curriculum_runtime: { enabled: "true" } }, { curriculum_runtime: { enabled: false } }]) assert.equal(crContextKeyValue(p), false);
 assert.equal(crContextKeyValue(ADULT_ON), true);
