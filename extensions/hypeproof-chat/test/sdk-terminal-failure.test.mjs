@@ -111,7 +111,7 @@ test('the real SDK\'s own ending: retries, an API-error message, then query() TH
   // "API Error: 502 …" and threw. Before the fix this came out as `unknown`.
   const apiError = { type: 'assistant', error: 'server_error', message: { id: 'e', content: [{ type: 'text', text: 'API Error: 502 upstream error (status 500).' }] } };
   const real = await turn([retry(502), retry(502), apiError], { throws: new Error('Claude Code process exited with code 1') });
-  assert.deepEqual([real.outcome.ok, real.outcome.errorKind, real.outcome.status], [false, 'error', 502]);
+  assert.deepEqual([real.outcome.ok, real.outcome.errorKind, real.outcome.status], [false, 'SdkApiError', 502]);
   assert.deepEqual([judged(real.outcome).followup.error_class, judged(real.outcome).verdict.next], ['provider_5xx', 'shared_cause_not_pc']);
   const synthetic = { type: 'assistant', message: { id: 's', model: '<synthetic>', content: [{ type: 'text', text: 'API Error: 502 upstream error' }] } };
   assert.equal((await turn([retry(502), synthetic], { throws: new Error('exit 1') })).outcome.status, 502, 'the CLI\'s own API-error line does not count as an answer');
