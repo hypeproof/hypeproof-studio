@@ -804,7 +804,7 @@
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "b8a15192fc04a94a923d1ca4d73bb3a5cddae4c0afe21606c0aefbc0fee5b380",
+      "sha256": "47c2890e0d6bc3a4ab8ec5d2402126adb892ee9484b86a524c7727f28fde29cc",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
@@ -3926,14 +3926,18 @@
         "extensions/hypeproof-chat/src/googleAutomationMcp.ts",
         "extensions/hypeproof-chat/src/automationPanel.ts",
         "extensions/hypeproof-chat/src/sdkCoach.ts",
-        "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx"
+        "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/UserQuestionCard.tsx",
+        "extensions/hypeproof-chat/webview-ui/src/App.tsx"
       ],
       "verification_inputs": [
         "docs/testing/email-automation.md",
         "extensions/hypeproof-chat/test/google-automation.smoke.mjs",
         "extensions/hypeproof-chat/test/automation-panel-host.smoke.mjs",
         "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs",
-        ".github/workflows/platform-fixtures.yml"
+        ".github/workflows/platform-fixtures.yml",
+        "extensions/hypeproof-chat/test/automation-conversation-host.smoke.mjs",
+        "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs"
       ]
     }
   ]
