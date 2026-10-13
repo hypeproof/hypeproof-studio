@@ -58,6 +58,7 @@ interface Props {
   verifyPanel?: import("react").ReactNode;
   /** A transient private question, outside normal chat messages. */
   questionPanel?: import("react").ReactNode;
+  questionId?: string;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
   sendLocked?: boolean;
   aiNotice: string | null;             // #320 — AI disclosure at session start
@@ -467,9 +468,16 @@ export function ChatPanel(props: Props) {
     config.profile.ux.coach.naming_mode === "user_names_it" &&
     !config.coach?.configured;
 
+  const questionRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, streaming, !!props.questionPanel]);
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    if (props.questionPanel && questionRef.current) {
+      // Keep a new question's beginning visible instead of jumping to its last button.
+      const top = questionRef.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTo({ top, behavior: "instant" });
+    } else scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+  }, [messages.length, streaming, props.questionId, !!props.questionPanel]);
 
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
@@ -753,7 +761,7 @@ export function ChatPanel(props: Props) {
 
   return (
     <div
-      className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
+      className={`hps-shell${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -882,7 +890,7 @@ export function ChatPanel(props: Props) {
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}
-      {!props.instructor && help && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
+      {!props.instructor && help && <details className="hp-inbox hp-rail-lesson hps-artifact-approval" data-artifact-approval="">
         <summary>수업 결과물 승인</summary>
         <p className="hp-rail-lesson-note">작업 폴더의 index.html 지금 판을 수업 결과물로 승인하거나 승인을 취소합니다. 누르면 그 판의 지문을 먼저 보여 주고 고르게 합니다. 승인한 판만 ‘학생이 승인한 결과물’ 회수에 들어가며, 이 버튼은 아무것도 보내지 않습니다. 고치면 새 판은 다시 승인해야 합니다.</p>
         <button type="button" className="hp-cta-quiet" data-artifact-approve="" onClick={() => postToHost({ type: "artifactApprove" })}>지금 결과물 확인하고 승인·취소</button>
@@ -1003,7 +1011,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {props.verifyPanel}
-        {props.questionPanel}
+        {props.questionPanel && <div ref={questionRef} className="hps-question-anchor">{props.questionPanel}</div>}
 
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
@@ -1069,7 +1077,7 @@ export function ChatPanel(props: Props) {
             : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요'}</small>
         </div>}
         <EffortControl config={config} post={postToHost} />
-        <AccessControl config={config} streaming={streaming} post={postToHost} />
+        <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} />
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read

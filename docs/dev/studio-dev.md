@@ -102,9 +102,13 @@ read/copied and no provider API key is needed for this model path.
 The existing chat shows the development provider/model. File tools (Read, Write,
 Edit) use one Studio host implementation with the resolved lesson profile's
 capability gates and the existing approval UI. Both providers can create and
-modify actual workspace files. Shell, search, browser tools, attachments, model
-switching during a turn, and production funding parity are outside this first
-local adapter. No claim of full release-runtime equivalence is made.
+modify actual workspace files. An adult email-automation profile also exposes the
+same managed conversation, Google connection, private Sheets, preview/send and
+cohort skill tools as the SDK path. The host keeps capability checks and human
+approvals; the active model deadline pauses while a host question awaits its
+answer. Local Claude calls these through its authenticated Studio MCP server.
+Attachments, model switching during a turn, and production funding parity remain
+outside this adapter. No claim of full release-runtime equivalence is made.
 
 The override requires BOTH the Dev app identity and launcher environment, and
 refuses a remote Service URL. Official app behavior and production model pins

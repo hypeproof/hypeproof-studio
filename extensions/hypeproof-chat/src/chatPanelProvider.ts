@@ -4626,7 +4626,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const chalkCtx = undefined; // student local path never has instructor chalkCtx
-          const result=await runLocalCoach({config:local,profile,cwd,
+          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          const result=await runLocalCoach({config:local,profile,cwd,emailAutomationHost,
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
             signal:ctrl.signal,onDelta,onActivity,chalkCtx,
             requestApproval:async action=>{

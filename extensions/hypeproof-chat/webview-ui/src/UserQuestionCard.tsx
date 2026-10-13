@@ -23,7 +23,7 @@ export function UserQuestionCard({ question, onAnswer }: { question: AutomationQ
   const ready = isInput ? !!text.trim() : isChoice ? !!choice && (!freeText || !!text.trim()) : !needsReview || reviewed;
   const canSubmit = ready && !pending && (question.kind !== 'preview' || !!question.preview?.messages.length);
   useEffect(() => { setPending(false); submitted.current = false; }, [question]);
-  useEffect(() => { heading.current?.focus(); }, [question.id]);
+  useEffect(() => { heading.current?.focus({ preventScroll: true }); }, [question.id]);
   const send = (cancelled = false) => {
     if (submitted.current || (!cancelled && !canSubmit)) return;
     submitted.current = true; setPending(true);

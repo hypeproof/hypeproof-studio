@@ -532,6 +532,7 @@ export function App() {
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
         verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        questionId={automationQuestion?.id}
         questionPanel={state.config?.profile?.automations?.enabled && automationQuestion ? <UserQuestionCard key={`${state.config.activity?.id ?? 'activity'}:${automationQuestion.id}`} question={automationQuestion} onAnswer={answer => postToHost({ ...answer, activityId: state.config?.activity?.id })} /> : null}
         sendLocked={!!state.verify?.running || !!automationQuestion}
         onRemoveElement={() => {

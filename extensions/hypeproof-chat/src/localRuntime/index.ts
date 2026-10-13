@@ -2,6 +2,8 @@ import type { ResolvedProfile } from "../protocol";
 import { isAbsolute } from "node:path";
 import type { CoachToolAction, SdkActivity } from "../sdkCoachHelpers.ts";
 import { workspaceTools } from "./tools.ts";
+import { localEmailTools, localTurnBudget } from "./emailTools.ts";
+import type { GoogleAutomationMcpHost } from "../googleAutomationMcp.ts";
 import {
   CHALK_TOOL_DEFINITIONS,
   callChalkTool,
@@ -143,13 +145,14 @@ export async function runLocalCoach(args: {
   chalkCtx?: ChalkToolContext;
   /** 강사 모드 browser tools (live_preview_start + browser_open). 없으면 붙이지 않는다. */
   browserTools?: BrowserToolsForLocal;
+  emailAutomationHost?: GoogleAutomationMcpHost;
 }) {
   const lifetime = new AbortController();
-  const signal = AbortSignal.any([
-    args.signal,
-    lifetime.signal,
-    AbortSignal.timeout(180000),
-  ]);
+  let isWaiting = () => false;
+  const budget = localTurnBudget(() => isWaiting());
+  const signal = AbortSignal.any([args.signal, lifetime.signal, budget.signal]);
+  const cancelQuestion = () => args.emailAutomationHost?.cancelPendingQuestion?.();
+  signal.addEventListener("abort", cancelQuestion, { once: true });
   const workTools = workspaceTools({
     cwd: args.cwd,
     profile: args.profile,
@@ -161,16 +164,31 @@ export async function runLocalCoach(args: {
   // Chalk 도구는 강사 모드(chalkCtx 있음)에서만 붙는다(SUB-06).
   const withChalk = mergeChalkTools(workTools, args.chalkCtx);
   // Browser tools (live_preview_start + browser_open)은 강사 모드에서만 붙는다.
-  const tools = mergeBrowserTools(withChalk, args.browserTools);
+  const withBrowser = mergeBrowserTools(withChalk, args.browserTools);
+  const email = localEmailTools({ profile: args.profile, host: args.emailAutomationHost, signal, activity: args.onActivity });
+  isWaiting = email.isWaiting;
+  const tools = mergeBrowserTools(withBrowser, email);
   const system = args.systemPrompt ??
-    ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Only provided Studio file tools are available; do not claim shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
+    ("You are the coach in a LOCAL DEVELOPMENT rehearsal of HypeProof Studio. Reply in Korean. Follow the supplied course. Use only the provided Studio host tools; do not claim unsupported shell, browser or deployment actions. Read existing files before changing them; preserve unrelated work. Never treat sample results as real customers.\n" +
     JSON.stringify({
       lesson: args.profile.lesson?.content ?? null,
       welcome: args.profile.welcome,
       assets: args.profile.assets_focus ?? [],
     }));
+  const emailGuide = email.definitions.length ? [
+    'Email automation is available through these exact local tool names: ' + email.definitions.map(tool => tool.name).join(', ') + '.',
+    'First understand the actual work in natural Korean conversation. Ask one necessary question at a time with email_ask_user (question, choices as JSON array of {id,label}, allowFreeText as "true" or "false"). Do not repeat known answers or impose a fixed form.',
+    'Generate a reusable skill matching that intent and save it with email_skill_save. Its recipe is JSON internally, never something the learner must type or import. Exact schema: {schema:"hps-email-automation/1",category:"email",title,description,subjectTemplate,bodyTemplate,columns:{email,name,document,dueDate}}. Templates allow only {{name}}, {{document}}, {{dueDate}}; columns contain sheet header names. Do not put actual people, addresses, data or secrets in the recipe.',
+    'Use email_google_connect and email_sheet_configure with mode:"reuse" by default. Existing valid connections are reused. Only an explicit account/sheet change uses mode:"change". These host questions privately collect consent and Sheet URLs; never ask for those values in ordinary chat.',
+    'email_sheet_read takes {} and reads only the configured sheet. email_email_preview takes recipe JSON and returns only previewId/count. email_email_send takes previewId and requires the person to approve every exact recipient, subject and body privately; calling the tool cannot manufacture approval.',
+    'Offer email_skill_publish only when sharing is wanted; its separate human confirmation is mandatory. email_skill_list and email_skill_install support reuse from the cohort store. A cancelled question stops that action. Never send real email or publish without the corresponding host approval.',
+    'For Claude these tools appear under the studio MCP server. Never invent an unavailable tool name. Google and recipient details remain on the host; do not request them as tool arguments.',
+  ].join('\n') : '';
+  const providerEmailGuide = args.config.provider === 'claude'
+    ? emailGuide.replace(/\bemail_[a-z_]+\b/g, name => 'mcp__studio__' + name)
+    : emailGuide;
   const messages = [
-    { role: "system", content: system },
+    { role: "system", content: system + (providerEmailGuide ? '\n\n' + providerEmailGuide : '') },
     ...args.history.filter((m) => m.role === "user" || m.role === "assistant"),
     { role: "user", content: args.userText },
   ];
@@ -190,6 +208,7 @@ export async function runLocalCoach(args: {
           signal,
           onDelta: args.onDelta,
           toolServer: server,
+          timeout: 0, // The shared active-time budget owns cancellation while questions wait.
         });
       } finally {
         server.close();
@@ -211,6 +230,9 @@ export async function runLocalCoach(args: {
       client.close();
     }
   } finally {
+    if (email.isWaiting()) cancelQuestion();
+    signal.removeEventListener("abort", cancelQuestion);
+    budget.dispose();
     lifetime.abort();
   }
 }

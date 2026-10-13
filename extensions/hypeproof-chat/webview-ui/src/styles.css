@@ -1688,3 +1688,13 @@ html, body, #root {
 .hps-evidence-note textarea, .hps-evidence-note input, .hps-evidence-note select { width: 100%; box-sizing: border-box; }
 .hps-evidence-variants { border-collapse: collapse; }
 .hps-evidence-variants td, .hps-evidence-variants th { border: 1px solid var(--vscode-panel-border, #8884); padding: 2px 4px; text-align: left; }
+
+/* While answering, keep the current question above optional classroom controls. */
+.hps-question-anchor { flex-shrink: 0; }
+.hps-shell-question .hps-question-anchor .hps-user-question { margin-top: 0; }
+.hps-shell-question > .hp-help,
+.hps-shell-question > .hps-artifact-approval { display: none; }
+.hps-shell-question .hps-input-area .hps-model-selection,
+.hps-shell-question .hps-input-area .hps-effort { display: none; }
+.hps-shell-question .hps-input-area .hps-access[open] { max-height: 120px; overflow-y: auto; }
+.hps-shell-question > .hps-messages { min-height: 0; }
