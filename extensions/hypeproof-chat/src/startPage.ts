@@ -5,10 +5,15 @@ import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxy
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
+import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 
 const entryError = (error:unknown) => error instanceof ActivityConnectionError || error instanceof ProxyTransportError
   ? error.message : "활동을 열지 못했습니다. 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.";
 const TOKEN_KEY = "hypeproofChat.workshopToken";
+/** REQ-L12 — the order a buyer is in the middle of paying. Kept until the seat is claimed, so a restart cannot lose a paid order. */
+const PENDING_PURCHASE_KEY = "hypeproofChat.pendingPurchase";
+const DEFAULT_PROXY_URL = "https://api.hypeproof-ai.xyz/v1";
+const DEFAULT_SITE_BASE = "https://hypeproof-ai.xyz";
 
 /**
  * 활동 분리 **이전**에 쌓인 대화 기록 키인가 (#960).
@@ -34,6 +39,14 @@ export class StartPage {
   private error?: string;
   private started = false;
   private candidate?: { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string };
+  // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
+  private products?: PassProduct[] | null;
+  private order?: PendingOrder;
+  private purchaseStage?: PurchaseView["stage"];
+  private purchaseMessage?: string;
+  private purchaseTimer?: ReturnType<typeof setTimeout>;
+  /** The code issued for the saved order, while its activity is previewed but not yet entered. */
+  private purchaseToken?: string;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -75,8 +88,135 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.stopPurchaseWait(); } });
     this.context.subscriptions.push(panel);
+    void this.resumePurchase();
+  }
+
+  private settings() {
+    const config = vscode.workspace.getConfiguration("hypeproofChat");
+    return { proxyUrl: config.get<string>("proxyUrl", DEFAULT_PROXY_URL), siteBase: config.get<string>("siteBase", DEFAULT_SITE_BASE) };
+  }
+  private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
+  private purchaseView(): PurchaseView {
+    return {
+      available: !!this.products?.length || !!this.order,
+      ...(this.products?.length ? { products: this.products } : {}),
+      ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
+      ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
+      ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
+    };
+  }
+  /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
+  private async loadProducts(force = false): Promise<void> {
+    if (this.products !== undefined && !force) return;
+    this.products = await fetchProducts(this.settings().proxyUrl);
+  }
+  private async savedOrder(): Promise<PendingOrder | null> {
+    const { proxyUrl, siteBase } = this.settings();
+    return restorePendingOrder(await this.context.secrets.get(PENDING_PURCHASE_KEY), proxyUrl, siteBase);
+  }
+  /** A paid order must survive a closed tab or a restart: pick the wait back up where it stopped. */
+  private async resumePurchase(): Promise<void> {
+    if (this.order) return;
+    const saved = await this.savedOrder();
+    if (!saved) return;
+    this.order = saved;
+    // A claimed record means a code was issued and the activity was never entered. Replacing that code
+    // rotates the credential, so it happens only when the buyer asks, never by itself.
+    if (saved.claimed) { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.unfinished; await this.refresh(); return; }
+    this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+    await this.refresh();
+    this.schedulePurchasePoll(0);
+  }
+  private schedulePurchasePoll(delay = POLL_INTERVAL_MS): void {
+    this.stopPurchaseWait();
+    if (!this.panel || !this.order) return;
+    this.purchaseTimer = setTimeout(() => { void this.purchaseTick(); }, delay);
+  }
+  private async endPurchase(message: string): Promise<void> {
+    this.stopPurchaseWait();
+    await this.context.secrets.delete(PENDING_PURCHASE_KEY);
+    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message;
+    await this.refresh();
+  }
+  private async purchaseTick(): Promise<void> {
+    const order = this.order;
+    if (!order || !this.panel) return;
+    const state = await pollOrder(order);
+    if (this.order !== order) return;
+    const next = waitDecision(state, order, Date.now());
+    if (next === "wait") {
+      const message = state === "confirming" ? PURCHASE_COPY.confirming : PURCHASE_COPY.waiting;
+      if (message !== this.purchaseMessage) { this.purchaseMessage = message; await this.refresh(); }
+      this.schedulePurchasePoll();
+      return;
+    }
+    if (next !== "claim") { await this.endPurchase(PURCHASE_COPY[next]); return; }
+    await this.claimPurchase(order);
+  }
+  private async claimPurchase(order: PendingOrder): Promise<void> {
+    this.stopPurchaseWait();
+    this.purchaseStage = "connecting"; this.purchaseMessage = PURCHASE_COPY.connecting;
+    await this.refresh();
+    const claim = await claimWithRecovery(order);
+    if (this.order !== order) return;
+    if (!claim.ok) {
+      // The payment is confirmed and the order is kept, so "다시 연결" can try again without paying twice.
+      this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.claimFailed;
+      await this.refresh();
+      return;
+    }
+    // Keep the record, marked claimed, until the activity is entered (see the commit in beginCourse).
+    // If anything fails before that, "다시 연결" replaces the code instead of the buyer paying again.
+    const claimed: PendingOrder = { ...order, claimed: true };
+    await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(claimed));
+    this.order = claimed;
+    // From here the issued code is an ordinary participation code and takes the ordinary entry path.
+    await this.handle({ type: "connectCourse", token: claim.code });
+    if (this.candidate?.token === claim.code) {
+      this.purchaseToken = claim.code; this.order = undefined; this.purchaseStage = undefined; this.purchaseMessage = undefined; this.error = undefined;
+    } else { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.claimFailed; }
+    await this.refresh();
+  }
+  private async handlePurchase(msg: StartRequest): Promise<void> {
+    if (msg.type === "purchaseOpen") {
+      await this.loadProducts(true);
+      if (!this.order) { this.purchaseStage = this.products?.length ? "choosing" : "stopped"; this.purchaseMessage = this.products?.length ? undefined : PURCHASE_COPY.unavailable; }
+      await this.refresh(); return;
+    }
+    if (msg.type === "purchaseCancel") {
+      // Cancelling stops the wait only. A saved paid order is never thrown away from here.
+      this.stopPurchaseWait();
+      if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
+      else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      await this.refresh(); return;
+    }
+    if (msg.type === "purchaseReopen") {
+      if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
+      return;
+    }
+    if (msg.type === "purchaseRetry") {
+      const order = this.order ?? await this.savedOrder();
+      if (!order) { this.purchaseStage = this.products?.length ? "choosing" : undefined; this.purchaseMessage = undefined; await this.refresh(); return; }
+      this.order = order;
+      if (order.claimed) { await this.claimPurchase(order); return; }
+      this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+      await this.refresh(); this.schedulePurchasePoll(0); return;
+    }
+    if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
+    if (!this.products?.some(p => p.id === msg.productId)) return;
+    const { proxyUrl, siteBase } = this.settings();
+    this.busy = true; await this.refresh();
+    try {
+      const order = await createOrder(proxyUrl, msg.productId, siteBase);
+      if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
+      // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
+      await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
+      this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+      await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl));
+      this.schedulePurchasePoll();
+    } finally { this.busy = false; await this.refresh(); }
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
@@ -97,6 +237,7 @@ export class StartPage {
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
+      purchase: this.purchaseView(),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
@@ -110,7 +251,8 @@ export class StartPage {
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
-    if (msg.type === "startReady") { await this.refresh(); return; }
+    if (msg.type === "startReady") { await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
+    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {
@@ -212,6 +354,8 @@ export class StartPage {
             rollback = await connections.commit(candidate.token,profile!,root);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
+          // REQ-L12 — the purchased activity is entered; the order record has done its job.
+          if (this.purchaseToken === candidate.token) { this.purchaseToken = undefined; await this.context.secrets.delete(PENDING_PURCHASE_KEY); }
           this.chat.invalidateProfile();
           if (vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           if (!await this.chat.ensureProfile(true)) throw new Error('connection validation failed');
