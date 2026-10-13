@@ -79,19 +79,35 @@ function Test-HpsEmailExistingInstall([string]$Destination) {
 
 function Get-HpsQuestPins {
     return @{
-        sha256 = '943060fb85302f54d79922341c5d5bfca47b31de7c06370ee8f481128c12af33'
-        bytes = 576356
-        sourceCommit = '261446e9'
+        sha256 = '1a77cbc1008cadbba2bbe948c4ca46f3b731257e7fa0a7014276bfa464773ada'
+        bytes = 582857
+        sourceCommit = 'd7106eda'
         files = @{
-            'dist/extension.js' = @('22a79a769f1d93657c6e0a9e42d113d81fd6d5573bd1b9981ec74cf6ca8b7e1d','22a79a769f1d93657c6e0a9e42d113d81fd6d5573bd1b9981ec74cf6ca8b7e1d','aa74fd3ddbbdfffad34937d071465526f17e8ab97d9e77190f8ec95907585fc4')
-            'media/chat.svg' = @('6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894','6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894','6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894')
-            'media/hypeproof-theme.json' = @('3e8f494b2057704f6b5c780ba53b63798d29c7fee886ea8c984292a537647161','3e8f494b2057704f6b5c780ba53b63798d29c7fee886ea8c984292a537647161','44e49a9b066605d60472e3b5164836bfb87baf2edffc71f1538e60c0569579dd')
-            'package.json' = @('faa447f00efef56e1bb0b4d698ab44ad7769745ce62d4ddb4fdb8165feb5db35','faa447f00efef56e1bb0b4d698ab44ad7769745ce62d4ddb4fdb8165feb5db35','42768ce5b2c2a6681621750998b791590607f46e489c4d9a5de79c4153943362')
-            'webview-ui/dist/assets/index.css' = @('0d1bce6e14447c6b8312c688a20f1abfdd8936d17fbbc9003b085e6861a1f12f','a3c1efa1b862e641769f9b4383bfefdf204180bbcb04dddeeb4c18630dd2db56','a3c1efa1b862e641769f9b4383bfefdf204180bbcb04dddeeb4c18630dd2db56')
-            'webview-ui/dist/assets/index.js' = @('c82891aac312d02cebd4d3100d2c93860c4308c7cb2d2dc8e93c1ef427d82a95','ce6f249455eb564547a58ffe5d27ec992e929391a1df371b7b5b5ab876d418a3','a6d1b5e3f83e3c3ba7cdd64c9bc01715c9864dd575246a6165d8cf138cba4563')
-            'webview-ui/dist/index.html' = @('b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6','b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6','b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6')
+            'dist/extension.js' = @('22a79a769f1d93657c6e0a9e42d113d81fd6d5573bd1b9981ec74cf6ca8b7e1d','22a79a769f1d93657c6e0a9e42d113d81fd6d5573bd1b9981ec74cf6ca8b7e1d','aa74fd3ddbbdfffad34937d071465526f17e8ab97d9e77190f8ec95907585fc4','cafe1f4dc5b0168a48deeba878a09dfd79243b7fcda97eed340b6bda93fc8794')
+            'media/chat.svg' = @('6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894','6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894','6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894','6e83bfc861e8967e367686ff41ced2ea7a3ac02c57b1a641df38a78af271a894')
+            'media/hypeproof-theme.json' = @('3e8f494b2057704f6b5c780ba53b63798d29c7fee886ea8c984292a537647161','3e8f494b2057704f6b5c780ba53b63798d29c7fee886ea8c984292a537647161','44e49a9b066605d60472e3b5164836bfb87baf2edffc71f1538e60c0569579dd','a4dcb218307cc49d733ac3d835d727b859d071a02aab06da920773633cec5b9a')
+            'package.json' = @('faa447f00efef56e1bb0b4d698ab44ad7769745ce62d4ddb4fdb8165feb5db35','faa447f00efef56e1bb0b4d698ab44ad7769745ce62d4ddb4fdb8165feb5db35','42768ce5b2c2a6681621750998b791590607f46e489c4d9a5de79c4153943362','de7d8ad7d8f12aa0acafb790b8a9902d97cdd502d44a53dfbe4234ace0f15c79')
+            'webview-ui/dist/assets/index.css' = @('0d1bce6e14447c6b8312c688a20f1abfdd8936d17fbbc9003b085e6861a1f12f','a3c1efa1b862e641769f9b4383bfefdf204180bbcb04dddeeb4c18630dd2db56','a3c1efa1b862e641769f9b4383bfefdf204180bbcb04dddeeb4c18630dd2db56','cb7b57b8a9d254c469586e84ed961f402694ad679403e1699937f7f0cfc1b73f')
+            'webview-ui/dist/assets/index.js' = @('c82891aac312d02cebd4d3100d2c93860c4308c7cb2d2dc8e93c1ef427d82a95','ce6f249455eb564547a58ffe5d27ec992e929391a1df371b7b5b5ab876d418a3','a6d1b5e3f83e3c3ba7cdd64c9bc01715c9864dd575246a6165d8cf138cba4563','021a15fb11e170781acd335fffeba47000c5702bfad61f79355479d838070333')
+            'webview-ui/dist/index.html' = @('b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6','b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6','b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6','b5e4ef96f4b220ede9314970df919572dc9e3d147db8b5d9f7a62d4a5e5ee0b6')
         }
     }
+}
+
+# Each column is one complete revision; the last column is the update target.
+function Get-HpsQuestRevisionCount($Pins) {
+    if ($Pins.files.Count -ne 7) { throw 'Invalid extension revision matrix.' }
+    $count = $null
+    foreach ($name in $Pins.files.Keys) {
+        $revisions = $Pins.files[$name]
+        if ($revisions -isnot [Array] -or $revisions.Count -lt 1) { throw 'Invalid extension revision matrix.' }
+        if ($null -eq $count) { $count = $revisions.Count }
+        if ($revisions.Count -ne $count) { throw 'Incomplete extension revision matrix.' }
+        foreach ($hash in $revisions) {
+            if ($hash -isnot [string] -or $hash -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid extension revision hash.' }
+        }
+    }
+    return $count
 }
 
 function Assert-HpsQuestFile([string]$Path) {
@@ -102,6 +118,7 @@ function Assert-HpsQuestFile([string]$Path) {
 
 function Expand-HpsQuestUpdate([string]$ZipPath, [string]$Destination) {
     $pins = Get-HpsQuestPins
+    $targetRevision = (Get-HpsQuestRevisionCount $pins) - 1
     if ((Get-Item -LiteralPath $ZipPath).Length -ne $pins.bytes -or
         (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash -ine $pins.sha256) { throw 'Extension archive integrity check failed.' }
     if (Test-Path -LiteralPath $Destination) { throw 'Extraction destination already exists.' }
@@ -122,13 +139,15 @@ function Expand-HpsQuestUpdate([string]$ZipPath, [string]$Destination) {
         foreach ($name in $pins.files.Keys) {
             $path = Join-Path $Destination $name
             Assert-HpsQuestFile $path
-            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $pins.files[$name][2]) { throw 'Extension file integrity check failed.' }
+            if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $pins.files[$name][$targetRevision]) { throw 'Extension file integrity check failed.' }
         }
     } finally { $zip.Dispose() }
 }
 
 function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string]$PatchHash) {
     $pins = Get-HpsQuestPins
+    $revisionCount = Get-HpsQuestRevisionCount $pins
+    $targetRevision = $revisionCount - 1
     if ($PatchHash -cne $pins.sha256) { throw 'Unexpected extension revision.' }
     if (-not (Test-HpsEmailExistingInstall $Destination)) { throw 'Install the private test app before updating it.' }
     Assert-HpsEmailNotRunning $Destination
@@ -138,7 +157,7 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
     if ($product.commit -cne '682dfd37c3511f3fa159f1516aac230dcda2467c' -or $product.version -cne '0.1.5') { throw 'This update only supports private build 682dfd37.' }
     $extension = Join-Path $Destination 'resources/app/extensions/hypeproof-chat'
     $names = @($pins.files.Keys | Sort-Object)
-    $matches = @(0,0,0)
+    $matches = New-Object int[] $revisionCount
     $oldHashes = @{}
     foreach ($name in $names) {
         $installed = Join-Path $extension $name
@@ -146,12 +165,12 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
         Assert-HpsQuestFile $installed
         Assert-HpsQuestFile $incoming
         $current = (Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash
-        if ((Get-FileHash -LiteralPath $incoming -Algorithm SHA256).Hash -ine $pins.files[$name][2]) { throw 'Extension file integrity check failed.' }
+        if ((Get-FileHash -LiteralPath $incoming -Algorithm SHA256).Hash -ine $pins.files[$name][$targetRevision]) { throw 'Extension file integrity check failed.' }
         $oldHashes[$name] = $current
-        for ($i = 0; $i -lt 3; $i++) { if ($current -ieq $pins.files[$name][$i]) { $matches[$i]++ } }
+        for ($i = 0; $i -lt $revisionCount; $i++) { if ($current -ieq $pins.files[$name][$i]) { $matches[$i]++ } }
     }
-    if ($matches[2] -eq 7) { Write-Host 'This quest extension update is already installed.'; return }
-    if ($matches[0] -ne 7 -and $matches[1] -ne 7) { throw 'Installed extension files have unknown or partial changes. They were preserved.' }
+    if ($matches[$targetRevision] -eq $names.Count) { Write-Host 'This quest extension update is already installed.'; return }
+    if ($matches -notcontains $names.Count) { throw 'Installed extension files have unknown or partial changes. They were preserved.' }
     $package = Get-Content -LiteralPath (Join-Path $Extracted 'package.json') -Raw | ConvertFrom-Json
     if ($package.version -cne '0.1.5') { throw 'Unexpected packaged extension version.' }
     $backup = Join-Path $Destination ('.quest-backup-' + [Guid]::NewGuid().ToString('N'))
@@ -168,7 +187,7 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
         Assert-HpsEmailNotRunning $Destination
         foreach ($name in $names) {
             Copy-Item -LiteralPath (Join-Path $Extracted $name) -Destination (Join-Path $extension $name) -Force
-            if ((Get-FileHash -LiteralPath (Join-Path $extension $name) -Algorithm SHA256).Hash -ine $pins.files[$name][2]) { throw 'Updated extension integrity failure.' }
+            if ((Get-FileHash -LiteralPath (Join-Path $extension $name) -Algorithm SHA256).Hash -ine $pins.files[$name][$targetRevision]) { throw 'Updated extension integrity failure.' }
         }
         $receipt = @{schema=1;baseCommit=$product.commit;sourceCommit=$pins.sourceCommit;patchSha256=$PatchHash;originalHashes=$oldHashes;installedAt=(Get-Date).ToUniversalTime().ToString('o')}
         [IO.File]::WriteAllText((Join-Path $backup 'update.json'), ($receipt | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding($false)))
