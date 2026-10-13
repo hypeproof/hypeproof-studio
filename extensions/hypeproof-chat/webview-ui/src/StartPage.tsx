@@ -86,7 +86,7 @@ export function StartPage() {
               <span className="studio-plan-name">{p.label}{p.recommended && <em>추천</em>}</span>
               <span className="studio-plan-price">{won(p.amount)}</span>
               {p.tagline && <span className="studio-plan-for">{p.tagline}</span>}
-              <span className="studio-plan-what">AI 요청 {p.requestLimit.toLocaleString("ko-KR")}번 · 하루 {Math.floor(p.requestLimit / p.durationDays)}번꼴</span>
+              <span className="studio-plan-what">AI 요청 {p.requestLimit.toLocaleString("ko-KR")}번 · {p.durationDays}일 동안</span>
             </button>)}</div>
             <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id }); }}>{state.checking ? "결제 창을 열고 있어요" : `${won(chosen.amount)} 결제하러 가기`} <span aria-hidden="true">↗</span></button>
             <p className="studio-help">브라우저가 열려요. 결제하고 돌아오면 바로 쓸 수 있어요.</p>
