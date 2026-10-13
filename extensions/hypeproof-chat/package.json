@@ -50,6 +50,11 @@
     },
     "commands": [
       {
+        "command": "hypeproof-chat.configureGoogleDesktopClient",
+        "title": "운영자: Google Desktop OAuth 설정",
+        "enablement": "hypeproofChat.devGoogleOperator"
+      },
+      {
         "command": "hypeproof-chat.focus",
         "title": "HypeProof Chat: Focus"
       },
@@ -309,6 +314,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "hypeproof-chat.configureGoogleDesktopClient",
+          "when": "hypeproofChat.devGoogleOperator"
+        },
         {
           "command": "hypeproof-chat.diagnoseVoiceCapability",
           "when": "false"

@@ -11,10 +11,11 @@ const storage=await mkdtemp(join(tmpdir(),'hps-conversation-host-'));
 const recipe={schema:'hps-email-automation/1',category:'email',title:'자료 요청',description:'반복 자료 요청 메일',subjectTemplate:'{{name}}님 자료 요청',bodyTemplate:'{{document}}를 {{dueDate}}까지 부탁드립니다.',columns:{email:'이메일',name:'이름',document:'서류',dueDate:'기한'}};
 let token='synthetic-participant',grant=true,handlers,question=null,started=0,panelCount=0,connected=0,published=0,readInput,tick,googleReady=false,connectionChecks=0;
 const current={serverId:'a'.repeat(64),token,service:'https://service.example.test/v1'};
-const commands=new Map(),globals=new Map(),secrets=new Map(),questions=[];
+const commands=new Map(),globals=new Map(),secrets=new Map(),questions=[],runtimeDeps=[];
+let desktopClientId='synthetic-desktop-client',operatorInput='synthetic-desktop-secret',operatorOptions,devContext;
 const uri=fsPath=>({fsPath});
-const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{openExternal:async()=>true},commands:{registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
-const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20}}}),createGoogleAutomationRuntime:()=>({status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,connect:async()=>{connected++;googleReady=true;},disconnect:async()=>{},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
+const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{appName:'HypeProof Studio Dev',openExternal:async()=>true},commands:{executeCommand:async(name,key,value)=>{assert.equal(name,'setContext');assert.equal(key,'hypeproofChat.devGoogleOperator');devContext=value;},registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showInputBox:async options=>{operatorOptions=options;return operatorInput;},showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
+const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,connect:async()=>{connected++;googleReady=true;},disconnect:async()=>{},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
 const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/automationHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,external:['vscode'],plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^\.\/(activityConnections|proxyClient|googleAutomation)$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('activityConnections')?`export const ACTIVITY_TOKEN_KEY='token';export const activityConnections=()=>({current:globalThis.fixture.current});`:args.path.endsWith('proxyClient')?`export const fetchProfileResult=(...args)=>globalThis.fixture.fetchProfileResult(...args);`:`export const createGoogleAutomationRuntime=(...args)=>globalThis.fixture.createGoogleAutomationRuntime(...args);export const validateEmailRecipe=value=>{if(value?.schema!=='hps-email-automation/1')throw Error('Invalid recipe');return structuredClone(value);};`,loader:'js'}));}}]});
 let pauseDetail=false,releaseDetail;
 const fetcher=async (url,init)=>{
@@ -29,6 +30,14 @@ const host=module.exports.registerAutomationHost(ctx,{beginAutomationConversatio
 const waitQuestion=async()=>{for(let i=0;i<100;i++){if(question)return question;await new Promise(r=>setTimeout(r,2));}throw Error('No question shown');};
 try {
   await commands.get('hypeproof-chat.emailAutomation')();assert.equal(started,1);assert.equal(panelCount,0);assert.equal(globals.size,0,'intent discovery must not save an assumed default skill');
+  const operator=commands.get('hypeproof-chat.configureGoogleDesktopClient');assert.equal(typeof operator,'function');assert.equal(devContext,true);
+  assert.equal((await operator()).configured,true);assert.equal(operatorOptions.password,true);assert.equal(operatorOptions.ignoreFocusOut,true);
+  assert.equal(secrets.size,1);assert.match([...secrets.keys()][0],/^hps\.google\.desktop-client\.[a-f0-9]{64}$/);
+  await host.getMcpHost();assert.equal(runtimeDeps.at(-1).clientSecret,'synthetic-desktop-secret');
+  assert.equal(JSON.stringify(questions).includes('synthetic-desktop-secret'),false);assert.equal(JSON.stringify([...globals.values()]).includes('synthetic-desktop-secret'),false);
+  operatorInput=undefined;assert.equal((await operator()).cancelled,true);assert.equal(secrets.size,1);
+  desktopClientId='another-synthetic-client';await host.getMcpHost();assert.equal(runtimeDeps.at(-1).clientSecret,undefined,'desktop secrets must not cross client IDs');
+  desktopClientId='synthetic-desktop-client';
   let mcp=await host.getMcpHost();
   let pending=mcp.askUser({question:'누구에게 어떤 안내를 반복하나요?',choices:[{id:'documents',label:'제출 자료 요청'}],allowFreeText:true});
   let card=await waitQuestion();assert.equal(card.private,false);assert.equal(handlers.isWaiting(),true);
@@ -75,5 +84,6 @@ try {
   current.serverId='c'.repeat(64);current.token=token='third-participant';await host.getMcpHost();
   releaseDetail();const installed=await installing;
   assert.ok(installed.error,'stale download must be rejected');assert.equal(question,null,'old cohort recipe must never be shown in the new activity');
+  vscode.env.appName='HypeProof Studio';commands.delete('hypeproof-chat.configureGoogleDesktopClient');module.exports.registerAutomationHost(ctx,{});assert.equal(commands.has('hypeproof-chat.configureGoogleDesktopClient'),false);assert.equal(devContext,false);
   console.log('PASS conversation host: intent-first entry, private answers, one-use approvals, auto-save, independent publish, locked refresh, Stop races, stale install privacy');
 } finally { await rm(storage,{recursive:true,force:true}); }

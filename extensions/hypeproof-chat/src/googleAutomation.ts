@@ -44,6 +44,9 @@ export function validateEmailRecipe(value: unknown): EmailRecipe {
   return structuredClone(value) as EmailRecipe;
 }
 
+// First-time Google login may include account selection, MFA and consent.
+export const GOOGLE_OAUTH_WAIT_MS = 10 * 60 * 1000;
+
 /** Binds only IPv4 loopback and releases the port on success, cancellation or timeout. */
 export async function listenGoogleOAuth(): Promise<OAuthListener> {
   let accept!: (url: URL) => void;
@@ -66,7 +69,7 @@ export async function listenGoogleOAuth(): Promise<OAuthListener> {
   const address = server.address();
   if (!address || typeof address === 'string') { server.close(); return fail('로그인 연결을 준비하지 못했어요.'); }
   redirectUri = `http://127.0.0.1:${address.port}/oauth/callback`;
-  const timer = setTimeout(() => { done = true; reject(new Error('로그인 시간이 만료됐어요. 다시 연결해 주세요.')); server.close(); }, 180000);
+  const timer = setTimeout(() => { done = true; reject(new Error('로그인 시간이 만료됐어요. 다시 연결해 주세요.')); server.close(); }, GOOGLE_OAUTH_WAIT_MS);
   return { redirectUri, wait, close() { clearTimeout(timer); server.close(); if (!done) { done = true; reject(new Error('로그인을 취소했어요.')); } } };
 }
 

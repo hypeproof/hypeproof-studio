@@ -23,6 +23,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   let draining = false, opening = false;
   const service = () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1').replace(/\/+$/, '');
   const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+  const desktopClientKey = (clientId: string) => `hps.google.desktop-client.${digest(clientId)}`;
   const matches = () => {
     const current = activityConnections(context)?.current;
     return !!binding && !!current && current.serverId === binding.activityId && current.token === binding.token && service() === binding.service && current.service.replace(/\/+$/, '') === binding.service && vscode.workspace.isTrusted;
@@ -129,7 +130,9 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         try { return await work(); } finally { lockedEpoch = undefined; }
       });
     };
-    const baseRuntime = createGoogleAutomationRuntime({ clientId: pinned.clientId, maxRecipients: pinned.maxRecipients,
+    const clientSecret = await context.secrets.get(desktopClientKey(pinned.clientId));
+    if (binding !== pinned || !matches()) throw new Error('활동이 변경됐어요.');
+    const baseRuntime = createGoogleAutomationRuntime({ clientId: pinned.clientId, clientSecret, maxRecipients: pinned.maxRecipients,
       isAllowed: () => binding === pinned && allowed() && (lockedEpoch === undefined || lockedEpoch === operationEpoch),
       secrets: { get: key => context.secrets.get(prefix + key), store: async (key, value) => { await authorize(); if (binding !== pinned || !matches() || (lockedEpoch !== undefined && lockedEpoch !== operationEpoch)) throw new Error('활동이 변경되거나 취소돼 연결을 저장하지 않았어요.'); await context.secrets.store(prefix + key, value); }, delete: key => context.secrets.delete(prefix + key) },
       openBrowser: url => { if (lockedEpoch !== undefined && lockedEpoch !== operationEpoch) throw new Error('로그인을 취소했어요.'); return vscode.env.openExternal(vscode.Uri.parse(url)); }, ledger,
@@ -223,6 +226,27 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     try { await prepare(); await provider.beginAutomationConversation(); }
     catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '업무 자동화를 시작하지 못했어요.'); }
   }
+  // Only the isolated Dev app exposes this operator setup command.
+  void vscode.commands.executeCommand('setContext', 'hypeproofChat.devGoogleOperator', vscode.env.appName === 'HypeProof Studio Dev');
+  if (vscode.env.appName === 'HypeProof Studio Dev') context.subscriptions.push(
+    vscode.commands.registerCommand('hypeproof-chat.configureGoogleDesktopClient', async () => {
+      try {
+        const target = await authorize(true);
+        if (!target.clientId.trim()) throw new Error('Google Desktop client ID를 먼저 설정해 주세요.');
+        const value = await vscode.window.showInputBox({ title: '운영자 Google Desktop OAuth 설정', prompt: '현재 Desktop client의 client secret을 입력하세요. 이 기기의 보안 저장소에만 보관합니다.', password: true, ignoreFocusOut: true, validateInput: input => !input.trim() || input.length > 4096 || /[\r\n\x00]/.test(input) ? 'Desktop client secret 한 줄을 입력하세요.' : undefined });
+        if (value === undefined) return { configured: false, cancelled: true };
+        if (!value.trim() || value.length > 4096 || /[\r\n\x00]/.test(value)) throw new Error('Desktop client secret을 확인해 주세요.');
+        const current = await authorize(true);
+        if (current.signature !== target.signature) throw new Error('활동이나 Google client 설정이 변경됐어요. 다시 설정해 주세요.');
+        await context.secrets.store(desktopClientKey(target.clientId), value.trim());
+        cancelQuestion(); panel?.dispose(); runtime = undefined; controller = undefined; permittedUntil = 0;
+        return { configured: true };
+      } catch {
+        await vscode.window.showWarningMessage('Google Desktop 설정을 저장하지 못했어요. 현재 활동과 client ID를 확인해 주세요.');
+        return { configured: false };
+      }
+    }),
+  );
   context.subscriptions.push(vscode.commands.registerCommand('hypeproof-chat.emailAutomation', startConversation), { dispose: () => { clearInterval(timer); permittedUntil = 0; cancelQuestion(); panel?.dispose(); } });
   return {
     show, startConversation, getRuntime: () => allowed() ? runtime : undefined,

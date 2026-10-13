@@ -110,6 +110,20 @@ answer. Local Claude calls these through its authenticated Studio MCP server.
 Attachments, model switching during a turn, and production funding parity remain
 outside this adapter. No claim of full release-runtime equivalence is made.
 
+For Google Desktop OAuth in the isolated Dev app, first set the public client ID
+through the authorized profile or `hypeproofChat.automationGoogleClientId`. Open
+Command Palette → **운영자: Google Desktop OAuth 설정** and enter that client's
+secret in the native masked input. The host stores it in SecretStorage under a
+client-ID-specific key and injects it only into Google token exchange. Never put
+it in settings, profile JSON, chat, command arguments or shared skills. Cancelling
+the input preserves the prior value; saving invalidates the current automation
+operation, so start a fresh coach request afterward. Google browser consent has a
+ten-minute limit and remains outside the active model execution budget.
+
+This operator command is registered and visible only in **HypeProof Studio Dev**.
+Provisioning the Desktop client for production learner installations is not yet
+implemented; this local operator path is not evidence of release readiness.
+
 The override requires BOTH the Dev app identity and launcher environment, and
 refuses a remote Service URL. Official app behavior and production model pins
 remain unchanged. Claude uses its documented CLI/MCP connection, with built-in

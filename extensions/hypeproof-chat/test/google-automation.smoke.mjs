@@ -164,3 +164,10 @@ test('existing Google consent refreshes silently; revocation needs consent while
   identityStatus=401;assert.equal(await f.runtime.ensureConnected(),false);
   identityStatus=503;await assert.rejects(f.runtime.ensureConnected(),/잠시 후/);assert.equal(browsers,0);
 });
+
+
+test('desktop client secret reaches only token exchange, never browser consent URL',async()=>{
+  let resolve;const wait=new Promise(r=>{resolve=r;});let exchangeSeen=false;
+  const f=fixture({clientSecret:'synthetic-desktop-secret',listenOAuth:async()=>({redirectUri:'http://127.0.0.1:43210/oauth/callback',wait,close(){}}),openBrowser:async raw=>{assert.equal(raw.includes('synthetic-desktop-secret'),false);const url=new URL(raw);resolve(new URL('http://127.0.0.1:43210/oauth/callback?code=synthetic-code&state='+url.searchParams.get('state')));},fetchImpl:async(url,init)=>{if(url.includes('/userinfo'))return new Response(JSON.stringify({sub:'synthetic-account'}));exchangeSeen=true;assert.equal(init.body.get('client_secret'),'synthetic-desktop-secret');return new Response(JSON.stringify({access_token:'synthetic-access',expires_in:3600,refresh_token:'synthetic-refresh'}));}});
+  f.secrets.clear();await f.runtime.connect();assert.equal(exchangeSeen,true);assert.equal(JSON.stringify([...f.secrets.values()]).includes('synthetic-desktop-secret'),false);
+});

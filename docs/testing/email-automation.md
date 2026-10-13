@@ -32,6 +32,16 @@ synthetic host messages and proves webview behavior, not a real OAuth or AI turn
 Run extension/webview type checks and builds after integration. Run affected existing
 start/profile, SDK permission, Service budget and native-trial checks as regression.
 
+For local Dev OAuth acceptance, use Command Palette →
+**운영자: Google Desktop OAuth 설정** after configuring the public Desktop client ID.
+Enter the secret only in the native masked input; it must be held in SecretStorage,
+scoped to that client ID, and absent from browser URLs, webview/model messages,
+settings/profile JSON and shared recipes. Check cancellation, changing client IDs,
+and that the command is unavailable in ordinary Studio. Verify browser consent
+can outlast the active model budget after the private question card closes; the
+OAuth listener itself expires after ten minutes. Production learner credential
+provisioning remains unimplemented and requires separate release acceptance.
+
 Release observations, recorded separately:
 
 1. Windows clean learner machine installs without an organization GitHub login.

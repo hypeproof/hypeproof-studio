@@ -45,3 +45,32 @@ else {
 `,{mode:0o700});
   try{let text='';await runClaude({executable,cwd:root,messages:[],signal:AbortSignal.timeout(2000),onDelta:value=>text+=value,toolServer:{url:'http://127.0.0.1:1/mcp',token:'synthetic'}});assert.equal(text,'synthetic');}finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('Google browser consent stays outside the active model budget after its question card closes', async()=>{
+  const {createGoogleAutomationRuntime}=await import('../src/googleAutomation.ts');
+  let finishOAuth,opened,consentUrl;
+  const browserOpened=new Promise(resolve=>{opened=resolve;});
+  const callback=new Promise(resolve=>{finishOAuth=resolve;});
+  const secrets=new Map();
+  const runtime=createGoogleAutomationRuntime({
+    clientId:'synthetic-desktop-client',isAllowed:()=>true,
+    secrets:{get:async key=>secrets.get(key),store:async(key,value)=>secrets.set(key,value),delete:async key=>secrets.delete(key)},
+    ledger:{load:async()=>({}),save:async()=>{}},
+    listenOAuth:async()=>({redirectUri:'http://127.0.0.1:23456/oauth/callback',wait:callback,close(){}}),
+    openBrowser:async url=>{consentUrl=new URL(url);opened();},
+    fetchImpl:async url=>new Response(JSON.stringify(String(url).includes('/token')?{access_token:'synthetic-access',refresh_token:'synthetic-refresh',expires_in:3600}:{sub:'synthetic-sender'})),
+  });
+  let questionOpen=true,tools;
+  const budget=localTurnBudget(()=>tools?.isWaiting()??false,25);
+  const host={isAllowed:()=>true,isAwaitingUser:()=>questionOpen,runtime,confirmSend:async()=>false,
+    connectGoogle:async()=>{questionOpen=false;await runtime.connect();return{connected:true};}};
+  tools=localEmailTools({profile,host,signal:budget.signal});
+  try{
+    const connecting=tools.call('email_google_connect',{mode:'reuse'});
+    await browserOpened;assert.equal(questionOpen,false);assert.equal(tools.isWaiting(),true);
+    await new Promise(resolve=>setTimeout(resolve,75));assert.equal(budget.signal.aborted,false,'closing the host question must not charge browser consent time');
+    const response=new URL('http://127.0.0.1:23456/oauth/callback');response.searchParams.set('state',consentUrl.searchParams.get('state'));response.searchParams.set('code','synthetic-code');finishOAuth(response);
+    assert.deepEqual(JSON.parse(await connecting),{connected:true});assert.equal(tools.isWaiting(),false);assert.equal(secrets.size,1);
+    await new Promise(resolve=>setTimeout(resolve,50));assert.equal(budget.signal.aborted,true,'active execution deadline resumes after consent completes');
+  }finally{budget.dispose();}
+});
