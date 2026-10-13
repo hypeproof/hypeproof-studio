@@ -4892,6 +4892,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs"
+        },
+        {
+          "path": "scripts/tests/install-email-test-fixture.ps1"
         }
       ]
     },
@@ -4930,6 +4933,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/AutomationSurface.tsx"
+        },
+        {
+          "path": "scripts/install-email-test.ps1"
         }
       ]
     }
