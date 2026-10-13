@@ -418,6 +418,7 @@
 .studio-plan-price { font-size:14px; font-weight:650; text-align:right; }
 .studio-plan-for, .studio-plan-what { grid-column:1 / -1; font-size:12px; color:var(--studio-muted); }
 .studio-purchase-actions { display:flex; flex-wrap:wrap; gap:4px 16px; }
+
 /* "GitHub에서 이어하기" — the choice that replaces the one Primary while a code is confirmed and
  * the seat's GitHub already holds a site: continue (Primary) or start new (a peer option). */
 .studio-github { display: grid; gap: 10px; }
