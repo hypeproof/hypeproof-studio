@@ -139,7 +139,9 @@ try {
     New-Item -ItemType $linkType -Path $media -Target $realMedia | Out-Null
     Refuses { Set-HpsQuestExtension $linked $extracted $validHash } 'normal directory'
     if ((Get-FileHash (Join-Path $realMedia 'chat.svg')).Hash -ine $script:fixturePins.files['media/chat.svg'][0]) { throw 'Reparse target was changed.' }
-    Remove-Item -LiteralPath $media -Force
+    # Windows PowerShell 5.1 Remove-Item fails for directory junctions.
+    # Non-recursive Delete removes only this test link, never its target.
+    [IO.Directory]::Delete($media)
     $running = New-Installation 'running' $base
     function Get-Process { [pscustomobject]@{Path=(Join-Path $running 'HypeProof Studio.exe')} }
     Refuses { Set-HpsQuestExtension $running $extracted $validHash } 'Close HypeProof'
