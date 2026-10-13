@@ -30,3 +30,13 @@ assert.match(history.at(-1).content,/중지/);assert.match(history.at(-1).conten
 assert.equal(JSON.stringify(history).includes('private-sheet-value'),false,'private answers never become conversation history');
 reopened.activeCohortId='different-activity';assert.equal(reopened.getHistory().length,0,'another activity does not inherit the interrupted conversation');
 console.log('PASS interrupted automation: public answers, explicit cancellation, stable history reload, private exclusion and activity isolation');
+
+// Opening either fresh or saved work must not race the funding picker with an
+// invisible model request. The learner starts a turn with their own message.
+let implicitTurns=0;
+const openingHost=Object.assign(makeHost(),{focusEditor:()=>true,handleSend:async()=>{implicitTurns++;}});
+await openingHost.beginAutomationConversation();
+openingHost.activeCohortId='different-activity';
+await openingHost.beginAutomationConversation();
+assert.equal(implicitTurns,0,'opening the automation workspace never starts a paid turn');
+console.log('PASS opening fresh and saved automation work requires explicit learner input');

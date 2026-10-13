@@ -2113,11 +2113,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     ] });
   }
 
-  /** Reopen existing work without spending a model turn; only an empty conversation starts onboarding. */
+  /** Opening the workspace is free; the learner's first message starts onboarding. */
   async beginAutomationConversation(): Promise<void> {
     if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
-    if (this.hasActiveStream() || this.getHistory().length > 0) return;
-    await this.handleSend('반복하는 업무를 자동화하고 싶어요. 먼저 제가 하려는 일을 대화로 파악하고, 필요한 것만 한 가지씩 물어봐 주세요. 실제 명단과 계정 정보는 비공개 설정 질문에서 입력할게요.', []);
   }
 
   /** Compatibility entry: continue the same conversation without producing a manual JSON file. */
