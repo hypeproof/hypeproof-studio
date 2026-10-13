@@ -76,7 +76,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     pendingQuestion = undefined; authorizingAnswer = pending;
     notifyProgress();
     await provider.showAutomationQuestion(null);
-    try { await authorize(); if (authorizingAnswer !== pending || operationEpoch !== pending.epoch || binding !== pending.owner || !matches()) throw new Error('Changed activity'); pending.resolve(answer); }
+    try { await authorize(); if (authorizingAnswer !== pending || operationEpoch !== pending.epoch || binding !== pending.owner || !matches()) throw new Error('Changed activity'); provider.recordAutomationAnswer?.(pending.question, answer); pending.resolve(answer); }
     catch { pending.resolve({ questionId: pending.question.id, cancelled: true }); }
     finally { if (authorizingAnswer === pending) authorizingAnswer = undefined; }
   }
@@ -272,6 +272,12 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       { id: 'deploy', label: '나만 실행할 버전 준비', description: '확인한 코드로 비공개 실행 버전을 만들어요.', dependsOn: ['upload'] },
       { id: 'preview', label: '실제 메일 미리보기', description: 'Google에서 실행해 내용을 확인해요. 발송은 별도 승인이 필요해요.', dependsOn: ['deploy', 'sheet'] },
     ] });
+    // A validated local recipe proves the saved intent and skill, not any
+    // remote Google connection, upload, deployment or execution outcome.
+    try {
+      reusable(context.globalState.get(recipeKey(binding)));
+      await quest.track('skill', async () => ({ saved: true }), () => true, ['goal']);
+    } catch { /* Missing or malformed local state never invents completion. */ }
   }
   async function startConversation() {
     try { await prepare(); await ensureQuest(); await provider.beginAutomationConversation(); }

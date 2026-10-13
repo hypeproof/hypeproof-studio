@@ -103,3 +103,32 @@ credential persistence; Windows must verify its own protected store. Google
 standard-project binding still requires a supported account/project setup. This
 is not evidence that 20 unrelated accounts work without setup. Latest Windows
 acceptance and a second real Google learner remain unverified.
+
+## Observed Windows acceptance — in progress, 2026-10-14
+
+The private Windows shell is `682dfd37`. Root installed extension `5f94738f`
+through the existing authenticated copy-command updater and independently matched
+all seven installed file hashes. Prior `d7106eda` checks covered launch, sidebar
+resize, and width/draft retention after restart. Explicit UTF-8 reading fixed
+PowerShell 5.1 parsing of Korean package metadata.
+
+On `4192189e`, the actual Windows coach asked focused questions, accepted title,
+body and column answers, saved the skill and advanced the graph to 2/8. The new
+funding choice remained selected. The Windows bot account received Google 403
+because it is not an OAuth test user; adding its new access awaits confirmation.
+No Windows Google preview or OS-backed Google-token reuse is claimed.
+
+Windows surfaced two lifecycle requirements now covered locally: duplicate
+submissions must preserve their draft without ending the active response, and
+queued messages must wait until the previous activity writer is released; Stop
+must cancel the OAuth callback wait and return the connection step to a retryable
+state. Do not interpret a browser consent window or a running graph as connection
+success. An interrupted multi-question turn also needs durable, explicitly
+incomplete conversation history, and a validated saved recipe must restore only
+the established goal/skill steps. Restoration of later Google execution steps
+requires their own evidence. The interrupted-turn restart check remains open.
+
+The new test budget ledger was USD 0.056300 settled and zero held after this
+conversation, up USD 0.050334 from its prior USD 0.005966. This is observed token
+accounting, not an invoice. Old settled/held amounts and the aggregate USD 2
+ceiling remain unchanged. No additional email was sent.

@@ -2099,6 +2099,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   setAutomationConversationHandlers(handlers: NonNullable<ChatPanelProvider['automationConversation']>): void { this.automationConversation = handlers; }
   async showAutomationQuestion(question: import('./automationProtocol').AutomationQuestion | null): Promise<void> { await this.post({ type: 'automationQuestion', question }); }
 
+  /** Public intent answers belong to the conversation; private setup never does. */
+  recordAutomationAnswer(question: import('./automationProtocol').AutomationQuestion, answer: import('./automationProtocol').AutomationAnswer): void {
+    if (question.private || answer.cancelled) return;
+    const text = answer.text?.trim() || question.choices?.find(choice => choice.id === answer.choiceId)?.label;
+    const streamId = [...this.activeStreams.keys()].at(-1);
+    const timeline = streamId ? this.turnTimelines.get(streamId) : undefined;
+    if (!text || !streamId || !timeline) return;
+    const closed = timelineEnd(timeline, Date.now());
+    this.turnTimelines.set(streamId, { ...closed, baseId: timeline.baseId, seg: timeline.seg, items: [...closed.items,
+      { id: randomId(), role: 'assistant', content: question.title, createdAt: Date.now() },
+      { id: randomId(), role: 'user', content: text, createdAt: Date.now() },
+    ] });
+  }
+
   /** Reopen existing work without spending a model turn; only an empty conversation starts onboarding. */
   async beginAutomationConversation(): Promise<void> {
     if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
@@ -4260,6 +4274,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
+    let historyCommitted = false;
     // #580 — this turn's spool recording state. spoolRuntime is the runtime that
     // **actually ran**, reflecting an SDK→proxy fallback — quantifying the cause of a
     // turn with no usage requires the recorded runtime to match reality (no silent
@@ -4843,6 +4858,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             effectiveCoachName,
           ),
         ]);
+        historyCommitted = true;
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
         tryReveal(assistantText);
@@ -4862,6 +4878,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
+      if (profile?.automations?.enabled && ctrl.signal.aborted && !historyCommitted) {
+        try { await this.preserveInterruptedAutomationTurn(streamId, messageId, text, assistantText, assistantCitations, effectiveCoachName); }
+        catch { void this.post({type:'activityDraftError',error:'중지한 대화를 저장하지 못했어요. 앱을 닫기 전에 필요한 내용을 복사해 주세요.'}).catch(()=>{}); }
+      }
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
       // the main loop does). A closed turn id is refused by the Service from then on; best effort, bounded by the Service.
       if (bindingKey && token) void closeTurn({ proxyUrl, token, turnId: streamId, outcome: ctrl.signal.aborted ? "aborted" : spoolStatus === "ok" ? "completed" : "failed" });
@@ -4929,6 +4949,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if(this.pendingFundingSelection){this.applyPendingFundingSelection();void this.postConfig().catch(()=>{});}
       }
     }
+  }
+
+  private async preserveInterruptedAutomationTurn(streamId: string, messageId: string, text: string, assistantText: string, citations: import('./protocol').Citation[], assistantName?: string): Promise<void> {
+    const items = this.finishTurnItems(streamId, messageId, assistantText, citations, assistantName)
+      .map(message => message.tool?.state === 'running'
+        ? { ...message, tool: { ...message.tool, state: 'error' as const, label: `${message.tool.label} · 중지됨 (결과 미확인)` } }
+        : message);
+    await this.appendHistory([
+      { id: randomId(), role: 'user', content: text, createdAt: Date.now() },
+      ...items,
+      { id: randomId(), role: 'assistant', assistantName, content: '이 작업은 중지됐어요. 위 내용은 중지 전까지의 대화이며, 실행 완료를 뜻하지 않아요. 저장한 스킬은 유지됩니다. 자동으로 다시 실행하지 않으니, 이어서 할 작업을 알려 주세요.', createdAt: Date.now() },
+    ]);
   }
 
   /**
