@@ -272,17 +272,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private accessScope:string|undefined;
   private accessCheckedAt=0;
   private accessLoad:Promise<void>|undefined;
+  private pendingFundingSelection?:{id:string;accessScope:string|undefined;activityScope:string|undefined;service:string};
+  private applyPendingFundingSelection():void {
+    const pending=this.pendingFundingSelection;
+    if(!pending)return;
+    const same=pending.accessScope===this.accessScope&&pending.activityScope===activityConnections(this.context)?.scope&&pending.service===vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
+    if(!same){this.pendingFundingSelection=undefined;if(this.accessState)this.accessState={...this.accessState,pendingSelection:undefined,notice:'연결이 바뀌었어요. 이번 작업의 이용권을 다시 선택해 주세요.'};return;}
+    if(this.hasActiveStream()||this.connectionChanging)return;
+    if(this.accessState?.status==='unknown'){this.accessState={...this.accessState,notice:'선택은 보관했어요. 사용량을 새로고침하면 이용권을 확인하고 적용합니다.'};return;}
+    this.pendingFundingSelection=undefined;
+    if(this.accessState?.view?.choices.some(c=>c.id===pending.id&&c.active)){this.accessState={...this.accessState,selected:pending.id,pendingSelection:undefined,notice:'선택한 이용권을 다음 작업부터 사용합니다.'};this.logChannel?.appendLine('[access] funding_selection applied');}
+    else if(this.accessState)this.accessState={...this.accessState,pendingSelection:undefined,notice:'이 이용권을 선택할 수 없어요. 사용량을 새로고침한 뒤 사용 가능한 이용권을 골라 주세요.'};
+  }
   private async loadAccess(force=false):Promise<void>{
+    const proxy=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
     const token=await this.context.secrets.get(TOKEN_KEY);
-    const scope=token?createHash('sha256').update(token).digest('hex'):undefined;
+    const scope=token?createHash('sha256').update(proxy+'\0'+token).digest('hex'):undefined;
     if(scope!==this.accessScope){this.accessScope=scope;this.accessState=undefined;this.accessCheckedAt=0;this.accessLoad=undefined;}
     if(!token)return;
     if(!force&&this.accessState&&Date.now()-this.accessCheckedAt<10000)return;
     if(this.accessLoad)return this.accessLoad;
-    const proxy=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
     const selected=this.accessState?.selected;
-    const pending=(async()=>{try{const view=await fetchAccessView(proxy,token);if(await this.context.secrets.get(TOKEN_KEY)===token)this.accessState={status:'ready',view,selected:this.accessState?.selected??selected};}
-      catch{if(await this.context.secrets.get(TOKEN_KEY)===token)this.accessState={status:'unknown',selected,notice:'사용량 미확인 · 새로고침해 주세요.'};}
+    const current=async()=>await this.context.secrets.get(TOKEN_KEY)===token&&proxy===vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')&&this.accessScope===scope;
+    const pending=(async()=>{try{const view=await fetchAccessView(proxy,token);if(await current())this.accessState={status:'ready',view,selected:this.accessState?.selected??selected,pendingSelection:this.accessState?.pendingSelection,notice:this.accessState?.status==='ready'?this.accessState.notice:undefined};}
+      catch{if(await current())this.accessState={status:'unknown',selected:this.accessState?.selected??selected,pendingSelection:this.accessState?.pendingSelection,notice:'사용량 미확인 · 새로고침해 주세요.'};}
       finally{if(this.accessScope===scope){this.accessCheckedAt=Date.now();this.accessLoad=undefined;}}})();
     this.accessLoad=pending;return pending;
   }
@@ -3458,7 +3471,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
     const connections=activityConnections(this.context);
-    if (connections && msg.activityId && msg.activityId!==connections.scope) return;
+    if (connections && msg.activityId && msg.activityId!==connections.scope) {
+      if(msg.type==='selectFunding'){
+        this.logChannel?.appendLine('[access] funding_selection stale_activity');
+        if(this.accessState)this.accessState={...this.accessState,notice:'이전 활동 화면에서 선택했어요. 현재 활동의 이용권을 다시 선택해 주세요.'};
+        await this.postConfig();
+      }
+      return;
+    }
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
       if (source && !msg.nonce) this.draftSource=source;
@@ -3640,10 +3660,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case 'refreshAccess':
         await this.loadAccess(true);await this.postConfig();return;
-      case 'selectFunding':
+      case 'selectFunding': {
+        this.logChannel?.appendLine(`[access] funding_selection received pending_sends=${this.pendingSends} streams=${this.activeStreams.size} approvals=${this.pendingApprovals?.size??0} world=${!!this.worldOpening} observation=${!!this.observationAssessment}`);
+        const activityScope=activityConnections(this.context)?.scope;
+        const accessScope=this.accessScope;
+        const service=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
         await this.loadAccess();
-        if(!this.hasActiveStream()&&this.accessState?.view?.choices.some(c=>c.id===msg.id&&c.active))this.accessState={...this.accessState,selected:msg.id,notice:'선택한 이용권을 다음 작업부터 사용합니다.'};
+        if(activityScope!==activityConnections(this.context)?.scope||accessScope!==this.accessScope||service!==vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')||this.connectionChanging){this.logChannel?.appendLine('[access] funding_selection connection_changed');if(this.accessState)this.accessState={...this.accessState,notice:'연결이 바뀌었어요. 활동 전환이 끝난 뒤 이용권을 다시 선택해 주세요.'};}
+        else if(this.accessState?.view?.choices.some(c=>c.id===msg.id&&c.active)){
+          this.pendingFundingSelection={id:msg.id,accessScope:this.accessScope,activityScope,service};
+          this.accessState={...this.accessState,pendingSelection:msg.id,notice:'현재 작업이 끝나면 선택한 이용권을 적용합니다. 진행 중인 작업의 이용권은 바뀌지 않아요.'};
+          this.applyPendingFundingSelection();
+          if(this.pendingFundingSelection)this.logChannel?.appendLine('[access] funding_selection queued');
+        }else {this.logChannel?.appendLine('[access] funding_selection unavailable');if(this.accessState)this.accessState={...this.accessState,notice:'이 이용권을 선택할 수 없어요. 사용량을 새로고침한 뒤 사용 가능한 이용권을 골라 주세요.'};}
         await this.postConfig();return;
+      }
       case 'requestBudget':{
         const token=await this.context.secrets.get(TOKEN_KEY),selected=this.accessState?.selected;
         if(token&&selected){try{await sendBudgetRequest(vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token,selected,msg.note);await this.loadAccess(true);if(this.accessState)this.accessState.notice='강사에게 추가 사용 요청을 보냈습니다.';}catch(error){if(this.accessState)this.accessState.notice=error instanceof Error?error.message:'요청을 보내지 못했습니다.';}}
@@ -4881,7 +4912,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({type:"inputRejected",text,images});
       await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
     } finally {
-      try { releaseActivity?.(); } finally { this.pendingSends--; }
+      try { releaseActivity?.(); } finally {
+        this.pendingSends--;
+        if(this.pendingFundingSelection){this.applyPendingFundingSelection();void this.postConfig().catch(()=>{});}
+      }
     }
   }
 
@@ -5410,6 +5444,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const scope=activity?.id;
     await this.draftWrites;
     await this.loadAccess();
+    this.applyPendingFundingSelection();
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const token = await this.context.secrets.get(TOKEN_KEY);
     const profile = await this.ensureProfile();

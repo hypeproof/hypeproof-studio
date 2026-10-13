@@ -20,7 +20,7 @@ export function AccessControl({config,streaming,post,collapseKey,embedded=false}
   {view?.configured===false&&<p>현재 연결은 수업·체험의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.</p>}
   {view?.configured&&view.choices.length===0&&<p>{view.required?'사용 가능한 이용권이 없습니다. 운영자에게 연결을 확인해 주세요.':'별도 이용권이 배정되지 않았습니다. 현재 수업·체험 정책을 적용합니다.'}</p>}
   {!!view?.choices.length&&<>
-   <label>이번 작업의 이용권 <select aria-label="이번 작업의 이용권" value={a.selected??''} disabled={streaming} onChange={e=>post({type:'selectFunding',id:e.target.value})}>
+   <label>이번 작업의 이용권 <select aria-label="이번 작업의 이용권" value={a.pendingSelection??a.selected??''} disabled={streaming} onChange={e=>post({type:'selectFunding',id:e.target.value,activityId:config.activity?.id})}>
     <option value="" disabled>직접 선택해 주세요</option>{view.choices.map(c=><option key={c.id} value={c.id} disabled={!c.active}>{c.label} · {c.source_kind==='account'?'개인 이용':'수업·기관 지원'}{!c.available?' · '+(stateLabels[c.state]??'미확인'):''}</option>)}
    </select></label>
    <p className="hps-access-muted">이번 작업에 선택한 이용권을 사용합니다.</p>
