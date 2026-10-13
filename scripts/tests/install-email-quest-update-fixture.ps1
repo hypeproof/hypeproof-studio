@@ -29,10 +29,12 @@ $script:fixturePins = @{sourceCommit='synthetic';sha256=('1'*64);bytes=1;files=@
 function Get-HpsQuestPins { return $script:fixturePins }
 $names = @($published.files.Keys | Sort-Object)
 $base = Join-Path $tmp 'base'; $hotfix = Join-Path $tmp 'hotfix'; $incoming = Join-Path $tmp 'incoming'
+# Real BOM-less UTF-8 package contains Korean descriptions; PS 5.1 defaults to ANSI.
+$unicodePackage = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../extensions/hypeproof-chat/package.json'), [Text.Encoding]::UTF8)
 foreach ($name in $names) {
     $old = if ($name -ceq 'package.json') { '{"version":"0.1.5","fixture":"base"}' } else { 'synthetic base ' + $name }
     $ui = if ($name -like 'webview-ui/dist/assets/*') { 'synthetic ui ' + $name } else { $old }
-    $next = if ($name -ceq 'package.json') { '{"version":"0.1.5","fixture":"next"}' } else { 'synthetic next ' + $name }
+    $next = if ($name -ceq 'package.json') { $unicodePackage } else { 'synthetic next ' + $name }
     Write-Fixture (Join-Path $base $name) $old
     Write-Fixture (Join-Path $hotfix $name) $ui
     Write-Fixture (Join-Path $incoming $name) $next
@@ -157,7 +159,7 @@ try {
     $mixedQuest = New-Installation 'mixed-quest' $incoming
     $priorExtension = Join-Path $priorQuest 'resources/app/extensions/hypeproof-chat'
     foreach ($name in $names) {
-        $fourth = if ($name -ceq 'package.json') { '{"version":"0.1.5","fixture":"fourth"}' } else { 'synthetic fourth ' + $name }
+        $fourth = if ($name -ceq 'package.json') { ($unicodePackage + [Environment]::NewLine) } else { 'synthetic fourth ' + $name }
         Write-Fixture (Join-Path $incoming $name) $fourth
         $script:fixturePins.files[$name] += (Get-FileHash (Join-Path $incoming $name)).Hash
     }

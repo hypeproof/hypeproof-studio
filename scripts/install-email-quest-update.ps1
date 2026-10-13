@@ -72,7 +72,7 @@ function Test-HpsEmailExistingInstall([string]$Destination) {
             throw 'Existing installation is incomplete or has no matching receipt. It was preserved; ask the operator for help.'
         }
     }
-    $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
     Assert-HpsEmailManifest $receipt
     return $true
 }
@@ -153,7 +153,7 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
     Assert-HpsEmailNotRunning $Destination
     $productPath = Join-Path $Destination 'resources/app/product.json'
     Assert-HpsQuestFile $productPath
-    $product = Get-Content -LiteralPath $productPath -Raw | ConvertFrom-Json
+    $product = Get-Content -LiteralPath $productPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($product.commit -cne '682dfd37c3511f3fa159f1516aac230dcda2467c' -or $product.version -cne '0.1.5') { throw 'This update only supports private build 682dfd37.' }
     $extension = Join-Path $Destination 'resources/app/extensions/hypeproof-chat'
     $names = @($pins.files.Keys | Sort-Object)
@@ -171,7 +171,7 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
     }
     if ($matches[$targetRevision] -eq $names.Count) { Write-Host 'This quest extension update is already installed.'; return }
     if ($matches -notcontains $names.Count) { throw 'Installed extension files have unknown or partial changes. They were preserved.' }
-    $package = Get-Content -LiteralPath (Join-Path $Extracted 'package.json') -Raw | ConvertFrom-Json
+    $package = Get-Content -LiteralPath (Join-Path $Extracted 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($package.version -cne '0.1.5') { throw 'Unexpected packaged extension version.' }
     $backup = Join-Path $Destination ('.quest-backup-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backup | Out-Null
