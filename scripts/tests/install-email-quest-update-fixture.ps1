@@ -19,7 +19,7 @@ $origin = 'https://hps-studio-email-test-20261013.jayleekr0125.workers.dev'
 Refuses { Get-HpsEmailArtifact 'https://other.invalid' '/quest/files/extension.zip' 'synthetic' 'unused' } 'Invalid download'
 Refuses { Get-HpsEmailArtifact $origin '/install/files/app.zip' 'synthetic' 'unused' } 'Invalid download'
 $published = Get-HpsQuestPins
-if ($published.files.Count -ne 7 -or $published.sha256 -cne '7042d51d40a1b2dd3c1f70ef3120b63da5192354a9212dcd79bff16430708acd' -or $published.bytes -ne 586040 -or $published.sourceCommit -cne '903e4751' -or (Get-HpsQuestRevisionCount $published) -ne 10) { throw 'Publication pins changed without updating this fixture.' }
+if ($published.files.Count -ne 7 -or $published.sha256 -cne 'a7052de0ab82daaba2493a849ac70d92857a264f0941931335f55c3afb60f05a' -or $published.bytes -ne 586095 -or $published.sourceCommit -cne 'ec8fabb3' -or (Get-HpsQuestRevisionCount $published) -ne 11) { throw 'Publication pins changed without updating this fixture.' }
 $tempRoot = if (Test-Path '/private/tmp') { '/private/tmp' } else { [IO.Path]::GetTempPath() }
 $tmp = Join-Path $tempRoot ('hps-quest-fixture-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
