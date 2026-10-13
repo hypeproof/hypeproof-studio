@@ -1698,3 +1698,23 @@ html, body, #root {
 .hps-shell-question .hps-input-area .hps-effort { display: none; }
 .hps-shell-question .hps-input-area .hps-access[open] { max-height: 120px; overflow-y: auto; }
 .hps-shell-question > .hps-messages { min-height: 0; }
+
+/* EA-01/03: keep optional rails out of the automation workspace's height budget.
+   This also overrides legacy effort/mission rules that scroll the entire shell. */
+.hps-shell.hps-shell-automation { min-height: 0; overflow: hidden; }
+.hps-shell-automation > .hps-header { flex-shrink: 0; }
+.hps-conversation-support { flex: 0 0 auto; margin: 0; padding: 0 12px; border-bottom: 1px solid var(--hp-line); max-height: 25%; overflow-y: auto; }
+.hps-conversation-support > summary { cursor: pointer; padding: 10px 0; font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); }
+.hps-shell-automation > .hps-messages { flex: 1 1 0; min-height: 0; overscroll-behavior: contain; }
+.hps-shell-automation > .hps-messages > * { flex-shrink: 0; }
+.hps-shell-automation > .hps-input-area { flex: 0 0 auto; max-height: 45%; box-sizing: border-box; overflow-y: auto; }
+.hps-shell-automation .hps-access { margin: 0; padding: 6px 8px; }
+.hps-shell-automation .hps-access[open] { box-sizing: border-box; max-height: 14vh; }
+.hps-shell-automation .hps-access:not([open]) .hps-access-summary { display: none; }
+.hps-shell-automation.hps-shell-question .hps-input { display: none; }
+.hps-question-return { text-align: left; padding: 6px 0; border: 0; background: transparent; color: var(--vscode-textLink-foreground, #6aa6df); cursor: pointer; }
+.hps-conversation-support > summary:focus-visible,
+.hps-question-return:focus-visible { outline: 2px solid var(--vscode-focusBorder, #6aa6df); outline-offset: -2px; }
+.hps-conversation-settings { flex-shrink: 0; max-height: 16vh; overflow-y: auto; }
+.hps-conversation-settings > summary { cursor: pointer; padding: 4px 0; font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); }
+.hps-conversation-settings > summary:focus-visible { outline: 2px solid var(--vscode-focusBorder, #6aa6df); outline-offset: -2px; }

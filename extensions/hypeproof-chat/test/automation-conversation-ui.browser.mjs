@@ -45,8 +45,22 @@ await question({id:'cancel-4',kind:'connect',title:'Google 계정을 연결할�
 await emit({type:'automationQuestion',question:null,activityId});
 await emit({type:'config',config:{...config,access:{status:'unknown',notice:'이용권 조회를 다시 확인해 주세요.'}}});
 await emit({type:'helpState',help:{generation:1,draft_key:'synthetic',availability:{state:'unknown'},seat:null,draft:{question:'',turnId:null,duration:30,updated_at:0},turns:[],envelope:null,current:[],history:[],refresh:{state:'never',at:null},note:null},activityId});
+await page.locator('.hps-conversation-settings > summary').click();
 await page.locator('.hps-access summary').click();assert.equal(await page.locator('.hps-access').getAttribute('open'),'');
 await emit({type:'history',messages:Array.from({length:12},(_,i)=>({id:'history-'+i,role:'assistant',content:'앞서 나눈 합성 업무 대화입니다. '.repeat(8),createdAt:i})),activityId});
+// A short Windows sidebar must retain a usable conversation before a question exists.
+await page.setViewportSize({width:360,height:540});
+await page.waitForTimeout(400);
+const layout = await page.locator('.hps-messages').evaluate(el => {
+ const r=el.getBoundingClientRect(), footer=document.querySelector('.hps-input-area').getBoundingClientRect();
+ const messages=[...el.querySelectorAll('.hps-msg')].map(m=>({box:m.getBoundingClientRect(),height:m.scrollHeight}));
+ return {height:r.height,bottom:r.bottom,footerTop:footer.top,footerBottom:footer.bottom,
+  compressed:messages.some(m=>m.box.height+2<m.height),viewport:innerHeight};
+});
+if(process.env.HPS_LAYOUT_SCREENSHOT)await page.screenshot({path:process.env.HPS_LAYOUT_SCREENSHOT});
+assert.ok(layout.height>=180 && layout.bottom<=layout.footerTop+1 && layout.footerBottom<=layout.viewport+1 && !layout.compressed,
+ 'short sidebar reserves at least one third for conversation even with settings open, without overlap: '+JSON.stringify(layout));
+await page.setViewportSize({width:300,height:900});
 await question({id:'narrow-connect',kind:'connect',title:'Google 계정을 연결할까요?',description:'만든 스킬에서 사용할 계정을 연결해 주세요.',private:true});
 await emit({type:'streamStart',streamId:'narrow-stream',messageId:'narrow-reply',activityId});
 await emit({type:'streamEnd',streamId:'narrow-stream',activityId});
@@ -55,6 +69,7 @@ const inChatViewport=selector=>page.locator(selector).evaluate(element=>{const r
 assert.equal(await inChatViewport('.hps-user-question h3'),true,'new question heading stays in the narrow chat viewport');
 assert.equal(await inChatViewport('.hps-question-submit'),true,'connect action is reachable without losing the question heading');
 assert.equal(await page.locator('.hps-access').getAttribute('open'),null,'an incoming question collapses optional usage details');
+assert.equal(await page.locator('.hps-conversation-settings').getAttribute('open'),null,'question closes optional settings');
 assert.equal(await page.locator('[data-artifact-approval]').isVisible(),false);
 await page.locator('.hps-messages').evaluate(element=>{element.scrollTop=element.scrollHeight;});
 await question({id:'narrow-sheet',kind:'sheet',title:'어떤 시트를 사용할까요?',private:true});
@@ -63,7 +78,40 @@ assert.equal(await inChatViewport('.hps-user-question h3'),true,'next question r
 assert.equal(await inChatViewport('.hps-question-submit'),true,'next question answer button remains reachable');
 if(process.env.HPS_NARROW_QUESTION_SCREENSHOT)await page.screenshot({path:process.env.HPS_NARROW_QUESTION_SCREENSHOT});
 await emit({type:'automationQuestion',question:null,activityId});
-assert.equal(await page.locator('[data-artifact-approval]').isVisible(),true,'classroom controls return after the question');
+assert.equal(await page.locator('[data-artifact-approval]').isVisible(),false,'optional classroom controls stay folded after answering');
+await page.locator('.hps-conversation-support > summary').click();
+assert.equal(await page.locator('[data-artifact-approval]').isVisible(),true,'classroom controls remain available on demand');
+await page.locator('.hps-conversation-support > summary').click();
+await page.setViewportSize({width:360,height:540});
+await page.locator('.hps-input textarea').fill('다음 자동화도 만들자');
+await page.locator('.hps-input textarea').press('Enter');
+for(const message of [
+ {type:'streamStart',streamId:'layout-stream',messageId:'layout-reply',activityId},
+ {type:'streamChunk',streamId:'layout-stream',delta:'확인할 내용을 정리합니다.',activityId},
+ {type:'streamEnd',streamId:'layout-stream',activityId},
+]) {
+ await emit(message); await page.waitForTimeout(50);
+ const box=await page.locator('.hps-messages').boundingBox();
+ assert.ok(box.height>=200,'sending, answering and idle all retain a readable conversation');
+ assert.equal(await page.locator('.hp-help').isVisible(),false,'help stays folded across the turn');
+ assert.equal(await page.locator('.hps-input textarea').isVisible(),true);
+}
+await question({id:'layout-final',kind:'text',title:'언제까지 자료를 받을까요?',private:false});
+assert.equal(await page.locator('.hps-input textarea').isVisible(),false,'no permanent read-only composer below an active question');
+await page.getByRole('button',{name:'답변할 질문으로 이동 ↑'}).click();
+assert.equal(await inChatViewport('.hps-user-question h3'),true);
+await emit({type:'automationQuestion',question:null,activityId});
+await page.getByRole('button',{name:'답변할 질문으로 이동 ↑'}).waitFor({state:'detached'});
+assert.equal(await page.getByRole('button',{name:'답변할 질문으로 이동 ↑'}).count(),0);
+assert.equal(await page.locator('.hps-input textarea').isVisible(),true);
+// Required selection opens the settings instead of silently choosing funding.
+await emit({type:'config',config:{...config,access:{status:'ready',selected:null,view:{configured:true,required:true,as_of:0,choices:[{id:'class',label:'시험 수업',active:true,available:true,state:'ready',source_kind:'cohort',resources:[],allowed:{models:[]},ends_at:1900000000000}]}}}});
+await page.getByRole('combobox',{name:'이번 작업의 이용권'}).waitFor({state:'visible'});
+assert.equal(await page.getByRole('combobox',{name:'이번 작업의 이용권'}).getAttribute('disabled'),null);
+await page.getByRole('combobox',{name:'이번 작업의 이용권'}).selectOption('class');
+assert.equal((await page.evaluate(()=>window.__posts.filter(m=>m.type==='selectFunding').at(-1))).id,'class');
+await emit({type:'config',config});
+await page.locator('.hps-conversation-settings:not([open])').waitFor();
 await emit({type:'config',config:{...config,profile:{...config.profile,automations:{enabled:false,provider:'gmail'}}}});await emit({type:'automationQuestion',question:{id:'denied',kind:'text',title:'보이면 안 됨',private:true},activityId});await page.getByTestId('user-question-card').waitFor({state:'detached'});assert.equal(await page.getByTestId('user-question-card').count(),0);
 assert.deepEqual(errors,[]);console.log('PASS conversation UI: real App private routing, single question, explicit choice/free text, full preview, approval, cancellation, 300px sidebar question visibility and opt-in gate');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

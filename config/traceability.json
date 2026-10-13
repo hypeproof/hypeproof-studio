@@ -4895,6 +4895,12 @@
         },
         {
           "path": "scripts/tests/install-email-test-fixture.ps1"
+        },
+        {
+          "path": "scripts/tests/install-email-ui-update-fixture.ps1"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs"
         }
       ]
     },
@@ -4936,6 +4942,9 @@
         },
         {
           "path": "scripts/install-email-test.ps1"
+        },
+        {
+          "path": "scripts/install-email-ui-update.ps1"
         }
       ]
     }

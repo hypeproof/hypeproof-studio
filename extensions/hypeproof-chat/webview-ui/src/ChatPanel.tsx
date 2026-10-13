@@ -16,7 +16,7 @@ import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type Impor
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   ChatConfig,
   ChatMessage,
@@ -115,6 +115,20 @@ function extractRenderableHtml(text: string): string | null {
     return `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;font-family:sans-serif;padding:12px}</style></head><body><script>try{${js}}catch(e){document.body.innerHTML='<pre style="color:#c00">'+e+'</pre>';}</script></body></html>`;
   }
   return null;
+}
+
+// Optional classroom controls must not compete with a working automation conversation.
+function ConversationSupport({ compact, children }: { compact: boolean; children: ReactNode }) {
+  return compact ? <details className="hps-conversation-support"><summary>수업 안내 · 도움</summary>{children}</details> : <>{children}</>;
+}
+
+function ConversationSettings({ compact, required, questionId, children }: { compact: boolean; required: boolean; questionId?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(required);
+  useEffect(() => { setOpen(required); }, [required]);
+  useEffect(() => { if (questionId && !required) setOpen(false); }, [questionId, required]);
+  return compact ? <details className="hps-conversation-settings" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{required ? "이용권을 선택해 주세요" : "대화 설정 · 이용권"}</summary>{children}
+  </details> : <>{children}</>;
 }
 
 // Pasted-image context (website-copyclone). Bounds match the worker's
@@ -761,7 +775,7 @@ export function ChatPanel(props: Props) {
 
   return (
     <div
-      className={`hps-shell${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
+      className={`hps-shell${config.profile?.automations?.enabled ? " hps-shell-automation" : ""}${dragActive ? " hps-shell-drag" : ""}${props.questionPanel ? " hps-shell-question" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -839,6 +853,7 @@ export function ChatPanel(props: Props) {
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
 
+      <ConversationSupport compact={config.profile?.automations?.enabled === true}>
       {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
           Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
           Student-only, like region A (#1298). */}
@@ -930,6 +945,8 @@ export function ChatPanel(props: Props) {
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
       {showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
       {config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
+
+      </ConversationSupport>
 
       <div className="hps-messages" ref={scrollRef}>
         {props.aiNotice && (
@@ -1053,6 +1070,12 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
+        {props.questionPanel && <button type="button" className="hps-question-return" onClick={() => {
+          questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
+          questionRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
+        }}>답변할 질문으로 이동 ↑</button>}
+        <ConversationSettings compact={config.profile?.automations?.enabled === true}
+          required={!!config.access?.view?.required && !config.access.selected} questionId={props.questionId}>
         {config.profile?.model_selection && <div className="hps-model-selection">
           <label>모델 <select aria-label="대화 모델" value={config.model}
             disabled={config.profile.model_selection.choices.length === 1}
@@ -1078,6 +1101,7 @@ export function ChatPanel(props: Props) {
         </div>}
         <EffortControl config={config} post={postToHost} />
         <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} />
+        </ConversationSettings>
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read

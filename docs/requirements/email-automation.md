@@ -15,9 +15,9 @@ instruction sets the follow-up trial to one month, implemented as 30 days.
 
 | ID | Required observable behavior |
 | --- | --- |
-| EA-01 | The main coach conversation is the primary automation entry. Free-text intent leads to relevant one-at-a-time questions and a saved bounded skill without a separate form or manual JSON transfer. Service-granted capability gates every tool; old profiles remain unchanged. |
+| EA-01 | The main coach conversation is the primary automation entry. Free-text intent leads to relevant one-at-a-time questions and a saved bounded skill without a separate form or manual JSON transfer. Optional classroom help and model/usage controls stay folded during ordinary conversation and never displace the message viewport or composer, including sending/streaming/question transitions in a short sidebar. Required funding selection remains directly reachable. Service-granted capability gates every tool; old profiles remain unchanged. |
 | EA-02 | Google desktop PKCE login uses the system browser, checks callback state and stores credentials outside the webview, source files and recipes. A learner grants Google access once; valid credentials and refresh tokens are reused for subsequent MCP operations. Reconnect only when access is missing/revoked or new scopes are needed. Existing private Sheet setup is reused unless the learner requests a change. Default builds include no client identity; an operator may explicitly package a Desktop client from a protected external file into an application-owned resource, bound to the authorized client ID. Students consent without entering keys; Web credentials and personal tokens are rejected. |
-| EA-03 | Inline user questions collect only missing setup, with explicit submit/cancel and no pre-approved choice. Google connection and Sheet/range inputs stay host-private. The learner can revise the template conversationally through an explicit skill save and sees exact recipients, subjects and plain-text bodies before sending. Conversation execution and publication use that same saved skill; a model-supplied preview recipe cannot silently replace it. Sheet cells are data, never instructions. |
+| EA-03 | An active inline question replaces the inactive composer with a return-to-question control; clearing the question restores normal input. Inline user questions collect only missing setup, with explicit submit/cancel and no pre-approved choice. Google connection and Sheet/range inputs stay host-private. The learner can revise the template conversationally through an explicit skill save and sees exact recipients, subjects and plain-text bodies before sending. Conversation execution and publication use that same saved skill; a model-supplied preview recipe cannot silently replace it. Sheet cells are data, never instructions. |
 | EA-04 | Sending requires confirmation of the current immutable preview. Editing, importing, expiry, account change or a stale preview cannot reuse approval. No background or scheduled sending. |
 | EA-05 | Sending is serialized across windows; durable per-account results prevent automatic resend after a timeout, lost response or crash. Unattempted, failed, unknown and confirmed sent are distinguishable. |
 | EA-06 | Conversation-driven store publish/install uses explicit inline confirmation and previews the exact bounded recipe; credentials, recipient records, Sheet IDs and executable code are excluded. Listing, detail and download enforce the authenticated cohort; unpublish requires ownership. |
@@ -55,3 +55,10 @@ and desktop shortcut preserve an ordinary Studio installation. Unknown existing
 folders, running test apps and unsafe archive paths stop installation. Matching
 receipts permit rerun without replacing user data. No code is placed in command
 history, settings, shortcuts or logs. OS security policy remains in effect.
+
+A private UI-only hotfix may update exactly the tested base build's two webview
+assets through the same authenticated copy/paste flow. The updater checks the
+base installation receipt, packaged commit/version, original file hashes and
+pinned download before replacing anything. It refuses running apps and unknown
+local modifications, backs up the original files and rolls back caught failures.
+User data, Google credentials, SDK and the ordinary Studio installation stay intact.

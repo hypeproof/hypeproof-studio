@@ -866,3 +866,5 @@ for the Windows test build. Pinned authenticated downloads, a separate directory
 SDK setup and receipt-bound rerun are covered by
 `scripts/tests/install-email-test-fixture.ps1`; real Windows installation and
 Google execution remain separate acceptance evidence.
+
+EA-01/03 keep automation conversations readable in a short sidebar: optional help and model/usage settings are folded, required funding selection stays accessible, message items do not shrink over one another, and an active question replaces the inactive composer with a return-to-question control. Browser transition coverage lives in `automation-conversation-ui.browser.mjs`; Windows user confirmation remains separate.

@@ -18,7 +18,11 @@ Automated local checks:
   human wait excluded from SDK stall timeout, and saved/previewed/published template
   equality even when the model supplies a different preview recipe.
 - React render: inline questions, exact preview, escaped untrusted sheet values, accessible controls,
-  disabled duplicate send, clear unattempted and uncertain results.
+  disabled duplicate send, clear unattempted and uncertain results. At 360×540,
+  selected/unknown access, help, long history, send, stream and idle retain a usable
+  message viewport without overlap. Optional rails stay folded across transitions;
+  pending questions hide the inactive composer, return-to-question works and clear
+  restores input. Required funding selection remains visible.
 - Host integration: visible entry, profile opt-in and account binding, permission
   refresh after confirmation, atomic per-learner ledger and cross-window send lock.
 - Service: owner/cohort isolation, revoked or wrong-role token denial, schema/size/

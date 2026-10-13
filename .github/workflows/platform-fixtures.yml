@@ -68,7 +68,9 @@ jobs:
       - name: Verify private email installer in Windows PowerShell 5.1
         if: runner.os == 'Windows'
         shell: powershell
-        run: ./scripts/tests/install-email-test-fixture.ps1
+        run: |
+          ./scripts/tests/install-email-test-fixture.ps1
+          ./scripts/tests/install-email-ui-update-fixture.ps1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
