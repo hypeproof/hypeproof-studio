@@ -556,15 +556,25 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       }
       if (args.emailAutomationHost && emailNames.every(name => opts.permittedMcpTools.includes(name))) {
         const host = args.emailAutomationHost;
+        const humanWait = async <T>(work: () => Promise<T>): Promise<T> => {
+          awaitingUser++;
+          const cancel = () => host.cancelPendingQuestion?.();
+          args.signal.addEventListener('abort', cancel, { once: true });
+          try {
+            if (args.signal.aborted) throw abortError();
+            return await work();
+          } finally { args.signal.removeEventListener('abort', cancel); awaitingUser--; }
+        };
         const server = buildGoogleAutomationMcpServer(factory, z, {
-          runtime: host.runtime,
-          isAllowed: () => host.isAllowed(),
+          ...host,
+          isAllowed: () => !args.signal.aborted && host.isAllowed(),
           refreshAuthorization: host.refreshAuthorization ? () => host.refreshAuthorization!() : undefined,
-          confirmSend: async preview => {
-            awaitingUser++;
-            try { return await host.confirmSend(preview); }
-            finally { awaitingUser--; }
-          },
+          confirmSend: preview => humanWait(() => host.confirmSend(preview)),
+          askUser: host.askUser ? input => humanWait(() => host.askUser!(input)) : undefined,
+          connectGoogle: host.connectGoogle ? mode => humanWait(() => host.connectGoogle!(mode)) : undefined,
+          configureSheet: host.configureSheet ? mode => humanWait(() => host.configureSheet!(mode)) : undefined,
+          publishSkill: host.publishSkill ? () => humanWait(() => host.publishSkill!()) : undefined,
+          installSkill: host.installSkill ? id => humanWait(() => host.installSkill!(id)) : undefined,
         });
         if (server) {
           servers[GOOGLE_AUTOMATION_MCP_SERVER] = server as NonNullable<Options["mcpServers"]>[string];
@@ -784,6 +794,6 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // running (one budget of slack after the decision — a long subagent gets
     // ~2 budgets total before the watchdog calls it wedged, a never-returning
     // one still ends in a message rather than a hang).
-    isTurnBlocked: () => awaitingUser > 0 || Date.now() - lastToolCallAt < stallMs,
+    isTurnBlocked: () => awaitingUser > 0 || args.emailAutomationHost?.isAwaitingUser?.() === true || Date.now() - lastToolCallAt < stallMs,
   });
 }

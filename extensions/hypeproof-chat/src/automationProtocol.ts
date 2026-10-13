@@ -26,3 +26,34 @@ export function defaultAutomationRecipe(): AutomationRecipe {
     bodyTemplate: '{{name}}님, 안녕하세요.\n\n{{document}}를 {{dueDate}}까지 제출해 주세요.\n감사합니다.',
     columns: { email: '이메일', name: '이름', document: '서류', dueDate: '기한' } };
 }
+
+/** Ephemeral question cards never enter the chat transcript or activity draft. */
+export interface AutomationQuestion {
+  id: string;
+  kind: 'text' | 'choice' | 'connect' | 'sheet' | 'preview' | 'publish' | 'install';
+  title: string;
+  description?: string;
+  choices?: Array<{ id: string; label: string }>;
+  allowFreeText?: boolean;
+  preview?: AutomationPreview;
+  recipe?: AutomationRecipe;
+  private: boolean;
+  error?: string;
+}
+export interface AutomationAnswer {
+  questionId: string;
+  text?: string;
+  choiceId?: string;
+  approved?: boolean;
+  cancelled?: boolean;
+}
+/** Repeated, stale, fabricated, and multi-selection answers are rejected by the host. */
+export function validateAutomationAnswer(question: AutomationQuestion, value: AutomationAnswer): boolean {
+  if (!value || value.questionId !== question.id) return false;
+  if (value.cancelled === true) return true;
+  if (['connect', 'preview', 'publish', 'install'].includes(question.kind)) return value.approved === true && value.text === undefined && value.choiceId === undefined;
+  if (question.kind === 'sheet' || question.kind === 'text') return typeof value.text === 'string' && !!value.text.trim() && value.text.length <= (question.kind === 'sheet' ? 4096 : 2000) && value.choiceId === undefined;
+  const choice = typeof value.choiceId === 'string' && !!question.choices?.some(item => item.id === value.choiceId);
+  const free = question.allowFreeText === true && typeof value.text === 'string' && !!value.text.trim() && value.text.length <= 2000;
+  return (choice && value.text === undefined) || (free && value.choiceId === undefined);
+}

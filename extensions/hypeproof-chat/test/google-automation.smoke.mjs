@@ -97,10 +97,10 @@ test('actual loopback callback binds localhost, returns a URL, and closes',async
 test('MCP keeps contacts and composed email local, requires exact native approval, and returns aggregate receipts',async()=>{
   const f=fixture();let approved=false;let confirmations=0;
   const factory={tool:(name,_description,schema,handler)=>({name,schema,handler}),createSdkMcpServer:x=>x};
-  const server=buildGoogleAutomationMcpServer(factory,{string:()=>({})},{runtime:f.runtime,isAllowed:()=>true,confirmSend:async preview=>{confirmations++;assert.equal(preview.messages[0].to,rows[1][0]);assert.equal(preview.messages[0].subject,'테스트님 보고서 요청');assert.equal(preview.messages[0].body,'테스트님, 내일까지 보고서를 보내 주세요.');return approved;}});
+  const server=buildGoogleAutomationMcpServer(factory,{string:()=>({})},{runtime:f.runtime,isAllowed:()=>true,readConfiguredSheet:async()=>{const data=await f.runtime.readSheet({spreadsheetId:'synthetic_sheet_id',range:'Sheet1!A1:D21'});return{rowCount:data.length-1,columns:data[0]};},confirmSend:async preview=>{confirmations++;assert.equal(preview.messages[0].to,rows[1][0]);assert.equal(preview.messages[0].subject,'테스트님 보고서 요청');assert.equal(preview.messages[0].body,'테스트님, 내일까지 보고서를 보내 주세요.');return approved;}});
   const tools=Object.fromEntries(server.tools.map(tool=>[tool.name,tool]));
   const results=[];
-  results.push(await tools.sheet_read.handler({spreadsheetId:'synthetic_sheet_id',range:'Sheet1!A1:D21'}));
+  results.push(await tools.sheet_read.handler({}));
   assert.deepEqual(JSON.parse(results[0].content[0].text),{rowCount:1,columns:rows[0]});
   assert.deepEqual(Object.keys(tools.email_preview.schema),['recipe']);
   results.push(await tools.email_preview.handler({recipe:JSON.stringify(recipe)}));
@@ -148,4 +148,19 @@ test('token retrieval racing another window cannot send with one sender and reco
   };
   await assert.rejects(f.runtime.send({previewId:preview.id,approved:true}),/연결이 변경/);
   assert.equal(f.sends,0);assert.deepEqual(f.ledger,{});
+});
+
+test('existing Google consent refreshes silently; revocation needs consent while outage does not request it',async()=>{
+  let refreshes=0,browsers=0,identityStatus=200;
+  const sender='synthetic-google-sub';
+  const f=fixture({openBrowser:async()=>{browsers++;},fetchImpl:async(url,init)=>{
+    if(url.includes('/token')){refreshes++;assert.equal(init.body.get('grant_type'),'refresh_token');return new Response(JSON.stringify({access_token:'refreshed-token',expires_in:3600}));}
+    if(identityStatus!==200)return new Response('{}',{status:identityStatus});
+    assert.equal(init.headers.authorization,'Bearer refreshed-token');return new Response(JSON.stringify({sub:sender}));
+  }});
+  f.secrets.set('hps.google.email-automation.v1',JSON.stringify({accessToken:'old-token',refreshToken:'existing-refresh',expiresAt:0,accountId:createHash('sha256').update(sender).digest('hex'),connectionId:'existing-consent'}));
+  assert.equal(await f.runtime.ensureConnected(),true);assert.equal(await f.runtime.ensureConnected(),true);assert.equal(refreshes,1);assert.equal(browsers,0);
+  assert.equal(JSON.parse(f.secrets.get('hps.google.email-automation.v1')).connectionId,'existing-consent');
+  identityStatus=401;assert.equal(await f.runtime.ensureConnected(),false);
+  identityStatus=503;await assert.rejects(f.runtime.ensureConnected(),/잠시 후/);assert.equal(browsers,0);
 });

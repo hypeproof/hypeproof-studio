@@ -78,6 +78,7 @@ export function gmailMime(message: EmailMessage): string {
   return Buffer.from(`To: ${message.to}\r\nSubject: ${encodedSubject}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${body}\r\n`).toString('base64url');
 }
 
+class GoogleConsentRequired extends Error {}
 interface GoogleToken { accessToken: string; refreshToken?: string; expiresAt: number; accountId?: string; connectionId?: string }
 export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -107,7 +108,7 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
   const revisionFor = (value: GoogleToken) => `${generation}:${value.accountId}:${value.connectionId ?? 'legacy'}`;
   async function exchange(params: Record<string,string>, old?: GoogleToken): Promise<GoogleToken> {
     const response = await request('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: deps.clientId, ...(deps.clientSecret ? { client_secret: deps.clientSecret } : {}), ...params }) });
-    if (!response.ok) return fail('Google 연결을 갱신하지 못했어요. 다시 연결해 주세요.');
+    if (!response.ok) { if ([400,401].includes(response.status)) throw new GoogleConsentRequired('Google 계정을 다시 연결해 주세요.'); return fail('Google 연결을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.'); }
     const body = await response.json() as Record<string, unknown>;
     if (typeof body.access_token !== 'string' || typeof body.expires_in !== 'number' || body.expires_in <= 0) return fail('Google 로그인 응답을 확인하지 못했어요.');
     if (typeof body.scope === 'string' && !SCOPES.every(scope => (body.scope as string).split(' ').includes(scope))) return fail('시트 읽기와 메일 보내기 권한이 필요해요.');
@@ -117,9 +118,9 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
     allowed();
     const state = generation;
     let value = await stored();
-    if (!value) return fail('Google 계정을 먼저 연결해 주세요.');
+    if (!value) throw new GoogleConsentRequired('Google 계정을 먼저 연결해 주세요.');
     if (value.expiresAt <= now() + 60000) {
-      if (!value.refreshToken) return fail('Google 계정을 다시 연결해 주세요.');
+      if (!value.refreshToken) throw new GoogleConsentRequired('Google 계정을 다시 연결해 주세요.');
       const expectedRevision = revisionFor(value);
       value = await exchange({ grant_type: 'refresh_token', refresh_token: value.refreshToken }, value);
       if (state !== generation || expectedRevision !== await connectionRevision()) return fail('Google 연결이 변경됐어요.');
@@ -209,6 +210,22 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
   return {
     preview, send,
     getConnectionRevision: connectionRevision,
+    async getConnectionIdentity(): Promise<string | null> {
+      allowed(); const value = await stored();
+      return value?.accountId ? `${value.accountId}:${value.connectionId ?? 'legacy'}` : null;
+    },
+    async ensureConnected(): Promise<boolean> {
+      allowed();
+      let value: GoogleToken;
+      try { value = await token(); } catch (error) { if (error instanceof GoogleConsentRequired) return false; throw error; }
+      if (!value.accountId) return false;
+      const response = await request('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${value.accessToken}` } });
+      if ([400,401,403].includes(response.status)) return false;
+      if (!response.ok) return fail('Google 연결을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      const identity = await response.json() as { sub?: unknown };
+      if (typeof identity.sub !== 'string' || hash(identity.sub) !== value.accountId) return false;
+      return revisionFor(value) === await connectionRevision();
+    },
     async previewLatestSheet(args: { recipe: EmailRecipe }): Promise<EmailPreview> {
       allowed();
       const sheet = cachedSheet;

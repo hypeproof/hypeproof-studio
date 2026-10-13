@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { activityConnections, ACTIVITY_TOKEN_KEY } from './activityConnections';
 import { fetchProfileResult } from './proxyClient';
 import type { GoogleAutomationMcpHost } from './googleAutomationMcp';
 import type { ChatPanelProvider } from './chatPanelProvider';
 import { createGoogleAutomationRuntime, validateEmailRecipe, type GoogleAutomationRuntime } from './googleAutomation';
-import { createAutomationPanelController } from './automationPanel';
+import { createAutomationPanelController, spreadsheetIdFromInput } from './automationPanel';
 import { createAutomationStoreClient } from './automationStoreClient';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
-import type { AutomationAction, AutomationView } from './automationProtocol';
+import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
 
 interface Binding { token: string; service: string; activityId: string; namespace: string; clientId: string; maxRecipients: number; signature: string }
 export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider) {
@@ -29,6 +29,53 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   };
   const allowed = () => matches() && Date.now() < permittedUntil;
   const emit = (view: AutomationView) => { if (matches()) void panel?.webview.postMessage({ type: 'automationView', view }); };
+  let operationEpoch = 0;
+  type PendingQuestion = { question: AutomationQuestion; owner: Binding; epoch: number; resolve(answer: AutomationAnswer): void };
+  let pendingQuestion: PendingQuestion | undefined;
+  let authorizingAnswer: PendingQuestion | undefined;
+  function cancelQuestion() {
+    operationEpoch++;
+    const pending = pendingQuestion ?? authorizingAnswer; pendingQuestion = undefined; authorizingAnswer = undefined;
+    if (!pending) return;
+    void provider.showAutomationQuestion(null);
+    pending.resolve({ questionId: pending.question.id, cancelled: true });
+  }
+  async function answerQuestion(answer: AutomationAnswer) {
+    const pending = pendingQuestion;
+    if (!pending || pending.owner !== binding || !matches() || answer.questionId !== pending.question.id) return;
+    if (answer.cancelled === true) { cancelQuestion(); return; }
+    let error = '';
+    if (!validateAutomationAnswer(pending.question, answer)) error = '질문에 맞는 답변 하나를 선택하거나 입력해 주세요.';
+    if (!pending.question.private && /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}|docs\.google\.com\/spreadsheets/i.test(answer.text ?? '')) error = '실제 이메일·계정 정보·시트 주소는 다음 비공개 설정 질문에서 입력해 주세요.';
+    if (!error && pending.question.kind === 'sheet') { try { spreadsheetIdFromInput(answer.text ?? ''); } catch { error = 'Google Sheets 주소를 확인해 주세요.'; } }
+    if (error) { pending.question = { ...pending.question, error }; await provider.showAutomationQuestion(pending.question); return; }
+    // Consume once before awaiting authorization; a second click cannot approve twice.
+    pendingQuestion = undefined; authorizingAnswer = pending;
+    await provider.showAutomationQuestion(null);
+    try { await authorize(); if (authorizingAnswer !== pending || operationEpoch !== pending.epoch || binding !== pending.owner || !matches()) throw new Error('Changed activity'); pending.resolve(answer); }
+    catch { pending.resolve({ questionId: pending.question.id, cancelled: true }); }
+    finally { if (authorizingAnswer === pending) authorizingAnswer = undefined; }
+  }
+  async function askQuestion(question: Omit<AutomationQuestion, 'id'>, owner: Binding, epoch: number): Promise<AutomationAnswer> {
+    if (epoch !== operationEpoch || binding !== owner || !matches()) throw new Error('Changed activity');
+    await authorize();
+    if (epoch !== operationEpoch || binding !== owner || !matches()) throw new Error('Changed activity');
+    if (pendingQuestion || authorizingAnswer) throw new Error('앞의 질문에 먼저 답해 주세요.');
+    if (typeof provider.showAutomationQuestion !== 'function') throw new Error('대화 화면에서 자동화를 다시 시작해 주세요.');
+    const value = { ...question, id: randomUUID() };
+    const answer = new Promise<AutomationAnswer>(resolve => { pendingQuestion = { question: value, owner, epoch, resolve }; });
+    if (epoch !== operationEpoch || binding !== owner || !matches()) { cancelQuestion(); return answer; }
+    await provider.showAutomationQuestion(value);
+    if (epoch !== operationEpoch || binding !== owner || !matches()) cancelQuestion();
+    return answer;
+  }
+  provider.setAutomationConversationHandlers?.({ answer: answerQuestion, cancel: cancelQuestion, isWaiting: () => !!pendingQuestion });
+  const recipeKey = (owner: Binding) => `hps.automation.recipe.${owner.namespace}`;
+  const reusable = (value: unknown) => {
+    const recipe = validateEmailRecipe(value);
+    if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}|docs\.google\.com\/spreadsheets/i.test(JSON.stringify(recipe))) throw new Error('재사용 스킬에는 실제 주소·시트·비밀값을 넣지 마세요.');
+    return recipe;
+  };
   async function authorize(opening = false): Promise<Binding> {
     permittedUntil = 0;
     if (!vscode.workspace.isTrusted) throw new Error('작업 폴더를 신뢰한 뒤 자동화를 열어 주세요.');
@@ -49,10 +96,15 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     permittedUntil = Date.now() + 60000;
     return next;
   }
-  async function confirmMcpSend(preview: import('./googleAutomation').EmailPreview): Promise<boolean> {
+  async function confirmMcpSend(preview: import('./googleAutomation').EmailPreview, epoch: number): Promise<boolean> {
     const pinned = binding;
+    if (!pinned) return false;
     await authorize();
-    if (binding !== pinned) return false;
+    if (binding !== pinned || epoch !== operationEpoch) return false;
+    if (typeof provider.showAutomationQuestion === 'function') {
+      const answer = await askQuestion({ kind: 'preview', title: `${preview.messages.length}명에게 이 내용으로 보낼까요?`, description: '받는 사람과 제목, 본문을 모두 확인해 주세요. 보내기를 누르면 실제 메일이 발송돼요.', preview, private: true }, pinned, epoch);
+      return answer.approved === true && answer.cancelled !== true && binding === pinned && allowed();
+    }
     const detail = preview.messages.map((message, index) => `${index + 1}. 받는 사람: ${message.to}\n제목: ${message.subject}\n\n${message.body}`).join('\n\n────────────────────\n\n');
     const answer = await vscode.window.showWarningMessage(`${preview.messages.length}명에게 보낼 내용을 모두 확인해 주세요.`, { modal: true, detail }, '확인한 메일 보내기');
     if (answer !== '확인한 메일 보내기') return false;
@@ -62,24 +114,35 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   async function prepare(): Promise<void> {
     const next = await authorize(true);
     if (binding?.signature === next.signature && runtime && controller) return;
-    if (binding) panel?.dispose();
+    if (binding) { cancelQuestion(); panel?.dispose(); }
     binding = next;
     const pinned = next;
     const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
     const prefix = `hps.email-automation.${pinned.namespace}.`;
+    let lockedEpoch: number | undefined;
+    const runLocked = <T>(work: () => Promise<T>): Promise<T> => {
+      const epoch = operationEpoch;
+      return ledger.withLock(async () => {
+        await authorize();
+        if (epoch !== operationEpoch || binding !== pinned || !matches()) throw new Error('취소되거나 활동이 변경됐어요.');
+        lockedEpoch = epoch;
+        try { return await work(); } finally { lockedEpoch = undefined; }
+      });
+    };
     const baseRuntime = createGoogleAutomationRuntime({ clientId: pinned.clientId, maxRecipients: pinned.maxRecipients,
-      isAllowed: () => binding === pinned && allowed(),
-      secrets: { get: key => context.secrets.get(prefix + key), store: async (key, value) => { await authorize(); if (binding !== pinned || !matches()) throw new Error('활동이 변경돼 연결을 저장하지 않았어요.'); await context.secrets.store(prefix + key, value); }, delete: key => context.secrets.delete(prefix + key) },
-      openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)), ledger,
+      isAllowed: () => binding === pinned && allowed() && (lockedEpoch === undefined || lockedEpoch === operationEpoch),
+      secrets: { get: key => context.secrets.get(prefix + key), store: async (key, value) => { await authorize(); if (binding !== pinned || !matches() || (lockedEpoch !== undefined && lockedEpoch !== operationEpoch)) throw new Error('활동이 변경되거나 취소돼 연결을 저장하지 않았어요.'); await context.secrets.store(prefix + key, value); }, delete: key => context.secrets.delete(prefix + key) },
+      openBrowser: url => { if (lockedEpoch !== undefined && lockedEpoch !== operationEpoch) throw new Error('로그인을 취소했어요.'); return vscode.env.openExternal(vscode.Uri.parse(url)); }, ledger,
     });
     runtime = { ...baseRuntime,
       // OAuth mutation and refresh share the send lock across windows so an old
       // refresh cannot overwrite a newly connected account while authorization awaits.
-      connect: () => ledger.withLock(async () => { await authorize(); return baseRuntime.connect(); }),
-      disconnect: () => ledger.withLock(async () => { await authorize(); return baseRuntime.disconnect(); }),
-      readSheet: args => ledger.withLock(async () => { await authorize(); return baseRuntime.readSheet(args); }),
+      connect: () => runLocked(() => baseRuntime.connect()),
+      ensureConnected: () => runLocked(() => baseRuntime.ensureConnected()),
+      disconnect: () => runLocked(() => baseRuntime.disconnect()),
+      readSheet: args => runLocked(() => baseRuntime.readSheet(args)),
       previewLatestSheet: async args => { await authorize(); return baseRuntime.previewLatestSheet(args); },
-      send: args => ledger.withLock(async () => { await authorize(); if (binding !== pinned) throw new Error('활동이 변경됐어요.'); return baseRuntime.send(args); }),
+      send: args => runLocked(() => baseRuntime.send(args)),
     };
     controller = createAutomationPanelController({ runtime,
       store: createAutomationStoreClient({ baseUrl: pinned.service, getToken: async () => { await authorize(); if (binding !== pinned) throw new Error('활동이 변경됐어요.'); return pinned.token; } }), emit: view => { if (binding === pinned) emit(view); },
@@ -155,27 +218,119 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       context.subscriptions.push(panel);
     } catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '자동화를 열지 못했어요.'); } finally { opening = false; }
   }
-  const timer = setInterval(() => { if (panel && !matches()) { permittedUntil = 0; panel.dispose(); } }, 1000);
-  context.subscriptions.push(vscode.commands.registerCommand('hypeproof-chat.emailAutomation', show), { dispose: () => { clearInterval(timer); permittedUntil = 0; panel?.dispose(); } });
+  const timer = setInterval(() => { if (binding && !matches()) { permittedUntil = 0; cancelQuestion(); panel?.dispose(); } }, 1000);
+  async function startConversation() {
+    try { await prepare(); await provider.beginAutomationConversation(); }
+    catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '업무 자동화를 시작하지 못했어요.'); }
+  }
+  context.subscriptions.push(vscode.commands.registerCommand('hypeproof-chat.emailAutomation', startConversation), { dispose: () => { clearInterval(timer); permittedUntil = 0; cancelQuestion(); panel?.dispose(); } });
   return {
-    show, getRuntime: () => allowed() ? runtime : undefined,
+    show, startConversation, getRuntime: () => allowed() ? runtime : undefined,
     async refreshRuntime() { if (!runtime) await prepare(); else await authorize(); return allowed() ? runtime : undefined; },
     async getMcpHost(): Promise<GoogleAutomationMcpHost | undefined> {
       if (!activityConnections(context)?.current) return undefined;
       try { await prepare(); } catch { return undefined; }
       if (!runtime || !allowed()) return undefined;
       const pinned = binding;
+      if (!pinned) return undefined;
+      const activeRuntime = runtime;
+      const epoch = operationEpoch;
+      const live = () => epoch === operationEpoch && binding === pinned && matches();
+      const guardedFetch: typeof fetch = (input, init) => { if (!live()) throw new Error('Cancelled or changed activity'); return fetch(input, init); };
+      const sheetKey = `hps.email-automation.${pinned.namespace}.sheet`;
       const refreshAuthorization = async () => {
-        if (binding !== pinned || !matches()) return false;
-        try { await authorize(); return binding === pinned && allowed(); } catch { return false; }
+        if (!live()) return false;
+        try { await authorize(); return live() && allowed(); } catch { return false; }
+      };
+      type SheetSetting = { spreadsheetId: string; range: string; connection: string };
+      const currentSheet = async (): Promise<SheetSetting | null> => {
+        const text = await context.secrets.get(sheetKey);
+        if (!text) return null;
+        try {
+          const value = JSON.parse(text) as SheetSetting;
+          if (typeof value.spreadsheetId !== 'string' || !/^[A-Za-z0-9_-]{20,200}$/.test(value.spreadsheetId) || value.range !== `A1:D${pinned.maxRecipients + 1}` || typeof value.connection !== 'string' || value.connection !== await activeRuntime.getConnectionIdentity()) return null;
+          return value;
+        } catch { return null; }
+      };
+      const readConfiguredSheet = async () => {
+        if (!await refreshAuthorization()) throw new Error('Changed activity');
+        const setting = await currentSheet();
+        if (!setting) return { needsSheetConfiguration: true };
+        const rows = await activeRuntime.readSheet({ spreadsheetId: setting.spreadsheetId, range: setting.range });
+        return { rowCount: Math.max(0, rows.length - 1), columns: rows[0] ?? [] };
       };
       return {
         runtime,
-        isAllowed: () => binding === pinned && allowed(),
+        readConfiguredSheet,
+        isAllowed: () => live() && allowed(),
         refreshAuthorization,
         confirmSend: async preview => {
           if (!await refreshAuthorization()) return false;
-          return binding === pinned && await confirmMcpSend(preview) && binding === pinned;
+          return live() && await confirmMcpSend(preview, epoch) && live();
+        },
+        isAwaitingUser: () => !!pendingQuestion && pendingQuestion.owner === pinned,
+        cancelPendingQuestion: () => { if (binding === pinned && epoch === operationEpoch) cancelQuestion(); },
+        askUser: async args => {
+          if (!await refreshAuthorization()) throw new Error('Changed activity');
+          const answer = await askQuestion({ kind: args.choices.length ? 'choice' : 'text', title: args.question, choices: args.choices, allowFreeText: args.allowFreeText, private: false, description: '업무 방식만 알려 주세요. 실제 이름·이메일·계정·시트 주소는 비공개 설정에서 입력해요.' }, pinned, epoch);
+          return answer.cancelled ? { cancelled: true } : { ...(answer.text ? { answer: answer.text.trim() } : {}), ...(answer.choiceId ? { choiceId: answer.choiceId } : {}) };
+        },
+        saveSkill: async value => {
+          if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
+          const recipe = reusable(value);
+          await context.globalState.update(recipeKey(pinned), recipe);
+          if (!live()) throw new Error('Changed activity');
+          controller?.importRecipe(recipe);
+          return { saved: true, title: recipe.title };
+        },
+        connectGoogle: async (mode = 'reuse') => {
+          if (!await refreshAuthorization()) throw new Error('Changed activity');
+          if (mode === 'reuse' && await activeRuntime.ensureConnected()) return { connected: true, reused: true };
+          const answer = await askQuestion({ kind: 'connect', title: mode === 'change' ? '다른 Google 계정으로 연결을 바꿀까요?' : '보내는 Google 계정을 처음 연결할까요?', description: 'Google에서 한 번 동의하면 연결을 재사용해요. 비밀번호와 로그인 토큰은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
+          if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
+          await activeRuntime.connect();
+          return { connected: true, reused: false };
+        },
+        configureSheet: async (mode = 'reuse') => {
+          if (!await refreshAuthorization()) throw new Error('Changed activity');
+          if (!await activeRuntime.ensureConnected()) return { needsGoogleConnection: true };
+          if (mode === 'reuse' && await currentSheet()) return { ...await readConfiguredSheet(), reused: true };
+          const answer = await askQuestion({ kind: 'sheet', title: mode === 'change' ? '대신 사용할 Google Sheets 주소를 알려 주세요.' : '명단이 있는 Google Sheets 주소를 알려 주세요.', description: '첫 행에 열 이름, 그 아래에 명단을 준비해 주세요. 첫 시트의 A~D열에서 최대 20명을 읽어요. 주소는 이 기기에 저장해 재사용하고, 실제 명단은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
+          if (answer.cancelled || !live()) return { cancelled: true };
+          const connection = await activeRuntime.getConnectionIdentity();
+          if (!connection) throw new Error('Google 계정을 먼저 연결해 주세요.');
+          const setting = { spreadsheetId: spreadsheetIdFromInput(answer.text!), range: `A1:D${pinned.maxRecipients + 1}`, connection };
+          const rows = await activeRuntime.readSheet({ spreadsheetId: setting.spreadsheetId, range: setting.range });
+          if (!live() || connection !== await activeRuntime.getConnectionIdentity()) throw new Error('Google 연결이 변경됐어요. 시트를 다시 확인해 주세요.');
+          await context.secrets.store(sheetKey, JSON.stringify(setting));
+          return { rowCount: Math.max(0, rows.length - 1), columns: rows[0] ?? [], reused: false };
+        },
+        publishSkill: async () => {
+          if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
+          const recipe = reusable(context.globalState.get(recipeKey(pinned)));
+          const answer = await askQuestion({ kind: 'publish', title: '이 스킬을 우리 반 스토어에 공유할까요?', description: '아래 템플릿과 설명만 공유해요. Google 계정·시트 주소·명단·보낸 메일은 공유하지 않아요.', recipe, private: true }, pinned, epoch);
+          if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
+          const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
+          const result = await store.publish(recipe, 'skill-' + digest(JSON.stringify(recipe)));
+          return { published: true, id: result.item.id, title: result.item.title };
+        },
+        listSkills: async () => {
+          if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
+          const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
+          const result = await store.list();
+          return { items: result.items.map(({ id, title, description, mine }) => ({ id, title, description, mine })) };
+        },
+        installSkill: async id => {
+          if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
+          const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
+          const detail = await store.detail(id);
+          const recipe = reusable(detail.recipe);
+          const answer = await askQuestion({ kind: 'install', title: `${recipe.title} 스킬을 가져올까요?`, description: '이메일 템플릿만 가져와요. Google 계정과 명단은 직접 연결하고, 발송 전에 다시 확인해요.', recipe, private: true }, pinned, epoch);
+          if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
+          await context.globalState.update(recipeKey(pinned), recipe);
+          if (!live()) throw new Error('Changed activity');
+          controller?.importRecipe(recipe);
+          return { installed: true, recipe };
         },
       };
     },

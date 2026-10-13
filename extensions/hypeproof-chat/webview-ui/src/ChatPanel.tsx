@@ -56,6 +56,8 @@ interface Props {
   onRemoveElement?: () => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
+  /** A transient private question, outside normal chat messages. */
+  questionPanel?: import("react").ReactNode;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
   sendLocked?: boolean;
   aiNotice: string | null;             // #320 — AI disclosure at session start
@@ -467,7 +469,7 @@ export function ChatPanel(props: Props) {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, streaming]);
+  }, [messages.length, streaming, !!props.questionPanel]);
 
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
@@ -1001,6 +1003,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {props.verifyPanel}
+        {props.questionPanel}
 
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
@@ -1137,8 +1140,8 @@ export function ChatPanel(props: Props) {
         >
           <textarea
             ref={textareaRef}
-            autoFocus
-            readOnly={unavailable}
+            autoFocus={!props.questionPanel}
+            readOnly={unavailable || !!props.questionPanel}
             aria-label={composerLabel(coachName)}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -1154,7 +1157,7 @@ export function ChatPanel(props: Props) {
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.
-              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable) return;
+              if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable || props.questionPanel) return;
               e.preventDefault();
               // Roll-expand owns Enter while it is open (idle-only flow).
               if (rollExpand && !streaming) {
@@ -1177,7 +1180,7 @@ export function ChatPanel(props: Props) {
               submit();
             }}
             placeholder={
-              streaming
+              props.questionPanel ? "위 질문 카드에서 답변해 주세요." : streaming
                 ? queued
                   ? "이어서 적으면 예약 메시지에 덧붙여요"
                   : "응답 중에도 적을 수 있어요 — Enter 로 예약하면 끝나고 바로 보내요"

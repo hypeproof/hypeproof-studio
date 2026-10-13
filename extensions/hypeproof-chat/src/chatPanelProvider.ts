@@ -2072,26 +2072,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** #751 — approval wait is reported as such, never as a failure or as "running". */
   opsRuntime(): { idleMs: number; status: "idle" | "running" | "waiting_approval" } {
-    const status = (this.pendingApprovals?.size ?? 0) > 0 ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
+    const status = ((this.pendingApprovals?.size ?? 0) > 0 || this.automationConversation?.isWaiting()) ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
     return { idleMs: Date.now() - this.lastActivityAt, status };
   }
   private emailAutomationHost?: () => Promise<import('./googleAutomationMcp').GoogleAutomationMcpHost | undefined>;
   setEmailAutomationHost(getHost: () => Promise<import('./googleAutomationMcp').GoogleAutomationMcpHost | undefined>): void { this.emailAutomationHost = getHost; }
 
-  /** Starts recipe authoring through the existing metered coach; never includes a sheet or credentials. */
-  async authorAutomationRecipe(recipe: import('./automationProtocol').AutomationRecipe, goal: string): Promise<void> {
-    if (this.hasActiveStream()) throw new Error('진행 중인 AI 작업이 끝난 뒤 다시 시작해 주세요.');
-    if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}/i.test(goal + JSON.stringify(recipe))) throw new Error('실제 이메일 주소나 비밀값을 지운 뒤 AI에게 요청해 주세요.');
+  private automationConversation?: {
+    answer(answer: import('./automationProtocol').AutomationAnswer): Promise<void>;
+    cancel(): void;
+    isWaiting(): boolean;
+  };
+  setAutomationConversationHandlers(handlers: NonNullable<ChatPanelProvider['automationConversation']>): void { this.automationConversation = handlers; }
+  async showAutomationQuestion(question: import('./automationProtocol').AutomationQuestion | null): Promise<void> { await this.post({ type: 'automationQuestion', question }); }
+
+  /** Starts with the user's work intent; the coach chooses the next relevant question. */
+  async beginAutomationConversation(): Promise<void> {
     if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
-    const prompt = [
-      '이메일 자동화 템플릿을 만들고 싶어요. 아래 요청에 맞춰 recipe.json 파일 하나를 만들어 주세요.',
-      '작업: ' + goal,
-      '출력은 아래 스키마의 JSON만 사용해요. 이메일을 보내거나 외부 서비스에 접속하지 마세요.',
-      '실제 사람 이름, 이메일 주소, 회사 정보, 비밀값은 넣지 마세요. 변수는 {{name}}, {{document}}, {{dueDate}}만 허용돼요.',
-      '범주 email과 스키마 hps-email-automation/1을 유지해 주세요. 알 수 없는 필드를 추가하지 마세요.',
-      JSON.stringify(recipe),
-    ].join('\n\n');
-    await this.handleSend(prompt, []);
+    if (this.hasActiveStream()) return;
+    await this.handleSend('반복하는 업무를 자동화하고 싶어요. 먼저 제가 하려는 일을 대화로 파악하고, 필요한 것만 한 가지씩 물어봐 주세요. 실제 명단과 계정 정보는 비공개 설정 질문에서 입력할게요.', []);
+  }
+
+  /** Compatibility entry: continue the same conversation without producing a manual JSON file. */
+  async authorAutomationRecipe(_recipe: import('./automationProtocol').AutomationRecipe, goal: string): Promise<void> {
+    if (this.hasActiveStream()) throw new Error('진행 중인 AI 작업이 끝난 뒤 다시 시작해 주세요.');
+    if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}/i.test(goal)) throw new Error('실제 이메일 주소나 비밀값을 지운 뒤 AI에게 요청해 주세요.');
+    if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
+    await this.handleSend('다음 업무를 자동화하고 싶어요. 필요한 의도를 먼저 파악한 뒤 스킬을 저장하고, 연결과 실행은 하나씩 질문해 주세요. 실제 계정과 명단은 비공개 질문으로 받아 주세요.\n\n' + goal.slice(0, 2000), []);
   }
 
   hasActiveStream(): boolean { return this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
@@ -3471,6 +3478,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (connections && (msg.type==='sendMessage'||msg.type==='retryMessage') && msg.activityId!==connections.scope) {
       await this.post({type:'streamError',streamId:'connection',error:'활동이 바뀌었습니다. 현재 활동에서 요청을 다시 확인해 주세요.'});return;
     }
+    if (msg.type === 'automationAnswer') {
+      if (this.connectionChanging || !connections?.scope || msg.activityId !== connections.scope) { this.automationConversation?.cancel(); return; }
+      this.lastActivityAt = Date.now();
+      await this.automationConversation?.answer(msg);
+      return;
+    }
     // Any message from the panel is evidence of a human. See `lastActivityAt`.
     this.lastActivityAt = Date.now();
     if (this.opsHold && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
@@ -3705,6 +3718,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "cancelStream":
+        this.automationConversation?.cancel();
         this.activeStreams.get(msg.streamId)?.abort();
         // #497 — abort() alone tells the webview NOTHING. handleSend and
         // handleSendError both skip their posts on an aborted signal, each

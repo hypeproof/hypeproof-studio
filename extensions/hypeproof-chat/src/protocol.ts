@@ -339,6 +339,7 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | ({ type: 'automationAnswer' } & import('./automationProtocol').AutomationAnswer)
   | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
   | { type: 'automationClose' }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
@@ -498,6 +499,7 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  | { type: 'automationQuestion'; question: import('./automationProtocol').AutomationQuestion | null }
   | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
   | {type:'inputRejected';text:string;images?:string[]}
   | {type:'activityFreeze';frozen:boolean;nonce?:string}
