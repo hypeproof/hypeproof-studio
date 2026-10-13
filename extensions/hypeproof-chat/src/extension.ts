@@ -175,7 +175,7 @@ export async function activate(context: vscode.ExtensionContext) {
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
-  const automationHost = registerAutomationHost(context, provider);
+  const automationHost = registerAutomationHost(context, provider, preview);
   provider.setEmailAutomationHost(() => automationHost.getMcpHost());
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const startPage = new StartPage(context, provider, async (profile, commit) => {

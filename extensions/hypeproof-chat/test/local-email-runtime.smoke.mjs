@@ -8,7 +8,7 @@ test('local subscription MCP uses the same profile gates, private metadata and h
   const controller=new AbortController();let approved=false,sends=0,questions=0;
   const host={isAllowed:()=>true,askUser:async()=>{questions++;return{answer:'자료 요청'};},readConfiguredSheet:async()=>({rowCount:1,columns:['이메일','이름','서류','기한']}),confirmSend:async()=>approved,runtime:{getPreview:()=>({id:'snapshot',messages:[{id:'row',to:'synthetic@example.invalid',subject:'제목',body:'비공개 본문'}]}),send:async()=>{sends++;return{records:[{id:'row',status:'sent',providerId:'private-provider-id'}]};}}};
   for(const rejected of [{},{...profile,automations:{enabled:false,provider:'gmail'}},{...profile,game:{template_tier:'kids-rich'}}])assert.equal(localEmailTools({profile:rejected,host,signal:controller.signal}).definitions.length,0);
-  const tools=localEmailTools({profile,host,signal:controller.signal});assert.equal(tools.definitions.length,10);
+  const tools=localEmailTools({profile,host,signal:controller.signal});assert.equal(tools.definitions.length,11);assert.ok(tools.definitions.some(tool=>tool.name==='email_workflow_plan'));
   const server=await startToolServer(tools.definitions,tools.call,controller.signal);
   const invoke=async(name,args)=>{const response=await fetch(server.url,{method:'POST',headers:{authorization:'Bearer '+server.token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})});return(await response.json()).result;};
   try{
@@ -73,4 +73,17 @@ test('Google browser consent stays outside the active model budget after its que
     assert.deepEqual(JSON.parse(await connecting),{connected:true});assert.equal(tools.isWaiting(),false);assert.equal(secrets.size,1);
     await new Promise(resolve=>setTimeout(resolve,50));assert.equal(budget.signal.aborted,true,'active execution deadline resumes after consent completes');
   }finally{budget.dispose();}
+});
+
+
+test('local Apps Script tools require both grants and keep OAuth wait outside the model timer',async()=>{
+ const controller=new AbortController();let release;
+ const host={isAllowed:()=>true,isAppsScriptAllowed:()=>true,runtime:{},confirmSend:async()=>false,appsScriptUpload:async()=>new Promise(resolve=>{release=resolve;})};
+ assert.equal(localEmailTools({profile,host,signal:controller.signal}).definitions.some(t=>t.name==='email_apps_script_upload'),false);
+ const enabled={...profile,automations:{...profile.automations,appsScript:true}};
+ const tools=localEmailTools({profile:enabled,host,signal:controller.signal});
+ const pending=tools.call('email_apps_script_upload',{});
+ await new Promise(resolve=>setTimeout(resolve,0));assert.equal(tools.isWaiting(),true);
+ release({cancelled:true});assert.equal(JSON.parse(await pending).cancelled,true);assert.equal(tools.isWaiting(),false);
+ host.isAppsScriptAllowed=()=>false;await assert.rejects(()=>tools.call('email_apps_script_upload',{}));
 });

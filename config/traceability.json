@@ -4858,6 +4858,9 @@
       "sources": [
         {
           "path": "docs/requirements/email-automation.md"
+        },
+        {
+          "path": "docs/plan/apps-script-quests.md"
         }
       ]
     },
@@ -4901,6 +4904,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automationQuest.test.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-quest.browser.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
         }
       ]
     },
@@ -4945,6 +4960,21 @@
         },
         {
           "path": "scripts/install-email-ui-update.ps1"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptRuntime.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptEmailProject.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationQuest.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationQuestSession.ts"
         }
       ]
     }

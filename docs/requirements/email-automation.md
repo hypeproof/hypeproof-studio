@@ -23,6 +23,8 @@ instruction sets the follow-up trial to one month, implemented as 30 days.
 | EA-06 | Conversation-driven store publish/install uses explicit inline confirmation and previews the exact bounded recipe; credentials, recipient records, Sheet IDs and executable code are excluded. Listing, detail and download enforce the authenticated cohort; unpublish requires ownership. |
 | EA-07 | Installed recipes require the recipient's own Google connection and Sheet. Recipe data never adds runtime permissions. Stable learner identity is independent of trial or paid entitlement. |
 | EA-08 | The workshop uses a dedicated 30-day bounded grant, preserving the existing one-hour trial default. AI usage and configured spending limits are server-enforced; deterministic rendering and sending make no model requests. Usage observations and monetary estimates are distinguished. |
+| EA-10 | The graphics area displays the conversational workflow dependency graph. Only host-observed outcomes advance stages; cancelled, blocked, stale and failed actions cannot appear complete. |
+| EA-11 | An explicit Apps Script grant permits bounded email source generation, separate code-upload and private immutable-deployment approvals, then Google preview and exact-approved send. Changed accounts/code/deployments and prior Gmail or Apps Script attempts cannot reuse approval or automatically resend. Same-standard-project and API-access setup blockers remain visible. |
 | EA-09 | A real Windows installation and two distinct learners' publish/import/run flow are required release evidence. Provider fixtures, a webview build and an app launch do not prove Google delivery or Windows acceptance. |
 
 The sponsor corrected the primary interaction on 2026-10-13: conversation first,
@@ -62,3 +64,7 @@ base installation receipt, packaged commit/version, original file hashes and
 pinned download before replacing anything. It refuses running apps and unknown
 local modifications, backs up the original files and rolls back caught failures.
 User data, Google credentials, SDK and the ordinary Studio installation stay intact.
+
+The Apps Script direction and rollout boundaries are in
+[conversational quests](../plan/apps-script-quests.md). Arbitrary executable code
+remains excluded; this slice compiles the saved bounded email recipe.

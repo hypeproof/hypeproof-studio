@@ -2,9 +2,18 @@ import type { SdkMcpFactory, ZodLike, McpToolResult } from './browserMcp.ts';
 import { validateEmailRecipe, type EmailPreview, type GoogleAutomationRuntime } from './googleAutomation.ts';
 
 export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
-export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install'] as const;
+export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan'] as const;
+export const APPS_SCRIPT_MCP_TOOLS = ['mcp__hypeproof_email__apps_script_prepare','mcp__hypeproof_email__apps_script_upload','mcp__hypeproof_email__apps_script_setup','mcp__hypeproof_email__apps_script_deploy','mcp__hypeproof_email__apps_script_run'] as const;
+export const ALL_AUTOMATION_MCP_TOOLS = [...GOOGLE_AUTOMATION_MCP_TOOLS, ...APPS_SCRIPT_MCP_TOOLS] as const;
 export interface GoogleAutomationMcpHost {
   runtime: GoogleAutomationRuntime;
+  workflowPlan?(plan: unknown): Promise<unknown>;
+  isAppsScriptAllowed?(): boolean;
+  appsScriptPrepare?(): Promise<unknown>;
+  appsScriptUpload?(): Promise<unknown>;
+  appsScriptSetup?(): Promise<unknown>;
+  appsScriptDeploy?(): Promise<unknown>;
+  appsScriptRun?(mode: 'preview' | 'send'): Promise<unknown>;
   isAllowed(): boolean;
   refreshAuthorization?(): Promise<boolean>;
   confirmSend(preview: EmailPreview): Promise<boolean>;
@@ -31,7 +40,22 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       return { content: [{ type: 'text', text: JSON.stringify(await work()) }] }; }
     catch { return { isError: true, content: [{ type: 'text', text: '자동화를 완료하지 못했어요. 입력과 수업 연결을 확인한 뒤 다시 시도해 주세요. 이미 보낸 메일은 다시 보내지 않아요.' }] }; }
   };
+  const scriptRun = (work: () => Promise<unknown>) => run(async () => {
+    if (!host.isAppsScriptAllowed?.()) throw new Error('Apps Script capability unavailable');
+    return work();
+  });
   return factory.createSdkMcpServer({ name: GOOGLE_AUTOMATION_MCP_SERVER, version: '1.0.0', tools: [
+    factory.tool('workflow_plan', '업무의 실행 흐름을 그래픽 영역에 표시한다. plan은 title,nodes 배열 JSON이고 각 node는 id,label,dependsOn으로 구성한다. ID는 goal,skill,connect,sheet,prepare,upload,deploy,preview,send,publish만 사용한다. 완료 상태는 host가 실제 결과로 표시하며 AI는 설정하지 않는다.', { plan: z.string() }, async args => run(async () => {
+      if (!host.workflowPlan || typeof args.plan !== 'string' || args.plan.length > 12000) throw new Error('Invalid plan');
+      return host.workflowPlan(JSON.parse(args.plan));
+    })),
+    ...(host.isAppsScriptAllowed?.() ? [
+      factory.tool('apps_script_prepare', '저장한 이메일 스킬을 Google Apps Script 코드로 만든다. 코드 생성만으로 저장·실행 완료를 주장하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptPrepare) throw new Error('Unavailable'); return host.appsScriptPrepare(); })),
+      factory.tool('apps_script_upload', '사용자에게 생성된 코드와 Google 권한을 확인받고 본인 Apps Script 프로젝트에 저장한다. Google 연결은 재사용하며 새 권한만 추가 동의한다.', {}, async () => scriptRun(async () => { if (!host.appsScriptUpload) throw new Error('Unavailable'); return host.appsScriptUpload(); })),
+      factory.tool('apps_script_setup', 'Google의 같은 표준 Cloud 프로젝트 설정이 필요한 경우 비공개 설정 안내를 표시한다. 사용자가 설정했다고 답한 것만으로 실제 실행 성공을 주장하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptSetup) throw new Error('Unavailable'); return host.appsScriptSetup(); })),
+      factory.tool('apps_script_deploy', '확인한 코드의 본인 전용 API 실행 버전을 만든다. 공개 웹앱·자동 발송 트리거는 만들지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptDeploy) throw new Error('Unavailable'); return host.appsScriptDeploy(); })),
+      factory.tool('apps_script_run', 'mode=preview는 Google에서 시트를 읽어 비공개 메일 미리보기를 만든다. mode=send는 현재 미리보기의 수신자와 내용을 사람이 직접 승인한 뒤 Google에서 발송한다. 불명확한 결과는 재발송하지 않는다.', { mode: z.string() }, async args => scriptRun(async () => { if (!host.appsScriptRun || !['preview','send'].includes(String(args.mode))) throw new Error('Unavailable'); return host.appsScriptRun(args.mode as 'preview' | 'send'); })),
+    ] : []),
     factory.tool('ask_user', '사용자의 업무 의도나 선택 중 필요한 한 가지만 묻는다. 선택지와 직접 입력을 지원한다. 계정·이메일·명단·시트 주소는 묻지 말고 전용 비공개 설정 도구를 쓴다.', { question: z.string(), choices: z.string(), allowFreeText: z.string() }, async args => run(async () => {
       if (!host.askUser || typeof args.question !== 'string' || !args.question.trim() || args.question.length > 500 || typeof args.choices !== 'string' || args.choices.length > 2000 || !['true','false'].includes(String(args.allowFreeText))) throw new Error('Invalid question');
       const choices = JSON.parse(args.choices);

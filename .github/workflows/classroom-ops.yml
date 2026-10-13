@@ -47,6 +47,12 @@ jobs:
       - run: node --test e2e/classroom/mac-devhost.test.mjs
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
+      - name: Conversational automation approval and layout
+        run: node --experimental-strip-types test/automation-conversation-ui.browser.mjs
+        working-directory: extensions/hypeproof-chat
+      - name: Automation quest graph rendering
+        run: node --experimental-strip-types test/automation-quest.browser.mjs
+        working-directory: extensions/hypeproof-chat
       - run: npm run test:classroom
         working-directory: e2e
       - run: npm run test:classroom-ops

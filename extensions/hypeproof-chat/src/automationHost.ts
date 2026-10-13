@@ -1,4 +1,8 @@
 import * as vscode from 'vscode';
+import { createAppsScriptRuntime, APPS_SCRIPT_TOKEN_KEY, type AppsScriptRuntime } from './appsScriptRuntime';
+import { createAppsScriptHost } from './appsScriptHost';
+import { createAutomationQuestSession, withAutomationQuest } from './automationQuestSession';
+import type { PreviewProvider } from './previewProvider';
 import { createHash, randomUUID } from 'node:crypto';
 import { loadPackagedGoogleDesktopClient } from './googleDesktopClient';
 import { activityConnections, ACTIVITY_TOKEN_KEY } from './activityConnections';
@@ -11,8 +15,16 @@ import { createAutomationStoreClient } from './automationStoreClient';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
 import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
 
-interface Binding { token: string; service: string; activityId: string; namespace: string; clientId: string; maxRecipients: number; signature: string }
-export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider) {
+interface Binding { token: string; service: string; activityId: string; namespace: string; clientId: string; maxRecipients: number; appsScript: boolean; signature: string }
+export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider, preview?: PreviewProvider) {
+  const quest = createAutomationQuestSession(async html => {
+    if (!matches() || !preview) return;
+    preview.setLabels({ title: '자동화 진행', placeholder: '대화에서 원하는 업무를 알려 주세요', emoji: '◇' });
+    await preview.show(html);
+  });
+  let appsRuntime: AppsScriptRuntime | undefined;
+  let appsLock: (<T>(work: () => Promise<T>) => Promise<T>) | undefined;
+  let appsTools: { epoch: number; host: ReturnType<typeof createAppsScriptHost> } | undefined;
   let panel: vscode.WebviewPanel | undefined;
   let binding: Binding | undefined;
   let permittedUntil = 0;
@@ -93,7 +105,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     if (grant?.enabled !== true || grant.provider !== 'gmail') throw new Error('이 수업에서는 이메일 자동화를 사용할 수 없어요.');
     const clientId = grant.oauthClientId ?? vscode.workspace.getConfiguration('hypeproofChat').get<string>('automationGoogleClientId', '');
     const maxRecipients = Math.max(1, Math.min(20, Number.isSafeInteger(grant.maxRecipients) ? grant.maxRecipients! : 20));
-    const next: Binding = { token, service: base, activityId: p.activity_id!, namespace: automationNamespace(base, p.activity_id!), clientId, maxRecipients, signature: digest(JSON.stringify([base, token, p.activity_id, clientId, maxRecipients])) };
+    const next: Binding = { token, service: base, activityId: p.activity_id!, namespace: automationNamespace(base, p.activity_id!), clientId, maxRecipients, appsScript: grant.appsScript === true, signature: digest(JSON.stringify([base, token, p.activity_id, clientId, maxRecipients, grant.appsScript === true])) };
     if (!opening && binding?.signature !== next.signature) { panel?.dispose(); throw new Error('자동화 설정이 변경됐어요. 다시 열어 주세요.'); }
     permittedUntil = Date.now() + 60000;
     return next;
@@ -117,7 +129,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     const next = await authorize(true);
     if (binding?.signature === next.signature && runtime && controller) return;
     if (binding) { cancelQuestion(); panel?.dispose(); }
-    binding = next; runtime = undefined; controller = undefined;
+    binding = next; runtime = undefined; controller = undefined; appsRuntime = undefined; appsTools = undefined; quest.clear();
     const pinned = next;
     const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
     const prefix = `hps.email-automation.${pinned.namespace}.`;
@@ -139,12 +151,25 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       secrets: { get: key => context.secrets.get(prefix + key), store: async (key, value) => { await authorize(); if (binding !== pinned || !matches() || (lockedEpoch !== undefined && lockedEpoch !== operationEpoch)) throw new Error('활동이 변경되거나 취소돼 연결을 저장하지 않았어요.'); await context.secrets.store(prefix + key, value); }, delete: key => context.secrets.delete(prefix + key) },
       openBrowser: url => { if (lockedEpoch !== undefined && lockedEpoch !== operationEpoch) throw new Error('로그인을 취소했어요.'); return vscode.env.openExternal(vscode.Uri.parse(url)); }, ledger,
     });
+    if (pinned.appsScript) {
+      appsLock = runLocked;
+      const appSecrets = {
+        get: (key: string) => context.secrets.get(prefix + key),
+        store: async (key: string, value: string) => { await authorize(); if (binding !== pinned || !matches() || lockedEpoch !== operationEpoch) throw new Error('Changed activity'); await context.secrets.store(prefix + key, value); if (key === APPS_SCRIPT_TOKEN_KEY) await context.secrets.store(prefix + 'hps.google.email-automation.v1', value); },
+        delete: (key: string) => context.secrets.delete(prefix + key),
+      };
+      appsRuntime = createAppsScriptRuntime({ clientId: pinned.clientId, clientSecret,
+        secrets: appSecrets,
+        isAllowed: () => binding === pinned && matches() && pinned.appsScript && (lockedEpoch === undefined ? allowed() : lockedEpoch === operationEpoch),
+        openBrowser: url => { if (!matches() || lockedEpoch !== operationEpoch) throw new Error('Cancelled'); return vscode.env.openExternal(vscode.Uri.parse(url)); },
+      });
+    }
     runtime = { ...baseRuntime,
       // OAuth mutation and refresh share the send lock across windows so an old
       // refresh cannot overwrite a newly connected account while authorization awaits.
-      connect: () => runLocked(() => baseRuntime.connect()),
+      connect: () => runLocked(() => pinned.appsScript && appsRuntime ? appsRuntime.connect() : baseRuntime.connect()),
       ensureConnected: () => runLocked(() => baseRuntime.ensureConnected()),
-      disconnect: () => runLocked(() => baseRuntime.disconnect()),
+      disconnect: () => runLocked(async () => { await baseRuntime.disconnect(); await appsRuntime?.disconnect(); }),
       readSheet: args => runLocked(() => baseRuntime.readSheet(args)),
       previewLatestSheet: async args => { await authorize(); return baseRuntime.previewLatestSheet(args); },
       send: args => runLocked(() => baseRuntime.send(args)),
@@ -223,7 +248,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       context.subscriptions.push(panel);
     } catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '자동화를 열지 못했어요.'); } finally { opening = false; }
   }
-  const timer = setInterval(() => { if (binding && !matches()) { permittedUntil = 0; cancelQuestion(); panel?.dispose(); } }, 1000);
+  const timer = setInterval(() => { if (binding && !matches()) { permittedUntil = 0; cancelQuestion(); panel?.dispose(); if (quest.snapshot()) { quest.clear(); void preview?.show('<!doctype html><html lang="ko"><body><p>활동이 바뀌었어요. 새 대화에서 자동화 흐름을 시작해 주세요.</p></body></html>'); } } }, 1000);
   async function startConversation() {
     try { await prepare(); await provider.beginAutomationConversation(); }
     catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '업무 자동화를 시작하지 못했어요.'); }
@@ -285,7 +310,22 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         const rows = await activeRuntime.readSheet({ spreadsheetId: setting.spreadsheetId, range: setting.range });
         return { rowCount: Math.max(0, rows.length - 1), columns: rows[0] ?? [] };
       };
-      return {
+      if (pinned.appsScript && appsRuntime && appsLock && appsTools?.epoch !== epoch) {
+        const projectKey = `hps.email-automation.${pinned.namespace}.apps-project`;
+        const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
+        appsTools = { epoch, host: createAppsScriptHost({ runtime: appsRuntime, maxRecipients: pinned.maxRecipients,
+          allowed: async () => await refreshAuthorization() && pinned.appsScript,
+          recipe: () => reusable(context.globalState.get(recipeKey(pinned))),
+          ask: question => askQuestion(question, pinned, epoch),
+          load: async () => { const text = await context.secrets.get(projectKey); if (!text) return undefined; try { return JSON.parse(text); } catch { return undefined; } },
+          save: async value => { if (!await refreshAuthorization()) throw new Error('Changed activity'); await context.secrets.store(projectKey, JSON.stringify(value)); },
+          sheet: currentSheet, lock: appsLock, ledger,
+          openBrowser: url => { if (!live()) throw new Error('Changed activity'); return vscode.env.openExternal(vscode.Uri.parse(url)); },
+        }) };
+      }
+      return withAutomationQuest({
+        ...(pinned.appsScript ? appsTools?.host : {}),
+        isAppsScriptAllowed: () => live() && allowed() && pinned.appsScript,
         runtime,
         readConfiguredSheet,
         previewSavedSkill: async () => {
@@ -318,10 +358,11 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         },
         connectGoogle: async (mode = 'reuse') => {
           if (!await refreshAuthorization()) throw new Error('Changed activity');
-          if (mode === 'reuse' && await activeRuntime.ensureConnected()) return { connected: true, reused: true };
-          const answer = await askQuestion({ kind: 'connect', title: mode === 'change' ? '다른 Google 계정으로 연결을 바꿀까요?' : '보내는 Google 계정을 처음 연결할까요?', description: 'Google에서 한 번 동의하면 연결을 재사용해요. 비밀번호와 로그인 토큰은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
+          if (mode === 'reuse' && (!pinned.appsScript || await appsRuntime?.isConnected()) && await activeRuntime.ensureConnected()) return { connected: true, reused: true };
+          const answer = await askQuestion({ kind: 'connect', title: mode === 'change' ? '다른 Google 계정으로 연결을 바꿀까요?' : '보내는 Google 계정을 처음 연결할까요?', description: pinned.appsScript ? 'Apps Script 생성·수정·본인 전용 배포, 시트 읽기와 메일 발송에 동의하면 이 연결을 함께 재사용해요. 실제 발송은 별도로 확인해요. 토큰은 AI에게 전달하지 않아요.' : 'Google에서 한 번 동의하면 연결을 재사용해요. 비밀번호와 로그인 토큰은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
-          await activeRuntime.connect();
+          if (pinned.appsScript && appsRuntime && appsLock) await appsLock(() => appsRuntime!.connect());
+          else await activeRuntime.connect();
           return { connected: true, reused: false };
         },
         configureSheet: async (mode = 'reuse') => {
@@ -365,7 +406,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           controller?.importRecipe(recipe);
           return { installed: true, recipe };
         },
-      };
+      }, quest);
     },
   };
 }

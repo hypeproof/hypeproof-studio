@@ -27,8 +27,9 @@ export function localEmailTools(args: {
     createSdkMcpServer(server) { registered = server.tools as LocalEmailTool[]; return server; },
   }, { string: () => ({ type: 'string' }) }, {
     ...host, isAllowed: () => !args.signal.aborted && host.isAllowed(),
+    isAppsScriptAllowed: () => !args.signal.aborted && args.profile.automations?.appsScript === true && host.isAppsScriptAllowed?.() === true,
   });
-  const humanTools = new Set(['email_ask_user','email_google_connect','email_sheet_configure','email_email_send','email_skill_publish','email_skill_install']);
+  const humanTools = new Set(['email_ask_user','email_google_connect','email_sheet_configure','email_email_send','email_skill_publish','email_skill_install','email_apps_script_upload','email_apps_script_setup','email_apps_script_deploy','email_apps_script_run']);
   return {
     definitions: registered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
     isWaiting: () => waiting > 0 || host.isAwaitingUser?.() === true,

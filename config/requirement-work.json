@@ -799,12 +799,14 @@
         "EA-06",
         "EA-07",
         "EA-08",
-        "EA-09"
+        "EA-09",
+        "EA-10",
+        "EA-11"
       ],
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "b7fb6d5f6430fbe035f33d9d3432e09486e5cfc3ae08328658410a9f8ce173f0",
+      "sha256": "ab5623b157f1d7f9649df95a0433d7f70cb89567f6955236726c553fc01c23b6",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
@@ -3910,7 +3912,9 @@
             "EA-06",
             "EA-07",
             "EA-08",
-            "EA-09"
+            "EA-09",
+            "EA-10",
+            "EA-11"
           ]
         }
       ],
@@ -3937,7 +3941,10 @@
         "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs",
         ".github/workflows/platform-fixtures.yml",
         "extensions/hypeproof-chat/test/automation-conversation-host.smoke.mjs",
-        "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs"
+        "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs",
+        "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts",
+        "extensions/hypeproof-chat/test/automationQuest.test.ts",
+        "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
       ]
     }
   ]

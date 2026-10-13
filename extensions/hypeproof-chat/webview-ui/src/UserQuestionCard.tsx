@@ -4,7 +4,7 @@ import type { WebviewMessage } from '../../src/protocol';
 import './UserQuestionCard.css';
 
 type Answer = Extract<WebviewMessage, { type: 'automationAnswer' }>;
-const affirmative = (question: AutomationQuestion) => ({ connect: 'Google 계정 연결하기', preview: `${question.preview?.messages.length ?? 0}명에게 보내기`, publish: '우리 반에 공유하기', install: '이 스킬 가져오기' }[question.kind as 'connect' | 'preview' | 'publish' | 'install'] ?? '답변 보내기');
+const affirmative = (question: AutomationQuestion) => question.kind === 'script' ? ({ upload: '확인한 코드를 Google에 저장', deploy: '나만 사용하는 실행 버전 만들기', setup: 'Google 설정을 확인했어요' }[question.script?.action ?? 'setup']) : ({ connect: 'Google 계정 연결하기', preview: `${question.preview?.messages.length ?? 0}명에게 보내기`, publish: '우리 반에 공유하기', install: '이 스킬 가져오기' }[question.kind as 'connect' | 'preview' | 'publish' | 'install'] ?? '답변 보내기');
 
 /** Ephemeral host-only form; never passes an answer through the chat composer. */
 export function UserQuestionCard({ question, onAnswer }: { question: AutomationQuestion; onAnswer(answer: Answer): void }) {
@@ -18,7 +18,7 @@ export function UserQuestionCard({ question, onAnswer }: { question: AutomationQ
   const helpId = `question-help-${question.id}`;
   const isInput = question.kind === 'text' || question.kind === 'sheet';
   const isChoice = question.kind === 'choice';
-  const needsReview = question.kind === 'preview' || question.kind === 'publish';
+  const needsReview = question.kind === 'preview' || question.kind === 'publish' || question.kind === 'script';
   const freeText = choice === '__free_text__';
   const ready = isInput ? !!text.trim() : isChoice ? !!choice && (!freeText || !!text.trim()) : !needsReview || reviewed;
   const canSubmit = ready && !pending && (question.kind !== 'preview' || !!question.preview?.messages.length);
@@ -49,8 +49,9 @@ export function UserQuestionCard({ question, onAnswer }: { question: AutomationQ
         {(isInput || (isChoice && freeText)) && <label className="hps-question-input-label"><span>{question.kind === 'sheet' ? '내 Google Sheets 주소' : '내 답변'}</span>{question.kind === 'sheet' ? <input type="url" value={text} onChange={event => setText(event.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" autoComplete="off" spellCheck={false} maxLength={4096} required /> : <textarea value={text} onChange={event => setText(event.target.value)} placeholder="평소 어떻게 처리하는지 편하게 알려 주세요." autoComplete="off" rows={3} maxLength={2000} required />}</label>}
         {question.kind === 'connect' && <p className="hps-question-context">Google 창에서 사용할 계정과 권한을 직접 확인해요. 연결 정보는 이 기기에 보관돼요.</p>}
         {question.preview && <div className="hps-question-preview" aria-label="전송 전 메일 전체 미리보기"><p className="hps-question-count">아직 보내지 않았어요 · {question.preview.messages.length}명</p>{question.preview.messages.map((message,index) => <article key={message.id} className="hps-question-mail"><div className="hps-question-mail-to"><span>{index + 1}</span><b>{message.to}</b></div><h4>{message.subject}</h4><pre>{message.body}</pre></article>)}</div>}
+        {question.script && <article className="hps-question-skill" aria-label="Google Apps Script 승인 내용"><p>Google에서 실행 · 내 계정 전용</p><p className="hps-question-digest">코드 버전: {question.script.digest.slice(0, 12)}</p><details><summary>코드와 요청 권한 확인</summary>{question.script.files.map(file => <section key={file.name}><h4>{file.name}</h4><pre>{file.source}</pre></section>)}<ul>{question.script.scopes.map(scope => <li key={scope}>{scope}</li>)}</ul></details></article>}
         {question.recipe && <article className="hps-question-skill" aria-label="공유할 이메일 스킬"><div className="hps-question-skill-kind">이메일 스킬 · Google Sheets → Gmail</div><h4>{question.recipe.title}</h4><p>{question.recipe.description}</p><dl><dt>메일 제목</dt><dd>{question.recipe.subjectTemplate}</dd><dt>메일 내용</dt><dd><pre>{question.recipe.bodyTemplate}</pre></dd><dt>명단의 열 이름</dt><dd>{Object.values(question.recipe.columns).join(' · ')}</dd></dl><p className="hps-question-privacy">명단과 Google 연결 정보는 공유하지 않아요. 스킬 안에 직접 적은 업무 정보도 확인해 주세요.</p></article>}
-        {needsReview && <label className="hps-question-review"><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /><span>{question.kind === 'preview' ? '받는 주소와 모든 메일 내용을 확인했어요.' : '공유할 내용에 실제 이름·주소·회사 정보·비밀값이 없음을 확인했어요.'}</span></label>}
+        {needsReview && <label className="hps-question-review"><input type="checkbox" checked={reviewed} onChange={event => setReviewed(event.target.checked)} /><span>{question.kind === 'preview' ? '받는 주소와 모든 메일 내용을 확인했어요.' : question.kind === 'script' ? '작업 내용과 Google 접근 권한을 확인했어요.' : '공유할 내용에 실제 이름·주소·회사 정보·비밀값이 없음을 확인했어요.'}</span></label>}
       </fieldset>
       <div className="hps-question-actions"><button type="submit" className="hps-question-submit" disabled={!canSubmit}>{pending ? '답변 확인 중…' : affirmative(question)}</button><button type="button" className="hps-question-cancel" disabled={pending} onClick={() => send(true)}>{question.kind === 'preview' ? '보내지 않기' : '지금은 그만하기'}</button><span role="status" aria-live="polite">{pending ? '입력한 내용을 확인하고 있어요.' : ''}</span></div>
     </form>

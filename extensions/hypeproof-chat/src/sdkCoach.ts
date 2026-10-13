@@ -30,7 +30,7 @@ import {
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
-import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
+import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
 import type { AssetScoreChunk, Citation, ResolvedProfile } from "./protocol";
 import { ProxyAuthError } from "./proxyClient";
 import {
@@ -547,14 +547,15 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       const factory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
       const servers: NonNullable<Options["mcpServers"]> = {};
       const grants: string[] = [];
-      const emailNames: readonly string[] = GOOGLE_AUTOMATION_MCP_TOOLS;
+      const emailNames: readonly string[] = ALL_AUTOMATION_MCP_TOOLS;
+      const emailGrants = opts.permittedMcpTools.filter(name => emailNames.includes(name));
       const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name));
       if (args.browserHost && browserGrants.length) {
         servers[HYPEPROOF_MCP_SERVER_NAME] = buildHypeproofMcpServer(factory, z, args.browserHost,
           crMcpRegistration(browserGrants)) as NonNullable<Options["mcpServers"]>[string];
         grants.push(...browserGrants);
       }
-      if (args.emailAutomationHost && emailNames.every(name => opts.permittedMcpTools.includes(name))) {
+      if (args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => opts.permittedMcpTools.includes(name))) {
         const host = args.emailAutomationHost;
         const humanWait = async <T>(work: () => Promise<T>): Promise<T> => {
           awaitingUser++;
@@ -569,6 +570,11 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           ...host,
           isAllowed: () => !args.signal.aborted && host.isAllowed(),
           refreshAuthorization: host.refreshAuthorization ? () => host.refreshAuthorization!() : undefined,
+          isAppsScriptAllowed: () => !args.signal.aborted && host.isAppsScriptAllowed?.() === true && emailGrants.includes('mcp__hypeproof_email__apps_script_run'),
+          appsScriptUpload: host.appsScriptUpload ? () => humanWait(() => host.appsScriptUpload!()) : undefined,
+          appsScriptSetup: host.appsScriptSetup ? () => humanWait(() => host.appsScriptSetup!()) : undefined,
+          appsScriptDeploy: host.appsScriptDeploy ? () => humanWait(() => host.appsScriptDeploy!()) : undefined,
+          appsScriptRun: host.appsScriptRun ? mode => humanWait(() => host.appsScriptRun!(mode)) : undefined,
           confirmSend: preview => humanWait(() => host.confirmSend(preview)),
           askUser: host.askUser ? input => humanWait(() => host.askUser!(input)) : undefined,
           connectGoogle: host.connectGoogle ? mode => humanWait(() => host.connectGoogle!(mode)) : undefined,
@@ -578,7 +584,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         });
         if (server) {
           servers[GOOGLE_AUTOMATION_MCP_SERVER] = server as NonNullable<Options["mcpServers"]>[string];
-          grants.push(...emailNames);
+          grants.push(...emailGrants.filter(name => (GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(name) || host.isAppsScriptAllowed?.() === true));
         }
       }
       if (grants.length) mcpServers = servers;

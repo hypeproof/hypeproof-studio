@@ -148,7 +148,7 @@ export interface CoachInfo {
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
   /** Service-owned opt-in, never inferred from a local setting. */
-  automations?: { enabled: boolean; provider: 'gmail'; maxRecipients?: number; oauthClientId?: string };
+  automations?: { enabled: boolean; provider: 'gmail'; appsScript?: boolean; maxRecipients?: number; oauthClientId?: string };
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */

@@ -84,3 +84,18 @@ test('configured sheet tool cannot be redirected by model-supplied private ident
  assert.equal((await read.handler({spreadsheetId:'invented-id',range:'A1:D21'})).isError,true);assert.equal(reads,0);
  assert.equal((await read.handler({})).isError,undefined);assert.equal(reads,1);
 });
+
+
+test('Apps Script tools require an explicit profile AND host grant, with protected inline approvals',async()=>{
+ const appsName='mcp__hypeproof_email__apps_script_upload';
+ assert.equal(permittedMcpToolsFor({automations:capability,game:{template_tier:'website'}}).includes(appsName),false);
+ const profile={automations:{...capability,appsScript:true},game:{template_tier:'website'}};
+ let calls=0;const host={isAllowed:()=>true,isAppsScriptAllowed:()=>true,confirmSend:async()=>false,runtime:{},appsScriptUpload:async()=>{calls++;return{cancelled:true};}};
+ const options=await turn({host,profile});
+ assert.equal((await options.canUseTool(appsName,{}, {signal:new AbortController().signal})).behavior,'allow');
+ const tool=options.mcpServers.hypeproof_email.tools.find(t=>t.name==='apps_script_upload');
+ assert.equal(JSON.parse((await tool.handler({})).content[0].text).cancelled,true);assert.equal(calls,1);
+ host.isAppsScriptAllowed=()=>false;assert.equal((await tool.handler({})).isError,true);assert.equal(calls,1);
+ const denied=await turn({host,profile});assert.equal(denied.mcpServers.hypeproof_email.tools.some(t=>t.name==='apps_script_upload'),false);
+ assert.equal((await denied.canUseTool(appsName,{}, {signal:new AbortController().signal})).behavior,'deny');
+});

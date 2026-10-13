@@ -40,6 +40,14 @@ posts=await page.evaluate(()=>window.__posts);const approved=posts.filter(m=>m.t
 await emit({type:'automationQuestion',question:null,activityId});await page.getByTestId('user-question-card').waitFor({state:'detached'});assert.equal(await page.locator('.hps-input textarea').getAttribute('readonly'),null);
 await page.locator('.hps-input textarea').fill('다음 업무도 정리해 보자');await page.locator('.hps-input textarea').press('Enter');await page.waitForFunction(()=>window.__posts.some(m=>m.type==='sendMessage'));
 const normalPosts=await page.evaluate(()=>window.__posts.filter(m=>m.type==='sendMessage'));assert.equal(normalPosts.length,1);assert.equal(normalPosts[0].text,'다음 업무도 정리해 보자');assert.equal(JSON.stringify(normalPosts).includes(sheet),false);
+await question({id:'script-review',kind:'script',title:'이 코드를 Google에 저장할까요?',private:true,script:{action:'upload',digest:'a'.repeat(64),files:[{name:'Code',source:'function example() { return "<script>unsafe</script>"; }'}],scopes:['https://www.googleapis.com/auth/script.projects']}});
+assert.equal(await page.getByRole('button',{name:'확인한 코드를 Google에 저장'}).isDisabled(),true);
+await page.getByText('코드와 요청 권한 확인',{exact:true}).click();
+assert.equal(await page.locator('.hps-question-skill script').count(),0);
+await page.getByLabel('작업 내용과 Google 접근 권한을 확인했어요.').check();
+await page.getByRole('button',{name:'확인한 코드를 Google에 저장'}).click();
+assert.equal((await page.evaluate(()=>window.__posts.filter(m=>m.type==='automationAnswer').at(-1))).approved,true);
+assert.equal(JSON.stringify(await page.evaluate(()=>window.__posts.filter(m=>m.type==='sendMessage'))).includes('function example'),false);
 await question({id:'cancel-4',kind:'connect',title:'Google 계정을 연결할까요?',private:true});await page.getByRole('button',{name:'지금은 그만하기'}).click();assert.equal((await page.evaluate(()=>window.__posts.filter(m=>m.type==='automationAnswer').at(-1))).cancelled,true);
 // Reproduce the real sidebar: long history, classroom rails and an expanded access block.
 await emit({type:'automationQuestion',question:null,activityId});

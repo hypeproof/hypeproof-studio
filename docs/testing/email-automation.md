@@ -104,3 +104,18 @@ executable path is adapted; the extracted Windows binary is never executed. The
 installer uses a minimal offline adapter so ordinary copy/paste installation does
 not require an unsigned child `.ps1` or an execution-policy change. Explicit
 organization Restricted/AllSigned policy stops the flow.
+
+
+## Apps Script quests (EA-10/11)
+
+`npm run test:automation` includes the Apps Script adapter, generated-source VM,
+host approvals/shared ledger and graph negative controls. The conversation browser
+test includes escaped code review, an initially unchecked approval and host-only
+response. `test/automation-quest.browser.mjs` checks actual graph rendering at
+1280x800 and 360x540, including failed/blocked states and overflow.
+
+Real acceptance requires the opt-in Service/access grant and updated host, new
+Google scopes, owned-script creation/upload, standard Cloud project association,
+approved private version, synthetic Sheet execution and separately approved send.
+Verify the exact version/content, execution user and inbox receipt. Settings opened,
+code uploaded, mocked runs and old Gmail API receipts are not this backend's proof.

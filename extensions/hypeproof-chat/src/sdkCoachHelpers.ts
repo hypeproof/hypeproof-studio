@@ -35,7 +35,7 @@ import {
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
-import { GOOGLE_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
+import { GOOGLE_AUTOMATION_MCP_TOOLS, APPS_SCRIPT_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
@@ -234,6 +234,7 @@ export function permittedMcpToolsFor(profile: ResolvedProfile): string[] {
   }
   if (profile.automations?.enabled === true && profile.automations.provider === "gmail") {
     tools.push(...GOOGLE_AUTOMATION_MCP_TOOLS);
+    if (profile.automations.appsScript === true) tools.push(...APPS_SCRIPT_MCP_TOOLS);
   }
   return tools;
 }
@@ -1889,7 +1890,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
-    (GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)
+    (ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)
   );
 }
 
@@ -2271,7 +2272,7 @@ export function evaluateSdkToolUse(args: {
 
   // The registered host rechecks capability and requires an exact-preview native
   // confirmation for every send. This dispatch grant cannot approve delivery.
-  if ((GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)) {
+  if ((ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)) {
     return { decision: "allow" };
   }
 
