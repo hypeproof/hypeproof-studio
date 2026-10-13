@@ -203,6 +203,7 @@ import {
   resolveInstructorTokenFromSecrets,
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
+import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
 import {
   SessionSpool,
   spoolIdentityFromToken,
@@ -3098,10 +3099,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // That gap is filled with one timeline line. It turns done when it really comes
     // up and error when it fails, so the state "said it was up but it was not" never
     // stays on screen (R0).
-    const revealLogId = randomId();
+    // D-027 — a summary cohort sees the line only while the preview opens: a `pending-` id is
+    // hidden once done. Five Edits in one turn used to leave five "미리보기를 열었어요".
+    const summaryActivity = toolActivityMode(this.cachedProfile) === "summary";
+    const revealLogId = summaryActivity ? `pending-reveal-${randomId()}` : randomId();
     const logReveal = (state: "running" | "done" | "error", label: string): void => {
       if (!opts?.streamId) return;
-      this.postToolLog(opts.streamId, { id: revealLogId, icon: "🖼️", label, state });
+      const shown = summaryActivity && state === "running" ? PREVIEW_PHRASE.label : label;
+      this.postToolLog(opts.streamId, { id: revealLogId, icon: "🖼️", label: shown, state });
     };
 
     logReveal("running", "미리보기 여는 중");
@@ -4404,11 +4409,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // result and the next call).
       let pendingShown = false;
       const PENDING_ID = `pending-${streamId}`;
+      // D-027 — a "summary" cohort gets one Korean line per stretch of work in place of a line
+      // per tool call (toolActivity.ts). The pending line below becomes that line.
+      const work = toolActivityMode(profile) === "summary"
+        ? new WorkLine(PENDING_ID, (entry) => this.postToolLog(streamId, entry))
+        : null;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
       // was 3 minutes and the last line was `Read ✓`, so children and adults alike
       // misread it as "still reading". That stretch is filled with one live line.
       const showPending = () => {
+        if (work) {
+          pendingShown = true;
+          work.show(NEXT_STEP_PHRASE);
+          return;
+        }
         if (pendingShown) return;
         pendingShown = true;
         this.postToolLog(streamId, { id: PENDING_ID, icon: "…", label: "다음 단계를 준비하는 중…", state: "running" });
@@ -4421,6 +4436,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const clearPending = () => {
         if (!pendingShown) return;
         pendingShown = false;
+        if (work) {
+          work.close(pendingCloseLabel(wroteOk));
+          return;
+        }
         this.postToolLog(streamId, {
           id: PENDING_ID,
           icon: "✍️",
@@ -4466,10 +4485,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           this.postToolLog(streamId, { id, icon, label, state, ...(a.at ? { at: a.at } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
+            if (work) {
+              pendingShown = true;
+              work.show(THINKING_PHRASE);
+              break;
+            }
             // One entry that ticks in place; the completed block replaces it.
             log(`think-${thinkingIndex}`, "💭", `응답 준비 중 · ${a.tokens} 토큰`, "running");
             break;
           case "thinking":
+            // D-027 — a summary cohort sees that the coach is thinking, not what it thinks.
+            if (work) {
+              pendingShown = true;
+              work.show(THINKING_PHRASE);
+              break;
+            }
             // 2026-08-20 — thinking is also "doing something". A child's inner
             // thoughts are hidden (below), so without this line the screen goes
             // completely quiet — 3 minutes of silence after Read ✓ on a real device.
@@ -4486,7 +4516,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // Pass the workspace root so the path is shown relative to it. Leaving
             // only the filename makes "normal · relative path refused · outside the
             // workspace" all read as the same characters.
-            clearPending();
+            if (!work) clearPending();
             const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd())})`;
             toolLabels.set(a.id, label);
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
@@ -4507,14 +4537,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 htmlWrites.set(a.id, fp);
               }
             }
-            log(a.id, "🔧", label, "running");
+            if (work) {
+              pendingShown = true;
+              work.show(workPhrase(a.name, a.input));
+            } else {
+              log(a.id, "🔧", label, "running");
+            }
             break;
           }
           case "tool_result":
             // A failure leaves a mark in the label — an icon alone disappears once the
             // scroll passes it. In real use a Write failure was missed and
             // "저장됐습니다" was believed as it stood (2026-07-26).
-            log(
+            // D-027 — a summary cohort gets no per-call line, failures included: the coach
+            // retries on its own, and the turn's own text has to say what did not work (R0).
+            if (!work) log(
               a.id,
               "🔧",
               a.isError

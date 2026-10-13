@@ -262,6 +262,8 @@ export interface ResolvedProfile {
   input?: { page_context?: boolean; image_paste?: boolean };
   /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
   classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
+  /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
+  tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
   browser_control?: { enabled: boolean; max_iterations?: number };
   /** CR-02 — Curriculum Runtime switch (`curriculum_runtime.enabled`), off when absent. */
