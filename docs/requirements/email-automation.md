@@ -43,3 +43,15 @@ The category structure starts with email; other categories must not pretend to r
 Implementation belongs to Studio host/webview, Service APIs and profile policy,
 Ops canonical migration, and the existing release pipeline. No new product repo.
 Verification contract: [email automation tests](../testing/email-automation.md).
+
+Private Windows acceptance installation uses the same website-copy / PowerShell
+paste interaction as the normal product installation (human correction,
+2026-10-13). `scripts/install-email-test.ps1` pins the existing tested application
+and offline SDK artifacts; it does not replace the production installer or public
+release. The participation code is entered in a masked prompt and sent only to
+the exact test origin. Files require authorization, direct HTTP 200, exact size
+and SHA-256 before extraction or execution. A separate versioned user directory
+and desktop shortcut preserve an ordinary Studio installation. Unknown existing
+folders, running test apps and unsafe archive paths stop installation. Matching
+receipts permit rerun without replacing user data. No code is placed in command
+history, settings, shortcuts or logs. OS security policy remains in effect.

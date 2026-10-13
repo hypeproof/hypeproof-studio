@@ -70,3 +70,33 @@ are external inputs; missing inputs are BLOCKED/NOT RUN, not a synthetic PASS.
 
 Windows artifacts built at 97b1a065 predate the conversational interaction correction.
 Their integrity and shell launch evidence cannot establish this revised acceptance.
+
+## Private one-command Windows installer
+
+Run `pwsh -NoProfile -File scripts/tests/install-email-test-fixture.ps1`.
+The fixture executes the production PowerShell manifest/hash/extraction/reuse
+functions and uses a fake HTTP transport to exercise status handling. It covers
+fixed build/artifact pins, actual changed file bytes, safe extraction versus
+traversal/Windows aliases, redirects and authorization errors, running-app refusal,
+and receipt-bound rerun preserving unrelated user data. It parses the actual
+ASCII installer with the PowerShell parser. This can run on macOS and is not proof
+of Windows PowerShell 5.1 behavior, shortcut creation, SDK launch or installation.
+
+On a real Windows x64 PC, copy the command from the private test installation page,
+paste into PowerShell, enter the participation code at the hidden prompt, and
+verify the separate shortcut/app opens without changing the ordinary Studio app.
+The installed app must show the test funding choice and accept the same code.
+No GitHub login or manual archive transfer is required. Test interruption/failure
+must preserve an existing install; rerun must preserve its workspace and login.
+Any OS security restriction must remain visible and must not trigger an automatic
+policy bypass. Windows acceptance remains NOT RUN until these observations exist.
+
+Passing `-SdkZip <protected-offline-addon.zip>` additionally runs the actual pinned
+SDK tarball through SHA-512 validation and offline extraction in a temporary
+APPDATA directory. The fixture compares the pinned integrity with the canonical
+seed script and SDK manifest, verifies the runtime marker contract, confirms
+idempotent reuse, and refuses an incomplete existing seed. On macOS only the tar
+executable path is adapted; the extracted Windows binary is never executed. The
+installer uses a minimal offline adapter so ordinary copy/paste installation does
+not require an unsigned child `.ps1` or an execution-policy change. Explicit
+organization Restricted/AllSigned policy stops the flow.
