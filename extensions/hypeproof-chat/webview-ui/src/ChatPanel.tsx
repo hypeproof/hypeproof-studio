@@ -30,6 +30,7 @@ import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
+import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import {
   RUNNER_PHRASE_MS,
@@ -421,6 +422,9 @@ export function ChatPanel(props: Props) {
    * two sides do not diverge.
    */
   const publishing = config?.profile?.publishing;
+  // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
+  // are drawn; absent → shown (classroomPanels.ts).
+  const classroomPanels = classroomPanelsShown(config?.profile);
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -891,11 +895,11 @@ export function ChatPanel(props: Props) {
       <InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} />
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
-      {!props.instructor && <HelpRequest view={help} post={postToHost} />}
+      {!props.instructor && classroomPanels.help && <HelpRequest view={help} post={postToHost} />}
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}
-      {!props.instructor && help && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
+      {!props.instructor && help && classroomPanels.approval && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
         <summary>수업 결과물 승인</summary>
         <p className="hp-rail-lesson-note">작업 폴더의 index.html 지금 판을 수업 결과물로 승인하거나 승인을 취소합니다. 누르면 그 판의 지문을 먼저 보여 주고 고르게 합니다. 승인한 판만 ‘학생이 승인한 결과물’ 회수에 들어가며, 이 버튼은 아무것도 보내지 않습니다. 고치면 새 판은 다시 승인해야 합니다.</p>
         <button type="button" className="hp-cta-quiet" data-artifact-approve="" onClick={() => postToHost({ type: "artifactApprove" })}>지금 결과물 확인하고 승인·취소</button>

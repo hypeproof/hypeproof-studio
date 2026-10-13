@@ -260,6 +260,8 @@ export interface ResolvedProfile {
   workspace_start?: 'empty' | 'html';
   /** Optional input capabilities (default off). #278 / website-copyclone. */
   input?: { page_context?: boolean; image_paste?: boolean };
+  /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
+  classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
   browser_control?: { enabled: boolean; max_iterations?: number };
   /** CR-02 — Curriculum Runtime switch (`curriculum_runtime.enabled`), off when absent. */
