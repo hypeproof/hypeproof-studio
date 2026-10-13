@@ -43,6 +43,8 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODES="
 irm  scripts/install.ps1
 irm  scripts/install-win.ps1
+irm  scripts/install-email-test.ps1
+file scripts/tests/install-email-test-fixture.ps1
 file scripts/seed-sdk-binary.ps1
 file e2e/classroom/win-field/prepare-devhost.ps1
 file e2e/classroom/win-field/preflight.ps1
