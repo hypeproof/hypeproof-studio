@@ -108,6 +108,12 @@ export interface ChatConfig {
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
+  /**
+   * One-click publish is allowed for this seat (host-computed `sitePublishAllowed`: publishing
+   * enabled + per_user_github_pages + not a minor). Sent as a decision rather than mirrored in
+   * the webview, so the button and the host gate cannot drift apart.
+   */
+  sitePublish?: boolean;
   // #1298 — true when the active token verified as an issuer via GET /admin/chalk/whoami.
   // Drives rendering of InstructorChatPanel (header band + unrestricted model select).
   isInstructor?: boolean;
@@ -238,7 +244,14 @@ export interface ResolvedProfile {
     example_prompts: string[];
   };
   ux: UxConfig;
-  publishing: { enabled: boolean; strategy: string };
+  /**
+   * `default_repo_name` and `custom_domain` belong to the one-click GitHub Pages publish
+   * (`strategy: "per_user_github_pages"`, src/publish/). Both are optional because a Service
+   * older than that feature omits them: a missing repo name falls back to `dental-homepage`
+   * and a missing `custom_domain` hides nothing (the coach may still pass a domain; this flag
+   * only says whether the cohort's skill offers it).
+   */
+  publishing: { enabled: boolean; strategy: string; default_repo_name?: string; custom_domain?: boolean };
   preview: { type: "iframe" | "live_server"; auto_start: boolean };
   // #422 — the cohort's on-disk workspace folder (e.g. "~/HypeProofClinic" for
   // the dental website cohort, "~/HypeProofGames" for kids). The extension opens
@@ -434,6 +447,8 @@ export type WebviewMessage = (
    * not what is on screen.
    */
   | { type: "publishToGallery" }
+  // One-click publish (src/publish/): the chat header button. The host re-checks the gate.
+  | { type: "publishSite" }
   // Trace signals (#9). Webview fires; host forwards via POST /v1/trace/event.
   // The host-side HTTP forwarding lands in a follow-up — keep these in sync
   // with worker/src/routes/trace.ts TraceEvent union.
@@ -619,7 +634,11 @@ export interface ActionRequest {
   // read-only subagent (코드리뷰어/리서처) via the SDK Agent/Task tool. The
   // modal makes the student consciously decide the delegation — the
   // delegation_judgment asset IS this decision (docs/seven-assets.md §5).
-  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType";
+  // "publishSite": the coach's publish_site tool makes the workspace public on GitHub Pages.
+  // Its own tier in resolveActionApproval (confirmed once per repository per session) and
+  // deliberately NOT in `requireApprovalFor`: a setting must not be able to remove the one
+  // confirmation in front of an irreversible "everyone can read this" act.
+  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType" | "publishSite";
   /**
    * epic #431, shell only — the command is unrecoverable if approved by
    * reflex (`rm`, `sudo`, `git push --force`, pipe-to-shell). The host shows

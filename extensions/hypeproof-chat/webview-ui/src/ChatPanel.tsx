@@ -69,6 +69,8 @@ interface Props {
     | { state: "error"; message: string }
     | null;
   onPublish: () => void;
+  /** One-click publish to GitHub Pages (shown when the host says `config.sitePublish`). */
+  onPublishSite?: () => void;
   streaming: boolean;
   /**
    * WHICH message is streaming, not just whether one is (#429). `streaming` is
@@ -781,6 +783,19 @@ export function ChatPanel(props: Props) {
                 : props.publish?.state === "done"
                   ? "올렸어요 ✓"
                   : "🖼️ 갤러리"}
+            </button>
+          )}
+          {/* One-click publish. The decision comes from the host (config.sitePublish) so it
+              cannot drift from the host gate; the host re-checks on click anyway. */}
+          {config?.sitePublish === true && props.onPublishSite && (
+            <button
+              className="hps-site-publish-btn"
+              onClick={props.onPublishSite}
+              disabled={props.streaming}
+              title="홈페이지를 내 GitHub 주소로 올려요"
+              aria-label="인터넷에 올리기"
+            >
+              인터넷에 올리기
             </button>
           )}
           <button onClick={props.onSetToken} title="연결된 활동 확인 및 변경">

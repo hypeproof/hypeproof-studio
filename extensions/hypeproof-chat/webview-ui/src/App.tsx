@@ -539,6 +539,7 @@ export function App() {
           dispatch({ type: "publishStart" });
           postToHost({ type: "publishToGallery" });
         }}
+        onPublishSite={() => postToHost({ type: "publishSite" })}
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
         error={state.error}

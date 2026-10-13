@@ -1,0 +1,299 @@
+// VS Code glue for the one-click publish: the toolbar command, the coach tool's host side,
+// the "this becomes public" confirmation, progress, and the device-code modal.
+//
+// Everything that decides something lives in the pure modules beside this file; this one only
+// turns their results into VS Code UI. Both entry points go through `run()`, so they share the
+// single-flight lock, the consent memory and the pipeline (D3).
+
+import * as vscode from "vscode";
+import * as crypto from "node:crypto";
+import * as path from "node:path";
+import { execFile } from "node:child_process";
+import type { ResolvedProfile } from "../protocol";
+import type { McpToolResult } from "../browserMcp";
+import { createGhCliAuthProvider, type AuthProvider } from "./githubAuth";
+import { classFolderCheck, pressAccess, publishError, resolveRepoName, sitePublishAllowed, type AccessCheck, type PublishSiteInput, type PublishSiteResult } from "./publishContract";
+import { BUTTON_BUDGET_MS, toolBudgetMs, type PublishEndpoints } from "./publishConfig";
+import { resultChatText, runPublishSite, stepLabel } from "./publishSite";
+import { markerSummary } from "./sitePreflight";
+import { consentDecision, PublishRegistry, registrationPrompt, type RegistryStore } from "./publishRegistry";
+
+/** Context key the manifest gates the toolbar button on. */
+export const SITE_PUBLISH_CONTEXT_KEY = "hypeproof-chat.sitePublishEnabled";
+
+export interface SitePublisherHost {
+  profile(): ResolvedProfile | null;
+  isMinor(profile: ResolvedProfile): boolean;
+  workspaceRoot(): string | undefined;
+  /** No coach turn is running (the button refuses while one is: the coach may be publishing). */
+  idle(): boolean;
+  /** Put a finished button run into the chat transcript (as an app-written reply). */
+  postToChat(text: string): Promise<void>;
+  /** Inline notice in the chat panel (no toast — a toast pauses the integrated browser, #308). */
+  notice(text: string): void;
+  log(line: string): void;
+  stallMs(): number | undefined;
+  endpoints: PublishEndpoints;
+  /** Where registrations persist (the extension's globalState: survives restarts). */
+  store: RegistryStore;
+  /** Ask the Service, now, about the token stored in this seat (one fresh /v1/profile). */
+  checkAccess(): Promise<AccessCheck>;
+  /** Re-read the profile after the Service refused a press, so the button disappears. */
+  refreshProfile(): Promise<void>;
+  /** The class folder: the activity's folder, else the profile's workspace_root. */
+  classFolder(): string | undefined;
+  /** The same folder on disk (symlinks resolved). */
+  sameFolder(a: string, b: string): boolean;
+}
+
+export class SitePublisher {
+  private readonly host: SitePublisherHost;
+  private readonly auth: AuthProvider;
+  private running = false;
+  readonly registry: PublishRegistry;
+  /**
+   * Repositories the coach tool was approved for in canUseTool but whose owner was not known
+   * yet (the approval happens before authentication). The run that follows registers them
+   * under the login it signs in as, then clears the entry.
+   */
+  private readonly toolApproved = new Set<string>();
+
+  constructor(host: SitePublisherHost) {
+    this.host = host;
+    this.registry = new PublishRegistry(host.store);
+    this.auth = createGhCliAuthProvider({
+      execFile: execFile as unknown as Parameters<typeof createGhCliAuthProvider>[0]["execFile"],
+      platform: process.platform,
+      ...(host.endpoints.ghPath ? { ghPath: host.endpoints.ghPath } : {}),
+    });
+    for (const r of host.endpoints.refused) host.log(`[publish] ignored override ${r} (not a test/dev run, or not a loopback URL)`);
+  }
+
+  /** The served profile allows publishing here — the gate for the button, the coach tool and registrations. */
+  allowed(): boolean {
+    const p = this.host.profile();
+    return !!p && sitePublishAllowed(p.publishing, this.host.isMinor(p)).ok;
+  }
+
+  /**
+   * May the BUTTON be shown? Only when the profile served for this seat's token allows it (user
+   * decision 2026-10-13: publishing is for holders of a HypeProof-issued token, decided per
+   * cohort by the Service). There is no profile without a valid token, so an expired token, a
+   * Service that does not answer, or a cohort without publishing all hide it — a persisted
+   * registration does not bring it back. Each press re-checks the token (`run`).
+   */
+  available(): boolean {
+    return this.allowed();
+  }
+
+  /** The repository name this input would publish to (for the confirmation copy). */
+  repoNameFor(input: PublishSiteInput): string {
+    return resolveRepoName(input.repo_name, this.host.profile()?.publishing?.default_repo_name);
+  }
+
+  /**
+   * Ask once per repository per session. Used by the button directly and by the coach tool via
+   * resolveActionApproval ("publishSite" kind). The copy names the consequence — public, and
+   * agent.md included (D2) — because "올리기" alone reads like saving.
+   */
+  /** Registered already under the last login we published as (the tool path cannot know the login sooner). */
+  allowedWithoutPrompt(repoName: string): boolean {
+    const login = this.registry.lastLogin();
+    return !!login && this.registry.isRegistered(login, repoName);
+  }
+
+  /**
+   * The registration question (button path, and the tool path when the owner turns out to be
+   * unregistered). Asked AFTER sign-in so it can name `<login>/<repo>`; a "yes" is persisted,
+   * so every later press of the button publishes without a modal.
+   */
+  async confirmRegistration(login: string, repoName: string): Promise<boolean> {
+    await this.registry.setLastLogin(login);
+    if (this.registry.isRegistered(login, repoName)) return true;
+    const { title, detail } = registrationPrompt(login, repoName);
+    const pick = await vscode.window.showWarningMessage(title, { modal: true, detail }, "공개하기");
+    if (pick !== "공개하기") return false;
+    await this.registry.register(login, repoName, this.host.workspaceRoot());
+    return true;
+  }
+
+  /**
+   * Coach tool approval (resolveActionApproval "publishSite"). The tool keeps its consent
+   * semantics — the coach's first outward publish is the participant's decision, asked in
+   * canUseTool before the tool runs — but uses the SAME persisted registration as the button:
+   * one consent concept, one place to revoke it ("배포 등록 해제"), and no second question for
+   * a repository the participant already registered by pressing the button (or vice versa).
+   * The login is unknown here (no authentication has run yet), so the last login we published
+   * as is used to recognize a registration; when there is none, the copy names the repository
+   * only and the run registers it under whoever signs in.
+   */
+  async approveForTool(repoName: string, stage: "save" | "publish", onPrompted?: () => void): Promise<boolean> {
+    if (this.allowedWithoutPrompt(repoName)) return true;
+    onPrompted?.();
+    const login = this.registry.lastLogin();
+    const { title, detail } = registrationPrompt(login ?? "내 GitHub 계정", repoName);
+    const pick = await vscode.window.showWarningMessage(stage === "save" ? title.replace("홈페이지를 공개합니다", "홈페이지를 저장합니다(공개 저장소)") : title, { modal: true, detail }, "공개하기");
+    if (pick !== "공개하기") return false;
+    this.toolApproved.add(repoName);
+    return true;
+  }
+
+  /** "배포 등록 해제": forget one registration (or all). The next press asks again. */
+  async unregisterFromCommand(): Promise<void> {
+    const regs = this.registry.list();
+    this.toolApproved.clear();
+    if (regs.length === 0) {
+      void vscode.window.showInformationMessage("등록된 배포가 없어요.");
+      return;
+    }
+    const ALL = "모두 해제";
+    const items = [...regs.map((r) => ({ label: `${r.login}/${r.repo}`, reg: r })), ...(regs.length > 1 ? [{ label: ALL, reg: null }] : [])];
+    const pick = regs.length === 1 ? items[0] : await vscode.window.showQuickPick(items, { placeHolder: "등록을 해제할 저장소를 고르세요" });
+    if (!pick) return;
+    const ok = await vscode.window.showWarningMessage(
+      pick.reg ? `${pick.label} 배포 등록을 해제할까요?` : "모든 배포 등록을 해제할까요?",
+      { modal: true, detail: "저장소와 공개된 사이트는 그대로 있어요. 다음에 버튼을 누르면 다시 확인을 받아요." },
+      "해제",
+    );
+    if (ok !== "해제") return;
+    const n = pick.reg ? await this.registry.unregister(pick.reg.login, pick.reg.repo) : await this.registry.unregister();
+    void vscode.window.showInformationMessage(`배포 등록 ${n}건을 해제했어요.`);
+  }
+
+  private async run(input: PublishSiteInput, mode: "button" | "tool", progress?: (line: string) => void): Promise<PublishSiteResult> {
+    const repoName = this.repoNameFor(input);
+    const workspace = this.host.workspaceRoot();
+    if (this.running) return { ok: false, verified: false, repo_name: repoName, steps: [], error: publishError("busy") };
+    this.running = true;
+    try {
+      // Token gate: the Service answers for this seat's token before anything else happens.
+      const gate = pressAccess(await this.host.checkAccess());
+      if (!gate.ok) {
+        this.host.log(`[publish] press refused by the token gate: ${gate.code}`);
+        if (gate.refreshProfile) await this.host.refreshProfile().catch(() => undefined);
+        return { ok: false, verified: false, repo_name: repoName, steps: [], error: publishError(gate.code) };
+      }
+      // Class folder only: the pipeline uploads the whole open folder, so nothing else may go out.
+      const classFolder = this.host.classFolder();
+      const folder = classFolderCheck({ workspaceRoot: workspace, classFolder, same: (a, b) => this.host.sameFolder(a, b) });
+      if (!folder.ok) {
+        this.host.log(`[publish] press refused: ${folder.code} (open ${workspace ?? "none"}, class ${classFolder ?? "unknown"})`);
+        const name = (p: string | undefined) => (p ? path.basename(p) : "알 수 없음");
+        const error =
+          folder.code === "not_class_folder"
+            ? publishError("not_class_folder", { message_ko: `수업 폴더(${name(classFolder)})에서만 올릴 수 있어요. 지금 열린 폴더(${name(workspace)})는 올리지 않았어요.` })
+            : publishError("no_workspace");
+        return { ok: false, verified: false, repo_name: repoName, steps: [], error };
+      }
+      const profileOk = this.allowed();
+      const profile = this.host.profile();
+      return await runPublishSite(input, {
+        fetch,
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+        now: () => Date.now(),
+        auth: this.auth,
+        apiBase: this.host.endpoints.apiBase,
+        ...(this.host.endpoints.pagesBase ? { pagesBase: this.host.endpoints.pagesBase } : {}),
+        workspaceRoot: this.host.workspaceRoot(),
+        profileDefaultRepo: profile?.publishing?.default_repo_name,
+        customDomainAllowed: profileOk && profile?.publishing?.custom_domain === true,
+        nonce: () => crypto.randomBytes(16).toString("hex"),
+        // Button: the person at the screen enters the code while we wait (≤ 5 min, the class
+        // budget). Tool: answer at once so the coach can show the code; a later call joins the
+        // same flow and waits a little for it to finish.
+        userAuthWaitMs: mode === "button" ? 5 * 60_000 : 0,
+        joinedAuthWaitMs: mode === "tool" ? 45_000 : 0,
+        budgetMs: mode === "button" ? BUTTON_BUDGET_MS : toolBudgetMs(this.host.stallMs()),
+        // Registration gate between sign-in and the first write (check_only never reaches it).
+        confirmPublish: async (login, repo) => {
+          await this.registry.setLastLogin(login);
+          const decision = consentDecision({
+            registered: this.registry.isRegistered(login, repo),
+            profileAllowed: profileOk,
+            toolApproved: mode === "tool" && this.toolApproved.has(repo),
+          });
+          if (decision === "go") return true;
+          if (decision === "not_allowed") return "not_allowed";
+          if (decision === "register") {
+            this.toolApproved.delete(repo);
+            await this.registry.register(login, repo, workspace);
+            return true;
+          }
+          return this.confirmRegistration(login, repo);
+        },
+        lastPushedSha: (login, repo) => this.registry.get(login, repo)?.lastPushedSha,
+        onPushed: async (login, repo, sha) => {
+          await this.registry.recordPush(login, repo, sha, workspace);
+        },
+        onStep: (step, at) => {
+          this.host.log(`[publish] ${new Date(at).toISOString()} ${step.id} ${step.status} ${step.detail_ko}`);
+          progress?.(stepLabel(step));
+        },
+        onDeviceCode: (code, uri) => (mode === "button" ? void this.showDeviceCode(code, uri) : this.host.notice(`GitHub 코드 ${code} — ${uri} 에서 입력해 주세요.`)),
+        log: (line) => this.host.log(line),
+      });
+    } finally {
+      this.running = false;
+    }
+  }
+
+  /** Coach tool entry. Consent was already asked by canUseTool (or skipped for check_only). */
+  async runForTool(input: PublishSiteInput): Promise<McpToolResult> {
+    const r = await this.run(input, "tool");
+    return { content: [{ type: "text", text: JSON.stringify(r) }], ...(r.error ? { isError: true } : {}) };
+  }
+
+  /** Toolbar command entry. */
+  async runFromButton(): Promise<void> {
+    if (!this.available()) {
+      this.host.notice(publishError("not_allowed").message_ko);
+      return;
+    }
+    if (!this.host.idle()) {
+      this.host.notice("코치가 답하는 중이에요. 답이 끝난 뒤 다시 눌러 주세요.");
+      return;
+    }
+    // No question here: sign-in comes first, then the pipeline's confirmPublish asks once per
+    // <login>/<repo> (persisted) — a registered repository publishes with no modal at all.
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "홈페이지 올리기", cancellable: false },
+      (progress) => this.run({}, "button", (line) => progress.report({ message: line })),
+    );
+    await this.host.postToChat(resultChatText(result)).catch(() => undefined);
+    await this.showResult(result);
+  }
+
+  private async showDeviceCode(code: string, uri: string): Promise<void> {
+    const COPY_OPEN = "코드 복사하고 GitHub 열기";
+    const pick = await vscode.window.showInformationMessage(
+      `GitHub 코드: ${code}`,
+      { modal: true, detail: `브라우저에서 이 여덟 글자를 입력하고 초록색 Authorize 버튼을 눌러 주세요.\n${uri}` },
+      COPY_OPEN,
+    );
+    if (pick === COPY_OPEN) {
+      await vscode.env.clipboard.writeText(code);
+      await vscode.env.openExternal(vscode.Uri.parse(uri));
+    }
+  }
+
+  private async showResult(r: PublishSiteResult): Promise<void> {
+    const OPEN = "열기";
+    const COPY = "주소 복사";
+    if (r.verified && r.url) {
+      // The marker counts come from preflight (code), never from the coach (D24).
+      const markers = markerSummary(r.markers);
+      const pick = await vscode.window.showInformationMessage(`인터넷 주소가 열리는 것을 확인했어요: ${r.url}${markers ? ` · ${markers}` : ""}`, OPEN, COPY);
+      if (pick === OPEN) await vscode.env.openExternal(vscode.Uri.parse(r.url));
+      if (pick === COPY) await vscode.env.clipboard.writeText(r.url);
+      return;
+    }
+    const REPO = "저장소 열기";
+    const text = r.error
+      ? `${r.error.message_ko} ${r.error.next_action_ko}`
+      : r.needs_user
+        ? `GitHub 코드 ${r.needs_user.code} 입력이 끝나지 않았어요. 다시 눌러 주세요.`
+        : "아직 주소가 열리는 것을 확인하지 못했어요. 1~2분 뒤 다시 눌러 확인해 주세요.";
+    const pick = await vscode.window.showWarningMessage(text, ...(r.repo_url ? [REPO] : []));
+    if (pick === REPO && r.repo_url) await vscode.env.openExternal(vscode.Uri.parse(r.repo_url));
+  }
+}

@@ -35,6 +35,7 @@ import {
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
+import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
@@ -225,13 +226,28 @@ export function permittedToolsFor(profile: ResolvedProfile): string[] {
  *   harness's child_sdk_browser FAIL. When in doubt, deny for minors.
  */
 export function permittedMcpToolsFor(profile: ResolvedProfile): string[] {
+  const tools: string[] = [];
   if (profile.sdk_tools?.browser === true && !isMinorTier(profile)) {
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
-    return isCurriculumRuntimeEnabled(profile)
-      ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-      : [...MCP_BROWSER_TOOLS];
+    tools.push(
+      ...(isCurriculumRuntimeEnabled(profile)
+        ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
+        : [...MCP_BROWSER_TOOLS]),
+    );
   }
-  return [];
+  // One-click publish: its own grant, independent of `sdk_tools.browser` — the profile's
+  // `publishing` block is the owner (the same gate the toolbar button uses), minors never.
+  if (sitePublishAllowed(profile.publishing, isMinorProfile(profile)).ok) tools.push(MCP_PUBLISH_SITE);
+  return tools;
+}
+
+/**
+ * Minor for the publish gate: the tier heuristic OR the Service's explicit `minor_cohort`
+ * flag. Either one is enough to refuse — a public repository under a child's account is the
+ * outward act the minor posture keeps closed.
+ */
+export function isMinorProfile(profile: ResolvedProfile): boolean {
+  return isMinorTier(profile) || profile.minor_cohort === true;
 }
 
 // ── SDK subagents (#282 P2 slice 3, REQ-M22/M23) ─────────────────────────────
@@ -1884,7 +1900,8 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
-    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName)
+    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    toolName === MCP_PUBLISH_SITE
   );
 }
 
@@ -1954,6 +1971,15 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   // 그게 없어서 문구가 통째로 비었다("코치가 명령을 실행하려고 해요:" 뒤가 공백).
   // CR-06 — choosing an option acts inside the already-opened page like a click, so it
   // takes the click's kind (auto-allowed by the default approval list).
+  if (action.toolName === MCP_PUBLISH_SITE) {
+    const repo = firstString(action.input, ["repo_name"]) ?? "";
+    const stage = firstString(action.input, ["stage"]) === "save" ? "save" : "publish";
+    return {
+      kind: "publishSite",
+      description: stage === "save" ? `GitHub 저장소에 홈페이지 저장: ${repo || "기본 이름"}` : `홈페이지를 인터넷에 공개: ${repo || "기본 이름"}`,
+      payload: { repo_name: repo, stage },
+    };
+  }
   if (action.toolName === MCP_BROWSER_SELECT) {
     const ref = firstString(action.input, ["ref"]) ?? "";
     const value = firstString(action.input, ["value"]) ?? "";
@@ -2311,6 +2337,14 @@ export function evaluateSdkToolUse(args: {
   // stays on their own preview (CR-11); a proposal only shows drafts the student confirms.
   if ((MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName)) {
     return { decision: "allow" };
+  }
+  // One-click publish. `check_only` uploads nothing (it may only turn on HTTPS GitHub already
+  // offers), so it runs without a modal — it is how the coach answers "확인해줘" and must not
+  // cost a click each time. Everything else makes the workspace public: "ask", and the host
+  // confirms once per repository per session (resolveActionApproval "publishSite").
+  if (toolName === MCP_PUBLISH_SITE) {
+    const checkOnly = !!input && typeof input === "object" && (input as { check_only?: unknown }).check_only === true;
+    return checkOnly ? { decision: "allow" } : { decision: "ask" };
   }
   if (toolName === MCP_BROWSER_SCREENSHOT || toolName === MCP_LIVE_PREVIEW_START) {
     // Auto-allow once the browser capability is granted: a screenshot of the

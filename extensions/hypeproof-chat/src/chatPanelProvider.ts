@@ -210,6 +210,10 @@ import {
   type SpoolArtifactSource,
 } from "./sessionSpool";
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
+import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
+import type { PublishEndpoints } from "./publish/publishConfig";
+import type { AccessCheck } from "./publish/publishContract";
+import { isMinorProfile } from "./sdkCoachHelpers";
 import {
   ArtifactChangeGate,
   startHeartbeat,
@@ -558,6 +562,100 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.logChannel;
   }
   private cachedProfile: ResolvedProfile | null = null;
+
+  // ── One-click publish (src/publish/) ──────────────────────────────────────
+  private sitePublisherInstance: SitePublisher | null = null;
+  private publishEndpoints: PublishEndpoints | null = null;
+
+  /** Called once by activate(): where the publish talks to (test overrides already gated). */
+  initSitePublish(endpoints: PublishEndpoints): void {
+    this.publishEndpoints = endpoints;
+    this.sitePublisherInstance = null; // rebuilt with these endpoints on first use
+    this.refreshSitePublishContext();
+  }
+
+  /** Mirror "may the publish button be shown here" (the served profile for this seat's token). */
+  private refreshSitePublishContext(): void {
+    void vscode.commands.executeCommand("setContext", SITE_PUBLISH_CONTEXT_KEY, this.sitePublisher().available());
+  }
+
+  /** Lazily built so a cohort that never publishes never resolves `gh`. */
+  private sitePublisher(): SitePublisher {
+    this.sitePublisherInstance ??= new SitePublisher({
+      profile: () => this.cachedProfile,
+      isMinor: (p) => isMinorProfile(p),
+      workspaceRoot: () => this.resolveCoachCwd(),
+      idle: () => !this.hasActiveStream(),
+      postToChat: (text) => this.postAppReply(text),
+      notice: (text) => this.postPageNotice(text),
+      log: (line) => this.voiceLogChannel().appendLine(line),
+      stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
+      store: this.context.globalState,
+      endpoints: this.publishEndpoints ?? { apiBase: "https://api.github.com", refused: [] },
+      checkAccess: () => this.checkSitePublishAccess(),
+      // ensureProfile(true) re-reads the profile and re-sets the context key; postConfig carries
+      // the new answer to the chat header button.
+      refreshProfile: async () => {
+        await this.ensureProfile(true);
+        await this.postConfig();
+      },
+      // The folder the class connected in; the profile's workspace_root when no activity is recorded.
+      classFolder: () => {
+        try {
+          const current = activityConnections(this.context)?.current?.workspace;
+          if (current) return current;
+        } catch {
+          /* an unreadable activity record: fall back to the profile */
+        }
+        const root = this.cachedProfile?.workspace_root;
+        return (root && resolveWorkspaceRoot(root)) || undefined;
+      },
+      sameFolder: (a, b) => canonicalizeForCompare(a) === canonicalizeForCompare(b),
+    });
+    return this.sitePublisherInstance;
+  }
+
+  /**
+   * One fresh /v1/profile for the token in this seat: the publish press's token gate. Read
+   * apart from the cache on purpose — the cached profile outlives the token in an app left open
+   * — and with the same activity rule as ensureProfile, so the two never disagree on a seat.
+   */
+  private async checkSitePublishAccess(): Promise<AccessCheck> {
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    if (!token) return { kind: "no_token" };
+    const connections = activityConnections(this.context);
+    if (connections && !connections.matchesService) return { kind: "profile", publishing: null, minor: false };
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const r = await fetchProfileResult({ proxyUrl, token }).catch(() => null);
+    if (!r) return { kind: "failure", reason: "network" };
+    if (!r.ok) return { kind: "failure", reason: r.failure.reason };
+    if (connections?.current && r.profile.activity_id !== connections.current.serverId) return { kind: "profile", publishing: null, minor: false };
+    return { kind: "profile", publishing: r.profile.publishing, minor: isMinorProfile(r.profile) };
+  }
+
+  /** "배포 등록 해제" — forget a persisted publish registration. */
+  async unregisterSitePublish(): Promise<void> {
+    await this.sitePublisher().unregisterFromCommand();
+  }
+
+  /** The "홈페이지 올리기" command. The manifest hides it; this re-checks (a command can run without its menu). */
+  async publishSite(): Promise<void> {
+    await this.sitePublisher().runFromButton();
+  }
+
+  /**
+   * An app-written reply bubble in the transcript, the same channel the team-brain answers use:
+   * the webview shows it and the next turn's history carries it, so the coach can continue
+   * from the button's outcome instead of asking what happened.
+   */
+  private async postAppReply(text: string): Promise<void> {
+    const sid = randomId();
+    const aid = randomId();
+    void this.post({ type: "streamStart", streamId: sid, messageId: aid });
+    void this.post({ type: "streamChunk", streamId: sid, delta: text });
+    void this.post({ type: "streamEnd", streamId: sid });
+    await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+  }
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
   /**
@@ -2176,6 +2274,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.nativeHistoryScope = null;
     // CR-10 — the token changed: the delete command follows the new identity.
     void this.refreshCrBytesContext();
+    // The profile is gone, and with it the publish button (token gate).
+    this.refreshSitePublishContext();
     // #1298 — re-check instructor status + brief after token change.
     this._instructorMode.reset();
   }
@@ -2284,6 +2384,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.commands.executeCommand("setContext", CR_CONTEXT_KEY, crContextKeyValue(p));
         // Learning wiki and deck generator commands follow the cohort's own switch.
         void vscode.commands.executeCommand("setContext", "hypeproof-chat.learningWikiEnabled", p?.learning_wiki?.enabled === true);
+        // One-click publish: the button shows only where the served profile allows it.
+        this.refreshSitePublishContext();
         if (!isCurriculumRuntimeEnabled(p)) this.clearElementContext();
         // CR-10 — the delete command follows whoever is signed in now (no disk I/O).
         void this.refreshCrBytesContext();
@@ -3315,6 +3417,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       crEnabled: () => this.isCurriculumRuntimeEnabled(),
       // cr-verify — the same session the proxy path runs (CR-03).
       verify: async (name: string, input: Record<string, unknown>) => toMcpToolResult(await this.runVerifyTool(name, input)),
+      // One-click publish: the same pipeline and lock as the toolbar button.
+      publishSite: (input) => this.sitePublisher().runForTool(input),
       crScope: (url: string) => checkAgentOrigin(url, this.crBrowserOptions().allowedOrigins()),
       // #507 — the address of the live server currently up. It does not start one
       // (giving a lookup a side effect would mean "what is the address?" turns the
@@ -3791,6 +3895,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "publishToGallery":
         void this.publishToGallery();
+        return;
+      case "publishSite":
+        // The visible "Studio button": HP shell defaults hide editor/view title actions (#725),
+        // so the chat header is where a participant can actually press it.
+        void this.publishSite();
         return;
       case "webviewError":
         // S-04 (#48). Log to output channel so the trace survives a panel
@@ -5223,6 +5332,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return pick === "열기";
     }
 
+    // Tier 1.6 — publishing the workspace to a public GitHub repository (publish_site).
+    // Asked until the repository is REGISTERED (persisted per GitHub login + repository, shared
+    // with the toolbar button — publishRegistry.ts), then never again until "배포 등록 해제".
+    // Not configurable through requireApprovalFor (see the ActionRequest kind comment).
+    // check_only never reaches here.
+    if (req.kind === "publishSite") {
+      const payload = (req.payload as { repo_name?: string; stage?: string } | null | undefined) ?? {};
+      const publisher = this.sitePublisher();
+      if (!publisher.allowed()) return false;
+      const repo = publisher.repoNameFor({ repo_name: payload.repo_name || undefined });
+      return publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
+    }
+
     // Tier 2 — file access must target the active workspace (write and read).
     if (req.kind === "writeFile" || req.kind === "readFile") {
       const target = (req.payload as { path?: string } | null | undefined)?.path;
@@ -5445,6 +5567,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate,
+        ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
         ...(instructorConnection ? { instructorConnection } : {}),
