@@ -18,7 +18,6 @@ assert.deepEqual(p.parseProducts(catalogue), [{ id: 'pass-30d', label: '30일 �
 const tiers = p.parseProducts({ products: [{ ...catalogue.products[0], id: 'pass-lite', request_limit: 300 }, { ...catalogue.products[0], id: 'pass-basic', tagline: '한 달 동안 내 일에 써 볼 때', recommended: true }] });
 assert.equal(tiers[1].tagline, '한 달 동안 내 일에 써 볼 때'); assert.equal(tiers[1].recommended, true); assert.equal(tiers[0].recommended, undefined);
 assert.equal(p.defaultProduct(tiers).id, 'pass-basic'); assert.equal(p.defaultProduct([tiers[0]]).id, 'pass-lite');
-assert.equal(p.requestsPerDay(tiers[1]), 20); assert.equal(p.requestsPerDay(tiers[0]), 10);
 assert.equal(p.parseProducts({ products: [{ ...catalogue.products[0], tagline: 7 }] }), null);
 for (const bad of [null, {}, { products: [] }, { products: [{ ...catalogue.products[0], amount: 0 }] }, { products: [{ ...catalogue.products[0], currency: 'USD' }] }, { products: [{ ...catalogue.products[0], request_limit: 1.5 }] }, { products: [{ ...catalogue.products[0], id: 'a b' }] }])
   assert.equal(p.parseProducts(bad), null, JSON.stringify(bad));

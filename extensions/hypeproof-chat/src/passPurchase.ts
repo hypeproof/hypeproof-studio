@@ -179,6 +179,5 @@ export function waitDecision(state: OrderState | null, order: PendingOrder, now:
 
 export const formatWon = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
 /** Requests per day if the count is spread evenly over the period. */
-export const requestsPerDay = (product: PassProduct) => Math.floor(product.requestLimit / product.durationDays);
 /** The pass a buyer sees selected first: the one the Service suggests, else the first. */
 export const defaultProduct = (products: PassProduct[]) => products.find(p => p.recommended) ?? products[0];
