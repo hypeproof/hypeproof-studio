@@ -35,8 +35,9 @@ jobs:
         run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
         working-directory: chalk
-      # Webview typechecks shared App protocols, which consume Service packages.
-      - run: npm ci --ignore-scripts --omit=optional
+      # Webview protocols consume Service packages; browser fixtures also need
+      # esbuild's platform binary, which npm distributes as an optional dependency.
+      - run: npm ci --ignore-scripts
         working-directory: extensions/hypeproof-chat
       - run: npm ci
         working-directory: extensions/hypeproof-chat/webview-ui
