@@ -86,6 +86,18 @@ export class PublishRegistry {
     return Object.values(this.all()).sort((a, b) => a.at - b.at);
   }
 
+  /**
+   * The repository `workspace` publishes to under `login`: the latest registration made from that
+   * folder (a publish, or "GitHub에서 이어하기" bringing the repository down into it). Undefined
+   * means the folder never published from this computer, and its first publish makes a new
+   * repository instead of writing into one made elsewhere (githubContinue.ts firstFreeRepoName).
+   */
+  boundRepo(login: string, workspace: string | undefined, same: (a: string, b: string) => boolean): string | undefined {
+    if (!login || !workspace) return undefined;
+    const mine = this.list().filter((r) => r.login.toLowerCase() === login.toLowerCase() && !!r.workspace && same(r.workspace, workspace));
+    return mine.length ? mine[mine.length - 1].repo : undefined;
+  }
+
   /** Remove one registration (login + repo), or every one when called without arguments. Returns how many were removed. */
   async unregister(login?: string, repo?: string): Promise<number> {
     const current = this.all();

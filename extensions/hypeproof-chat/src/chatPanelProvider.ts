@@ -212,7 +212,9 @@ import {
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
 import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
 import type { PublishEndpoints } from "./publish/publishConfig";
-import type { AccessCheck } from "./publish/publishContract";
+import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract";
+import { nextFreeFolder } from "./publish/githubContinue";
+import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
 import {
   ArtifactChangeGate,
@@ -631,6 +633,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!r.ok) return { kind: "failure", reason: r.failure.reason };
     if (connections?.current && r.profile.activity_id !== connections.current.serverId) return { kind: "profile", publishing: null, minor: false };
     return { kind: "profile", publishing: r.profile.publishing, minor: isMinorProfile(r.profile) };
+  }
+
+  /**
+   * "GitHub에서 이어하기" for the start page (startPage.ts): the publish module's GitHub side, for
+   * profiles behind the same gate as the publish button and naming a class folder.
+   */
+  githubContinueSource(): GithubContinueSource {
+    const classRoot = (p: ResolvedProfile) => (p.workspace_root ? resolveWorkspaceRoot(p.workspace_root) : null);
+    return {
+      allowed: (p) => sitePublishAllowed(p.publishing, isMinorProfile(p)).ok && !!classRoot(p),
+      find: () => this.sitePublisher().findClassRepos(),
+      signIn: () => this.sitePublisher().signInForContinue(),
+      prepare: (args) => this.sitePublisher().prepareContinue(args),
+      newFolder: (root) => nextFreeFolder(root),
+      classRoot,
+    };
   }
 
   /** "배포 등록 해제" — forget a persisted publish registration. */

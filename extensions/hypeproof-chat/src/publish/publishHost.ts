@@ -7,11 +7,14 @@
 
 import * as vscode from "vscode";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFile } from "node:child_process";
 import type { ResolvedProfile } from "../protocol";
 import type { McpToolResult } from "../browserMcp";
-import { createGhCliAuthProvider, type AuthProvider } from "./githubAuth";
+import { AuthToolMissingError, createGhCliAuthProvider, type AuthProvider } from "./githubAuth";
+import { createGitHubApi, GitHubTransportError, type GitHubApi } from "./githubApi";
+import { downloadRepo, findClassRepos, nextFreeFolder, remoteHead, type ClassRepo, type DownloadFailure } from "./githubContinue";
 import { classFolderCheck, pressAccess, publishError, resolveRepoName, sitePublishAllowed, type AccessCheck, type PublishSiteInput, type PublishSiteResult } from "./publishContract";
 import { BUTTON_BUDGET_MS, toolBudgetMs, type PublishEndpoints } from "./publishConfig";
 import { resultChatText, runPublishSite, stepLabel } from "./publishSite";
@@ -20,6 +23,22 @@ import { consentDecision, PublishRegistry, registrationPrompt, type RegistryStor
 
 /** Context key the manifest gates the toolbar button on. */
 export const SITE_PUBLISH_CONTEXT_KEY = "hypeproof-chat.sitePublishEnabled";
+
+/** What the start page learns about this seat's GitHub before a class folder opens. */
+export type ClassReposOutcome =
+  | { status: "found"; login: string; repos: ClassRepo[] }
+  | { status: "none"; login: string }
+  | { status: "signin" }
+  | { status: "unavailable"; detail: string };
+
+/** "GitHub에서 이어하기" could not bring the site down: the sentence the participant reads. */
+export function continueFailureMessage(code: DownloadFailure["code"] | "network" | "account"): string {
+  if (code === "empty") return "이 저장소에는 아직 올린 홈페이지가 없어요. '새로 하기'를 눌러 주세요.";
+  if (code === "too_large") return "홈페이지 파일이 너무 많거나 커서 내려받지 않았어요. 강사에게 알려 주세요.";
+  if (code === "network") return "GitHub에 연결하지 못해 내려받지 않았어요. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.";
+  if (code === "account") return "GitHub 계정을 다시 확인하지 못했어요. 시작 화면을 닫았다 다시 열어 주세요.";
+  return "GitHub에서 홈페이지를 내려받지 못했어요. 잠시 뒤 다시 눌러 주세요.";
+}
 
 export interface SitePublisherHost {
   profile(): ResolvedProfile | null;
@@ -86,8 +105,17 @@ export class SitePublisher {
     return this.allowed();
   }
 
-  /** The repository name this input would publish to (for the confirmation copy). */
+  /**
+   * The repository name this input would publish to (for the confirmation copy): an explicit
+   * name, else the repository the open folder is bound to under the last login, else the
+   * profile's default. The run decides finally, after sign-in (`folderRepo` in run()).
+   */
   repoNameFor(input: PublishSiteInput): string {
+    if (!input.repo_name?.trim()) {
+      const login = this.registry.lastLogin();
+      const bound = login ? this.registry.boundRepo(login, this.host.workspaceRoot(), (a, b) => this.host.sameFolder(a, b)) : undefined;
+      if (bound) return bound;
+    }
     return resolveRepoName(input.repo_name, this.host.profile()?.publishing?.default_repo_name);
   }
 
@@ -204,18 +232,28 @@ export class SitePublisher {
         userAuthWaitMs: mode === "button" ? 5 * 60_000 : 0,
         joinedAuthWaitMs: mode === "tool" ? 45_000 : 0,
         budgetMs: mode === "button" ? BUTTON_BUDGET_MS : toolBudgetMs(this.host.stallMs()),
+        // A folder publishes to its own repository: the one it is bound to under this login, or a
+        // new one when it never published from this computer (user requirement 2026-10-13).
+        folderRepo: (login) => {
+          const bound = this.registry.boundRepo(login, workspace, (a, b) => this.host.sameFolder(a, b));
+          return bound ? { repo: bound } : "new";
+        },
         // Registration gate between sign-in and the first write (check_only never reaches it).
         confirmPublish: async (login, repo) => {
           await this.registry.setLastLogin(login);
+          // The tool was approved under the name known before sign-in; a new folder's repository
+          // is named only after it, so that approval covers the name the run settled on.
+          const approved = this.toolApproved.has(repo) || this.toolApproved.has(repoName);
           const decision = consentDecision({
             registered: this.registry.isRegistered(login, repo),
             profileAllowed: profileOk,
-            toolApproved: mode === "tool" && this.toolApproved.has(repo),
+            toolApproved: mode === "tool" && approved,
           });
           if (decision === "go") return true;
           if (decision === "not_allowed") return "not_allowed";
           if (decision === "register") {
             this.toolApproved.delete(repo);
+            this.toolApproved.delete(repoName);
             await this.registry.register(login, repo, workspace);
             return true;
           }
@@ -234,6 +272,93 @@ export class SitePublisher {
       });
     } finally {
       this.running = false;
+    }
+  }
+
+  // ── "GitHub에서 이어하기" (start page) ─────────────────────────────────────────
+
+  /** The signed-in GitHub account without starting a sign-in: null when nobody is signed in. */
+  private async signedInApi(): Promise<{ api: GitHubApi; login: string } | null> {
+    const token = await this.auth.token();
+    if (!token) return null;
+    const api = createGitHubApi({
+      base: this.host.endpoints.apiBase,
+      token,
+      deps: { fetch, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now: () => Date.now() },
+    });
+    const u = await api.request("GET", "/user");
+    if (u.status === 401) return null;
+    const login = u.status === 200 ? String((u.json as { login?: unknown } | null)?.login ?? "") : "";
+    if (!login) throw new Error(`GET /user ${u.status}`);
+    return { api, login };
+  }
+
+  /** The class sites this seat's GitHub account already has (start page, after a token is entered). */
+  async findClassRepos(): Promise<ClassReposOutcome> {
+    try {
+      const gh = await this.signedInApi();
+      if (!gh) return { status: "signin" };
+      const r = await findClassRepos(gh.api, gh.login);
+      if (!r.ok) return { status: "unavailable", detail: r.detail };
+      return r.repos.length ? { status: "found", login: gh.login, repos: r.repos } : { status: "none", login: gh.login };
+    } catch (err) {
+      const detail = err instanceof AuthToolMissingError ? "gh missing" : err instanceof Error ? err.message : String(err);
+      this.host.log(`[continue] could not list repositories: ${detail}`);
+      return { status: "unavailable", detail };
+    }
+  }
+
+  /**
+   * Sign in from the start page so the participant's sites can be listed: the same device-code
+   * modal as the publish button, with the scopes a later publish needs (no second sign-in then).
+   */
+  async signInForContinue(): Promise<boolean> {
+    let pending;
+    try {
+      pending = await this.auth.beginUserAuth(["repo", "workflow"], false);
+    } catch (err) {
+      this.host.log(`[continue] sign-in did not start: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+    void this.showDeviceCode(pending.code, pending.verificationUri);
+    const outcome = await Promise.race([pending.done, new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 5 * 60_000))]);
+    if (outcome === "timeout") {
+      pending.cancel();
+      return false;
+    }
+    return outcome === true;
+  }
+
+  /**
+   * The folder "GitHub에서 이어하기" opens for `repo`. The folder this seat would reopen anyway
+   * (`reuse`) when it is still exactly what GitHub holds: published from here, nothing newer from
+   * another computer. Otherwise a fresh folder beside the class folder, with the repository
+   * brought down into it and bound to it — registered, with the commit it came from, so the next
+   * press publishes on top of that commit with no question. Existing folders are never written.
+   */
+  async prepareContinue(args: { login: string; repo: ClassRepo; reuse?: string; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }> {
+    const { login, repo } = args;
+    try {
+      const gh = await this.signedInApi();
+      if (!gh || gh.login.toLowerCase() !== login.toLowerCase()) return { ok: false, message: continueFailureMessage("account") };
+      const reg = this.registry.get(login, repo.name);
+      if (args.reuse && reg?.workspace && reg.lastPushedSha && this.host.sameFolder(reg.workspace, args.reuse) && fs.existsSync(args.reuse)) {
+        if ((await remoteHead(gh.api, login, repo.name, repo.defaultBranch)) === reg.lastPushedSha) return { ok: true, folder: args.reuse, downloaded: false };
+      }
+      const dest = nextFreeFolder(args.classRoot);
+      const d = await downloadRepo(gh.api, login, repo.name, repo.defaultBranch, dest);
+      if (!d.ok) {
+        this.host.log(`[continue] ${login}/${repo.name} → ${dest}: ${d.code} ${d.detail}`);
+        return { ok: false, message: continueFailureMessage(d.code) };
+      }
+      await this.registry.register(login, repo.name, dest);
+      await this.registry.recordPush(login, repo.name, d.head, dest);
+      await this.registry.setLastLogin(login);
+      this.host.log(`[continue] ${login}/${repo.name}@${d.head.slice(0, 7)} → ${dest} (${d.files} files)`);
+      return { ok: true, folder: dest, downloaded: true };
+    } catch (err) {
+      this.host.log(`[continue] ${login}/${repo.name}: ${err instanceof Error ? err.message : String(err)}`);
+      return { ok: false, message: continueFailureMessage(err instanceof GitHubTransportError ? "network" : "unexpected") };
     }
   }
 

@@ -126,6 +126,12 @@ export async function lookupRepo(
   return { ok: true, repo: repoFrom(j, false) };
 }
 
+/**
+ * The description every repository the button creates carries. "GitHub에서 이어하기"
+ * (githubContinue.ts) recognizes a class site by it, so it is a contract, not decoration.
+ */
+export const REPO_DESCRIPTION = "HypeProof Studio에서 만든 홈페이지";
+
 export async function ensureRepo(api: GitHubApi, login: string, name: string): Promise<{ ok: true; repo: RepoInfo } | StepFailure> {
   const found = await lookupRepo(api, login, name);
   if (!found.ok) return found;
@@ -135,7 +141,7 @@ export async function ensureRepo(api: GitHubApi, login: string, name: string): P
   // free plan only serves Pages from public repositories (D2: the repo is public anyway).
   const c = await api.request("POST", "/user/repos", {
     name,
-    description: "HypeProof Studio에서 만든 홈페이지",
+    description: REPO_DESCRIPTION,
     private: false,
     auto_init: true,
     has_wiki: false,

@@ -44,6 +44,7 @@ import {
   type TreeFile,
 } from "./pagesPublisher.ts";
 import { checkDomain, dnsRecordsFor } from "./customDomain.ts";
+import { firstFreeRepoName } from "./githubContinue.ts";
 
 export interface PublishTiming {
   pagesTries: number;
@@ -116,6 +117,16 @@ export interface PublishSiteDeps {
    * Not called for `check_only`, which writes nothing.
    */
   confirmPublish?: (login: string, repo: string, stage: "save" | "publish") => Promise<boolean | "not_allowed">;
+  /**
+   * Which repository the open folder publishes to, asked after sign-in because a folder's
+   * binding belongs to a GitHub login. `{ repo }`: the folder published from this computer
+   * before, or "GitHub에서 이어하기" brought that repository down into it. `"new"`: the folder
+   * never published from here, so it gets the first free of `<default>`, `<default>-2`, … and
+   * can never write into a site made on another computer (user requirement 2026-10-13: "새로
+   * 하기 → 올릴 때 새 저장소"). Absent: the default name, as before (tests, the live script).
+   * An explicit `repo_name` input always wins.
+   */
+  folderRepo?: (login: string) => { repo: string } | "new";
   /** The commit our last push to `<login>/<repo>` created (divergence stop, D18 ⑤). */
   lastPushedSha?: (login: string, repo: string) => string | undefined;
   /** A push succeeded: remember its commit for the next divergence check. */
@@ -174,7 +185,8 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
   const stage = input.stage === "save" ? "save" : "publish";
   const checkOnly = input.check_only === true;
   const steps = new Steps(deps.onStep, deps.now);
-  const repoName = resolveRepoName(input.repo_name, deps.profileDefaultRepo);
+  // `let`: a folder's own repository is known only after sign-in (deps.folderRepo).
+  let repoName = resolveRepoName(input.repo_name, deps.profileDefaultRepo);
   const extra: Partial<PublishSiteResult> = {};
 
   const result = (ok: boolean, verified: boolean): PublishSiteResult => ({
@@ -302,6 +314,16 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     }
     if (!api || !login) return fail("unexpected", "no api/login after auth");
     steps.set("auth", "ok", `GitHub 계정 ${login} 으로 확인했어요.`);
+    if (!input.repo_name?.trim() && deps.folderRepo) {
+      const own = deps.folderRepo(login);
+      if (own === "new") {
+        const free = await firstFreeRepoName(api, login, repoName);
+        if (!free.ok) return fail("unexpected", free.detail);
+        repoName = free.name;
+      } else {
+        repoName = own.repo;
+      }
+    }
     const plannedUrl = siteUrlFor(login, repoName, deps.pagesBase);
     extra.planned_url = plannedUrl;
 
