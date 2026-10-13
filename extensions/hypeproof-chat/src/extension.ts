@@ -71,7 +71,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // a more reliable fallback.
   const backdoors = await applyTestBackdoors(context);
 
-  const preview: PreviewProvider = new PreviewProvider(context, () => startPage.closeForAutomationPreview());
+  const preview: PreviewProvider = new PreviewProvider(context, () => {
+    startPage.closeForAutomationPreview();
+    return provider.automationPreviewColumn();
+  });
   const liveServer = new LiveServer();
   registerPreviewViewport(context, liveServer);
   // SX-59 — the old capability status bar was built here and sat on screen for the

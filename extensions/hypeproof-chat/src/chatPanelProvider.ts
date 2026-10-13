@@ -1961,6 +1961,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return true;
   }
 
+  /** Keep the automation canvas visible beside an editor-hosted conversation. */
+  automationPreviewColumn(): vscode.ViewColumn {
+    return this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One;
+  }
+
   private connectionChanging = false;
   private draftWrites: Promise<void> = Promise.resolve();
   private draftSource?: vscode.Webview;
