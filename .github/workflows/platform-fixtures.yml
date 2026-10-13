@@ -71,6 +71,7 @@ jobs:
         run: |
           ./scripts/tests/install-email-test-fixture.ps1
           ./scripts/tests/install-email-ui-update-fixture.ps1
+          ./scripts/tests/install-email-quest-update-fixture.ps1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
