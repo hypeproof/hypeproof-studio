@@ -17,7 +17,7 @@ test('one bounded HTTP read forwards only Bearer and preserves Service auth fail
   globalThis.fetch = async (url, init) => {
     calls++;
     assert.equal(url, 'https://service.test/admin/chalk/cohorts/cohort-one/state');
-    assert.equal(init.redirect, 'error');
+    assert.equal(init.redirect, 'manual');
     assert.ok(init.signal instanceof AbortSignal);
     assert.deepEqual([...init.headers.keys()].sort(), ['authorization', 'x-request-id']);
     assert.equal(init.headers.get('authorization'), 'Bearer fixture-token');

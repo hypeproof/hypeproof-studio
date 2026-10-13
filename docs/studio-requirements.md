@@ -868,3 +868,7 @@ SDK setup and receipt-bound rerun are covered by
 Google execution remain separate acceptance evidence.
 
 EA-01/03 keep automation conversations readable in a short sidebar: optional help and model/usage settings are folded, required funding selection stays accessible, message items do not shrink over one another, and an active question replaces the inactive composer with a return-to-question control. Browser transition coverage lives in `automation-conversation-ui.browser.mjs`; Windows user confirmation remains separate.
+
+EA-01/03 local acceptance is now defined in [the confirmed persona and Windows gate](plan/automation-local-acceptance.md) (TJ, 2026-10-14). Stable graph IDs retain host evidence across restatements; changed prerequisites invalidate dependent results. Automation opens in the existing preview area, releases only the Studio start page, and preserves other editor tabs. Repeated graph labels must not reset the ready handshake or freeze progress. Questions show one title and one privacy explanation; menus close after selection, outside click or Escape.
+
+EA-01/03 retain the learner-selected native conversation width across reopening and expose boundary-drag guidance. Opening an existing conversation does not send another onboarding request. Apps Script preview presents a read-only private card; acknowledge/close never grants sending or publication authority. The Mac isolated test uses in-memory SecretStorage, so it cannot establish OS-backed credential persistence.

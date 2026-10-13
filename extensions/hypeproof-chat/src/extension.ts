@@ -71,7 +71,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // a more reliable fallback.
   const backdoors = await applyTestBackdoors(context);
 
-  const preview = new PreviewProvider(context);
+  const preview: PreviewProvider = new PreviewProvider(context, () => startPage.closeForAutomationPreview());
   const liveServer = new LiveServer();
   registerPreviewViewport(context, liveServer);
   // SX-59 — the old capability status bar was built here and sat on screen for the
@@ -204,6 +204,8 @@ export async function activate(context: vscode.ExtensionContext) {
     readCollection: (sinceMs, identity) => provider.opsReadCollection(sinceMs, identity),
     recoverPreview: () => provider.opsRecoverPreview(),
   }, (line) => console.log(line));
+  classroomOps.setAutomationSource(() => automationHost.observation());
+  automationHost.setProgressListener(() => { classroomOps.refreshAutomation(); });
   provider.opsObserver = classroomOps;
   provider.inboxSource = classroomOps;
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.

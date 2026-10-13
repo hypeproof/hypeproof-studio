@@ -1,3 +1,5 @@
+import { automationOpsProgress, type AutomationOpsObservation } from './automationOps';
+import { tokenIdentityUnverified } from './classroomOps';
 import * as vscode from 'vscode';
 import { createAppsScriptRuntime, APPS_SCRIPT_TOKEN_KEY, type AppsScriptRuntime } from './appsScriptRuntime';
 import { createAppsScriptHost } from './appsScriptHost';
@@ -17,11 +19,13 @@ import { validateAutomationAnswer, type AutomationAction, type AutomationView, t
 
 interface Binding { token: string; service: string; activityId: string; namespace: string; clientId: string; maxRecipients: number; appsScript: boolean; signature: string }
 export function registerAutomationHost(context: vscode.ExtensionContext, provider: ChatPanelProvider, preview?: PreviewProvider) {
+  let progressListener: (() => void) | undefined;
+  const notifyProgress = () => { try { progressListener?.(); } catch { /* Observation is independent of the automation. */ } };
   const quest = createAutomationQuestSession(async html => {
     if (!matches() || !preview) return;
     preview.setLabels({ title: '자동화 진행', placeholder: '대화에서 원하는 업무를 알려 주세요', emoji: '◇' });
-    await preview.show(html);
-  });
+    await preview.showAutomation(html);
+  }, notifyProgress);
   let appsRuntime: AppsScriptRuntime | undefined;
   let appsLock: (<T>(work: () => Promise<T>) => Promise<T>) | undefined;
   let appsTools: { epoch: number; host: ReturnType<typeof createAppsScriptHost> } | undefined;
@@ -51,6 +55,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     operationEpoch++;
     const pending = pendingQuestion ?? authorizingAnswer; pendingQuestion = undefined; authorizingAnswer = undefined;
     if (!pending) return;
+    notifyProgress();
     void provider.showAutomationQuestion(null);
     pending.resolve({ questionId: pending.question.id, cancelled: true });
   }
@@ -65,6 +70,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     if (error) { pending.question = { ...pending.question, error }; await provider.showAutomationQuestion(pending.question); return; }
     // Consume once before awaiting authorization; a second click cannot approve twice.
     pendingQuestion = undefined; authorizingAnswer = pending;
+    notifyProgress();
     await provider.showAutomationQuestion(null);
     try { await authorize(); if (authorizingAnswer !== pending || operationEpoch !== pending.epoch || binding !== pending.owner || !matches()) throw new Error('Changed activity'); pending.resolve(answer); }
     catch { pending.resolve({ questionId: pending.question.id, cancelled: true }); }
@@ -79,6 +85,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     const value = { ...question, id: randomUUID() };
     const answer = new Promise<AutomationAnswer>(resolve => { pendingQuestion = { question: value, owner, epoch, resolve }; });
     if (epoch !== operationEpoch || binding !== owner || !matches()) { cancelQuestion(); return answer; }
+    notifyProgress();
     await provider.showAutomationQuestion(value);
     if (epoch !== operationEpoch || binding !== owner || !matches()) cancelQuestion();
     return answer;
@@ -249,8 +256,21 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     } catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '자동화를 열지 못했어요.'); } finally { opening = false; }
   }
   const timer = setInterval(() => { if (binding && !matches()) { permittedUntil = 0; cancelQuestion(); panel?.dispose(); if (quest.snapshot()) { quest.clear(); void preview?.show('<!doctype html><html lang="ko"><body><p>활동이 바뀌었어요. 새 대화에서 자동화 흐름을 시작해 주세요.</p></body></html>'); } } }, 1000);
+  async function ensureQuest() {
+    if (!binding?.appsScript || !preview || quest.snapshot()) return;
+    await quest.plan({ title: '나의 메일 자동화 만들기', nodes: [
+      { id: 'goal', label: '내 업무 이야기하기', description: '대화에서 필요한 내용을 하나씩 확인해요.', dependsOn: [] },
+      { id: 'skill', label: '메일 스킬 만들기', description: '반복해서 쓸 문구와 항목을 저장해요.', dependsOn: ['goal'] },
+      { id: 'connect', label: '내 Google 계정 연결', description: '허용한 연결은 다음에도 다시 쓸 수 있어요.', dependsOn: ['goal'] },
+      { id: 'sheet', label: '내 명단 연결', description: '시트 주소와 명단은 비공개로 확인해요.', dependsOn: ['connect'] },
+      { id: 'prepare', label: '자동화 코드 준비', description: '저장한 스킬에 맞는 Apps Script 코드를 만들어요.', dependsOn: ['skill'] },
+      { id: 'upload', label: 'Google에 코드 저장', description: '내용을 확인한 뒤 내 계정에 저장해요.', dependsOn: ['prepare', 'connect'] },
+      { id: 'deploy', label: '나만 실행할 버전 준비', description: '확인한 코드로 비공개 실행 버전을 만들어요.', dependsOn: ['upload'] },
+      { id: 'preview', label: '실제 메일 미리보기', description: 'Google에서 실행해 내용을 확인해요. 발송은 별도 승인이 필요해요.', dependsOn: ['deploy', 'sheet'] },
+    ] });
+  }
   async function startConversation() {
-    try { await prepare(); await provider.beginAutomationConversation(); }
+    try { await prepare(); await ensureQuest(); await provider.beginAutomationConversation(); }
     catch (error) { void vscode.window.showWarningMessage(error instanceof Error ? error.message : '업무 자동화를 시작하지 못했어요.'); }
   }
   // Only the isolated Dev app exposes this operator setup command.
@@ -276,12 +296,19 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   );
   context.subscriptions.push(vscode.commands.registerCommand('hypeproof-chat.emailAutomation', startConversation), { dispose: () => { clearInterval(timer); permittedUntil = 0; cancelQuestion(); panel?.dispose(); } });
   return {
+    setProgressListener(listener: () => void) { progressListener = listener; },
+    observation(): AutomationOpsObservation | null {
+      if (!matches() || !binding) return null;
+      const owner = tokenIdentityUnverified(binding.token);
+      return { owner: { u: owner.u, c: owner.c }, progress: automationOpsProgress(quest.snapshot(), pendingQuestion?.owner === binding ? pendingQuestion.question : undefined) };
+    },
     show, startConversation, getRuntime: () => allowed() ? runtime : undefined,
     async refreshRuntime() { if (!runtime) await prepare(); else await authorize(); return allowed() ? runtime : undefined; },
     async getMcpHost(): Promise<GoogleAutomationMcpHost | undefined> {
       if (!activityConnections(context)?.current) return undefined;
       try { await prepare(); } catch { return undefined; }
       if (!runtime || !allowed()) return undefined;
+      await ensureQuest();
       const pinned = binding;
       if (!pinned) return undefined;
       const activeRuntime = runtime;

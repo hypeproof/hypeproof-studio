@@ -30,7 +30,7 @@ export type OpsErrorClass =
   | "auth_expired" | "auth_signature" | "auth_revoked" | "auth_rejected" | "class_not_open" | "profile_mismatch"
   | "roster_missing" | "budget_limit" | "provider_rate_limit" | "provider_5xx" | "network" | "sdk_not_ready"
   | "tool_not_ready" | "review_error" | "upload_failed" | "unknown";
-export type OpsEventKind = "activation" | "step" | "runtime" | "error" | "upload" | "evidence" | "recovery";
+export type OpsEventKind = "activation" | "step" | "runtime" | "error" | "upload" | "evidence" | "recovery" | "automation";
 /** Who acted. Kept per event so a learner's own decision is never merged with what the AI or an instructor did. */
 export type OpsActor = "student" | "ai" | "teacher" | "external_user" | "tool" | "system" | "unknown";
 export type SourceState = "real" | "simulated" | "self_reported" | "unverified";
@@ -51,6 +51,7 @@ export const CLIENT_OPS_PAYLOAD_KEYS = {
   activation: ["stage", "reason", "token_jti", "token_exp", "http_status"],
   step: ["lesson_version", "step_id", "status"],
   runtime: ["status"],
+  automation: ["phase", "step_id", "completed", "total"],
   error: ["class", "code", "request_id", "blocking", "cleared"],
   upload: ["status", "snapshot_revision"],
   evidence: ["evidence_type", "source_state", "step_id", "artifact_before", "artifact_after"],

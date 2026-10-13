@@ -4861,6 +4861,9 @@
         },
         {
           "path": "docs/plan/apps-script-quests.md"
+        },
+        {
+          "path": "docs/plan/automation-local-acceptance.md"
         }
       ]
     },
@@ -4916,6 +4919,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-quest-session.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-ops.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-resume.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-automation-layout.smoke.mjs"
         }
       ]
     },

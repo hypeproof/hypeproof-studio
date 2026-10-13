@@ -99,6 +99,8 @@ export interface ChatConfig {
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
+  /** Display-only: host-confirmed local subscription AI route; never an execution grant. */
+  localSubscription?: boolean;
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
   effortNotice?: string;
   effortResult?: { state: 'loading' | 'observed' | 'unknown'; requests: EffortRequestRecord[]; truncated?: boolean };

@@ -43,6 +43,17 @@ export class StartPage {
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
   inboxChanged(): void { if (this.panel) void this.refresh(); }
 
+  /** Release only the entry panel we own; never close user editors or the chat. */
+  closeForAutomationPreview(): vscode.ViewColumn | undefined {
+    const entry = this.panel;
+    if (!entry) return undefined;
+    const column = entry.viewColumn;
+    this.panel = undefined;
+    this.candidate = undefined;
+    entry.dispose();
+    return column;
+  }
+
   async openChat(): Promise<void> {
     const entry = this.panel;
     if (!entry) return;

@@ -1,4 +1,4 @@
-import { AccessControl } from './AccessControl';
+import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
@@ -115,6 +115,30 @@ function extractRenderableHtml(text: string): string | null {
     return `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;font-family:sans-serif;padding:12px}</style></head><body><script>try{${js}}catch(e){document.body.innerHTML='<pre style="color:#c00">'+e+'</pre>';}</script></body></html>`;
   }
   return null;
+}
+
+function ConversationActions({ compact, children }: { compact: boolean; children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!compact) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (menu.current && event.target instanceof Node && !menu.current.contains(event.target)) menu.current.open = false;
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    const cleanup = () => document.removeEventListener("pointerdown", closeOutside);
+    return cleanup;
+  }, [compact]);
+  return compact ? <details ref={menu} className="hps-conversation-actions" onKeyDown={event => {
+    if (event.key === "Escape" && menu.current?.open) {
+      event.preventDefault(); event.stopPropagation(); menu.current.open = false;
+      menu.current.querySelector<HTMLElement>("summary")?.focus();
+    }
+  }}>
+    <summary aria-label="대화 메뉴">메뉴</summary><div onClick={event => {
+      const button = event.target instanceof Element ? event.target.closest("button") : null;
+      if (button && !button.disabled && menu.current) menu.current.open = false;
+    }}>{children}<p className="hps-layout-hint">대화와 결과 사이 경계를 좌우로 드래그해 너비를 조절할 수 있어요.</p></div>
+  </details> : <div className="hps-actions">{children}</div>;
 }
 
 // Optional classroom controls must not compete with a working automation conversation.
@@ -483,6 +507,16 @@ export function ChatPanel(props: Props) {
     !config.coach?.configured;
 
   const questionRef = useRef<HTMLDivElement>(null);
+  const [questionVisible, setQuestionVisible] = useState(true);
+  useEffect(() => {
+    const heading = questionRef.current?.querySelector("h3");
+    const scroller = scrollRef.current;
+    if (!heading || !scroller) { setQuestionVisible(true); return; }
+    const observer = new IntersectionObserver(([entry]) => setQuestionVisible(entry.isIntersecting), { root: scroller });
+    observer.observe(heading);
+    const disconnect = () => observer.disconnect();
+    return disconnect;
+  }, [props.questionId, !!props.questionPanel]);
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller) return;
@@ -787,7 +821,7 @@ export function ChatPanel(props: Props) {
         {ux.coach.naming_mode === "fixed"
           ? <strong title={`이 수업의 AI 이름: ${coachName}`} className="hps-coach-name">{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
-        <div className="hps-actions">
+        <ConversationActions compact={config.profile?.automations?.enabled === true}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
               own size makes the header row grow taller because of this one button.
@@ -812,7 +846,7 @@ export function ChatPanel(props: Props) {
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
           <button onClick={props.onSettings} title="설정" aria-label="설정">⚙</button>
-        </div>
+        </ConversationActions>
       </header>
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
@@ -1070,12 +1104,12 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
-        {props.questionPanel && <button type="button" className="hps-question-return" onClick={() => {
+        {props.questionPanel && !questionVisible && <button type="button" className="hps-question-return" onClick={() => {
           questionRef.current?.scrollIntoView({ block: "start", behavior: "instant" });
           questionRef.current?.querySelector<HTMLElement>("h3")?.focus({ preventScroll: true });
         }}>답변할 질문으로 이동 ↑</button>}
         <ConversationSettings compact={config.profile?.automations?.enabled === true}
-          required={!!config.access?.view?.required && !config.access.selected} questionId={props.questionId}>
+          required={requiresFundingSelection(config)} questionId={props.questionId}>
         {config.profile?.model_selection && <div className="hps-model-selection">
           <label>모델 <select aria-label="대화 모델" value={config.model}
             disabled={config.profile.model_selection.choices.length === 1}
@@ -1100,7 +1134,7 @@ export function ChatPanel(props: Props) {
             : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요'}</small>
         </div>}
         <EffortControl config={config} post={postToHost} />
-        <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} />
+        <AccessControl config={config} streaming={streaming} post={postToHost} collapseKey={props.questionId} embedded={config.profile?.automations?.enabled === true} />
         </ConversationSettings>
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
@@ -1218,11 +1252,13 @@ export function ChatPanel(props: Props) {
                   : "응답 중에도 적을 수 있어요 — Enter 로 예약하면 끝나고 바로 보내요"
                 : rollExpand
                   ? "한 가지만 더 떠올려서 적어주세요"
+                  : config.profile?.automations?.enabled
+                    ? "자동화하고 싶은 업무를 이야기해 주세요"
                   : imagePasteEnabled
                     ? platformizeKeys("메시지를 입력하고 Enter — 이미지는 ⌘V로 붙여넣기 (Shift+Enter 줄바꿈)")
                     : "메시지를 입력하고 Enter (Shift+Enter 줄바꿈)"
             }
-            rows={3}
+            rows={config.profile?.automations?.enabled ? 2 : 3}
           />
           <div className="hps-input-buttons">
             {!streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
@@ -1244,7 +1280,7 @@ export function ChatPanel(props: Props) {
                 }}
                 className="hps-btn-stop"
               >
-                Stop
+                {config.profile?.automations?.enabled ? "중지" : "Stop"}
               </button>
             ) : rollExpand ? (
               <button
@@ -1252,7 +1288,7 @@ export function ChatPanel(props: Props) {
                 disabled={!draft.trim()}
                 className="hps-btn-send"
               >
-                Send
+                {config.profile?.automations?.enabled ? "보내기" : "Send"}
               </button>
             ) : (
               <button
@@ -1260,7 +1296,7 @@ export function ChatPanel(props: Props) {
                 disabled={(!draft.trim() && pendingImages.length === 0) || props.sendLocked}
                 className="hps-btn-send"
               >
-                Send
+                {config.profile?.automations?.enabled ? "보내기" : "Send"}
               </button>
             )}
           </div>

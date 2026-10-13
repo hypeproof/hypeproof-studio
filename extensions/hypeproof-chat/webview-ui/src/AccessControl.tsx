@@ -4,13 +4,18 @@ const stateLabels:Record<string,string>={ready:'사용 가능',ended:'이용 기
 const meterLabels:Record<string,string>={'tokens:input':'입력 토큰','tokens:output':'출력 토큰','tokens:cache_read':'캐시 읽기 토큰','tokens:cache_write':'캐시 쓰기 토큰','tokens:cache_write:5m':'5분 캐시 토큰','tokens:cache_write:1h':'1시간 캐시 토큰','requests:count':'요청 수','browser:seconds':'브라우저 초','computer:seconds':'컴퓨터 초','execution:seconds':'실행 초','storage:byte-seconds':'저장 byte·초'};
 const unit=(m:string)=>m.startsWith('currency:')?m.split(':')[1]+' 정산 기준':meterLabels[m]??m;
 const amount=(n:number,m:string)=>m.startsWith('currency:')?(n/1000000).toLocaleString('en-US',{maximumFractionDigits:6}):n.toLocaleString('en-US');
-export function AccessControl({config,streaming,post,collapseKey}:{config:ChatConfig;streaming:boolean;collapseKey?:string;post:(m:WebviewMessage)=>void}){
+export function requiresFundingSelection(config: ChatConfig): boolean {
+ return config.localSubscription !== true && !!config.access?.view?.required && !config.access.selected;
+}
+export function AccessControl({config,streaming,post,collapseKey,embedded=false}:{config:ChatConfig;streaming:boolean;collapseKey?:string;embedded?:boolean;post:(m:WebviewMessage)=>void}){
  const [note,setNote]=useState(''),[expanded,setExpanded]=useState(false);const a=config.access,view=a?.view,choice=view?.choices.find(c=>c.id===a?.selected);
- useEffect(()=>{if(view?.required&&!a?.selected)setExpanded(true);},[view?.required,a?.selected]);
+ const required=requiresFundingSelection(config);
+ useEffect(()=>{if(config.localSubscription===true)setExpanded(false);else if(required)setExpanded(true);},[required,config.localSubscription]);
  useEffect(()=>{if(collapseKey)setExpanded(false);},[collapseKey]);
+ if(config.localSubscription===true)return <p className="hps-access-muted">이 대화의 AI 사용량은 연결한 로컬 계정의 구독에 적용돼요. 서버 이용권은 사용하지 않아요.</p>;
  if(!a)return null;
- return <details className="hps-access" open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}>
-  <summary>이용권 · 사용량 {config.profile?.automations?.enabled ? (a.status==='unknown'?'· 미확인':'') : choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</summary>
+ const summary=<>이용권 · 사용량 {config.profile?.automations?.enabled ? (a.status==='unknown'?'· 미확인':'') : choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</>;
+ const content=<>
   {a.status==='unknown'&&<p role="status">이용권과 사용량을 확인하지 못했습니다. 이전 잔액으로 실행 가능 여부를 판단하지 않습니다.</p>}
   {view?.configured===false&&<p>현재 연결은 수업·체험의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.</p>}
   {view?.configured&&view.choices.length===0&&<p>{view.required?'사용 가능한 이용권이 없습니다. 운영자에게 연결을 확인해 주세요.':'별도 이용권이 배정되지 않았습니다. 현재 수업·체험 정책을 적용합니다.'}</p>}
@@ -34,5 +39,10 @@ export function AccessControl({config,streaming,post,collapseKey}:{config:ChatCo
   </>}
   {view&&<small>확인 시각 {new Date(view.as_of).toLocaleString()}{view.truncated?' · 일부 이용권만 표시':''}</small>}
   {a.notice&&<p role="status">{a.notice}</p>}<button type="button" onClick={()=>post({type:'refreshAccess'})}>사용량 새로고침</button>
+ </>;
+ return embedded ? <section className="hps-access hps-access-embedded" aria-label="이용권 및 사용량">
+  <h3 className="hps-access-heading">{summary}</h3>{content}
+ </section> : <details className="hps-access" open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}>
+  <summary>{summary}</summary>{content}
  </details>;
 }

@@ -2086,10 +2086,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   setAutomationConversationHandlers(handlers: NonNullable<ChatPanelProvider['automationConversation']>): void { this.automationConversation = handlers; }
   async showAutomationQuestion(question: import('./automationProtocol').AutomationQuestion | null): Promise<void> { await this.post({ type: 'automationQuestion', question }); }
 
-  /** Starts with the user's work intent; the coach chooses the next relevant question. */
+  /** Reopen existing work without spending a model turn; only an empty conversation starts onboarding. */
   async beginAutomationConversation(): Promise<void> {
     if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
-    if (this.hasActiveStream()) return;
+    if (this.hasActiveStream() || this.getHistory().length > 0) return;
     await this.handleSend('반복하는 업무를 자동화하고 싶어요. 먼저 제가 하려는 일을 대화로 파악하고, 필요한 것만 한 가지씩 물어봐 주세요. 실제 명단과 계정 정보는 비공개 설정 질문에서 입력할게요.', []);
   }
 
@@ -5477,6 +5477,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
+        localSubscription:!!local,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,

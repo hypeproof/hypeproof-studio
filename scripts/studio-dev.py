@@ -240,6 +240,8 @@ def prepare(repo, base, state, service):
     shutil.copy2(stage / 'extension.js', target / 'dist/extension.js')
     shutil.rmtree(target / 'webview-ui/dist')
     shutil.copytree(stage / 'webview', target / 'webview-ui/dist')
+    # The manifest references current icons/themes as well as compiled code.
+    shutil.copytree(ext / 'media', target / 'media', dirs_exist_ok=True)
     shutil.copy2(ext / 'package.json', target / 'package.json')
     configure_copy(candidate, hashlib.sha256(str(repo).encode()).hexdigest()[:12])
     if is_mac_app(base):

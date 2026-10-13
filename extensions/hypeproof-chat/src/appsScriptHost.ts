@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { AppsScriptBlockedError, generateAppsScriptEmailProject, type AppsScriptRuntime, type AppsScriptDeployment } from './appsScriptRuntime';
+import { AppsScriptBlockedError, AppsScriptRecoveryError, generateAppsScriptEmailProject, type AppsScriptRuntime, type AppsScriptDeployment } from './appsScriptRuntime';
 import type { GoogleAutomationMcpHost } from './googleAutomationMcp';
 import type { EmailRecipe, EmailPreview, SendRecord } from './googleAutomation';
 import type { AutomationQuestion, AutomationAnswer } from './automationProtocol';
@@ -22,10 +22,22 @@ const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 /** Private project IDs and actual mail data never leave these host callbacks. */
 export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 'appsScriptPrepare' | 'appsScriptUpload' | 'appsScriptSetup' | 'appsScriptDeploy' | 'appsScriptRun'> {
   let lastPreview: EmailPreview | undefined;
+  let resumeTool = 'apps_script_upload';
+  let recoveryReason: string | undefined;
   const bundle = () => generateAppsScriptEmailProject(deps.recipe(), deps.maxRecipients);
   const allowed = async () => { if (!await deps.allowed()) throw new Error('Apps Script capability unavailable'); };
-  const blocked = (error: unknown) => {
-    if (error instanceof AppsScriptBlockedError) return { setupRequired: true, reason: 'Google API 접근과 Studio OAuth와 같은 표준 Cloud 프로젝트 연결을 확인해 주세요.', nextTool: 'apps_script_setup' };
+  const blocked = (error: unknown, nextTool: string) => {
+    lastPreview = undefined;
+    resumeTool = nextTool;
+    if (error instanceof AppsScriptBlockedError) {
+      recoveryReason = 'Google에서 실행 권한을 확인하지 못했어요. 계정의 API 접근과 스크립트의 Cloud 프로젝트 설정을 확인해 주세요.';
+      return { setupRequired: true, reason: recoveryReason, nextTool: 'apps_script_setup', executionVerified: false };
+    }
+    if (error instanceof AppsScriptRecoveryError) {
+      recoveryReason = error.message;
+      return { recoveryRequired: true, recovery: error.recovery, reason: recoveryReason,
+        nextTool: 'apps_script_setup', executionVerified: false };
+    }
     throw error;
   };
   const receipt = async () => {
@@ -47,8 +59,8 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
     appsScriptPrepare: async () => { await allowed(); const project = bundle(); lastPreview = undefined; return { prepared: true, digest: project.digest, files: project.files.map(file => file.name), runtime: 'Google Apps Script', uploaded: false }; },
     appsScriptUpload: async () => {
       await allowed(); const project = bundle();
-      if (!await confirm('upload', project)) return { cancelled: true };
       lastPreview = undefined;
+      if (!await confirm('upload', project)) return { cancelled: true };
       try {
         if (!await deps.runtime.isConnected()) {
           const answer = await deps.ask({ kind: 'connect', private: true, title: 'Apps Script용 Google 권한을 추가할까요?', description: '내 스크립트 생성·수정·배포, 시트 읽기, 메일 발송과 Google API 호출 권한이 필요해요. Google 창에서 계정과 권한을 확인하며 이후에는 연결을 재사용해요.' });
@@ -67,22 +79,41 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           }
           const result = await deps.runtime.uploadProject(saved.scriptId, project, project.digest);
           await deps.save({ scriptId: saved.scriptId, connectionIdentity: saved.connectionIdentity, uploadedDigest: result.digest });
+          recoveryReason = undefined; resumeTool = 'apps_script_deploy';
           return { uploaded: true, digest: result.digest, deployed: false };
         });
-      } catch (error) { return blocked(error); }
+      } catch (error) { return blocked(error, 'apps_script_upload'); }
     },
     appsScriptSetup: async () => {
       await allowed();
+      lastPreview = undefined;
       const saved = await receipt();
-      const answer = await deps.ask({ kind: 'choice', private: true, title: 'Google 실행 설정을 확인할까요?', description: '계정의 Apps Script API 접근을 켜야 해요. 원격 실행에는 Studio 로그인 앱과 스크립트가 같은 표준 Cloud 프로젝트를 사용해야 하며 운영자의 프로젝트 권한 설정이 필요할 수 있어요. 화면을 연 것만으로 설정 완료로 처리하지 않아요.', choices: [{ id: 'settings', label: saved ? '내 스크립트 설정 열기' : 'Apps Script API 접근 설정 열기' }, { id: 'reconnect', label: 'Google 권한 다시 연결하기' }], allowFreeText: false });
+      const choices = [
+        { id: 'retry', label: '설정을 확인했어요 · 이어서 진행' },
+        { id: 'account', label: 'Google 계정의 API 접근 설정' },
+        ...(saved ? [{ id: 'settings', label: '내 스크립트의 Cloud 프로젝트 설정' }] : []),
+        { id: 'reconnect', label: 'Google 권한 다시 연결하기' },
+      ];
+      const answer = await deps.ask({ kind: 'choice', private: true, title: 'Google 연결을 어디서 이어갈까요?',
+        description: [recoveryReason, '계정 설정에서 Apps Script API 접근을 켜 주세요. 스크립트는 Studio와 같은 표준 Cloud 프로젝트가 필요해요. 프로젝트 번호나 권한이 없다면 운영자에게 확인해 주세요. 설정 후 여기로 돌아오면 이어갈 수 있어요.'].filter(Boolean).join('\n\n'),
+        choices, allowFreeText: false });
       if (answer.cancelled) return { cancelled: true };
       await allowed();
-      if (answer.choiceId === 'reconnect') { await deps.lock(() => deps.runtime.connect()); lastPreview = undefined; return { connected: true, executionVerified: false }; }
-      await deps.openBrowser(saved ? `https://script.google.com/home/projects/${saved.scriptId}/settings` : 'https://script.google.com/home/usersettings');
-      return { setupRequired: true, opened: true, executionVerified: false };
+      if (!choices.some(choice => choice.id === answer.choiceId)) return { cancelled: true };
+      if (answer.choiceId === 'retry') return { retryRequired: true, nextTool: resumeTool, ...(resumeTool === 'apps_script_run' ? { mode: 'preview' } : {}), executionVerified: false };
+      if (answer.choiceId === 'reconnect') {
+        try {
+          await deps.lock(() => deps.runtime.connect()); recoveryReason = undefined;
+          return { connected: true, uploadRequired: true, nextTool: 'apps_script_upload', executionVerified: false };
+        } catch (error) { return blocked(error, 'apps_script_upload'); }
+      }
+      const url = answer.choiceId === 'settings' && saved ? `https://script.google.com/home/projects/${saved.scriptId}/settings` : 'https://script.google.com/home/usersettings';
+      const opened = await deps.openBrowser(url);
+      return { setupRequired: true, opened: opened !== false, nextTool: 'apps_script_setup', executionVerified: false };
     },
     appsScriptDeploy: async () => {
       await allowed(); const project = bundle();
+      lastPreview = undefined;
       const saved = await receipt();
       if (!saved || saved.uploadedDigest !== project.digest) return { uploadRequired: true };
       if (!await confirm('deploy', project)) return { cancelled: true };
@@ -93,9 +124,10 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           if (!fresh || fresh.scriptId !== saved.scriptId || fresh.uploadedDigest !== project.digest) throw new Error('Google 프로젝트가 변경됐어요.');
           const deployment = await deps.runtime.deployProject(saved.scriptId, project, project.digest);
           await deps.save({ ...fresh, deployment }); lastPreview = undefined;
+          recoveryReason = undefined; resumeTool = 'apps_script_run';
           return { deployed: true, versionNumber: deployment.versionNumber, access: 'MYSELF', executionVerified: false };
         });
-      } catch (error) { return blocked(error); }
+      } catch (error) { return blocked(error, 'apps_script_deploy'); }
     },
     appsScriptRun: async mode => {
       await allowed(); const project = bundle(), saved = await receipt();
@@ -109,7 +141,13 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           if (sheet.connection !== saved.connectionIdentity) return { sameGoogleAccountRequired: true };
           const preview = await deps.lock(() => deps.runtime.preview(deployment, sheet));
           await allowed(); checkDigest(project.digest); lastPreview = preview;
-          return { previewed: true, count: preview.messages.length, confirmationRequired: true };
+          recoveryReason = undefined;
+          const answer = await deps.ask({ kind: 'preview_review', private: true, title: 'Google에서 만든 메일을 확인해 주세요',
+            description: '받는 사람과 제목·본문을 미리 확인해요. 확인하거나 닫아도 메일은 보내지 않아요.', preview });
+          await allowed(); checkDigest(project.digest);
+          if (saved.connectionIdentity !== await deps.runtime.getConnectionIdentity()) { lastPreview = undefined; return { sameGoogleAccountRequired: true }; }
+          return { previewed: true, count: preview.messages.length, reviewed: answer.approved === true && !answer.cancelled,
+            dismissed: answer.cancelled === true, nextAction: 'wait_for_user', confirmationRequired: true, mailSent: false };
         }
         const preview = lastPreview;
         if (!preview || !deps.runtime.getPreview(preview.id)) return { previewRequired: true };
@@ -131,7 +169,10 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           const count = result.records.filter(record => record.status === 'sent').length;
           return { sent: count === preview.messages.length, sentCount: count, unknownCount: preview.messages.length - count, automaticResendBlocked: true };
         });
-      } catch (error) { return blocked(error); }
+      } catch (error) {
+        const recovery = blocked(error, 'apps_script_run');
+        return mode === 'send' ? { ...recovery, automaticResendBlocked: true } : recovery;
+      }
     },
   };
 }

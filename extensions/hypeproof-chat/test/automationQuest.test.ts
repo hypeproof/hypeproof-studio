@@ -59,3 +59,18 @@ test("graph descriptions reject identifying content without echoing it, and HTML
   assert.match(html, /aria-current="step"/);
   assert.match(html, /aria-valuenow="0"/);
 });
+
+// A plan with no result must never announce completion, even with no active node.
+test("the renderer distinguishes a draft from evidence and pending-only progress", () => {
+  const initial = createQuest(plan);
+  assert.match(renderQuestHtml(initial), /설계한 흐름 · 실행 전/);
+  const pending = { ...initial, nodes: initial.nodes.map(node => ({ ...node, status: "pending" as const })) };
+  assert.doesNotMatch(renderQuestHtml(pending), /모든 단계의 결과를 확인했습니다/);
+  assert.match(renderQuestHtml(pending), /아직 완료되지 않은 단계/);
+  const partiallyDone = transitionQuest(transitionQuest(initial, "goal", "running"), "goal", "succeeded");
+  const html = renderQuestHtml(partiallyDone);
+  assert.match(html, /실제 진행 상황/);
+  assert.match(html, /앞선 2단계 모두 필요 · 0\/2 확인/);
+  assert.match(html, /data-from="sheet" data-to="review"/);
+  assert.match(html, /data-from="draft" data-to="review"/);
+});

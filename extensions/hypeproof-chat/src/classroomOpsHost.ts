@@ -1,3 +1,4 @@
+import { AUTOMATION_OPS_CAPABILITY, automationOpsRuntime, type AutomationOpsObservation, type AutomationOpsProgress } from './automationOps';
 // Host adapter for remote classroom operations (#751). VS Code, SecretStorage,
 // disk and fetch live here; every decision lives in classroomOps.ts.
 //
@@ -88,6 +89,23 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
   private outbox: OpsOutbox | null = null;
   private readonly appInstanceId = randomUUID();
   private readonly runtimeGate = new ChangeGate<RuntimeStatus>();
+  private readonly automationGate = new ChangeGate<string>();
+  private automationSource?: () => AutomationOpsObservation | null;
+  setAutomationSource(source: () => AutomationOpsObservation | null): void { this.automationSource = source; }
+
+  /** Reads the live activity synchronously; callbacks never carry an earlier seat's state. */
+  refreshAutomation(nudge = true): AutomationOpsProgress | null {
+    if (!this.outbox || !this.meta?.student || !this.automationSource) return null;
+    const observation = this.automationSource();
+    if (observation && (observation.owner.u !== this.meta.student.u || observation.owner.c !== this.meta.student.c)) return null;
+    const progress: AutomationOpsProgress = observation?.progress ?? { phase: 'idle', completed: 0, total: 0 };
+    if (this.automationGate.next(JSON.stringify(progress))) {
+      void this.outbox.add('automation', { ...progress }, 'system');
+      if (nudge) this.loop?.nudge();
+    }
+    return progress;
+  }
+
   private readonly activationGate = new ChangeGate<string>();
   private readonly errorGate = new ChangeGate<string>();
   private readonly context: vscode.ExtensionContext;
@@ -337,7 +355,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     try {
       res = await fetch(`${this.base()}/classroom/ops/connect`, {
         method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(10000),
-        body: JSON.stringify({ ticket, app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY], app_version: this.version() }),
+        body: JSON.stringify({ ticket, app_instance_id: this.appInstanceId, boot_id: randomUUID(), protocol: OPS_PROTOCOL, capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(this.executors()), INBOX_CAPABILITY], app_version: this.version() }),
       });
     } catch {
       void vscode.window.showWarningMessage("서버에 연결하지 못했습니다. 인터넷 연결을 확인한 뒤 같은 코드로 다시 시도하세요."); return;
@@ -430,7 +448,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     this.loop?.stop(); this.runner?.close(); this.loop = null; this.runner = null; this.outbox = null;
     // Disconnecting ends the instructor's pause on this device; the Service's own admission still applies.
     this.paused = false; this.stopUnconfirmed = false; this.applyHold();
-    this.recoveryWatch.clear(); this.faultClass = null;
+    this.recoveryWatch.clear(); this.faultClass = null; this.automationGate.reset();
   }
   private async forget(): Promise<void> {
     const mine = this.meta?.grant_id, was = this.credential;
@@ -482,10 +500,10 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     }
     this.loop = startOpsSync({
       ...(inbox ? { distribution: inbox } : {}),
-      capabilities: [...OPS_CLIENT_CAPABILITIES, RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
+      capabilities: [...OPS_CLIENT_CAPABILITIES, ...(this.automationSource ? [AUTOMATION_OPS_CAPABILITY] : []), RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
       commands: runner as unknown as NonNullable<Parameters<typeof startOpsSync>[0]["commands"]>,
       post: (body, timeoutMs) => this.post(credential, body, timeoutMs), outbox: this.outbox, appInstanceId: this.appInstanceId,
-      sample: () => { const r = this.runtime(); const changed = this.runtimeGate.next(r.status); if (changed) void this.outbox?.add("runtime", runtimePayload(changed)); return { idle_ms: Math.max(0, Math.round(r.idleMs)), runtime_status: r.status, control_revision: this.controlRevision }; },
+      sample: () => { const base = this.runtime(); const r = { ...base, status: automationOpsRuntime(live() ? this.refreshAutomation(false) : null, base.status) }; const changed = this.runtimeGate.next(r.status); if (changed) void this.outbox?.add("runtime", runtimePayload(changed)); return { idle_ms: Math.max(0, Math.round(r.idleMs)), runtime_status: r.status, control_revision: this.controlRevision }; },
       // The revision is reported only after the hold is actually in place on this device.
       onControl: (control) => { if (!live()) return; this.paused = control.paused; this.applyHold(); this.controlRevision = control.control_revision; },
       now: () => Date.now(), random: Math.random, setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),

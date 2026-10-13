@@ -1,8 +1,9 @@
 # Conversational automation quests on Google Apps Script
 
 Approved direction: TJ, 2026-10-13. Extends Epic #1603 / implementation #1604.
-Status: implemented locally behind an explicit new capability; live Google and
-Windows acceptance pending. This is the email vertical, not arbitrary code authoring.
+Status: implemented behind an explicit new capability. A prior adapter-level
+Google preview completed; current native local persona and Windows acceptance
+remain separate and incomplete. See `automation-local-acceptance.md`. This is the email vertical, not arbitrary code authoring.
 
 The learner describes a task in the existing conversation. The coach proposes a
 small dependency graph in the existing editor/game preview area and asks one
@@ -54,7 +55,9 @@ Deterministic execution makes zero model requests but consumes Google quotas.
 Authoring and further coach turns still consume Studio tokens. The existing direct
 Gmail path also makes no per-recipient model calls, so moving execution does not
 by itself establish additional AI savings. No paid resource or billing plan was
-provisioned. Actual new-backend cost and latency remain unmeasured.
+provisioned. The prior live Google preview completed in 1.405 seconds on Google (6.330
+seconds adapter roundtrip), with zero model calls and no additional mail.
+That isolated measurement does not establish current native UI acceptance.
 
 Adapter fixtures execute generated source against synthetic Google services.
 Host tests cover approvals, changed recipes, revoked grants and the shared ledger.

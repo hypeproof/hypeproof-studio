@@ -58,7 +58,16 @@ export class PreviewProvider {
   private readonly resultEmitter = new vscode.EventEmitter<Record<string, unknown>>();
   readonly onResult = this.resultEmitter.event;
 
-  constructor(private readonly _context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly _context: vscode.ExtensionContext,
+    private readonly releaseAutomationEntry?: () => vscode.ViewColumn | undefined,
+  ) {}
+
+  /** Use the existing work canvas beside the chat, not a third editor group. */
+  async showAutomation(html: string): Promise<void> {
+    const column = this.releaseAutomationEntry?.() ?? this.panel?.viewColumn ?? vscode.ViewColumn.One;
+    await this.show(html, undefined, column);
+  }
 
   /**
    * Re-render the preview every time `fileUri` is saved. Called by the
@@ -84,6 +93,7 @@ export class PreviewProvider {
    * Call this whenever the resolved profile changes (e.g. after token set).
    */
   setLabels(labels: { title: string; placeholder: string; emoji: string }): void {
+    if (labels.title === this.labels.title && labels.placeholder === this.labels.placeholder && labels.emoji === this.labels.emoji) return;
     this.labels = labels;
     if (this.panel) {
       this.panel.title = labels.title;
@@ -106,7 +116,7 @@ export class PreviewProvider {
    * back to `about:srcdoc` and relative paths remain dead (matches old
    * behavior, just doesn't crash).
    */
-  async show(html: string, basePath?: vscode.Uri): Promise<void> {
+  async show(html: string, basePath?: vscode.Uri, viewColumn?: vscode.ViewColumn): Promise<void> {
     // Replace any unresolved `%%KEY%%` with sensible defaults (#161). Lets
     // partial LLM responses still render a recognizable V1.
     html = applyPlaceholderDefaults(html);
@@ -122,7 +132,7 @@ export class PreviewProvider {
       this.panel = vscode.window.createWebviewPanel(
         "hypeproofPreview",
         this.labels.title,
-        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+        { viewColumn: viewColumn ?? vscode.ViewColumn.Beside, preserveFocus: true },
         {
           enableScripts: true,
           retainContextWhenHidden: true,
@@ -155,7 +165,7 @@ export class PreviewProvider {
       });
     } else {
       // Bring the existing panel forward without stealing focus from chat.
-      this.panel.reveal(vscode.ViewColumn.Beside, true);
+      this.panel.reveal(viewColumn ?? this.panel.viewColumn, true);
     }
 
     // Inject `<base href="...">` so relative paths (./pic.png, style.css,

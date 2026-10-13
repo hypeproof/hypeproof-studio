@@ -30,7 +30,7 @@ export function defaultAutomationRecipe(): AutomationRecipe {
 /** Ephemeral question cards never enter the chat transcript or activity draft. */
 export interface AutomationQuestion {
   id: string;
-  kind: 'text' | 'choice' | 'connect' | 'sheet' | 'preview' | 'publish' | 'install' | 'script';
+  kind: 'text' | 'choice' | 'connect' | 'sheet' | 'preview' | 'preview_review' | 'publish' | 'install' | 'script';
   title: string;
   description?: string;
   choices?: Array<{ id: string; label: string }>;
@@ -52,7 +52,7 @@ export interface AutomationAnswer {
 export function validateAutomationAnswer(question: AutomationQuestion, value: AutomationAnswer): boolean {
   if (!value || value.questionId !== question.id) return false;
   if (value.cancelled === true) return true;
-  if (['connect', 'preview', 'publish', 'install', 'script'].includes(question.kind)) return value.approved === true && value.text === undefined && value.choiceId === undefined;
+  if (['connect', 'preview', 'preview_review', 'publish', 'install', 'script'].includes(question.kind)) return value.approved === true && value.text === undefined && value.choiceId === undefined;
   if (question.kind === 'sheet' || question.kind === 'text') return typeof value.text === 'string' && !!value.text.trim() && value.text.length <= (question.kind === 'sheet' ? 4096 : 2000) && value.choiceId === undefined;
   const choice = typeof value.choiceId === 'string' && !!question.choices?.some(item => item.id === value.choiceId);
   const free = question.allowFreeText === true && typeof value.text === 'string' && !!value.text.trim() && value.text.length <= 2000;
