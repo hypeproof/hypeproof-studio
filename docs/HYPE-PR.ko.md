@@ -43,6 +43,25 @@ CI가 검증하는 버전은 **Python 3.11+**이다(`.github/workflows/test.yml`
 
 PyYAML이 없으면 명령이 어느 인터프리터에 무엇을 설치해야 하는지 알려주며 중단한다.
 
+2026-10-10 조직 이관 호환: #287에서 이관된 일곱 저장소(`hypeproof-harness`,
+`hypeprooflab`, `hypeproof-studio`, `sediment`, `hypeproof-studio-releases`,
+`sediment-cli-releases`, `homebrew-sediment`)의 `hypeproof/*` 주소와 origin은 기존
+`jayleekr/*` registry ID로 연결한다. manifest와 source revision, assessment, receipt
+검증은 그대로 수행한다. 이 일곱 저장소 외에는 owner를 치환하지 않는다. 정책 ID의
+전체 이관은 #287에서 추적한다. installer는 이관된 Lab·Studio·Sediment origin도
+허용한다.
+
+GitHub을 바꾸는 명령(`gh pr create`, reviewer 편집, auto-merge)과 실행 이슈 조회는
+조직 주소로 보낸다. registry 원본을 읽는 change-impact 조회만 registry ID를 그대로
+쓰고 GitHub redirect에 기댄다. `plan.repo` 같은 출력의 registry ID는 이관 전까지
+`jayleekr/*`로 남는다.
+
+`--repo`에는 항상 `hypeproof/<repo>`를 넘기고, PR 본문의 close 대상도 `#N`이나
+`hypeproof/<repo>#N`으로 쓴다. 이관된 저장소의 이전 주소(`jayleekr/<repo>`)를 넘기면
+조직 주소를 알려주는 안내가 stderr에 나온다. 도구가 조직 주소를 거부하면 이전 주소로
+우회하지 말고 `scripts/hype-pr/preparation.py`의 `TRANSFERRED`나 registry를 고친다.
+redirect 때문에 틀린 이름도 성공한 것처럼 보인다 (#290).
+
 ---
 
 ## Agent가 PR을 만드는 흐름
@@ -95,6 +114,8 @@ options는 다음을 지정한다.
 - `args`: 기존 CLI 인수 배열. `inspect` → Agent assessment 작성 → `prepare` →
   `create --preparation ... --apply`를 동일하게 실행한다. consumer PR에도 같은 경로를 쓴다.
 - `repositories`: `policy/change-impact.json`의 저장소 목록. 임의로 확대하지 않는다.
+  manifest가 고정 commit으로 인용하는 외부 source가 있으면 같은 파일의 `external_sources`도
+  넣는다. 읽기에만 쓰이며 생성 대상은 여전히 `repo` 하나다.
 - `repo`, `branch`, `author`: 사용자 작업 대상과 연결된 GitHub 계정.
 - `reviewers`: 명시적인 `--request-reviewers`를 사용할 때 허용할 active 비작성자 목록.
 - `allowCreate`: inspect/prepare는 false, 사용자가 요청한 PR 생성은 true.

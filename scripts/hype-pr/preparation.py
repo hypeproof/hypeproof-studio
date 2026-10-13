@@ -19,6 +19,26 @@ impact = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(impact)
 
 
+# Organization path -> registered policy ID for the seven repositories transferred
+# on 2026-10-10 (#287). Exact identities only: an organization path the tool rejects
+# sends the agent back to the former owner path, which GitHub redirects silently.
+TRANSFERRED = impact.TRANSFERRED
+
+
+def policy_repo(repo):
+    """Transferred repos retain their registered IDs until registry migration.
+
+    GitHub redirects these old API names to the same transferred repositories.
+    Do not generalize this to an arbitrary owner or unregistered repository.
+    """
+    return TRANSFERRED.get(repo, repo)
+
+
+def organization_repo(repo):
+    """Organization path for a transferred repository's former owner path, else None."""
+    return next((org for org, former in TRANSFERRED.items() if former == repo), None)
+
+
 def git(checkout, *args):
     return subprocess.check_output(["git", "-C", str(checkout), *args], timeout=60).decode().strip()
 
@@ -28,7 +48,7 @@ def repo_identity(checkout):
     match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?", remote)
     if not match:
         raise ValueError("origin must identify the intended GitHub repository")
-    return match[1]
+    return policy_repo(match[1])
 
 
 def local_sources(policy, checkout):
@@ -60,7 +80,9 @@ def local_sources(policy, checkout):
     except (subprocess.SubprocessError, OSError, IndexError):
         pass
     found = {}
-    for repo in policy["repositories"]:
+    # External source repositories are read at pinned commits only, so a sibling
+    # clone can serve them the same way.
+    for repo in [*policy["repositories"], *impact.external_sources(policy)]:
         for base in bases:
             candidate = base / repo.split("/")[-1]
             if not (candidate / ".git").exists():
@@ -135,7 +157,14 @@ def inspect(checkout, repo, base="main", roots=None, members=()):
         for nid, node in snap["nodes"].items():
             if node["repo"] == repo:
                 for src in node["sources"]:
-                    registered.setdefault(src["path"], set()).add(nid)
+                    # An external source is another repository's file, not this path here.
+                    if not impact.is_external(src):
+                        registered.setdefault(src["path"], set()).add(nid)
+    external = {}
+    for node in after["nodes"].values():
+        for src in node["sources"]:
+            if impact.is_external(src):
+                external.setdefault(src["repository"], set()).add(src["commit"])
     added = git(checkout, "diff", "--name-only", "--diff-filter=A", merge_base, head).splitlines()
     for path in added:
         if (re.search(r"(?i)(?:^|/)(?:intent|requirements?|designs?|testing|validation)(?:/|[-_.])", path)
@@ -149,7 +178,9 @@ def inspect(checkout, repo, base="main", roots=None, members=()):
              for nid, n in after["nodes"].items()}
     report = {"version": 1, "repo": repo, "branch": branch, "base_branch": base,
               "base_tip": base_tip, "merge_base": merge_base, "head": head,
-              "source_commits": after["commits"], "tool_version": tool_version(),
+              "source_commits": after["commits"],
+              "external_sources": {r: sorted(c) for r, c in sorted(external.items())},
+              "tool_version": tool_version(),
               "paths": paths, "changed_nodes": planned["changed"], "tasks": planned["tasks"],
               "nodes": nodes, "unmapped": unmapped, "blockers": blockers, "existing_debt": debt}
     report["fingerprint"] = impact.digest(report)
@@ -184,7 +215,7 @@ def validate_assessment(report, assessment):
             links = review.get("followups")
             if not isinstance(links, list) or not links or not all(
                 isinstance(url, str) and re.fullmatch(r"https://github\.com/[^/]+/[^/]+/(?:issues|pull)/\d+", url)
-                and "/".join(url.split("/")[3:5]) in report["source_commits"]
+                and policy_repo("/".join(url.split("/")[3:5])) in report["source_commits"]
                 for url in links
             ):
                 raise ValueError(f"{nid}: unresolved impact needs tracked issue/PR followups, not automatic approval")
@@ -233,9 +264,11 @@ def verify(path, checkout, repo, base, branch, members):
 
 def summary(report):
     # Do not publish the agent's private source excerpts/reasoning across repositories.
+    pins = "".join(f"External sources: `{repo}` at {', '.join(f'`{c}`' for c in commits)}\n\n"
+                   for repo, commits in report.get("external_sources", {}).items())
     return ("\n\n<!-- hype-pr-prepared:v1 -->\n"
             "### Agent preparation\n\n"
-            f"Source: `{report['head']}`; base: `{report['base_tip']}`\n\n"
+            f"Source: `{report['head']}`; base: `{report['base_tip']}`\n\n{pins}"
             f"Changed files: {len(report['paths'])}; affected nodes: {len(report['tasks'])}; "
             f"existing mapping/ownership debt: {len(report['existing_debt'])}.\n\n"
             "Mapping links, semantic assessment and agent-reported validation were checked before creation. "

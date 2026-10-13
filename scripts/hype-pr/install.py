@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # block, the .agents alias and the SKILLS.md row. A repo in one list but not
 # the other is left half-installed (#210).
 CONSUMER_REMOTE = re.compile(
-    r"(?:https://github\.com/|git@github\.com:)(?:jayleekr)/"
+    r"(?:https://github\.com/|git@github\.com:)(?:jayleekr|hypeproof)/"
     r"(?:hypeprooflab|hypeproof-studio|sediment)(?:\.git)?"
 )
 START, END = "<!-- hype-pr-skill:start -->", "<!-- hype-pr-skill:end -->"
