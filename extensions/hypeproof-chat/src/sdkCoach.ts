@@ -267,7 +267,7 @@ function listWorkspaceFiles(root?: string): string[] | undefined {
  * 목록에 뜨는 순간 코치가 읽고 지금 세상과 섞는다(실기기: 초코 세상에서 얼음 이야기).
  * 판정은 순수 함수(filterCoachVisibleFiles)가 소유한다 — 성인 트랙은 무변경.
  */
-function coachVisibleWorkspaceFiles(
+export function coachVisibleWorkspaceFiles(
   root: string | undefined,
   profile: ResolvedProfile,
 ): string[] | undefined {
@@ -280,7 +280,7 @@ function coachVisibleWorkspaceFiles(
  * EXISTING ancestor (target may not exist yet — new-file writes) and re-append
  * the tail. Twin of chatPanelProvider.canonicalizeForCompare.
  */
-function canonicalizeFsPath(p: string): string {
+export function canonicalizeFsPath(p: string): string {
   let base = path.resolve(p);
   const tail: string[] = [];
   for (;;) {

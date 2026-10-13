@@ -27,6 +27,9 @@ import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, type ProfileFailure } from "./proxyClientHelpers";
 import { runSdkCoach, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+// #1611 (local trial) — a GPT model on an agent-sdk seat runs on the Codex SDK instead.
+import { runCodexCoach } from "./codexCoach";
+import { codexRuntimeFor } from "./codexRuntime";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -4612,8 +4615,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!token) {
           throw new ProxyAuthError("missing", TOKEN_MISSING_FRIENDLY);
         }
+        // #1611 — same arguments, same callbacks; only the agent loop differs.
+        const codexRun = codexRuntimeFor({ runtime, selection, model, env: process.env });
+        if (codexRun.codex) {
+          this.spool?.recordWorkflow({ turnId: streamId, event: "codex_runtime", payload: { model: codexRun.model } });
+        }
         try {
-          const sdkEnd = await runSdkCoach({
+          const sdkEnd = await (codexRun.codex ? runCodexCoach : runSdkCoach)({
             gatewayUrl: proxyUrl,
             effort,
             turnId: streamId,
@@ -4623,7 +4631,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             helpMode: turnFocus.helpMode,
 
             token,
-            model,
+            model: codexRun.codex ? codexRun.model : model,
             profile,
             // #747 — failure copy inside the SDK run names the same AI as the
             // header and the approval modals.

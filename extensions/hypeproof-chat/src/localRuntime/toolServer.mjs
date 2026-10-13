@@ -48,14 +48,13 @@ export async function startToolServer(tools, call, signal) {
       else if (m.method === "tools/call") {
         if (signal?.aborted) throw Error("요청이 중지되었습니다.");
         try {
-          result = {
-            content: [
-              {
-                type: "text",
-                text: await call(m.params.name, m.params.arguments),
-              },
-            ],
-          };
+          const out = await call(m.params.name, m.params.arguments);
+          // A handler may return a whole MCP result (image blocks, isError) — the Codex
+          // coach passes the Claude path's browser tools through unchanged.
+          result =
+            out && typeof out === "object" && Array.isArray(out.content)
+              ? out
+              : { content: [{ type: "text", text: out }] };
         } catch (e) {
           result = {
             isError: true,
