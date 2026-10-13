@@ -566,7 +566,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** The output channel — where a diagnosis leaves its verdict. Same channel as the fallback notice (#476). */
-  voiceLogChannel(): vscode.OutputChannel {
+  coachLogChannel(): vscode.OutputChannel {
     this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
     return this.logChannel;
   }
@@ -4716,7 +4716,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
           const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
-            onDiagnostic: phase => this.voiceLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
+            onDiagnostic: phase => this.coachLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
             emailAutomationHost,
             gatewayUrl: proxyUrl,
             effort,

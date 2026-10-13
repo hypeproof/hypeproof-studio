@@ -128,7 +128,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("hypeproof-chat.diagnoseVoiceCapability", async () => {
       const { diagnoseVoiceCapability } = await import("./voiceCapability");
-      await diagnoseVoiceCapability(context, provider, provider.voiceLogChannel());
+      await diagnoseVoiceCapability(context, provider, provider.coachLogChannel());
     }),
   );
 
