@@ -24,22 +24,30 @@ for(const type of ['sendMessage','retryMessage']){
  await assert.rejects(pending,/synthetic storage failure/);
  assert.equal(h.hasActiveStream(),false,'early failure releases the connection');
 }
-// A counter, not a boolean: one rejected pending send cannot unlock another.
+// A duplicate click/retry during authentication cannot take another writer or
+// make the real turn look ended. Its text and image return to the draft.
 {
- const h=host(),first=deferred(),second=deferred();let reads=0;
- h.context={secrets:{get:()=>++reads===1?first.promise:second.promise}};
- const a=proto.handleSend.call(h,'정리해줘',[]),b=proto.handleSend.call(h,'계획해줘',[]);
- first.reject(new Error('first'));await assert.rejects(a,/first/);
- assert.equal(h.hasActiveStream(),true);second.reject(new Error('second'));await assert.rejects(b,/second/);
+ const h=host(),auth=deferred(),posts=[];let reads=0;
+ h.context={secrets:{get:()=>{reads++;return auth.promise;}}};h.post=async m=>posts.push(m);
+ const first=proto.handleSend.call(h,'정리해줘',[]);
+ await proto.handleMessage.call(h,{type:'retryMessage',prompt:'추가 계획',history:[],images:['synthetic-image']});
+ assert.equal(reads,1,'the duplicate never reads credentials or acquires another writer');
+ assert.equal(h.pendingSends,1);assert.equal(h.hasActiveStream(),true);
+ assert.equal(posts.length,1);assert.equal(posts[0].type,'inputRejected');
+ assert.equal(posts[0].text,'추가 계획');assert.deepEqual(posts[0].images,['synthetic-image']);
+ assert.match(posts[0].notice,/초안/);
+ auth.reject(new Error('first'));await assert.rejects(first,/first/);
  assert.equal(h.hasActiveStream(),false);
 }
 // Even a no-model response remains bound until its history write finishes.
 {
- const h=host(),save=deferred();h.cachedProfile={worlds:[{id:'synthetic',emoji:'',guest:'테스트',chip:'테스트'}]};
+ const h=host(),save=deferred(),posts=[];h.cachedProfile={worlds:[{id:'synthetic',emoji:'',guest:'테스트',chip:'테스트'}]};
  h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ h.post=async m=>{posts.push(m);if(m.type==='streamEnd')assert.equal(h.hasActiveStream(),false,'queued next send is released only after writer cleanup');};
  const pending=proto.handleSend.call(h,'다른 친구도 있어?',[]);
  assert.equal(h.activeStreams.size,0);assert.equal(h.hasActiveStream(),true,'history persistence still owns activity');
- save.resolve();await pending;assert.equal(h.hasActiveStream(),false);
+ assert.equal(posts.some(m=>m.type==='streamEnd'),false,'pending history must not flush the next message yet');
+ save.resolve();await pending;assert.equal(h.hasActiveStream(),false);assert.equal(posts.filter(m=>m.type==='streamEnd').length,1);
 }
 // The inverse ordering: preparation already owns the connection, so no send
 // reaches secrets or history. No provider call is needed by these controls.
@@ -94,4 +102,4 @@ for(const type of ['sendMessage','retryMessage']){
  await proto.handleMessage.call(h,{type:'selectFunding',id:'ended'});
  assert.equal(h.accessState.selected,'a');assert.match(h.accessState.notice,/선택할 수 없/);
 }
-console.log('PASS pending send: authentication wait, retry, overlapping failures, history persistence and connection preparation');
+console.log('PASS pending send: authentication wait, retry, duplicate draft preservation, queue-safe history persistence and connection preparation');

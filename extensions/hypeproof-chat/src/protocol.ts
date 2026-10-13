@@ -503,7 +503,7 @@ export type WebviewMessage = (
 export type HostMessage = (
   | { type: 'automationQuestion'; question: import('./automationProtocol').AutomationQuestion | null }
   | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
-  | {type:'inputRejected';text:string;images?:string[]}
+  | {type:'inputRejected';text:string;images?:string[];notice?:string}
   | {type:'activityFreeze';frozen:boolean;nonce?:string}
   | {type:'activityDraftError';error:string}
   /** #897 (VO-01) — a request to run the probe. Raised only by a command, never at activation time. */

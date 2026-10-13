@@ -3982,8 +3982,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({type:"streamError",streamId:"activity",error:"제품 테스트가 끝난 뒤에 보내 주세요."});
       return;
     }
+    // The composer can submit again before streamStart (or from another view).
+    // Preserve that draft without ending the turn that already owns this folder.
+    if (this.pendingSends > 0) {
+      await this.post({type:'inputRejected',text,images,notice:'이미 요청을 처리하고 있어요. 추가 입력은 초안에 보관했어요.'});
+      return;
+    }
     this.pendingSends++;
     let releaseActivity: (()=>void) | undefined;
+    let completedStream: string | undefined;
     let preflightComplete=false;
     try {
     const connections=activityConnections(this.context);
@@ -4025,7 +4032,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const aid = randomId();
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
+        completedStream = uid;
         await this.appendHistory([
           { id: randomId(), role: "user", content: text, createdAt: Date.now() },
           {
@@ -4057,7 +4064,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const aid = randomId();
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
+        completedStream = uid;
         await this.appendHistory([
           { id: randomId(), role: "user", content: text, createdAt: Date.now() },
           {
@@ -4820,7 +4827,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // (parity with the proxy path, which throws on abort).
       if (!ctrl.signal.aborted) {
         clearPending();
-        void this.post({ type: "streamEnd", streamId });
+        completedStream = streamId;
         // #371 — persist the agent.md handoff fence, if the coach emitted one.
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
@@ -4841,6 +4848,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         tryReveal(assistantText);
       }
     } catch (err) {
+      completedStream = undefined;
       spoolStatus = "error";
       spoolErrorKind = classifyTurnError(err);
       { const e = err as { status?: unknown; kind?: unknown; requestId?: unknown }; opsFailure = { ...(typeof e?.status === "number" ? { status: e.status } : {}), ...(typeof e?.kind === "string" ? { code: e.kind } : {}), ...(typeof e?.requestId === "string" ? { requestId: e.requestId } : {}) }; }
@@ -4908,12 +4916,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnTimelines.delete(streamId);
     }
     } catch (error) {
+      completedStream = undefined;
       if (preflightComplete) throw error;
       await this.post({type:"inputRejected",text,images});
       await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
     } finally {
       try { releaseActivity?.(); } finally {
         this.pendingSends--;
+        // The webview flushes its parked next message on streamEnd. Release the
+        // writer before that edge, including awaited history/observation writes.
+        if(completedStream)void this.post({type:'streamEnd',streamId:completedStream});
         if(this.pendingFundingSelection){this.applyPendingFundingSelection();void this.postConfig().catch(()=>{});}
       }
     }

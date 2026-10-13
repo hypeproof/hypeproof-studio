@@ -255,6 +255,7 @@ export function ChatPanel(props: Props) {
   const [queued, setQueued] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   // #751 F4 — local display state for the learner's step self-report; it is separate from task completion.
@@ -347,6 +348,7 @@ export function ChatPanel(props: Props) {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
       if (msg.type === "inputRejected") {
+        if (msg.notice) setSubmissionNotice(msg.notice);
         setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
       }
@@ -538,6 +540,7 @@ export function ChatPanel(props: Props) {
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
+    setSubmissionNotice(null);
     props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined);
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
@@ -1062,6 +1065,7 @@ export function ChatPanel(props: Props) {
         )}
 
         {props.verifyPanel}
+        {submissionNotice && <div className="hps-page-notice" role="status" aria-live="polite">{submissionNotice}</div>}
         {props.questionPanel && <div ref={questionRef} className="hps-question-anchor">{props.questionPanel}</div>}
 
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as

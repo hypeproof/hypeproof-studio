@@ -63,6 +63,15 @@ posts=await page.evaluate(()=>window.__posts);const approved=posts.filter(m=>m.t
 await emit({type:'automationQuestion',question:null,activityId});await page.getByTestId('user-question-card').waitFor({state:'detached'});assert.equal(await page.locator('.hps-input textarea').getAttribute('readonly'),null);
 await page.locator('.hps-input textarea').fill('다음 업무도 정리해 보자');await page.locator('.hps-input textarea').press('Enter');await page.waitForFunction(()=>window.__posts.some(m=>m.type==='sendMessage'));
 const normalPosts=await page.evaluate(()=>window.__posts.filter(m=>m.type==='sendMessage'));assert.equal(normalPosts.length,1);assert.equal(normalPosts[0].text,'다음 업무도 정리해 보자');assert.equal(JSON.stringify(normalPosts).includes(sheet),false);
+// A duplicate native click returns only the extra draft; it must not end the
+// actual response or flush the participant's parked message.
+await emit({type:'streamStart',streamId:'duplicate-guard',messageId:'duplicate-reply',activityId});
+await emit({type:'inputRejected',text:'추가 입력 보존',images:[],notice:'이미 요청을 처리하고 있어요. 추가 입력은 초안에 보관했어요.',activityId});
+await page.waitForFunction(()=>document.querySelector('.hps-input textarea').value==='추가 입력 보존');
+assert.equal(await page.locator('.hps-input textarea').inputValue(),'추가 입력 보존');
+assert.equal(await page.getByRole('button',{name:'중지',exact:true}).isVisible(),true);
+assert.equal(await page.getByText('이미 요청을 처리하고 있어요. 추가 입력은 초안에 보관했어요.',{exact:true}).isVisible(),true);
+await emit({type:'streamEnd',streamId:'duplicate-guard',activityId});
 await question({id:'script-review',kind:'script',title:'이 코드를 Google에 저장할까요?',private:true,script:{action:'upload',digest:'a'.repeat(64),files:[{name:'Code',source:'function example() { return "<script>unsafe</script>"; }'}],scopes:['https://www.googleapis.com/auth/script.projects']}});
 assert.equal(await page.getByRole('button',{name:'확인한 코드를 Google에 저장'}).isDisabled(),true);
 await page.getByText('코드와 요청 권한 확인',{exact:true}).click();
