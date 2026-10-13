@@ -1174,7 +1174,8 @@ export function profileToAgentOptions(
  * or 400 (request the gateway refuses outright) will fail all 10 retries
  * identically. 403 is NOT here — the worker uses it for session-window/roster
  * states that the SDK doesn't retry (they surface as a terminal error), and
- * 5xx/429/529 stay retryable (the SDK's backoff is the right behavior there).
+ * 5xx/529 stay retryable. Capacity 429 is handled separately without an auth
+ * error, because a budget refusal needs action rather than CLI backoff.
  */
 export const SDK_FATAL_AUTH_STATUSES: ReadonlySet<number> = new Set([400, 401]);
 
@@ -1192,6 +1193,22 @@ export function sdkFatalAuthStatus(msg: Record<string, unknown>): number | null 
 /** True for the SDK's retry tick (`{type:"system", subtype:"api_retry"}`). */
 export function isSdkRetryEvent(msg: Record<string, unknown>): boolean {
   return msg["type"] === "system" && msg["subtype"] === "api_retry";
+}
+
+/** SDK API failures are control messages, not assistant prose. Never display
+ * their raw body: a gateway error can contain private request details. A 429
+ * also covers a hard budget reservation refusal, so waiting through CLI retries
+ * cannot be assumed to help. Leave retry to an explicit learner action. */
+function sdkApiFailure(msg: Record<string, unknown>): Error | null {
+  const rateLimit = (isSdkRetryEvent(msg) && msg.error_status === 429)
+    || (msg.type === 'assistant' && msg.error === 'rate_limit');
+  const assistantFailure = msg.type === 'assistant' && (msg.isApiErrorMessage === true
+    || ['authentication_failed','oauth_org_not_allowed','billing_error','overloaded','invalid_request','model_not_found','server_error','unknown'].includes(String(msg.error ?? '')));
+  if (!rateLimit && !assistantFailure) return null;
+  return Object.assign(new Error(rateLimit
+    ? '사용 가능한 예산 또는 동시 실행 한도 때문에 요청이 거절됐어요. 이용권·사용량을 확인하고, 다른 작업이 실행 중이면 끝난 뒤 다시 보내 주세요. (429)'
+    : 'AI 서비스가 요청을 처리하지 못했어요. 작업 파일은 보존돼 있습니다. 연결과 이용권을 확인한 뒤 다시 보내 주세요.'),
+    { name: 'SdkApiError', ...(rateLimit ? { status: 429 } : {}) });
 }
 
 // ── First-token / idle stall watchdog (#403) ────────────────────────────────
@@ -1776,6 +1793,11 @@ export async function consumeSdkStream(
         // Kill the subprocess's retry loop first, then surface the token error.
         h.abortQuery();
         throw h.makeFatalAuthError(fatal);
+      }
+      const apiFailure = sdkApiFailure(msg);
+      if (apiFailure) {
+        h.abortQuery();
+        throw apiFailure;
       }
       // Retry ticks are the pathology, not progress — they must not renew the
       // watchdog budget.

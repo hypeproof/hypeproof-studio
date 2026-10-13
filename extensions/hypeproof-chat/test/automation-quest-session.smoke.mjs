@@ -17,6 +17,38 @@ const plan = { title: '자료 요청 메일', nodes: [
 ] };
 const status = (quest, id) => quest.snapshot().nodes.find(node => node.id === id).status;
 
+test('install receipt completes the shared skill and intent, never another learner\'s execution', async () => {
+  const frames=[];
+  const quest=createAutomationQuestSession(async html=>frames.push(html));
+  const ids=['goal','skill','connect','sheet','prepare','upload','deploy','preview'];
+  await quest.plan({title:'공유 스킬 재사용',nodes:ids.map((id,i)=>({id,label:id,dependsOn:i?[ids[i-1]]:[]}))});
+  let outcome={installed:true};
+  const host=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,
+    installSkill:async()=>{if(outcome.error)throw Error('synthetic install failure');return outcome;}},quest);
+  await host.installSkill('synthetic-shared-skill');
+  assert.equal(status(quest,'goal'),'succeeded');assert.equal(status(quest,'skill'),'succeeded');
+  for(const id of ids.slice(2))assert.notEqual(status(quest,id),'succeeded');
+  assert.match(frames.at(-1),/2 \/ 8 완료/);
+  for(const id of ids.slice(2))await quest.track(id,async()=>true);
+  outcome={cancelled:true};await host.installSkill('replacement');
+  assert.equal(status(quest,'preview'),'succeeded','declining replacement preserves the installed skill');
+  outcome={error:true};await assert.rejects(host.installSkill('replacement'));
+  assert.equal(status(quest,'preview'),'succeeded','failed download does not replace the saved skill');
+  outcome={installed:true};await host.installSkill('replacement');
+  assert.equal(status(quest,'skill'),'succeeded');
+  for(const id of ['prepare','upload','deploy','preview'])assert.notEqual(status(quest,id),'succeeded','old execution does not verify a different recipe');
+});
+
+test('a late install receipt cannot advance a replacement activity',async()=>{
+  const quest=createAutomationQuestSession(async()=>{});await quest.plan(plan);
+  let finish;
+  const host=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,
+    installSkill:()=>new Promise(resolve=>{finish=resolve;})},quest);
+  const operation=host.installSkill('synthetic-shared-skill');
+  quest.clear();await quest.plan(plan);finish({installed:true});await operation;
+  assert.equal(quest.snapshot().nodes.filter(node=>node.status==='succeeded').length,0);
+});
+
 test('experienced learner can provide complete intent without a redundant question', async () => {
   const quest = createAutomationQuestSession(async () => {});
   const host = withAutomationQuest({ runtime: {}, isAllowed: () => true, confirmSend: async () => false,

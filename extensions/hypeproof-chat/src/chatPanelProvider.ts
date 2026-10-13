@@ -4108,6 +4108,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.loadAccess();
     const fundingSource=this.accessState?.selected;
     const chosenAccess=this.accessState?.view?.choices.find(c=>c.id===fundingSource);
+    // A stale/remounted view can submit before its funding choice reaches the
+    // host. Stop before creating a stream: the SDK retries the Service's 409
+    // selection_required response and otherwise looks like a silent AI turn.
+    if (this.accessState?.view?.required && !localRuntimeConfig(vscode.env.appName, proxyUrl) && !chosenAccess?.active) {
+      const notice='이번 작업에 사용할 이용권을 선택한 뒤 다시 보내 주세요. 입력 내용은 초안에 보관했어요.';
+      this.accessState={...this.accessState,selected:undefined,notice};
+      await this.post({type:'inputRejected',text,images,notice});
+      await this.postConfig();
+      return;
+    }
     const profile=resolvedProfile?accessProfile(resolvedProfile,chosenAccess):null;
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
@@ -4704,7 +4714,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         try {
           const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
+            onDiagnostic: phase => this.voiceLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
             emailAutomationHost,
             gatewayUrl: proxyUrl,
             effort,

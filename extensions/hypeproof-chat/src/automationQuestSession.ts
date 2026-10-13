@@ -37,6 +37,15 @@ export function createAutomationQuestSession(show: (html: string) => Promise<voi
     state = { ...state, nodes: state.nodes.map(node => affected.has(node.id) ? { ...node, status: 'pending' as const } : node) };
     state = transitionQuest(state, step, status);
   };
+  const invalidate = (ids: readonly Step[]) => {
+    generation++;
+    dependentSteps(ids).forEach(id => completed.delete(id as Step));
+    if (state) {
+      state = createQuest({ title: state.title, nodes: state.nodes.map(({ id, label, description, dependsOn }) => ({ id, label, ...(description ? { description } : {}), dependsOn })) });
+      reconcile();
+    }
+    notify();
+  };
   return {
     clear() { generation++; state = undefined; completed.clear(); notify(); },
     async plan(input: unknown) {
@@ -60,14 +69,17 @@ export function createAutomationQuestSession(show: (html: string) => Promise<voi
       await draw();
       return { displayed: true, steps: next.nodes.map(node => node.id), completion: 'host-evidence-only' };
     },
-    invalidate(ids: Step[]) {
-      generation++;
-      dependentSteps(ids).forEach(id => completed.delete(id as Step));
-      if (state) {
-        state = createQuest({ title: state.title, nodes: state.nodes.map(({ id, label, description, dependsOn }) => ({ id, label, ...(description ? { description } : {}), dependsOn })) });
-        reconcile();
-      }
-      notify();
+    invalidate,
+    /** A declined/failed replacement leaves the existing saved skill intact.
+     * Only its successful receipt can revoke old execution evidence. */
+    async replace<T>(step: Step, work: () => Promise<T>, succeeded: (value: T) => boolean, invalidates: readonly Step[], establishes: readonly Step[] = []): Promise<T> {
+      const epoch = generation;
+      const value = await work();
+      if (epoch !== generation || !succeeded(value)) return value;
+      invalidate(invalidates);
+      completed.add(step); establishes.forEach(id => completed.add(id)); reconcile();
+      await draw();
+      return value;
     },
     async track<T>(step: Step, work: () => Promise<T>, succeeded: (value: T) => boolean = () => true, establishes: readonly Step[] = []): Promise<T> {
       const epoch = generation;
@@ -101,6 +113,7 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
     // A validated recipe is host evidence for a concrete goal. Apply related
     // evidence inside track's generation guard so a late result cannot mark a new plan.
     saveSkill: host.saveSkill ? recipe => { quest.invalidate(['skill','prepare','upload','deploy','preview','send','publish']); return quest.track('skill', () => host.saveSkill!(recipe), flag('saved'), ['goal']); } : undefined,
+    installSkill: host.installSkill ? id => quest.replace('skill', () => host.installSkill!(id), flag('installed'), ['skill','prepare','upload','deploy','preview','send','publish'], ['goal']) : undefined,
     connectGoogle: host.connectGoogle ? mode => quest.track('connect', () => host.connectGoogle!(mode), flag('connected')) : undefined,
     // Reading a private sheet succeeds only after the host verifies the current
     // Google connection. Reuse can therefore restore connection evidence too.

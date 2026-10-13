@@ -76,7 +76,7 @@ function handlers(overrides = {}) {
   assert.equal(sdkFatalAuthStatus(apiRetry(400, "invalid_request")), 400, "400 api_retry is fatal");
 
   // Retryable statuses stay with the SDK's backoff (correct behavior there).
-  assert.equal(sdkFatalAuthStatus(apiRetry(429, "rate_limit")), null, "429 keeps retrying");
+  assert.equal(sdkFatalAuthStatus(apiRetry(429, "rate_limit")), null, "429 is a capacity failure, never an auth failure");
   assert.equal(sdkFatalAuthStatus(apiRetry(529, "overloaded")), null, "529 keeps retrying");
   assert.equal(sdkFatalAuthStatus(apiRetry(500, "server_error")), null, "500 keeps retrying");
   assert.equal(sdkFatalAuthStatus(apiRetry(null)), null, "connection error (null status) keeps retrying");
@@ -141,6 +141,27 @@ function handlers(overrides = {}) {
   await consumeSdkStream(mockStream([apiRetry(529, "overloaded"), assistantMsg("복구됨")], []), h);
   assert.deepEqual(calls.deltas, ["복구됨"], "stream continues past a retryable event");
   assert.equal(calls.aborted, 0);
+}
+
+// A budget refusal is terminal for this turn, including the real Windows
+// synthetic assistant envelope. Do not wait for another event, emit its raw
+// request details, or misclassify it as token expiry.
+for (const failure of [apiRetry(429, 'rate_limit'), {
+  type:'assistant',error:'rate_limit',isApiErrorMessage:true,
+  message:{model:'<synthetic>',content:[{type:'text',text:'API Error: Request rejected (429) private synthetic request details'}]},
+}, {type:'assistant',error:'invalid_request',message:{model:'<synthetic>',content:[{type:'text',text:'private synthetic request details'}]}}]) {
+ const pulled=[],{h,calls}=handlers();
+ const err=await consumeSdkStream(mockStream([failure,assistantMsg('must not continue')],pulled),h).then(()=>null,e=>e);
+ assert.equal(err?.name,'SdkApiError');assert.equal(calls.aborted,1);assert.equal(pulled.length,1);
+ assert.deepEqual(calls.deltas,[]);assert.equal(err.message.includes('private'),false);
+ assert.equal(err.message.includes('만료'),false);
+ if(failure.error==='rate_limit')assert.equal(err.status,429);
+}
+{
+ const {h,calls}=handlers();
+ await consumeSdkStream(mockStream([assistantMsg('429 오류의 뜻을 설명할게요'),{...assistantMsg('이어지는 일부 응답'),error:'max_output_tokens'}],[]),h);
+ assert.equal(calls.aborted,0,'ordinary prose and output truncation are not API rejection envelopes');
+ assert.equal(calls.deltas.length,2);
 }
 
 // ─── user stop still wins: AbortError before any processing (REQ-M8) ─────────

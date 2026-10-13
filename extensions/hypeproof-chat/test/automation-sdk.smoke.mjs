@@ -26,10 +26,21 @@ test('email capability is independent of browser; minors and ungranted names fai
   assert.equal(evaluateSdkToolUse({toolName,input:{},permittedTools:names}).decision,'allow');
  }
 });
-async function turn({host,profile={automations:capability,game:{template_tier:'website'}},browserHost,withFactory=true}){
+async function turn({host,profile={automations:capability,game:{template_tier:'website'}},browserHost,withFactory=true,onDiagnostic}){
  let options;const sdk={query:args=>{options=args.options;return(async function*(){yield{type:'result',subtype:'success',is_error:false};})();},...(withFactory?{tool:(name,description,schema,handler)=>({name,handler}),createSdkMcpServer:server=>server}:{})};
- await runSdkCoach({sdk,zod:{string:()=>({})},binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'synthetic',model:'synthetic',profile,systemPrompt:'',history:[],userText:'synthetic',signal:new AbortController().signal,stallTimeoutMs:0,onDelta:()=>{},requestApproval:async()=>false,emailAutomationHost:host,browserHost});return options;
+ await runSdkCoach({sdk,zod:{string:()=>({})},binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'synthetic',model:'synthetic',profile,systemPrompt:'',history:[],userText:'synthetic',signal:new AbortController().signal,stallTimeoutMs:0,onDelta:()=>{},requestApproval:async()=>false,emailAutomationHost:host,browserHost,onDiagnostic});return options;
 }
+test('SDK diagnostics distinguish prepared query from first event without emitting runtime data',async()=>{
+ const phases=[];
+ await turn({host:{isAllowed:()=>true,runtime:{}},onDiagnostic:phase=>phases.push(phase)});
+ assert.deepEqual(phases,['starting','binary_ready','sdk_ready','tools_loading','tools_ready','config_ready','query_options_ready','query_created','first_event']);
+ const stalled=[];let aborted=false;
+ const sdk={query:({options})=>({[Symbol.asyncIterator](){return{next:()=>new Promise((_,reject)=>options.abortController.signal.addEventListener('abort',()=>{aborted=true;reject(new Error('synthetic abort'));},{once:true}))};}})};
+ await assert.rejects(runSdkCoach({sdk,binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'private-synthetic-token',model:'synthetic',profile:{},systemPrompt:'private synthetic system',history:[],userText:'private synthetic input',signal:new AbortController().signal,stallTimeoutMs:10,onDelta:()=>{},requestApproval:async()=>false,onDiagnostic:phase=>stalled.push(phase)}),error=>error.name==='CoachStallError');
+ assert.equal(aborted,true);assert.equal(stalled.includes('query_created'),true);assert.equal(stalled.includes('first_event'),false);assert.equal(stalled.at(-1),'stalled');
+ assert.equal(JSON.stringify(stalled).includes('private'),false);
+ await turn({onDiagnostic:()=>{throw Error('diagnostic sink unavailable');}});
+});
 test('real SDK registration grants only an installed email server and preserves mandatory human send gate',async()=>{
  let approved=false,sent=0;const preview={id:'preview-1',createdAt:Date.now(),messages:[{id:'message-1',to:'synthetic@example.test',subject:'Synthetic',body:'Synthetic'}]};
  const host={isAllowed:()=>true,confirmSend:async()=>approved,runtime:{getPreview:()=>preview,send:async()=>{sent++;return{records:[{id:'message-1',status:'sent'}]};}}};

@@ -97,7 +97,11 @@ export class CoachStallError extends Error {
   }
 }
 
+export type SdkDiagnosticPhase = 'starting' | 'binary_ready' | 'sdk_ready' | 'tools_loading' | 'tools_ready' | 'config_ready' | 'query_options_ready' | 'query_created' | 'first_event' | 'stalled';
+
 export interface SdkCoachArgs {
+  /** Fixed phase names only: never emit prompts, credentials, paths or raw SDK diagnostics. */
+  onDiagnostic?: (phase: SdkDiagnosticPhase) => void;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -484,6 +488,8 @@ function abortError(): Error {
  * both runtimes and the fallback inside one guard.
  */
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
+  const diagnostic = (phase: SdkDiagnosticPhase) => { try { args.onDiagnostic?.(phase); } catch { /* Diagnostics cannot break a turn. */ } };
+  diagnostic('starting');
   // Bridge the caller's signal to an SDK AbortController UP FRONT — before any
   // await — so a stop during loadSdk() still cancels. (addEventListener added
   // after the signal already fired would never run.)
@@ -511,7 +517,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     console.info(`[coach] claude binary via ${binary.source}: ${binary.path}`);
   }
 
+  diagnostic('binary_ready');
   const sdk = args.sdk ?? (await loadSdk());
+  diagnostic('sdk_ready');
   const opts = profileToAgentOptions(args.profile, {
     model: args.model,
     systemPrompt: args.systemPrompt,
@@ -540,6 +548,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
 
   let mcpServers: Options["mcpServers"];
   let grantedMcpTools: readonly string[] = [];
+  diagnostic('tools_loading');
   if (opts.permittedMcpTools.length > 0 && (args.browserHost || args.emailAutomationHost)) {
     const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
@@ -594,6 +603,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     }
   }
 
+  diagnostic('tools_ready');
   // REQ-M13 — the coach's CLI gets a config dir of its own so stored Claude
   // Code / Claude Desktop credentials can't outrank the workshop token. The
   // path is derived purely (sdkConfigDirFor); creating it is the host's job.
@@ -605,6 +615,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   } catch (err) {
     console.warn(`[coach] could not create SDK config dir ${sdkConfigDir}:`, err);
   }
+  diagnostic('config_ready');
 
   // Pure option/env construction (allowedTools/settingSources pinned to [],
   // ANTHROPIC_BASE_URL derived from proxyUrl, ANTHROPIC_API_KEY scrubbed) is
@@ -741,7 +752,16 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     abortController,
   };
 
+  diagnostic('query_options_ready');
   const stream = sdk.query({ prompt, options });
+  diagnostic('query_created');
+  const diagnosedStream = (async function* () {
+    let first = true;
+    for await (const event of stream) {
+      if (first) { first = false; diagnostic('first_event'); }
+      yield event;
+    }
+  })();
 
   // Map SDK messages → the proxyChat callback shape via the pure consumer
   // (sdkCoachHelpers.consumeSdkStream — unit-tested). Three exits besides
@@ -756,15 +776,17 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   //   both statuses here: the workshop token is the only credential on this
   //   path, so a 400/401 means that token is unusable — replacing it is the
   //   recovery, retrying is not.
+  // - 429 or a synthetic assistant API failure → immediate safe error notice;
+  //   the learner can fix funding/concurrency before explicitly retrying.
   // - stall watchdog → CoachStallError (#403, REQ-M26): everything the 4xx
-  //   fast-fail does NOT cover (429/529/5xx/connection retries, or a first turn
+  //   fast-fail does NOT cover (529/5xx/connection retries, or a first turn
   //   that simply never produces a token) left the student on "생각하는 중… ✨"
   //   with no error and no way out. After stallTimeoutMs of no progress we
   //   abort the query and surface a retry-me message.
   // (onCitations / onAssetScore are wired for parity but the SDK stream
   // mapping for those lands in a later phase.)
   const stallMs = args.stallTimeoutMs ?? SDK_STREAM_STALL_MS;
-  return await consumeSdkStream(stream, {
+  return await consumeSdkStream(diagnosedStream, {
     isAborted: () => args.signal.aborted,
     makeAbortError: abortError,
     abortQuery: () => abortController.abort(),
@@ -789,6 +811,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,
     makeStallError: (status) => {
+      diagnostic('stalled');
       // Developer-side signal — the student only ever sees the Korean line.
       console.warn(
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +

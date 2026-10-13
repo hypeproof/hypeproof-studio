@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 const require=createRequire(import.meta.url);
 const bundle=await build({entryPoints:[new URL('../src/chatPanelProvider.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 let proxyUrl='https://api.hypeproof-ai.xyz/v1';
-const vscode={workspace:{getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?proxyUrl:fallback})}};
+const vscode={env:{appName:'HypeProof Studio'},workspace:{getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?proxyUrl:fallback})}};
 const module={exports:{}};
 let fetchImpl=()=>assert.fail('no network expected');
 vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?vscode:require(id),console,Buffer,process,setTimeout,clearTimeout,AbortSignal,URL,TextEncoder,TextDecoder,fetch:(...args)=>fetchImpl(...args)});
@@ -102,4 +102,45 @@ for(const type of ['sendMessage','retryMessage']){
  await proto.handleMessage.call(h,{type:'selectFunding',id:'ended'});
  assert.equal(h.accessState.selected,'a');assert.match(h.accessState.notice,/선택할 수 없/);
 }
-console.log('PASS pending send: authentication wait, retry, duplicate draft preservation, queue-safe history persistence and connection preparation');
+// Host admission cannot trust a stale webview's enabled composer. Missing,
+// removed, or ended funding choices return the original draft before any AI
+// stream/workspace preparation; a valid choice and legacy/local paths proceed.
+for (const selected of [undefined,'removed','ended','ready']) {
+ const h=host(),posts=[];let configPosts=0;
+ h.context={secrets:{get:async()=> 'synthetic-token'},workspaceState:{get:()=>undefined}};
+ h.getCoach=()=>null;h.ensureProfile=async()=>null;h.loadAccess=async()=>{};
+ h.post=async m=>posts.push(m);h.postConfig=async()=>{configPosts++;};
+ h.accessState={status:'ready',selected,view:{required:true,choices:[{id:'ready',active:true},{id:'ended',active:false}]}};
+ h.pullQuestResultFromPreview=async()=>{throw Error('accepted turn reached preparation');};
+ if(selected==='ready') {
+  await assert.rejects(proto.handleSend.call(h,'자료 요청',[],['synthetic-image']),/accepted turn reached preparation/);
+  assert.equal(posts.length,0);
+ } else {
+  await proto.handleSend.call(h,'자료 요청',[],['synthetic-image']);
+  assert.equal(posts.length,1);assert.equal(posts[0].type,'inputRejected');
+  assert.equal(posts[0].text,'자료 요청');assert.deepEqual(posts[0].images,['synthetic-image']);
+  assert.match(posts[0].notice,/이용권을 선택/);assert.equal(h.accessState.selected,undefined);
+  assert.equal(configPosts,1);
+ }
+ assert.equal(h.hasActiveStream(),false);
+}
+for (const local of [false,true]) {
+ const h=host();h.context={secrets:{get:async()=> 'synthetic-token'},workspaceState:{get:()=>undefined}};
+ h.getCoach=()=>null;h.ensureProfile=async()=>null;h.loadAccess=async()=>{};
+ h.accessState={status:'ready',view:{required:local,choices:[]}};
+ h.pullQuestResultFromPreview=async()=>{throw Error('accepted turn reached preparation');};
+ const savedEnv={...process.env};
+ try {
+  if(local) {
+   vscode.env.appName='HypeProof Studio Dev';proxyUrl='http://127.0.0.1:8787/v1';
+   Object.assign(process.env,{HPS_DEV_RUNTIME:'1',HPS_DEV_PROVIDER:'claude',HPS_DEV_EXECUTABLE:process.execPath,HPS_DEV_MODEL:'synthetic'});
+  }
+  await assert.rejects(proto.handleSend.call(h,'자료 요청',[]),/accepted turn reached preparation/);
+ } finally {
+  for(const k of ['HPS_DEV_RUNTIME','HPS_DEV_PROVIDER','HPS_DEV_EXECUTABLE','HPS_DEV_MODEL']) {
+   if(savedEnv[k]===undefined)delete process.env[k];else process.env[k]=savedEnv[k];
+  }
+  vscode.env.appName='HypeProof Studio';proxyUrl='https://api.hypeproof-ai.xyz/v1';
+ }
+}
+console.log('PASS pending send: authentication, draft preservation, funding admission, local/legacy compatibility and connection preparation');
