@@ -27,16 +27,16 @@ assert.equal(sent.length,0);
 assert.equal(focusCount,2);
 assert.equal(commands.length,2);
 assert.equal(stored.get('returning').length,2,'existing messages remain intact');
-// History in another activity must not suppress a genuinely new activity's onboarding.
+// A fresh activity also waits for the learner: opening before funding selection is free.
 scope='new-activity';editor=true;
 await proto.beginAutomationConversation.call(host);
-assert.equal(sent.length,1);
-assert.equal(sent[0].scope,'new-activity');
+assert.equal(sent.length,0);
+assert.equal(stored.has('new-activity'),false,'opening does not fabricate a user message');
 await proto.beginAutomationConversation.call(host);
-assert.equal(sent.length,1,'opening again does not repeat onboarding');
+assert.equal(sent.length,0,'opening again still waits for explicit learner input');
 assert.equal(commands.length,2,'an existing editor is focused without opening a duplicate sidebar');
 // A busy or approval-blocked activity cannot start an extra onboarding request.
 scope='busy-empty';busy=true;
 await proto.beginAutomationConversation.call(host);
-assert.equal(sent.length,1);
-console.log('PASS automation resume: existing history opens without AI request; fresh activity onboards once; busy activity remains unchanged');
+assert.equal(sent.length,0);
+console.log('PASS automation resume: existing history opens without AI request; fresh activity waits for learner input; busy activity remains unchanged');

@@ -104,31 +104,39 @@ standard-project binding still requires a supported account/project setup. This
 is not evidence that 20 unrelated accounts work without setup. Latest Windows
 acceptance and a second real Google learner remain unverified.
 
-## Observed Windows acceptance — in progress, 2026-10-14
+## Observed Windows acceptance — 2026-10-14
 
-The private Windows shell is `682dfd37`. Root installed extension `5f94738f`
-through the existing authenticated copy-command updater and independently matched
-all seven installed file hashes. Prior `d7106eda` checks covered launch, sidebar
-resize, and width/draft retention after restart. Explicit UTF-8 reading fixed
-PowerShell 5.1 parsing of Korean package metadata.
+The private Windows shell remains `682dfd37`; the latest extension source is
+`a5390e58`. The authenticated copy-command updater preserves the existing SDK,
+Google configuration and activity data. Root independently matched all seven
+installed file hashes for a5390e58. Explicit UTF-8 reading fixed PowerShell
+5.1 parsing of Korean package metadata. Earlier native checks verified sidebar
+resize, width/draft retention and seven exact installed hashes.
 
-On `4192189e`, the actual Windows coach asked focused questions, accepted title,
-body and column answers, saved the skill and advanced the graph to 2/8. The new
-funding choice remained selected. The Windows bot account received Google 403
-because it is not an OAuth test user; adding its new access awaits confirmation.
-No Windows Google preview or OS-backed Google-token reuse is claimed.
+The actual coach on `4192189e` asked focused questions, accepted title/body/column
+answers, saved the skill and advanced the graph to 2/8. On `514a0f5a`, root
+independently matched all seven installed hashes, saw the saved recipe restore to
+2/8, answered a fresh public question, opened the Google authorization wait and
+pressed Stop. The graph returned to setup-required without waiting for the OAuth
+timeout. No account permission was granted during that check.
 
-Windows surfaced two lifecycle requirements now covered locally: duplicate
-submissions must preserve their draft without ending the active response, and
-queued messages must wait until the previous activity writer is released; Stop
-must cancel the OAuth callback wait and return the connection step to a retryable
-state. Do not interpret a browser consent window or a running graph as connection
-success. An interrupted multi-question turn also needs durable, explicitly
-incomplete conversation history, and a validated saved recipe must restore only
-the established goal/skill steps. Restoration of later Google execution steps
-requires their own evidence. The interrupted-turn restart check remains open.
+After full process exit and the `a5390e58` update, the same activity restored its
+public question and answer, marked the interrupted Google tool as an unconfirmed
+result, showed an explicit interruption notice and retained only the proven
+2/8 goal/skill steps. Opening the activity made no new model/tool request. Fresh
+activities also wait for the learner's own message, preventing automatic startup
+from racing funding selection. A new-provider test checks private-answer exclusion
+and activity isolation; actual Windows UI confirms public-answer recovery.
 
-The new test budget ledger was USD 0.056300 settled and zero held after this
-conversation, up USD 0.050334 from its prior USD 0.005966. This is observed token
-accounting, not an invoice. Old settled/held amounts and the aggregate USD 2
-ceiling remain unchanged. No additional email was sent.
+The Windows bot account is not an OAuth test user and previously received 403.
+Adding its new account access awaits confirmation. Windows Google preview,
+OS-backed Google-token reuse and a second actual learner remain unverified. This
+is not a full Windows Google acceptance result. Duplicate-submit/queue cleanup,
+OAuth cancellation and restart persistence have local regression coverage.
+
+After these checks, the new test ledger shows USD 0.080232 settled and zero held:
+USD 0.074266 more than its prior USD 0.005966. This is token accounting, not an
+invoice. Old settled/held amounts and the aggregate USD 2 ceiling are preserved.
+No additional email was sent. The instructor gate above was verified locally
+before any of these private Windows updates; the remote instructor page was not
+newly deployed or asserted as accepted.
