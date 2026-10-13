@@ -38,6 +38,7 @@ const identity = (value: Token) => `${value.accountId}:${value.connectionId}`;
 export function createAppsScriptRuntime(deps: AppsScriptDeps) {
   const request = deps.fetchImpl ?? fetch, now = deps.now ?? Date.now;
   let epoch = 0, busy = false;
+  let pendingConnect: { cancelled: boolean; listener?: OAuthListener } | undefined;
   let current: { deployment: AppsScriptDeployment; preview: EmailPreview } | undefined;
   const allowed = () => { if (!deps.isAllowed()) fail('현재 활동에서는 이 작업을 할 수 없어요.'); };
   const rawRequest = async (url: string, init: RequestInit) => request(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(url.includes(':run') ? 370000 : 30000) });
@@ -114,16 +115,26 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     async status() { return { connected: !!await stored(), configured: !!deps.clientId.trim() }; },
     async isConnected() { return !!await getConnectionIdentity(); },
     getPreview(id: string) { return current?.preview.id === id ? current.preview : undefined; },
+    cancelConnect() {
+      if (!pendingConnect) return false;
+      pendingConnect.cancelled = true; pendingConnect.listener?.close(); return true;
+    },
     async connect() { return exclusive(async () => {
       if (!deps.clientId.trim()) throw new AppsScriptRecoveryError('operator', '운영자가 Studio의 Google 로그인 설정을 먼저 완료해야 해요. 설정 후 이 단계에서 다시 연결할 수 있어요.');
-      const state = epoch, listener = await (deps.listenOAuth ?? listenGoogleOAuth)();
+      const state = epoch, attempt = { cancelled: false, listener: undefined as OAuthListener | undefined };
+      pendingConnect = attempt;
+      let listener: OAuthListener | undefined;
       try {
+        listener = await (deps.listenOAuth ?? listenGoogleOAuth)(); attempt.listener = listener;
+        if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
         const verifier = nonce(), csrf = nonce(), url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         url.search = new URLSearchParams({ client_id: deps.clientId, redirect_uri: listener.redirectUri, response_type: 'code', scope: [...APPS_SCRIPT_OAUTH_SCOPES, 'openid'].join(' '), include_granted_scopes: 'true', state: csrf, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent' }).toString();
         await deps.openBrowser(url.toString());
         let callback: URL;
         try { callback = await listener.wait; }
         catch { throw new AppsScriptRecoveryError('reconnect', 'Google 로그인 시간이 끝났거나 창을 닫았어요. 다시 연결하면 이 단계부터 이어갈 수 있어요.'); }
+        if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
+        if (pendingConnect === attempt) pendingConnect = undefined;
         if (callback.origin + callback.pathname === listener.redirectUri && callback.searchParams.getAll('state').length === 1 && callback.searchParams.get('state') === csrf && callback.searchParams.get('error') === 'access_denied') throw new AppsScriptRecoveryError('reconnect', 'Google 연결이 허용되지 않았어요. 계정과 요청 권한을 확인한 뒤 다시 연결해 주세요.');
         if (callback.origin + callback.pathname !== listener.redirectUri || callback.searchParams.getAll('state').length !== 1 || callback.searchParams.get('state') !== csrf || callback.searchParams.has('error') || callback.searchParams.getAll('code').length !== 1 || !callback.searchParams.get('code')) return fail('Google 로그인 확인에 실패했어요.');
         const t = await exchange({ grant_type: 'authorization_code', code: callback.searchParams.get('code')!, code_verifier: verifier, redirect_uri: listener.redirectUri });
@@ -133,7 +144,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
         allowed(); if (state !== epoch) return fail('Google 연결이 변경됐어요.');
         t.accountId = hash(user.sub); t.connectionId = nonce();
         await deps.secrets.store(APPS_SCRIPT_TOKEN_KEY, JSON.stringify(t)); epoch++; current = undefined;
-      } finally { listener.close(); }
+      } finally { if (pendingConnect === attempt) pendingConnect = undefined; listener?.close(); }
     }); },
     async disconnect() { epoch++; current = undefined; await deps.secrets.delete(APPS_SCRIPT_TOKEN_KEY); },
     async createProject(title: string) { return exclusive(async () => {

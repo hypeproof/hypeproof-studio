@@ -13,10 +13,12 @@ const recipe={schema:'hps-email-automation/1',category:'email',title:'자료 요
 let token='synthetic-participant',grant=true,handlers,question=null,started=0,panelCount=0,connected=0,published=0,readInput,tick,googleReady=false,connectionChecks=0,previewedRecipe;
 const current={serverId:'a'.repeat(64),token,service:'https://service.example.test/v1'};
 const commands=new Map(),globals=new Map(),secrets=new Map(),questions=[],runtimeDeps=[];
+let oauthWait, cancelOAuth, oauthStarted=false;
+const questViews=[];
 let desktopClientId='synthetic-desktop-client',operatorInput='synthetic-desktop-secret',operatorOptions,devContext;
 const uri=fsPath=>({fsPath});
 const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{appName:'HypeProof Studio Dev',openExternal:async()=>true},commands:{executeCommand:async(name,key,value)=>{assert.equal(name,'setContext');assert.equal(key,'hypeproofChat.devGoogleOperator');devContext=value;},registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showInputBox:async options=>{operatorOptions=options;return operatorInput;},showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
-const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,connect:async()=>{connected++;googleReady=true;},disconnect:async()=>{},previewLatestSheet:async({recipe})=>{previewedRecipe=structuredClone(recipe);return{id:'saved-preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:recipe.subjectTemplate,body:recipe.bodyTemplate}]};},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
+const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,cancelConnect:()=>{if(cancelOAuth){cancelOAuth();return true;}return false;},connect:async()=>{if(oauthWait){oauthStarted=true;await oauthWait;}connected++;googleReady=true;},disconnect:async()=>{},previewLatestSheet:async({recipe})=>{previewedRecipe=structuredClone(recipe);return{id:'saved-preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:recipe.subjectTemplate,body:recipe.bodyTemplate}]};},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
 const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/automationHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,external:['vscode'],plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^\.\/(activityConnections|proxyClient|googleAutomation)$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('activityConnections')?`export const ACTIVITY_TOKEN_KEY='token';export const activityConnections=()=>({current:globalThis.fixture.current});`:args.path.endsWith('proxyClient')?`export const fetchProfileResult=(...args)=>globalThis.fixture.fetchProfileResult(...args);`:`export const createGoogleAutomationRuntime=(...args)=>globalThis.fixture.createGoogleAutomationRuntime(...args);export const validateEmailRecipe=value=>{if(value?.schema!=='hps-email-automation/1')throw Error('Invalid recipe');return structuredClone(value);};`,loader:'js'}));}}]});
 let pauseDetail=false,releaseDetail;
 const fetcher=async (url,init)=>{
@@ -27,7 +29,7 @@ const fetcher=async (url,init)=>{
 const module={exports:{}};const require=createRequire(import.meta.url);
 vm.runInNewContext(bundled.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?vscode:require(id),fixture,console,URL,Date,Buffer,TextDecoder,AbortSignal,structuredClone,fetch:fetcher,setInterval:fn=>{tick=fn;return 1;},clearInterval(){},process});
 const ctx={globalStorageUri:uri(storage),extensionUri:uri(storage),subscriptions:[],globalState:{get:key=>globals.get(key),update:async(key,value)=>globals.set(key,value)},secrets:{get:async key=>key==='token'?token:secrets.get(key),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)}};
-const host=module.exports.registerAutomationHost(ctx,{beginAutomationConversation:async()=>{started++;},setAutomationConversationHandlers:value=>{handlers=value;},showAutomationQuestion:async value=>{question=value;questions.push(value);}});
+const host=module.exports.registerAutomationHost(ctx,{beginAutomationConversation:async()=>{started++;},setAutomationConversationHandlers:value=>{handlers=value;},showAutomationQuestion:async value=>{question=value;questions.push(value);}},{setLabels(){},show(){},showAutomation:async html=>questViews.push(html)});
 const waitQuestion=async()=>{for(let i=0;i<100;i++){if(question)return question;await new Promise(r=>setTimeout(r,2));}throw Error('No question shown');};
 try {
   await commands.get('hypeproof-chat.emailAutomation')();assert.equal(started,1);assert.equal(panelCount,0);assert.equal(globals.size,0,'intent discovery must not save an assumed default skill');
@@ -60,6 +62,16 @@ try {
   await mcp.saveSkill(recipe);await mcp.previewSavedSkill();
   await assert.rejects(mcp.saveSkill({...recipe,bodyTemplate:'actual@example.invalid'}),/실제 주소/);
   pending=mcp.connectGoogle();card=await waitQuestion();assert.equal(card.kind,'connect');await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(connected,0);mcp=await host.getMcpHost();
+  // Stop after approving the connect card must cancel the callback wait and
+  // settle the graph, even though there is no pending question card anymore.
+  await mcp.workflowPlan({title:'Google 연결 시험',nodes:[{id:'connect',label:'Google 연결',dependsOn:[]}]});
+  oauthWait=new Promise((_,reject)=>{cancelOAuth=()=>reject(new Error('synthetic OAuth cancelled'));});
+  pending=mcp.connectGoogle();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});
+  while(!oauthStarted)await new Promise(resolve=>setTimeout(resolve,2));
+  assert.equal(question,null);assert.match(questViews.at(-1),/class="node running"/);
+  handlers.cancel();assert.equal((await pending).cancelled,true);assert.equal(connected,0);
+  assert.match(questViews.at(-1),/class="node blocked"/);assert.doesNotMatch(questViews.at(-1),/class="node running"/);
+  oauthWait=undefined;cancelOAuth=undefined;mcp=await host.getMcpHost();
   googleReady=true;pending=mcp.configureSheet();card=await waitQuestion();assert.equal(card.private,true);
   await handlers.answer({questionId:card.id,text:'wrong'});assert.match(question.error,/Sheets/);
   await handlers.answer({questionId:card.id,text:'https://docs.google.com/spreadsheets/d/'+'s'.repeat(30)+'/edit'});

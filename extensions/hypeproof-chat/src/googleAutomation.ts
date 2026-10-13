@@ -92,6 +92,7 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
   const rowRevisions = new WeakMap<string[][], string>();
   let sending = false;
   let connecting = false;
+  let pendingConnect: { cancelled: boolean; listener?: OAuthListener } | undefined;
   let generation = 0;
   let cachedSheet: { rows: string[][]; revision: string } | null = null;
   let sheetRequestId = 0;
@@ -237,20 +238,32 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
     },
     getPreview(id: string): EmailPreview | undefined { return previews.get(id); },
     async status() { return { connected: !!(await stored()), configured: !!deps.clientId.trim() }; },
+    // Only the browser/callback wait is cancellable here. Existing credentials,
+    // token exchanges and already dispatched Google writes are not revoked.
+    cancelConnect() {
+      if (!pendingConnect) return false;
+      pendingConnect.cancelled = true; pendingConnect.listener?.close(); return true;
+    },
     async connect() {
       allowed();
       if (!deps.clientId.trim()) fail('운영자가 Google 로그인 설정을 먼저 완료해야 해요.');
       if (connecting || sending) fail('진행 중인 연결 또는 발송이 끝난 뒤 다시 시도해 주세요.');
       connecting = true;
       const state = generation;
+      const attempt = { cancelled: false, listener: undefined as OAuthListener | undefined };
+      pendingConnect = attempt;
       let listener: OAuthListener | undefined;
       try {
         listener = await (deps.listenOAuth ?? listenGoogleOAuth)();
+        attempt.listener = listener;
+        if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
         const verifier = nonce(), csrf = nonce();
         const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
         url.search = new URLSearchParams({ client_id: deps.clientId, redirect_uri: listener.redirectUri, response_type: 'code', scope: [...SCOPES, 'openid', 'email'].join(' '), state: csrf, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent' }).toString();
         await deps.openBrowser(url.toString());
         const callback = await listener.wait;
+        if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
+        if (pendingConnect === attempt) pendingConnect = undefined;
         if (callback.origin + callback.pathname !== listener.redirectUri || callback.searchParams.getAll('state').length !== 1 || callback.searchParams.get('state') !== csrf || callback.searchParams.has('error') || callback.searchParams.getAll('code').length !== 1 || !callback.searchParams.get('code')) fail('Google 로그인 확인에 실패했어요. 다시 연결해 주세요.');
         const value = await exchange({ grant_type: 'authorization_code', code: callback.searchParams.get('code')!, code_verifier: verifier, redirect_uri: listener.redirectUri });
         const identityResponse = await request('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${value.accessToken}` } });
@@ -262,7 +275,7 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
         if (state !== generation) fail('Google 연결이 변경됐어요.');
         await deps.secrets.store(TOKEN_KEY, JSON.stringify(value));
         generation++; cachedSheet = null; previews.clear(); previewRevisions.clear();
-      } finally { listener?.close(); connecting = false; }
+      } finally { if (pendingConnect === attempt) pendingConnect = undefined; listener?.close(); connecting = false; }
     },
     async disconnect() {
       generation++; cachedSheet = null; previews.clear(); previewRevisions.clear();

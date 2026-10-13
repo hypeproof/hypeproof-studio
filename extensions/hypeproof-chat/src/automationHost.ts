@@ -53,6 +53,10 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   let authorizingAnswer: PendingQuestion | undefined;
   function cancelQuestion() {
     operationEpoch++;
+    // Stop must release the local OAuth callback wait even after its question
+    // card was answered. This never aborts uploaded code or dispatched mail.
+    appsRuntime?.cancelConnect?.();
+    runtime?.cancelConnect?.();
     const pending = pendingQuestion ?? authorizingAnswer; pendingQuestion = undefined; authorizingAnswer = undefined;
     if (!pending) return;
     notifyProgress();
@@ -388,8 +392,10 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           if (mode === 'reuse' && (!pinned.appsScript || await appsRuntime?.isConnected()) && await activeRuntime.ensureConnected()) return { connected: true, reused: true };
           const answer = await askQuestion({ kind: 'connect', title: mode === 'change' ? '다른 Google 계정으로 연결을 바꿀까요?' : '보내는 Google 계정을 처음 연결할까요?', description: pinned.appsScript ? 'Apps Script 생성·수정·본인 전용 배포, 시트 읽기와 메일 발송에 동의하면 이 연결을 함께 재사용해요. 실제 발송은 별도로 확인해요. 토큰은 AI에게 전달하지 않아요.' : 'Google에서 한 번 동의하면 연결을 재사용해요. 비밀번호와 로그인 토큰은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
-          if (pinned.appsScript && appsRuntime && appsLock) await appsLock(() => appsRuntime!.connect());
-          else await activeRuntime.connect();
+          try {
+            if (pinned.appsScript && appsRuntime && appsLock) await appsLock(() => appsRuntime!.connect());
+            else await activeRuntime.connect();
+          } catch (error) { if (!live()) return { cancelled: true }; throw error; }
           return { connected: true, reused: false };
         },
         configureSheet: async (mode = 'reuse') => {
