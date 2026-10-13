@@ -1752,6 +1752,11 @@ html, body, #root {
 .hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; }
 .hps-shell-automation .hps-conversation-settings > summary { padding: 6px 0; }
 .hps-shell-automation .hps-conversation-settings[open] { border-bottom: 1px solid var(--hp-line); padding-bottom: 8px; }
+/* Keep the conversation usable on short Windows screens with expanded settings,
+   including systems whose Korean fallback font has taller line metrics. */
+@media (max-height: 600px) {
+  .hps-shell-automation > .hps-input-area { max-height: 40%; }
+}
 .hps-shell-automation .hps-access-embedded { border: 0; padding: 8px 0; max-height: none; overflow: visible; }
 .hps-shell-automation .hps-access-heading { font-size: 12px; margin: 6px 0; }
 .hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-muted); line-height: 1.6; }
