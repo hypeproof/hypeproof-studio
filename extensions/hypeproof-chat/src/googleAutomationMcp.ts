@@ -15,6 +15,7 @@ export interface GoogleAutomationMcpHost {
   connectGoogle?(mode?: 'reuse' | 'change'): Promise<unknown>;
   configureSheet?(mode?: 'reuse' | 'change'): Promise<unknown>;
   readConfiguredSheet?(): Promise<unknown>;
+  previewSavedSkill?(): Promise<EmailPreview>;
   publishSkill?(): Promise<unknown>;
   listSkills?(): Promise<unknown>;
   installSkill?(id: string): Promise<unknown>;
@@ -50,9 +51,11 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (!host.readConfiguredSheet || Object.keys(args).length) throw new Error('Configure the sheet privately first');
       return host.readConfiguredSheet();
     })),
-    factory.tool('email_preview', '레시피 JSON과 마지막으로 읽은 로컬 시트로 미리보기를 만든다. 시트 행을 입력하지 않는다. 수신자와 내용은 사용자 확인 화면에서만 표시한다.', { recipe: z.string() }, async args => run(async () => {
+    factory.tool('email_preview', '저장된 스킬과 마지막으로 읽은 로컬 시트로 미리보기를 만든다. 변경은 먼저 skill_save로 저장한다. recipe 인자는 이전 클라이언트 호환용이며 대화 host는 저장본을 사용한다. 수신자와 내용은 사용자 확인 화면에서만 표시한다.', { recipe: z.string() }, async args => run(async () => {
       if (typeof args.recipe !== 'string' || args.recipe.length > 32768 || 'rows' in args) throw new Error('Invalid payload');
-      const preview = await host.runtime.previewLatestSheet({ recipe: validateEmailRecipe(JSON.parse(args.recipe)) });
+      const preview = host.previewSavedSkill
+        ? await host.previewSavedSkill()
+        : await host.runtime.previewLatestSheet({ recipe: validateEmailRecipe(JSON.parse(args.recipe)) });
       return { previewId: preview.id, count: preview.messages.length, confirmationRequired: true };
     })),
     factory.tool('email_send', '해당 미리보기 전체를 사용자에게 표시하고 사람이 직접 승인했을 때만 발송한다. AI는 승인을 대신할 수 없다.', { previewId: z.string() }, async args => run(async () => {

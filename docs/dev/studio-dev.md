@@ -121,8 +121,9 @@ operation, so start a fresh coach request afterward. Google browser consent has 
 ten-minute limit and remains outside the active model execution budget.
 
 This operator command is registered and visible only in **HypeProof Studio Dev**.
-Provisioning the Desktop client for production learner installations is not yet
-implemented; this local operator path is not evidence of release readiness.
+For a student installation with no key entry, use the explicit application
+packaging step below. Neither developer setup nor synthetic packaging proves
+release readiness.
 
 The override requires BOTH the Dev app identity and launcher environment, and
 refuses a remote Service URL. Official app behavior and production model pins
@@ -230,3 +231,56 @@ extension/webview source development here, not a release installer distribution.
 - 검증: 앱/Service/강의 버전과 모델 연결 경로를 기록한다. 결정적인 상태·권한·저장은 자동 테스트로, 모델 응답과 사용자 흐름은 실제 실행으로 확인한다. 로컬 구독에서 성공한 것을 공식 모델 연결의 성공으로 간주하지 않는다.
 - 리뷰: 저장소 hype-pr 절차로 별도 PR을 올린다. 실험용 프롬프트와 UI는 개발 실행기 PR에 편승시키지 않는다. 리뷰를 거쳐 머지한 뒤 기존 공식 릴리스 절차로 배포한다. 개발 실행 자체가 자동 머지나 배포를 유발하지 않는다.
 - 제외: 참여 코드, 로그인 자격, .dev.vars, 사용자 데이터, 빌드 앱, 생성 작업물, 개인 실행 로그는 커밋하지 않는다.
+
+
+## Optional Desktop OAuth application packaging
+
+Default builds contain no Google client identity. A release operator may explicitly
+include a **Desktop app** client in an external staged application before signing
+and archiving it. Students then consent to Google in their browser; they never
+enter a key. The Service must still grant email automation and resolve the matching
+public client ID. This step does not grant runtime capabilities or publish an app.
+
+Google describes installed clients as unable to keep secrets: an embedded Desktop
+client secret is extractable application identity, **not a confidential server
+credential**. Do not use a Web application client, service-account key or any user
+access/refresh token. See Google's [installed-app overview](https://developers.google.com/identity/protocols/oauth2#installed)
+and [native OAuth flow](https://developers.google.com/identity/protocols/oauth2/native-app).
+The existing PKCE, system-browser consent, loopback state validation and per-user
+SecretStorage remain the authorization boundary.
+
+Run on a POSIX operator host, using absolute paths outside the source repository:
+
+```sh
+node scripts/package-google-desktop-client.mjs \
+  --credential-file /protected/operator/google-desktop.json \
+  --extension-dir /external/staging/Studio/resources/app/extensions/hypeproof-chat
+```
+
+The input is the Google-downloaded `installed` JSON in a private directory (0700),
+with a private file (0600), owned by the current operator or root. The destination
+must already be the staged `hypeproof` extension, named `hypeproof-chat`, owned by
+the operator or root and not writable by group/others. The tool refuses repository
+paths, symlinks, existing output, Web clients, unexpected fields and personal tokens;
+errors and success output contain no input values or paths. It creates only
+`oauth/google-desktop-client.json` with schema, client ID and Desktop client secret.
+The resource is intentionally portable/readable as application identity; its
+contents must not be copied into settings, logs, models, recipes or Git.
+
+For a local Dev copy, select its exact extension directory under
+`HypeProof Studio Dev.app/Contents/Resources/app/extensions/hypeproof-chat` instead.
+Use an owned, stopped copy; package after Dev preparation (which can replace the
+extension), then re-sign the modified app using the existing Dev/release procedure
+before launch. Do not alter the running or official app. For Windows, package the
+staged extension on the POSIX operator host before placing it in the portable or
+installer payload; Windows uses the installed application's filesystem protection,
+not POSIX mode checks. The packaging tool itself does not run on Windows.
+
+At runtime, only this installed extension resource is read and its client ID must
+match the authorized resolved client. A Dev SecretStorage override takes precedence.
+A mismatched or malformed resource fails closed; there is no workspace/env fallback.
+Real credential inclusion, signing, distribution, clean Windows installation and
+student OAuth acceptance are separate release steps, **not run by the synthetic
+packaging tests**. Google consent-screen verification and Workspace restrictions
+still apply. Replacing the Desktop client requires a new explicit staged package
+and corresponding Service client-ID configuration.

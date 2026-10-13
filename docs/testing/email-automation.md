@@ -15,7 +15,8 @@ Automated local checks:
 - Conversation: free-text intent, one pending question at a time, choice/free-text
   submission and cancellation, automatic bounded skill save, no manual JSON step,
   private answers absent from model transcript, stale question/account rejection,
-  human wait excluded from SDK stall timeout.
+  human wait excluded from SDK stall timeout, and saved/previewed/published template
+  equality even when the model supplies a different preview recipe.
 - React render: inline questions, exact preview, escaped untrusted sheet values, accessible controls,
   disabled duplicate send, clear unattempted and uncertain results.
 - Host integration: visible entry, profile opt-in and account binding, permission
@@ -39,8 +40,14 @@ scoped to that client ID, and absent from browser URLs, webview/model messages,
 settings/profile JSON and shared recipes. Check cancellation, changing client IDs,
 and that the command is unavailable in ordinary Studio. Verify browser consent
 can outlast the active model budget after the private question card closes; the
-OAuth listener itself expires after ten minutes. Production learner credential
-provisioning remains unimplemented and requires separate release acceptance.
+OAuth listener itself expires after ten minutes. Optional learner installation
+provisioning uses the [explicit external staging procedure](../dev/studio-dev.md#optional-desktop-oauth-application-packaging).
+`test/google-desktop-packaging.smoke.mjs` uses synthetic identity to exercise
+absent/default packaging, client-ID binding, Web/user-token rejection, private
+source permissions, symlinks, overwrite refusal and redacted failures. Host tests
+also require Service opt-in, preserve the Dev override and reject a mismatched
+package on repeated attempts. Actual credential injection, signed artifact handling
+and clean Windows student OAuth remain separate release acceptance.
 
 Release observations, recorded separately:
 

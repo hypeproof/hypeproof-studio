@@ -49,3 +49,6 @@ extensions/hypeproof-chat/webview-ui/src/*.js
 
 # Proprietary Service artifacts are authenticated local/CI inputs, never Studio source.
 .private-service-cache/
+
+# Opt-in packaged Desktop app identification is a release input, never source.
+**/oauth/google-desktop-client.json

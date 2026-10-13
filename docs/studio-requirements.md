@@ -858,3 +858,5 @@ How confirmed decisions later reach the server project memory (cr-memory, #1450)
 ## Email automation workshop (2026-10-13)
 
 EA-01–EA-09 in [email-automation.md](requirements/email-automation.md) specify the approved Google Sheets/email/cohort-store slice (Epic #1603, execution #1604). Human-reviewed sending and data-free sharing extend useful-work and human-judgment intent. Release observations remain separate from local tests.
+
+EA-02 includes optional operator packaging of an external Google Desktop client into the installed extension, with default omission, resolved client-ID binding and no user tokens. EA-03 binds conversational preview and publication to the saved skill; explicit `skill_save` changes it. Synthetic coverage: `google-desktop-packaging.smoke.mjs` and `automation-conversation-host.smoke.mjs`. Real packaged Windows OAuth acceptance remains separate.

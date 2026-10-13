@@ -2,20 +2,21 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { automationNamespace, createAutomationLedger } from '../src/automationLedger.ts';
+import { buildGoogleAutomationMcpServer } from '../src/googleAutomationMcp.ts';
 const storage=await mkdtemp(join(tmpdir(),'hps-conversation-host-'));
 const recipe={schema:'hps-email-automation/1',category:'email',title:'자료 요청',description:'반복 자료 요청 메일',subjectTemplate:'{{name}}님 자료 요청',bodyTemplate:'{{document}}를 {{dueDate}}까지 부탁드립니다.',columns:{email:'이메일',name:'이름',document:'서류',dueDate:'기한'}};
-let token='synthetic-participant',grant=true,handlers,question=null,started=0,panelCount=0,connected=0,published=0,readInput,tick,googleReady=false,connectionChecks=0;
+let token='synthetic-participant',grant=true,handlers,question=null,started=0,panelCount=0,connected=0,published=0,readInput,tick,googleReady=false,connectionChecks=0,previewedRecipe;
 const current={serverId:'a'.repeat(64),token,service:'https://service.example.test/v1'};
 const commands=new Map(),globals=new Map(),secrets=new Map(),questions=[],runtimeDeps=[];
 let desktopClientId='synthetic-desktop-client',operatorInput='synthetic-desktop-secret',operatorOptions,devContext;
 const uri=fsPath=>({fsPath});
 const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{appName:'HypeProof Studio Dev',openExternal:async()=>true},commands:{executeCommand:async(name,key,value)=>{assert.equal(name,'setContext');assert.equal(key,'hypeproofChat.devGoogleOperator');devContext=value;},registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showInputBox:async options=>{operatorOptions=options;return operatorInput;},showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
-const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,connect:async()=>{connected++;googleReady=true;},disconnect:async()=>{},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
+const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,connect:async()=>{connected++;googleReady=true;},disconnect:async()=>{},previewLatestSheet:async({recipe})=>{previewedRecipe=structuredClone(recipe);return{id:'saved-preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:recipe.subjectTemplate,body:recipe.bodyTemplate}]};},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
 const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/automationHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,external:['vscode'],plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^\.\/(activityConnections|proxyClient|googleAutomation)$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('activityConnections')?`export const ACTIVITY_TOKEN_KEY='token';export const activityConnections=()=>({current:globalThis.fixture.current});`:args.path.endsWith('proxyClient')?`export const fetchProfileResult=(...args)=>globalThis.fixture.fetchProfileResult(...args);`:`export const createGoogleAutomationRuntime=(...args)=>globalThis.fixture.createGoogleAutomationRuntime(...args);export const validateEmailRecipe=value=>{if(value?.schema!=='hps-email-automation/1')throw Error('Invalid recipe');return structuredClone(value);};`,loader:'js'}));}}]});
 let pauseDetail=false,releaseDetail;
 const fetcher=async (url,init)=>{
@@ -37,6 +38,12 @@ try {
   assert.equal(JSON.stringify(questions).includes('synthetic-desktop-secret'),false);assert.equal(JSON.stringify([...globals.values()]).includes('synthetic-desktop-secret'),false);
   operatorInput=undefined;assert.equal((await operator()).cancelled,true);assert.equal(secrets.size,1);
   desktopClientId='another-synthetic-client';await host.getMcpHost();assert.equal(runtimeDeps.at(-1).clientSecret,undefined,'desktop secrets must not cross client IDs');
+  desktopClientId='synthetic-release.apps.googleusercontent.com';
+  await mkdir(join(storage,'oauth'),{mode:0o755});await writeFile(join(storage,'oauth','google-desktop-client.json'),JSON.stringify({schema:'hps-google-desktop/1',clientId:desktopClientId,clientSecret:'synthetic-packaged-identity'}),{mode:0o644});
+  assert.ok(await host.getMcpHost());assert.equal(runtimeDeps.at(-1).clientSecret,'synthetic-packaged-identity','ordinary installed resources provide app identity without a learner prompt');
+  const beforeDenied=runtimeDeps.length;grant=false;assert.equal(await host.getMcpHost(),undefined);assert.equal(runtimeDeps.length,beforeDenied);grant=true;
+  desktopClientId='mismatched.apps.googleusercontent.com';assert.equal(await host.getMcpHost(),undefined);assert.equal(await host.getMcpHost(),undefined,'failed preparation must not reuse the previous runtime');
+  await rm(join(storage,'oauth'),{recursive:true});
   desktopClientId='synthetic-desktop-client';
   let mcp=await host.getMcpHost();
   let pending=mcp.askUser({question:'누구에게 어떤 안내를 반복하나요?',choices:[{id:'documents',label:'제출 자료 요청'}],allowFreeText:true});
@@ -44,7 +51,13 @@ try {
   await handlers.answer({questionId:'stale',choiceId:'documents'});assert.equal(handlers.isWaiting(),true);
   await handlers.answer({questionId:card.id,text:'actual@example.invalid'});assert.match(question.error,/비공개/);assert.equal(handlers.isWaiting(),true);
   await handlers.answer({questionId:card.id,choiceId:'documents'});assert.deepEqual(JSON.parse(JSON.stringify(await pending)),{choiceId:'documents'});assert.equal(question,null);
+  await assert.rejects(mcp.previewSavedSkill(),/Invalid recipe/);
   await mcp.saveSkill(recipe);assert.deepEqual([...globals.values()][0],recipe);
+  const toolHandlers={};buildGoogleAutomationMcpServer({tool:(name,_description,_schema,handler)=>{toolHandlers[name]=handler;return{name};},createSdkMcpServer:value=>value},{string:()=>({})},mcp);
+  const previewResult=await toolHandlers.email_preview({recipe:JSON.stringify({...recipe,bodyTemplate:'An unsaved model rewrite must never execute.'})});
+  assert.equal(previewResult.isError,undefined);assert.deepEqual(previewedRecipe,recipe);
+  const edited={...recipe,bodyTemplate:'{{name}}님, {{document}}를 부탁드립니다.'};await mcp.saveSkill(edited);await mcp.previewSavedSkill();assert.deepEqual(previewedRecipe,edited);
+  await mcp.saveSkill(recipe);await mcp.previewSavedSkill();
   await assert.rejects(mcp.saveSkill({...recipe,bodyTemplate:'actual@example.invalid'}),/실제 주소/);
   pending=mcp.connectGoogle();card=await waitQuestion();assert.equal(card.kind,'connect');await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(connected,0);mcp=await host.getMcpHost();
   googleReady=true;pending=mcp.configureSheet();card=await waitQuestion();assert.equal(card.private,true);
@@ -58,7 +71,7 @@ try {
   const checksBefore=connectionChecks;await assert.rejects(mcp.connectGoogle(),/다른 창/);
   assert.equal(connectionChecks,checksBefore,'credential refresh must not run while another window holds the account lock');
   releaseLock();await held;assert.equal((await mcp.connectGoogle()).reused,true);assert.equal(connectionChecks,checksBefore+1);
-  pending=mcp.publishSkill();card=await waitQuestion();assert.equal(card.kind,'publish');assert.deepEqual(card.recipe,recipe);await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(published,0);mcp=await host.getMcpHost();
+  pending=mcp.publishSkill();card=await waitQuestion();assert.equal(card.kind,'publish');assert.deepEqual(card.recipe,recipe);assert.deepEqual(card.recipe,previewedRecipe,'published skill must match the saved skill used for execution');await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(published,0);mcp=await host.getMcpHost();
   pending=mcp.publishSkill();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).published,true);assert.equal(published,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(published,1);
   // Stop must survive both answer authorization and the later store token check.
   for(const pauseAt of [1,2]) {

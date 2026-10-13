@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { createHash, randomUUID } from 'node:crypto';
+import { loadPackagedGoogleDesktopClient } from './googleDesktopClient';
 import { activityConnections, ACTIVITY_TOKEN_KEY } from './activityConnections';
 import { fetchProfileResult } from './proxyClient';
 import type { GoogleAutomationMcpHost } from './googleAutomationMcp';
@@ -116,7 +117,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     const next = await authorize(true);
     if (binding?.signature === next.signature && runtime && controller) return;
     if (binding) { cancelQuestion(); panel?.dispose(); }
-    binding = next;
+    binding = next; runtime = undefined; controller = undefined;
     const pinned = next;
     const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
     const prefix = `hps.email-automation.${pinned.namespace}.`;
@@ -130,7 +131,8 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         try { return await work(); } finally { lockedEpoch = undefined; }
       });
     };
-    const clientSecret = await context.secrets.get(desktopClientKey(pinned.clientId));
+    const clientSecret = await context.secrets.get(desktopClientKey(pinned.clientId))
+      ?? await loadPackagedGoogleDesktopClient(context.extensionUri.fsPath, pinned.clientId);
     if (binding !== pinned || !matches()) throw new Error('활동이 변경됐어요.');
     const baseRuntime = createGoogleAutomationRuntime({ clientId: pinned.clientId, clientSecret, maxRecipients: pinned.maxRecipients,
       isAllowed: () => binding === pinned && allowed() && (lockedEpoch === undefined || lockedEpoch === operationEpoch),
@@ -286,6 +288,13 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       return {
         runtime,
         readConfiguredSheet,
+        previewSavedSkill: async () => {
+          if (!await refreshAuthorization()) throw new Error('Changed activity');
+          const recipe = reusable(context.globalState.get(recipeKey(pinned)));
+          const preview = await activeRuntime.previewLatestSheet({ recipe });
+          if (!live()) throw new Error('Changed activity');
+          return preview;
+        },
         isAllowed: () => live() && allowed(),
         refreshAuthorization,
         confirmSend: async preview => {
