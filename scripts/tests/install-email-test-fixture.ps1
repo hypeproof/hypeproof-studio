@@ -47,6 +47,7 @@ try {
     Write-Host 'PASS: actual downloaded byte corruption is rejected'
     Expect-Failure { Install-HpsEmailOfflineSdk $file } 'tarball integrity'
 
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     foreach ($entryName in @('safe/file.txt', '../escape.txt', '/absolute.txt', 'C:/drive.txt', 'safe/../escape.txt', 'file.txt:payload', 'CON.txt', 'trailing./file', 'a\..\escape')) {
         $zipPath = Join-Path $directory ([Guid]::NewGuid().ToString('N') + '.zip')

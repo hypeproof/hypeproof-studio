@@ -48,6 +48,7 @@ function Assert-HpsEmailHash([string]$Path, $Artifact) {
 }
 
 function Expand-HpsEmailZip([string]$Path, [string]$Destination) {
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($Path)
     try {
