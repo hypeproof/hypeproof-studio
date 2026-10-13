@@ -868,7 +868,7 @@ const WIRING = {
   // The turn's finally closes the run, so a later turn cannot test on its own.
   endTurn: /this\.activeStreams\.delete\(streamId\);\s*\/\/[^\n]*\n\s*this\.verifySession\?\.endTurn\(\);\s*this\.verifyTurnRecorder = null;/,
   // A send while a re-test drives the tab is refused before the turn starts.
-  sendWhileRunning: /private async handleSend\([^)]*?\)[^{]*\{\s*\/\/[^\n]*\n\s*if \(this\.verifySession\?\.running\) \{\s*await this\.post\(\{type:"inputRejected",text,images\}\);[\s\S]{0,200}?return;\s*\}\s*this\.pendingSends\+\+;/,
+  sendWhileRunning: /private async handleSend\([^)]*?\)[^{]*\{\s*\/\/[^\n]*\n\s*if \(this\.verifySession\?\.running\) \{\s*await this\.post\(\{type:"inputRejected",text,images\}\);[\s\S]{0,200}?return;\s*\}[\s\S]{0,600}?this\.pendingSends\+\+;/,
   // Start, fix and re-test are refused while a turn streams (all three come after this line).
   verifyWhileTurn: /if \(this\.pendingSends > 0 \|\| this\.activeStreams\.size > 0\) return this\.postVerifyState\(\{ error: refusalText\("turn_running"\) \}\);\s*if \(msg\.type === "verifyStart"\)/,
   // The coach's verify calls write to the turn's own recorder.
