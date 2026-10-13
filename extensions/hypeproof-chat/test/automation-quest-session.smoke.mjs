@@ -157,3 +157,18 @@ test('a failed rerun preserves prerequisites and revokes only the failed stage a
   assert.equal(status(quest, 'prepare'), 'succeeded');
   assert.equal(status(quest, 'upload'), 'current');
 });
+
+test('reading a private sheet restores verified connection evidence after a cancelled public question', async () => {
+  const quest = createAutomationQuestSession(async () => {});
+  const ids = ['goal', 'skill', 'connect', 'sheet', 'prepare'];
+  await quest.plan({ title: '공유 스킬 재사용', nodes: ids.map((id, i) => ({ id, label: id, dependsOn: i ? [ids[i - 1]] : [] })) });
+  let result = { needsGoogleConnection: true };
+  const host = withAutomationQuest({ runtime: {}, isAllowed: () => true, confirmSend: async () => false,
+    configureSheet: async () => result, appsScriptPrepare: async () => ({ prepared: true }) }, quest);
+  await host.configureSheet('reuse');
+  assert.notEqual(status(quest, 'connect'), 'succeeded');
+  result = { rowCount: 1, columns: ['이메일'], reused: true };
+  await host.configureSheet('reuse');
+  await host.appsScriptPrepare();
+  for (const id of ids) assert.equal(status(quest, id), 'succeeded');
+});

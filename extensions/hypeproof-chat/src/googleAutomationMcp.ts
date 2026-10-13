@@ -5,6 +5,22 @@ export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
 export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan'] as const;
 export const APPS_SCRIPT_MCP_TOOLS = ['mcp__hypeproof_email__apps_script_prepare','mcp__hypeproof_email__apps_script_upload','mcp__hypeproof_email__apps_script_setup','mcp__hypeproof_email__apps_script_deploy','mcp__hypeproof_email__apps_script_run'] as const;
 export const ALL_AUTOMATION_MCP_TOOLS = [...GOOGLE_AUTOMATION_MCP_TOOLS, ...APPS_SCRIPT_MCP_TOOLS] as const;
+
+/** Reject explicit private-value collection, not business questions about email. */
+function privateSetupTool(question: string): 'sheet_configure' | 'google_connect' | undefined {
+  const text = question.normalize('NFKC').toLowerCase();
+  // Asking how a template should read or which columns it uses remains a public
+  // business question, even when its example copy mentions a link or address.
+  if (/(?:제목|본문|문구|템플릿|열 이름|subject|body|wording|template|column).*(?:어떻게|어떤|무엇|할까요|넣을까요|쓸까요|바꿀까요|what|which|should|prefer)/u.test(text)) return undefined;
+  const sheet = /(?:구글\s*)?시트\s*(?:주소|링크|url|id|아이디)|(?:스프레드시트|spreadsheet|google\s*sheet(?:s)?)\s*(?:주소|링크|url|link|id)/u;
+  const account = /(?:구글|google)\s*계정(?:\s*(?:주소|이메일|email|id))?|(?:계정|로그인|발신자)\s*(?:주소|이메일|email|id)|(?:이메일|메일|email)\s*(?:주소|address)|google\s*account/u;
+  const collect = /입력|붙여\s*넣|붙여넣|알려\s*주|보내\s*주|공유해|제공해|적어\s*주|어디인가요|무엇인가요|\b(?:enter|paste|provide|type|share|what\s+is)\b|비공개\s*입력/u;
+  if (!collect.test(text)) return undefined;
+  if (sheet.test(text)) return 'sheet_configure';
+  if (account.test(text)) return /수신자|받는\s*사람|recipient/u.test(text) ? 'sheet_configure' : 'google_connect';
+  return undefined;
+}
+
 export interface GoogleAutomationMcpHost {
   runtime: GoogleAutomationRuntime;
   workflowPlan?(plan: unknown): Promise<unknown>;
@@ -33,6 +49,17 @@ export interface GoogleAutomationMcpHost {
 /** Registration and every invocation require the Service-granted capability. */
 export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLike, host: GoogleAutomationMcpHost): unknown | undefined {
   if (!host.isAllowed()) return undefined;
+  // Keep the base tool contract for existing SDK clients, but an opted-in turn
+  // must not silently switch execution engines if its Script grant is revoked.
+  const appsScriptSession = host.isAppsScriptAllowed?.() === true;
+  const legacyRouting = (mode: 'preview' | 'send') => ({
+    recoveryRequired: true,
+    nextTool: 'apps_script_run',
+    arguments: { mode },
+    previewCreated: false,
+    sent: false,
+    message: `No preview or email was produced. This activity runs on Google Apps Script. Call apps_script_run using its registered automation tool name with mode="${mode}". Follow its setup/recovery result; never claim completion or fall back to email_preview/email_send. Sending still requires the host's exact-recipient/content approval.`,
+  });
   const run = async (work: () => Promise<unknown>): Promise<McpToolResult> => {
     try {
       if (host.refreshAuthorization && !await host.refreshAuthorization()) throw new Error('Capability unavailable');
@@ -49,17 +76,25 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (!host.workflowPlan || typeof args.plan !== 'string' || args.plan.length > 12000) throw new Error('Invalid plan');
       return host.workflowPlan(JSON.parse(args.plan));
     })),
-    ...(host.isAppsScriptAllowed?.() ? [
+    ...(appsScriptSession ? [
       factory.tool('apps_script_prepare', '저장한 이메일 스킬을 Google Apps Script 코드로 만든다. 코드 생성만으로 저장·실행 완료를 주장하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptPrepare) throw new Error('Unavailable'); return host.appsScriptPrepare(); })),
       factory.tool('apps_script_upload', '사용자에게 생성된 코드와 Google 권한을 확인받고 본인 Apps Script 프로젝트에 저장한다. Google 연결은 재사용하며 새 권한만 추가 동의한다.', {}, async () => scriptRun(async () => { if (!host.appsScriptUpload) throw new Error('Unavailable'); return host.appsScriptUpload(); })),
       factory.tool('apps_script_setup', 'Google의 같은 표준 Cloud 프로젝트 설정이 필요한 경우 비공개 설정 안내를 표시한다. 사용자가 설정했다고 답한 것만으로 실제 실행 성공을 주장하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptSetup) throw new Error('Unavailable'); return host.appsScriptSetup(); })),
       factory.tool('apps_script_deploy', '확인한 코드의 본인 전용 API 실행 버전을 만든다. 공개 웹앱·자동 발송 트리거는 만들지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptDeploy) throw new Error('Unavailable'); return host.appsScriptDeploy(); })),
       factory.tool('apps_script_run', 'mode=preview는 Google에서 시트를 읽어 비공개 메일 미리보기를 만든다. mode=send는 현재 미리보기의 수신자와 내용을 사람이 직접 승인한 뒤 Google에서 발송한다. 불명확한 결과는 재발송하지 않는다.', { mode: z.string() }, async args => scriptRun(async () => { if (!host.appsScriptRun || !['preview','send'].includes(String(args.mode))) throw new Error('Unavailable'); return host.appsScriptRun(args.mode as 'preview' | 'send'); })),
     ] : []),
-    factory.tool('ask_user', '사용자의 업무 의도나 선택 중 필요한 한 가지만 묻는다. 선택지와 직접 입력을 지원한다. 계정·이메일·명단·시트 주소는 묻지 말고 전용 비공개 설정 도구를 쓴다.', { question: z.string(), choices: z.string(), allowFreeText: z.string() }, async args => run(async () => {
+    factory.tool('ask_user', '사용자의 업무 의도나 선택 중 필요한 한 가지만 묻는 공개 대화 카드다. 비공개 입력이라고 적어도 비공개가 되지 않는다. 시트 주소·명단은 sheet_configure(mode=reuse), Google 계정 연결은 google_connect(mode=reuse)를 호출한다. 이 도구가 recoveryRequired를 반환하면 질문을 다시 쓰지 말고 nextTool을 호출한다.', { question: z.string(), choices: z.string(), allowFreeText: z.string() }, async args => run(async () => {
       if (!host.askUser || typeof args.question !== 'string' || !args.question.trim() || args.question.length > 500 || typeof args.choices !== 'string' || args.choices.length > 2000 || !['true','false'].includes(String(args.allowFreeText))) throw new Error('Invalid question');
       const choices = JSON.parse(args.choices);
       if (!Array.isArray(choices) || choices.length > 4 || choices.some(choice => !choice || typeof choice.id !== 'string' || !choice.id || choice.id.length > 40 || typeof choice.label !== 'string' || !choice.label || choice.label.length > 120) || new Set(choices.map(choice => choice.id)).size !== choices.length) throw new Error('Invalid choices');
+      const nextTool = privateSetupTool(args.question);
+      if (nextTool) return {
+        recoveryRequired: true,
+        nextTool,
+        arguments: { mode: 'reuse' },
+        questionDisplayed: false,
+        message: `This public question was not shown. Call ${nextTool} using its registered automation tool name with mode="reuse". It privately collects missing setup and reuses existing settings. Do not ask for account values, recipient data or Sheet URLs in chat or ask_user, even if labelled private.`,
+      };
       return host.askUser({ question: args.question, choices, allowFreeText: args.allowFreeText === 'true' || !choices.length });
     })),
     factory.tool('skill_save', '대화에서 이해한 업무에 맞춰 만든 재사용 이메일 스킬을 로컬에 저장한다. 사용자에게 JSON 작성이나 파일 가져오기를 요구하지 않는다. 실제 개인정보·계정·시트 주소를 포함하지 않는다.', { recipe: z.string() }, async args => run(async () => {
@@ -75,14 +110,16 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (!host.readConfiguredSheet || Object.keys(args).length) throw new Error('Configure the sheet privately first');
       return host.readConfiguredSheet();
     })),
-    factory.tool('email_preview', '저장된 스킬과 마지막으로 읽은 로컬 시트로 미리보기를 만든다. 변경은 먼저 skill_save로 저장한다. recipe 인자는 이전 클라이언트 호환용이며 대화 host는 저장본을 사용한다. 수신자와 내용은 사용자 확인 화면에서만 표시한다.', { recipe: z.string() }, async args => run(async () => {
+    factory.tool('email_preview', 'Apps Script 도구가 있는 수업에서는 사용하지 말고 apps_script_run(mode=preview)을 호출한다. 그 외 수업에서는 저장된 스킬과 로컬 시트로 미리보기를 만든다. 변경은 먼저 skill_save로 저장한다. recipe 인자는 이전 클라이언트 호환용이다.', { recipe: z.string() }, async args => run(async () => {
+      if (appsScriptSession || host.isAppsScriptAllowed?.() === true) return legacyRouting('preview');
       if (typeof args.recipe !== 'string' || args.recipe.length > 32768 || 'rows' in args) throw new Error('Invalid payload');
       const preview = host.previewSavedSkill
         ? await host.previewSavedSkill()
         : await host.runtime.previewLatestSheet({ recipe: validateEmailRecipe(JSON.parse(args.recipe)) });
       return { previewId: preview.id, count: preview.messages.length, confirmationRequired: true };
     })),
-    factory.tool('email_send', '해당 미리보기 전체를 사용자에게 표시하고 사람이 직접 승인했을 때만 발송한다. AI는 승인을 대신할 수 없다.', { previewId: z.string() }, async args => run(async () => {
+    factory.tool('email_send', 'Apps Script 도구가 있는 수업에서는 사용하지 말고 apps_script_run(mode=send)을 호출한다. 그 외 수업에서는 해당 미리보기 전체를 사용자에게 표시하고 사람이 직접 승인했을 때만 발송한다. AI는 승인을 대신할 수 없다.', { previewId: z.string() }, async args => run(async () => {
+      if (appsScriptSession || host.isAppsScriptAllowed?.() === true) return legacyRouting('send');
       const preview = host.runtime.getPreview(String(args.previewId ?? ''));
       if (!preview) throw new Error('Missing preview');
       const approved = await host.confirmSend(preview);

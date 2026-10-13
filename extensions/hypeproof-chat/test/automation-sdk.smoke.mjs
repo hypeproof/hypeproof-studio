@@ -85,6 +85,45 @@ test('configured sheet tool cannot be redirected by model-supplied private ident
  assert.equal((await read.handler({})).isError,undefined);assert.equal(reads,1);
 });
 
+test('public questions redirect private setup without showing a card or collecting account values',async()=>{
+ let displayed=0,configured=0,connected=0;
+ const host={isAllowed:()=>true,confirmSend:async()=>false,runtime:{},askUser:async()=>{displayed++;return{answer:'선택 완료'};},configureSheet:async mode=>{assert.equal(mode,'reuse');configured++;return{rowCount:1};},connectGoogle:async mode=>{assert.equal(mode,'reuse');connected++;return{connected:true};}};
+ const options=await turn({host});
+ const tools=options.mcpServers.hypeproof_email.tools;
+ const ask=tools.find(t=>t.name==='ask_user');
+ for(const [question,nextTool] of [
+  ['미리보기에 사용할 Google 시트 주소를 입력해 주세요. (비공개 입력)','sheet_configure'],
+  ['사용할 스프레드시트 링크를 붙여넣어 주세요.','sheet_configure'],
+  ['Please paste the Google Sheets URL.','sheet_configure'],
+  ['사용할 Google 계정의 이메일 주소를 알려 주세요.','google_connect'],
+  ['Enter your Google account email address.','google_connect'],
+  ['수신자 이메일 주소를 입력해 주세요.','sheet_configure'],
+ ]){
+  const result=await ask.handler({question,choices:'[]',allowFreeText:'true'});
+  assert.equal(result.isError,undefined);
+  const guidance=JSON.parse(result.content[0].text);
+  assert.equal(guidance.questionDisplayed,false);
+  assert.equal(guidance.recoveryRequired,true);
+  assert.equal(guidance.nextTool,nextTool);
+  assert.equal(displayed,0);
+  assert.equal(result.content[0].text.includes(question),false);
+  await tools.find(t=>t.name===guidance.nextTool).handler(guidance.arguments);
+ }
+ assert.equal(configured,4);assert.equal(connected,2);
+ for(const question of [
+  '어떤 업무 메일을 자동화하고 싶나요?',
+  'Google 계정 연결을 진행할까요?',
+  'Google 시트 읽기 권한을 허용할까요?',
+  '미리보기와 실제 발송 중 무엇을 할까요?',
+  '메일 본문에 “시트 주소를 입력해 주세요”라는 문구를 넣을까요?',
+  '이메일 주소가 들어 있는 열 이름은 무엇인가요?',
+ ]){
+  const result=await ask.handler({question,choices:'[{"id":"continue","label":"계속"}]',allowFreeText:'true'});
+  assert.equal(JSON.parse(result.content[0].text).answer,'선택 완료');
+ }
+ assert.equal(displayed,6);
+});
+
 
 test('Apps Script tools require an explicit profile AND host grant, with protected inline approvals',async()=>{
  const appsName='mcp__hypeproof_email__apps_script_upload';
@@ -98,4 +137,27 @@ test('Apps Script tools require an explicit profile AND host grant, with protect
  host.isAppsScriptAllowed=()=>false;assert.equal((await tool.handler({})).isError,true);assert.equal(calls,1);
  const denied=await turn({host,profile});assert.equal(denied.mcpServers.hypeproof_email.tools.some(t=>t.name==='apps_script_upload'),false);
  assert.equal((await denied.canUseTool(appsName,{}, {signal:new AbortController().signal})).behavior,'deny');
+});
+
+test('Apps Script sessions cannot bypass Google execution and review through legacy preview/send tools',async()=>{
+ let scriptAllowed=true,legacyCalls=0;
+ const scriptModes=[];
+ const host={isAllowed:()=>true,isAppsScriptAllowed:()=>scriptAllowed,runtime:{getPreview:()=>{legacyCalls++;throw new Error('Legacy send bypass');}},confirmSend:async()=>{legacyCalls++;return true;},previewSavedSkill:async()=>{legacyCalls++;throw new Error('Legacy preview bypass');},appsScriptRun:async mode=>{scriptModes.push(mode);return mode==='preview'?{reviewed:true,nextAction:'wait_for_user'}:{cancelled:true};}};
+ const options=await turn({host,profile:{automations:{...capability,appsScript:true},game:{template_tier:'website'}}});
+ const tools=options.mcpServers.hypeproof_email.tools;
+ for(const [name,input,mode] of [['email_preview',{recipe:'{}'},'preview'],['email_send',{previewId:'legacy-id'},'send']]){
+  const guidance=JSON.parse((await tools.find(t=>t.name===name).handler(input)).content[0].text);
+  assert.equal(guidance.recoveryRequired,true);assert.equal(guidance.previewCreated,false);assert.equal(guidance.sent,false);
+  assert.equal(guidance.nextTool,'apps_script_run');assert.deepEqual(guidance.arguments,{mode});
+  const result=await tools.find(t=>t.name===guidance.nextTool).handler(guidance.arguments);
+  assert.deepEqual(JSON.parse(result.content[0].text),mode==='preview'?{reviewed:true,nextAction:'wait_for_user'}:{cancelled:true});
+ }
+ assert.deepEqual(scriptModes,['preview','send']);assert.equal(legacyCalls,0);
+ scriptAllowed=false;
+ for(const name of ['email_preview','email_send']){
+  const guidance=JSON.parse((await tools.find(t=>t.name===name).handler({})).content[0].text);
+  assert.equal(guidance.recoveryRequired,true);
+  assert.equal((await tools.find(t=>t.name===guidance.nextTool).handler(guidance.arguments)).isError,true);
+ }
+ assert.equal(legacyCalls,0);assert.deepEqual(scriptModes,['preview','send']);
 });

@@ -119,3 +119,5 @@ Google scopes, owned-script creation/upload, standard Cloud project association,
 approved private version, synthetic Sheet execution and separately approved send.
 Verify the exact version/content, execution user and inbox receipt. Settings opened,
 code uploaded, mocked runs and old Gmail API receipts are not this backend's proof.
+
+Windows bot-account follow-up (2026-10-14): OAuth consent, a separate bot-owned one-row Sheet, cohort store installation of another learner's recipe, generated script upload and owner-only version 1 were observed. Standard Cloud project binding failed on the bot's missing IAM roles; Google execution is not passed. Public/private question routing and legacy preview routing have new MCP regression cases, and authenticated Sheet reuse has a quest regression. Root full-suite/native follow-up remains recorded separately. No mail sent.
