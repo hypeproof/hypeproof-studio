@@ -156,8 +156,8 @@ R2 session-log upload is a manual button. Nobody who gave up, or whose app died,
 ever presses it. 2026-08-22 actual:
 
 ```
-present:  SK34-CM6YPX-02 .. -10
-missing:  SK34-CM6YPX-01 · -11 · -12 · -13 · -14
+present:  KW34-CM6YPX-02 .. -10
+missing:  KW34-CM6YPX-01 · -11 · -12 · -13 · -14
 ```
 
 The two worst seats of the day are in the missing set. R2 retention is 90 days,

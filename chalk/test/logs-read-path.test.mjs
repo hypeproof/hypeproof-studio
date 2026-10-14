@@ -57,7 +57,7 @@ const SP = serviceProfiles(listProfiles);
 
 {
   const cohort = SP.kidsCohort;
-  const seat = "SK34-CM6YPX-07";
+  const seat = "KW34-CM6YPX-07";
   const day = "2026-08-22";
   const sessionId = "0f9d1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
   for (const filename of ALLOWED_UPLOAD_FILENAMES) {
@@ -98,7 +98,7 @@ console.log("✓ logs-read-path: malformed keys are rejected, never folded into 
 
 const COHORT = SP.kidsCohort;
 const DAY = "2026-08-22";
-const BATCH = "SK34-CM6YPX-";
+const BATCH = "KW34-CM6YPX-";
 
 // Ground truth as docs/plan/vessel-and-modules.md §3 states it: -02 .. -10
 // uploaded, -01/-11/-12/-13/-14 did not.
@@ -176,14 +176,14 @@ function fixtureObjects(seats, { day = DAY, complete = true } = {}) {
   // A seat whose upload died before manifest.json must NOT read as complete —
   // otherwise partial arrival looks identical to full arrival, which is the
   // failure mode that hid the 2026-08-22 gap for twelve days.
-  const partial = summarizeArrival(fixtureObjects(["SK34-CM6YPX-05"], { complete: false }), ROSTER_0822);
+  const partial = summarizeArrival(fixtureObjects(["KW34-CM6YPX-05"], { complete: false }), ROSTER_0822);
   assert.equal(partial.seats[0].sessions, 1);
   assert.equal(partial.seats[0].complete_sessions, 0, "no manifest => session is not complete");
   console.log("✓ logs-read-path: a manifest-less session reports as incomplete, not as absent");
 
   // An uploaded seat that is not on the roster is surfaced, never dropped.
-  const stale = summarizeArrival(fixtureObjects(["SK56-ZZZZZZ-01"]), ROSTER_0822);
-  assert.deepEqual(stale.unknown_seats, ["SK56-ZZZZZZ-01"]);
+  const stale = summarizeArrival(fixtureObjects(["KW56-ZZZZZZ-01"]), ROSTER_0822);
+  assert.deepEqual(stale.unknown_seats, ["KW56-ZZZZZZ-01"]);
   assert.equal(stale.seats[0].on_roster, false);
   assert.deepEqual(stale.missing_seats, ROSTER_0822, "every roster row is still rendered");
 
@@ -201,7 +201,7 @@ function fixtureObjects(seats, { day = DAY, complete = true } = {}) {
   assert.equal(noRoster.roster_size, 0);
   assert.equal(noRoster.uploaded_seats, 9);
 
-  const sessions = summarizeSeatSessions(fixtureObjects(["SK34-CM6YPX-02"]));
+  const sessions = summarizeSeatSessions(fixtureObjects(["KW34-CM6YPX-02"]));
   assert.deepEqual(Object.keys(sessions[0]).sort(), [
     "bytes", "complete", "day", "files", "first_upload", "last_upload", "session_id",
   ]);
@@ -308,7 +308,7 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
 }
 
 {
-  const res = await call(`/admin/cohorts/${COHORT}/logs/SK34-CM6YPX-02`, asInstructor);
+  const res = await call(`/admin/cohorts/${COHORT}/logs/KW34-CM6YPX-02`, asInstructor);
   assert.equal(res.status, 200);
   const text = await res.text();
   const body = JSON.parse(text);
@@ -324,8 +324,8 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
   // ever minted, plus probes. Unscoped, the diff drowns; `?seat_prefix=`
   // recovers the class, and `roster_scope` reports which was used.
   const OTHER_BATCHES = [
-    ...Array.from({ length: 20 }, (_, i) => `SK56-3SDBN4-${String(i + 1).padStart(2, "0")}`),
-    ...Array.from({ length: 10 }, (_, i) => `SK34-D8YAFE-${String(i + 1).padStart(2, "0")}`),
+    ...Array.from({ length: 20 }, (_, i) => `KW56-3SDBN4-${String(i + 1).padStart(2, "0")}`),
+    ...Array.from({ length: 10 }, (_, i) => `KW34-D8YAFE-${String(i + 1).padStart(2, "0")}`),
     "deploy-verify", "kids-sdk-verify", "pilot-01",
   ];
   await setRoster(kv, COHORT, [...OTHER_BATCHES, ...ROSTER_0822]);
@@ -379,7 +379,7 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
 }
 
 // --- retrieval: the whole point of the access-control decision -------------
-const RETRIEVE = `/admin/cohorts/${COHORT}/logs/SK34-CM6YPX-02/${DAY}/sess-sk34-cm6ypx-02/events.jsonl`;
+const RETRIEVE = `/admin/cohorts/${COHORT}/logs/KW34-CM6YPX-02/${DAY}/sess-kw34-cm6ypx-02/events.jsonl`;
 
 {
   // Unconfigured deployment (no Cloudflare Access, no operator secret): fail
@@ -438,9 +438,9 @@ const callOp = (path, headers = {}) =>
 {
   // Path shape is validated before R2 is touched.
   for (const [path, status] of [
-    [`/admin/cohorts/${COHORT}/logs/SK34-CM6YPX-02/${DAY}/sess/secrets.txt`, 400],
-    [`/admin/cohorts/${COHORT}/logs/SK34-CM6YPX-02/2026-13-99/sess/events.jsonl`, 400],
-    [`/admin/cohorts/${COHORT}/logs/SK34-CM6YPX-99/${DAY}/nope/events.jsonl`, 404],
+    [`/admin/cohorts/${COHORT}/logs/KW34-CM6YPX-02/${DAY}/sess/secrets.txt`, 400],
+    [`/admin/cohorts/${COHORT}/logs/KW34-CM6YPX-02/2026-13-99/sess/events.jsonl`, 400],
+    [`/admin/cohorts/${COHORT}/logs/KW34-CM6YPX-99/${DAY}/nope/events.jsonl`, 404],
   ]) {
     const res = await callOp(path, asOperator);
     assert.equal(res.status, status, `${path} => ${status}`);
