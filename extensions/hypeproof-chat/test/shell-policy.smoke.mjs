@@ -371,6 +371,7 @@ console.log("✓ shell-policy smoke passed");
     "Start-Process http://localhost:5173", "cmd /c dir", 'Write-Host "del /s /q"',
     'powershell -NoProfile -Command "Get-ChildItem"',
     "pwsh -NoProfile -File build.ps1 -Environment prod", // -e… after -File is the script's
+    "pwsh -File:deploy.ps1 -Environment prod",            // also after the inline form
     "powershell -ExecutionPolicy RemoteSigned -File .\\x.ps1",
     "Add-Content log.txt 'x'", "Get-Process | Out-File -Append log.txt",
     "Get-Process | Out-File -FilePath log.txt -NoClobber",
