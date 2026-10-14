@@ -3870,6 +3870,12 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-06-e2e.md"
+        },
+        {
+          "path": "e2e/curriculum-runtime/workshop-element-trial.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/fixtures/dental-element-trial/index.html"
         }
       ]
     },
