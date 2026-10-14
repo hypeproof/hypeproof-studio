@@ -196,7 +196,7 @@
         "MU-08"
       ],
       "inline_prefixes": [],
-      "sha256": "15f9fc189409562568f2fc9b64b3b69d5bb0c9c4cd04bddfcf50fbaa935cf667",
+      "sha256": "cb337a8930feffe328017a0359d7462569c18fa5e28681c3f1717ec63260fed4",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/model-effort-and-course-usage.md",
@@ -225,7 +225,7 @@
         "AB-18"
       ],
       "inline_prefixes": [],
-      "sha256": "f94469c38ce9ede592af0d00e30302399b49860eb057227c8ef804e4005f6e77",
+      "sha256": "98ed25362032a09e5d6966def566fddd5725fdba3bf9f45782053b45e54e55b0",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/access-budget-settlement.md",
