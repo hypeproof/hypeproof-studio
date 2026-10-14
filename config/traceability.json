@@ -373,6 +373,14 @@
         },
         {
           "path": "e2e/admin-usage/run.mjs"
+        },
+        {
+          "path": "scripts/test-owner-console.mjs"
+        },
+        {
+          "path": "worker/test/owner-usage.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "029e596ee9e2351a97006d25ae474f3b48fde848"
         }
       ]
     },
@@ -1510,6 +1518,9 @@
         },
         {
           "path": ".github/workflows/verify-service-activities.yml"
+        },
+        {
+          "path": "scripts/verify-owner-console.mjs"
         }
       ]
     },
