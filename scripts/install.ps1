@@ -860,9 +860,9 @@ function Install-Studio {
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
         '/MERGETASKS=!runcode'
     ) -Wait -PassThru
-    if ($p.ExitCode -ne 0) {
-        Write-Warn2 "Studio setup exited with code $($p.ExitCode)."
-    }
+    # A failed setup must not be reported as installed: the receipt would claim
+    # a version that is not on the machine.
+    if ($p.ExitCode -ne 0) { throw "Studio setup exited with code $($p.ExitCode)" }
     $receipt.studio = $manifest.studio.version
     Write-Ok "Studio $($manifest.studio.version) installed."
     return $true
@@ -943,7 +943,9 @@ function Seed-Sdk {
     Write-Info "Seeding native SDK binary via $seedName (canonical) ..."
     $psExe = try { (Get-Process -Id $PID).Path } catch { $null }
     if (-not $psExe) { $psExe = 'powershell' }
-    & $psExe -NoProfile -ExecutionPolicy Bypass -File $seedScript
+    # Out-Host: the seeder's progress belongs on screen (the download takes
+    # minutes) and must not become part of this function's return value.
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File $seedScript | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Err2 "seed-sdk-binary.ps1 failed (exit $LASTEXITCODE)."
         return $false
@@ -979,7 +981,10 @@ function Invoke-Doctor {
         }
         if (-not (Test-VersionAtLeast $ver $tool.min)) {
             $line = (($ver -split "`n")[0]).Trim()
-            $fail += "$($tool.id): $line below min $($tool.min)"
+            # An old optional tool is reported like a missing one: the app and the
+            # coach do not depend on it, so it must not fail the whole install.
+            if ($tool.required) { $fail += "$($tool.id): $line below min $($tool.min)" }
+            else { $missingOptional += "$($tool.id) (older than $($tool.min))"; Write-Warn2 "$($tool.id): $line below min $($tool.min) (optional)" }
             continue
         }
         Write-Ok ("{0}: {1}" -f $tool.id, (($ver -split "`n")[0]).Trim())

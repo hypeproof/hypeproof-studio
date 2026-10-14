@@ -9,7 +9,8 @@ $ast = [Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRo
 if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
 # Load only the production functions being exercised; never execute Main.
 foreach ($name in @('Read-KitSums', 'Get-KitFile', 'Resolve-KitStudioAsset', 'Use-ClassKit',
-                    'Resolve-StudioAsset', 'Install-Studio', 'Get-SeededSdk', 'Seed-Sdk', 'Invoke-ToolPost')) {
+                    'Resolve-StudioAsset', 'Install-Studio', 'Get-SeededSdk', 'Seed-Sdk', 'Invoke-ToolPost',
+                    'Invoke-Doctor', 'Test-VersionAtLeast')) {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (-not $definition) { throw "Missing function $name" }
     Invoke-Expression $definition.Extent.Text
@@ -27,9 +28,10 @@ function gh { $global:KitGhCalls++; throw 'gh must not be called in kit mode' }
 function Start-Process {
     param($FilePath, $ArgumentList, [switch]$Wait, [switch]$PassThru)
     $global:KitLaunchedHash = (Get-FileHash $FilePath -Algorithm SHA256).Hash
-    return @{ExitCode=0}
+    return @{ExitCode=$global:FixtureSetupExit}
 }
 
+$global:FixtureSetupExit = 0
 $installer = 'HypeProof.StudioUserSetup-x64-9.9.9.exe'
 $root = Join-Path ([IO.Path]::GetTempPath()) ('hps-kit-fixture-' + [guid]::NewGuid())
 
@@ -41,7 +43,7 @@ function New-Kit([string]$name, [string[]]$without = @()) {
     $files = [ordered]@{
         'HypeProof.StudioSetup-x64-9.9.9.exe' = 'fixture system installer, a decoy'
         $installer                            = 'fixture user installer, never executed'
-        'seed-sdk-binary.ps1'                 = "[IO.File]::WriteAllText((Join-Path `$PSScriptRoot 'SEEDER_RAN'), 'ran')`nexit 0`n"
+        'seed-sdk-binary.ps1'                 = "Write-Output 'seeding progress line'`n[IO.File]::WriteAllText((Join-Path `$PSScriptRoot 'SEEDER_RAN'), 'ran')`nexit 0`n"
         'kit-info.txt'                        = "schema=1`nstudio_version=9.9.9`n"
     }
     $lines = @()
@@ -83,11 +85,25 @@ try {
     $want = (Get-FileHash (Join-Path $script:KitDir $installer) -Algorithm SHA256).Hash
     if ($global:KitLaunchedHash -ne $want) { throw 'Install-Studio did not launch the user installer from the kit' }
     if ($receipt.studio -ne '9.9.9') { throw 'Receipt does not record the kit version' }
-    Seed-Sdk $manifest $receipt | Out-Null
+    # The seeder's own output goes to the screen, not into the return value:
+    # a caller must get one boolean, and the participant must see progress.
+    $seedResult = @(Seed-Sdk $manifest $receipt)
     if (-not (Test-Path -LiteralPath (Join-Path $script:KitDir 'SEEDER_RAN'))) { throw 'Seed-Sdk did not run the seeder from the kit' }
+    if ($seedResult.Count -ne 1 -or $seedResult[0] -isnot [bool]) { throw ('Seed-Sdk returned the seeder output instead of one boolean: {0}' -f ($seedResult -join ' | ')) }
     Invoke-ToolPost @{ post = 'gh_auth' }
     if ($global:KitGhCalls -ne 0) { throw 'gh was called in kit mode' }
     Write-Host '  ok   intact kit: version pinned, user installer launched, kit seeder run, gh never called'
+
+    # --- A failed setup is not reported as installed -----------------------------
+    $script:KitDir = New-Kit 'setup-fails'
+    $script:TempRoot = Join-Path $root 'temp-setup-fails'
+    $global:FixtureSetupExit = 1
+    $failedReceipt = @{ studio = $null }
+    Assert-Refused 'setup exit code 1' 'Studio setup exited with code 1' { Install-Studio (New-Manifest) $failedReceipt }
+    if ($null -ne $failedReceipt.studio) { throw 'A failed setup was recorded in the receipt' }
+    $global:FixtureSetupExit = 0
+
+    Write-Host '  ok   failed setup refused and not recorded in the receipt'
 
     # --- Negative controls ---------------------------------------------------
     $script:KitDir = New-Kit 'bad-installer'
@@ -119,6 +135,23 @@ try {
 
     $script:KitDir = New-Kit 'mac-only' @('HypeProof.StudioSetup-x64-9.9.9.exe', $installer)
     Assert-Refused 'kit without a Windows installer' 'built without win32-x64' { Resolve-StudioAsset (New-Manifest) }
+
+    # --- Doctor (last: its stubs replace Get-SeededSdk for the rest of the file): an old optional tool is reported, an old required tool fails ----
+    $SkipStudio = $true
+    function Write-Head($message) {}
+    function Update-ProcessPath {}
+    function git { if ($args -contains 'core.autocrlf') { 'false' } elseif ($args -contains 'core.longpaths') { 'true' } }
+    function Test-Command($name) { return $true }
+    function Get-SeededSdk { return @{ version = '0.3.207' } }
+    function Get-ToolVersion($tool) { return $global:FixtureToolVersions[$tool.id] }
+    $doctorManifest = @{ studio = @{ version = '9.9.9' }; tools = @(
+        @{ id = 'git'; cmd = 'git'; min = '2.30'; required = $true },
+        @{ id = 'gh';  cmd = 'gh';  min = '2.40'; required = $false }) }
+    $global:FixtureToolVersions = @{ git = 'git version 2.45.0'; gh = 'gh version 2.20.0 (2022-11-01)' }
+    if ((Invoke-Doctor $doctorManifest @{ studio = $null }) -ne 0) { throw 'An old optional tool failed the doctor' }
+    $global:FixtureToolVersions = @{ git = 'git version 2.20.0'; gh = 'gh version 2.60.0' }
+    if ((Invoke-Doctor $doctorManifest @{ studio = $null }) -eq 0) { throw 'An old required tool passed the doctor' }
+    Write-Host '  ok   doctor: old optional tool reported, old required tool fails'
 
     if ($global:KitGhCalls -ne 0) { throw 'gh was called in kit mode' }
     Write-Host 'PASS: class kit Windows bootstrap functions'
