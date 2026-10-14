@@ -24,6 +24,11 @@ export function generateAppsScriptEmailProject(value: EmailRecipe, maxRecipients
 function hpsHash_(value) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value, Utilities.Charset.UTF_8).map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
 }
+function hpsMessagesDigest_(messages) {
+  // Apps Script API transports objects as unordered maps. Bind ordered values,
+  // including recipient case and message order, rather than object key order.
+  return hpsHash_(JSON.stringify(messages.map(function(m) { return [m.id, m.to, m.subject, m.body]; })));
+}
 function hpsJson_(url, options) {
   var response = UrlFetchApp.fetch(url, Object.assign({ muteHttpExceptions: true, followRedirects: false, headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }, options || {}));
   if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) throw new Error('GOOGLE_REQUEST_FAILED');
@@ -59,7 +64,7 @@ function hpsPreview(input) {
   var createdAt = Date.now(), id = Utilities.getUuid();
   var lock = LockService.getUserLock(); lock.waitLock(10000);
   try {
-    PropertiesService.getUserProperties().setProperty('hps.currentPreview', JSON.stringify({ id: id, createdAt: createdAt, digest: hpsHash_(JSON.stringify(messages)) }));
+    PropertiesService.getUserProperties().setProperty('hps.currentPreview', JSON.stringify({ id: id, createdAt: createdAt, digest: hpsMessagesDigest_(messages) }));
   } finally { lock.releaseLock(); }
   return { id: id, createdAt: createdAt, messages: messages };
 }
@@ -81,7 +86,7 @@ function hpsSendApproved(input) {
   try {
     var properties = PropertiesService.getUserProperties();
     var preview = JSON.parse(properties.getProperty('hps.currentPreview') || 'null');
-    if (!preview || preview.id !== input.previewId || Date.now() - preview.createdAt > 1800000 || preview.digest !== hpsHash_(JSON.stringify(input.messages))) throw new Error('STALE_PREVIEW');
+    if (!preview || preview.id !== input.previewId || Date.now() - preview.createdAt > 1800000 || preview.digest !== hpsMessagesDigest_(input.messages)) throw new Error('STALE_PREVIEW');
     var records = [];
     for (var i = 0; i < input.messages.length; i++) {
       var m = input.messages[i], key = 'hps.sent.' + m.id, old = properties.getProperty(key);

@@ -126,6 +126,24 @@ test('generated script executes synthetic Sheets→preview→approved Gmail with
   }
 });
 
+test('generated approval digest survives API object key reordering while binding every approved value', () => {
+  for (const unknown of [false,true]) {
+    const f=scriptFixture();
+    const p=f.context.hpsPreview({spreadsheetId:'synthetic_sheet_id',range:'A1:D21'});
+    const messages=p.messages.map((m: any) => ({body:m.body,subject:m.subject,to:m.to,id:m.id}));
+    assert.notEqual(JSON.stringify(messages),JSON.stringify(p.messages),'fixture models unordered API map serialization');
+    const altered=structuredClone(messages);altered[0].body+=' altered';
+    altered[0].id=digest(JSON.stringify([altered[0].to.toLowerCase(),altered[0].subject,altered[0].body]));
+    assert.throws(()=>f.context.hpsSendApproved({previewId:p.id,messages:altered,approved:true}),/STALE_PREVIEW/);
+    assert.equal(f.sends,0,'valid message IDs cannot authorize edited preview content');
+    f.loseResponse=unknown;
+    const result=f.context.hpsSendApproved({previewId:p.id,messages,approved:true});
+    assert.equal(result.records[0].status,unknown?'unknown':'sent');
+    f.context.hpsSendApproved({previewId:p.id,messages:p.messages,approved:true});
+    assert.equal(f.sends,1,'key reordering never creates a second send or retries unknown outcomes');
+  }
+});
+
 test('OAuth binds PKCE/state, asks only necessary management and execution scopes, and rejects partial consent', async () => {
   for (const goodState of [false,true]) {
     const f=fixture(); f.secrets.clear(); let resolve!: (value: URL) => void, exchanges=0;
