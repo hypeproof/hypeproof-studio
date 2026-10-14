@@ -257,7 +257,11 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || { echo "::error::CLOUDFLARE_API_TOKEN is required"; exit 1; }
-          npx wrangler deploy --var "HPS_WORKER_VERSION:${WORKER_VERSION}"
+          owner_secrets_file="$(mktemp)"
+          trap 'rm -f "$owner_secrets_file"' EXIT
+          chmod 600 "$owner_secrets_file"
+          OWNER_SECRETS_FILE="$owner_secrets_file" node -e "require('node:fs').writeFileSync(process.env.OWNER_SECRETS_FILE, JSON.stringify({ HPS_OWNER_SERVICE_SECRET: process.env.HPS_OWNER_SERVICE_SECRET }))"
+          npx wrangler deploy --var "HPS_WORKER_VERSION:${WORKER_VERSION}" --secrets-file "$owner_secrets_file"
 
       - name: Verify production
         if: ${{ !inputs.dry_run && inputs.verify_prod }}
