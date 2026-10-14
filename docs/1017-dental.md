@@ -1,16 +1,14 @@
 # 1017-dental — Studio changes for the 2026-10-17 dental seminar
 
-Branch `1017-dental` of `jayleekr/hypeproof-studio`, built from `origin/main` e987aa34.
-Companion branch: `1017-dental` of `hypeproof/hypeproof-service` (cohort, prompts, skills and
-the `/v1/profile` fields this app reads). Written 2026-10-14.
+The Studio side of the 2026-10-17 dental seminar, as merged into `main`. It started as branch
+`1017-dental` (from `main` e987aa34), grew Section 5 on branch `haiku`, and was brought up to
+`main` 57368811 on 2026-10-14 together with Section 7 (GitHub calls through the gh CLI).
+The Service side (cohort, prompts, skills and the `/v1/profile` fields this app reads) is the
+companion pull request in `hypeproof/hypeproof-service`. Written 2026-10-14.
 
-Branch `haiku` is `1017-dental` plus Section 5 (photos attached as files), with the Service
-branch `haiku` putting the seminar cohort on Claude Haiku 5.5 with thinking off. See
-[Running the seminar on Claude Haiku 5.5](#running-the-seminar-on-claude-haiku-55-branch-haiku).
-
-This branch carries feature code with its comments, the requirement rows in
-`docs/studio-requirements.md`, and this document. Unit tests, end-to-end tests and rehearsal
-tooling are deliberately left out (see [What is not on this branch](#what-is-not-on-this-branch)).
+The pull request carries the feature code with its comments, the requirement rows in
+`docs/studio-requirements.md`, this document, and the extension unit tests for these features.
+End-to-end specs and rehearsal tooling stay local (see [What is not in this change](#what-is-not-in-this-change)).
 
 ## Summary
 
@@ -22,6 +20,7 @@ tooling are deliberately left out (see [What is not on this branch](#what-is-not
 | 4 | `feat(chat)` one summary line for the coach's tool work | Instead of a raw line per tool call, one Korean line such as "홈페이지를 고치는 중…" while the coach works (for cohorts that ask for it, the seminar) |
 | 5 | `style(start)` blank line in start.css | Whitespace only |
 | 6 | `feat(chat)` photos attached to the chat as files | Drag a photo onto the chat (or paste it), press send: it is saved in the class folder's `images/` under its own name and the coach gets its path |
+| 7 | `refactor(publish)` every GitHub REST call is a `gh api` process | Nothing visible. The GitHub credential stays inside the GitHub CLI the class already signs in |
 
 Every behaviour change is gated by the served profile. Cohorts whose profile does not set the new
 fields behave exactly as before.
@@ -51,8 +50,9 @@ fields behave exactly as before.
 - Only from the class folder: the folder the activity connected in, else the profile's
   `workspace_root` (`~/HypeProofDentalSeminar` for the seminar). Any other open folder is refused
   with `not_class_folder`, naming both folders and the way back ("시작 화면에서 '이어서 하기'").
-- GitHub API endpoint overrides are honoured only in development runs and only for loopback
-  addresses, because the API base receives the participant's GitHub token.
+- GitHub calls go through the GitHub CLI (Section 7). The only exception is a scripted GitHub
+  on this machine in a test or development run: an API base override is honoured there only, and
+  only for a loopback address, because that path sends the participant's GitHub token itself.
 
 ### What a publish does
 
@@ -212,7 +212,7 @@ in Finder and type their names. Now the participant drops them onto the chat.
 - Unchanged: the `image_paste` path (#421, the photo shown to the model and saved under
   `assets/`), which the seminar profile does not turn on.
 
-## `/v1/profile` fields this branch reads
+## `/v1/profile` fields this change reads
 
 | Field | Used for | When absent |
 |---|---|---|
@@ -224,14 +224,14 @@ in Finder and type their names. Now the participant drops them onto the chat.
 | `tool_activity` | summary line | one line per tool call |
 | `input.image_files` | photos attached as files, saved to `images/` | drop and paste as before |
 
-The Service side is branch `1017-dental` of `hypeproof/hypeproof-service`. Deploy it before
-shipping an app build from this branch.
+The Service side is the companion `hypeproof/hypeproof-service` pull request. Deploy it before
+shipping an app build that carries this change.
 
-## Running the seminar on Claude Haiku 5.5 (branch `haiku`)
+## Running the seminar on Claude Haiku 5.5
 
 **No Studio code changes for this.**
-- The model is the Service's choice. The Service branch `haiku` pins
-  `boah-dental-2026-1017-s1` to `claude-haiku-5-5` with thinking off.
+- The model is the Service's choice. The Service change pins the seminar cohort to
+  `claude-haiku-5-5` with thinking off.
 - This app runs it on the existing Claude Agent SDK path.
 - The model picker shows the one choice the Service serves, "Claude Haiku 5.5".
 
@@ -263,25 +263,68 @@ with the app.
 - The two together (this branch's app with the photo drop, on Haiku 5.5) have not yet been
   run as one class rehearsal.
 
+## 7. GitHub calls through the gh CLI
+
+Sections 1 and 2 first talked to `api.github.com` with their own HTTP client. The client read
+the participant's token with `gh auth token` and put it on each request. The class already
+installs and signs in the GitHub CLI (`gh auth login`), so the CLI now carries every request
+and the token no longer passes through this extension.
+
+- `githubApi.ts`: `createGitHubApi` takes a transport. It keeps what `gh api` does not do:
+  one request at a time, the rate-limit waits (`retry-after`, `x-ratelimit-reset`, the
+  one-minute secondary wait), and retries on 5xx and dropped connections.
+- `createGhTransport`: one `gh api --hostname github.com --method <M> --include` process per
+  request. The JSON body goes on stdin, so a photo's base64 is never on an argument vector.
+  Status and headers (`x-oauth-scopes`, `retry-after`) are read from the `--include` output.
+  gh exits non-zero on 4xx and 5xx but still prints the response, so the exit code is ignored
+  when a status line came back. If gh lost its login during a run, the call answers 401 and the
+  auth step starts a new sign-in.
+- `createFetchTransport`: plain HTTP, used only for a scripted GitHub on loopback in tests and
+  development runs (`publishConfig.ts`). A real run has no API base override and stays on
+  `gh api`.
+- `githubAuth.ts`: the gh provider exposes the `gh` it resolved (`bin()`), so requests run the
+  same executable. `gh auth token` is now only the "is anyone signed in" check.
+- `publishSite.ts`, `publishHost.ts`: `PublishSiteDeps.apiBase` became `transport(token)`.
+  `fetch` remains only for the unauthenticated read of the published page.
+
+Checked against real GitHub with the signed-in gh, on the sandbox repository approved for
+these runs:
+- `GET /user` with its scopes, a 404, and the repository list.
+- A first publish: repository created, Pages on, files committed, Actions build, live in 54 s,
+  and an independent fetch answered 200 with the page's marker.
+- A second publish into the same repository: live in 50 s.
+- Continue from GitHub: `findClassRepos` listed the site, `downloadRepo` brought down its 4
+  files, and `remoteHead` matched the downloaded commit.
+
+## Merging with `main` (2026-10-14)
+
+`main` moved 14 commits while this work was on branches. Four files conflicted and both sides
+were kept:
+- `extension.ts`: main's `begin(profile, commit, selectedDirectory)` and this change's GitHub
+  source for the start page.
+- `startPage.ts`: main keeps the served profile unchanged and passes the local folder as
+  `selectedDirectory` (#1641). "GitHub에서 이어하기" now does the same: the downloaded folder
+  becomes the selected folder and is no longer written into `profile.workspace_root`.
+- `sdkCoachHelpers.ts`: main's roster tools (`consult`, `site_check`) and the `publish_site`
+  grant.
+- `StartPage.tsx`: main's pass display and purchase hide/cancel, and the GitHub card.
+
+Test fixtures use generic names ("가상치과", `neo-dental`), as the customer-name check on `main`
+requires.
+
 ## Verification done
 
-- Extension typecheck and build pass on this branch.
-- The extension code on this branch equals the locally tested code plus main's changes since
-  2026-10-12, compared line by line.
-- With the local unit-test updates applied on top (not committed here), the full extension suite
-  passes.
+- Under Node 22, the CI version: extension typecheck and build; `npm test` in
+  `extensions/hypeproof-chat` (147 smoke tests and the six suites); `npm run
+  test:service-integration`; e2e `test:cr-publish`; `scripts/check-customer-names.py`.
+- Real GitHub through gh, as listed in Section 7.
 - During development: app-level runs in an app copy against a scripted GitHub (publish,
-  continue on a second computer, the token gate, the panels), one opt-in run against a real
-  GitHub account and repository, and the seminar rehearsal with a person at the keyboard.
+  continue on a second computer, the token gate, the panels) and the seminar rehearsal with a
+  person at the keyboard.
 
-## What is not on this branch
+## What is not in this change
 
-- **Tests.** No unit or end-to-end test files. Consequence: on this branch alone three existing
-  tests no longer match the new wiring and fail: `test/cr-switch.smoke.mjs` (the MCP registration
-  now also spreads `hypeproofMcpRegistration`), `test/history-identity.smoke.mjs` (the publish
-  result is a fourth app-made reply) and `test/student-goal.smoke.mjs` (`postConfig` now asks
-  `sitePublisher` whether the button may show, and the test's stand-in provider has none). Their updates, and the new tests for these features, are kept on the
-  local branch `feat/summary-tool-activity` and must come with any pull request to `main`.
-- **Rehearsal and local-only tooling**: e2e specs, the class-rehearsal harness, local stack
-  scripts, model labels used only in local rehearsals, and any keys or account names.
+- **End-to-end specs and rehearsal tooling**: the app-level publish specs, the class-rehearsal
+  harness, local stack scripts, model labels used only in local rehearsals, and any keys or
+  account names. They name a test account and stay local.
 - **The Codex SDK trial** is on branch `dental-codex`.

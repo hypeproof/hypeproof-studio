@@ -50,7 +50,7 @@ const GOOD_SITE = {
   "more.css": "p{}",
   "img/logo.png": "PNG",
   "img/logo@2x.png": "PNG2",
-  "agent.md": "이 문서는 공개 보관함에 있어 누구나 볼 수 있습니다\n\n# 보아치과",
+  "agent.md": "이 문서는 공개 보관함에 있어 누구나 볼 수 있습니다\n\n# 가상치과",
   ".env": "SECRET=1",
   ".DS_Store": "x",
   ".hypeproof/state.json": "{}",
@@ -90,7 +90,7 @@ function deps(gh, root, extra = {}) {
     transport: (token) => createFetchTransport({ base: gh.apiBase(), token, fetch: (u, i) => d.fetch(u, i) }),
     pagesBase: gh.pagesBase(),
     workspaceRoot: root,
-    profileDefaultRepo: "boa-dental",
+    profileDefaultRepo: "neo-dental",
     customDomainAllowed: true,
     nonce: () => (++n).toString(16).padStart(32, "a"),
     userAuthWaitMs: 5 * 60_000,
@@ -110,12 +110,12 @@ const tree = (gh, name) => {
 
 // ── contract ─────────────────────────────────────────────────────────────────
 {
-  for (const good of ["boa-dental", "dental-homepage", "a", "a1-b2-c3", "x".repeat(30)]) assert.ok(C.validateRepoName(good).ok, good);
-  for (const bad of ["", "Boa-Dental", "boa_dental", "boa.dental", "-boa", "boa-", "boa--dental", "보아치과", "boa dental", "x".repeat(31)]) {
+  for (const good of ["neo-dental", "dental-homepage", "a", "a1-b2-c3", "x".repeat(30)]) assert.ok(C.validateRepoName(good).ok, good);
+  for (const bad of ["", "Neo-Dental", "neo_dental", "neo.dental", "-neo", "neo-", "neo--dental", "가상치과", "neo dental", "x".repeat(31)]) {
     assert.equal(C.validateRepoName(bad).ok, false, bad);
   }
-  assert.equal(C.resolveRepoName(undefined, "boa-dental"), "boa-dental");
-  assert.equal(C.resolveRepoName("  my-site ", "boa-dental"), "my-site");
+  assert.equal(C.resolveRepoName(undefined, "neo-dental"), "neo-dental");
+  assert.equal(C.resolveRepoName("  my-site ", "neo-dental"), "my-site");
   assert.equal(C.resolveRepoName(undefined, undefined), C.FALLBACK_REPO_NAME, "an old Service omits default_repo_name");
   assert.equal(C.resolveRepoName(undefined, "Bad Name"), C.FALLBACK_REPO_NAME, "a malformed default is not repaired into an unchosen name");
 
@@ -128,8 +128,8 @@ const tree = (gh, name) => {
     [{ enabled: true, strategy: "per_user_github_pages" }, true, "minor"],
   ]) assert.equal(C.sitePublishAllowed(p, minor).ok, false, why);
 
-  assert.deepEqual(C.normalizeCustomDomain("https://www.Boa-Dental.co.kr/"), { ok: true, domain: "www.boa-dental.co.kr" });
-  for (const bad of ["boa", "boa.dental.co.kr/path", "1.2.3.4", "*.boa.kr", "octo.github.io", "boa_dental.kr", "boa.kr:8080"]) {
+  assert.deepEqual(C.normalizeCustomDomain("https://www.Neo-Dental.co.kr/"), { ok: true, domain: "www.neo-dental.co.kr" });
+  for (const bad of ["neo", "neo.dental.co.kr/path", "1.2.3.4", "*.neo.kr", "octo.github.io", "neo_dental.kr", "neo.kr:8080"]) {
     assert.equal(C.normalizeCustomDomain(bad).ok, false, bad);
   }
   ok("contract: gate, slug, default name, domain normalization");
@@ -170,7 +170,7 @@ const tree = (gh, name) => {
   assert.ok(codes({ "index.html": "환자 900101-1234567" }).includes("block:rrn"), "resident registration number");
   assert.deepEqual(codes({ "index.html": "주문번호 991399-1234567 · task-list · disk-image" }), [], "an impossible date and ordinary words are not secrets");
   assert.deepEqual(codes({ "index.html": "x", "사진.jpg": "x" }), ["warn:non_ascii_name"]);
-  assert.deepEqual(codes({ "index.html": "x", "agent.md": "# 보아치과" }), ["warn:agent_md_notice"]);
+  assert.deepEqual(codes({ "index.html": "x", "agent.md": "# 가상치과" }), ["warn:agent_md_notice"]);
   const big = site({ "index.html": "x" });
   fs.writeFileSync(path.join(big, "video.mp4"), "");
   fs.truncateSync(path.join(big, "video.mp4"), 51 * 1024 * 1024);
@@ -253,14 +253,14 @@ const tree = (gh, name) => {
 
 // ── custom domain records ────────────────────────────────────────────────────
 {
-  assert.deepEqual(splitDomain("boadental.co.kr"), { apex: "boadental.co.kr", sub: "" });
-  assert.deepEqual(splitDomain("www.boadental.co.kr"), { apex: "boadental.co.kr", sub: "www" });
+  assert.deepEqual(splitDomain("neodental.co.kr"), { apex: "neodental.co.kr", sub: "" });
+  assert.deepEqual(splitDomain("www.neodental.co.kr"), { apex: "neodental.co.kr", sub: "www" });
   assert.deepEqual(splitDomain("blog.example.com"), { apex: "example.com", sub: "blog" });
-  const apex = dnsRecordsFor("boadental.co.kr", "Octo-Clinic");
+  const apex = dnsRecordsFor("neodental.co.kr", "Octo-Clinic");
   assert.equal(apex.filter((r) => r.type === "A" && r.host === "@").length, 4);
   assert.equal(apex.filter((r) => r.type === "AAAA" && r.host === "@").length, 4);
   assert.deepEqual(apex.find((r) => r.type === "CNAME"), { type: "CNAME", host: "www", value: "octo-clinic.github.io" }, "CNAME never carries the repo name");
-  const www = dnsRecordsFor("www.boadental.co.kr", "octo");
+  const www = dnsRecordsFor("www.neodental.co.kr", "octo");
   assert.deepEqual(www[0], { type: "CNAME", host: "www", value: "octo.github.io" });
   assert.deepEqual(dnsRecordsFor("blog.example.com", "octo"), [{ type: "CNAME", host: "blog", value: "octo.github.io" }]);
   assert.ok(apex.some((r) => r.value === "185.199.108.153") && apex.some((r) => r.value === "2606:50c0:8003::153"));
@@ -275,23 +275,23 @@ const tree = (gh, name) => {
   const r = await runPublishSite({}, deps(gh, root, { onStep: (s) => seen.push(`${s.id}:${s.status}`) }));
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.verified, true);
-  assert.equal(r.url, siteUrlFor("octo-clinic", "boa-dental", gh.pagesBase()));
+  assert.equal(r.url, siteUrlFor("octo-clinic", "neo-dental", gh.pagesBase()));
   assert.equal(r.planned_url, r.url);
-  assert.equal(r.repo_name, "boa-dental", "profile default_repo_name used when no repo_name");
+  assert.equal(r.repo_name, "neo-dental", "profile default_repo_name used when no repo_name");
   assert.equal(r.error, undefined);
   assert.deepEqual(r.steps.map((s) => s.id), ["preflight", "auth", "repo", "pages", "commit", "build", "verify"]);
   assert.ok(r.steps.every((s) => s.status === "ok"), JSON.stringify(r.steps));
   assert.ok(seen.includes("build:pending") && seen.includes("verify:pending"), "progress reports the waits");
 
   const log = gh.state.log;
-  const firstPagesPost = log.findIndex((l) => l.startsWith("POST /repos/octo-clinic/boa-dental/pages"));
-  const lastPagesRead = log.map((l, i) => (l === "GET /repos/octo-clinic/boa-dental/pages" ? i : -1)).filter((i) => i > firstPagesPost)[2];
-  const refUpdate = log.findIndex((l) => l.startsWith("PATCH /repos/octo-clinic/boa-dental/git/refs/heads/main"));
+  const firstPagesPost = log.findIndex((l) => l.startsWith("POST /repos/octo-clinic/neo-dental/pages"));
+  const lastPagesRead = log.map((l, i) => (l === "GET /repos/octo-clinic/neo-dental/pages" ? i : -1)).filter((i) => i > firstPagesPost)[2];
+  const refUpdate = log.findIndex((l) => l.startsWith("PATCH /repos/octo-clinic/neo-dental/git/refs/heads/main"));
   assert.ok(firstPagesPost > 0 && lastPagesRead < refUpdate, "Pages set to workflow AND read back before the workflow file lands (#500)");
   assert.equal(log.filter((l) => l.startsWith("PATCH ")).length, 1, "one atomic commit");
   assert.equal(log.filter((l) => l.includes("/dispatches")).length, 0, "the push started the run; nothing re-dispatched");
 
-  const t = tree(gh, "boa-dental");
+  const t = tree(gh, "neo-dental");
   assert.equal(t.get(".github/workflows/pages.yml"), PAGES_WORKFLOW_YAML, "the skill's workflow, verbatim");
   assert.match(t.get("hps-build.txt"), /^[a-f0-9]{32}\n$/);
   assert.ok(t.has(".nojekyll") && t.has("index.html") && t.has("img/logo@2x.png") && t.has("agent.md"));
@@ -319,13 +319,13 @@ const tree = (gh, name) => {
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.verified, false);
   assert.equal(r.url, undefined, "a saved site has no verified address");
-  assert.equal(r.planned_url, siteUrlFor("octo-clinic", "boa-dental", gh.pagesBase()));
+  assert.equal(r.planned_url, siteUrlFor("octo-clinic", "neo-dental", gh.pagesBase()));
   assert.ok(r.repo_url);
   assert.ok(!gh.state.log.some((l) => /\/pages/.test(l)), "no Pages API call at all");
-  const t = tree(gh, "boa-dental");
+  const t = tree(gh, "neo-dental");
   assert.ok(!t.has(".github/workflows/pages.yml"), "no workflow file (it would run red without Pages)");
   assert.ok(t.has(".nojekyll") && t.has("index.html"));
-  assert.equal(gh.repo("boa-dental").runs.length, 0, "no Actions run");
+  assert.equal(gh.repo("neo-dental").runs.length, 0, "no Actions run");
   assert.match(stepOf(r, "commit").detail_ko, /404가 정상/);
 
   // check_only after a save: planned URL, Pages pending, nothing verified, nothing written.
@@ -347,7 +347,7 @@ const tree = (gh, name) => {
   const gh = createMockGitHub();
   const asked = [];
   const no = await runPublishSite({}, deps(gh, site(GOOD_SITE), { confirmPublish: async (login, repo, stage) => (asked.push(`${login}/${repo}:${stage}`), false) }));
-  assert.deepEqual(asked, ["octo-clinic/boa-dental:publish"], "the question names the real owner and repository");
+  assert.deepEqual(asked, ["octo-clinic/neo-dental:publish"], "the question names the real owner and repository");
   assert.equal(no.error?.code, "declined");
   assert.ok(!gh.state.log.some((l) => /^(POST|PUT|PATCH)/.test(l)), "a 'no' leaves GitHub untouched");
   const yes = await runPublishSite({}, deps(gh, site(GOOD_SITE), { confirmPublish: async () => true }));
@@ -368,7 +368,7 @@ const tree = (gh, name) => {
   // First publish: nothing stored → proceeds and records its commit.
   const first = await runPublishSite({}, tracked());
   assert.equal(first.verified, true);
-  const repo = gh.repo("boa-dental");
+  const repo = gh.repo("neo-dental");
   assert.equal(last, repo.refs.get("main"), "the pushed commit is remembered");
   // Normal repeat push: remote head is still ours → push, and the record moves forward.
   fs.writeFileSync(path.join(root, "about.html"), "<p>바뀐 소개</p>");
@@ -377,7 +377,7 @@ const tree = (gh, name) => {
   assert.equal(last, repo.refs.get("main"));
   // Someone edits on github.com (the pencil): a commit we did not make.
   const before = gh.state.log.length;
-  const webEdit = await gh.fetch(`${gh.apiBase()}/repos/octo-clinic/boa-dental/contents/index.html`, {
+  const webEdit = await gh.fetch(`${gh.apiBase()}/repos/octo-clinic/neo-dental/contents/index.html`, {
     method: "PUT",
     headers: { authorization: `Bearer ${gh.state.token}` },
     body: JSON.stringify({ message: "Update index.html", content: Buffer.from("<p>웹에서 고침</p>").toString("base64") }),
@@ -429,7 +429,7 @@ const tree = (gh, name) => {
   gh2.state.faults.repoOwner = "someone-else";
   const r2 = await runPublishSite({}, deps(gh2, site(GOOD_SITE)));
   assert.equal(r2.error?.code, "repo_name_taken", "a redirect to another owner's repo is not ours");
-  assert.ok(!gh2.state.log.some((l) => l.startsWith("POST /repos/octo-clinic/boa-dental/pages")), "nothing written into it");
+  assert.ok(!gh2.state.log.some((l) => l.startsWith("POST /repos/octo-clinic/neo-dental/pages")), "nothing written into it");
   const gh3 = createMockGitHub({ faults: { createRepo403: "You must verify your email address." } });
   assert.equal((await runPublishSite({}, deps(gh3, site(GOOD_SITE)))).error?.code, "email_unverified");
   ok("failure: 422 name taken / someone else's repo / unverified email");
@@ -489,7 +489,7 @@ const tree = (gh, name) => {
   const gh = createMockGitHub({ faults: { pagesNeverWorkflow: true } });
   const r = await runPublishSite({}, deps(gh, site(GOOD_SITE)));
   assert.equal(r.error?.code, "pages_not_ready", JSON.stringify(r));
-  assert.equal(gh.state.log.filter((l) => l === "GET /repos/octo-clinic/boa-dental/pages").length, 1 + 12, "the skill's bounded 12 reads");
+  assert.equal(gh.state.log.filter((l) => l === "GET /repos/octo-clinic/neo-dental/pages").length, 1 + 12, "the skill's bounded 12 reads");
   assert.ok(!gh.state.log.some((l) => l.startsWith("PATCH ")), "the workflow file is NOT pushed when Pages never read back as workflow");
   ok("failure: Pages build_type never becomes workflow → bounded, nothing pushed");
 }
@@ -543,35 +543,35 @@ const tree = (gh, name) => {
 {
   // A cohort without `publishing.custom_domain: true` refuses the input before any request.
   const off = createMockGitHub();
-  const r0 = await runPublishSite({ custom_domain: "www.boadental.co.kr" }, deps(off, site(GOOD_SITE), { customDomainAllowed: false }));
+  const r0 = await runPublishSite({ custom_domain: "www.neodental.co.kr" }, deps(off, site(GOOD_SITE), { customDomainAllowed: false }));
   assert.equal(r0.error?.code, "not_allowed");
   assert.equal(off.state.log.length, 0);
 }
 {
   const gh = createMockGitHub();
   const root = site(GOOD_SITE);
-  const r = await runPublishSite({ custom_domain: "www.boadental.co.kr" }, deps(gh, root));
+  const r = await runPublishSite({ custom_domain: "www.neodental.co.kr" }, deps(gh, root));
   assert.equal(r.verified, true, "github.io verified BEFORE the domain is attached");
   assert.equal(r.domain.state, "dns_pending");
-  assert.equal(r.domain.name, "www.boadental.co.kr");
+  assert.equal(r.domain.name, "www.neodental.co.kr");
   assert.deepEqual(r.domain.dns_records[0], { type: "CNAME", host: "www", value: "octo-clinic.github.io" });
-  assert.equal(gh.repo("boa-dental").pages.cname, "www.boadental.co.kr");
-  assert.equal(tree(gh, "boa-dental").get("CNAME"), "www.boadental.co.kr\n");
+  assert.equal(gh.repo("neo-dental").pages.cname, "www.neodental.co.kr");
+  assert.equal(tree(gh, "neo-dental").get("CNAME"), "www.neodental.co.kr\n");
 
   // DNS done, certificate not yet: check_only → cert_pending (HTTPS not forced).
   gh.state.faults.healthStatus = [202, 200];
   gh.state.faults.healthDomain = { dns_resolves: true, is_cname_to_github_user_domain: true };
   gh.state.faults.certState = "authorization_pending";
-  const d = deps(gh, undefined, { fetch: async (url, init) => (String(url).includes("boadental") ? new Response("down", { status: 503 }) : gh.fetch(url, init)), budgetMs: 60_000 });
-  const c1 = await runPublishSite({ check_only: true, custom_domain: "www.boadental.co.kr" }, d);
+  const d = deps(gh, undefined, { fetch: async (url, init) => (String(url).includes("neodental") ? new Response("down", { status: 503 }) : gh.fetch(url, init)), budgetMs: 60_000 });
+  const c1 = await runPublishSite({ check_only: true, custom_domain: "www.neodental.co.kr" }, d);
   assert.equal(c1.domain.state, "cert_pending", JSON.stringify(c1));
-  assert.ok(!gh.repo("boa-dental").pages.https_enforced);
+  assert.ok(!gh.repo("neo-dental").pages.https_enforced);
 
   // Certificate issued: check_only enforces HTTPS.
   gh.state.faults.certState = "approved";
   const c2 = await runPublishSite({ check_only: true }, deps(gh, undefined, { fetch: d.fetch, budgetMs: 60_000 }));
   assert.equal(c2.domain.state, "https_enforced", JSON.stringify(c2));
-  assert.equal(gh.repo("boa-dental").pages.https_enforced, true);
+  assert.equal(gh.repo("neo-dental").pages.https_enforced, true);
   assert.equal(c2.verified, false, "the domain host here never served the nonce → not verified");
   assert.equal(c2.url, undefined);
   ok("domain: dns_pending → cert_pending → https_enforced; HTTPS only after the certificate");

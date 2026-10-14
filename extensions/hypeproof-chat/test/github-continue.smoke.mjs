@@ -67,11 +67,11 @@ function listing(dir) {
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0x10, 0x80]);
 const SITE = {
-  "index.html": '<!doctype html><meta charset="utf-8"><title>보아치과</title><link rel="stylesheet" href="shared.css"><img src="images/logo.png"><a href="about.html">소개</a>',
+  "index.html": '<!doctype html><meta charset="utf-8"><title>가상치과</title><link rel="stylesheet" href="shared.css"><img src="images/logo.png"><a href="about.html">소개</a>',
   "about.html": '<!doctype html><meta charset="utf-8"><a href="index.html">처음</a>',
   "shared.css": "body{font-family:sans-serif}",
   "images/logo.png": PNG,
-  "agent.md": "이 문서는 공개 보관함에 있어 누구나 볼 수 있습니다\n\n# 보아치과\n",
+  "agent.md": "이 문서는 공개 보관함에 있어 누구나 볼 수 있습니다\n\n# 가상치과\n",
 };
 
 function deps(gh, root, extra = {}) {
@@ -85,7 +85,7 @@ function deps(gh, root, extra = {}) {
     transport: (token) => createFetchTransport({ base: gh.apiBase(), token, fetch: gh.fetch }),
     pagesBase: gh.pagesBase(),
     workspaceRoot: root,
-    profileDefaultRepo: "boa-dental",
+    profileDefaultRepo: "neo-dental",
     customDomainAllowed: false,
     nonce: () => (++n).toString(16).padStart(32, "b"),
     userAuthWaitMs: 0,
@@ -143,22 +143,22 @@ function computer(gh, root) {
   const a = site({ ...SITE, ".env": "SECRET=1", "node_modules/x/index.js": "x" });
   const published = await runPublishSite({}, deps(gh, a));
   assert.equal(published.verified, true, JSON.stringify(published.error));
-  const repo = gh.repo("boa-dental");
+  const repo = gh.repo("neo-dental");
   const onGitHub = [...repo.trees.get(repo.commits.get(repo.refs.get("main")).tree)].map((e) => e.path).sort();
   assert.ok(onGitHub.includes(".github/workflows/pages.yml") && onGitHub.includes("hps-build.txt") && onGitHub.includes(".nojekyll"), "control: the repository does hold the generated files");
 
   const dest = path.join(tmp("hps-continue-home-"), "HypeProofDentalSeminar");
-  const d = await downloadRepo(api, LOGIN, "boa-dental", "main", dest);
+  const d = await downloadRepo(api, LOGIN, "neo-dental", "main", dest);
   assert.equal(d.ok, true, JSON.stringify(d));
   assert.equal(d.head, repo.refs.get("main"), "the commit the files came from");
-  assert.equal(d.head, await remoteHead(api, LOGIN, "boa-dental", "main"));
+  assert.equal(d.head, await remoteHead(api, LOGIN, "neo-dental", "main"));
   const expected = listing(site(SITE));
   assert.deepEqual(listing(dest), expected, "exactly the publishable files, byte for byte (the PNG included)");
   assert.equal(d.files, Object.keys(expected).length);
 
   // Never into an existing folder; that folder is left exactly as it was.
   const before = listing(dest);
-  const again = await downloadRepo(api, LOGIN, "boa-dental", "main", dest);
+  const again = await downloadRepo(api, LOGIN, "neo-dental", "main", dest);
   assert.equal(again.ok, false);
   assert.equal(again.code, "dest_exists");
   assert.deepEqual(listing(dest), before, "the existing folder is untouched");
@@ -167,7 +167,7 @@ function computer(gh, root) {
   const logoSha = repo.trees.get(repo.commits.get(repo.refs.get("main")).tree).find((e) => e.path === "images/logo.png").sha;
   gh.state.faults.corruptBlob = logoSha;
   const bad = path.join(path.dirname(dest), "corrupt");
-  const corrupt = await downloadRepo(api, LOGIN, "boa-dental", "main", bad);
+  const corrupt = await downloadRepo(api, LOGIN, "neo-dental", "main", bad);
   assert.equal(corrupt.code, "integrity");
   assert.equal(fs.existsSync(bad), false, "nothing is left behind");
   gh.state.faults.corruptBlob = null;
@@ -194,10 +194,10 @@ function computer(gh, root) {
   assert.equal(nextFreeFolder("/h/Other", (p) => taken.has(p)), "/h/Other", "control: a free base is used as is");
   const gh = createMockGitHub();
   const api = apiFor(gh);
-  assert.deepEqual(await firstFreeRepoName(api, LOGIN, "boa-dental"), { ok: true, name: "boa-dental" }, "control: a free name is used as is");
-  gh.seedRepo("boa-dental", { "a.txt": "a" });
-  gh.seedRepo("boa-dental-2", { "a.txt": "a" });
-  assert.deepEqual(await firstFreeRepoName(api, LOGIN, "boa-dental"), { ok: true, name: "boa-dental-3" });
+  assert.deepEqual(await firstFreeRepoName(api, LOGIN, "neo-dental"), { ok: true, name: "neo-dental" }, "control: a free name is used as is");
+  gh.seedRepo("neo-dental", { "a.txt": "a" });
+  gh.seedRepo("neo-dental-2", { "a.txt": "a" });
+  assert.deepEqual(await firstFreeRepoName(api, LOGIN, "neo-dental"), { ok: true, name: "neo-dental-3" });
   const long = "a".repeat(30);
   gh.seedRepo(long, { "a.txt": "a" });
   const short = await firstFreeRepoName(api, LOGIN, long);
@@ -210,19 +210,19 @@ function computer(gh, root) {
   const gh = createMockGitHub();
   const a = site(SITE);
   assert.equal((await runPublishSite({}, deps(gh, a))).verified, true);
-  const headA = gh.repo("boa-dental").refs.get("main");
+  const headA = gh.repo("neo-dental").refs.get("main");
 
   // A folder that never published from here: a NEW repository, the existing one untouched.
   const b = site({ ...SITE, "index.html": "<p>다른 컴퓨터에서 새로 시작</p>" });
   const fresh = await runPublishSite({}, deps(gh, b, { folderRepo: () => "new" }));
   assert.equal(fresh.verified, true, JSON.stringify(fresh.error));
-  assert.equal(fresh.repo_name, "boa-dental-2");
-  assert.equal(gh.repo("boa-dental").refs.get("main"), headA, "the site made elsewhere is untouched");
+  assert.equal(fresh.repo_name, "neo-dental-2");
+  assert.equal(gh.repo("neo-dental").refs.get("main"), headA, "the site made elsewhere is untouched");
 
   // Bound: its own repository, by name.
-  const bound = await runPublishSite({}, deps(gh, b, { folderRepo: () => ({ repo: "boa-dental-2" }) }));
-  assert.equal(bound.repo_name, "boa-dental-2");
-  assert.equal(gh.repo("boa-dental").refs.get("main"), headA);
+  const bound = await runPublishSite({}, deps(gh, b, { folderRepo: () => ({ repo: "neo-dental-2" }) }));
+  assert.equal(bound.repo_name, "neo-dental-2");
+  assert.equal(gh.repo("neo-dental").refs.get("main"), headA);
 
   // An explicit name wins over both.
   const named = await runPublishSite({ repo_name: "my-clinic" }, deps(gh, b, { folderRepo: () => "new" }));
@@ -230,7 +230,7 @@ function computer(gh, root) {
 
   // Control: no folderRepo → the default name, as before.
   const legacy = await runPublishSite({}, deps(gh, a));
-  assert.equal(legacy.repo_name, "boa-dental");
+  assert.equal(legacy.repo_name, "neo-dental");
   ok("pipeline: an unbound folder makes a new repository (the old one untouched); bound → its own; explicit name wins; absent → default");
 }
 
@@ -260,24 +260,24 @@ function computer(gh, root) {
   const A = computer(gh, () => folderA);
   const first = await A.publish();
   assert.equal(first.verified, true, JSON.stringify(first.error));
-  assert.equal(first.repo_name, "boa-dental", "a first-ever folder takes the default name (it is free)");
-  const headA = gh.repo("boa-dental").refs.get("main");
+  assert.equal(first.repo_name, "neo-dental", "a first-ever folder takes the default name (it is free)");
+  const headA = gh.repo("neo-dental").refs.get("main");
 
   // Computer B brings it down, as prepareContinue does: download + register + record the commit.
   const folderB = path.join(tmp("hps-continue-b-"), "HypeProofDentalSeminar");
   const B = computer(gh, () => folderB);
-  const d = await downloadRepo(api, LOGIN, "boa-dental", "main", folderB);
+  const d = await downloadRepo(api, LOGIN, "neo-dental", "main", folderB);
   assert.equal(d.ok, true);
-  await B.registry.register(LOGIN, "boa-dental", folderB);
-  await B.registry.recordPush(LOGIN, "boa-dental", d.head, folderB);
+  await B.registry.register(LOGIN, "neo-dental", folderB);
+  await B.registry.recordPush(LOGIN, "neo-dental", d.head, folderB);
   fs.writeFileSync(path.join(folderB, "about.html"), "<p>B에서 고친 소개</p>");
   const fromB = await B.publish();
   assert.equal(fromB.verified, true, JSON.stringify(fromB.error));
-  assert.equal(fromB.repo_name, "boa-dental", "B continues the same site");
-  const repo = gh.repo("boa-dental");
+  assert.equal(fromB.repo_name, "neo-dental", "B continues the same site");
+  const repo = gh.repo("neo-dental");
   const headB = repo.refs.get("main");
   assert.deepEqual(repo.commits.get(headB).parents, [headA], "B's commit is built on A's");
-  const live = await gh.fetch(`${gh.pagesBase()}/${LOGIN}/boa-dental/about.html`);
+  const live = await gh.fetch(`${gh.pagesBase()}/${LOGIN}/neo-dental/about.html`);
   assert.equal(await live.text(), "<p>B에서 고친 소개</p>");
 
   // A's copy is now stale: its press stops instead of overwriting B's work.
@@ -320,8 +320,8 @@ function computer(gh, root) {
 
   const classRoot = "/h/HypeProofDentalSeminar";
   const repos = [
-    { name: "boa-dental-2", pushedAt: "2026-10-14T09:00:00Z", htmlUrl: "https://github.com/octo-clinic/boa-dental-2", defaultBranch: "main" },
-    { name: "boa-dental", pushedAt: "2026-10-13T09:00:00Z", htmlUrl: "https://github.com/octo-clinic/boa-dental", defaultBranch: "main" },
+    { name: "neo-dental-2", pushedAt: "2026-10-14T09:00:00Z", htmlUrl: "https://github.com/octo-clinic/neo-dental-2", defaultBranch: "main" },
+    { name: "neo-dental", pushedAt: "2026-10-13T09:00:00Z", htmlUrl: "https://github.com/octo-clinic/neo-dental", defaultBranch: "main" },
   ];
   const calls = { prepare: [], find: 0, signIn: 0 };
   let findAnswer = { status: "found", login: LOGIN, repos };
@@ -357,9 +357,9 @@ function computer(gh, root) {
   // JSON round trip: the state object was made in the bundle's VM context (another realm).
   assert.deepEqual(JSON.parse(JSON.stringify(last().github)), { status: "found", repos: repos.map(({ name, pushedAt }) => ({ name, pushedAt })), newFolder: "HypeProofDentalSeminar-3" });
   assert.ok(!JSON.stringify(states).includes("code-1"), "the code never reaches the UI");
-  await page.handle({ type: "continueFromGithub", repo: "boa-dental" });
+  await page.handle({ type: "continueFromGithub", repo: "neo-dental" });
   assert.equal(calls.prepare.length, 1);
-  assert.equal(calls.prepare[0].repo.name, "boa-dental", "the picked site, not the most recent one");
+  assert.equal(calls.prepare[0].repo.name, "neo-dental", "the picked site, not the most recent one");
   assert.equal(calls.prepare[0].classRoot, classRoot);
   assert.deepEqual(begun, [`${classRoot}-2`], "the folder the site came down into is the one that opens");
   assert.equal(stored, "code-1");
@@ -381,7 +381,7 @@ function computer(gh, root) {
   await page.handle({ type: "connectCourse", token: "code-3" });
   await settle();
   const opened = begun.length;
-  await page.handle({ type: "continueFromGithub", repo: "boa-dental" });
+  await page.handle({ type: "continueFromGithub", repo: "neo-dental" });
   assert.equal(begun.length, opened);
   assert.equal(last().candidate, true);
   assert.match(last().error, /내려받지 못했어요/);
