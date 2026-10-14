@@ -806,7 +806,7 @@
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "d60cb0648c094f6d3191d3945ab5b12d997dc6066a4107033f968c559af5437f",
+      "sha256": "e5bf8ebb6e031ab57af5ce328465c1cda813afc0eee744776670b9d90792d5d7",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
@@ -3919,7 +3919,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Scoped local/Windows acceptance passed at extension463e8529 and Serviceffef7bc: cohort A/B reuse, exact approved Apps Script send1/unknown0 and matching Inbox receipt. Complete PR review; commercial Google onboarding and separately authorized merge/general rollout remain outside this test acceptance.",
+      "next_action": "Scoped local/Windows acceptance passed at extension463e8529 and Serviceffef7bc: cohort A/B reuse, exact approved Apps Script send1/unknown0 and matching Inbox receipt. Complete PR review; commercial Google onboarding and separately authorized merge/general rollout remain outside this test acceptance. Follow-up commercial preparation distinguishes Google recovery states; select and verify a no-IAM execution architecture before public onboarding per docs/plan/google-commercial-onboarding.md.",
       "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
       "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
       "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",
