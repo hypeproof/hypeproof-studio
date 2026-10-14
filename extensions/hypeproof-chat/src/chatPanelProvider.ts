@@ -1,5 +1,6 @@
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
+import { passSpentNotice } from "./passPurchase";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
@@ -5352,6 +5353,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
     if (isAbortError(err)) return;
+    // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
+    const spent = passSpentNotice(err);
+    if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }
     if (err instanceof ProxyAuthError) {
       if (err.requestId) this.lastRequestId = err.requestId;
       void this.post({
@@ -5732,7 +5736,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile},
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
           activityDraft:this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),

@@ -70,7 +70,7 @@ t("설정 agent-sdk → agent-sdk", () => {
   );
 });
 
-t("프로필 agent-sdk → agent-sdk (보아 원장 트랙)", () => {
+t("프로필 agent-sdk → agent-sdk (치과 원장 트랙)", () => {
   assert.equal(
     resolveCoachRuntime({ settingRuntime: "proxy", profileRuntime: "agent-sdk", minorCohort: false }),
     "agent-sdk",

@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import type { ResolvedProfile } from './protocol';
@@ -21,6 +22,16 @@ export function activityService(url: string): string {
   return u.href.replace(/\/+$/, '');
 }
 const canonical = (root: string) => fs.realpathSync(root);
+/**
+ * REQ-L12 — a bought pass continues in its home folder, the way Claude Code continues in the folder
+ * it is started in (Jay, 2026-10-14). Only the profile's own `workspace_root` can be taken over, and
+ * only by a pass. A local folder choice must not change the Service profile's home.
+ */
+export function passTakesOver(p: Pick<ResolvedProfile, 'pass' | 'workspace_root'>, root: string): boolean {
+  if (!p.pass || !p.workspace_root) return false;
+  const home = p.workspace_root.startsWith('~/') ? path.join(os.homedir(), p.workspace_root.slice(2)) : p.workspace_root;
+  try { return canonical(home) === canonical(root); } catch { return false; }
+}
 const contexts = new WeakMap<vscode.ExtensionContext, ActivityConnections>();
 export function activityConnections(context: vscode.ExtensionContext): ActivityConnections | undefined { return contexts.get(context); }
 
@@ -66,7 +77,7 @@ export class ActivityConnections {
       if (r?.service !== activityService(this.service())) continue;
       if (!found.has(r.id) || found.get(r.id)!.savedAt < r.savedAt) found.set(r.id, r);
     }
-    return [...found.values()].map(({ref,id,name,kind,workspace}) => ({ref,id,name,kind,workspace}));
+    return [...found.values()].map(({ref,id,name,kind,pass,workspace}) => ({ref,id,name,kind,...(pass?{pass:true}:{}),workspace}));
   }
   async candidate(ref: string): Promise<ActivityRecord> {
     const r = await this.read(ref);
@@ -75,12 +86,15 @@ export class ActivityConnections {
   }
   async token(): Promise<string | undefined> { return this.matchesService ? this.active?.token : undefined; }
   private bindingPath(root: string): string { return path.join(this.dir, digest(canonical(root)) + '.json'); }
-  private claim(root: string, id: string): void {
+  private claim(root: string, id: string, takeover = false): void {
     fs.mkdirSync(this.dir, {recursive:true,mode:0o700});
     const file = this.bindingPath(root);
     try { fs.writeFileSync(file, JSON.stringify({version:1,id}), {flag:'wx',mode:0o600}); }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
-    if (JSON.parse(fs.readFileSync(file,'utf8')).id !== id) throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
+    if (JSON.parse(fs.readFileSync(file,'utf8')).id === id) return;
+    // The earlier activity keeps its saved record; selecting it later reports this folder as taken.
+    if (takeover) { fs.writeFileSync(file, JSON.stringify({version:1,id}), {mode:0o600}); return; }
+    throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
   }
   prepare(root:string,p:ResolvedProfile,prepare:()=>void):void {
     if (!/^[a-f0-9]{64}$/.test(p.activity_id ?? '')) throw new ActivityConnectionError('활동 정보를 다시 확인해 주세요.');
@@ -88,7 +102,11 @@ export class ActivityConnections {
     fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
     const release=this.lock(root);
     try {
-      this.claim(root,digest(JSON.stringify([activityService(this.service()),p.activity_id])));
+      // Preparation must not replace the binding that commit snapshots for rollback.
+      const file=this.bindingPath(root), id=digest(JSON.stringify([activityService(this.service()),p.activity_id]));
+      if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file,'utf8')).id !== id && !passTakesOver(p,root)) {
+        throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
+      }
       prepare();
     } finally { release(); }
   }
@@ -105,17 +123,18 @@ export class ActivityConnections {
     const sameWindowRoot = !!this.root() && canonical(this.root()!) === workspace;
     const ref = PREFIX + crypto.randomUUID();
     const next: ActivityRecord = {version:1,ref,id,service,serverId:p.activity_id!,workspace,token,
-      name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,savedAt:Date.now()};
+      name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),savedAt:Date.now()};
     const restore = () => {
       if (!fs.existsSync(bindingFile)) return;
       const bound=JSON.parse(fs.readFileSync(bindingFile,'utf8'));
-      if (bound.ref !== ref && !(oldBinding===undefined && bound.id===id && !bound.ref)) return;
+      // Ours: written with this ref, or claimed for this id without a ref yet.
+      if (bound.ref !== ref && !(bound.id===id && !bound.ref)) return;
       if (oldBinding===undefined) fs.unlinkSync(bindingFile);
       else fs.writeFileSync(bindingFile,oldBinding,{mode:0o600});
     };
     const tmp = bindingFile + '.' + crypto.randomUUID();
     try {
-      this.claim(workspace,id);
+      this.claim(workspace,id,passTakesOver(p,workspace));
       await this.raw.secrets.store(ref,JSON.stringify(next));
       fs.writeFileSync(tmp,JSON.stringify({version:1,id,ref}),{flag:'wx',mode:0o600});
       fs.renameSync(tmp,bindingFile);

@@ -128,6 +128,12 @@ Judgment, Verify, Orchestrate, Adapt, Ownership은 이를 연구할 잠정 후�
 - 구매한 기능과 강사의 수업 정책은 플랫폼 안전·사용자 승인·런타임 지원 안에서만 작동한다.
 - 한도 도달·만료·실패는 새 유료 실행을 제한하며 자기 결과·파일·중지·내보내기를 지키도록 설계한다.
 - 실제 원가·예약·미정산·상품 포함량을 구분한다. 토큰·비용·유료 등급은 인간 역량의 점수가 아니다.
+- 이용권이 포함하는 것은 기간 안의 요청 횟수이고, 한 요청은 메뉴에서 어느 모델을 고르든 같은 단위로 센다
+  (Service `399109c` `lib/purchase.ts:24-29`, `middleware/native-trial-budget.ts:60-66`). 메뉴의 모델은 Service가 붙인
+  현재 표시 이름으로 실행 전에 보인다(`lib/lesson-model-policy.ts:60`). 2026-10-14 별칭 재지정 뒤 이용권의 기본은 Claude Sonnet 5.5이고
+  Claude Opus 5.5·Haiku 5.5도 같은 단위로 고를 수 있다([REQ-M36](studio-requirements.md), Service
+  `399109c`). 재지정은 HypeProof의 원가를 바꾸지만 포함 단위는 바꾸지 않으며, 확정 수업은 확정
+  당시의 모델을 유지한다.
 
 구현 계약은 [AB-01~18](requirements/access-budget-settlement.md),
 [설계](design/access-budget-settlement.md), [CA-T01~19](testing/capability-and-access.md),

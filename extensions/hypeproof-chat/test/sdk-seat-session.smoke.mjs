@@ -38,8 +38,8 @@ const seatOf = (token, profileId, lessonVersion) =>
 
 // ─── The seat key separates the people who share a classroom PC ──────────────
 {
-  const a = seatOf("token-student-a", "sk-biopharm-kids-s1", "2026.09.01");
-  const b = seatOf("token-student-b", "sk-biopharm-kids-s1", "2026.09.01");
+  const a = seatOf("token-student-a", "kids-workshop-s1", "2026.09.01");
+  const b = seatOf("token-student-b", "kids-workshop-s1", "2026.09.01");
 
   assert.notEqual(a, b, "two students on one cohort must not share a seat");
 
@@ -47,7 +47,7 @@ const seatOf = (token, profileId, lessonVersion) =>
   // would scope the directory correctly and still make resuming impossible.
   assert.equal(
     a,
-    seatOf("token-student-a", "sk-biopharm-kids-s1", "2026.09.01"),
+    seatOf("token-student-a", "kids-workshop-s1", "2026.09.01"),
     "the same student on the same lesson keeps one seat across turns",
   );
 
@@ -55,14 +55,14 @@ const seatOf = (token, profileId, lessonVersion) =>
   // session that was mid-flight on the previous content.
   assert.notEqual(
     a,
-    seatOf("token-student-a", "sk-biopharm-kids-s1", "2026.09.02"),
+    seatOf("token-student-a", "kids-workshop-s1", "2026.09.02"),
     "a lesson version bump starts a new seat",
   );
 
   // Same person, different cohort — the profile is part of the seat.
   assert.notEqual(
     a,
-    seatOf("token-student-a", "sk-biopharm-adult-s1", "2026.09.01"),
+    seatOf("token-student-a", "adult-workshop-s1", "2026.09.01"),
     "the cohort profile is part of the seat",
   );
 }

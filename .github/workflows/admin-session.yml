@@ -25,10 +25,9 @@ on:
         default: open
       cohort:
         description: "cohort id"
-        default: boah-dental-2026-a
+        required: true
       profile:
         description: "profile id (open)"
-        default: boah-dental-director-copyclone-2026-s1
       user_handle:
         description: "student handle to mint + add to roster (open)"
         default: rehearsal-director

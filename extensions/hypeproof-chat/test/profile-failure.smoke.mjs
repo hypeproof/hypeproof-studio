@@ -97,7 +97,7 @@ const errBody = (code, type = "auth") =>
 // ─── instructor token detected offline, before any request ───────────────────
 {
   const issuer = tokenFor({ u: "jay", c: "__issuer__", p: "__issuer__", role: "issuer", v: 2 });
-  const student = tokenFor({ u: "kid01", c: "sk-biopharm-2026-a", p: "prof-s1", v: 2 });
+  const student = tokenFor({ u: "kid01", c: "kids-workshop-2026-a", p: "prof-s1", v: 2 });
 
   assert.equal(looksLikeIssuerTokenUnverified(issuer), true, "role:issuer is named");
   assert.equal(looksLikeIssuerTokenUnverified(student), false, "a student token is not");
@@ -131,3 +131,15 @@ for (const copy of [TOKEN_EXPIRED_FRIENDLY, PROFILE_ISSUER_TOKEN_FRIENDLY, PROFI
   assert.doesNotMatch(copy, /선생님|새 토큰/);
 }
 assert.match(TOKEN_EXPIRED_FRIENDLY, /코드 발급 담당자/);
+
+// REQ-L12 — a refunded or replaced code, and a bought pass past its window, show the Service's own
+// sentence (2026-10-14: a refunded pass read "참여 코드를 확인할 수 없습니다 … 코드 발급 담당자에게 문의").
+const withMessage = (code, message) => JSON.stringify({ error: { code, message } });
+assert.equal(classifyProfileFailure(401, withMessage('trial_revoked_or_reissued', '환불했거나 새 코드로 바뀐 이용권입니다.')).friendly, '환불했거나 새 코드로 바뀐 이용권입니다.');
+assert.match(classifyProfileFailure(401, JSON.stringify({ error: { code: 'trial_revoked_or_reissued' } })).friendly, /환불했거나 새 코드로 바뀐 코드/);
+assert.equal(classifyProfileFailure(403, withMessage('trial_expired', '이용권 기간이 끝났습니다. 작업 파일은 그대로 보존됩니다.')).friendly, '이용권 기간이 끝났습니다. 작업 파일은 그대로 보존됩니다.');
+assert.match(classifyProfileFailure(403, withMessage('trial_expired', '개인 체험 시간이 끝났습니다.')).friendly, /새 체험을 요청/);
+const { passSpentNotice, PASS_SPENT_FRIENDLY } = await import("../src/passPurchase.ts");
+assert.equal(passSpentNotice(new Error('Claude Code returned an error result: API Error: Request rejected (429) · 이용권의 AI 요청 횟수를 모두 썼습니다. 만든 파일과 대화는 그대로 남아 있습니다.')), PASS_SPENT_FRIENDLY);
+assert.equal(passSpentNotice(new Error('API Error: 429 rate limited')), null);
+console.log("profile-failure.smoke.mjs — pass endings: refunded, past window, spent");

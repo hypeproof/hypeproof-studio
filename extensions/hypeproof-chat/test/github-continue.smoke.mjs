@@ -336,7 +336,7 @@ function computer(gh, root) {
   };
   const begun = [];
   const make = (src) => {
-    const page = new mod.exports.StartPage(ctx, chat, async (profile, commit) => { begun.push(profile.workspace_root); await commit(); return false; }, src);
+    const page = new mod.exports.StartPage(ctx, chat, async (profile, commit, selectedDirectory) => { begun.push(selectedDirectory ?? profile.workspace_root); await commit(); return false; }, src);
     page.panel = { webview: { postMessage: async (m) => void states.push(m) } };
     return page;
   };

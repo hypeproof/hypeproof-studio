@@ -5,6 +5,8 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { localOps } from '../../e2e/classroom/service-fixture.mjs';
+import { serviceProfiles } from '../fixtures/service-profiles.mjs';
+const { listProfiles } = await import('@hypeproof/service-testkit/src/profiles/index.ts');
 let count = 0; async function check(name, fn) { await fn(); count++; console.log('PASS ' + name); }
 const f = await localOps(); const seats = [{ seat_id: 'A1', student_id: 'student-a' }, { seat_id: 'A2', student_id: 'student-b' }, { seat_id: 'A3', student_id: 'student-c' }];
 const sha = (s) => createHash('sha256').update(s).digest('hex'); const admin = { authorization: 'Basic ' + Buffer.from('x:pw').toString('base64') };
@@ -78,7 +80,7 @@ try {
   await check('AT-26 a child class cannot consent with a tap: only an operator-recorded verified guardian consent counts, and an instructor cannot record one', async () => {
     const kids = await localOps();
     try {
-      f.db; const kp = 'sk-biopharm-kids-2026-grade-3-4-s1'; kids.db.prepare('UPDATE sessions SET profile_id=? WHERE id=?').run(kp, kids.run); const { startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts'); await startSession(kids.env.HPS_KV, kids.cohort, { session_id: kids.run, profile_id: kp, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: new Date(Date.now() + 3600000).toISOString() });
+      f.db; const kp = serviceProfiles(listProfiles).kidsLower.id; kids.db.prepare('UPDATE sessions SET profile_id=? WHERE id=?').run(kp, kids.run); const { startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts'); await startSession(kids.env.HPS_KV, kids.cohort, { session_id: kids.run, profile_id: kp, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: new Date(Date.now() + 3600000).toISOString() });
       const t = await kids.teacher('teacher-a', undefined, kids.cohort, [kp]); assert.equal((await kids.request(kids.base, 'PUT', { expected_roster_revision: 0, seats: [{ seat_id: 'K1', student_id: 'student-a' }], flags: { ops_observe: true, ops_commands: true, ops_collect: true } }, t)).status, 201);
       const p = await kids.request(kids.base + '/pairings', 'POST', { seat_id: 'K1', roster_revision: 1 }, t); const k1 = (await kids.request('/v1/classroom/ops/connect', 'POST', { ticket: p.json.ticket, ...kids.instance(1) }, null)).json;
       assert.equal((await kids.request('/v1/classroom/ops/collect/consent', 'POST', { consent: true, purpose: 'class_report', notice_version: 'notice-v1' }, k1.credential)).json.reason, 'guardian_consent_required');

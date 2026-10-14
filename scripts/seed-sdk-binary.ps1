@@ -20,7 +20,7 @@
   this script only supplies the native binary half.
 
 .PARAMETER Version
-  Explicit SDK version (default: pinned 0.3.207). Non-pinned → registry integrity.
+  Explicit SDK version (default: pinned 0.3.299). Non-pinned → registry integrity.
 
 .PARAMETER Tarball
   Local .tgz path (air-gapped mode) instead of downloading.
@@ -34,7 +34,7 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\seed-sdk-binary.ps1
 .EXAMPLE
-  powershell -File scripts\seed-sdk-binary.ps1 -Tarball D:\claude-agent-sdk-win32-x64-0.3.207.tgz
+  powershell -File scripts\seed-sdk-binary.ps1 -Tarball D:\claude-agent-sdk-win32-x64-0.3.299.tgz
 #>
 [CmdletBinding()]
 param(
@@ -51,10 +51,10 @@ $ErrorActionPreference = "Stop"
 # Single source of truth is extensions/hypeproof-chat/src/sdkBinaryManifest.ts
 # (itself locked to package-lock.json). Keep these in lockstep with that manifest
 # AND scripts/seed-sdk-binary.sh — bump all three together with the SDK dep.
-$PinnedVersion = "0.3.207"
+$PinnedVersion = "0.3.299"
 $PinnedSha512 = @{
-  "win32-x64"   = "sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg=="
-  "win32-arm64" = "sha512-9fWpUzfkXlPAg2tf8JpQe7w9avFaomAUbfAwyAmykQgSIf66LwaJjvI5hNqhNqczRKyfsXPn3ei2S5HKlmFP+Q=="
+  "win32-x64"   = "sha512-PWHbjAdrecVlmR0kdgsX20QvUiFgWQl4zskuWd6Ieg3e5w+Ol0FZGXYRLS+Erd+pYUEZBNjDCqK2yd2KdBbDQw=="
+  "win32-arm64" = "sha512-sKvddLLYlXzk0FwjT9gNZDzmdzupI7qI0Dok7uu/KYGFgMGiSEGIsB9bfg+31HMDDftaT16P80MLzH+F8zQBFA=="
 }
 
 function Say($msg)  { Write-Host "`n▶ $msg" -ForegroundColor Magenta }
@@ -141,7 +141,7 @@ try {
     Say "Using local tarball (air-gapped mode): $Tarball"
     $tgz = $Tarball
   } else {
-    Say "Downloading $pkg@$Version (~67 MiB) from the npm registry"
+    Say "Downloading $pkg@$Version (~105-120 MiB) from the npm registry"
     $tgz = Join-Path $tmp.FullName "sdk.tgz"
     Invoke-WebRequest -Uri $tgzUrl -OutFile $tgz -UseBasicParsing
   }

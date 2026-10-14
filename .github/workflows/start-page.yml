@@ -9,6 +9,8 @@ on:
       - 'e2e/service-provenance.mjs'
       - 'e2e/voice-conversation/**'
       - 'e2e/sx/goal-browser.mjs'
+      - 'e2e/curriculum-runtime/workshop-element-trial.mjs'
+      - 'e2e/curriculum-runtime/fixtures/dental-element-trial/**'
       - 'e2e/package*.json'
       - '.github/workflows/start-page.yml'
 permissions:
@@ -51,6 +53,9 @@ jobs:
       # AE-01 (#554): the learner's goal over time in the built webview (late lesson, answers, typed text).
       - run: npm run test:goal:browser
         working-directory: e2e
+      - name: Workshop element selection at desktop and mobile widths
+        run: npm run test:workshop-element
+        working-directory: e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -60,4 +65,5 @@ jobs:
             e2e/test-results/trial-ux/
             e2e/test-results/voice-popup/
             e2e/test-results/goal-browser/
+            e2e/test-results/workshop-element-trial/
           retention-days: 14

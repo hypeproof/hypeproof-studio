@@ -84,7 +84,7 @@ distributed build is stale — run the full **Cut + Dogfood**, plus:
 - [ ] 4시간 세션 끝까지 conversation history 유지 확인
 - [ ] 종료 후 피드백 수집 (오디오 또는 메모)
 
-## Go / No-go (SK바이오팜 1회차)
+## Go / No-go (기업 고객 1회차)
 
 다음이 **모두 true**이면 GO:
 - [ ] 6 operator install rate = 100%

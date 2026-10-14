@@ -1,3 +1,5 @@
+/** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
+export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -94,7 +96,7 @@ export interface EffortRequestRecord {
   reason: 'selected' | 'course_default' | 'unsupported_model'; status: number; created_at: string;
 }
 export interface ChatConfig {
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean};
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
@@ -161,6 +163,8 @@ export interface ResolvedProfile {
   activity_id?: string;
   /** Presentation only; derived from authenticated Service access, never grants authority. */
   activity_kind?: "trial" | "personal" | "classroom";
+  /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
+  pass?: PassStatus;
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;

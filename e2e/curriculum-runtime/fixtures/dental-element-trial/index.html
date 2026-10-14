@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>치과 홈페이지 요소 선택 시험</title>
+  <style>
+    body { margin: 0; padding: 24px; font-family: sans-serif; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1000px; }
+    #clinic-photo { min-height: 160px; padding: 24px; background: #dbeafe; border: 2px solid #2563eb; }
+    @media (max-width: 600px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>우리 치과 소개</h1>
+  <main>
+    <section><h2>진료 안내</h2><p>사진을 넣을 위치를 선택해 주세요.</p></section>
+    <button id="clinic-photo" type="button">치과 사진 넣을 자리</button>
+  </main>
+  <output id="actions">0</output>
+  <script>
+    document.getElementById('clinic-photo').addEventListener('click', () => {
+      const output = document.getElementById('actions');
+      output.textContent = String(Number(output.textContent) + 1);
+    });
+  </script>
+</body>
+</html>

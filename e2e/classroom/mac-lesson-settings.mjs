@@ -51,7 +51,8 @@ assert.ok(manifest.agent_sdk?.vendored === true && manifest.agent_sdk.binary, 't
 const steps = []; const step = (name, detail = {}) => { steps.push({ at: new Date().toISOString(), name, ...detail }); console.log('STEP ' + name + (Object.keys(detail).length ? ' ' + JSON.stringify(detail) : '')); };
 
 // ── Service: real router + SQLite. The class and its tokens last HOURS so that a person can keep using what is left running. ──
-const local = await localOps(MODE === 'proxy' ? { profile: 'boah-dental-teaser-2026-s1' /* same synthetic cohort, proxy runtime */ } : {}), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { readLesson } = await import('@hypeproof/service-testkit/src/lib/lesson-delivery.ts');
+const { serviceProfiles } = await import('../../test/fixtures/service-profiles.mjs'), { listProfiles } = await import('@hypeproof/service-testkit/src/profiles/index.ts');
+const local = await localOps(MODE === 'proxy' ? { profile: serviceProfiles(listProfiles).searchTeaser.id /* same synthetic cohort, proxy runtime */ } : {}), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { readLesson } = await import('@hypeproof/service-testkit/src/lib/lesson-delivery.ts');
 const endsAt = new Date(Date.now() + HOURS * 3600_000).toISOString();
 await startSession(local.env.HPS_KV, local.cohort, { session_id: local.run, profile_id: local.profile, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: endsAt }); local.db.prepare('UPDATE sessions SET ends_at=? WHERE id=?').run(endsAt, local.run);
 const seats = ['A1', 'A2'].map((id, i) => ({ seat_id: id, student_id: prefix + (i + 1) })), KEY = () => crypto.randomUUID();

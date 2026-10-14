@@ -16,13 +16,13 @@
 
 두 SK 아동 프로필 모두 `coach_runtime: "agent-sdk"` 를 선언한다:
 
-- `worker/src/profiles/sk-biopharm-kids-s1.ts:61` (초3·4)
-- `worker/src/profiles/sk-biopharm-kids-2026-grade-5-6-s1.ts:67` (초5·6)
+- `worker/src/profiles/kids-workshop-s1.ts:61` (초3·4)
+- `worker/src/profiles/kids-2026-grade-5-6-s1.ts:67` (초5·6)
 
 프로덕션 토큰으로 직접 확인한 값 (2026-08-19):
 
 ```
-token probe: 200 · profile=sk-biopharm-kids-2026-grade-3-4-s1
+token probe: 200 · profile=kids-2026-grade-3-4-s1
              · coach_runtime=agent-sdk · minor_cohort=true
 ```
 
@@ -70,7 +70,7 @@ LOAD_WORKERS=23 LOAD_ARRIVAL=burst LOAD_TURNS=8 node run.mjs
 | `LOAD_STAGGER_MS` | `20000` | `stagger` 모드 시작 분산 폭 |
 | `LOAD_MAX_TOKENS` | `16384` | 워커가 어차피 16384 로 클램프 (`translate.ts:514`) |
 | `LOAD_TURN_TIMEOUT_MS` | `300000` | 턴 하드 타임아웃. 치과 max 가 278s 였으므로 60s 로 자르면 재려던 꼬리를 자른다 |
-| `LOAD_COHORT` | `sk-biopharm-2026-a` | |
+| `LOAD_COHORT` | `kids-workshop-2026-a` | |
 | `LOAD_WORKER_ORIGIN` | `https://api.hypeproof-ai.xyz` | |
 | `LOAD_FORCE_SPLIT` | (미설정) | `1` 이면 13/10 분할 강행 — **세션과 다른 프로필은 403 난다.** 아래 참조 |
 | `HPS_ADMIN_PASSWORD` | `worker/.dev.vars` 에서 읽음 | 값은 절대 출력하지 않는다 (길이만) |
@@ -267,7 +267,7 @@ curl -H "Authorization: Bearer <토큰>" https://api.hypeproof-ai.xyz/v1/profile
 `load-01`…`load-NN` 을 append 한다 (idempotent).
 
 **rehearsal 배너가 먼저 찍힌다.** `tests/rehearsal/helpers/env.mjs` 를 import 하면
-`[rehearsal] env: … COHORT = boah-dental-2026-a` 배너가 부작용으로 출력된다.
+`[rehearsal] env: … COHORT = dental-pilot-2026-a` 배너가 부작용으로 출력된다.
 **이 런의 설정이 아니다.** 바로 아래 하네스 자신의 배너를 믿어라.
 
 **어드민 비밀번호는 절대 출력하지 않는다.** 길이만 찍는다.
@@ -287,8 +287,8 @@ if (session.profile_id !== profile.id) {
 ```
 
 한 코호트에는 **활성 세션이 하나**뿐이고, 그 세션은 **프로필 하나**에 고정된다.
-그리고 초3·4 와 초5·6 프로필은 **같은 코호트 `sk-biopharm-2026-a` 를 공유**한다
-(`sk-biopharm-kids-s1.ts:93` 주석: "초3·4·초5·6 두 트랙이 공유하는 cohort").
+그리고 초3·4 와 초5·6 프로필은 **같은 코호트 `kids-workshop-2026-a` 를 공유**한다
+(`kids-workshop-s1.ts:93` 주석: "초3·4·초5·6 두 트랙이 공유하는 cohort").
 
 ⇒ **두 학년 트랙을 동시에 서비스할 수 없다.** 부하시험만의 문제가 아니라
 **실제 워크숍의 문제**다. 두 트랙을 같은 시간에 돌릴 계획이라면 한쪽 전원이
@@ -299,7 +299,7 @@ if (session.profile_id !== profile.id) {
 | 안 | 내용 | 비용 |
 |---|---|---|
 | A | 23명 전원을 **열려 있는 세션의 프로필 하나**로 돌린다 | 부하 특성은 정확히 측정됨. 프로필 혼합만 미측정. **코드 변경 0** |
-| B | 초5·6 프로필에 **별도 cohort_id** 를 준다 (예: `sk-biopharm-2026-b`) → 코호트 2개, 세션 2개 | 프로필 파일 수정 + 배포. roster/토큰 발급 절차가 두 벌 |
+| B | 초5·6 프로필에 **별도 cohort_id** 를 준다 (예: `kids-workshop-2026-b`) → 코호트 2개, 세션 2개 | 프로필 파일 수정 + 배포. roster/토큰 발급 절차가 두 벌 |
 | C | 세션이 **프로필 배열**을 갖도록 워커 수정 | 게이트·콘솔·admin API 변경. 제일 큼 |
 
 기본값은 **A** 다 (`LOAD_FORCE_SPLIT` 미설정 → 전원 세션 프로필). B/C 없이
@@ -313,7 +313,7 @@ if (session.profile_id !== profile.id) {
 2. **roster** — `run.mjs` 가 `load-01…load-23` 을 자동 append 한다. 현재 roster 는
    21명이고 상한은 500 (`admin.ts:705`) 이라 여유 있음. 수동으로 하려면:
    ```bash
-   curl -u "admin:$PW" -X POST https://api.hypeproof-ai.xyz/admin/cohorts/sk-biopharm-2026-a/roster/append \
+   curl -u "admin:$PW" -X POST https://api.hypeproof-ai.xyz/admin/cohorts/kids-workshop-2026-a/roster/append \
      -H 'content-type: application/json' \
      -d '{"users":["load-01","load-02", ...]}'
    ```

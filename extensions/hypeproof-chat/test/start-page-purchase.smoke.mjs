@@ -142,6 +142,14 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   assert.equal(world.secrets.has(KEY), true, 'stopping the wait never throws a possibly paid order away');
   await page.handle({ type: 'purchaseRetry' });
   assert.equal(view().stage, 'waiting');
+  // Leaving for the other ways to start hides the view but keeps the order on offer (2026-10-14:
+  // after 그만두기 the screen could not be left for up to 40 minutes).
+  await page.handle({ type: 'purchaseHide' });
+  assert.equal(view().stage, undefined);
+  assert.equal(view().order.label, '30일 이용권');
+  assert.equal(world.secrets.has(KEY), true);
+  await page.handle({ type: 'purchaseRetry' });
+  assert.equal(view().stage, 'waiting');
   world.poll = 'failed'; await page.purchaseTick();
   assert.match(view().message, /돈이 나가지 않았어요/);
   assert.equal(world.secrets.has(KEY), false);

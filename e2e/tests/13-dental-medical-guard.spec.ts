@@ -1,4 +1,4 @@
-// T2.M — 의료법 reach guards for boah-dental-teaser-2026-s1 (#109).
+// T2.M — 의료법 reach guards for dental-teaser-2026-s1 (#109).
 //
 // Extends T2.D (08-dental-llm-shape) which only covered: 보장 표현 / 임상 결론 /
 // 블로그 vs 학회. The workshop audience handles real patient data — the coach

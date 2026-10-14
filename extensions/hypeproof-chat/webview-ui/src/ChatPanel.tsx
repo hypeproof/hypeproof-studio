@@ -1,5 +1,6 @@
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
+import { activityLabel, passEnd } from "./activityLabel";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -499,7 +500,7 @@ export function ChatPanel(props: Props) {
   const coachName = resolveCoachIdentity(config?.coach, { ux }).name;
 
   // Tone for hard-coded chat-panel labels — game (kids) vs search-webapp
-  // (보아치과 teaser) vs website (보아치과 원장 copyclone) vs world
+  // (예시치과 teaser) vs website (치과 원장 copyclone) vs world
   // ("내가 만든 미래"). Centralized in chatPanelHelpers (appToneOf/TONE_LABELS)
   // but mirrored here so the webview stays vscode-free (chatPanelHelpers
   // imports Node `Buffer`).
@@ -730,7 +731,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업"} · {config.activity.name}
+        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{passEnd(config.activity.pass) && <> · {passEnd(config.activity.pass)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -942,7 +943,8 @@ export function ChatPanel(props: Props) {
         // step the record holds.
         busy={streaming || awaitingRecord}
         activity={config?.activity ? {
-          label: config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업",
+          label: activityLabel(config.activity.kind, config.activity.pass),
+          ...(passEnd(config.activity.pass) ? { detail: passEnd(config.activity.pass)! } : {}),
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}
@@ -2028,8 +2030,10 @@ function ErrorBanner({
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
   const isAuth = /참여 코드|토큰|세션|강사|만료|등록|인가/.test(message);
   const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort/i.test(message);
-  const icon = isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
-  const title = isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
+  // REQ-L12 — a spent, refunded or ended pass is an account state, not a fault.
+  const isPass = /이용권|환불/.test(message);
+  const icon = isPass ? "🎟️" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
+  const title = isPass ? "이용권을 더 쓸 수 없어요" : isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
 
   return (
     <div className="hps-error-banner" role="alert">

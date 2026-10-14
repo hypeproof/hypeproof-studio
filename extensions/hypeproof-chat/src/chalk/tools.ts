@@ -135,7 +135,7 @@ export const CHALK_CHECK_PLAN_DEF: ChalkToolDefinition = {
     "저장된 초안을 검사해 규격 위반·관문 판정 결과를 돌려줍니다. 선택적으로 HTML 본문을 직접 넣어 파서 검사만 먼저 받을 수 있습니다.",
   inputSchema: schema(
     {
-      cohort: { ...str, description: "코호트 ID (예: sk-biopharm-kids-s1)" },
+      cohort: { ...str, description: "코호트 ID (예: kids-workshop-s1)" },
       course: { ...str, description: "강의 ID (예: lesson-01)" },
       html: {
         type: "string",
@@ -227,7 +227,7 @@ export const CHALK_RECOMMEND_METHODS_DEF: ChalkToolDefinition = {
     "강의 초안의 학습 조건·목표를 기반으로 적합한 교수 모형을 추천합니다.",
   inputSchema: schema(
     {
-      cohort: { ...str, description: "코호트 ID (예: sk-biopharm-kids-s1). 강사 토큰 scope에서 선택" },
+      cohort: { ...str, description: "코호트 ID (예: kids-workshop-s1). 강사 토큰 scope에서 선택" },
       course: { ...str, description: "강의 ID (예: lesson-01)" },
       conditions: {
         type: "array",

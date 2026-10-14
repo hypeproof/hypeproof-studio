@@ -77,7 +77,7 @@ export class StartPage {
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
-    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>) => Promise<boolean>,
+    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
     private githubSource?: GithubContinueSource,
   ) {}
 
@@ -145,8 +145,9 @@ export class StartPage {
       if (!prepared.ok) { this.error = prepared.message; await this.refresh(); return; }
       folder = prepared.folder;
     }
+    // The folder travels as the local choice (`begin`'s selectedDirectory), not as a rewrite of
+    // the served profile: the profile stays what the Service said.
     candidate.workspace = folder;
-    candidate.profile = { ...candidate.profile, workspace_root: folder };
     await this.handle({ type: "beginCourse" });
   }
 
@@ -215,7 +216,8 @@ export class StartPage {
   }
   /** A paid order must survive a closed tab or a restart: pick the wait back up where it stopped. */
   private async resumePurchase(): Promise<void> {
-    if (this.order) return;
+    // The tab was closed and opened again: the order is still held, but its timer died with the panel.
+    if (this.order) { if (this.purchaseStage === "waiting") this.schedulePurchasePoll(0); return; }
     const saved = await this.savedOrder();
     if (!saved) return;
     this.order = saved;
@@ -289,6 +291,12 @@ export class StartPage {
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
       await this.refresh(); return;
     }
+    if (msg.type === "purchaseHide") {
+      // Back to the other ways to start. The order stays saved and the choice list offers it again.
+      this.stopPurchaseWait();
+      if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      await this.refresh(); return;
+    }
     if (msg.type === "purchaseReopen") {
       if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
       return;
@@ -336,12 +344,12 @@ export class StartPage {
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
       ...(this.look() ? { github: this.look()!.state } : {}),
-      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
+      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
-        series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: p.workspace_root ?? "현재 작업 폴더" } } : {}),
+        series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
     await this.panel?.webview.postMessage({ type: "startState", state });
   }
@@ -350,7 +358,7 @@ export class StartPage {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") { await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
-    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel") { await this.handlePurchase(msg); return; }
+    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {
@@ -388,7 +396,7 @@ export class StartPage {
         if (!record) throw new ActivityConnectionError('저장된 활동을 찾지 못했습니다.');
         const result = await fetchProfileResult({proxyUrl:record.service,token:record.token});
         if (!result.ok) {this.error=result.failure.friendly; return;}
-        this.candidate = {token:record.token,proxyUrl:record.service,profile:{...result.profile,workspace_root:record.workspace},workspace:record.workspace,previousConnected:!!connections?.current};
+        this.candidate = {token:record.token,proxyUrl:record.service,profile:result.profile,workspace:record.workspace,previousConnected:!!connections?.current};
         this.error = undefined;
       } catch (error) { this.error = entryError(error); }
       finally { this.busy=false; await this.refresh(); }
@@ -396,7 +404,7 @@ export class StartPage {
     }
     if (msg.type === 'chooseActivityFolder' && this.candidate) {
       const choice = await vscode.window.showOpenDialog({canSelectFiles:false,canSelectFolders:true,canSelectMany:false,openLabel:'이 활동의 작업 폴더 선택'});
-      if (choice?.[0]) { this.candidate.workspace=choice[0].fsPath; this.candidate.profile={...this.candidate.profile,workspace_root:choice[0].fsPath}; }
+      if (choice?.[0]) this.candidate.workspace=choice[0].fsPath;
       await this.refresh(); return;
     }
     if (msg.type === "cancelCandidate") {
@@ -431,7 +439,8 @@ export class StartPage {
           if (proxyUrl !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           const result = await fetchProfileResult({ proxyUrl, token: candidate.token });
           if (!result.ok) { this.error = result.failure.friendly; return; }
-          profile = candidate.workspace ? {...result.profile,workspace_root:candidate.workspace} : result.profile;
+          // Service authority stays separate from the local navigation choice.
+          profile = result.profile;
           if (!profile?.profile_id || !profile.display_name || !profile.ux?.coach || !profile.welcome) throw new Error("Invalid activity profile");
         } else profile = await this.chat.ensureProfile(true);
         if (!profile) {
@@ -462,7 +471,7 @@ export class StartPage {
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
           this.candidate = undefined;
         };
-        if (await this.begin(profile, commit)) return; // workspace switch reloads the window
+        if (await this.begin(profile, commit, candidate?.workspace)) return; // workspace switch reloads the window
         await commit();
         if (!this.panel) throw new Error('Entry page was closed');
         await this.openChat();
@@ -509,7 +518,7 @@ export class StartPage {
       // Preview only. Existing runtime and credential stay bound until workspace preparation succeeds.
       const running = await this.chat.ensureProfile(), connections = activityConnections(this.context);
       const workspace = reentryWorkspace({ candidateActivity: p.activity_id, record: connections?.current ?? null, recordServiceMatches: !!connections?.matchesService, openFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, runningActivity: running?.activity_id });
-      this.candidate = { token, profile: workspace ? { ...p, workspace_root: workspace } : p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
+      this.candidate = { token, profile: p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
       // GitHub first (user requirement 2026-10-13): the served profile names the class folder.
       const classRoot = this.githubSource?.allowed(p) ? this.githubSource.classRoot(p) : null;
       if (classRoot) this.lookAtGithub(this.candidate, classRoot);

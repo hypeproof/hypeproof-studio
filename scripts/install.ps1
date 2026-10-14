@@ -39,6 +39,12 @@
                             the doctor's SDK check all still run - a
                             click-installed Studio ships no claude.exe, so this
                             flag must not be the thing that keeps it missing.
+
+    Class kit (docs/INSTALL-CLASS-KIT.ko.md):
+      -KitDir <folder>      or  env HPS_KIT_DIR -> take the Studio installer and
+                            the SDK seeder from this folder (built by
+                            scripts/make-class-kit.sh) instead of GitHub. No
+                            GitHub login is used.
 #>
 
 [CmdletBinding()]
@@ -67,7 +73,10 @@ param(
     # It must point at a tree that ACTUALLY hosts scripts/seed-sdk-binary.ps1:
     # this repo, not the releases repo (Studio binaries only). Deriving it from
     # $ManifestUrl gave a 404 seeder URL, which is fail-closed on Windows.
-    [string]$ScriptsBaseUrl = 'https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/'
+    [string]$ScriptsBaseUrl = 'https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/',
+    # Class kit folder (instructor hand-off for participants who are not
+    # organization members). Empty = the normal member install from GitHub.
+    [string]$KitDir = ''
 )
 
 # ----------------------------------------------------------------------------
@@ -82,6 +91,7 @@ if ($env:HPS_NONINTERACTIVE -eq '1' -or $env:HPS_NONINTERACTIVE -eq 'true') { $N
 if ($Yes) { $NonInteractive = $true }
 if ($env:INSTALLER_NO_MODIFY_PATH) { $NoModifyPath = $true }
 if ($env:HPS_SKIP_STUDIO -eq '1') { $SkipStudio = $true }
+$script:KitDir = if ($KitDir) { $KitDir } elseif ($env:HPS_KIT_DIR) { $env:HPS_KIT_DIR } else { '' }
 
 # Is it safe to call `exit` when we finish?
 #
@@ -157,7 +167,7 @@ $EMBEDDED_MANIFEST = [ordered]@{
     # 아니다. fail-closed doctor 가 이 플래그를 그대로 읽어 설치를 중단시키므로,
     # 여기에 과하게 표시하면 **멀쩡히 쓸 수 있는 기기를 설치 실패로 만든다.**
     #
-    # 2026-08-21 SK바이오팜 현장이 그 사고였다. gh·node·python·jq 가 사내망
+    # 2026-08-21 기업 고객 현장이 그 사고였다. gh·node·python·jq 가 사내망
     # TLS 검사 때문에 winget 설치에 실패했고 doctor 가 "Setup incomplete" 를
     # 냈는데, 정작 Studio·SDK·git 은 13대 전부 정상 설치돼 있었다. 즉 수업은
     # 돌 수 있는 상태였는데 설치기가 아니라고 말한 것이다.
@@ -207,6 +217,78 @@ function Sync-ManifestVersions {
     } catch {
         Write-Info 'Remote manifest unreachable; using embedded pinned versions.'
     }
+}
+
+# ----------------------------------------------------------------------------
+# 2b. Class kit (-KitDir / HPS_KIT_DIR)
+# ----------------------------------------------------------------------------
+# A kit folder, built by scripts/make-class-kit.sh, carries what this script
+# otherwise takes from the private repositories: the Studio installer and the
+# SDK seeder. Every kit file is checked against the kit's SHA256SUMS before it
+# is used. That catches a damaged or half-copied kit. It does not authenticate
+# the person who handed the folder over: whoever can change a file can change
+# SHA256SUMS too.
+
+# SHA256SUMS as an ordered map: file name -> lowercase hex digest.
+function Read-KitSums([string]$dir) {
+    $path = Join-Path $dir 'SHA256SUMS'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Class kit: SHA256SUMS not found in $dir - this folder is not a class kit"
+    }
+    $sums = [ordered]@{}
+    foreach ($line in @(Get-Content -LiteralPath $path)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $m = [regex]::Match($line, '^([0-9a-f]{64})[ \t]+([A-Za-z0-9._-]+)[ \t]*$')
+        if (-not $m.Success -or $sums.Contains($m.Groups[2].Value)) { throw 'Class kit: SHA256SUMS is malformed' }
+        $sums[$m.Groups[2].Value] = $m.Groups[1].Value
+    }
+    return $sums
+}
+
+# Full path of a kit file, after checking it against the kit's SHA256SUMS.
+function Get-KitFile([string]$name) {
+    if ($name -notmatch '^[A-Za-z0-9._-]+$') { throw "Class kit: invalid file name '$name'" }
+    $sums = Read-KitSums $script:KitDir
+    if (-not $sums.Contains($name)) { throw "Class kit: $name is not listed in SHA256SUMS" }
+    $path = Join-Path $script:KitDir $name
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Class kit: $name is missing from the kit folder" }
+    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $sums[$name]) {
+        throw "Class kit: SHA-256 mismatch for $name - the copy is damaged. Ask your instructor for the kit again."
+    }
+    return $path
+}
+
+# The Studio installer in the kit, shaped like a release API asset (name and
+# digest) so Install-Studio runs the same checks on it.
+function Resolve-KitStudioAsset($manifest) {
+    $sums = Read-KitSums $script:KitDir
+    foreach ($g in @($manifest.studio.asset_glob, $manifest.studio.asset_glob_fallback)) {
+        foreach ($name in @($sums.Keys)) {
+            if ($name -like $g) { return [pscustomobject]@{ name = $name; digest = 'sha256:' + $sums[$name] } }
+        }
+    }
+    throw 'Class kit: no Studio installer for Windows in the kit (it was built without win32-x64).'
+}
+
+# Check the whole kit before anything is installed, then pin the Studio version
+# it holds. A damaged kit should stop here, not after the dependency installs.
+function Use-ClassKit($manifest) {
+    if (-not (Test-Path -LiteralPath $script:KitDir -PathType Container)) {
+        throw "Class kit folder not found: $script:KitDir"
+    }
+    $script:KitDir = (Resolve-Path -LiteralPath $script:KitDir).ProviderPath
+    $sums = Read-KitSums $script:KitDir
+    foreach ($name in @($sums.Keys)) { Get-KitFile $name | Out-Null }
+    $version = $null
+    foreach ($line in @(Get-Content -LiteralPath (Get-KitFile 'kit-info.txt'))) {
+        if ($line -match '^studio_version=(\S+)\s*$') { $version = $Matches[1]; break }
+    }
+    if (-not $version -or $version -notmatch '^[0-9]+(\.[0-9]+)+(-[0-9A-Za-z.]+)?$') {
+        throw 'Class kit: kit-info.txt has no usable studio_version'
+    }
+    # The kit holds exactly one Studio version, so it decides (HPS_STUDIO_VERSION is ignored).
+    $manifest.studio.version = $version
+    Write-Ok ("Class kit verified: Studio {0}, {1} file(s) match SHA256SUMS" -f $version, $sums.Count)
 }
 
 # ----------------------------------------------------------------------------
@@ -393,7 +475,7 @@ function Add-ToUserPath {
 # Overwriting therefore deleted winget from PATH mid-run. Ensure-Tool calls this
 # after every install, so the damage landed right after the FIRST tool: git
 # (manifest order #1) installed fine, then `& winget` was unresolvable and
-# gh/node/python/jq all failed with "NOT FOUND". That is the SK Biopharm
+# gh/node/python/jq all failed with "NOT FOUND". That is the the corporate customer
 # 2026-08-21 field report -- 6 of 13 identically-imaged machines, always the
 # same four tools, always after git.
 #
@@ -502,7 +584,7 @@ function Install-WingetPackage {
     #     Please specify one of them using the --source option to proceed.
     #       Node.js (LTS)  OpenJS.NodeJS.LTS  winget
     #
-    # SK바이오팜 2026-08-21 현장이 정확히 이것이었다. 13대 중 6대에서 gh·node·
+    # 기업 고객 2026-08-21 현장이 정확히 이것이었다. 13대 중 6대에서 gh·node·
     # python·jq 가 전부 실패했고, git 만 통과한 것은 이미 설치돼 있어 winget 을
     # 타지 않았기 때문이다. 기기 차이가 아니라 **그 망에서 나가는 경로** 차이다.
     #
@@ -581,6 +663,8 @@ function Ensure-Tool {
 function Invoke-ToolPost($tool) {
     switch ($tool.post) {
         'gh_auth' {
+            # Class kit: a participant needs no GitHub login to install, so do not ask for one.
+            if ($script:KitDir) { break }
             try {
                 & gh auth status 1>$null 2>$null
                 if ($LASTEXITCODE -ne 0) {
@@ -655,6 +739,8 @@ function Configure-Git {
 # ----------------------------------------------------------------------------
 function Resolve-StudioAsset {
     param($manifest)
+    # Class kit: the installer is in the kit folder, so the release API is not asked.
+    if ($script:KitDir) { return (Resolve-KitStudioAsset $manifest) }
     $repo = $manifest.studio.releases_repo
     if ($repo -eq 'jayleekr/hypeproof-studio-releases') { $repo = 'hypeproof/hypeproof-studio-releases' }
     if ($repo -ne 'hypeproof/hypeproof-studio-releases') { throw 'Untrusted Studio release repository' }
@@ -730,6 +816,24 @@ function Test-StudioInstalled {
     return $false
 }
 
+# The native SDK binary version the installed Studio app loads. The build vendors the
+# Agent SDK package into the bundled extension (scripts/inject-builtin-extensions.sh);
+# its optionalDependencies name the native package for each platform with the exact
+# version. $null when no app is installed or the file is missing.
+function Get-AppSdkVersion {
+    $rel = 'resources\app\extensions\hypeproof-chat\dist\vendor\node_modules\@anthropic-ai\claude-agent-sdk\package.json'
+    foreach ($root in @($env:LOCALAPPDATA, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if (-not $root) { continue }
+        foreach ($dir in @('Programs\HypeProof Studio', 'HypeProof Studio')) {
+            $pkg = Join-Path (Join-Path $root $dir) $rel
+            if (-not (Test-Path -LiteralPath $pkg)) { continue }
+            $m = [regex]::Match([IO.File]::ReadAllText($pkg), '"@anthropic-ai/claude-agent-sdk-win32-x64"\s*:\s*"([0-9][0-9A-Za-z.-]*)"')
+            if ($m.Success) { return $m.Groups[1].Value }
+        }
+    }
+    return $null
+}
+
 function Install-Studio {
     param($manifest, $receipt)
     # Resolve BEFORE the idempotent-skip compare: with version='latest' there is
@@ -754,8 +858,15 @@ function Install-Studio {
     Write-Info "Downloading $($asset.name) ..."
     if ($asset.name -notmatch '^[A-Za-z0-9._-]+$') { throw 'Invalid asset name' }
     if ($asset.digest -notmatch '^sha256:[a-fA-F0-9]{64}$') { throw 'Missing release SHA-256' }
-    & gh release download "v$($manifest.studio.version)" --repo 'hypeproof/hypeproof-studio-releases' --pattern $asset.name --dir $script:TempRoot --clobber
-    if ($LASTEXITCODE -ne 0) { throw 'Private release download failed' }
+    if ($script:KitDir) {
+        # Class kit: copy the installer out of the kit folder. The SHA-256 check
+        # below then compares the copied bytes with the kit's SHA256SUMS, where
+        # the member path compares the download with the release API digest.
+        Copy-Item -LiteralPath (Join-Path $script:KitDir $asset.name) -Destination $exe -Force
+    } else {
+        & gh release download "v$($manifest.studio.version)" --repo 'hypeproof/hypeproof-studio-releases' --pattern $asset.name --dir $script:TempRoot --clobber
+        if ($LASTEXITCODE -ne 0) { throw 'Private release download failed' }
+    }
     if ((Get-FileHash $exe -Algorithm SHA256).Hash -ne ($asset.digest -replace '^sha256:', '')) { throw 'Release SHA-256 mismatch' }
 
     # Unblock the download (bypass the MOTW/SmartScreen prompt for our own signed setup).
@@ -767,9 +878,9 @@ function Install-Studio {
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
         '/MERGETASKS=!runcode'
     ) -Wait -PassThru
-    if ($p.ExitCode -ne 0) {
-        Write-Warn2 "Studio setup exited with code $($p.ExitCode)."
-    }
+    # A failed setup must not be reported as installed: the receipt would claim
+    # a version that is not on the machine.
+    if ($p.ExitCode -ne 0) { throw "Studio setup exited with code $($p.ExitCode)" }
     $receipt.studio = $manifest.studio.version
     Write-Ok "Studio $($manifest.studio.version) installed."
     return $true
@@ -825,6 +936,10 @@ function Seed-Sdk {
         $sib = Join-Path $PSScriptRoot $seedName
         if (Test-Path $sib) { $seedScript = $sib }
     }
+    # Class kit: always the kit's seeder, checked against the kit's SHA256SUMS
+    # first. This replaces whatever the sibling lookup found (when the kit's own
+    # install.ps1 runs, that sibling is the same file, but not yet verified).
+    if ($script:KitDir) { $seedScript = Get-KitFile $seedName }
     # 2) Bootstrap path (irm | iex): fetch the seeder from the scripts raw base.
     #    NOT derived from $ManifestUrl - the manifest and the seeders do not live
     #    in the same tree, and deriving it produced a 404. The seeder self-verifies
@@ -846,7 +961,20 @@ function Seed-Sdk {
     Write-Info "Seeding native SDK binary via $seedName (canonical) ..."
     $psExe = try { (Get-Process -Id $PID).Path } catch { $null }
     if (-not $psExe) { $psExe = 'powershell' }
-    & $psExe -NoProfile -ExecutionPolicy Bypass -File $seedScript
+    # Out-Host: the seeder's progress belongs on screen (the download takes
+    # minutes) and must not become part of this function's return value.
+    # Seed the SDK version the installed app loads, not the seeder's own pin: the
+    # seeder can come from main, which may pin a newer SDK than the latest release
+    # (after #1634 main pinned 0.3.299 while v0.1.56 loads 0.3.207), and a seeded
+    # binary of another version is never found. A non-pinned version's integrity
+    # comes from the npm registry.
+    $seedArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $seedScript)
+    $sdkVersion = Get-AppSdkVersion
+    if ($sdkVersion) {
+        Write-Info "SDK version the installed app loads: $sdkVersion"
+        $seedArgs += @('-Version', $sdkVersion)
+    }
+    & $psExe @seedArgs | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Err2 "seed-sdk-binary.ps1 failed (exit $LASTEXITCODE)."
         return $false
@@ -882,7 +1010,10 @@ function Invoke-Doctor {
         }
         if (-not (Test-VersionAtLeast $ver $tool.min)) {
             $line = (($ver -split "`n")[0]).Trim()
-            $fail += "$($tool.id): $line below min $($tool.min)"
+            # An old optional tool is reported like a missing one: the app and the
+            # coach do not depend on it, so it must not fail the whole install.
+            if ($tool.required) { $fail += "$($tool.id): $line below min $($tool.min)" }
+            else { $missingOptional += "$($tool.id) (older than $($tool.min))"; Write-Warn2 "$($tool.id): $line below min $($tool.min) (optional)" }
             continue
         }
         Write-Ok ("{0}: {1}" -f $tool.id, (($ver -split "`n")[0]).Trim())
@@ -997,7 +1128,14 @@ function Main {
         Write-Warn2 "Arch '$arch' is unusual; win32-x64 assets will be used (may run under emulation on arm64)."
     }
 
-    Sync-ManifestVersions $manifest $ManifestUrl
+    if ($script:KitDir) {
+        # Class kit: the kit pins the Studio version. The remote manifest is read
+        # for nothing else, so it is not fetched (it would need a GitHub login).
+        Write-Head 'Check the class kit'
+        Use-ClassKit $manifest
+    } else {
+        Sync-ManifestVersions $manifest $ManifestUrl
+    }
 
     if ($DoctorOnly) {
         $script:ExitCode = Invoke-Doctor $manifest $receipt

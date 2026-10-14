@@ -11,7 +11,7 @@
 #
 # Usage:
 #   bash scripts/preview-profile.sh                                  # default: 초3·4 track
-#   bash scripts/preview-profile.sh --profile sk-biopharm-kids-2026-grade-5-6-s1
+#   bash scripts/preview-profile.sh --profile "$(service_profile kids-upper)"
 #   bash scripts/preview-profile.sh --profile <id> --cohort <id> --user <name> --port 8787
 #   bash scripts/preview-profile.sh --print-token                    # local manual paste only
 #
@@ -31,7 +31,8 @@ export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && . "/opt/homebrew/opt/nvm/nvm.sh" >/dev/null 2>&1 || true
 command -v nvm >/dev/null 2>&1 && nvm use 22.22.1 --silent >/dev/null 2>&1 || true
 
-PROFILE="sk-biopharm-kids-2026-grade-3-4-s1"
+service_profile() { (cd "$ROOT" && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --no-warnings scripts/service-profile.mjs "$1"); }
+PROFILE="$(service_profile kids-lower)"
 COHORT=""
 USER_ID="preview-smoke"
 PORT="8787"
