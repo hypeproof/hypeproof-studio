@@ -174,7 +174,9 @@ export function waitDecision(state: OrderState | null, order: PendingOrder, now:
   if (state === "refunded") return "refunded";
   // "expired" from the Service is final for an unpaid order; an unreadable Service is not.
   if (state === "expired") return "expired";
-  return now > order.expiresAt + SETTLE_GRACE_MS ? "expired" : "wait";
+  // Only an order the Service still calls unpaid can run out here. An unreadable Service (offline,
+  // outage) or a confirm still in flight may be a paid order: deleting it would lose the pass.
+  return state === "pending" && now > order.expiresAt + SETTLE_GRACE_MS ? "expired" : "wait";
 }
 
 export const formatWon = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;

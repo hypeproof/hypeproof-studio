@@ -49,9 +49,13 @@ assert.equal(p.waitDecision('refunded', order, now), 'refunded');
 assert.equal(p.waitDecision('expired', order, now), 'expired');
 assert.equal(p.waitDecision('pending', order, now), 'wait');
 assert.equal(p.waitDecision('confirming', order, now), 'wait');
-// An unreadable Service is not a failed payment: keep waiting until well past the deadline.
+// An unreadable Service is not a failed payment, and neither is a confirm still in flight: the
+// order may be paid, so it is never given up on these (2026-10-14). Only an order the Service
+// still calls unpaid runs out after the grace period.
 assert.equal(p.waitDecision(null, order, order.expiresAt + p.SETTLE_GRACE_MS - 1), 'wait');
-assert.equal(p.waitDecision(null, order, order.expiresAt + p.SETTLE_GRACE_MS + 1), 'expired');
+assert.equal(p.waitDecision(null, order, order.expiresAt + p.SETTLE_GRACE_MS + 1), 'wait');
+assert.equal(p.waitDecision('confirming', order, order.expiresAt + p.SETTLE_GRACE_MS + 1), 'wait');
+assert.equal(p.waitDecision('pending', order, order.expiresAt + p.SETTLE_GRACE_MS + 1), 'expired');
 // A confirm already in flight at the deadline is still honoured.
 assert.equal(p.waitDecision('paid', order, order.expiresAt + p.SETTLE_GRACE_MS + 1), 'claim');
 
