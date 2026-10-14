@@ -69,6 +69,22 @@ const sdk = await import("@anthropic-ai/claude-agent-sdk");
     undefined,
     "SDK 를 prod dependency 로 두면 빌드가 깨진다 (#349)",
   );
+
+  // The rule holds for every package, not only for these two. With any entry
+  // under `dependencies`, `npm list --production` exits 1 on the injected copy
+  // (the manifest without node_modules), and that is the check
+  // vscode-min-prepack runs (#349). #1587 added three @hypeproof/* entries
+  // there and no test failed. Packages that esbuild inlines belong in
+  // devDependencies as well.
+  const prodDepsOf = (manifest) => Object.keys(manifest.dependencies ?? {});
+  // Control: the probe reports an entry when there is one.
+  assert.deepEqual(prodDepsOf({ dependencies: { "left-pad": "1.3.0" } }), ["left-pad"]);
+  assert.deepEqual(
+    prodDepsOf(pkg),
+    [],
+    `package.json must not declare dependencies (found: ${prodDepsOf(pkg).join(", ")}). ` +
+      "The injected copy has no node_modules, so any entry fails vscode-min-prepack (#349). Use devDependencies.",
+  );
 }
 
 // ─── 4. 게이트가 여전히 그 두 이름을 본다 (드리프트 락) ─────────────────────
