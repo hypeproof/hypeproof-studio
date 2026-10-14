@@ -86,13 +86,22 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
     },
     appsScriptSetup: async () => {
       await allowed();
+      const recoveryPreview = lastPreview;
       lastPreview = undefined;
       const saved = await receipt();
+      const legacyCandidates = async () => {
+        if (!saved?.deployment || !recoveryPreview || !deps.runtime.getPreview(recoveryPreview.id) || saved.deployment.digest !== bundle().digest) return [];
+        const records = await deps.ledger.load(), account = saved.connectionIdentity.split(':')[0];
+        return recoveryPreview.messages.map(message => ({ id: message.id, key: hash(`${account}:${message.id}`) }))
+          .filter(({id,key}) => records[key]?.id === id && ['sending','unknown'].includes(records[key]!.status) && !saved.sendOrigins?.[key]);
+      };
+      const legacy = await deps.lock(legacyCandidates);
       const choices = [
         { id: 'retry', label: '설정을 확인했어요 · 이어서 진행' },
         { id: 'account', label: 'Google 계정의 API 접근 설정' },
         ...(saved ? [{ id: 'settings', label: '내 스크립트의 Cloud 프로젝트 설정' }] : []),
         { id: 'reconnect', label: 'Google 권한 다시 연결하기' },
+        ...(legacy.length ? [{ id: 'reconcile', label: '이전 발송 기록 확인' }] : []),
       ];
       const answer = await deps.ask({ kind: 'choice', private: true, title: 'Google 연결을 어디서 이어갈까요?',
         description: [recoveryReason, '계정 설정에서 Apps Script API 접근을 켜 주세요. 스크립트는 Studio와 같은 표준 Cloud 프로젝트가 필요해요. 프로젝트 번호나 권한이 없다면 운영자에게 확인해 주세요. 설정 후 여기로 돌아오면 이어갈 수 있어요.'].filter(Boolean).join('\n\n'),
@@ -100,6 +109,26 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
       if (answer.cancelled) return { cancelled: true };
       await allowed();
       if (!choices.some(choice => choice.id === answer.choiceId)) return { cancelled: true };
+      if (answer.choiceId === 'reconcile' && saved?.deployment && recoveryPreview) {
+        const proof = await deps.ask({ kind: 'text', private: true, title: '이전 발송을 시도한 스크립트 ID를 입력해 주세요',
+          description: 'Google Apps Script의 이전 실행 기록을 열어, 그 프로젝트의 스크립트 ID를 복사해 주세요. 현재 프로젝트와 일치하고 Google에 발송 시도 기록이 없을 때만 연결 정보를 복구해요. 메일은 보내지 않으며 다시 미리보기와 발송 승인이 필요해요.' });
+        if (proof.cancelled) return { cancelled: true };
+        const historicalId = proof.text?.trim();
+        if (!historicalId || !/^[A-Za-z0-9_-]{10,200}$/.test(historicalId) || historicalId !== saved.scriptId || historicalId !== saved.deployment.scriptId) return { reconciled: false, originalProjectRequired: true, automaticResendBlocked: true };
+        return deps.lock(async () => {
+          await allowed();
+          const fresh = await receipt(), records = await deps.ledger.load();
+          if (!fresh?.deployment || JSON.stringify(fresh.deployment) !== JSON.stringify(saved.deployment) || fresh.scriptId !== historicalId || fresh.connectionIdentity !== saved.connectionIdentity || !deps.runtime.getPreview(recoveryPreview.id) || bundle().digest !== fresh.deployment.digest || legacy.some(({id,key}) => records[key]?.id !== id || !['sending','unknown'].includes(records[key]!.status) || fresh.sendOrigins?.[key])) return { reconciled: false, previousAttempt: true, automaticResendBlocked: true };
+          let remote;
+          try { remote = await deps.runtime.getSendStatus(fresh.deployment, legacy.map(item => item.id)); }
+          catch { return { reconciled: false, remoteStatusUnavailable: true, automaticResendBlocked: true }; }
+          if (remote.records.length !== legacy.length || remote.records.some((record,i) => record.id !== legacy[i]!.id || record.status !== 'not_attempted')) return { reconciled: false, previousAttempt: true, automaticResendBlocked: true };
+          const sendOrigins = { ...fresh.sendOrigins };
+          legacy.forEach(({key}) => { sendOrigins[key] = historicalId; });
+          await deps.save({ ...fresh, sendOrigins });
+          return { reconciled: true, count: legacy.length, previewRequired: true, nextTool: 'apps_script_run', mode: 'preview', mailSent: false, automaticResendBlocked: true };
+        });
+      }
       if (answer.choiceId === 'retry') return { retryRequired: true, nextTool: resumeTool, ...(resumeTool === 'apps_script_run' ? { mode: 'preview' } : {}), executionVerified: false };
       if (answer.choiceId === 'reconnect') {
         try {
@@ -166,7 +195,7 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           if (remote.records.some(record => record.status !== 'not_attempted')) return null;
           return new Map(prior.map(key => [key, JSON.stringify(records[key])]));
         });
-        if (!recoverable) return { sent: false, previousAttempt: true, automaticResendBlocked: true };
+        if (!recoverable) return { sent: false, previousAttempt: true, automaticResendBlocked: true, nextTool: 'apps_script_setup' };
         const answer = await deps.ask({ kind: 'preview', private: true, title: `${preview.messages.length}명에게 Google에서 발송할까요?`, description: '받는 사람과 제목·본문을 모두 확인해 주세요. 승인하면 Google Apps Script가 이 내용 그대로 발송해요.', preview });
         if (!answer.approved || answer.cancelled) return { cancelled: true };
         await allowed(); checkDigest(project.digest);

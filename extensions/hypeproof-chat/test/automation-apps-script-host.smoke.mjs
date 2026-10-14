@@ -70,6 +70,28 @@ test('upload preserves original send provenance and reuses the same project',asy
  await h.appsScriptRun('send');const before=await f.deps.load();assert.equal(Object.values(before.sendOrigins)[0],before.scriptId);
  f.changeRecipe();await h.appsScriptUpload();const after=await f.deps.load();assert.equal(after.scriptId,before.scriptId);assert.deepEqual(after.sendOrigins,before.sendOrigins);
 });
+test('legacy provenance recovery is private, explicit, same-project, read-only and fail-closed',async()=>{
+ for(const scenario of ['absent','wrong-id','unknown','read-failed','cancel']) {
+  const f=fixture(),h=f.host;await h.appsScriptUpload();await h.appsScriptDeploy();await h.appsScriptRun('preview');f.prior();
+  const before=await f.deps.ledger.load(),original=structuredClone(await f.deps.load());let reads=0;
+  f.deps.runtime.getSendStatus=async(_d,ids)=>{reads++;if(scenario==='read-failed')throw Error('synthetic failure');return{records:ids.map(id=>({id,status:scenario==='unknown'?'unknown':'not_attempted'}))};};
+  f.deps.ask=async question=>{
+   f.answers.push(question);assert.equal(question.private,true);
+   if(question.kind==='choice'){assert(question.choices.some(c=>c.id==='reconcile'));return{questionId:'q',choiceId:'reconcile'};}
+   assert.equal(question.kind,'text');return scenario==='cancel'?{questionId:'q',cancelled:true}:{questionId:'q',text:scenario==='wrong-id'?'another-project-id':'synthetic-project-id'};
+  };
+  const result=await h.appsScriptSetup();assert.equal(f.sends,0);assert.deepEqual(await f.deps.ledger.load(),before,'reconciliation never removes or rewrites unknown ledger entries');
+  assert.equal(reads,['wrong-id','cancel'].includes(scenario)?0:1);
+  if(scenario==='absent'){
+   assert.equal(result.reconciled,true);assert.equal(result.mailSent,false);assert.equal(result.previewRequired,true);
+   const after=await f.deps.load();assert.deepEqual({...structuredClone(after),sendOrigins:undefined},{...original,sendOrigins:undefined});assert.equal(Object.values(after.sendOrigins)[0],original.scriptId);
+   assert.equal((await h.appsScriptRun('send')).previewRequired,true,'proof does not authorize sending');
+   f.deps.ask=async()=>({questionId:'q',approved:true});await h.appsScriptRun('preview');assert.equal((await h.appsScriptRun('send')).sent,true);assert.equal(f.sends,1);
+  }else assert.deepEqual(structuredClone(await f.deps.load()),original);
+ }
+ const clean=fixture();await clean.host.appsScriptUpload();await clean.host.appsScriptDeploy();await clean.host.appsScriptRun('preview');
+ clean.deps.ask=async q=>{assert(!q.choices.some(c=>c.id==='reconcile'));return{questionId:'q',cancelled:true};};await clean.host.appsScriptSetup();
+});
 test('graph progress reflects tool outcomes; blocked actions stay incomplete',async()=>{
  const renders=[],quest=createAutomationQuestSession(async html=>renders.push(html));
  const host=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,askUser:async()=>({answer:'자료 요청'}),saveSkill:async()=>({saved:true}),appsScriptPrepare:async()=>({prepared:true}),appsScriptUpload:async()=>({setupRequired:true})},quest);
