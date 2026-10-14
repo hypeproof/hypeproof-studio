@@ -69,7 +69,21 @@ ambiguous delivery, existing ledgers, and cross-account state. These checks do n
 prove real mail delivery. The earlier two-account live probe above remains
 separate from this native single-account integration acceptance.
 
-Windows acceptance of this exact integration is pending. Production OAuth review,
+Windows acceptance completed on 2026-10-15 KST with source `ab0a13a7` on the
+existing `682dfd37` shell. Root updated the installed test app through the
+authenticated installer, checked all eight installed file SHA256 values, and used
+the native Windows conversation to reuse its existing imported skill, Google
+connection and private Sheet. The shared runner returned one real preview with no
+OAuth repetition or personal project setup. Read-only acknowledgement completed
+the graph at 6/6 and restored the composer. No mail was sent. The single acceptance
+conversation added USD0.057188 to the settled token ledger; unresolved reservations
+remained unchanged. This is a Service ledger amount, not invoice confirmation.
+
+The source-only Service prompt update is `a50be76`; the isolated backend remains
+`ffef7bc`. The installed Studio SDK capability override selects the shared flow.
+Only the authenticated download gateway was updated, with no normal-traffic rollout.
+
+Production OAuth review,
 managed-domain policy, quotas and twenty actual pre-class logins remain separate
 gates. Personal Apps Script export is deferred. Real mail needs fresh explicit
 approval of the exact recipient and content.
