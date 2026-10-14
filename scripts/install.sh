@@ -125,6 +125,11 @@ if [ -n "$KIT_DIR" ]; then
 fi
 # stdin is the piped script under curl|bash, so prompts are impossible there.
 [ -t 0 ] || NONINTERACTIVE=1
+# Homebrew 7 asks "Do you want to proceed with the installation? [y/n]" before any
+# install with dependencies. The participant already agreed to the tools here, and
+# the English question stops a Korean install halfway (#1645). Older Homebrew
+# ignores the variable, where `--yes` would be an unknown option.
+export HOMEBREW_NO_ASK=1
 
 # --- curl | bash 안전장치: 자기 자신을 파일로 다시 실행한다 ------------------- #
 # 파이프로 오면 bash 는 이 스크립트를 stdin 에서 조금씩 읽어가며 실행한다. 그런데
@@ -305,6 +310,29 @@ resolve_brew() {
   return 1
 }
 
+# The Homebrew installer runs with stdin from /dev/null (see below), which switches
+# it to non-interactive mode: it then checks sudo with `sudo -n` only and aborts
+# with "Insufficient permissions" on any Mac where sudo needs a password (#1646).
+# So ask for the Mac password here, once, and keep it fresh until Homebrew and the
+# Command Line Tools are installed (longer than sudo's 5-minute timeout).
+BREW_SUDO_KEEPALIVE=""
+brew_sudo_begin() {
+  sudo -n true 2>/dev/null && return 0
+  printf '\n    Homebrew를 설치하려면 이 Mac의 로그인 암호가 한 번 필요합니다.\n'
+  printf '    암호를 입력해도 화면에는 아무것도 표시되지 않습니다. 다 입력하고 Enter를 누르세요.\n\n'
+  sudo -v -p '    Mac 암호: ' </dev/tty \
+    || die "Mac 암호를 확인하지 못했습니다. 암호를 다시 확인하고 설치를 다시 실행하세요. 이 Mac의 관리자 계정이 아니라면 관리자 계정으로 실행해야 합니다."
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || true; sleep 50; done ) &
+  BREW_SUDO_KEEPALIVE=$!
+}
+brew_sudo_end() {
+  [ -n "$BREW_SUDO_KEEPALIVE" ] || return 0
+  # set -e: a killed child makes `wait` return 143, which would end the install.
+  kill "$BREW_SUDO_KEEPALIVE" 2>/dev/null || true
+  wait "$BREW_SUDO_KEEPALIVE" 2>/dev/null || true
+  BREW_SUDO_KEEPALIVE=""
+}
+
 ensure_brew() {
   step "Ensuring package manager (Homebrew)"
   if resolve_brew; then ok "brew present: $BREW"; return 0; fi
@@ -312,13 +340,15 @@ ensure_brew() {
     if confirm "Homebrew not found. Install it now (also triggers Xcode CLT)?"; then
       NONINTERACTIVE_BREW=""
       [ "$NONINTERACTIVE" = "1" ] && NONINTERACTIVE_BREW="NONINTERACTIVE=1"
+      [ "$NONINTERACTIVE" = "1" ] || brew_sudo_begin
       # </dev/null 은 이중 안전장치다. 위쪽 re-exec 가 이미 stdin 의존을 없앴지만,
       # brew 설치기와 그것이 부르는 softwareupdate 가 stdin 을 읽는다는 사실 자체는
       # 그대로이므로 여기서도 끊어둔다 (누가 re-exec 를 걷어내도 안 터지게).
       env $NONINTERACTIVE_BREW /bin/bash -c \
         "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
         </dev/null \
-        || die "Homebrew install failed. See https://brew.sh"
+        || { brew_sudo_end; die "Homebrew install failed. See https://brew.sh"; }
+      brew_sudo_end
       resolve_brew || die "Homebrew installed but 'brew' not on PATH; open a new shell and re-run."
       ensure_path_entry "$(dirname "$BREW")"
       ok "Homebrew installed: $BREW"

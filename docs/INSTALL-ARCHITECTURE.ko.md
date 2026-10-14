@@ -127,8 +127,10 @@ flowchart TD
   대신 **명확한 메시지와 함께 중단**한다.
 - **2. Ensure package manager:** mac은 `brew`가 없으면 Homebrew 설치(Xcode CLT
   트리거); win은 `winget`(App Installer) 존재 보장, 없으면 winget-cli release
-  msixbundle을 side-load. 대화형 프롬프트가 살아 있도록 Homebrew의
-  `bash -c "$(...)"` / winget UAC를 사용.
+  msixbundle을 side-load. Homebrew 설치기는 stdin을 `/dev/null`로 받아 비대화형으로
+  돌기 때문에 `sudo -n`만 시도한다. 그래서 대화형 설치에서는 그 전에 Mac 암호를 한 번
+  받아(`sudo -v`) 설치가 끝날 때까지 유지한다(#1646). brew 설치 확인 질문은
+  `HOMEBREW_NO_ASK=1`로 끈다(#1645). win은 winget UAC를 사용.
 - **3. Guarantee a POSIX shell (Windows 핵심 수정):** winget으로 `Git.Git`을 설치
   → Git Bash가 함께 들어온다. `C:\Program Files\Git\bin\bash.exe`를 등록하고 PATH에
   추가해서 번들된 모든 `SKILL.md`와 `.sh`가 실행되게 한다. WSL은 fallback. mac은
