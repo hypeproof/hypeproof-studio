@@ -1,6 +1,10 @@
 # 0003 — Adopt the Claude Agent SDK as the coach runtime
 
-Status: Proposed
+Status: Accepted (recorded 2026-10-14). Proposed in #283 on 2026-07-06. The runtime it
+decides is the one that ships: v0.1.56 runs the Agent SDK coach (Agent SDK 0.3.207,
+`extensions/hypeproof-chat/src/sdkBinaryManifest.ts:29` at `v0.1.56`), and ADR 0006 and
+ADR 0007 build on it. Phase 3 ("Retire") has not happened, and its alias-map clause is
+superseded; see the 2026-10-14 addendum.
 
 Epic: #282
 
@@ -63,6 +67,7 @@ the engine and keep the pedagogy.
   enforced today — re-home that check (into the profile→SDK tool policy) before
   deleting it, or a non-empty allowlist on a still-proxied cohort silently stops
   filtering.
+  *(2026-10-14: the alias maps are not retired; they were remapped. See the addendum.)*
 
 Migration is staged behind a feature flag (Phase 0 spike → Phase 1 flagged SDK
 coach → Phase 2 real tool-use/subagents → Phase 3 remove the plumbing) so the
@@ -85,3 +90,19 @@ unchanged; this ADR changes the runtime boundary, not the product philosophy.
 ## Addendum
 
 - 2026-07-14 — CLI binary provisioning for packaged builds decided: option (b) on-demand download + instructor pre-seed + proxy fallback (REQ-M7). Evidence, comparison, and W4 implementation sketch: [docs/sdk-bundling.md](../sdk-bundling.md).
+- 2026-10-14 — The alias maps persist and the catalogue grows. Instead of retiring
+  `MODEL_MAP`, `OPENAI_MODEL_MAP` and `GEMINI_MODEL_MAP`, the owner remapped the
+  provider-neutral aliases to the Claude 5.5 family and split the OpenAI side cheaper-first
+  ([ADR 0006, Alias remap — 2026-10-14](0006-lesson-model-policy.md#alias-remap--2026-10-14)).
+  The aliases remain the vocabulary most profiles and every alias-bound frozen lesson use.
+  Reviewed explicit ids sit next to them (12 Claude and 7 OpenAI ids on the Service branch
+  `feat/claude-5-5-models`, `worker/src/profiles/types.ts:514-542` at `aa94cf3`, not merged),
+  and `SUPERSEDED_ALIAS_MAPS` keeps each replaced map so lessons frozen under it keep their
+  models. `translate.ts`, `sse.ts` and `gemini.ts` stay as well: the retirement condition
+  ("no cohort runs the proxy path") is false, because the dental teaser, the GPT practice, the
+  model-comparison practice and the SDK-unavailable fallback (REQ-M7) use the proxy route. The
+  SDK coach still receives the model as the alias the app chose: v0.1.56 passes it into
+  `Options.model` (`extensions/hypeproof-chat/src/sdkCoachHelpers.ts:975`, `sdkCoach.ts:490-491`)
+  and the gateway resolves it (`worker/src/routes/messages.ts:157-169` on the Service branch).
+  Orchestration beyond the two built-in read-only subagents still needs host-side code, and a
+  per-request model router needs its own ADR first (ADR 0006).

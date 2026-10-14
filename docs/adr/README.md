@@ -11,7 +11,7 @@ contracts, preview safety policy, or the docs source-of-truth model.
 |---|---|---|
 | `0001-source-owned-dev-docs.md` | Accepted | Keep dev docs in product repos and publish through `hypeprooflab`. |
 | `0002-native-browser-via-webcontentsview.md` | Proposed | Build the education native browser on Electron `WebContentsView` (core patch + CDP), not a cmux/WKWebView port. |
-| `0003-agent-sdk-coach-runtime.md` | Proposed | Adopt the Claude Agent SDK as the coach runtime; keep the fork and embed the SDK coach; retire the provider-proxy plumbing. |
+| `0003-agent-sdk-coach-runtime.md` | Accepted (recorded 2026-10-14) | Adopt the Claude Agent SDK as the coach runtime; keep the fork and embed the SDK coach. The provider-proxy plumbing and the alias maps stay while proxy cohorts exist; on 2026-10-14 the maps were remapped instead of retired. |
 | [0004-chalk-authoring-storage.md](0004-chalk-authoring-storage.md) | Accepted | Service-owned drafts and frozen session-design documents. |
 | [0005-lesson-assistant-identity.md](0005-lesson-assistant-identity.md) | Proposed | A frozen lesson's fixed AI display name travels through the existing `ux.coach` contract; no new profile key, no capability change. |
 | [0006-lesson-model-policy.md](0006-lesson-model-policy.md) | Accepted for the bounded #792/#795 implementation; amended 2026-10-14 | A frozen lesson may narrow the models it allows within what the profile already grants, and the app is told the seat's set. The 2026-10-14 amendment remaps the aliases to the Claude 5.5 family, keeps lessons frozen under the old map on their frozen models, and requires a new ADR before any per-request router. |
