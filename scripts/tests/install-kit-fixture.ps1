@@ -10,7 +10,7 @@ if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
 # Load only the production functions being exercised; never execute Main.
 foreach ($name in @('Read-KitSums', 'Get-KitFile', 'Resolve-KitStudioAsset', 'Use-ClassKit',
                     'Resolve-StudioAsset', 'Install-Studio', 'Get-SeededSdk', 'Seed-Sdk', 'Invoke-ToolPost',
-                    'Invoke-Doctor', 'Test-VersionAtLeast')) {
+                    'Invoke-Doctor', 'Test-VersionAtLeast', 'Get-AppSdkVersion')) {
     $definition = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
     if (-not $definition) { throw "Missing function $name" }
     Invoke-Expression $definition.Extent.Text
@@ -43,7 +43,7 @@ function New-Kit([string]$name, [string[]]$without = @()) {
     $files = [ordered]@{
         'HypeProof.StudioSetup-x64-9.9.9.exe' = 'fixture system installer, a decoy'
         $installer                            = 'fixture user installer, never executed'
-        'seed-sdk-binary.ps1'                 = "Write-Output 'seeding progress line'`n[IO.File]::WriteAllText((Join-Path `$PSScriptRoot 'SEEDER_RAN'), 'ran')`nexit 0`n"
+        'seed-sdk-binary.ps1'                 = "Write-Output 'seeding progress line'`n[IO.File]::WriteAllText((Join-Path `$PSScriptRoot 'SEEDER_RAN'), (`$args -join ' '))`nexit 0`n"
         'kit-info.txt'                        = "schema=1`nstudio_version=9.9.9`n"
     }
     $lines = @()
@@ -85,10 +85,20 @@ try {
     $want = (Get-FileHash (Join-Path $script:KitDir $installer) -Algorithm SHA256).Hash
     if ($global:KitLaunchedHash -ne $want) { throw 'Install-Studio did not launch the user installer from the kit' }
     if ($receipt.studio -ne '9.9.9') { throw 'Receipt does not record the kit version' }
+    # The installed app's vendored Agent SDK package names the native binary version;
+    # the seeder must be asked for that version, not its own pin.
+    $savedLocal = $env:LOCALAPPDATA
+    $env:LOCALAPPDATA = Join-Path $root 'localappdata'
+    $vendor = Join-Path $env:LOCALAPPDATA 'Programs\HypeProof Studio\resources\app\extensions\hypeproof-chat\dist\vendor\node_modules\@anthropic-ai\claude-agent-sdk'
+    New-Item -ItemType Directory -Force -Path $vendor | Out-Null
+    [IO.File]::WriteAllText((Join-Path $vendor 'package.json'), '{"name":"@anthropic-ai/claude-agent-sdk","optionalDependencies":{"@anthropic-ai/claude-agent-sdk-win32-arm64":"0.0.1","@anthropic-ai/claude-agent-sdk-win32-x64":"9.8.7"}}')
     # The seeder's own output goes to the screen, not into the return value:
     # a caller must get one boolean, and the participant must see progress.
     $seedResult = @(Seed-Sdk $manifest $receipt)
     if (-not (Test-Path -LiteralPath (Join-Path $script:KitDir 'SEEDER_RAN'))) { throw 'Seed-Sdk did not run the seeder from the kit' }
+    $env:LOCALAPPDATA = $savedLocal
+    $seederArgs = [IO.File]::ReadAllText((Join-Path $script:KitDir 'SEEDER_RAN'))
+    if ($seederArgs -ne '-Version 9.8.7') { throw ('Seed-Sdk did not pass the installed app SDK version to the seeder: [{0}]' -f $seederArgs) }
     if ($seedResult.Count -ne 1 -or $seedResult[0] -isnot [bool]) { throw ('Seed-Sdk returned the seeder output instead of one boolean: {0}' -f ($seedResult -join ' | ')) }
     Invoke-ToolPost @{ post = 'gh_auth' }
     if ($global:KitGhCalls -ne 0) { throw 'gh was called in kit mode' }

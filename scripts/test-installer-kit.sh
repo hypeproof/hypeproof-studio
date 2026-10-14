@@ -49,6 +49,14 @@ cat > "$REL/HypeProof Studio.app/Contents/Info.plist" <<'EOF'
 <key>CFBundleShortVersionString</key><string>9.9.9</string>
 </dict></plist>
 EOF
+# The vendored Agent SDK package names the native binary version the app loads; the
+# installer must seed that version, not the seeder's own pin. The real seeder's pin is
+# used here so the run stays offline (a non-pinned version asks the npm registry).
+SDK_VERSION="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' "$REPO_ROOT/scripts/seed-sdk-binary.sh")"
+VENDOR="$REL/HypeProof Studio.app/Contents/Resources/app/extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk"
+mkdir -p "$VENDOR"
+printf '{"name":"@anthropic-ai/claude-agent-sdk","version":"%s","optionalDependencies":{"@anthropic-ai/claude-agent-sdk-darwin-x64":"0.0.1","@anthropic-ai/claude-agent-sdk-darwin-arm64":"%s"}}' \
+  "$SDK_VERSION" "$SDK_VERSION" > "$VENDOR/package.json"
 ( cd "$REL" && zip -q -r HypeProof-Studio-darwin-arm64.zip "HypeProof Studio.app" )
 printf 'fixture windows user installer, never executed' > "$REL/HypeProof.StudioUserSetup-x64-9.9.9.exe"
 printf 'fixture windows system installer, a decoy'      > "$REL/HypeProof.StudioSetup-x64-9.9.9.exe"
@@ -119,7 +127,6 @@ chmod +x "$BIN"/*
 
 # The real seeder leaves a valid seed alone, so a fixture seed lets the kit's own
 # seed-sdk-binary.sh run to the end without the 67 MiB download.
-SDK_VERSION="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' "$REPO_ROOT/scripts/seed-sdk-binary.sh")"
 SEED_DIR="$SB_HOME/Library/Application Support/HypeProof-Studio/sdk/$SDK_VERSION"
 mkdir -p "$SEED_DIR"
 printf 'fixture, not a real sdk binary' > "$SEED_DIR/claude"; chmod +x "$SEED_DIR/claude"
@@ -199,7 +206,7 @@ else printf '%s\n' "$out"; bad "kit install failed"; fi
 if [ -f "$APPS/HypeProof Studio.app/Contents/Info.plist" ]; then pass "app copied from the kit archive"
 else bad "app was not installed"; fi
 
-for line in 'class kit verified: Studio 9.9.9' 'Already seeded and verified' 'SDK seeded (canonical seeder)' 'doctor: all manifest checks passed'; do
+for line in 'class kit verified: Studio 9.9.9' "SDK version the installed app loads: ${SDK_VERSION}" 'Already seeded and verified' 'SDK seeded (canonical seeder)' 'doctor: all manifest checks passed'; do
   if printf '%s' "$out" | grep -q -F "$line"; then pass "output has: $line"
   else bad "output lacks: $line"; fi
 done

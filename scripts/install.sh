@@ -626,6 +626,18 @@ resolve_seed_script() {
   return 1
 }
 
+# app_sdk_version — the native SDK binary version the installed Studio app loads. The
+# build vendors the Agent SDK package into the bundled extension
+# (scripts/inject-builtin-extensions.sh); its optionalDependencies name the native
+# package for each platform with the exact version. Empty when no app is installed,
+# the file is missing, or the platform is not darwin-arm64 (the only Mac build).
+app_sdk_version() {
+  _pkg="${STUDIO_APP}/Contents/Resources/app/extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json"
+  [ -f "$_pkg" ] || return 0
+  grep -o '"@anthropic-ai/claude-agent-sdk-darwin-arm64" *: *"[0-9][0-9A-Za-z.-]*"' "$_pkg" \
+    | head -n1 | sed 's/.*: *"\([^"]*\)"$/\1/'
+}
+
 seed_sdk() {
   # Delegate to the canonical seed-sdk-binary.sh (single source of truth for the
   # package, pinned version 0.3.207, sha512 table, seeded location, and the
@@ -639,8 +651,15 @@ seed_sdk() {
     warn "Could not obtain ${SEED_SCRIPT_NAME} (local or ${RAW_BASE}) — Studio will self-heal on first run"
     return 0
   }
+  # Seed the SDK version the installed app loads, not the seeder's own pin: the
+  # seeder comes from main, which can pin a newer SDK than the latest release
+  # (after #1634 main pinned 0.3.299 while v0.1.56 loads 0.3.207, and a seeded
+  # binary of another version is never found). The seeder takes a non-pinned
+  # version's integrity from the npm registry.
+  _sdk_version="${HPS_SDK_VERSION:-$(app_sdk_version)}"
+  [ -n "$_sdk_version" ] && info "SDK version the installed app loads: ${_sdk_version}"
   # Pass --platform on Linux where auto-detect may need help; darwin auto-detects.
-  if bash "$_seed" ${HPS_SDK_VERSION:+--version "$HPS_SDK_VERSION"}; then
+  if bash "$_seed" ${_sdk_version:+--version "$_sdk_version"}; then
     # Record the version the seeder actually wrote (from its verified marker).
     _mk="$(find "${STUDIO_SUPPORT%/*}/HypeProof-Studio/sdk" \
              "${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk" \

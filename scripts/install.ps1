@@ -816,6 +816,24 @@ function Test-StudioInstalled {
     return $false
 }
 
+# The native SDK binary version the installed Studio app loads. The build vendors the
+# Agent SDK package into the bundled extension (scripts/inject-builtin-extensions.sh);
+# its optionalDependencies name the native package for each platform with the exact
+# version. $null when no app is installed or the file is missing.
+function Get-AppSdkVersion {
+    $rel = 'resources\app\extensions\hypeproof-chat\dist\vendor\node_modules\@anthropic-ai\claude-agent-sdk\package.json'
+    foreach ($root in @($env:LOCALAPPDATA, $env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if (-not $root) { continue }
+        foreach ($dir in @('Programs\HypeProof Studio', 'HypeProof Studio')) {
+            $pkg = Join-Path (Join-Path $root $dir) $rel
+            if (-not (Test-Path -LiteralPath $pkg)) { continue }
+            $m = [regex]::Match([IO.File]::ReadAllText($pkg), '"@anthropic-ai/claude-agent-sdk-win32-x64"\s*:\s*"([0-9][0-9A-Za-z.-]*)"')
+            if ($m.Success) { return $m.Groups[1].Value }
+        }
+    }
+    return $null
+}
+
 function Install-Studio {
     param($manifest, $receipt)
     # Resolve BEFORE the idempotent-skip compare: with version='latest' there is
@@ -945,7 +963,18 @@ function Seed-Sdk {
     if (-not $psExe) { $psExe = 'powershell' }
     # Out-Host: the seeder's progress belongs on screen (the download takes
     # minutes) and must not become part of this function's return value.
-    & $psExe -NoProfile -ExecutionPolicy Bypass -File $seedScript | Out-Host
+    # Seed the SDK version the installed app loads, not the seeder's own pin: the
+    # seeder can come from main, which may pin a newer SDK than the latest release
+    # (after #1634 main pinned 0.3.299 while v0.1.56 loads 0.3.207), and a seeded
+    # binary of another version is never found. A non-pinned version's integrity
+    # comes from the npm registry.
+    $seedArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $seedScript)
+    $sdkVersion = Get-AppSdkVersion
+    if ($sdkVersion) {
+        Write-Info "SDK version the installed app loads: $sdkVersion"
+        $seedArgs += @('-Version', $sdkVersion)
+    }
+    & $psExe @seedArgs | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Err2 "seed-sdk-binary.ps1 failed (exit $LASTEXITCODE)."
         return $false
