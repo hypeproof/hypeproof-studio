@@ -272,6 +272,11 @@ const reviewerOk = () => json(200, okBody("design-reviewer", REVIEW));
     assert.equal(resultOf(r).code, "context_invalid", `${JSON.stringify(f)} is refused`);
   }
   assert.equal(g4.gw.calls.length, 0, "no request carried any of them");
+  // A `..` segment is refused even when it would land inside the workspace: the rule is
+  // "a plain workspace-relative path", not "whatever resolves inside".
+  for (const f of ["pages/../index.html", "./pages/./about.html", "pages//about.html"]) {
+    assert.equal(resultOf(await C.runConsult(g4.deps, { agent: "design-reviewer", question: "이 파일을 봐 주세요", focus: { files: [f] } })).code, "context_invalid", f);
+  }
   // A file that is not text, or does not exist, is refused too.
   for (const f of ["logo.png", "missing.html"]) {
     assert.equal(resultOf(await C.runConsult(g4.deps, { agent: "design-reviewer", question: "이 파일을 봐 주세요", focus: { files: [f] } })).code, "context_invalid");
@@ -314,6 +319,13 @@ const reviewerOk = () => json(200, okBody("design-reviewer", REVIEW));
   held.gw.calls.length = 0;
   assert.equal(resultOf(await C.runConsult(held.deps, { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" })).code, "busy");
   assert.equal(waits.length, C.CONSULT_BUSY_RETRY_DELAYS_MS.length);
+
+  // A shorter window cuts the schedule: never a retry past it, never a zero-length wait.
+  waits.length = 0;
+  const short = setup(busy, { sleep, busyWaitMs: 5000 });
+  assert.equal(resultOf(await C.runConsult(short.deps, { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" })).code, "busy");
+  assert.deepEqual(waits, [2000, 3000], "the window bounds the wait");
+  assert.equal(short.gw.calls.length, 3);
 
   // Busy, then another error: no more waiting, the error is the answer.
   waits.length = 0;
