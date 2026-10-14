@@ -273,4 +273,185 @@ const {
   assert.equal(typeof mod.query, "function", "SDK exports query()");
 }
 
+// ─── A2: non-orchestrator builds are byte-identical to the A1 tip ────────────
+// Everything A2 adds for the orchestrator rides on a served roster. Without
+// one, what the CLI receives must not move. This locks it: the matrix below
+// covers chat-only, read/write, browser+shell+web, subagent, Curriculum
+// Runtime and polluted-minor profiles with full and minimal arguments, plus
+// four env-only builds. The digests are of JSON.stringify(entry) — key order
+// included — computed with this same matrix at ea9ba109 (A1: SDK 0.3.299
+// pinned, before any A2 change). The one deliberate difference,
+// CLAUDE_CODE_AUTO_COMPACT_WINDOW, is asserted and removed before hashing (see
+// SDK_AUTO_COMPACT_WINDOW_TOKENS: it keeps 0.3.207's compaction point).
+// <matrix>
+const SNAPSHOT_PROFILES = {
+  kidsChat: { game: { template_tier: "kids-basic" } },
+  kidsRW: { game: { template_tier: "kids-rich" }, sdk_tools: { read: true, write: true } },
+  adultRW: { game: { template_tier: "website" }, sdk_tools: { read: true, write: true } },
+  adultWide: { game: { template_tier: "website" }, sdk_tools: { read: true, write: true, browser: true, shell: true }, tools: { web_search: true } },
+  adultSubagents: { game: { template_tier: "search-webapp" }, sdk_tools: { read: true, subagents: true } },
+  adultCR: { game: { template_tier: "website" }, sdk_tools: { browser: true }, curriculum_runtime: { enabled: true } },
+  pollutedTeen: { game: { template_tier: "teen" }, sdk_tools: { read: true, write: true, browser: true, subagents: true, shell: true } },
+  minorFlagAdultTier: { minor_cohort: true, game: { template_tier: "website" }, sdk_tools: { read: true, browser: true } },
+};
+const SNAPSHOT_FULL_ARGS = {
+  effort: "medium", turnId: "turn_1", fundingSource: "pass:abc", lessonBinding: "token:0123456789abcdef",
+  lessonStep: "s1", helpMode: "hint", proxyUrl: "https://api.hypeproof-ai.xyz/v1", token: "hps-token",
+  cwd: "/ws/student", baseEnv: { PATH: "/bin", HOME: "/Users/s", ANTHROPIC_CUSTOM_HEADERS: "x-test: kept\nx-hps-effort: high" },
+  pathToClaudeCodeExecutable: "/opt/claude", workspaceFiles: ["index.html", "css/a.css"],
+  previewUrl: "http://127.0.0.1:5173/", configDir: "/cfg/seat",
+};
+const SNAPSHOT_MIN_ARGS = { proxyUrl: "http://localhost:8787/v1", token: "t", baseEnv: {} };
+/** Every non-orchestrator build this file locks, as plain JSON values keyed by case name. */
+function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAgentOptions }) {
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  const out = {};
+  for (const [name, p] of Object.entries(SNAPSHOT_PROFILES)) {
+    const agent = profileToAgentOptions(p, { model: "hypeproof-default", systemPrompt: "P" });
+    out[`agent.${name}`] = plain(agent);
+    out[`options.${name}`] = plain(buildSdkQueryOptions(agent, SNAPSHOT_FULL_ARGS));
+    out[`optionsMin.${name}`] = plain(buildSdkQueryOptions(agent, SNAPSHOT_MIN_ARGS));
+  }
+  out["env.devMachine"] = plain(buildSdkGatewayEnv(
+    { PATH: "/usr/bin", HOME: "/Users/s", ANTHROPIC_API_KEY: "k", CLAUDE_CODE_USE_BEDROCK: "1", CLAUDE_CODE_USE_VERTEX: "1", CLAUDE_CODE_OAUTH_TOKEN: "o", CLAUDE_CODE_EFFORT_LEVEL: "max", ANTHROPIC_BASE_URL: "https://api.anthropic.com", ANTHROPIC_AUTH_TOKEN: "stale" },
+    { proxyUrl: "https://api.hypeproof-ai.xyz/v1", token: "hps" },
+  ));
+  out["env.ambientHeaders"] = plain(buildSdkGatewayEnv(
+    { ANTHROPIC_CUSTOM_HEADERS: "x-hps-effort: high\nx-hps-turn-id: old\nx-hps-funding-source: x\nx-hps-lesson-binding: y\nx-hps-lesson-step: z\nx-hps-help-mode: w\nx-test: retained" },
+    { proxyUrl: "https://api.hypeproof-ai.xyz/v1", token: "t", effort: "low", turnId: "t2" },
+  ));
+  out["env.minimal"] = plain(buildSdkGatewayEnv({}, { proxyUrl: "http://localhost:8787/v1", token: "t" }));
+  out["env.concurrency"] = plain(buildSdkGatewayEnv(
+    { HOME: "/h" },
+    { proxyUrl: "http://localhost:8787/v1", token: "t", maxToolConcurrency: 1, workspace: "/한글 폴더", workspaceFiles: Array.from({ length: 90 }, (_, i) => `f${i}.html`) },
+  ));
+  return out;
+}
+// </matrix>
+{
+  const { createHash } = await import("node:crypto");
+  const helpers = await import("../src/sdkCoachHelpers.ts");
+  const A1_TIP_DIGESTS = {
+    "agent.kidsChat": "3e2a5c25fd37fb7b",
+    "options.kidsChat": "b37c0950c446e1bf",
+    "optionsMin.kidsChat": "00ab84048f616fc9",
+    "agent.kidsRW": "b1a986eb858e7400",
+    "options.kidsRW": "956e08c78a60c075",
+    "optionsMin.kidsRW": "23429b83f6f981e8",
+    "agent.adultRW": "d4cfac125171a652",
+    "options.adultRW": "ec5d90a5e7810921",
+    "optionsMin.adultRW": "de34a46d094343e7",
+    "agent.adultWide": "22a8790a57382140",
+    "options.adultWide": "c503f02a87d7368a",
+    "optionsMin.adultWide": "a092a427aa0b37e1",
+    "agent.adultSubagents": "a9ffb7ae70941bf0",
+    "options.adultSubagents": "d81a757b8223f4fc",
+    "optionsMin.adultSubagents": "990e41a54fe10ca1",
+    "agent.adultCR": "d655444c68289f8a",
+    "options.adultCR": "cc54b52021206102",
+    "optionsMin.adultCR": "fd98e08d36a5f3de",
+    "agent.pollutedTeen": "c697ac6c924f242e",
+    "options.pollutedTeen": "c2b59a931550ecbb",
+    "optionsMin.pollutedTeen": "f61d43bb316ae98c",
+    "agent.minorFlagAdultTier": "182a98ce189d34ae",
+    "options.minorFlagAdultTier": "d99d40dd1268a1cb",
+    "optionsMin.minorFlagAdultTier": "259d69535bf780de",
+    "env.devMachine": "56b91ed2a688b3f8",
+    "env.ambientHeaders": "fec192bc85f1e7c5",
+    "env.minimal": "1d38b66498d92735",
+    "env.concurrency": "ebf07480b7a59f73",
+  };
+  const digest = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
+  const withoutCompactionPin = (name, value) => {
+    const env = name.startsWith("env.") ? value : value.env;
+    if (env) {
+      assert.equal(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", `${name}: the compaction pin is the one deliberate env change`);
+      delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+    }
+    return value;
+  };
+
+  const entries = snapshotEntries(helpers);
+  assert.deepEqual(Object.keys(entries), Object.keys(A1_TIP_DIGESTS), "the matrix covers the locked cases");
+  const drifted = Object.entries(entries).filter(([name, value]) => digest(withoutCompactionPin(name, value)) !== A1_TIP_DIGESTS[name]);
+  assert.deepEqual(
+    drifted.map(([name]) => name),
+    [],
+    `non-orchestrator builds drifted from the A1 tip:\n${drifted.map(([n, v]) => `${n}: ${JSON.stringify(v)}`).join("\n")}`,
+  );
+
+  // Negative control — the comparison notices a one-name change in one build.
+  const tampered = snapshotEntries({
+    ...helpers,
+    buildSdkQueryOptions: (agent, args) => {
+      const built = helpers.buildSdkQueryOptions(agent, args);
+      return { ...built, tools: [...built.tools, "PowerShell"] };
+    },
+  });
+  assert.notEqual(
+    digest(withoutCompactionPin("options.adultWide", tampered["options.adultWide"])),
+    A1_TIP_DIGESTS["options.adultWide"],
+    "a widened tool list must change the locked digest",
+  );
+  console.log("✓ A2: 28 non-orchestrator builds byte-identical to the A1 tip (compaction pin aside)");
+}
+
+// ─── A2: compaction stays at 200K on every seat (spec §4.1, A1 note E8) ──────
+{
+  const { SDK_AUTO_COMPACT_WINDOW_TOKENS } = await import("../src/sdkCoachHelpers.ts");
+  assert.equal(SDK_AUTO_COMPACT_WINDOW_TOKENS, 200_000, "the pre-1M compaction point");
+  const plain = buildSdkGatewayEnv({}, { proxyUrl: "http://localhost:8787/v1", token: "t" });
+  assert.equal(plain.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", "pinned with no ambient value");
+  // Negative control — an ambient value (a dev machine's 1M) cannot move it.
+  const ambient = buildSdkGatewayEnv(
+    { CLAUDE_CODE_AUTO_COMPACT_WINDOW: "1000000" },
+    { proxyUrl: "http://localhost:8787/v1", token: "t" },
+  );
+  assert.equal(ambient.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", "an ambient window is overwritten");
+  // It reaches query() through the full option build too.
+  const agent = profileToAgentOptions({ game: { template_tier: "website" } }, { model: "claude-sonnet-5-5", systemPrompt: "" });
+  const options = buildSdkQueryOptions(agent, { proxyUrl: "http://localhost:8787/v1", token: "t", baseEnv: {} });
+  assert.equal(options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", "a real 5.5 id compacts where 0.3.207 did");
+  console.log("✓ A2: CLAUDE_CODE_AUTO_COMPACT_WINDOW=200000 on every seat, ambient values overwritten");
+}
+
+// ─── A2: orchestrator header names are reserved on every seat (spec §4.1, §14) ─
+{
+  const env = buildSdkGatewayEnv(
+    {
+      ANTHROPIC_CUSTOM_HEADERS: [
+        "x-hps-agent: coach@9.9.9",
+        "X-HPS-Roster: homepage@9.9.9",
+        "  x-hps-orchestrator : hps-agent-roster/1",
+        "x-hps-agent-call: 11111111-1111-1111-1111-111111111111",
+        "x-hps-agentic: retained",
+        "x-team: retained",
+      ].join("\n"),
+    },
+    { proxyUrl: "http://localhost:8787/v1", token: "t" },
+  );
+  const lines = (env.ANTHROPIC_CUSTOM_HEADERS ?? "").split("\n");
+  for (const reserved of ["x-hps-agent", "x-hps-roster", "x-hps-orchestrator", "x-hps-agent-call"]) {
+    assert.ok(
+      !lines.some((l) => new RegExp(`^\\s*${reserved}\\s*:`, "i").test(l)),
+      `an ambient ${reserved} line never reaches the CLI`,
+    );
+  }
+  // Positive controls — unrelated ambient headers survive, including a look-alike name.
+  assert.deepEqual(lines, ["x-hps-agentic: retained", "x-team: retained"], "only the reserved names are dropped");
+  console.log("✓ A2: ambient x-hps-agent / roster / orchestrator / agent-call lines are dropped, others kept");
+}
+
+// ─── A2: permissionMode is always the explicit "default" (0.3.286 auto hazard) ─
+{
+  const base = { systemPrompt: "", model: "m", permittedTools: [], permittedMcpTools: [], permittedAgentTools: [], maxTurns: 1 };
+  const args = { proxyUrl: "http://localhost:8787/v1", token: "t", baseEnv: {} };
+  for (const permissionMode of ["default", "bypassPermissions", "acceptEdits", "auto", undefined]) {
+    const built = buildSdkQueryOptions({ ...base, permissionMode }, args);
+    assert.ok(Object.prototype.hasOwnProperty.call(built, "permissionMode"), "the key is always present (never left to the CLI)");
+    assert.equal(built.permissionMode, "default", `a caller's ${String(permissionMode)} cannot reach query()`);
+  }
+  console.log("✓ A2: permissionMode pinned to an explicit 'default' whatever the caller passes");
+}
+
 console.log("✓ #282: agent-sdk gateway wiring — base-URL derivation, env/key invariants, flag default, real SDK loadable");

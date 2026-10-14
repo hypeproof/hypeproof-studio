@@ -40,7 +40,16 @@ import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
 
-export type AgentPermissionMode = "default" | "plan" | "acceptEdits" | "bypassPermissions";
+/**
+ * The only permission mode a coach session runs in. It must be passed
+ * explicitly: since SDK 0.3.286 an omitted `permissionMode` is left to Claude
+ * Code, which on third-party providers (a gateway is one) starts in `auto`, so
+ * a classifier rather than canUseTool would decide tool calls (0.3.299
+ * `sdk.d.ts` Options.permissionMode). `default` routes every call that needs a
+ * decision through canUseTool (evaluateSdkToolUse).
+ */
+export const SDK_PERMISSION_MODE = "default" as const;
+export type AgentPermissionMode = typeof SDK_PERMISSION_MODE;
 
 /** Subset of Claude Agent SDK `Options` we drive from a cohort profile. */
 export interface AgentCoachOptions {
@@ -751,6 +760,29 @@ export function anthropicBaseUrlFor(proxyUrl: string): string {
 export const SDK_CONFIG_DIR_NAME = "claude-config";
 
 /**
+ * Auto-compaction window pinned for every coach session (A2, spec §4.1).
+ *
+ * Since Claude Code 2.1.285 a session behind a custom ANTHROPIC_BASE_URL uses
+ * "the 1M context window of models that have one (Opus 4.7+, Sonnet 5+)".
+ * 2.1.207 did not know the 5.5 ids and assumed 200K; 2.1.299 does, so a seat
+ * served `claude-sonnet-5-5` would compact about five times later, with
+ * requests to match. In the 2.1.299 binary the env value wins over settings
+ * and is capped by the model's own window (`Math.min(modelWindow, value)`), so
+ * a gateway alias such as `hypeproof-default` (assumed 200K) is unchanged and
+ * a 1M id compacts where it did on 0.3.207. Every seat gets it, orchestrator
+ * or not: the 1M default came with the engine bump, not with the orchestrator.
+ * Raise it only after §9 measures the cost.
+ */
+export const SDK_AUTO_COMPACT_WINDOW_TOKENS = 200_000;
+
+/**
+ * Header names this module owns in ANTHROPIC_CUSTOM_HEADERS. A line from the
+ * ambient environment that names one is dropped before ours are added.
+ */
+const OWNED_HEADER_LINE =
+  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator)\s*:/i;
+
+/**
  * #749 (AE-14) — the seat a CLI session belongs to: this student, on this
  * cohort profile, under this frozen lesson version.
  *
@@ -988,8 +1020,11 @@ export function buildSdkGatewayEnv(
   // 있으면 안 되고 — 파일 목록의 구분자는 퍼센트 인코딩해서 넘긴다. 한글 폴더명도
   // 같은 이유로 인코딩이 필요하다(HTTP 헤더는 바이트 안전해야 한다).
   // Owned headers never inherit an ambient course choice or correlation ID.
+  // The orchestrator names (spec §4.1, §14: agent, agent-call, roster,
+  // orchestrator) are reserved too, on every seat: an ambient variable must
+  // never claim an agent identity or a roster for the coach.
   const inheritedHeaders = (env.ANTHROPIC_CUSTOM_HEADERS ?? '').split('\n')
-    .filter(line => !/^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode)\s*:/i.test(line)).join('\n').trim();
+    .filter(line => !OWNED_HEADER_LINE.test(line)).join('\n').trim();
   if (inheritedHeaders) env.ANTHROPIC_CUSTOM_HEADERS = inheritedHeaders;
   else delete env.ANTHROPIC_CUSTOM_HEADERS;
   delete env.CLAUDE_CODE_EFFORT_LEVEL;
@@ -1020,6 +1055,9 @@ export function buildSdkGatewayEnv(
     const existing = (env.ANTHROPIC_CUSTOM_HEADERS ?? "").trim();
     env.ANTHROPIC_CUSTOM_HEADERS = existing ? `${existing}\n${custom.join("\n")}` : custom.join("\n");
   }
+  // A2 — keep compaction where 0.3.207 had it (see SDK_AUTO_COMPACT_WINDOW_TOKENS).
+  // Always set, so an ambient value is overwritten rather than inherited.
+  env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(SDK_AUTO_COMPACT_WINDOW_TOKENS);
   return env;
 }
 
@@ -1104,7 +1142,9 @@ export function buildSdkQueryOptions(
     // user settings, and plugin MCP configs are ignored, so no ambient config
     // can add tools behind the cohort profile's back.
     strictMcpConfig: true,
-    permissionMode: agent.permissionMode,
+    // Always the explicit constant, never the caller's field: an omitted or
+    // different mode would let the CLI start in auto mode (0.3.286+).
+    permissionMode: SDK_PERMISSION_MODE,
     maxTurns: agent.maxTurns,
     ...(args.cwd ? { cwd: args.cwd } : {}),
     ...(args.pathToClaudeCodeExecutable
@@ -1160,7 +1200,7 @@ export function profileToAgentOptions(
     permittedAgentTools: permittedAgentToolsFor(profile),
     // Always gate. Minors and adults alike route every tool use through the
     // manual-approve modal — the gate is the lesson.
-    permissionMode: "default",
+    permissionMode: SDK_PERMISSION_MODE,
     maxTurns: maxTurnsFor(profile),
   };
 }
