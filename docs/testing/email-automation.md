@@ -173,5 +173,9 @@ Sheets and the same marker namespace. Both own-Sheet calls must succeed; both
 cross-Sheet calls must be denied without a cell digest or state mutation. Re-read
 the namespace as each user to prove marker separation. An unlisted caller must
 fail before Sheet access. Save only redacted receipts outside protected evidence.
-Current live status: project uploaded and bound; consent/deployment and all live
-isolation calls pending. No new email was sent.
+Current live status: PASS on 2026-10-14, seven no-mail live calls plus a post-test
+lock check. Both callers had no company IAM or script-file access; own-sheet and
+identity digests matched, cross-sheet reads were denied, and same-namespace state
+remained per-user. The non-allowlisted owner was blocked. See the
+[actual evidence](../plan/google-shared-runner-isolation-evidence.md). Installed
+Studio integration and shared-runner mail execution remain NOT RUN.

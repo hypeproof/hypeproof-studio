@@ -60,6 +60,14 @@ Run the deterministic safety/contract checks with no Google access or API spend:
 node --test scripts/google-runner-probe/probe.test.mjs
 ```
 
-Delete or disable the probe deployment after evidence collection. Real mail
+Disable the probe after evidence collection by removing its valid allowlist;
+retain deployment and evidence rather than deleting records. Real mail
 requires a separately reviewed implementation, scope consent, and explicit
 recipient/content approval; this probe adds none of those capabilities.
+
+## Observed spike result
+
+Root completed the real two-account no-IAM/no-script-file-access test on 2026-10-14:
+seven live calls passed and a subsequent disabled-allowlist call failed closed.
+See [evidence](../../docs/plan/google-shared-runner-isolation-evidence.md). This does
+not claim the shared runner has been integrated into the learner runtime.
