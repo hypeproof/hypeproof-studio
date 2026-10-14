@@ -44,15 +44,15 @@ AE-01/02/36/41은 충분한 요청에 진단을 강요하지 않고 기존 맥�
 | AE-22 | 학생은 공유할 작업·결과·검수 근거와 수신자/기한을 선택한다. 기존 공유 계약을 확장하더라도 열람 감사·철회·만료와 수업 격리를 유지한다. | P0 | INT-AE-04/05 / ADM-03~07/14, AUTH-01 | E5 |
 | AE-23 | Computer Use는 웹으로 해결할 수 없는 승인된 실습에서 별도 격리 환경으로만 실행한다. 화면 범위·인계·비상 정지·세션 초기화·자격 격리를 검증한다. | P2 | INT-AE-02/05 / ENV-06 | E6 |
 | AE-24 | 학생의 독립 변경 과제에서 목적·위임 이유·검증·복구를 관측한다. 프롬프트 수/자동 검사 통과를 학습 능력 점수로 바꾸지 않는다. | P1 | INT-AE-01~05 / EDU-03~05, ADM-13 | E5 |
-| AE-25 | 기존 provider/alias/profile 경로를 카탈로그와 연결한다. 기관·수업·단계·학생 배정의 허용 교집합을 Service에서 집행하고 임의 모델 ID/alias/다른 수업 권한으로 우회할 수 없다. 기존 fast 보조 호출도 명시된 정책·예산으로 관리한다. | P0 | INT-AE-05/07 / 기존 profile.model·resolveMessagesModel | E7/E2 |
+| AE-25 | 기존 provider/alias/profile 경로를 카탈로그와 연결한다. 기관·수업·단계·학생 배정의 허용 교집합을 Service에서 집행하고 임의 모델 ID/alias/다른 수업 권한으로 우회할 수 없다. 기존 fast 보조 호출도 명시된 정책·예산으로 관리한다. 2026-10-14: fast 보조 호출은 별칭 재지정으로 Haiku 5.5 로 옮겨 가지만(Service `aa94cf3` `routes/messages.ts:159`, `:166`; [REQ-M11](../studio-requirements.md)) 명시된 정책·예산은 아직 없다 — 이 행의 미결 항목이다. | P0 | INT-AE-05/07 / 기존 profile.model·resolveMessagesModel | E7/E2 |
 | AE-26 | 강사가 고정/제한 선택 모드를 수업 버전으로 저장·리허설한다. 자동/비교 모드는 후보·역할·전송 자료·예산·횟수 상한까지 확정한 뒤 활성화한다. 교사 preview 성공을 학생 실행 성공으로 간주하지 않는다. | P0 고정/제한; P1 자동/비교 | INT-AE-05/07 / AE-10/11 | E7/E2 |
 | AE-27 | 학생은 입력창에서 허용 선택과 현재 선택을 확인한다. AI 이름/역할과 별도로 턴의 실제 provider/model, 자동/대체 이유, 사용량 또는 미확인을 볼 수 있다. 요청 모델 clamp·동일 ID의 다른 alias를 모델 변경으로 오인시키지 않는다. 입력창의 선택·전환이 기본 흐름이며 답변별 상시 배지는 필수가 아니다. 실제 모델은 상세/예외 확인과 검증 기록으로 구분한다. | P0 | INT-AE-06/07 / AE-07/08 | E7/E1 |
-| AE-28 | 모델×실행기×SDK/Gateway×도구/OS 조합에서 검증한 능력만 선택 가능하다. 미지원 이미지/effort/tools/browser/Computer Use를 조용히 제거하거나 chat-only로 바꾸지 않는다. 강사가 모델별 effort 기본값·변경 허용·상한을 정하며 미지원 설정은 선택할 수 없다. 모델 전환 때 재평가하고 실제 적용값·이유를 다음 요청에 반영한다. 기존 매개변수 정규화의 변경/제거도 실행 기록과 UI 설명에 반영한다. | P0 | INT-AE-02/07 / AE-12/16 | E7/E3 |
+| AE-28 | 모델×실행기×SDK/Gateway×도구/OS 조합에서 검증한 능력만 선택 가능하다. 미지원 이미지/effort/tools/browser/Computer Use를 조용히 제거하거나 chat-only로 바꾸지 않는다. 강사가 모델별 effort 기본값·변경 허용·상한을 정하며 미지원 설정은 선택할 수 없다. 모델 전환 때 재평가하고 실제 적용값·이유를 다음 요청에 반영한다. 기존 매개변수 정규화의 변경/제거도 실행 기록과 UI 설명에 반영한다. 2026-10-14: Claude 5.5 세 모델 × Agent SDK 0.3.207 × OS 조합은 [아래 행렬](#claude-55-능력-행렬-ae-28-2026-10-14)에 있으며 canary 가 돌기 전까지 전부 미검증이다. 메뉴에 나온다는 것은 이 행의 '검증한 능력' 이 아니다. | P0 | INT-AE-02/07 / AE-12/16 | E7/E3 |
 | AE-29 | 모델 변경은 턴 경계에서 적용한다. 공급자/실행기 변경은 확인한 목표·자료·파일/검수 snapshot으로 새 세션에 인계하며 제외한 자료·숨은 추론·자격·이전 grant를 넘기지 않는다. 문맥 축소/요약과 원본 복귀를 표시한다. | P1 | INT-AE-02/04/07 / AE-14/15 | E7/E3 |
 | AE-30 | Auto의 사전 선택과 장애 대체를 별도 정책으로 집행한다. 후보·필요 능력·자료 전송·예산을 재확인하고 부분 출력/외부 효과 이후의 불확실한 재시도를 중복 실행하지 않는다. 미허용 후보밖에 없으면 이유와 함께 중지한다. | P1 | INT-AE-02/05/07 / 기존 Gemini 재시도·AE-17 | E7/E3 |
 | AE-31 | 다른 모델 검토는 동일한 선택 자료/산출물 snapshot으로 별도 읽기 전용 세션에서 수행한다. 각 결과·실제 모델·실패·채택 이유를 보존한다. 병렬 편집은 작업 공간·브라우저·자격 분리와 채택/폐기 검증 후에만 제공한다. | P1 검토; P2 병렬 편집 | INT-AE-03/07 / AE-05/18 | E7/E4 |
 | AE-32 | 모델 비교·역할 배정·자동 대체·보조 호출 비용과 동시성을 E3의 같은 학급/학생 예약·정산에 포함한다. 일부 분기 실패/취소도 이미 발생한 비용을 숨기지 않으며 한 학생의 비교가 다른 학생을 장기 방치하지 않는다. | P1 | INT-AE-05/07 / AE-17/20 | E7/E3/E5 |
-| AE-33 | 확정 수업의 provider/model 매핑·허용 후보·정책/카탈로그 revision·실행기 범위를 보존한다. 모델 교체는 재리허설/새 버전/복귀 경로를 거치고 은퇴·강제 차단 시 조용히 다른 모델로 치환하지 않는다. | P0 | INT-AE-05/07 / AE-11/16 | E7/E2 |
+| AE-33 | 확정 수업의 provider/model 매핑·허용 후보·정책/카탈로그 revision·실행기 범위를 보존한다. 모델 교체는 재리허설/새 버전/복귀 경로를 거치고 은퇴·강제 차단 시 조용히 다른 모델로 치환하지 않는다. 2026-10-14: 별칭 재지정은 바뀌기 전 map 을 `SUPERSEDED_ALIAS_MAPS` 에 기록해, 그 map 으로 확정된 수업을 확정 당시 provider/model 로 계속 서빙한다(Service `aa94cf3` `profiles/types.ts:643-648`, `lib/lesson-model-policy.ts:73-97`, `lib/chat-gate.ts:330`) — 조용한 치환은 없다. 새 매핑은 새 확정 버전과 재리허설로만 붙는다([재확정 절차](../adr/0006-lesson-model-policy.md#alias-remap--2026-10-14)). 확정 id 가 공급자에서 은퇴하면 대체 없이 실패하므로 은퇴 전에 재확정한다. 운영 반영·실기 NOT RUN. | P0 | INT-AE-05/07 / AE-11/16 | E7/E2 |
 | AE-34 | 비교 실습은 동일 과제의 결함 탐지·오탐·시간·비용·학생 채택/보류 설명을 단일 모델 조건과 비교한다. 두 결과 모두 보류 가능하며 모델 합의/브랜드 선호를 정답이나 능력 점수로 쓰지 않는다. 모델 검토와 인간 피드백을 구분하고 모델명 가림 실험에서도 자료 전송 범위는 사전 고지한다. | P1 | INT-AE-03/07/09 / AE-24/43 | E7/E5 |
 | AE-35 | 비교가 필요한 과제에서 내용·viewport가 같은 대안을 보고 학생이 채택/보류 이유를 자기 목적·기준에 연결한다. 기존 발화를 재사용하며 AI 추천을 학생 판단으로 기록하지 않는다. | P0 | INT-AE-08 / Taste, EDU-01 | E1 |
 | AE-36 | 시연/힌트/함께 수정/직접 수행을 허용된 수업 범위 안에서 선택하고 다음 실행에 반영한다. 변경 시점·도움 출처·시도를 구분하고 모드 선택만으로 독립 수행을 판정하지 않는다. 질문은 다음 행동에 필요한 한 가지를 기본으로 한다. | P0 | INT-AE-02/05 / EDU-02, AE-10 | E2 |
@@ -88,6 +88,47 @@ coach name/personality 저장 경로를 먼저 재사용한다. 이름 설정 �
 
 설정 변경이 곧 운영 수업 변경은 아니다. Service의 session-design/1은 현재 해당 필드를
 받지 않으므로 schema evolution과 구버전 클라이언트 호환을 E2에서 연결한다.
+
+## Claude 5.5 능력 행렬 (AE-28, 2026-10-14)
+
+상태: **전부 미검증.** 칸의 내용은 공식 문서(2026-10-14 확인)와 Service 브랜치
+`feat/claude-5-5-models`(`aa94cf3`, 미병합·미배포)의 코드에서 옮긴 것이다. 5.5 id 로 실행한
+요청도, 설치 앱 v0.1.56 의 실기 관측도 아직 없다. 메뉴에 나온다는 것은 AE-28 의 "검증한 능력"
+이 아니다. 칸을 채우는 실행은 둘이다: 운영 반영 전 Worker 버전에 대한 SDK 계약 canary
+(`scripts/run-sdk-contract.sh` → `tests/rehearsal/07-sdk-request-shape.test.mjs`)와, v0.1.56 으로
+canary 코호트에서 홈페이지 흐름을 macOS arm64·Windows x64 각각 끝까지 돌리는 실기 실행
+([AE-T21](../testing/learning-agent-experience.md)). 둘 다 NOT RUN.
+
+| 모델 | 실행기 · 엔진 · 경로 | 어디서 나오나 | 문서 근거 능력 (`lib/model-caps.ts:120-158`) | 게이트웨이 정규화 | macOS arm64 | Windows x64 |
+|---|---|---|---|---|---|---|
+| Claude Opus 5.5 (`claude-opus-5-5`) | agent-sdk · Agent SDK 0.3.207 · `/v1/messages` | `hypeproof-strong`; 홈페이지 연습·이용권·synthetic 메뉴 | effort low–max(기본 medium) · thinking 을 끌 수 없음 · 기본값이 아닌 sampling·강제 `tool_choice` 는 400 · thinking block 이 prefix 에 묶임 | thinking off 요청은 제거(adaptive, `:313-330`) · `any`/`tool`→`auto`(`:332-343`) · sampling 제거 · `drop_block`(`:348-378`) | 미검증 | 미검증 |
+| Claude Sonnet 5.5 (`claude-sonnet-5-5`) | agent-sdk · Agent SDK 0.3.207 · `/v1/messages` | `hypeproof-default` — 아동 3-4·5-6, 디렉터, canary, 이용권·synthetic, 홈페이지 기본 | effort low–max(기본 high) · `disabled` 는 400 이고 끄기는 `between_tools`(effort ≤ high) · sampling·강제 `tool_choice` 400 · prefix 결속 | `disabled`→`between_tools`, effort ≤ high · `any`/`tool`→`auto` · sampling 제거 · `drop_block` | 미검증 | 미검증 |
+| Claude Haiku 5.5 (`claude-haiku-5-5`) | agent-sdk · Agent SDK 0.3.207 · `/v1/messages` | `hypeproof-fast` 와 `claude-*haiku*` 보조 호출; 홈페이지·이용권 메뉴 | effort low–max(기본 medium) · `disabled` 는 effort ≤ high 에서만 · `temperature` 1·`top_p` 0.99 만 허용 · 강제 `tool_choice` 허용(그때 thinking 없음) · prefix 결속 · 100K 토큰 초과 프롬프트는 5배 요율 | thinking off 일 때 effort ≤ high · sampling 제거 · `drop_block` | 미검증 | 미검증 |
+| Claude Sonnet 5.5 | proxy · 앱 v0.1.56 · `/v1/chat/completions` | 티저(proxy), SDK 미가용 폴백(REQ-M7), 모델 비교 실습 | 위와 같다. 이 경로는 `thinking` 을 보내지 않아 기본 adaptive thinking 이 출력 상한을 나눠 쓴다 | 모델 게이트 매개변수 정리를 모든 코호트에 적용(`routes/chat.ts:914-926`) | 미검증 | 미검증 |
+| Claude Opus 5.5 · Haiku 5.5 | proxy · 앱 v0.1.56 · `/v1/chat/completions` | 모델 비교 실습 메뉴; 티저 fallback(Haiku) | 위와 같다 | 위와 같다 | 미검증 | 미검증 |
+
+공통 메모 — 모두 문서·코드에서 읽은 것이고 관측이 아니다.
+
+- **도구**: 파일·셸·브라우저 도구는 클라이언트가 실행한다(REQ-M38). 모델 쪽 위험은 강제
+  `tool_choice` 가 `auto` 로 바뀌어 엔진이 기대한 도구 호출이 오지 않을 수 있다는 것이다(Opus·Sonnet 5.5).
+  assistant prefill 은 세 모델 모두 400 이며 게이트웨이 규칙이 없다 — 엔진이 보내는지는 미관측.
+- **웹 검색**(`web_search_20250305`): 공식 예시는 Opus 5.5 만 보여 주고 Sonnet·Haiku 5.5 의 지원은
+  문서에 적혀 있지 않다 — 검색을 켠 코호트에서 미검증.
+- **이미지**: 참가자 이미지는 REQ-M43 대로 걸러지고 스크린샷 `tool_result` 는 통과한다. Haiku 5.5 는
+  큰 이미지에 Haiku 4.5 의 약 2.5배 visual token 을 쓴다(문서).
+- **출력 길이**: 모델 상한은 128K 지만 Service 가 16384(디렉터·canary·홈페이지)·12000(미성년)·
+  8192(이용권)로 자른다. thinking 은 출력에 포함되고 새 tokenizer 는 같은 텍스트에 약 30% 많은
+  토큰을 쓴다(한국어 미측정) — 홈페이지 한 장을 한 번에 쓰다 잘릴 위험이 있고 미측정이다.
+- **거절**: 5.5 는 거절을 HTTP 200 `stop_reason: "refusal"` 로 낸다. v0.1.56 이 이를 어떻게
+  보여 주는지는 미관측이고, 아동 수업(생명과학 주제)의 오탐률은 아동 검증 실행에서 잰다.
+- **도구 사이 문장**: 기본 `display: "omitted"` 에서는 도구 사이 텍스트가 빈 thinking block 으로 와
+  긴 턴에서 채팅이 조용해질 수 있다 — 대응 없음, 미관측.
+- **정규화 기록**: 바꾼 매개변수는 Worker 로그(`#406 dropped …`, `routes/messages.ts:547-552`)에만
+  남고 학생·강사 화면 설명은 없다 — AE-28 의 '실행 기록과 UI 설명' 요구는 여전히 미충족이다
+  ([ADR-0006](../adr/0006-lesson-model-policy.md)).
+- **엔진**: 2026-10-14 조사 보고서에 따르면 Claude Code 는 Opus 5.5 를 2.1.280, Sonnet 5.5 를
+  2.1.284, Haiku 5.5 를 2.1.293 부터 안다. v0.1.56 의 SDK 0.3.207 은 별칭과 5.5 id 를 모르는 모델로
+  다루므로, 실제 요청 모양은 Worker 의 `#obs cli thinking shape` 로그로 확인한다(`routes/messages.ts:532-539`).
 
 ## 출시 판정
 
