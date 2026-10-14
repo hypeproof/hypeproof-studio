@@ -1024,6 +1024,16 @@ export function buildSdkGatewayEnv(
 }
 
 /**
+ * The `Options.tools` list from the cohort's grants: built-ins only. A name
+ * from SDK_DENIED_TOOLS or an MCP name (REQ-M19) never gets in, whatever the
+ * permitted set says. Order is kept, so a list without such names comes back
+ * unchanged — which is every list profileToAgentOptions produces today.
+ */
+function sdkBuiltinTools(names: readonly string[]): string[] {
+  return names.filter((n) => sdkDeniedToolReason(n) === undefined && !n.startsWith("mcp__"));
+}
+
+/**
  * Build the SDK `query()` options for a gateway-routed coach turn — everything
  * EXCEPT the two host-bound fields (canUseTool, abortController), which the
  * orchestration layer (sdkCoach.ts) attaches. Pure and total so the full
@@ -1086,7 +1096,7 @@ export function buildSdkQueryOptions(
     // exactly when the profile grants them. The Agent/Task invoker IS a
     // built-in, so it joins the base set only when the profile grants
     // subagents (REQ-M22).
-    tools: [...agent.permittedTools, ...agent.permittedAgentTools],
+    tools: sdkBuiltinTools([...agent.permittedTools, ...agent.permittedAgentTools]),
     ...(agents ? { agents } : {}),
     allowedTools: [],
     settingSources: [],
@@ -1849,10 +1859,70 @@ export async function consumeSdkStream(
 // is what makes the executeShell hard-deny and the writeFile workspace-scope
 // check actually fire — a wrong mapping silently defeats both.
 
-const SHELL_TOOLS = new Set(["bash", "shell", "run"]);
+// "powershell" (FO-11, A2): the CLI's shell tool on Windows when Git Bash is
+// missing. In the 2.1.299 binary, `vw()` turns the PowerShell tool on by
+// default exactly there, and the startup check exits with
+// `shell_tool_missing` only when neither shell exists. The typings have no
+// PowerShell input type, so the drift smoke cannot see it; it is classified
+// here so that, whenever it is granted, it meets the same destructive-command
+// gate as Bash instead of falling through as an unknown tool. The grant
+// itself stays with Bash only (permittedToolsFor): PowerShell is never in
+// `tools`, so on its own this changes no seat's options.
+const SHELL_TOOLS = new Set(["bash", "shell", "run", "powershell"]);
 const WRITE_TOOLS = new Set(["write", "edit", "multiedit", "notebookedit"]);
 const READ_TOOLS = new Set(["read", "glob", "grep", "ls"]);
 const SEARCH_TOOLS = new Set(["websearch", "webfetch"]);
+
+/**
+ * Built-in tools Studio has classified and keeps away from learners, each with
+ * the reason (A2, Agent SDK 0.3.299). Exact runtime names, read from the
+ * installed `sdk-tools.d.ts` union and the bundled 2.1.299 CLI.
+ *
+ * How they stay off:
+ * - `tools` narrowing. Every built-in not in `Options.tools` becomes a CLI
+ *   deny rule (source `toolsNarrowing` in the 2.1.299 binary), applied before
+ *   the tool's own permission check. That ordering matters for SendFeedback,
+ *   whose own check always answers "allow", so canUseTool never sees it.
+ *   buildSdkQueryOptions also strips these names from `tools`, so no profile
+ *   or polluted permitted set can list them.
+ * - canUseTool. evaluateSdkToolUse denies these names before any grant is
+ *   consulted, as a routine (not drift) denial with the reason below.
+ */
+export const SDK_DENIED_TOOLS: Readonly<Record<string, string>> = {
+  // Added in 0.3.299.
+  SendFeedback:
+    "queues a feedback draft that quotes the learner's words and the session's request ids, for Anthropic's /feedback channel; it runs silently (its own permission check always allows) and Studio offers no /feedback",
+  ReadNotifications:
+    "drains notifications pushed from outside the conversation (PR activity, scheduled triggers, other sessions) into the coach's context: an input channel the learner never sees, with no Studio use",
+  RefreshMcpTools:
+    "re-lists MCP server tools mid-session; Studio's MCP set is fixed per query (strictMcpConfig) and a changed tool list invalidates the prompt cache",
+  OfferChromeSetup:
+    "offers to connect Claude in Chrome, the learner's own signed-in browser; the coach works only in the integrated preview browser",
+  ProposeGoal:
+    "sets a session goal that keeps the CLI working until an evaluator agrees, at extra model requests; the learner's goal is Studio's own and the loop stays bounded by maxTurns",
+  ProposeSkills:
+    "proposes SKILL.md files to save as persistent instructions outside the workspace; cohort skills are Service-owned",
+  // Changed in 0.3.299 and never granted: the changes widen external effects.
+  Artifact:
+    "publishes and edits pages on claude.ai (0.3.299 adds read, watch, upload and pin actions): an external side effect",
+  Projects:
+    "reads and writes claude.ai project documents (0.3.299 adds project memory reads): data outside the workspace",
+  RemoteTrigger:
+    "creates and runs remote triggers (0.3.299 adds webhook triggers and run logs): external side effects",
+  ScheduleWakeup:
+    "schedules a later /loop run outside the learner's turn",
+  Monitor:
+    "starts a background watcher (a command or a WebSocket) that outlives the turn",
+  ReportFindings:
+    "emits structured code-review findings for Claude Code's review UI; Studio has no surface for them",
+};
+
+/** The reason a built-in is never available to learners, or undefined when it is not on that list. */
+export function sdkDeniedToolReason(toolName: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(SDK_DENIED_TOOLS, toolName)
+    ? SDK_DENIED_TOOLS[toolName]
+    : undefined;
+}
 
 /**
  * The complete vocabulary of Agent SDK tool names the #282 Phase 2 policy
@@ -1869,6 +1939,8 @@ const SEARCH_TOOLS = new Set(["websearch", "webfetch"]);
  * dropping, which must surface loudly and distinctly instead of blending into
  * the routine-denial stream. Deny stays deny either way (fail-closed); this
  * only tells the two denials apart.
+ *
+ * SDK_DENIED_TOOLS counts as classified: denying them by name IS their rule.
  */
 export function isClassifiedSdkToolName(toolName: string): boolean {
   const name = toolName.toLowerCase();
@@ -1881,6 +1953,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   ) {
     return true;
   }
+  if (sdkDeniedToolReason(toolName) !== undefined) return true;
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
@@ -2181,6 +2254,17 @@ export function evaluateSdkToolUse(args: {
   const { toolName, input, permittedTools, workspaceRoot } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
 
+  // Gate 0 (A2) — built-ins that never run for learners, whatever the permitted
+  // set says. A routine denial (classified), with the reason logged host-side.
+  const neverReason = sdkDeniedToolReason(toolName);
+  if (neverReason !== undefined) {
+    return {
+      decision: "deny",
+      reason: `tool "${toolName}" is never available to learners: ${neverReason}`,
+      friendly: TOOL_DENIED_FRIENDLY,
+    };
+  }
+
   // Gate 1 — the profile's permitted set. Bash/WebFetch/anything not granted
   // dies here with a logged reason, even if the upstream model requests it.
   if (!permittedTools.includes(toolName)) {
@@ -2217,6 +2301,10 @@ export function evaluateSdkToolUse(args: {
   // destructive commands (`rm`, `sudo`, `git push --force`, pipe-to-shell)
   // carry a flag so the host shows the stronger confirm and never lets
   // "항상 허용" remember them.
+  //
+  // PowerShell takes this same branch: one gate, one destructive-command
+  // policy (shellPolicy.isDestructiveCommand), so a Windows seat without Git
+  // Bash can never reach a laxer path than Bash.
   if (SHELL_TOOLS.has(name)) {
     const command = firstString(input, ["command"]) ?? "";
     if (!command.trim()) {
