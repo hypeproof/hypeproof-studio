@@ -6,9 +6,10 @@
 // secrets, no SecretStorage. They are pinned to the exact SDK version in
 // extensions/hypeproof-chat/package-lock.json; a smoke test
 // (test/sdk-binary.smoke.mjs) fails the build if this table drifts from the
-// lockfile, and scripts/seed-sdk-binary.sh embeds the same values (also
-// locked by the smoke test). Bump this file ONLY together with the
-// @anthropic-ai/claude-agent-sdk dependency — never float (doc §6 "Upstream
+// lockfile, and scripts/seed-sdk-binary.sh and scripts/seed-sdk-binary.ps1
+// embed the same values (both locked by the smoke test). Bump this file ONLY
+// together with the @anthropic-ai/claude-agent-sdk dependency, which
+// package.json pins exactly (no ^range) — never float (doc §6 "Upstream
 // layout drift").
 //
 // TRUST MODEL (doc §5 step 4 + W4a integrity gate):
@@ -26,7 +27,7 @@
  * this manifest describes. Must equal the version resolved in
  * package-lock.json (smoke-tested).
  */
-export const SDK_BINARY_VERSION = "0.3.207";
+export const SDK_BINARY_VERSION = "0.3.299";
 
 export interface SdkBinaryManifestEntry {
   /** npm platform package that carries the binary. */
@@ -49,49 +50,49 @@ export const SDK_BINARY_MANIFEST: Readonly<Record<string, SdkBinaryManifestEntry
     packageName: "@anthropic-ai/claude-agent-sdk-darwin-arm64",
     url: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-darwin-arm64/-/claude-agent-sdk-darwin-arm64-${SDK_BINARY_VERSION}.tgz`,
     sha512:
-      "sha512-08xSo1FDx8h0aLhL5tvcRxa2SMmcUV3aDWeZiEJVTclyiDAs61BgTjAxCg+SZcu1CndjJO8cfO0yM5dhamxz3g==",
-    unpackedSize: 241237720,
+      "sha512-KfkR3Ve7Eku1QuxT3LhC5e9Oj7c8UXvLJFFLbCw0u3OrhpzJUQ0ldd9ArmYNU3J47gpaqYgafnk9ztVPLdcajA==",
+    unpackedSize: 247932280,
   },
   "darwin-x64": {
     packageName: "@anthropic-ai/claude-agent-sdk-darwin-x64",
     url: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-darwin-x64/-/claude-agent-sdk-darwin-x64-${SDK_BINARY_VERSION}.tgz`,
     sha512:
-      "sha512-1o7K4EYqyCixZ/oeOZSh7AzSy6TM86xoOuf4VuORjPSS31hBnoqY0NGZd27+2VDs9LGtsdksmsTqcNGx9xd1hA==",
-    unpackedSize: 249274256,
+      "sha512-7G6qjn+xNCmyewcQ/XG/ElBoEGr8uDD4D8X33bqXEbNZ4vXbssiOzmcyxfuWLa7YqR8g9cJnmaWB6UzFEwiC6Q==",
+    unpackedSize: 257765648,
   },
   "win32-x64": {
     packageName: "@anthropic-ai/claude-agent-sdk-win32-x64",
     url: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-win32-x64/-/claude-agent-sdk-win32-x64-${SDK_BINARY_VERSION}.tgz`,
     sha512:
-      "sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg==",
-    unpackedSize: 249486048,
+      "sha512-PWHbjAdrecVlmR0kdgsX20QvUiFgWQl4zskuWd6Ieg3e5w+Ol0FZGXYRLS+Erd+pYUEZBNjDCqK2yd2KdBbDQw==",
+    unpackedSize: 269231840,
   },
   "win32-arm64": {
     packageName: "@anthropic-ai/claude-agent-sdk-win32-arm64",
     url: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-win32-arm64/-/claude-agent-sdk-win32-arm64-${SDK_BINARY_VERSION}.tgz`,
     sha512:
-      "sha512-9fWpUzfkXlPAg2tf8JpQe7w9avFaomAUbfAwyAmykQgSIf66LwaJjvI5hNqhNqczRKyfsXPn3ei2S5HKlmFP+Q==",
-    unpackedSize: 243953384,
+      "sha512-sKvddLLYlXzk0FwjT9gNZDzmdzupI7qI0Dok7uu/KYGFgMGiSEGIsB9bfg+31HMDDftaT16P80MLzH+F8zQBFA==",
+    unpackedSize: 255381736,
   },
   "linux-x64": {
     packageName: "@anthropic-ai/claude-agent-sdk-linux-x64",
     url: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-x64/-/claude-agent-sdk-linux-x64-${SDK_BINARY_VERSION}.tgz`,
     sha512:
-      "sha512-Kg6BPH8Ee0ny/oEUWJmvT1jCRBne4jVpRSOMsJcYp1Fav1rMEgpU219oJJs+LWwx4ifuuLtNWedqJNnVw7mnKg==",
-    unpackedSize: 259403141,
+      "sha512-Q+sweKF/ruNq4Gmf4CzglwaKJmtQjhBK5MT3U1oUhlNStwHejgBg1GLa/KrQMRE0R4u0ayapLyVNrfu0hQYGkQ==",
+    unpackedSize: 265342725,
   },
   "linux-arm64": {
     packageName: "@anthropic-ai/claude-agent-sdk-linux-arm64",
     url: `https://registry.npmjs.org/@anthropic-ai/claude-agent-sdk-linux-arm64/-/claude-agent-sdk-linux-arm64-${SDK_BINARY_VERSION}.tgz`,
     sha512:
-      "sha512-X4uezYOifDiNTTmmugfRCdg3nNamrr1LFRY9hg30vWYTShL+bbN+nfC3KaFfSYCl4GTtsEEUbYdOTC2F3bBpcA==",
-    unpackedSize: 256228677,
+      "sha512-8b5apRvHageZ/9xDfoIu8tJ6lpPAGjg4tD9JYef4SjpsY4KM/gvR6qC+Kqq5JHiH/Tq/mjgGYZjMkTZS8TOnsQ==",
+    unpackedSize: 264626765,
   },
 };
 
 /**
  * Coarse floor for a plausible `claude` binary (every platform's real binary
- * is ~230–250 MB). Guards against a truncated download / corrupt marker even
+ * is ~230–270 MB; darwin-arm64 0.3.299 is 247,931,696 bytes). Guards against a truncated download / corrupt marker even
  * if the marker's own size field was damaged the same way. Deliberately loose
  * — the EXACT check is `size === marker.size` (isSeededBinaryTrusted).
  */
