@@ -573,11 +573,22 @@ function surfacesOf({ call, seen }) {
   const sdk2 = fakeSdk(async ({ options }) => {
     results.turn2 = await options.mcpServers.hypeproof.tools.find((t) => t.name === "consult").handler({ agent: "design-reviewer", question: "새 섹션을 검토해 주세요" }, {});
   });
-  // This turn's stream ends with error_max_turns: the next turn records F5.
+  // This turn's stream has two failed Edits of index.html (F3, read by the stream tap) and
+  // ends with error_max_turns: the next turn records F5.
+  const editUse = (id) => ({ type: "assistant", message: { id: `m_${id}`, content: [{ type: "tool_use", id, name: "Edit", input: { file_path: path.join(WS2, "index.html") } }] } });
+  const editFail = (id) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: true, content: "old_string not found" }] } });
   sdk2.query = ((orig) => (input) => {
     const it = orig(input);
     return (async function* () {
-      for await (const e of it) yield e.type === "result" ? { ...e, subtype: "error_max_turns", is_error: true } : e;
+      for await (const e of it) {
+        if (e.type === "result") {
+          yield editUse("toolu_e1");
+          yield editFail("toolu_e1");
+          yield editUse("toolu_e2");
+          yield editFail("toolu_e2");
+          yield { ...e, subtype: "error_max_turns", is_error: true };
+        } else yield e;
+      }
     })();
   })(sdk2.query.bind(sdk2));
   const turn2 = await quietly(() => runSdkCoach({
@@ -590,6 +601,7 @@ function surfacesOf({ call, seen }) {
   assert.equal(turn2.value.failed, true);
   assert.equal(JSON.parse(results.turn2.content[0].text).ok, true, "a new turn: the per-turn cap starts over");
   assert.deepEqual(session.usage("design-reviewer"), { turn: 1, session: 2 }, "the per-session count carries on");
+  assert.deepEqual(session.failuresThisTurn().map((f) => [f.id, f.path]), [["F3", "index.html"]], "the stream tap saw two failed Edits of one file");
   session.beginTurn("turn_full_3");
   assert.deepEqual(session.failuresThisTurn().map((f) => f.id), ["F5"], "runSdkCoach told the session how the turn ended");
 
@@ -615,6 +627,45 @@ function surfacesOf({ call, seen }) {
   }));
   assert.match(fetches[0].content[0].text, /^📏 390·1280px 확인 — 미확인\(미리보기 꺼짐\)/, "no browser host: no preview, unverified");
   ok("no browser host: site_check still registers on a consult-only seat and reads 미확인, never 통과");
+}
+
+// ── 5. A consult longer than the stall budget is host work, not a stall ─────
+{
+  const STALL = 100;
+  const turn = async (consultMs) => {
+    const sdk = fakeSdk(async ({ options }) => {
+      await options.canUseTool("mcp__hypeproof__consult", { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" }, { toolUseID: "c", signal: new AbortController().signal });
+      await options.mcpServers.hypeproof.tools.find((t) => t.name === "consult").handler({ agent: "design-reviewer", question: "첫 화면을 검토해 주세요" }, {});
+    });
+    const gatewaySlow = async () => {
+      await new Promise((r) => setTimeout(r, consultMs));
+      return new Response(JSON.stringify({ ok: true, agent: "design-reviewer", output: { verdict: "pass", findings: [] } }), { status: 200 });
+    };
+    return quietly(() =>
+      runSdkCoach({
+        gatewayUrl: "https://api.hypeproof-ai.xyz/v1", token: "t", model: "m", turnId: `stall_${consultMs}`, profile: { ...PROFILES.adultRW, orchestrator: ROSTER }, systemPrompt: "",
+        history: [], userText: "q", signal: new AbortController().signal, cwd: WS, stallTimeoutMs: STALL,
+        binaryResolution: { available: true, source: "setting", path: "/opt/claude", reasons: [] }, sdk, zod: fakeZod(),
+        onDelta: () => {}, onCitations: () => {}, onAssetScore: () => {}, requestApproval: async () => ({ approved: true, actor: "policy" }),
+        orchestrator: { session: new OrchestratorSession(), fetch: gatewaySlow },
+      }).then((v) => ({ ok: v }), (e) => ({ error: e })),
+    );
+  };
+  const long = (await turn(STALL * 6)).value;
+  assert.ok(long.ok, `a 600 ms consult under a 100 ms stall budget finishes (${long.error?.name ?? ""})`);
+  // Control: the same silence with no host work in it is a stall (the watchdog is armed).
+  const sdkSilent = fakeSdk(async () => new Promise((r) => setTimeout(r, STALL * 6)));
+  const silent = (await quietly(() =>
+    runSdkCoach({
+      gatewayUrl: "https://api.hypeproof-ai.xyz/v1", token: "t", model: "m", profile: { ...PROFILES.adultRW, orchestrator: ROSTER }, systemPrompt: "",
+      history: [], userText: "q", signal: new AbortController().signal, cwd: WS, stallTimeoutMs: STALL,
+      binaryResolution: { available: true, source: "setting", path: "/opt/claude", reasons: [] }, sdk: sdkSilent, zod: fakeZod(),
+      onDelta: () => {}, onCitations: () => {}, onAssetScore: () => {}, requestApproval: async () => ({ approved: true, actor: "policy" }),
+      orchestrator: { session: new OrchestratorSession() },
+    }).then((v) => ({ ok: v }), (e) => ({ error: e })),
+  )).value;
+  assert.equal(silent.error?.name, "CoachStallError", "control: plain silence is still a stall");
+  ok("stall watchdog: a consult running longer than the stall budget is host work, not a stall (control: the same silence without it stalls)");
 }
 
 console.log(`\n${passed} orchestrator-switch checks passed`);

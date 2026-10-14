@@ -95,6 +95,7 @@ const still = { now: () => 1_000 }; // the clock does not move: the script gets 
   assert.equal(m[0].params.expression, siteCheckExpression("/index.html", { budgetMs: SITE_CHECK_BUDGET_MS }), "A3's script, verbatim, with the whole budget");
   assert.equal(m[0].params.returnByValue, true);
   assert.equal(m[0].timeoutMs, SITE_CHECK_BUDGET_MS + SITE_CHECK_CDP_SLACK_MS, "the CDP timeout is a little above the script's budget");
+  assert.ok(SITE_CHECK_CDP_SLACK_MS > 0 && SITE_CHECK_CDP_SLACK_MS <= 2000, "a little: at most 2 s past the 5 s budget (A3's runner contract)");
   assert.equal(page.state.released, 1, "the session is released");
   assert.ok(!page.calls.some((c) => c.method === "Page.navigate"), "a page already on the wrapper is not navigated");
 
