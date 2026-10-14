@@ -49,6 +49,16 @@
 | DEC-021 | 짬통과 backlog의 구분 | 짬통은 불필요하거나 과거에 쓰였지만 현재 사용하지 않는 것이 확인된 코드를 복구 가능하게 옮겨 보관하는 곳이다. 사용 여부·필요성이 애매한 코드는 먼저 backlog에서 검토한다. 제품 통합·리팩터링·운영·이력 같은 후속 업무도 backlog이며 폐기 코드로 취급하지 않는다. 방금 이전하려던 후보들은 우선 backlog에 유지한다. DEC-020의 “애매한 코드 식별·보관 위치” 정의는 이 결정으로 대체하되 Worker 분리 우선과 짬통 작업 중단은 유지한다. | 사용자가 “짬통은 불필요한 코드를 정리하는 곳, 옛날에 있었는데 지금은 안쓰는 코드들을 옮기는 곳이고. 애매한 것들은 백로그에 남기는 것으로 생각해야한다.”라고 정정했다. |
 | DEC-022 | 최종 PR 보고 시점과 칸반 갱신 순서 | 최종 PR 주소는 필요한 검사와 의존 정리가 끝나 인간이 바로 머지할 수 있는 상태에서 보고한다. 코드 테스트 통과나 draft PR 생성만으로 전체 완료를 보고하지 않는다. 인간에게 PR을 보고한 뒤 머지하는 동안 칸반 상태·근거를 갱신하며, 실제 병합 상태를 확인한 뒤 반영한다. 에이전트가 대신 병합하지 않는다. | 사용자가 “다 되면 최종 PR 주소와 함께 보고해라. 내가 바로 머지하면 되는 상태가 되었을 때 보고하고, 내가 머지하는동안 칸반 업데이트를 진행하도록 해라.”라고 지시했다. |
 
+### Confirmed Google automation decision — 2026-10-14
+
+| ID | Proposal | Human decision | Evidence |
+|---|---|---|---|
+| DEC-023 | Managed shared Google executor versus learner-owned Apps Script | Default to the shared executor; defer personal Apps Script export. First verify two distinct Google users without company Cloud IAM and isolate their data. Real mail requires separate explicit approval. | TJ: “공통 실행기를 기본으로 가자. 개인 Apps Script 내보내기는 나중에 추가하고 ... 회사 관리 권한 없이 서로 다른 구글 계정으로 실행되고 데이터가 분리되는지부터 직접 검증해.” |
+
+This changes the intended commercial execution contract. It does not claim the
+shared runner is integrated, accepted, or released. Existing owner-script MVP
+evidence remains historical evidence of that implementation only.
+
 ## 이번 레포 정리의 목표와 필수 원칙 — 2026-10-10
 
 ### 궁극적인 목표

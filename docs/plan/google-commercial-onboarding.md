@@ -4,6 +4,22 @@ TJ request, 2026-10-14: identify remaining commercial onboarding work and procee
 with feasible preparation. Existing MVP acceptance is retained, not relabelled
 as commercial launch approval. Parent: Epic1603 / issue1604 / PR1605, EA-02/08/11.
 
+## Confirmed architecture and bounded verification
+
+TJ selected the managed shared Google executor on 2026-10-14 (DEC-023).
+Personal Apps Script export is deferred. Learners supply bounded saved recipes;
+Studio manages the immutable execution code, and each call must use the learner's
+own Google identity. No company Cloud IAM or script editor role is part of learner
+onboarding. Real sending still requires exact recipient/content approval.
+
+The first spike is `scripts/google-runner-probe/`: a separate read-only script,
+no Gmail scope or send function, a mandatory two-subject allowlist, private A1
+value digests and per-user synthetic markers. Root ran its six local behavior
+checks successfully. These model Google semantics; live account execution is
+still required. The separate probe project was created/uploaded and associated
+with the Studio test Cloud project. IAM currently lists only the company owner.
+Live OAuth/deployment and two-user isolation are pending, not passing.
+
 ## Current observed gaps
 
 Root read the Studio Google Cloud console on 2026-10-14: External/Testing,
@@ -27,8 +43,8 @@ scope verification are separate from a pilot-user list.
 
 | Priority / owner | Work | Required evidence / current state |
 | --- | --- | --- |
-| P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Decision pending. Managed executor reduces setup but changes code ownership. No silent replacement of current authoring contract. |
-| P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Two independent external accounts with zero company IAM; preview and cross-account denial. Not implemented or verified yet. |
+| P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Shared executor approved; personal export deferred (DEC-023). Integration remains gated on live two-account isolation. |
+| P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Two independent external accounts with zero company IAM; own-Sheet success, cross-Sheet denial and per-user state. Read-only spike and six local checks ready; live proof pending. |
 | P0 Product/site owner | Publish product homepage, accurate privacy/deletion policy, support contact; verify company domain | URLs reachable without login and domain ownership verified. Technical disclosure draft below is prepared; publication and legal/retention facts need owner confirmation. |
 | P0 Google project owner | Production OAuth project/client, required APIs, branding and least-privilege scope declarations; submit demo and rationale | Separate production and test configuration; submission receipt then Google approval. Never infer approval from a Publish button. |
 | P0 Service/Ops | Twenty distinct learner identities, cohort membership, 30-day grants, individual and aggregate budgets, revocation | Dry-run manifest first; no shared instructor token. Sum of exposures fits approved class budget. Actual roster, date and budget not supplied. Existing isolated test cap remains USD3. |
@@ -41,7 +57,7 @@ scope verification are separate from a pilot-user list.
 
 Dependencies: architecture spike → stable data/scopes → final policy/demo →
 Google review → limited pilot → commercial release. Domain/policy drafts and
-local recovery/concurrency work can proceed while the architecture is decided.
+local recovery/concurrency work can proceed while the approved architecture is verified.
 Engineering estimate, not a commitment: 1–2 days for the narrow two-account
 architecture experiment, then 2–4 days for integration/operations/verification
 if it succeeds. Google's review and company-admin response time are external;

@@ -879,3 +879,10 @@ EA-04/05 Apps Script approval digests bind ordered message values, independent o
 
 
 EA-02/11 commercial-onboarding preparation distinguishes fixed-code Google recovery states: quota/outage retry, revoked/missing consent reconnect, and operator/client/Workspace-policy configuration. Private setup cards offer relevant actions and pause without clearing credentials or send ledgers. Unknown 403 remains setup-blocked; no Cloud IAM grant is requested and no raw provider response reaches the model. Root runtime/host regression coverage is in `appsScriptRuntime.test.ts` and `automation-apps-script-host.smoke.mjs`. The separate [commercial onboarding plan](plan/google-commercial-onboarding.md) records external launch gates; this improvement does not establish twenty-account production readiness.
+
+EA-11 follows DEC-023: the commercial default is an immutable shared Google runner
+using each learner's own identity and bounded saved recipe, with no company IAM or
+script-editor onboarding. Personal Apps Script export is deferred. A separate
+read-only probe tests identity-derived access and UserProperties isolation; its
+local fixture success is not real two-account acceptance. Existing owner-script
+Windows acceptance remains valid only for that prior implementation.

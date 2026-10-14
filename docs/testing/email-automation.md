@@ -162,3 +162,16 @@ No real account, IAM, OAuth publication, Windows package or mail changed in this
 follow-up. Console audit observed External/Testing, two test users, empty branding
 URLs/domains and empty declared scope tables. The runtime does request scopes;
 an empty console declaration is not absence of granted user permissions.
+
+## Shared runner isolation gate (EA-11, DEC-023)
+
+Root ran `node --test scripts/google-runner-probe/probe.test.mjs`: six passed.
+These are local safety/contract checks, not live Google identity evidence.
+Use a separate immutable no-mail probe, exactly two allowlisted Google subjects,
+no company Cloud IAM/script-editor access, separately owned unshared synthetic
+Sheets and the same marker namespace. Both own-Sheet calls must succeed; both
+cross-Sheet calls must be denied without a cell digest or state mutation. Re-read
+the namespace as each user to prove marker separation. An unlisted caller must
+fail before Sheet access. Save only redacted receipts outside protected evidence.
+Current live status: project uploaded and bound; consent/deployment and all live
+isolation calls pending. No new email was sent.

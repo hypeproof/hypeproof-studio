@@ -806,7 +806,7 @@
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "e5bf8ebb6e031ab57af5ce328465c1cda813afc0eee744776670b9d90792d5d7",
+      "sha256": "e73218f81d785abb8162c632d52c8d2e55975e5ea1da5913d69cb80f43dcdfc3",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
@@ -3919,7 +3919,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Scoped local/Windows acceptance passed at extension463e8529 and Serviceffef7bc: cohort A/B reuse, exact approved Apps Script send1/unknown0 and matching Inbox receipt. Complete PR review; commercial Google onboarding and separately authorized merge/general rollout remain outside this test acceptance. Follow-up commercial preparation distinguishes Google recovery states; select and verify a no-IAM execution architecture before public onboarding per docs/plan/google-commercial-onboarding.md.",
+      "next_action": "DEC-023 selects the shared Google executor; personal Apps Script export is deferred. Read-only probe and six local checks pass; dedicated probe uploaded/bound and IAM owner-only observed. Complete additional Google consent and exactly-two-subject execution access, then verify own-Sheet success, cross-Sheet denial and UserProperties isolation with two non-IAM users. Existing owner-script Windows acceptance does not prove this new contract. General rollout and new real mail remain unapproved.",
       "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
       "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
       "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",
