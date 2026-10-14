@@ -119,7 +119,7 @@
         "AE-44"
       ],
       "inline_prefixes": [],
-      "sha256": "9fe3a242b5688e5eec2267d8737f6539e0b17b125c898e1231414c60a73d487a",
+      "sha256": "5937ee5091b447061a5873ca1866cbb28c8597ee23de83e4b6a560d068137c35",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/learning-agent-experience.md",
@@ -196,7 +196,7 @@
         "MU-08"
       ],
       "inline_prefixes": [],
-      "sha256": "cb337a8930feffe328017a0359d7462569c18fa5e28681c3f1717ec63260fed4",
+      "sha256": "b11347e06fc63cb146917ac51ff992680e37d4f3933e989900f16700d044513c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/model-effort-and-course-usage.md",
@@ -225,7 +225,7 @@
         "AB-18"
       ],
       "inline_prefixes": [],
-      "sha256": "98ed25362032a09e5d6966def566fddd5725fdba3bf9f45782053b45e54e55b0",
+      "sha256": "88ec885c04cee1146bf28433119cfd5d4645fa63bb15c90e70833106f968b636",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/access-budget-settlement.md",

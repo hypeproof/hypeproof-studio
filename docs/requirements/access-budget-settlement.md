@@ -45,8 +45,8 @@ AB-*는 REQ-L5, AE-17/20/27/32, MU-03~08의 후속이며 기존 계약을 폐기
 ## Claude 5.5 가격 revision (2026-10-14)
 
 2026-10-14 별칭 재지정([REQ-M36](../studio-requirements.md))이 AB-01/05/07/08 에 요구하는 것이다.
-줄 번호는 Service 브랜치 `feat/claude-5-5-models` 의 `aa94cf3` 이며 가격·예산 코드는 기준
-`2e563ce` 와 같다. 운영의 `HPS_ACCESS_CONTRACTS` 값과 D1 행은 확인하지 않았다.
+줄 번호는 Service main `399109c`(#73·#74 병합본)이며 가격·예산 코드는 `2e563ce` 와 같다. Service #73
+본문에 따르면 운영에는 지금 계량 좌석이 없다 — 이 문서 작성자가 운영 설정이나 D1 을 조회한 것은 아니다.
 
 - **누가 가격을 타나.** `HPS_ACCESS_CONTRACTS=enabled` 일 때 계정을 실은 토큰, `x-hps-funding-source`
   요청, `access_course_policies.required = 1` 인 코호트만 예산 admission 을 탄다
