@@ -14,6 +14,9 @@ import { modelEchoVerdict, modelEchoNotice, describeModelEcho, type ModelEchoInp
 type ModelEchoContext = Omit<ModelEchoInput, 'resolved'>;
 import * as vscode from "vscode";
 import * as path from "path";
+import * as os from "node:os";
+// hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
+import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -1564,6 +1567,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (this.crDirector.on) void this.refreshCrDirectorContext(true).catch(() => undefined);
     }, CR_DIRECTOR_REPROBE_MS);
     context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
+    // D-028 — staged photos that were never sent go with the window.
+    context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
   }
 
   /**
@@ -2715,6 +2720,103 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return { note: pastedImageNote(relPaths, cwd), relPaths };
   }
 
+  /** D-028 — this panel's staging folder, created on the first attached photo. */
+  private imageStaging: ImageStaging | null = null;
+
+  /**
+   * D-028 — keep a photo dropped or pasted into the chat until the message is sent. Only a
+   * cohort with `input.image_files` takes photos this way; a refusal goes back to the panel
+   * so the chip disappears with the reason instead of the photo vanishing on send.
+   */
+  private async stageAttachedImage(stageId: string, name: string, mime: string, base64: string): Promise<void> {
+    const refusal = this.stageImageBytes(stageId, name, mime, Buffer.from(base64, "base64"));
+    if (refusal) void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+  }
+
+  /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */
+  private stageImageBytes(stageId: string, name: string, mime: string, bytes: Buffer): string | null {
+    if (!this.isImageFilesEnabled()) return "이 수업에서는 사진을 붙일 수 없어요.";
+    const refusal = attachedImageRefusal({ name, mime, bytes: bytes.length, alreadyStaged: this.imageStaging?.count() ?? 0 });
+    if (refusal) return refusal;
+    try {
+      if (!this.imageStaging) {
+        const { rootParent, root } = stagingRootFor(os.tmpdir(), process.pid, randomId());
+        this.imageStaging = new ImageStaging(rootParent, root);
+        this.imageStaging.purgeLeftovers();
+      }
+      this.imageStaging.stage(stageId, safeAttachedImageName(name, attachedImageExt(name, mime) ?? "jpg"), bytes);
+      return null;
+    } catch (err) {
+      console.warn("[attached-images] staging failed:", err);
+      return "사진을 잠시 보관하지 못했어요. 다시 끌어다 놓아 주세요.";
+    }
+  }
+
+  /** D-028 — does this cohort take photos into the chat as files? */
+  isImageFilesEnabled(): boolean {
+    return this.cachedProfile?.input?.image_files === true;
+  }
+
+  /** D-028 — is this file already inside the class folder (an existing photo being viewed)? */
+  isInsideWorkspace(fsPath: string): boolean {
+    const roots = [this.resolveCoachCwd(), ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)].filter(
+      (r): r is string => !!r,
+    );
+    return roots.some((r) => {
+      const rel = path.relative(r, fsPath);
+      return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+    });
+  }
+
+  /**
+   * D-028 — a photo dropped onto Studio from Finder. VS Code takes such a drop before the
+   * chat webview sees it and opens the file as an editor tab (see #384), so extension.ts
+   * hands the opened file here: it is staged like a dropped photo and its chip appears in
+   * the chat. Returns false when it was not taken (the reason is shown in the chat).
+   */
+  async stageImageFromFile(fsPath: string): Promise<boolean> {
+    const name = path.basename(fsPath);
+    const ext = attachedImageExt(name, "") ?? "";
+    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext ? `image/${ext}` : "";
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(fsPath)));
+    } catch {
+      void this.post({ type: "imageStageRefused", stageId: "", reason: "사진 파일을 읽지 못했어요. 다시 끌어다 놓아 주세요." });
+      return false;
+    }
+    const stageId = randomId().replace(/[^A-Za-z0-9_-]/g, "");
+    const refusal = this.stageImageBytes(stageId, name, mime, bytes);
+    if (refusal) {
+      void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+      return false;
+    }
+    // The preview needs the bytes in the webview; a very large photo goes without one.
+    const preview = bytes.length <= 8 * 1024 * 1024 && mime && !/hei[cf]$/.test(mime) ? `data:${mime};base64,${bytes.toString("base64")}` : undefined;
+    void this.post({ type: "imageStagedByHost", stageId, name, ...(preview ? { dataUrl: preview } : {}) });
+    return true;
+  }
+
+  /** D-028 — move this send's staged photos into images/ and return the note for the model. */
+  private commitAttachedImages(ids: string[] | undefined, streamId: string): string {
+    if (!ids?.length || !this.imageStaging) return "";
+    const cwd = this.resolveCoachCwd();
+    if (!cwd) {
+      for (const id of ids) this.imageStaging.discard(id);
+      this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(ids.length), state: "error" });
+      return "";
+    }
+    const { relPaths, failed } = this.imageStaging.commit(ids, cwd);
+    if (failed > 0) this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(failed), state: "error" });
+    if (relPaths.length === 0) return "";
+    this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: attachedImagesSavedLabel(relPaths), state: "done" });
+    const note = attachedImagesNote(relPaths);
+    // The sent bubble gets the same lines, so the history the panel sends back next turn
+    // still names the files.
+    void this.post({ type: "attachedImagesSaved", note });
+    return note;
+  }
+
   /** #278 Phase 1 — does this cohort's profile request the native live-server preview? */
   private isLiveServerPreview(): boolean {
     return this.cachedProfile?.preview?.type === "live_server";
@@ -3581,6 +3683,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // Any message from the panel is evidence of a human. See `lastActivityAt`.
     this.lastActivityAt = Date.now();
+    // D-028 — a send that is turned away here never reaches handleSend, so its staged photos
+    // are deleted now; they are not part of the text handed back to the input box.
+    if ((this.opsHold || this.connectionChanging) && msg.type === "sendMessage") {
+      for (const id of msg.attachments ?? []) this.imageStaging?.discard(id);
+    }
     if (this.opsHold && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
       // #751 — only a NEW AI run is held; the typed text goes back into the box, nothing is lost.
       await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images});
@@ -3794,7 +3901,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports));
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments);
+        return;
+      case "stageImage":
+        await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
+        return;
+      case "discardStagedImage":
+        this.imageStaging?.discard(msg.stageId);
         return;
       case "retryMessage":
         // #358 — carry the failed turn's image(s) through the retry so the
@@ -4043,6 +4156,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     rawHistory: ChatMessage[],
     images?: string[],
     instructorPromptRefs?: Array<{ object_id: string; revision: number }>,
+    attachments?: string[],
   ): Promise<void> {
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
     if (this.verifySession?.running) {
@@ -4293,6 +4407,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // it would fill the work folder with files the participant never asked for.
     const savedImages = await this.savePastedImages(images, streamId);
     if (savedImages.note) userTextForModel = `${userTextForModel}\n\n${savedImages.note}`;
+    // D-028 — photos attached as files move into images/ now, and the message carries their
+    // paths. The same lines go into the saved history, so later turns can still name them.
+    const attachedNote = this.commitAttachedImages(attachments, streamId);
+    if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
+    const historyText = attachedNote ? `${text}\n\n${attachedNote}` : text;
 
     let assistantText = "";
     // REQ-D2: auto-reveal as soon as a renderable HTML block completes in
@@ -4924,7 +5043,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // window is reopened.
         await this.saveAgentMdIfPresent(assistantText, streamId);
         await this.appendHistory([
-          { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+          { id: randomId(), role: "user", content: historyText, createdAt: Date.now() },
           ...this.finishTurnItems(
             streamId,
             messageId,

@@ -259,7 +259,12 @@ export interface ResolvedProfile {
   workspace_root?: string | null;
   workspace_start?: 'empty' | 'html';
   /** Optional input capabilities (default off). #278 / website-copyclone. */
-  input?: { page_context?: boolean; image_paste?: boolean };
+  input?: {
+    page_context?: boolean;
+    image_paste?: boolean;
+    /** Photos attached as files saved to `images/`, paths only to the model (attachedImages.ts). hype-dental D-028. */
+    image_files?: boolean;
+  };
   /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
   classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
   /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
@@ -426,7 +431,13 @@ export type WebviewMessage = (
   | { type: "selectModelDirect"; modelId: string }
   | { type: "selectEffort"; value: CourseEffort }
   | { type: "refreshEffort" }
-  | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }> }
+  | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }>;
+      /** D-028 — stage ids of photos attached as files; the host moves them into images/ on send. */
+      attachments?: string[] }
+  /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
+  | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
+  /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
+  | { type: "discardStagedImage"; stageId: string }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[] }
   | { type: "cancelStream"; streamId: string }
   | { type: "requestAction"; action: ActionRequest }
@@ -514,6 +525,12 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | {type:'inputRejected';text:string;images?:string[]}
+  /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
+  | {type:'imageStageRefused';stageId:string;reason:string}
+  /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */
+  | {type:'imageStagedByHost';stageId:string;name:string;dataUrl?:string}
+  /** D-028 — the photos of the message just sent were saved; `note` is the `[첨부한 사진]` list. */
+  | {type:'attachedImagesSaved';note:string}
   | {type:'activityFreeze';frozen:boolean;nonce?:string}
   | {type:'activityDraftError';error:string}
   /** #897 (VO-01) — a request to run the probe. Raised only by a command, never at activation time. */

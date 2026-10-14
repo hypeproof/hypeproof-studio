@@ -99,7 +99,9 @@ type Action =
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
   | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string }
-  | { type: "userSent"; text: string; images?: string[] };
+  | { type: "userSent"; text: string; images?: string[] }
+  /** D-028 — the host saved this send's attached photos; append their paths to the message. */
+  | { type: "attachmentsSaved"; note: string };
 
 // #497 — 사용자가 Stop 을 눌렀을 때의 안내. 오류가 아니므로 에러 배너를 쓰지
 // 않는다 ("문제가 생겼어요" + 🚨 신고하기 는 정상 조작을 사고로 만든다).
@@ -240,6 +242,16 @@ function reducer(state: State, action: Action): State {
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
       };
+    case "attachmentsSaved": {
+      const items = [...state.timeline.items];
+      for (let i = items.length - 1; i >= 0; i--) {
+        const it = items[i] as { role?: string; content?: string };
+        if (it.role !== "user") continue;
+        items[i] = { ...items[i], content: it.content ? `${it.content}\n\n${action.note}` : action.note } as typeof items[number];
+        break;
+      }
+      return { ...state, timeline: { ...state.timeline, items } };
+    }
     case "userSent":
       return {
         ...state,
@@ -300,6 +312,7 @@ export function App() {
         case "config":      dispatch({ type: "config", config: msg.config }); break;
         case "history":     dispatch({ type: "history", messages: msg.messages }); break;
         case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId }); break;
+        case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
         case "streamCitations": dispatch({ type: "streamCitations", citations: msg.citations }); break;
         case "toolLog": dispatch({ type: "toolLog", entry: { id: msg.id, icon: msg.icon, label: msg.label, state: msg.state, ...(msg.at ? { at: msg.at } : {}) } }); break;
@@ -335,12 +348,16 @@ export function App() {
   // 전에 role:"tool" 이 걸러진다(chatTimeline.modelHistory).
   const messages = state.timeline.items;
 
-  const send = (text: string, images?: string[], imports?: Array<{ object_id: string; revision: number; hash16: string }>) => {
+  const send = (text: string, images?: string[], imports?: Array<{ object_id: string; revision: number; hash16: string }>, attachments?: Array<{ id: string }>) => {
     const trimmed = text.trim();
     const hasImages = !!images && images.length > 0;
-    if ((!trimmed && !hasImages) || state.streamId) return;
+    const hasAttachments = !!attachments && attachments.length > 0;
+    if ((!trimmed && !hasImages && !hasAttachments) || state.streamId) return;
+    // D-028 — only the stage ids go to the host. The photos are not put on the bubble as
+    // images (a retry would send those to the model); the host answers with the saved paths,
+    // which are appended to this message (attachedImagesSaved).
     dispatch({ type: "userSent", text: trimmed, images });
-    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}) });
+    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
   };
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes

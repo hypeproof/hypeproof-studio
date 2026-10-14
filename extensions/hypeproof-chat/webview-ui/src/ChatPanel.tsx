@@ -86,7 +86,7 @@ interface Props {
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   canRetryLast: boolean;
-  onSend: (text: string, images?: string[], imports?: ImportRef[]) => void;
+  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[]) => void;
   onRetry: (prompt: string) => void;
   onRetryLast: () => void;
   onDismissError: () => void;
@@ -179,6 +179,54 @@ async function fitDataUrl(original: string): Promise<string> {
   return out; // best effort — worker cap still guards the extreme tail
 }
 
+// hype-dental D-028 — photos attached as files (cohorts with `input.image_files`). The bytes
+// go to the host's staging folder as they are; the host moves them into images/ on send and
+// the model gets their paths. Limits mirror the host's attachedImages.ts.
+const MAX_FILE_PHOTOS = 10;
+const MAX_FILE_PHOTO_BYTES = 25 * 1024 * 1024;
+interface StagedPhoto { id: string; name: string; thumb: string | null; ready: boolean }
+
+function newStageId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return c?.randomUUID ? c.randomUUID().replace(/-/g, "") : `${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** A photo file? HEIC from an iPhone often arrives with an empty type, so the name counts too. */
+function isPhotoFile(f: File): boolean {
+  return f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp|gif|avif)$/i.test(f.name);
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(typeof r.result === "string" ? r.result : "");
+    r.onerror = () => reject(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+/** A small preview for the chip; null when the browser cannot draw the format (HEIC). */
+async function photoThumb(dataUrl: string): Promise<string | null> {
+  try {
+    const img: HTMLImageElement = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("decode failed"));
+      el.src = dataUrl;
+    });
+    const scale = Math.min(1, 160 / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_UX: UxConfig = {
   coach: {
     naming_mode: "fixed",
@@ -213,6 +261,9 @@ export function ChatPanel(props: Props) {
   // a brief reason when a paste is rejected (too big / too many).
   const [pendingImages, setPendingImages] = useState<string[]>(config?.activityDraft?.images ?? []);
   const [imgNote, setImgNote] = useState<string | null>(null);
+  // D-028 — photos staged in the host until this message is sent. Not part of the saved draft:
+  // the host deletes staged files when the window closes.
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
   // #416 — the ONE message parked while a turn is running (null = none).
   const [queued, setQueued] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
@@ -320,6 +371,20 @@ export function ChatPanel(props: Props) {
     });
     return off;
   }, [activityId]);
+  // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
+  // one itself (dropped from Finder, it opened as a tab): draw its chip.
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "imageStageRefused") {
+      setStagedPhotos((prev) => prev.filter((p) => p.id !== msg.stageId));
+      setImgNote(msg.reason);
+      return;
+    }
+    if (msg.type !== "imageStagedByHost") return;
+    const { stageId, name, dataUrl } = msg;
+    setImgNote(null);
+    setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev : [...prev, { id: stageId, name, thumb: null, ready: true }]));
+    if (dataUrl) void photoThumb(dataUrl).then((thumb) => setStagedPhotos((prev) => prev.map((p) => (p.id === stageId ? { ...p, thumb } : p))));
+  }), []);
   // SX-14·15·17 — take the learning state the host sent as-is. Why it is not filtered
   // by activity id: the gate is per **task**, and the host already sends only that
   // task's events.
@@ -397,6 +462,8 @@ export function ChatPanel(props: Props) {
   // gate server-side, this just keeps the UI honest (no thumbnail, plain text
   // paste). Absent on older cached /v1/profile responses → treated as off.
   const imagePasteEnabled = config?.profile?.input?.image_paste === true;
+  // D-028 — photos as files, paths only to the model. Takes over drop and paste where on.
+  const imageFilesEnabled = config?.profile?.input?.image_files === true;
   // #649 — switching worlds is **click-only**. Only for cohorts whose profile carries
   // worlds (kids-quest), the friend strip is always up, right above the composer. It
   // must not disappear once the conversation has started — in v0.1.48, which had only
@@ -480,15 +547,18 @@ export function ChatPanel(props: Props) {
 
   const submit = (text?: string) => {
     const value = (text ?? draft).trim();
-    if ((!value && pendingImages.length === 0) || streaming || unavailable || props.sendLocked) return;
+    if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked) return;
+    if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return; }
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
-    props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined);
+    props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined);
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
+    // The host now owns these files (it moves them into images/), so no discard here.
+    setStagedPhotos([]);
     setImgNote(null);
     setRollExpand(null);
   };
@@ -561,6 +631,29 @@ export function ChatPanel(props: Props) {
     }
   };
 
+  // D-028 — keep dropped or pasted photos as files in the host until the message is sent.
+  const stagePhotoFiles = (files: File[]) => {
+    setImgNote(null);
+    let count = stagedPhotos.length;
+    for (const f of files) {
+      if (count >= MAX_FILE_PHOTOS) { setImgNote(`사진은 한 번에 ${MAX_FILE_PHOTOS}장까지 보낼 수 있어요.`); break; }
+      if (f.size > MAX_FILE_PHOTO_BYTES) { setImgNote("사진이 너무 커요(25MB까지). 휴대폰에서 보통 크기로 다시 보내 주세요."); continue; }
+      count++;
+      const id = newStageId();
+      setStagedPhotos((prev) => [...prev, { id, name: f.name, thumb: null, ready: false }]);
+      readAsDataUrl(f)
+        .then(async (url) => {
+          postToHost({ type: "stageImage", stageId: id, name: f.name, mime: f.type, base64: url.slice(url.indexOf(",") + 1) });
+          const thumb = await photoThumb(url);
+          setStagedPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, thumb, ready: true } : p)));
+        })
+        .catch(() => {
+          setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+          setImgNote("사진을 읽지 못했어요. 다시 끌어다 놓아 주세요.");
+        });
+    }
+  };
+
   // #384 — attach an image handed over by the host (an image opened in an
   // editor tab, e.g. a dropped screenshot). Same downscale + thumbnail path as
   // paste, just from a data URL. Re-runs on nonce so the same file re-attaches.
@@ -587,7 +680,7 @@ export function ChatPanel(props: Props) {
   // next turn instead of pasting raw text. A normal text paste falls through
   // to the textarea default (we only preventDefault when we found image data).
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!imagePasteEnabled) return;          // text-only cohort — let default text paste happen
+    if (!imagePasteEnabled && !imageFilesEnabled) return;          // text-only cohort — let default text paste happen
     const items = e.clipboardData?.items;
     if (!items) return;
     const imageFiles: File[] = [];
@@ -600,7 +693,8 @@ export function ChatPanel(props: Props) {
     }
     if (imageFiles.length === 0) return;     // plain text paste — let default happen
     e.preventDefault();
-    attachImageFiles(imageFiles);
+    if (imageFilesEnabled) stagePhotoFiles(imageFiles);
+    else attachImageFiles(imageFiles);
   };
 
   // #384 — drag a screenshot file from Finder/desktop straight onto the input.
@@ -655,19 +749,27 @@ export function ChatPanel(props: Props) {
     );
   }
   const handleDragOver = (e: React.DragEvent<HTMLElement>) => {
-    if (!imagePasteEnabled) return;
+    if (!imagePasteEnabled && !imageFilesEnabled) return;
     if (!Array.from(e.dataTransfer.items ?? []).some((it) => it.kind === "file")) return;
     e.preventDefault();
     if (!dragActive) setDragActive(true);
   };
   const handleDragLeave = () => setDragActive(false);
   const handleDrop = (e: React.DragEvent<HTMLElement>) => {
-    if (!imagePasteEnabled) return;
-    const files = Array.from(e.dataTransfer.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (!imagePasteEnabled && !imageFilesEnabled) return;
+    const files = Array.from(e.dataTransfer.files ?? []).filter(imageFilesEnabled ? isPhotoFile : (f) => f.type.startsWith("image/"));
     if (files.length === 0) { setDragActive(false); return; }
     e.preventDefault();
     setDragActive(false);
-    attachImageFiles(files);
+    if (imageFilesEnabled) stagePhotoFiles(files);
+    else attachImageFiles(files);
+  };
+
+  /** D-028 — the × on a staged photo: it was never sent, so the host deletes the file. */
+  const removeStagedPhoto = (id: string) => {
+    postToHost({ type: "discardStagedImage", stageId: id });
+    setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+    setImgNote(null);
   };
 
   const removePendingImage = (idx: number) => {
@@ -1150,6 +1252,27 @@ export function ChatPanel(props: Props) {
               </div>
             ))}
           </div>
+        )}
+        {stagedPhotos.length > 0 && (
+          <>
+            <div className="hps-attachments" aria-label="첨부한 사진">
+              {stagedPhotos.map((p) => (
+                <div key={p.id} className="hps-attachment hps-attachment-file" title={p.name}>
+                  {p.thumb ? <img src={p.thumb} alt={p.name} /> : <span className="hps-attachment-name">{p.ready ? p.name : "준비 중…"}</span>}
+                  <button
+                    type="button"
+                    className="hps-attachment-remove"
+                    onClick={() => removeStagedPhoto(p.id)}
+                    title="사진 빼기"
+                    aria-label={`${p.name} 빼기`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
+          </>
         )}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}

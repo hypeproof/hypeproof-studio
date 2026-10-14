@@ -17,6 +17,7 @@ tooling are deliberately left out (see [What is not on this branch](#what-is-not
 | 3 | `feat(chat)` classroom-operation panels follow the Service | "강사에게 도움 요청" and "수업 결과물 승인" disappear for cohorts that do not use them (the seminar) |
 | 4 | `feat(chat)` one summary line for the coach's tool work | Instead of a raw line per tool call, one Korean line such as "홈페이지를 고치는 중…" while the coach works (for cohorts that ask for it, the seminar) |
 | 5 | `style(start)` blank line in start.css | Whitespace only |
+| 6 | `feat(chat)` photos attached to the chat as files | Drag a photo onto the chat (or paste it), press send: it is saved in the class folder's `images/` under its own name and the coach gets its path |
 
 Every behaviour change is gated by the served profile. Cohorts whose profile does not set the new
 fields behave exactly as before.
@@ -157,6 +158,56 @@ raw tool calls, five preview lines and a red error for an edit the coach retried
   still decided only by a write that succeeded; product notices (coach connection, pasted images)
   still show.
 
+## 5. Photos attached to the chat as files (REQ-STUDIO-CHAT-PHOTO-FILES)
+
+Decision hype-dental D-028, issue #1611 ("채팅 사진 드래그 앤드롭", "사진 보관 폴더 규약"). In
+the seminar the photo step (17:05) asked the participant to copy photos into the class folder
+in Finder and type their names. Now the participant drops them onto the chat.
+
+- Gate: `input.image_files` on `/v1/profile`. Absent, drop and paste behave as before.
+- Two ways in, same result:
+  - **From Finder.** VS Code takes a file dropped onto the window before the chat sees it and
+    opens it as a tab (#384). For a photo from outside the class folder, Studio asks once
+    ("방금 연 이미지 "원장님.png"를 코치 채팅에 붙일까요?" → 붙이기), stages it, closes that
+    tab and shows the chip in the chat. Opening a photo that is already in the class folder is
+    not an attachment and asks nothing.
+  - **Into the chat itself** (paste, or a drop the chat receives directly).
+- Drop or paste → the photo's original bytes go to the host's staging folder
+  (`<tmp>/hypeproof-studio-staged-images/<pid>-<random>/`). The chat shows a small preview
+  (or the file name when the format cannot be drawn, such as HEIC) and the line
+  "보내면 작업 폴더의 images 폴더에 저장돼요."
+- × on a preview → that staged file is deleted at once.
+- Send → the photos move into `<class folder>/images/` under their own names. Korean names
+  from macOS are recomposed (NFC) and an existing file is never overwritten (`외관-2.jpg`).
+  The message gets:
+
+  ```
+  [첨부한 사진]
+  - images/외관.jpg
+  ```
+
+  on the model input, in the saved history and on the sent bubble, so later turns can name
+  the files. The timeline shows "🖼️ 사진을 저장했어요 — images/외관.jpg".
+- Not sent → deleted with the window. A crashed window's folder is deleted on the next start.
+  A folder whose process is still alive belongs to another open window and is left alone.
+- Limits: 10 photos per message, 25 MB each, photo types only (HEIC by file name).
+- The photos are not shown to the model. The Service contract tells the coach to open a
+  photo only when the participant asks to copy its look ("이 사진처럼", "똑같이").
+- Code: `src/attachedImages.ts` (names, limits, staging), `chatPanelProvider.ts`
+  (`stageAttachedImage`, `stageImageFromFile`, `commitAttachedImages`), `extension.ts` (the
+  opened-photo-tab path), `protocol.ts` (`stageImage`, `discardStagedImage`,
+  `sendMessage.attachments`, `imageStageRefused`, `imageStagedByHost`, `attachedImagesSaved`),
+  `ChatPanel.tsx` / `App.tsx` (drop, paste, previews, send).
+- Checked in a studio-dev app copy against a local Service with the real model (Azure
+  gpt-6-luna), 2026-10-14: the dropped photo was saved byte-identical as
+  `images/clinic-interior.png`, the staging folder emptied on send, on × and on closing the
+  app; the Finder path asked once, closed the photo tab and saved `images/원장님.png`; with
+  "첫 화면 사진을 이 사진으로 바꿔줘" the coach did not open the photo and linked a web copy;
+  with "이 사진과 똑같은 색감으로…" it opened the photo (`Read(images/clinic-exterior.png)`)
+  and said what it saw before changing the colour.
+- Unchanged: the `image_paste` path (#421, the photo shown to the model and saved under
+  `assets/`), which the seminar profile does not turn on.
+
 ## `/v1/profile` fields this branch reads
 
 | Field | Used for | When absent |
@@ -167,6 +218,7 @@ raw tool calls, five preview lines and a red error for an edit the coach retried
 | `workspace_root` | the class folder | publishing refused (`not_class_folder`) |
 | `classroom_panels` | the two classroom panels | both drawn |
 | `tool_activity` | summary line | one line per tool call |
+| `input.image_files` | photos attached as files, saved to `images/` | drop and paste as before |
 
 The Service side is branch `1017-dental` of `hypeproof/hypeproof-service`. Deploy it before
 shipping an app build from this branch.

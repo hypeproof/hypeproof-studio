@@ -667,13 +667,32 @@ export async function activate(context: vscode.ExtensionContext) {
     // feature. image_paste-gated; the user still confirms via a one-click
     // notification (never silent).
     vscode.window.tabGroups.onDidChangeTabs(async (e) => {
-      if (!provider.isImagePasteEnabled()) return;
+      const asFiles = provider.isImageFilesEnabled();
+      if (!provider.isImagePasteEnabled() && !asFiles) return;
       for (const tab of e.opened) {
         const input = tab.input as { uri?: vscode.Uri } | undefined;
         const uri = input?.uri;
         if (!uri || uri.scheme !== "file") continue;
-        if (!/\.(png|jpe?g|gif|webp)$/i.test(uri.fsPath)) continue;
+        if (!(asFiles ? /\.(png|jpe?g|gif|webp|heic|heif|avif)$/i : /\.(png|jpe?g|gif|webp)$/i).test(uri.fsPath)) continue;
         const name = uri.path.split("/").pop() ?? "이미지";
+        if (asFiles) {
+          // D-028 — the photo goes into the chat as a file (saved to images/ on send). A photo
+          // already in the class folder is just being looked at, not attached.
+          if (provider.isInsideWorkspace(uri.fsPath)) continue;
+          const pick = await vscode.window.showInformationMessage(imageAttachPrompt(provider.coachDisplayName(), name), "붙이기");
+          if (pick !== "붙이기") continue;
+          if (await provider.stageImageFromFile(uri.fsPath)) {
+            // The tab VS Code opened for the drop covers the work; the photo now lives in the chat.
+            // Look the tab up again by its file: the Tab object from the event can be stale after
+            // the prompt (2026-10-14 app run: closing it left the photo tab open).
+            const same = vscode.window.tabGroups.all
+              .flatMap((g) => g.tabs)
+              .filter((t) => (t.input as { uri?: vscode.Uri } | undefined)?.uri?.toString() === uri.toString());
+            try { if (same.length) await vscode.window.tabGroups.close(same); } catch { /* already closed */ }
+          }
+          await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+          continue;
+        }
         const pick = await vscode.window.showInformationMessage(
           imageAttachPrompt(provider.coachDisplayName(), name),
           "붙이기",
