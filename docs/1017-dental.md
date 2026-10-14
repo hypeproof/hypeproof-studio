@@ -318,6 +318,17 @@ requires.
   `extensions/hypeproof-chat` (147 smoke tests and the six suites); `npm run
   test:service-integration`; e2e `test:cr-publish`; `scripts/check-customer-names.py`.
 - Real GitHub through gh, as listed in Section 7.
+- An app copy built from this change (Agent SDK 0.3.299 seeded) against a local Service from
+  the companion Service change, on Claude Haiku 5.5:
+  - The seminar cue sheet (t01–t09, t11): 10 of 10 turns in 222 s, no error. The map came only
+    at the map turn; the photo turn changed only the first screen; the summary line replaced the
+    tool lines.
+  - Photo drop: a dropped photo was staged, × deleted it, send saved it byte-identical in
+    `images/` with the path on the bubble and the page; the Finder path closed the photo tab and
+    saved `images/원장님.png`; an unsent photo was deleted on close.
+  - This run found a Service bug that made every coach turn 400 on SDK 0.3.299 (the CLI puts
+    `output_config` on mid-conversation system entries). The fix is in the companion Service
+    change.
 - During development: app-level runs in an app copy against a scripted GitHub (publish,
   continue on a second computer, the token gate, the panels) and the seminar rehearsal with a
   person at the keyboard.
