@@ -962,6 +962,12 @@ export function buildSdkGatewayEnv(
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   env.ANTHROPIC_BASE_URL = anthropicBaseUrlFor(args.proxyUrl);
   env.ANTHROPIC_AUTH_TOKEN = args.token;
+  // Bundled CLI 0.3.207 starts an unawaited generate_session_title request
+  // beside the first SDK prompt unless this switch is set. That paid helper
+  // competes with the learner's turn for the native-trial single request lease
+  // (trial_busy/429). Studio owns its conversation title; never inherit an
+  // ambient opt-in to the CLI's separate model-generated terminal title.
+  env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
   // The env scrub above cannot reach credentials stored on DISK. The CLI reads
   // those from its config dir and prefers them over ANTHROPIC_AUTH_TOKEN, so the
   // coach must get a config dir of its own or the workshop token is ignored
