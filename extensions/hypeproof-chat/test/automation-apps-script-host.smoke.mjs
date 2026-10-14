@@ -153,3 +153,26 @@ test('real adapter classifies API denial, expired login and temporary failures w
   assert.equal(calls,1);
  }
 });
+
+
+test('onboarding separates operator, transient and consent recovery without destructive or sending actions', async () => {
+ for (const recovery of ['operator', 'retry', 'reconnect']) {
+  const f=fixture(),h=f.host; await h.appsScriptUpload(); await h.appsScriptDeploy(); await h.appsScriptRun('preview');
+  const saved=structuredClone(await f.deps.load()); let connects=0,opened=0;
+  f.deps.runtime.preview=async()=>{throw new AppsScriptRecoveryError(recovery,'Google 설정 확인');};
+  f.deps.runtime.connect=async()=>{connects++;}; f.deps.openBrowser=async()=>{opened++;};
+  await h.appsScriptRun('preview');
+  let choice='pause';
+  f.deps.ask=async q=>{
+   assert.equal(q.private,true);
+   assert.equal(q.choices.some(c=>c.id==='reconnect'),recovery==='reconnect');
+   assert.equal(q.choices.some(c=>c.id==='settings'||c.id==='account'),false);
+   return {questionId:'q',choiceId:choice};
+  };
+  const paused=await h.appsScriptSetup(); assert.equal(paused.paused,true); assert.equal(paused.executionVerified,false);
+  assert.equal(paused.operatorRequired,recovery==='operator');
+  choice='settings'; assert.equal((await h.appsScriptSetup()).cancelled,true,'a forged choice cannot open setup or mutate the connection');
+  assert.deepEqual(structuredClone(await f.deps.load()),saved);assert.equal(connects,0);assert.equal(opened,0);assert.equal(f.sends,0);
+  assert.equal((await h.appsScriptRun('send')).previewRequired,true);
+ }
+});

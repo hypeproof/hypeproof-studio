@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
-import { createAppsScriptRuntime, generateAppsScriptEmailProject, APPS_SCRIPT_TOKEN_KEY, AppsScriptBlockedError } from '../src/appsScriptRuntime.ts';
+import { createAppsScriptRuntime, generateAppsScriptEmailProject, APPS_SCRIPT_TOKEN_KEY, AppsScriptBlockedError, AppsScriptRecoveryError } from '../src/appsScriptRuntime.ts';
 import type { EmailRecipe } from '../src/googleAutomation.ts';
 
 const recipe: EmailRecipe = { schema: 'hps-email-automation/1', title: '자료 요청', description: '자료 제출 요청', category: 'email', subjectTemplate: '{{name}}님 {{document}}', bodyTemplate: '{{dueDate}}까지 보내 주세요.', columns: { email: 'email', name: 'name', document: 'document', dueDate: 'dueDate' } };
@@ -174,5 +174,112 @@ test('OAuth binds PKCE/state, asks only necessary management and execution scope
     });
     await assert.rejects(runtime.connect(),goodState?/권한/:/로그인/);
     assert.equal(exchanges,goodState?1:0); assert.equal(f.secrets.size,0);
+  }
+});
+
+test('refresh failures distinguish operator settings, expired grants and transient faults without erasing credentials or retrying', async () => {
+  const cases: [number, unknown, 'reconnect' | 'retry' | 'operator'][] = [
+    [400, { error: 'invalid_grant' }, 'reconnect'],
+    [400, { error: 'invalid_client' }, 'operator'],
+    [400, { error: 'admin_policy_enforced' }, 'operator'],
+    [400, { error: 'org_internal' }, 'operator'],
+    [400, { error: 'unauthorized_client' }, 'operator'],
+    [400, { error: 'temporarily_unavailable' }, 'retry'],
+    [400, { error: 'server_error' }, 'retry'],
+    [429, { error: 'invalid_client' }, 'retry'],
+    [503, { error: 'invalid_grant' }, 'retry'],
+    [400, { error: 'unrecognized', error_description: 'invalid_client' }, 'reconnect'],
+    [400, { error: { code: 'invalid_client' } }, 'reconnect'],
+    [400, null, 'reconnect'],
+  ];
+  for (const [status, body, recovery] of cases) {
+    const f = fixture(); let requests = 0;
+    const saved = JSON.stringify({ accessToken: 'synthetic-private-token', refreshToken: 'synthetic-refresh', expiresAt: 0, accountId: 'synthetic-account', connectionId: 'synthetic-connection' });
+    f.secrets.set(APPS_SCRIPT_TOKEN_KEY, saved);
+    const runtime = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async (url: string | URL | Request) => {
+      requests++; assert.equal(String(url), 'https://oauth2.googleapis.com/token');
+      return new Response(body === null ? '<not-json>synthetic-private-response' : JSON.stringify({ ...body as object, private: 'synthetic-private-response' }), { status, headers: { 'x-private': 'synthetic-private-header' } });
+    }) as typeof fetch });
+    await assert.rejects(runtime.createProject('test'), (error: unknown) => {
+      assert(error instanceof AppsScriptRecoveryError); assert.equal(error.recovery, recovery);
+      assert(!JSON.stringify(error).includes('synthetic-private')); assert(!error.message.includes('synthetic-private')); return true;
+    });
+    assert.equal(requests, 1); assert.equal(f.secrets.get(APPS_SCRIPT_TOKEN_KEY), saved);
+    assert.equal((await runtime.status()).connected, true);
+  }
+});
+
+test('API machine reasons route quota, scope and disabled-service recovery; free text and untrusted detail types cannot choose recovery', async () => {
+  const cases: [number, unknown, 'reconnect' | 'retry' | 'operator' | 'setup'][] = [
+    ...['rateLimitExceeded', 'userRateLimitExceeded', 'dailyLimitExceeded', 'quotaExceeded'].map(reason => [403, { errors: [{ reason }] }, 'retry'] as [number, unknown, 'retry']),
+    [403, { errors: [{ reason: 'insufficientPermissions' }] }, 'reconnect'],
+    [403, { errors: [{ reason: 'accessNotConfigured' }] }, 'operator'],
+    ...(['RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'SERVICE_DISABLED'] as const).map(reason => [403, { details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', domain: 'googleapis.com', reason }] }, reason === 'SERVICE_DISABLED' ? 'operator' : reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT' ? 'reconnect' : 'retry'] as [number, unknown, 'operator' | 'reconnect' | 'retry']),
+    [403, { message: 'SERVICE_DISABLED', status: 'PERMISSION_DENIED' }, 'setup'],
+    [403, { errors: [{ reason: 'forbidden', message: 'rateLimitExceeded' }] }, 'setup'],
+    [403, { details: [{ '@type': 'arbitrary', domain: 'googleapis.com', reason: 'SERVICE_DISABLED' }] }, 'setup'],
+    [403, { details: [{ '@type': 'type.googleapis.com/google.rpc.ErrorInfo', domain: 'untrusted.invalid', reason: 'SERVICE_DISABLED' }] }, 'setup'],
+    [403, { errors: [{ reason: 'rateLimitExceeded synthetic-private-response' }] }, 'setup'],
+    [403, null, 'setup'],
+    [401, {}, 'reconnect'], [429, {}, 'retry'], [502, {}, 'retry'],
+  ];
+  for (const [status, body, recovery] of cases) {
+    const f = fixture(), saved = f.secrets.get(APPS_SCRIPT_TOKEN_KEY); let requests = 0;
+    const runtime = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async () => {
+      requests++; return new Response(body === null ? 'synthetic-private-response' : JSON.stringify({ error: { ...body as object, private: 'synthetic-private-response' } }), { status });
+    }) as typeof fetch });
+    await assert.rejects(runtime.createProject('test'), (error: unknown) => {
+      if (recovery === 'setup') assert(error instanceof AppsScriptBlockedError);
+      else { assert(error instanceof AppsScriptRecoveryError); assert.equal(error.recovery, recovery); }
+      assert(error instanceof Error); assert(!error.message.includes('synthetic-private')); assert(!JSON.stringify(error).includes('synthetic-private')); return true;
+    });
+    assert.equal(requests, 1); assert.equal(f.secrets.get(APPS_SCRIPT_TOKEN_KEY), saved);
+  }
+});
+
+test('OAuth callback recovery requires the bound redirect/state and one error code, and never exchanges on failure', async () => {
+  for (const variant of ['operator', 'retry', 'wrong-state', 'duplicate-error', 'code-and-error']) {
+    const f = fixture(); let resolve!: (value: URL) => void, requests = 0, closed = 0;
+    const saved = f.secrets.get(APPS_SCRIPT_TOKEN_KEY), wait = new Promise<URL>(r => { resolve = r; });
+    const runtime = createAppsScriptRuntime({ ...f.deps,
+      listenOAuth: async () => ({ redirectUri: 'http://127.0.0.1:41234/oauth/callback', wait, close() { closed++; } }),
+      openBrowser: async raw => {
+        const u = new URL(raw), callback = new URL('http://127.0.0.1:41234/oauth/callback');
+        callback.searchParams.set('state', variant === 'wrong-state' ? 'wrong' : u.searchParams.get('state')!);
+        callback.searchParams.set('error', variant === 'retry' ? 'temporarily_unavailable' : 'invalid_client');
+        callback.searchParams.set('error_description', 'synthetic-private-response');
+        if (variant === 'duplicate-error') callback.searchParams.append('error', 'invalid_client');
+        if (variant === 'code-and-error') callback.searchParams.set('code', 'synthetic-code');
+        resolve(callback);
+      },
+      fetchImpl: (async () => { requests++; throw new Error('unexpected request'); }) as typeof fetch,
+    });
+    await assert.rejects(runtime.connect(), (error: unknown) => {
+      assert(error instanceof Error); assert(!error.message.includes('synthetic-private'));
+      if (variant === 'operator' || variant === 'retry') { assert(error instanceof AppsScriptRecoveryError); assert.equal(error.recovery, variant); }
+      else assert(!(error instanceof AppsScriptRecoveryError));
+      return true;
+    });
+    assert.equal(requests, 0); assert.equal(closed, 1); assert.equal(f.secrets.get(APPS_SCRIPT_TOKEN_KEY), saved);
+  }
+});
+
+test('quota or server failures during an approved send remain unknown and consume approval without an automatic retry', async () => {
+  for (const status of [403, 429, 503]) {
+    const f = fixture(); let sendAttempts = 0;
+    const runtime = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async (url: string | URL | Request, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      if (String(url).endsWith(':run') && body.function === 'hpsSendApproved') {
+        sendAttempts++;
+        return new Response(JSON.stringify({ error: { errors: [{ reason: 'rateLimitExceeded' }], message: 'synthetic-private-response' } }), { status });
+      }
+      return f.deps.fetchImpl(url, init);
+    }) as typeof fetch });
+    await runtime.uploadProject('synthetic_script_id', f.bundle, f.bundle.digest);
+    const d = await runtime.deployProject('synthetic_script_id', f.bundle, f.bundle.digest);
+    const p = await runtime.preview(d, { spreadsheetId: 'synthetic_sheet_id', range: 'A1:D21' });
+    assert.deepEqual(await runtime.sendApproved(d, p.id, true), { records: [{ id: p.messages[0].id, status: 'unknown' }] });
+    await assert.rejects(runtime.sendApproved(d, p.id, true), /미리보기/);
+    assert.equal(sendAttempts, 1); assert.equal(await runtime.isConnected(), true);
   }
 });

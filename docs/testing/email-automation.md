@@ -149,3 +149,16 @@ concurrency probe and updater fixtures. The final live flow had no 429. The
 [acceptance audit](../plan/automation-local-acceptance.md#final-windows-send-acceptance--2026-10-14)
 records the separate settled/held costs, USD 3 ceiling and commercial-onboarding
 boundary. PR review/merge and general rollout remain separate.
+
+
+## Commercial onboarding recovery preparation (2026-10-14)
+
+Root local automation suite: 73/73; typecheck and host build passed. Fetch-driven
+controls cover revoked/expired grants, invalid clients, Workspace policy blocks,
+quota/API-disabled/scope errors, spoofed machine-code payloads, callback state and
+malformed responses. Private host cards distinguish operator intervention, retry
+and consent; pause preserves the existing project and blocks stale sending.
+No real account, IAM, OAuth publication, Windows package or mail changed in this
+follow-up. Console audit observed External/Testing, two test users, empty branding
+URLs/domains and empty declared scope tables. The runtime does request scopes;
+an empty console declaration is not absence of granted user permissions.

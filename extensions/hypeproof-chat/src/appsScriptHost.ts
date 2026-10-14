@@ -24,17 +24,19 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
   let lastPreview: EmailPreview | undefined;
   let resumeTool = 'apps_script_upload';
   let recoveryReason: string | undefined;
+  let recoveryKind: 'reconnect' | 'retry' | 'operator' | undefined;
   const bundle = () => generateAppsScriptEmailProject(deps.recipe(), deps.maxRecipients);
   const allowed = async () => { if (!await deps.allowed()) throw new Error('Apps Script capability unavailable'); };
   const blocked = (error: unknown, nextTool: string) => {
     lastPreview = undefined;
     resumeTool = nextTool;
     if (error instanceof AppsScriptBlockedError) {
+      recoveryKind = undefined;
       recoveryReason = 'Google에서 실행 권한을 확인하지 못했어요. 계정의 API 접근과 스크립트의 Cloud 프로젝트 설정을 확인해 주세요.';
       return { setupRequired: true, reason: recoveryReason, nextTool: 'apps_script_setup', executionVerified: false };
     }
     if (error instanceof AppsScriptRecoveryError) {
-      recoveryReason = error.message;
+      recoveryReason = error.message; recoveryKind = error.recovery;
       return { recoveryRequired: true, recovery: error.recovery, reason: recoveryReason,
         nextTool: 'apps_script_setup', executionVerified: false };
     }
@@ -79,7 +81,7 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           }
           const result = await deps.runtime.uploadProject(saved.scriptId, project, project.digest);
           await deps.save({ ...saved, deployment: undefined, uploadedDigest: result.digest });
-          recoveryReason = undefined; resumeTool = 'apps_script_deploy';
+          recoveryReason = undefined; recoveryKind = undefined; resumeTool = 'apps_script_deploy';
           return { uploaded: true, digest: result.digest, deployed: false };
         });
       } catch (error) { return blocked(error, 'apps_script_upload'); }
@@ -96,15 +98,26 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           .filter(({id,key}) => records[key]?.id === id && ['sending','unknown'].includes(records[key]!.status) && !saved.sendOrigins?.[key]);
       };
       const legacy = await deps.lock(legacyCandidates);
-      const choices = [
+      const setupChoices = [
         { id: 'retry', label: '설정을 확인했어요 · 이어서 진행' },
         { id: 'account', label: 'Google 계정의 API 접근 설정' },
         ...(saved ? [{ id: 'settings', label: '내 스크립트의 Cloud 프로젝트 설정' }] : []),
         { id: 'reconnect', label: 'Google 권한 다시 연결하기' },
         ...(legacy.length ? [{ id: 'reconcile', label: '이전 발송 기록 확인' }] : []),
       ];
-      const answer = await deps.ask({ kind: 'choice', private: true, title: 'Google 연결을 어디서 이어갈까요?',
-        description: [recoveryReason, '계정 설정에서 Apps Script API 접근을 켜 주세요. 스크립트는 Studio와 같은 표준 Cloud 프로젝트가 필요해요. 프로젝트 번호나 권한이 없다면 운영자에게 확인해 주세요. 설정 후 여기로 돌아오면 이어갈 수 있어요.'].filter(Boolean).join('\n\n'),
+      const choices = recoveryKind === 'operator'
+        ? [{ id: 'pause', label: '저장한 작업을 두고 나중에 이어가기' }, { id: 'retry', label: '운영자가 수정했어요 · 다시 확인' }]
+        : recoveryKind === 'retry'
+          ? [{ id: 'retry', label: '잠시 후 다시 확인' }, { id: 'pause', label: '나중에 이어가기' }]
+          : recoveryKind === 'reconnect'
+            ? [{ id: 'reconnect', label: 'Google 권한 다시 연결하기' }, { id: 'pause', label: '나중에 이어가기' }]
+            : setupChoices;
+      const guidance = recoveryKind === 'operator' ? '수강생의 재로그인으로 해결되지 않는 설정이에요. 운영자에게 이 안내를 전달해 주세요. 저장한 스킬과 연결 정보는 유지해요.'
+        : recoveryKind === 'retry' ? '연결을 해제하거나 다시 로그인할 필요는 없어요. 자동 재시도나 메일 재발송은 하지 않아요.'
+          : recoveryKind === 'reconnect' ? 'Google 창에서 필요한 권한을 확인해 주세요. 연결 후 미리보기를 다시 확인하며, 메일은 별도로 승인해야 해요.'
+            : '계정 설정에서 Apps Script API 접근을 켜 주세요. 현재 개인 스크립트 실행은 Studio와 같은 표준 Cloud 프로젝트 연결이 필요해요. 프로젝트 권한이 없다면 운영자에게 확인해 주세요. 회사 프로젝트의 관리 권한을 직접 요청하거나 공유하지 마세요. 설정 후 실제 실행으로 확인해요.';
+      const answer = await deps.ask({ kind: 'choice', private: true, title: recoveryKind === 'operator' ? '운영자의 Google 설정 확인이 필요해요' : 'Google 연결을 어디서 이어갈까요?',
+        description: [recoveryReason, guidance].filter(Boolean).join('\n\n'),
         choices, allowFreeText: false });
       if (answer.cancelled) return { cancelled: true };
       await allowed();
@@ -129,10 +142,11 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           return { reconciled: true, count: legacy.length, previewRequired: true, nextTool: 'apps_script_run', mode: 'preview', mailSent: false, automaticResendBlocked: true };
         });
       }
+      if (answer.choiceId === 'pause') return { paused: true, operatorRequired: recoveryKind === 'operator', executionVerified: false, mailSent: false };
       if (answer.choiceId === 'retry') return { retryRequired: true, nextTool: resumeTool, ...(resumeTool === 'apps_script_run' ? { mode: 'preview' } : {}), executionVerified: false };
       if (answer.choiceId === 'reconnect') {
         try {
-          await deps.lock(() => deps.runtime.connect()); recoveryReason = undefined;
+          await deps.lock(() => deps.runtime.connect()); recoveryReason = undefined; recoveryKind = undefined;
           return { connected: true, uploadRequired: true, nextTool: 'apps_script_upload', executionVerified: false };
         } catch (error) { return blocked(error, 'apps_script_upload'); }
       }
@@ -153,7 +167,7 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
           if (!fresh || fresh.scriptId !== saved.scriptId || fresh.uploadedDigest !== project.digest) throw new Error('Google 프로젝트가 변경됐어요.');
           const deployment = await deps.runtime.deployProject(saved.scriptId, project, project.digest);
           await deps.save({ ...fresh, deployment }); lastPreview = undefined;
-          recoveryReason = undefined; resumeTool = 'apps_script_run';
+          recoveryReason = undefined; recoveryKind = undefined; resumeTool = 'apps_script_run';
           return { deployed: true, versionNumber: deployment.versionNumber, access: 'MYSELF', executionVerified: false };
         });
       } catch (error) { return blocked(error, 'apps_script_deploy'); }

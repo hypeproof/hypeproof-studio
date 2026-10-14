@@ -33,6 +33,28 @@ const plain = (value: unknown): value is Record<string, unknown> => !!value && t
 const fail = (message: string): never => { throw new Error(message); };
 const checkedId = (value: string) => /^[A-Za-z0-9_-]{10,200}$/.test(value) ? value : fail('Google 프로젝트 또는 배포 ID를 확인해 주세요.');
 const identity = (value: Token) => `${value.accountId}:${value.connectionId}`;
+const retryError = () => new AppsScriptRecoveryError('retry', 'Google 사용량 제한 또는 일시적인 오류예요. 잠시 후 다시 시도해 주세요. 자동 재시도는 하지 않았어요.');
+function oauthError(code: unknown): AppsScriptRecoveryError {
+  if (code === 'admin_policy_enforced' || code === 'org_internal') return new AppsScriptRecoveryError('operator', '회사 Google 관리자가 이 앱의 연결을 허용해야 해요. 관리자에게 사용 가능 여부를 확인해 주세요. 반복 로그인으로는 해결되지 않아요.');
+  if (code === 'invalid_client' || code === 'unauthorized_client') return new AppsScriptRecoveryError('operator', 'Studio의 Google 로그인 설정을 운영자가 확인해야 해요. 설정이 수정되기 전에는 계정을 다시 연결할 필요가 없어요.');
+  if (code === 'temporarily_unavailable' || code === 'server_error') return retryError();
+  if (code === 'invalid_grant') return new AppsScriptRecoveryError('reconnect', 'Google 연결을 다시 허용해 주세요. 권한 철회나 시험 앱의 연결 유효기간 등으로 기존 연결을 사용할 수 없어요.');
+  if (code === 'access_denied') return new AppsScriptRecoveryError('reconnect', 'Google 연결이 허용되지 않았어요. 계정과 요청 권한을 확인한 뒤 다시 연결해 주세요.');
+  return new AppsScriptRecoveryError('reconnect', 'Google 연결을 갱신하지 못했어요. Google 권한을 다시 연결해 주세요.');
+}
+/** Inspect only documented machine-code fields, never message text, metadata or headers. */
+function forbiddenError(body: unknown): AppsScriptRecoveryError | AppsScriptBlockedError {
+  const error = plain(body) && plain(body.error) ? body.error : {};
+  const reasons: unknown[] = [];
+  if (Array.isArray(error.errors)) for (const entry of error.errors) if (plain(entry)) reasons.push(entry.reason);
+  if (Array.isArray(error.details)) for (const entry of error.details) {
+    if (plain(entry) && entry['@type'] === 'type.googleapis.com/google.rpc.ErrorInfo' && entry.domain === 'googleapis.com') reasons.push(entry.reason);
+  }
+  if (reasons.some(r => r === 'accessNotConfigured' || r === 'SERVICE_DISABLED')) return new AppsScriptRecoveryError('operator', 'Google API 사용 설정을 운영자가 확인해야 해요. 계정을 다시 연결해도 이 설정 문제는 해결되지 않아요.');
+  if (reasons.some(r => r === 'insufficientPermissions' || r === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT')) return new AppsScriptRecoveryError('reconnect', 'Google 작업에 필요한 권한이 부족해요. 계정을 다시 연결하고 요청한 권한을 허용해 주세요.');
+  if (reasons.some(r => typeof r === 'string' && ['rateLimitExceeded', 'userRateLimitExceeded', 'dailyLimitExceeded', 'quotaExceeded', 'RATE_LIMIT_EXCEEDED', 'QUOTA_EXCEEDED'].includes(r))) return retryError();
+  return new AppsScriptBlockedError();
+}
 
 /** Host must namespace SecretStorage by the current grant and serialize operations across windows. */
 export function createAppsScriptRuntime(deps: AppsScriptDeps) {
@@ -56,7 +78,8 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     let r: Response;
     try { r = await rawRequest('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ ...params, client_id: deps.clientId, ...(deps.clientSecret ? { client_secret: deps.clientSecret } : {}) }) }); }
     catch { throw new AppsScriptRecoveryError('retry', 'Google에 연결하지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.'); }
-    if (!r.ok) throw new AppsScriptRecoveryError('reconnect', 'Google 연결을 갱신하지 못했어요. Google 권한을 다시 연결해 주세요.');
+    if (r.status === 429 || r.status >= 500) throw retryError();
+    if (!r.ok) { const body: unknown = await r.json().catch(() => null); throw oauthError(plain(body) ? body.error : undefined); }
     const t: unknown = await r.json().catch(() => null);
     if (!plain(t) || typeof t.access_token !== 'string' || typeof t.expires_in !== 'number' || t.expires_in <= 0 || (typeof t.scope === 'string' && !APPS_SCRIPT_OAUTH_SCOPES.every(s => (t.scope as string).split(' ').includes(s)))) throw new AppsScriptRecoveryError('reconnect', 'Apps Script에 필요한 권한을 모두 허용해 주세요.');
     return { accessToken: t.access_token, expiresAt: now() + t.expires_in * 1000, refreshToken: typeof t.refresh_token === 'string' ? t.refresh_token : old?.refreshToken, accountId: old?.accountId ?? '', connectionId: old?.connectionId ?? '' };
@@ -81,9 +104,9 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     try { r = await rawRequest(`https://script.googleapis.com/v1/${path}`, { method, headers: { authorization: `Bearer ${t.accessToken}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); }
     catch { throw new AppsScriptRecoveryError('retry', 'Google 작업 결과를 확인하지 못했어요. 자동으로 재시도하지 않았어요. 인터넷 연결과 Google 실행 기록을 확인해 주세요.'); }
     allowed(); if (state !== epoch || expected !== await getConnectionIdentity()) return fail('Google 연결이 변경됐어요. 작업 결과를 Google에서 확인해 주세요.');
-    if (r.status === 403) throw new AppsScriptBlockedError();
-    if (r.status === 401) throw new AppsScriptRecoveryError('reconnect', 'Google 권한이 만료됐어요. 다시 연결해 주세요.');
-    if (r.status === 429 || r.status >= 500) throw new AppsScriptRecoveryError('retry', 'Google 사용량 제한 또는 일시적인 오류예요. 잠시 후 다시 시도해 주세요. 자동 재시도는 하지 않았어요.');
+    if (r.status === 403) throw forbiddenError(await r.json().catch(() => null));
+    if (r.status === 401) throw new AppsScriptRecoveryError('reconnect', 'Google에서 연결 권한을 확인하지 못했어요. 다시 연결해 주세요.');
+    if (r.status === 429 || r.status >= 500) throw retryError();
     if (!r.ok) return fail('Google에서 작업을 완료하지 못했어요. 프로젝트와 할당량을 확인해 주세요.');
     const result: unknown = await r.json().catch(() => null);
     if (!plain(result)) return fail('Google 작업 결과를 확인하지 못했어요.');
@@ -135,7 +158,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
         catch { throw new AppsScriptRecoveryError('reconnect', 'Google 로그인 시간이 끝났거나 창을 닫았어요. 다시 연결하면 이 단계부터 이어갈 수 있어요.'); }
         if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
         if (pendingConnect === attempt) pendingConnect = undefined;
-        if (callback.origin + callback.pathname === listener.redirectUri && callback.searchParams.getAll('state').length === 1 && callback.searchParams.get('state') === csrf && callback.searchParams.get('error') === 'access_denied') throw new AppsScriptRecoveryError('reconnect', 'Google 연결이 허용되지 않았어요. 계정과 요청 권한을 확인한 뒤 다시 연결해 주세요.');
+        if (callback.origin + callback.pathname === listener.redirectUri && callback.searchParams.getAll('state').length === 1 && callback.searchParams.get('state') === csrf && callback.searchParams.getAll('error').length === 1 && !callback.searchParams.has('code')) throw oauthError(callback.searchParams.get('error'));
         if (callback.origin + callback.pathname !== listener.redirectUri || callback.searchParams.getAll('state').length !== 1 || callback.searchParams.get('state') !== csrf || callback.searchParams.has('error') || callback.searchParams.getAll('code').length !== 1 || !callback.searchParams.get('code')) return fail('Google 로그인 확인에 실패했어요.');
         const t = await exchange({ grant_type: 'authorization_code', code: callback.searchParams.get('code')!, code_verifier: verifier, redirect_uri: listener.redirectUri });
         const r = await rawRequest('https://openidconnect.googleapis.com/v1/userinfo', { headers: { authorization: `Bearer ${t.accessToken}` } });
