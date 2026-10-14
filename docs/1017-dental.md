@@ -4,6 +4,10 @@ Branch `1017-dental` of `jayleekr/hypeproof-studio`, built from `origin/main` e9
 Companion branch: `1017-dental` of `hypeproof/hypeproof-service` (cohort, prompts, skills and
 the `/v1/profile` fields this app reads). Written 2026-10-14.
 
+Branch `haiku` is `1017-dental` plus Section 5 (photos attached as files), with the Service
+branch `haiku` putting the seminar cohort on Claude Haiku 5.5 with thinking off. See
+[Running the seminar on Claude Haiku 5.5](#running-the-seminar-on-claude-haiku-55-branch-haiku).
+
 This branch carries feature code with its comments, the requirement rows in
 `docs/studio-requirements.md`, and this document. Unit tests, end-to-end tests and rehearsal
 tooling are deliberately left out (see [What is not on this branch](#what-is-not-on-this-branch)).
@@ -222,6 +226,42 @@ in Finder and type their names. Now the participant drops them onto the chat.
 
 The Service side is branch `1017-dental` of `hypeproof/hypeproof-service`. Deploy it before
 shipping an app build from this branch.
+
+## Running the seminar on Claude Haiku 5.5 (branch `haiku`)
+
+**No Studio code changes for this.**
+- The model is the Service's choice. The Service branch `haiku` pins
+  `boah-dental-2026-1017-s1` to `claude-haiku-5-5` with thinking off.
+- This app runs it on the existing Claude Agent SDK path.
+- The model picker shows the one choice the Service serves, "Claude Haiku 5.5".
+
+**Why Haiku 5.5.** Issue #1611 compared three setups on the same 10 class turns in the
+Studio app (cue sheet v3, t01–t09 and t11, publishing excluded, reasoning off):
+
+| | Claude SDK + GPT gpt-6-luna | Codex SDK + GPT gpt-6-luna | Claude SDK + Haiku 5.5 |
+|---|---|---|---|
+| Time | 286 s | 441 s | 225 s |
+| Cost per participant (10 turns) | $0.074 | $0.117 | $0.085 |
+| Map-rule misses | 0 | 1 of 3 runs | 0 |
+| Reply length (10 turns) | 2,627 chars | 5,124 chars | 12,744 chars |
+
+Haiku 5.5 needs no app change, unlike the Codex path, which needs a 328 MB binary shipped
+with the app.
+
+**Watch in class.**
+- Haiku's replies are longer.
+- In the comparison run it left placeholders on the visible page for information it was not
+  given: `[가까운 역·출구 정보를 입력해 주세요]`, `사업자등록번호 000-00-00000`, and an empty
+  photo box.
+
+**Checked.**
+- The 10-turn comparison ran in a studio-dev copy of this app's code line. That copy did not
+  have Sections 4 and 5.
+- The Service branch `haiku` was run locally against the Anthropic API. It served the single
+  Haiku 5.5 choice with `input.image_files: true`, and answered a request sent with
+  adaptive thinking and effort `max` with thinking off and effort `high`.
+- The two together (this branch's app with the photo drop, on Haiku 5.5) have not yet been
+  run as one class rehearsal.
 
 ## Verification done
 
