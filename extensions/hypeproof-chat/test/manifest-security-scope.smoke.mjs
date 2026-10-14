@@ -76,8 +76,8 @@ assert.deepEqual(
 );
 assert.deepEqual(
   [...(approval.items?.enum ?? [])].sort(),
-  [...EXPECTED_APPROVAL, "writeFile"].sort(),
-  "items.enum must offer every gateable kind (incl. writeFile as an opt-in) or Settings UI cannot set it",
+  [...EXPECTED_APPROVAL, "writeFile", "consultHelper"].sort(),
+  "items.enum must offer every gateable kind (incl. writeFile and consultHelper as opt-ins) or Settings UI cannot set it",
 );
 
 console.log("manifest-security-scope.smoke: all assertions passed");
