@@ -18,12 +18,15 @@ REQ-L5와 [설계/감사](../design/usage-observation-audit.md)의 첫 구현 �
 
 Service implementation and OU-01–07 acceptance are in
 [hypeproof-service#76](https://github.com/hypeproof/hypeproof-service/pull/76),
-head `029e596ee9e2351a97006d25ae474f3b48fde848`. This extends REQ-L5 and
+head `4b06b29b3b9c33a3f85b96e68bc825f3bff7e843`. This extends REQ-L5 and
 ADM-08 with `/admin/owner`: a full selected-period view including trials, passes,
-synthetic tests and unclassified history. Existing operator authorization is reused.
+synthetic tests and unclassified history. The browser entry is now
+`https://hypeproof-ai.xyz/admin/owner`, using existing Lab Google/GitHub SSO with
+an explicit Owner allowlist and fresh active admin membership per read.
+Lab integration: [hypeprooflab#1247](https://github.com/hypeproof/hypeprooflab/issues/1247).
 
-- PASS: Service Hono/SQLite controls, full premerge and exact-head CI, plus
-  independent negative-control verification.
+- PASS: Service Hono/SQLite controls and full premerge with the scoped SSO gate.
+- NOT RUN: new SSO head CI and independent verification at documentation time.
 - PASS: implementation-agent Chrome observation with synthetic local SQLite: filters,
   person/model drill-down, CSV, responsive layout and stale-data clearing.
 - PASS: `node scripts/test-owner-console.mjs` exercises read-only release-smoke
@@ -35,12 +38,17 @@ synthetic tests and unclassified history. Existing operator authorization is reu
 
 Studio's `deploy-worker` pins the reviewed Service head and runs the smoke controls
 for dry-run and production. A real verified deployment additionally runs
-`node scripts/verify-owner-console.mjs` using the existing admin secret. It only reads
+`node scripts/verify-owner-console.mjs` using the dedicated
+`HPS_OWNER_SERVICE_SECRET` shared with the Worker and Lab server. It only reads
 HTML and aggregates, logs no identities or credentials, requires unauthenticated
 requests to fail, and fails closed on malformed responses or authentication failure.
 It accepts an empty ledger without asserting ingestion completeness.
 
-Do not dispatch production until Service #76 and the Studio release PR are approved
-and merged. Keep the normal activity-compatibility and live-session gates. Rollback
+Set `HPS_OWNER_EMAILS` on Lab and the shared read credential on Lab, Worker and
+Studio Actions before deployment. Owner routes reject Basic, student/issuer tokens
+and client-supplied Access headers. Other API authentication is unchanged.
+
+Do not dispatch production until Service #76, the Lab SSO PR and the Studio release
+PR meet their merge gates. Keep the normal activity-compatibility and live-session gates. Rollback
 is the prior Studio deployment ref with Service `399109c0d310f6860457cfbfe789bb1b973a4943`;
 this feature introduces no migration and never changes stored usage or cost data.

@@ -2,8 +2,8 @@
 // Read-only release smoke. Never log credentials, identities, or raw responses.
 import { pathToFileURL } from 'node:url';
 
-export async function verifyOwnerConsole({ base, password, fetchImpl = fetch }) {
-  if (!password) throw new Error('HPS_ADMIN_PASSWORD is required');
+export async function verifyOwnerConsole({ base, secret, fetchImpl = fetch }) {
+  if (!secret || secret.length < 32) throw new Error('HPS_OWNER_SERVICE_SECRET is required');
   const origin = new URL(base);
   if (origin.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(origin.hostname)) {
     throw new Error('HTTPS is required');
@@ -15,7 +15,7 @@ export async function verifyOwnerConsole({ base, password, fetchImpl = fetch }) 
     try {
       return await fetchImpl(new URL(path, origin), {
         method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(30000),
-        headers: authenticated ? { authorization: `Basic ${Buffer.from(`:${password}`).toString('base64')}` } : {},
+        headers: authenticated ? { 'x-hps-owner-service-secret': secret } : {},
       });
     } catch { throw new Error('Owner console network read failed'); }
   };
@@ -55,7 +55,7 @@ export async function verifyOwnerConsole({ base, password, fetchImpl = fetch }) 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     console.log(JSON.stringify(await verifyOwnerConsole({
-      base: process.env.PROD || 'https://api.hypeproof-ai.xyz', password: process.env.HPS_ADMIN_PASSWORD,
+      base: process.env.PROD || 'https://api.hypeproof-ai.xyz', secret: process.env.HPS_OWNER_SERVICE_SECRET,
     })));
   } catch (error) {
     console.error(`Owner console: FAIL — ${error.message}`);
