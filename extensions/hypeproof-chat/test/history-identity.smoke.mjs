@@ -89,11 +89,12 @@ const roleLabel = (message, coachName) =>
   );
 
   // 앱이 직접 쓴 답변 세 곳도 찍는다 — 화면에는 똑같이 코치 이름으로 붙는다.
-  // (The third is the learning wiki answering a call by name, "팀 브레인에 정리해 줘".)
+  // (The third is the learning wiki answering a call by name, "팀 브레인에 정리해 줘"; the
+  // fourth is the one-click publish button's result, postAppReply.)
   assert.equal(
     (host.match(/assistantName: this\.coachDisplayName\(\)/g) || []).length,
-    3,
-    "앱이 만든 답변(보여주기·게스트 목록·팀 브레인)도 이름을 남긴다",
+    4,
+    "앱이 만든 답변(보여주기·게스트 목록·팀 브레인·홈페이지 올리기 결과)도 이름을 남긴다",
   );
 }
 
