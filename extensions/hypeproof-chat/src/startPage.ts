@@ -118,7 +118,8 @@ export class StartPage {
   }
   /** A paid order must survive a closed tab or a restart: pick the wait back up where it stopped. */
   private async resumePurchase(): Promise<void> {
-    if (this.order) return;
+    // The tab was closed and opened again: the order is still held, but its timer died with the panel.
+    if (this.order) { if (this.purchaseStage === "waiting") this.schedulePurchasePoll(0); return; }
     const saved = await this.savedOrder();
     if (!saved) return;
     this.order = saved;
@@ -192,6 +193,12 @@ export class StartPage {
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
       await this.refresh(); return;
     }
+    if (msg.type === "purchaseHide") {
+      // Back to the other ways to start. The order stays saved and the choice list offers it again.
+      this.stopPurchaseWait();
+      if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      await this.refresh(); return;
+    }
     if (msg.type === "purchaseReopen") {
       if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
       return;
@@ -238,7 +245,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
-      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
+      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.
@@ -252,7 +259,7 @@ export class StartPage {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") { await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
-    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel") { await this.handlePurchase(msg); return; }
+    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {

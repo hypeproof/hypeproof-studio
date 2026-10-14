@@ -1,5 +1,6 @@
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
+import { activityLabel, passEnd } from "./activityLabel";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -630,7 +631,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업"} · {config.activity.name}
+        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{passEnd(config.activity.pass) && <> · {passEnd(config.activity.pass)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -821,7 +822,8 @@ export function ChatPanel(props: Props) {
         // step the record holds.
         busy={streaming || awaitingRecord}
         activity={config?.activity ? {
-          label: config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업",
+          label: activityLabel(config.activity.kind, config.activity.pass),
+          ...(passEnd(config.activity.pass) ? { detail: passEnd(config.activity.pass)! } : {}),
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}
