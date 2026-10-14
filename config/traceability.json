@@ -1435,6 +1435,9 @@
           "path": "extensions/hypeproof-chat/test/activity-connections.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/pass-takeover-transaction.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/activity-draft.smoke.mjs"
         },
         {

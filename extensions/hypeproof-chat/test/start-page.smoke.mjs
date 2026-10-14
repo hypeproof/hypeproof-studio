@@ -172,7 +172,7 @@ assert.equal(page.candidate.workspace,undefined,'전제 확인: 후보는 폴더
   folderChoice=[{fsPath:'/tmp/hps-chosen'}];const writesBefore=writes;
   await page.handle({type:'chooseActivityFolder'});
   assert.equal(page.candidate.workspace,'/tmp/hps-chosen');
-  assert.equal(page.candidate.profile.workspace_root,'/tmp/hps-chosen');
+  assert.equal(page.candidate.profile.workspace_root,profile.workspace_root,'folder choice preserves the Service home');
   assert.equal(states.at(-1).state.profile.workspace,'/tmp/hps-chosen','화면이 선택한 폴더를 보여주지 않는다');
   assert.equal(writes,writesBefore,'폴더 선택이 자격증명을 저장했다');
   assert.equal(states.at(-1).state.candidate,true,'폴더 선택이 후보 상태를 끝냈다');
@@ -217,7 +217,7 @@ console.log('PASS activity folder choice: no candidate opens no dialog, cancel k
   await page2.handle({type:'selectActivity',ref});
   assert.equal(page2.candidate.token,'saved-token','저장된 활동의 자격증명을 쓰지 않았다');
   assert.equal(page2.candidate.workspace,fs.realpathSync(root),'저장된 활동의 작업 폴더를 따르지 않았다');
-  assert.equal(page2.candidate.profile.workspace_root,fs.realpathSync(root));
+  assert.equal(page2.candidate.profile.workspace_root,profile.workspace_root,'saved directory preserves the freshly fetched Service home');
   assert.equal(saw.at(-1).state.candidate,true);
   // 자격증명은 화면으로 **절대** 돌아가지 않는다 (위 후보 검사와 같은 규칙).
   assert.ok(!JSON.stringify(saw).includes('saved-token'),'저장된 활동의 토큰이 UI 로 나갔다');

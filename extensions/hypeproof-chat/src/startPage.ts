@@ -50,7 +50,7 @@ export class StartPage {
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
-    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>) => Promise<boolean>,
+    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
   ) {}
 
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
@@ -250,7 +250,7 @@ export class StartPage {
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
-        series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: p.workspace_root ?? "현재 작업 폴더" } } : {}),
+        series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
     await this.panel?.webview.postMessage({ type: "startState", state });
   }
@@ -295,7 +295,7 @@ export class StartPage {
         if (!record) throw new ActivityConnectionError('저장된 활동을 찾지 못했습니다.');
         const result = await fetchProfileResult({proxyUrl:record.service,token:record.token});
         if (!result.ok) {this.error=result.failure.friendly; return;}
-        this.candidate = {token:record.token,proxyUrl:record.service,profile:{...result.profile,workspace_root:record.workspace},workspace:record.workspace,previousConnected:!!connections?.current};
+        this.candidate = {token:record.token,proxyUrl:record.service,profile:result.profile,workspace:record.workspace,previousConnected:!!connections?.current};
         this.error = undefined;
       } catch (error) { this.error = entryError(error); }
       finally { this.busy=false; await this.refresh(); }
@@ -303,7 +303,7 @@ export class StartPage {
     }
     if (msg.type === 'chooseActivityFolder' && this.candidate) {
       const choice = await vscode.window.showOpenDialog({canSelectFiles:false,canSelectFolders:true,canSelectMany:false,openLabel:'이 활동의 작업 폴더 선택'});
-      if (choice?.[0]) { this.candidate.workspace=choice[0].fsPath; this.candidate.profile={...this.candidate.profile,workspace_root:choice[0].fsPath}; }
+      if (choice?.[0]) this.candidate.workspace=choice[0].fsPath;
       await this.refresh(); return;
     }
     if (msg.type === "cancelCandidate") {
@@ -338,7 +338,8 @@ export class StartPage {
           if (proxyUrl !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           const result = await fetchProfileResult({ proxyUrl, token: candidate.token });
           if (!result.ok) { this.error = result.failure.friendly; return; }
-          profile = candidate.workspace ? {...result.profile,workspace_root:candidate.workspace} : result.profile;
+          // Service authority stays separate from the local navigation choice.
+          profile = result.profile;
           if (!profile?.profile_id || !profile.display_name || !profile.ux?.coach || !profile.welcome) throw new Error("Invalid activity profile");
         } else profile = await this.chat.ensureProfile(true);
         if (!profile) {
@@ -369,7 +370,7 @@ export class StartPage {
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
           this.candidate = undefined;
         };
-        if (await this.begin(profile, commit)) return; // workspace switch reloads the window
+        if (await this.begin(profile, commit, candidate?.workspace)) return; // workspace switch reloads the window
         await commit();
         if (!this.panel) throw new Error('Entry page was closed');
         await this.openChat();
@@ -416,7 +417,7 @@ export class StartPage {
       // Preview only. Existing runtime and credential stay bound until workspace preparation succeeds.
       const running = await this.chat.ensureProfile(), connections = activityConnections(this.context);
       const workspace = reentryWorkspace({ candidateActivity: p.activity_id, record: connections?.current ?? null, recordServiceMatches: !!connections?.matchesService, openFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, runningActivity: running?.activity_id });
-      this.candidate = { token, profile: workspace ? { ...p, workspace_root: workspace } : p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
+      this.candidate = { token, profile: p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
     } catch (error) {
       console.error('[startPage] connectCourse failed:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       this.error = "수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";
