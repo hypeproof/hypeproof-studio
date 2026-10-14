@@ -1536,6 +1536,86 @@ export function isSdkRetryEvent(msg: Record<string, unknown>): boolean {
 export const SDK_STREAM_STALL_MS = 240_000;
 
 /**
+ * The CLI's own stream-idle limit behind a custom ANTHROPIC_BASE_URL, Claude
+ * Code 2.1.299: `Math.max(CLAUDE_STREAM_IDLE_TIMEOUT_MS ?? 0, 300000)` in the
+ * bundled binary, matching its changelog ("they now wait 300 seconds,
+ * whether or not feature flags are loaded"). Studio's stall watchdog and the
+ * busy abort below must both end a turn before this does, so the learner
+ * reads Studio's Korean line rather than whatever the CLI does at 300 s.
+ */
+export const SDK_CLI_STREAM_IDLE_MS = 300_000;
+
+// ── Busy notice and bounded abort (A2; spec §11.6 item 4) ───────────────────
+// A shared-upstream rush (429 rate limit, 503, 529 overloaded) used to look
+// like nothing at all: the CLI retries those silently, and the screen stayed
+// on "생각하는 중…" until the 240 s watchdog. With a busy policy attached (the
+// orchestrator host attaches one: sdkBusyPolicyFor), the first busy retry of a
+// turn posts one non-blocking notice, and the turn ends with its own Korean
+// line after SDK_BUSY_MAX_RETRIES busy retries or SDK_BUSY_MAX_WAIT_MS of busy
+// waiting, whichever comes first. A first-byte-timeout retry (0.3.299
+// `no_response`, `error_status: null`) and other 5xx are not "busy": they
+// neither notify nor count, and the stall watchdog still covers them.
+
+/** api_retry statuses that mean the shared upstream is busy. */
+export const SDK_BUSY_STATUSES: ReadonlySet<number> = new Set([429, 503, 529]);
+
+/** Shown once per turn, on the first busy retry (spec §11.6, verbatim). */
+export const SDK_BUSY_NOTICE = "지금 요청이 많아 잠시 기다리는 중이에요. 자동으로 다시 시도합니다.";
+
+/** The turn's last line when the busy retries run out (spec §11.6, verbatim). */
+export const SDK_BUSY_ABORT_FRIENDLY =
+  "지금 사용하는 사람이 많아 답을 받지 못했어요. 30초 뒤에 다시 보내 주세요. 작업 파일은 그대로 있어요.";
+
+/**
+ * Busy retries in one episode before the turn ends: the third busy `api_retry`
+ * event aborts the query instead of letting the CLI wait out another delay.
+ * An episode ends when a real response arrives.
+ */
+export const SDK_BUSY_MAX_RETRIES = 3;
+
+/** Longest busy wait in one episode, from its first busy retry. */
+export const SDK_BUSY_MAX_WAIT_MS = 90_000;
+
+/**
+ * The bounded abort. Its message is the learner-facing line, which the panel's
+ * generic error path renders as is; `status` is the busy status that ended it.
+ */
+export class SdkBusyAbortError extends Error {
+  // A plain field, not a TS parameter property: the smoke tests load this
+  // module under `node --experimental-strip-types`, which rejects those.
+  readonly status?: number;
+  constructor(status?: number) {
+    super(SDK_BUSY_ABORT_FRIENDLY);
+    this.name = "SdkBusyAbortError";
+    if (status !== undefined) this.status = status;
+  }
+}
+
+/** What consumeSdkStream needs to notify and bound a busy wait. */
+export interface SdkBusyPolicy {
+  /** Called once per turn with SDK_BUSY_NOTICE. Must not block; a throw is ignored. */
+  onNotice: (text: string) => void;
+  /** Defaults to SDK_BUSY_MAX_RETRIES. */
+  maxRetries?: number;
+  /** Defaults to SDK_BUSY_MAX_WAIT_MS. */
+  maxWaitMs?: number;
+  /** Defaults to `new SdkBusyAbortError(status)`. */
+  makeBusyError?: (status: number | undefined) => Error;
+}
+
+/**
+ * The busy policy for this seat: only an orchestrator seat gets one (spec
+ * §13.2 row A2). Undefined elsewhere, so consumeSdkStream behaves exactly as
+ * before.
+ */
+export function sdkBusyPolicyFor(
+  agent: Pick<AgentCoachOptions, "orchestrator">,
+  onNotice: (text: string) => void,
+): SdkBusyPolicy | undefined {
+  return agent.orchestrator ? { onNotice } : undefined;
+}
+
+/**
  * Student-facing stall copy. Same register as the token copy (REQ-B5): says
  * what to do, never shows a technical reason. Retrying is the real recovery —
  * the aborted turn leaves no server-side state behind.
@@ -1975,6 +2055,12 @@ export interface SdkStreamHandlers {
    * dedupe 는 소비자 몫 — extractSdkUsage 주석 참고.
    */
   onUsage?: (u: SdkUsageEvent) => void;
+  /**
+   * A2 — busy notice and bounded abort (spec §11.6 item 4). Optional: absent,
+   * busy retries stay silent and only the stall watchdog bounds them, as
+   * before. Attach it with sdkBusyPolicyFor (orchestrator seats only).
+   */
+  busy?: SdkBusyPolicy;
 }
 
 /**
@@ -2028,21 +2114,44 @@ export async function consumeSdkStream(
    */
   let sawPause = false;
 
+  // A2 — busy bookkeeping (spec §11.6 item 4). Inert without h.busy.
+  const busy = h.busy;
+  const busyMaxRetries = Math.max(1, busy?.maxRetries ?? SDK_BUSY_MAX_RETRIES);
+  const busyMaxWait = Math.max(1, busy?.maxWaitMs ?? SDK_BUSY_MAX_WAIT_MS);
+  /** Busy retries since the last real response (one episode). */
+  let busyRetries = 0;
+  /** When the current busy episode began; undefined outside one. */
+  let busySince: number | undefined;
+  let busyStatus: number | undefined;
+  /** The notice is once per turn, across episodes. */
+  let busyNoticed = false;
+  const busyAbort = (): Error => {
+    // Nobody awaits an in-flight next() after this throw, and abortQuery() rejects it.
+    pending?.catch(() => {});
+    h.abortQuery();
+    return busy?.makeBusyError?.(busyStatus) ?? new SdkBusyAbortError(busyStatus);
+  };
+
   const nextEvent = async (): Promise<IteratorResult<unknown>> => {
     if (!pending) pending = it.next();
-    if (budget <= 0) {
+    if (budget <= 0 && busySince === undefined) {
       const settled = await pending;
       pending = null;
       return settled;
     }
     for (;;) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const remaining = Math.max(1, budget - (Date.now() - progressAt));
+      const now = Date.now();
+      const stallLeft = budget > 0 ? Math.max(1, budget - (now - progressAt)) : Number.POSITIVE_INFINITY;
+      const busyLeft =
+        busySince !== undefined ? Math.max(1, busySince + busyMaxWait - now) : Number.POSITIVE_INFINITY;
+      // Decided before waiting, so timer rounding can never mistake one deadline for the other.
+      const busyDeadlineFirst = busyLeft <= stallLeft;
       // NOT unref'd on purpose: this timer is the only thing that ends a wedged
       // turn, so it has to be able to keep the loop alive while one is live.
       // It is always cleared below (both legs of the race).
       const expired = new Promise<typeof STALLED>((resolve) => {
-        timer = setTimeout(() => resolve(STALLED), remaining);
+        timer = setTimeout(() => resolve(STALLED), Math.min(stallLeft, busyLeft));
       });
       const won = await Promise.race([pending.then((value) => ({ value })), expired]);
       clearTimeout(timer);
@@ -2050,6 +2159,8 @@ export async function consumeSdkStream(
         pending = null;
         return won.value;
       }
+      // The busy wait ran out before the stall budget: the bounded abort, in its own words.
+      if (busyDeadlineFirst) throw busyAbort();
       if (h.isTurnBlocked?.()) {
         // An open approval modal / a running tool is not a stall.
         sawPause = true;
@@ -2077,11 +2188,33 @@ export async function consumeSdkStream(
       // Check BEFORE emitting so a chunk isn't flushed to the webview after stop.
       if (h.isAborted()) throw h.makeAbortError();
       const msg = (step.value ?? {}) as Record<string, unknown>;
-      if (isSdkRetryEvent(msg)) lastRetryStatus = typeof msg.error_status === "number" ? msg.error_status : undefined;
+      if (isSdkRetryEvent(msg)) {
+        lastRetryStatus = typeof msg.error_status === "number" ? msg.error_status : undefined;
+        // A2 — a busy retry: one notice per turn, and the episode's count and clock.
+        if (busy && lastRetryStatus !== undefined && SDK_BUSY_STATUSES.has(lastRetryStatus)) {
+          busyRetries += 1;
+          busyStatus = lastRetryStatus;
+          busySince ??= Date.now();
+          if (!busyNoticed) {
+            busyNoticed = true;
+            try {
+              busy.onNotice(SDK_BUSY_NOTICE);
+            } catch {
+              // The notice is non-blocking by contract: a host error must not end the turn.
+            }
+          }
+          if (busyRetries >= busyMaxRetries) throw busyAbort();
+        }
+      }
       // A response that came back after the retries answers them: their status no longer describes this turn.
       // The CLI's own "API Error: …" line is an assistant message too — it is the failure, not an answer (`error` set, or
       // the CLI's `<synthetic>` model).
-      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") lastRetryStatus = undefined;
+      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
+        lastRetryStatus = undefined;
+        // …and ends a busy episode: the next rush counts from zero again.
+        busyRetries = 0;
+        busySince = undefined;
+      }
       const fatal = sdkFatalAuthStatus(msg);
       if (fatal !== null) {
         // Kill the subprocess's retry loop first, then surface the token error.
