@@ -465,7 +465,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("Chalk 초안 검사는 강사 모드에서만 사용할 수 있습니다. issuer 토큰을 먼저 등록하세요.");
         return;
       }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: sk-biopharm-kids-s1" });
+      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: kids-workshop-s1" });
       if (!cohort) return;
       const course = await vscode.window.showInputBox({ prompt: "강의 ID", placeHolder: "예: lesson-01" });
       if (!course) return;
@@ -488,7 +488,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz");
       const enabled = await chalkToolsEnabled(context.secrets);
       if (!enabled) { vscode.window.showWarningMessage("강사 모드에서만 사용할 수 있습니다."); return; }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: sk-biopharm-kids-s1" });
+      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: kids-workshop-s1" });
       if (!cohort) return;
       const course = await vscode.window.showInputBox({ prompt: "강의 ID", placeHolder: "예: lesson-01" });
       if (!course) return;

@@ -167,7 +167,7 @@ $EMBEDDED_MANIFEST = [ordered]@{
     # 아니다. fail-closed doctor 가 이 플래그를 그대로 읽어 설치를 중단시키므로,
     # 여기에 과하게 표시하면 **멀쩡히 쓸 수 있는 기기를 설치 실패로 만든다.**
     #
-    # 2026-08-21 SK바이오팜 현장이 그 사고였다. gh·node·python·jq 가 사내망
+    # 2026-08-21 기업 고객 현장이 그 사고였다. gh·node·python·jq 가 사내망
     # TLS 검사 때문에 winget 설치에 실패했고 doctor 가 "Setup incomplete" 를
     # 냈는데, 정작 Studio·SDK·git 은 13대 전부 정상 설치돼 있었다. 즉 수업은
     # 돌 수 있는 상태였는데 설치기가 아니라고 말한 것이다.
@@ -475,7 +475,7 @@ function Add-ToUserPath {
 # Overwriting therefore deleted winget from PATH mid-run. Ensure-Tool calls this
 # after every install, so the damage landed right after the FIRST tool: git
 # (manifest order #1) installed fine, then `& winget` was unresolvable and
-# gh/node/python/jq all failed with "NOT FOUND". That is the SK Biopharm
+# gh/node/python/jq all failed with "NOT FOUND". That is the the corporate customer
 # 2026-08-21 field report -- 6 of 13 identically-imaged machines, always the
 # same four tools, always after git.
 #
@@ -584,7 +584,7 @@ function Install-WingetPackage {
     #     Please specify one of them using the --source option to proceed.
     #       Node.js (LTS)  OpenJS.NodeJS.LTS  winget
     #
-    # SK바이오팜 2026-08-21 현장이 정확히 이것이었다. 13대 중 6대에서 gh·node·
+    # 기업 고객 2026-08-21 현장이 정확히 이것이었다. 13대 중 6대에서 gh·node·
     # python·jq 가 전부 실패했고, git 만 통과한 것은 이미 설치돼 있어 winget 을
     # 타지 않았기 때문이다. 기기 차이가 아니라 **그 망에서 나가는 경로** 차이다.
     #

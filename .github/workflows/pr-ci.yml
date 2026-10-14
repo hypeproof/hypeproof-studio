@@ -46,6 +46,13 @@ jobs:
       # A bash body on a Windows runner without `shell: bash` parses as
       # PowerShell and dies on its first POSIX token. v0.0.0-rc.2 published a
       # release and then failed exactly that way.
+      # Studio is meant to become public; customer names live only in the
+      # private Service package. The denylist is digests, never names.
+      - name: No customer names in tracked files
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/test-check-customer-names.py
+          python3 scripts/check-customer-names.py
       - name: Workflow shells declare bash on Windows runners
         if: ${{ !cancelled() }}
         run: python3 scripts/check-workflow-shells.py

@@ -21,7 +21,7 @@
 // This is a live-contract (R) test — it needs a workshop TOKEN for a cohort
 // whose session is open. Without one every case skips, so it is safe to run
 // anywhere. Mint one with:
-//   TOKEN=$(bash worker/scripts/issue-boah-student.sh copyclone r7 1) \
+//   TOKEN=$(bash worker/scripts/issue-pilot-student.sh copyclone r7 1) \
 //   WORKER_URL=https://api.hypeproof-ai.xyz/v1 npm run test:sdkshape
 
 import { test } from "node:test";

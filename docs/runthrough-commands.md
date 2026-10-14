@@ -10,8 +10,7 @@
 [`e2e/observe/README.md`](../e2e/observe/README.md).
 
 > **✅ 완주 검증 완료 (2026-07-27, v0.1.32)** — 결과물 4종이 전부 실재하고 독립
-> 조회로 확인됐다. 턴별 실측과 남은 결함은
-> [`curriculum-snapshots/boah-cuesheet-complete-2026-07-27/`](./curriculum-snapshots/boah-cuesheet-complete-2026-07-27/).
+> 조회로 확인됐다. 턴별 실측 기록은 고객을 식별할 수 있어 비공개 보관 저장소에만 남겼다.
 
 ---
 
@@ -20,7 +19,7 @@
 ```bash
 # 1. 세션이 열려 있는지 — 안 열려 있으면 코치가 빈 응답만 낸다
 curl -s -H "Authorization: Bearer $ISSUER" \
-  https://chalk.hypeproof-ai.xyz/admin/cohorts/boah-dental-2026-a/state | jq .session   # 강사 surface = Chalk (plan task F)
+  https://chalk.hypeproof-ai.xyz/admin/cohorts/dental-pilot-2026-a/state | jq .session   # 강사 surface = Chalk (plan task F)
 
 # 2. 워크스페이스를 비운다 — 남아 있으면 "만든 것"과 "있던 것"이 구분 안 된다
 rm -rf ~/HypeProofClinic/*
@@ -38,7 +37,7 @@ HPS_CDP_PORT=9333 node e2e/observe/watch.mjs
 
 ## 커맨드 1 — 참고 사이트만 주고 초안
 
-> `https://boaclinic.com/ 이거대로 치과 웹사이트 만들어줘`
+> `https://dental.example/ 이거대로 치과 웹사이트 만들어줘`
 
 **큐시트**: 19:30–19:45 Reference First
 **의도**: URL 하나로 초안이 나오는가. 스크린샷을 요구하지 않는가.
@@ -47,7 +46,7 @@ HPS_CDP_PORT=9333 node e2e/observe/watch.mjs
 
 | | 정상 | 이상하면 |
 |---|---|---|
-| 첫 동작 | `browser_open(boaclinic.com)` → `browser_read` | 스크린샷을 붙여 달라고 되물으면 프롬프트 회귀 |
+| 첫 동작 | `browser_open(dental.example)` → `browser_read` | 스크린샷을 붙여 달라고 되물으면 프롬프트 회귀 |
 | 저장 경로 | `Write(index.html)` — **첫 시도에 성공** | `Write(/Users/workspace/…)` 처럼 지어낸 경로가 뜨면 작업 폴더가 안 전달된 것 |
 | 탐색 | `find` · `pwd` · `Glob` **0회** | 나오면 위와 같은 원인 |
 | 산출물 | `~/HypeProofClinic/index.html` 실재 | 채팅에 ` ```html ` 펜스를 쏟아내면 낡은 프롬프트 |
@@ -62,7 +61,7 @@ v0.1.28   같은 요청에서 지어낸 경로로 Write 실패 → 164초 재생
 
 `"뼈대만"` 을 붙이면 산출물이 눈에 띄게 작아진다 — 크기는 프롬프트로 제어된다.
 
-승인은 **처음 `boaclinic.com` 열 때 1회**만 뜬다(오리진 기억). 「이 사이트는 항상
+승인은 **처음 `dental.example` 열 때 1회**만 뜬다(오리진 기억). 「이 사이트는 항상
 허용」을 누르면 이후 서브페이지는 안 묻는다.
 
 ---
@@ -70,12 +69,12 @@ v0.1.28   같은 요청에서 지어낸 경로로 Write 실패 → 164초 재생
 ## 커맨드 2 — 콘텐츠 주입 + 인수인계 문서
 
 > ```
-> 실제 보아치과의 핵심 컨텐츠는
+> 실제 치과 파일럿의 핵심 컨텐츠는
 > 1. About us
 > 2. 첨단 디지털 클리닉 (첨단기술 강조)
 > 3. 평생 예방관리 클리닉 (예방의학 타겟)
 > 4. 어르신 보험 임플란트 (실버 타겟)
-> 이다 이것들을 보아치과 웹사이트에서 내용부분을 가져와서 agent.md 로 저장하고
+> 이다 이것들을 치과 파일럿 웹사이트에서 내용부분을 가져와서 agent.md 로 저장하고
 > 이 md 파일을 보고 우리 웹사이트를 고쳐보자.
 > ```
 
@@ -180,7 +179,7 @@ browser_click(e7) — 실패: e7를 찾을 수 없어요
 ```
 
 **돌릴 때마다 공개 저장소가 생긴다** — 테스트 계정이나 정리 계획을 정하고 시작한다.
-(07-27 검증본: `ico1036/boa-dental`)
+(07-27 검증본: `<member>/dental-demo`)
 
 ---
 

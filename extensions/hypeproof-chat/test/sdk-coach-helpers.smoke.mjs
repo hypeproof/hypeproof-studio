@@ -483,9 +483,9 @@ console.log("✓ #384: containment canonicalizer — symlinked roots pass, real 
   assert.ok(click.description.includes("e7"), "무엇을 누르는지 문구에 있어야 한다");
   assert.equal(click.payload.ref, "e7");
 
-  const type = sdkToolToActionRequest({ toolName: MCP_BROWSER_TYPE, input: { ref: "e3", text: "보아치과" } });
+  const type = sdkToolToActionRequest({ toolName: MCP_BROWSER_TYPE, input: { ref: "e3", text: "예시치과" } });
   assert.equal(type.kind, "browserType");
-  assert.ok(type.description.includes("보아치과"), "무엇을 입력하는지 문구에 있어야 한다");
+  assert.ok(type.description.includes("예시치과"), "무엇을 입력하는지 문구에 있어야 한다");
 
   // 음성 대조군 — 진짜 미지의 툴은 여전히 셸 폴백(fail closed)이어야 한다.
   const unknown = sdkToolToActionRequest({ toolName: "mcp__hypeproof__browser_teleport", input: {} });
@@ -501,7 +501,7 @@ console.log("✓ #384: containment canonicalizer — symlinked roots pass, real 
   // 양성 대조군 — 읽기/조회 명령은 자동 실행. 실측에서 이것들이 한 턴에 6번까지
   // 모달을 띄웠고, 그게 "뜨면 누른다" 반사를 훈련시켰다.
   for (const c of [
-    `curl -s https://boaclinic.com/ | grep -o 'href="[^"]*"'`,
+    `curl -s https://dental.example/ | grep -o 'href="[^"]*"'`,
     `curl -sL "https://x.com" | python3 -c "import sys; print(sys.stdin.read())"`,
     "pwd",
     "ls -la /Users/student/HypeProofClinic/",

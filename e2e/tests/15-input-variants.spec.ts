@@ -1,4 +1,4 @@
-// T2.V — 입력 변종 robustness for boah-dental-teaser-2026-s1 (#112).
+// T2.V — 입력 변종 robustness for dental-teaser-2026-s1 (#112).
 //
 // T2.E.1만 사투리/반말 1건 검증. 워크숍 청중은 30~60대 전문직 + IT 친숙도
 // 편차 큼. 오타·자모·이모지·장문·code-mix·공백 케이스 회귀로 박는다.

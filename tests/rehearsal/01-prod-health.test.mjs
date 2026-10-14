@@ -9,6 +9,7 @@ import {
   ADMIN_PASSWORD,
   adminBase,
   basicAuthHeader,
+  SEARCH_TEASER,
 } from "./helpers/env.mjs";
 import { fetchJson, GAME_VESTIGE_RE } from "./helpers/api.mjs";
 
@@ -50,7 +51,7 @@ test(
     assert.equal(r.status, 200);
     const p = r.json;
     assert.ok(p?.profile_id, "profile_id missing");
-    if (p.profile_id.includes("boah-dental")) {
+    if (p.profile_id === SEARCH_TEASER) {
       assert.ok(p.welcome.greeting_md.includes("슈퍼서치엔진"), `greeting missing '슈퍼서치엔진': ${p.welcome.greeting_md}`);
       assert.ok(p.welcome.greeting_md.includes("원장님을 이겨"), `greeting missing '원장님을 이겨': ${p.welcome.greeting_md}`);
     }
@@ -67,7 +68,7 @@ test(
       headers: { authorization: `Bearer ${TOKEN}` },
     });
     const p = r.json;
-    if (!p.profile_id.includes("boah-dental")) {
+    if (p.profile_id !== SEARCH_TEASER) {
       // Other cohorts have their own follow_up shape; this test is dental-specific.
       assert.ok(p.ux.suggestions.follow_up.length > 0, "follow_up empty");
       return;

@@ -369,11 +369,11 @@ pages and the Service in-process and writes `e2e/test-results/classroom-feedback
 echo 'HPS_FEEDBACK_LOOP=enabled' >> worker/.dev.vars
 (cd worker && npx wrangler d1 execute hypeproof-studio --local --file=migrations/0039-feedback-loop.sql)
 # 2. an adult class (sharing is refused for minors): roster and open session
-HPS_COHORT=boah-dental-2026-a HPS_PROFILE=boah-dental-director-copyclone-2026-s1 HPS_USER=learner-a bash scripts/dev-stack.sh
+HPS_COHORT=dental-pilot-2026-a HPS_PROFILE=dental-copyclone-2026-s1 HPS_USER=learner-a bash scripts/dev-stack.sh
 # 3. Chalk on :8788 and an instructor code for teacher-a
 (cd chalk && cp ../worker/.dev.vars .dev.vars && npx wrangler dev --env dev --port 8788)
 HPS_SIGNING_SECRET="<from worker/.dev.vars>" node --experimental-strip-types worker/scripts/issue-issuer-token.ts \
-  --instructor teacher-a --cohorts boah-dental-2026-a --profiles boah-dental-director-copyclone-2026-s1 --max-hours 12 --days 1
+  --instructor teacher-a --cohorts dental-pilot-2026-a --profiles dental-copyclone-2026-s1 --max-hours 12 --days 1
 ```
 
 | Step | Who · where | Expected |

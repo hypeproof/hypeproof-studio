@@ -89,7 +89,7 @@ rc1 `e4483c9b` and rc2 `987383f4`, not yet on Windows (the evidence is listed be
 - Upgrade to Claude Opus 5.5, Sonnet 5.5 and Haiku 5.5 and remap the provider-neutral aliases
   for **every alias-based cohort** before the 2026-10-17 seminar.
 - **The kids classes move only after a validation run passes.** The two kids profiles name only
-  aliases (`profiles/sk-biopharm-kids-s1.ts:18-21`, `profiles/sk-biopharm-kids-2026-grade-5-6-s1.ts:27-30`),
+  aliases (`profiles/kids-workshop-s1.ts:18-21`, `profiles/kids-2026-grade-5-6-s1.ts:27-30`),
   so the code has no kids-only pin and they move in the same commit as every other alias cohort.
   The gate is therefore the promotion of the Service release. The validation run was a closed
   4-minute kids session on the 0% version: 5/5 benign biology and medicine questions were answered
@@ -139,9 +139,9 @@ compares ids, never aliases) still decides what counts as a model change.
 
 | Profile | Minors | Runtime | Default | SDK auxiliary (`claude-*haiku*`) | Served choices |
 |---|---|---|---|---|---|
-| `sk-biopharm-kids-2026-grade-3-4-s1`, `sk-biopharm-kids-2026-grade-5-6-s1` | yes | agent-sdk | Sonnet 5.5 | Haiku 5.5 | Sonnet 5.5, Haiku 5.5 |
-| `boah-dental-director-copyclone-2026-s1` (seminar), `canary-sdk-contract` | no | agent-sdk | Sonnet 5.5 | Haiku 5.5 | Sonnet 5.5, Haiku 5.5 |
-| `boah-dental-teaser-2026-s1` | no | proxy | Sonnet 5.5 | — | Sonnet 5.5, Haiku 5.5 |
+| `kids-2026-grade-3-4-s1`, `kids-2026-grade-5-6-s1` | yes | agent-sdk | Sonnet 5.5 | Haiku 5.5 | Sonnet 5.5, Haiku 5.5 |
+| `dental-copyclone-2026-s1` (seminar), `canary-sdk-contract` | no | agent-sdk | Sonnet 5.5 | Haiku 5.5 | Sonnet 5.5, Haiku 5.5 |
+| `dental-teaser-2026-s1` | no | proxy | Sonnet 5.5 | — | Sonnet 5.5, Haiku 5.5 |
 | `homepage-practice-s1` | no | agent-sdk | Sonnet 5.5 (explicit id), course effort medium | Haiku 5.5 | Sonnet 5.5, Opus 5.5, Haiku 5.5, each at low/medium/high |
 | `studio-native-trial` (trial and paid pass), `synthetic-release-acceptance` | no | agent-sdk | Sonnet 5.5, course effort medium | Haiku 5.5 | nine: Sonnet 5.5, Haiku 5.5, Sonnet 5, Sonnet 4.5, Opus 5.5, Opus 5, Opus 4.8, Opus 4.6, Opus 4.5. Sonnet 4.6, Haiku 4.5 and Opus 4.7 were reachable only through aliases and fold away |
 | `studio-gpt-practice` | no | proxy (OpenAI) | `gpt-6-luna` | — | GPT-6 Luna, GPT-6.1 Sol, GPT-5.6 Luna/Terra/Sol |
@@ -159,8 +159,8 @@ plus `homepage-update` (`profiles/studio-native-trial.ts:43-48`). The seminar (d
 canary that mirrors it get a guard against the v0.1.56 `index.html` overwrite paths: no html or js
 code fences in chat, one `index.html` with sections, the shared shell ban replaced by an honest
 shell rule, and `workshop-setup` served instruction-only
-(`prompts/boah-dental-director-copyclone-2026-s1.md:69-76`, `lib/translate.ts:31-69`,
-`profiles/boah-dental-director-copyclone-2026-s1.ts:67`, `:150`; REQ-D5, REQ-M4). Every other
+(`prompts/dental-copyclone-2026-s1.md:69-76`, `lib/translate.ts:31-69`,
+`profiles/dental-copyclone-2026-s1.ts:67`, `:150`; REQ-D5, REQ-M4). Every other
 profile's cached prefix is byte-identical, which `worker/test/prefix-pins.test.mjs` pins.
 
 ### How a frozen lesson keeps its models
@@ -188,7 +188,7 @@ profile's cached prefix is byte-identical, which `worker/test/prefix-pins.test.m
 - Evidence: `worker/test/model-catalog.test.mjs` block 10 (a lesson frozen under the old map is
   served on Sonnet 4.6 under its old labels, returns 409 without the record, and a new version
   binds 5.5) and block 11 (the same for OpenAI). Both use a synthetic upstream. Production D1
-  holds two frozen versions, both in `boah-dental-2026-a`, and neither carries a `model` or
+  holds two frozen versions, both in `dental-pilot-2026-a`, and neither carries a `model` or
   `features` block (hypeproof/hypeproof-service#73), so no live lesson changes and the mechanism
   has not yet held a real one.
 

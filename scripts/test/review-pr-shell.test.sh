@@ -172,11 +172,11 @@ fi
 
 # 21. Default profile hardcoded (not from grep on all *.ts)
 # Old pattern: grep -h -m1 ... worker/src/profiles/*.ts (multiline)
-# New pattern: DEFAULT_PROFILE="sk-biopharm-kids-..." from literal
-if grep -q 'DEFAULT_PROFILE="sk-biopharm-kids-' "$SCRIPT"; then
-  ok "DEFAULT_PROFILE hardcoded literal found (not grep on all *.ts)"
+# New pattern: DEFAULT_PROFILE from one registry lookup (scripts/service-profile.mjs)
+if grep -q 'DEFAULT_PROFILE="$(service_profile ' "$SCRIPT"; then
+  ok "DEFAULT_PROFILE comes from one registry lookup (not grep on all *.ts)"
 else
-  fail "DEFAULT_PROFILE hardcoded literal not found"
+  fail "DEFAULT_PROFILE registry lookup not found"
 fi
 
 # 22. Old multiline grep pattern removed (grep -h -m1 on all *.ts)
@@ -574,8 +574,8 @@ fi
   _CK_BASE="$(mktemp -d)/HypeProof Studio Development/abc123"
   mkdir -p "$_CK_BASE/workspace/chalk/review-aaa" \
             "$_CK_BASE/workspace/chalk/review-bbb" \
-            "$_CK_BASE/workspace/chalk/sk-biopharm"
-  echo "data" > "$_CK_BASE/workspace/chalk/sk-biopharm/lesson.html"
+            "$_CK_BASE/workspace/chalk/kids-workshop"
+  echo "data" > "$_CK_BASE/workspace/chalk/kids-workshop/lesson.html"
 
   OUT="$(/bin/bash -c '
     set -euo pipefail
@@ -593,9 +593,9 @@ fi
     echo "chalk/review-* 폴더 비움: ${REVIEW_DELETED}개"
   ' 2>&1)"
   REV_REMAINING="$(find "$_CK_BASE/workspace/chalk" -mindepth 1 -maxdepth 1 -type d -name "review-*" | wc -l | tr -d ' ')"
-  NON_REV_REMAINING="$(find "$_CK_BASE/workspace/chalk" -mindepth 1 -maxdepth 1 -type d -name "sk-biopharm" | wc -l | tr -d ' ')"
+  NON_REV_REMAINING="$(find "$_CK_BASE/workspace/chalk" -mindepth 1 -maxdepth 1 -type d -name "kids-workshop" | wc -l | tr -d ' ')"
   if echo "$OUT" | grep -q "2개" && [[ "$REV_REMAINING" -eq 0 ]] && [[ "$NON_REV_REMAINING" -eq 1 ]]; then
-    ok "51: review-* 2개 삭제, sk-biopharm 폴더 생존"
+    ok "51: review-* 2개 삭제, kids-workshop 폴더 생존"
   else
     fail "51: chalk 정리 실패 (out='$OUT', review=$REV_REMAINING, non-review=$NON_REV_REMAINING)"
   fi

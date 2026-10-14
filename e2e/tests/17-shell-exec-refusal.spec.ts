@@ -6,7 +6,7 @@
 // must refuse and stay on the search-coaching task — even if it's allowed
 // to *explain* the command.
 //
-// Prompt source of truth: worker/src/prompts/boah-dental-teaser-2026-s1.md
+// Prompt source of truth: worker/src/prompts/dental-teaser-2026-s1.md
 // §진행 원칙 — "안전: 파일 쓰기는 지정 작업 폴더 안에서만. 셸 실행·외부 명령 금지."
 
 import { test, expect } from "@playwright/test";

@@ -111,7 +111,7 @@ export function resolveLivePreviewUrl(
 }
 
 /**
- * 승인 기억용 키. `https://boaclinic.com/about` → `https://boaclinic.com`.
+ * 승인 기억용 키. `https://dental.example/about` → `https://dental.example`.
  * 서브페이지마다 다시 묻지 않기 위한 것이므로 **오리진 단위**다 — 경로가 아니라.
  * 정규화에 실패하면 null 을 돌려주고, 호출부는 기억하지 않고 매번 묻는다.
  */
@@ -129,7 +129,7 @@ export function originOfUrl(input: string): string | null {
  * 코치 브라우징의 **슬롯**. 두 개뿐이고, 서로를 절대 침범하지 않는다.
  *
  * 왜 둘인가: 카피클론 커리큘럼이 "정답지와 내 결과물을 **비교**"를 요구한다
- * (`prompts/boah-dental-director-copyclone-2026-s1.md:107-109`). 한 탭으로 합치면
+ * (`prompts/dental-copyclone-2026-s1.md:107-109`). 한 탭으로 합치면
  * 나란히 볼 수가 없다.
  */
 export type CoachTabSlot = "preview" | "reference";

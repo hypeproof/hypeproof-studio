@@ -3,9 +3,9 @@
 // inside the chat webview; filling it surfaces the coach name everywhere.
 //
 // These specs require `naming_mode: "user_names_it"` profiles. The current
-// dev-stack default (boah-dental) uses `naming_mode: "fixed"` + empty prompts
+// dev-stack default (dental-pilot) uses `naming_mode: "fixed"` + empty prompts
 // (단발 티저 — naming step 생략, 마찰 최소화), so the naming card never
-// renders. Skip until a sk-biopharm-kids run-mode is wired into the e2e
+// renders. Skip until a kids-workshop run-mode is wired into the e2e
 // harness (epic #200 follow-up).
 
 import { test, expect } from "@playwright/test";
@@ -16,7 +16,7 @@ test.beforeAll(async () => {
   const profile = await fetchDentalProfile();
   test.skip(
     profile.ux.coach.naming_mode === "fixed",
-    `profile ${profile.profile_id} uses naming_mode=fixed — naming card never appears (option B). Re-enable when sk-biopharm-kids run-mode lands.`,
+    `profile ${profile.profile_id} uses naming_mode=fixed — naming card never appears (option B). Re-enable when kids-workshop run-mode lands.`,
   );
 });
 

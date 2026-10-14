@@ -30,7 +30,7 @@ const m = await import("../src/mintStudentTokenHelpers.ts");
 
 // ─── validateInputs ──────────────────────────────────────────────────
 {
-  assert.deepEqual(m.validateInputs("student-01", "boah-dental-2026-a", "boah-dental-teaser-2026-s1", 2), { ok: true });
+  assert.deepEqual(m.validateInputs("student-01", "dental-pilot-2026-a", "dental-teaser-2026-s1", 2), { ok: true });
   assert.equal(m.validateInputs("", "c", "p", 2).ok, false);
   assert.equal(m.validateInputs("student-01", "", "p", 2).ok, false);
   assert.equal(m.validateInputs("student-01", "c", "", 2).ok, false);
@@ -62,20 +62,20 @@ const { SERVICE_CONTRACT_FIXTURES: serviceFixture } = await import("./fixtures/s
 
   // ── issuerScopes: reads the real signed shape
   assert.equal(m.issuerScopes(single).length, 1);
-  assert.equal(m.issuerScopes(single)[0].cohort, "boah-dental-2026-a");
+  assert.equal(m.issuerScopes(single)[0].cohort, "dental-pilot-2026-a");
   assert.deepEqual(m.issuerScopes("not-a-token"), []);
   assert.deepEqual(m.issuerScopes(""), []);
 
   // ── issuerCohorts: scope order, deduped
-  assert.deepEqual(m.issuerCohorts(single), ["boah-dental-2026-a"]);
-  assert.deepEqual(m.issuerCohorts(multi), ["boah-dental-2026-a", "sk-biopharm-2026-a"]);
+  assert.deepEqual(m.issuerCohorts(single), ["dental-pilot-2026-a"]);
+  assert.deepEqual(m.issuerCohorts(multi), ["dental-pilot-2026-a", "kids-workshop-2026-a"]);
 
   // ── issuerDefaultCohort: single → prefill, multi → caller must ask
-  assert.equal(m.issuerDefaultCohort(single), "boah-dental-2026-a");
+  assert.equal(m.issuerDefaultCohort(single), "dental-pilot-2026-a");
   assert.equal(m.issuerDefaultCohort(multi), undefined);
 
   // A STUDENT token has no scopes → no default (and never the old hardcoded
-  // "boah-dental-2026-a", which is what #347 leaked into every prompt).
+  // "dental-pilot-2026-a", which is what #347 leaked into every prompt).
   const studentToken = serviceFixture.tokens.student;
   assert.equal(m.issuerDefaultCohort(studentToken), undefined);
   assert.deepEqual(m.issuerScopes(studentToken), []);
@@ -89,16 +89,16 @@ const { SERVICE_CONTRACT_FIXTURES: serviceFixture } = await import("./fixtures/s
   assert.equal(m.issuerDefaultCohort("a.b.c"), undefined);
 
   // ── issuerProfilesFor: scoped to the chosen cohort
-  assert.deepEqual(m.issuerProfilesFor(single, "boah-dental-2026-a"), [
-    "boah-dental-teaser-2026-s1",
+  assert.deepEqual(m.issuerProfilesFor(single, "dental-pilot-2026-a"), [
+    "dental-teaser-2026-s1",
   ]);
-  assert.deepEqual(m.issuerProfilesFor(multi, "sk-biopharm-2026-a"), [
-    "sk-biopharm-kids-2026-grade-3-4-s1",
-    "sk-biopharm-kids-2026-grade-5-6-s1",
+  assert.deepEqual(m.issuerProfilesFor(multi, "kids-workshop-2026-a"), [
+    "kids-2026-grade-3-4-s1",
+    "kids-2026-grade-5-6-s1",
   ]);
   // Cohort the issuer does not hold → no profiles (never another cohort's).
   assert.deepEqual(m.issuerProfilesFor(multi, "unknown-cohort"), []);
-  assert.deepEqual(m.issuerProfilesFor("not-a-token", "boah-dental-2026-a"), []);
+  assert.deepEqual(m.issuerProfilesFor("not-a-token", "dental-pilot-2026-a"), []);
 
   console.log(
     "✅ issuer scopes (#347): Service-signed synthetic claim fixtures · 1→default · multi→undef · student→undef · profiles scoped",
@@ -109,7 +109,7 @@ const { SERVICE_CONTRACT_FIXTURES: serviceFixture } = await import("./fixtures/s
 {
   // The exact payload the old helper looked for. If someone reintroduces a
   // `scope.cohorts` read, this fails — it must not be treated as a scope.
-  const b64 = Buffer.from(JSON.stringify({ scope: { cohorts: ["boah-dental-2026-a"] } }))
+  const b64 = Buffer.from(JSON.stringify({ scope: { cohorts: ["dental-pilot-2026-a"] } }))
     .toString("base64")
     .replace(/=+$/, "");
   const drifted = `${b64}.sig`;
