@@ -477,4 +477,43 @@ function ps1SeedProblems(script, { manifest, version }) {
   assert.ok(ps1.includes('"$destBin.verified.json"'), "seed-sdk-binary.ps1 writes the runtime-trusted marker");
 }
 
+// ─── approval policy for the roster consult (ADR 0011 §5.1) ─────────────────
+// The consult tool reaches tool-less, read-only roster helpers, so it runs
+// without a modal by default, yet a machine must still be able to require
+// one: `consultHelper` is offered in requireApprovalFor's enum and kept out of
+// its default. It sits here because WP A1 owns package.json and this file;
+// manifest-security-scope.smoke.mjs keeps the full approval-policy lock.
+function consultApprovalProblems(pkg) {
+  const setting = pkg.contributes?.configuration?.properties?.["hypeproofChat.requireApprovalFor"];
+  if (!setting) return ["requireApprovalFor is not declared"];
+  const problems = [];
+  if (!(setting.items?.enum ?? []).includes("consultHelper")) {
+    problems.push("enum does not offer consultHelper (a machine could not require the modal)");
+  }
+  if ((setting.default ?? []).includes("consultHelper")) {
+    problems.push("default requires consultHelper (every consult would open a modal)");
+  }
+  return problems;
+}
+
+{
+  const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8"));
+  assert.deepEqual(consultApprovalProblems(pkg), [], "consultHelper is offered in requireApprovalFor and kept out of its default");
+
+  // Negative controls on copies: drop it from the enum, then add it to the default.
+  const setting = pkg.contributes.configuration.properties["hypeproofChat.requireApprovalFor"];
+  const withSetting = (patch) => {
+    const copy = JSON.parse(JSON.stringify(pkg));
+    Object.assign(copy.contributes.configuration.properties["hypeproofChat.requireApprovalFor"], patch);
+    return copy;
+  };
+  assert.deepEqual(
+    consultApprovalProblems(withSetting({ items: { ...setting.items, enum: setting.items.enum.filter((k) => k !== "consultHelper") } })),
+    ["enum does not offer consultHelper (a machine could not require the modal)"],
+  );
+  assert.deepEqual(consultApprovalProblems(withSetting({ default: [...setting.default, "consultHelper"] })), [
+    "default requires consultHelper (every consult would open a modal)",
+  ]);
+}
+
 console.log("sdk-binary.smoke: all assertions passed");
