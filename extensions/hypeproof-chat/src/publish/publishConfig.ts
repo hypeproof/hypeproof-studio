@@ -3,8 +3,9 @@
 // The overrides (`HPS_GITHUB_API_BASE`, `HPS_GITHUB_PAGES_BASE`, `HPS_GH_PATH`) exist so the
 // e2e can run the real extension against a scripted GitHub. They are honored ONLY in a test
 // run (the e2e fixture's HPS_TEST_E2E / test-state file, or HPS_E2E=1) or an Extension
-// Development Host, and ONLY for loopback URLs. Reason: the API base receives the participant's
-// GitHub token — a full `repo` credential. An environment variable is easy to plant (a shell
+// Development Host, and ONLY for loopback URLs. Reason: an API base override switches the REST
+// transport from `gh api` to plain HTTP that carries the participant's GitHub token — a full
+// `repo` credential. An environment variable is easy to plant (a shell
 // profile, a launcher, another program), so in a shipped app an override must not be able to
 // send that token anywhere, and even in a test run it may only point at this machine.
 // `HPS_GH_PATH` is held to the same gate: whatever it names is executed and its stdout becomes
@@ -12,10 +13,12 @@
 //
 // Pure; unit-tested in test/publish-host.smoke.mjs.
 
-export const GITHUB_API_BASE = "https://api.github.com";
-
 export interface PublishEndpoints {
-  apiBase: string;
+  /**
+   * A loopback scripted GitHub (test runs only). Absent in a real run: then every REST call is
+   * `gh api` against github.com and no URL of ours ever receives the credential.
+   */
+  apiBase?: string;
   pagesBase?: string;
   ghPath?: string;
   /** Overrides that were present but refused (for the developer log). */
@@ -52,7 +55,7 @@ export function resolvePublishEndpoints(args: {
   const pages = pick("HPS_GITHUB_PAGES_BASE", args.testState?.githubPagesBase);
   const gh = pick("HPS_GH_PATH", args.testState?.ghPath);
   const refused: string[] = [];
-  const out: PublishEndpoints = { apiBase: GITHUB_API_BASE, refused };
+  const out: PublishEndpoints = { refused };
   if (api) {
     if (allowed && isLoopbackHttp(api)) out.apiBase = api.replace(/\/+$/, "");
     else refused.push("HPS_GITHUB_API_BASE");

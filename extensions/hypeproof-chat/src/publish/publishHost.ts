@@ -12,8 +12,8 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import type { ResolvedProfile } from "../protocol";
 import type { McpToolResult } from "../browserMcp";
-import { AuthToolMissingError, createGhCliAuthProvider, type AuthProvider } from "./githubAuth";
-import { createGitHubApi, GitHubTransportError, type GitHubApi } from "./githubApi";
+import { AuthToolMissingError, createGhCliAuthProvider, type GhCliAuthProvider } from "./githubAuth";
+import { createFetchTransport, createGhTransport, createGitHubApi, GitHubTransportError, type GitHubApi, type GitHubTransport } from "./githubApi";
 import { downloadRepo, findClassRepos, nextFreeFolder, remoteHead, type ClassRepo, type DownloadFailure } from "./githubContinue";
 import { classFolderCheck, pressAccess, publishError, resolveRepoName, sitePublishAllowed, type AccessCheck, type PublishSiteInput, type PublishSiteResult } from "./publishContract";
 import { BUTTON_BUDGET_MS, toolBudgetMs, type PublishEndpoints } from "./publishConfig";
@@ -67,9 +67,10 @@ export interface SitePublisherHost {
 
 export class SitePublisher {
   private readonly host: SitePublisherHost;
-  private readonly auth: AuthProvider;
+  private readonly auth: GhCliAuthProvider;
   private running = false;
   readonly registry: PublishRegistry;
+  private readonly transport: (token: string) => GitHubTransport;
   /**
    * Repositories the coach tool was approved for in canUseTool but whose owner was not known
    * yet (the approval happens before authentication). The run that follows registers them
@@ -85,6 +86,14 @@ export class SitePublisher {
       platform: process.platform,
       ...(host.endpoints.ghPath ? { ghPath: host.endpoints.ghPath } : {}),
     });
+    const ghApi = createGhTransport({
+      execFile: execFile as unknown as Parameters<typeof createGhTransport>[0]["execFile"],
+      bin: () => this.auth.bin(),
+    });
+    // `gh api` in every real run. Only a loopback mock that publishConfig.ts let through gets
+    // plain HTTP (it cannot be reached by `gh`, which talks to github.com).
+    const apiBase = host.endpoints.apiBase;
+    this.transport = apiBase ? (token) => createFetchTransport({ base: apiBase, token, fetch }) : () => ghApi;
     for (const r of host.endpoints.refused) host.log(`[publish] ignored override ${r} (not a test/dev run, or not a loopback URL)`);
   }
 
@@ -220,7 +229,7 @@ export class SitePublisher {
         sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
         now: () => Date.now(),
         auth: this.auth,
-        apiBase: this.host.endpoints.apiBase,
+        transport: this.transport,
         ...(this.host.endpoints.pagesBase ? { pagesBase: this.host.endpoints.pagesBase } : {}),
         workspaceRoot: this.host.workspaceRoot(),
         profileDefaultRepo: profile?.publishing?.default_repo_name,
@@ -282,9 +291,8 @@ export class SitePublisher {
     const token = await this.auth.token();
     if (!token) return null;
     const api = createGitHubApi({
-      base: this.host.endpoints.apiBase,
-      token,
-      deps: { fetch, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now: () => Date.now() },
+      transport: this.transport(token),
+      deps: { sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now: () => Date.now() },
     });
     const u = await api.request("GET", "/user");
     if (u.status === 401) return null;

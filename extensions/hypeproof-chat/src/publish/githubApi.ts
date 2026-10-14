@@ -1,26 +1,29 @@
 // Minimal GitHub REST client for the one-click publish.
 //
-// Why not Octokit: it would be a runtime dependency, and runtime dependencies of this
-// extension must ship through `dist/vendor` (build-pipeline.md, #349) — a cost far larger than
-// the dozen endpoints used here. Why not the `gh api` CLI: every call would be a process spawn
-// with the token on the child's environment, and we need response headers (`x-oauth-scopes`,
-// `retry-after`) that `gh api` only prints in a format we would then have to parse.
+// Every request goes through the GitHub CLI (`gh api`) in the shipped app. The class already
+// installs and signs in `gh` (githubAuth.ts), so `gh` holds the credential end to end: the
+// token is never put on a request by this extension. Why not Octokit: it would be a runtime
+// dependency, and runtime dependencies of this extension must ship through `dist/vendor`
+// (build-pipeline.md, #349) — a cost far larger than the dozen endpoints used here.
 //
-// Three rules, all from GitHub's REST rate-limit documentation
-// (docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api):
+// What stays here is the part `gh api` does not do for us. Three rules, all from GitHub's REST
+// rate-limit documentation (docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api):
 //   1. Requests are SERIALIZED. "Make requests for a single user serially instead of
 //      concurrently" is the documented way to avoid secondary limits, and a classroom of
 //      participants shares one NAT IP. The publish is a short chain anyway; parallelism would
 //      save seconds and risk minutes.
 //   2. `retry-after` is honored first, then `x-ratelimit-remaining: 0` + `x-ratelimit-reset`,
 //      then (a secondary limit with neither header) a fixed one-minute wait, as documented.
+//      `gh api --include` prints the status line and headers, so these are read from it.
 //   3. A wait longer than `maxRateWaitMs` is NOT slept through: it becomes a `rate_limited`
 //      error the participant can read, instead of a progress bar frozen for an hour.
 //
-// Pure apart from the injected `fetch`/`sleep`/`now`: no `vscode`, testable with a fake.
+// The transport is injected: `createGhTransport` in the app, `createFetchTransport` only for a
+// scripted GitHub on loopback (tests, publishConfig.ts). No `vscode` import, testable with a fake.
+
+import type { ExecFileFn } from "./githubAuth.ts";
 
 export interface HttpDeps {
-  fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
 }
@@ -42,14 +45,18 @@ export class GitHubTransportError extends Error {
   }
 }
 
+/**
+ * One HTTP exchange with the REST API: `path` is relative to the API root (`/user`,
+ * `/repos/o/r/git/refs/heads/main`). Resolves for every HTTP status; throws
+ * `GitHubTransportError("network")` only when no response arrived.
+ */
+export type GitHubTransport = (method: string, path: string, body: unknown) => Promise<ApiResponse>;
+
 export interface GitHubApiOptions {
-  base: string;
-  token: string;
+  transport: GitHubTransport;
   deps: HttpDeps;
   /** Longest single rate-limit wait we sleep through (default 90 s). */
   maxRateWaitMs?: number;
-  /** Per-request network timeout (default 30 s). */
-  timeoutMs?: number;
 }
 
 const MAX_ATTEMPTS = 4;
@@ -61,42 +68,19 @@ export interface GitHubApi {
 }
 
 export function createGitHubApi(opts: GitHubApiOptions): GitHubApi {
-  const base = opts.base.replace(/\/+$/, "");
   const maxWait = opts.maxRateWaitMs ?? 90_000;
-  const timeoutMs = opts.timeoutMs ?? 30_000;
   const { deps } = opts;
   // The serialization queue. Each request chains on the previous one's settlement (success
   // OR failure), so one failed call never wedges the queue for the rest of the pipeline.
   let tail: Promise<unknown> = Promise.resolve();
 
   async function once(method: string, path: string, body: unknown): Promise<ApiResponse> {
-    let res: Response;
     try {
-      res = await deps.fetch(`${base}${path}`, {
-        method,
-        headers: {
-          authorization: `Bearer ${opts.token}`,
-          accept: "application/vnd.github+json",
-          "x-github-api-version": "2022-11-28",
-          "user-agent": "HypeProof-Studio",
-          ...(body !== undefined ? { "content-type": "application/json" } : {}),
-        },
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
+      return await opts.transport(method, path, body);
     } catch (err) {
+      if (err instanceof GitHubTransportError) throw err;
       throw new GitHubTransportError("network", err instanceof Error ? err.message : String(err));
     }
-    const text = await res.text().catch(() => "");
-    let json: unknown = null;
-    if (text) {
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = null;
-      }
-    }
-    return { status: res.status, headers: res.headers, json };
   }
 
   /** How long to wait before retrying, or null when this response is not a rate limit. */
@@ -155,6 +139,139 @@ export function createGitHubApi(opts: GitHubApiOptions): GitHubApi {
       tail = next.catch(() => undefined);
       return next;
     },
+  };
+}
+
+function parseJson(text: string): unknown {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+export interface GhTransportOptions {
+  execFile: ExecFileFn;
+  /** The resolved `gh` executable (githubAuth.ts `GhCliAuthProvider.bin`). */
+  bin: () => Promise<string>;
+  env?: NodeJS.ProcessEnv;
+  /** Per-request timeout (default 60 s: a blob upload carries a base64 photo). */
+  timeoutMs?: number;
+}
+
+/**
+ * `gh api --include` output → status, headers, body. The first line is the status line
+ * (`HTTP/2.0 404 Not Found`), then `Name: value` headers, a blank line, and the body. Null when
+ * the output is not a response at all (gh failed before one arrived).
+ */
+export function parseGhInclude(stdout: string): ApiResponse | null {
+  const m = /^HTTP\/[\d.]+ (\d{3})[^\n]*\n/.exec(stdout);
+  if (!m) return null;
+  const rest = stdout.slice(m[0].length);
+  const sep = /\r?\n\r?\n/.exec(rest);
+  const head = sep ? rest.slice(0, sep.index) : rest;
+  const body = sep ? rest.slice(sep.index + sep[0].length) : "";
+  const headers = new Headers();
+  for (const line of head.split(/\r?\n/)) {
+    const i = line.indexOf(":");
+    if (i > 0) headers.append(line.slice(0, i).trim(), line.slice(i + 1).trim());
+  }
+  return { status: Number(m[1]), headers, json: parseJson(body.trim()) };
+}
+
+/**
+ * The shipped transport: one `gh api` process per request. `gh` attaches the participant's
+ * credential itself; this extension only names the method, path and JSON body (on stdin, so
+ * a photo's base64 never sits on an argument vector). `gh` exits non-zero on a 4xx/5xx but
+ * still prints the response, which is what the pipeline reads — the exit code is ignored
+ * whenever a status line came back.
+ */
+export function createGhTransport(opts: GhTransportOptions): GitHubTransport {
+  const timeout = opts.timeoutMs ?? 60_000;
+  return async (method, path, body) => {
+    const bin = await opts.bin();
+    const args = [
+      "api",
+      "--hostname",
+      "github.com",
+      "--method",
+      method,
+      "--include",
+      "-H",
+      "Accept: application/vnd.github+json",
+      "-H",
+      "X-GitHub-Api-Version: 2022-11-28",
+      ...(body !== undefined ? ["-H", "Content-Type: application/json", "--input", "-"] : []),
+      path,
+    ];
+    return await new Promise<ApiResponse>((resolve, reject) => {
+      let child: ReturnType<ExecFileFn>;
+      try {
+        child = opts.execFile(
+          bin,
+          args,
+          { timeout, maxBuffer: 64 * 1024 * 1024, windowsHide: true, ...(opts.env ? { env: opts.env } : {}) },
+          (err, stdout, stderr) => {
+            const r = parseGhInclude(String(stdout ?? ""));
+            if (r) return resolve(r);
+            const why = String(stderr ?? "").trim() || (err ? err.message : "no output");
+            // gh lost its login between the token probe and this call: answer the way GitHub
+            // would, so the auth step starts a fresh sign-in instead of reporting a network fault.
+            if (/gh auth login/i.test(why)) return resolve({ status: 401, headers: new Headers(), json: { message: why } });
+            reject(new GitHubTransportError("network", `gh api ${method} ${path}: ${why.slice(0, 300)}`));
+          },
+        );
+      } catch (err) {
+        reject(new GitHubTransportError("network", err instanceof Error ? err.message : String(err)));
+        return;
+      }
+      // Always close stdin: with no body, an open pipe is something gh could wait on.
+      try {
+        child.stdin?.end(body !== undefined ? JSON.stringify(body) : undefined);
+      } catch {
+        /* the process is already gone; the callback reports it */
+      }
+    });
+  };
+}
+
+export interface FetchTransportOptions {
+  /** API root, e.g. `http://127.0.0.1:18941/api`. Loopback only (publishConfig.ts). */
+  base: string;
+  token: string;
+  fetch: typeof fetch;
+  /** Per-request network timeout (default 30 s). */
+  timeoutMs?: number;
+}
+
+/**
+ * Plain HTTP to a scripted GitHub on this machine (tests, the e2e mock). Never used against
+ * github.com: there the credential stays inside `gh` (createGhTransport).
+ */
+export function createFetchTransport(opts: FetchTransportOptions): GitHubTransport {
+  const base = opts.base.replace(/\/+$/, "");
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  return async (method, path, body) => {
+    let res: Response;
+    try {
+      res = await opts.fetch(`${base}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${opts.token}`,
+          accept: "application/vnd.github+json",
+          "x-github-api-version": "2022-11-28",
+          "user-agent": "HypeProof-Studio",
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (err) {
+      throw new GitHubTransportError("network", err instanceof Error ? err.message : String(err));
+    }
+    const text = await res.text().catch(() => "");
+    return { status: res.status, headers: res.headers, json: parseJson(text) };
   };
 }
 

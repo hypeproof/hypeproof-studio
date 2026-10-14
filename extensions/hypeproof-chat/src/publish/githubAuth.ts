@@ -6,8 +6,9 @@
 //     exactly one GitHub login on the machine and we do not add a second one.
 //   - The device flow `gh` runs is GitHub CLI's own OAuth app. Using it needs no OAuth app
 //     registration by HypeProof and puts no client id in the App (plan §4-1).
-//   - The token never touches disk on our side: it is read per run (`gh auth token`) and held
-//     only in memory for that run.
+//   - The token never touches disk on our side, and no request of ours carries it: every REST
+//     call is a `gh api` process (githubApi.ts `createGhTransport`), so `gh` attaches it.
+//     `gh auth token` is read only as the "is anyone signed in" probe.
 //
 // `AuthProvider` is the seam for a native device-flow provider later (client id served by the
 // profile). It is not implemented now: nothing in the profile carries a client id yet, and an
@@ -105,7 +106,13 @@ function run(
   });
 }
 
-export function createGhCliAuthProvider(opts: GhCliOptions): AuthProvider {
+/** The gh CLI provider, plus the executable it resolved — the REST transport runs the same one. */
+export interface GhCliAuthProvider extends AuthProvider {
+  /** The `gh` that answered `--version`. Throws `AuthToolMissingError`. */
+  bin(): Promise<string>;
+}
+
+export function createGhCliAuthProvider(opts: GhCliOptions): GhCliAuthProvider {
   let resolvedGh: string | null = null;
   let pending: { scopesKey: string; auth: PendingUserAuth; settled: boolean } | null = null;
 
@@ -123,6 +130,8 @@ export function createGhCliAuthProvider(opts: GhCliOptions): AuthProvider {
 
   return {
     kind: "gh_cli",
+
+    bin: gh,
 
     async token() {
       const bin = await gh();

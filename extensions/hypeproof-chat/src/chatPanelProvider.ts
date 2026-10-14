@@ -597,7 +597,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       log: (line) => this.voiceLogChannel().appendLine(line),
       stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
       store: this.context.globalState,
-      endpoints: this.publishEndpoints ?? { apiBase: "https://api.github.com", refused: [] },
+      endpoints: this.publishEndpoints ?? { refused: [] },
       checkAccess: () => this.checkSitePublishAccess(),
       // ensureProfile(true) re-reads the profile and re-sets the context key; postConfig carries
       // the new answer to the chat header button.

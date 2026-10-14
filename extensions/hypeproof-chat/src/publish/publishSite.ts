@@ -10,7 +10,7 @@
 // base), so the smoke tests drive the whole pipeline against a scripted GitHub.
 
 import * as fs from "node:fs";
-import { createGitHubApi, ghMessage, GitHubTransportError, missingScopes, parseOAuthScopes, type GitHubApi } from "./githubApi.ts";
+import { createGitHubApi, ghMessage, GitHubTransportError, missingScopes, parseOAuthScopes, type GitHubApi, type GitHubTransport } from "./githubApi.ts";
 import { AuthToolMissingError, type AuthProvider } from "./githubAuth.ts";
 import {
   normalizeCustomDomain,
@@ -76,12 +76,17 @@ export const DEFAULT_TIMING: PublishTiming = {
 };
 
 export interface PublishSiteDeps {
+  /** Unauthenticated reads of the published site (the live check). Never carries a token. */
   fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
   now: () => number;
   auth: AuthProvider;
-  /** `https://api.github.com` in production. */
-  apiBase: string;
+  /**
+   * How REST calls reach GitHub once `auth.token()` says someone is signed in. In the app this
+   * is `gh api` (githubApi.ts `createGhTransport`) and ignores the token; a loopback test
+   * mock gets the fetch transport, which sends it.
+   */
+  transport: (token: string) => GitHubTransport;
   /**
    * Test/dev only: serve the site from `<pagesBase>/<login>/<slug>/` instead of
    * `https://<login>.github.io/<slug>/`. The host decides whether it may be set.
@@ -258,7 +263,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       if (!token) {
         needed = ["repo", "workflow"];
       } else {
-        api = createGitHubApi({ base: deps.apiBase, token, deps: { fetch: deps.fetch, sleep: deps.sleep, now: deps.now } });
+        api = createGitHubApi({ transport: deps.transport(token), deps: { sleep: deps.sleep, now: deps.now } });
         const u = await api.request("GET", "/user");
         if (u.status === 401) {
           // gh still holds a token GitHub no longer accepts (revoked, expired): log in again.
