@@ -12,9 +12,9 @@ const recipe={schema:'hps-email-automation/1',category:'email',title:'자료 요
 function fixture(){
  let current=structuredClone(recipe),saved,preview,ledger={},answers=[],approved=true,permitted=true,sends=0,uploads=0,connected=false;
  const connection='account:connection';
- const runtime={isConnected:async()=>connected,getConnectionIdentity:async()=>connected?connection:null,connect:async()=>{connected=true;},createProject:async()=>({scriptId:'synthetic-project-id'}),uploadProject:async(id,project)=>{uploads++;return{digest:project.digest};},deployProject:async(id,project)=>({scriptId:id,deploymentId:'synthetic-deployment-id',versionNumber:1,digest:project.digest,connectionIdentity:connection}),preview:async()=>preview={id:'preview-identity',createdAt:Date.now(),messages:[{id:'mail-id',to:'synthetic@example.invalid',subject:'자료',body:'본문'}]},getPreview:()=>preview,sendApproved:async()=>{sends++;return{records:[{id:'mail-id',status:'sent'}]};}};
+ const runtime={isConnected:async()=>connected,getConnectionIdentity:async()=>connected?connection:null,connect:async()=>{connected=true;},createProject:async()=>({scriptId:'synthetic-project-id'}),uploadProject:async(id,project)=>{uploads++;return{digest:project.digest};},deployProject:async(id,project)=>({scriptId:id,deploymentId:'synthetic-deployment-id',versionNumber:1,digest:project.digest,connectionIdentity:connection}),preview:async()=>preview={id:'preview-identity',createdAt:Date.now(),messages:[{id:'mail-id',to:'synthetic@example.invalid',subject:'자료',body:'본문'}]},getPreview:()=>preview,getSendStatus:async(_deployment,ids)=>({records:ids.map(id=>({id,status:'unknown'}))}),sendApproved:async()=>{sends++;return{records:[{id:'mail-id',status:'sent'}]};}};
  const deps={runtime,maxRecipients:20,allowed:async()=>permitted,recipe:()=>current,ask:async question=>{answers.push(question);return{questionId:'q',approved,cancelled:!approved};},load:async()=>saved,save:async value=>{saved=value;},sheet:async()=>({spreadsheetId:'synthetic-spreadsheet',range:'A1:D21',connection}),lock:async work=>{if(!permitted)throw Error('revoked');return work();},ledger:{load:async()=>structuredClone(ledger),save:async value=>{ledger=structuredClone(value);}},openBrowser:async()=>{}};
- return {host:createAppsScriptHost(deps),deps,answers,get sends(){return sends;},get uploads(){return uploads;},set approved(value){approved=value;},set permitted(value){permitted=value;},changeRecipe(){current={...current,bodyTemplate:'수정한 내용'};},prior(){ledger[createHash('sha256').update('account:mail-id').digest('hex')]={id:'mail-id',status:'unknown'};}};
+ return {host:createAppsScriptHost(deps),deps,answers,get sends(){return sends;},get uploads(){return uploads;},set approved(value){approved=value;},set permitted(value){permitted=value;},changeRecipe(){current={...current,bodyTemplate:'수정한 내용'};},prior(origin){const key=createHash('sha256').update('account:mail-id').digest('hex');ledger[key]={id:'mail-id',status:'unknown'};if(origin)saved.sendOrigins={[key]:origin};}};
 }
 test('Apps Script authoring requires code and deployment approvals, then exact host preview approval',async()=>{
  const f=fixture(), h=f.host;
@@ -50,6 +50,25 @@ test('changed skill, revoked capability and previous Gmail/unknown attempts cann
  assert.equal((await h.appsScriptRun('send')).previousAttempt,true);assert.equal(f.sends,0);
  f.changeRecipe();assert.equal((await h.appsScriptRun('preview')).deploymentRequired,true);
  f.permitted=false;await assert.rejects(()=>h.appsScriptUpload());assert.equal(f.uploads,1);
+});
+test('unknown recovery requires original script proof, remote absence and a fresh explicit approval',async()=>{
+ for(const scenario of ['absent','cancel','remote-unknown','remote-sent','read-failed','other-project','legacy']) {
+  const f=fixture(),h=f.host;await h.appsScriptUpload();await h.appsScriptDeploy();await h.appsScriptRun('preview');
+  f.prior(scenario==='legacy'?undefined:scenario==='other-project'?'another-script-id':'synthetic-project-id');
+  let reads=0;f.deps.runtime.getSendStatus=async(_d,ids)=>{reads++;if(scenario==='read-failed')throw Error('synthetic transport failure');return{records:ids.map(id=>({id,status:scenario==='remote-unknown'?'unknown':scenario==='remote-sent'?'sent':'not_attempted'}))};};
+  if(scenario==='cancel')f.approved=false;
+  const before=await f.deps.ledger.load(),questions=f.answers.length,result=await h.appsScriptRun('send');
+  assert.equal(f.sends,scenario==='absent'?1:0);
+  if(scenario==='absent'||scenario==='cancel')assert.equal(f.answers.length,questions+1,'recovery still requires a new private approval');
+  else {assert.equal(result.previousAttempt,true);assert.equal(f.answers.length,questions);}
+  if(scenario!=='absent')assert.deepEqual(await f.deps.ledger.load(),before,'blocked or cancelled recovery never clears uncertainty');
+  assert.equal(reads,scenario==='legacy'||scenario==='other-project'?0:1);
+ }
+});
+test('upload preserves original send provenance and reuses the same project',async()=>{
+ const f=fixture(),h=f.host;await h.appsScriptUpload();await h.appsScriptDeploy();await h.appsScriptRun('preview');
+ await h.appsScriptRun('send');const before=await f.deps.load();assert.equal(Object.values(before.sendOrigins)[0],before.scriptId);
+ f.changeRecipe();await h.appsScriptUpload();const after=await f.deps.load();assert.equal(after.scriptId,before.scriptId);assert.deepEqual(after.sendOrigins,before.sendOrigins);
 });
 test('graph progress reflects tool outcomes; blocked actions stay incomplete',async()=>{
  const renders=[],quest=createAutomationQuestSession(async html=>renders.push(html));

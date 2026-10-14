@@ -4,7 +4,7 @@ import type { GoogleAutomationMcpHost } from './googleAutomationMcp';
 import type { EmailRecipe, EmailPreview, SendRecord } from './googleAutomation';
 import type { AutomationQuestion, AutomationAnswer } from './automationProtocol';
 
-interface ProjectReceipt { scriptId: string; connectionIdentity: string; uploadedDigest?: string; deployment?: AppsScriptDeployment }
+interface ProjectReceipt { scriptId: string; connectionIdentity: string; uploadedDigest?: string; deployment?: AppsScriptDeployment; sendOrigins?: Record<string, string> }
 interface Deps {
   runtime: AppsScriptRuntime;
   maxRecipients: number;
@@ -78,7 +78,7 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
             await deps.save(saved);
           }
           const result = await deps.runtime.uploadProject(saved.scriptId, project, project.digest);
-          await deps.save({ scriptId: saved.scriptId, connectionIdentity: saved.connectionIdentity, uploadedDigest: result.digest });
+          await deps.save({ ...saved, deployment: undefined, uploadedDigest: result.digest });
           recoveryReason = undefined; resumeTool = 'apps_script_deploy';
           return { uploaded: true, digest: result.digest, deployed: false };
         });
@@ -151,6 +151,22 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
         }
         const preview = lastPreview;
         if (!preview || !deps.runtime.getPreview(preview.id)) return { previewRequired: true };
+        const account = saved.connectionIdentity.split(':')[0];
+        const keys = preview.messages.map(message => hash(`${account}:${message.id}`));
+        // A missing remote record proves nothing for another script or legacy
+        // Gmail attempt. Require durable original-project provenance first.
+        const recoverable = await deps.lock(async () => {
+          const records = await deps.ledger.load(), fresh = await receipt();
+          const prior = keys.filter(key => records[key]);
+          if (!prior.length) return new Map<string, string>();
+          if (!fresh?.deployment || JSON.stringify(fresh.deployment) !== JSON.stringify(deployment) || prior.some(key => !['sending','unknown'].includes(records[key]!.status) || fresh.sendOrigins?.[key] !== deployment.scriptId)) return null;
+          let remote;
+          try { remote = await deps.runtime.getSendStatus(deployment, prior.map(key => records[key]!.id)); }
+          catch { return null; }
+          if (remote.records.some(record => record.status !== 'not_attempted')) return null;
+          return new Map(prior.map(key => [key, JSON.stringify(records[key])]));
+        });
+        if (!recoverable) return { sent: false, previousAttempt: true, automaticResendBlocked: true };
         const answer = await deps.ask({ kind: 'preview', private: true, title: `${preview.messages.length}명에게 Google에서 발송할까요?`, description: '받는 사람과 제목·본문을 모두 확인해 주세요. 승인하면 Google Apps Script가 이 내용 그대로 발송해요.', preview });
         if (!answer.approved || answer.cancelled) return { cancelled: true };
         await allowed(); checkDigest(project.digest);
@@ -158,9 +174,11 @@ export function createAppsScriptHost(deps: Deps): Pick<GoogleAutomationMcpHost, 
         return await deps.lock(async () => {
           const fresh = await receipt();
           if (!fresh?.deployment || JSON.stringify(fresh.deployment) !== JSON.stringify(deployment)) throw new Error('배포가 변경됐어요.');
-          const records = await deps.ledger.load(), account = saved.connectionIdentity.split(':')[0];
-          const keys = preview.messages.map(message => hash(`${account}:${message.id}`));
-          if (keys.some(key => records[key])) return { sent: false, previousAttempt: true, automaticResendBlocked: true };
+          const records = await deps.ledger.load();
+          if (keys.some(key => records[key] && (recoverable.get(key) !== JSON.stringify(records[key]) || fresh.sendOrigins?.[key] !== deployment.scriptId))) return { sent: false, previousAttempt: true, automaticResendBlocked: true };
+          const sendOrigins = { ...fresh.sendOrigins };
+          keys.forEach(key => { sendOrigins[key] = deployment.scriptId; });
+          await deps.save({ ...fresh, sendOrigins });
           preview.messages.forEach((message, i) => { records[keys[i]!] = { id: message.id, status: 'sending' }; });
           await deps.ledger.save(records);
           const result = await deps.runtime.sendApproved(deployment, preview.id, true);

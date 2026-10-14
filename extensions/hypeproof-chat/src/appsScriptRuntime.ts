@@ -98,7 +98,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     allowed(); if (busy) return fail('진행 중인 Google 작업이 끝난 뒤 다시 시도해 주세요.');
     busy = true; try { return await action(); } finally { busy = false; }
   }
-  async function run(deployment: AppsScriptDeployment, fn: 'hpsPreview' | 'hpsSendApproved', input: unknown) {
+  async function run(deployment: AppsScriptDeployment, fn: 'hpsPreview' | 'hpsSendApproved' | 'hpsGetSendStatus', input: unknown) {
     checkedId(deployment.deploymentId); checkedId(deployment.scriptId);
     if (!Number.isSafeInteger(deployment.versionNumber) || deployment.versionNumber < 1) return fail('배포 버전을 확인해 주세요.');
     if (!/^[a-f0-9]{64}$/.test(deployment.digest) || deployment.connectionIdentity !== await getConnectionIdentity()) return fail('Google 연결 또는 스킬이 변경됐어요. 다시 배포해 주세요.');
@@ -188,6 +188,15 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
       });
       const preview = Object.freeze({ id: result.id, createdAt: result.createdAt, messages: Object.freeze(messages) });
       current = { deployment: structuredClone(deployment), preview }; return preview;
+    }); },
+    async getSendStatus(deployment: AppsScriptDeployment, ids: readonly string[]): Promise<{ records: { id: string; status: 'sent' | 'unknown' | 'not_attempted' }[] }> { return exclusive(async () => {
+      if (!Array.isArray(ids) || !ids.length || ids.length > 20 || ids.some(id => !/^[a-f0-9]{64}$/.test(id)) || new Set(ids).size !== ids.length) return fail('확인할 전송 기록이 올바르지 않아요.');
+      const result = await run(deployment, 'hpsGetSendStatus', { ids });
+      if (!Array.isArray(result.records) || result.records.length !== ids.length) return fail('Google 전송 기록을 확인하지 못했어요. 자동 재발송은 하지 않아요.');
+      return { records: result.records.map((record, i) => {
+        if (!plain(record) || record.id !== ids[i] || !['sent','unknown','not_attempted'].includes(String(record.status))) return fail('Google 전송 기록을 확인하지 못했어요. 자동 재발송은 하지 않아요.');
+        return { id: ids[i]!, status: record.status as 'sent' | 'unknown' | 'not_attempted' };
+      }) };
     }); },
     async sendApproved(deployment: AppsScriptDeployment, previewId: string, approved: boolean): Promise<{ records: SendRecord[] }> { return exclusive(async () => {
       const saved = current;

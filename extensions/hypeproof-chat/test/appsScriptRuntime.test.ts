@@ -30,7 +30,7 @@ function fixture() {
       else if (u.endsWith('/versions')) result = { versionNumber: 1 };
       else if (u.endsWith('/deployments')) result = { deploymentId: 'synthetic_deployment_id' };
       else if (u.includes('/deployments/')) result = { deploymentConfig: { versionNumber: changeVersion ? 2 : 1 } };
-      else if (u.endsWith(':run')) result = { done: true, response: { result: body.function === 'hpsPreview' ? preview : { records: [{ id: preview.messages[0].id, status: 'sent', private: 'must drop' }] } } };
+      else if (u.endsWith(':run')) result = { done: true, response: { result: body.function === 'hpsPreview' ? preview : { records: [{ id: preview.messages[0].id, status: body.function === 'hpsGetSendStatus' ? 'not_attempted' : 'sent', private: 'must drop' }] } } };
       else throw new Error('unexpected request');
       return new Response(JSON.stringify(result));
     }) as typeof fetch,
@@ -142,6 +142,25 @@ test('generated approval digest survives API object key reordering while binding
     f.context.hpsSendApproved({previewId:p.id,messages:p.messages,approved:true});
     assert.equal(f.sends,1,'key reordering never creates a second send or retries unknown outcomes');
   }
+});
+
+test('read-only remote send status binds immutable deployment and exact IDs without consuming approval or sending', async () => {
+  const f=fixture();await f.runtime.uploadProject('synthetic_script_id',f.bundle,f.bundle.digest);
+  const d=await f.runtime.deployProject('synthetic_script_id',f.bundle,f.bundle.digest);
+  const p=await f.runtime.preview(d,{spreadsheetId:'synthetic_sheet_id',range:'A1:D21'});
+  assert.deepEqual(await f.runtime.getSendStatus(d,[p.messages[0].id]),{records:[{id:p.messages[0].id,status:'not_attempted'}]});
+  assert(f.runtime.getPreview(p.id));
+  assert.equal(f.calls.filter(c=>c.body?.function==='hpsSendApproved').length,0);
+  await assert.rejects(f.runtime.getSendStatus(d,['invalid']));
+  f.changeVersion=true;await assert.rejects(f.runtime.getSendStatus(d,[p.messages[0].id]),/버전/);
+  const script=scriptFixture(),preview=script.context.hpsPreview({spreadsheetId:'synthetic_sheet_id',range:'A1:D21'}),id=preview.messages[0].id;
+  for(const value of [undefined,'unknown','sent','unexpected']) {
+    if(value!==undefined)script.properties.set('hps.sent.'+id,value);
+    const before=JSON.stringify([...script.properties]);
+    assert.equal(script.context.hpsGetSendStatus({ids:[id]}).records[0].status,value===undefined?'not_attempted':value==='sent'?'sent':'unknown');
+    assert.equal(JSON.stringify([...script.properties]),before);assert.equal(script.sends,0);
+  }
+  assert.throws(()=>script.context.hpsGetSendStatus({ids:[id,id]}));
 });
 
 test('OAuth binds PKCE/state, asks only necessary management and execution scopes, and rejects partial consent', async () => {

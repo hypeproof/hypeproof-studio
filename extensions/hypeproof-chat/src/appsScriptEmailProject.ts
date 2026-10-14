@@ -79,6 +79,17 @@ function hpsRaw_(m) {
   var body = Utilities.base64Encode(m.body, Utilities.Charset.UTF_8).match(/.{1,76}/g) || [];
   return Utilities.base64EncodeWebSafe('To: ' + m.to + '\r\nSubject: ' + subject + '\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n' + body.join('\r\n') + '\r\n', Utilities.Charset.UTF_8).replace(/=+$/, '');
 }
+function hpsGetSendStatus(input) {
+  if (!input || !Array.isArray(input.ids) || !input.ids.length || input.ids.length > MAX_RECIPIENTS || input.ids.some(function(id) { return typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id); }) || new Set(input.ids).size !== input.ids.length) throw new Error('INVALID_MESSAGE_IDS');
+  var lock = LockService.getUserLock(); lock.waitLock(10000);
+  try {
+    var properties = PropertiesService.getUserProperties();
+    return { records: input.ids.map(function(id) {
+      var value = properties.getProperty('hps.sent.' + id);
+      return { id: id, status: value == null ? 'not_attempted' : value === 'sent' ? 'sent' : 'unknown' };
+    }) };
+  } finally { lock.releaseLock(); }
+}
 function hpsSendApproved(input) {
   if (!input || input.approved !== true) throw new Error('APPROVAL_REQUIRED');
   hpsValidateMessages_(input.messages);
