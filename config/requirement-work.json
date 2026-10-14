@@ -779,10 +779,11 @@
         "PRA-04",
         "PRA-05",
         "PRA-06",
-        "PRA-07"
+        "PRA-07",
+        "PRA-08"
       ],
       "inline_prefixes": [],
-      "sha256": "4b47197886b4f63739284c590777acdd6c022c8da44fa4dc4fa2495dd9c80eaa",
+      "sha256": "20204f24829ec89d30058fa9f020e7c2b5c63baa73fba95bae90781e89b66e9f",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3835,6 +3836,40 @@
         "extensions/hypeproof-chat/test/update-transport.smoke.mjs",
         "scripts/tests/install-win-fixture.ps1",
         "scripts/tests/bootstrap-win-private-fixture.ps1"
+      ]
+    },
+    {
+      "id": "non-member-class-kit-install",
+      "title": "Class kit install for people outside the organization",
+      "issue": 1635,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-08"
+          ]
+        }
+      ],
+      "depends_on": [
+        "private-org-release-access"
+      ],
+      "next_action": "Merge kit mode, the release installer bundle and the SDK version fix; upload the bundle to the current release; run a participation-code install end to end on macOS and on a real Windows PC.",
+      "design_delta": "A kit folder (release archive, installer, SDK seeder, kit-info.txt, SHA256SUMS) replaces the gh source; mirror-release attaches each tag's installers and seeders; installers seed the SDK version the installed app loads.",
+      "positive_control": "An intact kit installs the app, runs the kit seeder with the app's SDK version and passes the doctor with no gh call (macOS script test, Windows PS5.1 fixture).",
+      "negative_control": "A damaged archive or seeder, a file outside SHA256SUMS, a malformed or missing SHA256SUMS, a failed setup and an old required tool cannot pass.",
+      "evidence_required": "Studio commit, fixture results, the release bundle digests, and real macOS and Windows participation-code installs. A local fixture is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "scripts/install.ps1",
+        "scripts/make-class-kit.sh",
+        ".github/workflows/mirror-release.yml",
+        "docs/INSTALL-CLASS-KIT.ko.md"
+      ],
+      "verification_inputs": [
+        "scripts/test-installer-kit.sh",
+        "scripts/tests/install-kit-fixture.ps1"
       ]
     },
     {
