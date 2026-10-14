@@ -92,8 +92,9 @@ export const SDK_BINARY_MANIFEST: Readonly<Record<string, SdkBinaryManifestEntry
 
 /**
  * Coarse floor for a plausible `claude` binary (every platform's real binary
- * is ~230–270 MB; darwin-arm64 0.3.299 is 247,931,696 bytes). Guards against a truncated download / corrupt marker even
- * if the marker's own size field was damaged the same way. Deliberately loose
- * — the EXACT check is `size === marker.size` (isSeededBinaryTrusted).
+ * is ~230–270 MB; darwin-arm64 0.3.299 is 247,931,696 bytes). Guards against
+ * a truncated download / corrupt marker even if the marker's own size field
+ * was damaged the same way. Deliberately loose — the EXACT check is
+ * `size === marker.size` (isSeededBinaryTrusted).
  */
 export const SDK_BINARY_MIN_BYTES = 150 * 1024 * 1024;
