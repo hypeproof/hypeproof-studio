@@ -5,7 +5,8 @@
 Scope: confirm existing iteration limits and extend CR-T09 with a responsive
 dental-homepage fixture. No runtime limit, cohort grant, preview sandbox, or
 production setting changes. Intent: INT-CR-02 (preserve the shared HTML runtime)
-and INT-CR-04 (observations remain separate from interpretations);
+INT-CR-03 (verify the artifact rather than infer success from code), and INT-CR-04
+(observations remain separate from interpretations);
 requirement CR-09, validation CR-T09; owner remains
 jayleekr. This is synthetic browser evidence, not a learning-outcome claim.
 
@@ -14,7 +15,7 @@ jayleekr. This is synthetic browser evidence, not a learning-outcome claim.
 | Execution path | Bound | Actual wiring |
 |---|---|---|
 | Main Agent SDK coach | Adult workshop tiers `website` / `search-webapp`: 60; minors and unknown tiers: 20 | `sdkCoachHelpers.maxTurnsFor` → `profileToAgentOptions.maxTurns` → `buildSdkQueryOptions.maxTurns` → `sdkCoach.runSdkCoach` query. Existing `sdk-coach-helpers` and `sdk-gateway` smokes exercise the profile/options contract without a model call. |
-| SDK reviewer/researcher definitions, when granted | 10 per child agent | `SDK_SUBAGENT_DEFS` in `sdkCoachHelpers.ts`; separate from the main coach bound. |
+| SDK reviewer/researcher definitions, when granted | 10 per child agent | `SUBAGENT_DEFINITIONS` in `sdkCoachHelpers.ts`; separate from the main coach bound. |
 | Proxy browser-control path | Profile `browser_control.max_iterations`, default 8 | `ChatPanelProvider.runBrowserLoop`: zero-based `iter`, `proxyChat` first, then stop before executing tools when `iter >= maxIter`. With the default and continuous tool requests, at most 8 tool-execution batches and 9 model requests. One batch may contain multiple tool calls. |
 | Plain proxy | One client-side request | `runProxyRuntime` chooses the browser loop only when `profile.browser_control.enabled` is truthy; otherwise `runProxy` calls `proxyChat` once. |
 
@@ -39,7 +40,7 @@ CDP inspect-mode mouse clicks through `waitForPick`, builds the production
 
 Observed on Linux, 2026-10-14: both viewports **PASS**, mapping the selected photo
 placeholder to `index.html:18`. Local context-building times were 59 ms and 60 ms
-in this two-sample run, not a latency benchmark. The bounded snippet was 60
+in the first two-sample run, not a latency benchmark. The bounded snippet was 60
 characters; text-only context was 769 UTF-8 bytes. Element crops were 2,670 / 2,557
 bytes. The runner measures each new execution independently.
 
