@@ -64,7 +64,7 @@ One overlapping-work-free platform pass covers:
 Do not rerun the local persona matrix through paid Windows conversations.
 Prefer deterministic integration fixtures; use the minimum live coach turns
 needed to prove the actual provider/tool path. Preserve settled and held budget;
-the previously approved aggregate test ceiling remains USD 2. Track local
+the aggregate test ceiling is USD 3 after TJ authorized an increase on 2026-10-14. Track local
 synthetic coverage, live provider cost, Google execution and actual mail
 separately. Additional mail still needs exact recipient/content approval.
 
@@ -161,14 +161,14 @@ was sent. A separate exact-message self-test approval is pending.
 | EA-01 conversation and layout | Actual local and Windows focused questions, saved skill, separated chat/graph; short-viewport transitions and errors covered locally. No claim of a human usability study. |
 | EA-02 reusable Google connection | Windows browser OAuth and protected-store reuse after full exit/update; scopes, callback state and isolation also have local negative controls. |
 | EA-03 private questions and immutable recipe | Local private-routing/transcript tests; actual own-Sheet read and shared-recipe preview. Editor/sidebar graph-placement defect fixed. |
-| EA-04 exact send approval | Local stale/edit/expiry/cancel controls pass. Actual Apps Script send and receipt are NOT RUN pending explicit approval. |
+| EA-04 exact send approval | Local stale/edit/expiry/cancel controls pass. Actual exact-message approval, Apps Script send and matching inbox receipt passed on Windows at 13:06 KST; see final acceptance below. |
 | EA-05 no automatic duplicate send | Local durable ledger, cross-window serialization and unknown-result controls; no deliberate real duplicate sends. |
 | EA-06 cohort store | Actual conversation publication and second-participant confirmed installation; isolation, unsafe payload and unpublish controls are local/Service tests. |
 | EA-07 own-account reuse | Different Studio participant, different Google identity from author, own Sheet and separate script/deployment; actual preview succeeds. |
 | EA-08 trial and costs | Dedicated 30-day grants and server budget controls; legacy trial preserved by tests. Live accounting above; no monthly billing change. |
-| EA-09 Windows and two learners | Actual private installation, update, second-participant install/run and restart pass. End-to-end Apps Script email receipt still pending; no general-release completion attestation. |
+| EA-09 Windows and two learners | Actual private installation, update, second-participant install/run and restart pass. End-to-end Apps Script email receipt passed on the second account; no general-release completion attestation. |
 | EA-10 observed quest graph | Root native local and Windows graph observations; shared-install success now advances only goal/skill, invalidating old runtime proofs. Local failure/cancel/stale controls. |
-| EA-11 Apps Script execution | Actual generated-source upload, owner-only immutable deployment and Google preview; send remains pending. Standard-project setup constraint remains visible. |
+| EA-11 Apps Script execution | Actual generated-source upload, owner-only immutable deployment and Google preview; one approved send and inbox receipt passed. Standard-project setup constraint remains visible. |
 | Instructor addition | Root local native seat plus labelled synthetic class; learner stages match instructor progress, including stale and disconnected states. Remote instructor deployment not claimed. |
 | Resizable conversation | Native local and Windows resize/reopen observed; editor chat remains beside graph. |
 
@@ -177,7 +177,51 @@ Local evidence is retained in the sponsor's private acceptance bundle under
 verification JSON and masked final-screen/hash images. The repository contains
 no test credentials, private project IDs, account addresses or recipient rows.
 
-Remaining external actions are the explicit Apps Script send approval/receipt,
-commercial Google onboarding policy, and separately authorized merge/general
-rollout. The implementation packet remains in review; no full-release PASS is
-recorded while the actual send observation is missing.
+The scoped local/Windows MVP acceptance is complete. Commercial Google onboarding
+policy and separately authorized merge/general rollout remain outside this test
+completion. The implementation packet remains in review.
+
+
+## Final Windows send acceptance — 2026-10-14
+
+This observation supersedes the earlier approval-wait and failed-send state;
+historical execution and budget records remain intact. TJ explicitly approved
+one exact self-addressed test message and a test-budget increase. No further
+message is authorized.
+
+- Installed extension `463e8529`, shell `682dfd37`, Service `ffef7bc`;
+  all seven installed extension SHA-256 values matched the published manifest.
+- The bundled SDK had issued a paid session-title request concurrently with the
+  main request. Studio now disables that optional title call. Service awaits
+  durable settlement/lease release before forwarding terminal protocol output.
+  A zero-cost actual-SDK probe changed peak concurrency from two to one; the
+  subsequent real Windows conversation/tool flow completed without 429.
+- Generated-script approval hashing now uses ordered value tuples rather than
+  object-key order. The earlier version-1 send execution failed at 11:25:33 KST.
+  The same original script's read-only remote ledger confirmed `not_attempted`;
+  this was required before a new exact-message approval. Unknown delivery and
+  different/missing original-project provenance remain blocked, not erased.
+- Version 2 `hpsGetSendStatus` completed at 12:45:36 KST (0.526 s), preview
+  completed at 12:52:55 (1.144 s), and status was rechecked at 13:01:41 (0.784 s).
+  The user approved the identical recipient and content through the private card.
+- Version 2 `hpsSendApproved` completed at **13:06:22 KST in 1.94 s**. Studio
+  reported **sent 1, unknown 0**. Bot Gmail showed exactly one matching message
+  in Inbox; the approved subject and all seven body lines matched. Root checked
+  the self-recipient against the protected local account value. No connector
+  send or additional retry was used.
+- Root local verification: automation tests 68/68, TypeScript check, extension
+  build, actual-SDK concurrency probe and updater fixtures passed. These are
+  separate from the real Windows/Google/Gmail observations above.
+
+The overall ceiling is USD 3; the active contract cap is USD 1 and conservative
+combined maximum exposure is USD 2.3155. Settled token-accounting cost is
+USD 0.568366; unresolved historical/current reservations total USD 1.347240 and
+are preserved. The current contract settled USD 0.144626. These values are not a
+provider invoice; the existing HypeProof provider account remains the payer.
+
+Private local evidence: `2026-10-14_429해결_메일발송수신.json` and masked
+`2026-10-14_본인메일_수신확인.png` in the sponsor's acceptance bundle. Raw account,
+recipient, project and credential values remain outside Git. Temporary project
+IAM roles were already revoked and were not regranted. Commercial Google
+verification and standard-project onboarding for 20 unrelated learners remain
+unverified; no merge or general production release is asserted.

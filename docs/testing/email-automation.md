@@ -128,6 +128,24 @@ API success at 09:00:43 KST (1.267 s) and again after restart and temporary IAM
 revocation at 09:11:37 KST (2.827 s). The previously missing OAuth tester and
 project-role access were explicitly authorized; temporary project roles were
 removed and the IAM list read back. Saved credentials and deployment were reused.
-No additional mail was sent: real Apps Script send/receipt remains NOT RUN pending
-exact-message approval. See the [current acceptance audit](../plan/automation-local-acceptance.md)
+At that earlier checkpoint, no additional mail was sent. The later explicitly
+approved one-message send and receipt passed; see the final acceptance below. See the [current acceptance audit](../plan/automation-local-acceptance.md)
 for local personas, instructor verification, Windows scope and cost accounting.
+
+
+## Final real Windows send and receipt (2026-10-14)
+
+Extension `463e8529` on shell `682dfd37`, Service `ffef7bc`: seven installed file
+hashes matched. Root verified the private recipient/content approval, Google
+version-2 `hpsSendApproved` completion at 13:06:22 KST (1.94 s), Studio sent=1 /
+unknown=0, and one matching Inbox message with the exact approved subject/body.
+Read-only original-script ledger checks established no send attempt from the
+earlier failed execution before a new explicit approval. No further send is
+permitted by this test approval. This supersedes the historical NOT RUN send
+status, without treating local controls as actual email-delivery evidence.
+
+Root reran 68 automation tests, TypeScript/build, the actual bundled SDK
+concurrency probe and updater fixtures. The final live flow had no 429. The
+[acceptance audit](../plan/automation-local-acceptance.md#final-windows-send-acceptance--2026-10-14)
+records the separate settled/held costs, USD 3 ceiling and commercial-onboarding
+boundary. PR review/merge and general rollout remain separate.
