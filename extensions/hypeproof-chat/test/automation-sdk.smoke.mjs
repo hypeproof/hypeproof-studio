@@ -26,9 +26,9 @@ test('email capability is independent of browser; minors and ungranted names fai
   assert.equal(evaluateSdkToolUse({toolName,input:{},permittedTools:names}).decision,'allow');
  }
 });
-async function turn({host,profile={automations:capability,game:{template_tier:'website'}},browserHost,withFactory=true,onDiagnostic}){
+async function turn({host,profile={automations:capability,game:{template_tier:'website'}},browserHost,withFactory=true,onDiagnostic,systemPrompt=''}){
  let options;const sdk={query:args=>{options=args.options;return(async function*(){yield{type:'result',subtype:'success',is_error:false};})();},...(withFactory?{tool:(name,description,schema,handler)=>({name,handler}),createSdkMcpServer:server=>server}:{})};
- await runSdkCoach({sdk,zod:{string:()=>({})},binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'synthetic',model:'synthetic',profile,systemPrompt:'',history:[],userText:'synthetic',signal:new AbortController().signal,stallTimeoutMs:0,onDelta:()=>{},requestApproval:async()=>false,emailAutomationHost:host,browserHost,onDiagnostic});return options;
+ await runSdkCoach({sdk,zod:{string:()=>({})},binaryResolution:{available:true,reasons:[]},gatewayUrl:'http://127.0.0.1:1/v1',token:'synthetic',model:'synthetic',profile,systemPrompt,history:[],userText:'synthetic',signal:new AbortController().signal,stallTimeoutMs:0,onDelta:()=>{},requestApproval:async()=>false,emailAutomationHost:host,browserHost,onDiagnostic});return options;
 }
 test('SDK diagnostics distinguish prepared query from first event without emitting runtime data',async()=>{
  const phases=[];
@@ -171,4 +171,31 @@ test('Apps Script sessions cannot bypass Google execution and review through leg
   assert.equal((await tools.find(t=>t.name===guidance.nextTool).handler(guidance.arguments)).isError,true);
  }
  assert.equal(legacyCalls,0);assert.deepEqual(scriptModes,['preview','send']);
+});
+
+
+test('installed shared-host guidance overrides stale lessons only with registered profile and host grants', async () => {
+ const profile={automations:{...capability,appsScript:true},game:{template_tier:'website'}};
+ const systemPrompt='Synthetic older lesson: upload and deploy personal scripts.';
+ const marker='Installed Studio execution contract: shared Google runner.';
+ const host={isAllowed:()=>true,isAppsScriptAllowed:()=>true,isSharedRunner:()=>true,runtime:{},confirmSend:async()=>false};
+ const shared=await turn({host,profile,systemPrompt});
+ assert(shared.systemPrompt.startsWith(systemPrompt),'preserve the supplied course and its constraints');
+ assert(shared.systemPrompt.includes(marker));
+ assert.match(shared.systemPrompt,/supersedes earlier personal Apps Script upload\/deployment instructions/);
+ assert.match(shared.systemPrompt,/nextAction:wait_for_user/);
+ assert.match(shared.systemPrompt,/exact recipient\/content approval/);
+ assert.equal((await shared.canUseTool('mcp__hypeproof_email__apps_script_run',{}, {signal:new AbortController().signal})).behavior,'allow');
+ for (const options of [
+   {host:{...host,isSharedRunner:undefined},profile},
+   {host:{...host,isSharedRunner:()=>false},profile},
+   {host:{...host,isAppsScriptAllowed:()=>false},profile},
+   {host:{...host,isAllowed:()=>false},profile},
+   {host,profile:{...profile,automations:capability}},
+   {host,profile:{...profile,game:{template_tier:'kids-rich'}}},
+   {host,profile,withFactory:false},
+ ]) {
+   const unchanged=await turn({...options,systemPrompt});
+   assert.equal(unchanged.systemPrompt,systemPrompt,'unavailable or older hosts retain their existing instruction contract');
+ }
 });

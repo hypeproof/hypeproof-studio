@@ -96,7 +96,10 @@ function Get-HpsQuestPins {
 
 # Each column is one complete revision; the last column is the update target.
 function Get-HpsQuestRevisionCount($Pins) {
-    if ($Pins.files.Count -ne 7) { throw 'Invalid extension revision matrix.' }
+    $required = @('dist/extension.js','media/chat.svg','media/hypeproof-theme.json','package.json','webview-ui/dist/assets/index.css','webview-ui/dist/assets/index.js','webview-ui/dist/index.html')
+    $sharedResource = 'resources/google-shared-runner.json'
+    if ($Pins.files.Count -notin @(7,8) -or @($required | Where-Object { -not $Pins.files.ContainsKey($_) }).Count -or
+        @($Pins.files.Keys | Where-Object { $_ -cnotin $required -and $_ -cne $sharedResource }).Count) { throw 'Invalid extension revision matrix.' }
     $count = $null
     foreach ($name in $Pins.files.Keys) {
         $revisions = $Pins.files[$name]
@@ -104,9 +107,12 @@ function Get-HpsQuestRevisionCount($Pins) {
         if ($null -eq $count) { $count = $revisions.Count }
         if ($revisions.Count -ne $count) { throw 'Incomplete extension revision matrix.' }
         foreach ($hash in $revisions) {
+            if ($name -ceq $sharedResource -and $hash -ceq 'ABSENT') { continue }
             if ($hash -isnot [string] -or $hash -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid extension revision hash.' }
         }
     }
+    # Legacy revisions may have no runner resource, but a shared-runner target must include it.
+    if ($Pins.files.ContainsKey($sharedResource) -and $Pins.files[$sharedResource][$count - 1] -ceq 'ABSENT') { throw 'Shared runner target resource is missing.' }
     return $count
 }
 
@@ -114,6 +120,17 @@ function Assert-HpsQuestFile([string]$Path) {
     Assert-HpsEmailDirectory (Split-Path $Path -Parent)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf) -or
         ((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unexpected extension file path.' }
+}
+
+function Get-HpsQuestInstalledHash([string]$Path, [bool]$AllowAbsent) {
+    Assert-HpsEmailDirectory (Split-Path $Path -Parent)
+    try { $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop }
+    catch [System.Management.Automation.ItemNotFoundException] {
+        if ($AllowAbsent) { return 'ABSENT' }
+        throw 'Unexpected extension file path.'
+    }
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unexpected extension file path.' }
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
 function Expand-HpsQuestUpdate([string]$ZipPath, [string]$Destination) {
@@ -127,11 +144,12 @@ function Expand-HpsQuestUpdate([string]$ZipPath, [string]$Destination) {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $zip = [IO.Compression.ZipFile]::OpenRead($ZipPath)
     try {
-        if ($zip.Entries.Count -ne 7) { throw 'Extension archive must contain exactly seven files.' }
+        if ($zip.Entries.Count -ne $pins.files.Count) { throw 'Extension archive must contain exactly the pinned files.' }
         $seen = @{}
         foreach ($entry in $zip.Entries) {
             if ($entry.FullName -cnotin @($pins.files.Keys) -or $seen.ContainsKey($entry.FullName) -or
                 $entry.Length -le 0 -or $entry.Length -gt 20971520 -or
+                ($entry.FullName -ceq 'resources/google-shared-runner.json' -and $entry.Length -gt 4096) -or
                 (($entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000) { throw 'Unexpected extension archive entry.' }
             $seen[$entry.FullName] = $true
         }
@@ -162,9 +180,8 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
     foreach ($name in $names) {
         $installed = Join-Path $extension $name
         $incoming = Join-Path $Extracted $name
-        Assert-HpsQuestFile $installed
+        $current = Get-HpsQuestInstalledHash $installed ($name -ceq 'resources/google-shared-runner.json')
         Assert-HpsQuestFile $incoming
-        $current = (Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash
         if ((Get-FileHash -LiteralPath $incoming -Algorithm SHA256).Hash -ine $pins.files[$name][$targetRevision]) { throw 'Extension file integrity check failed.' }
         $oldHashes[$name] = $current
         for ($i = 0; $i -lt $revisionCount; $i++) { if ($current -ieq $pins.files[$name][$i]) { $matches[$i]++ } }
@@ -175,9 +192,10 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
     if ($package.version -cne '0.1.5') { throw 'Unexpected packaged extension version.' }
     $backup = Join-Path $Destination ('.quest-backup-' + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $backup | Out-Null
-    # Back up all seven replaced files before changing any installed file.
+    # Back up every existing allowlisted file before changing any installed file.
     # OAuth resources, SDK and user data are outside this exact allowlist.
     foreach ($name in $names) {
+        if ($oldHashes[$name] -ceq 'ABSENT') { continue }
         $copy = Join-Path $backup $name
         New-Item -ItemType Directory -Path (Split-Path $copy -Parent) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $extension $name) -Destination $copy
@@ -186,6 +204,9 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
     try {
         Assert-HpsEmailNotRunning $Destination
         foreach ($name in $names) {
+            $parent = Split-Path (Join-Path $extension $name) -Parent
+            Assert-HpsEmailDirectory $parent
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $Extracted $name) -Destination (Join-Path $extension $name) -Force
             if ((Get-FileHash -LiteralPath (Join-Path $extension $name) -Algorithm SHA256).Hash -ine $pins.files[$name][$targetRevision]) { throw 'Updated extension integrity failure.' }
         }
@@ -195,6 +216,12 @@ function Set-HpsQuestExtension([string]$Destination, [string]$Extracted, [string
         $rollbackFailed = $false
         foreach ($name in $names) {
             try {
+                if ($oldHashes[$name] -ceq 'ABSENT') {
+                    $added = Join-Path $extension $name
+                    if ((Get-HpsQuestInstalledHash $added $true) -cne 'ABSENT') { Remove-Item -LiteralPath $added -Force }
+                    if ((Get-HpsQuestInstalledHash $added $true) -cne 'ABSENT') { throw 'Rollback presence mismatch.' }
+                    continue
+                }
                 Copy-Item -LiteralPath (Join-Path $backup $name) -Destination (Join-Path $extension $name) -Force
                 if ((Get-FileHash -LiteralPath (Join-Path $extension $name) -Algorithm SHA256).Hash -ine $oldHashes[$name]) { throw 'Rollback hash mismatch.' }
             } catch { $rollbackFailed = $true }

@@ -27,7 +27,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $script:fixturePins = @{sourceCommit='synthetic';sha256=('1'*64);bytes=1;files=@{}}
 function Get-HpsQuestPins { return $script:fixturePins }
-$names = @($published.files.Keys | Sort-Object)
+$names = @(@($published.files.Keys) + @('resources/google-shared-runner.json') | Select-Object -Unique | Sort-Object)
 $base = Join-Path $tmp 'base'; $hotfix = Join-Path $tmp 'hotfix'; $incoming = Join-Path $tmp 'incoming'
 # Real BOM-less UTF-8 package contains Korean descriptions; PS 5.1 defaults to ANSI.
 $unicodePackage = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../extensions/hypeproof-chat/package.json'), [Text.Encoding]::UTF8)
@@ -35,6 +35,11 @@ foreach ($name in $names) {
     $old = if ($name -ceq 'package.json') { '{"version":"0.1.5","fixture":"base"}' } else { 'synthetic base ' + $name }
     $ui = if ($name -like 'webview-ui/dist/assets/*') { 'synthetic ui ' + $name } else { $old }
     $next = if ($name -ceq 'package.json') { $unicodePackage } else { 'synthetic next ' + $name }
+    if ($name -ceq 'resources/google-shared-runner.json') {
+        Write-Fixture (Join-Path $incoming $name) '{"protocol":"hps-email-v1","scriptId":"synthetic_script","deploymentId":"synthetic_deployment","versionNumber":1,"releaseId":"synthetic-release"}'
+        $script:fixturePins.files[$name] = @('ABSENT','ABSENT',(Get-FileHash (Join-Path $incoming $name)).Hash)
+        continue
+    }
     Write-Fixture (Join-Path $base $name) $old
     Write-Fixture (Join-Path $hotfix $name) $ui
     Write-Fixture (Join-Path $incoming $name) $next
@@ -61,7 +66,7 @@ function New-Archive([string[]]$Entries, [switch]$Symlink) {
 function New-Installation([string]$Name, [string]$From) {
     $dest = Join-Path $tmp $Name
     $extension = Join-Path $dest 'resources/app/extensions/hypeproof-chat'
-    foreach ($entry in $names) { Write-Fixture (Join-Path $extension $entry) ([IO.File]::ReadAllText((Join-Path $From $entry))) }
+    foreach ($entry in $names) { if (Test-Path -LiteralPath (Join-Path $From $entry)) { Write-Fixture (Join-Path $extension $entry) ([IO.File]::ReadAllText((Join-Path $From $entry))) } }
     Write-Fixture (Join-Path $dest 'HypeProof Studio.exe') 'synthetic not executable'
     Write-Fixture (Join-Path $dest 'resources/app/product.json') '{"commit":"682dfd37c3511f3fa159f1516aac230dcda2467c","version":"0.1.5"}'
     $manifest = @{schema=1;build='682dfd37';artifacts=@(@{name='app.zip';path='/install/files/app.zip';bytes=196839798;sha256='378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1'},@{name='sdk.zip';path='/install/files/sdk.zip';bytes=80241659;sha256='f099b98ef4b2d048973d189928186ffc1835ef2de099aa9e62ee045b31889d05'})}
@@ -102,17 +107,17 @@ try {
     $bad = New-Archive $names -Symlink
     Refuses { Expand-HpsQuestUpdate $bad (Join-Path $tmp 'symlink-archive') } 'archive'
     $script:fixturePins.sha256 = $validHash; $script:fixturePins.bytes = $validBytes
-    Write-Host 'PASS: pinned archive, exact seven-file allowlist, traversal, duplicate, case, extra-file and symlink refusal'
+    Write-Host 'PASS: pinned archive, exact eight-file allowlist with required shared runner, traversal, duplicate, case, extra-file and symlink refusal'
 
     $dest = New-Installation 'installed' $base
     $extension = Join-Path $dest 'resources/app/extensions/hypeproof-chat'
     $script:failOnce = $true
     function Copy-Item { param($LiteralPath, $Destination, [switch]$Force)
-        if ($script:failOnce -and $LiteralPath -eq (Join-Path $extracted 'package.json')) { $script:failOnce = $false; throw 'Synthetic partial disk failure' }
+        if ($script:failOnce -and $LiteralPath -eq (Join-Path $extracted 'webview-ui/dist/assets/index.css')) { $script:failOnce = $false; throw 'Synthetic partial disk failure' }
         Microsoft.PowerShell.Management\Copy-Item -LiteralPath $LiteralPath -Destination $Destination -Force:$Force
     }
     Refuses { Set-HpsQuestExtension $dest $extracted $validHash } 'all original extension files were restored'
-    foreach ($name in $names) { if ((Get-FileHash (Join-Path $extension $name)).Hash -ine $script:fixturePins.files[$name][0]) { throw 'Rollback did not restore complete base.' } }
+    foreach ($name in $names) { if ((Get-HpsQuestInstalledHash (Join-Path $extension $name) ($name -ceq 'resources/google-shared-runner.json')) -ine $script:fixturePins.files[$name][0]) { throw 'Rollback did not restore complete base.' } }
     Remove-Item Function:Copy-Item
     Assert-Preserved $dest
     Set-HpsQuestExtension $dest $extracted $validHash
@@ -126,6 +131,11 @@ try {
     Assert-Preserved $uiDest
     Write-Host 'PASS: complete backup, partial-failure verified rollback, base/hotfix update, idempotence and OAuth/SDK/data preservation'
 
+    $unknownConfig = New-Installation 'unknown-config' $base
+    Write-Fixture (Join-Path $unknownConfig 'resources/app/extensions/hypeproof-chat/resources/google-shared-runner.json') 'unrecognized local config'
+    Refuses { Set-HpsQuestExtension $unknownConfig $extracted $validHash } 'unknown or partial changes'
+    if (@(Get-ChildItem $unknownConfig -Directory -Force | Where-Object Name -like '.quest-backup-*').Count) { throw 'Unknown config was changed.' }
+    Assert-Preserved $unknownConfig
     $unknown = New-Installation 'unknown' $base
     Write-Fixture (Join-Path $unknown 'resources/app/extensions/hypeproof-chat/dist/extension.js') 'other local work'
     Refuses { Set-HpsQuestExtension $unknown $extracted $validHash } 'unknown or partial changes'
@@ -203,6 +213,11 @@ try {
         }
         Assert-Preserved $earlier
     }
+    $resourceColumn = $script:fixturePins.files['resources/google-shared-runner.json']
+    try {
+        $script:fixturePins.files['resources/google-shared-runner.json'] = @('ABSENT','ABSENT','ABSENT','ABSENT')
+        Refuses { Get-HpsQuestRevisionCount $script:fixturePins } 'target resource is missing'
+    } finally { $script:fixturePins.files['resources/google-shared-runner.json'] = $resourceColumn }
     $savedColumn = $script:fixturePins.files['dist/extension.js']
     try {
         $script:fixturePins.files['dist/extension.js'] = @($savedColumn[0..2])

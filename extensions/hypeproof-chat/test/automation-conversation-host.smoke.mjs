@@ -111,15 +111,17 @@ try {
   assert.ok(installed.error,'stale download must be rejected');assert.equal(question,null,'old cohort recipe must never be shown in the new activity');
   // A new host restores only locally evidenced intent+skill, never Google work.
   appsScriptEnabled=true;
+  await mkdir(join(storage,'resources'),{mode:0o755});
+  await writeFile(join(storage,'resources','google-shared-runner.json'),JSON.stringify({scriptId:'synthetic-shared-script',deploymentId:'synthetic-shared-deployment',versionNumber:1,protocol:'hps-email-v1',releaseId:'synthetic-v1'}),{mode:0o644});
   const savedRecipeKey='hps.automation.recipe.'+automationNamespace(current.service,current.serverId);
   globals.set(savedRecipeKey,recipe);
   const reopen=async()=>{const renders=[];const reopened=module.exports.registerAutomationHost(ctx,{}, {setLabels(){},show(){},showAutomation:async html=>renders.push(html)});assert.ok(await reopened.getMcpHost());return renders.at(-1);};
-  let restored=await reopen();assert.match(restored,/2 \/ 8 완료/);
+  let restored=await reopen();assert.match(restored,/2 \/ 6 완료/);
   assert.match(restored,/class="node succeeded" data-node-id="goal"/);assert.match(restored,/class="node succeeded" data-node-id="skill"/);
   assert.doesNotMatch(restored,/class="node succeeded" data-node-id="(?:connect|sheet|prepare|upload|deploy|preview)"/);
   globals.set(savedRecipeKey,{...recipe,bodyTemplate:'private@example.invalid'});
-  restored=await reopen();assert.match(restored,/0 \/ 8 완료/,'invalid/private recipe cannot hydrate progress');
-  globals.delete(savedRecipeKey);restored=await reopen();assert.match(restored,/0 \/ 8 완료/,'another or missing activity recipe remains uncompleted');
+  restored=await reopen();assert.match(restored,/0 \/ 6 완료/,'invalid/private recipe cannot hydrate progress');
+  globals.delete(savedRecipeKey);restored=await reopen();assert.match(restored,/0 \/ 6 완료/,'another or missing activity recipe remains uncompleted');
   vscode.env.appName='HypeProof Studio';commands.delete('hypeproof-chat.configureGoogleDesktopClient');module.exports.registerAutomationHost(ctx,{});assert.equal(commands.has('hypeproof-chat.configureGoogleDesktopClient'),false);assert.equal(devContext,false);
   console.log('PASS conversation host: intent-first entry, private answers, one-use approvals, auto-save, independent publish, locked refresh, Stop races, stale install privacy');
 } finally { await rm(storage,{recursive:true,force:true}); }

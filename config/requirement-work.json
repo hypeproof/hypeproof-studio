@@ -3919,7 +3919,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "DEC-023 shared-runner architecture passed real two-account no-IAM/no-script-file-access isolation: seven live no-mail calls and a post-test lock check, source68c37857. Integrate execution-only pinned runner into Studio, preserve per-account exact approvals and durable send history across versions, then revalidate local/Windows UI. Personal export deferred. Production OAuth and twenty real pre-class logins remain open. No new mail is authorized.",
+      "next_action": "DEC-023 shared-runner architecture passed real two-account no-IAM/no-script-file-access isolation: seven live no-mail calls and a post-test lock check, source68c37857. Execution-only pinned shared runner and per-account approval/ledger integration passed native local conversation-to-skill-to-real-preview with graph6/6, no mail. Package the exact accepted revision and verify Windows before claiming device acceptance. Personal export deferred. Production OAuth and twenty real pre-class logins remain open. No new mail is authorized.",
       "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
       "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
       "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",

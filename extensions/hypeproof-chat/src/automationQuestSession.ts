@@ -1,8 +1,31 @@
-import { createQuest, transitionQuest, renderQuestHtml, type AutomationQuestSnapshot } from './automationQuest';
+import { createQuest, transitionQuest, renderQuestHtml, type AutomationQuestSnapshot, validateQuestPlan } from './automationQuest';
 import type { GoogleAutomationMcpHost } from './googleAutomationMcp';
 
 const steps = ['goal', 'skill', 'connect', 'sheet', 'prepare', 'upload', 'deploy', 'preview', 'send', 'publish'] as const;
 type Step = typeof steps[number];
+
+/** Older coaches can describe personal-script stages. Shared execution has no
+ * learner upload or deployment, so remove those stages instead of inventing
+ * evidence for them. Validate before normalizing to reject unsafe plan content. */
+function sharedRunnerPlan(input: unknown) {
+  const plan = validateQuestPlan(input);
+  const legacy = new Set(['upload', 'deploy']);
+  const byId = new Map(plan.nodes.map(node => [node.id, node]));
+  const prerequisites = (id: string): string[] => legacy.has(id)
+    ? byId.get(id)!.dependsOn.flatMap(prerequisites) : [id];
+  const nodes = plan.nodes.filter(node => !legacy.has(node.id)).map(node => ({
+    ...node,
+    ...(node.id === 'prepare' ? { label: 'Google 실행 준비', description: '내 계정으로 공통 실행기를 사용할 준비를 확인해요.' } : {}),
+    dependsOn: [...new Set(node.dependsOn.flatMap(prerequisites))],
+  }));
+  for (const node of nodes) {
+    if (node.id === 'prepare' && byId.has('connect')) node.dependsOn = [...new Set([...node.dependsOn, 'connect'])];
+    if (node.id === 'preview') node.dependsOn = ['prepare', 'sheet'].filter(id => byId.has(id));
+    // Sharing a recipe never requires sending an email.
+    if (node.id === 'publish' && byId.has('preview')) node.dependsOn = ['preview'];
+  }
+  return { title: plan.title, nodes };
+}
 /** Display progress comes only from host tool results, never from the proposed plan. */
 export function createAutomationQuestSession(show: (html: string) => Promise<void>, observed?: () => void) {
   let state: AutomationQuestSnapshot | undefined;
@@ -81,7 +104,7 @@ export function createAutomationQuestSession(show: (html: string) => Promise<voi
       await draw();
       return value;
     },
-    async track<T>(step: Step, work: () => Promise<T>, succeeded: (value: T) => boolean = () => true, establishes: readonly Step[] = []): Promise<T> {
+    async track<T>(step: Step, work: () => Promise<T>, succeeded: (value: T) => boolean = () => true, establishes: readonly Step[] | ((value: T) => readonly Step[]) = []): Promise<T> {
       const epoch = generation;
       const node = state?.nodes.find(n => n.id === step);
       if (state && node && node.status !== 'succeeded' && node.dependsOn.every(id => state!.nodes.find(n => n.id === id)?.status === 'succeeded')) {
@@ -90,7 +113,7 @@ export function createAutomationQuestSession(show: (html: string) => Promise<voi
       try {
         const value = await work();
         if (epoch !== generation) return value;
-        if (succeeded(value)) { completed.add(step); establishes.forEach(id => completed.add(id)); reconcile(); }
+        if (succeeded(value)) { completed.add(step); (typeof establishes === 'function' ? establishes(value) : establishes).forEach(id => completed.add(id)); reconcile(); }
         else recordUnsuccessful(step, 'blocked');
         await draw(); return value;
       } catch (error) {
@@ -108,8 +131,13 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
   const ok = (value: unknown) => !!value && typeof value === 'object' && !(value as { cancelled?: boolean }).cancelled;
   const flag = (key: string) => (value: unknown) => ok(value) && (value as Record<string, unknown>)[key] === true;
   return { ...host,
-    workflowPlan: plan => quest.plan(plan),
-    askUser: host.askUser ? args => quest.track('goal', () => host.askUser!(args), ok) : undefined,
+    workflowPlan: plan => quest.plan(host.isSharedRunner?.() ? sharedRunnerPlan(plan) : plan),
+    askUser: host.askUser ? args => {
+      // A new requirement question reopens the saved recipe's design evidence.
+      // Keep the actual recipe; do not show its previous completion as the new task.
+      quest.invalidate(['goal']);
+      return quest.track('goal', () => host.askUser!(args), ok);
+    } : undefined,
     // A validated recipe is host evidence for a concrete goal. Apply related
     // evidence inside track's generation guard so a late result cannot mark a new plan.
     saveSkill: host.saveSkill ? recipe => { quest.invalidate(['skill','prepare','upload','deploy','preview','send','publish']); return quest.track('skill', () => host.saveSkill!(recipe), flag('saved'), ['goal']); } : undefined,
@@ -123,10 +151,13 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
     appsScriptPrepare: host.appsScriptPrepare ? () => quest.track('prepare', () => host.appsScriptPrepare!(), flag('prepared'), ['goal', 'skill']) : undefined,
     appsScriptUpload: host.appsScriptUpload ? () => quest.track('upload', () => host.appsScriptUpload!(), flag('uploaded')) : undefined,
     appsScriptDeploy: host.appsScriptDeploy ? () => quest.track('deploy', () => host.appsScriptDeploy!(), flag('deployed')) : undefined,
-    // A successful preview verifies the recipe, account, sheet, immutable code digest
-    // and deployment on Google. Existing receipts can satisfy these stages after
-    // restart without creating/uploading/deploying a duplicate project.
+    // A shared preview proves caller-bound execution, never a learner upload or
+    // deployment. Retain those receipts only for the legacy personal runtime.
     appsScriptRun: host.appsScriptRun ? mode => quest.track(mode, () => host.appsScriptRun!(mode), flag(mode === 'preview' ? 'previewed' : 'sent'),
-      mode === 'preview' ? ['goal', 'skill', 'connect', 'sheet', 'prepare', 'upload', 'deploy'] : []) : undefined,
+      value => mode === 'preview'
+        ? (host.isSharedRunner?.() || (value as { sharedRunner?: boolean })?.sharedRunner
+          ? ['goal', 'skill', 'connect', 'sheet', 'prepare']
+          : ['goal', 'skill', 'connect', 'sheet', 'prepare', 'upload', 'deploy'])
+        : []) : undefined,
   };
 }

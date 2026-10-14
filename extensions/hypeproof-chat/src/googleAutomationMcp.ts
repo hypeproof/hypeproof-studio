@@ -25,6 +25,7 @@ export interface GoogleAutomationMcpHost {
   runtime: GoogleAutomationRuntime;
   workflowPlan?(plan: unknown): Promise<unknown>;
   isAppsScriptAllowed?(): boolean;
+  isSharedRunner?(): boolean;
   appsScriptPrepare?(): Promise<unknown>;
   appsScriptUpload?(): Promise<unknown>;
   appsScriptSetup?(): Promise<unknown>;
@@ -72,16 +73,16 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     return work();
   });
   return factory.createSdkMcpServer({ name: GOOGLE_AUTOMATION_MCP_SERVER, version: '1.0.0', tools: [
-    factory.tool('workflow_plan', '업무의 실행 흐름을 그래픽 영역에 표시한다. plan은 title,nodes 배열 JSON이고 각 node는 id,label,dependsOn으로 구성한다. ID는 goal,skill,connect,sheet,prepare,upload,deploy,preview,send,publish만 사용한다. 완료 상태는 host가 실제 결과로 표시하며 AI는 설정하지 않는다.', { plan: z.string() }, async args => run(async () => {
+    factory.tool('workflow_plan', '업무의 실행 흐름을 그래픽 영역에 표시한다. plan은 title,nodes 배열 JSON이고 각 node는 id,label,dependsOn으로 구성한다. 기본 ID는 goal,skill,connect,sheet,prepare,preview,send,publish다. prepare는 skill과 connect에, preview는 prepare와 sheet에 의존한다. send와 publish는 preview 뒤의 독립 선택 단계다. upload와 deploy는 이전 흐름 호환용이며 새 계획에 넣지 않는다. 완료 상태는 host가 실제 결과로 표시하며 AI는 설정하지 않는다.', { plan: z.string() }, async args => run(async () => {
       if (!host.workflowPlan || typeof args.plan !== 'string' || args.plan.length > 12000) throw new Error('Invalid plan');
       return host.workflowPlan(JSON.parse(args.plan));
     })),
     ...(appsScriptSession ? [
-      factory.tool('apps_script_prepare', '저장한 이메일 스킬을 Google Apps Script 코드로 만든다. 코드 생성만으로 저장·실행 완료를 주장하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptPrepare) throw new Error('Unavailable'); return host.appsScriptPrepare(); })),
-      factory.tool('apps_script_upload', '사용자에게 생성된 코드와 Google 권한을 확인받고 본인 Apps Script 프로젝트에 저장한다. Google 연결은 재사용하며 새 권한만 추가 동의한다.', {}, async () => scriptRun(async () => { if (!host.appsScriptUpload) throw new Error('Unavailable'); return host.appsScriptUpload(); })),
-      factory.tool('apps_script_setup', 'Google의 같은 표준 Cloud 프로젝트 설정이 필요한 경우 비공개 설정 안내를 표시한다. 사용자가 설정했다고 답한 것만으로 실제 실행 성공을 주장하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptSetup) throw new Error('Unavailable'); return host.appsScriptSetup(); })),
-      factory.tool('apps_script_deploy', '확인한 코드의 본인 전용 API 실행 버전을 만든다. 공개 웹앱·자동 발송 트리거는 만들지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptDeploy) throw new Error('Unavailable'); return host.appsScriptDeploy(); })),
-      factory.tool('apps_script_run', 'mode=preview는 Google에서 시트를 읽어 비공개 메일 미리보기를 만든다. mode=send는 현재 미리보기의 수신자와 내용을 사람이 직접 승인한 뒤 Google에서 발송한다. 불명확한 결과는 재발송하지 않는다.', { mode: z.string() }, async args => scriptRun(async () => { if (!host.appsScriptRun || !['preview','send'].includes(String(args.mode))) throw new Error('Unavailable'); return host.appsScriptRun(args.mode as 'preview' | 'send'); })),
+      factory.tool('apps_script_prepare', '저장한 이메일 스킬과 현재 Google 연결로 Studio 공통 실행기를 사용할 준비를 확인한다. 개인 프로젝트·코드 업로드·배포 설정은 필요 없다. 준비 성공은 메일 미리보기나 발송 성공이 아니다.', {}, async () => scriptRun(async () => { if (!host.appsScriptPrepare) throw new Error('Unavailable'); return host.appsScriptPrepare(); })),
+      factory.tool('apps_script_upload', '이전 클라이언트 호환용이다. 공통 실행기에서는 개인 코드를 업로드하지 않는다. 새 흐름은 apps_script_prepare 다음 apps_script_run(mode=preview)으로 진행하고 반환된 nextTool을 따른다. uploaded=false를 코드 저장 성공으로 표현하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptUpload) throw new Error('Unavailable'); return host.appsScriptUpload(); })),
+      factory.tool('apps_script_setup', 'Google 연결 문제의 비공개 복구 카드를 연다. 필요하면 연결을 다시 허용하고 실제 실행을 재시도한다. 공통 실행기의 운영자 설정 문제는 안전한 안내만 표시한다. 수강생에게 Cloud 프로젝트·IAM 권한·Apps Script 편집·API 설정을 요구하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptSetup) throw new Error('Unavailable'); return host.appsScriptSetup(); })),
+      factory.tool('apps_script_deploy', '이전 클라이언트 호환용이다. 공통 실행기는 Studio가 관리하므로 수강생 개인 배포를 만들지 않는다. 반환된 nextTool을 따르며 deployed=false를 배포 성공으로 표현하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptDeploy) throw new Error('Unavailable'); return host.appsScriptDeploy(); })),
+      factory.tool('apps_script_run', 'mode=preview는 내 Google 권한으로 시트를 읽어 비공개 메일 미리보기를 만든다. nextAction=wait_for_user이면 결과를 짧게 알리고 턴을 종료한다. reviewed=true는 발송 승인이 아니다. 사용자가 발송을 요청했을 때만 mode=send를 호출하며 수신자·내용을 별도 카드에서 직접 승인해야 한다. 불명확한 결과는 재발송하지 않는다.', { mode: z.string() }, async args => scriptRun(async () => { if (!host.appsScriptRun || !['preview','send'].includes(String(args.mode))) throw new Error('Unavailable'); return host.appsScriptRun(args.mode as 'preview' | 'send'); })),
     ] : []),
     factory.tool('ask_user', '사용자의 업무 의도나 선택 중 필요한 한 가지만 묻는 공개 대화 카드다. 비공개 입력이라고 적어도 비공개가 되지 않는다. 시트 주소·명단은 sheet_configure(mode=reuse), Google 계정 연결은 google_connect(mode=reuse)를 호출한다. 이 도구가 recoveryRequired를 반환하면 질문을 다시 쓰지 말고 nextTool을 호출한다.', { question: z.string(), choices: z.string(), allowFreeText: z.string() }, async args => run(async () => {
       if (!host.askUser || typeof args.question !== 'string' || !args.question.trim() || args.question.length > 500 || typeof args.choices !== 'string' || args.choices.length > 2000 || !['true','false'].includes(String(args.allowFreeText))) throw new Error('Invalid question');

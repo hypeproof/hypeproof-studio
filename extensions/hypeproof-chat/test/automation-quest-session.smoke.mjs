@@ -204,3 +204,66 @@ test('reading a private sheet restores verified connection evidence after a canc
   await host.appsScriptPrepare();
   for (const id of ids) assert.equal(status(quest, id), 'succeeded');
 });
+
+test('shared runner migrates an old plan without inventing personal upload or deployment', async () => {
+  const quest = createAutomationQuestSession(async () => {});
+  let result = { recoveryRequired: true, sharedRunner: true };
+  let sends = 0;
+  const host = withAutomationQuest({ runtime: {}, isAllowed: () => true, isSharedRunner: () => true, confirmSend: async () => false,
+    appsScriptPrepare: async () => ({ prepared: true, sharedRunner: true }),
+    appsScriptUpload: async () => ({ sharedRunner: true, ready: true, uploaded: false }),
+    appsScriptDeploy: async () => ({ sharedRunner: true, ready: true, deployed: false }),
+    appsScriptRun: async mode => { if (mode === 'send') sends++; return result; },
+  }, quest);
+  await host.workflowPlan({ title: '나의 자동화', nodes: [
+    { id: 'goal', label: '업무 정하기', dependsOn: [] },
+    { id: 'skill', label: '스킬 저장', dependsOn: ['goal'] },
+    { id: 'connect', label: 'Google 연결', dependsOn: ['goal'] },
+    { id: 'sheet', label: '명단 연결', dependsOn: ['connect'] },
+    { id: 'prepare', label: '코드 생성', dependsOn: ['skill'] },
+    { id: 'upload', label: '코드 업로드', dependsOn: ['prepare', 'connect'] },
+    { id: 'deploy', label: '개인 배포', dependsOn: ['upload'] },
+    { id: 'preview', label: '미리보기', dependsOn: ['deploy', 'sheet'] },
+    { id: 'send', label: '메일 발송', dependsOn: ['preview'] },
+    { id: 'publish', label: '스토어 공유', dependsOn: ['send'] },
+  ] });
+  assert(!quest.snapshot().nodes.some(node => ['upload', 'deploy'].includes(node.id)));
+  assert.deepEqual(Array.from(quest.snapshot().nodes.find(node => node.id === 'preview').dependsOn), ['prepare', 'sheet']);
+  assert.deepEqual(Array.from(quest.snapshot().nodes.find(node => node.id === 'publish').dependsOn), ['preview']);
+  await host.appsScriptUpload(); await host.appsScriptDeploy();
+  assert.equal(quest.snapshot().nodes.filter(node => node.status === 'succeeded').length, 0, 'compatibility readiness is not learner progress');
+  await host.appsScriptRun('preview');
+  assert.equal(status(quest, 'preview'), 'blocked');
+  result = { sharedRunner: true, previewed: true, reviewed: true, nextAction: 'wait_for_user', mailSent: false };
+  await host.appsScriptRun('preview');
+  for (const id of ['goal', 'skill', 'connect', 'sheet', 'prepare', 'preview']) assert.equal(status(quest, id), 'succeeded');
+  for (const id of ['send', 'publish']) assert.equal(status(quest, id), 'current');
+  assert.equal(sends, 0, 'review never initiates a send');
+  quest.invalidate(['connect']);
+  for (const id of ['connect', 'sheet', 'prepare', 'preview', 'send', 'publish']) assert.notEqual(status(quest, id), 'succeeded', 'changing account invalidates caller-bound readiness and preview');
+  assert.equal(status(quest, 'skill'), 'succeeded');
+});
+
+test('shared preview receipts never mark legacy personal-script stages as complete', async () => {
+  const quest = createAutomationQuestSession(async () => {});
+  await quest.plan({ title: '이전 활동', nodes: [
+    { id: 'goal', label: '업무', dependsOn: [] },
+    { id: 'upload', label: '코드 저장', dependsOn: ['goal'] },
+    { id: 'deploy', label: '개인 배포', dependsOn: ['upload'] },
+    { id: 'preview', label: '미리보기', dependsOn: ['deploy'] },
+  ] });
+  const host = withAutomationQuest({ runtime: {}, isAllowed: () => true, confirmSend: async () => false,
+    appsScriptRun: async () => ({ sharedRunner: true, previewed: true }) }, quest);
+  await host.appsScriptRun('preview');
+  for (const id of ['upload', 'deploy']) assert.notEqual(status(quest, id), 'succeeded');
+});
+
+test('new requirement questions reopen old skill completion until the next saved recipe receipt',async()=>{
+ const quest=createAutomationQuestSession(async()=>{});
+ const host=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,isSharedRunner:()=>true,askUser:async()=>({answer:'different tone'}),saveSkill:async()=>({saved:true})},quest);
+ await host.workflowPlan({title:'Requirements revision',nodes:[{id:'goal',label:'Goal',dependsOn:[]},{id:'skill',label:'Skill',dependsOn:['goal']}]});
+ await host.saveSkill({});assert.equal(quest.snapshot().nodes.find(n=>n.id==='skill').status,'succeeded');
+ await host.askUser({question:'Tone?',choices:[],allowFreeText:true});
+ assert.equal(quest.snapshot().nodes.find(n=>n.id==='goal').status,'succeeded');
+ assert.equal(quest.snapshot().nodes.find(n=>n.id==='skill').status,'current');
+});

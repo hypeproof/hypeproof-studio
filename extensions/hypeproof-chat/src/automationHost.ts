@@ -2,7 +2,8 @@ import { automationOpsProgress, type AutomationOpsObservation } from './automati
 import { tokenIdentityUnverified } from './classroomOps';
 import * as vscode from 'vscode';
 import { createAppsScriptRuntime, APPS_SCRIPT_TOKEN_KEY, type AppsScriptRuntime } from './appsScriptRuntime';
-import { createAppsScriptHost } from './appsScriptHost';
+import { createSharedRunnerHost } from './sharedRunnerHost';
+import { loadSharedRunnerConfig } from './sharedRunnerConfig';
 import { createAutomationQuestSession, withAutomationQuest } from './automationQuestSession';
 import type { PreviewProvider } from './previewProvider';
 import { createHash, randomUUID } from 'node:crypto';
@@ -28,7 +29,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   }, notifyProgress);
   let appsRuntime: AppsScriptRuntime | undefined;
   let appsLock: (<T>(work: () => Promise<T>) => Promise<T>) | undefined;
-  let appsTools: { epoch: number; host: ReturnType<typeof createAppsScriptHost> } | undefined;
+  let appsTools: { epoch: number; host: ReturnType<typeof createSharedRunnerHost> } | undefined;
   let panel: vscode.WebviewPanel | undefined;
   let binding: Binding | undefined;
   let permittedUntil = 0;
@@ -169,7 +170,9 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         store: async (key: string, value: string) => { await authorize(); if (binding !== pinned || !matches() || lockedEpoch !== operationEpoch) throw new Error('Changed activity'); await context.secrets.store(prefix + key, value); if (key === APPS_SCRIPT_TOKEN_KEY) await context.secrets.store(prefix + 'hps.google.email-automation.v1', value); },
         delete: (key: string) => context.secrets.delete(prefix + key),
       };
-      appsRuntime = createAppsScriptRuntime({ clientId: pinned.clientId, clientSecret,
+      const sharedRunner = await loadSharedRunnerConfig(context.extensionUri.fsPath);
+      if (!sharedRunner) throw new Error('공통 Google 실행기 설정이 없는 설치본이에요. 운영자에게 Studio 업데이트를 요청해 주세요.');
+      appsRuntime = createAppsScriptRuntime({ clientId: pinned.clientId, clientSecret, sharedRunner,
         secrets: appSecrets,
         isAllowed: () => binding === pinned && matches() && pinned.appsScript && (lockedEpoch === undefined ? allowed() : lockedEpoch === operationEpoch),
         openBrowser: url => { if (!matches() || lockedEpoch !== operationEpoch) throw new Error('Cancelled'); return vscode.env.openExternal(vscode.Uri.parse(url)); },
@@ -267,10 +270,8 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       { id: 'skill', label: '메일 스킬 만들기', description: '반복해서 쓸 문구와 항목을 저장해요.', dependsOn: ['goal'] },
       { id: 'connect', label: '내 Google 계정 연결', description: '허용한 연결은 다음에도 다시 쓸 수 있어요.', dependsOn: ['goal'] },
       { id: 'sheet', label: '내 명단 연결', description: '시트 주소와 명단은 비공개로 확인해요.', dependsOn: ['connect'] },
-      { id: 'prepare', label: '자동화 코드 준비', description: '저장한 스킬에 맞는 Apps Script 코드를 만들어요.', dependsOn: ['skill'] },
-      { id: 'upload', label: 'Google에 코드 저장', description: '내용을 확인한 뒤 내 계정에 저장해요.', dependsOn: ['prepare', 'connect'] },
-      { id: 'deploy', label: '나만 실행할 버전 준비', description: '확인한 코드로 비공개 실행 버전을 만들어요.', dependsOn: ['upload'] },
-      { id: 'preview', label: '실제 메일 미리보기', description: 'Google에서 실행해 내용을 확인해요. 발송은 별도 승인이 필요해요.', dependsOn: ['deploy', 'sheet'] },
+      { id: 'prepare', label: 'Google 실행 준비', description: '저장한 스킬을 본인 Google 연결로 실행할 준비를 해요.', dependsOn: ['skill', 'connect'] },
+      { id: 'preview', label: '실제 메일 미리보기', description: 'Google에서 실행해 내용을 확인해요. 발송은 별도 승인이 필요해요.', dependsOn: ['prepare', 'sheet'] },
     ] });
     // A validated local recipe proves the saved intent and skill, not any
     // remote Google connection, upload, deployment or execution outcome.
@@ -348,21 +349,18 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         return { rowCount: Math.max(0, rows.length - 1), columns: rows[0] ?? [] };
       };
       if (pinned.appsScript && appsRuntime && appsLock && appsTools?.epoch !== epoch) {
-        const projectKey = `hps.email-automation.${pinned.namespace}.apps-project`;
-        const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
-        appsTools = { epoch, host: createAppsScriptHost({ runtime: appsRuntime, maxRecipients: pinned.maxRecipients,
+          const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
+        appsTools = { epoch, host: createSharedRunnerHost({ runtime: appsRuntime, maxRecipients: pinned.maxRecipients,
           allowed: async () => await refreshAuthorization() && pinned.appsScript,
           recipe: () => reusable(context.globalState.get(recipeKey(pinned))),
           ask: question => askQuestion(question, pinned, epoch),
-          load: async () => { const text = await context.secrets.get(projectKey); if (!text) return undefined; try { return JSON.parse(text); } catch { return undefined; } },
-          save: async value => { if (!await refreshAuthorization()) throw new Error('Changed activity'); await context.secrets.store(projectKey, JSON.stringify(value)); },
           sheet: currentSheet, lock: appsLock, ledger,
-          openBrowser: url => { if (!live()) throw new Error('Changed activity'); return vscode.env.openExternal(vscode.Uri.parse(url)); },
         }) };
       }
       return withAutomationQuest({
         ...(pinned.appsScript ? appsTools?.host : {}),
         isAppsScriptAllowed: () => live() && allowed() && pinned.appsScript,
+        isSharedRunner: () => pinned.appsScript,
         runtime,
         readConfiguredSheet,
         previewSavedSkill: async () => {
@@ -396,7 +394,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         connectGoogle: async (mode = 'reuse') => {
           if (!await refreshAuthorization()) throw new Error('Changed activity');
           if (mode === 'reuse' && (!pinned.appsScript || await appsRuntime?.isConnected()) && await activeRuntime.ensureConnected()) return { connected: true, reused: true };
-          const answer = await askQuestion({ kind: 'connect', title: mode === 'change' ? '다른 Google 계정으로 연결을 바꿀까요?' : '보내는 Google 계정을 처음 연결할까요?', description: pinned.appsScript ? 'Apps Script 생성·수정·본인 전용 배포, 시트 읽기와 메일 발송에 동의하면 이 연결을 함께 재사용해요. 실제 발송은 별도로 확인해요. 토큰은 AI에게 전달하지 않아요.' : 'Google에서 한 번 동의하면 연결을 재사용해요. 비밀번호와 로그인 토큰은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
+          const answer = await askQuestion({ kind: 'connect', title: mode === 'change' ? '다른 Google 계정으로 연결을 바꿀까요?' : '보내는 Google 계정을 처음 연결할까요?', description: pinned.appsScript ? '본인 계정의 시트 읽기와 메일 발송에 동의하면 연결을 재사용해요. 실행은 Google에서 처리하며, 실제 발송은 별도로 확인해요. 회사 관리 권한이나 프로젝트 설정은 필요하지 않아요.' : 'Google에서 한 번 동의하면 연결을 재사용해요. 비밀번호와 로그인 토큰은 AI에게 전달하지 않아요.', private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           try {
             if (pinned.appsScript && appsRuntime && appsLock) await appsLock(() => appsRuntime!.connect());

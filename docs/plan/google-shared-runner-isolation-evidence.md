@@ -45,19 +45,31 @@ acceptance record and in the dated vault result artifact. Probe deployment is
 retained but fail-closed; its allowlist was emptied after the test. Registered
 OAuth testers and consent remain; no company IAM was added.
 
-## Integration still required
+## Studio integration acceptance — 2026-10-14
 
-The installed Studio still uses the previously accepted owner-script path. Before
-switching its default, implement an execution-only adapter that accepts only the
-operator-pinned runner/deployment, validates the response contract, and binds every
-preview and exact user approval to caller, saved recipe and runner version. Keep
-per-user durable send state across version upgrades; an unknown earlier send must
-not become eligible merely because the runner changed. Do not require source-read
-or project-management scopes from learners. Distribution and rollback must pin an
-operator-verified configuration; an untrusted recipe cannot select a runner.
+Studio now defaults to the operator-pinned execution-only runner. Missing or
+untrusted packaged configuration fails closed; no learner-owned script fallback
+or project-management consent is requested. The shared host preserves the legacy
+per-account message ledger and requires a separate exact private approval for
+sending. Recipe/account/release changes invalidate pending previews.
 
-Production scope consent, managed-domain policy, Gmail send behavior, source update
-review, quotas and twenty actual pre-class logins remain separate gates. The probe
-is not a production recipe executor and cannot run learner-supplied code. Personal
-Apps Script export is deferred. Real mail needs fresh explicit approval of the
-exact recipient and content.
+Root exercised the native local app with the real subscription-backed coach:
+business question, tone question, skill save, private Google connection and Sheet
+selection, shared prepare, actual Google preview of one synthetic recipient, and
+read-only preview acknowledgement. The graph progressed to 6/6 and the composer
+returned without an outstanding question card. Changing an earlier answer resets
+its dependent graph evidence. No personal script creation, source upload, Cloud
+IAM or deployment setup was required. No mail was sent.
+
+Two integration defects found during native testing were fixed: a host-only Sheet
+connection field was stripped from the strict runner payload, and a new business
+question invalidates the preceding skill's completion state. Deterministic checks
+cover identity/recipe/approval binding, cancelled and stale confirmations,
+ambiguous delivery, existing ledgers, and cross-account state. These checks do not
+prove real mail delivery. The earlier two-account live probe above remains
+separate from this native single-account integration acceptance.
+
+Windows acceptance of this exact integration is pending. Production OAuth review,
+managed-domain policy, quotas and twenty actual pre-class logins remain separate
+gates. Personal Apps Script export is deferred. Real mail needs fresh explicit
+approval of the exact recipient and content.

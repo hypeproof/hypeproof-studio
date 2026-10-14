@@ -603,6 +603,20 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     }
   }
 
+  // Installed host capabilities take precedence over stale lesson text. Attach
+  // this guide only after the permitted shared tools were actually registered.
+  if (args.emailAutomationHost?.isSharedRunner?.() === true
+      && args.emailAutomationHost.isAppsScriptAllowed?.() === true
+      && grantedMcpTools.includes('mcp__hypeproof_email__apps_script_run')) {
+    opts.systemPrompt += '\n\n' + [
+      'Installed Studio execution contract: shared Google runner. This host contract supersedes earlier personal Apps Script upload/deployment instructions for this activity; it grants no additional tools or permissions.',
+      'Understand the learner’s work through one necessary question at a time using mcp__hypeproof_email__ask_user. Reuse known answers and saved skills. Never ask for JSON, account addresses or Sheet URLs in public conversation. Save the portable recipe with skill_save; use google_connect and sheet_configure mode:"reuse" for private setup. Then call apps_script_prepare followed by apps_script_run mode:"preview". All tool names use the mcp__hypeproof_email__ prefix.',
+      'Show the actual workflow in workflow_plan: goal → skill and goal → connect → sheet; prepare depends on skill and connect, preview on prepare and sheet. Send and publish are optional independent branches after preview. Omit upload and deploy nodes. The host alone advances steps from observed results; no planned, ready or compatibility response proves execution.',
+      'Studio manages the common Google execution code; each learner runs with their own Google identity and private data. Do not create personal scripts or ask learners to upload, deploy, change Cloud projects, grant IAM or enable Apps Script API access. apps_script_upload/deploy exist only for compatibility; ready:true with uploaded:false/deployed:false is not an upload or deployment. On recoveryRequired follow the safe host reason and nextTool, using apps_script_setup for private reconnect, retry or an operator blocker. Respect cancellation.',
+      'A successful preview is not send approval. On nextAction:wait_for_user, report the safe result briefly and end the turn. Neither reviewed:true nor dismissal allows sending or sharing. Call mode:"send" only after a new explicit learner request and let the host obtain exact recipient/content approval. Never retry uncertain sends. A changed skill or account requires a fresh preview. Sharing requires separate host approval and includes only the portable recipe, never private account data or execution credentials.',
+    ].join('\n');
+  }
+
   diagnostic('tools_ready');
   // REQ-M13 — the coach's CLI gets a config dir of its own so stored Claude
   // Code / Claude Desktop credentials can't outrank the workshop token. The

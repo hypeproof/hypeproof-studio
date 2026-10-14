@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { gmailMime, listenGoogleOAuth, type EmailPreview, type OAuthListener, type SendRecord } from './googleAutomation.ts';
+import { gmailMime, listenGoogleOAuth, type EmailPreview, type OAuthListener, type SendRecord, type EmailRecipe } from './googleAutomation.ts';
 import { APPS_SCRIPT_EXECUTION_SCOPES, appsScriptContentDigest, assertGeneratedAppsScriptProject, type AppsScriptEmailProject, type AppsScriptFile } from './appsScriptEmailProject.ts';
+import { canonicalSharedRecipe, sharedRecipeDigest, validateSharedRunnerConfig, type SharedRunnerConfig } from './sharedRunnerConfig.ts';
 export { generateAppsScriptEmailProject } from './appsScriptEmailProject.ts';
 
 export const APPS_SCRIPT_OAUTH_SCOPES = [
@@ -20,13 +21,14 @@ export class AppsScriptRecoveryError extends Error {
 }
 export interface AppsScriptDeps {
   clientId: string; clientSecret?: string;
+  sharedRunner?: SharedRunnerConfig;
   secrets: { get(key: string): PromiseLike<string | undefined>; store(key: string, value: string): PromiseLike<void>; delete(key: string): PromiseLike<void> };
   openBrowser(url: string): PromiseLike<unknown>;
   isAllowed(): boolean;
   fetchImpl?: typeof fetch; listenOAuth?: () => Promise<OAuthListener>; now?: () => number;
 }
 interface Token { accessToken: string; refreshToken?: string; expiresAt: number; accountId: string; connectionId: string }
-export interface AppsScriptDeployment { scriptId: string; deploymentId: string; versionNumber: number; digest: string; connectionIdentity: string }
+export interface AppsScriptDeployment { scriptId: string; deploymentId: string; versionNumber: number; digest: string; connectionIdentity: string; recipe?: EmailRecipe; recipeDigest?: string; sharedReleaseId?: string; maxRecipients?: number }
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const nonce = () => randomBytes(32).toString('base64url');
 const plain = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -59,6 +61,9 @@ function forbiddenError(body: unknown): AppsScriptRecoveryError | AppsScriptBloc
 /** Host must namespace SecretStorage by the current grant and serialize operations across windows. */
 export function createAppsScriptRuntime(deps: AppsScriptDeps) {
   const request = deps.fetchImpl ?? fetch, now = deps.now ?? Date.now;
+  const shared = deps.sharedRunner ? validateSharedRunnerConfig(deps.sharedRunner) : undefined;
+  const oauthScopes: readonly string[] = shared ? APPS_SCRIPT_EXECUTION_SCOPES : APPS_SCRIPT_OAUTH_SCOPES;
+  const ownerOnly = () => { if (shared) throw new AppsScriptRecoveryError('operator', '공통 실행기는 Studio가 관리해요. 개인 프로젝트 생성이나 코드 배포는 이 경로에서 지원하지 않아요.'); };
   let epoch = 0, busy = false;
   let pendingConnect: { cancelled: boolean; listener?: OAuthListener } | undefined;
   let current: { deployment: AppsScriptDeployment; preview: EmailPreview } | undefined;
@@ -81,7 +86,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     if (r.status === 429 || r.status >= 500) throw retryError();
     if (!r.ok) { const body: unknown = await r.json().catch(() => null); throw oauthError(plain(body) ? body.error : undefined); }
     const t: unknown = await r.json().catch(() => null);
-    if (!plain(t) || typeof t.access_token !== 'string' || typeof t.expires_in !== 'number' || t.expires_in <= 0 || (typeof t.scope === 'string' && !APPS_SCRIPT_OAUTH_SCOPES.every(s => (t.scope as string).split(' ').includes(s)))) throw new AppsScriptRecoveryError('reconnect', 'Apps Script에 필요한 권한을 모두 허용해 주세요.');
+    if (!plain(t) || typeof t.access_token !== 'string' || typeof t.expires_in !== 'number' || t.expires_in <= 0 || (typeof t.scope === 'string' && !oauthScopes.every(s => (t.scope as string).split(' ').includes(s)))) throw new AppsScriptRecoveryError('reconnect', 'Apps Script에 필요한 권한을 모두 허용해 주세요.');
     return { accessToken: t.access_token, expiresAt: now() + t.expires_in * 1000, refreshToken: typeof t.refresh_token === 'string' ? t.refresh_token : old?.refreshToken, accountId: old?.accountId ?? '', connectionId: old?.connectionId ?? '' };
   }
   async function token(): Promise<Token> {
@@ -104,7 +109,11 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     try { r = await rawRequest(`https://script.googleapis.com/v1/${path}`, { method, headers: { authorization: `Bearer ${t.accessToken}`, 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); }
     catch { throw new AppsScriptRecoveryError('retry', 'Google 작업 결과를 확인하지 못했어요. 자동으로 재시도하지 않았어요. 인터넷 연결과 Google 실행 기록을 확인해 주세요.'); }
     allowed(); if (state !== epoch || expected !== await getConnectionIdentity()) return fail('Google 연결이 변경됐어요. 작업 결과를 Google에서 확인해 주세요.');
-    if (r.status === 403) throw forbiddenError(await r.json().catch(() => null));
+    if (r.status === 403) {
+      const error = forbiddenError(await r.json().catch(() => null));
+      if (shared && error instanceof AppsScriptBlockedError) throw new AppsScriptRecoveryError('operator', '공통 Google 실행기 접근을 운영자가 확인해야 해요. 개인 프로젝트나 회사 관리 권한을 추가하지 마세요.');
+      throw error;
+    }
     if (r.status === 401) throw new AppsScriptRecoveryError('reconnect', 'Google에서 연결 권한을 확인하지 못했어요. 다시 연결해 주세요.');
     if (r.status === 429 || r.status >= 500) throw retryError();
     if (!r.ok) return fail('Google에서 작업을 완료하지 못했어요. 프로젝트와 할당량을 확인해 주세요.');
@@ -125,6 +134,21 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     checkedId(deployment.deploymentId); checkedId(deployment.scriptId);
     if (!Number.isSafeInteger(deployment.versionNumber) || deployment.versionNumber < 1) return fail('배포 버전을 확인해 주세요.');
     if (!/^[a-f0-9]{64}$/.test(deployment.digest) || deployment.connectionIdentity !== await getConnectionIdentity()) return fail('Google 연결 또는 스킬이 변경됐어요. 다시 배포해 주세요.');
+    if (shared) {
+      if (deployment.scriptId !== shared.scriptId || deployment.deploymentId !== shared.deploymentId || deployment.versionNumber !== shared.versionNumber ||
+          deployment.sharedReleaseId !== shared.releaseId || !deployment.recipe || deployment.recipeDigest !== sharedRecipeDigest(deployment.recipe) || deployment.digest !== deployment.recipeDigest ||
+          !Number.isSafeInteger(deployment.maxRecipients) || Number(deployment.maxRecipients) < 1 || Number(deployment.maxRecipients) > 20) return fail('공통 실행기 또는 스킬이 변경됐어요. 실행 준비부터 다시 진행해 주세요.');
+      const accountId = deployment.connectionIdentity.split(':')[0]!;
+      if (!/^[a-f0-9]{64}$/.test(accountId)) return fail('Google 계정을 다시 연결해 주세요.');
+      const envelope = { protocol: shared.protocol, releaseId: shared.releaseId, accountId, recipe: canonicalSharedRecipe(deployment.recipe), recipeDigest: deployment.recipeDigest, payload: input };
+      const functions = { hpsPreview: 'hpsSharedPreview', hpsSendApproved: 'hpsSharedSendApproved', hpsGetSendStatus: 'hpsSharedGetSendStatus' };
+      const result = await api(`scripts/${shared.deploymentId}:run`, 'POST', { function: functions[fn], parameters: [envelope], devMode: false }, deployment.connectionIdentity);
+      if (result.done !== true || result.error || !plain(result.response) || !plain(result.response.result)) throw new AppsScriptRecoveryError('operator', '공통 Google 실행 결과를 확인하지 못했어요. 운영자가 시험 계정 허용과 실행기 설정을 확인해야 해요.');
+      const response = result.response.result;
+      if (response.protocol !== shared.protocol || response.releaseId !== shared.releaseId || response.accountId !== accountId || response.recipeDigest !== deployment.recipeDigest || !plain(response.result)) return fail('Google 실행 결과의 계정 또는 스킬이 일치하지 않아요. 다시 확인해 주세요.');
+      return response.result;
+    }
+    if (deployment.sharedReleaseId || deployment.recipeDigest || deployment.recipe) return fail('공통 실행기 설정이 필요해요. 운영자에게 확인해 주세요.');
     // Verify immutable version content, never execute editable HEAD or arbitrary functions.
     if (await content(deployment.scriptId, deployment.versionNumber, deployment.connectionIdentity) !== deployment.digest) return fail('배포된 코드가 승인한 코드와 달라요. 다시 확인해 주세요.');
     const d = await api(`projects/${deployment.scriptId}/deployments/${deployment.deploymentId}`, 'GET', undefined, deployment.connectionIdentity);
@@ -134,6 +158,18 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     return result.response.result;
   }
   return {
+    sharedRunnerEnabled: !!shared,
+    async sharedDeployment(recipe: EmailRecipe, maxRecipients = 20): Promise<AppsScriptDeployment> {
+      allowed();
+      if (!shared) throw new AppsScriptRecoveryError('operator', 'Studio 공통 Google 실행기를 운영자가 먼저 설정해야 해요.');
+      if (!Number.isSafeInteger(maxRecipients) || maxRecipients < 1 || maxRecipients > 20) return fail('수신자 한도를 확인해 주세요.');
+      const connectionIdentity = await getConnectionIdentity();
+      if (!connectionIdentity) throw new AppsScriptRecoveryError('reconnect', 'Google 계정을 먼저 연결해 주세요.');
+      const canonical = canonicalSharedRecipe(recipe), recipeDigest = sharedRecipeDigest(canonical);
+      Object.freeze(canonical.columns); Object.freeze(canonical);
+      return Object.freeze({ scriptId: shared.scriptId, deploymentId: shared.deploymentId, versionNumber: shared.versionNumber, digest: recipeDigest, connectionIdentity,
+        recipe: canonical, recipeDigest, sharedReleaseId: shared.releaseId, maxRecipients });
+    },
     getConnectionIdentity,
     async status() { return { connected: !!await stored(), configured: !!deps.clientId.trim() }; },
     async isConnected() { return !!await getConnectionIdentity(); },
@@ -151,7 +187,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
         listener = await (deps.listenOAuth ?? listenGoogleOAuth)(); attempt.listener = listener;
         if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
         const verifier = nonce(), csrf = nonce(), url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        url.search = new URLSearchParams({ client_id: deps.clientId, redirect_uri: listener.redirectUri, response_type: 'code', scope: [...APPS_SCRIPT_OAUTH_SCOPES, 'openid'].join(' '), include_granted_scopes: 'true', state: csrf, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent' }).toString();
+        url.search = new URLSearchParams({ client_id: deps.clientId, redirect_uri: listener.redirectUri, response_type: 'code', scope: [...oauthScopes, 'openid'].join(' '), include_granted_scopes: 'true', state: csrf, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent' }).toString();
         await deps.openBrowser(url.toString());
         let callback: URL;
         try { callback = await listener.wait; }
@@ -171,12 +207,14 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
     }); },
     async disconnect() { epoch++; current = undefined; await deps.secrets.delete(APPS_SCRIPT_TOKEN_KEY); },
     async createProject(title: string) { return exclusive(async () => {
+      ownerOnly();
       if (typeof title !== 'string' || !title.trim() || title.length > 120 || /[\x00-\x1f]/.test(title)) return fail('프로젝트 이름을 확인해 주세요.');
       const result = await api('projects', 'POST', { title });
       if (typeof result.scriptId !== 'string') return fail('Google 프로젝트 결과를 확인하지 못했어요.');
       return { scriptId: checkedId(result.scriptId), editorUrl: `https://script.google.com/home/projects/${checkedId(result.scriptId)}/edit` };
     }); },
     async uploadProject(scriptId: string, project: AppsScriptEmailProject, approvedDigest: string) { return exclusive(async () => {
+      ownerOnly();
       assertGeneratedAppsScriptProject(project);
       if (approvedDigest !== project.digest) return fail('작성된 코드를 확인하고 업로드를 승인해 주세요.');
       current = undefined;
@@ -185,6 +223,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
       return { digest: project.digest };
     }); },
     async deployProject(scriptId: string, project: AppsScriptEmailProject, approvedDigest: string): Promise<AppsScriptDeployment> { return exclusive(async () => {
+      ownerOnly();
       assertGeneratedAppsScriptProject(project);
       if (approvedDigest !== project.digest) return fail('작성된 코드와 본인 전용 배포를 승인해 주세요.');
       const connectionIdentity = await getConnectionIdentity(); if (!connectionIdentity) return fail('Google을 먼저 연결해 주세요.');
@@ -202,8 +241,8 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
       current = undefined;
       checkedId(input.spreadsheetId);
       if (typeof input.range !== 'string' || !input.range.trim() || input.range.length > 200 || /[\x00-\x1f]/.test(input.range)) return fail('시트 범위를 확인해 주세요.');
-      const result = await run(deployment, 'hpsPreview', input);
-      if (typeof result.id !== 'string' || !/^[A-Za-z0-9_-]{10,200}$/.test(result.id) || typeof result.createdAt !== 'number' || Math.abs(now() - result.createdAt) > 300000 || !Array.isArray(result.messages) || !result.messages.length || result.messages.length > 20) return fail('미리보기 결과를 확인하지 못했어요.');
+      const result = await run(deployment, 'hpsPreview', { spreadsheetId: input.spreadsheetId, range: input.range });
+      if (typeof result.id !== 'string' || !/^[A-Za-z0-9_-]{10,200}$/.test(result.id) || typeof result.createdAt !== 'number' || Math.abs(now() - result.createdAt) > 300000 || !Array.isArray(result.messages) || !result.messages.length || result.messages.length > (shared ? deployment.maxRecipients! : 20)) return fail('미리보기 결과를 확인하지 못했어요.');
       const seen = new Set<string>();
       const messages = result.messages.map(m => {
         if (!plain(m) || typeof m.id !== 'string' || typeof m.to !== 'string' || typeof m.subject !== 'string' || typeof m.body !== 'string' || m.subject.length > 998 || m.body.length > 100000 || /\x00/.test(m.body) || m.id !== hash(JSON.stringify([m.to.toLowerCase(), m.subject, m.body])) || seen.has(m.to.toLowerCase())) return fail('미리보기 결과를 확인하지 못했어요.');

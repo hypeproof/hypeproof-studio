@@ -179,3 +179,28 @@ identity digests matched, cross-sheet reads were denied, and same-namespace stat
 remained per-user. The non-allowlisted owner was blocked. See the
 [actual evidence](../plan/google-shared-runner-isolation-evidence.md). Installed
 Studio integration and shared-runner mail execution remain NOT RUN.
+
+## Shared-runner default (DEC-023)
+
+The current host uses the packaged `resources/google-shared-runner.json` for
+Apps Script activities and fails closed when it is absent. No workspace setting,
+recipe or model argument can choose a runner. Provision this operator-verified
+configuration only in an external installation staging directory; no OAuth
+credential, subject allowlist or private account identifier belongs in Git.
+
+Run `node --experimental-strip-types --test test/sharedRunnerRuntime.test.ts`
+from the extension and `node --test scripts/google-shared-runner/runner.test.mjs`
+from the repository. `test:automation` includes shared host migration and quest
+checks. They cover pinned release/caller/recipe validation, no source or deployment
+reads by learners, exact approval, cross-account state, changed connection/recipe,
+old sent/sending/unknown ledger retention, duplicate suppression and transport
+uncertainty. The runtime retains the existing per-account local ledger key; it
+never clears ambiguous earlier attempts during migration.
+
+Native acceptance must show a new requirement question reopens previous design
+completion, one inline card at a time, saved skill → own Google → private Sheet →
+shared preparation → Google preview. Upload/deploy compatibility calls must not
+claim a personal project was created. Preview review is not send approval.
+Windows acceptance begins only after local native success and uses the same
+pinned eight-file update; rollback must remove a newly introduced configuration
+while preserving OAuth, SDK and user data. Actual mail remains separately gated.
