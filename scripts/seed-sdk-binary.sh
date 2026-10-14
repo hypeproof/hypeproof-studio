@@ -18,9 +18,9 @@
 #
 # Usage:
 #   bash scripts/seed-sdk-binary.sh                    # networked venue machine
-#   bash scripts/seed-sdk-binary.sh --tarball /Volumes/USB/claude-agent-sdk-darwin-arm64-0.3.207.tgz
+#   bash scripts/seed-sdk-binary.sh --tarball /Volumes/USB/claude-agent-sdk-darwin-arm64-0.3.299.tgz
 #   bash scripts/seed-sdk-binary.sh --force            # re-seed over an existing install
-#   bash scripts/seed-sdk-binary.sh --version 0.3.207  # explicit version (non-pinned → registry integrity)
+#   bash scripts/seed-sdk-binary.sh --version 0.3.299  # explicit version (non-pinned → registry integrity)
 #
 # Idempotent: an already-seeded binary with a valid marker exits 0 untouched.
 # Written to be zsh-compatible (no bash-only idioms beyond the bash shebang).
@@ -31,16 +31,16 @@ set -euo pipefail
 # Single source of truth is extensions/hypeproof-chat/src/sdkBinaryManifest.ts
 # (itself locked to package-lock.json). test/sdk-binary.smoke.mjs fails if the
 # values below drift from that manifest — bump both together with the SDK dep.
-PINNED_VERSION="0.3.207"
+PINNED_VERSION="0.3.299"
 
 pinned_sha512() {
   case "$1" in
-    darwin-arm64) printf '%s' "sha512-08xSo1FDx8h0aLhL5tvcRxa2SMmcUV3aDWeZiEJVTclyiDAs61BgTjAxCg+SZcu1CndjJO8cfO0yM5dhamxz3g==" ;;
-    darwin-x64)   printf '%s' "sha512-1o7K4EYqyCixZ/oeOZSh7AzSy6TM86xoOuf4VuORjPSS31hBnoqY0NGZd27+2VDs9LGtsdksmsTqcNGx9xd1hA==" ;;
-    win32-x64)    printf '%s' "sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg==" ;;
-    win32-arm64)  printf '%s' "sha512-9fWpUzfkXlPAg2tf8JpQe7w9avFaomAUbfAwyAmykQgSIf66LwaJjvI5hNqhNqczRKyfsXPn3ei2S5HKlmFP+Q==" ;;
-    linux-x64)    printf '%s' "sha512-Kg6BPH8Ee0ny/oEUWJmvT1jCRBne4jVpRSOMsJcYp1Fav1rMEgpU219oJJs+LWwx4ifuuLtNWedqJNnVw7mnKg==" ;;
-    linux-arm64)  printf '%s' "sha512-X4uezYOifDiNTTmmugfRCdg3nNamrr1LFRY9hg30vWYTShL+bbN+nfC3KaFfSYCl4GTtsEEUbYdOTC2F3bBpcA==" ;;
+    darwin-arm64) printf '%s' "sha512-KfkR3Ve7Eku1QuxT3LhC5e9Oj7c8UXvLJFFLbCw0u3OrhpzJUQ0ldd9ArmYNU3J47gpaqYgafnk9ztVPLdcajA==" ;;
+    darwin-x64)   printf '%s' "sha512-7G6qjn+xNCmyewcQ/XG/ElBoEGr8uDD4D8X33bqXEbNZ4vXbssiOzmcyxfuWLa7YqR8g9cJnmaWB6UzFEwiC6Q==" ;;
+    win32-x64)    printf '%s' "sha512-PWHbjAdrecVlmR0kdgsX20QvUiFgWQl4zskuWd6Ieg3e5w+Ol0FZGXYRLS+Erd+pYUEZBNjDCqK2yd2KdBbDQw==" ;;
+    win32-arm64)  printf '%s' "sha512-sKvddLLYlXzk0FwjT9gNZDzmdzupI7qI0Dok7uu/KYGFgMGiSEGIsB9bfg+31HMDDftaT16P80MLzH+F8zQBFA==" ;;
+    linux-x64)    printf '%s' "sha512-Q+sweKF/ruNq4Gmf4CzglwaKJmtQjhBK5MT3U1oUhlNStwHejgBg1GLa/KrQMRE0R4u0ayapLyVNrfu0hQYGkQ==" ;;
+    linux-arm64)  printf '%s' "sha512-8b5apRvHageZ/9xDfoIu8tJ6lpPAGjg4tD9JYef4SjpsY4KM/gvR6qC+Kqq5JHiH/Tq/mjgGYZjMkTZS8TOnsQ==" ;;
     *)            printf '%s' "" ;;
   esac
 }
@@ -84,8 +84,9 @@ LOCKFILE="$SCRIPT_DIR/../extensions/hypeproof-chat/package-lock.json"
 if [ -z "$VERSION" ]; then
   VERSION="$PINNED_VERSION"
   # Drift guard when run from the repo: the extension lockfile is the ultimate
-  # pin for the SDK dependency (package.json carries a ^range; the lockfile
-  # resolves it exactly). Fails loudly instead of seeding a mismatched binary.
+  # pin for the SDK dependency (package.json pins the exact version; the
+  # lockfile records the resolved tarball). Fails loudly instead of seeding a
+  # mismatched binary.
   if [ -f "$LOCKFILE" ]; then
     LOCK_VERSION="$(sed -n 's|.*claude-agent-sdk/-/claude-agent-sdk-\([0-9][0-9.]*\)\.tgz.*|\1|p' "$LOCKFILE" | head -n1)"
     if [ -n "$LOCK_VERSION" ] && [ "$LOCK_VERSION" != "$VERSION" ]; then
@@ -135,7 +136,7 @@ if [ -n "$TARBALL" ]; then
   say "Using local tarball (air-gapped mode): $TARBALL"
   TGZ="$TARBALL"
 else
-  say "Downloading $PKG@$VERSION (~67 MiB) from the npm registry"
+  say "Downloading $PKG@$VERSION (~105-120 MiB) from the npm registry"
   TGZ="$TMP/sdk.tgz"
   curl -fL --retry 3 -o "$TGZ" "$TGZ_URL"
 fi

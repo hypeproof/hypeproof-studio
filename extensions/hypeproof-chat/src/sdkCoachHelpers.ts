@@ -15,6 +15,10 @@
 import { stallNotice } from "./coachIdentity.ts";
 import type {
   AgentDefinition,
+  HookCallback,
+  HookCallbackMatcher,
+  HookEvent,
+  HookJSONOutput,
   Options as AgentSdkOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { createHash } from "node:crypto";
@@ -40,7 +44,16 @@ import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
 import { isDestructiveCommand } from "./shellPolicy.ts";
 
-export type AgentPermissionMode = "default" | "plan" | "acceptEdits" | "bypassPermissions";
+/**
+ * The only permission mode a coach session runs in. It must be passed
+ * explicitly: since SDK 0.3.286 an omitted `permissionMode` is left to Claude
+ * Code, which on third-party providers (a gateway is one) starts in `auto`, so
+ * a classifier rather than canUseTool would decide tool calls (0.3.299
+ * `sdk.d.ts` Options.permissionMode). `default` routes every call that needs a
+ * decision through canUseTool (evaluateSdkToolUse).
+ */
+export const SDK_PERMISSION_MODE = "default" as const;
+export type AgentPermissionMode = typeof SDK_PERMISSION_MODE;
 
 /** Subset of Claude Agent SDK `Options` we drive from a cohort profile. */
 export interface AgentCoachOptions {
@@ -82,12 +95,26 @@ export interface AgentCoachOptions {
   permissionMode: AgentPermissionMode;
   /** Hard turn cap so a beginner's loop stays bounded. */
   maxTurns: number;
+  /**
+   * Front-line orchestrator (ADR 0011) — present only when the Service served
+   * a roster this seat may use (orchestratorBindingFor: adult, valid roster).
+   * Absent = today's path, byte for byte. When present, buildSdkQueryOptions
+   * attaches no SDK `agents`, takes the host's hooks, and sends the
+   * attribution headers and env pins of spec §4.1.
+   */
+  orchestrator?: OrchestratorBinding;
 }
 
 export interface ProfileToAgentCtx {
   model: string;
   /** Cohort system prompt text (the tuned Korean coaching script). */
   systemPrompt: string;
+  /**
+   * The served roster, as A4's parser hands it over (`profile.orchestrator`
+   * once validated). Absent or null = no orchestrator. A disabled form
+   * (`{ enabled: false, reason }`) is not a roster and is ignored here.
+   */
+  orchestrator?: ServedRosterView | null;
 }
 
 // Real worker `game.template_tier` values (worker/src/profiles/types.ts).
@@ -214,6 +241,100 @@ export function permittedToolsFor(profile: ResolvedProfile): string[] {
   return tools;
 }
 
+// ── Front-line orchestrator boundary (ADR 0011; spec §3.2, §4.1, §5.1, §5.4) ──
+// The Service may serve a versioned roster of helper agents on /v1/profile
+// (`orchestrator`, format hps-agent-roster/1). The coach then delegates
+// through one host-run MCP tool (consult) and gets a deterministic check tool
+// (site_check). This block decides, from the served roster, what the SDK
+// boundary does — grants, headers, env, hooks — and nothing else: parsing the
+// roster is A4's agentRoster.ts, which hands over a value matching
+// ServedRosterView. No roster → every function here behaves exactly as before.
+
+/** The roster format this build understands; also the `x-hps-orchestrator` value. */
+export const ORCHESTRATOR_FORMAT = "hps-agent-roster/1";
+
+/** Short names A4 registers on the in-process "hypeproof" MCP server. */
+export const CONSULT_TOOL_NAME = "consult";
+export const SITE_CHECK_TOOL_NAME = "site_check";
+/** Full names as the model and canUseTool see them (`mcp__<server>__<tool>`). */
+export const MCP_CONSULT = "mcp__hypeproof__consult";
+export const MCP_SITE_CHECK = "mcp__hypeproof__site_check";
+export const MCP_ORCHESTRATOR_TOOLS = [MCP_CONSULT, MCP_SITE_CHECK] as const;
+
+/**
+ * The approval kind consult uses (spec §5.1). It is in the
+ * `hypeproofChat.requireApprovalFor` enum but not its default (A1), so a
+ * consult runs without a modal unless a machine asks for one.
+ */
+export const CONSULT_HELPER_KIND = "consultHelper";
+
+/**
+ * The model id the CLI names for its background calls on orchestrator seats
+ * (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). Without it, under ANTHROPIC_AUTH_TOKEN,
+ * those calls use "the main model" (llm-gateway-protocol). The gateway still
+ * resolves the aux model itself (spec §4.2); this only keeps the request
+ * body from naming the coach's model.
+ */
+export const ORCHESTRATOR_AUX_MODEL = "claude-haiku-5-5";
+
+/**
+ * What A2 reads from a served roster. A4's parsed type is richer (titles,
+ * purposes, caps, models, coach_brief); any value with these fields fits.
+ */
+export interface ServedRosterView {
+  format: string;
+  id: string;
+  version: string;
+  checks?: readonly string[];
+  agents: ReadonlyArray<{ name: string; role: string; enabled?: boolean }>;
+}
+
+/** What the SDK boundary keeps once a served roster passed orchestratorBindingFor. */
+export interface OrchestratorBinding {
+  rosterId: string;
+  rosterVersion: string;
+  /** consult is granted: the roster has at least one enabled helper or advisor. */
+  consult: boolean;
+  /** site_check is granted: the roster lists the check. */
+  siteCheck: boolean;
+}
+
+// Both values go into HTTP header values (`x-hps-roster: <id>@<version>`), so
+// they must be header-safe as well as well-formed: no space, colon or newline.
+const ROSTER_ID = /^[a-z][a-z0-9-]{0,39}$/;
+const ROSTER_VERSION = /^\d{1,6}\.\d{1,6}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,32})?$/;
+
+/**
+ * The orchestrator binding for this seat, or null when there is none.
+ * Fails closed:
+ * - MINOR-SAFETY INVARIANT (spec §5.4, REQ-M23 extended): a minor or unknown
+ *   tier, or a cohort flagged `minor_cohort`, never gets the orchestrator —
+ *   no consult, no checks, no headers — even if the Service served a roster
+ *   (it should not: serializer + harness `child_orchestrator`). Same posture
+ *   as permittedAgentToolsFor.
+ * - Anything but a well-formed roster is no roster: wrong format, an unsafe
+ *   id or version, or not exactly one coach named "coach". The disabled
+ *   form `{ enabled: false, reason }` has no format and lands here too.
+ */
+export function orchestratorBindingFor(
+  profile: ResolvedProfile,
+  roster: ServedRosterView | null | undefined,
+): OrchestratorBinding | null {
+  if (!roster || typeof roster !== "object") return null;
+  if (isMinorTier(profile) || profile.minor_cohort === true) return null;
+  if (roster.format !== ORCHESTRATOR_FORMAT) return null;
+  if (typeof roster.id !== "string" || !ROSTER_ID.test(roster.id)) return null;
+  if (typeof roster.version !== "string" || !ROSTER_VERSION.test(roster.version)) return null;
+  const agents = Array.isArray(roster.agents) ? roster.agents : [];
+  const coaches = agents.filter((a) => !!a && a.role === "coach");
+  if (coaches.length !== 1 || coaches[0].name !== "coach") return null;
+  const consult = agents.some(
+    (a) => !!a && (a.role === "helper" || a.role === "advisor") && a.enabled === true,
+  );
+  const siteCheck = Array.isArray(roster.checks) && roster.checks.includes("site_check");
+  return { rosterId: roster.id, rosterVersion: roster.version, consult, siteCheck };
+}
+
 /**
  * Which in-process MCP tools a cohort may use (#282 P2 slice 2). Same
  * ownership and fail-closed posture as permittedToolsFor:
@@ -223,15 +344,30 @@ export function permittedToolsFor(profile: ResolvedProfile): string[] {
  *   safe-session ships — stripped for minor tiers even if a profile
  *   mistakenly carries browser:true, defense-in-depth on top of the worker
  *   harness's child_sdk_browser FAIL. When in doubt, deny for minors.
+ * - A2: a served roster adds `consult` (≥1 enabled helper or advisor) and
+ *   `site_check` (listed in `checks`), after the browser tools and only for
+ *   adults (orchestratorBindingFor). These two do NOT imply the browser grant,
+ *   so the list can be non-empty for a cohort without it: register the
+ *   browser tools from MCP_BROWSER_TOOLS ∩ this list, not from its length.
+ *   Without a roster the result is exactly today's.
  */
-export function permittedMcpToolsFor(profile: ResolvedProfile): string[] {
+export function permittedMcpToolsFor(
+  profile: ResolvedProfile,
+  roster?: ServedRosterView | null,
+): string[] {
+  const tools: string[] = [];
   if (profile.sdk_tools?.browser === true && !isMinorTier(profile)) {
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
-    return isCurriculumRuntimeEnabled(profile)
-      ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-      : [...MCP_BROWSER_TOOLS];
+    tools.push(
+      ...(isCurriculumRuntimeEnabled(profile)
+        ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
+        : MCP_BROWSER_TOOLS),
+    );
   }
-  return [];
+  const orchestrator = orchestratorBindingFor(profile, roster);
+  if (orchestrator?.consult) tools.push(MCP_CONSULT);
+  if (orchestrator?.siteCheck) tools.push(MCP_SITE_CHECK);
+  return tools;
 }
 
 // ── SDK subagents (#282 P2 slice 3, REQ-M22/M23) ─────────────────────────────
@@ -751,6 +887,29 @@ export function anthropicBaseUrlFor(proxyUrl: string): string {
 export const SDK_CONFIG_DIR_NAME = "claude-config";
 
 /**
+ * Auto-compaction window pinned for every coach session (A2, spec §4.1).
+ *
+ * Since Claude Code 2.1.285 a session behind a custom ANTHROPIC_BASE_URL uses
+ * "the 1M context window of models that have one (Opus 4.7+, Sonnet 5+)".
+ * 2.1.207 did not know the 5.5 ids and assumed 200K; 2.1.299 does, so a seat
+ * served `claude-sonnet-5-5` would compact about five times later, with
+ * requests to match. In the 2.1.299 binary the env value wins over settings
+ * and is capped by the model's own window (`Math.min(modelWindow, value)`), so
+ * a gateway alias such as `hypeproof-default` (assumed 200K) is unchanged and
+ * a 1M id compacts where it did on 0.3.207. Every seat gets it, orchestrator
+ * or not: the 1M default came with the engine bump, not with the orchestrator.
+ * Raise it only after §9 measures the cost.
+ */
+export const SDK_AUTO_COMPACT_WINDOW_TOKENS = 200_000;
+
+/**
+ * Header names this module owns in ANTHROPIC_CUSTOM_HEADERS. A line from the
+ * ambient environment that names one is dropped before ours are added.
+ */
+const OWNED_HEADER_LINE =
+  /^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode|agent|agent-call|roster|orchestrator)\s*:/i;
+
+/**
  * #749 (AE-14) — the seat a CLI session belongs to: this student, on this
  * cohort profile, under this frozen lesson version.
  *
@@ -946,6 +1105,11 @@ export function buildSdkGatewayEnv(
     maxToolConcurrency?: number;
     /** Coach-owned CLI config dir. Defaults to sdkConfigDirFor(baseEnv). */
     configDir?: string;
+    /**
+     * A2 — set only on an orchestrator seat (orchestratorBindingFor). Adds the
+     * spec §4.1 attribution headers and env pins; absent = today's env.
+     */
+    orchestrator?: OrchestratorBinding;
   },
 ): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...baseEnv };
@@ -988,8 +1152,11 @@ export function buildSdkGatewayEnv(
   // 있으면 안 되고 — 파일 목록의 구분자는 퍼센트 인코딩해서 넘긴다. 한글 폴더명도
   // 같은 이유로 인코딩이 필요하다(HTTP 헤더는 바이트 안전해야 한다).
   // Owned headers never inherit an ambient course choice or correlation ID.
+  // The orchestrator names (spec §4.1, §14: agent, agent-call, roster,
+  // orchestrator) are reserved too, on every seat: an ambient variable must
+  // never claim an agent identity or a roster for the coach.
   const inheritedHeaders = (env.ANTHROPIC_CUSTOM_HEADERS ?? '').split('\n')
-    .filter(line => !/^\s*x-hps-(effort|turn-id|funding-source|lesson-binding|lesson-step|help-mode)\s*:/i.test(line)).join('\n').trim();
+    .filter(line => !OWNED_HEADER_LINE.test(line)).join('\n').trim();
   if (inheritedHeaders) env.ANTHROPIC_CUSTOM_HEADERS = inheritedHeaders;
   else delete env.ANTHROPIC_CUSTOM_HEADERS;
   delete env.CLAUDE_CODE_EFFORT_LEVEL;
@@ -1016,11 +1183,139 @@ export function buildSdkGatewayEnv(
   if (args.previewUrl?.trim()) {
     custom.push(`x-hps-preview-url: ${encodeURIComponent(args.previewUrl.trim())}`);
   }
+  // A2 (spec §4.1) — an orchestrator seat says who is speaking on every CLI
+  // request. ANTHROPIC_CUSTOM_HEADERS is process-wide, so the coach identity
+  // also rides on the CLI's own background calls; the request-class header
+  // (turned on below) is what tells those apart at the gateway. Every label
+  // only ever reduces what a request gets (§4.2), so none needs to be secret.
+  if (args.orchestrator) {
+    const { rosterId, rosterVersion } = args.orchestrator;
+    // Header values: the same checks orchestratorBindingFor applies, again
+    // here because this function is exported on its own.
+    if (!ROSTER_ID.test(rosterId) || !ROSTER_VERSION.test(rosterVersion)) throw Error("invalid roster identity");
+    custom.push(`x-hps-orchestrator: ${ORCHESTRATOR_FORMAT}`);
+    custom.push(`x-hps-agent: coach@${rosterVersion}`);
+    custom.push(`x-hps-roster: ${rosterId}@${rosterVersion}`);
+    // Behind a custom base URL the CLI sends x-claude-code-request-class
+    // (main | subagent | workflow | compaction | auxiliary) only with this
+    // opt-in (llm-gateway-protocol; Claude Code 2.1.273+).
+    env.CLAUDE_CODE_GATEWAY_HINT_HEADERS = "1";
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = ORCHESTRATOR_AUX_MODEL;
+    // Bash or legacy agent work stays in the foreground, inside the turn the
+    // learner is watching (sub-agents doc: "runs the subagent in the
+    // foreground, in every kind of session").
+    env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+  }
   if (custom.length) {
     const existing = (env.ANTHROPIC_CUSTOM_HEADERS ?? "").trim();
     env.ANTHROPIC_CUSTOM_HEADERS = existing ? `${existing}\n${custom.join("\n")}` : custom.join("\n");
   }
+  // A2 — keep compaction where 0.3.207 had it (see SDK_AUTO_COMPACT_WINDOW_TOKENS).
+  // Always set, so an ambient value is overwritten rather than inherited.
+  env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(SDK_AUTO_COMPACT_WINDOW_TOKENS);
   return env;
+}
+
+/**
+ * The `Options.tools` list from the cohort's grants: built-ins only. A name
+ * from SDK_DENIED_TOOLS or an MCP name (REQ-M19) never gets in, whatever the
+ * permitted set says. Order is kept, so a list without such names comes back
+ * unchanged — which is every list profileToAgentOptions produces today. On an
+ * orchestrator seat the Agent/Task invoker is dropped too (ADR 0011 §2).
+ */
+function sdkBuiltinTools(names: readonly string[], orchestrator = false): string[] {
+  return names.filter(
+    (n) =>
+      sdkDeniedToolReason(n) === undefined &&
+      !n.startsWith("mcp__") &&
+      !(orchestrator && AGENT_TOOLS.has(n.toLowerCase())),
+  );
+}
+
+// ── Orchestrator hooks: they may report, never grant (A2; A1 note E9) ───────
+
+/**
+ * The hook events an orchestrator seat may register (spec §14: PreToolUse for
+ * the diff guard, PostToolUse for the site-check summary). Every other event
+ * is dropped — a PermissionRequest hook, for one, can answer `allow` and skip
+ * canUseTool altogether.
+ */
+export const ORCHESTRATOR_HOOK_EVENTS: readonly HookEvent[] = ["PreToolUse", "PostToolUse"];
+
+/**
+ * What a hook's answer may still carry once it leaves A4's code. A hook can
+ * report (`additionalContext`), block (`permissionDecision: "deny"`,
+ * `decision: "block"`, `continue: false`) or send the call to the permission
+ * prompt (`"ask"`). It can never approve: the Claude Code 2.1.292 changelog
+ * describes PreToolUse hook approvals as "bypassing the permission prompt",
+ * and the prompt is where canUseTool — and with it evaluateSdkToolUse — runs
+ * (an inference from the changelog, not observed; dropping the field costs
+ * nothing either way). So:
+ * - `permissionDecision` survives only as "deny" or "ask" ("allow" and
+ *   "defer" are dropped), and only on PreToolUse;
+ * - a top-level `decision: "approve"` is dropped ("block" is kept);
+ * - rewrites (`updatedInput`, `updatedToolOutput`, `updatedMCPToolOutput`),
+ *   the auto-mode `classifierContext`, `systemMessage`, `terminalSequence`
+ *   and `async` answers are dropped;
+ * - `hookEventName` is the event the hook is registered on.
+ * Anything that is not a plain object becomes `{}`: no decision.
+ */
+export function sanitizeHookOutput(event: HookEvent, output: unknown): HookJSONOutput {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return {};
+  const o = output as Record<string, unknown>;
+  const safe: Record<string, unknown> = {};
+  if (typeof o.continue === "boolean") safe.continue = o.continue;
+  if (typeof o.stopReason === "string") safe.stopReason = o.stopReason;
+  if (o.decision === "block") safe.decision = "block";
+  if (typeof o.reason === "string") safe.reason = o.reason;
+  const spec = o.hookSpecificOutput;
+  if (spec && typeof spec === "object" && !Array.isArray(spec)) {
+    const s = spec as Record<string, unknown>;
+    const kept: Record<string, unknown> = {};
+    if (typeof s.additionalContext === "string") kept.additionalContext = s.additionalContext;
+    if (event === "PreToolUse" && (s.permissionDecision === "deny" || s.permissionDecision === "ask")) {
+      kept.permissionDecision = s.permissionDecision;
+      if (typeof s.permissionDecisionReason === "string") kept.permissionDecisionReason = s.permissionDecisionReason;
+    }
+    if (Object.keys(kept).length > 0) safe.hookSpecificOutput = { hookEventName: event, ...kept };
+  }
+  return safe as HookJSONOutput;
+}
+
+/**
+ * The `hooks` option for an orchestrator seat: only ORCHESTRATOR_HOOK_EVENTS,
+ * and every callback's answer goes through sanitizeHookOutput. A callback
+ * that throws still throws: the CLI then blocks the call (2.1.288 "a matcher
+ * failure … blocks the call"), the closed direction. Undefined when nothing
+ * is left to register.
+ */
+export function guardOrchestratorHooks(
+  hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
+  if (!hooks || typeof hooks !== "object") return undefined;
+  const guarded: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
+  for (const event of ORCHESTRATOR_HOOK_EVENTS) {
+    const matchers = hooks[event];
+    if (!Array.isArray(matchers)) continue;
+    const kept: HookCallbackMatcher[] = [];
+    for (const m of matchers) {
+      if (!m || !Array.isArray(m.hooks)) continue;
+      const callbacks = m.hooks
+        .filter((cb): cb is HookCallback => typeof cb === "function")
+        .map(
+          (cb): HookCallback =>
+            async (input, toolUseID, options) => sanitizeHookOutput(event, await cb(input, toolUseID, options)),
+        );
+      if (callbacks.length === 0) continue;
+      kept.push({
+        ...(typeof m.matcher === "string" ? { matcher: m.matcher } : {}),
+        ...(typeof m.timeout === "number" ? { timeout: m.timeout } : {}),
+        hooks: callbacks,
+      });
+    }
+    if (kept.length > 0) guarded[event] = kept;
+  }
+  return Object.keys(guarded).length > 0 ? guarded : undefined;
 }
 
 /**
@@ -1066,16 +1361,27 @@ export function buildSdkQueryOptions(
     previewUrl?: string;
     /** REQ-M13 — coach-owned CLI config dir (the host creates it). */
     configDir?: string;
+    /**
+     * A2 — the orchestrator host's SDK hooks (A4: diff guard on PreToolUse,
+     * site-check summary on PostToolUse). Attached only when `agent` carries
+     * an orchestrator binding, and only through guardOrchestratorHooks, so no
+     * hook can approve a tool call. Ignored on every other seat.
+     */
+    hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
   },
 ): Omit<AgentSdkOptions, "canUseTool" | "abortController"> {
+  const orchestrator = agent.orchestrator;
   // #282 P2 slice 3 — the read-only subagent catalog rides on the same flag
   // that grants the Agent/Task invoker. Definition tools are the intersection
   // with the cohort's permitted set (buildSubagentDefinitions); no grant → no
-  // `agents` key at all, so the model never sees a subagent.
+  // `agents` key at all, so the model never sees a subagent. ADR 0011 §2: an
+  // orchestrator seat never attaches it, whatever the caller's grant says.
+  const agentTools = orchestrator ? [] : agent.permittedAgentTools;
   const agents =
-    agent.permittedAgentTools.length > 0
+    agentTools.length > 0
       ? buildSubagentDefinitions(agent.permittedTools)
       : undefined;
+  const hooks = orchestrator ? guardOrchestratorHooks(args.hooks) : undefined;
   return {
     systemPrompt: withWorkspaceContext(agent.systemPrompt, args.cwd, args.workspaceFiles),
     model: agent.model,
@@ -1086,7 +1392,7 @@ export function buildSdkQueryOptions(
     // exactly when the profile grants them. The Agent/Task invoker IS a
     // built-in, so it joins the base set only when the profile grants
     // subagents (REQ-M22).
-    tools: [...agent.permittedTools, ...agent.permittedAgentTools],
+    tools: sdkBuiltinTools([...agent.permittedTools, ...agentTools], orchestrator !== undefined),
     ...(agents ? { agents } : {}),
     allowedTools: [],
     settingSources: [],
@@ -1094,7 +1400,9 @@ export function buildSdkQueryOptions(
     // user settings, and plugin MCP configs are ignored, so no ambient config
     // can add tools behind the cohort profile's back.
     strictMcpConfig: true,
-    permissionMode: agent.permissionMode,
+    // Always the explicit constant, never the caller's field: an omitted or
+    // different mode would let the CLI start in auto mode (0.3.286+).
+    permissionMode: SDK_PERMISSION_MODE,
     maxTurns: agent.maxTurns,
     ...(args.cwd ? { cwd: args.cwd } : {}),
     ...(args.pathToClaudeCodeExecutable
@@ -1114,7 +1422,9 @@ export function buildSdkQueryOptions(
       ...(args.cwd ? { workspace: args.cwd } : {}),
       ...(args.workspaceFiles ? { workspaceFiles: args.workspaceFiles } : {}),
       ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
+      ...(orchestrator ? { orchestrator } : {}),
     }),
+    ...(hooks ? { hooks } : {}),
   };
 }
 
@@ -1142,16 +1452,22 @@ export function profileToAgentOptions(
   profile: ResolvedProfile,
   ctx: ProfileToAgentCtx,
 ): AgentCoachOptions {
+  const orchestrator = orchestratorBindingFor(profile, ctx.orchestrator);
   return {
     systemPrompt: ctx.systemPrompt,
     model: ctx.model,
     permittedTools: permittedToolsFor(profile),
-    permittedMcpTools: permittedMcpToolsFor(profile),
-    permittedAgentTools: permittedAgentToolsFor(profile),
+    permittedMcpTools: permittedMcpToolsFor(profile, ctx.orchestrator),
+    // ADR 0011 §2 — with a roster served, helpers are reached through consult,
+    // never through SDK subagents: no Agent/Task grant, whatever
+    // `sdk_tools.subagents` says. The legacy catalog (REQ-M22) stays for every
+    // seat without a roster.
+    permittedAgentTools: orchestrator ? [] : permittedAgentToolsFor(profile),
     // Always gate. Minors and adults alike route every tool use through the
     // manual-approve modal — the gate is the lesson.
-    permissionMode: "default",
+    permissionMode: SDK_PERMISSION_MODE,
     maxTurns: maxTurnsFor(profile),
+    ...(orchestrator ? { orchestrator } : {}),
   };
 }
 
@@ -1218,6 +1534,86 @@ export function isSdkRetryEvent(msg: Record<string, unknown>): boolean {
  * point: bounded-and-visible beats forever-and-silent.
  */
 export const SDK_STREAM_STALL_MS = 240_000;
+
+/**
+ * The CLI's own stream-idle limit behind a custom ANTHROPIC_BASE_URL, Claude
+ * Code 2.1.299: `Math.max(CLAUDE_STREAM_IDLE_TIMEOUT_MS ?? 0, 300000)` in the
+ * bundled binary, matching its changelog ("they now wait 300 seconds,
+ * whether or not feature flags are loaded"). Studio's stall watchdog and the
+ * busy abort below must both end a turn before this does, so the learner
+ * reads Studio's Korean line rather than whatever the CLI does at 300 s.
+ */
+export const SDK_CLI_STREAM_IDLE_MS = 300_000;
+
+// ── Busy notice and bounded abort (A2; spec §11.6 item 4) ───────────────────
+// A shared-upstream rush (429 rate limit, 503, 529 overloaded) used to look
+// like nothing at all: the CLI retries those silently, and the screen stayed
+// on "생각하는 중…" until the 240 s watchdog. With a busy policy attached (the
+// orchestrator host attaches one: sdkBusyPolicyFor), the first busy retry of a
+// turn posts one non-blocking notice, and the turn ends with its own Korean
+// line after SDK_BUSY_MAX_RETRIES busy retries or SDK_BUSY_MAX_WAIT_MS of busy
+// waiting, whichever comes first. A first-byte-timeout retry (0.3.299
+// `no_response`, `error_status: null`) and other 5xx are not "busy": they
+// neither notify nor count, and the stall watchdog still covers them.
+
+/** api_retry statuses that mean the shared upstream is busy. */
+export const SDK_BUSY_STATUSES: ReadonlySet<number> = new Set([429, 503, 529]);
+
+/** Shown once per turn, on the first busy retry (spec §11.6, verbatim). */
+export const SDK_BUSY_NOTICE = "지금 요청이 많아 잠시 기다리는 중이에요. 자동으로 다시 시도합니다.";
+
+/** The turn's last line when the busy retries run out (spec §11.6, verbatim). */
+export const SDK_BUSY_ABORT_FRIENDLY =
+  "지금 사용하는 사람이 많아 답을 받지 못했어요. 30초 뒤에 다시 보내 주세요. 작업 파일은 그대로 있어요.";
+
+/**
+ * Busy retries in one episode before the turn ends: the third busy `api_retry`
+ * event aborts the query instead of letting the CLI wait out another delay.
+ * An episode ends when a real response arrives.
+ */
+export const SDK_BUSY_MAX_RETRIES = 3;
+
+/** Longest busy wait in one episode, from its first busy retry. */
+export const SDK_BUSY_MAX_WAIT_MS = 90_000;
+
+/**
+ * The bounded abort. Its message is the learner-facing line, which the panel's
+ * generic error path renders as is; `status` is the busy status that ended it.
+ */
+export class SdkBusyAbortError extends Error {
+  // A plain field, not a TS parameter property: the smoke tests load this
+  // module under `node --experimental-strip-types`, which rejects those.
+  readonly status?: number;
+  constructor(status?: number) {
+    super(SDK_BUSY_ABORT_FRIENDLY);
+    this.name = "SdkBusyAbortError";
+    if (status !== undefined) this.status = status;
+  }
+}
+
+/** What consumeSdkStream needs to notify and bound a busy wait. */
+export interface SdkBusyPolicy {
+  /** Called once per turn with SDK_BUSY_NOTICE. Must not block; a throw is ignored. */
+  onNotice: (text: string) => void;
+  /** Defaults to SDK_BUSY_MAX_RETRIES. */
+  maxRetries?: number;
+  /** Defaults to SDK_BUSY_MAX_WAIT_MS. */
+  maxWaitMs?: number;
+  /** Defaults to `new SdkBusyAbortError(status)`. */
+  makeBusyError?: (status: number | undefined) => Error;
+}
+
+/**
+ * The busy policy for this seat: only an orchestrator seat gets one (spec
+ * §13.2 row A2). Undefined elsewhere, so consumeSdkStream behaves exactly as
+ * before.
+ */
+export function sdkBusyPolicyFor(
+  agent: Pick<AgentCoachOptions, "orchestrator">,
+  onNotice: (text: string) => void,
+): SdkBusyPolicy | undefined {
+  return agent.orchestrator ? { onNotice } : undefined;
+}
 
 /**
  * Student-facing stall copy. Same register as the token copy (REQ-B5): says
@@ -1659,6 +2055,12 @@ export interface SdkStreamHandlers {
    * dedupe 는 소비자 몫 — extractSdkUsage 주석 참고.
    */
   onUsage?: (u: SdkUsageEvent) => void;
+  /**
+   * A2 — busy notice and bounded abort (spec §11.6 item 4). Optional: absent,
+   * busy retries stay silent and only the stall watchdog bounds them, as
+   * before. Attach it with sdkBusyPolicyFor (orchestrator seats only).
+   */
+  busy?: SdkBusyPolicy;
 }
 
 /**
@@ -1712,21 +2114,44 @@ export async function consumeSdkStream(
    */
   let sawPause = false;
 
+  // A2 — busy bookkeeping (spec §11.6 item 4). Inert without h.busy.
+  const busy = h.busy;
+  const busyMaxRetries = Math.max(1, busy?.maxRetries ?? SDK_BUSY_MAX_RETRIES);
+  const busyMaxWait = Math.max(1, busy?.maxWaitMs ?? SDK_BUSY_MAX_WAIT_MS);
+  /** Busy retries since the last real response (one episode). */
+  let busyRetries = 0;
+  /** When the current busy episode began; undefined outside one. */
+  let busySince: number | undefined;
+  let busyStatus: number | undefined;
+  /** The notice is once per turn, across episodes. */
+  let busyNoticed = false;
+  const busyAbort = (): Error => {
+    // Nobody awaits an in-flight next() after this throw, and abortQuery() rejects it.
+    pending?.catch(() => {});
+    h.abortQuery();
+    return busy?.makeBusyError?.(busyStatus) ?? new SdkBusyAbortError(busyStatus);
+  };
+
   const nextEvent = async (): Promise<IteratorResult<unknown>> => {
     if (!pending) pending = it.next();
-    if (budget <= 0) {
+    if (budget <= 0 && busySince === undefined) {
       const settled = await pending;
       pending = null;
       return settled;
     }
     for (;;) {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const remaining = Math.max(1, budget - (Date.now() - progressAt));
+      const now = Date.now();
+      const stallLeft = budget > 0 ? Math.max(1, budget - (now - progressAt)) : Number.POSITIVE_INFINITY;
+      const busyLeft =
+        busySince !== undefined ? Math.max(1, busySince + busyMaxWait - now) : Number.POSITIVE_INFINITY;
+      // Decided before waiting, so timer rounding can never mistake one deadline for the other.
+      const busyDeadlineFirst = busyLeft <= stallLeft;
       // NOT unref'd on purpose: this timer is the only thing that ends a wedged
       // turn, so it has to be able to keep the loop alive while one is live.
       // It is always cleared below (both legs of the race).
       const expired = new Promise<typeof STALLED>((resolve) => {
-        timer = setTimeout(() => resolve(STALLED), remaining);
+        timer = setTimeout(() => resolve(STALLED), Math.min(stallLeft, busyLeft));
       });
       const won = await Promise.race([pending.then((value) => ({ value })), expired]);
       clearTimeout(timer);
@@ -1734,6 +2159,8 @@ export async function consumeSdkStream(
         pending = null;
         return won.value;
       }
+      // The busy wait ran out before the stall budget: the bounded abort, in its own words.
+      if (busyDeadlineFirst) throw busyAbort();
       if (h.isTurnBlocked?.()) {
         // An open approval modal / a running tool is not a stall.
         sawPause = true;
@@ -1761,11 +2188,33 @@ export async function consumeSdkStream(
       // Check BEFORE emitting so a chunk isn't flushed to the webview after stop.
       if (h.isAborted()) throw h.makeAbortError();
       const msg = (step.value ?? {}) as Record<string, unknown>;
-      if (isSdkRetryEvent(msg)) lastRetryStatus = typeof msg.error_status === "number" ? msg.error_status : undefined;
+      if (isSdkRetryEvent(msg)) {
+        lastRetryStatus = typeof msg.error_status === "number" ? msg.error_status : undefined;
+        // A2 — a busy retry: one notice per turn, and the episode's count and clock.
+        if (busy && lastRetryStatus !== undefined && SDK_BUSY_STATUSES.has(lastRetryStatus)) {
+          busyRetries += 1;
+          busyStatus = lastRetryStatus;
+          busySince ??= Date.now();
+          if (!busyNoticed) {
+            busyNoticed = true;
+            try {
+              busy.onNotice(SDK_BUSY_NOTICE);
+            } catch {
+              // The notice is non-blocking by contract: a host error must not end the turn.
+            }
+          }
+          if (busyRetries >= busyMaxRetries) throw busyAbort();
+        }
+      }
       // A response that came back after the retries answers them: their status no longer describes this turn.
       // The CLI's own "API Error: …" line is an assistant message too — it is the failure, not an answer (`error` set, or
       // the CLI's `<synthetic>` model).
-      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") lastRetryStatus = undefined;
+      else if (msg["type"] === "assistant" && msg["error"] === undefined && (msg["message"] as { model?: unknown } | undefined)?.model !== "<synthetic>") {
+        lastRetryStatus = undefined;
+        // …and ends a busy episode: the next rush counts from zero again.
+        busyRetries = 0;
+        busySince = undefined;
+      }
       const fatal = sdkFatalAuthStatus(msg);
       if (fatal !== null) {
         // Kill the subprocess's retry loop first, then surface the token error.
@@ -1849,10 +2298,70 @@ export async function consumeSdkStream(
 // is what makes the executeShell hard-deny and the writeFile workspace-scope
 // check actually fire — a wrong mapping silently defeats both.
 
-const SHELL_TOOLS = new Set(["bash", "shell", "run"]);
+// "powershell" (FO-11, A2): the CLI's shell tool on Windows when Git Bash is
+// missing. In the 2.1.299 binary, `vw()` turns the PowerShell tool on by
+// default exactly there, and the startup check exits with
+// `shell_tool_missing` only when neither shell exists. The typings have no
+// PowerShell input type, so the drift smoke cannot see it; it is classified
+// here so that, whenever it is granted, it meets the same destructive-command
+// gate as Bash instead of falling through as an unknown tool. The grant
+// itself stays with Bash only (permittedToolsFor): PowerShell is never in
+// `tools`, so on its own this changes no seat's options.
+const SHELL_TOOLS = new Set(["bash", "shell", "run", "powershell"]);
 const WRITE_TOOLS = new Set(["write", "edit", "multiedit", "notebookedit"]);
 const READ_TOOLS = new Set(["read", "glob", "grep", "ls"]);
 const SEARCH_TOOLS = new Set(["websearch", "webfetch"]);
+
+/**
+ * Built-in tools Studio has classified and keeps away from learners, each with
+ * the reason (A2, Agent SDK 0.3.299). Exact runtime names, read from the
+ * installed `sdk-tools.d.ts` union and the bundled 2.1.299 CLI.
+ *
+ * How they stay off:
+ * - `tools` narrowing. Every built-in not in `Options.tools` becomes a CLI
+ *   deny rule (source `toolsNarrowing` in the 2.1.299 binary), applied before
+ *   the tool's own permission check. That ordering matters for SendFeedback,
+ *   whose own check always answers "allow", so canUseTool never sees it.
+ *   buildSdkQueryOptions also strips these names from `tools`, so no profile
+ *   or polluted permitted set can list them.
+ * - canUseTool. evaluateSdkToolUse denies these names before any grant is
+ *   consulted, as a routine (not drift) denial with the reason below.
+ */
+export const SDK_DENIED_TOOLS: Readonly<Record<string, string>> = {
+  // Added in 0.3.299.
+  SendFeedback:
+    "queues a feedback draft that quotes the learner's words and the session's request ids, for Anthropic's /feedback channel; it runs silently (its own permission check always allows) and Studio offers no /feedback",
+  ReadNotifications:
+    "drains notifications pushed from outside the conversation (PR activity, scheduled triggers, other sessions) into the coach's context: an input channel the learner never sees, with no Studio use",
+  RefreshMcpTools:
+    "re-lists MCP server tools mid-session; Studio's MCP set is fixed per query (strictMcpConfig) and a changed tool list invalidates the prompt cache",
+  OfferChromeSetup:
+    "offers to connect Claude in Chrome, the learner's own signed-in browser; the coach works only in the integrated preview browser",
+  ProposeGoal:
+    "sets a session goal that keeps the CLI working until an evaluator agrees, at extra model requests; the learner's goal is Studio's own and the loop stays bounded by maxTurns",
+  ProposeSkills:
+    "proposes SKILL.md files to save as persistent instructions outside the workspace; cohort skills are Service-owned",
+  // Changed in 0.3.299 and never granted: the changes widen external effects.
+  Artifact:
+    "publishes and edits pages on claude.ai (0.3.299 adds read, watch, upload and pin actions): an external side effect",
+  Projects:
+    "reads and writes claude.ai project documents (0.3.299 adds project memory reads): data outside the workspace",
+  RemoteTrigger:
+    "creates and runs remote triggers (0.3.299 adds webhook triggers and run logs): external side effects",
+  ScheduleWakeup:
+    "schedules a later /loop run outside the learner's turn",
+  Monitor:
+    "starts a background watcher (a command or a WebSocket) that outlives the turn",
+  ReportFindings:
+    "emits structured code-review findings for Claude Code's review UI; Studio has no surface for them",
+};
+
+/** The reason a built-in is never available to learners, or undefined when it is not on that list. */
+export function sdkDeniedToolReason(toolName: string): string | undefined {
+  return Object.prototype.hasOwnProperty.call(SDK_DENIED_TOOLS, toolName)
+    ? SDK_DENIED_TOOLS[toolName]
+    : undefined;
+}
 
 /**
  * The complete vocabulary of Agent SDK tool names the #282 Phase 2 policy
@@ -1869,6 +2378,8 @@ const SEARCH_TOOLS = new Set(["websearch", "webfetch"]);
  * dropping, which must surface loudly and distinctly instead of blending into
  * the routine-denial stream. Deny stays deny either way (fail-closed); this
  * only tells the two denials apart.
+ *
+ * SDK_DENIED_TOOLS counts as classified: denying them by name IS their rule.
  */
 export function isClassifiedSdkToolName(toolName: string): boolean {
   const name = toolName.toLowerCase();
@@ -1881,10 +2392,12 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   ) {
     return true;
   }
+  if (sdkDeniedToolReason(toolName) !== undefined) return true;
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
-    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName)
+    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName)
   );
 }
 
@@ -1988,6 +2501,20 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
       kind: "delegateAgent",
       description: `${subagent || "서브에이전트"}에게 위임: ${task}`,
       payload: { subagent, task },
+    };
+  }
+  // A2 — consult reaches the approval path as its own kind (spec §5.1), so
+  // resolveActionApproval decides from requireApprovalFor: allowed without a
+  // modal by default, a modal where a machine lists consultHelper. protocol.ts
+  // (A5) adds the kind to ActionRequest["kind"] (spec §14); until then it
+  // travels as a string, which the host treats like any unlisted kind (Tier 3).
+  if (action.toolName === MCP_CONSULT) {
+    const agent = firstString(action.input, ["agent"]) ?? "";
+    const question = firstString(action.input, ["question"]) ?? "";
+    return {
+      kind: CONSULT_HELPER_KIND as string as ActionRequest["kind"],
+      description: `도우미에게 묻기${agent ? ` (${agent})` : ""}: ${question.slice(0, 120)}`,
+      payload: { agent, question },
     };
   }
 
@@ -2181,6 +2708,17 @@ export function evaluateSdkToolUse(args: {
   const { toolName, input, permittedTools, workspaceRoot } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
 
+  // Gate 0 (A2) — built-ins that never run for learners, whatever the permitted
+  // set says. A routine denial (classified), with the reason logged host-side.
+  const neverReason = sdkDeniedToolReason(toolName);
+  if (neverReason !== undefined) {
+    return {
+      decision: "deny",
+      reason: `tool "${toolName}" is never available to learners: ${neverReason}`,
+      friendly: TOOL_DENIED_FRIENDLY,
+    };
+  }
+
   // Gate 1 — the profile's permitted set. Bash/WebFetch/anything not granted
   // dies here with a logged reason, even if the upstream model requests it.
   if (!permittedTools.includes(toolName)) {
@@ -2217,6 +2755,10 @@ export function evaluateSdkToolUse(args: {
   // destructive commands (`rm`, `sudo`, `git push --force`, pipe-to-shell)
   // carry a flag so the host shows the stronger confirm and never lets
   // "항상 허용" remember them.
+  //
+  // PowerShell takes this same branch: one gate, one destructive-command
+  // policy (shellPolicy.isDestructiveCommand), so a Windows seat without Git
+  // Bash can never reach a laxer path than Bash.
   if (SHELL_TOOLS.has(name)) {
     const command = firstString(input, ["command"]) ?? "";
     if (!command.trim()) {
@@ -2263,6 +2805,17 @@ export function evaluateSdkToolUse(args: {
     // (sdk.d.ts: CanUseTool options carry agentID for sub-agent context).
     return { decision: "ask" };
   }
+
+  // ── Orchestrator tools (A2; spec §3.2, §5.1, §6.1) ───────────────────────
+  // Gate 1 already proved a served roster granted them (permittedMcpToolsFor:
+  // adults only). site_check measures the learner's own preview, read-only:
+  // "Deterministic checks have no modal" (§5.1). consult goes to the approval
+  // path as kind consultHelper, which requireApprovalFor's default leaves out:
+  // no modal unless a machine lists it, and the machine-scoped setting stays
+  // the single source of that choice (#499). Helpers have no tools, so a
+  // consult can cause no external effect.
+  if (toolName === MCP_SITE_CHECK) return { decision: "allow" };
+  if (toolName === MCP_CONSULT) return { decision: "ask" };
 
   // ── hypeproof MCP browser tools (#282 P2 slice 2, REQ-M20) ────────────────
   // Grant already passed Gate 1 (profile opted in via sdk_tools.browser and

@@ -101,4 +101,70 @@ const sdk = await import("@anthropic-ai/claude-agent-sdk");
   assert.match(coach, /browser MCP tools but the SDK\/zod factory is unavailable/, "게이트 실패가 로그로 남는다");
 }
 
+// ─── 5. A2: hook answers still have the shape the guard knows ────────────────
+// sanitizeHookOutput is an allowlist. If the SDK adds a NEW field to hook
+// answers that can carry an approval, the guard drops it, but nobody learns it
+// exists — and the next person, wondering why the field "does nothing", may
+// add it to the allowlist as is. So the keys of the installed sdk.d.ts hook
+// output types are locked exactly: when they move, stop here and re-read the
+// guard.
+{
+  const dts = readFileSync(join(here, "..", "node_modules", "@anthropic-ai", "claude-agent-sdk", "sdk.d.ts"), "utf8");
+  /** Top-level keys of `export declare type <name> = { … };`, comments removed. */
+  const typeKeys = (name) => {
+    const start = dts.indexOf(`export declare type ${name} = {`);
+    assert.ok(start >= 0, `sdk.d.ts declares ${name}`);
+    let depth = 0;
+    let end = -1;
+    for (let i = dts.indexOf("{", start); i < dts.length; i++) {
+      if (dts[i] === "{") depth++;
+      else if (dts[i] === "}" && --depth === 0) { end = i; break; }
+    }
+    const body = dts.slice(dts.indexOf("{", start) + 1, end).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const keys = [];
+    let level = 0;
+    for (const line of body.split("\n")) {
+      const m = level === 0 ? line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\??\s*:/) : null;
+      if (m) keys.push(m[1]);
+      level += (line.match(/[{(]/g) ?? []).length - (line.match(/[})]/g) ?? []).length;
+    }
+    return keys.sort();
+  };
+  assert.deepEqual(
+    typeKeys("SyncHookJSONOutput"),
+    ["continue", "decision", "hookSpecificOutput", "reason", "stopReason", "suppressOutput", "systemMessage", "terminalSequence"],
+    "the top-level hook answer fields changed: re-read sanitizeHookOutput",
+  );
+  assert.deepEqual(
+    typeKeys("PreToolUseHookSpecificOutput"),
+    ["additionalContext", "hookEventName", "permissionDecision", "permissionDecisionReason", "updatedInput"],
+    "the PreToolUse output fields changed: re-read sanitizeHookOutput",
+  );
+  assert.deepEqual(
+    typeKeys("PostToolUseHookSpecificOutput"),
+    ["additionalContext", "classifierContext", "hookEventName", "updatedMCPToolOutput", "updatedToolOutput"],
+    "the PostToolUse output fields changed: re-read sanitizeHookOutput",
+  );
+  assert.match(
+    dts,
+    /export declare type HookPermissionDecision = 'allow' \| 'deny' \| 'ask' \| 'defer';/,
+    "the permissionDecision values changed: the guard passes only deny and ask",
+  );
+  // Negative controls — if the key extractor measured nothing, the locks above
+  // would mean nothing. A real key must be found, an invented one must not.
+  assert.ok(typeKeys("PreToolUseHookSpecificOutput").includes("permissionDecision"), "the extractor sees a real key");
+  assert.ok(!typeKeys("PreToolUseHookSpecificOutput").includes("thisKeyHasNeverExisted"), "the extractor invents no key");
+
+  // The two events the guard lets through are events the SDK really exports (runtime value).
+  const { ORCHESTRATOR_HOOK_EVENTS } = await import("../src/sdkCoachHelpers.ts");
+  assert.ok(Array.isArray(sdk.HOOK_EVENTS), "the SDK exports HOOK_EVENTS");
+  for (const event of ORCHESTRATOR_HOOK_EVENTS) {
+    assert.ok(sdk.HOOK_EVENTS.includes(event), `${event} is a hook event the SDK knows`);
+  }
+  // The Options keys we pass still exist: a renamed key would be ignored silently.
+  for (const key of ["hooks", "permissionMode", "tools", "allowedTools", "settingSources", "strictMcpConfig", "env"]) {
+    assert.match(dts, new RegExp(`\\n    ${key}\\?:`), `Options.${key} is declared in sdk.d.ts`);
+  }
+}
+
 console.log("sdk-surface-drift smoke OK");

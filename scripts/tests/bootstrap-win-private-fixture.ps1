@@ -55,6 +55,10 @@ try {
     try { Resolve-StudioAsset $manifest | Out-Null } catch { $rejected = $true }
     if (-not $rejected) { throw 'Foreign repository was accepted' }
     Write-Host 'PASS: private Windows bootstrap functions'
+    # Class kit mode goes through the same functions. Its fixture runs from here
+    # so the Windows PowerShell 5.1 job that runs this file covers it too; it
+    # throws on any failure.
+    & (Join-Path $PSScriptRoot 'install-kit-fixture.ps1')
 } finally {
     if (Test-Path $script:TempRoot) { Remove-Item -Recurse -Force $script:TempRoot }
 }

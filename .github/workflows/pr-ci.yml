@@ -234,6 +234,63 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: npm test
 
+  # The Windows leg for the extension smokes whose verdict depends on the host
+  # (ADR 0011 rollout, WP A1). Every other job here runs on Ubuntu, where a
+  # Windows-only break cannot show: `path` resolves drive letters and
+  # separators differently there, and seed-sdk-binary.ps1 is the seeder venue
+  # Windows machines run. These smokes import only Node built-ins and the
+  # extension's own modules (SDK imports are type-only and stripped), so the
+  # job needs no npm install and no Service secret. It costs one Windows
+  # minute, about two Linux minutes, per run.
+  #   shell-policy      shell-gate controls (WP A3 adds the PowerShell verbs)
+  #   absolutize-paths  relative-path absolutizing and the workspace
+  #                     containment deny under Windows path rules
+  #   sdk-binary        both seed scripts against the manifest and lockfile,
+  #                     and the seeded binary path per platform
+  #   sdk-vendor        the vendored SDK entry a packaged build loads
+  # WP A4's consult-context containment smoke joins the list when it lands.
+  extension-windows:
+    name: extension / windows smokes
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Every smoke runs even when an earlier one fails, so one failure does
+      # not hide another.
+      - name: Run platform-sensitive smokes (no install needed)
+        shell: bash
+        working-directory: extensions/hypeproof-chat
+        run: |
+          failed=0
+          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs; do
+            echo "— $f"
+            node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::smoke failed on Windows"; failed=1; }
+          done
+          exit "$failed"
+      # The smokes read seed-sdk-binary.ps1 as text. This parses it with
+      # Windows PowerShell 5.1, the shell venue machines run, so an edit that
+      # breaks its syntax fails here instead of on a student's machine. The
+      # parser must first reject a broken snippet, or a pass would prove
+      # nothing.
+      - name: Parse seed-sdk-binary.ps1 with Windows PowerShell 5.1
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          $bad = $null
+          [System.Management.Automation.Language.Parser]::ParseInput('function f( {', [ref]$null, [ref]$bad) | Out-Null
+          if (-not ($bad -and $bad.Count)) { Write-Host 'control failed: the parser accepted broken input'; exit 1 }
+          $errs = $null
+          $full = (Resolve-Path -LiteralPath 'scripts/seed-sdk-binary.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile($full, [ref]$null, [ref]$errs) | Out-Null
+          if ($errs -and $errs.Count) {
+            $errs | Select-Object -First 5 | ForEach-Object { Write-Host ('line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
+            exit 1
+          }
+          Write-Host "seed-sdk-binary.ps1 parses under PowerShell $($PSVersionTable.PSVersion) with 0 errors"
+
   cr-publish-browser:
     # cr-publish (#1393): the published test runtime in real Chromium as a phone (CR-T18,
     # CR-T19 incl. the service-worker and sibling-link cases, CR-T21 one visit, CR-T22, CR-T60,

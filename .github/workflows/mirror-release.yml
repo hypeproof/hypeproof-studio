@@ -247,6 +247,15 @@ jobs:
           gh release create "$TAG" --repo "$TARGET_REPO" --title "${name:-HypeProof Studio $TAG}" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-} 2>/dev/null || true
           gh release edit "$TAG" --repo "$TARGET_REPO" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-}
           gh release upload "$TAG" --repo "$TARGET_REPO" dist/* --clobber
+          # Installer bundle (#1617): this tag's two installers and two SDK seeders
+          # as release assets, so a participation-code install can assemble a class
+          # kit from the release alone (Lab /studio/install). Taken from the tag, so
+          # they always match the app they install.
+          mkdir -p install-bundle
+          for f in install.sh install.ps1 seed-sdk-binary.sh seed-sdk-binary.ps1; do
+            git show "$TAG:scripts/$f" > "install-bundle/$f"
+          done
+          gh release upload "$TAG" --repo "$TARGET_REPO" install-bundle/* --clobber
 
       - name: Verify mirror
         if: env.DRY_RUN != 'true'
