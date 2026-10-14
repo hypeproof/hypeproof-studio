@@ -25,7 +25,7 @@ const canonical = (root: string) => fs.realpathSync(root);
 /**
  * REQ-L12 — a bought pass continues in its home folder, the way Claude Code continues in the folder
  * it is started in (Jay, 2026-10-14). Only the profile's own `workspace_root` can be taken over, and
- * only by a pass: a lesson or personal folder keeps its one-activity binding.
+ * only by a pass. A local folder choice must not change the Service profile's home.
  */
 export function passTakesOver(p: Pick<ResolvedProfile, 'pass' | 'workspace_root'>, root: string): boolean {
   if (!p.pass || !p.workspace_root) return false;
@@ -102,7 +102,11 @@ export class ActivityConnections {
     fs.mkdirSync(this.dir,{recursive:true,mode:0o700});
     const release=this.lock(root);
     try {
-      this.claim(root,digest(JSON.stringify([activityService(this.service()),p.activity_id])),passTakesOver(p,root));
+      // Preparation must not replace the binding that commit snapshots for rollback.
+      const file=this.bindingPath(root), id=digest(JSON.stringify([activityService(this.service()),p.activity_id]));
+      if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file,'utf8')).id !== id && !passTakesOver(p,root)) {
+        throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
+      }
       prepare();
     } finally { release(); }
   }
@@ -123,7 +127,7 @@ export class ActivityConnections {
     const restore = () => {
       if (!fs.existsSync(bindingFile)) return;
       const bound=JSON.parse(fs.readFileSync(bindingFile,'utf8'));
-      // Ours: written with this ref, or claimed for this id without a ref yet (a pass takeover included).
+      // Ours: written with this ref, or claimed for this id without a ref yet.
       if (bound.ref !== ref && !(bound.id===id && !bound.ref)) return;
       if (oldBinding===undefined) fs.unlinkSync(bindingFile);
       else fs.writeFileSync(bindingFile,oldBinding,{mode:0o600});

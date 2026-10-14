@@ -175,8 +175,8 @@ export async function activate(context: vscode.ExtensionContext) {
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
-  const startPage = new StartPage(context, provider, async (profile, commit) => {
-    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit);
+  const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
+    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   });
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
   // kids-quest — skeleton round result → next-turn context for the coach.
@@ -929,7 +929,8 @@ export function resolveWorkspaceRoot(raw: string): string | null {
 
 /**
  * Make sure the learner has a real folder to work in, matching their cohort.
- * The folder path comes from `profile.workspace_root` and the starter page from
+ * The folder path comes from a local selection or `profile.workspace_root`, kept
+ * separate so a selection cannot authorize pass takeover. The starter page comes from
  * `profile.game.template_tier` (website vs game) — #422. When the profile is
  * absent (called before onboarding resolves it) or carries no workspace_root,
  * we fall back to the legacy `~/HypeProofGames` + game starter, so existing
@@ -952,12 +953,15 @@ export function resolveWorkspaceRoot(raw: string): string | null {
  * folder would briefly see workspaceFolders empty, fire openFolder, and
  * reload mid-onboard, racing the setToken QuickInput.
  */
-async function ensureWorkspace(
+export async function ensureWorkspace(
   profile?: ResolvedProfile | null,
   context?: vscode.ExtensionContext,
   isTestRun = false,
   commit: (directory?: string) => Promise<void> = async () => {},
+  selectedDirectory?: string,
 ): Promise<boolean> {
+  const desiredRoot = selectedDirectory ? resolveWorkspaceRoot(selectedDirectory)
+    : profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
   let open: string[] = [];
   for (let i = 0; i < 10; i++) {
     const folders = vscode.workspace.workspaceFolders;
@@ -972,14 +976,14 @@ async function ensureWorkspace(
     const attempted = context?.globalState.get<string>(WORKSPACE_SWITCH_ATTEMPT_KEY) ?? null;
     const decision = decideWorkspaceSwitch({
       openFolders: open,
-      desiredRoot: profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null,
+      desiredRoot,
       lastAttemptedRoot: attempted,
       // Reuse the env OR file fixture verdict from activation (same as spool).
       isE2E: isTestRun,
       canonicalize: canonicalizeFsPath,
     });
     if (!decision.switch) {
-      const desired = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
+      const desired = desiredRoot;
       if (!isTestRun && desired && !isSameLocation(open[0], desired, canonicalizeFsPath)) {
         await clearWorkspaceSwitchAttempt(context);
         throw new Error('Activity workspace is not the active root');
@@ -1010,7 +1014,7 @@ async function ensureWorkspace(
 
   // Folder + starter are cohort-driven; legacy fallback keeps old cohorts intact
   // and guarantees an absolute path (a relative workspace_root resolves to null).
-  const resolved = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
+  const resolved = desiredRoot;
   const dir = resolved ?? path.join(os.homedir(), LEGACY_WORKSPACE_DIRNAME);
   return await openWorkspaceFolder(dir, profile, commit, context);
 }

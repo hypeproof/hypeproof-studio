@@ -35,9 +35,17 @@ try{
  // REQ-L12 — a bought pass continues in its own home folder (Jay, 2026-10-14: the Claude Code way); elsewhere the rule holds.
  const pass=(id,home)=>({...profile(id),pass:{request_limit:200,requests_used:0},workspace_root:home});
  assert.throws(()=>store.prepare(a,pass('c',b),()=>assert.fail('a pass takes over only its home folder')),/다른 활동/);
- let prepared=false;store.prepare(a,pass('c',a),()=>{prepared=true;});assert.equal(prepared,true,'a pass takes over its home folder');
+ // The old owner is retained until commit, including failed preparation and credential storage.
+ const beforePass=fs.readFileSync(store['bindingPath'](a),'utf8');
+ let prepared=false;store.prepare(a,pass('c',a),()=>{prepared=true;});assert.equal(prepared,true,'a pass can prepare its home folder');
+ assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
+ assert.throws(()=>store.prepare(a,pass('c',a),()=>{throw Error('prepare failure');}),/prepare failure/);
+ assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
+ failStore=true;await assert.rejects(()=>store.commit('synthetic-c',pass('c',a),a),/store failure/);failStore=false;
+ assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
+ const undoPass=await store.commit('synthetic-c',pass('c',a),a);
  assert.throws(()=>store.prepare(a,profile('a'),()=>assert.fail('an activity that is not a pass cannot take it back')),/다른 활동/);
- store.prepare(a,pass('a',a),()=>{});
+ await undoPass();assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
  await undo();assert.equal(store.current.ref,first.ref,'failed navigation rolls back exact old reference');
  root=a;origin='https://different.invalid/v1';assert.equal(await store.token(),undefined,'changed server gets no saved credential');origin='https://synthetic.invalid/v1';
  failStore=true;await assert.rejects(()=>store.commit('rotation',profile('a'),a),/store failure/);failStore=false;
