@@ -95,14 +95,14 @@ unchanged; this ADR changes the runtime boundary, not the product philosophy.
   provider-neutral aliases to the Claude 5.5 family and split the OpenAI side cheaper-first
   ([ADR 0006, Alias remap — 2026-10-14](0006-lesson-model-policy.md#alias-remap--2026-10-14)).
   The aliases remain the vocabulary most profiles and every alias-bound frozen lesson use.
-  Reviewed explicit ids sit next to them (12 Claude and 7 OpenAI ids on the Service branch
-  `feat/claude-5-5-models`, `worker/src/profiles/types.ts:514-542` at `aa94cf3`, not merged),
+  Reviewed explicit ids sit next to them (12 Claude and 7 OpenAI ids,
+  `worker/src/profiles/types.ts:561-589` at Service main `399109c`, hypeproof/hypeproof-service#73),
   and `SUPERSEDED_ALIAS_MAPS` keeps each replaced map so lessons frozen under it keep their
   models. `translate.ts`, `sse.ts` and `gemini.ts` stay as well: the retirement condition
   ("no cohort runs the proxy path") is false, because the dental teaser, the GPT practice, the
   model-comparison practice and the SDK-unavailable fallback (REQ-M7) use the proxy route. The
   SDK coach still receives the model as the alias the app chose: v0.1.56 passes it into
   `Options.model` (`extensions/hypeproof-chat/src/sdkCoachHelpers.ts:975`, `sdkCoach.ts:490-491`)
-  and the gateway resolves it (`worker/src/routes/messages.ts:157-169` on the Service branch).
+  and the gateway resolves it (`worker/src/routes/messages.ts:168-180` at `399109c`).
   Orchestration beyond the two built-in read-only subagents still needs host-side code, and a
   per-request model router needs its own ADR first (ADR 0006).
