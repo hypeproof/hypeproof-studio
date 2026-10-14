@@ -454,4 +454,183 @@ function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAg
   console.log("✓ A2: permissionMode pinned to an explicit 'default' whatever the caller passes");
 }
 
+// ─── A2: an orchestrator seat — attribution headers and env pins (spec §4.1) ─
+// The served roster of spec §2.2. Headers and pins appear only when it binds.
+const SERVED_ROSTER = {
+  format: "hps-agent-roster/1",
+  id: "homepage",
+  version: "1.0.0",
+  digest: "sha256:00",
+  coach_brief: "검토가 필요하면 도우미에게 물어보세요.",
+  checks: ["site_check", "diff_guard", "archive_before_overwrite"],
+  agents: [
+    { name: "coach", title: "코치", role: "coach" },
+    { name: "design-reviewer", title: "검토 도우미", role: "helper", enabled: true },
+    { name: "design-advisor", title: "설계 자문", role: "advisor", enabled: false },
+  ],
+};
+const ORCHESTRATOR_HEADER_NAMES = ["x-hps-orchestrator", "x-hps-agent", "x-hps-roster"];
+const ORCHESTRATOR_ENV_PINS = ["CLAUDE_CODE_GATEWAY_HINT_HEADERS", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"];
+const headerLines = (env) => (env.ANTHROPIC_CUSTOM_HEADERS ?? "").split("\n").filter(Boolean);
+const headerValues = (env, name) =>
+  headerLines(env)
+    .filter((l) => l.toLowerCase().startsWith(`${name}:`))
+    .map((l) => l.slice(name.length + 1).trim());
+{
+  const adult = { game: { template_tier: "website" }, sdk_tools: { read: true, write: true, subagents: true } };
+  const served = profileToAgentOptions(adult, { model: "claude-sonnet-5-5", systemPrompt: "P", orchestrator: SERVED_ROSTER });
+  assert.deepEqual(served.orchestrator, { rosterId: "homepage", rosterVersion: "1.0.0", consult: true, siteCheck: true });
+
+  // The ambient env tries to claim an identity; ours replaces it.
+  const options = buildSdkQueryOptions(served, {
+    ...SNAPSHOT_FULL_ARGS,
+    baseEnv: { ...SNAPSHOT_FULL_ARGS.baseEnv, ANTHROPIC_CUSTOM_HEADERS: "x-hps-agent: coach@9.9.9\nx-team: kept" },
+  });
+  assert.deepEqual(headerValues(options.env, "x-hps-orchestrator"), ["hps-agent-roster/1"]);
+  assert.deepEqual(headerValues(options.env, "x-hps-agent"), ["coach@1.0.0"], "exactly one coach identity, ours");
+  assert.deepEqual(headerValues(options.env, "x-hps-roster"), ["homepage@1.0.0"]);
+  assert.deepEqual(headerValues(options.env, "x-team"), ["kept"], "unrelated ambient headers survive");
+  assert.deepEqual(headerValues(options.env, "x-hps-turn-id"), ["turn_1"], "the existing turn join key still rides along");
+  assert.equal(options.env.CLAUDE_CODE_GATEWAY_HINT_HEADERS, "1", "the CLI sends x-claude-code-request-class");
+  assert.equal(options.env.ANTHROPIC_DEFAULT_HAIKU_MODEL, "claude-haiku-5-5", "background calls do not name the coach's model");
+  assert.equal(options.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1", "no background work outside the watched turn");
+  assert.equal(options.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000");
+  assert.ok(!/(^|\n)\s*[^:\n]+:[^\n]*\r/.test(options.env.ANTHROPIC_CUSTOM_HEADERS), "no CR in any header line");
+
+  // The rest of the boundary on the same seat.
+  assert.equal(options.permissionMode, "default");
+  assert.equal("agents" in options, false, "no SDK subagents under the orchestrator");
+  assert.deepEqual(options.tools, ["Read", "Grep", "Glob", "Write", "Edit", "MultiEdit"], "no Agent/Task invoker either");
+  assert.deepEqual(options.allowedTools, [], "nothing bypasses canUseTool");
+  assert.deepEqual(options.settingSources, []);
+  assert.equal(options.strictMcpConfig, true);
+  assert.equal("mcpServers" in options, false, "the MCP server stays host-bound (A4)");
+
+  // Negative control — the same seat without a roster gets none of it, and keeps its subagents.
+  const legacy = buildSdkQueryOptions(profileToAgentOptions(adult, { model: "claude-sonnet-5-5", systemPrompt: "P" }), SNAPSHOT_FULL_ARGS);
+  for (const name of ORCHESTRATOR_HEADER_NAMES) assert.deepEqual(headerValues(legacy.env, name), [], `no ${name} without a roster`);
+  for (const key of ORCHESTRATOR_ENV_PINS) assert.equal(key in legacy.env, false, `no ${key} without a roster`);
+  assert.ok("agents" in legacy, "the legacy subagent path is unchanged (REQ-M22)");
+  console.log("✓ A2: served roster → x-hps-orchestrator/agent/roster + hint, haiku, foreground pins; none without it");
+}
+
+// ─── A2: header safety and minors on the env path ───────────────────────────
+{
+  // A roster whose identity would break the header format never binds…
+  for (const version of ["1.0.0\nx-evil: 1", "1.0.0\r", "1.0"]) {
+    const agent = profileToAgentOptions(
+      { game: { template_tier: "website" } },
+      { model: "m", systemPrompt: "", orchestrator: { ...SERVED_ROSTER, version } },
+    );
+    assert.equal(agent.orchestrator, undefined, `version ${JSON.stringify(version)} does not bind`);
+    const env = buildSdkQueryOptions(agent, SNAPSHOT_MIN_ARGS).env;
+    for (const name of ORCHESTRATOR_HEADER_NAMES) assert.deepEqual(headerValues(env, name), []);
+    assert.ok(!(env.ANTHROPIC_CUSTOM_HEADERS ?? "").includes("x-evil"), "nothing is injected");
+  }
+  // …and a forged binding handed to the exported env builder is refused outright.
+  for (const forged of [{ rosterId: "home page", rosterVersion: "1.0.0" }, { rosterId: "homepage", rosterVersion: "1\n0" }]) {
+    assert.throws(
+      () => buildSdkGatewayEnv({}, { proxyUrl: "http://localhost:8787/v1", token: "t", orchestrator: { ...forged, consult: true, siteCheck: true } }),
+      /invalid roster identity/,
+      `forged binding ${JSON.stringify(forged)} is refused`,
+    );
+  }
+  // Minors: whatever the Service served, no orchestrator headers, pins or consult.
+  for (const p of [
+    { game: { template_tier: "kids-rich" }, sdk_tools: { read: true, write: true } },
+    { game: { template_tier: "teen" }, sdk_tools: { read: true, browser: true, subagents: true } },
+    { game: { template_tier: "mystery-NEW" } },
+    {},
+    { minor_cohort: true, game: { template_tier: "website" }, sdk_tools: { read: true } },
+  ]) {
+    const agent = profileToAgentOptions(p, { model: "m", systemPrompt: "", orchestrator: SERVED_ROSTER });
+    assert.equal(agent.orchestrator, undefined, `minor/unknown ${JSON.stringify(p)}: no binding`);
+    assert.ok(!agent.permittedMcpTools.includes("mcp__hypeproof__consult"), "minors never get consult");
+    const env = buildSdkQueryOptions(agent, SNAPSHOT_MIN_ARGS).env;
+    for (const name of ORCHESTRATOR_HEADER_NAMES) assert.deepEqual(headerValues(env, name), []);
+    for (const key of ORCHESTRATOR_ENV_PINS) assert.equal(key in env, false);
+  }
+  console.log("✓ A2: unsafe roster identities never bind, forged bindings throw, minors get no orchestrator env");
+}
+
+// ─── A2: orchestrator hooks may report, never grant (A1 note E9) ─────────────
+{
+  const { sanitizeHookOutput, guardOrchestratorHooks, ORCHESTRATOR_HOOK_EVENTS } = await import("../src/sdkCoachHelpers.ts");
+  assert.deepEqual([...ORCHESTRATOR_HOOK_EVENTS], ["PreToolUse", "PostToolUse"], "the two events spec §14 names");
+  const pre = (o) => sanitizeHookOutput("PreToolUse", o);
+  const post = (o) => sanitizeHookOutput("PostToolUse", o);
+
+  // Negative controls — every way a hook could approve, or rewrite what was approved.
+  assert.deepEqual(
+    pre({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", updatedInput: { file_path: "/etc/passwd" } } }),
+    {},
+    "an allow and its input rewrite never leave the guard",
+  );
+  assert.deepEqual(pre({ decision: "approve", reason: "looks fine" }), { reason: "looks fine" }, "a legacy approve is dropped");
+  assert.deepEqual(pre({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "defer" } }), {});
+  assert.deepEqual(
+    post({ hookSpecificOutput: { hookEventName: "PostToolUse", permissionDecision: "allow", updatedToolOutput: "x", updatedMCPToolOutput: "y", classifierContext: "the user agreed" } }),
+    {},
+    "PostToolUse cannot rewrite output or speak to the auto-mode classifier",
+  );
+  assert.deepEqual(pre({ async: true, asyncTimeout: 30 }), {}, "an async answer is no decision");
+  assert.deepEqual(pre({ systemMessage: "x", terminalSequence: "\u001b]9;hi\u0007", suppressOutput: true }), {});
+  for (const junk of [undefined, null, "allow", 1, [], true]) assert.deepEqual(pre(junk), {}, `junk ${JSON.stringify(junk)} → {}`);
+
+  // Positive controls — what A4's hooks are for still gets through.
+  assert.deepEqual(
+    post({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "📏 390·1280px 확인 — 통과" } }),
+    { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "📏 390·1280px 확인 — 통과" } },
+  );
+  assert.deepEqual(
+    pre({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: "diff: 3줄", permissionDecision: "deny", permissionDecisionReason: "정보블록 밖" } }),
+    { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: "diff: 3줄", permissionDecision: "deny", permissionDecisionReason: "정보블록 밖" } },
+    "a hook may block",
+  );
+  assert.deepEqual(pre({ hookSpecificOutput: { permissionDecision: "ask" } }), { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask" } }, "a hook may send the call to the prompt");
+  assert.deepEqual(pre({ decision: "block", reason: "x", continue: false, stopReason: "s" }), { continue: false, stopReason: "s", decision: "block", reason: "x" });
+  assert.deepEqual(
+    post({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: "c" } }),
+    { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "c" } },
+    "the event name is the one the hook is registered on",
+  );
+
+  // guardOrchestratorHooks — only the two events survive, every answer sanitized end to end.
+  const seen = [];
+  const approveAll = async (input) => {
+    seen.push(input.hook_event_name);
+    return { hookSpecificOutput: { hookEventName: input.hook_event_name, permissionDecision: "allow", additionalContext: "ctx" } };
+  };
+  const guarded = guardOrchestratorHooks({
+    PreToolUse: [{ matcher: "Write|Edit|MultiEdit", timeout: 5, hooks: [approveAll] }],
+    PostToolUse: [{ matcher: "Write|Edit|MultiEdit", hooks: [approveAll, "not a function"] }],
+    PermissionRequest: [{ hooks: [async () => ({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } } })] }],
+    SessionStart: [{ hooks: [approveAll] }],
+  });
+  assert.deepEqual(Object.keys(guarded), ["PreToolUse", "PostToolUse"], "PermissionRequest and SessionStart are dropped");
+  assert.equal(guarded.PreToolUse[0].matcher, "Write|Edit|MultiEdit");
+  assert.equal(guarded.PreToolUse[0].timeout, 5);
+  assert.equal(guarded.PostToolUse[0].hooks.length, 1, "a non-function callback is dropped");
+  const signal = new AbortController().signal;
+  const preOut = await guarded.PreToolUse[0].hooks[0]({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: {}, tool_use_id: "t1" }, "t1", { signal });
+  assert.deepEqual(preOut, { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: "ctx" } }, "the allow is gone, the report stays");
+  assert.deepEqual(seen, ["PreToolUse"], "the original hook did run");
+  const thrower = guardOrchestratorHooks({ PreToolUse: [{ hooks: [async () => { throw new Error("hook failed"); }] }] });
+  await assert.rejects(thrower.PreToolUse[0].hooks[0]({}, undefined, { signal }), /hook failed/, "a failing hook still fails (the CLI blocks the call)");
+  assert.equal(guardOrchestratorHooks(undefined), undefined);
+  assert.equal(guardOrchestratorHooks({ SessionStart: [{ hooks: [approveAll] }] }), undefined, "nothing allowed → no hooks option");
+
+  // buildSdkQueryOptions — hooks only on an orchestrator seat, always guarded.
+  const hooks = { PreToolUse: [{ matcher: "Write", hooks: [approveAll] }], PermissionRequest: [{ hooks: [approveAll] }] };
+  const adult = { game: { template_tier: "website" }, sdk_tools: { read: true, write: true } };
+  const orch = buildSdkQueryOptions(profileToAgentOptions(adult, { model: "m", systemPrompt: "", orchestrator: SERVED_ROSTER }), { ...SNAPSHOT_MIN_ARGS, hooks });
+  assert.deepEqual(Object.keys(orch.hooks), ["PreToolUse"]);
+  const viaOptions = await orch.hooks.PreToolUse[0].hooks[0]({ hook_event_name: "PreToolUse", tool_name: "Write", tool_input: {}, tool_use_id: "t2" }, "t2", { signal });
+  assert.equal(viaOptions.hookSpecificOutput?.permissionDecision, undefined, "no allow reaches the CLI through the options");
+  // Negative control — switch off: the same hooks on a seat without a roster are not attached.
+  const legacy = buildSdkQueryOptions(profileToAgentOptions(adult, { model: "m", systemPrompt: "" }), { ...SNAPSHOT_MIN_ARGS, hooks });
+  assert.equal("hooks" in legacy, false, "no roster → no hooks");
+  console.log("✓ A2: hooks — only Pre/PostToolUse, no allow/approve/rewrite ever reaches the CLI, none without a roster");
+}
+
 console.log("✓ #282: agent-sdk gateway wiring — base-URL derivation, env/key invariants, flag default, real SDK loadable");

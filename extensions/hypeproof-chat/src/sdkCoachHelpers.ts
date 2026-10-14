@@ -15,6 +15,10 @@
 import { stallNotice } from "./coachIdentity.ts";
 import type {
   AgentDefinition,
+  HookCallback,
+  HookCallbackMatcher,
+  HookEvent,
+  HookJSONOutput,
   Options as AgentSdkOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { createHash } from "node:crypto";
@@ -91,12 +95,26 @@ export interface AgentCoachOptions {
   permissionMode: AgentPermissionMode;
   /** Hard turn cap so a beginner's loop stays bounded. */
   maxTurns: number;
+  /**
+   * Front-line orchestrator (ADR 0011) — present only when the Service served
+   * a roster this seat may use (orchestratorBindingFor: adult, valid roster).
+   * Absent = today's path, byte for byte. When present, buildSdkQueryOptions
+   * attaches no SDK `agents`, takes the host's hooks, and sends the
+   * attribution headers and env pins of spec §4.1.
+   */
+  orchestrator?: OrchestratorBinding;
 }
 
 export interface ProfileToAgentCtx {
   model: string;
   /** Cohort system prompt text (the tuned Korean coaching script). */
   systemPrompt: string;
+  /**
+   * The served roster, as A4's parser hands it over (`profile.orchestrator`
+   * once validated). Absent or null = no orchestrator. A disabled form
+   * (`{ enabled: false, reason }`) is not a roster and is ignored here.
+   */
+  orchestrator?: ServedRosterView | null;
 }
 
 // Real worker `game.template_tier` values (worker/src/profiles/types.ts).
@@ -223,6 +241,100 @@ export function permittedToolsFor(profile: ResolvedProfile): string[] {
   return tools;
 }
 
+// ── Front-line orchestrator boundary (ADR 0011; spec §3.2, §4.1, §5.1, §5.4) ──
+// The Service may serve a versioned roster of helper agents on /v1/profile
+// (`orchestrator`, format hps-agent-roster/1). The coach then delegates
+// through one host-run MCP tool (consult) and gets a deterministic check tool
+// (site_check). This block decides, from the served roster, what the SDK
+// boundary does — grants, headers, env, hooks — and nothing else: parsing the
+// roster is A4's agentRoster.ts, which hands over a value matching
+// ServedRosterView. No roster → every function here behaves exactly as before.
+
+/** The roster format this build understands; also the `x-hps-orchestrator` value. */
+export const ORCHESTRATOR_FORMAT = "hps-agent-roster/1";
+
+/** Short names A4 registers on the in-process "hypeproof" MCP server. */
+export const CONSULT_TOOL_NAME = "consult";
+export const SITE_CHECK_TOOL_NAME = "site_check";
+/** Full names as the model and canUseTool see them (`mcp__<server>__<tool>`). */
+export const MCP_CONSULT = "mcp__hypeproof__consult";
+export const MCP_SITE_CHECK = "mcp__hypeproof__site_check";
+export const MCP_ORCHESTRATOR_TOOLS = [MCP_CONSULT, MCP_SITE_CHECK] as const;
+
+/**
+ * The approval kind consult uses (spec §5.1). It is in the
+ * `hypeproofChat.requireApprovalFor` enum but not its default (A1), so a
+ * consult runs without a modal unless a machine asks for one.
+ */
+export const CONSULT_HELPER_KIND = "consultHelper";
+
+/**
+ * The model id the CLI names for its background calls on orchestrator seats
+ * (`ANTHROPIC_DEFAULT_HAIKU_MODEL`). Without it, under ANTHROPIC_AUTH_TOKEN,
+ * those calls use "the main model" (llm-gateway-protocol). The gateway still
+ * resolves the aux model itself (spec §4.2); this only keeps the request
+ * body from naming the coach's model.
+ */
+export const ORCHESTRATOR_AUX_MODEL = "claude-haiku-5-5";
+
+/**
+ * What A2 reads from a served roster. A4's parsed type is richer (titles,
+ * purposes, caps, models, coach_brief); any value with these fields fits.
+ */
+export interface ServedRosterView {
+  format: string;
+  id: string;
+  version: string;
+  checks?: readonly string[];
+  agents: ReadonlyArray<{ name: string; role: string; enabled?: boolean }>;
+}
+
+/** What the SDK boundary keeps once a served roster passed orchestratorBindingFor. */
+export interface OrchestratorBinding {
+  rosterId: string;
+  rosterVersion: string;
+  /** consult is granted: the roster has at least one enabled helper or advisor. */
+  consult: boolean;
+  /** site_check is granted: the roster lists the check. */
+  siteCheck: boolean;
+}
+
+// Both values go into HTTP header values (`x-hps-roster: <id>@<version>`), so
+// they must be header-safe as well as well-formed: no space, colon or newline.
+const ROSTER_ID = /^[a-z][a-z0-9-]{0,39}$/;
+const ROSTER_VERSION = /^\d{1,6}\.\d{1,6}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,32})?$/;
+
+/**
+ * The orchestrator binding for this seat, or null when there is none.
+ * Fails closed:
+ * - MINOR-SAFETY INVARIANT (spec §5.4, REQ-M23 extended): a minor or unknown
+ *   tier, or a cohort flagged `minor_cohort`, never gets the orchestrator —
+ *   no consult, no checks, no headers — even if the Service served a roster
+ *   (it should not: serializer + harness `child_orchestrator`). Same posture
+ *   as permittedAgentToolsFor.
+ * - Anything but a well-formed roster is no roster: wrong format, an unsafe
+ *   id or version, or not exactly one coach named "coach". The disabled
+ *   form `{ enabled: false, reason }` has no format and lands here too.
+ */
+export function orchestratorBindingFor(
+  profile: ResolvedProfile,
+  roster: ServedRosterView | null | undefined,
+): OrchestratorBinding | null {
+  if (!roster || typeof roster !== "object") return null;
+  if (isMinorTier(profile) || profile.minor_cohort === true) return null;
+  if (roster.format !== ORCHESTRATOR_FORMAT) return null;
+  if (typeof roster.id !== "string" || !ROSTER_ID.test(roster.id)) return null;
+  if (typeof roster.version !== "string" || !ROSTER_VERSION.test(roster.version)) return null;
+  const agents = Array.isArray(roster.agents) ? roster.agents : [];
+  const coaches = agents.filter((a) => !!a && a.role === "coach");
+  if (coaches.length !== 1 || coaches[0].name !== "coach") return null;
+  const consult = agents.some(
+    (a) => !!a && (a.role === "helper" || a.role === "advisor") && a.enabled === true,
+  );
+  const siteCheck = Array.isArray(roster.checks) && roster.checks.includes("site_check");
+  return { rosterId: roster.id, rosterVersion: roster.version, consult, siteCheck };
+}
+
 /**
  * Which in-process MCP tools a cohort may use (#282 P2 slice 2). Same
  * ownership and fail-closed posture as permittedToolsFor:
@@ -232,15 +344,30 @@ export function permittedToolsFor(profile: ResolvedProfile): string[] {
  *   safe-session ships — stripped for minor tiers even if a profile
  *   mistakenly carries browser:true, defense-in-depth on top of the worker
  *   harness's child_sdk_browser FAIL. When in doubt, deny for minors.
+ * - A2: a served roster adds `consult` (≥1 enabled helper or advisor) and
+ *   `site_check` (listed in `checks`), after the browser tools and only for
+ *   adults (orchestratorBindingFor). These two do NOT imply the browser grant,
+ *   so the list can be non-empty for a cohort without it: register the
+ *   browser tools from MCP_BROWSER_TOOLS ∩ this list, not from its length.
+ *   Without a roster the result is exactly today's.
  */
-export function permittedMcpToolsFor(profile: ResolvedProfile): string[] {
+export function permittedMcpToolsFor(
+  profile: ResolvedProfile,
+  roster?: ServedRosterView | null,
+): string[] {
+  const tools: string[] = [];
   if (profile.sdk_tools?.browser === true && !isMinorTier(profile)) {
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
-    return isCurriculumRuntimeEnabled(profile)
-      ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
-      : [...MCP_BROWSER_TOOLS];
+    tools.push(
+      ...(isCurriculumRuntimeEnabled(profile)
+        ? [...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS]
+        : MCP_BROWSER_TOOLS),
+    );
   }
-  return [];
+  const orchestrator = orchestratorBindingFor(profile, roster);
+  if (orchestrator?.consult) tools.push(MCP_CONSULT);
+  if (orchestrator?.siteCheck) tools.push(MCP_SITE_CHECK);
+  return tools;
 }
 
 // ── SDK subagents (#282 P2 slice 3, REQ-M22/M23) ─────────────────────────────
@@ -978,6 +1105,11 @@ export function buildSdkGatewayEnv(
     maxToolConcurrency?: number;
     /** Coach-owned CLI config dir. Defaults to sdkConfigDirFor(baseEnv). */
     configDir?: string;
+    /**
+     * A2 — set only on an orchestrator seat (orchestratorBindingFor). Adds the
+     * spec §4.1 attribution headers and env pins; absent = today's env.
+     */
+    orchestrator?: OrchestratorBinding;
   },
 ): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...baseEnv };
@@ -1051,6 +1183,29 @@ export function buildSdkGatewayEnv(
   if (args.previewUrl?.trim()) {
     custom.push(`x-hps-preview-url: ${encodeURIComponent(args.previewUrl.trim())}`);
   }
+  // A2 (spec §4.1) — an orchestrator seat says who is speaking on every CLI
+  // request. ANTHROPIC_CUSTOM_HEADERS is process-wide, so the coach identity
+  // also rides on the CLI's own background calls; the request-class header
+  // (turned on below) is what tells those apart at the gateway. Every label
+  // only ever reduces what a request gets (§4.2), so none needs to be secret.
+  if (args.orchestrator) {
+    const { rosterId, rosterVersion } = args.orchestrator;
+    // Header values: the same checks orchestratorBindingFor applies, again
+    // here because this function is exported on its own.
+    if (!ROSTER_ID.test(rosterId) || !ROSTER_VERSION.test(rosterVersion)) throw Error("invalid roster identity");
+    custom.push(`x-hps-orchestrator: ${ORCHESTRATOR_FORMAT}`);
+    custom.push(`x-hps-agent: coach@${rosterVersion}`);
+    custom.push(`x-hps-roster: ${rosterId}@${rosterVersion}`);
+    // Behind a custom base URL the CLI sends x-claude-code-request-class
+    // (main | subagent | workflow | compaction | auxiliary) only with this
+    // opt-in (llm-gateway-protocol; Claude Code 2.1.273+).
+    env.CLAUDE_CODE_GATEWAY_HINT_HEADERS = "1";
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = ORCHESTRATOR_AUX_MODEL;
+    // Bash or legacy agent work stays in the foreground, inside the turn the
+    // learner is watching (sub-agents doc: "runs the subagent in the
+    // foreground, in every kind of session").
+    env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+  }
   if (custom.length) {
     const existing = (env.ANTHROPIC_CUSTOM_HEADERS ?? "").trim();
     env.ANTHROPIC_CUSTOM_HEADERS = existing ? `${existing}\n${custom.join("\n")}` : custom.join("\n");
@@ -1065,10 +1220,102 @@ export function buildSdkGatewayEnv(
  * The `Options.tools` list from the cohort's grants: built-ins only. A name
  * from SDK_DENIED_TOOLS or an MCP name (REQ-M19) never gets in, whatever the
  * permitted set says. Order is kept, so a list without such names comes back
- * unchanged — which is every list profileToAgentOptions produces today.
+ * unchanged — which is every list profileToAgentOptions produces today. On an
+ * orchestrator seat the Agent/Task invoker is dropped too (ADR 0011 §2).
  */
-function sdkBuiltinTools(names: readonly string[]): string[] {
-  return names.filter((n) => sdkDeniedToolReason(n) === undefined && !n.startsWith("mcp__"));
+function sdkBuiltinTools(names: readonly string[], orchestrator = false): string[] {
+  return names.filter(
+    (n) =>
+      sdkDeniedToolReason(n) === undefined &&
+      !n.startsWith("mcp__") &&
+      !(orchestrator && AGENT_TOOLS.has(n.toLowerCase())),
+  );
+}
+
+// ── Orchestrator hooks: they may report, never grant (A2; A1 note E9) ───────
+
+/**
+ * The hook events an orchestrator seat may register (spec §14: PreToolUse for
+ * the diff guard, PostToolUse for the site-check summary). Every other event
+ * is dropped — a PermissionRequest hook, for one, can answer `allow` and skip
+ * canUseTool altogether.
+ */
+export const ORCHESTRATOR_HOOK_EVENTS: readonly HookEvent[] = ["PreToolUse", "PostToolUse"];
+
+/**
+ * What a hook's answer may still carry once it leaves A4's code. A hook can
+ * report (`additionalContext`), block (`permissionDecision: "deny"`,
+ * `decision: "block"`, `continue: false`) or send the call to the permission
+ * prompt (`"ask"`). It can never approve: the Claude Code 2.1.292 changelog
+ * describes PreToolUse hook approvals as "bypassing the permission prompt",
+ * and the prompt is where canUseTool — and with it evaluateSdkToolUse — runs
+ * (an inference from the changelog, not observed; dropping the field costs
+ * nothing either way). So:
+ * - `permissionDecision` survives only as "deny" or "ask" ("allow" and
+ *   "defer" are dropped), and only on PreToolUse;
+ * - a top-level `decision: "approve"` is dropped ("block" is kept);
+ * - rewrites (`updatedInput`, `updatedToolOutput`, `updatedMCPToolOutput`),
+ *   the auto-mode `classifierContext`, `systemMessage`, `terminalSequence`
+ *   and `async` answers are dropped;
+ * - `hookEventName` is the event the hook is registered on.
+ * Anything that is not a plain object becomes `{}`: no decision.
+ */
+export function sanitizeHookOutput(event: HookEvent, output: unknown): HookJSONOutput {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return {};
+  const o = output as Record<string, unknown>;
+  const safe: Record<string, unknown> = {};
+  if (typeof o.continue === "boolean") safe.continue = o.continue;
+  if (typeof o.stopReason === "string") safe.stopReason = o.stopReason;
+  if (o.decision === "block") safe.decision = "block";
+  if (typeof o.reason === "string") safe.reason = o.reason;
+  const spec = o.hookSpecificOutput;
+  if (spec && typeof spec === "object" && !Array.isArray(spec)) {
+    const s = spec as Record<string, unknown>;
+    const kept: Record<string, unknown> = {};
+    if (typeof s.additionalContext === "string") kept.additionalContext = s.additionalContext;
+    if (event === "PreToolUse" && (s.permissionDecision === "deny" || s.permissionDecision === "ask")) {
+      kept.permissionDecision = s.permissionDecision;
+      if (typeof s.permissionDecisionReason === "string") kept.permissionDecisionReason = s.permissionDecisionReason;
+    }
+    if (Object.keys(kept).length > 0) safe.hookSpecificOutput = { hookEventName: event, ...kept };
+  }
+  return safe as HookJSONOutput;
+}
+
+/**
+ * The `hooks` option for an orchestrator seat: only ORCHESTRATOR_HOOK_EVENTS,
+ * and every callback's answer goes through sanitizeHookOutput. A callback
+ * that throws still throws: the CLI then blocks the call (2.1.288 "a matcher
+ * failure … blocks the call"), the closed direction. Undefined when nothing
+ * is left to register.
+ */
+export function guardOrchestratorHooks(
+  hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
+  if (!hooks || typeof hooks !== "object") return undefined;
+  const guarded: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
+  for (const event of ORCHESTRATOR_HOOK_EVENTS) {
+    const matchers = hooks[event];
+    if (!Array.isArray(matchers)) continue;
+    const kept: HookCallbackMatcher[] = [];
+    for (const m of matchers) {
+      if (!m || !Array.isArray(m.hooks)) continue;
+      const callbacks = m.hooks
+        .filter((cb): cb is HookCallback => typeof cb === "function")
+        .map(
+          (cb): HookCallback =>
+            async (input, toolUseID, options) => sanitizeHookOutput(event, await cb(input, toolUseID, options)),
+        );
+      if (callbacks.length === 0) continue;
+      kept.push({
+        ...(typeof m.matcher === "string" ? { matcher: m.matcher } : {}),
+        ...(typeof m.timeout === "number" ? { timeout: m.timeout } : {}),
+        hooks: callbacks,
+      });
+    }
+    if (kept.length > 0) guarded[event] = kept;
+  }
+  return Object.keys(guarded).length > 0 ? guarded : undefined;
 }
 
 /**
@@ -1114,16 +1361,27 @@ export function buildSdkQueryOptions(
     previewUrl?: string;
     /** REQ-M13 — coach-owned CLI config dir (the host creates it). */
     configDir?: string;
+    /**
+     * A2 — the orchestrator host's SDK hooks (A4: diff guard on PreToolUse,
+     * site-check summary on PostToolUse). Attached only when `agent` carries
+     * an orchestrator binding, and only through guardOrchestratorHooks, so no
+     * hook can approve a tool call. Ignored on every other seat.
+     */
+    hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
   },
 ): Omit<AgentSdkOptions, "canUseTool" | "abortController"> {
+  const orchestrator = agent.orchestrator;
   // #282 P2 slice 3 — the read-only subagent catalog rides on the same flag
   // that grants the Agent/Task invoker. Definition tools are the intersection
   // with the cohort's permitted set (buildSubagentDefinitions); no grant → no
-  // `agents` key at all, so the model never sees a subagent.
+  // `agents` key at all, so the model never sees a subagent. ADR 0011 §2: an
+  // orchestrator seat never attaches it, whatever the caller's grant says.
+  const agentTools = orchestrator ? [] : agent.permittedAgentTools;
   const agents =
-    agent.permittedAgentTools.length > 0
+    agentTools.length > 0
       ? buildSubagentDefinitions(agent.permittedTools)
       : undefined;
+  const hooks = orchestrator ? guardOrchestratorHooks(args.hooks) : undefined;
   return {
     systemPrompt: withWorkspaceContext(agent.systemPrompt, args.cwd, args.workspaceFiles),
     model: agent.model,
@@ -1134,7 +1392,7 @@ export function buildSdkQueryOptions(
     // exactly when the profile grants them. The Agent/Task invoker IS a
     // built-in, so it joins the base set only when the profile grants
     // subagents (REQ-M22).
-    tools: sdkBuiltinTools([...agent.permittedTools, ...agent.permittedAgentTools]),
+    tools: sdkBuiltinTools([...agent.permittedTools, ...agentTools], orchestrator !== undefined),
     ...(agents ? { agents } : {}),
     allowedTools: [],
     settingSources: [],
@@ -1164,7 +1422,9 @@ export function buildSdkQueryOptions(
       ...(args.cwd ? { workspace: args.cwd } : {}),
       ...(args.workspaceFiles ? { workspaceFiles: args.workspaceFiles } : {}),
       ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
+      ...(orchestrator ? { orchestrator } : {}),
     }),
+    ...(hooks ? { hooks } : {}),
   };
 }
 
@@ -1192,16 +1452,22 @@ export function profileToAgentOptions(
   profile: ResolvedProfile,
   ctx: ProfileToAgentCtx,
 ): AgentCoachOptions {
+  const orchestrator = orchestratorBindingFor(profile, ctx.orchestrator);
   return {
     systemPrompt: ctx.systemPrompt,
     model: ctx.model,
     permittedTools: permittedToolsFor(profile),
-    permittedMcpTools: permittedMcpToolsFor(profile),
-    permittedAgentTools: permittedAgentToolsFor(profile),
+    permittedMcpTools: permittedMcpToolsFor(profile, ctx.orchestrator),
+    // ADR 0011 §2 — with a roster served, helpers are reached through consult,
+    // never through SDK subagents: no Agent/Task grant, whatever
+    // `sdk_tools.subagents` says. The legacy catalog (REQ-M22) stays for every
+    // seat without a roster.
+    permittedAgentTools: orchestrator ? [] : permittedAgentToolsFor(profile),
     // Always gate. Minors and adults alike route every tool use through the
     // manual-approve modal — the gate is the lesson.
     permissionMode: SDK_PERMISSION_MODE,
     maxTurns: maxTurnsFor(profile),
+    ...(orchestrator ? { orchestrator } : {}),
   };
 }
 
@@ -1997,7 +2263,8 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
   return (
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
-    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName)
+    (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName)
   );
 }
 
@@ -2101,6 +2368,20 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
       kind: "delegateAgent",
       description: `${subagent || "서브에이전트"}에게 위임: ${task}`,
       payload: { subagent, task },
+    };
+  }
+  // A2 — consult reaches the approval path as its own kind (spec §5.1), so
+  // resolveActionApproval decides from requireApprovalFor: allowed without a
+  // modal by default, a modal where a machine lists consultHelper. protocol.ts
+  // (A5) adds the kind to ActionRequest["kind"] (spec §14); until then it
+  // travels as a string, which the host treats like any unlisted kind (Tier 3).
+  if (action.toolName === MCP_CONSULT) {
+    const agent = firstString(action.input, ["agent"]) ?? "";
+    const question = firstString(action.input, ["question"]) ?? "";
+    return {
+      kind: CONSULT_HELPER_KIND as string as ActionRequest["kind"],
+      description: `도우미에게 묻기${agent ? ` (${agent})` : ""}: ${question.slice(0, 120)}`,
+      payload: { agent, question },
     };
   }
 
@@ -2391,6 +2672,17 @@ export function evaluateSdkToolUse(args: {
     // (sdk.d.ts: CanUseTool options carry agentID for sub-agent context).
     return { decision: "ask" };
   }
+
+  // ── Orchestrator tools (A2; spec §3.2, §5.1, §6.1) ───────────────────────
+  // Gate 1 already proved a served roster granted them (permittedMcpToolsFor:
+  // adults only). site_check measures the learner's own preview, read-only:
+  // "Deterministic checks have no modal" (§5.1). consult goes to the approval
+  // path as kind consultHelper, which requireApprovalFor's default leaves out:
+  // no modal unless a machine lists it, and the machine-scoped setting stays
+  // the single source of that choice (#499). Helpers have no tools, so a
+  // consult can cause no external effect.
+  if (toolName === MCP_SITE_CHECK) return { decision: "allow" };
+  if (toolName === MCP_CONSULT) return { decision: "ask" };
 
   // ── hypeproof MCP browser tools (#282 P2 slice 2, REQ-M20) ────────────────
   // Grant already passed Gate 1 (profile opted in via sdk_tools.browser and

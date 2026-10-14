@@ -636,3 +636,154 @@ console.log("✓ #384: containment canonicalizer — symlinked roots pass, real 
   );
   console.log("✓ A2: Options.tools strips never-for-learners built-ins and MCP names, leaves clean lists alone");
 }
+
+// ─── A2: the orchestrator binding from a served roster (spec §2.2, §5.4) ─────
+// The served shape is the Service's (§2.2); A4's parser hands it over. What A2
+// reads must fail closed: no roster, a disabled form, a malformed or
+// header-unsafe roster, and every minor or unknown tier mean NO orchestrator.
+const ROSTER = (over = {}) => ({
+  format: "hps-agent-roster/1",
+  id: "homepage",
+  version: "1.0.0",
+  digest: "sha256:00",
+  coach_brief: "검토가 필요하면 도우미에게 물어보세요.",
+  checks: ["site_check", "diff_guard", "archive_before_overwrite"],
+  agents: [
+    { name: "coach", title: "코치", role: "coach" },
+    { name: "design-reviewer", title: "검토 도우미", role: "helper", enabled: true, caps: { per_turn: 1, per_session: 6 } },
+    { name: "design-advisor", title: "설계 자문", role: "advisor", enabled: false },
+  ],
+  ...over,
+});
+{
+  const { orchestratorBindingFor } = await import("../src/sdkCoachHelpers.ts");
+  const adult = profile("website", { sdk_tools: { read: true, write: true } });
+
+  // Positive control — the §2.2 example roster on an adult seat.
+  assert.deepEqual(orchestratorBindingFor(adult, ROSTER()), {
+    rosterId: "homepage",
+    rosterVersion: "1.0.0",
+    consult: true,
+    siteCheck: true,
+  });
+
+  // No roster, or the served "off" form → none.
+  for (const r of [undefined, null, { enabled: false, reason: "lesson_locked" }, "homepage@1.0.0"]) {
+    assert.equal(orchestratorBindingFor(adult, r), null, `not a roster: ${JSON.stringify(r)}`);
+  }
+  // Malformed or header-unsafe → none (the id and version become header values).
+  for (const [why, bad] of [
+    ["future format", ROSTER({ format: "hps-agent-roster/2" })],
+    ["id with a space", ROSTER({ id: "home page" })],
+    ["id with a newline", ROSTER({ id: "homepage\nx-evil: 1" })],
+    ["upper-case id", ROSTER({ id: "Homepage" })],
+    ["two-part version", ROSTER({ version: "1.0" })],
+    ["version with CRLF", ROSTER({ version: "1.0.0\r\nx-evil: 1" })],
+    ["no coach", ROSTER({ agents: [{ name: "design-reviewer", role: "helper", enabled: true }] })],
+    ["two coaches", ROSTER({ agents: [{ name: "coach", role: "coach" }, { name: "coach", role: "coach" }] })],
+    ["coach under another name", ROSTER({ agents: [{ name: "boss", role: "coach" }] })],
+    ["agents not a list", ROSTER({ agents: "coach" })],
+  ]) {
+    assert.equal(orchestratorBindingFor(adult, bad), null, `fails closed: ${why}`);
+  }
+
+  // consult needs an ENABLED helper or advisor; site_check needs the listed check.
+  const only = (...agents) => ROSTER({ agents: [{ name: "coach", role: "coach" }, ...agents] });
+  assert.equal(orchestratorBindingFor(adult, only({ name: "a", role: "advisor", enabled: false })).consult, false, "a disabled advisor grants nothing");
+  assert.equal(orchestratorBindingFor(adult, only({ name: "h", role: "helper", enabled: "yes" })).consult, false, "enabled must be === true");
+  assert.equal(orchestratorBindingFor(adult, only({ name: "aux", role: "aux", enabled: true })).consult, false, "aux is not consultable");
+  assert.equal(orchestratorBindingFor(adult, only({ name: "a", role: "advisor", enabled: true })).consult, true, "an enabled advisor counts");
+  assert.equal(orchestratorBindingFor(adult, ROSTER({ checks: ["diff_guard"] })).siteCheck, false, "site_check only when listed");
+  assert.equal(orchestratorBindingFor(adult, ROSTER({ checks: undefined })).siteCheck, false);
+
+  // MINOR-SAFETY INVARIANT — never for minors or unknown tiers, even with a roster.
+  for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d", "mystery-NEW", null]) {
+    assert.equal(orchestratorBindingFor(profile(tier, { sdk_tools: { read: true } }), ROSTER()), null, `${tier}: no orchestrator`);
+  }
+  assert.equal(orchestratorBindingFor({ ...adult, minor_cohort: true }, ROSTER()), null, "a minor_cohort flag wins over an adult tier");
+  console.log("✓ A2: orchestrator binding — §2.2 roster binds adults; absent/off/malformed/unsafe/minor all fail closed");
+}
+
+// ─── A2: permittedMcpToolsFor from the served roster (spec §3.2) ─────────────
+{
+  const { MCP_CONSULT, MCP_SITE_CHECK } = await import("../src/sdkCoachHelpers.ts");
+  const adult = profile("website", { sdk_tools: { read: true, write: true } });
+  const browserAdult = profile("website", { sdk_tools: { read: true, browser: true } });
+
+  assert.deepEqual(permittedMcpToolsFor(adult, ROSTER()), [MCP_CONSULT, MCP_SITE_CHECK], "roster tools without the browser grant");
+  assert.deepEqual(
+    permittedMcpToolsFor(browserAdult, ROSTER()),
+    [...MCP_BROWSER_TOOLS, MCP_CONSULT, MCP_SITE_CHECK],
+    "browser tools first, then the roster's",
+  );
+  // Positive controls — no roster or an off form leaves today's result exactly.
+  assert.deepEqual(permittedMcpToolsFor(browserAdult), [...MCP_BROWSER_TOOLS]);
+  assert.deepEqual(permittedMcpToolsFor(browserAdult, { enabled: false, reason: "lesson_locked" }), [...MCP_BROWSER_TOOLS]);
+  assert.deepEqual(permittedMcpToolsFor(adult), []);
+  // A roster with nothing to consult and no check grants nothing.
+  assert.deepEqual(
+    permittedMcpToolsFor(adult, ROSTER({ checks: [], agents: [{ name: "coach", role: "coach" }, { name: "a", role: "advisor", enabled: false }] })),
+    [],
+  );
+  // Minors never get consult (nor site_check), whatever they were served.
+  for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d", "mystery-NEW", null]) {
+    assert.deepEqual(permittedMcpToolsFor(profile(tier, { sdk_tools: { browser: true } }), ROSTER()), [], `${tier}: no consult`);
+  }
+  assert.deepEqual(permittedMcpToolsFor({ ...browserAdult, minor_cohort: true }, ROSTER()), [...MCP_BROWSER_TOOLS],
+    "minor_cohort strips the orchestrator (the browser grant keeps its own, unchanged rule)");
+  console.log("✓ A2: permittedMcpToolsFor adds consult/site_check from the roster, adults only, today's result without one");
+}
+
+// ─── A2: consult and site_check in the policy matrix (spec §5.1) ─────────────
+{
+  const {
+    MCP_CONSULT,
+    MCP_SITE_CHECK,
+    MCP_ORCHESTRATOR_TOOLS,
+    CONSULT_TOOL_NAME,
+    SITE_CHECK_TOOL_NAME,
+    CONSULT_HELPER_KIND,
+    isClassifiedSdkToolName,
+  } = await import("../src/sdkCoachHelpers.ts");
+  const { HYPEPROOF_MCP_SERVER_NAME } = await import("../src/browserMcp.ts");
+  const { readFileSync } = await import("node:fs");
+
+  // Names: the server prefix the SDK builds from the registered short names.
+  assert.equal(MCP_CONSULT, `mcp__${HYPEPROOF_MCP_SERVER_NAME}__${CONSULT_TOOL_NAME}`);
+  assert.equal(MCP_SITE_CHECK, `mcp__${HYPEPROOF_MCP_SERVER_NAME}__${SITE_CHECK_TOOL_NAME}`);
+  assert.deepEqual([...MCP_ORCHESTRATOR_TOOLS], [MCP_CONSULT, MCP_SITE_CHECK]);
+  for (const name of MCP_ORCHESTRATOR_TOOLS) assert.ok(isClassifiedSdkToolName(name), `${name} is classified`);
+
+  const granted = ["Read", "Write", MCP_CONSULT, MCP_SITE_CHECK];
+  const verdict = (toolName, permittedTools) =>
+    evaluateSdkToolUse({ toolName, input: { agent: "design-reviewer", question: "대비가 충분한가요?" }, permittedTools, workspaceRoot: "/ws" });
+
+  // Not granted (no roster, a minor, an old Service) → a routine denial.
+  for (const name of [MCP_CONSULT, MCP_SITE_CHECK]) {
+    const v = verdict(name, ["Read", "Write"]);
+    assert.equal(v.decision, "deny", `${name} without the roster grant is denied`);
+    assert.ok(!v.drift, `${name} is a known name: routine, not drift`);
+  }
+  // Granted → site_check runs (no modal), consult takes the approval path.
+  assert.deepEqual(verdict(MCP_SITE_CHECK, granted), { decision: "allow" }, "a deterministic check has no modal");
+  assert.deepEqual(verdict(MCP_CONSULT, granted), { decision: "ask" }, "consult is decided by requireApprovalFor");
+
+  // The approval path sees kind consultHelper with the agent and the question.
+  const req = sdkToolToActionRequest({
+    toolName: MCP_CONSULT,
+    input: { agent: "design-reviewer", question: "대비가 충분한가요?", focus: { files: ["index.html"] } },
+  });
+  assert.equal(req.kind, CONSULT_HELPER_KIND);
+  assert.equal(req.kind, "consultHelper");
+  assert.deepEqual(req.payload, { agent: "design-reviewer", question: "대비가 충분한가요?" });
+  assert.ok(req.description.includes("design-reviewer") && req.description.includes("대비가 충분한가요?"), "the modal (if a machine asks for one) says who and what");
+  // Negative control — site_check never asks; if it ever did, it fails closed like the other auto tools.
+  assert.equal(sdkToolToActionRequest({ toolName: MCP_SITE_CHECK, input: {} }).kind, "executeShell");
+
+  // The kind is offered by the manifest but not required by default (A1 ↔ A2 agree).
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const approval = pkg.contributes.configuration.properties["hypeproofChat.requireApprovalFor"];
+  assert.ok(approval.items.enum.includes(CONSULT_HELPER_KIND), "a machine can require the consult modal");
+  assert.ok(!approval.default.includes(CONSULT_HELPER_KIND), "by default consult runs without a modal");
+  console.log("✓ A2: consult → ask as consultHelper (no modal by default), site_check → allow, both denied ungranted");
+}
