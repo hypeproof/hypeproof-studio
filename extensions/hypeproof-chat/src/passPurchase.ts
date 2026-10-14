@@ -183,3 +183,17 @@ export const formatWon = (amount: number) => `${amount.toLocaleString("ko-KR")}�
 /** Requests per day if the count is spread evenly over the period. */
 /** The pass a buyer sees selected first: the one the Service suggests, else the first. */
 export const defaultProduct = (products: PassProduct[]) => products.find(p => p.recommended) ?? products[0];
+
+/** What a person reads when a bought pass has no requests left. 해요체 like the rest of the purchase copy. */
+export const PASS_SPENT_FRIENDLY =
+  "이용권의 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요. 더 쓰려면 시작 화면의 '이용권으로 시작하기'에서 새 이용권을 살 수 있어요.";
+
+/**
+ * A turn that ended because the pass is spent. The SDK host sees only text: the Service's 429
+ * arrives as "Claude Code returned an error result: API Error: Request rejected (429) · <message>"
+ * (2026-10-14 rehearsal), so the Service's pass sentence or the code is matched in the message.
+ */
+export function passSpentNotice(err: unknown): string | null {
+  const m = (err as { message?: unknown } | null)?.message;
+  return typeof m === "string" && /trial_exhausted|이용권의 AI 요청 횟수를 모두 썼습니다/.test(m) ? PASS_SPENT_FRIENDLY : null;
+}
