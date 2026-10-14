@@ -97,7 +97,7 @@ const errBody = (code, type = "auth") =>
 // ─── instructor token detected offline, before any request ───────────────────
 {
   const issuer = tokenFor({ u: "jay", c: "__issuer__", p: "__issuer__", role: "issuer", v: 2 });
-  const student = tokenFor({ u: "kid01", c: "sk-biopharm-2026-a", p: "prof-s1", v: 2 });
+  const student = tokenFor({ u: "kid01", c: "kids-workshop-2026-a", p: "prof-s1", v: 2 });
 
   assert.equal(looksLikeIssuerTokenUnverified(issuer), true, "role:issuer is named");
   assert.equal(looksLikeIssuerTokenUnverified(student), false, "a student token is not");

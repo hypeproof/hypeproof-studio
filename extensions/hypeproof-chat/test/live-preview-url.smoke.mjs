@@ -46,9 +46,9 @@ const LIVE = "http://127.0.0.1:58085/";
 
   // 외부 주소는 절대 교정하지 않는다 — 참고 사이트를 라이브 서버로 끌고 가면
   // 코치가 보려던 것과 다른 페이지를 읽는다.
-  const ext = resolveLivePreviewUrl("https://boaclinic.example/about", LIVE);
+  const ext = resolveLivePreviewUrl("https://dental.example/about", LIVE);
   assert.equal(ext.redirected, false);
-  assert.equal(ext.url, "https://boaclinic.example/about");
+  assert.equal(ext.url, "https://dental.example/about");
 
   // 서버 주소를 모르면 아무것도 고치지 않는다 (짐작으로 고치지 않는다).
   for (const unknown of [undefined, null, ""]) {

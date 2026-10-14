@@ -18,8 +18,7 @@
 
 set -euo pipefail
 PROD="${PROD:-https://api.hypeproof-ai.xyz}"
-COHORT="${HPS_COHORT:-boah-dental-2026-a}"
-PROFILE="${HPS_PROFILE:-boah-dental-teaser-2026-s1}"
+COHORT="${HPS_COHORT:-from TOKEN}"
 
 ok()   { printf '\033[32m✓ %s\033[0m\n' "$*"; }
 warn() { printf '\033[33m! %s\033[0m\n' "$*" >&2; }

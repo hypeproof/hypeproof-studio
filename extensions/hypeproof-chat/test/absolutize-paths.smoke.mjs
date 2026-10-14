@@ -74,7 +74,7 @@ const abs = (...segments) => path.resolve(ROOT, ...segments);
 
   // 파일 도구가 아닌 것은 통째로 제외 — Bash 의 command 를 건드리면 안 된다
   untouched("Bash", "Bash", { command: "ls -la ." }, ROOT);
-  untouched("browser_open", "mcp__hypeproof__browser_open", { url: "boaclinic.com" }, ROOT);
+  untouched("browser_open", "mcp__hypeproof__browser_open", { url: "dental.example" }, ROOT);
   untouched("WebFetch", "WebFetch", { url: "https://example.com/a" }, ROOT);
 
   console.log("✓ 음성 대조군 — 절대경로·패턴·비경로 필드·비파일도구는 그대로 둔다");

@@ -1,8 +1,8 @@
 # 런북 — 한 코호트에서 트랙 바꾸기 (오전 → 오후)
 
-> 8/22 SK바이오팜: 오전 3-4학년, 오후 5-6학년. 두 트랙은 **프로필이 다릅니다.**
+> 8/22 기업 고객: 오전 3-4학년, 오후 5-6학년. 두 트랙은 **프로필이 다릅니다.**
 >
-> 2026-08-19 `boah-dental-2026-a` 에서 전 과정 리허설 완료. 아래 거동은 전부 실측입니다.
+> 2026-08-19 `dental-pilot-2026-a` 에서 전 과정 리허설 완료. 아래 거동은 전부 실측입니다.
 
 ## 왜 이 문서가 필요한가
 
@@ -30,7 +30,7 @@
 
 ## 절차
 
-`$PW` = admin 비밀번호, `$C` = 코호트 id (`sk-biopharm-2026-a`).
+`$PW` = admin 비밀번호, `$C` = 코호트 id (`kids-workshop-2026-a`).
 
 ### 1. 오전 시작
 
@@ -38,7 +38,7 @@
 curl -s -u "admin:$PW" -X POST \
   "https://api.hypeproof-ai.xyz/admin/cohorts/$C/session/open" \
   -H 'content-type: application/json' \
-  -d '{"profile_id":"sk-biopharm-kids-2026-grade-3-4-s1",
+  -d '{"profile_id":"kids-2026-grade-3-4-s1",
        "user":"강사-오전",
        "token_hours":12,
        "session_hours":4}'
@@ -67,7 +67,7 @@ curl -s -u "admin:$PW" -X POST \
 curl -s -u "admin:$PW" -X POST \
   "https://api.hypeproof-ai.xyz/admin/cohorts/$C/session/open" \
   -H 'content-type: application/json' \
-  -d '{"profile_id":"sk-biopharm-kids-2026-grade-5-6-s1",
+  -d '{"profile_id":"kids-2026-grade-5-6-s1",
        "user":"강사-오후",
        "token_hours":8,
        "session_hours":4}'
@@ -128,7 +128,7 @@ curl -H "Authorization: Bearer <학생토큰>" https://api.hypeproof-ai.xyz/v1/p
 
 200 이면 토큰은 무죄이고, 클라이언트가 **무엇을 대신 보냈는지**를 봐야 합니다.
 
-## 리허설 기록 (2026-08-19, `boah-dental-2026-a`)
+## 리허설 기록 (2026-08-19, `dental-pilot-2026-a`)
 
 실 워크숍 코호트를 건드리지 않으려고 프로필 2개를 가진 치과 코호트로 밟았습니다.
 같은 코드 경로입니다.

@@ -42,9 +42,12 @@ assert.equal("TokenError" in shared, false, "Token verification errors stay in t
 console.log("✓ drift-lock: one public routing predicate; token verifier and cohort authorization remain in the Service");
 
 // --- one Service store, two HTTP request paths ------------------------------------------------------
-const COHORT = "boah-dental-2026-a";
-const PROFILE = "boah-dental-director-copyclone-2026-s1";
-const OTHER_COHORT = "sk-biopharm-2026-a";
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { serviceProfiles } = await import("../../test/fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COHORT = SP.pilotCohort;
+const PROFILE = SP.copyclone.id;
+const OTHER_COHORT = SP.kidsCohort;
 const ADMIN_PW = "drift-admin-pw";
 
 const serviceEnv = createMockEnv({ withSession: false, withRoster: false, adminPassword: ADMIN_PW });

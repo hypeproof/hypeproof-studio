@@ -93,8 +93,8 @@ export interface ProfileToAgentCtx {
 // Real worker `game.template_tier` values (worker/src/profiles/types.ts).
 // Game tiers (kids-basic/kids-rich/teen/pro-3d) are kids/teen cohorts — guided,
 // minor bounds. The WORKSHOP tiers below are the professional adult cohorts:
-// "search-webapp" (보아치과 clinical workshop) and "website" (website-copyclone,
-// 보아치과 원장 v2 — added in #273). Anything NOT in this set — including a tier
+// "search-webapp" (예시치과 clinical workshop) and "website" (website-copyclone,
+// 치과 원장 v2 — added in #273). Anything NOT in this set — including a tier
 // we don't recognize or a missing field — is treated as a minor game cohort
 // (fail closed). Since #282 Phase 2 the tier drives AUDIENCE bounds only
 // (maxTurns + the minor write-strip); file-tool eligibility is owned by the

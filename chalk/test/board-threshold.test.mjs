@@ -377,7 +377,7 @@ assert.equal(d1ToMs("nonsense"), null);
 
 // The seat set — the spec did not settle this, so the behaviour is pinned here.
 {
-  const cumulative = [...FX.roster, "SK34-E87K3K-01", "보아치과-01", "load-01"];
+  const cumulative = [...FX.roster, "SK34-E87K3K-01", "pilot-01", "load-01"];
   const withPrefix = resolveSeatSet({ roster: cumulative, seatPrefix: "SK34-CM6YPX-", observed: ["SK34-CM6YPX-02"] });
   assert.deepEqual(withPrefix.seats, FX.roster, "prefix mode renders the batch, not the 340-row cohort roster");
   assert.equal(withPrefix.complete, true);

@@ -1,4 +1,4 @@
-// T1.B — Deterministic UI rendering checks for boah-dental-teaser-2026-s1
+// T1.B — Deterministic UI rendering checks for dental-teaser-2026-s1
 // (issue #79). Launches HypeProof Studio.app via existing app fixture; the
 // dental token in /tmp/hps-token.txt is auto-seeded so the chat panel mounts
 // against the dental cohort.
@@ -29,7 +29,7 @@ test("T1.B.1 — greeting in webview references 슈퍼서치엔진 (NOT v3 game 
   }
 });
 
-// #174/#187 — chip option B: meta-skill (boa-search-skill-creator) drives
+// #174/#187 — chip option B: meta-skill (search-skill-creator) drives
 // 7자산 Q&A in chat. Initial rack is reduced to 1 starter chip and
 // follow_up is empty. Tests T1.B.2–T1.B.7 collapsed to T1.B.2 (single
 // starter chip render + dental-relevant text) + T1.B.6 (no follow_up rack

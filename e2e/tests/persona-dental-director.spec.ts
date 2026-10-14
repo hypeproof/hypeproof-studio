@@ -1,4 +1,4 @@
-// Persona walk-through: 보아치과 원장 (Boa Dental director / 청중) goes through
+// Persona walk-through: 치과 원장 (dental clinic director / 청중) goes through
 // the v4 supersearch teaser, end-to-end. Records what the coach actually
 // teaches at each step and dumps a transcript + screenshots for the audit
 // report.
@@ -9,7 +9,7 @@
 // 원장님/audience have learned from this session?".
 //
 // Output:
-//   docs/curriculum-snapshots/boah-dental-director-persona/
+//   docs/curriculum-snapshots/dental-director-persona/
 //     transcript.md             — every user message + assistant reply
 //     01-welcome.png            — initial chip rack
 //     02-intent-clarity.png     — after vague "치과 관련 질문 답해줘" weak chip
@@ -22,7 +22,7 @@
 //     09-ownership-save.png     — after "방금 깨진 이유를 다음 검색에 자동 적용될 규칙으로 저장"
 //
 // Prerequisite: dental dev-stack running.
-//   HPS_COHORT=boah-dental-2026-a HPS_PROFILE=boah-dental-teaser-2026-s1 \
+//   HPS_COHORT=dental-pilot-2026-a HPS_PROFILE=dental-teaser-2026-s1 \
 //     HPS_USER=smoke-dental bash scripts/dev-stack.sh
 
 import { test, expect, type FrameLocator } from "@playwright/test";
@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(
   __dirname,
-  "../../docs/curriculum-snapshots/boah-dental-director-persona",
+  "../../docs/curriculum-snapshots/dental-director-persona",
 );
 
 interface Turn {
@@ -56,7 +56,7 @@ test.beforeAll(() => {
 test.afterAll(() => {
   // Dump a markdown transcript so the audit report can read it.
   const lines: string[] = [];
-  lines.push("# 보아치과 원장 페르소나 — 학습 여정 transcript\n");
+  lines.push("# 치과 원장 페르소나 — 학습 여정 transcript\n");
   lines.push(`자동 캡처: ${new Date().toISOString()}\n`);
   lines.push("> 각 턴: 행동 의도 → 사용자 발화 → 모델 응답 → 자동 patterns probe\n");
   for (const t of transcript) {
@@ -102,7 +102,7 @@ async function shot(cf: FrameLocator, name: string) {
   await cf.locator(".hps-shell").screenshot({ path: path.join(OUT_DIR, name) });
 }
 
-test("보아치과 원장 페르소나 — 5블록 × 7자산 학습 여정", async () => {
+test("치과 원장 페르소나 — 5블록 × 7자산 학습 여정", async () => {
   test.setTimeout(900_000); // 15 min, plenty for 9 LLM turns
   const ctx: AppContext = await launchApp({
     preseedToken: true,

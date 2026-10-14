@@ -47,13 +47,16 @@ const {
 const { uploadObjectKey, ALLOWED_UPLOAD_FILENAMES } = await import("@hypeproof/service-testkit/src/routes/logs.ts");
 const { issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
 const { setRoster } = await import("@hypeproof/service-testkit/src/lib/kv.ts");
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { serviceProfiles } = await import("../../test/fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
 
 // ---------------------------------------------------------------------------
 // 1. Key-layout drift against the write path
 // ---------------------------------------------------------------------------
 
 {
-  const cohort = "sk-biopharm-2026-a";
+  const cohort = SP.kidsCohort;
   const seat = "SK34-CM6YPX-07";
   const day = "2026-08-22";
   const sessionId = "0f9d1a2b-3c4d-4e5f-8a9b-0c1d2e3f4a5b";
@@ -93,7 +96,7 @@ console.log("✓ logs-read-path: malformed keys are rejected, never folded into 
 // 2. Controls — pure over rows, no R2, no app
 // ---------------------------------------------------------------------------
 
-const COHORT = "sk-biopharm-2026-a";
+const COHORT = SP.kidsCohort;
 const DAY = "2026-08-22";
 const BATCH = "SK34-CM6YPX-";
 
@@ -104,7 +107,7 @@ const PRESENT_0822 = DOC_ROSTER.slice(1, 10);
 const DOC_MISSING = [`${BATCH}01`, `${BATCH}11`, `${BATCH}12`, `${BATCH}13`, `${BATCH}14`];
 
 // Ground truth as PRODUCTION actually holds it. Read 2026-09-04 from
-// cohort:sk-biopharm-2026-a:roster: the batch has FIFTEEN rows, not fourteen.
+// the kids cohort's roster key: the batch has FIFTEEN rows, not fourteen.
 // -15 was minted and never uploaded, so the honest roster diff names six seats,
 // not the five the spec lists. The spec's list is not wrong about the nine that
 // arrived; it undercounts the absences by one. Both are pinned here on purpose
@@ -269,7 +272,7 @@ const call = (path, headers = {}) =>
 await setRoster(kv, COHORT, ROSTER_0822);
 
 const { token: instructorToken } = await issueIssuer(
-  { issuer: "task-i", scopes: [{ cohort: COHORT, profiles: ["sk-biopharm-kids-s1"], max_hours: 6 }] },
+  { issuer: "task-i", scopes: [{ cohort: COHORT, profiles: ["kids-profile-s1"], max_hours: 6 }] },
   24,
   SECRET,
 );
@@ -289,7 +292,7 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
   );
   assert.deepEqual(body.missing_seats, EXPECTED_MISSING, "HTTP path reproduces the 2026-08-22 answer");
   assert.deepEqual(body.roster_scope, { seat_prefix: null, cohort_roster_size: ROSTER_0822.length, scoped_roster_size: ROSTER_0822.length });
-  assert.equal(body.upload_opt_in, true, "sk-biopharm carries analytics.upload_session_logs");
+  assert.equal(body.upload_opt_in, true, "the kids cohort carries analytics.upload_session_logs");
   for (const s of body.seats) {
     assert.deepEqual(
       Object.keys(s).sort(),
@@ -323,7 +326,7 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
   const OTHER_BATCHES = [
     ...Array.from({ length: 20 }, (_, i) => `SK56-3SDBN4-${String(i + 1).padStart(2, "0")}`),
     ...Array.from({ length: 10 }, (_, i) => `SK34-D8YAFE-${String(i + 1).padStart(2, "0")}`),
-    "deploy-verify", "kids-sdk-verify", "보아치과-01",
+    "deploy-verify", "kids-sdk-verify", "pilot-01",
   ];
   await setRoster(kv, COHORT, [...OTHER_BATCHES, ...ROSTER_0822]);
 
@@ -354,7 +357,7 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
 {
   assert.equal((await call(`/admin/cohorts/${COHORT}/logs`)).status, 401, "listing requires a credential");
   const { token: other } = await issueIssuer(
-    { issuer: "elsewhere", scopes: [{ cohort: "boah-dental-2026-a", max_hours: 6 }] },
+    { issuer: "elsewhere", scopes: [{ cohort: SP.pilotCohort, max_hours: 6 }] },
     24,
     SECRET,
   );
@@ -364,14 +367,14 @@ const asOperator = { "x-hps-operator-secret": OPERATOR_SECRET };
 
 // --- NEGATIVE CONTROL over HTTP: a cohort with no uploads ------------------
 {
-  const res = await call(`/admin/cohorts/boah-dental-2026-a/logs`, {
-    authorization: `Bearer ${(await issueIssuer({ issuer: "d", scopes: [{ cohort: "boah-dental-2026-a", max_hours: 6 }] }, 24, SECRET)).token}`,
+  const res = await call(`/admin/cohorts/${SP.pilotCohort}/logs`, {
+    authorization: `Bearer ${(await issueIssuer({ issuer: "d", scopes: [{ cohort: SP.pilotCohort, max_hours: 6 }] }, 24, SECRET)).token}`,
   });
   assert.equal(res.status, 200, "a cohort with no uploads is 200, NOT 404 and NOT 500");
   const body = await res.json();
   assert.deepEqual(body.seats, [], "empty list");
   assert.equal(body.total_files, 0);
-  assert.equal(body.upload_opt_in, false, "boah-dental never opted in — reported, not thrown");
+  assert.equal(body.upload_opt_in, false, "the pilot cohort never opted in — reported, not thrown");
   console.log("✓ logs-read-path: NEGATIVE control (HTTP) — no uploads returns an empty list, not an error");
 }
 
@@ -421,10 +424,10 @@ const callOp = (path, headers = {}) =>
 }
 
 {
-  // Cohort opt-in is re-checked on READ. boah-dental has no upload_session_logs,
+  // Cohort opt-in is re-checked on READ. The pilot cohort has no upload_session_logs,
   // so even an operator gets a policy refusal rather than bytes.
   const res = await callOp(
-    `/admin/cohorts/boah-dental-2026-a/logs/X-01/${DAY}/sess/events.jsonl`,
+    `/admin/cohorts/${SP.pilotCohort}/logs/X-01/${DAY}/sess/events.jsonl`,
     asOperator,
   );
   assert.equal(res.status, 403);

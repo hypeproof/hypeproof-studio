@@ -61,7 +61,7 @@ P1 평가가 F-1 로 잡은 것과 **같은 유형**이다.
 코치가 만든 워크스페이스 파일 본문** — 를 워커로, 다시 `hypeproof-sediment.fly.dev` 를 거쳐
 Anthropic 으로 보낸다. 자동이 아니고 학생이 동의 체크박스를 누를 때만 발사된다.
 
-그래서 아이 코호트(`sk-biopharm-kids-*`)는 **`record: true, assess: false`** 다.
+그래서 아이 코호트(`kids-workshop-*`)는 **`record: true, assess: false`** 다.
 
 사람이 결정할 것이 두 개 **남아 있고, 이 ADR 은 그것을 결정하지 않는다**:
 

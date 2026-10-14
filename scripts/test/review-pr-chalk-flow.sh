@@ -73,7 +73,7 @@ async function step(name, fn) {
 await step('chalk_set_inputs', () =>
   execSetInputs(ctx, {
     cohort: COHORT, course: COURSE,
-    audience: 'SK바이오팜 신입 연구원 30명, 이공계 배경, AI 협업 경험 없음',
+    audience: '기업 고객 신입 연구원 30명, 이공계 배경, AI 협업 경험 없음',
     assets: ['INTENT', 'VERIFY', 'ITERATE'],
     teaching_style: '탐구 학습 + 팀 토론',
     requirements: '실제 연구 시나리오 활용, 120분 이내',
