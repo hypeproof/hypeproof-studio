@@ -1,6 +1,6 @@
 # Email automation acceptance
 
-Requirement: [EA-01 through EA-09](../requirements/email-automation.md).
+Requirement: [EA-01 through EA-11](../requirements/email-automation.md).
 Issue #1604. This file defines evidence; it does not claim any test has run.
 
 Automated local checks:
@@ -120,4 +120,14 @@ approved private version, synthetic Sheet execution and separately approved send
 Verify the exact version/content, execution user and inbox receipt. Settings opened,
 code uploaded, mocked runs and old Gmail API receipts are not this backend's proof.
 
-Windows bot-account follow-up (2026-10-14): OAuth consent, a separate bot-owned one-row Sheet, cohort store installation of another learner's recipe, generated script upload and owner-only version 1 were observed. Standard Cloud project binding failed on the bot's missing IAM roles; Google execution is not passed. Public/private question routing and legacy preview routing have new MCP regression cases, and authenticated Sheet reuse has a quest regression. Root full-suite/native follow-up remains recorded separately. No mail sent.
+Windows follow-up (2026-10-14): root verified extension `8844c233` on shell
+`682dfd37`, including all seven installed hashes. A distinct Studio participant
+installed the original recipe, used its own bot Google account and one-row Sheet,
+and created a separate owner-only script/version. Google recorded `hpsPreview`
+API success at 09:00:43 KST (1.267 s) and again after restart and temporary IAM
+revocation at 09:11:37 KST (2.827 s). The previously missing OAuth tester and
+project-role access were explicitly authorized; temporary project roles were
+removed and the IAM list read back. Saved credentials and deployment were reused.
+No additional mail was sent: real Apps Script send/receipt remains NOT RUN pending
+exact-message approval. See the [current acceptance audit](../plan/automation-local-acceptance.md)
+for local personas, instructor verification, Windows scope and cost accounting.

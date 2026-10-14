@@ -3919,7 +3919,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "Complete Google OAuth and delivered synthetic-email acceptance, Windows installation, and cohort A/B rerun against the linked Service and Ops changes; retain draft until external evidence exists.",
+      "next_action": "Windows OAuth, installed-file verification and cohort A/B Apps Script preview passed at extension8844c233. Obtain explicit approval for one actual Apps Script test send, verify receipt, and retain draft with commercial onboarding/general rollout separate.",
       "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
       "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
       "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",

@@ -101,42 +101,83 @@ The development app deliberately uses in-memory secrets: window reload lost its
 Google connection and private deployment receipt. This does not establish OS
 credential persistence; Windows must verify its own protected store. Google
 standard-project binding still requires a supported account/project setup. This
-is not evidence that 20 unrelated accounts work without setup. Latest Windows
-acceptance and a second real Google learner remain unverified.
+is not evidence that 20 unrelated accounts work without setup. The subsequent Windows and second-participant observations below supersede
+the earlier missing-device evidence; they do not establish a twenty-person class.
 
 ## Observed Windows acceptance — 2026-10-14
 
-The private Windows shell remains `682dfd37`; the latest extension source is
-`a5390e58`. The authenticated copy-command updater preserves the existing SDK,
-Google configuration and activity data. Root independently matched all seven
-installed file hashes for a5390e58. Explicit UTF-8 reading fixed PowerShell
-5.1 parsing of Korean package metadata. Earlier native checks verified sidebar
-resize, width/draft retention and seven exact installed hashes.
+The private shell remains `682dfd37`; the accepted extension source is
+`8844c233`, packaged by Studio PR head `92df6169`. Service is `c455865`.
+Root matched all seven installed file SHA-256 values after the authenticated
+copy-command update and full app restart. The extension archive is 587,047 bytes,
+SHA-256 `3d7933d458a549f1d3b1c5f9e9c30276fefdfd3845e05ca561876ae8d6fd55b7`.
+This is an isolated installed-shell update, not a new signed release or merge.
 
-The actual coach on `4192189e` asked focused questions, accepted title/body/column
-answers, saved the skill and advanced the graph to 2/8. On `514a0f5a`, root
-independently matched all seven installed hashes, saw the saved recipe restore to
-2/8, answered a fresh public question, opened the Google authorization wait and
-pressed Stop. The graph returned to setup-required without waiting for the OAuth
-timeout. No account permission was granted during that check.
+Windows PowerShell 5.1 UTF-8 metadata handling, offline SDK installation, Korean
+workspace paths, width/draft retention, public-question recovery and cancellation
+of the real OAuth wait were exercised. Opening a restored activity makes no
+new AI/tool request. Interrupted tools remain unconfirmed rather than complete.
+Editor chat and the quest graph now occupy separate editor groups; sidebar chat
+also remains visible. The latest maximized app showed the conversation beside the
+8/8 read-only preview workflow with optional help/settings folded.
 
-After full process exit and the `a5390e58` update, the same activity restored its
-public question and answer, marked the interrupted Google tool as an unconfirmed
-result, showed an explicit interruption notice and retained only the proven
-2/8 goal/skill steps. Opening the activity made no new model/tool request. Fresh
-activities also wait for the learner's own message, preventing automatic startup
-from racing funding selection. A new-provider test checks private-answer exclusion
-and activity isolation; actual Windows UI confirms public-answer recovery.
+A distinct Studio participant installed the original learner's cohort recipe
+(`mine:false`) through explicit inline confirmation. That participant used the
+bot's own Google account and separate synthetic one-row Sheet, created a separate
+Apps Script project, reviewed/uploaded the generated source and approved an
+owner-only immutable version. No author credentials or recipient data came from
+the shared recipe. The bot Google identity differs from the original author.
 
-The Windows bot account is not an OAuth test user and previously received 403.
-Adding its new account access awaits confirmation. Windows Google preview,
-OS-backed Google-token reuse and a second actual learner remain unverified. This
-is not a full Windows Google acceptance result. Duplicate-submit/queue cleanup,
-OAuth cancellation and restart persistence have local regression coverage.
+The sponsor authorized temporary Browser and OAuth Config Editor roles on the
+Studio test project to complete Google's standard-project binding. Root removed
+both roles after verification and read the IAM list back: only the original
+owner remained. The bot remains an authorized OAuth tester with the previously
+approved user scopes. This privileged test setup is not proof that unrelated
+commercial learners can bind projects without operator assistance.
 
-After these checks, the new test ledger shows USD 0.080232 settled and zero held:
-USD 0.074266 more than its prior USD 0.005966. This is token accounting, not an
-invoice. Old settled/held amounts and the aggregate USD 2 ceiling are preserved.
-No additional email was sent. The instructor gate above was verified locally
-before any of these private Windows updates; the remote instructor page was not
-newly deployed or asserted as accepted.
+Google execution history confirmed version 1 `hpsPreview`, API execution,
+2026-10-14 09:00:43 KST, completed in 1.267 seconds. After full app restart and IAM
+role removal, the saved Google connection, Sheet and deployment were reused:
+version 1 `hpsPreview`, API, 09:11:37 KST, completed in 2.827 seconds. Root confirmed
+the private one-message preview and observed 8/8 after its read-only confirmation.
+That graph completion means preview-workflow completion, not email delivery.
+
+Studio checks at `92df6169`: 17/17 success. Service checks at `c455865`: 12/12
+success. Local coverage includes shared-install receipt invalidation, stale
+activity isolation, missing-funding refusal and safe SDK budget failure handling.
+These checks supplement, rather than replace, the native observations above.
+
+The active test ledger settled USD 0.311521 with zero held (original participant
+0.178273; second participant 0.133248). The active caps total USD 1, unchanged by
+rebalancing them equally. Historical settled USD 0.102024 and held USD 0.436280
+remain preserved; the combined maximum is USD 1.538304 within the approved USD 2.
+These are token-accounting amounts, not provider invoices. No additional email
+was sent. A separate exact-message self-test approval is pending.
+
+## Requirement-by-requirement completion audit
+
+| Requirement | Evidence and remaining boundary |
+| --- | --- |
+| EA-01 conversation and layout | Actual local and Windows focused questions, saved skill, separated chat/graph; short-viewport transitions and errors covered locally. No claim of a human usability study. |
+| EA-02 reusable Google connection | Windows browser OAuth and protected-store reuse after full exit/update; scopes, callback state and isolation also have local negative controls. |
+| EA-03 private questions and immutable recipe | Local private-routing/transcript tests; actual own-Sheet read and shared-recipe preview. Editor/sidebar graph-placement defect fixed. |
+| EA-04 exact send approval | Local stale/edit/expiry/cancel controls pass. Actual Apps Script send and receipt are NOT RUN pending explicit approval. |
+| EA-05 no automatic duplicate send | Local durable ledger, cross-window serialization and unknown-result controls; no deliberate real duplicate sends. |
+| EA-06 cohort store | Actual conversation publication and second-participant confirmed installation; isolation, unsafe payload and unpublish controls are local/Service tests. |
+| EA-07 own-account reuse | Different Studio participant, different Google identity from author, own Sheet and separate script/deployment; actual preview succeeds. |
+| EA-08 trial and costs | Dedicated 30-day grants and server budget controls; legacy trial preserved by tests. Live accounting above; no monthly billing change. |
+| EA-09 Windows and two learners | Actual private installation, update, second-participant install/run and restart pass. End-to-end Apps Script email receipt still pending; no general-release completion attestation. |
+| EA-10 observed quest graph | Root native local and Windows graph observations; shared-install success now advances only goal/skill, invalidating old runtime proofs. Local failure/cancel/stale controls. |
+| EA-11 Apps Script execution | Actual generated-source upload, owner-only immutable deployment and Google preview; send remains pending. Standard-project setup constraint remains visible. |
+| Instructor addition | Root local native seat plus labelled synthetic class; learner stages match instructor progress, including stale and disconnected states. Remote instructor deployment not claimed. |
+| Resizable conversation | Native local and Windows resize/reopen observed; editor chat remains beside graph. |
+
+Local evidence is retained in the sponsor's private acceptance bundle under
+`2026-10-13_Studio_AppsScript_퀘스트`, especially the 2026-10-14 cross-participant
+verification JSON and masked final-screen/hash images. The repository contains
+no test credentials, private project IDs, account addresses or recipient rows.
+
+Remaining external actions are the explicit Apps Script send approval/receipt,
+commercial Google onboarding policy, and separately authorized merge/general
+rollout. The implementation packet remains in review; no full-release PASS is
+recorded while the actual send observation is missing.
