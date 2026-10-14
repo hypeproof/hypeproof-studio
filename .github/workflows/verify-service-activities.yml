@@ -16,7 +16,8 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     outputs:
-      service_sha: ${{ steps.resolve.outputs.service_sha }}
+      driver_sha: ${{ steps.resolve.outputs.driver_sha }}
+      candidate_service_sha: ${{ steps.resolve.outputs.candidate_service_sha }}
       app_sha: ${{ steps.resolve.outputs.app_sha }}
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
@@ -32,7 +33,8 @@ jobs:
           tag="$(gh release view --json tagName --jq .tagName)"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "app_sha=$(git rev-parse "$tag^{commit}")" >> "$GITHUB_OUTPUT"
-          echo "service_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "driver_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "candidate_service_sha=$(node e2e/unified-release/candidate-service.mjs pin)" >> "$GITHUB_OUTPUT"
   compatibility:
     needs: resolve
     strategy:
@@ -44,10 +46,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve.outputs.service_sha }}
+          ref: ${{ needs.resolve.outputs.driver_sha }}
+      - name: Checkout exact deployment-candidate Service
+        uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ needs.resolve.outputs.candidate_service_sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .candidate-service
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
+      - name: Prepare candidate Service dependencies
+        working-directory: .candidate-service
+        run: npm run setup:packages -- worker
       - name: Bootstrap pinned private Service packages
         env:
           GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
@@ -92,14 +104,15 @@ jobs:
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
-          SERVICE_SHA: ${{ needs.resolve.outputs.service_sha }}
+          DRIVER_SHA: ${{ needs.resolve.outputs.driver_sha }}
+          HPS_CANDIDATE_SERVICE_ROOT: ${{ github.workspace }}/.candidate-service
           APP_SHA: ${{ needs.resolve.outputs.app_sha }}
           TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
           app="$RUNNER_TEMP/public-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
-          node e2e/unified-release/run.mjs "$app" "$RUNNER_TEMP/public-assets" "$RUNNER_TEMP/service-evidence" "$SERVICE_SHA" "${TAG#v}" "$APP_SHA"
+          node e2e/unified-release/run.mjs "$app" "$RUNNER_TEMP/public-assets" "$RUNNER_TEMP/service-evidence" "$DRIVER_SHA" "${TAG#v}" "$APP_SHA"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

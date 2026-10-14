@@ -1513,6 +1513,9 @@
         },
         {
           "path": ".github/workflows/verify-service-activities.yml"
+        },
+        {
+          "path": "e2e/unified-release/candidate-service.mjs"
         }
       ]
     },
@@ -1547,6 +1550,9 @@
         },
         {
           "path": "e2e/tests/native-trial-live.spec.ts"
+        },
+        {
+          "path": "e2e/unified-release/candidate-service.test.mjs"
         }
       ]
     },

@@ -27,10 +27,17 @@ flowchart TD
 
 검사는 아래를 구분한다.
 
-- `e2e/unified-release/run.mjs`: 수정하지 않은 후보 App과 같은 SHA의 로컬 합성 Service.
+- `e2e/unified-release/run.mjs`: 수정하지 않은 후보 App과 버전이 고정된 private-package 로컬 합성 Service.
   각 OS에서 체험·수업 각각 A/B 전환, 초안/첨부, 실제 모델 파일 생성, 요청 자료 분리,
   실제 암호화 저장과 프로세스 재시작을 검사한다. Service 바인딩은 합성이며 Cloudflare
   배포 인수는 아니다. 활동별 upstream 요청 최대 8회, 동시 테스트 1개, 실패 시 중단한다.
+- Service-only compatibility (`verify-service-activities.yml`) runs the current public App
+  against a separate test-only Service checkout at the immutable deployment pin from
+  `deploy-worker.yml`. The actual server/loader come from that checkout; clean SHA and
+  tracked-byte checks run before/after each activity and the receipt names the actual
+  Service commit separately from the Studio driver SHA. It refuses missing/stale/dirty
+  candidates rather than using a historical testkit. This does not add a sibling source
+  dependency to normal Studio development or App builds.
 - `install-windows.mjs`: 폐기 가능한 Windows CI에서 User/System 설치기를 실제로
   별도 위치에 설치하고 모든 portable payload 파일을 대조한다. 로컬 Mac에서는 실행 불가다.
 - `public.mjs`: checks the same candidate App against the current public Service with

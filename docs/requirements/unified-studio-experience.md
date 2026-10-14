@@ -40,3 +40,12 @@ REQ-I 업데이트 계약을 확장한다. P0는 통합 사용자 경로 출시 
 
 각 US 행의 원본은 이 표다. 구현 이슈·PR은 행 ID와 [US 테스트](../testing/unified-studio-experience.md)를
 참조하고 구현, 실기, 공개 배포를 별도 상태로 갱신한다. 기존 NAT/AE/AB 표를 복사해 독립 정책으로 만들지 않는다.
+
+Service-only public-App compatibility uses a separate, test-only clean checkout at the exact
+`hypeproof/hypeproof-service` commit pinned in `deploy-worker.yml`. It runs that checkout's
+server and loader, verifies the pin and tracked bytes before/after both activities, and
+records the actual Service commit independently of the Studio acceptance-driver SHA.
+A missing, stale, dirty, index-concealed or changed checkout cannot produce a PASS receipt. Ordinary App
+acceptance and developer tooling keep their pinned private-package runtime. Verification:
+`e2e/unified-release/candidate-service.test.mjs`; actual macOS/Windows candidate App runs
+remain per-run evidence.
