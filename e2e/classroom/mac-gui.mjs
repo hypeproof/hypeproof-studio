@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751) — REAL Mac GUI acceptance of the current build.
 //
 //   node e2e/classroom/mac-devhost.mjs prepare      # isolated copy + current extension + vendored SDK JS
@@ -20,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { _electron as electron } from '@playwright/test';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps } from './service-fixture.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
 const out = path.join(home, 'gui'); rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
@@ -42,19 +43,19 @@ const PLAN = ['token', 'connect', 'step', 'reviewed', 'error', 'resolved', 'toke
 const record = (id, data) => { steps.push({ id, status: 'PASS', ...data }); console.log('PASS ' + id); save('IN_PROGRESS'); };
 
 // ── Service: real router + SQLite, synthetic class run ──
-const local = await localOps(), { setRoster } = await import('../../worker/src/lib/kv.ts');
+const local = await localOps(), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const seats = [{ seat_id: 'A1', student_id: 'student-a' }, { seat_id: 'A2', student_id: 'student-b' }];
 await setRoster(local.env.HPS_KV, local.cohort, seats.map((s) => s.student_id)); await local.freeze();
 assert.equal((await local.configure(seats, 0, { flags: { ops_observe: true, ops_commands: true, ops_collect: true, ops_reports: true } })).status, 201);
 // The harness instructor token lives one hour; a participant token may not outlive its issuer, so this one is issued for longer.
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs'), { OPS_ALL } = await import('../../worker/test/harness/classroom-ops.mjs');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs'), { OPS_ALL } = await import('./service-fixture.mjs');
 const inviter = (await issueIssuer({ issuer: 'teacher-a', scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: OPS_ALL }] }, 4, TEST_SECRET)).token;
 const invite = await local.request(`/admin/cohorts/${local.cohort}/authoring/${local.lesson.course_id}/versions/${local.lesson.version}/participants`, 'POST', { user: 'student-a', hours: 1 }, inviter);
 assert.equal(invite.status, 200, invite.raw); const token = invite.json.token;
 Object.assign(local.env, { LLM_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'synthetic-no-live-key', OPENAI_API_KEY: undefined, ANTHROPIC_PROXY_URL: undefined });
 
 // ── evaluator: a scripted transport that may only cite quotes the Service put in its catalog (no live model, no key) ──
-const { setEvaluatorTransport } = await import('../../worker/src/routes/classroom-reports.ts'); local.env.HPS_CLASSROOM_EVALUATOR = 'service-anthropic'; let evaluatorCalls = 0;
+const { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts'); local.env.HPS_CLASSROOM_EVALUATOR = 'service-anthropic'; let evaluatorCalls = 0;
 setEvaluatorTransport(async (request) => { evaluatorCalls++; const own = JSON.parse(request.messages[0].content).evidence_catalog.find((q) => q.basis);
   return Response.json({ content: [{ type: 'text', text: JSON.stringify({ findings: own ? [{ capability: 'FRAMING', status: 'observed', claim: '확인할 조건을 말로 제시했습니다.', evidence: [{ quote_id: own.quote_id }], assistance: 'unknown' }] : [], next_experiment: '다음에는 확인 기준을 먼저 적고 시작해 보세요.' }) }], usage: { input_tokens: 100, output_tokens: 40 } }); });
 

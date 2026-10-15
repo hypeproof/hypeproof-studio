@@ -1,6 +1,73 @@
 # Curriculum Runtime verification contract
 
-Status: **CR-T01 runs in CI** (worker `npm test`, `worker/test/cr-recon.test.mjs`; its PASS is recorded with `cr-recon`'s completion, not here). **CR-T02–T80: NOT RUN except the `cr-browser` runs recorded in [curriculum-runtime-2026-09-30-evidence.md](curriculum-runtime-2026-09-30-evidence.md)** (its CI smokes, a synthetic real-Chromium run, and in-app Playwright runs of CR-T02 switch on/off, CR-T07, CR-T08, CR-T09, CR-T10 and CR-T63 on 2026-10-01; the `cr-verify` runs in [curriculum-runtime-2026-10-01-evidence.md](curriculum-runtime-2026-10-01-evidence.md); the `cr-publish` runs in [curriculum-runtime-2026-10-02-evidence.md](curriculum-runtime-2026-10-02-evidence.md); the `cr-evidence` runs in [curriculum-runtime-2026-10-02-evidence-capture.md](curriculum-runtime-2026-10-02-evidence-capture.md); the `cr-memory` runs in [curriculum-runtime-2026-10-02-memory.md](curriculum-runtime-2026-10-02-memory.md); the `cr-skills` runs in [curriculum-runtime-2026-10-02-skills.md](curriculum-runtime-2026-10-02-skills.md); the #1506 runs in [curriculum-runtime-2026-10-05-unblock.md](curriculum-runtime-2026-10-05-unblock.md) (CR-T01 after decision 9; `09-preview.spec.ts`, one spec of CR-T02's switch-off half, on both preview paths); whether a row is claimed is decided by the slice's completion record, not here). 2026-09-29, runs added 2026-09-30, 2026-10-01, 2026-10-02 and 2026-10-05. Owner: jayleekr.
+## October 17 workshop local trial (#1610 / #1615)
+
+Scope: confirm existing iteration limits and extend CR-T09 with a responsive
+dental-homepage fixture. No runtime limit, cohort grant, preview sandbox, or
+production setting changes. Intent: INT-CR-02 (preserve the shared HTML runtime)
+INT-CR-03 (verify the artifact rather than infer success from code), and INT-CR-04
+(observations remain separate from interpretations);
+requirement CR-09, validation CR-T09; owner remains
+jayleekr. This is synthetic browser evidence, not a learning-outcome claim.
+
+### Iteration-limit inspection (2026-10-14)
+
+| Execution path | Bound | Actual wiring |
+|---|---|---|
+| Main Agent SDK coach | Adult workshop tiers `website` / `search-webapp`: 60; minors and unknown tiers: 20 | `sdkCoachHelpers.maxTurnsFor` → `profileToAgentOptions.maxTurns` → `buildSdkQueryOptions.maxTurns` → `sdkCoach.runSdkCoach` query. Existing `sdk-coach-helpers` and `sdk-gateway` smokes exercise the profile/options contract without a model call. |
+| SDK reviewer/researcher definitions, when granted | 10 per child agent | `SUBAGENT_DEFINITIONS` in `sdkCoachHelpers.ts`; separate from the main coach bound. |
+| Proxy browser-control path | Profile `browser_control.max_iterations`, default 8 | `ChatPanelProvider.runBrowserLoop`: zero-based `iter`, `proxyChat` first, then stop before executing tools when `iter >= maxIter`. With the default and continuous tool requests, at most 8 tool-execution batches and 9 model requests. One batch may contain multiple tool calls. |
+| Plain proxy | One client-side request | `runProxyRuntime` chooses the browser loop only when `profile.browser_control.enabled` is truthy; otherwise `runProxy` calls `proxyChat` once. |
+
+These are internal execution bounds for one submitted prompt, not the number of
+questions a participant may ask. Participant pass/request allowances are a separate
+Service contract. The actual workshop profile and selected SDK still need to be
+checked on the seminar machine; no live cohort token or paid model was used here.
+
+### Local experiment and observed result
+
+Run with pinned Service packages bootstrapped, e2e dependencies installed, and
+Playwright Chromium available (Node 22+):
+
+```sh
+npm --prefix e2e run test:workshop-element
+```
+
+The runner serves a synthetic page using Studio's `serveStatic`, performs real
+CDP inspect-mode mouse clicks through `waitForPick`, builds the production
+`ElementContext`, and passes it through `ElementQueue`, `withElementText`, and
+`turnImages`. It resizes the same page from 1280×900 to 390×844 so the target moves.
+
+Observed on Linux, 2026-10-14: both viewports **PASS**, mapping the selected photo
+placeholder to `index.html:18`. Local context-building times were 59 ms and 60 ms
+in the first two-sample run, not a latency benchmark. The bounded snippet was 60
+characters; text-only context was 769 UTF-8 bytes. Element crops were 2,670 / 2,557
+bytes. The runner measures each new execution independently.
+
+Controls passed: selection does not activate the page button; ordinary clicks
+resume afterward; a mismatched element ref fails; images-disabled context sends
+no image; images-enabled context carries the crop; removal and disabled runtime
+drop the queued context; a selection is consumed by exactly one turn. The existing
+CR switch and rendered attachment/removal smokes also passed locally.
+
+Evidence is generated under ignored `e2e/test-results/workshop-element-trial/`
+(`result.json` and the two element crops); the `start-page` PR workflow runs this
+trial and uploads the directory with its existing evidence artifact.
+
+Recommendation: try the existing **요소 고르기** command in the adult, explicitly
+enabled Experiment Browser before adding a coordinate-only picker or a second
+preview bridge. The source identity survived responsive reflow, and text-only
+context can carry “여기에 사진 넣어줘” without sending a crop. The existing
+implementation still captures the crop locally; this trial does not introduce a
+capture-free mode. Recommendation is not a human adoption decision.
+
+**NOT RUN:** Studio Electron tab visibility/focus on a supported macOS/Windows
+machine, the October 17 cohort's live profile, an AI editing/inserting a photo,
+and production deployment. The sandboxed iframe preview is a different path and
+does not gain this feature. Parent #1610 stays open for the remaining workshop
+checks and release.
+
+Status: **CR-T01 runs in CI** (worker `npm test`, `worker/test/cr-recon.test.mjs`; its PASS is recorded with `cr-recon`'s completion, not here). **CR-T02–T80: NOT RUN except the `cr-browser` runs recorded in [curriculum-runtime-2026-09-30-evidence.md](curriculum-runtime-2026-09-30-evidence.md)** (its CI smokes, a synthetic real-Chromium run, and in-app Playwright runs of CR-T02 switch on/off, CR-T07, CR-T08, CR-T09, CR-T10 and CR-T63 on 2026-10-01; the `cr-verify` runs in [curriculum-runtime-2026-10-01-evidence.md](curriculum-runtime-2026-10-01-evidence.md); the `cr-publish` runs in [curriculum-runtime-2026-10-02-evidence.md](curriculum-runtime-2026-10-02-evidence.md); the `cr-evidence` runs in [curriculum-runtime-2026-10-02-evidence-capture.md](curriculum-runtime-2026-10-02-evidence-capture.md); the `cr-memory` runs in [curriculum-runtime-2026-10-02-memory.md](curriculum-runtime-2026-10-02-memory.md); the `cr-skills` runs in [curriculum-runtime-2026-10-02-skills.md](curriculum-runtime-2026-10-02-skills.md); the #1506 runs in [curriculum-runtime-2026-10-05-unblock.md](curriculum-runtime-2026-10-05-unblock.md) (CR-T01 after decision 9; `09-preview.spec.ts`, one spec of CR-T02's switch-off half, on both preview paths); the `cr-review` runs in [curriculum-runtime-2026-10-05-review.md](curriculum-runtime-2026-10-05-review.md) and, for CR-T58 against the real and the recorded provider, [curriculum-runtime-2026-10-06-review-provider.md](curriculum-runtime-2026-10-06-review-provider.md); the `cr-e2e` runs (CR-T66's scripted run and its planted break, CR-T55 and CR-T56 in the app, CR-T02's whole inventory) in [curriculum-runtime-2026-10-06-e2e.md](curriculum-runtime-2026-10-06-e2e.md); whether a row is claimed is decided by the slice's completion record, not here). 2026-09-29, runs added 2026-09-30, 2026-10-01, 2026-10-02, 2026-10-05 and 2026-10-06. Owner: jayleekr.
 Intent: [INT-CR-00–09](../intents/curriculum-runtime.md) · requirements: [CR-01–84](../requirements/curriculum-runtime.md) · plan: [curriculum-runtime](../plan/curriculum-runtime.md). Layer and command canon: [05-testing-requirements](../dev/05-testing-requirements.md). Judgment discipline: [.claude/rules/verification.md](../../.claude/rules/verification.md) — open the target before writing a verdict rule, run the controls before the real run, and rule out the instrument before blaming the product.
 
 This document **defines** checks. A check written here is not a check that ran. Every row starts NOT RUN; run records go to a separate evidence file (`docs/testing/curriculum-runtime-<date>-evidence.md`) with commit, environment, evidence class (live-host / captured-replay / synthetic, MC-38), expected and observed, PASS / FAIL / NOT RUN / BLOCKED. Passing unit tests of an existing feature is not a PASS for a CR row. File names below are proposals; the implementing PR fixes them after reading the code it tests.
@@ -190,7 +257,7 @@ Both runs follow CR-71's fifteen steps in this order. A step passes only when it
 | 14 | The Weekly Review shows v0 → test → evidence → decision → v1. | A cached pack whose claims link to the records of steps 5–13. | CR-48, CR-50 |
 | 15 | The Deck Builder proposes changes to the relevant slides only. | Slide patch proposals with evidence refs, for the affected slides only. | CR-56, CR-57 |
 
-Scripted run: `node e2e/classroom/cr-e2e.mjs` on the dev host (the name is a proposal; `cr-e2e` fixes it). Steps 7–8 use a second browser context in Playwright mobile emulation at 390 px, so their evidence class is synthetic. The script prints one line per step with the record ID it read.
+Scripted run: `e2e/curriculum-runtime/loop-app.spec.ts` in the Studio app on the dev host (`GATE=idle HPS_APP_PATH=<prepared copy> bash scripts/e2e-quiet.sh npx playwright test -c curriculum-runtime/playwright.config.ts loop-app`; the in-app Curriculum Runtime runs share its local Service and fixture, so it lives beside them rather than under `e2e/classroom`). Steps 7–8 use a second browser (Chromium, Playwright mobile emulation at 390 px), so their evidence class is synthetic. The script prints one line per step with the record ID it read. Step 13 registers v1 with `e2e/curriculum-runtime/register-version.mjs` (the publish panel's own set builder and upload, without starting a test) and names it on the decision, a harness script outside the App, because no panel does either yet; the step is PARTIAL ("PASS via harness, not product"), and CR-71 is not met until a panel does it.
 
 Live run, real-phone step (steps 6–8):
 

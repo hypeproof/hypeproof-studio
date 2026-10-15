@@ -1,11 +1,15 @@
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
+import { activityLabel, passEnd } from "./activityLabel";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
+import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
 import { EvidenceDrawer } from './EvidenceDrawer';
 import { CompletionGate } from './CompletionGate';
 import { LessonStepPanel } from './LessonStepPanel';
+import { StudentGoal } from './StudentGoal';
 import type { StepWork } from '../../src/lessonFocus';
+import { acceptGoalView, goalNoteFor, goalOfLesson, type GoalNote, type GoalSaveRequest, type StudentGoalView } from '../../src/studentGoal';
 import { InstructorInbox } from './InstructorInbox';
 import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
@@ -222,6 +226,38 @@ export function ChatPanel(props: Props) {
     if (msg.type === "lessonWorkState") setLessonWork({ sha256: msg.sha256, work: msg.work });
     if (msg.type === "rehearsalState") setRehearsalResult({ state: msg.state, verdict: msg.verdict, reasons: msg.reasons, message: msg.message });
   }), []);
+  // AE-01 (#554) — the learner's own goal for the served lesson, as the host stored it: the newer, by revision, of the
+  // goal the current `config` carries and the goal the host's save answers brought (they reach every chat view). Only
+  // the answers are kept in state; `config` is read on every render, never copied once. A panel that mounted before its
+  // lesson arrived (no config yet, or a first config without a profile under the same activity, so nothing remounts)
+  // therefore draws the goal of the config that brings the lesson, and its first save starts from that goal's revision.
+  // A goal never moves back to an older revision. The note under the editor is this view's own: the host echoes the id
+  // of the save it answers, and only the view that sent that save shows "저장했어요." or the refusal. One save at a time
+  // per view.
+  const [goalAnswer, setGoalAnswer] = useState<StudentGoalView | null>(null);
+  const studentGoal = acceptGoalView(goalAnswer, config?.studentGoal);
+  const [goalNote, setGoalNote] = useState<GoalNote>(null);
+  const goalRequest = useRef<string | null>(null);
+  const [goalPending, setGoalPending] = useState(false);
+  // A note belongs to the lesson it was made under.
+  useEffect(() => { setGoalNote(null); }, [config?.profile?.lesson?.sha256]);
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type !== "goalState") return;
+    setGoalAnswer((prev) => acceptGoalView(prev, msg.view));
+    const note = goalNoteFor(msg, goalRequest.current);
+    if (note === undefined) return;
+    goalRequest.current = null;
+    setGoalPending(false);
+    setGoalNote(note);
+  }), []);
+  const sendGoalSave = (edit: GoalSaveRequest) => {
+    if (goalRequest.current) return;
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    goalRequest.current = requestId;
+    setGoalPending(true);
+    setGoalNote(null);
+    postToHost({ type: "goalSave", ...edit, requestId });
+  };
   /**
    * SX-14·15·17 — the learning state the host computed and sent. **It is not
    * recomputed here.** null means this connection does not use learning events (it is
@@ -229,6 +265,28 @@ export function ChatPanel(props: Props) {
    * screen does nothing when pressed.
    */
   const [learning, setLearning] = useState<LearningStatePayload | null>(null);
+  /**
+   * SX-01/SX-02 — the step region A shows starts where the task's record stands, then follows the
+   * student (`stepViewOnState`). Drawn from the first step, a reopened task offered an earlier
+   * step's action as the Primary, and pressing it moved the record back.
+   */
+  const stepView = useRef<StepViewSettled>(null);
+  const learningTask = useRef<string | null>(null);
+  const pickStep = (stepId: string) => {
+    stepView.current = stepViewOnPick(learningTask.current);
+    setCurrentStepId(stepId);
+  };
+  /**
+   * SX-01/SX-02 — the lesson and activity (`recordViewKey`) whose task record a learning state has
+   * shown this screen (`recordShownBy`). Until then, on a seat that runs the task flow, region A's
+   * Primary is busy: it is drawn from the profile at the first step, and a start pressed there
+   * moved a task left mid-way back to that step (review of 2026-10-05). The key a state counts for
+   * is the one of the last `config` message, read in message order (not from a render, which can
+   * run after the next message).
+   */
+  const recordKeyNow = useRef(recordViewKey(config));
+  const [recordShownFor, setRecordShownFor] = useState<string | null>(null);
+  const awaitingRecord = taskFlowSeat(config?.profile) && recordShownFor !== recordViewKey(config);
   /** Drawer open/closed is a **view state**, so the webview owns it. Closed by default (SX-17). */
   const [drawerOpen, setDrawerOpen] = useState(false);
   // #751 U3 — instructor prompts imported into THIS draft (bodiless refs, saved with the draft, handed over with the send).
@@ -265,7 +323,14 @@ export function ChatPanel(props: Props) {
   // task's events.
   useEffect(() => {
     const off = onHostMessage((msg) => {
-      if (msg.type === "learningState") setLearning(msg.state);
+      if (msg.type === "config") recordKeyNow.current = recordViewKey(msg.config);
+      if (msg.type !== "learningState") return;
+      setLearning(msg.state);
+      learningTask.current = msg.state.task;
+      const next = stepViewOnState(stepView.current, msg.state);
+      stepView.current = next.settled;
+      if (next.step) setCurrentStepId(next.step);
+      if (recordShownBy(msg.state)) setRecordShownFor(recordKeyNow.current);
     });
     return off;
   }, []);
@@ -362,7 +427,7 @@ export function ChatPanel(props: Props) {
   const coachName = resolveCoachIdentity(config?.coach, { ux }).name;
 
   // Tone for hard-coded chat-panel labels — game (kids) vs search-webapp
-  // (보아치과 teaser) vs website (보아치과 원장 copyclone) vs world
+  // (예시치과 teaser) vs website (치과 원장 copyclone) vs world
   // ("내가 만든 미래"). Centralized in chatPanelHelpers (appToneOf/TONE_LABELS)
   // but mirrored here so the webview stays vscode-free (chatPanelHelpers
   // imports Node `Buffer`).
@@ -566,7 +631,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업"} · {config.activity.name}
+        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{passEnd(config.activity.pass) && <> · {passEnd(config.activity.pass)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -734,10 +799,14 @@ export function ChatPanel(props: Props) {
         // Without `learningState` (a seat that records no learning events) there is no verdict,
         // and nothing gets a check mark.
         missing={learning ? learning.complete.missing : null}
+        // SX-02 — "지난번 이어서", exactly as the host decided it from the task record.
+        resume={learning?.resume ?? null}
+        // AE-01 — the learner's own goal for THIS lesson, fixed with the header; edited in the rail below.
+        goal={goalOfLesson(studentGoal, config?.profile?.lesson)?.goal || null}
         currentStepId={currentStepId}
-        onSelectStep={setCurrentStepId}
+        onSelectStep={pickStep}
         onStartStep={(step) => {
-          setCurrentStepId(step.id);
+          pickStep(step.id);
           const lesson = config?.profile?.lesson;
           if (!lesson) return;
           postToHost({ type: 'lessonStep', stepId: step.id, status: 'in_progress' });
@@ -748,15 +817,32 @@ export function ChatPanel(props: Props) {
           });
         }}
         onOpenGrowth={() => postToHost({ type: "openLocalReview" })}
-        busy={streaming}
+        // SX-04 — busy while the coach answers, and (SX-01/SX-02) until a learning state has shown
+        // this screen the task's record: before it the Primary stands on the first step, not the
+        // step the record holds.
+        busy={streaming || awaitingRecord}
         activity={config?.activity ? {
-          label: config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업",
+          label: activityLabel(config.activity.kind, config.activity.pass),
+          ...(passEnd(config.activity.pass) ? { detail: passEnd(config.activity.pass)! } : {}),
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}
       />}
       {draftError && <p role="alert">{draftError}</p>}
       {updateBanner}
+
+      {/* AE-01 (#554) — "내 목표": the learner's own goal and completion criteria, in the rail right under region A.
+          Region A keeps drawing the lesson's own criteria from the design file; this block never touches them.
+          Student-only, like region A (#1298). */}
+      {!props.instructor && config?.profile?.lesson && (
+        <StudentGoal
+          lesson={config.profile.lesson}
+          view={goalOfLesson(studentGoal, config.profile.lesson)}
+          note={goalNote}
+          pending={goalPending}
+          onSave={sendGoalSave}
+        />
+      )}
 
       {/* Region B's lesson info — inside the coach rail, **outside** the message stream
           (SX-05). Closed by default, and it opens only the current step. It used to
@@ -1802,8 +1888,10 @@ function ErrorBanner({
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
   const isAuth = /참여 코드|토큰|세션|강사|만료|등록|인가/.test(message);
   const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort/i.test(message);
-  const icon = isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
-  const title = isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
+  // REQ-L12 — a spent, refunded or ended pass is an account state, not a fault.
+  const isPass = /이용권|환불/.test(message);
+  const icon = isPass ? "🎟️" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
+  const title = isPass ? "이용권을 더 쓸 수 없어요" : isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
 
   return (
     <div className="hps-error-banner" role="alert">

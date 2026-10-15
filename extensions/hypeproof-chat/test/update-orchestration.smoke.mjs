@@ -17,11 +17,13 @@ mod.paths = Module._nodeModulePaths(process.cwd());
 mod._compile(bundle.outputFiles[0].text, mod.filename);
 const { checkForUpdates, scheduleUpdateChecks } = mod.exports;
 const originalFetch = globalThis.fetch;
+const originalToken = process.env.HPS_RELEASE_TOKEN;
+process.env.HPS_RELEASE_TOKEN = "test-private-release-token";
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 const originalArch = Object.getOwnPropertyDescriptor(process, 'arch');
 const release = {
   tag_name: 'v0.1.51', html_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/tag/v0.1.51',
-  assets: [{ name: 'HypeProof-Studio-darwin-arm64.zip', size: 100, digest: 'sha256:' + 'a'.repeat(64), browser_download_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.51/HypeProof-Studio-darwin-arm64.zip' }],
+  assets: [{ url: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', name: 'HypeProof-Studio-darwin-arm64.zip', size: 100, digest: 'sha256:' + 'a'.repeat(64), browser_download_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.51/HypeProof-Studio-darwin-arm64.zip' }],
 };
 try {
   Object.defineProperty(process, 'platform', { value: 'darwin' });
@@ -67,6 +69,7 @@ try {
   console.log('PASS actual update orchestrator: check failures, platform, version, assets, cadence, banner retention and disposal');
 } finally {
   globalThis.fetch = originalFetch;
+  if (originalToken === undefined) delete process.env.HPS_RELEASE_TOKEN; else process.env.HPS_RELEASE_TOKEN = originalToken;
   Object.defineProperty(process, 'platform', originalPlatform);
   Object.defineProperty(process, 'arch', originalArch);
 }

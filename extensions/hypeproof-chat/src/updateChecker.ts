@@ -42,7 +42,7 @@ const INITIAL_DELAY_MS = 30 * 1000;
 const DISMISSAL_KEY = "hypeproofChat.updateDismissals";
 
 /**
- * Hit the public releases API. No auth — GitHub allows 60 unauth req/h/IP.
+ * Read the private organization release API using the member’s GitHub login.
  * The 24h cadence + 1 strructor per user means we're nowhere near the limit.
  */
 export async function checkForUpdates(currentVersion: string): Promise<UpdateInfo> {

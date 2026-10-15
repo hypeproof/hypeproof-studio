@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Isolated Mac host for checking the CURRENT remote-classroom-operations build in a real Studio shell (#751).
 //
 //   node e2e/classroom/mac-devhost.mjs prepare   # copy → inject current build → ad-hoc sign the COPY → verify → manifest
@@ -47,7 +48,7 @@ export function preflight() {
   assert.ok(inside(copy, home), 'internal: copy path escaped the working directory');
   for (const f of BUNDLES) assert.ok(existsSync(path.join(repo, 'extensions/hypeproof-chat', f)), `build first: missing ${f} (npm --prefix extensions/hypeproof-chat run build:extension && npm --prefix extensions/hypeproof-chat/webview-ui run build)`);
   assert.ok(existsSync(path.join(source, 'Contents/Resources/app/product.json')), 'no Studio shell to copy: set HPS_DEVHOST_SOURCE to an official .app');
-  const dirty = execFileSync('git', ['status', '--porcelain', '--', 'extensions/hypeproof-chat/src', 'extensions/hypeproof-chat/webview-ui/src', 'worker/src', 'chalk/src'], { cwd: repo, encoding: 'utf8' }).trim();
+  const dirty = execFileSync('git', ['status', '--porcelain', '--', 'extensions/hypeproof-chat/src', 'extensions/hypeproof-chat/webview-ui/src', 'e2e/package.json', 'e2e/package-lock.json', 'chalk/src'], { cwd: repo, encoding: 'utf8' }).trim();
   return { shell: json(path.join(source, 'Contents/Resources/app/product.json')), source_sha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), source_dirty: !!dirty };
 }
 
@@ -91,7 +92,7 @@ function reinject() {
   for (const f of BUNDLES) assert.ok(existsSync(path.join(repo, 'extensions/hypeproof-chat', f)), `build first: missing ${f}`);
   const earlier = json(path.join(home, 'manifest.json')), product = json(path.join(copy, 'Contents/Resources/app/product.json'));
   assert.equal(product.commit, earlier.shell.commit, 'the copy is not the shell the earlier manifest names');
-  const dirty = execFileSync('git', ['status', '--porcelain', '--', 'extensions/hypeproof-chat/src', 'extensions/hypeproof-chat/webview-ui/src', 'worker/src', 'chalk/src'], { cwd: repo, encoding: 'utf8' }).trim();
+  const dirty = execFileSync('git', ['status', '--porcelain', '--', 'extensions/hypeproof-chat/src', 'extensions/hypeproof-chat/webview-ui/src', 'e2e/package.json', 'e2e/package-lock.json', 'chalk/src'], { cwd: repo, encoding: 'utf8' }).trim();
   const pre = { source_sha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), source_dirty: !!dirty };
   writeFileSync(path.join(home, 'manifest.before-reinject.json'), JSON.stringify(earlier, null, 2));
   return inject(pre, { ...earlier.shell, reinjected: { at: new Date().toISOString(), earlier_prepared_at: earlier.prepared_at, earlier_extension_source_sha: earlier.extension?.source_sha } });
@@ -122,7 +123,7 @@ async function launch() {
   assert.ok(existsSync(path.join(home, 'manifest.json')) && existsSync(copy), 'run `prepare` first');
   const manifest = json(path.join(home, 'manifest.json'));
   for (const [f, h] of Object.entries(manifest.extension.bundles)) assert.equal(sha(path.join(ext, f)), h, `${f} changed since prepare; prepare again`);
-  const { localOps } = await import('../../worker/test/harness/classroom-ops.mjs'), { setRoster } = await import('../../worker/src/lib/kv.ts');
+  const { localOps } = await import('./service-fixture.mjs'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
   const local = await localOps(); await local.freeze();
   const seats = [{ seat_id: 'A1', student_id: 'student-a' }, { seat_id: 'A2', student_id: 'student-b' }]; await setRoster(local.env.HPS_KV, local.cohort, seats.map((s) => s.student_id));
   assert.equal((await local.configure(seats, 0, { flags: { ops_observe: true, ops_commands: true, ops_collect: true, ops_reports: true } })).status, 201);

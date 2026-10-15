@@ -45,14 +45,14 @@ block) 구축 후 screenshot(vision) 주입 ② 미성년 안전 세션/URL 정�
 
 ## 0.5 구현 완료 (2026-07) — Phase 0–3 · 현재 진실의 출처
 
-보아치과 홈페이지 커리큘럼(성인)을 위해 세 조건을 모두 구현했다. 통합 브랜치
-`feat/boah-homepage-browser`(→ #278). 각 커밋 tsc·단위테스트 green. (참고: #278 본체 —
+치과 파일럿 홈페이지 커리큘럼(성인)을 위해 세 조건을 모두 구현했다. 통합 브랜치
+`feat/homepage-browser`(→ #278). 각 커밋 tsc·단위테스트 green. (참고: #278 본체 —
 upstream 통합 브라우저 enable + 확장 배선 — 은 이미 #279로 main에 머지됨. 아래는 그 위 후속.)
 
-- **Phase 0** — 최초엔 별도 `boah-homepage-2026-s1` 코호트 + `homepage` tier로 스캐폴드했으나,
+- **Phase 0** — 최초엔 별도 `dental-homepage-2026-s1` 코호트 + `homepage` tier로 스캐폴드했으나,
   PR #309 리뷰(ico1036)의 운영 판단으로 **기존 원장 website-copyclone 트랙
-  (`boah-dental-director-copyclone-2026-s1`, cohort `boah-dental-2026-a`)에 통합**했다.
-  근거: 강사 issuer 토큰이 `boah-dental-2026-a`로 스코프돼 신규 cohort는 세션을 못 열고,
+  (`dental-copyclone-2026-s1`, cohort `dental-pilot-2026-a`)에 통합**했다.
+  근거: 강사 issuer 토큰이 `dental-pilot-2026-a`로 스코프돼 신규 cohort는 세션을 못 열고,
   확정 큐시트가 copyclone 페다고지(정답지 클론)다. 신규 프로필/프롬프트/`homepage` tier는
   제거하고, copyclone(이미 `preview.type:"live_server"`)에 `page_context`·`browser_control`·
   `max_tokens`(#298) 3필드를 얹어 조건 ①②③을 `website` tier에서 굴린다.
@@ -109,7 +109,7 @@ dev-host(로컬 worker + homepage 토큰). 단위 로직(핸드셰이크·실행
 - Q1 — 수강자가 만든 페이지(`file://`·`localhost`)와 따라하려는 외부 사이트(`https://`)를
   하나의 네이티브 브라우저에서 연다.
 - Q2 — 그 페이지를 Studio LLM(코치)이 분석에 쓸 수 있다(스크린샷 + DOM/텍스트).
-- Q3 — SK바이오팜 아이들이 만든 게임을 이 브라우저에서 안전하게 실행한다.
+- Q3 — 기업 고객 아이들이 만든 게임을 이 브라우저에서 안전하게 실행한다.
 
 **비목표 (이번 범위 밖)**
 - 풀 브라우저 UX(북마크/확장/싱크). 최소 chrome(주소·뒤로/앞으로·새로고침)만.
@@ -268,7 +268,7 @@ product 결정(§11).
 - `worker/src/profiles/types.ts`: `preview.type`에 네이티브 경로 배선(`"live_server"`
   재사용 또는 `"native"` 추가) + `session: "safe" | "browse"` 힌트.
 - `input.page_context: boolean` 추가(default off), worker에서 강제.
-- 영향 프로필: `sk-biopharm-kids-*`(안전 세션·page_context off), 일반 코호트는 선택.
+- 영향 프로필: `kids-workshop-*`(안전 세션·page_context off), 일반 코호트는 선택.
 
 ## 9. 작업 분해 / 단계
 

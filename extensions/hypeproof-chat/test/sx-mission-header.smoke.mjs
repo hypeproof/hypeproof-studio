@@ -23,7 +23,7 @@ import { rendererStatus, renderComponent, visibleText } from "./sx-render.mjs";
 import { MAX_ACTIONS, actionsFrom, stepsRemaining } from "../webview-ui/src/missionHeaderLogic.ts";
 
 const week3 = JSON.parse(
-  readFileSync(new URL("../../../worker/test/fixtures/session-design/week-3.json", import.meta.url), "utf8"),
+  readFileSync(new URL("./fixtures/session-design/week-3.json", import.meta.url), "utf8"),
 );
 const lesson = { course_id: "globalbuddy", version: "m2026.09.20-1", sha256: "f".repeat(64), content: week3 };
 const noop = () => {};
@@ -160,8 +160,10 @@ const text = visibleText(html);
   //
   // The assertion is strengthened, not relaxed: it now pins the ABSENCE of the invented
   // sentence AND the absence of an h1, while still requiring the activity line SX-02
-  // does ask for ("현재 프로젝트 상태"). The 이어가기 진입 is not built yet (SX-T11 makes
-  // it conditional on a previous session); when it is, add its case here.
+  // does ask for ("현재 프로젝트 상태"). The 이어가기 진입 ("지난번 이어서") is judged in
+  // test/sx-home.smoke.mjs. On a seat with no design file it is not drawn today, and no test
+  // pins that: SX-02 says such a seat shows it alone, and what it would resume there waits for
+  // Jay's decision.
   const noneHtml = await renderComponent("MissionHeader", { ...homeProps, lesson: null });
   const none = visibleText(noneHtml);
   assert.doesNotMatch(none, /아직 연결된 수업이 없습니다/, `설계 파일이 없는데 문장을 지어냈다: ${none}`);

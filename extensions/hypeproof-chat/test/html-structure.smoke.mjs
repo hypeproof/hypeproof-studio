@@ -18,10 +18,10 @@ const {
 // closes with `*/` instead of `-->`, so everything after it is one open
 // comment (footer, disclaimer, slider script, </body></html>).
 const CORRUPTED = `<!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><title>보아치과</title>
+<html lang="ko"><head><meta charset="utf-8"><title>예시치과</title>
 <style>.hero{color:#a33} /* warm palette */</style></head>
 <body>
-  <section class="hero"><h1>건강한 미소, 보아치과</h1></section>
+  <section class="hero"><h1>건강한 미소, 예시치과</h1></section>
   <!-- ── Footer ── */
   <footer>
     <p class="disclaimer">치료 효과를 단정하는 표현은 의료광고법상 사용이 제한됩니다.</p>

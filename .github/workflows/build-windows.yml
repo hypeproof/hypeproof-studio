@@ -186,6 +186,10 @@ jobs:
           . ./get_repo.sh
           . ./version.sh
 
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Prepare VS Code source
         shell: bash
         working-directory: vscodium-base

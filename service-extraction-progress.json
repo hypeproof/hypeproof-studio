@@ -1,0 +1,98 @@
+{
+  "updated": "2026-10-10T13:13:57.469298+00:00",
+  "phase": "Service #16 병합 · Studio #1587 마지막 CI 경쟁조건 교정 후 원격 재검증",
+  "steps": [
+    {
+      "name": "현재 상태·의존성 조사",
+      "status": "1차 조사 완료"
+    },
+    {
+      "name": "공통 측정 코어 패키지 추출",
+      "status": "core 0.1.0 · CLI 0.3.5 공개 배포 완료"
+    },
+    {
+      "name": "Studio·측정 도구 패키지 전환",
+      "status": "PR #1580 · 원격 CI 24개 모두 통과 · draft/병합 전"
+    },
+    {
+      "name": "Chalk API 경계 전환",
+      "status": "state/board/logs 모두 공개 HTTP 경계 전환 · auth/transport/실제SQL 및 staging PASS · UI 전환 제외"
+    },
+    {
+      "name": "Service 독립 레포 추출",
+      "status": "공개 Service 6a2a769 push · Worker/측정 엔진·기준/SQL/historical HAIN7 독립 · dev testkit0.1.2 Release"
+    },
+    {
+      "name": "독립 빌드·호환성 검증",
+      "status": "Studio 없는 git archive: 설치·typecheck·bundle·독립 104명령 PASS; 원격 Node22/24 Worker CI + 패키지6job PASS"
+    },
+    {
+      "name": "배포 주체 이전",
+      "status": "운영 승인 전 대기"
+    },
+    {
+      "name": "worker/ 없는 Studio 최종 수용 테스트",
+      "status": "PASS: worker/·형제소스 없는 격리 Studio 설치·App/webview/Chalk 빌드·실제 App/Chalk/Chromium/SDK 핵심 기능. 근거 docs/dev/worker-separation-acceptance.json"
+    },
+    {
+      "name": "최종 PR 원격 검사와 머지 준비",
+      "status": "Service #16 인간 병합 완료. Studio 03af1c5 CI23/24PASS: registry·Dev macOS/Windows 모두PASS. F5 withdrawal 테스트의 고정150ms 완료가정을 실제background 작업완료await로수정, 요구사항assertion보존. 새head 원격검증대기."
+    }
+  ],
+  "notes": [
+    "구현 검증과 운영 배포를 따로 기록합니다.",
+    "실제 원격: hypeproof/hypeproof-studio",
+    "기존 10개 코어 파일을 공통 패키지로 이동하고 임시 재수출 경로를 유지했습니다.",
+    "측정 코어 빌드, 기존 검증 69개, 레포 밖 패키지 설치 검증 통과",
+    "Worker 전체 npm test 및 Worker·확장 typecheck 통과(측정 코어 이동 시점)",
+    "공개 레포·공개 패키지로 진행 확정",
+    "배포 자료 경로·비밀 탐지 공통 계약 패키지 추가, 2개 테스트 통과",
+    "https://github.com/hypeproof/hypeproof-service 공개 레포 생성 확인",
+    "경로·비밀 탐지 계약 추출 후 Worker 전체 npm test 재실행 통과",
+    "gh 인증과 새 레포 ADMIN 권한 확인",
+    "Service 첫 커밋 f9215e5: 공통 패키지·이전 기록·독립 CI 게시",
+    "공개 배포처: GitHub Release 버전 고정 tgz + lockfile integrity",
+    "런타임 rubric JSON을 Worker 내부 data/rubrics로 복사하고 문서 디렉토리 import 제거; 내용·해시 보존",
+    "공개 Release packages-v0.1.0 게시, SHA-256/SHA-512 기록 및 npm 설치 확인",
+    "Service 독립 패키지 GitHub Actions CI 성공",
+    "https://github.com/orgs/hypeproof/projects/1",
+    "공개 패키지 전환 후 Worker 전체 테스트·CLI 테스트·확장 bundle·webview build 통과",
+    "공개 패키지 전환 후 확장 전체 npm test 최종 통과; 설치된 패키지까지 provider 의존 검사 유지",
+    "임시 Studio 공통 패키지 소스 복사본을 보관 이동; canonical 구현은 Service 레포에만 유지",
+    "measurement CLI 소스·빌드·테스트·어댑터를 Service로 이전: c841d1c",
+    "Node 22·24의 독립 패키지 GitHub CI 6개 job 모두 통과",
+    "CLI 설치 파일 검증 포함 36개 테스트 통과; adapter import가 수집·sync를 시작하지 않음",
+    "https://github.com/hypeproof/hypeproof-service/releases/tag/measurement-v0.3.5",
+    "기존 CLI 실행 코드와 어댑터 런타임 본문을 Studio 기준 커밋과 대조; Lab 동기화 경로 보존",
+    "칸반 #1–#14 실제 상태 재조회: 완료 3개, 진행 중 4개, 대기 7개; 소스·Release·CI 근거와 미실행 범위 반영",
+    "최종 확장 전체 테스트 및 Worker·Service·옛 CLI 소스 없는 별도 경로의 확장·webview 빌드 통과; #1 이슈 검증 근거 갱신",
+    "feat/service-package-consumers 브랜치에서 Studio 소비자 전환 PR 준비; Worker CI에 교차 제품 계약 테스트용 App 의존 설치 추가",
+    "상태 조회는 Service가 issuer 범위·폐기·KV·프로필을 확인; 한 번의 HTTP 호출·8초 제한·헤더 제한·502 실패 표시 검증",
+    "칸반 #5 진행 중으로 전환: Done 3 / In Progress 5 / Backlog 6",
+    "https://github.com/hypeproof/hypeproof-studio/pull/1581 · 상태 조회만 전환, board·로그 조회·binding 제거는 남음",
+    "PR #1580 최신 c3f387d의 원격 CI 24개 검사 모두 통과; 실제 설치 App·운영 검증은 미실행",
+    "최신 GitHub 재조회: #1580·#1581 각각 CI 24개 모두 통과, 두 PR 모두 OPEN draft/미병합. 새 AGENTS 순서대로 Worker 전체 분리를 우선하며 Chalk 후속 전환은 구조 검토 후 판단.",
+    "새 AGENTS 순서로 Worker 전체 분리 우선. tracked Worker 파일만 Service 브랜치로 이전하며 local secrets/state/node_modules는 제외.",
+    "정본 hype-pr inspect/plan 실행: 새 Service는 정책 미등록(outside scope/unknown repo). receipt 우회 없이 registry #9 후속으로 기록하며 구현·독립 빌드는 계속 진행.",
+    "Worker src 206개 파일·SQL migration36개·rubric 원본 bytes 보존. 파일/원본 commit/hash/disposition manifest 공개 브랜치에 기록.",
+    "독립 Service 테스트 104명령 PASS. Studio 통합24명령 및 혼합 파일의 App assertions는 NOT_RUN 명시, 기존 Studio 테스트 유지.",
+    "https://github.com/hypeproof/hypeproof-service/actions/runs/38047730086 · Node22/24 독립 Worker CI PASS",
+    "최신 DEC-009 적용: 제품 구조 분석 병렬, 최종 구조 확정/추가 코드 변경은 분리 결과 확인 후. proxy-poc는 참조/복구 후보로만 기록하며 현재 코드 격리·삭제하지 않음.",
+    "칸반 #3/#4/#9/#10에 Worker branch·104독립명령·원격CI·정본 Service정책 미등록·운영 미실행 동기화. 현재 Done3 / In Progress6 / Backlog5.",
+    "Service 최신 f9a9ce0 재조회: Worker Node22/24 CI38048090306 및 패키지6job CI38048090321 모두 PASS. Studio AGENTS의 DEC-010/011 확인: 현재 제품 역할 유지·겹친 책임/수정 결합 분석, 추가 레포 분리는 필수 아님.",
+    "DEC-013: App private Worker import 8개·fixture 읽기 6곳 제거 후 전체 App npm test PASS. Chalk board/log/auth HTTP 경계 및 e2e 공개 Service testkit 소비 전환 병렬 구현 중. worker/ 없는 최종 checkout 검증은 아직 미실행. UI 웹→App 전환은 범위 밖/backlog.",
+    "Service 새 board/log API와 transport credential의 양성/음성 3개 controls PASS. 공통 instructor allowlist contracts0.1.1 공개Release 완료. 공개 dev testkit 실제 설치 후 router health·SQLite fixture PASS.",
+    "Studio 7781a80 push 완료; Worker 전체 Git 이력 후속과 현재 구현 push를 구분한다.",
+    "칸반 sync: Service Done#2/#12/#13; InProgress#1/#3~#9/#11; Backlog#10/#14. Studio#1582 InProgress. 전체 수용gate 아직 PASS 아님.",
+    "공개 testkit0.1.2 실제 staging4controls PASS/skip0. 소비자 기존38소스/43명령 보존, 기본5개 요구사항 lane PASS; 전체43명령 PASS로 주장하지 않는다.",
+    "hype-luwak 후속6issue/Backlog: https://github.com/hypeproof/hype-luwak/issues/1 ~ /6; 활성코드 미삭제/미이동.",
+    "최종 npm run test:worker-free PASS, 204.966초. 실제구독/유료API/GUI수동/운영/merge는미실행. 남은 기록/원격 리뷰 절차는 미션 수용 완료와 구분한다.",
+    "최종consumer ac73a70 commit/push 완료. parent AGENTS/manual guide/boundary/backlog 문서는 임의stage하지않고보존했다.",
+    "최종칸반 Service Done11, InProgress#9, Backlog#10/#14; Studio#1582 Done. 완료는 코드/최종수용범위이며 운영·PR채택 미실행.",
+    "Guarded Studio PR inspect는 옛 config/traceability.json의 worker/test 소스정본 경로가남아실패. Service criteria onboarding#9로추적하며 가짜shim/receipt우회하지않았다.",
+    "Studio #1587 CI의 두 독립 job은 root 공개 testkit 설치 누락으로 ERR_MODULE_NOT_FOUND, registry는 이전된 테스트 경로와 test/ 미등록. 로컬 registry 양성/음성 및 이전 drift lock 전체 PASS, 공개 패키지/원본 assertion 유지. 수정은 최종 PR에 push 후 원격 재검증한다.",
+    "CI 보정 로컬 검증: Node22.23.3 fresh Worker-free archive에서 Devjob 실제3명령·확장 전체 npmtest PASS. registry 기존 drift lock10파일 모두 Node22/24 PASS, checker 양성·음성2controls PASS, workflow shells/timeouts PASS. 원격 CI 재실행 결과는 대기.",
+    "F5 거부응답을150ms뒤에명시해제하는대조군으로경쟁조건확인. 실제upload완료/저장await후 withdrawn·현재seal/retry차단·다음activation재시도없음assertion확인. App소스무변경. focusedNode22 PASS, 원격재검증대기."
+  ],
+  "kanban": "https://github.com/orgs/hypeproof/projects/1"
+}

@@ -23,7 +23,7 @@
     {
       "id": "ST-REQ-NATIVE",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -36,7 +36,7 @@
     {
       "id": "ST-DES-NATIVE",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-NATIVE"
       ],
@@ -50,7 +50,7 @@
     {
       "id": "ST-REQ-UX",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-NATIVE"
       ],
@@ -63,7 +63,7 @@
     {
       "id": "ST-IMP-START",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-DES-NATIVE",
         "ST-REQ-UX"
@@ -77,7 +77,7 @@
     {
       "id": "ST-TEST-NATIVE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-NATIVE"
       ],
@@ -90,7 +90,7 @@
     {
       "id": "ST-TEST-UX",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UX"
       ],
@@ -103,7 +103,7 @@
     {
       "id": "ST-VAL-NATIVE",
       "stage": "validation",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-TEST-NATIVE",
         "ST-IMP-START"
@@ -117,7 +117,7 @@
     {
       "id": "ST-REQ-COACH-RUNTIME",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -133,9 +133,27 @@
       ]
     },
     {
+      "id": "REQ-STUDIO-DEV-SUBSCRIPTION",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/studio-dev.md",
+          "section": "### Windows"
+        },
+        {
+          "path": "docs/dev/studio-dev.md",
+          "section": "## Local subscriptions"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-COACH-SESSION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
@@ -148,33 +166,37 @@
     {
       "id": "ST-TEST-LESSON-FEATURES",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
       "sources": [
         {
-          "path": "worker/test/lesson-feature-policy.test.mjs"
+          "path": "worker/test/lesson-feature-policy.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-LESSON-HELP-MODE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
       "sources": [
         {
-          "path": "worker/test/lesson-help-mode.test.mjs"
+          "path": "worker/test/lesson-help-mode.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-REQ-STUDIO-SAFETY",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -188,7 +210,7 @@
     {
       "id": "ST-TEST-PUBLISH-GATE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-STUDIO-SAFETY"
       ],
@@ -201,7 +223,7 @@
     {
       "id": "ST-TEST-SDK-RESULT-DRIFT",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
@@ -214,7 +236,7 @@
     {
       "id": "ST-TEST-SDK-SURFACE-DRIFT",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
@@ -227,7 +249,7 @@
     {
       "id": "ST-DES-COURSE-EFFORT",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
@@ -241,7 +263,7 @@
     {
       "id": "ST-TEST-COURSE-EFFORT",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME",
         "ST-DES-COURSE-EFFORT"
@@ -251,7 +273,9 @@
           "path": "docs/testing/lesson-effort.md"
         },
         {
-          "path": "worker/test/lesson-effort-policy.test.mjs"
+          "path": "worker/test/lesson-effort-policy.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/model-selection.smoke.mjs"
@@ -266,16 +290,19 @@
           "path": "e2e/tests/native-effort-old-client.spec.ts"
         },
         {
-          "path": "worker/test/request-settings-d1.test.mjs"
+          "path": "worker/test/request-settings-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-GPT-PRACTICE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME",
+        "REQ-STUDIO-DEV-SUBSCRIPTION",
         "ST-REQ-NATIVE"
       ],
       "sources": [
@@ -283,10 +310,12 @@
           "path": "docs/testing/studio-personas-gpt.md"
         },
         {
-          "path": "worker/test/gpt-model-policy.test.mjs"
+          "path": "worker/test/gpt-model-policy.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/codex-rehearsal.test.mjs"
+          "path": "test/service-integration/codex-rehearsal.test.mjs"
         },
         {
           "path": "e2e/tests/native-personas.spec.ts"
@@ -296,13 +325,16 @@
         },
         {
           "path": "scripts/test-studio-dev.py"
+        },
+        {
+          "path": "docs/testing/studio-dev-windows-2026-10-02.md"
         }
       ]
     },
     {
       "id": "ST-DES-USAGE-OBSERVATION",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "rabqatab",
       "depends_on": [
         "ST-REQ-STUDIO-SAFETY"
       ],
@@ -315,7 +347,7 @@
     {
       "id": "ST-TEST-USAGE-OBSERVATION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-STUDIO-SAFETY",
         "ST-DES-USAGE-OBSERVATION"
@@ -325,23 +357,37 @@
           "path": "docs/testing/usage-observation.md"
         },
         {
-          "path": "worker/test/usage-observation.test.mjs"
+          "path": "worker/test/usage-observation.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/usage-report.test.mjs"
+          "path": "worker/test/usage-report.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/usage-log-status.test.mjs"
+          "path": "worker/test/usage-log-status.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/admin-usage/run.mjs"
+        },
+        {
+          "path": "scripts/test-owner-console.mjs"
+        },
+        {
+          "path": "worker/test/owner-usage.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "40caf3921e97d7b02df895b877ba408f40835121"
         }
       ]
     },
     {
       "id": "ST-REQ-COACH-NAMING",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -355,7 +401,7 @@
     {
       "id": "ST-TEST-HISTORY-IDENTITY",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-COACH-NAMING"
       ],
@@ -368,7 +414,7 @@
     {
       "id": "ST-REQ-MODEL-USAGE",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -381,7 +427,7 @@
     {
       "id": "ST-TEST-MODEL-USAGE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-MODEL-USAGE",
         "ST-REQ-COACH-RUNTIME"
@@ -391,7 +437,9 @@
           "path": "docs/testing/model-access-usage.md"
         },
         {
-          "path": "worker/test/model-usage.test.mjs"
+          "path": "worker/test/model-usage.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/tests/native-models.spec.ts"
@@ -401,7 +449,7 @@
     {
       "id": "ST-REQ-TRIAL-CONVERSATION",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-INT-NATIVE",
         "ST-REQ-UX"
@@ -415,7 +463,7 @@
     {
       "id": "ST-TEST-TRIAL-CONVERSATION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-TRIAL-CONVERSATION",
         "ST-REQ-NATIVE"
@@ -431,7 +479,9 @@
           "path": "extensions/hypeproof-chat/test/workspace-preparation.smoke.mjs"
         },
         {
-          "path": "worker/test/trial-entry.test.mjs"
+          "path": "worker/test/trial-entry.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/tests/native-trial-guidance.spec.ts"
@@ -457,7 +507,7 @@
     {
       "id": "ST-REQ-CAPABILITY-CONTRACT",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-INT-CAPABILITY-ACCESS"
       ],
@@ -520,17 +570,19 @@
     {
       "id": "ST-TEST-MEASUREMENT-CORE-UNIT1",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-CAPABILITY-CONTRACT",
         "ST-REQ-NATIVE"
       ],
       "sources": [
         {
-          "path": "worker/test/measurement-core.test.mjs"
+          "path": "test/service-integration/measurement-core.test.mjs"
         },
         {
-          "path": "worker/test/fixtures/measurement-core/legacy-verdicts.json"
+          "path": "worker/test/fixtures/measurement-core/legacy-verdicts.json",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/measurement-core-shim.smoke.mjs"
@@ -540,98 +592,122 @@
     {
       "id": "ST-TEST-MEASUREMENT-CORE-UNIT2",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-CAPABILITY-CONTRACT",
         "ST-REQ-NATIVE"
       ],
       "sources": [
         {
-          "path": "worker/test/measurement-core-local-record.test.mjs"
+          "path": "worker/test/measurement-core-local-record.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-ACCESS-CONTRACTS",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-DES-ACCESS-BUDGET"
       ],
       "sources": [
         {
-          "path": "worker/src/lib/access-contracts.ts"
+          "path": "worker/src/lib/access-contracts.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/access.ts"
+          "path": "worker/src/routes/access.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0007-access-contracts.sql"
+          "path": "worker/migrations/0007-access-contracts.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-ACCESS-CONTRACTS",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-IMP-ACCESS-CONTRACTS"
       ],
       "sources": [
         {
-          "path": "worker/test/access-contracts.test.mjs"
+          "path": "worker/test/access-contracts.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/access-contracts-d1.test.mjs"
+          "path": "worker/test/access-contracts-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-USAGE-COSTS",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-DES-ACCESS-BUDGET"
       ],
       "sources": [
         {
-          "path": "worker/src/lib/usage-costs.ts"
+          "path": "worker/src/lib/usage-costs.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0008-usage-costs.sql"
+          "path": "worker/migrations/0008-usage-costs.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-USAGE-COSTS",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-IMP-USAGE-COSTS"
       ],
       "sources": [
         {
-          "path": "worker/test/usage-costs.test.mjs"
+          "path": "worker/test/usage-costs.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/usage-costs-d1.test.mjs"
+          "path": "worker/test/usage-costs-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/sse-cost-receipts.test.mjs"
+          "path": "worker/test/sse-cost-receipts.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/openai-usage-shape.test.mjs"
+          "path": "worker/test/openai-usage-shape.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-BUDGET-ADMISSION",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-DES-ACCESS-BUDGET",
@@ -640,40 +716,52 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/budgets.ts"
+          "path": "worker/src/lib/budgets.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/budget-admission.ts"
+          "path": "worker/src/lib/budget-admission.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0009-budget-admission.sql"
+          "path": "worker/migrations/0009-budget-admission.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-BUDGET-ADMISSION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-IMP-BUDGET-ADMISSION"
       ],
       "sources": [
         {
-          "path": "worker/test/budget-admission.test.mjs"
+          "path": "worker/test/budget-admission.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/budget-admission-d1.test.mjs"
+          "path": "worker/test/budget-admission-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/harness/budgets.mjs"
+          "path": "worker/test/harness/budgets.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-BUDGET-SURFACES",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-DES-ACCESS-BUDGET",
@@ -681,13 +769,19 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/budget-views.ts"
+          "path": "worker/src/lib/budget-views.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0010-budget-surfaces.sql"
+          "path": "worker/migrations/0010-budget-surfaces.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/ui/budgets-admin.html"
+          "path": "worker/src/ui/budgets-admin.html",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/src/ui/budgets.html"
@@ -703,17 +797,21 @@
     {
       "id": "ST-TEST-BUDGET-SURFACES",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-IMP-BUDGET-SURFACES"
       ],
       "sources": [
         {
-          "path": "worker/test/budget-surfaces.test.mjs"
+          "path": "worker/test/budget-surfaces.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/budget-surfaces-d1.test.mjs"
+          "path": "worker/test/budget-surfaces-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/test/budgets.test.mjs"
@@ -735,7 +833,7 @@
     {
       "id": "ST-TEST-BUDGET-RECOVERY",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-ACCESS-BUDGET",
         "ST-IMP-BUDGET-ADMISSION",
@@ -743,7 +841,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/budget-recovery.test.mjs"
+          "path": "worker/test/budget-recovery.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/access-budgets/sdk.mjs"
@@ -756,7 +856,7 @@
     {
       "id": "ST-REQ-VOICE-CAPABILITY",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -770,7 +870,7 @@
     {
       "id": "ST-TEST-VOICE-CAPABILITY",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY"
       ],
@@ -786,7 +886,7 @@
     {
       "id": "ST-IMP-VOICE-CAPABILITY",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-TEST-VOICE-CAPABILITY"
@@ -821,7 +921,7 @@
     {
       "id": "ST-TEST-VOICE-PREFLOW",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-IMP-VOICE-CAPABILITY"
@@ -835,34 +935,38 @@
     {
       "id": "ST-TEST-VOICE-AUDIO-REFUSAL",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-IMP-BUDGET-ADMISSION"
       ],
       "sources": [
         {
-          "path": "worker/test/audio-refusal-contract.test.mjs"
+          "path": "worker/test/audio-refusal-contract.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-INBOUND-IMAGES",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
       "sources": [
         {
-          "path": "worker/test/inbound-images.test.mjs"
+          "path": "worker/test/inbound-images.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-ROUTE-MESSAGES",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-REQ-COACH-RUNTIME",
@@ -872,44 +976,52 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/messages.ts"
+          "path": "worker/src/routes/messages.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/inbound-images.ts"
+          "path": "worker/src/lib/inbound-images.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-VOICE-LINKAGE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY"
       ],
       "sources": [
         {
-          "path": "worker/test/voice-linkage-contract.test.mjs"
+          "path": "worker/test/voice-linkage-contract.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-VOICE-LINKAGE",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-TEST-VOICE-LINKAGE"
       ],
       "sources": [
         {
-          "path": "worker/src/lib/voice-linkage-contract.ts"
+          "path": "worker/src/lib/voice-linkage-contract.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-REQ-VOICE-CONVERSATION",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -922,7 +1034,7 @@
     {
       "id": "ST-TEST-VOICE-CONVERSATION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CONVERSATION",
         "ST-REQ-VOICE-CAPABILITY"
@@ -954,7 +1066,7 @@
     {
       "id": "ST-REQ-UNIFIED",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-INT-UNIFIED",
         "ST-REQ-NATIVE",
@@ -969,7 +1081,7 @@
     {
       "id": "ST-DES-UNIFIED",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UNIFIED"
       ],
@@ -990,7 +1102,7 @@
     {
       "id": "ST-TEST-UNIFIED",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-DES-UNIFIED"
@@ -1004,7 +1116,7 @@
     {
       "id": "ST-TEST-VOICE-SESSION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY"
       ],
@@ -1017,7 +1129,7 @@
     {
       "id": "ST-IMP-VOICE-SESSION",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-TEST-VOICE-SESSION"
@@ -1031,7 +1143,7 @@
     {
       "id": "ST-TEST-VOICE-POPUP",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-REQ-VOICE-CONVERSATION"
@@ -1048,7 +1160,7 @@
     {
       "id": "ST-IMP-VOICE-POPUP",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CAPABILITY",
         "ST-REQ-VOICE-CONVERSATION",
@@ -1069,20 +1181,22 @@
     {
       "id": "ST-TEST-OPERATOR-HEALTH-AUTH",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-STUDIO-SAFETY"
       ],
       "sources": [
         {
-          "path": "worker/test/deep-health-auth.test.mjs"
+          "path": "worker/test/deep-health-auth.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-UNIFIED-ENTRY",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-TEST-UNIFIED"
@@ -1104,14 +1218,16 @@
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
         },
         {
-          "path": "worker/src/routes/chat.ts"
+          "path": "worker/src/routes/chat.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-UNIFIED-ENTRY",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-TEST-UNIFIED"
@@ -1125,7 +1241,7 @@
     {
       "id": "ST-VAL-UNIFIED-ENTRY",
       "stage": "validation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-IMP-UNIFIED-ENTRY",
         "ST-TEST-UNIFIED-ENTRY"
@@ -1139,7 +1255,7 @@
     {
       "id": "ST-DES-ACTIVITY-BINDING",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED"
       ],
@@ -1152,7 +1268,7 @@
     {
       "id": "ST-TEST-ACTIVITY-CANDIDATE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-DES-ACTIVITY-BINDING"
@@ -1171,9 +1287,40 @@
       ]
     },
     {
+      "id": "ST-TEST-PASS-PURCHASE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-SAFETY",
+        "ST-REQ-ACCESS-BUDGET"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/pass-purchase.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-page-purchase.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PASS-PURCHASE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-SAFETY",
+        "ST-TEST-PASS-PURCHASE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/passPurchase.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-VAL-ACTIVITY-CANDIDATE",
       "stage": "validation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-IMP-UNIFIED-ENTRY",
         "ST-TEST-ACTIVITY-CANDIDATE"
@@ -1187,21 +1334,23 @@
     {
       "id": "ST-IMP-MODEL-USAGE",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-MODEL-USAGE",
         "ST-TEST-MODEL-USAGE"
       ],
       "sources": [
         {
-          "path": "worker/src/profiles/types.ts"
+          "path": "worker/src/profiles/types.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-MODEL-ECHO",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-MODEL-USAGE"
       ],
@@ -1214,7 +1363,7 @@
     {
       "id": "ST-IMP-MODEL-ECHO",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-MODEL-USAGE",
         "ST-TEST-MODEL-ECHO"
@@ -1228,21 +1377,23 @@
     {
       "id": "ST-IMP-OPERATOR-HEALTH-AUTH",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-STUDIO-SAFETY",
         "ST-TEST-OPERATOR-HEALTH-AUTH"
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chat.ts"
+          "path": "worker/src/routes/chat.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-ACTIVITY-BINDING",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-TEST-UNIFIED"
@@ -1273,14 +1424,16 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/vscode.ts"
         },
         {
-          "path": "worker/src/lib/activity-identity.ts"
+          "path": "worker/src/lib/activity-identity.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-TEST-ACTIVITY-ISOLATION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-DES-ACTIVITY-BINDING"
@@ -1290,10 +1443,15 @@
           "path": "extensions/hypeproof-chat/test/activity-connections.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/pass-takeover-transaction.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/activity-draft.smoke.mjs"
         },
         {
-          "path": "worker/test/activity-identity.test.mjs"
+          "path": "worker/test/activity-identity.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/tests/native-unified-switch.spec.ts"
@@ -1306,7 +1464,7 @@
     {
       "id": "ST-IMP-UNIFIED-DELIVERY",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-TEST-UNIFIED"
@@ -1328,7 +1486,23 @@
           "path": "e2e/unified-release/public.mjs"
         },
         {
+          "path": "worker/src/lib/synthetic-cohort.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/profiles/synthetic-release-acceptance.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "scripts/check-live-sessions.mjs"
+        },
+        {
           "path": "e2e/unified-release/install-windows.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.mjs"
         },
         {
           "path": ".github/workflows/build-mac.yml"
@@ -1347,13 +1521,16 @@
         },
         {
           "path": ".github/workflows/verify-service-activities.yml"
+        },
+        {
+          "path": "scripts/verify-owner-console.mjs"
         }
       ]
     },
     {
       "id": "ST-TEST-UNIFIED-DELIVERY",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-IMP-UNIFIED-DELIVERY"
@@ -1366,6 +1543,17 @@
           "path": "e2e/unified-release/gate.test.mjs"
         },
         {
+          "path": "worker/test/synthetic-cohort.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "scripts/test-check-live-sessions.mjs"
+        },
+        {
+          "path": "e2e/unified-release/sdk-seed.test.mjs"
+        },
+        {
           "path": "e2e/tests/native-public-activity.spec.ts"
         },
         {
@@ -1376,7 +1564,7 @@
     {
       "id": "ST-IMP-SDK-SAVE-EVIDENCE",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-TEST-UNIFIED"
@@ -1390,7 +1578,7 @@
     {
       "id": "ST-TEST-SDK-SAVE-EVIDENCE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-UNIFIED",
         "ST-IMP-SDK-SAVE-EVIDENCE"
@@ -1407,7 +1595,7 @@
     {
       "id": "ST-DES-UNIFIED-DELIVERY",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-UNIFIED"
       ],
@@ -1420,7 +1608,7 @@
     {
       "id": "ST-VAL-UNIFIED-COMPLETION",
       "stage": "validation",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-IMP-ACTIVITY-BINDING",
         "ST-TEST-ACTIVITY-ISOLATION",
@@ -1437,34 +1625,38 @@
     {
       "id": "ST-TEST-MODEL-SUBSTITUTION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME"
       ],
       "sources": [
         {
-          "path": "worker/test/model-substitution.test.mjs"
+          "path": "worker/test/model-substitution.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-MODEL-SUBSTITUTION",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-COACH-RUNTIME",
         "ST-TEST-MODEL-SUBSTITUTION"
       ],
       "sources": [
         {
-          "path": "worker/src/lib/translate.ts"
+          "path": "worker/src/lib/translate.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-REQ-LOCAL-REVIEW",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-INT-NATIVE",
         "ST-REQ-CAPABILITY-CONTRACT"
@@ -1482,7 +1674,7 @@
     {
       "id": "ST-IMP-LOCAL-REVIEW",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-LOCAL-REVIEW"
       ],
@@ -1528,7 +1720,7 @@
     {
       "id": "ST-TEST-LOCAL-REVIEW",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-LOCAL-REVIEW",
         "ST-IMP-LOCAL-REVIEW"
@@ -1554,7 +1746,7 @@
     {
       "id": "ST-REQ-SESSION-SYNC",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-LOCAL-REVIEW"
       ],
@@ -1571,7 +1763,7 @@
     {
       "id": "ST-IMP-SESSION-SYNC",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-SESSION-SYNC"
       ],
@@ -1605,7 +1797,7 @@
     {
       "id": "ST-TEST-SESSION-SYNC",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-SESSION-SYNC",
         "ST-IMP-SESSION-SYNC"
@@ -1631,7 +1823,7 @@
     {
       "id": "ST-IMP-HAIN7-RETIREMENT",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-CAPABILITY-CONTRACT"
       ],
@@ -1656,7 +1848,7 @@
     {
       "id": "ST-TEST-HAIN7-RETIREMENT",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-CAPABILITY-CONTRACT",
         "ST-IMP-HAIN7-RETIREMENT"
@@ -1700,7 +1892,7 @@
     {
       "id": "ST-REQ-MEASUREMENT-CORE",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-INT-MEASUREMENT-CORE",
         "ST-REQ-CAPABILITY-CONTRACT"
@@ -1714,7 +1906,7 @@
     {
       "id": "ST-DES-MEASUREMENT-CORE",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-MEASUREMENT-CORE"
       ],
@@ -1730,7 +1922,7 @@
     {
       "id": "ST-TEST-MEASUREMENT-CORE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-MEASUREMENT-CORE",
         "ST-DES-MEASUREMENT-CORE"
@@ -1744,7 +1936,7 @@
     {
       "id": "ST-DES-UNIFIED-STUDIO-EXPERIENCE",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UNIFIED"
       ],
@@ -1760,7 +1952,7 @@
     {
       "id": "ST-TEST-UNIFIED-STUDIO-EXPERIENCE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UNIFIED"
       ],
@@ -1773,7 +1965,7 @@
     {
       "id": "ST-DES-STUDIO-NATIVE-TRIAL",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-NATIVE"
       ],
@@ -1789,7 +1981,7 @@
     {
       "id": "ST-TEST-STUDIO-NATIVE-TRIAL",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-NATIVE"
       ],
@@ -1802,7 +1994,7 @@
     {
       "id": "ST-REQ-LEARNING-AGENT-EXPERIENCE",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -1815,7 +2007,7 @@
     {
       "id": "ST-DES-LEARNING-AGENT-EXPERIENCE",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE"
       ],
@@ -1831,7 +2023,7 @@
     {
       "id": "ST-TEST-LEARNING-AGENT-EXPERIENCE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-LEARNING-AGENT-EXPERIENCE"
       ],
@@ -1842,9 +2034,126 @@
       ]
     },
     {
+      "id": "ST-TEST-FEEDBACK-LOOP",
+      "stage": "test",
+      "label": "Feedback loop — learner answer, retrospective and next draft tests (#1013)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-TEST-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "worker/test/feedback-loop.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/feedback-loop-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "chalk/test/feedback-loop-forward.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/feedback-loop.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-FEEDBACK-LOOP",
+      "stage": "implementation",
+      "label": "Feedback loop — learner answer to feedback, lesson retrospective → next draft (#1013)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-DES-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-DES-CHALK-AUTHORING",
+        "ST-TEST-FEEDBACK-LOOP"
+      ],
+      "sources": [
+        {
+          "path": "worker/src/lib/feedback-loop.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/routes/lesson-retrospective.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/routes/classroom.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/migrations/0039-feedback-loop.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "chalk/src/ui/authoring.html"
+        },
+        {
+          "path": "chalk/src/ui/sharing.html"
+        },
+        {
+          "path": "chalk/src/ui/manage.html"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-AE-GOAL",
+      "stage": "test",
+      "label": "Learner goal beside the lesson criteria — rules, host, screen, browser and App tests (AE-01, #554)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-LEARNING-AGENT-EXPERIENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/student-goal.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/goal-browser.mjs"
+        },
+        {
+          "path": "e2e/sx/goal-app.spec.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-AE-GOAL",
+      "stage": "implementation",
+      "label": "Learner goal beside the lesson criteria (AE-01, #554)",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-DES-LEARNING-AGENT-EXPERIENCE",
+        "ST-TEST-AE-GOAL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/studentGoal.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/StudentGoal.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-DES-VOICE-CONVERSATION",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-VOICE-CONVERSATION"
       ],
@@ -1860,7 +2169,7 @@
     {
       "id": "ST-DES-MODEL-ACCESS-USAGE",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-MODEL-USAGE"
       ],
@@ -1876,7 +2185,7 @@
     {
       "id": "ST-TEST-MODEL-ACCESS-USAGE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "J3llyBe4n",
       "depends_on": [
         "ST-REQ-MODEL-USAGE"
       ],
@@ -1918,7 +2227,7 @@
     {
       "id": "ST-REQ-CHALK-AUTHORING",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -1931,7 +2240,7 @@
     {
       "id": "ST-DES-CHALK-AUTHORING",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING"
       ],
@@ -1947,7 +2256,7 @@
     {
       "id": "ST-TEST-CHALK-AUTHORING",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING"
       ],
@@ -1960,17 +2269,21 @@
     {
       "id": "ST-TEST-CHALK-REHEARSAL",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING",
         "ST-TEST-CHALK-AUTHORING"
       ],
       "sources": [
         {
-          "path": "worker/test/authoring-rehearsal.test.mjs"
+          "path": "worker/test/authoring-rehearsal.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/authoring-mission.test.mjs"
+          "path": "worker/test/authoring-mission.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/lesson-focus.smoke.mjs"
@@ -1989,7 +2302,7 @@
     {
       "id": "ST-IMP-CHALK-REHEARSAL",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-CHALK-AUTHORING",
         "ST-DES-CHALK-AUTHORING",
@@ -1997,16 +2310,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/lesson-rehearsal.ts"
+          "path": "worker/src/lib/lesson-rehearsal.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-rehearsal-store.ts"
+          "path": "worker/src/lib/lesson-rehearsal-store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/rehearsal-report.ts"
+          "path": "worker/src/routes/rehearsal-report.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0026-authoring-rehearsal.sql"
+          "path": "worker/migrations/0026-authoring-rehearsal.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/src/ui/authoring.html"
@@ -2022,7 +2343,7 @@
     {
       "id": "ST-REQ-CLASSROOM-ADMIN",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-INT-NATIVE",
         "ST-INT-CLASSROOM-OPS"
@@ -2036,7 +2357,7 @@
     {
       "id": "ST-DES-CLASSROOM-ADMIN",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN"
       ],
@@ -2052,7 +2373,7 @@
     {
       "id": "ST-TEST-CLASSROOM-ADMIN",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN"
       ],
@@ -2061,7 +2382,7 @@
           "path": "docs/testing/classroom-admin.md"
         },
         {
-          "path": "worker/test/classroom-ops-review.test.mjs"
+          "path": "test/service-integration/classroom-ops-review.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/classroom-ops-review.test.mjs"
@@ -2070,7 +2391,7 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops-expiry-review.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-report-sessions.test.mjs"
+          "path": "test/service-integration/classroom-ops-report-sessions.test.mjs"
         },
         {
           "path": "e2e/classroom/g4-journey.mjs"
@@ -2086,7 +2407,7 @@
     {
       "id": "ST-IMP-CLASSROOM-OPS",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-CLASSROOM-ADMIN",
         "ST-DES-CLASSROOM-ADMIN",
@@ -2095,19 +2416,27 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/classroom-ops.ts"
+          "path": "worker/src/routes/classroom-ops.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-ops.ts"
+          "path": "worker/src/lib/classroom-ops.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0011-classroom-ops.sql"
+          "path": "worker/migrations/0011-classroom-ops.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops.test.mjs"
+          "path": "worker/test/classroom-ops.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-d1.test.mjs"
+          "path": "test/service-integration/classroom-ops-d1.test.mjs"
         },
         {
           "path": "chalk/src/ui/manage.html"
@@ -2128,16 +2457,22 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops.smoke.mjs"
         },
         {
-          "path": "worker/migrations/0012-classroom-ops-commands.sql"
+          "path": "worker/migrations/0012-classroom-ops-commands.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-commands.test.mjs"
+          "path": "worker/test/classroom-ops-commands.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-device.test.mjs"
         },
         {
-          "path": "worker/test/fixtures/schema-pre-0011.sql"
+          "path": "worker/test/fixtures/schema-pre-0011.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomOpsCommands.ts"
@@ -2146,13 +2481,19 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops-commands.smoke.mjs"
         },
         {
-          "path": "worker/migrations/0013-classroom-ops-control.sql"
+          "path": "worker/migrations/0013-classroom-ops-control.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-ops-control.ts"
+          "path": "worker/src/lib/classroom-ops-control.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-control.test.mjs"
+          "path": "worker/test/classroom-ops-control.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/runtimeReset.ts"
@@ -2161,67 +2502,95 @@
           "path": "extensions/hypeproof-chat/test/runtime-reset.smoke.mjs"
         },
         {
-          "path": "worker/migrations/0014-classroom-ops-evidence-review.sql"
+          "path": "worker/migrations/0014-classroom-ops-evidence-review.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-coaching.test.mjs"
+          "path": "worker/test/classroom-ops-coaching.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/classroom-collect.ts"
+          "path": "worker/src/routes/classroom-collect.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-collect.ts"
+          "path": "worker/src/lib/classroom-collect.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0015-classroom-collection.sql"
+          "path": "worker/migrations/0015-classroom-collection.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-collect.test.mjs"
+          "path": "test/service-integration/classroom-ops-collect.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/src/evidenceSnapshot.ts"
         },
         {
-          "path": "worker/test/classroom-ops-snapshot-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-snapshot-device.test.mjs"
         },
         {
-          "path": "worker/src/routes/classroom-reports.ts"
+          "path": "worker/src/routes/classroom-reports.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-report.ts"
+          "path": "worker/src/lib/classroom-report.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0016-classroom-report-jobs.sql"
+          "path": "worker/migrations/0016-classroom-report-jobs.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-reports.test.mjs"
+          "path": "test/service-integration/classroom-ops-reports.test.mjs"
         },
         {
-          "path": "worker/src/routes/classroom-delivery.ts"
+          "path": "worker/src/routes/classroom-delivery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-delivery.ts"
+          "path": "worker/src/lib/classroom-delivery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0017-classroom-delivery.sql"
+          "path": "worker/migrations/0017-classroom-delivery.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-delivery.test.mjs"
+          "path": "test/service-integration/classroom-ops-delivery.test.mjs"
         },
         {
           "path": "scripts/classroom-report-runner.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-regression.test.mjs"
+          "path": "worker/test/classroom-ops-regression.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0018-classroom-snapshot-binding.sql"
+          "path": "worker/migrations/0018-classroom-snapshot-binding.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-evaluator.ts"
+          "path": "worker/src/lib/classroom-evaluator.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-evaluator.test.mjs"
+          "path": "test/service-integration/classroom-ops-evaluator.test.mjs"
         },
         {
           "path": "scripts/classroom-legacy-hain7.mjs"
@@ -2230,7 +2599,7 @@
           "path": "extensions/hypeproof-chat/src/evidenceSnapshotStore.ts"
         },
         {
-          "path": "worker/test/classroom-ops-review.test.mjs"
+          "path": "test/service-integration/classroom-ops-review.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/classroom-ops-review.test.mjs"
@@ -2239,13 +2608,17 @@
           "path": "extensions/hypeproof-chat/test/classroom-ops-expiry-review.test.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-report-html.ts"
+          "path": "worker/src/lib/classroom-report-html.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-delivery-resend.ts"
+          "path": "worker/src/lib/classroom-delivery-resend.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-provider.test.mjs"
+          "path": "test/service-integration/classroom-ops-provider.test.mjs"
         },
         {
           "path": "scripts/classroom-report-pdf.mjs"
@@ -2254,25 +2627,33 @@
           "path": "e2e/classroom/report-page.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-erasure.ts"
+          "path": "worker/src/lib/classroom-erasure.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-erasure.test.mjs"
+          "path": "test/service-integration/classroom-ops-erasure.test.mjs"
         },
         {
           "path": "e2e/classroom/ops-roster.mjs"
         },
         {
-          "path": "worker/migrations/0019-classroom-report-attempts.sql"
+          "path": "worker/migrations/0019-classroom-report-attempts.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": ".github/workflows/classroom-ops.yml"
         },
         {
-          "path": "worker/migrations/0021-classroom-erasure-log.sql"
+          "path": "worker/migrations/0021-classroom-erasure-log.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0020-classroom-viewer-check.sql"
+          "path": "worker/migrations/0020-classroom-viewer-check.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/classroom/mac-devhost.mjs"
@@ -2287,7 +2668,9 @@
           "path": "e2e/classroom/evaluator-trial.mjs"
         },
         {
-          "path": "worker/scripts/classroom-ops-d1-check.mjs"
+          "path": "worker/scripts/classroom-ops-d1-check.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "e2e/classroom/mac-demo.mjs"
@@ -2299,10 +2682,12 @@
           "path": "e2e/classroom/ops-selection.mjs"
         },
         {
-          "path": "worker/migrations/0022-classroom-collect-scope.sql"
+          "path": "worker/migrations/0022-classroom-collect-scope.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-selected-collect.test.mjs"
+          "path": "test/service-integration/classroom-ops-selected-collect.test.mjs"
         },
         {
           "path": "e2e/classroom/delivery-trial.mjs"
@@ -2320,43 +2705,59 @@
           "path": "e2e/classroom/win-field/README.md"
         },
         {
-          "path": "worker/scripts/classroom-ops-staging-check.mjs"
+          "path": "worker/scripts/classroom-ops-staging-check.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/wrangler.staging.toml"
+          "path": "worker/wrangler.staging.toml",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "chalk/wrangler.staging.toml"
         },
         {
-          "path": "worker/test/classroom-ops-spool-seq.test.mjs"
+          "path": "test/service-integration/classroom-ops-spool-seq.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-staging-config.test.mjs"
+          "path": "test/service-integration/classroom-ops-staging-config.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/session-spool-seq.smoke.mjs"
         },
         {
-          "path": "worker/src/routes/classroom-distribution.ts"
+          "path": "worker/src/routes/classroom-distribution.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-distribution.ts"
+          "path": "worker/src/lib/classroom-distribution.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/classroom-distribution-store.ts"
+          "path": "worker/src/lib/classroom-distribution-store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0023-classroom-distribution.sql"
+          "path": "worker/migrations/0023-classroom-distribution.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-distribution.test.mjs"
+          "path": "worker/test/classroom-ops-distribution.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-distribution-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-distribution-device.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-distribution-d1.test.mjs"
+          "path": "worker/test/classroom-ops-distribution-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomInbox.ts"
@@ -2377,37 +2778,55 @@
           "path": "e2e/classroom/ops-distribution.mjs"
         },
         {
-          "path": "worker/src/lib/lesson-binding.ts"
+          "path": "worker/src/lib/lesson-binding.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-binding-store.ts"
+          "path": "worker/src/lib/lesson-binding-store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-binding-activate.ts"
+          "path": "worker/src/lib/lesson-binding-activate.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-basis.ts"
+          "path": "worker/src/lib/lesson-basis.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0024-classroom-lesson-bindings.sql"
+          "path": "worker/migrations/0024-classroom-lesson-bindings.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/lesson-binding.test.mjs"
+          "path": "worker/test/lesson-binding.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-settings.test.mjs"
+          "path": "worker/test/classroom-ops-lesson-settings.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-basis.test.mjs"
+          "path": "test/service-integration/classroom-ops-lesson-basis.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-settings-device.test.mjs"
+          "path": "test/service-integration/classroom-ops-lesson-settings-device.test.mjs"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-settings-d1.test.mjs"
+          "path": "worker/test/classroom-ops-lesson-settings-d1.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-lesson-review.test.mjs"
+          "path": "worker/test/classroom-ops-lesson-review.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/lessonBinding.ts"
@@ -2425,10 +2844,14 @@
           "path": "e2e/classroom/mac-lesson-settings.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-recovery.ts"
+          "path": "worker/src/lib/classroom-recovery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-ops-recovery.test.mjs"
+          "path": "worker/test/classroom-ops-recovery.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/previewRecovery.ts"
@@ -2443,10 +2866,14 @@
           "path": "e2e/classroom/mac-window.mjs"
         },
         {
-          "path": "worker/src/routes/classroom.ts"
+          "path": "worker/src/routes/classroom.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/classroom-help.test.mjs"
+          "path": "worker/test/classroom-help.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomHelp.ts"
@@ -2479,14 +2906,16 @@
           "path": "e2e/classroom/mac-help-windows.mjs"
         },
         {
-          "path": "worker/src/lib/classroom-report-input.ts"
+          "path": "worker/src/lib/classroom-report-input.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-DES-STUDIO-NATIVE-TRIAL-UX",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UX"
       ],
@@ -2502,7 +2931,7 @@
     {
       "id": "ST-TEST-STUDIO-NATIVE-TRIAL-UX",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "ico1036",
       "depends_on": [
         "ST-REQ-UX"
       ],
@@ -2515,7 +2944,7 @@
     {
       "id": "ST-REQ-CLASSROOM-DESIGN",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-INT-NATIVE",
         "ST-INT-CLASSROOM-OPS"
@@ -2529,7 +2958,7 @@
     {
       "id": "ST-DES-CLASSROOM-DESIGN",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-CLASSROOM-DESIGN"
       ],
@@ -2545,7 +2974,7 @@
     {
       "id": "ST-TEST-CLASSROOM-DESIGN",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "TJ-kr",
       "depends_on": [
         "ST-REQ-CLASSROOM-DESIGN"
       ],
@@ -2561,7 +2990,7 @@
     {
       "id": "ST-DES-CAPABILITY-MODEL-CONTRACT",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-CAPABILITY-CONTRACT"
       ],
@@ -2577,7 +3006,7 @@
     {
       "id": "ST-TEST-CAPABILITY-MODEL-CONTRACT",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-CAPABILITY-CONTRACT"
       ],
@@ -2590,7 +3019,7 @@
     {
       "id": "ST-REQ-INDEPENDENT-COURSE",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -2603,7 +3032,7 @@
     {
       "id": "ST-DES-INDEPENDENT-COURSE",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-INDEPENDENT-COURSE"
       ],
@@ -2619,7 +3048,7 @@
     {
       "id": "ST-TEST-INDEPENDENT-COURSE",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-INDEPENDENT-COURSE"
       ],
@@ -2632,7 +3061,7 @@
     {
       "id": "ST-REQ-WORK",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-INT-NATIVE"
       ],
@@ -2645,7 +3074,7 @@
     {
       "id": "ST-DES-WORK",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-WORK"
       ],
@@ -2658,7 +3087,7 @@
     {
       "id": "ST-IMP-WORK",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-DES-WORK"
       ],
@@ -2677,7 +3106,7 @@
     {
       "id": "ST-TEST-WORK",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-WORK"
       ],
@@ -2714,7 +3143,7 @@
     {
       "id": "ST-REQ-SX",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-INT-SX",
         "ST-REQ-MEASUREMENT-CORE",
@@ -2734,7 +3163,7 @@
     {
       "id": "ST-DES-SX",
       "stage": "design",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-SX"
       ],
@@ -2753,7 +3182,7 @@
     {
       "id": "ST-TEST-SX",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "xoqhdgh1002",
       "depends_on": [
         "ST-REQ-SX",
         "ST-DES-SX"
@@ -2766,10 +3195,12 @@
           "path": ".claude/evals/STUDIO_UX_EVAL.md"
         },
         {
-          "path": "worker/test/session-design-learning.test.mjs"
+          "path": "test/service-integration/session-design-learning.test.mjs"
         },
         {
-          "path": "worker/test/learning-prompt.test.mjs"
+          "path": "worker/test/learning-prompt.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/sx-audit.mjs"
@@ -2796,10 +3227,14 @@
           "path": "extensions/hypeproof-chat/test/sx-mission-header.smoke.mjs"
         },
         {
-          "path": "worker/test/learning-events.test.mjs"
+          "path": "worker/test/learning-events.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/measurement-core/learning-cases.mjs"
+          "path": "worker/test/fixtures/measurement-core/learning-cases.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/sx-evidence-gate.smoke.mjs"
@@ -2824,29 +3259,43 @@
         },
         {
           "path": "e2e/sx/playwright.config.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sx-home.smoke.mjs"
+        },
+        {
+          "path": "e2e/sx/home-app.spec.ts"
         }
       ]
     },
     {
       "id": "ST-IMP-SX-P0",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-DES-SX",
         "ST-REQ-SX"
       ],
       "sources": [
         {
-          "path": "worker/src/lib/learning-design.ts"
+          "path": "worker/src/lib/learning-design.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/learning-prompt.ts"
+          "path": "worker/src/lib/learning-prompt.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/session-design.ts"
+          "path": "worker/src/lib/session-design.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chat-gate.ts"
+          "path": "worker/src/lib/chat-gate.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/MissionHeader.tsx"
@@ -2875,13 +3324,19 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/session-design.ts"
+          "path": "worker/src/lib/session-design.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/learning-prompt.ts"
+          "path": "worker/src/lib/learning-prompt.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/lesson-delivery.ts"
+          "path": "worker/src/lib/lesson-delivery.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -2898,7 +3353,9 @@
           "path": "docs/testing/chalk-mvp.md"
         },
         {
-          "path": "worker/test/chalk-session-design-fields.test.mjs"
+          "path": "worker/test/chalk-session-design-fields.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -2911,14 +3368,16 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-pedagogy-machine.test.mjs"
+          "path": "worker/test/chalk-pedagogy-machine.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-SX-P1",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-DES-SX",
         "ST-REQ-SX",
@@ -2926,29 +3385,41 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/measurement-core/learning-events.ts"
+          "path": "worker/src/lib/measurement-core/learning-events.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/legacy-observation.ts"
+          "path": "worker/src/lib/measurement-core/legacy-observation.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/interpretation.ts"
+          "path": "worker/src/lib/measurement-core/interpretation.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/local-record.ts"
+          "path": "worker/src/lib/measurement-core/local-record.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/normalize.ts"
+          "path": "worker/src/lib/measurement-core/normalize.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/measurement-core/index.ts"
+          "path": "worker/src/lib/measurement-core/index.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-SX-P1B",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JinyongShin",
       "depends_on": [
         "ST-DES-SX",
         "ST-REQ-SX",
@@ -3040,34 +3511,54 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/curriculum.ts"
+          "path": "worker/src/routes/curriculum.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/curriculum-test-origin.ts"
+          "path": "worker/src/routes/curriculum-test-origin.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/venture.ts"
+          "path": "worker/src/lib/curriculum/venture.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/store.ts"
+          "path": "worker/src/lib/curriculum/store.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/publish-scan.ts"
+          "path": "worker/src/lib/curriculum/publish-scan.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/test-origin.ts"
+          "path": "worker/src/lib/curriculum/test-origin.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/session-token.ts"
+          "path": "worker/src/lib/curriculum/session-token.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/participant-record.ts"
+          "path": "worker/src/lib/curriculum/participant-record.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/participant-snippet.ts"
+          "path": "worker/src/lib/curriculum/participant-snippet.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0032-curriculum-runtime-publish.sql"
+          "path": "worker/migrations/0032-curriculum-runtime-publish.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/publishSet.ts"
@@ -3097,16 +3588,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/measurement-core/participant-evidence.ts"
+          "path": "worker/src/lib/measurement-core/participant-evidence.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/retention.ts"
+          "path": "worker/src/lib/curriculum/retention.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/curriculum-admin.ts"
+          "path": "worker/src/routes/curriculum-admin.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0033-curriculum-runtime-evidence.sql"
+          "path": "worker/migrations/0033-curriculum-runtime-evidence.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/evidenceSession.ts"
@@ -3131,10 +3630,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/curriculum/memory.ts"
+          "path": "worker/src/lib/curriculum/memory.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/migrations/0034-curriculum-runtime-memory.sql"
+          "path": "worker/migrations/0034-curriculum-runtime-memory.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/memorySession.ts"
@@ -3159,19 +3662,29 @@
       ],
       "sources": [
         {
-          "path": "worker/src/skills/curriculum/registry.ts"
+          "path": "worker/src/skills/curriculum/registry.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/skills/curriculum/contract.ts"
+          "path": "worker/src/skills/curriculum/contract.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/skills/curriculum/rules.ts"
+          "path": "worker/src/skills/curriculum/rules.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/skills/curriculum/curriculum-v5.json"
+          "path": "worker/src/skills/curriculum/curriculum-v5.json",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/curriculum/skill-run.ts"
+          "path": "worker/src/lib/curriculum/skill-run.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/src/skillSession.ts"
@@ -3185,6 +3698,41 @@
       ]
     },
     {
+      "id": "ST-IMP-CR-REVIEW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-DES-CR",
+        "ST-REQ-CR",
+        "ST-IMP-CR-MEMORY",
+        "ST-IMP-CR-SKILLS"
+      ],
+      "sources": [
+        {
+          "path": "worker/src/lib/curriculum/review.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/migrations/0038-curriculum-runtime-review.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reviewSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/reviewView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReviewPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/reviewPanelState.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-CR",
       "stage": "test",
       "owner": "jayleekr",
@@ -3194,17 +3742,18 @@
         "ST-IMP-CR-PUBLISH",
         "ST-IMP-CR-EVIDENCE",
         "ST-IMP-CR-MEMORY",
-        "ST-IMP-CR-SKILLS"
+        "ST-IMP-CR-SKILLS",
+        "ST-IMP-CR-REVIEW"
       ],
       "sources": [
         {
           "path": "docs/testing/curriculum-runtime.md"
         },
         {
-          "path": "worker/test/cr-traceability.test.mjs"
+          "path": "test/service-integration/cr-traceability.test.mjs"
         },
         {
-          "path": "worker/test/cr-recon.test.mjs"
+          "path": "test/service-integration/cr-recon.test.mjs"
         },
         {
           "path": "e2e/curriculum-runtime/cdp-probe.mjs"
@@ -3225,10 +3774,12 @@
           "path": "e2e/curriculum-runtime/publish-app.spec.ts"
         },
         {
-          "path": "worker/test/cr-publish.test.mjs"
+          "path": "test/service-integration/cr-publish.test.mjs"
         },
         {
-          "path": "worker/test/harness/curriculum.mjs"
+          "path": "worker/test/harness/curriculum.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-publish.smoke.mjs"
@@ -3243,7 +3794,7 @@
           "path": "e2e/curriculum-runtime/publish-runtime.real.mjs"
         },
         {
-          "path": "worker/test/cr-evidence.test.mjs"
+          "path": "test/service-integration/cr-evidence.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-evidence.smoke.mjs"
@@ -3258,7 +3809,7 @@
           "path": "docs/testing/curriculum-runtime-2026-10-02-evidence-capture.md"
         },
         {
-          "path": "worker/test/cr-memory.test.mjs"
+          "path": "test/service-integration/cr-memory.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-memory.smoke.mjs"
@@ -3270,7 +3821,7 @@
           "path": "docs/testing/curriculum-runtime-2026-10-02-memory.md"
         },
         {
-          "path": "worker/test/cr-skills.test.mjs"
+          "path": "test/service-integration/cr-skills.test.mjs"
         },
         {
           "path": "extensions/hypeproof-chat/test/cr-skills.smoke.mjs"
@@ -3283,13 +3834,69 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-05-unblock.md"
+        },
+        {
+          "path": "test/service-integration/cr-review.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/cr-review.smoke.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/review-app.spec.ts"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-05-review.md"
+        },
+        {
+          "path": "worker/test/fixtures/cr-review/provider-recording.json",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-06-review-provider.md"
+        },
+        {
+          "path": "e2e/curriculum-runtime/app-service.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/loop-coach.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-gate.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/service-control.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/loop-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/timing-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/switch-app.spec.ts"
+        },
+        {
+          "path": "e2e/curriculum-runtime/register-version.mjs"
+        },
+        {
+          "path": "scripts/cr-dev-kit.sh"
+        },
+        {
+          "path": "docs/testing/curriculum-runtime-2026-10-06-e2e.md"
+        },
+        {
+          "path": "e2e/curriculum-runtime/workshop-element-trial.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/fixtures/dental-element-trial/index.html"
         }
       ]
     },
     {
       "id": "ST-REQ-MODULE-DISTRIBUTION",
       "stage": "requirement",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-STUDIO-SAFETY"
       ],
@@ -3303,39 +3910,51 @@
     {
       "id": "ST-TEST-MODULE-DISTRIBUTION",
       "stage": "test",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-MODULE-DISTRIBUTION"
       ],
       "sources": [
         {
-          "path": "worker/test/module-distribution.test.mjs"
+          "path": "worker/test/module-distribution.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/module-child-guard.test.mjs"
+          "path": "worker/test/module-child-guard.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/scripts/cohort-harness/validate.py"
+          "path": "worker/scripts/cohort-harness/validate.py",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/scripts/cohort-harness/rules.yaml"
+          "path": "worker/scripts/cohort-harness/rules.yaml",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
     {
       "id": "ST-IMP-MODULE-DISTRIBUTION",
       "stage": "implementation",
-      "owner": "jayleekr",
+      "owner": "JeHyeong2",
       "depends_on": [
         "ST-REQ-MODULE-DISTRIBUTION",
         "ST-TEST-MODULE-DISTRIBUTION"
       ],
       "sources": [
         {
-          "path": "worker/src/lib/modules.ts"
+          "path": "worker/src/lib/modules.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/harness-rules.ts"
+          "path": "worker/src/lib/harness-rules.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3522,7 +4141,9 @@
           "path": "scripts/chalk-knowledge-import/index.ts"
         },
         {
-          "path": "worker/src/lib/chalk-vocab-check.ts"
+          "path": "worker/src/lib/chalk-vocab-check.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3536,43 +4157,69 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-knowledge-import.test.mjs"
+          "path": "worker/test/chalk-knowledge-import.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/_templates/lesson-plan.md"
+          "path": "worker/test/fixtures/chalk-vault/_templates/lesson-plan.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/activity-acceptance-checklist.md"
+          "path": "worker/test/fixtures/chalk-vault/design/activity-acceptance-checklist.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-authoring-guide.md"
+          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-authoring-guide.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-quality-checklist.md"
+          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-quality-checklist.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-to-steps-mapping.md"
+          "path": "worker/test/fixtures/chalk-vault/design/lesson-plan-to-steps-mapping.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/methods/m-explicit-instruction.md"
+          "path": "worker/test/fixtures/chalk-vault/methods/m-explicit-instruction.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/curriculum-schema.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/curriculum-schema.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/edu-11-16-session-format.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/edu-11-16-session-format.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/edu-constitution.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/edu-constitution.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/measurement-axes.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/measurement-axes.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/placement-rules.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/placement-rules.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/test/fixtures/chalk-vault/rules/prohibited-moves.md"
+          "path": "worker/test/fixtures/chalk-vault/rules/prohibited-moves.md",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3634,8 +4281,14 @@
         "ST-DES-CHALK-INSTRUCTOR"
       ],
       "sources": [
-        { "path": "worker/src/routes/chalk-instructor.ts" },
-        { "path": "extensions/hypeproof-chat/src/chalk/instructorMode.ts" }
+        {
+          "path": "worker/src/routes/chalk-instructor.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalk/instructorMode.ts"
+        }
       ]
     },
     {
@@ -3648,10 +4301,22 @@
         "ST-IMP-CHALK-INSTRUCTOR-MODE"
       ],
       "sources": [
-        { "path": "worker/test/chalk-instructor-whoami.test.mjs" },
-        { "path": "worker/test/chalk-instructor-brief.test.mjs" },
-        { "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs" },
-        { "path": "extensions/hypeproof-chat/test/instructor-render.test.tsx" }
+        {
+          "path": "worker/test/chalk-instructor-whoami.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/chalk-instructor-brief.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-instructor-mode.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/instructor-render.test.tsx"
+        }
       ]
     },
     {
@@ -3746,7 +4411,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chalk-knowledge.ts"
+          "path": "worker/src/routes/chalk-knowledge.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3761,7 +4428,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-knowledge.test.mjs"
+          "path": "worker/test/chalk-knowledge.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3775,16 +4444,24 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/chalk-plan/parser.ts"
+          "path": "worker/src/lib/chalk-plan/parser.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/tokenizer.ts"
+          "path": "worker/src/lib/chalk-plan/tokenizer.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/types.ts"
+          "path": "worker/src/lib/chalk-plan/types.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/lib/chalk-plan/index.ts"
+          "path": "worker/src/lib/chalk-plan/index.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3798,7 +4475,19 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-plan-parser.test.mjs"
+          "path": "worker/test/chalk-plan-parser.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/chalk-ops-plan.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/chalk-ops.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3812,7 +4501,9 @@
       ],
       "sources": [
         {
-          "path": "worker/src/routes/chalk-courses.ts"
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3827,10 +4518,14 @@
       ],
       "sources": [
         {
-          "path": "worker/src/lib/chalk-recommend.ts"
+          "path": "worker/src/lib/chalk-recommend.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         },
         {
-          "path": "worker/src/routes/chalk-recommend.ts"
+          "path": "worker/src/routes/chalk-recommend.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3844,7 +4539,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-draft-check.test.mjs"
+          "path": "worker/test/chalk-draft-check.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3858,7 +4555,9 @@
       ],
       "sources": [
         {
-          "path": "worker/test/chalk-recommend.test.mjs"
+          "path": "worker/test/chalk-recommend.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
         }
       ]
     },
@@ -3872,9 +4571,26 @@
         "ST-IMP-CHALK-KB-STORE"
       ],
       "sources": [
-        {"path": "worker/src/routes/chalk-courses.ts"},
-        {"path": "worker/src/lib/authoring-draft-write.ts"},
-        {"path": "worker/migrations/0031-chalk-plan-files.sql"}
+        {
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/authoring-draft-write.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/migrations/0031-chalk-plan-files.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/chalk-ops.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        }
       ]
     },
     {
@@ -3886,8 +4602,21 @@
         "ST-REQ-CHALK-KB"
       ],
       "sources": [
-        {"path": "worker/test/chalk-courses.test.mjs"},
-        {"path": "worker/test/chalk-draft-check.test.mjs"}
+        {
+          "path": "worker/test/chalk-courses.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/chalk-draft-check.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/chalk-ops-plan.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        }
       ]
     },
     {
@@ -3955,6 +4684,73 @@
       ]
     },
     {
+      "id": "ST-IMP-CHALK-FEEDBACK",
+      "stage": "implementation",
+      "label": "Chalk 피드백 기록·비교·이력 구현 (E2-7 / #1466)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "worker/migrations/0036-chalk-feedback.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/chalk-plan/units.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/routes/chalk-instructor.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/instructor-auth.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chalk/tools.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-FEEDBACK",
+      "stage": "test",
+      "label": "Chalk 피드백 라우트·도구 시험 (E2-7 / #1466)",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING",
+        "ST-IMP-CHALK-FEEDBACK"
+      ],
+      "sources": [
+        {
+          "path": "worker/test/chalk-feedback.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/test/chalk-plan-units.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-generator.test.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CHALK-JUDGEMENTS",
       "stage": "implementation",
       "label": "Context judgement items and records — server (E2-5 / #1465)",
@@ -3964,10 +4760,26 @@
         "ST-IMP-CHALK-GEN-SERVER"
       ],
       "sources": [
-        {"path": "worker/src/routes/chalk-courses.ts"},
-        {"path": "worker/src/lib/chalk-judge-prompts.ts"},
-        {"path": "worker/src/lib/instructor-auth.ts"},
-        {"path": "worker/migrations/0037-chalk-judgements.sql"}
+        {
+          "path": "worker/src/routes/chalk-courses.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/chalk-judge-prompts.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/src/lib/instructor-auth.ts",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "worker/migrations/0037-chalk-judgements.sql",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        }
       ]
     },
     {
@@ -3980,8 +4792,111 @@
         "ST-IMP-CHALK-JUDGEMENTS"
       ],
       "sources": [
-        {"path": "worker/test/chalk-judgements.test.mjs"},
-        {"path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"}
+        {
+          "path": "worker/test/chalk-judgements.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/chalk-judge.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-PRIVATE-RELEASE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "section": "## Requirements"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PRIVATE-RELEASE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PRIVATE-RELEASE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/updateTransport.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateChecker.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/updateCheckerHelpers.ts"
+        },
+        {
+          "path": "scripts/install-mac.sh"
+        },
+        {
+          "path": "scripts/install-win.ps1"
+        },
+        {
+          "path": ".github/workflows/requirement-work.yml"
+        },
+        {
+          "path": "scripts/install.sh"
+        },
+        {
+          "path": "scripts/install.ps1"
+        },
+        {
+          "path": "dependencies.yaml"
+        },
+        {
+          "path": "scripts/bootstrap-service-packages.mjs"
+        },
+        {
+          "path": "config/service-packages.json"
+        },
+        {
+          "path": "scripts/setup.sh"
+        },
+        {
+          "path": ".github/workflows/deploy-worker.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PRIVATE-RELEASE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PRIVATE-RELEASE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/private-release-access.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-transport.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-checker.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/update-orchestration.smoke.mjs"
+        },
+        {
+          "path": "scripts/tests/install-win-fixture.ps1"
+        },
+        {
+          "path": ".github/workflows/private-installers.yml"
+        },
+        {
+          "path": "scripts/tests/bootstrap-win-private-fixture.ps1"
+        },
+        {
+          "path": "scripts/test/bootstrap-service-packages.test.mjs"
+        }
       ]
     }
   ]

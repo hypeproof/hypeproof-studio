@@ -6,6 +6,9 @@
 //   negative  live_sessions > 0, no override           -> non-zero, message names the count
 //   also      override_live_session == true            -> proceeds, override recorded
 //                                                         together with task C's worker version
+// #1404 adds a pair for synthetic cohorts (release acceptance's own session):
+//   a live session on a cohort the worker reports synthetic -> ignored, named in the message
+//   a real live class next to it                            -> still blocks
 //
 // .claude/rules/verification.md rule 2: a positive control catches a gate that
 // is too strict (blocks legitimate deploys forever, so someone disables it); a
@@ -43,7 +46,7 @@ const check = (cond, m) => (cond ? ok(m) : bad(m));
 // and "not live" are facts of the fixture, not of when the test runs.
 const NOW = new Date("2026-08-22T10:00:00Z");
 
-const session = (startsAt, endsAt, profile = "sk-biopharm-kids-s1") => ({
+const session = (startsAt, endsAt, profile = "kids-workshop-s1") => ({
   session_id: "sess-planted",
   profile_id: profile,
   starts_at: startsAt,
@@ -80,8 +83,8 @@ console.log("\n=== 2. classify — planted answers ===");
 // is the one that catches an over-strict gate.
 const quiet = {
   cohorts: [
-    { id: "sk-biopharm-kids", session: null },
-    { id: "boah-dental", session: session("2026-08-22T06:00:00Z", "2026-08-22T09:00:00Z") },
+    { id: "kids-workshop", session: null },
+    { id: "dental-pilot", session: session("2026-08-22T06:00:00Z", "2026-08-22T09:00:00Z") },
     { id: "canary", session: null },
   ],
 };
@@ -92,14 +95,14 @@ check(r.decision === "proceed" && r.liveCount === 0,
 // NEGATIVE CONTROL. This is #668: a class one hour in.
 const inClass = {
   cohorts: [
-    { id: "sk-biopharm-kids", session: session("2026-08-22T09:00:00Z", "2026-08-22T12:00:00Z") },
-    { id: "boah-dental", session: null },
+    { id: "kids-workshop", session: session("2026-08-22T09:00:00Z", "2026-08-22T12:00:00Z") },
+    { id: "dental-pilot", session: null },
   ],
 };
 r = classify(inClass, NOW);
 check(r.decision === "blocked" && r.liveCount === 1, `negative: live class -> blocked (${r.reason})`);
 check(/\b1 live session/.test(r.message), "negative: message names the count");
-check(r.message.includes("sk-biopharm-kids"), "negative: message names the cohort");
+check(r.message.includes("kids-workshop"), "negative: message names the cohort");
 
 r = classify(
   {
@@ -131,10 +134,63 @@ for (const [payload, reason, label] of failClosed) {
 
 // "Cannot tell" is also a block — the deliberate divergence from the worker,
 // which treats an unparseable window as not-live.
-r = classify({ cohorts: [{ id: "sk-biopharm-kids", session: session("garbage", "garbage") }] }, NOW);
+r = classify({ cohorts: [{ id: "kids-workshop", session: session("garbage", "garbage") }] }, NOW);
 check(r.decision === "blocked" && r.reason === "undecidable_session",
   "fail-closed: unparseable session window -> blocked");
 check(r.message.includes("treated as live"), "fail-closed: message says why it could not tell");
+
+// --------------------------------------------------------------------------
+console.log("\n=== 2b. synthetic cohorts (#1404) — planted answers ===");
+// --------------------------------------------------------------------------
+
+// The shape GET /admin/cohorts returns: the worker decides `synthetic` from the
+// compiled profiles, the freeze only reads it.
+const ACCEPTANCE = "synthetic-release-acceptance";
+const acceptanceCohort = (extra = {}) => ({
+  id: ACCEPTANCE,
+  profile_ids: [ACCEPTANCE],
+  synthetic: true,
+  session: session("2026-08-22T09:50:00Z", "2026-08-22T10:50:00Z", ACCEPTANCE),
+  ...extra,
+});
+
+// Acceptance's own session, nothing else live: it must NOT block.
+const acceptanceOnly = { cohorts: [acceptanceCohort(), { id: "kids-workshop", synthetic: false, session: null }] };
+r = classify(acceptanceOnly, NOW);
+check(r.decision === "proceed" && r.liveCount === 0,
+  `synthetic: acceptance session alone -> proceed (${r.reason})`);
+check(r.message.includes(ACCEPTANCE) && /ignored 1 synthetic session/.test(r.message),
+  "synthetic: the ignored session is named, never dropped silently");
+
+// A real class next to it: the class still blocks, and only the class is counted.
+const acceptanceDuringClass = {
+  cohorts: [
+    acceptanceCohort(),
+    { id: "kids-workshop", synthetic: false, session: session("2026-08-22T09:00:00Z", "2026-08-22T12:00:00Z") },
+  ],
+};
+r = classify(acceptanceDuringClass, NOW);
+check(r.decision === "blocked" && r.liveCount === 1 && r.message.includes("kids-workshop"),
+  "synthetic: a real live class beside it still blocks");
+check(r.live.every((l) => l.cohort !== ACCEPTANCE), "synthetic: only the real class is counted as live");
+
+// Fail closed: anything short of the worker's exact answer still blocks.
+const notExempt = [
+  [acceptanceCohort({ synthetic: undefined }), "field missing (worker predates #1404)"],
+  [acceptanceCohort({ synthetic: "true" }), "string 'true', not boolean"],
+  [acceptanceCohort({ synthetic: 1 }), "truthy number"],
+  [acceptanceCohort({ profile_ids: ["studio-native-trial"] }), "session runs a profile the cohort does not own"],
+  [acceptanceCohort({ profile_ids: undefined }), "no profile_ids to check against"],
+  [acceptanceCohort({ session: session("garbage", "garbage", ACCEPTANCE) }), "undecidable window on a synthetic cohort"],
+];
+for (const [cohort, label] of notExempt) {
+  const got = classify({ cohorts: [cohort] }, NOW);
+  check(got.decision === "blocked", `fail-closed: ${label} -> blocked/${got.reason}`);
+}
+// And a real cohort cannot opt itself out by naming its own profile.
+r = classify({ cohorts: [{ id: "kids-workshop", profile_ids: ["kids-workshop-s1"], synthetic: false,
+  session: session("2026-08-22T09:00:00Z", "2026-08-22T12:00:00Z", "kids-workshop-s1") }] }, NOW);
+check(r.decision === "blocked", "fail-closed: synthetic:false with matching profile still blocks");
 
 // --------------------------------------------------------------------------
 console.log("\n=== 3. CLI — exit codes and the override record ===");
@@ -192,6 +248,15 @@ check(cli.output.includes("decision=blocked") && cli.output.includes("live_sessi
   "negative: GITHUB_OUTPUT records decision=blocked live_sessions=1");
 check(/\bwait\b/i.test(cli.stderr) && /-rc/.test(cli.stderr),
   "negative: CLI tells the operator the ways out (wait / -rc dev channel / override)");
+
+// synthetic: the CLI the workflows run proceeds on acceptance's own session
+cli = runCli(acceptanceOnly);
+check(cli.status === 0 && cli.output.includes("decision=proceed"),
+  "synthetic: CLI exits 0 when only the acceptance session is live");
+check(cli.stdout.includes(ACCEPTANCE), "synthetic: CLI log names the ignored session");
+cli = runCli(acceptanceDuringClass);
+check(cli.status === 1 && cli.output.includes("live_sessions=1"),
+  "synthetic: CLI still blocks a real class running beside it");
 
 // also: override, carrying task C's worker version as the audit context
 cli = runCli(inClass, {
@@ -263,6 +328,13 @@ check(g.status === 0, "branch build (publishes no release) -> exempt");
 
 g = runGate("refs/tags/v9.9.9", quiet);
 check(g.status === 0, "positive: stable tag with no class running -> proceeds");
+
+// #1404 — the publish job's own call: acceptance left its session open (or a
+// concurrent run holds one). The stable tag still publishes; a class does not.
+g = runGate("refs/tags/v9.9.9", acceptanceOnly);
+check(g.status === 0, "synthetic: stable tag with only the acceptance session live -> proceeds");
+g = runGate("refs/tags/v9.9.9", acceptanceDuringClass);
+check(g.status === 1, "synthetic: stable tag with a real class beside it -> frozen");
 
 g = runGate("refs/tags/v9.9.9", inClass, {
   HPS_FREEZE_OVERRIDE: "true",

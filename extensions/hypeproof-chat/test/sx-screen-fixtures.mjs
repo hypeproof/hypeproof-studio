@@ -7,15 +7,15 @@
 // Leaning the judgement on a source grep misses conditional branches
 // (verification.md rule 1).
 //
-// Lesson data is **not made up** — it reads the real session-design file
-// `worker/test/fixtures/session-design/week-N.json`. Judging on the same data the
-// screen reads is what makes the judgement stick to the real thing.
+// Lesson examples are synthetic App-owned consumer input. Their Service source
+// and byte hashes are recorded in fixtures/consumer-input-provenance.json. The
+// real screens receive the same session-design data format through the profile.
 
 import { readFileSync } from "node:fs";
 
 export function weekFixture(n) {
   return JSON.parse(
-    readFileSync(new URL(`../../../worker/test/fixtures/session-design/week-${n}.json`, import.meta.url), "utf8"),
+    readFileSync(new URL(`./fixtures/session-design/week-${n}.json`, import.meta.url), "utf8"),
   );
 }
 

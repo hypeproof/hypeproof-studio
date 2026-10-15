@@ -14,7 +14,7 @@ process.env.HPS_E2E_PROXY_URL ||= `http://127.0.0.1:${SX_APP_PORT}/v1`;
 
 export default defineConfig({
   testDir: here,
-  testMatch: /task-flow-app\.spec\.ts$/,
+  testMatch: /(task-flow|home|goal)-app\.spec\.ts$/,
   timeout: 300_000,
   expect: { timeout: 20_000 },
   fullyParallel: false,

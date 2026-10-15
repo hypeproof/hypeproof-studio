@@ -6,7 +6,12 @@ on:
     branches: [main]
     paths:
       - 'packages/measurement/**'
-      - 'worker/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'config/service-packages.json'
+      - 'scripts/bootstrap-service-packages.mjs'
+      - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'test/service-integration/**'
       - 'chalk/**'
       - 'extensions/hypeproof-chat/**'
       - '.github/workflows/pr-ci.yml'
@@ -14,78 +19,92 @@ on:
 permissions:
   contents: read
 
-jobs:
-  measurement-package:
-    name: measurement / package and sync
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/measurement/package-lock.json
-      - run: npm ci
-        working-directory: packages/measurement
-      - run: npm test
-        working-directory: packages/measurement
-      - run: npm pack
-        working-directory: packages/measurement
+# A newer push to the same pull request replaces the run in progress. Runs on
+# main are never cancelled.
+concurrency:
+  group: pr-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-  workflow-shells:
-    name: workflows / windows shell
+jobs:
+  # Four groups of controls that need no Service install and finish in seconds.
+  # They were four jobs, each billed as a whole minute. Every step runs even
+  # when an earlier one fails, so one failure does not hide another.
+  repo-controls:
+    name: repo / release and measurement controls
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+          cache: npm
+          cache-dependency-path: packages/measurement/package-lock.json
       - run: pip install --quiet pyyaml
       # A bash body on a Windows runner without `shell: bash` parses as
       # PowerShell and dies on its first POSIX token. v0.0.0-rc.2 published a
       # release and then failed exactly that way.
-      - run: python3 scripts/check-workflow-shells.py
+      # Studio is meant to become public; customer names live only in the
+      # private Service package. The denylist is digests, never names.
+      - name: No customer names in tracked files
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/test-check-customer-names.py
+          python3 scripts/check-customer-names.py
+      - name: Workflow shells declare bash on Windows runners
+        if: ${{ !cancelled() }}
+        run: python3 scripts/check-workflow-shells.py
       # #632 sized the mirror's asset wait for two 1-2h builds and then
       # wrapped it in a 20-minute job. Both numbers looked deliberate;
       # nobody compared them until v0.0.0-rc.3 was cancelled mid-wait.
-      - run: python3 scripts/check-mirror-timeout.py
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22.22.1'
+      - name: Mirror wait fits inside its job timeout
+        if: ${{ !cancelled() }}
+        run: python3 scripts/check-mirror-timeout.py
       - name: Unified release verdict and launcher recovery controls
+        if: ${{ !cancelled() }}
         run: |
           node e2e/unified-release/gate.test.mjs
+          node e2e/unified-release/sdk-seed.test.mjs
           node scripts/test-unified-launcher.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
+        if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
-
-  dev-channel-tag-classifier:
-    name: dev-channel / tag-is-prerelease
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       # dag.yaml task A control: the --prerelease decision used by
       # build-mac.yml / build-windows.yml must be testable without cutting a
       # real tag. Runs in milliseconds, no build/app required.
       - name: Regression — tag-is-prerelease positive + negative controls
+        if: ${{ !cancelled() }}
         run: bash scripts/test-tag-is-prerelease.sh
-
-  live-session-freeze:
-    name: deploy-freeze / live-session controls
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       # dag.yaml task D control (#676): the live-class freeze used by
       # deploy-worker.yml / build-mac.yml / build-windows.yml must be
       # exercisable with no live class and no real deploy. Fixtures + a
       # planted clock; milliseconds, no network. Includes the fail-closed
       # cases, which are the ones nobody would otherwise ever see run.
       - name: Regression — live-session freeze positive/negative/override controls
+        if: ${{ !cancelled() }}
         run: node scripts/test-check-live-sessions.mjs
+      - name: Owner console read-only smoke controls
+        if: ${{ !cancelled() }}
+        run: node scripts/test-owner-console.mjs
+      - name: Private Service package integrity and boundary controls
+        if: ${{ !cancelled() }}
+        run: npm run test:private-service-packages
+      - name: Bootstrap pinned private Service packages
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Measurement — released package compatibility
+        if: ${{ !cancelled() }}
+        working-directory: packages/measurement
+        run: |
+          npm ci
+          npm test
 
+  # Context names stay compatible with existing protection until canonical policy adoption.
+  # Server-only validation lives in hypeproof-service; this lane preserves App integration.
   worker-test:
     name: worker / test
     runs-on: ubuntu-latest
@@ -93,49 +112,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: worker/package-lock.json
-      - name: Install worker deps
-        working-directory: worker
-        run: npm ci
-      - name: Run worker tests
-        working-directory: worker
-        run: npm test
-
-      - name: Run authoring against local D1
-        working-directory: worker
-        run: npm run test:authoring:d1
-      - name: Run classroom sharing against local D1
-        working-directory: worker
-        run: npm run test:classroom:d1
-      - name: Run individual trials against local D1
-        working-directory: worker
-        run: npm run test:native-trial:d1
-      # #751 — the remote classroom ledgers on local workerd/D1, incl. the statement/row-count gates of targeted distribution.
-      # Local D1 only: not evidence about production quotas, latency or the account's plan.
-      - name: Run remote classroom operations against local D1
-        working-directory: worker
-        run: npm run test:classroom-ops:d1
-      # cr-publish (#1393) — Publish for User Test (CR-T80 and the publish routes) on local workerd/D1.
-      - name: Run Publish for User Test against local D1
-        working-directory: worker
-        run: npm run test:cr-publish:d1
-      # cr-memory (#1395) — Venture Memory (decisions, stakeholders, metrics, slides, register, timeline, director reads) on local workerd D1 and R2.
-      - name: Run Venture Memory against local D1 and R2
-        working-directory: worker
-        run: npm run test:cr-memory:d1
-      # cr-skills (#1396) — the curriculum skill gate and the Evidence skill's write-back on local workerd D1 and R2.
-      - name: Run Curriculum skills against local D1 and R2
-        working-directory: worker
-        run: npm run test:cr-skills:d1
-      # cr-evidence (#1394) — participant evidence, notes, drafts, deletion and controls on local workerd D1 and R2.
-      # Keep this step LAST in the job: its Miniflare round trips (the 120-session and 30x120 cases)
-      # leave several thousand sockets in TIME_WAIT for about a minute, and a local D1 suite started right
-      # after it can fail with EADDRNOTAVAIL (measured on macOS; see the note in the test file).
-      - name: Run Evidence capture against local D1 and R2
-        working-directory: worker
-        run: npm run test:cr-evidence:d1
+          node-version: '22'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - run: npm ci
+      - run: npm ci
+        working-directory: extensions/hypeproof-chat
+      - run: npm ci
+        working-directory: extensions/hypeproof-chat/webview-ui
+      - run: npm ci
+        working-directory: e2e
+      - name: Cross-product checks against the pinned private Service runtime
+        run: npm run test:service-integration
 
   worker-typecheck:
     name: worker / typecheck
@@ -144,24 +134,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: worker/package-lock.json
-      - name: Install worker deps
-        working-directory: worker
-        run: npm ci
-      - name: Typecheck worker
-        working-directory: worker
-        run: npm run typecheck
+          node-version: '22'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - run: npm ci
+      - name: Typecheck the pinned private Service reference source
+        run: node node_modules/typescript/bin/tsc -p "$(node scripts/service-tooling.mjs)/tsconfig.json"
 
   # Chalk (chalk/) — the instructor surface, its own Worker on the c* train
-  # (plan task F). It re-exports the Service's token verifier and its
-  # drift-lock test boots the Service app in-process, so both dependency
-  # trees are installed. `npm test` here includes the two task-F controls:
+  # (plan task F). HTTP clients use the public contract; tests install the
+  # pinned private Service reference artifact. `npm test` includes controls:
   # instructor-auth-drift (one verifier, two workers) and deploy-isolation
   # (a c* deploy cannot move the Service's version).
   chalk-test:
-    name: chalk / test
+    name: chalk / typecheck + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -170,62 +158,27 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: chalk/package-lock.json
-      - name: Install worker deps (shared auth module)
-        working-directory: worker
-        run: npm ci
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install chalk deps
-        working-directory: chalk
-        run: npm ci
-      - name: Run chalk tests
-        working-directory: chalk
-        run: npm test
-
-  chalk-typecheck:
-    name: chalk / typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: chalk/package-lock.json
-      - name: Install chalk deps
+        id: chalk_install
         working-directory: chalk
         run: npm ci
       - name: Typecheck chalk
         working-directory: chalk
         run: npm run typecheck
-
-  validate-profiles:
-    name: worker / validate-profiles
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: worker/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install worker deps
-        working-directory: worker
-        run: npm ci
-      # Validator (validate.py + rules.yaml) is studio-local at
-      # worker/scripts/cohort-harness/ — guardrails for cohort profiles
-      # (7-asset enum, prompt↔profile coherence, child-safety). Real gate.
-      - name: Validate cohort profiles
-        working-directory: worker
-        run: npm run validate-profiles
-      # The step above proves the REAL profiles pass. This one proves the
-      # validator still detects what it claims to — the inner loop. Without it
-      # a guard can rot silently: #606 found the suite already red (a renamed
-      # check and a fixture stale against #306) while the real gate stayed green,
-      # and the #602 child upload_session_logs guard had no coverage at all.
-      - name: Validator self-test (fixtures)
-        run: bash worker/scripts/cohort-harness/test/run.sh
+      # The tests still run when the typecheck fails, so one report shows both.
+      - name: Install App dependencies for cross-product contract tests
+        id: app_install
+        if: ${{ !cancelled() && steps.chalk_install.outcome == 'success' }}
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --ignore-scripts --omit=optional
+      - name: Run chalk tests
+        if: ${{ !cancelled() && steps.app_install.outcome == 'success' }}
+        working-directory: chalk
+        run: npm test
 
   extension-typecheck:
     name: extension / typecheck
@@ -237,32 +190,18 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: extensions/hypeproof-chat/package-lock.json
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install extension deps
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
         # `claude` binary package (#282) — typecheck/smoke never spawn it.
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       - name: Typecheck extension
         working-directory: extensions/hypeproof-chat
         run: npm run typecheck
-
-  update-platform-fixtures:
-    name: updater / ${{ matrix.os }} fixtures
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Execute installer failure controls (no real app installation)
-        shell: bash
-        working-directory: extensions/hypeproof-chat
-        run: |
-          node --experimental-strip-types test/update-installer.smoke.mjs
-          node --experimental-strip-types test/update-windows-wrapper.smoke.mjs
 
   extension-test:
     name: extension / smoke
@@ -274,11 +213,17 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: extensions/hypeproof-chat/package-lock.json
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install pinned private Service testkit
+        run: npm ci
       - name: Install extension deps
         # --omit=optional skips @anthropic-ai/claude-agent-sdk's ~250 MB native
         # `claude` binary package (#282) — typecheck/smoke never spawn it.
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       # The render instrument (`test/sx-render.mjs`) resolves react from
       # webview-ui. Without these deps `rendererStatus()` reports
       # `webview-deps-missing` and EVERY screen test skips — which is what was
@@ -292,6 +237,63 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: npm test
 
+  # The Windows leg for the extension smokes whose verdict depends on the host
+  # (ADR 0011 rollout, WP A1). Every other job here runs on Ubuntu, where a
+  # Windows-only break cannot show: `path` resolves drive letters and
+  # separators differently there, and seed-sdk-binary.ps1 is the seeder venue
+  # Windows machines run. These smokes import only Node built-ins and the
+  # extension's own modules (SDK imports are type-only and stripped), so the
+  # job needs no npm install and no Service secret. It costs one Windows
+  # minute, about two Linux minutes, per run.
+  #   shell-policy      shell-gate controls (WP A3 adds the PowerShell verbs)
+  #   absolutize-paths  relative-path absolutizing and the workspace
+  #                     containment deny under Windows path rules
+  #   sdk-binary        both seed scripts against the manifest and lockfile,
+  #                     and the seeded binary path per platform
+  #   sdk-vendor        the vendored SDK entry a packaged build loads
+  # WP A4's consult-context containment smoke joins the list when it lands.
+  extension-windows:
+    name: extension / windows smokes
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Every smoke runs even when an earlier one fails, so one failure does
+      # not hide another.
+      - name: Run platform-sensitive smokes (no install needed)
+        shell: bash
+        working-directory: extensions/hypeproof-chat
+        run: |
+          failed=0
+          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs; do
+            echo "— $f"
+            node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::smoke failed on Windows"; failed=1; }
+          done
+          exit "$failed"
+      # The smokes read seed-sdk-binary.ps1 as text. This parses it with
+      # Windows PowerShell 5.1, the shell venue machines run, so an edit that
+      # breaks its syntax fails here instead of on a student's machine. The
+      # parser must first reject a broken snippet, or a pass would prove
+      # nothing.
+      - name: Parse seed-sdk-binary.ps1 with Windows PowerShell 5.1
+        if: ${{ !cancelled() }}
+        shell: powershell
+        run: |
+          $bad = $null
+          [System.Management.Automation.Language.Parser]::ParseInput('function f( {', [ref]$null, [ref]$bad) | Out-Null
+          if (-not ($bad -and $bad.Count)) { Write-Host 'control failed: the parser accepted broken input'; exit 1 }
+          $errs = $null
+          $full = (Resolve-Path -LiteralPath 'scripts/seed-sdk-binary.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile($full, [ref]$null, [ref]$errs) | Out-Null
+          if ($errs -and $errs.Count) {
+            $errs | Select-Object -First 5 | ForEach-Object { Write-Host ('line {0}: {1}' -f $_.Extent.StartLineNumber, $_.Message) }
+            exit 1
+          }
+          Write-Host "seed-sdk-binary.ps1 parses under PowerShell $($PSVersionTable.PSVersion) with 0 errors"
+
   cr-publish-browser:
     # cr-publish (#1393): the published test runtime in real Chromium as a phone (CR-T18,
     # CR-T19 incl. the service-worker and sibling-link cases, CR-T21 one visit, CR-T22, CR-T60,
@@ -304,12 +306,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install worker deps
-        working-directory: worker
-        run: npm ci
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Install extension deps
         working-directory: extensions/hypeproof-chat
-        run: npm ci --omit=optional
+        run: npm ci
       - name: Install e2e deps
         working-directory: e2e
         run: npm ci

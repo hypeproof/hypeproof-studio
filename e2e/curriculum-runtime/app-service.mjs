@@ -16,17 +16,52 @@
 // and HPS_TEST_ORIGIN = http://{project}.test.invalid:<port>, so the App can publish a test
 // version and a request whose Host is a test origin reaches the published runtime.
 //
+// Every run also writes a director's issuer token for the same cohort and profile to `<token-file>.issuer` (cr-review),
+// and the admin credential of this run (a random password for /admin's Basic auth) to `<token-file>.admin` (cr-e2e).
+//
 // Control routes (the spec only): GET /__cr/state · POST /__cr/reset · POST /__cr/plant-dangling
 // (cr-evidence: removes one participant session key behind the record's back, with no tombstone,
-// so a stored draft's reference stops resolving; publish mode only).
-import "../../worker/test/harness/loader.mjs";
+// so a stored draft's reference stops resolving; publish mode only) · cr-e2e's GET /__cr/records,
+// POST /__cr/switch and POST /__cr/plant-deck (service-control.mjs). service-gate.mjs admits them only
+// from this Mac and never from a browser (a page's request carries Origin, Referer or Sec-Fetch-*), and
+// HPS_CR_CONTROL=0 turns them all off (scripts/cr-dev-kit.sh runs the Service that way). A route that
+// changes something takes POST only.
+//
+// cr-e2e (#1400) adds the scripted model's part of the PRD §14 loop (loop-app.spec.ts and the dev kit):
+// `[cr:observe]`, `[cr:edit]`, `[cr:apply]` and the Evidence and Deck Builder skill prompts are answered by
+// loop-coach.mjs, and its control routes and recorders are service-control.mjs; cr-e2e owns and pins both,
+// and this file only calls in. Every request passes service-gate.mjs first: through a tunnel
+// (cr-dev-kit.sh --phone) only the published runtime `/l/…` is reachable.
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 import { createServer } from "node:http";
+import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
+import { GATE_HEADER, gate } from "./service-gate.mjs";
+import { createLoopCoach } from "./loop-coach.mjs";
+import { createServiceControl, freshE2eState } from "./service-control.mjs";
 
 const [portArg, tokenFile, switchArg, modeArg] = process.argv.slice(2);
-const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("../../worker/test/harness/index.mjs");
-const { getProfile } = await import("../../worker/src/profiles/index.ts");
-const { issue } = await import("../../worker/src/lib/tokens.ts");
+// cr-e2e (scripts/cr-dev-kit.sh): HPS_CR_CONTROL=0 turns the /__cr/ control routes off (the gate refuses
+// them); the dev kit's Service needs none, and a page open in the browser beside it must reach none.
+const CONTROL = process.env.HPS_CR_CONTROL !== "0";
+// cr-e2e (scripts/cr-dev-kit.sh --real-model): HPS_CR_MODEL=real lets the Service's own calls to
+// api.anthropic.com through with ANTHROPIC_API_KEY from this process's environment, instead of the
+// scripted coach. Every other outbound host stays blocked. Off by default; the specs never set it.
+const REAL_MODEL = process.env.HPS_CR_MODEL === "real";
+if (REAL_MODEL && !process.env.ANTHROPIC_API_KEY) {
+  console.error("HPS_CR_MODEL=real needs ANTHROPIC_API_KEY in the environment");
+  process.exit(2);
+}
+const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("@hypeproof/service-testkit/test/harness/index.mjs");
+const { getProfile } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { issue, issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+// The kit's exposed mode (one shared test origin, a tunnel: --phone) and paid mode (--real-model) sign
+// tokens with a secret made for this run: TEST_SECRET is in the repository, so with it anyone who has
+// the source could sign a student's or a director's token for this Service.
+const SHARED_ORIGIN = !!process.env.HPS_TEST_ORIGIN && !process.env.HPS_TEST_ORIGIN.includes("{project}");
+const SECRET = REAL_MODEL || SHARED_ORIGIN ? randomBytes(32).toString("hex") : TEST_SECRET;
+// /admin's Basic-auth password for this run only (cr-e2e: CR-T02 walks the admin routes with it).
+const ADMIN_PASSWORD = randomBytes(18).toString("base64url");
 
 // An adult, workshop-tier profile with browser control, image paste and an observation
 // format (every condition curriculumRuntimeAllowed and the validator ask for). Only the
@@ -39,15 +74,17 @@ const env = createMockEnv({
   withSession: false,
   withRoster: false,
   environment: "development",
-  env: { LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "synthetic-no-live-key", OPENAI_API_KEY: undefined, ANTHROPIC_PROXY_URL: undefined },
+  secret: SECRET,
+  adminPassword: ADMIN_PASSWORD,
+  env: { LLM_PROVIDER: "anthropic", ANTHROPIC_API_KEY: REAL_MODEL ? process.env.ANTHROPIC_API_KEY : "synthetic-no-live-key", OPENAI_API_KEY: undefined, ANTHROPIC_PROXY_URL: undefined },
 });
 if (modeArg === "publish") {
   const { DatabaseSync } = await import("node:sqlite");
   const { readFileSync } = await import("node:fs");
-  const { sqliteBinding, memoryR2 } = await import("../../worker/test/harness/curriculum.mjs");
+  const { sqliteBinding, memoryR2 } = await import("@hypeproof/service-testkit/test/harness/curriculum.mjs");
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys=ON");
-  db.exec(readFileSync(new URL("../../worker/schema.sql", import.meta.url), "utf8"));
+  db.exec(readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/schema.sql")), "utf8"));
   // The rows usage accounting references (as the classroom-ops fixture mirrors them), so a turn's usage row is not refused.
   db.prepare("INSERT OR IGNORE INTO cohorts(id, display_name) VALUES(?, ?)").run(cohort, cohort);
   db.prepare("INSERT OR IGNORE INTO sessions(id, cohort_id, profile_id, starts_at, ends_at) VALUES(?, ?, ?, ?, ?)").run("cr-app-session", cohort, profile.id, new Date(Date.now() - 60_000).toISOString(), new Date(Date.now() + 6 * 3600_000).toISOString());
@@ -56,7 +93,11 @@ if (modeArg === "publish") {
 const now = Date.now();
 await env.HPS_KV.put(`cohort:${cohort}:active_session`, JSON.stringify({ session_id: "cr-app-session", profile_id: profile.id, starts_at: new Date(now - 60_000).toISOString(), ends_at: new Date(now + 6 * 3600_000).toISOString() }));
 await env.HPS_KV.put(`cohort:${cohort}:roster`, JSON.stringify({ users: ["cr-adult-a"] }));
-writeFileSync(tokenFile, (await issue({ u: "cr-adult-a", c: cohort, p: profile.id }, 6, TEST_SECRET)).token);
+writeFileSync(tokenFile, (await issue({ u: "cr-adult-a", c: cohort, p: profile.id }, 6, SECRET)).token, { mode: 0o600 });
+// cr-review (#1398): a director's issuer token whose scope covers this cohort and profile, next to
+// the learner's (`<token-file>.issuer`), for the director's Weekly Review screen (CR-51, CR-53).
+writeFileSync(`${tokenFile}.issuer`, (await issueIssuer({ issuer: "cr-director", scopes: [{ cohort, profiles: [profile.id] }] }, 6, SECRET)).token, { mode: 0o600 });
+writeFileSync(`${tokenFile}.admin`, ADMIN_PASSWORD, { mode: 0o600 });
 
 // ── the scripted agent ───────────────────────────────────────────────────────
 
@@ -85,7 +126,11 @@ const recordLines = (text) => text.split("\n").filter((l) => /^- \[(console|exce
 const blocks = (content) => (typeof content === "string" ? [{ type: "text", text: content }] : Array.isArray(content) ? content : []);
 const textOf = (content) => blocks(content).filter((b) => b.type === "text").map((b) => b.text).join("\n");
 
-const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [] };
+// cr-e2e adds its own keys (service-control.mjs `freshE2eState`): the §14 coach's observations and edits,
+// the recorders' directorProbes and skillOutputs, and the Deck Builder plant.
+const state = { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [], ...freshE2eState() };
+const coach = createLoopCoach(state, { blocks, textOf });
+const e2eControl = createServiceControl({ state, profile, env, cohort, publish: modeArg === "publish" });
 
 /** The next move for one upstream request: a tool call or the final text. */
 function agent(body) {
@@ -109,6 +154,9 @@ function agent(body) {
   if (/\[cr:propose\]/.test(userText)) return propose(msgs.slice(start + 1));
   // cr-skills (#1396): a curriculum skill run's prompt (skill, schema, context, input).
   if (/^## Skill\n[a-z-]+@\d/m.test(userText)) return { text: skillAnswer(userText) };
+  // cr-e2e (#1400): the §14 loop's own requests (loop-coach.mjs).
+  if (/\[cr:observe\]/.test(userText)) return coach.observeOnce(body, msgs, msgs.slice(start + 1));
+  if (/\[cr:(edit|apply)\]/.test(userText)) return { text: coach.editAnswer(userText, msgs.slice(0, Math.max(start, 0))) };
   const scenario = /\[cr:flow(?::([a-z0-9-]+))?\]/.exec(userText);
   if (!scenario) return { text: "[로컬 시험 응답] 받았어요." };
   const plant = scenario[1] ?? "";
@@ -228,6 +276,9 @@ function skillAnswer(userText) {
       success_criteria: bad ? ["사람들이 좋아한다"] : ["5명 중 3명이 도움 없이 주문을 마친다"],
     }) + "\n```";
   }
+  // cr-e2e: the Evidence and Deck Builder skills of the §14 loop (loop-coach.mjs).
+  if (tag.startsWith("evidence@")) return coach.evidenceAnswer(context);
+  if (tag.startsWith("deck-builder@")) return coach.deckBuilderAnswer(context, JSON.parse(/^## Input\n(.*)$/m.exec(userText)?.[1] ?? "{}"));
   return "{}";
 }
 
@@ -260,6 +311,7 @@ const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url);
   if (url.hostname === "api.anthropic.com") {
+    if (REAL_MODEL) return realFetch(input, init);
     const body = JSON.parse(init.body);
     if (url.pathname.endsWith("/count_tokens")) return Response.json({ input_tokens: 10 });
     const move = agent(body);
@@ -270,27 +322,55 @@ globalThis.fetch = async (input, init) => {
   return realFetch(input, init);
 };
 
+// cr-e2e (#1400): every request passes service-gate.mjs before the router sees it. Through a tunnel
+// (cr-dev-kit.sh --phone, a shared test origin) only the published runtime `/l/…` answers; this
+// Service's API and the control routes below stay on this Mac.
+const GATE_SERVICE = { testOrigin: env.HPS_TEST_ORIGIN, environment: env.ENVIRONMENT, control: CONTROL };
+const sendJson = (res, status, value) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(value));
+async function readBody(req) {
+  const parts = [];
+  for await (const p of req) parts.push(p);
+  return Buffer.concat(parts);
+}
+
+/** The spec-only control routes (what service-gate.mjs admits: this Mac, not a browser, control on). */
+async function control(req, res, path, search) {
+  if (path === "/__cr/state") return sendJson(res, 200, state);
+  // A route that changes something takes POST only: a page's <img> or link is a GET.
+  if ((path === "/__cr/reset" || path === "/__cr/plant-dangling") && req.method !== "POST") return res.writeHead(405, { allow: "POST" }).end();
+  if (path === "/__cr/reset") {
+    Object.assign(state, { requests: [], runs: {}, verify: [], skills: [], skillHeaders: [] }, freshE2eState());
+    return res.writeHead(204).end();
+  }
+  const body = (await readBody(req)).toString("utf8");
+  if (path === "/__cr/plant-dangling" && modeArg === "publish") {
+    const { project, session } = JSON.parse(body);
+    const key = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/sessions/published/${encodeURIComponent(session)}`;
+    const had = (await env.HPS_TRACES.get(key)) !== null;
+    await env.HPS_TRACES.delete(key);
+    return sendJson(res, 200, { removed: had });
+  }
+  // cr-e2e's routes: /__cr/records, /__cr/switch, /__cr/plant-deck.
+  if (await e2eControl.route(req, res, path, search, body)) return;
+  return res.writeHead(404).end();
+}
+
 const server = createServer(async (req, res) => {
   try {
-    if (req.url === "/__cr/state") return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(state));
-    if (req.url === "/__cr/reset") { state.requests = []; state.runs = {}; state.verify = []; state.skills = []; state.skillHeaders = []; return res.writeHead(204).end(); }
-    const parts = [];
-    for await (const p of req) parts.push(p);
-    const body = Buffer.concat(parts);
-    if (req.url === "/__cr/plant-dangling" && modeArg === "publish") {
-      const { project, session } = JSON.parse(body.toString("utf8"));
-      const key = `curriculum/${encodeURIComponent(cohort)}/${encodeURIComponent(project)}/sessions/published/${encodeURIComponent(session)}`;
-      const had = (await env.HPS_TRACES.get(key)) !== null;
-      await env.HPS_TRACES.delete(key);
-      return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ removed: had }));
-    }
-    // A test origin (cr-publish: `*.test.invalid`, or an ngrok host given as HPS_TEST_ORIGIN for a
-    // phone) keeps its own Host so the Service dispatches it as one; everything else is this Service.
-    const h = req.headers.host ?? "";
-    const host = /^(127\.0\.0\.1|localhost)(:\d+)?$/.test(h) || !h ? `127.0.0.1:${portArg}` : h;
-    const r = await app.fetch(new Request(`http://${host}${req.url}`, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), env, makeCtx());
+    const g = gate({ url: req.url, headers: req.headers }, GATE_SERVICE);
+    if (!g.ok) return res.writeHead(404, { [GATE_HEADER]: "refused" }).end();
+    const path = g.pathname;
+    if (g.kind === "local" && (path === "/__cr" || path.startsWith("/__cr/"))) return await control(req, res, path, g.search);
+    const body = await readBody(req);
+    // This Mac's requests go to the Service's own host. A test origin keeps its Host, so the router
+    // dispatches it to the published runtime (cr-publish: `*.test.invalid`, or the ngrok host given as
+    // HPS_TEST_ORIGIN for a phone); the router is handed exactly the path the gate checked.
+    const host = g.kind === "local" ? `127.0.0.1:${portArg}` : (g.host ?? "no-host.invalid");
+    const r = await app.fetch(new Request(`http://${host}${path}${g.search}`, { method: req.method, headers: req.headers, ...(body.length ? { body } : {}) }), env, makeCtx());
     // cr-skills: what the coach route recorded for a skill request, and whether the App named a model.
     if (req.headers["x-hps-skill"]) state.skillHeaders.push({ sent: { skill: req.headers["x-hps-skill"], capability: req.headers["x-hps-capability"], model_in_body: JSON.parse(body.toString("utf8") || "{}").model ?? null }, answered: { status: r.status, skill: r.headers.get("x-hps-skill"), capability: r.headers.get("x-hps-capability"), model: r.headers.get("x-hps-model") } });
+    // cr-e2e: the director route's answers and the skill output gate's verdicts (service-control.mjs).
+    await e2eControl.observe(req.method, path, r);
     res.writeHead(r.status, Object.fromEntries(r.headers));
     if (r.body) for await (const chunk of r.body) res.write(Buffer.from(chunk));
     res.end();
@@ -300,4 +380,4 @@ const server = createServer(async (req, res) => {
     res.end();
   }
 });
-server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} switch=${switchArg}`));
+server.listen(Number(portArg), "127.0.0.1", () => console.log(`READY ${portArg} switch=${switchArg} model=${REAL_MODEL ? "real" : "scripted"} control=${CONTROL ? "on" : "off"}`));

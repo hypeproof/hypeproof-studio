@@ -138,7 +138,7 @@ To eliminate this warning, add "type": "module" to /Users/jaylee/CodeWorkspace/h
 
 === 성인 — 기존 동작이 그대로여야 한다 (과잉 차단 방지) ===
   ok   설정 agent-sdk → agent-sdk
-  ok   프로필 agent-sdk → agent-sdk (보아 원장 트랙)
+  ok   프로필 agent-sdk → agent-sdk (치과 원장 트랙)
   ok   둘 다 proxy → proxy
 
 === minor_cohort 미상 — 기존 동작을 깨지 않는다 ===
@@ -791,7 +791,8 @@ Run `npm audit` for details.
 > tsc -b && vite build
 
 vite v8.0.16 building client environment for production...
-[2Ktransforming...✓ 277 modules transformed.
+[2K
+transforming...✓ 277 modules transformed.
 rendering chunks...
 computing gzip size...
 dist/index.html          0.38 kB │ gzip:   0.25 kB

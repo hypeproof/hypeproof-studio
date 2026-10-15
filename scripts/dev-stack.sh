@@ -11,34 +11,39 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/worker"
+SERVICE_WORKER_ROOT="$(node "$ROOT/scripts/service-tooling.mjs")"
+DEV_VARS="$(node "$ROOT/scripts/service-tooling.mjs" --dev-vars)"
+cd "$SERVICE_WORKER_ROOT"
 
 # Pin Node 22
 export NVM_DIR="$HOME/.nvm"
 # shellcheck disable=SC1091
 [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && . "/opt/homebrew/opt/nvm/nvm.sh" >/dev/null 2>&1
-nvm use 22.22.1 --silent >/dev/null 2>&1
+command -v nvm >/dev/null 2>&1 && nvm use 22.22.1 --silent >/dev/null 2>&1 || true
 
 # Ensure .dev.vars exists with real Anthropic key
-if [[ ! -f .dev.vars ]]; then
-  echo "ERROR: worker/.dev.vars missing. Run: source ~/.env && create .dev.vars" >&2
+if [[ ! -f "$DEV_VARS" ]]; then
+  echo "ERROR: local Service environment file missing: $DEV_VARS" >&2
+  echo "Set HPS_SERVICE_DEV_VARS or prepare this file with signing/admin credentials and the provider key used for API mode." >&2
   exit 1
 fi
 
-SIGNING=$(grep "^HPS_SIGNING_SECRET=" .dev.vars | cut -d= -f2-)
-ADMIN_PASS=$(grep "^HPS_ADMIN_PASSWORD=" .dev.vars | cut -d= -f2-)
+SIGNING=$(grep "^HPS_SIGNING_SECRET=" "$DEV_VARS" | cut -d= -f2-)
+ADMIN_PASS=$(grep "^HPS_ADMIN_PASSWORD=" "$DEV_VARS" | cut -d= -f2-)
 if [[ -z "$SIGNING" || -z "$ADMIN_PASS" ]]; then
   echo "ERROR: .dev.vars missing HPS_SIGNING_SECRET or HPS_ADMIN_PASSWORD" >&2
   exit 1
 fi
 
-# Cohort/profile/user — env-overridable. Defaults preserve the existing
-# sk-biopharm flow, so the existing e2e specs run unchanged. Override to run
-# the *same* specs against another cohort, e.g. the boah-dental teaser:
-#   HPS_COHORT=boah-dental-2026-a HPS_PROFILE=boah-dental-teaser-2026-s1 \
+# Cohort/profile/user — env-overridable. Defaults are the kids quest track
+# (grades 3-4), read from the Service registry by scripts/service-profile.mjs,
+# so the existing e2e specs run unchanged. Override to run the *same* specs
+# against another cohort, e.g. the search teaser:
+#   HPS_COHORT="$(service_profile pilot-cohort)" HPS_PROFILE="$(service_profile search-teaser)" \
 #     HPS_USER=smoke-dental bash scripts/dev-stack.sh
-HPS_COHORT="${HPS_COHORT:-sk-biopharm-2026-a}"
-HPS_PROFILE="${HPS_PROFILE:-sk-biopharm-kids-2026-grade-3-4-s1}"
+service_profile() { (cd "$ROOT" && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --no-warnings scripts/service-profile.mjs "$1"); }
+HPS_COHORT="${HPS_COHORT:-$(service_profile kids-cohort)}"
+HPS_PROFILE="${HPS_PROFILE:-$(service_profile kids-lower)}"
 HPS_USER="${HPS_USER:-jay-test}"
 TOKEN_FILE="/tmp/hps-token.txt"   # e2e global-setup + extension auto-import read this
 
@@ -47,7 +52,7 @@ pkill -f "wrangler dev" 2>/dev/null || true
 sleep 1
 
 echo "▶ starting wrangler dev (local miniflare)…"
-nohup npx wrangler dev --local --port 8787 > /tmp/wrangler-dev.log 2>&1 &
+nohup npm exec -- wrangler dev --local --port 8787 --env-file "$DEV_VARS" > /tmp/wrangler-dev.log 2>&1 &
 sleep 2
 
 # Wait until ready
@@ -79,12 +84,13 @@ curl -fsS -X POST "http://localhost:8787/admin/cohorts/$HPS_COHORT/session" \
   -d "{\"profile_id\":\"$HPS_PROFILE\",\"starts_at\":\"$NOW\",\"ends_at\":\"$END\"}" >/dev/null
 
 echo "▶ issuing token for '$HPS_USER'…"
-TOKEN=$(HPS_SIGNING_SECRET="$SIGNING" node --experimental-strip-types scripts/issue-token.ts \
+TOKEN=$(HPS_SIGNING_SECRET="$SIGNING" node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types scripts/issue-token.ts \
   --user "$HPS_USER" --cohort "$HPS_COHORT" --profile "$HPS_PROFILE" --hours 2)
 
 # e2e global-setup + the extension's local-dev auto-import both read this file.
 # Without it the e2e preflight fails and the app can't auto-seed the token.
 printf '%s' "$TOKEN" > "$TOKEN_FILE"
+chmod 600 "$TOKEN_FILE"
 
 cat <<EOF
 
@@ -93,7 +99,7 @@ cat <<EOF
 ═══════════════════════════════════════════════════════════════════════
 
   Worker:        http://localhost:8787
-  Admin UI:      http://localhost:8787/      (basic auth — pass: $ADMIN_PASS)
+  Admin UI:      http://localhost:8787/      (uses your local admin password)
   Health:        http://localhost:8787/v1/health
   Class window:  $NOW  →  $END  (2 hours)
   Cohort:        $HPS_COHORT
@@ -101,8 +107,7 @@ cat <<EOF
   Roster:        kid01, kid02, kid03, $HPS_USER
   Token file:    $TOKEN_FILE   (e2e + extension auto-import)
 
-  Workshop token (paste in HypeProof Studio.app):
-    $TOKEN
+  Workshop token: read the local token file when manually importing it.
 
 ─── How to test in the app ───────────────────────────────────────────
 
@@ -114,7 +119,7 @@ cat <<EOF
        http://localhost:8787/v1
 
   3. Open Command Palette (Cmd+Shift+P) →
-     "HypeProof Chat: Set Workshop Token" → paste the token above
+     "HypeProof Chat: Set Workshop Token" → paste the value from $TOKEN_FILE
 
   4. Click the 💬 icon on the left → type "안녕"
      → Expect HypeProof Coach reply in Korean
@@ -122,7 +127,7 @@ cat <<EOF
 ─── Direct curl test (no app needed) ────────────────────────────────
 
   curl -N -X POST http://localhost:8787/v1/chat/completions \\
-    -H "authorization: Bearer $TOKEN" \\
+    -H "authorization: Bearer \$(cat '$TOKEN_FILE')" \\
     -H "content-type: application/json" \\
     -d '{"model":"hypeproof-default","stream":true,"max_tokens":200,
          "messages":[{"role":"user","content":"삼각형이 점프하는 게임 만들어줘"}]}'

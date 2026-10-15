@@ -1,10 +1,11 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Real operator HTML and Service routing, synthetic stored rows, no production.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
 import { chromium } from '@playwright/test';
-import { localUsageObservation } from '../../worker/test/harness/usage-observation.mjs';
+import { localUsageObservation } from '@hypeproof/service-testkit/test/harness/usage-observation.mjs';
 
 const local = await localUsageObservation();
 const requests = [];

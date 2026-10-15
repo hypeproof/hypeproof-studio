@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom (#751) — native help device storage, AT-47: TWO REAL Studio windows of ONE app on this Mac (two extension
 // hosts, one user-data-dir, one globalStorage) writing help records at the same time, then an extension-host restart and a
 // full app restart. What must hold: neither window erases the other learner's draft or request; a request that is being sent
@@ -22,7 +23,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
 import { HelpRecordStore } from '../../extensions/hypeproof-chat/src/classroomHelpStore.ts';
 import { macWindow } from './mac-window.mjs';
 
@@ -38,13 +39,13 @@ assert.equal(execFileSync('git', ['diff', manifest.extension.source_sha, head, '
 const steps = []; const step = (name, detail = {}) => { steps.push({ at: new Date().toISOString(), name, ...detail }); console.log('STEP ' + name + (Object.keys(detail).length ? ' ' + JSON.stringify(detail) : '')); };
 
 // ── Service: real router + SQLite; one class, seats A1 (learner A) and A2 (learner B) ──
-const local = await localOps(), { setRoster, startSession } = await import('../../worker/src/lib/kv.ts');
+const local = await localOps(), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const endsAt = new Date(Date.now() + HOURS * 3600_000).toISOString();
 await startSession(local.env.HPS_KV, local.cohort, { session_id: local.run, profile_id: local.profile, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: endsAt }); local.db.prepare('UPDATE sessions SET ends_at=? WHERE id=?').run(endsAt, local.run);
 const [LA, LB] = ['a', 'b'].map((x) => prefix + x), course = local.lesson.course_id, V1 = local.lesson.version;
 await setRoster(local.env.HPS_KV, local.cohort, [LA, LB]); await local.freeze(course, V1, ['intro', 'build', 'review']);
 assert.equal((await local.configure([{ seat_id: 'A1', student_id: LA }, { seat_id: 'A2', student_id: LB }], 0, { flags: { ops_observe: true } })).status, 201);
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const teacherToken = (await issueIssuer({ issuer: 'teacher-a', scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: [...OPS_ALL] }] }, HOURS + 1, TEST_SECRET)).token;
 const invite = async (user) => { const r = await local.request(`/admin/cohorts/${local.cohort}/authoring/${course}/versions/${V1}/participants`, 'POST', { user, hours: HOURS }, teacherToken); assert.equal(r.status, 200, r.raw); return r.json.token; };
 const tokens = { [LA]: await invite(LA), [LB]: await invite(LB) };

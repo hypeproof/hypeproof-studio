@@ -1,9 +1,9 @@
-// 10 curriculum-page snapshots for the boah-dental-teaser v4 supersearch
+// 10 curriculum-page snapshots for the dental-teaser v4 supersearch
 // workshop (issue #79 follow-up). Captures the participant journey across the
 // five blocks of the 60-min teaser plus two UX detail panels.
 //
 // Output:
-//   docs/curriculum-snapshots/boah-dental-v4/
+//   docs/curriculum-snapshots/dental-teaser-v4/
 //     01-greeting.png        — block 1 도입
 //     02-chip-pick.png       — block 2 탐색 (위생사 임플란트 칩)
 //     03-intent-clarity.png  — block 3 V1 제작 — Intent Clarity (E7) reframe
@@ -20,7 +20,7 @@
 // 09/10) are visually stable.
 //
 // Prerequisite: dental dev-stack running.
-//   HPS_COHORT=boah-dental-2026-a HPS_PROFILE=boah-dental-teaser-2026-s1 \
+//   HPS_COHORT=dental-pilot-2026-a HPS_PROFILE=dental-teaser-2026-s1 \
 //     HPS_USER=smoke-dental bash scripts/dev-stack.sh
 
 import { test, expect, type FrameLocator } from "@playwright/test";
@@ -30,7 +30,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = path.resolve(__dirname, "../../docs/curriculum-snapshots/boah-dental-v4");
+const OUT_DIR = path.resolve(__dirname, "../../docs/curriculum-snapshots/dental-teaser-v4");
 
 test.beforeAll(() => {
   fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -121,7 +121,7 @@ test("04-v1-axes", async () => {
 });
 
 // 5 — follow-up chips: retired with #187 chip option B (follow_up: []).
-// Meta-skill (boa-search-skill-creator) carries 7자산 Q&A via chat prose
+// Meta-skill (search-skill-creator) carries 7자산 Q&A via chat prose
 // instead of a chip palette. Snapshot kept as a placeholder so the
 // curriculum doc has 10 numbered panels — captures the post-reply shell
 // shape (no chip rack present).

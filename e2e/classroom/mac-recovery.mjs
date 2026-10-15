@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751, U4) — AT-40 M3: cause → action → follow-up verification, from the REAL Chalk page to a REAL Studio window on this Mac.
 //
 //   HPS_DEVHOST_SOURCE="<official shell>.app" HPS_DEVHOST_DIR=e2e/test-results/classroom-devhost-u4 node e2e/classroom/mac-devhost.mjs prepare
@@ -26,7 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { CommandRunner } from '../../extensions/hypeproof-chat/src/classroomOpsCommands.ts';
 import { draftAfterStop } from '../../extensions/hypeproof-chat/webview-ui/src/sendQueue.ts';
@@ -44,14 +45,14 @@ assert.ok(manifest.agent_sdk?.vendored === true && manifest.agent_sdk.binary, 't
 const steps = []; const step = (name, detail = {}) => { steps.push({ at: new Date().toISOString(), name, ...detail }); console.log('STEP ' + name + (Object.keys(detail).length ? ' ' + JSON.stringify(detail) : '')); };
 
 // ── Service: real router + SQLite; a class and tokens that last HOURS so a person can keep using what is left running ──
-const local = await localOps(), { setRoster, startSession } = await import('../../worker/src/lib/kv.ts');
+const local = await localOps(), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const endsAt = new Date(Date.now() + HOURS * 3600_000).toISOString();
 await startSession(local.env.HPS_KV, local.cohort, { session_id: local.run, profile_id: local.profile, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: endsAt }); local.db.prepare('UPDATE sessions SET ends_at=? WHERE id=?').run(endsAt, local.run);
 const seats = ['A1', 'A2', 'A3', 'A4'].map((id, i) => ({ seat_id: id, student_id: prefix + (i + 1) })), course = local.lesson.course_id, V1 = local.lesson.version;
 await setRoster(local.env.HPS_KV, local.cohort, seats.map((s) => s.student_id)); await local.freeze(course, V1, ['intro', 'build', 'review']);
 const AT41 = (process.env.HPS_U4_SCENARIOS || '').split(',').map((x) => x.trim()).includes('AT41'); // distribution is switched on only for the AT-41 scenario
 assert.equal((await local.configure(seats, 0, { flags: { ops_observe: true, ops_commands: true, ops_collect: true, ...(AT41 ? { ops_distribute: true } : {}) } })).status, 201);
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const teacherToken = (await issueIssuer({ issuer: 'teacher-a', scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: [...OPS_ALL, ...(AT41 ? ['distribute'] : [])] }] }, HOURS + 1, TEST_SECRET)).token;
 /** The instructor's existing issuing path (it records the issue and moves the learner's login generation). */
 const invite = async (user) => { const r = await local.request(`/admin/cohorts/${local.cohort}/authoring/${course}/versions/${V1}/participants`, 'POST', { user, hours: HOURS }, teacherToken); assert.equal(r.status, 200, r.raw); return r.json.token; };
@@ -201,7 +202,7 @@ try {
   const statusLine = (await I.T('status')).trim(), a1Row = (await I.row('A1').innerText()).replace(/\s+/g, ' '), helpLine = (await I.T('ops-help-state')).replace(/\s+/g, ' ');
   await I.shot('board-02-reconnected-help.png'); await W.shot(win, 'board-03-learner-window.png');
   const draftAfter = await draftOf(chat), answersAfter = await answers(chat); assert.equal(draftAfter, '보드 확인 중에도 남아야 하는 학생 초안'); assert.equal(answersAfter, answersBefore); assert.deepEqual(workFiles(), KEPT);
-  results.BOARD = { served_manage_sha256: servedSha, manage_source_sha256: sha(manageSrc), service_classroom_ts_sha256: sha(path.join(repo, 'worker/src/routes/classroom.ts')), service_open_filter: probe.json.filter, a1_connection: a1.connection?.state, a1_row: a1Row, status_line: statusLine, help_line: helpLine, action_availability: availability, checkpoint_same_owner_redraw: keptSameOwner, other_instructor_sees: otherSees, learner_draft_kept: draftAfter, answers_on_screen: [answersBefore, answersAfter], work_files: workFiles(), help_request: 'made here through /v1/classroom/shares with a synthetic learner token (the app\'s own help entry is NOT run)' };
+  results.BOARD = { served_manage_sha256: servedSha, manage_source_sha256: sha(manageSrc), service_classroom_ts_sha256: sha(new URL(import.meta.resolve('@hypeproof/service-testkit/src/routes/classroom.ts'))), service_open_filter: probe.json.filter, a1_connection: a1.connection?.state, a1_row: a1Row, status_line: statusLine, help_line: helpLine, action_availability: availability, checkpoint_same_owner_redraw: keptSameOwner, other_instructor_sees: otherSees, learner_draft_kept: draftAfter, answers_on_screen: [answersBefore, answersAfter], work_files: workFiles(), help_request: 'made here through /v1/classroom/shares with a synthetic learner token (the app\'s own help entry is NOT run)' };
   step('BOARD latest Chalk + Service over the real report: connected, actions available, help listed, checkpoint draft isolated; learner draft/chat/files kept', { a1: a1.connection?.state });
   }
 

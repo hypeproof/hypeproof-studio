@@ -4,10 +4,10 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
-import '../../worker/test/harness/loader.mjs';
-const { composeReport } = await import('../../worker/src/lib/classroom-report.ts');
-const { renderReportHtml } = await import('../../worker/src/lib/classroom-report-html.ts');
-const { CANDIDATE_CAPABILITY_V1: M } = await import('../../worker/src/lib/measurement-core/index.ts');
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
+const { composeReport } = await import('@hypeproof/service-testkit/src/lib/classroom-report.ts');
+const { renderReportHtml } = await import('@hypeproof/service-testkit/src/lib/classroom-report-html.ts');
+const { CANDIDATE_CAPABILITY_V1: M } = await import('@hypeproof/service-testkit/src/lib/measurement-core/index.ts');
 const { renderReportPdf } = await import('../../scripts/classroom-report-pdf.mjs');
 const out = new URL('../test-results/classroom-report/', import.meta.url).pathname; mkdirSync(out, { recursive: true });
 

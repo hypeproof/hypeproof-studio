@@ -1,0 +1,19 @@
+{
+  "name": "hypeproof-studio-tooling",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Studio consumer tooling; private Service packages are acquired with authenticated, SHA256-pinned bootstrap.",
+  "scripts": {
+    "test:service-integration": "node test/service-integration/run.mjs",
+    "test:worker-free": "node scripts/verify-worker-free.mjs",
+    "test:registry-contracts": "node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite test/service-integration/logs-upload.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite test/service-integration/quest-result-contract.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite test/service-integration/native-observation.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite test/service-integration/trial-evidence.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite node_modules/@hypeproof/service-testkit/dist/worker/test/authoring.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite node_modules/@hypeproof/service-testkit/dist/worker/test/dental-course-automation.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite node_modules/@hypeproof/service-testkit/dist/worker/test/classroom.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite node_modules/@hypeproof/service-testkit/dist/worker/test/native-trial-grants.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite node_modules/@hypeproof/service-testkit/dist/worker/test/module-distribution.test.mjs && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --experimental-sqlite node_modules/@hypeproof/service-testkit/dist/worker/test/native-trial.test.mjs",
+    "bootstrap:service": "node scripts/bootstrap-service-packages.mjs",
+    "test:private-service-packages": "node --test scripts/test/bootstrap-service-packages.test.mjs"
+  },
+  "devDependencies": {
+    "@hypeproof/service-testkit": "file:.private-service-cache/hypeproof-service-testkit-0.1.2.tgz",
+    "@hypeproof/measurement-core": "file:.private-service-cache/hypeproof-measurement-core-0.1.0.tgz",
+    "@hypeproof/service-contracts": "file:.private-service-cache/hypeproof-service-contracts-0.1.1.tgz"
+  }
+}

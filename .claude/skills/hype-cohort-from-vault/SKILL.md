@@ -10,7 +10,7 @@ triggers:
   - "커리큘럼 적용"
   - "볼트에서 코호트"
   - "프로필 업데이트"
-argument_hint: "[cohort id, e.g. boah-dental-teaser-2026-s1 — optional, will list if omitted]"
+argument_hint: "[cohort id, e.g. dental-teaser-2026-s1 — optional, will list if omitted]"
 ---
 
 # hype-cohort-from-vault
@@ -44,7 +44,7 @@ wins on asset definitions**, **`worker/src/profiles/types.ts` wins on schema**.
   gh api repos/JinyongShin/hypeproof_kids_edu/git/trees/HEAD?recursive=1 \
     --jq '.tree[].path' | grep specs/.*\.md$
   ```
-  Match cohort id ↔ doc by shared slug (e.g. `boah-dental` ↔
+  Match cohort id ↔ doc by shared slug (e.g. `dental-pilot` ↔
   `track-b/dental-supersearch-curriculum-v4.md`). If ambiguous, ask the user.
 
 ### 2. Fetch the curriculum content

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { LocalReviewRequest, LocalReviewState, TaskCard } from '../../src/localReviewProtocol';
-import { capabilityModel } from '../../../../worker/src/lib/measurement-core/capability-models';
+import { capabilityModel } from '@hypeproof/measurement-core/capability-models';
 import './localReview.css';
 import { postLocalReview } from "./vscode";
 const bridge = { postMessage: postLocalReview };

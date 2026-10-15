@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "repository": "hypeproof/hypeproof-service",
+  "packages": [
+    {
+      "asset": "hypeproof-measurement-core-0.1.0.tgz",
+      "tag": "packages-v0.1.0",
+      "sha256": "e045ff63483ed07e63a5cab340393128a653d6d3526b69f7cb04116a7c351850"
+    },
+    {
+      "asset": "hypeproof-service-contracts-0.1.0.tgz",
+      "tag": "packages-v0.1.0",
+      "sha256": "a43c6c62fdbc212df3f14f6ed3be33a522c091d80697062ee87e3ba298b0bed6"
+    },
+    {
+      "asset": "hypeproof-service-contracts-0.1.1.tgz",
+      "tag": "service-contracts-v0.1.1",
+      "sha256": "d1ba4928e81401f8d716193f6dd381378f076cca82196cab14bfb66720b4dadc"
+    },
+    {
+      "asset": "hypeproof-measurement-0.3.5.tgz",
+      "tag": "service-testkit-v0.1.2-private.1",
+      "sha256": "3bcc62170870a5ba881f3e7607740aaff2576920350ddb5097e6f71d7658c0d7"
+    },
+    {
+      "asset": "hypeproof-service-testkit-0.1.2.tgz",
+      "tag": "service-testkit-v0.1.2-private.1",
+      "sha256": "15bd637cdfc438ca6b63dd56434fd01ea0e26ec3ef88f4284ca8ea8e13f95d93"
+    }
+  ]
+}

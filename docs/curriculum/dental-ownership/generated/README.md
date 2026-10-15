@@ -2,7 +2,7 @@
 
 > 자동 생성: program.json을 수정하고 npm run courses:dental로 재생성한다.
 
-사용자가 제공한 Dental Digital Ownership Program 제안서의 L1~L5 정의를 사용한 신규 5강 설계. 원 제안서의 7회 구성과 과거 보아치과 큐시트를 대체하지 않는다. 페르소나는 실제 인물이나 조사 결과가 아닌 설계 가설이다.
+사용자가 제공한 Dental Digital Ownership Program 제안서의 L1~L5 정의를 사용한 신규 5강 설계. 원 제안서의 7회 구성과 과거 치과 파일럿 큐시트를 대체하지 않는다. 페르소나는 실제 인물이나 조사 결과가 아닌 설계 가설이다.
 
 ## 강사 페르소나
 

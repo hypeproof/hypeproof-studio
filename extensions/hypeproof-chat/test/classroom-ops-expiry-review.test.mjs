@@ -110,12 +110,32 @@ test('F5 the upload-only afterlife ends with the window: 24 h after class nothin
   assert.deepEqual(f.requests, []);
   assert.equal(f.secrets.size, 0, 'a credential with nothing left to do is not kept');
 });
-test('F5 a Service refusal (withdrawn) ends the resume: recorded once, not retried on the next start', async (t) => {
-  const f = await hostFixture(t);
-  globalThis.fetch = async (url) => { f.requests.push(new URL(url).pathname); return Response.json({ reason: 'withdrawn' }, { status: 403 }); };
-  await f.host.resume(); await settle();
+test('F5 a Service refusal (withdrawn) ends the resume: recorded once, not retried on the next start', { timeout: 5000 }, async (t) => {
+  const requested = Promise.withResolvers(), response = Promise.withResolvers();
+  const f = await hostFixture(t, { onFetch: async (path) => {
+    assert.ok(path.startsWith('/v1/classroom/ops/collect/snapshots/'));
+    requested.resolve(); await response.promise;
+    return Response.json({ reason: 'withdrawn' }, { status: 403 });
+  } });
+  // Observe the real background work started by public resume(), including its
+  // persisted terminal state. A fetch returning is not a completed disk write.
+  const uploads = [], resumePending = f.host.resumePendingUploads.bind(f.host);
+  f.host.resumePendingUploads = (...args) => { const work = resumePending(...args); uploads.push(work); return work; };
+  try {
+    await f.host.resume();
+    assert.equal(uploads.length, 1, 'public resume starts the pending upload');
+    await requested.promise;
+    // Plant a Service response later than the old 150 ms assertion. Until the
+    // response arrives, that clock wait cannot prove a refusal was persisted.
+    await settle();
+    assert.equal(JSON.parse(await readFile(f.stateFile, 'utf8')).result, undefined);
+    assert.equal(f.requests.length, 1, 'an in-flight upload is not retried');
+  } finally {
+    response.resolve(); await Promise.all(uploads);
+  }
   assert.equal(JSON.parse(await readFile(f.stateFile, 'utf8')).result, 'withdrawn');
-  const before = f.requests.length; await f.host.resume(); await settle();
+  assert.equal(f.requests.length, 1, 'a withdrawn first PUT ends the current upload without a seal or retry');
+  const before = f.requests.length; await f.host.resume(); await Promise.all(uploads);
   assert.equal(f.requests.length, before, 'a withdrawn upload is not attempted again');
 });
 

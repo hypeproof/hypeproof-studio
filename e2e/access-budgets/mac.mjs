@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import assert from 'node:assert/strict';
 import {mkdirSync,mkdtempSync,writeFileSync,readFileSync,unlinkSync,realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -6,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {_electron as electron} from '@playwright/test';
 import {budgetFixture} from './fixture.mjs';
-const {budgetSubjectKey}=await import('../../worker/src/lib/budgets.ts');
+const {budgetSubjectKey}=await import('@hypeproof/service-testkit/src/lib/budgets.ts');
 const out=process.env.HPS_BUDGET_EVIDENCE_DIR||'/tmp/hps-856-evidence';mkdirSync(out,{recursive:true});
 if(process.env.HPS_BUDGET_BUNDLED==='1'){for(const f of ['dist/extension.js','webview-ui/dist/assets/index.js','webview-ui/dist/assets/index.css']){const candidate=process.env.HPS_APP_PATH.split('/Contents/MacOS/')[0]+'/Contents/Resources/app/extensions/hypeproof-chat/'+f;assert.equal(createHash('sha256').update(readFileSync(candidate)).digest('hex'),createHash('sha256').update(readFileSync(new URL('../../extensions/hypeproof-chat/'+f,import.meta.url))).digest('hex'),'candidate bundle '+f);}}
 const h=await budgetFixture(),userDir=realpathSync(mkdtempSync(tmpdir()+'/hps-budget-mac-'));mkdirSync(userDir+'/User');mkdirSync(userDir+'/ws');

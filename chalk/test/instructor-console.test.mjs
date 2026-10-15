@@ -4,20 +4,22 @@
 // Covers: page serving, /health version, GET /admin/cohorts/:id/state (the
 // issuer-Bearer read the console builds its UI from), the instructor-write
 // forwarder (allowlist, header whitelist, pass-through, upstream failure),
-// and the signing-secret guard. Invokes the worker's fetch() directly, no
+// and the Service signing-secret guard through HTTP. Invokes the worker's fetch() directly, no
 // wrangler.
 //
 // Run: node --experimental-strip-types chalk/test/instructor-console.test.mjs
 
 import assert from "node:assert/strict";
-// Same loader the Service tests use (extensionless .ts + .html/.md as text).
-import "../../worker/test/harness/loader.mjs";
+// The public development artifact loads real Service modules and Chalk HTML.
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 
 const SECRET = "test-secret-" + "x".repeat(20);
-const { default: chalk } = await import("../src/index.ts");
+const { default: localChalk } = await import("../src/index.ts");
+const { bridgeStateToService } = await import("./harness/service-state.mjs");
+const chalk = bridgeStateToService(localChalk);
 // Test-side minting only. Chalk itself imports NO signing code (src/shared.ts).
-const { issue, issueIssuer } = await import("../../worker/src/lib/tokens.ts");
-const { startSession } = await import("../../worker/src/lib/kv.ts");
+const { issue, issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+const { startSession } = await import("@hypeproof/service-testkit/src/lib/kv.ts");
 
 function makeKV() {
   const store = new Map();
@@ -50,8 +52,11 @@ function makeEnv(overrides = {}) {
 }
 const env = makeEnv();
 
-const COHORT = "boah-dental-2026-a";
-const COPYCLONE = "boah-dental-director-copyclone-2026-s1";
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { serviceProfiles } = await import("../../test/fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COHORT = SP.pilotCohort;
+const COPYCLONE = SP.copyclone.id;
 
 async function fetchOnce(path, { method = "GET", headers = {}, body, env: e = env } = {}) {
   const req = new Request("https://chalk.test" + path, {
@@ -165,7 +170,7 @@ await check("state: admin Basic is NOT an auth path on Chalk → 401", async () 
 });
 
 await check("state: issuer scoped to a different cohort → 403", async () => {
-  const { status, text } = await fetchOnce(`/admin/cohorts/sk-biopharm-2026-a/state`, { headers: BEARER });
+  const { status, text } = await fetchOnce(`/admin/cohorts/${SP.kidsCohort}/state`, { headers: BEARER });
   assert.equal(status, 403, `got ${status}: ${text}`);
 });
 
@@ -295,7 +300,7 @@ await check("forward: unreachable Service → 502, request id preserved", async 
   });
 });
 
-// --- 5. signing-secret guard ---------------------------------------------------
+// --- 5. Service signing-secret guard ---------------------------------------------------
 
 await check("guard: weak secret in production fails closed on /admin/* but pages still serve", async () => {
   const bad = makeEnv({ HPS_SIGNING_SECRET: "x".repeat(32) });

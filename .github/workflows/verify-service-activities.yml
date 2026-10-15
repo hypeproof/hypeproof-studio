@@ -6,6 +6,8 @@ on:
         required: true
         type: string
     secrets:
+      HYPEPROOF_READ_TOKEN:
+        required: true
       HPS_ACCEPTANCE_ANTHROPIC_API_KEY:
         required: true
 permissions:
@@ -46,6 +48,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - name: Prepare public App and test dependencies
         shell: bash
         env:
@@ -55,7 +61,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ANTHROPIC_API_KEY" || { echo 'BLOCKED missing acceptance credential'; exit 1; }
-          npm ci --prefix worker
           npm ci --prefix e2e
           mkdir -p "$RUNNER_TEMP/public-assets" "$RUNNER_TEMP/public-app" "$RUNNER_TEMP/service-evidence"
           gh release download "$TAG" --dir "$RUNNER_TEMP/public-assets" --pattern '*.zip'
@@ -68,6 +73,21 @@ jobs:
           $assets = @(Get-ChildItem "$env:RUNNER_TEMP/public-assets/*win32-x64*.zip")
           if ($assets.Count -ne 1) { throw 'Expected one Windows package' }
           Expand-Archive -LiteralPath $assets[0].FullName -DestinationPath "$env:RUNNER_TEMP/public-app"
+      # jayleekr/hypeprooflab#997: the App never ships the native Agent SDK binary;
+      # each machine seeds it, as the installers do. Unseeded, every trial turn falls
+      # back to the proxy and the Service answers 409 before any model call. Seed the
+      # exact version the downloaded App vendors; run.mjs refuses to start otherwise.
+      - name: Seed the Agent SDK binary the public App expects
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/seed-sdk-binary.sh --version "$(node e2e/unified-release/sdk-seed.mjs version "$RUNNER_TEMP/public-app/HypeProof Studio.app")"
+      - name: Seed the Agent SDK binary the public App expects
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = node e2e/unified-release/sdk-seed.mjs version "$env:RUNNER_TEMP/public-app"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/seed-sdk-binary.ps1 -Version $version
       - name: Exercise current public App against candidate Service
         shell: bash
         env:

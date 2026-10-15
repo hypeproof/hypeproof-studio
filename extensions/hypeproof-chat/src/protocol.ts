@@ -1,3 +1,5 @@
+/** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
+export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -94,8 +96,10 @@ export interface EffortRequestRecord {
   reason: 'selected' | 'course_default' | 'unsupported_model'; status: number; created_at: string;
 }
 export interface ChatConfig {
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean};
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
+  /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
+  studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
   effortNotice?: string;
@@ -153,6 +157,8 @@ export interface ResolvedProfile {
   activity_id?: string;
   /** Presentation only; derived from authenticated Service access, never grants authority. */
   activity_kind?: "trial" | "personal" | "classroom";
+  /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
+  pass?: PassStatus;
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -249,6 +255,11 @@ export interface ResolvedProfile {
   browser_control?: { enabled: boolean; max_iterations?: number };
   /** CR-02 — Curriculum Runtime switch (`curriculum_runtime.enabled`), off when absent. */
   curriculum_runtime?: { enabled: boolean };
+  /**
+   * Learning wiki and deck generator (App-side generic skills), off when absent. `plan` is the
+   * cohort's specialization: folder, audience, session label, deck template and per-session focus.
+   */
+  learning_wiki?: { enabled: boolean; plan?: LearningWikiPlan };
   /**
    * #306 — hardened native-browser session for minor cohorts. `mode: "safe"`
    * makes the host enable the locked-down `persist:hp-safe` integrated-browser
@@ -391,6 +402,12 @@ export type WebviewMessage = (
   // cr-skills — the curriculum skills panel (CR-43–CR-47; CR switch only, re-checked by the host).
   | { type: "skillsOpen" }
   | { type: "skillRun"; skill: string; form: import("./skillView").SkillForm }
+  // cr-review — the Weekly Review panel (CR-48–CR-53). The student's two messages are behind the CR
+  // switch; the director's two behind the switch as the Service answers the issuer token. Both re-checked by the host.
+  | { type: "reviewOpen"; week?: number }
+  | { type: "reviewPrepare"; week?: number }
+  | { type: "reviewDirectorOpen"; projectId?: string | null; week?: number }
+  | { type: "reviewDecision"; projectId: string; week: number; revision: number; form: import("./reviewView").DirectorDecisionForm }
   | { type: "selectModel"; alias: string }
   // #1298 — instructor-only: free-form model id that bypasses the profile's choices list.
   | { type: "selectModelDirect"; modelId: string }
@@ -432,6 +449,10 @@ export type WebviewMessage = (
   | { type: "lessonWork"; stepId: string; kind: "criterion" | "decision"; text: string; reason?: string }
   // #751 G2 — rehearsal only: what the panel DREW for each step, read back from the rendered DOM. The host adds App identity and sends it.
   | { type: "rehearsalSend"; steps: import("./lessonFocus").RenderedStep[]; mission?: import("./lessonFocus").RenderedMission }
+  // AE-01 (#554) — the learner saves their own goal and completion criteria for the lesson revision `lesson` (sha256),
+  // starting from revision `base`; `requestId` is the sending view's id for the save. Only these fields are read; the
+  // lesson's own criteria are never part of it.
+  | ({ type: "goalSave" } & import("./studentGoal").GoalSaveRequest)
   // #751 U2 — the inbox of instructor notices/materials. `generation` is the connection the card list was drawn under: the
   // host answers a callback from an older one with nothing. Opening a card is kept on this device; it is not reported.
   | { type: "inboxRequest" }
@@ -497,6 +518,12 @@ export type HostMessage = (
   /** #751 G2 — the learner's saved work-surface entries for the lesson `sha256` (read from this device), and the rehearsal result. */
   | { type: "lessonWorkState"; sha256: string; work: Record<string, import("./lessonFocus").StepWork> }
   | { type: "rehearsalState"; state: "sending" | "sent" | "error"; verdict?: string; reasons?: string[]; message?: string }
+  /**
+   * AE-01 (#554) — the answer to one goal save, sent to every chat view. `requestId` names the save, so only the view that
+   * sent it shows the note (`saved`, or `error`: the sentence to show). `view` is the goal as stored after a save, or the
+   * newer goal a `stale` save lost to; any other refusal carries none, so every view keeps the goal and the text it shows.
+   */
+  | ({ type: "goalState" } & import("./studentGoal").GoalAnswer)
   /** #751 U2 — always read from disk by the host; the webview holds no copy of record. */
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
@@ -545,6 +572,8 @@ export type HostMessage = (
   | { type: "memoryState"; view: import("./memoryView").MemoryView | null; error?: string; done?: string }
   // cr-skills — the "커리큘럼 스킬" panel (null = hidden); `running` while a skill runs.
   | { type: "skillsState"; view: import("./skillView").SkillsView | null; running?: boolean; error?: string; done?: string }
+  // cr-review — the "주간 리뷰" panel, the student's or the director's (null = hidden).
+  | { type: "reviewState"; view: import("./reviewView").ReviewView | null; error?: string; done?: string }
   // #320 — AI disclosure notice (Anthropic Usage Policy: consumer-facing chat
   // must disclose "you are interacting with AI" at minimum at session start).
   // Host posts once per session — first webview mount of this run and again
@@ -616,4 +645,20 @@ export interface ElementPreview {
   sentText: string;
   /** The element crop as it will be sent, or null when the cohort sends no images. */
   imageDataUrl: string | null;
+}
+
+/** Cohort plan for the learning wiki and deck skills (served as `learning_wiki.plan`; learningWiki.ts re-exports it). */
+export interface LearningWikiPlan {
+  /** What students call the wiki in the chat and in the copy (default "팀 브레인"). */
+  name?: string;
+  /** Folder in the workspace (default "wiki"). */
+  dir?: string;
+  /** Who the learners are, in the prompt's words (default "학습 팀"). */
+  audience?: string;
+  /** What one session is called (default "회차"; the founder course says "주차"). */
+  session_label?: string;
+  /** Deck template for the deck skill; `hint` tells the skill what the slide must and must not show. */
+  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
+  /** Per session: the slides the deck skill drafts that session and the session's question. */
+  sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }

@@ -20,6 +20,7 @@
     "test:classroom-ops-selection": "node --experimental-strip-types --experimental-sqlite classroom/ops-selection.mjs",
     "test:classroom-ops-roster": "node --experimental-strip-types --experimental-sqlite classroom/ops-roster.mjs",
     "test:trial-ux": "node trial-ux/run.mjs",
+    "test:goal:browser": "node --experimental-strip-types sx/goal-browser.mjs",
     "test:cr-browser": "node --experimental-strip-types curriculum-runtime/experiment-browser.real.mjs",
     "test:cr-publish": "node --experimental-strip-types --experimental-sqlite curriculum-runtime/publish-runtime.real.mjs",
     "test:cr-evidence": "node --experimental-strip-types --experimental-sqlite curriculum-runtime/evidence-runtime.real.mjs",
@@ -37,11 +38,14 @@
     "test:classroom-ops-g1": "node --experimental-strip-types --experimental-sqlite classroom/ops-g1-layout.mjs",
     "test:classroom-ops-g1-wrap": "node --experimental-strip-types --experimental-sqlite classroom/ops-g1-wrap.mjs",
     "test:classroom-authoring-g2": "node --experimental-strip-types --experimental-sqlite classroom/authoring-g2.mjs",
-    "test:classroom-authoring-mission": "node --experimental-strip-types --experimental-sqlite classroom/authoring-mission.mjs"
+    "test:classroom-authoring-mission": "node --experimental-strip-types --experimental-sqlite classroom/authoring-mission.mjs",
+    "test:classroom-feedback-loop": "node --experimental-strip-types --experimental-sqlite classroom/feedback-loop.mjs",
+    "test:workshop-element": "node --experimental-strip-types curriculum-runtime/workshop-element-trial.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "esbuild": "^0.28.2",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.2.tgz"
   }
 }

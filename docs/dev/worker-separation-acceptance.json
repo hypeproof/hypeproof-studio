@@ -1,0 +1,281 @@
+{
+  "schema": "hps-worker-separation-acceptance-summary/1",
+  "executedAt": "2026-10-10T12:21:09.422225+00:00",
+  "status": "pass",
+  "command": "npm run test:worker-free",
+  "sourceCommitBeforeFinalCommit": "7781a80a4402dc405b6733c0ff6b19855f6e979f",
+  "sourceDirty": true,
+  "acceptanceSnapshot": "bb0fa5cd7762dfc3c10dcef137efa24653690b9b",
+  "workerExcluded": true,
+  "siblingSourceUsed": false,
+  "publicServiceCommit": "6a2a769b7002b19799accd59ab83b8274e91884d",
+  "testkitRelease": "https://github.com/hypeproof/hypeproof-service/releases/tag/service-testkit-v0.1.2",
+  "checks": [
+    {
+      "name": "tooling install",
+      "command": [
+        "npm",
+        "ci",
+        "--ignore-scripts"
+      ],
+      "directory": ".",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 1498
+    },
+    {
+      "name": "App install",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "directory": "extensions/hypeproof-chat",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 1438
+    },
+    {
+      "name": "webview install",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "directory": "extensions/hypeproof-chat/webview-ui",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 518
+    },
+    {
+      "name": "Chalk install",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "directory": "chalk",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 3384
+    },
+    {
+      "name": "integration install",
+      "command": [
+        "npm",
+        "ci"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 3211
+    },
+    {
+      "name": "App typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "directory": "extensions/hypeproof-chat",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 1420
+    },
+    {
+      "name": "App production bundle",
+      "command": [
+        "npm",
+        "run",
+        "build:extension"
+      ],
+      "directory": "extensions/hypeproof-chat",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 89
+    },
+    {
+      "name": "webview production build",
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "directory": "extensions/hypeproof-chat/webview-ui",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 2573
+    },
+    {
+      "name": "Chalk typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "directory": "chalk",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 547
+    },
+    {
+      "name": "Chalk production bundle",
+      "command": [
+        "npm",
+        "exec",
+        "--",
+        "wrangler",
+        "deploy",
+        "--dry-run",
+        "--outdir",
+        "dist"
+      ],
+      "directory": "chalk",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 835
+    },
+    {
+      "name": "App feature and failure regression",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "directory": "extensions/hypeproof-chat",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 97183
+    },
+    {
+      "name": "Chalk authorization, reads and transport",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "directory": "chalk",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 2166
+    },
+    {
+      "name": "App to Service contracts, measurements, snapshots and deployment boundaries",
+      "command": [
+        "npm",
+        "run",
+        "test:service-integration"
+      ],
+      "directory": ".",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 583
+    },
+    {
+      "name": "launcher isolation and subscription lifecycle",
+      "command": [
+        "python3",
+        "scripts/test-studio-dev.py"
+      ],
+      "directory": ".",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 102
+    },
+    {
+      "name": "Chromium install",
+      "command": [
+        "npm",
+        "exec",
+        "--",
+        "playwright",
+        "install",
+        "chromium"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 801
+    },
+    {
+      "name": "App to Service classroom results",
+      "command": [
+        "npm",
+        "run",
+        "test:classroom-ops-results"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 47138
+    },
+    {
+      "name": "published runtime in real Chromium",
+      "command": [
+        "npm",
+        "run",
+        "test:cr-publish"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 17625
+    },
+    {
+      "name": "participant evidence in real Chromium",
+      "command": [
+        "npm",
+        "run",
+        "test:cr-evidence"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 9281
+    },
+    {
+      "name": "budget isolation in real Chromium",
+      "command": [
+        "npm",
+        "run",
+        "test:budgets:browser"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 1063
+    },
+    {
+      "name": "API gateway and SDK credential isolation",
+      "command": [
+        "npm",
+        "run",
+        "test:budgets:sdk"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 4138
+    },
+    {
+      "name": "published classroom flows and App results",
+      "command": [
+        "npm",
+        "run",
+        "test:trial-ux"
+      ],
+      "directory": "e2e",
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 9373
+    }
+  ],
+  "notRun": [
+    "Actual interactive Studio GUI manual flow",
+    "Real Claude subscription model request",
+    "Paid API provider request",
+    "Production deployment or data/secret migration",
+    "PR merge",
+    "All 43 retained compatibility commands (focused core lane ran five)"
+  ],
+  "remoteServiceCI": [
+    "https://github.com/hypeproof/hypeproof-service/actions/runs/38050538636",
+    "https://github.com/hypeproof/hypeproof-service/actions/runs/38050538605"
+  ],
+  "localReceipt": "/var/folders/td/pxt5g8wd42v_6f4sb5nrmfp40000gn/T/hypeproof-studio-worker-free-ewTm5V/worker-separation-acceptance.json"
+}

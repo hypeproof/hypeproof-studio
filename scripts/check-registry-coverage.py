@@ -32,8 +32,6 @@ import sys
 REGISTRY = "config/traceability.json"
 REQUIREMENTS = "docs/studio-requirements.md"
 AREAS = [
-    ("worker/src/routes", (".ts",)),
-    ("worker/src/lib", (".ts",)),
     ("extensions/hypeproof-chat/src", (".ts",)),
     ("extensions/hypeproof-chat/webview-ui/src", (".ts", ".tsx")),
 ]
@@ -110,6 +108,7 @@ def main() -> int:
 
     areas, named = sweep()
     print("레지스트리 사각지대 (어느 노드의 source 도 아닌 파일)")
+    print("  Service 소스의 coverage는 hypeproof-service에서 관리한다; 이 검사는 Studio 소비자 범위다.")
     for area, unmapped, total in areas:
         print(f"  {unmapped:3d} / {total:3d}  {area}")
     print()

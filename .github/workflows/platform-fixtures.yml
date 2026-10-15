@@ -1,0 +1,87 @@
+name: studio-platform-fixtures
+
+# The macOS and Windows legs of CI. They exercise the updater, the local
+# runtime, the dev launcher and the Codex rehearsal client.
+#
+# Billing shapes this file. GitHub rounds every job up to a whole minute, a
+# macOS minute costs about ten Linux minutes and a Windows minute about 1.7.
+# The macOS work here takes under 30 seconds, so:
+#   - there is one job per operating system, not one per test group;
+#   - the macOS leg runs after merge (push to main) and on manual dispatch, not
+#     on pull requests. A break that only shows on macOS is therefore found on
+#     main. Run this workflow by hand on a branch when a change is likely to
+#     behave differently there (launcher, updater, shell scripts).
+#   - the Windows leg also runs on pull requests that touch what the tests read.
+#
+# Add a path here when one of the steps below starts reading a new place.
+
+on:
+  pull_request:
+    paths:
+      - 'extensions/hypeproof-chat/**'
+      - 'scripts/**'
+      - 'test/service-integration/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/platform-fixtures.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'extensions/hypeproof-chat/**'
+      - 'scripts/**'
+      - 'test/service-integration/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/platform-fixtures.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces the run in progress. Runs on
+# main are never cancelled.
+concurrency:
+  group: platform-fixtures-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  platform-fixtures:
+    name: platform / ${{ matrix.os }} fixtures
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["windows-latest"]' || '["macos-latest", "windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Needs no install, so it runs first and reports even when an install
+      # below fails.
+      - name: Execute installer failure controls (no real app installation)
+        shell: bash
+        working-directory: extensions/hypeproof-chat
+        run: |
+          node --experimental-strip-types test/update-installer.smoke.mjs
+          node --experimental-strip-types test/update-windows-wrapper.smoke.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install pinned public Service testkit
+        run: npm ci
+      - name: Install extension dependencies without native model binaries
+        working-directory: extensions/hypeproof-chat
+        run: npm ci
+      - name: Verify isolated launcher and subscription lifecycle controls
+        shell: bash
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python scripts/test-studio-dev.py
+          node --experimental-strip-types extensions/hypeproof-chat/test/local-runtime.smoke.mjs
+          node --experimental-strip-types --test test/service-integration/codex-rehearsal.test.mjs

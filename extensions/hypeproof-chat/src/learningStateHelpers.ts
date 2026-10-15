@@ -22,9 +22,9 @@ import {
   type PreviousVerification,
   type SourceKind,
   type SourceState,
-} from "../../../worker/src/lib/measurement-core/learning-events.ts";
-import type { ObservationEvent } from "../../../worker/src/lib/measurement-core/legacy-observation.ts";
-import type { CurriculumPhase } from "../../../worker/src/lib/measurement-core/local-record.ts";
+} from "@hypeproof/measurement-core/learning-events";
+import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
+import type { CurriculumPhase } from "@hypeproof/measurement-core/local-record";
 
 /** One row of the session design's `learning.completion[]`. `label` goes to the screen verbatim. */
 export interface CompletionItem {
@@ -76,6 +76,13 @@ export interface LearningStatePayload {
    * Absent when there is nothing to say. Sent once with the state it explains.
    */
   notice?: string;
+  /**
+   * SX-02 — region A's "지난번 이어서": the step the task record holds, sent only while that
+   * record still stands where an earlier session of the app left it, the task is being worked
+   * on, and the student has not acted on it in this session (`FlowSession.resumeFor` in
+   * taskFlowHelpers.ts decides). Absent otherwise, and on every seat without the task flow.
+   */
+  resume?: { step: string };
 }
 
 /**
@@ -188,6 +195,7 @@ export function learningState(input: {
   phase?: LearningStatePayload["phase"];
   currentStep?: string | null;
   notice?: string | null;
+  resume?: { step: string } | null;
 }): LearningStatePayload {
   const completion = input.completion ?? [];
   const mine = input.events.filter((e) => e.task === input.task);
@@ -205,6 +213,7 @@ export function learningState(input: {
       missing: verdict.complete.missing,
     },
     ...(input.notice ? { notice: input.notice } : {}),
+    ...(input.resume ? { resume: { step: input.resume.step } } : {}),
     declared: completion.length > 0,
     verification: {
       state: verdict.verification.state,

@@ -1,6 +1,6 @@
 # A lesson narrows the models it allows; the app switches the next request
 
-Status: Accepted for the bounded implementation #792 / #795; production activation and full E7 acceptance remain separate. The implementation decision below supersedes the original proposal sections.
+Status: Accepted for the bounded implementation #792 / #795; production activation and full E7 acceptance remain separate. The implementation decision below supersedes the original proposal sections. Amended 2026-10-14 by the owner's alias remap to the Claude 5.5 family, recorded in [Alias remap — 2026-10-14](#alias-remap--2026-10-14); the Service implements it in hypeproof/hypeproof-service#73 and #74, merged as `399109c`, and the Studio PR that carries this amendment moves the deploy pin there.
 
 Original audit (first unit of E7 [#755](https://github.com/jayleekr/hypeproof-studio/issues/755), epic [#746](https://github.com/jayleekr/hypeproof-studio/issues/746)).
 Design input (docs branch PR [#753](https://github.com/jayleekr/hypeproof-studio/pull/753), pinned at `293d4b5`):
@@ -37,10 +37,17 @@ model badges are not required. The existing usage records verify actual executio
   Only the adult `studio-native-trial` compiled profile opts into the expanded set.
   Other cohorts retain their default/fallback pair. The three existing alias pins stay unchanged;
   #690's all-cohort default migration and long-output/token-limit checks remain separate.
+  *(2026-10-14: the pins and the all-cohort migration are superseded by
+  [Alias remap — 2026-10-14](#alias-remap--2026-10-14), which also adds Sonnet 5.5, Opus 5.5
+  and Haiku 5.5 and lists the profiles that now carry an expanded or explicit set. The
+  long-output/token-limit checks are still open.)*
 - At freeze the Service adds `binding`: revision `hps-model-selection/1`, effective provider,
   runtime, and deduplicated alias/id/label choices. Drafts cannot submit their own binding.
   Every lesson read compares the frozen binding with the current pins/runtime/provider.
   Drift returns `lesson_unavailable`; a new mapping requires a new frozen version.
+  *(2026-10-14: a binding that matches an alias map recorded in `SUPERSEDED_ALIAS_MAPS` is
+  not drift; the lesson keeps serving the models it was frozen with. A new mapping still
+  requires a new frozen version.)*
 - The shared chat gate narrows the profile. **The SDK clamp is changed for explicit
   frozen policies**: all requests, including auxiliary calls, obey the same allowed set.
   There is no guessed auxiliary-purpose exemption. A fixed Sonnet lesson consequently
@@ -64,6 +71,249 @@ new auth/store, full capability matrix or enforced rehearsal workflow. Those par
 AE-25–34 remain separate work. The original audit and counterexample below describe
 pre-#792 behavior and remain useful legacy controls.
 
+## Alias remap — 2026-10-14
+
+Decided by the owner on 2026-10-14. This is the all-cohort model migration that #690 and the
+bullet above left to a separate decision; #690's long-output and token-limit half stays open.
+
+Where it stands: merged in `hypeproof/hypeproof-service` as #73 (`bb0d1ef`: catalogue, 5.5
+request rules, alias remap) and #74 (`399109c`: homepage harness and the seminar guard). Line
+numbers in this section are at Service main `399109c` and relative to `worker/src/` unless a path
+says otherwise. Before this Studio PR the deploy workflow pinned `43dd009`, whose map is Haiku 4.5
+/ Sonnet 4.6 / Opus 4.7 (`profiles/types.ts:491-495` at that commit); this PR moves the pin to
+`399109c` (`.github/workflows/deploy-worker.yml:93`). Verified on macOS through the 0% versions
+rc1 `e4483c9b` and rc2 `987383f4`, not yet on Windows (the evidence is listed below).
+
+### Decision
+
+- Upgrade to Claude Opus 5.5, Sonnet 5.5 and Haiku 5.5 and remap the provider-neutral aliases
+  for **every alias-based cohort** before the 2026-10-17 seminar.
+- **The kids classes move only after a validation run passes.** The two kids profiles name only
+  aliases (`profiles/kids-workshop-s1.ts:18-21`, `profiles/kids-2026-grade-5-6-s1.ts:27-30`),
+  so the code has no kids-only pin and they move in the same commit as every other alias cohort.
+  The gate is therefore the promotion of the Service release. The validation run was a closed
+  4-minute kids session on the 0% version: 5/5 benign biology and medicine questions were answered
+  with no refusal, the proxy route streamed with keep-alives, and the engine built a page
+  (hypeproof/hypeproof-service#73).
+- **The paid pass keeps Opus 5.5 selectable.** `studio-native-trial` writes out its model block
+  instead of spreading the homepage profile's (`profiles/studio-native-trial.ts:19-27`), so a
+  change to homepage practice cannot move the pass.
+- **Lessons frozen under the old map keep their frozen models until an instructor freezes a new
+  version** (AE-33). The mechanism and the procedure follow.
+- **OpenAI side, cheaper first:** fast and default `gpt-6-luna`, strong `gpt-6.1-sol`; GPT
+  practice defaults to `gpt-6-luna` (`profiles/studio-gpt-practice.ts:26-27`); `gpt-6-astra` is
+  no alias target and stays out of the comparison menu (`profiles/studio-model-practice.ts:11-16`).
+- **Measurement paths do not follow the coach map.** The observation assessment and the classroom
+  report evaluator resolve aliases through the pre-remap map, so a measurement keeps its model
+  under unchanged rubric and evaluator revisions (see "What moves and what stays").
+- **No per-request model router in the installed app v0.1.56. Any future router needs a new ADR
+  first.** That ADR has to settle at least: a trusted request-purpose marker (Decision §2 below
+  records that the route cannot tell an auxiliary request from a participant one); the actual
+  model of every turn and the reason for any automatic choice (AE-27); Auto and failure fallback
+  as separate policies (AE-30); one ledger for every branch (AE-32); switching only at turn
+  boundaries (AE-29); no silent override of an explicit choice (REQ-M41/M42); no re-routing of
+  frozen lessons (AE-33); and enforcement inside the allowed intersection (AE-25).
+- **The goal this serves:** keep cutting HypeProof's model spend per completed step, for classes
+  and for post-class pass use, at a quality floor. The floor is not defined or measured yet; no
+  HypeProof evaluation compares model tiers on Korean homepage tasks.
+
+This supersedes, in "Implementation decision — #792" above, "The three existing alias pins stay
+unchanged" and the deferral of #690's all-cohort default migration.
+
+### Alias table
+
+| Provider | fast | default | strong | Replaced map, kept in `SUPERSEDED_ALIAS_MAPS` |
+|---|---|---|---|---|
+| anthropic | `claude-haiku-5-5` | `claude-sonnet-5-5` | `claude-opus-5-5` | `claude-haiku-4-5` / `claude-sonnet-4-6` / `claude-opus-4-7` (`ANTHROPIC_ALIASES_UNTIL_2026_10_14`) |
+| openai | `gpt-6-luna` | `gpt-6-luna` | `gpt-6.1-sol` | `gpt-5.6-luna` for all three |
+| gemini | `gemini-2.5-flash` | `gemini-3.5-flash` | `gemini-3.5-flash` | unchanged |
+| glm | `glm-5.2` | `glm-5.2` | `glm-5.2` | unchanged |
+
+Sources: `profiles/types.ts:550-554` (anthropic), `:630-634` (gemini), `:663-667` (openai),
+`:674-678` (glm), `:691-699` (the superseded maps). The catalogue keeps every previous id
+(`:561-589`), because explicit pins, frozen lessons and the measurement paths still call them.
+The OpenAI default and fast aliases now share one id, so the rule in Decision §3 below (the app
+compares ids, never aliases) still decides what counts as a model change.
+
+### What each profile serves after the remap
+
+| Profile | Minors | Runtime | Default | SDK auxiliary (`claude-*haiku*`) | Served choices |
+|---|---|---|---|---|---|
+| `kids-2026-grade-3-4-s1`, `kids-2026-grade-5-6-s1` | yes | agent-sdk | Sonnet 5.5 | Haiku 5.5 | Sonnet 5.5, Haiku 5.5 |
+| `dental-copyclone-2026-s1` (seminar), `canary-sdk-contract` | no | agent-sdk | Sonnet 5.5 | Haiku 5.5 | Sonnet 5.5, Haiku 5.5 |
+| `dental-teaser-2026-s1` | no | proxy | Sonnet 5.5 | — | Sonnet 5.5, Haiku 5.5 |
+| `homepage-practice-s1` | no | agent-sdk | Sonnet 5.5 (explicit id), course effort medium | Haiku 5.5 | Sonnet 5.5, Opus 5.5, Haiku 5.5, each at low/medium/high |
+| `studio-native-trial` (trial and paid pass), `synthetic-release-acceptance` | no | agent-sdk | Sonnet 5.5, course effort medium | Haiku 5.5 | nine: Sonnet 5.5, Haiku 5.5, Sonnet 5, Sonnet 4.5, Opus 5.5, Opus 5, Opus 4.8, Opus 4.6, Opus 4.5. Sonnet 4.6, Haiku 4.5 and Opus 4.7 were reachable only through aliases and fold away |
+| `studio-gpt-practice` | no | proxy (OpenAI) | `gpt-6-luna` | — | GPT-6 Luna, GPT-6.1 Sol, GPT-5.6 Luna/Terra/Sol |
+| `studio-model-practice` | no | proxy (cross-provider) | `glm-5.2` | — | the whole catalogue except `gpt-6-astra`: 21 |
+
+Source: the served-model lock `worker/test/model-catalog.test.mjs:126-140`, which a catalogue or
+alias change has to update in the same commit. Lessons without a `model` block follow their
+profile and move; lessons with one keep their frozen models (next subsection).
+
+The same release changed two cohorts' cached prefixes (#74). Homepage practice runs the homepage
+harness: its own preview contract, the `homepage-craft` and `homepage-sections` skills in place
+of `design-craft` and `workshop-setup`, web search off, course effort medium
+(`profiles/homepage-practice-s1.ts:14-25`, `:51`, `:62`, `:67`). The pass gets the same two skills
+plus `homepage-update` (`profiles/studio-native-trial.ts:43-48`). The seminar (director) and the
+canary that mirrors it get a guard against the v0.1.56 `index.html` overwrite paths: no html or js
+code fences in chat, one `index.html` with sections, the shared shell ban replaced by an honest
+shell rule, and `workshop-setup` served instruction-only
+(`prompts/dental-copyclone-2026-s1.md:69-76`, `lib/translate.ts:31-69`,
+`profiles/dental-copyclone-2026-s1.ts:67`, `:150`; REQ-D5, REQ-M4). Every other
+profile's cached prefix is byte-identical, which `worker/test/prefix-pins.test.mjs` pins.
+
+### How a frozen lesson keeps its models
+
+- At freeze the Service computes the binding from the pins of that moment
+  (`routes/authoring.ts:194`) and stores alias, id and label per choice.
+- Every read compares the stored binding with a fresh one (`lib/lesson-delivery.ts:23`). Before
+  this change the comparison was plain equality with the current pins, so any remap closed every
+  model-configured frozen lesson with `409 lesson_unavailable`.
+- `frozenLessonPins` (`lib/lesson-model-policy.ts:73-84`) now accepts a binding that matches
+  either the current pins or one map recorded in `SUPERSEDED_ALIAS_MAPS`, and returns that map;
+  `lessonModelIsCurrent` is true exactly when it returns something (`:86-88`).
+- The chat gate applies the lesson with those pins (`lib/chat-gate.ts:332` → `applyLessonModel`,
+  `lib/lesson-model-policy.ts:92-97`, which sets `model.pins`), and the coach resolvers honor
+  them: `/v1/messages` (`routes/messages.ts:168-180`), `/v1/chat/completions` (`lib/translate.ts:627`,
+  `:737`) and the served menu and labels (`lib/lesson-model-policy.ts:99-105`). A lesson-locked
+  profile has no fast exception (`routes/messages.ts:170`, `:177`), so its auxiliary calls stay
+  inside its frozen set as well.
+- Rules that come with the record: an alias remap must append the map it replaces
+  (`worker/DEPLOY.md:130-133`); a change to an alias map that is not recorded still closes the
+  lessons frozen under the old values; only maps whose ids are still catalogued may be listed
+  (`profiles/types.ts:680-689`). The record is an id map, not a promise that the ids keep
+  working: when a frozen id retires upstream, that lesson's requests fail at the provider. They
+  are not substituted (AE-33), so the lesson has to be re-frozen before the retirement date.
+- Evidence: `worker/test/model-catalog.test.mjs` block 10 (a lesson frozen under the old map is
+  served on Sonnet 4.6 under its old labels, returns 409 without the record, and a new version
+  binds 5.5) and block 11 (the same for OpenAI). Both use a synthetic upstream. Production D1
+  holds two frozen versions, both in `dental-pilot-2026-a`, and neither carries a `model` or
+  `features` block (hypeproof/hypeproof-service#73), so no live lesson changes and the mechanism
+  has not yet held a real one.
+
+### Re-freezing a lesson onto the 5.5 pins
+
+1. List the model-configured frozen versions (read-only):
+   `SELECT cohort_id, course_id, version FROM authoring_versions WHERE json_extract(module_json, '$.content.model') IS NOT NULL;`
+   On 2026-10-14 production had none (#73). Lessons without a `model` block need no re-freeze.
+2. The instructor opens the frozen version for reuse: `GET /cohorts/:cohort/authoring/:course/versions/:version/readiness`
+   returns its content with the Service-produced bindings stripped (`routes/authoring.ts:264-278`).
+   This works only while the version is still readable, which is what the superseded record keeps
+   true. The instructor saves that content as the draft (`PUT …/authoring/:course`,
+   `routes/authoring.ts:111`) and freezes it as a new version (`PUT …/versions/:version`,
+   `routes/authoring.ts:162-213`); the Service computes the new binding from the current pins (`:194`).
+3. Rehearse the new version before students use it (`POST …/versions/:version/rehearsals`,
+   `routes/authoring.ts:302`). A teacher preview is not a student run (AE-26).
+4. Deliver it. A participation token names one version (`lib/tokens.ts:22`), so issue the class's
+   seats on the new version (`POST …/versions/:version/participants`, `routes/authoring.ts:75`),
+   or move selected participants with targeted settings where that path is enabled
+   ([classroom-admin U3](../requirements/classroom-admin.md#remote-management-u3-20260921)).
+5. Keep the old version. It keeps serving its frozen models while its map stays recorded and its
+   ids stay catalogued and unretired, and it is the rollback target.
+
+### What moves and what stays
+
+- **The measurement paths stay on the pre-remap models.** `MEASUREMENT_ALIAS_MAP` is the recorded
+  `ANTHROPIC_ALIASES_UNTIL_2026_10_14` (`lib/measurement-models.ts:1-20`, `profiles/types.ts:690-693`).
+  The observation assessment (`routes/observations.ts:123`) and the classroom report evaluator's
+  profile model (`routes/classroom-reports.ts:59`) resolve the profile default through it, so an
+  alias measures on Sonnet 4.6 as before and an explicit id is used as written. Neither reads the
+  coach's lesson pins any more. `EVALUATOR_REVISION` and the rubric versions are unchanged, as the
+  Service's `AGENTS.md:10` ("preserve … rubric/model versions") requires; moving a measurement to another
+  model is a new revision, decided on its own. A `max_tokens` stop is now a failure on both paths
+  (`lib/native-assessment.ts:229-232`, `lib/classroom-evaluator.ts:123-124`). `claude-sonnet-4-5`
+  (`lib/classroom-evaluator.ts:23`) is used only when a profile resolves no model.
+- **SDK auxiliary calls move to Haiku 5.5, with thinking off.** A haiku-class id that the cohort
+  does not list is clamped onto the fast pin and flagged auxiliary (`routes/messages.ts:168-180`); a
+  request that names one of the cohort's own ids is never auxiliary. Auxiliary calls are sent with
+  up-front thinking off at effort `low`; a minor cohort keeps `MINOR_EFFORT`, and a course effort
+  policy (the pass and homepage practice at `medium`) still sets the effort, so its receipt stays
+  true (`routes/messages.ts:580-596`). An auxiliary call that ends in an assistant prefill, which
+  Haiku 5.5 rejects (`lib/model-caps.ts:77-82`, `:200`), is served on `claude-haiku-4-5` without
+  thinking (`routes/messages.ts:182-187`, `:471-486`); main coach calls are never moved. Whether the
+  v0.1.56 engine (Agent SDK 0.3.207, no `ANTHROPIC_DEFAULT_HAIKU_MODEL`) sends its background calls
+  as a haiku id or as the main model is unverified. Production usage from 2026-08-10 to 2026-09-09
+  has no Haiku rows ([budget readiness](../research/budget-readiness-2026-09-08/README.md)), which
+  does not tell "no auxiliary calls" from "auxiliary calls on the main model".
+- **Health probes follow the pins.** The deep health check and the heartbeat probe each current
+  `MODEL_MAP` target with up-front thinking off (`cron/health.ts:148-152`, `cron/heartbeat.ts:108-113`,
+  `probeRequest` in `lib/model-caps.ts:494-496`); a failing pin is named in the error. The
+  heartbeat's OpenAI branch still probes `gpt-4o-mini` (`cron/heartbeat.ts:127`).
+
+### Request shapes the 5.5 models reject, and what the gateway does
+
+The three capability rows are docs-derived, each with a dated `verifiedBy` (`lib/model-caps.ts:155-205`).
+The fields that encode the model facts and the gateway policies are documented at `:41-91`.
+
+- `thinking: {type: "disabled"}`: dropped on Opus 5.5, which cannot turn thinking off; rewritten to
+  `between_tools` with effort capped at high on Sonnet 5.5; kept on Haiku 5.5 at effort ≤ high
+  (`lib/model-caps.ts:365-382`).
+- Forced `tool_choice` (`any`, `tool`) becomes `auto` on Opus 5.5 and Sonnet 5.5 (`:384-395`). The
+  model is then no longer guaranteed to call the tool the engine forced.
+- Non-default sampling is stripped, and the strip also runs on `/v1/chat/completions` for every
+  cohort (`routes/chat.ts:929-935`). This reverses "Wiring it there … is out" under "Not in this
+  slice" below: every 5.5 model rejects a non-default `temperature`, and `translate()` forwards the
+  client's value.
+- Effort: a cohort with no course effort policy is capped at `high` on the 5.5 pins
+  (`unpolicedEffortCeiling`, `lib/model-caps.ts:57-65`, `:407-420`; `lib/model-effort.ts:36-43`).
+  Claude Code 2.1.207 sends `xhigh`, which Sonnet 4.6 lowered to `high`, so those cohorts keep the
+  effort they had. No cohort reaches `xhigh` or `max` on a 5.5 pin; lifting that is an owner decision.
+- `/v1/chat/completions` turns up-front thinking off on the 5.5 pins, because its clients render
+  text only (`routes/chat.ts:922-928`, `lib/model-caps.ts:430-459`): Sonnet `between_tools`, Haiku
+  `disabled`, Opus at effort `low`; a minor cohort runs at `MINOR_EFFORT` and a course policy still
+  wins. The stream sends `: keep-alive` comments while upstream is silent (`lib/sse.ts:53-75`), and a
+  `stop_reason: "refusal"` is answered with a Korean notice instead of an empty reply
+  (`lib/sse.ts:154`, `:523-525`; `routes/chat.ts:1089-1093`). `/v1/messages` passes a refusal
+  through and logs it (`routes/messages.ts:703-708`).
+- Thinking display: on Opus 5.5 and Sonnet 5.5 the progress updates between tool calls arrive in
+  thinking blocks that are empty under the `display: "omitted"` the engine sends. For adult
+  cohorts the gateway asks for `"summarized"` (`lib/model-caps.ts:476-486`,
+  `routes/messages.ts:621-630`), which also returns summaries of the reasoning. Minor cohorts keep
+  `"omitted"` (`isMinorCohort`, the fail-safe check moderation uses), so a child's screen can stay
+  quiet during a long turn.
+- Prefix-bound thinking: `/v1/messages` and `count_tokens` add
+  `thinking.block_binding.prefix_mismatch_behavior: "drop_block"` and the beta
+  `thinking-binding-controls-2026-08-01` on adaptive requests (`lib/model-caps.ts:498`, `:514-528`;
+  `routes/messages.ts:632-635`, `:663`, `:956`, `:968`), because the gateway's own `system`
+  replacement changes the prefix between prompts (REQ-M10). Never over a value the client set.
+- Every change is logged as a `#406` line (`dropped`, `lowered`, `auxiliary`, `summarized`). There is
+  still no per-turn surface for them (AE-28's second half).
+
+Evidence, from the Service PR records (hypeproof/hypeproof-service#73 and #74; that session's
+attestation, not rerun for this document), with normal traffic left on the previous version:
+
+- 16/16 API probes returned 200 on 5.5, including the four shapes 5.5 rejects
+  (`thinking.disabled`, forced `tool_choice`, `budget_tokens`, `temperature`), all normalized.
+- The installed engine, Claude Code 2.1.207, completed file-writing runs on Sonnet, Opus and Haiku
+  5.5, and the usage rows show the 5.5 ids.
+- A pass seat wrote an 8,192-token page in 47 s (149 tok/s, against the 65 tok/s the 240 s deadline
+  was sized from). Homepage practice built a complete flower-shop page in 29 s. The seminar mirror
+  answered a request for example code with no fence and built a 20,748-character single page,
+  complete at the 16,384 cap.
+- For the same Korean request, `count_tokens` read 11,532 on Sonnet 4.6 and 11,977 on Sonnet 5.5
+  (+4%).
+- The kids validation run is described under Decision.
+
+Not verified: Windows, the proxy route on Opus 5.5 and Haiku 5.5 in the app, how v0.1.56 shows a
+refusal on `/v1/messages`, and whether blocks were actually dropped. The AE-28 matrix keeps these
+cells open ([AE-28 matrix](../requirements/learning-agent-experience.md#claude-55-능력-행렬-ae-28-2026-10-14)).
+
+### Rollback floor
+
+- The Studio deploy workflow deploys the Service from the ref pinned at
+  `.github/workflows/deploy-worker.yml:93`. This PR moves it from `43dd009` to `399109c`; rolling
+  back is restoring `43dd009`.
+- The floor (`worker/DEPLOY.md:124-133`): once any model-configured lesson is frozen after the
+  remap, an older Service computes the 4.x ids, the binding no longer matches, and that lesson
+  returns `409 lesson_unavailable` (`lib/lesson-delivery.ts:23`). A lesson that names a 5.5 or
+  GPT-6 id fails the older catalogue the same way. Lessons frozen before the remap survive a
+  rollback, and on 2026-10-14 production had no model-configured lesson at all.
+- So a rollback after promotion is the ref revert plus moving any class frozen after the remap
+  back to its pre-remap version, which step 5 above keeps available.
+- Price approval is a precondition only for metered seats, and #73 records that production meters
+  none today ([AB price revisions](../requirements/access-budget-settlement.md#claude-55-가격-revision-2026-10-14)).
+
 ## What exists today (audited, not assumed)
 
 **Aliases are the entire model vocabulary.** A profile can say `hypeproof-fast`,
@@ -77,6 +327,10 @@ with its own alias→id map.
 | gemini | gemini-2.5-flash | gemini-3.5-flash | gemini-3.5-flash |
 | openai | gpt-4o-mini | gpt-4o | gpt-4o |
 | glm | glm-5.2 | glm-5.2 | glm-5.2 |
+
+*(Audit snapshot at `feb1310`. The OpenAI row was already stale on 2026-09-10, when all three
+OpenAI aliases moved to `gpt-5.6-luna`; the current table is in
+[Alias remap — 2026-10-14](#alias-remap--2026-10-14).)*
 
 Three of the four providers collapse two or three aliases onto the same upstream id.
 That single fact decides one design rule below.
@@ -264,11 +518,17 @@ shape rather than by a rule someone must remember.
   changed pin invalidates the rehearsal for versions bound to it rather than silently
   applying, and a new binding requires a new version. Designing that is the next E7
   unit, not this one.
+  *(Since #792 the binding records the resolved ids and drift closes the lesson. Since the
+  2026-10-14 remap, a map recorded in `SUPERSEDED_ALIAS_MAPS` keeps such a lesson on its
+  frozen models instead of closing it, and only a new version binds the new pins — see
+  [Alias remap — 2026-10-14](#alias-remap--2026-10-14).)*
 - **A per-turn "which parameters were clamped" surface (AE-28's second half).** The
   parameter guard already returns exactly that list and logs it, but surfacing it needs
   a response field the Anthropic-shaped stream does not have. Also worth recording:
   that guard runs on `/v1/messages` only, so `/v1/chat/completions` is **not**
   capability-protected today. Wiring it there changes runtime behavior and is out.
+  *(2026-10-14: the remap made that wiring necessary, and Service main `399109c` runs the
+  guard on `/v1/chat/completions` for every cohort. The per-turn surface is still missing.)*
 - **Per-step or per-student model mapping.** A session-design step is key-exact, so a
   per-step field is a step-schema change rather than an optional add; and a per-student
   model would be the first runtime capability ever carried on a participation token.
@@ -288,6 +548,9 @@ shape rather than by a rule someone must remember.
   token budgets, and the native-observation assessor resolves the profile's default
   alias against the Anthropic map and calls Anthropic regardless of the profile's
   provider. They are real spend on real ids that no lesson policy governs.
+  *(2026-10-14: the assessor and the classroom report evaluator, which is not listed here,
+  stay on the pre-remap models through `MEASUREMENT_ALIAS_MAP`, and the cron health probes
+  now follow the current pins — see [Alias remap — 2026-10-14](#alias-remap--2026-10-14).)*
 
 ## The load-bearing claim, executed rather than reasoned
 

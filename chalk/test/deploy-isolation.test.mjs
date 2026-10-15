@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { bootApp, createMockEnv, makeCtx } from "../../worker/test/harness/index.mjs";
+import { bootApp, createMockEnv, makeCtx } from "@hypeproof/service-testkit/test/harness/index.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const read = (p) => readFileSync(root + p, "utf8");
@@ -27,9 +27,9 @@ const tomlValue = (toml, key) => {
   return m ? m[1] : null;
 };
 
-// --- 1a. two Workers, one KV, one D1 ------------------------------------------------
+// --- 1a. separate Workers; only Service owns participant stores ------------------------------------------------
 const chalkToml = read("chalk/wrangler.toml");
-const workerToml = read("worker/wrangler.toml");
+const workerToml = readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/wrangler.toml")), "utf8");
 assert.equal(tomlValue(chalkToml, "name"), "hypeproof-chalk");
 assert.equal(tomlValue(workerToml, "name"), "hypeproof-studio-api");
 assert.notEqual(tomlValue(chalkToml, "name"), tomlValue(workerToml, "name"), "different Worker names → different artifacts");
@@ -38,12 +38,12 @@ assert.equal(tomlValue(chalkToml, "main"), "src/index.ts", "chalk deploys its ow
 assert.ok(!/^\s*\[triggers\]/m.test(chalkToml), "chalk has no cron — the scheduler stays with the Service");
 assert.ok(/^\s*\[triggers\]/m.test(workerToml), "sanity: the same regex does find the Service's cron block");
 assert.ok(!/HPS_CHALK_VERSION\s*=/.test(chalkToml), "HPS_CHALK_VERSION is injected per-deploy, never static");
-// Same bindings by id — acceptance "binds the same D1/KV".
-const kvId = (t) => /binding = "HPS_KV"\s*\nid = "([0-9a-f]+)"/.exec(t)?.[1];
-const d1Id = (t) => /database_id = "([0-9a-f-]+)"/.exec(t)?.[1];
-assert.ok(kvId(chalkToml) && kvId(chalkToml) === kvId(workerToml), "HPS_KV is the same namespace on both");
-assert.ok(d1Id(chalkToml) && d1Id(chalkToml) === d1Id(workerToml), "HPS_DB is the same database on both");
-console.log("✓ deploy-isolation: separate Worker names, shared KV/D1 ids, no cron on chalk");
+// The client has no participant storage bindings or signing secret.
+for (const binding of ["kv_namespaces", "d1_databases", "r2_buckets"]) {
+  assert.doesNotMatch(chalkToml, new RegExp(`\\[\\[${binding}\\]\\]`), binding + " belongs only to Service");
+}
+assert.doesNotMatch(chalkToml, /HPS_SIGNING_SECRET/);
+console.log("✓ deploy-isolation: separate Worker names, no participant storage or cron on Chalk");
 
 // --- 1b. the c* train touches chalk/ only --------------------------------------------
 // Assertions run on the workflow with `#` comment lines removed — the

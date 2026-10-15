@@ -13,7 +13,7 @@
 import type {
   EvidenceType,
   SourceKind,
-} from "../../../../worker/src/lib/measurement-core/learning-events.ts";
+} from "@hypeproof/measurement-core/learning-events";
 // The one table of kind names. A row whose kind does not require `student_text`
 // has nothing of the learner's to print, and a second copy here is how the two
 // wordings drift apart.

@@ -1,46 +1,53 @@
-// Drift lock — instructor token verification is ONE implementation on both
-// Cloudflare Workers (dag.yaml task F negative control).
-//
-// The Service (worker/) and Chalk (chalk/) deploy on different trains. If
-// either ever grew its own copy of issuer-token verification, the two would
-// drift and there would be two trust boundaries around minors' data. This
-// test boots BOTH real apps in one process, shares ONE KV store between them,
-// and pushes the same token fixtures through:
-//
-//   Service : POST /admin/cohorts/:id/roster/append  (authorizeIssuerForCohort)
-//   Chalk   : GET  /admin/cohorts/:id/state          (authorizeIssuerForCohort)
-//
-// For every fixture the HTTP status must match, and for every rejection the
-// error prose must match byte-for-byte. It also asserts identity: Chalk's
-// `verify` / `authorizeIssuerForCohort` / `isIssuerAllowedEndpoint` ARE the
-// Service's function objects (re-export), not look-alikes.
-//
-// Deliberate, asserted asymmetry: admin Basic is an auth path on the Service
-// and NOT on Chalk (Chalk holds no admin password). That is the boundary the
-// split draws, so it is pinned here rather than hidden.
-//
-// Run: node --experimental-strip-types chalk/test/instructor-auth-drift.test.mjs
+// The same installed Service authorizes direct instructor writes and HTTP reads
+// through Chalk. Expired, tampered, revoked, student and out-of-scope tokens keep
+// their original status and error prose. Chalk has no token verifier, signing key
+// or participant store; only the public routing predicate is shared code.
+// Administrator Basic remains a direct Service capability and is refused here.
 
 import assert from "node:assert/strict";
-import { bootApp, createMockEnv, makeCtx, TEST_SECRET } from "../../worker/test/harness/index.mjs";
+import { readFileSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { bootApp, createMockEnv, makeCtx, TEST_SECRET } from "@hypeproof/service-testkit/test/harness/index.mjs";
 
 const service = await bootApp();                                   // worker/src/index.ts
-const { default: chalk } = await import("../src/index.ts");        // chalk/src/index.ts
-const tokens = await import("../../worker/src/lib/tokens.ts");
-const auth = await import("../../worker/src/lib/instructor-auth.ts");
+const { default: localChalk } = await import("../src/index.ts");
+const { bridgeStateToService } = await import("./harness/service-state.mjs");
+const chalk = bridgeStateToService(localChalk);        // chalk/src/index.ts
+const tokens = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+const auth = await import("@hypeproof/service-testkit/src/lib/instructor-auth.ts");
 const shared = await import("../src/shared.ts");
 
 // --- identity: re-export, not copy ------------------------------------------
-assert.strictEqual(shared.verify, tokens.verify, "chalk.verify must BE worker verify (same function object)");
-assert.strictEqual(shared.authorizeIssuerForCohort, auth.authorizeIssuerForCohort, "authorizeIssuerForCohort re-exported, not copied");
-assert.strictEqual(shared.isIssuerAllowedEndpoint, auth.isIssuerAllowedEndpoint, "isIssuerAllowedEndpoint re-exported, not copied");
-assert.strictEqual(shared.TokenError, tokens.TokenError, "TokenError class identity (instanceof must work across both)");
-console.log("✓ drift-lock: Chalk re-exports the Service's verifier — same function objects");
+assert.equal("verify" in shared, false, "Chalk has no verifier: the Service makes the HTTP authorization verdict");
+assert.equal("authorizeIssuerForCohort" in shared, false, "Chalk does not implement issuer authorization");
+// A self-contained private testkit has its own installed contracts instance.
+// Object identity is therefore not a drift control across these package roots:
+// require the exact canonical module bytes and both explicit re-export boundaries.
+const serviceAuthUrl = import.meta.resolve("@hypeproof/service-testkit/src/lib/instructor-auth.ts");
+const candidates = createRequire(serviceAuthUrl).resolve.paths("@hypeproof/service-contracts");
+const packageRoot = candidates.map(path => join(path, "@hypeproof/service-contracts"))
+  .find(path => existsSync(join(path, "package.json")));
+assert.ok(packageRoot, "Service uses an installed canonical contracts package");
+const contractManifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
+const canonical = join(packageRoot, contractManifest.exports["./instructor-endpoints"].import);
+const localCanonical = fileURLToPath(import.meta.resolve("@hypeproof/service-contracts/instructor-endpoints"));
+assert.deepEqual(readFileSync(localCanonical), readFileSync(canonical), "Chalk and Service use identical canonical predicate implementation bytes");
+const reexport = /^export \{ isIssuerAllowedEndpoint \} from ["']@hypeproof\/service-contracts["'];$/m;
+assert.match(readFileSync(new URL("../src/shared.ts", import.meta.url), "utf8"), reexport, "Chalk explicitly re-exports the canonical predicate");
+assert.match(readFileSync(new URL(serviceAuthUrl), "utf8"), reexport, "Service explicitly re-exports the canonical predicate");
+assert.equal(shared.isIssuerAllowedEndpoint.toString(), auth.isIssuerAllowedEndpoint.toString(), "Both module instances expose the same canonical implementation");
+assert.equal("TokenError" in shared, false, "Token verification errors stay in the Service");
+console.log("✓ drift-lock: one public routing predicate; token verifier and cohort authorization remain in the Service");
 
-// --- one KV, two workers ------------------------------------------------------
-const COHORT = "boah-dental-2026-a";
-const PROFILE = "boah-dental-director-copyclone-2026-s1";
-const OTHER_COHORT = "sk-biopharm-2026-a";
+// --- one Service store, two HTTP request paths ------------------------------------------------------
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { serviceProfiles } = await import("../../test/fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COHORT = SP.pilotCohort;
+const PROFILE = SP.copyclone.id;
+const OTHER_COHORT = SP.kidsCohort;
 const ADMIN_PW = "drift-admin-pw";
 
 const serviceEnv = createMockEnv({ withSession: false, withRoster: false, adminPassword: ADMIN_PW });

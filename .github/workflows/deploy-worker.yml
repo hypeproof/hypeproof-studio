@@ -30,10 +30,12 @@ on:
         type: boolean
         default: false
       # jayleekr/hypeprooflab#997: the activity-compatibility check has never
-      # passed since it was added on 2026-09-10 (first run with its key on
-      # 09-23 failed before any request reached the Service). Skipping it is a
-      # recorded, per-dispatch decision; the freeze, schemas and post-deploy
-      # checks still run.
+      # passed since it was added on 2026-09-10. The first run with its key on
+      # 09-23 failed before any model call: the runner had no seeded Agent SDK
+      # binary, so the trial fell back to the proxy and the Service answered
+      # 409 trial_requires_sdk. verify-service-activities.yml now seeds it.
+      # Skipping it is a recorded, per-dispatch decision; the freeze, schemas
+      # and post-deploy checks still run.
       skip_activity_compatibility:
         description: "Skip the public-App compatibility check for this deploy (recorded in the job summary)"
         type: boolean
@@ -65,6 +67,7 @@ jobs:
       ref: ${{ needs.resolve.outputs.sha }}
     secrets:
       HPS_ACCEPTANCE_ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+      HYPEPROOF_READ_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
   deploy:
     needs: [resolve, activity-compatibility]
     if: ${{ always() && needs.resolve.result == 'success' && (inputs.dry_run || inputs.skip_activity_compatibility || needs.activity-compatibility.result == 'success') }}
@@ -73,6 +76,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+      HPS_OWNER_SERVICE_SECRET: ${{ secrets.HPS_OWNER_SERVICE_SECRET }}
       PROD: https://api.hypeproof-ai.xyz
     steps:
       - uses: actions/checkout@v4
@@ -83,23 +87,38 @@ jobs:
           # (depth-1, no-tags) checkout would hide.
           fetch-depth: 0
 
+      - name: Checkout pinned Service source (deployment ownership unchanged)
+        uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: 40caf3921e97d7b02df895b877ba408f40835121
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: .service-source/worker/package-lock.json
 
       - name: Install worker dependencies
-        working-directory: worker
-        run: npm ci
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
 
       - name: Worker smoke tests
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npm test
 
       - name: Worker typecheck
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npm run typecheck
+
+      - name: Owner console smoke controls
+        run: node scripts/test-owner-console.mjs
+
+      - name: Require Owner SSO read credential before deployment
+        if: ${{ !inputs.dry_run }}
+        run: node -e "if ((process.env.HPS_OWNER_SERVICE_SECRET || '').length < 32) { console.error('Owner SSO read credential is not configured'); process.exit(1); }"
 
       - name: Dry-run stop
         if: inputs.dry_run
@@ -165,34 +184,34 @@ jobs:
 
       - name: Apply additive course authoring schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0002-chalk-authoring.sql
 
       - name: Apply additive classroom sharing schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0003-classroom-sharing.sql
 
       - name: Apply additive native trial schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0004-native-trials.sql
 
       - name: Apply additive model usage admission schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0006-model-usage.sql
 
       - name: Apply additive request settings schema
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0005-request-settings.sql
 
       # Additive preparation only. Applying schema does not publish a plan,
       # approve rates or opt any class into paid admission.
       - name: Apply additive access, cost and budget schemas
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: |
           set -euo pipefail
           for migration in migrations/0007-access-contracts.sql migrations/0008-usage-costs.sql migrations/0009-budget-admission.sql migrations/0010-budget-surfaces.sql; do
@@ -204,7 +223,7 @@ jobs:
       # All seven are CREATE ... IF NOT EXISTS, safe to replay on every deploy.
       - name: Apply additive classroom operation schemas
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: |
           set -euo pipefail
           for migration in migrations/0011-classroom-ops.sql migrations/0012-classroom-ops-commands.sql migrations/0013-classroom-ops-control.sql migrations/0014-classroom-ops-evidence-review.sql migrations/0015-classroom-collection.sql migrations/0016-classroom-report-jobs.sql migrations/0017-classroom-delivery.sql; do
@@ -214,7 +233,7 @@ jobs:
       # Additive tables only. No flag is set by this: HPS_CLASSROOM_OPS stays unset and every class run's ops flags stay off.
       - name: Apply additive remote classroom operations schema (0011–0026; 0026 = authoring rehearsal/confirmation, #1012)
         if: ${{ !inputs.dry_run && inputs.apply_classroom_ops_schema }}
-        working-directory: worker
+        working-directory: .service-source/worker
         run: |
           set -euo pipefail
           for migration in migrations/0011-classroom-ops.sql migrations/0012-classroom-ops-commands.sql migrations/0013-classroom-ops-control.sql migrations/0014-classroom-ops-evidence-review.sql migrations/0015-classroom-collection.sql migrations/0016-classroom-report-jobs.sql migrations/0017-classroom-delivery.sql migrations/0018-classroom-snapshot-binding.sql migrations/0019-classroom-report-attempts.sql migrations/0020-classroom-viewer-check.sql migrations/0021-classroom-erasure-log.sql migrations/0022-classroom-collect-scope.sql migrations/0023-classroom-distribution.sql migrations/0024-classroom-lesson-bindings.sql migrations/0025-classroom-collect-kinds.sql migrations/0026-authoring-rehearsal.sql; do
@@ -222,19 +241,35 @@ jobs:
           done
           node scripts/classroom-ops-d1-check.mjs --database hypeproof-studio --expect-id 2427207c-272e-4ecd-9d16-7a1dcc0fc741 --require all
 
+      # hypeproof-service#41: card purchase of a pass seat. One additive table,
+      # CREATE ... IF NOT EXISTS, safe to replay. It sells nothing by itself: the
+      # purchase routes answer 404 until HPS_PURCHASE and the gateway settings are set.
+      - name: Apply additive purchase order schema
+        if: ${{ !inputs.dry_run }}
+        working-directory: .service-source/worker
+        run: npx wrangler d1 execute hypeproof-studio --remote --file=migrations/0043-purchase-orders.sql
+
       - name: Deploy Worker
         if: ${{ !inputs.dry_run }}
-        working-directory: worker
+        working-directory: .service-source/worker
         env:
           WORKER_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || { echo "::error::CLOUDFLARE_API_TOKEN is required"; exit 1; }
-          npx wrangler deploy --var "HPS_WORKER_VERSION:${WORKER_VERSION}"
+          owner_secrets_file="$(mktemp)"
+          trap 'rm -f "$owner_secrets_file"' EXIT
+          chmod 600 "$owner_secrets_file"
+          OWNER_SECRETS_FILE="$owner_secrets_file" node -e "require('node:fs').writeFileSync(process.env.OWNER_SECRETS_FILE, JSON.stringify({ HPS_OWNER_SERVICE_SECRET: process.env.HPS_OWNER_SERVICE_SECRET }))"
+          npx wrangler deploy --var "HPS_WORKER_VERSION:${WORKER_VERSION}" --secrets-file "$owner_secrets_file"
 
       - name: Verify production
         if: ${{ !inputs.dry_run && inputs.verify_prod }}
         run: bash scripts/verify-prod.sh
+
+      - name: Verify Owner usage console (read-only)
+        if: ${{ !inputs.dry_run && inputs.verify_prod }}
+        run: node scripts/verify-owner-console.mjs
 
       # #406 — verify-prod.sh never makes a real model call (its chat layer
       # needs a TOKEN it has no way to mint), so a deploy could green-light a

@@ -1,7 +1,7 @@
 # G1 REPORT — install-session-trace
 
 **게이트** G1 「설치 후 Studio 첫 응답까지 간다」
-**코호트** `sk-biopharm-2026-a` (SK 바이오팜 워크숍 · 2026-08-22)
+**코호트** `kids-workshop-2026-a` (기업 고객 워크숍 · 2026-08-22)
 **due** 2026-08-09 (경과)
 **실측일** 2026-08-10
 **실측자** Ryan (지웅) · Mac (Apple Silicon, macOS 15, 16GB)
@@ -26,7 +26,7 @@
 
 Green 전환 차단 요인은 둘이다.
 1. **Windows 실기기 검증 (⑤⑥⑦)** — 검증 한 번으로 셋이 함께 닫힌다. 단 PR CI 가 windows-2022 에서 doctor + shell smoke 를 이미 매번 돌리고 있어 일부는 덮여 있다(§6). 별도 담당자 진행.
-2. **항목 ⑧ 의 문언** — agent-sdk 트랙(보아) 기준으로 쓰여 있어 chat-only 아동 트랙에 그대로 적용되지 않는다(§8). 기준을 코호트 계층별로 나눠야 한다.
+2. **항목 ⑧ 의 문언** — agent-sdk 트랙(치과 원장) 기준으로 쓰여 있어 chat-only 아동 트랙에 그대로 적용되지 않는다(§8). 기준을 코호트 계층별로 나눠야 한다.
 
 **부수 쟁점:** `/download` 는 네이티브 PowerShell 설치를 지시하지만 `dependencies.yaml`(`windows_policy: wsl2-recommended`)과 `MEMBER-GUIDE.ko.md:18`("네이티브 PowerShell/cmd 미지원")은 반대를 선언한다. SK 는 초3~6 가족 워크숍이라 대부분 네이티브 Windows 다. Windows 담당자에게 이관.
 
@@ -39,29 +39,29 @@ Green 전환 차단 요인은 둘이다.
 ```
 https://hypeproof-ai.xyz/download          200  0.42s
 https://hypeproof-ai.xyz/install           200  0.30s
-https://hypeproof-ai.xyz/live/sk-biofarm   200  0.32s
+https://hypeproof-ai.xyz/live/kids-workshop   200  0.32s
 ```
 
-`/live/sk-biofarm` 단일 페이지에 설치·토큰·세션이 모두 존재한다 (본문 언급: 설치 16회 / 토큰 11회 / 세션 4회).
+`/live/kids-workshop` 단일 페이지에 설치·토큰·세션이 모두 존재한다 (본문 언급: 설치 16회 / 토큰 11회 / 세션 4회).
 로그인·비밀번호·Sign in 요소 없음 → 학생 직접 접근 가능.
 
 Mac·Windows 원라인 설치가 같은 페이지에 병기되어 있고, OS 경고창 대처법과 오프라인 대체 경로(.dmg/.exe 직접 다운로드)까지 한 화면에 있다.
 
 ## §2. 토큰·세션 3분 기준 (항목 3)
 
-강사 실사용 경로(웹 프록시 `/api/workshop/boa-room/session`)로 측정.
+강사 실사용 경로(웹 프록시 `/api/workshop/workshop-room/session`)로 측정.
 
 ```
 status  0.79s  → session: null
-open    1.76s  → session_id : sk-biopharm-2026-a-2026-08-10
-                 profile_id : sk-biopharm-kids-2026-grade-3-4-s1
+open    1.76s  → session_id : kids-workshop-2026-a-2026-08-10
+                 profile_id : kids-2026-grade-3-4-s1
                  window     : 2026-08-10T04:16:10Z ~ 05:16:10Z
 close   0.50s  → session: null
 ─────────────────────────────────────────
 전체    3.1초    (기준 180초 대비 1.7%)
 ```
 
-**부수 확인:** #542에서 수정된 B반 프로필 id(`sk-biopharm-kids-2026-grade-3-4-s1`)가 실제 세션 개설까지 관통했다. 파일명(`sk-biopharm-kids-s1`)이 아닌 레지스트리 id가 정상 동작함을 확인.
+**부수 확인:** #542에서 수정된 B반 프로필 id(`kids-2026-grade-3-4-s1`)가 실제 세션 개설까지 관통했다. 파일명(`kids-workshop-s1`)이 아닌 레지스트리 id가 정상 동작함을 확인.
 
 테스트 후 잔여물 없음: `session: null · roster_size: 0 · paused: null`.
 
@@ -74,7 +74,7 @@ close   0.50s  → session: null
 | 형식 깨진 토큰 (`.` 없음) | `invalid issuer token: malformed token` | 401 |
 | 서명 불일치 | `invalid issuer token: invalid signature` | 401 |
 | 폐기된 토큰 | `issuer token revoked` | 401 |
-| 스코프 밖 코호트 | `issuer not scoped to cohort=sk-biopharm-2026-a` | 403 |
+| 스코프 밖 코호트 | `issuer not scoped to cohort=kids-workshop-2026-a` | 403 |
 
 토큰 검증이 코호트 검증보다 선행하는 순서는 정상이다. 프록시 계층(`boaMint.ts:mapError`)이 이를 한국어 안내로 변환하는 것도 확인.
 
@@ -206,7 +206,7 @@ Windows 실기기가 없어 착수 불가. 항목의 명제 자체가 "양쪽이
 앱을 실제로 열고 접근성 API 로 UI 를 조작해 학생과 동일한 경로를 밟았다.
 토큰 등록 → 코치 작명 → 채팅 → 파일 생성 요청.
 
-세션: `sk-biopharm-2026-a` / `sk-biopharm-kids-2026-grade-3-4-s1` / user `g1-rehearsal-ryan`
+세션: `kids-workshop-2026-a` / `kids-2026-grade-3-4-s1` / user `g1-rehearsal-ryan`
 
 ### 결론 — 아동 트랙의 산출물은 정상 저장된다
 
@@ -228,7 +228,7 @@ if (this.isLiveServerPreview() && (await this.openInLiveServer())) return true;
 
 ### 항목 ⑧ 은 아동 트랙에 그대로 적용되지 않는다
 
-「자기 workspace path 와 실행 컨텍스트를 정확히 읽음」은 코치가 파일 도구로 워크스페이스를 다루는 **agent-sdk 트랙(보아)** 기준 문언이다.
+「자기 workspace path 와 실행 컨텍스트를 정확히 읽음」은 코치가 파일 도구로 워크스페이스를 다루는 **agent-sdk 트랙(치과 원장)** 기준 문언이다.
 
 - 프록시 코치는 cwd 를 못 읽는다 — 실측에서 "저는 파일 시스템에 직접 접근할 수 없어요" 로 정확히 답했다. 설계대로다
 - 아동 트랙에서 코치가 cwd 를 알 **필요가 없다** — 저장을 확장이 하기 때문이다

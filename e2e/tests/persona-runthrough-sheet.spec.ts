@@ -1,4 +1,4 @@
-// Run-through of ~/Downloads/boa-dental-run-through-sheet.html personas against
+// Run-through of ~/Downloads/dental-run-through-sheet.html personas against
 // the INSTALLED Studio (point HPS_APP_PATH at /Applications/HypeProof
 // Studio.app) + current worker main, through the real chat UI.
 //
@@ -9,7 +9,7 @@
 // transcript.
 //
 // Prerequisite: wrangler dev on 8787 + copyclone session + /tmp/hps-token.txt
-//   (dev-stack equivalent; profile boah-dental-director-copyclone-2026-s1)
+//   (dev-stack equivalent; profile dental-copyclone-2026-s1)
 // Run:
 //   cd e2e && HPS_APP_PATH="/Applications/HypeProof Studio.app" \
 //     npx playwright test persona-runthrough-sheet --reporter=line
@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.resolve(
   __dirname,
-  "../../docs/curriculum-snapshots/boah-dental-runthrough-2026-07-20",
+  "../../docs/curriculum-snapshots/dental-runthrough-2026-07-20",
 );
 
 interface Turn {
@@ -43,7 +43,7 @@ test.beforeAll(() => {
 
 test.afterAll(() => {
   const lines: string[] = [];
-  lines.push("# 보아치과 런스루 시트 페르소나 검증 — transcript\n");
+  lines.push("# 예시치과 런스루 시트 페르소나 검증 — transcript\n");
   lines.push(`자동 캡처: ${new Date().toISOString()} · 앱: ${process.env.HPS_APP_PATH ?? "(build dir)"}\n`);
   for (const t of transcript) {
     lines.push(`\n---\n`);
@@ -175,7 +175,7 @@ test("런스루 시트 페르소나 — 설치본 실채팅 검증", async () =>
 
     // ── 1. 정태식(58·보철): 참고 없음 → URL만 던짐 (시트: ✅ 해소 주장) ──
     {
-      const msg = "https://boaclinic.com/ 이 사이트 보고 우리 병원 홈페이지 만들어줘. 스크린샷은 안 붙였어요. 병원 이름은 정담치과, 보철 전문이에요.";
+      const msg = "https://dental.example/ 이 사이트 보고 우리 병원 홈페이지 만들어줘. 스크린샷은 안 붙였어요. 병원 이름은 정담치과, 보철 전문이에요.";
       const r = await sendAndWaitStable(ctx.win, msg);
       record(1, "정태식 (URL 정답지)", "URL만으로 클론 시작", msg, r, {
         "브라우저로 열어보는 행동/발화": /열어|브라우저|직접 (보|확인)|접속/.test(r.reply),

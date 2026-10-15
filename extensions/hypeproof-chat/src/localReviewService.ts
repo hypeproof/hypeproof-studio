@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { LocalRecord, confirmPurpose, verifyReceipt, redactDeep, digestOf, type SubmissionBundle, type ReviewAction } from '../../../worker/src/lib/measurement-core/index.ts';
+import { LocalRecord, confirmPurpose, verifyReceipt, redactDeep, digestOf, type SubmissionBundle, type ReviewAction } from '@hypeproof/measurement-core';
 import { FileRecordStorage } from './localRecordFile.ts';
 import { manualInterpretation, parseLocalTranscript } from './localTranscript.ts';
 import type { ReviewHost, TaskCard } from './localReviewProtocol.ts';

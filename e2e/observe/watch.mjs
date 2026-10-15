@@ -23,7 +23,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { APPROVAL_TITLE_PATTERN } from "../../extensions/hypeproof-chat/src/coachIdentity.ts";
 
-// 출력·대상은 환경변수로 갈아끼운다. 기본값은 보아치과 원장 트랙 기준.
+// 출력·대상은 환경변수로 갈아끼운다. 기본값은 치과 원장 트랙 기준.
 const OUT = process.env.HPS_OBSERVE_OUT
   ?? path.join(path.dirname(new URL(import.meta.url).pathname), "runs", "session.jsonl");
 const WS = process.env.HPS_WORKSPACE ?? path.join(os.homedir(), "HypeProofClinic");

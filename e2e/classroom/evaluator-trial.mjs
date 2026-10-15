@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751) — LIMITED real-model trial of the report evaluator. Costs money when it really runs.
 //
 //   node --experimental-strip-types --experimental-sqlite e2e/classroom/evaluator-trial.mjs            # plan only, no call
@@ -12,8 +13,8 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
-const { MAX_CATALOG_CHARS, DEFAULT_EVALUATOR_MODEL } = await import('../../worker/src/lib/classroom-evaluator.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts');
+import { localOps } from './service-fixture.mjs';
+const { MAX_CATALOG_CHARS, DEFAULT_EVALUATOR_MODEL } = await import('@hypeproof/service-testkit/src/lib/classroom-evaluator.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 
 const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '../test-results/classroom-evaluator-trial'); mkdirSync(out, { recursive: true });
 const line = (o) => JSON.stringify({ schema_version: 1, ts: new Date().toISOString(), ...o }), rec = (...events) => events.map((e, i) => line({ seq: i + 1, ...e })).join('\n') + '\n';
@@ -33,7 +34,7 @@ const plan = { cases: CASES.map((c) => c.id), max_calls: MAX_CALLS, model: proce
 // Grader control (no model, no cost): a scripted stand-in answers instead of the provider. `good` must pass every case; `scores`
 // slips score language into a claim and the grader must FAIL. A grader that has not been through both is not trusted with a real run.
 const control = process.env.HPS_TRIAL_CONFIRM === 'grader-control' ? (process.env.HPS_TRIAL_STANDIN || 'good') : null;
-if (control) { const { setEvaluatorTransport } = await import('../../worker/src/routes/classroom-reports.ts'); process.env.ANTHROPIC_API_KEY = 'synthetic-no-live-key';
+if (control) { const { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts'); process.env.ANTHROPIC_API_KEY = 'synthetic-no-live-key';
   setEvaluatorTransport(async (request) => { const catalog = JSON.parse(request.messages[0].content).evidence_catalog, own = catalog.filter((q) => q.basis), pick = own.find((q) => /390px|다시 생각해 보니/.test(q.quote)) ?? own[own.length - 1];
     return Response.json({ content: [{ type: 'text', text: JSON.stringify({ findings: pick ? [{ capability: 'FRAMING', status: 'observed', claim: control === 'scores' ? '확인 조건을 먼저 정함 (85점, 상위 10%)' : '확인할 조건을 먼저 정함', evidence: [{ quote_id: pick.quote_id }], assistance: 'unknown' }] : [], next_experiment: '' }) }], usage: { input_tokens: 0, output_tokens: 0 } }); }); }
 if (!control && (process.env.HPS_TRIAL_CONFIRM !== 'real-model' || !process.env.ANTHROPIC_API_KEY)) { console.log(JSON.stringify({ status: 'NOT_RUN', reason: 'set HPS_TRIAL_CONFIRM=real-model and ANTHROPIC_API_KEY to spend money', plan }, null, 2)); process.exit(0); }

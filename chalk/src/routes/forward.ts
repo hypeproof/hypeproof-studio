@@ -27,7 +27,8 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   const url = new URL(c.req.url);
   const method = c.req.method.toUpperCase();
 
-  const studentShare = (method === 'GET' && /^\/v1\/classroom\/shares(?:\/[^/]+\/audit)?$/.test(url.pathname)) || (method === 'POST' && /^\/v1\/classroom\/shares(?:\/[^/]+\/confirm)?$/.test(url.pathname)) || (method === 'DELETE' && /^\/v1\/classroom\/shares\/[^/]+$/.test(url.pathname));
+  // #1013 adds `response`: the learner's revise/keep/hold after a person's feedback (the Service answers 404 while it is off).
+  const studentShare = (method === 'GET' && /^\/v1\/classroom\/shares(?:\/[^/]+\/audit)?$/.test(url.pathname)) || (method === 'POST' && /^\/v1\/classroom\/shares(?:\/[^/]+\/(?:confirm|response))?$/.test(url.pathname)) || (method === 'DELETE' && /^\/v1\/classroom\/shares\/[^/]+$/.test(url.pathname));
   const studentProfile = method === 'GET' && url.pathname === '/v1/profile';
   if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile) {
     return c.json(
@@ -59,7 +60,7 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
 
   let upstream: Response;
   try {
-    upstream = await fetch(target, { method, headers, body });
+    upstream = await fetch(target, { method, headers, body, redirect: "error", signal: AbortSignal.timeout(8_000) });
   } catch (err) {
     console.error(`[${rid}] forward to ${origin} failed:`, err);
     return c.json(

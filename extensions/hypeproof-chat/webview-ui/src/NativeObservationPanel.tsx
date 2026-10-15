@@ -9,7 +9,7 @@ import { DEFAULT_COACH_NAME, observationIntro } from "../../src/coachIdentity";
 // an English word in front of a Korean learner, and after the 2026-09-13 model
 // decision it may be a key from either model — so the label is looked up across
 // both rather than mapped here.
-import { capabilityLabel } from "../../../../worker/src/lib/measurement-core/capability-models";
+import { capabilityLabel } from "@hypeproof/measurement-core/capability-models";
 export function NativeObservationPanel({ scope, coachName = DEFAULT_COACH_NAME }: { scope?: string; coachName?: string }) {
   const activeScope = useRef<string | null>(scope ?? null);
   const [assessedCount,setAssessedCount]=useState<number|undefined>();

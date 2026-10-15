@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // #751 G2 · #1012 · #1008 — curriculum → actual execution on THIS Mac: two deliberately different valid curricula authored in the
 // real Chalk page, each rehearsed in a REAL Studio window under a learner rehearsal code, confirmed, sent to a selected learner,
 // and observed at the execution boundary of that learner's REAL Studio window.
@@ -25,7 +26,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
@@ -43,7 +44,7 @@ const steps = []; const step = (name, detail = {}) => { steps.push({ at: new Dat
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ── Service: real router + SQLite; bindings enforced; the class and its codes last HOURS. ──
-const local = await localOps(), { setRoster, startSession } = await import('../../worker/src/lib/kv.ts'), { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs');
+const local = await localOps(), { setRoster, startSession } = await import('@hypeproof/service-testkit/src/lib/kv.ts'), { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs');
 local.env.HPS_LESSON_BINDINGS = 'enforce';
 const endsAt = new Date(Date.now() + HOURS * 3600_000).toISOString();
 await startSession(local.env.HPS_KV, local.cohort, { session_id: local.run, profile_id: local.profile, starts_at: new Date(Date.now() - 60000).toISOString(), ends_at: endsAt }); local.db.prepare('UPDATE sessions SET ends_at=? WHERE id=?').run(endsAt, local.run);

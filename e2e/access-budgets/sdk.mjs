@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Real pinned Agent SDK/CLI -> actual local Service/SQLite. Provider only is synthetic.
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
@@ -5,8 +6,8 @@ import {tmpdir} from 'node:os';
 import {budgetFixture} from './fixture.mjs';
 const {buildSdkQueryOptions}=await import('../../extensions/hypeproof-chat/src/sdkCoachHelpers.ts');
 const {query}=await import('../../extensions/hypeproof-chat/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs');
-const {budgetBalances}=await import('../../worker/src/lib/budgets.ts');
-const {recordCostEvidence}=await import('../../worker/src/lib/usage-costs.ts');
+const {budgetBalances}=await import('@hypeproof/service-testkit/src/lib/budgets.ts');
+const {recordCostEvidence}=await import('@hypeproof/service-testkit/src/lib/usage-costs.ts');
 const results=[];
 for(const mode of ['chat','retry','read']){
  const dir=mkdtempSync(tmpdir()+'/hps-budget-sdk-'),marker='synthetic-local-file-marker';

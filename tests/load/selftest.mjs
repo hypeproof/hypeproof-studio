@@ -127,7 +127,7 @@ test("NEGATIVE CONTROL — impossible thresholds FAIL even on a perfect run", ()
   assert.ok(v.checks.find((c) => c.name.startsWith("TTFT") && c.status === "FAIL"));
 });
 
-test("NEGATIVE CONTROL — slow p99 FAILS (the 보아치과 211s case)", () => {
+test("NEGATIVE CONTROL — slow p99 FAILS (the 예시치과 211s case)", () => {
   const recs = goodRun();
   recs.push(turnRec({ turn_idx: 99, t_rel_start_ms: 900_000, total_ms: 211_000, ttft_ms: 1200 }));
   const v = verdict(analyze(recs));

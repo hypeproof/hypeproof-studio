@@ -190,8 +190,8 @@ await check('T-L11 execCheckPlan uses #1294 route with cohort in path', async ()
   try {
     const fakeSecrets = { get: async () => 'tok', store: async () => {}, delete: async () => {}, keys: async () => [] };
     await callChalkTool({ serverUrl: `http://127.0.0.1:${port}`, secrets: fakeSecrets },
-      'chalk_check_plan', { cohort: 'sk-biopharm', course: 'lesson-01' });
-    assert.match(capturedPath, /\/admin\/chalk\/cohorts\/sk-biopharm\/courses\/lesson-01\/check/,
+      'chalk_check_plan', { cohort: 'kids-workshop', course: 'lesson-01' });
+    assert.match(capturedPath, /\/admin\/chalk\/cohorts\/kids-workshop\/courses\/lesson-01\/check/,
       `#1294 경로가 아님: ${capturedPath}`);
   } finally {
     server.close();
@@ -269,7 +269,7 @@ await check('T-L15 execRecommendMethods → POST /admin/chalk/cohorts/:cohort/co
     res.end(JSON.stringify({ recommended: [] }));
   }, async (port) => {
     await execRecommendMethods(fakeCtx(port), {
-      cohort: 'sk-biopharm-kids-s1',
+      cohort: 'kids-workshop-s1',
       course: 'lesson-01',
       conditions: ['short-session'],
       goals: ['conceptual-understanding'],
@@ -277,7 +277,7 @@ await check('T-L15 execRecommendMethods → POST /admin/chalk/cohorts/:cohort/co
     // 키는 kids_edu_vault/curriculum_wiki/rules/curriculum-schema.md §조건·목표 어휘에서 복사
     assert.match(
       captured,
-      /\/admin\/chalk\/cohorts\/sk-biopharm-kids-s1\/courses\/lesson-01\/recommend/,
+      /\/admin\/chalk\/cohorts\/kids-workshop-s1\/courses\/lesson-01\/recommend/,
       `#1293 경로 불일치: ${captured}`,
     );
   });
@@ -291,7 +291,7 @@ await check('T-L16 409 from recommend → 지식이 적재되지 않았습니다
     let threw = null;
     try {
       await execRecommendMethods(fakeCtx(port), {
-        cohort: 'sk-biopharm-kids-s1', course: 'lesson-01',
+        cohort: 'kids-workshop-s1', course: 'lesson-01',
         conditions: ['short-session'], goals: ['conceptual-understanding'],
       });
     } catch (e) { threw = e; }
@@ -309,7 +309,7 @@ await check('T-L17 409 from check passes through as IssuerHttpError, not 지식 
   }, async (port) => {
     let threw = null;
     try {
-      await execCheckPlan(fakeCtx(port), { cohort: 'sk-biopharm-kids-s1', course: 'lesson-01' });
+      await execCheckPlan(fakeCtx(port), { cohort: 'kids-workshop-s1', course: 'lesson-01' });
     } catch (e) { threw = e; }
     assert.ok(threw, '409 should throw');
     assert.ok(threw instanceof IssuerHttpError, `should be IssuerHttpError, got: ${threw.constructor.name}`);
@@ -326,7 +326,7 @@ await check('T-L18 400 VocabError from recommend → field and unknown_values in
     let threw = null;
     try {
       await execRecommendMethods(fakeCtx(port), {
-        cohort: 'sk-biopharm-kids-s1', course: 'lesson-01',
+        cohort: 'kids-workshop-s1', course: 'lesson-01',
         conditions: ['bad-key'], goals: ['build-concept'],
       });
     } catch (e) { threw = e; }
@@ -344,7 +344,7 @@ await check('T-L19 409 knowledge_incomplete from recommend → 지식이 적재�
     let threw = null;
     try {
       await execRecommendMethods(fakeCtx(port), {
-        cohort: 'sk-biopharm-kids-s1', course: 'lesson-01',
+        cohort: 'kids-workshop-s1', course: 'lesson-01',
         conditions: ['short-session'], goals: ['conceptual-understanding'],
       });
     } catch (e) { threw = e; }
@@ -361,7 +361,7 @@ await check('T-L20 409 knowledge_incompatible from recommend → 앱 버전 mess
     let threw = null;
     try {
       await execRecommendMethods(fakeCtx(port), {
-        cohort: 'sk-biopharm-kids-s1', course: 'lesson-01',
+        cohort: 'kids-workshop-s1', course: 'lesson-01',
         conditions: ['no_prior'], goals: ['conceptual-understanding'],
       });
     } catch (e) { threw = e; }

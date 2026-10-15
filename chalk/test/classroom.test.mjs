@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Script } from 'node:vm';
-import {localClassroom} from '../../worker/test/harness/classroom.mjs';
+import {localClassroom} from '@hypeproof/service-testkit/test/harness/classroom.mjs';
 const f=await localClassroom();const {default:chalk}=await import('../src/index.ts');const savedFetch=globalThis.fetch;const calls=[];
 const env={...f.env,HPS_SERVICE_ORIGIN:'https://service.test'};
 globalThis.fetch=async(url,init)=>{calls.push({url,init});return f.app.fetch(new Request(url,init),f.env,{waitUntil(){}});};
