@@ -9,6 +9,7 @@ export interface ActivitySummary {
   workspace: string;
 }
 export interface StartState {
+  account?: import("./accountSession").AccountView;
   activities?: ActivitySummary[];
   legacyConnection?: boolean;
   legacyHistory?: boolean;
@@ -43,6 +44,8 @@ export interface StartState {
 }
 export type StartRequest =
   | { type: "startReady" }
+  | { type: "accountSignIn" | "accountCancel" | "accountReopen" | "accountRefresh" | "accountSignOut" | "accountManage" }
+  | { type: "accountActivate"; passId: string }
   | { type: "exportLegacyHistory" }
   | { type: "selectActivity"; ref: string }
   | { type: "chooseActivityFolder" }

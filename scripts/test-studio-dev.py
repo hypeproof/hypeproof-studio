@@ -168,6 +168,15 @@ class DevLauncherTests(unittest.TestCase):
         self.assertEqual(result['update.mode'],'none')
         self.assertNotIn('window.title',source)
 
+    def test_account_preview_is_local_and_explicit(self):
+        preview = dev.settings_for({}, 'local', 'account', True)
+        self.assertTrue(preview['hypeproofChat.accountsPreview'])
+        self.assertEqual(preview['hypeproofChat.proxyUrl'], 'http://127.0.0.1:8793/v1')
+        self.assertEqual(preview['hypeproofChat.siteBase'], 'http://localhost:3193')
+        self.assertFalse(dev.settings_for(preview, 'local', 'account')['hypeproofChat.accountsPreview'])
+        with self.assertRaises(ValueError):
+            dev.settings_for({}, 'live', 'account', True)
+
     def test_file_manifest_detects_payload_change(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);(root/'binary').write_bytes(b'old');before=dev.file_manifest(root)

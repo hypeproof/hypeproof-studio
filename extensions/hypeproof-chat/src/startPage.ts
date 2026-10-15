@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import { ActivityConnectionError, activityConnections } from "./activityConnections";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
@@ -54,7 +55,7 @@ export function shouldHideSidebar(allTabGroups: readonly { tabs: readonly unknow
   return allTabGroups.every(g => g.tabs.length === 0) && !chatViewVisible;
 }
 
-type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string };
+type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string; accountPass?: AccountPassBinding };
 /** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
 type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
 
@@ -79,7 +80,13 @@ export class StartPage {
     private chat: ChatPanelProvider,
     private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
     private githubSource?: GithubContinueSource,
+    private accounts?: AccountSession,
   ) {}
+
+  accountChanged(): void {
+    if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
+    if (this.panel) void this.refresh();
+  }
 
   /** The look that belongs to the candidate on screen, if any. */
   private look(): GithubLook | undefined {
@@ -186,7 +193,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.stopPurchaseWait(); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -258,6 +265,15 @@ export class StartPage {
     this.stopPurchaseWait();
     this.purchaseStage = "connecting"; this.purchaseMessage = PURCHASE_COPY.connecting;
     await this.refresh();
+    if (order.accountOwned) {
+      try {
+        await this.accounts?.refreshView();
+        await this.activateAccountPass(order.id);
+        await this.context.secrets.delete(PENDING_PURCHASE_KEY);
+        this.order = undefined; this.purchaseStage = undefined; this.purchaseMessage = undefined;
+      } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.claimFailed; }
+      await this.refresh(); return;
+    }
     const claim = await claimWithRecovery(order);
     if (this.order !== order) return;
     if (!claim.ok) {
@@ -314,14 +330,30 @@ export class StartPage {
     const { proxyUrl, siteBase } = this.settings();
     this.busy = true; await this.refresh();
     try {
-      const order = await createOrder(proxyUrl, msg.productId, siteBase);
+      if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
+      const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
+      if (this.accounts && !accountToken) throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
+      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken);
+      const order = result && result !== "bad_checkout" ? { ...result, ...(accountToken ? {accountOwned:true} : {}) } : result;
       if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
       // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
       await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
       this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
       await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl));
       this.schedulePurchasePoll();
-    } finally { this.busy = false; await this.refresh(); }
+    } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.orderFailed; }
+    finally { this.busy = false; await this.refresh(); }
+  }
+
+  private async activateAccountPass(passId: string): Promise<void> {
+    if (!this.accounts) throw new Error('account disabled');
+    const settings = this.settings();
+    if (!this.accounts.matches(settings.proxyUrl, settings.siteBase)) throw new AccountError('settings_changed', '서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.');
+    if (this.chat.hasActiveStream()) throw new AccountError('active_stream', '진행 중인 작업을 마치거나 중지한 후 이용권을 선택해 주세요.');
+    const activated = await this.accounts.activate(passId);
+    await this.handle({type:"connectCourse",token:activated.token});
+    if (!this.candidate || this.candidate.token !== activated.token) throw new AccountError('pass_profile_unavailable', '이용권 정보를 확인하지 못했어요. 새로고침 후 다시 선택해 주세요.');
+    this.candidate.accountPass = activated.binding;
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
@@ -343,6 +375,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
+      ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
@@ -355,9 +388,26 @@ export class StartPage {
   }
 
   private async handle(msg: StartRequest): Promise<void> {
+    if (!msg || typeof msg !== "object" || typeof msg.type !== "string") return;
+    if (msg.type.startsWith("account")) {
+      if (!this.accounts) return;
+      this.error = undefined;
+      try {
+        if (msg.type === "accountSignIn") await this.accounts.start();
+        else if (msg.type === "accountCancel") this.accounts.cancel();
+        else if (msg.type === "accountReopen") await this.accounts.reopen();
+        else if (msg.type === "accountRefresh") await this.accounts.refreshView();
+        else if (msg.type === "accountManage") await this.accounts.openAccount();
+        else if (msg.type === "accountSignOut") { this.candidate = undefined; await this.accounts.signOut(); }
+        else if (msg.type === "accountActivate") await this.activateAccountPass(msg.passId);
+      } catch (e) { this.error = e instanceof AccountError ? e.message : "계정을 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요."; }
+      await this.refresh(); return;
+    }
+
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
-    if (msg.type === "startReady") { await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
+    if (msg.type === "startReady") {
+      void this.accounts?.refreshView(); await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
     if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
@@ -396,7 +446,7 @@ export class StartPage {
         if (!record) throw new ActivityConnectionError('저장된 활동을 찾지 못했습니다.');
         const result = await fetchProfileResult({proxyUrl:record.service,token:record.token});
         if (!result.ok) {this.error=result.failure.friendly; return;}
-        this.candidate = {token:record.token,proxyUrl:record.service,profile:result.profile,workspace:record.workspace,previousConnected:!!connections?.current};
+        this.candidate = {token:record.token,proxyUrl:record.service,profile:result.profile,workspace:record.workspace,previousConnected:!!connections?.current,...(record.accountPass?{accountPass:record.accountPass}:{})};
         this.error = undefined;
       } catch (error) { this.error = entryError(error); }
       finally { this.busy=false; await this.refresh(); }
@@ -437,6 +487,7 @@ export class StartPage {
         if (candidate) {
           const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
           if (proxyUrl !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
+          if (candidate.accountPass) { const fresh = await this.accounts?.resolvePass(candidate.accountPass); if (!fresh) throw new AccountError("unauthorized", "Google로 다시 로그인해 주세요."); candidate.token = fresh; }
           const result = await fetchProfileResult({ proxyUrl, token: candidate.token });
           if (!result.ok) { this.error = result.failure.friendly; return; }
           // Service authority stays separate from the local navigation choice.
@@ -460,7 +511,7 @@ export class StartPage {
           if (connections) {
             const root = directory ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             if (!root) throw new Error('작업 폴더를 선택해 주세요.');
-            rollback = await connections.commit(candidate.token,profile!,root);
+            rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
           // REQ-L12 — the purchased activity is entered; the order record has done its job.

@@ -5,6 +5,7 @@ import { startPageCopy } from "../../src/coachIdentity";
 import { Brand } from "./Brand";
 import "./start.css";
 
+import { AccountEntry } from "./AccountEntry";
 import { InstructorInbox } from "./InstructorInbox";
 import { activityLabel, passSummary } from "./activityLabel";
 
@@ -58,7 +59,7 @@ export function StartPage() {
     : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
   return <main className="studio-start">
-    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색"><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "openStudioSettings" })}>설정</button></nav></header>
+    <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색">{state.account?.status === "signedIn" && <button onClick={() => postToHost({type:"accountManage"})}>{state.account.account?.display_name} · 내 계정 ↗</button>}<button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "openStudioSettings" })}>설정</button></nav></header>
     <div className="studio-main">
       <section className="studio-intro" aria-labelledby="start-title">
         <p className="studio-eyebrow"><span/> 생각에서, 나의 결과물로</p>
@@ -109,6 +110,7 @@ export function StartPage() {
             <button className="studio-text-button" onClick={leavePurchase}>시작 방법 다시 선택</button>
           </>}
         </div> : entry === null ? <div className="studio-entry-options" role="group" aria-label="시작 방법 고르기">
+          {state.account && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}
           {/* SX-04 — these two are **peer choices**. They both used to be Lime Primary,
               which puts two emphasized buttons on one screen. The requirement names this
               screen explicitly and writes "draw it as a list of options and do not draw
@@ -133,7 +135,7 @@ export function StartPage() {
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}
         <div aria-live="polite" role="status" className="studio-status">{status}</div>
         {state.error && <div className="studio-error" id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>}
-        <div className="studio-card-footer">{buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 공개 가입은 아직 지원하지 않습니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
+        <div className="studio-card-footer">{buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
     <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <span aria-hidden="true">↗</span></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">MAKE · VERIFY · OWN</span></footer>
