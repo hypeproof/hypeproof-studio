@@ -1,3 +1,4 @@
+import { captureReferenceScreenshot, referenceCaptureText } from "./referenceDesign.ts";
 import * as vscode from "vscode";
 import { CdpSession } from "./cdpSession";
 import { safeNavigateUrl, quadCenter, buildAxSnapshot } from "./browserControlHelpers";
@@ -288,10 +289,11 @@ export class BrowserControl {
 
   private async screenshot(): Promise<BrowserToolResult> {
     const s = await this.cdp();
-    const shot = await s.send("Page.captureScreenshot", { format: "jpeg", quality: 70 });
-    const data = String(shot?.data ?? "");
-    if (!data) return fail("화면 캡쳐에 실패했어요.");
-    return { content: [{ type: "image_url", image_url: { url: `data:image/jpeg;base64,${data}` } }], isError: false };
+    const { data, metadata } = await captureReferenceScreenshot(s);
+    return { content: [
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${data}` } },
+      { type: "text", text: referenceCaptureText(metadata) },
+    ], isError: false };
   }
 
   private async click(ref: string): Promise<BrowserToolResult> {

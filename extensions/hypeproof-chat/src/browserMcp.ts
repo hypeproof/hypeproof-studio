@@ -1,3 +1,4 @@
+import { referenceCaptureMetadata, referenceCaptureText, type ReferenceCapture } from "./referenceDesign.ts";
 // #282 Phase 2 slice 2 — PURE builder for the in-process "hypeproof" SDK MCP
 // server that exposes the native integrated browser (#309/#278) to the Agent
 // SDK coach as tools:
@@ -126,6 +127,7 @@ export interface McpToolResult {
 export interface BrowserScreenshot {
   imageBase64: string;
   mimeType: string;
+  capture?: ReferenceCapture;
   url?: string;
   title?: string;
 }
@@ -853,6 +855,9 @@ export function buildHypeproofMcpServer(
           content: [
             { type: "image", data: shot.imageBase64, mimeType: shot.mimeType || "image/jpeg" },
             ...(label ? [{ type: "text", text: label } as const] : []),
+            { type: "text", text: referenceCaptureText(shot.capture ?? referenceCaptureMetadata({
+              data: shot.imageBase64, mime: shot.mimeType || "image/jpeg", url: shot.url, title: shot.title,
+            })) },
           ],
         },
         // 캡처한 탭이 곧 현재 페이지. 호스트 재조회 없이 그대로 상태로 쓴다.
