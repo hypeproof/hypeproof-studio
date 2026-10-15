@@ -337,13 +337,15 @@ const ok = (name) => {
 // profiles were taken at 48cf6d86, where one-click publish (#1650) added publish_site.
 const BASE = {
   kidsChat: "e4650ad1dc31c51b",
-  kidsPolluted: "c6e30e39c05012d9",
+  // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
+  // carry their own browser flag's tools. Re-taken on the #1527 merge; the other eight are unchanged.
+  kidsPolluted: "b5acb3ff355601bf",
   adultRW: "7ddfb7c2911645e8",
   adultWide: "df0a1ba6e0920f98",
   adultSubagents: "d07543df34fa6401",
   adultCR: "6cda00d7ffa4fdd6",
   minorFlagAdultTier: "99035f6bafb010d6",
-  unknownTier: "3b83f67a44c1d4f3",
+  unknownTier: "bfef4df1d7d9b589",
   adultPublishOnly: "277052a7471ddaf3",
   adultBrowserPublish: "39edc7360c618388",
 };

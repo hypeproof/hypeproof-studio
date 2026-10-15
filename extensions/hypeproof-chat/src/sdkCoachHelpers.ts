@@ -341,10 +341,8 @@ export function orchestratorBindingFor(
  * ownership and fail-closed posture as permittedToolsFor:
  * - the WORKER PROFILE owns the policy: `sdk_tools.browser === true` grants
  *   the three hypeproof browser tools as one unit. Absent/false → none.
- * - MINOR-SAFETY INVARIANT (#306/#318): minors get NO browser MCP tools until
- *   safe-session ships — stripped for minor tiers even if a profile
- *   mistakenly carries browser:true, defense-in-depth on top of the worker
- *   harness's child_sdk_browser FAIL. When in doubt, deny for minors.
+ * - Age and tier do not strip it (2026-10-05). A child cohort that opts in
+ *   still browses in the hardened session (harness child_browser_session_safe).
  * - A2: a served roster adds `consult` (≥1 enabled helper or advisor) and
  *   `site_check` (listed in `checks`), after the browser tools and only for
  *   adults (orchestratorBindingFor). These two do NOT imply the browser grant,
@@ -357,7 +355,7 @@ export function permittedMcpToolsFor(
   roster?: ServedRosterView | null,
 ): string[] {
   const tools: string[] = [];
-  if (profile.sdk_tools?.browser === true && !isMinorTier(profile)) {
+  if (profile.sdk_tools?.browser === true) {
     // CR-02 — the Experiment Browser tools join only behind the Curriculum Runtime switch.
     tools.push(
       ...(isCurriculumRuntimeEnabled(profile)
@@ -480,13 +478,10 @@ export const SUBAGENT_DEFINITIONS: Readonly<Record<string, SubagentBaseDefinitio
  * - the WORKER PROFILE owns the policy: `sdk_tools.subagents === true` grants
  *   the Agent/Task tool (and with it the read-only subagent catalog). Absent/
  *   false → none.
- * - MINOR-SAFETY INVARIANT: minors get NO subagents until a pedagogy decision
- *   lands — stripped for minor tiers even if a profile mistakenly carries
- *   subagents:true, defense-in-depth on top of the worker harness's
- *   child_sdk_subagents FAIL. When in doubt, deny for minors.
+ * - Age and tier do not strip it (2026-10-05).
  */
 export function permittedAgentToolsFor(profile: ResolvedProfile): string[] {
-  if (profile.sdk_tools?.subagents === true && !isMinorTier(profile)) {
+  if (profile.sdk_tools?.subagents === true) {
     return [...SDK_AGENT_TOOL_NAMES];
   }
   return [];
@@ -2809,8 +2804,8 @@ export function evaluateSdkToolUse(args: {
   }
 
   // ── Agent/Task tool — subagent delegation (#282 P2 slice 3, REQ-M22) ──────
-  // Grant already passed Gate 1 (profile opted in via sdk_tools.subagents and
-  // the cohort is not a minor — permittedAgentToolsFor stripped it otherwise).
+  // Grant already passed Gate 1 (profile opted in via sdk_tools.subagents;
+  // permittedAgentToolsFor withholds it otherwise).
   if (AGENT_TOOLS.has(name)) {
     // Only OUR read-only catalog is delegable: an unknown/absent subagent_type
     // (a general-purpose agent, a hallucinated name) dies here, fail closed.
@@ -2841,8 +2836,8 @@ export function evaluateSdkToolUse(args: {
   if (toolName === MCP_CONSULT) return { decision: "ask" };
 
   // ── hypeproof MCP browser tools (#282 P2 slice 2, REQ-M20) ────────────────
-  // Grant already passed Gate 1 (profile opted in via sdk_tools.browser and
-  // the cohort is not a minor — permittedMcpToolsFor stripped it otherwise).
+  // Grant already passed Gate 1 (profile opted in via sdk_tools.browser;
+  // permittedMcpToolsFor withholds it otherwise).
   if (toolName === MCP_BROWSER_OPEN) {
     // URL policy: the SAME whitelist the #278 browser-control loop uses
     // (safeNavigateUrl) — http(s)/localhost/file only; javascript:, vscode:,

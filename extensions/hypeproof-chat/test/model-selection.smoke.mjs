@@ -9,7 +9,7 @@ assert.equal(selectedModel(profile,selection,undefined,'hypeproof-fast'),'hypepr
 assert.equal(selectedModel({...profile,lesson:{sha256:'version-b'}},selection,saved,'hypeproof-fast'),'hypeproof-default','new lesson does not inherit a previous choice');
 assert.equal(selectedModel(profile,selection,{...saved,alias:'hypeproof-strong'},'hypeproof-strong'),'hypeproof-default');
 const fixed={...selection,choices:[choices[0]]};assert.equal(selectedModel(profile,fixed,saved,'hypeproof-fast'),'hypeproof-default');
-assert.equal(availableModelSelection({...profile,minor_cohort:true},'agent-sdk'),undefined,'minor runtime gate cannot be widened by model selection');
+assert.equal(availableModelSelection({...profile,minor_cohort:true},'agent-sdk'),profile.model_selection,'age does not hide the frozen lesson choice (2026-10-05)');
 assert.equal(availableModelSelection(null,'proxy'),undefined);
 assert.equal(availableModelSelection({profile_id:'old'},'proxy'),undefined);
 assert.equal(availableModelSelection({...profile,coach_runtime:'proxy',model_selection:{...selection,source:'profile',runtime:'proxy'}},'agent-sdk'),undefined,'unsupported machine override does not advertise the wrong catalogue');

@@ -54,22 +54,15 @@ const READ_SET = ["Read", "Grep", "Glob"];
     "non-boolean truthy grants nothing",
   );
 
-  // MINOR-SAFETY INVARIANT (REQ-M23): a minor/unknown tier with a
-  // (misconfigured) subagents:true still gets NO subagents — client strip is
-  // defense-in-depth on top of the worker harness's child_sdk_subagents FAIL.
-  for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d"]) {
+  // 2026-10-05 — age and tier no longer strip the grant: the profile flag decides.
+  for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d", null]) {
     assert.deepEqual(
-      permittedAgentToolsFor(profile(tier, { sdk_tools: { subagents: true } })),
-      [],
-      `minor tier ${tier} NEVER gains subagents, even if the profile says subagents:true`,
+      permittedAgentToolsFor(profile(tier, { sdk_tools: { subagents: true } })).sort(),
+      ["Agent", "Task"],
+      `tier ${tier} with subagents:true gets the invoker (the flag decides)`,
     );
   }
-  assert.deepEqual(
-    permittedAgentToolsFor(profile(null, { sdk_tools: { subagents: true } })),
-    [],
-    "unknown/missing tier fails closed to minor → subagents stripped",
-  );
-  console.log("✓ permittedAgentToolsFor: profile-owned, === true only, minors always stripped");
+  console.log("✓ permittedAgentToolsFor: profile-owned, === true only, at any age or tier");
 }
 
 // ─── subagent catalog invariants — read-only by construction ────────────────
@@ -184,15 +177,16 @@ const READ_SET = ["Read", "Grep", "Glob"];
     "granted → invoker joins the base tool set (availability)");
   assert.deepEqual(grantedOptions.allowedTools, [], "REQ-M5: allowedTools stays [] — every call hits canUseTool");
 
-  // Minor cohort with a polluted profile → stripped end-to-end.
-  const pollutedKids = profileToAgentOptions(
+  // A kids-tier cohort that opts in gets the same end-to-end grant (2026-10-05).
+  const kidsOptIn = profileToAgentOptions(
     profile("kids-rich", { sdk_tools: { read: true, subagents: true } }),
     { model: "hypeproof-default", systemPrompt: "" },
   );
-  const kidsOptions = buildSdkQueryOptions(pollutedKids, args);
-  assert.equal("agents" in kidsOptions, false, "minor tier: agents option absent even if profile says true");
-  assert.ok(!kidsOptions.tools.includes("Task"), "minor tier: no invoker in the base tool set");
-  console.log("✓ buildSdkQueryOptions: agents option rides the flag; minors stripped; allowedTools stays []");
+  const kidsOptions = buildSdkQueryOptions(kidsOptIn, args);
+  assert.equal("agents" in kidsOptions, true, "kids tier: agents option present when the profile opts in");
+  assert.ok(kidsOptions.tools.includes("Task"), "kids tier: invoker in the base tool set when the profile opts in");
+  assert.deepEqual(kidsOptions.allowedTools, [], "REQ-M5: allowedTools stays [] at any tier");
+  console.log("✓ buildSdkQueryOptions: agents option rides the flag at any tier; allowedTools stays []");
 }
 
 // ─── evaluateSdkToolUse — Agent/Task policy + subagent-context calls ─────────

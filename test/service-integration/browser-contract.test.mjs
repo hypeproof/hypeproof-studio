@@ -148,9 +148,12 @@ test("브라우저를 안 켠 코호트는 어느 런타임에서도 계약을 �
   }
 });
 
-test("sdk: 미성년 코호트는 sdk_tools.browser 가 켜져 있어도 계약을 안 받는다", () => {
-  // 클라이언트(permittedMcpToolsFor)가 미성년에게는 플래그와 무관하게 브라우저
-  // MCP 도구를 벗긴다(#306/#318). 계약만 주입되면 바로 이 버그가 재현된다.
+// Pinned Service runtime: this file runs against the released testkit in
+// config/service-packages.json, which still withholds the SDK browser contract
+// from minor cohorts. hypeproof/hypeproof-service#87 makes the contract follow the
+// flag at any age, matching the client since #1527. When the pin moves to a Service
+// release that contains #87, flip this assertion (the contract must then be present).
+test("sdk: the pinned Service withholds the browser contract from a minor cohort even with sdk_tools.browser", () => {
   const minorWithBrowser = {
     ...KIDS,
     sdk_tools: { ...(KIDS.sdk_tools ?? {}), browser: true },
@@ -158,7 +161,7 @@ test("sdk: 미성년 코호트는 sdk_tools.browser 가 켜져 있어도 계약�
   const prefix = prefixFor(minorWithBrowser, "sdk");
   assert.ok(
     !prefix.includes("브라우저 제어 도구 사용 규약"),
-    "미성년 코호트에 SDK 브라우저 계약이 주입됐다",
+    "the pinned Service injected the SDK browser contract for a minor cohort; if the pin now includes service#87, flip this test",
   );
 });
 
