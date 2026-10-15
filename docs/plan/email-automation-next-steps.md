@@ -29,6 +29,9 @@ Current partial evidence, all dated2026-10-15:
   saved and published through the actual conversation and private review card.
   The coach correctly acknowledged completed sharing. Three distinct Studio
   principals listed/fetched the exact version1; only the author had ownership.
+  One distinct recipient subsequently found and imported it through the actual
+  Mac conversation/review card. Persisted author/recipient recipes match exactly
+  in separate activity namespaces; the third principal still has API-only evidence.
 - The native attempt exposed a missing SDK recipe contract and misleading save
   recovery. The fixed tool declares the exact schema and stage-specific recovery.
   Automation89/89, types/build pass. All18 runtime CI checks pass after the single
@@ -36,13 +39,13 @@ Current partial evidence, all dated2026-10-15:
   preceding command is corrected separately; it changes no packaged runtime.
 - Store/API controls pass19 publication/ownership/withdrawal and23 access/download
   checks. Common client validation rejects unsafe or mismatched recipes. These
-  checks and API recipient reads do not prove native recipient installation or use.
+  checks and API recipient reads do not prove Windows recipient installation or Google execution.
 - Windows candidate `3f1a3f20` on shell720be661 is prepared locally with matching
   SDK0.3.299. Actual archive/integrity, backup and exact-receipt upgrade fixtures
   pass, including priorf90b65e3. The private installer now serves3f1a3f20; all23
-  three-principal access checks pass. Full download verification is incomplete:
-  a bounded HTTP/2 attempt received41.4MB of196.6MB in180s and timed out, after
-  an earlier slow HTTP/1.1 attempt was stopped. Transport cause is unconfirmed. Actual Windows execution is NOT_RUN.
+  three-principal access checks pass. Complete authenticated archive readback now matches both pinned
+  hashes:196646585 app bytes in76.39s and121940997 SDK bytes in35.41s. Earlier
+  slow/timeout attempts remain recorded; their cause is unconfirmed. Actual Windows execution is NOT_RUN.
 
 The full Mac→store→Windows gate is NOT_RUN. Actual Google alias mapping, recipient
 private setup/execution, restart, update/rollback and withdrawal still require
@@ -52,10 +55,17 @@ the memory-only Dev app does not preserve its credentials. No new mail was sent.
 
 Three subjects share aUSD1 sequential test pool under the existingUSD3 ceiling.
 The117-record historical audit retainedUSD1.972794 prior spent/held exposure;
-prior exposure plus the full new pool remainsUSD2.972794. The two actual online
-Mac turns have now settledUSD0.060136, held0, leavingUSD0.273198 for their subject.
+prior exposure plus the full new pool remainsUSD2.972794. At20:26KST, native
+author/recipient work has settledUSD0.086166 across the pool, held0 and
+overrun0. The author spentUSD0.060136 and first recipientUSD0.026030;
+the third subject has no spend. Pool remaining isUSD0.913834.
 No limit increased and no usage/token reset occurred. This does not provision the
 real20-person class budget. Preserve the native publication for Windows reuse.
+
+A20:14KST default Service deployment removed the pilot zero-percent version.
+Its exact existing version was reattached while retaining the new default at100%;
+all three profile reads recovered. This temporary version-routing dependency must
+be checked before Windows acceptance; no participant code or budget was reset.
 
 Evidence and exact revision boundaries: [store acceptance](skill-store-cross-platform.md).
 
@@ -114,7 +124,7 @@ silently interpret the workshop grant as paid recurring subscription consent.
 | Service | Main `012274d6` integrated at `abf79a8`; shared workshop capability retained; final13 CI checks passed | Local server now runs `abf79a8` directly, preserving116 existing tables and the20-seat roster; no production deployment. Additive local migrations0043–0045 applied with an integrity check and rollback backup |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
 | Local product | Earlier native acceptance at720be661 and0b57074d remains revision-bound; current Peer Check app is3f1a3f20 in a separate online activity | Start page, saved dialogue/recipe and fresh coach request work. Google-dependent stages reset; a non-owner private-Sheet read is denied. After the user completed fresh login, bot own-Sheet read and exact one-recipient preview passed at0b57074d; no new two-account run is claimed |
-| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Latest private candidate contains shell720be661 / extension3f1a3f20 / SDK0.3.299 | Current installer and23 access controls are verified online; anonymous downloads deny401. Current full archive download/hash remains incomplete because of slow transfer; the previousf90b65e3 full-download success cannot validate this candidate. PowerShell archive/backup and exact-receipt handover from682dfd37,9d535c87,0b57074d andf90b65e3 pass. Actual Windows install/update/credential reuse remain NOT_RUN |
+| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Latest private candidate contains shell720be661 / extension3f1a3f20 / SDK0.3.299 | Current installer and23 access controls are verified online; anonymous downloads deny401. Current full app/SDK downloads match the3f1a3f20 pins (76.39s/35.41s). Earlier slow/timeout attempts remain recorded; no20-seat bandwidth guarantee follows from one successful retry. PowerShell archive/backup and exact-receipt handover from682dfd37,9d535c87,0b57074d andf90b65e3 pass. Actual Windows install/update/credential reuse remain NOT_RUN |
 | Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported an inert recipe earlier; latest `720be661` real Google execution denies cross-Sheet reads in both directions | One durable sent record and Inbox receipt remain at `624b214f`; latest sequential account-switch test is not a new two-participant store-sharing pass. Credentials remain in-memory in Dev |
 | Store/instructor | Twenty synthetic signed grants and real local D1 cap tests pass; 720be661 actual A02 previously reported failed read4/6, answer wait4/6 and restored preview6/6; after0b57074d restart, native classroom reconnect reports blocked Google connection2/6 then restored preview6/6 | Only Peer Check runs. Refreshed board changed blocked1/normal0/unknown19 → normal1/unknown19 after real preview, and labels the old6/6 as last report while disconnected; not20 actual users. Progress is mail-only; CSV correctness is not automatically observed |
 | Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |

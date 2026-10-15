@@ -380,7 +380,7 @@ The three-principal access helper and pinned remote Service binding are unchange
 Sixteen immutable download chunks and the manifest passed upload/readback with
 a7-day TTL. All23 current three-principal manifest/profile/download metadata,
 outsider/revoked/anonymous denial and exact installer-script checks pass. Complete
-end-user archive download/hash readback is incomplete. HTTP/1.1 was stopped
+end-user archive download/hash readback initially failed to complete. HTTP/1.1 was stopped
 after more than360s; a separate bounded HTTP/2 attempt received41432480 of
 196646585 bytes in180.03s and exited28 (timeout). Neither proves the full archive
 hash. All source archive hashes and16 upload-chunk readbacks passed; those do
@@ -388,7 +388,76 @@ not substitute for this end-user download gate. The transport cause is unconfirm
 Compare the current temporary KV installer transport with private R2 delivery
 before treating this as20-seat classroom readiness; do not assume a protocol
 change alone fixes it. No R2 migration or new subscription was performed.
+
+A subsequent bounded1200s-per-file HTTP/2 retry completed at2026-10-15
+20:10:52KST: app196646585 bytes in76.39s and SDK121940997 bytes in35.41s,
+both exact pinned SHA256. This closes the current archive-download integrity
+gate, not the unexplained latency variation or real Windows execution gate.
+`online-verification.json` records the successful full read;
+`download-interrupted.json` and `http2-progress.json` retain earlier failures.
 This preparation does not establish native Windows installation or credential reuse.
 
 The retention-test helper correction passed all18 local AT-41 browser result cases.
 The installer/test follow-up commit is `d1a8d6a5`; it does not change runtime3f1a3f20.
+
+### Private Service version routing recovery — 2026-10-15
+
+At20:14:35KST a new default Service deployment omitted the existing zero-percent
+email test version. The private gateway then returned503 for all three profiles
+because its expected-version check failed. The public health route stayed200;
+no participant credential was blamed, rotated or widened. This is separate from
+the earlier slow archive transfers, whose cause remains unconfirmed.
+
+Cloudflare applies a version override only when that version is in the active
+deployment, including at0%; otherwise it follows the default traffic split.
+The gateway's marker check therefore prevented silent execution on the new
+unvalidated default. See [official version override semantics](https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/).
+
+A fresh deployment read and dry run preceded recovery: retain the newly deployed
+production version at100% and reattach the exact prior test version at0%.
+The post-change deployment read confirmed both percentages. No Service code,
+schema, participant tokens, budgets, Google permissions or default traffic
+allocation changed. All three profile reads subsequently returned200.
+Readback artifacts are under `native-store-20261015/`: `reattach-receipt.json`,
+protected before/after deployment records and apply/dry-run logs. All23 current access controls passed again after recovery; the separate
+`windows-current-3f1a3f20/access-after-reattach.json` retains that readback.
+
+Before the Windows/classroom run, verify that the intended test version remains
+in the active deployment and that private health/profile match it. Do not silently
+adopt the default Service version after a later deploy. This dependence on the
+production deployment list makes the current zero-percent mechanism a temporary
+pilot arrangement; a separately versioned test Service with explicit resource
+bindings is a follow-up design, not an implemented isolation guarantee.
+
+### First native recipient import — 2026-10-15 20:24KST
+
+In the same single Mac Dev app3f1a3f20, the distinct `original` Studio principal
+joined through the normal participation-code UI using its own workspace and
+existing funded allocation. A normal SDK conversation listed the actual catalogue,
+selected the author's retained item, displayed its exact title/body/column mapping
+in a private import card, and installed it only after “이 스킬 가져오기”.
+The coach reported installation complete; the actual quest advanced to2/6 and
+left Google/Sheet/execution stages pending. No Google connection or email occurred.
+
+Read-only verification of the host's persisted state, keyed by each principal's
+fresh Service-verified activity ID, found the exact reviewed recipe in two distinct
+activity namespaces. The author's copy was unchanged; the recipient's store view
+still marked the publication as not owned by it. This proves native discovery,
+review and installation for one recipient on Mac, not Windows execution, three
+Google identities or the expanded GAS template path.
+
+Changing workspace in this isolated Dev app lost memory-only activity credentials;
+normal re-entry in the selected folder restored the activity. Do not treat this as
+successful OS-backed persistence. Keep real Windows restart/credential reuse in
+the required gate. The transient Service outage and its recovery above were also
+observed through the actual participation screen; existing codes were reused.
+
+Evidence under `native-store-20261015/`: `recipient-original-card.txt`,
+`recipient-original-success.txt`, `recipient-original-success.png` and
+`recipient-original-receipt.json`. No operator JSON import or duplicate publication
+was used. The third Studio principal still has API-only store evidence.
+
+The20:26KST funding readback (`budget-after-native-recipient.json`) records
+USD0.060136 author spend andUSD0.026030 recipient spend, totalingUSD0.086166
+of the existingUSD1 pool. All three have zero held, overrun and unresolved cost;
+no allocation increased and historical usage remains retained.
