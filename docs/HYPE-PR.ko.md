@@ -43,6 +43,25 @@ CI가 검증하는 버전은 **Python 3.11+**이다(`.github/workflows/test.yml`
 
 PyYAML이 없으면 명령이 어느 인터프리터에 무엇을 설치해야 하는지 알려주며 중단한다.
 
+2026-10-10 조직 이관 호환: #287에서 이관된 일곱 저장소(`hypeproof-harness`,
+`hypeprooflab`, `hypeproof-studio`, `sediment`, `hypeproof-studio-releases`,
+`sediment-cli-releases`, `homebrew-sediment`)의 `hypeproof/*` 주소와 origin은 기존
+`jayleekr/*` registry ID로 연결한다. manifest와 source revision, assessment, receipt
+검증은 그대로 수행한다. 이 일곱 저장소 외에는 owner를 치환하지 않는다. 정책 ID의
+전체 이관은 #287에서 추적한다. installer는 이관된 Lab·Studio·Sediment origin도
+허용한다.
+
+GitHub을 바꾸는 명령(`gh pr create`, reviewer 편집, auto-merge)과 실행 이슈 조회는
+조직 주소로 보낸다. registry 원본을 읽는 change-impact 조회만 registry ID를 그대로
+쓰고 GitHub redirect에 기댄다. `plan.repo` 같은 출력의 registry ID는 이관 전까지
+`jayleekr/*`로 남는다.
+
+`--repo`에는 항상 `hypeproof/<repo>`를 넘기고, PR 본문의 close 대상도 `#N`이나
+`hypeproof/<repo>#N`으로 쓴다. 이관된 저장소의 이전 주소(`jayleekr/<repo>`)를 넘기면
+조직 주소를 알려주는 안내가 stderr에 나온다. 도구가 조직 주소를 거부하면 이전 주소로
+우회하지 말고 `scripts/hype-pr/preparation.py`의 `TRANSFERRED`나 registry를 고친다.
+redirect 때문에 틀린 이름도 성공한 것처럼 보인다 (#290).
+
 ---
 
 ## Agent가 PR을 만드는 흐름
@@ -95,6 +114,8 @@ options는 다음을 지정한다.
 - `args`: 기존 CLI 인수 배열. `inspect` → Agent assessment 작성 → `prepare` →
   `create --preparation ... --apply`를 동일하게 실행한다. consumer PR에도 같은 경로를 쓴다.
 - `repositories`: `policy/change-impact.json`의 저장소 목록. 임의로 확대하지 않는다.
+  manifest가 고정 commit으로 인용하는 외부 source가 있으면 같은 파일의 `external_sources`도
+  넣는다. 읽기에만 쓰이며 생성 대상은 여전히 `repo` 하나다.
 - `repo`, `branch`, `author`: 사용자 작업 대상과 연결된 GitHub 계정.
 - `reviewers`: 명시적인 `--request-reviewers`를 사용할 때 허용할 active 비작성자 목록.
 - `allowCreate`: inspect/prepare는 false, 사용자가 요청한 PR 생성은 true.
@@ -164,6 +185,49 @@ PR 본문은 `--issue`에 지정한 이슈만 `Closes`/`Fixes`/`Resolves`로 닫
 `--preparation <prepare 출력 경로> --apply`를 붙이면 이슈와 검토를 재확인한 뒤 `gh pr create`를 실행한다. `--auto-merge`를 같이 붙였고
 eligibility가 통과하면 생성 직후 `gh pr merge --auto --squash --delete-branch`도
 실행한다.
+
+### Release check 계약 (repo가 선언한 경우만)
+
+대상 repo가 `config/pr-body-contract.json`에 `release_check.enforced: true`를 커밋해 두면,
+`create --apply`는 PR 본문에 아래 절이 있는지 검사한다. 하나라도 빠지면 PR을 만들지 않는다.
+계약 파일이 없거나 `enforced: false`이면 아무것도 검사하지 않는다. 계약은 제안하는 커밋의
+트리에서 읽는다.
+
+```markdown
+## Release check
+How to verify: <어디서> → <무엇을 누르거나 실행> → <기대 결과>
+Smoke: yes|no — <이유>
+Smoke check: <smoke_check_prefix 아래 파일 경로, 또는 #후속-이슈>
+```
+
+- `How to verify`는 절의 첫 줄이다. 릴리스 매니저 체크리스트가 그 줄을 읽는다. `→`(또는 `->`)로 나눈 세 부분이 모두 채워져야 한다.
+- `Smoke`는 yes 또는 no이고, 이유는 10자 이상이다. 다른 저장소나 서버에 기대는 기능을 추가하면 yes다.
+- `Smoke: yes`이면 `Smoke check`가 PR 트리에 있는 smoke 파일이거나 같은 repo의 열린 이슈 `#N`이어야 한다.
+- 연결된 이슈 form의 "Smoke needed?" 답이 yes인데 PR이 no이면 `Smoke differs from issue: <이유>` 줄을 더 요구한다. 이슈에 답이 없으면 비교하지 않는다. 이슈 본문 자체는 검사하지 않는다.
+- `<...>` 자리표시나 `<!--`가 남아 있으면 빈 양식으로 판정한다.
+- 판정 코드는 `scripts/hype-pr/body_contract.py`다. 의존성이 없어 consumer CI에서도 그대로 실행할 수 있다.
+
+### hotfix 경로 (repo 계약에 `hotfix`가 있는 경우만)
+
+```json
+"hotfix": {"base_prefix": "hotfix/", "label": "hotfix", "forward_label": "hotfix-forward"}
+```
+
+hotfix 설정은 정책이므로 **기본 브랜치(origin/main)의 계약**에서 읽는다. hotfix 브랜치는 옛 태그에서 따므로 계약이 없을 수 있기 때문이다.
+
+1. 마지막 v 태그에서 `hotfix/<태그>` 브랜치를 만든다. 같은 태그에서 나온 hotfix는 같은 브랜치에 모은다.
+2. 수정은 `fix/...` 브랜치에서 `create --base hotfix/<태그>`로 올린다.
+   - `create`가 `hotfix` 라벨을 붙이고, `--auto-merge`는 거부한다.
+   - Release check는 `How to verify`를 요구하지 않는다(release manager 체크리스트 생략). `Smoke` 줄은 요구한다.
+   - `Smoke check` 경로는 PR 트리나 기본 브랜치 트리 중 한 곳에 있으면 된다.
+3. 머지하고 브랜치 끝 커밋에 다음 태그(`v연.월일.번호`)를 붙인다.
+4. 같은 수정을 기본 브랜치로 `create --base main --forward-of <hotfix PR 번호>`로 올린다.
+   - 본문에 `Forward-port of #N` 줄이 있어야 한다.
+   - `hotfix-forward` 라벨이 붙고, Release check는 일반 규칙을 따른다.
+   - `#N`이 실제로 hotfix 브랜치를 대상으로 한 PR인지 확인한다.
+
+hotfix PR의 `Closes #N`은 기본 브랜치 머지가 아니라서 이슈를 닫지 않는다. 그래서 이슈는 4번 PR이 머지될 때까지 열려 있다. 열린 `hotfix` 이슈가 곧 미반영 목록이다. `create`는 hotfix PR을 만든 뒤 4번 명령을 `next`로 출력한다.
+main 대상 PR에 `hotfix` 라벨을 달면 거부한다. 배포 gate가 이 라벨을 믿기 때문이다.
 
 `--request-reviewers`를 사용하면 PR 생성 후 1명씩 요청한다. 특정 repo에서 아직 write 권한이 없거나
 초대를 수락하지 않은 멤버가 있으면 PR 생성 자체를 막지 않고, 해당 reviewer 요청
