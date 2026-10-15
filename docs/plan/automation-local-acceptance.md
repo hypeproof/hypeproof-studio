@@ -737,3 +737,13 @@ Evidence: `/tmp/hps-email-mvp/integrated-peer/native-google-preview-9b4dd233-rec
 redacted `native-preview-9b4dd233.png`, and
 `instructor-integrated/{after-preview-9b4dd233.json,native-preview-9b4dd233-instructor.png}`.
 The raw screenshot and Google resource stay in protected local storage.
+
+
+### Version lifecycle source validation — 2026-10-16
+
+The source now binds author revisions to a selected owned parent and confirms the
+exact recipient version for update/rollback. API, real local D1, three-principal
+Studio/Service integration and host cancellation/private-setup checks pass; see
+[the store checkpoint](skill-store-cross-platform.md#immutable-revisions-checkpoint--2026-10-16).
+This is not a native runtime observation. Mac9b4dd233 and Windowse3ab008b are
+unchanged and do not include this follow-up. Fork provenance remains outstanding.

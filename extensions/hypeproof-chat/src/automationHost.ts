@@ -429,17 +429,19 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           await context.secrets.store(sheetKey, JSON.stringify(setting));
           return { rowCount: Math.max(0, rows.length - 1), columns: rows[0] ?? [], reused: false };
         },
-        publishSkill: async () => {
+        publishSkill: async parentId => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const recipe = reusable(context.globalState.get(recipeKey(pinned)));
-          const answer = await askQuestion({ kind: 'publish', title: '이 스킬을 우리 반 스토어에 공유할까요?', description: '아래 템플릿과 설명만 공유해요. Google 계정·시트 주소·명단·보낸 메일은 공유하지 않아요.', recipe, private: true }, pinned, epoch);
-          if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
+          const parent = parentId ? await store.detail(parentId) : null;
+          if (parent && parent.item.mine !== true) throw new Error('내가 공유한 스킬에만 새 버전을 올릴 수 있어요.');
+          const answer = await askQuestion({ kind: 'publish', title: parent ? `${parent.item.title} 버전 ${parent.item.version + 1}로 공유할까요?` : '이 스킬을 우리 반 스토어에 공유할까요?', description: '아래 템플릿과 설명만 공유해요. Google 계정·시트 주소·명단·보낸 메일은 공유하지 않아요.', recipe, private: true }, pinned, epoch);
+          if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           const result = await publishAutomationRecipe({ storageRoot: context.globalStorageUri.fsPath, namespace: pinned.namespace, store,
             authorize: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); },
-          }, recipe);
+          }, recipe, parentId);
           // Report the completed host confirmation without exposing the private card.
-          return { published: true, approvalConfirmed: true, id: result.item.id, title: result.item.title };
+          return { published: true, approvalConfirmed: true, id: result.item.id, version: result.item.version, familyId: result.item.familyId, title: result.item.title };
         },
         unpublishSkill: async id => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
@@ -453,23 +455,23 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           if (!live()) throw new Error('Changed activity');
           return { unpublished: true, approvalConfirmed: true, id, installedCopiesRetained: true, googleConnectionsRetained: true };
         },
-        listSkills: async () => {
+        listSkills: async id => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
-          const result = await store.list();
-          return { items: result.items.map(({ id, title, description, mine }) => ({ id, title, description, mine })) };
+          const result = id ? await store.versions(id) : await store.list();
+          return { items: result.items.map(({ id, title, description, mine, version, familyId, parentId }) => ({ id, title, description, mine, version, familyId, parentId })) };
         },
         installSkill: async id => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
           const detail = await store.detail(id);
           const recipe = reusable(detail.recipe);
-          const answer = await askQuestion({ kind: 'install', title: `${recipe.title} 스킬을 가져올까요?`, description: '이메일 템플릿만 가져와요. Google 계정과 명단은 직접 연결하고, 발송 전에 다시 확인해요.', recipe, private: true }, pinned, epoch);
+          const answer = await askQuestion({ kind: 'install', title: `${recipe.title} 버전 ${detail.item.version}을 가져올까요?`, description: '현재 템플릿을 선택한 버전으로 바꿔요. 새 버전은 자동 적용되지 않아요. 내 Google 연결과 발송 기록은 유지하며, 발송 전에는 다시 미리보고 확인해요.', recipe, private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           await context.globalState.update(recipeKey(pinned), recipe);
           if (!live()) throw new Error('Changed activity');
           controller?.importRecipe(recipe);
-          return { installed: true, recipe };
+          return { installed: true, id: detail.item.id, version: detail.item.version, familyId: detail.item.familyId, recipe };
         },
       }, quest);
     },

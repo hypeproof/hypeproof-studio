@@ -1,6 +1,6 @@
 # Studio skill store: Mac authoring, Windows reuse
 
-Updated 2026-10-15. Sponsor: TJ. DEC-025 extends the active delivery goal;
+Updated 2026-10-16. Sponsor: TJ. DEC-025 extends the active delivery goal;
 this is a design and acceptance contract, not completed implementation.
 Requirements: EA-06/07/09, and the reusable-template destination in WAJ-03/06/07/11.
 Parent: [delivery goal](email-automation-next-steps.md).
@@ -71,9 +71,9 @@ Service `worker/src/routes/automations.ts`, `worker/src/lib/automation-recipe.ts
 The next delivery sequence is explicit: finish the local feature/lifecycle gaps,
 freeze and verify one Windows candidate, then execute SS-01–12 with actual Windows
 recipients. Same-content re-publication has a local recovery implementation and
-actual Service-route proof below; native acceptance remains pending. Version2,
-update and rollback remain implementation gaps; successful import or withdrawal
-alone does not close them. Store acceptance remains part of the active delivery
+actual Service-route proof below; native acceptance remains pending. Version2, update and rollback now have a local implementation and three-principal
+integration proof (checkpoint below); native acceptance and fork provenance remain
+open. Successful import or withdrawal alone does not close SS-08. Store acceptance remains part of the active delivery
 goal, not a follow-up that can be omitted when the email feature passes.
 
 The [source-backed distribution research](skill-store-distribution-research.md)
@@ -316,8 +316,9 @@ allocation were preserved. All23 online access controls pass. Complete HTTP body
 verification is still required before claiming successful delivery or a performance
 improvement. The authenticated HTTP/2 app GET terminated at300.02s with
 28818717 bytes and curl28 (timeout); the partial digest is not an archive hash.
-A bounded HTTP/1.1 comparison is running to check a different transport used by
-Windows clients. R2 object readback does not pass gateway delivery. Actual Windows
+The HTTP/1.1 comparison also ended with curl28 at300.02s and11611200 bytes.
+Neither protocol completed the archive. Continue on the Windows network rather
+than repeat the same Mac transfer; the root cause is not established. R2 object readback does not pass gateway delivery. Actual Windows
 remains a separate gate.
 The preparation receipt and live upload checkpoint are under
 `/tmp/hps-email-mvp/windows-current-e3ab008b/`; a running process is not upload success.
@@ -608,3 +609,42 @@ Google action, mail or live store mutation was required. Evidence under
 `/tmp/hps-email-mvp/`: `republish-automation-tests.log`, `republish-typecheck.log`,
 `republish-build.log`, `republish-service-integration.log` and its script.
 This is local functional evidence, not a native Mac or Windows re-publication PASS.
+
+
+## Immutable revisions checkpoint — 2026-10-16
+
+Local Servicee76d1c2 adds re-runnable migration0046:
+`automation_recipe_versions(recipe_id,family_id,release_version,parent_id)`.
+It references existing inert `automation_recipes`; both insert in one atomic D1
+batch. Legacy rows remain v1 without rewriting them. The metadata table is included
+in schema and backup coverage. No remote migration or active Service change has
+been performed. Ops' canonical schema still needs the reviewed addition.
+
+- Publish optionally binds the latest owned `parentId`. Each revision has a new
+  immutable ID and digest; identical retry returns the same receipt. Conflicting
+  parents or concurrent authors cannot overwrite a release.
+- Latest discovery returns one card per family. `/:id/versions` returns visible
+  versions to the same authorized cohort. Withdrawing the newest revision never
+  silently makes an older version the latest. Exact older IDs remain usable while
+  those versions are published.
+- Studio keeps package `formatVersion:1` separate from the release number. It
+  checks downloaded SHA256 and lineage before installation. Legacy v1 responses
+  remain supported; old Studio clients reject v2, so upgrade recipients first.
+- Conversation tools use the existing publication and installation review cards.
+  `skill_publish(parentId)` names the next version; `skill_list(id)` shows history;
+  `skill_install(id)` confirms the exact selected version for update or rollback.
+  The local CLI and SDK both preserve optional arguments. Installing never sends
+  mail, replaces credentials or transfers approvals/ledgers.
+
+The actual Studio client/publication helper/import controllers were exercised with
+Service routes and SQLite under three signed synthetic principals: A publishes
+v1/v2; B updates to v2 then restores v1; C stays on v1. Owner checks, replay,
+withdrawal and zero Google execution passed. Host tests also cover rollback
+cancellation and unchanged private connections. API15/readiness3, local D1 batch
+rollback/concurrency, classroom-ops10 commands, Studio automation91/local-runtime8,
+types and builds pass. Logs are under `/tmp/hps-email-mvp/store-version-*`.
+
+SS-08 remains PARTIAL: native Mac/Windows evidence, recipient fork provenance and
+coordinated migration/release are outstanding. Hash verification detects altered
+content against the API receipt; it does not independently authenticate a publisher
+or replace Service authorization. General executable packages remain out of scope.

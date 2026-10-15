@@ -47,9 +47,9 @@ export interface GoogleAutomationMcpHost {
   configureSheet?(mode?: 'reuse' | 'change'): Promise<unknown>;
   readConfiguredSheet?(): Promise<unknown>;
   previewSavedSkill?(): Promise<EmailPreview>;
-  publishSkill?(): Promise<unknown>;
+  publishSkill?(parentId?: string): Promise<unknown>;
   unpublishSkill?(id: string): Promise<unknown>;
-  listSkills?(): Promise<unknown>;
+  listSkills?(id?: string): Promise<unknown>;
   installSkill?(id: string): Promise<unknown>;
 }
 
@@ -58,6 +58,15 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
   if (!host.isAllowed()) return undefined;
   // Keep the base tool contract for existing SDK clients, but an opted-in turn
   // must not silently switch execution engines if its Script grant is revoked.
+  const optionalId = () => {
+    const schema = z.string() as { optional?: () => unknown };
+    return typeof schema.optional === 'function' ? schema.optional() : schema;
+  };
+  const readOptionalId = (value: unknown) => {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string' || !value || value.length > 200) throw new Error('Invalid skill');
+    return value;
+  };
   const appsScriptSession = host.isAppsScriptAllowed?.() === true;
   const legacyRouting = (mode: 'preview' | 'send') => ({
     recoveryRequired: true,
@@ -142,9 +151,9 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     }, 'skill_save')),
     factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다. 실패하면 반환된 단계와 복구 안내만 설명하고 사용자의 다음 요청을 기다린다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); }, 'google_connect')),
     factory.tool('sheet_configure', 'mode=reuse는 기존 비공개 시트 설정을 재사용하며 없을 때만 주소를 묻는다. 시트를 바꾸려는 명시적 요청에만 mode=change를 쓴다. 행 수와 열 이름만 반환한다.', { mode: z.string() }, async args => run(async () => { if (!host.configureSheet || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.configureSheet(args.mode as 'reuse' | 'change'); })),
-    factory.tool('skill_publish', '현재 저장한 스킬의 공유 내용을 별도 질문으로 확인받은 뒤 우리 반 스토어에 올린다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.' + storeReplyGuidance, {}, async () => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(); })),
+    factory.tool('skill_publish', '새 게시에는 parentId를 생략한다. 기존 본인 스킬의 새 버전은 목록에서 확인한 최신 id를 parentId로 지정한다. 과거 버전을 덮어쓰거나 다른 사람에게 자동 적용하지 않는다. 현재 저장한 스킬의 공유 내용을 별도 질문으로 확인받은 뒤 우리 반 스토어에 올린다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.' + storeReplyGuidance, { parentId: optionalId() }, async args => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(readOptionalId(args.parentId)); })),
     factory.tool('skill_unpublish', '사용자가 철회를 요청한 본인 게시물만 내린다. skill_list의 mine=true인 정확한 id를 사용하며, 호스트 카드에서 해당 게시물의 철회를 별도로 확인받는다. 이미 설치한 복사본·Google 연결·발송 기록은 삭제하거나 취소하지 않는다. unpublished=true일 때만 게시 철회 완료를 알린다. 실패하거나 결과가 불명확하면 목록을 다시 확인하고 자동으로 철회를 재시도하지 않는다.' + storeReplyGuidance, { id: z.string() }, async args => run(async () => { if (!host.unpublishSkill || typeof args.id !== 'string' || !args.id || args.id.length > 200) throw new Error('Invalid skill'); return host.unpublishSkill(args.id); })),
-    factory.tool('skill_list', '우리 반 스토어의 스킬 목록을 보여준다. 설치는 skill_install로 별도 확인한다.' + storeReplyGuidance, {}, async () => run(async () => { if (!host.listSkills) throw new Error('Unavailable'); return host.listSkills(); })),
+    factory.tool('skill_list', 'id를 생략하면 우리 반 스토어의 최신 스킬 목록을 보여준다. id를 넣으면 해당 스킬의 버전 목록을 조회한다. 업데이트나 이전 버전 복원을 원하면 먼저 버전 목록을 보여주고 사용자가 선택한 정확한 id를 skill_install에 전달한다. 설치는 skill_install로 별도 확인한다.' + storeReplyGuidance, { id: optionalId() }, async args => run(async () => { if (!host.listSkills) throw new Error('Unavailable'); return host.listSkills(readOptionalId(args.id)); })),
     factory.tool('skill_install', '사용자가 고른 스킬의 내용과 설치를 확인받고 로컬에 저장한다. Google 계정·실제 명단·발송 권한은 가져오지 않는다.' + storeReplyGuidance, { id: z.string() }, async args => run(async () => { if (!host.installSkill || typeof args.id !== 'string' || !args.id || args.id.length > 200) throw new Error('Invalid skill'); return host.installSkill(args.id); })),
     factory.tool('sheet_read', '비공개 설정에서 사용자가 연결한 시트만 다시 읽는다. 주소나 범위를 입력으로 받지 않는다. 행 수와 열 이름만 반환한다.', {}, async args => run(async () => {
       if (!host.readConfiguredSheet || Object.keys(args).length) throw new Error('Configure the sheet privately first');

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { AutomationRecipe, AutomationStoreItem } from './automationProtocol';
 import { validateEmailRecipe } from './googleAutomation.ts';
 import { scanFile } from '@hypeproof/service-contracts/publish-scan';
@@ -6,8 +7,9 @@ export class AutomationPublicationWithdrawnError extends Error {
 }
 export interface AutomationStoreClient {
   list(): Promise<{ items: AutomationStoreItem[] }>;
+  versions(id: string): Promise<{ items: AutomationStoreItem[] }>;
   detail(id: string): Promise<{ item: AutomationStoreItem; recipe: AutomationRecipe }>;
-  publish(recipe: AutomationRecipe, requestId: string): Promise<{ item: AutomationStoreItem }>;
+  publish(recipe: AutomationRecipe, requestId: string, parentId?: string): Promise<{ item: AutomationStoreItem }>;
   unpublish(id: string): Promise<{ ok: true }>;
 }
 export function createAutomationStoreClient(deps: { baseUrl: string; getToken(): Promise<string>; fetchImpl?: typeof fetch }): AutomationStoreClient {
@@ -39,9 +41,16 @@ export function createAutomationStoreClient(deps: { baseUrl: string; getToken():
   async function detail(id: string): Promise<{ item: AutomationStoreItem; recipe: AutomationRecipe }> {
     const value = await request<{ item: AutomationStoreItem; recipe: unknown }>(itemPath(id));
     try {
-      if (!value || value.item?.id !== id || value.item.version !== 1) throw new Error('Invalid publication');
+      if (!value || value.item?.id !== id) throw new Error('Invalid publication');
+      const release = value.item;
+      if (release.formatVersion === undefined) { if (release.version !== 1) throw new Error('Unknown legacy format'); }
+      else if (release.formatVersion !== 1 || !Number.isInteger(release.version) || release.version < 1 || release.version > 50
+        || typeof release.familyId !== 'string' || !release.familyId || release.familyId.length > 200
+        || !/^[a-f0-9]{64}$/.test(release.recipeSha256 ?? '')
+        || (release.version > 1 && (typeof release.parentId !== 'string' || !release.parentId || release.parentId.length > 200))) throw new Error('Invalid release');
       const recipe = validateEmailRecipe(value.recipe);
       const serialized = JSON.stringify(recipe);
+      if (release.formatVersion === 1 && createHash('sha256').update(serialized).digest('hex') !== release.recipeSha256) throw new Error('Changed content');
       // Local authoring can contain private drafts. A distributed recipe cannot.
       // Apply publication restrictions before either UI can install remote data.
       if (/[A-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)+/i.test(serialized)
@@ -64,5 +73,5 @@ export function createAutomationStoreClient(deps: { baseUrl: string; getToken():
     if (result?.ok !== true) throw new Error('게시 철회 결과를 확인할 수 없어요. 스토어 목록을 확인해 주세요.');
     return { ok: true };
   }
-  return { list: () => request(''), detail, publish: (recipe, requestId) => request('', 'POST', { recipe, requestId }), unpublish };
+  return { list: () => request(''), versions: id => request(`${itemPath(id)}/versions`), detail, publish: (recipe, requestId, parentId) => request('', 'POST', { recipe, requestId, ...(parentId ? { parentId } : {}) }), unpublish };
 }

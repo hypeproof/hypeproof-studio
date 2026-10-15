@@ -76,3 +76,16 @@ assert.match(recoveryInspector.view().error,/이전에 철회/);assert.equal(pub
 wasWithdrawn=false;await recoveryInspector.handle({kind:'publish',reviewed:false});assert.equal(publicationIds.length,2);
 await recoveryInspector.handle({kind:'publish',reviewed:true});assert.notEqual(publicationIds.at(-1),firstRequest);
 console.log('PASS inspector republish: withdrawn request replacement requires renewed review');
+
+const {createHash}=await import('node:crypto');
+const release={...item,version:2,formatVersion:1,familyId:'root',parentId:'root',recipeSha256:createHash('sha256').update(JSON.stringify(recipe)).digest('hex')};
+body={item:release,recipe};
+assert.deepEqual((await distribution.detail(item.id)).recipe,recipe,'release number differs from supported package format');
+for(const damaged of [{...release,formatVersion:2},{...release,recipeSha256:'0'.repeat(64)},{...release,parentId:null},{...release,version:1.5},{...release,familyId:''}]) {
+ body={item:damaged,recipe};await assert.rejects(distribution.detail(item.id),/스토어/);
+}
+let route,posted;
+const versionsClient=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async(url,init)=>{route=url;if(init.body)posted=JSON.parse(init.body);return new Response(JSON.stringify({items:[release],item:release}));}});
+await versionsClient.versions('root');assert.equal(route,'https://service.example.test/v1/automations/root/versions');
+await versionsClient.publish(recipe,'new-version','root');assert.equal(posted.parentId,'root');
+console.log('PASS version downloads: explicit format, digest and parent verification; version history and publication bind exact parent');

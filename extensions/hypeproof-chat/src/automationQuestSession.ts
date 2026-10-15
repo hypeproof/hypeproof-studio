@@ -161,7 +161,7 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
     // Reading a private sheet succeeds only after the host verifies the current
     // Google connection. Reuse can therefore restore connection evidence too.
     configureSheet: host.configureSheet ? mode => { quest.invalidate(['sheet','preview','send']); return quest.track('sheet', () => host.configureSheet!(mode), value => ok(value) && typeof (value as { rowCount?: unknown }).rowCount === 'number', ['connect']); } : undefined,
-    publishSkill: host.publishSkill ? () => quest.track('publish', () => host.publishSkill!(), flag('published')) : undefined,
+    publishSkill: host.publishSkill ? parentId => quest.track('publish', () => host.publishSkill!(parentId), flag('published')) : undefined,
     unpublishSkill: host.unpublishSkill ? id => quest.invalidateAfter(() => host.unpublishSkill!(id), flag('unpublished'), ['publish']) : undefined,
     // Preparation validates the persisted recipe, including reuse without skill_save.
     appsScriptPrepare: host.appsScriptPrepare ? () => quest.track('prepare', () => host.appsScriptPrepare!(), flag('prepared'), ['goal', 'skill']) : undefined,

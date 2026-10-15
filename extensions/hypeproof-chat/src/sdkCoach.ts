@@ -670,7 +670,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           askUser: host.askUser ? input => humanWait(() => host.askUser!(input)) : undefined,
           connectGoogle: host.connectGoogle ? mode => humanWait(() => host.connectGoogle!(mode)) : undefined,
           configureSheet: host.configureSheet ? mode => humanWait(() => host.configureSheet!(mode)) : undefined,
-          publishSkill: host.publishSkill ? () => humanWait(() => host.publishSkill!()) : undefined,
+          publishSkill: host.publishSkill ? parentId => humanWait(() => host.publishSkill!(parentId)) : undefined,
           installSkill: host.installSkill ? id => humanWait(() => host.installSkill!(id)) : undefined,
         });
         if (server) {

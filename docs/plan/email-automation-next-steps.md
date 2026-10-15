@@ -1,6 +1,6 @@
 # Studio email automation: goal and remaining delivery plan
 
-Updated: 2026-10-15 KST. Sponsor: TJ. The sponsor authorized continuing
+Updated: 2026-10-16 KST. Sponsor: TJ. The sponsor authorized continuing
 implementation and delivery with minimal approval interruptions. Exact email
 content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
@@ -28,7 +28,7 @@ Studio journey on Windows. Private R2 now serves the e3ab008b installer candidat
 (shell720be661 / SDK0.3.299), with both stored archives and manifest read back and
 hashed. All23 online access controls pass. Complete authenticated HTTP download
 and native Windows acceptance remain separate gates. The current native Mac is
-9b4dd233; source622cc4e4 adds locally tested re-publication recovery. Installer ZIP
+9b4dd233; source622cc4e4 adds re-publication recovery and the current follow-up adds locally tested immutable versions against Servicee76d1c2. Native version acceptance and recipient fork provenance remain open. Installer ZIP
 transport and the D1 skill catalog are distinct delivery surfaces.
 
 Latest main integration: `05efefdb` adds project switching and release operations.
@@ -161,10 +161,10 @@ silently interpret the workshop grant as paid recurring subscription consent.
 | --- | --- | --- |
 | Studio source | Main05efefdb integrated at9b4dd233; current622cc4e4 adds renewed-approval re-publication recovery | All18 CI checks pass at622cc4e4. Automation91, types/build and actual Service-route/SQLite re-publication controls pass. Native9b4dd233 and Windows e3ab008b remain distinct revision evidence |
 | Main integration | Main browser/subagent age policy and outbox drain retained; email-specific minor gate remains; SDK0.3.299 pinned | Automation88/88, orchestrator6/6 and automation-SDK12/12, SDK/browser helpers, types/build pass. Independent pre-A4 characterization updated only for main's policy delta; no current-output baseline recording |
-| Service | Main `38d8879` integrated at `acfd637`; revoked-grant checks and agent routing retained alongside workshop model/output bounds and terminal settlement. Typecheck/build and focused42 checks pass; full independent run125 commands passed plus the corrected nine-command orchestrator group rerun. Documentation head2ce0b2e passed all13 CI checks, including premerge | Local Dev server watches the integrated checkout and reloads code. A21:01KST read-only instructor refresh agrees with live API:20 unknown/0 normal; staleA02 keeps6/6 only as a last report. At21:16KST, actual nativeA02 classroom reconnect produced fresh running/connect2/6 in both API and UI. The21:16 Google request later failed before callback completion; current32ba0ac2 native classroom reconnect and Google preview remain pending; earlier successful preview belongs toabf79a8. Existing DB/20-seat roster and online pilot unchanged; no new migration or remote deployment. Earlier local migrations0043–0045 and13 CI checks belong toabf79a8 |
+| Service | Active local server remains2ce0b2e with13 passing CI checks. Isolated follow-up e76d1c2 adds immutable recipe revisions and re-runnable metadata migration0046 | Local API15, readiness3, classroom-ops10 independent commands, types and dry-run build pass. Migration0046 is not applied to the running local or remote Service; canonical Ops DDL and coordinated deployment remain pending |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
 | Local product | Single Mac Dev app9b4dd233 against local Service2ce0b2e, local subscription coach | Fresh Google callback, bot-owned Sheet and exact1-recipient preview pass; native App and instructor both6/6. One durable send ledger hash is unchanged; no new mail. Source622cc4e4 native re-publication and two-recipient Windows reuse remain unverified |
-| Windows | Private R2 gateway7a9c50d2 serves shell720be661 / extensione3ab008b / SDK0.3.299 | Both stored archive hashes, final manifest, local PowerShell extraction/backup/handover and23 online access controls pass. Authenticated HTTP/2 app download timed out at300.02s/28818717 bytes (curl28); no complete-download PASS. A bounded HTTP/1.1 comparison is running. Native Windows install/update/credential reuse remain NOT_RUN; no20-seat bandwidth guarantee |
+| Windows | Private R2 gateway7a9c50d2 serves shell720be661 / extensione3ab008b / SDK0.3.299 | Both stored archive hashes, final manifest, local PowerShell extraction/backup/handover and23 online access controls pass. Authenticated HTTP/2 app download timed out at300.02s/28818717 bytes (curl28); no complete-download PASS. HTTP/1.1 also timed out at300.02s/11611200 bytes (curl28). Repeating the same Mac transfer is not the next gate; verify the Windows network and installer. Native Windows install/update/credential reuse remain NOT_RUN; no20-seat bandwidth guarantee |
 | Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported an inert recipe earlier; latest `720be661` real Google execution denies cross-Sheet reads in both directions | One durable sent record and Inbox receipt remain at `624b214f`; latest sequential account-switch test is not a new two-participant store-sharing pass. Credentials remain in-memory in Dev |
 | Store/instructor | Twenty synthetic signed grants and real local D1 cap tests pass; 720be661 actual A02 previously reported failed read4/6, answer wait4/6 and restored preview6/6; after0b57074d restart, native classroom reconnect reports blocked Google connection2/6 then restored preview6/6 | Only Peer Check runs. Refreshed board changed blocked1/normal0/unknown19 → normal1/unknown19 after real preview, and labels the old6/6 as last report while disconnected; not20 actual users. Progress is mail-only; CSV correctness is not automatically observed |
 | Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |
@@ -240,3 +240,28 @@ public offer and privacy/support ownership. Obtain exact mail approval when its
 reviewable preview exists. Prepared commercial evidence and billing findings:
 [operator packet](email-commercial-operator-packet.md),
 [billing continuity](email-commercial-billing-map.md).
+
+
+## Version lifecycle implementation checkpoint — 2026-10-16
+
+Servicee76d1c2 and the corresponding Studio changes now support owner-only v2
+publication, version history, explicit recipient update and explicit rollback.
+The publication review names the next version; installation review names the
+selected version and replaces only the inert recipe. Parent-bound request IDs
+retain retry identity. Download checks separate recipe format from release number
+and reject a changed SHA256, unknown format or malformed lineage.
+
+Actual Studio client/helper/controllers plus Service routes and SQLite passed a
+three-principal integration: A publishes v1/v2; B updates then restores v1; C keeps
+v1 throughout. No Google call or mail is made by installation. Host tests confirm
+cancelled rollback preserves the draft and approved rollback preserves existing
+private connections. Local D1 tests confirm atomic metadata/recipe insertion,
+concurrent revisions and old rows without metadata. Studio automation91,
+local-runtime8, typecheck and builds pass. Evidence:
+`/tmp/hps-email-mvp/store-version-{service-integration,after,studio-tests,local-runtime-tests}.log`.
+
+This closes a local implementation gap, not SS-08 acceptance: native Mac/Windows
+version selection, persisted provenance for recipient forks, canonical Ops DDL,
+release coordination and current-revision CI remain open. Keep the running Mac
+9b4dd233 and private Windows candidatee3ab008b evidence separate. Do not restart
+the current successful Google connection just to claim a newer runtime.

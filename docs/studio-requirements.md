@@ -972,3 +972,13 @@ script-editor onboarding. Personal Apps Script export is deferred. A separate
 read-only probe tests identity-derived access and UserProperties isolation; its
 local fixture success is not real two-account acceptance. Existing owner-script
 Windows acceptance remains valid only for that prior implementation.
+
+
+### Store version lifecycle checkpoint (2026-10-16)
+
+EA-06/07/09 and DEC-025 now have local immutable-revision implementation:
+owner/current-parent publication, explicit recipient version selection, old-version
+restoration, parent-bound retry, downloaded digest/format checks and atomic D1
+metadata. Runtime permissions and private setup never travel with a recipe.
+[SS-08](plan/skill-store-cross-platform.md) remains PARTIAL until native Mac/Windows
+reuse, recipient-fork provenance and coordinated schema/release validation pass.

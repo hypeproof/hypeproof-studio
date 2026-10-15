@@ -6,7 +6,7 @@ export interface AutomationRecipe {
 }
 export interface AutomationPreview { id: string; createdAt: number; messages: ReadonlyArray<{ id: string; to: string; subject: string; body: string }> }
 export interface AutomationSendRecord { id: string; status: 'sending' | 'sent' | 'unknown' | 'failed'; providerId?: string; error?: string }
-export interface AutomationStoreItem { id: string; version: number; title: string; description: string; ownerId: string; updatedAt: string; mine: boolean }
+export interface AutomationStoreItem { id: string; version: number; formatVersion?: 1; familyId?: string; parentId?: string | null; recipeSha256?: string; title: string; description: string; ownerId: string; updatedAt: string | number; mine: boolean }
 export interface AutomationView {
   recipe: AutomationRecipe; sheetUrl: string; range: string; connected: boolean; configured: boolean;
   revocationPending?: boolean;

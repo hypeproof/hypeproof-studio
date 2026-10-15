@@ -144,3 +144,24 @@ test('withdrawal confirmation pauses the local model budget until the private an
   assert.equal(typeof answer,'function');assert.equal(tools.isWaiting(),true);
   answer({cancelled:true});await pending;assert.equal(tools.isWaiting(),false);
 });
+
+test('local and SDK version selectors remain optional and reject malformed identities before host dispatch',async()=>{
+ const calls=[];const host={isAllowed:()=>true,runtime:{},confirmSend:async()=>false,
+  publishSkill:async parentId=>{calls.push(['publish',parentId]);return{published:true};},
+  listSkills:async id=>{calls.push(['list',id]);return{items:[]};}};
+ const local=localEmailTools({profile,host,signal:new AbortController().signal});
+ for(const name of ['email_skill_publish','email_skill_list']){
+  const schema=local.definitions.find(t=>t.name===name).inputSchema;
+  assert.deepEqual(schema.required,[]);assert.ok(Object.values(schema.properties).every(s=>s.type==='string'&&!('optional'in s)));
+ }
+ assert.deepEqual(local.definitions.find(t=>t.name==='email_skill_install').inputSchema.required,['id']);
+ await local.call('email_skill_publish',{});await local.call('email_skill_publish',{parentId:'release-one'});
+ await local.call('email_skill_list',{});await local.call('email_skill_list',{id:'release-one'});
+ assert.deepEqual(calls,[['publish',undefined],['publish','release-one'],['list',undefined],['list','release-one']]);
+ const server=buildGoogleAutomationMcpServer({tool:(name,description,schema,handler)=>({name,schema,handler}),createSdkMcpServer:s=>s},{string:()=>({optional:()=>({optional:true})})},host);
+ for(const [name,key]of [['skill_publish','parentId'],['skill_list','id']]){
+  const tool=server.tools.find(t=>t.name===name);assert.equal(tool.schema[key].optional,true);
+  for(const bad of ['',42,'x'.repeat(201)])assert.equal((await tool.handler({[key]:bad})).isError,true);
+ }
+ assert.equal(calls.length,4,'malformed selectors never reach a host action');
+});

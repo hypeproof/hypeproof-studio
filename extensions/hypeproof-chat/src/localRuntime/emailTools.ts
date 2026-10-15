@@ -22,10 +22,11 @@ export function localEmailTools(args: {
   let registered: LocalEmailTool[] = [];
   buildGoogleAutomationMcpServer({
     tool(name, description, properties, handler) {
-      return { name: 'email_' + name, description, inputSchema: { type: 'object', properties, required: Object.keys(properties), additionalProperties: false }, handler: (input: Record<string, unknown>) => handler(input, undefined) };
+      const entries = Object.entries(properties).map(([key, value]) => { const { optional, ...schema } = value as { optional?: boolean; type: string }; return { key, schema, optional }; });
+      return { name: 'email_' + name, description, inputSchema: { type: 'object', properties: Object.fromEntries(entries.map(({ key, schema }) => [key, schema])), required: entries.filter(entry => entry.optional !== true).map(entry => entry.key), additionalProperties: false }, handler: (input: Record<string, unknown>) => handler(input, undefined) };
     },
     createSdkMcpServer(server) { registered = server.tools as LocalEmailTool[]; return server; },
-  }, { string: () => ({ type: 'string' }) }, {
+  }, { string: () => ({ type: 'string', optional() { return { type: 'string', optional: true }; } }) }, {
     ...host, isAllowed: () => !args.signal.aborted && host.isAllowed(),
     isAppsScriptAllowed: () => !args.signal.aborted && args.profile.automations?.appsScript === true && host.isAppsScriptAllowed?.() === true,
   });
