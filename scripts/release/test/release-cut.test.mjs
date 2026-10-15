@@ -7,6 +7,7 @@ import {classify, howToCheck, parseTitle, render} from '../checklist.mjs';
 import s1 from '../smoke/checks/s1-service-health.mjs';
 import s3 from '../smoke/checks/s3-cohort-token.mjs';
 import s4 from '../smoke/checks/s4-chat-api.mjs';
+import {judge} from '../smoke/checks/s5-candidate-ci.mjs';
 
 const pr = (number, title, files = [], extra = {}) => ({
   number, title, body: '', author: {login: 'dev'},
@@ -68,6 +69,20 @@ test('S1 passes a healthy versioned Service and fails the rest', async () => {
   assert.equal(ok.version, 'w1.0.0');
   assert.equal((await withHealth({ok: false, version: 'w1'}, url => s1.run({serviceUrl: url}))).result, 'FAIL');
   assert.equal((await withHealth({ok: true, version: 'unknown'}, url => s1.run({serviceUrl: url}))).result, 'FAIL');
+});
+
+test('S5 leaves out the release-cut run itself, and only that run', () => {
+  const run = (name, status, conclusion, id) => ({name, status, conclusion, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
+  const done = run('build', 'completed', 'success', 100);
+  const self = run('dry-run', 'in_progress', '', 200);
+  // the bug: our own job counted as still running
+  assert.equal(judge([done, self], undefined).result, 'NOT_RUN');
+  assert.equal(judge([done, self], '200').result, 'PASS');
+  // negative control: another run still in progress keeps NOT_RUN
+  assert.equal(judge([done, self, run('macos', 'in_progress', '', 300)], '200').result, 'NOT_RUN');
+  assert.equal(judge([run('test', 'completed', 'failure', 100), self], '200').result, 'FAIL');
+  // a run id that is a prefix of another run id does not match it
+  assert.equal(judge([done, run('lint', 'in_progress', '', 2001)], '200').result, 'NOT_RUN');
 });
 
 test('S3 and S4 are NOT_RUN without their scoped credential, even with the admin password', async () => {
