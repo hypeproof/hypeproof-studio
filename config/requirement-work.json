@@ -807,7 +807,7 @@
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "e73218f81d785abb8162c632d52c8d2e55975e5ea1da5913d69cb80f43dcdfc3",
+      "sha256": "c0f860fba86701d9ebb5abfe798ceab9510cdb4d03fdba8e75d0b99f07863df7",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
