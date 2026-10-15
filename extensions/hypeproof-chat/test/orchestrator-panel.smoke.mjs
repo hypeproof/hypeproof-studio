@@ -115,7 +115,7 @@ async function provider() {
   if (!providerApi) {
     const bundle = await build({
       stdin: {
-        contents: `export * from "./src/chatPanelProvider.ts";\nexport { runSdkCoach } from "./src/sdkCoach.ts";`,
+        contents: `export * from "./src/chatPanelProvider.ts";\nexport { runSdkCoach } from "./src/sdkCoach.ts";\nexport { SdkBusyAbortError } from "./src/sdkCoachHelpers.ts";`,
         resolveDir: new URL("../", import.meta.url).pathname, loader: "ts", sourcefile: "orchestrator-panel-host.ts",
       },
       bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "silent",
@@ -947,6 +947,21 @@ if (!status.available) {
   // An orchestrator seat reads the per-request record whatever its effort policy (the details list).
   assert.match(src, /if \(token && profile && \(selection\?\.choices\.some\(c=>c\.effort\) \|\| orchestratorRosterFor\(profile\)\)\) \{\s*this\.effortTurn = /);
   ok("the student SDK turn's runSdkCoach call passes orchestratorHostArgs with the seat's session, its turn and its timeline (control: a planted removal is caught); orchestrator seats fetch the per-request record");
+
+  // A2's bounded busy wait ends the turn with SdkBusyAbortError: the generic banner shows its
+  // Korean line (it is not an abort, so it is not swallowed as the learner's own stop).
+  const banners = [];
+  const errHost = { post: async (m) => banners.push({ ...m }), lastRequestId: undefined };
+  await P.ChatPanelProvider.prototype.handleSendError.call(errHost, new P.SdkBusyAbortError(429), "s-busy");
+  assert.equal(banners.length, 1);
+  assert.equal(banners[0].type, "streamError");
+  assert.equal(banners[0].error, "지금 사용하는 사람이 많아 답을 받지 못했어요. 30초 뒤에 다시 보내 주세요. 작업 파일은 그대로 있어요.");
+  // Control: a real abort (the learner pressed stop) shows nothing.
+  const abort = new Error("aborted");
+  abort.name = "AbortError";
+  await P.ChatPanelProvider.prototype.handleSendError.call(errHost, abort, "s-stop");
+  assert.equal(banners.length, 1);
+  ok("SdkBusyAbortError reaches the learner as the generic banner with its Korean line (control: a stop shows none)");
 }
 
 // ── 7. The adult archive before revealBuilt overwrites index.html (spec §6.3, FO-10) ─

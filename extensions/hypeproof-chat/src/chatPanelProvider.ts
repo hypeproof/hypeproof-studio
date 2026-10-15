@@ -2346,7 +2346,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       );
       if (choice !== "대화 지우기" || this.hasActiveStream() || key !== this.historyKey()) return;
       await this.context.workspaceState.update(key, []);
-      // A5 — a new conversation starts the orchestrator session over (A4 §9).
+      // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
       // A cleared chat starts a new conversation, not a new trial allowance.
