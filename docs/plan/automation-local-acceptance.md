@@ -562,3 +562,21 @@ board changed to A02 completed6/6, normal1/unknown19. This closes bot reconnect
 and own-preview recovery for0b57074d, not a new two-account isolation run or
 Windows persistence. Evidence: /tmp/hps-email-mvp/final-0b57074d-acceptance/
 bot-preview-restored.json and instructor-preview-restored.png.
+
+## Current integrated Service: stale instructor state — 2026-10-15 21:01KST
+
+The existing instructor browser at127.0.0.1:8796/manage was refreshed against
+the local Service watching integration checkout2ce0b2e (runtime mergeacfd637).
+The live API and rendered board agree on20 seats,20 unknown,0 normal and2 never
+connected. Eighteen seats have stale signals. Native seatA02 retains its earlier
+6/6 result, but the UI explicitly labels it “마지막 보고 (현재 확인 불가)” and
+does not count it as currently normal. The detail explains that mail-stage
+progress does not establish CSV correctness or learning completion.
+
+This is a read-only post-integration instructor observation, with no fabricated
+fresh learner events or altered roster. It verifies current stale-state reporting,
+not a fresh native reconnect/Google preview or20 actual learner readiness. The
+private online three-principal store activity remains a separate environment.
+Evidence: `/tmp/hps-email-mvp/instructor-integrated/current-main-stale-board.json`,
+plus `.txt` and `.png` captures. The Service health label is still the historical
+local configuration string; it must not be treated as the running source SHA.
