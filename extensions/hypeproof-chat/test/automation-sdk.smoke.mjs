@@ -19,6 +19,9 @@ const capability={enabled:true,provider:'gmail',maxRecipients:20};
 test('email capability is independent of browser; minors and ungranted names fail closed',()=>{
  assert.deepEqual(permittedMcpToolsFor({automations:capability,game:{template_tier:'website'}}),names);
  assert.deepEqual(permittedMcpToolsFor({automations:capability,game:{template_tier:'kids-rich'}}),[]);
+ const mixed=permittedMcpToolsFor({automations:capability,game:{template_tier:'kids-rich'},sdk_tools:{browser:true}});
+ assert.ok(mixed.includes('mcp__hypeproof__browser_read'),'the email gate must not strip the independently granted browser capability');
+ assert.ok(names.every(name=>!mixed.includes(name)),'the browser grant must not widen email access');
  assert.deepEqual(permittedMcpToolsFor({automations:{...capability,enabled:false}}),[]);
  assert.deepEqual(permittedMcpToolsFor({automations:{...capability,provider:'other'}}),[]);
  for(const toolName of names){

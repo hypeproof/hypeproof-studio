@@ -95,7 +95,6 @@ import {
 } from "./crHostWiring";
 import { FileRecordStorage, LOCAL_RECORD_DIR } from "./localRecordFile";
 import { LocalRecord } from "@hypeproof/measurement-core/local-record";
-import { isMinorTier } from "./sdkCoachHelpers";
 import {
   toMcpToolResult,
   BROWSER_OPEN_TOOL_DEF,
@@ -1798,8 +1797,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.postPageNotice("지금 수업에서는 요소 고르기를 쓸 수 없어요.");
       return;
     }
-    // Minors: no element crops or DOM snippets to the model, whatever the switch says.
-    if (!this.cachedProfile || isMinorTier(this.cachedProfile)) {
+    // The switch above already requires a web-app workshop tier; age does not decide it (2026-10-05).
+    if (!this.cachedProfile) {
       this.postPageNotice("지금 수업에서는 요소 고르기를 쓸 수 없어요.");
       return;
     }

@@ -327,14 +327,13 @@ const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : 
   assert.deepEqual(permittedMcpToolsFor(profile("website", { sdk_tools: { read: true, write: true } })), [],
     "read/write grants do NOT imply the browser grant");
 
-  // MINOR-SAFETY INVARIANT (#306/#318): a minor tier with a (misconfigured)
-  // browser:true still gets NO browser MCP tools — client strip on top of the
-  // worker harness's child_sdk_browser FAIL. When in doubt, deny for minors.
+  // 2026-10-05 — age and tier no longer strip the grant: any tier with browser:true
+  // gets the tools (a child cohort still browses in the hardened session).
   for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d", "mystery-NEW", null]) {
     assert.deepEqual(
       permittedMcpToolsFor(profile(tier, { sdk_tools: { browser: true } })),
-      [],
-      `minor/unknown tier ${tier} NEVER gains browser MCP tools, even with browser:true`,
+      ALL_BROWSER_MCP,
+      `tier ${tier} with browser:true gets the browser MCP tools (the flag decides)`,
     );
   }
 }
@@ -725,9 +724,10 @@ const ROSTER = (over = {}) => ({
     permittedMcpToolsFor(adult, ROSTER({ checks: [], agents: [{ name: "coach", role: "coach" }, { name: "a", role: "advisor", enabled: false }] })),
     [],
   );
-  // Minors never get consult (nor site_check), whatever they were served.
+  // Minors never get consult (nor site_check), whatever they were served. Since #1527
+  // (2026-10-15) their own browser flag still grants the browser tools: age does not strip them.
   for (const tier of ["kids-basic", "kids-rich", "teen", "pro-3d", "mystery-NEW", null]) {
-    assert.deepEqual(permittedMcpToolsFor(profile(tier, { sdk_tools: { browser: true } }), ROSTER()), [], `${tier}: no consult`);
+    assert.deepEqual(permittedMcpToolsFor(profile(tier, { sdk_tools: { browser: true } }), ROSTER()), [...MCP_BROWSER_TOOLS], `${tier}: browser by its flag, no consult`);
   }
   assert.deepEqual(permittedMcpToolsFor({ ...browserAdult, minor_cohort: true }, ROSTER()), [...MCP_BROWSER_TOOLS],
     "minor_cohort strips the orchestrator (the browser grant keeps its own, unchanged rule)");

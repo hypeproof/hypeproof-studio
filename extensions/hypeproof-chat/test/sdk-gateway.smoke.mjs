@@ -21,6 +21,7 @@ const {
   sdkConfigDirFor,
   SDK_CONFIG_DIR_NAME,
 } = await import("../src/sdkCoachHelpers.ts");
+const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
 
 // ─── anthropicBaseUrlFor — proxyUrl (/v1 base) → SDK base URL ────────────────
 // The SDK appends /v1/messages to ANTHROPIC_BASE_URL; passing the proxyUrl
@@ -236,12 +237,12 @@ const {
   assert.equal(browserOptions.strictMcpConfig, true, "strictMcpConfig pinned for browser cohorts too");
   assert.deepEqual(browserOptions.allowedTools, [], "REQ-M5: browser MCP tools also route through canUseTool");
 
-  // Minor cohort defense-in-depth: even a polluted profile grants nothing.
-  const pollutedKids = profileToAgentOptions(
+  // 2026-10-05 — the profile flag decides at any tier: a kids tier that opts in gets the grant.
+  const kidsOptIn = profileToAgentOptions(
     { game: { template_tier: "kids-rich" }, sdk_tools: { browser: true } },
     { model: "hypeproof-default", systemPrompt: "" },
   );
-  assert.deepEqual(pollutedKids.permittedMcpTools, [], "minor tier: browser grant stripped client-side");
+  assert.deepEqual(kidsOptIn.permittedMcpTools, [...MCP_BROWSER_TOOLS], "kids tier: the browser grant follows the flag");
 }
 
 // ─── coachRuntime flag still defaults to "proxy" (Phase-3 flip is Jay-gated) ─
@@ -353,9 +354,11 @@ function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAg
     "agent.adultCR": "d655444c68289f8a",
     "options.adultCR": "cc54b52021206102",
     "optionsMin.adultCR": "fd98e08d36a5f3de",
-    "agent.pollutedTeen": "c697ac6c924f242e",
-    "options.pollutedTeen": "c2b59a931550ecbb",
-    "optionsMin.pollutedTeen": "f61d43bb316ae98c",
+    // #1527 (2026-10-15): age no longer strips the browser grant, so the teen tier's own
+    // browser flag now adds the browser MCP tools. The only deliberate drift from the A1 tip.
+    "agent.pollutedTeen": "335abfd7e95652c0",
+    "options.pollutedTeen": "7e8106e55d6b42ea",
+    "optionsMin.pollutedTeen": "3ba774bae646543d",
     "agent.minorFlagAdultTier": "182a98ce189d34ae",
     "options.minorFlagAdultTier": "d99d40dd1268a1cb",
     "optionsMin.minorFlagAdultTier": "259d69535bf780de",

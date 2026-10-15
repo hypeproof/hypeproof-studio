@@ -13,7 +13,7 @@
 // 3. A full consult turn through runSdkCoach against a fake gateway.
 //
 // Run: node --experimental-strip-types test/orchestrator-switch.smoke.mjs
-// Record the base digests (only on pre-A4 commit 624b214f, with this file copied in):
+// Record on pre-A4 624b214f with the approved #1527 policy delta and this test copied in:
 //   HPS_A4_RECORD_BASE=1 node --experimental-strip-types test/orchestrator-switch.smoke.mjs
 
 import assert from "node:assert/strict";
@@ -339,16 +339,19 @@ const ok = (name) => {
 // Taken with HPS_A4_RECORD_BASE=1 on the independent pre-A4 email branch at
 // 624b214f. Its unmanaged 429 fails immediately, so the snapshot includes that
 // error; orchestrator seats still own the bounded busy retry and finish normally.
+// Independently applied #1527 to that pre-A4 source: browser/subagent profile
+// grants are age-independent; the email-specific gate stays on email tools only.
+// Only kidsPolluted and unknownTier changed; all adult digests are unchanged.
 // All ten cases per profile match there: no pre-A4 code reads the roster or host.
 const BASE = {
   kidsChat: "b4a9319497b84e59",
-  kidsPolluted: "36ded3310dbc1e33",
+  kidsPolluted: "90f33380959c3fa2",
   adultRW: "dc75a1c8a5319846",
   adultWide: "83e6259002a714f2",
   adultSubagents: "f23a5e09897c354f",
   adultCR: "c1d3a929179497ef",
   minorFlagAdultTier: "a12db54f43846784",
-  unknownTier: "e188d22952fb548f",
+  unknownTier: "4db3527580d1e09c",
   adultPublishOnly: "0cd0b3747f2ce46a",
   adultBrowserPublish: "0faf1e3fdbdd8c94",
 };
