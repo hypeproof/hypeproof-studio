@@ -1,6 +1,6 @@
 # HypeProof Studio — Solo Build Metaplan
 
-> **Owner:** Jay (solo) · **Target:** SK바이오팜 1회차 (June 2026)
+> **Owner:** Jay (solo) · **Target:** 기업 고객 1회차 (June 2026)
 > **Philosophy (drives UX):** [docs/seven-assets.md](./docs/seven-assets.md) — 7 AI Native Assets; chat-panel features follow the §4.5 map.
 > **Strategic plan:** [hypeproof-studio-plan.md](../hypeproof/.claude/worktrees/curriculum/products/ai-architect-academy/internal/hypeproof-studio-plan.md)
 
@@ -96,7 +96,7 @@ register as built-in, add the manual-approve modal + game-preview panel.
 
 ## Phase 7. Release v0.1.0
 
-**Goal:** distributable to SK바이오팜 families. GitHub Release (.app/.exe),
+**Goal:** distributable to 기업 고객 families. GitHub Release (.app/.exe),
 one-line installers, 1-page install guide, 6-person staff dogfood, child
 dry-run. **Gate:** 6 staff installs + 4 h dogfood pass → 1회차 GO.
 

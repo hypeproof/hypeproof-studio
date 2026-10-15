@@ -4,6 +4,8 @@ export interface ActivitySummary {
   id: string;
   name: string;
   kind?: 'trial' | 'personal' | 'classroom';
+  /** REQ-L12 — the activity was entered with a bought pass. */
+  pass?: boolean;
   workspace: string;
 }
 export interface StartState {
@@ -16,13 +18,15 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
-  profile?: { kind?: "trial" | "personal" | "classroom"; id: string; name: string; coach: string; series: string; workspace: string };
+  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; id: string; name: string; coach: string; series: string; workspace: string };
   /** #747 — resolved AI display name for the connected seat; absent → "코치". */
   coachName?: string;
   workspace?: string;
   version: string;
   /** #751 U2 — instructor notices/materials of the connected class, read from disk by the host. */
   inbox?: import("./classroomInbox").InboxView;
+  /** REQ-L12 — buying a pass. Presentation only: the order secret and the issued code never leave the host. */
+  purchase?: import("./passPurchase").PurchaseView;
 }
 export type StartRequest =
   | { type: "startReady" }
@@ -37,7 +41,13 @@ export type StartRequest =
   | { type: "beginCourse" }
   | { type: "disconnectCourse" }
   | { type: "cancelCandidate" }
+  | { type: "purchaseHide" }
   | { type: "openLocalFolder" }
+  | { type: "purchaseOpen" }
+  | { type: "purchaseStart"; productId: string }
+  | { type: "purchaseReopen" }
+  | { type: "purchaseRetry" }
+  | { type: "purchaseCancel" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" };
 export type StartResponse = { type: "startState"; state: StartState };

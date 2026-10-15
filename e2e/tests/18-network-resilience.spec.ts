@@ -29,8 +29,8 @@ type MockMode =
   | { kind: "fast_ok"; reply: string; profileBody?: unknown };
 
 const DEFAULT_PROFILE = {
-  profile_id: "boah-dental-teaser-2026-s1",
-  display_name: "보아치과 v4",
+  profile_id: "dental-teaser-2026-s1",
+  display_name: "예시치과 v4",
   language: "ko",
   series_index: 1,
   series_total: 1,

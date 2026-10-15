@@ -5,7 +5,8 @@
 # Wraps studio-dev.py; never touches production values.
 # --vault <path>   explicit path to the curriculum_wiki vault for Chalk knowledge import.
 #                  Falls back to CHALK_VAULT_PATH env var, then auto-detects sibling repo paths.
-# --profile <id>   override the default review profile (default: sk-biopharm-kids-2026-grade-3-4-s1).
+# --profile <id>   override the default review profile (default: the grades 3-4 kids track,
+#                  read from the Service registry by scripts/service-profile.mjs).
 # --cohort <id>    override the default review cohort (default: derived from --profile's file).
 #                  If --profile is given without --cohort the cohort is read from that profile file.
 # --no-app         stop before launching the Dev app (step 5); keep the local server running.
@@ -377,8 +378,9 @@ echo "=== [4/6] Instructor token ==="
 # Default review profile and cohort. Override with --profile / --cohort.
 # Reading all *.ts files with grep -m1 emits one line per file; instead we
 # read only the specific profile file so the value is always exactly one line.
-DEFAULT_PROFILE="sk-biopharm-kids-2026-grade-3-4-s1"
-DEFAULT_PROFILE_FILE="$WORKER_DIR/src/profiles/sk-biopharm-kids-s1.ts"
+service_profile() { (cd "$WORKTREE_DIR" && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --no-warnings scripts/service-profile.mjs "$1"); }
+DEFAULT_PROFILE="$(service_profile kids-lower)"
+DEFAULT_COHORT="$(service_profile kids-cohort)"
 
 if [[ -n "$REVIEW_PROFILE_ARG" ]]; then
   PROFILE_ID="$REVIEW_PROFILE_ARG"
@@ -399,7 +401,7 @@ elif [[ -n "$REVIEW_COHORT_ARG" ]]; then
   COHORT_ID="$REVIEW_COHORT_ARG"
 else
   PROFILE_ID="$DEFAULT_PROFILE"
-  COHORT_ID="$(grep -m1 "cohort_id:" "$DEFAULT_PROFILE_FILE" | sed "s/.*cohort_id: ['\"]//;s/['\"].*//" | tr -d ' ')"
+  COHORT_ID="$DEFAULT_COHORT"
 fi
 
 # Validate exactly one line each (guards against accidental multiline values).

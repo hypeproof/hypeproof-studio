@@ -116,9 +116,12 @@ test('actual Service storage failure remains a failure through Chalk', async () 
   const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
   const { bridgeStateToService } = await import('./harness/service-state.mjs');
   const serverEnv = createMockEnv({ withSession: false, withRoster: false });
-  const cohort = 'boah-dental-2026-a';
+  const { listProfiles } = await import('@hypeproof/service-testkit/src/profiles/index.ts');
+  const { serviceProfiles } = await import('../../test/fixtures/service-profiles.mjs');
+  const SP = serviceProfiles(listProfiles);
+  const cohort = SP.pilotCohort;
   const { token } = await issueIssuer({ issuer: 'storage-control', scopes: [{
-    cohort, profiles: ['boah-dental-director-copyclone-2026-s1'], max_hours: 6,
+    cohort, profiles: [SP.copyclone.id], max_hours: 6,
   }] }, 1, TEST_SECRET);
   // The real board passes authorization before D1 fails during its query.
   serverEnv.HPS_DB = { prepare() { throw new Error('injected D1 unavailable'); } };

@@ -35,13 +35,15 @@ if [[ -z "$SIGNING" || -z "$ADMIN_PASS" ]]; then
   exit 1
 fi
 
-# Cohort/profile/user — env-overridable. Defaults preserve the existing
-# sk-biopharm flow, so the existing e2e specs run unchanged. Override to run
-# the *same* specs against another cohort, e.g. the boah-dental teaser:
-#   HPS_COHORT=boah-dental-2026-a HPS_PROFILE=boah-dental-teaser-2026-s1 \
+# Cohort/profile/user — env-overridable. Defaults are the kids quest track
+# (grades 3-4), read from the Service registry by scripts/service-profile.mjs,
+# so the existing e2e specs run unchanged. Override to run the *same* specs
+# against another cohort, e.g. the search teaser:
+#   HPS_COHORT="$(service_profile pilot-cohort)" HPS_PROFILE="$(service_profile search-teaser)" \
 #     HPS_USER=smoke-dental bash scripts/dev-stack.sh
-HPS_COHORT="${HPS_COHORT:-sk-biopharm-2026-a}"
-HPS_PROFILE="${HPS_PROFILE:-sk-biopharm-kids-2026-grade-3-4-s1}"
+service_profile() { (cd "$ROOT" && node --import @hypeproof/service-testkit/test/harness/loader.mjs --experimental-strip-types --no-warnings scripts/service-profile.mjs "$1"); }
+HPS_COHORT="${HPS_COHORT:-$(service_profile kids-cohort)}"
+HPS_PROFILE="${HPS_PROFILE:-$(service_profile kids-lower)}"
 HPS_USER="${HPS_USER:-jay-test}"
 TOKEN_FILE="/tmp/hps-token.txt"   # e2e global-setup + extension auto-import read this
 

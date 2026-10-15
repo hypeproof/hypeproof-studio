@@ -62,13 +62,15 @@ const SDK_CONTRACT = readContract("sdk");
 
 // browser_control + sdk_tools.browser 둘 다 켜진 살아있는 코호트 — 드리프트가
 // 실제로 발생하던 바로 그 프로필.
-const COPYCLONE = getProfile("boah-dental-director-copyclone-2026-s1");
+const { serviceProfiles } = await import("../fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COPYCLONE = getProfile(SP.copyclone.id);
 assert.ok(COPYCLONE, "copyclone fixture profile exists in the registry");
 assert.equal(COPYCLONE.browser_control?.enabled, true, "fixture opts into browser_control");
 assert.equal(COPYCLONE.sdk_tools?.browser, true, "fixture opts into sdk_tools.browser");
 
-// 음성 대조군 — 브라우저를 안 켠 코호트(SK 초3·4 미성년, chat-only).
-const KIDS = getProfile("sk-biopharm-kids-2026-grade-3-4-s1");
+// Negative control: a cohort without the browser (grades 3-4 minors, chat-only).
+const KIDS = getProfile(SP.kidsLower.id);
 assert.ok(KIDS, "kids fixture profile exists in the registry");
 
 // MCP 도구는 `mcp__hypeproof__browser_open` 형태로 노출된다. 계약 문서는 학생용

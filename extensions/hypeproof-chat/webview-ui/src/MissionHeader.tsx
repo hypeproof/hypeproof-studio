@@ -53,7 +53,7 @@ export interface MissionHeaderProps {
    */
   busy: boolean;
   /** Activity kind and name. Demoted to a small line inside the header (design §정보 구조, region A). */
-  activity: { label: string; name: string; verified: boolean } | null;
+  activity: { label: string; name: string; verified: boolean; detail?: string } | null;
   /**
    * SX-02 — "지난번 이어서": the step the host says this task's record still holds from an earlier
    * session of the app (`learningState.resume`). null or absent: no entry. The host decides when
@@ -144,6 +144,7 @@ export function MissionHeader(props: MissionHeaderProps) {
         // is unchanged by the move.
         <p className="hp-mission-activity" aria-label="현재 활동">
           {activity.label} · {activity.name}
+          {activity.detail ? <span className="hp-mission-activity-detail"> · {activity.detail}</span> : null}
           {!activity.verified ? (
             <span role="status"> · 연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</span>
           ) : null}

@@ -33,7 +33,9 @@ async function test(name, fn) {
   }
 }
 
-const COPYCLONE = getProfile("boah-dental-director-copyclone-2026-s1");
+const { serviceProfiles } = await import("../fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COPYCLONE = getProfile(SP.copyclone.id);
 const withSwitch = (p, enabled) => ({ ...p, curriculum_runtime: { enabled } });
 const toolNames = (profile) =>
   (translate({ model: "hypeproof-default", messages: [{ role: "user", content: "hi" }] }, profile).tools ?? []).map((t) => t.name);
@@ -73,13 +75,13 @@ await test("switch ON: the CR browser and verify tools and the CR contract appea
 });
 
 await test("switch ON without browser tools: nothing CR appears (the switch never grants browsing)", () => {
-  const kids = withSwitch(getProfile("sk-biopharm-kids-2026-grade-3-4-s1"), true);
+  const kids = withSwitch(getProfile(SP.kidsLower.id), true);
   assert.deepEqual(toolNames(kids).filter((n) => CR_NAMES.includes(n)), []);
   for (const runtime of ["proxy", "sdk"]) assert.ok(!buildAnthropicSystemBlocks(kids, {}, runtime)[0].text.includes(CR_CONTRACT));
 });
 
 await test("switch ON for a minor cohort WITH browser_control: still no CR tool or contract on either runtime", () => {
-  const kids = getProfile("sk-biopharm-kids-2026-grade-3-4-s1");
+  const kids = getProfile(SP.kidsLower.id);
   const kidsBrowsing = { ...withSwitch(kids, true), browser_control: { ...(kids.browser_control ?? {}), enabled: true } };
   const names = toolNames(kidsBrowsing);
   assert.ok(names.includes("browser_navigate"), "control: the planted browser_control really injects the base tools");

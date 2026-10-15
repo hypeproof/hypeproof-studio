@@ -228,3 +228,87 @@ function pacedStream(events, gapMs, state = {}) {
 }
 
 console.log("✓ #403: sdk stall watchdog — silent/retry-storm turns abort with a friendly retry message");
+
+// ─── A2: the busy wait is bounded in time too (spec §11.6 item 4) ────────────
+// "abort after 3 retries or 90 s": the count is locked in sdk-fastfail.smoke;
+// here is the clock, scaled down. It runs from the first busy retry of an
+// episode, ends the turn with the busy line (not the stall line) and works
+// even with the stall watchdog switched off.
+{
+  const {
+    SDK_BUSY_ABORT_FRIENDLY,
+    SDK_BUSY_MAX_WAIT_MS,
+    SDK_CLI_STREAM_IDLE_MS,
+    SdkBusyAbortError,
+  } = await import("../src/sdkCoachHelpers.ts");
+  const silentAfter = (events, state = {}) => {
+    let i = 0;
+    return {
+      [Symbol.asyncIterator]: () => ({
+        next: () => (i < events.length ? Promise.resolve({ done: false, value: events[i++] }) : new Promise(() => {})),
+        return: async () => {
+          state.closed = true;
+          return { done: true, value: undefined };
+        },
+      }),
+    };
+  };
+  const notices = [];
+  const busy = (maxWaitMs) => ({ onNotice: (t) => notices.push(t), maxWaitMs });
+
+  // Negative control — one busy retry, then silence: the busy clock ends it, well before the stall budget.
+  {
+    const state = {};
+    const { h, calls } = handlers({ stallMs: 5_000, busy: busy(40) });
+    const started = Date.now();
+    const err = await consumeSdkStream(silentAfter([apiRetry(429)], state), h).then(() => null, (e) => e);
+    const took = Date.now() - started;
+    assert.ok(err instanceof SdkBusyAbortError, "the busy deadline ends the turn");
+    assert.equal(err.message, SDK_BUSY_ABORT_FRIENDLY, "…with the busy line, not the stall line");
+    assert.equal(err.status, 429);
+    assert.equal(calls.stalls, 0, "the stall factory is not used");
+    assert.equal(calls.aborted, 1);
+    assert.ok(took >= 35 && took < 2_000, `waited out the busy window (${took}ms), not the 5s stall budget`);
+    assert.equal(state.closed, true, "iterator closed on the early exit");
+  }
+
+  // The busy clock works with the stall watchdog switched off (stallMs: 0).
+  {
+    const { h } = handlers({ stallMs: 0, busy: busy(30) });
+    const err = await consumeSdkStream(silentAfter([apiRetry(529)]), h).then(() => null, (e) => e);
+    assert.ok(err instanceof SdkBusyAbortError, "the busy bound does not depend on the stall budget");
+  }
+
+  // A real answer stops the busy clock: the later silence is the stall watchdog's business.
+  {
+    const { h, calls } = handlers({ stallMs: 60, busy: busy(40) });
+    const err = await consumeSdkStream(
+      pacedStream([apiRetry(429), assistantMsg("응답"), ...Array.from({ length: 4 }, (_, i) => assistantMsg(String(i)))], 15),
+      h,
+    ).then(() => null, (e) => e);
+    assert.equal(err, null, "a progressing stream after one busy retry is never cut by the busy clock");
+    assert.deepEqual(calls.deltas, ["응답", "0", "1", "2", "3"]);
+  }
+
+  // Without a busy policy, budget/concurrency rejection is actionable immediately.
+  {
+    const { h, calls } = handlers({ stallMs: 40 });
+    const err = await consumeSdkStream(silentAfter([apiRetry(429)]), h).then(() => null, (e) => e);
+    assert.equal(err?.name, "SdkApiError", "a budget rejection does not wait for a silence timeout");
+    assert.equal(err?.status, 429);
+    assert.equal(calls.stalls, 0);
+    assert.equal(calls.aborted, 1);
+  }
+
+  // Deadline order (A1 note E5): busy (90 s) < Studio's stall (240 s) < the CLI's own idle floor (300 s, 2.1.299).
+  assert.equal(SDK_BUSY_MAX_WAIT_MS, 90_000, "the spec's 90 s");
+  assert.equal(SDK_CLI_STREAM_IDLE_MS, 300_000, "Claude Code 2.1.299's stream-idle floor behind a custom base URL");
+  assert.ok(SDK_BUSY_MAX_WAIT_MS < SDK_STREAM_STALL_MS, "the busy line comes before the generic stall line");
+  assert.ok(SDK_STREAM_STALL_MS < SDK_CLI_STREAM_IDLE_MS, "Studio's watchdog fires before the CLI gives up on its own");
+  const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8"));
+  assert.ok(
+    pkg.contributes.configuration.properties["hypeproofChat.sdkStallTimeoutMs"].default < SDK_CLI_STREAM_IDLE_MS,
+    "the shipped default watchdog setting is below the CLI floor too",
+  );
+  console.log("✓ A2: busy clock bounds the wait (scaled 90 s), works with the watchdog off; 90 s < 240 s < 300 s");
+}

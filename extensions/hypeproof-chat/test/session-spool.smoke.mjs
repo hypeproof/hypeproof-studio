@@ -360,8 +360,8 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "hps-spool-"));
 {
   const payload = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url") + ".sig";
   assert.deepEqual(
-    spoolIdentityFromToken(payload({ u: "kid01", c: "sk-biopharm-kids-s1", p: "prof", exp: 1 })),
-    { u: "kid01", c: "sk-biopharm-kids-s1", p: "prof" },
+    spoolIdentityFromToken(payload({ u: "kid01", c: "kids-workshop-s1", p: "prof", exp: 1 })),
+    { u: "kid01", c: "kids-workshop-s1", p: "prof" },
   );
   assert.deepEqual(spoolIdentityFromToken(payload({ u: "kid01", c: "co" })), { u: "kid01", c: "co" });
   // 음성 — u/c 없거나 깨진 토큰은 null (신원을 지어내지 않는다).

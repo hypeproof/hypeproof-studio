@@ -13,7 +13,7 @@
 - 앱 shell 0.1.50, shell commit `3ba1a364144a2776f2e9cc28d26cbc16b15b78f8`. 설치 앱 자체가 최신 main 빌드라는 뜻은 아니다.
 - 실제 연습 경로 `/private/tmp/hps-dental-20260906/workspace`, 별도 user-data/확장 디렉터리, CDP 9347. 실행 인수에서 workspace를 Chromium 옵션보다 먼저 배치했다.
 - 격리된 local workerd/SQLite Service `127.0.0.1:8797`, Chalk `127.0.0.1:8798`. 기존 안전한 모델 설정을 재사용했다. 자격증명·사용자 데이터 디렉터리는 공유 증거에서 제외한다.
-- registry의 성인 프로필 `boah-dental-director-copyclone-2026-s1`, 격리된 local `boah-dental-2026-a`에 합성 사용자 1명과 가상 강사 김서연. 아동 기본 프로필은 사용하지 않았다.
+- registry의 성인 프로필 `dental-copyclone-2026-s1`, 격리된 local `dental-pilot-2026-a`에 합성 사용자 1명과 가상 강사 김서연. 아동 기본 프로필은 사용하지 않았다.
 - 정상 API로 roster/세션/강사 발급을 진행했다. 스키마 초기화 외 직접 DB 수정은 하지 않았다. 실제 발급 토큰으로 `/v1/profile` 200, 세션 상태 API 200, 열린 세션과 성인 Agent SDK 도구 권한을 확인했다.
 - 토큰 입력 자체는 test-state fixture를 사용했다. 일반 사용자 토큰 입력 UI를 검증했다고 보고하지 않는다. 실제 채팅 webview에 연결해 요청·응답·도구 상태를 관측했다.
 - Plugin/MCP 추가 설치는 없었다. 제품에 내장된 파일·shell·브라우저 도구를 사용했다. subagent를 사용하지 않았다.

@@ -1,6 +1,6 @@
 // T1 — 첫 턴 하나를 현미경으로 본다.
 //
-//   "https://boaclinic.com/  치과 홈페이지를 만들껀데 이런 스타일로 만들어줘"
+//   "https://dental.example/  치과 홈페이지를 만들껀데 이런 스타일로 만들어줘"
 //
 // 큐시트 19:30 Reference First 의 실제 첫 입력이다. 이 한 턴이 오늘 고친 것을
 // 전부 지나간다 — 브라우저 열기·읽기(#457) · 파일 쓰기 · cwd(#428/#457) ·
@@ -118,7 +118,7 @@ test("T1 — 첫 턴 현미경: 생각·도구·성공·소요", async () => {
     const before = await cf.locator(".hps-msg-assistant").count();
     turnStart = Date.now();
     await ta.fill(
-      "https://boaclinic.com/\n치과 홈페이지를 만들껀데 이런 스타일로 만들어줘",
+      "https://dental.example/\n치과 홈페이지를 만들껀데 이런 스타일로 만들어줘",
       { force: true },
     );
     await ta.press("Enter");
@@ -196,7 +196,7 @@ test("T1 — 첫 턴 현미경: 생각·도구·성공·소요", async () => {
     const lines: string[] = [
       "# T1 — 첫 턴 현미경",
       "",
-      `입력: \`https://boaclinic.com/ 치과 홈페이지를 만들껀데 이런 스타일로 만들어줘\``,
+      `입력: \`https://dental.example/ 치과 홈페이지를 만들껀데 이런 스타일로 만들어줘\``,
       `작업 폴더: \`${ws}\``,
       "",
       "## 요약",

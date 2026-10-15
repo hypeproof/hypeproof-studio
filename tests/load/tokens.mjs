@@ -2,7 +2,7 @@
 //
 // Reuses tests/rehearsal/helpers — zero new deps, same style.
 // NOTE: importing rehearsal/helpers/env.mjs prints a "[rehearsal] env:" banner
-// as an import side effect. It describes the REHEARSAL defaults (boah cohort),
+// as an import side effect. It describes the REHEARSAL defaults (pilot cohort),
 // not this run. run.mjs prints its own banner right after; trust that one.
 
 import { fetchJson } from "../rehearsal/helpers/api.mjs";

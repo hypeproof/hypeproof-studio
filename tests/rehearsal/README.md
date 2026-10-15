@@ -79,8 +79,8 @@ npm test
 | `TOKEN` | (empty) | R1.3–R1.5 (profile shape), R2.6 (gold-path chat), R3.* (coach stress), R5.* (rate-limit). |
 | `ADMIN_PASSWORD` | (empty) | R1.2 (deep health), R2.4 (cohort pause). |
 | `ISSUER_TOKEN` | (empty) | R4.1–R4.6 (issuer/mint edge). |
-| `COHORT` | `boah-dental-2026-a` | Test target cohort. |
-| `PROFILE` | `boah-dental-teaser-2026-s1` | Test target profile id. |
+| `COHORT` | the search teaser's cohort, from `scripts/service-profile.mjs pilot-cohort` | Test target cohort. |
+| `PROFILE` | the search teaser, from `scripts/service-profile.mjs search-teaser` | Test target profile id. |
 
 토큰이 없으면 관련 테스트가 자동으로 skip 됩니다 — 한 번에 가진 만큼만 돌리면 OK.
 

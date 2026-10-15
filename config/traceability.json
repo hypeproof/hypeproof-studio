@@ -373,6 +373,14 @@
         },
         {
           "path": "e2e/admin-usage/run.mjs"
+        },
+        {
+          "path": "scripts/test-owner-console.mjs"
+        },
+        {
+          "path": "worker/test/owner-usage.test.mjs",
+          "repository": "hypeproof/hypeproof-service",
+          "commit": "40caf3921e97d7b02df895b877ba408f40835121"
         }
       ]
     },
@@ -1279,6 +1287,37 @@
       ]
     },
     {
+      "id": "ST-TEST-PASS-PURCHASE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-SAFETY",
+        "ST-REQ-ACCESS-BUDGET"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/pass-purchase.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/start-page-purchase.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PASS-PURCHASE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-STUDIO-SAFETY",
+        "ST-TEST-PASS-PURCHASE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/passPurchase.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-VAL-ACTIVITY-CANDIDATE",
       "stage": "validation",
       "owner": "TJ-kr",
@@ -1404,6 +1443,9 @@
           "path": "extensions/hypeproof-chat/test/activity-connections.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/pass-takeover-transaction.smoke.mjs"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/activity-draft.smoke.mjs"
         },
         {
@@ -1479,6 +1521,9 @@
         },
         {
           "path": ".github/workflows/verify-service-activities.yml"
+        },
+        {
+          "path": "scripts/verify-owner-console.mjs"
         }
       ]
     },
@@ -3839,6 +3884,12 @@
         },
         {
           "path": "docs/testing/curriculum-runtime-2026-10-06-e2e.md"
+        },
+        {
+          "path": "e2e/curriculum-runtime/workshop-element-trial.mjs"
+        },
+        {
+          "path": "e2e/curriculum-runtime/fixtures/dental-element-trial/index.html"
         }
       ]
     },

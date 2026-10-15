@@ -210,3 +210,136 @@ for (const failure of [apiRetry(429, 'rate_limit'), {
 }
 
 console.log("✓ #320: sdk fast-fail — 401/400 api_retry aborts within one event + proxy-path token copy");
+
+// ─── A2: busy notice and bounded abort, by retry count (spec §11.6 item 4) ───
+// With a busy policy (orchestrator seats): the first 429/503/529 retry of a
+// turn posts ONE notice; the third busy retry of an episode aborts the query
+// with the spec's line. A real response ends the episode. Without the policy,
+// nothing changes — the retries stay silent, as the 529 test above shows.
+{
+  const {
+    SDK_BUSY_NOTICE,
+    SDK_BUSY_ABORT_FRIENDLY,
+    SDK_BUSY_MAX_RETRIES,
+    SDK_BUSY_STATUSES,
+    SdkBusyAbortError,
+    sdkBusyPolicyFor,
+    isAbortError,
+  } = await import("../src/sdkCoachHelpers.ts");
+
+  // The copy is the spec's, verbatim.
+  assert.equal(SDK_BUSY_NOTICE, "지금 요청이 많아 잠시 기다리는 중이에요. 자동으로 다시 시도합니다.");
+  assert.equal(SDK_BUSY_ABORT_FRIENDLY, "지금 사용하는 사람이 많아 답을 받지 못했어요. 30초 뒤에 다시 보내 주세요. 작업 파일은 그대로 있어요.");
+  assert.equal(SDK_BUSY_MAX_RETRIES, 3);
+  assert.deepEqual([...SDK_BUSY_STATUSES].sort(), [429, 503, 529]);
+
+  const busyRun = async (events, policy = {}) => {
+    const notices = [];
+    const pulled = [];
+    const { h, calls } = handlers({ busy: { onNotice: (t) => notices.push(t), ...policy } });
+    const result = await consumeSdkStream(mockStream(events, pulled), h).then(
+      (end) => ({ end }),
+      (err) => ({ err }),
+    );
+    return { ...result, notices, pulled, calls };
+  };
+
+  // Positive control — one busy retry, then the answer: one notice, no abort, text flows.
+  {
+    const r = await busyRun([apiRetry(429, "rate_limit"), assistantMsg("복구됨"), { type: "result" }]);
+    assert.equal(r.err, undefined, "a single busy retry does not end the turn");
+    assert.deepEqual(r.notices, [SDK_BUSY_NOTICE], "exactly one notice, with the spec's words");
+    assert.deepEqual(r.calls.deltas, ["복구됨"]);
+    assert.equal(r.calls.aborted, 0);
+  }
+
+  // Negative control — the third busy retry aborts, before a fourth is even read.
+  {
+    const r = await busyRun([apiRetry(429, "rate_limit"), apiRetry(529, "overloaded"), apiRetry(503, "unavailable"), apiRetry(429, "rate_limit"), assistantMsg("늦은 응답")]);
+    assert.ok(r.err instanceof SdkBusyAbortError, "the bounded abort throws its own error");
+    assert.equal(r.err.message, SDK_BUSY_ABORT_FRIENDLY, "…with the spec's line as the message the panel shows");
+    assert.equal(r.err.status, 503, "…and the busy status that ended it");
+    assert.equal(isAbortError(r.err), false, "it is not a user stop: the banner shows");
+    assert.equal(r.calls.aborted, 1, "the CLI's retry loop is killed exactly once");
+    assert.equal(r.pulled.length, 3, "no fourth event is consumed");
+    assert.deepEqual(r.notices, [SDK_BUSY_NOTICE], "still a single notice");
+    assert.deepEqual(r.calls.deltas, []);
+  }
+
+  // A real response ends the episode; the notice stays once per turn.
+  {
+    const r = await busyRun([
+      apiRetry(429, "rate_limit"), apiRetry(429, "rate_limit"), assistantMsg("a"),
+      apiRetry(529, "overloaded"), apiRetry(529, "overloaded"), assistantMsg("b"), { type: "result" },
+    ]);
+    assert.equal(r.err, undefined, "two short rushes with an answer between them are not three retries");
+    assert.deepEqual(r.notices, [SDK_BUSY_NOTICE], "one notice for the whole turn");
+    assert.deepEqual(r.calls.deltas, ["a", "b"]);
+  }
+
+  // The CLI's own "API Error" line is not an answer: it does not reset the count.
+  {
+    const r = await busyRun([
+      apiRetry(429, "rate_limit"), apiRetry(429, "rate_limit"),
+      { type: "assistant", error: "rate_limit", message: { model: "<synthetic>", content: [{ type: "text", text: "API Error: 429" }] } },
+      apiRetry(429, "rate_limit"),
+    ]);
+    assert.ok(r.err instanceof SdkBusyAbortError, "a synthetic error message does not buy more retries");
+    assert.deepEqual(r.calls.deltas, [], "raw provider errors never enter the conversation");
+  }
+
+  // Not busy: other 5xx and first-byte-timeout retries (0.3.299 `no_response`, status null).
+  {
+    const r = await busyRun([apiRetry(500, "server_error"), apiRetry(502, "bad_gateway"), { ...apiRetry(null, "unknown"), no_response: true }, apiRetry(504), assistantMsg("ok")]);
+    assert.equal(r.err, undefined, "non-busy retries never trigger the bounded abort");
+    assert.deepEqual(r.notices, [], "…nor the notice");
+    // …and they do not reset a busy count either: three busy among them still abort.
+    const mixed = await busyRun([apiRetry(429), apiRetry(500), apiRetry(429), apiRetry(null), apiRetry(529), assistantMsg("x")]);
+    assert.ok(mixed.err instanceof SdkBusyAbortError);
+    assert.equal(mixed.pulled.length, 5, "aborted on the third busy retry, the fifth event");
+  }
+
+  // Without an explicit busy policy, a hard budget/concurrency refusal must
+  // stop immediately; the learner decides whether to retry after recovery.
+  {
+    const pulled = [];
+    const { h, calls } = handlers();
+    await assert.rejects(
+      consumeSdkStream(mockStream([apiRetry(429), apiRetry(429), assistantMsg("결국 응답")], pulled), h),
+      error => error.name === 'SdkApiError' && error.status === 429,
+    );
+    assert.deepEqual(calls.deltas, []);
+    assert.equal(calls.aborted, 1);
+    assert.equal(pulled.length, 1);
+  }
+
+  // The 401 fast-fail still wins under the policy (#320 unchanged).
+  {
+    const r = await busyRun([apiRetry(429, "rate_limit"), apiRetry(401)]);
+    assert.equal(r.err?.name, "FatalAuth", "a rejected token is not a busy upstream");
+    assert.equal(r.calls.aborted, 1);
+  }
+
+  // A host's onNotice that throws does not end the turn; a custom error and count are honored.
+  {
+    const r = await busyRun([apiRetry(429), assistantMsg("계속")], { onNotice: () => { throw new Error("render failed"); } });
+    assert.equal(r.err, undefined, "the notice is non-blocking");
+    assert.deepEqual(r.calls.deltas, ["계속"]);
+    const custom = await busyRun([apiRetry(529), apiRetry(529)], {
+      maxRetries: 2,
+      makeBusyError: (status) => Object.assign(new Error("custom"), { name: "Busy", status }),
+    });
+    assert.equal(custom.err?.name, "Busy");
+    assert.equal(custom.err.status, 529);
+  }
+
+  // The gate itself: only an orchestrator seat gets a policy.
+  {
+    const onNotice = () => {};
+    assert.equal(sdkBusyPolicyFor({}, onNotice), undefined, "no orchestrator → no busy policy");
+    assert.equal(sdkBusyPolicyFor({ orchestrator: undefined }, onNotice), undefined);
+    const policy = sdkBusyPolicyFor({ orchestrator: { rosterId: "homepage", rosterVersion: "1.0.0", consult: true, siteCheck: true } }, onNotice);
+    assert.equal(policy?.onNotice, onNotice, "an orchestrator seat gets the notice hook");
+  }
+  console.log("✓ A2: busy — one notice on the first 429/503/529, abort on the third, reset by a real answer, gated");
+}

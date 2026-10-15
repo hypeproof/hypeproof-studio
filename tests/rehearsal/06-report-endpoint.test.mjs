@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WORKER_URL, TOKEN } from "./helpers/env.mjs";
+import { WORKER_URL, TOKEN, PROFILE } from "./helpers/env.mjs";
 import { fetchJson, sleep } from "./helpers/api.mjs";
 
 const REPORT_URL = `${WORKER_URL}/report`;
@@ -16,7 +16,7 @@ function validBody(overrides = {}) {
   return {
     description: "R6 rehearsal smoke — automated test report (please ignore on triage)",
     request_id: "test-rid-12345678",
-    profile_id: "boah-dental-teaser-2026-s1",
+    profile_id: PROFILE,
     contact: "(rehearsal)",
     include_recent_turns: false,
     attachments: {

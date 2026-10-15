@@ -49,7 +49,7 @@ No real-device run was made: no Studio app run with this branch reached a CR sur
 
 ### `09-preview.spec.ts` baseline (switch off)
 
-Local Worker on port 8797 with a dev-only signing secret (no provider key), sk-biopharm kids cohort, the switch absent. Same shell, two injected builds, three runs each:
+Local Worker on port 8797 with a dev-only signing secret (no provider key), kids-workshop kids cohort, the switch absent. Same shell, two injected builds, three runs each:
 
 | Test | `origin/main` build | this branch |
 |---|---|---|
@@ -310,7 +310,7 @@ In-app (`app-layer.spec.ts`), scratch copy of 0.1.51 with `f8b3a15a`'s extension
 - Negative, CR-08 across requests: `CrExecutor.newTurn()` without `turn++` (steps still restart, earlier records keep their step): **RED** at "CR-T08: an earlier request's error reads 이전 요청", with the raw line "단계 4 planted-step3-error" in the `[cr:again]` request.
 - Negative, both `crNewTurn()` call sites removed: **RED** earlier, at "reported at the step index of the action that raised it". Removing only the proxy call site stays green, as the reviewer found: the shared-setup call `this.mcpBrowser?.crNewTurn()` runs for proxy turns too and resets the same long-lived control (`proxyTurnBrowser` hands proxy turns `this.mcpBrowser` with the switch on), so the two sites are redundant on that path, not untested.
 
-`09-preview.spec.ts`, same app copy, gated and quiet, against `scripts/dev-stack.sh` (sk-biopharm, `preview.type: live_server`): 3 passed. Planted: expected path forced to `iframe` (a webview cohort) → REQ-D1/D3/D6 and REQ-D4 RED at "the preview path the served profile's preview.type picks". REQ-D3/D6 themselves still run only on a webview cohort, which the dev stack does not serve.
+`09-preview.spec.ts`, same app copy, gated and quiet, against `scripts/dev-stack.sh` (kids-workshop, `preview.type: live_server`): 3 passed. Planted: expected path forced to `iframe` (a webview cohort) → REQ-D1/D3/D6 and REQ-D4 RED at "the preview path the served profile's preview.type picks". REQ-D3/D6 themselves still run only on a webview cohort, which the dev stack does not serve.
 
 Gates at `f8b3a15a` (exit codes, run after committing): `packages/measurement` 0 · `worker` test 0 · typecheck 0 · `test:authoring:d1` 0 · `test:classroom:d1` 0 · `test:native-trial:d1` 0 · `test:classroom-ops:d1` 0 · `validate-profiles` 0 · cohort-harness 0 · `chalk` test 0 · typecheck 0 · extension typecheck 0 · extension `npm test` 0 · `webview-ui` tsc 0 · `e2e` `test:cr-browser` (real Chromium) 0 · `next-work.py --check` 0 · `check-registry.py` 0 · `align.py check --doc curriculum-runtime` 0.
 

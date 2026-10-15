@@ -27,9 +27,11 @@ const { issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.
 const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
 const { setRoster, startSession, pauseCohort } = await import("@hypeproof/service-testkit/src/lib/kv.ts");
 
-const COHORT = "boah-dental-2026-a";
-const COPYCLONE = "boah-dental-director-copyclone-2026-s1";
-const TEASER = "boah-dental-teaser-2026-s1";   // dashboard_hidden this round (#384)
+const { serviceProfiles } = await import("../../test/fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COHORT = SP.pilotCohort;
+const COPYCLONE = SP.copyclone.id;
+const TEASER = SP.searchTeaser.id;   // dashboard_hidden this round (#384)
 
 const store = new Map();
 const kv = {

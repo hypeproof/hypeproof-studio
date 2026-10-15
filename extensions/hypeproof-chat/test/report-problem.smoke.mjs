@@ -48,7 +48,7 @@ function makeFakeToken(payload) {
 
 await check("extractJtiUnverified pulls jti from valid v2 token", () => {
   const tok = makeFakeToken({
-    u: "alice", c: "boah-dental-2026-a", p: "boah-dental-teaser-2026-s1",
+    u: "alice", c: "dental-pilot-2026-a", p: "dental-teaser-2026-s1",
     iat: 1, exp: 100, v: 2, jti: "11111111-2222-4333-8444-555555555555",
   });
   assert.equal(extractJtiUnverified(tok), "11111111-2222-4333-8444-555555555555");

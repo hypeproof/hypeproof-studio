@@ -292,4 +292,60 @@ const READ_SET = ["Read", "Grep", "Glob"];
   console.log("✓ sdkToolToActionRequest: Agent/Task → delegateAgent with subagent + task in the modal copy");
 }
 
+// ─── A2: an orchestrator seat never attaches SDK subagents (ADR 0011 §2) ─────
+// With a roster served, helpers are reached through consult. The SDK `agents`
+// option and the Agent/Task tool stay off — the gateway replaces every
+// subagent's system prompt anyway (spec §3.1) — even where the profile grants
+// `sdk_tools.subagents`. Without a roster, REQ-M22 is untouched.
+{
+  const args = { proxyUrl: "https://api.hypeproof-ai.xyz/v1", token: "hps-token", baseEnv: {} };
+  const roster = {
+    format: "hps-agent-roster/1",
+    id: "homepage",
+    version: "1.0.0",
+    checks: ["site_check"],
+    agents: [
+      { name: "coach", role: "coach" },
+      { name: "design-reviewer", role: "helper", enabled: true },
+    ],
+  };
+  const grantedProfile = profile("website", { sdk_tools: { read: true, write: true, subagents: true } });
+
+  const orch = profileToAgentOptions(grantedProfile, { model: "hypeproof-default", systemPrompt: "", orchestrator: roster });
+  assert.deepEqual(orch.permittedAgentTools, [], "no Agent/Task grant under the orchestrator");
+  const orchOptions = buildSdkQueryOptions(orch, args);
+  assert.equal("agents" in orchOptions, false, "agents option absent under the orchestrator");
+  assert.ok(!orchOptions.tools.includes("Task") && !orchOptions.tools.includes("Agent"), "no invoker in the base tool set");
+
+  // Belt: a hand-built option set carrying both the binding and an Agent grant still attaches nothing.
+  const forced = buildSdkQueryOptions(
+    { ...orch, permittedAgentTools: ["Task", "Agent"], permittedTools: [...orch.permittedTools, "Agent"] },
+    args,
+  );
+  assert.equal("agents" in forced, false, "the binding wins over a stray grant");
+  assert.ok(!forced.tools.includes("Agent") && !forced.tools.includes("Task"), "…and the invoker is stripped");
+
+  // canUseTool on that seat: a delegation attempt dies at Gate 1.
+  const delegation = evaluateSdkToolUse({
+    toolName: "Task",
+    input: { subagent_type: SUBAGENT_CODE_REVIEWER, prompt: "리뷰해줘" },
+    permittedTools: [...orch.permittedTools, ...orch.permittedAgentTools, ...orch.permittedMcpTools],
+  });
+  assert.equal(delegation.decision, "deny", "Task is not granted on an orchestrator seat");
+
+  // Negative controls — no roster, or the served "off" form, keep the legacy catalog exactly.
+  for (const orchestrator of [undefined, null, { enabled: false, reason: "lesson_locked" }]) {
+    const legacy = profileToAgentOptions(grantedProfile, { model: "hypeproof-default", systemPrompt: "", orchestrator });
+    assert.deepEqual(legacy.permittedAgentTools, ["Task", "Agent"], `legacy grant kept (${JSON.stringify(orchestrator)})`);
+    const legacyOptions = buildSdkQueryOptions(legacy, args);
+    assert.deepEqual(
+      Object.keys(legacyOptions.agents).sort(),
+      [SUBAGENT_CODE_REVIEWER, SUBAGENT_RESEARCHER].sort(),
+      "both legacy subagents still defined",
+    );
+    assert.ok(legacyOptions.tools.includes("Task") && legacyOptions.tools.includes("Agent"));
+  }
+  console.log("✓ A2: orchestrator seat → no agents option, no Agent/Task; without a roster REQ-M22 is unchanged");
+}
+
 console.log("sdk-subagents.smoke.mjs: all tests passed");

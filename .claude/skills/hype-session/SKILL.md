@@ -36,9 +36,9 @@ wrong session opened. Therefore:
 
 - If the user's request does not name a track (커리큘럼 이름으로), **ask
   which track before any mutation** — show the display names from the
-  issuer scope, not profile IDs. e.g. boah-dental-2026-a:
-  - `boah-dental-director-copyclone-2026-s1` — "원장 웹사이트 카피클론" (홈페이지 만들기)
-  - `boah-dental-teaser-2026-s1` — "티저 · 원장님을 이겨라" (직원 검색엔진)
+  issuer scope, not profile IDs. e.g. dental-pilot-2026-a:
+  - `dental-copyclone-2026-s1` — "원장 웹사이트 카피클론" (홈페이지 만들기)
+  - `dental-teaser-2026-s1` — "티저 · 원장님을 이겨라" (직원 검색엔진)
 - Read-only actions (`status`) need no confirmation.
 
 ## Preflight (every invocation)

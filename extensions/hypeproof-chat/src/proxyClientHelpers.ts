@@ -91,6 +91,9 @@ export const PROFILE_ISSUER_TOKEN_FRIENDLY =
  */
 export const PROFILE_REJECTED_FRIENDLY =
   "참여 코드를 확인할 수 없습니다. 코드 전체를 붙여넣었는지 확인하고, 문제가 계속되면 코드 발급 담당자에게 문의해 주세요.";
+/** A trial or pass code that was refunded or replaced, when the Service sent no sentence of its own. */
+export const NATIVE_SEAT_ENDED_FRIENDLY =
+  "환불했거나 새 코드로 바뀐 코드라 더 쓸 수 없습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
 export const PROFILE_UNKNOWN_COHORT_FRIENDLY =
   "참여 코드에 연결된 수업을 찾을 수 없습니다. 코드 발급 담당자에게 수업 정보를 확인해 주세요.";
 export const PROFILE_SERVER_FRIENDLY =
@@ -109,7 +112,7 @@ export function profileNetworkFailure(): ProfileFailure {
  * page from a proxy) and simply degrades to status-based classification.
  */
 export function classifyProfileFailure(status: number, bodyText: string): ProfileFailure {
-  type ErrorBody = { error?: { code?: string; type?: string; request_id?: string } };
+  type ErrorBody = { error?: { code?: string; type?: string; request_id?: string; message?: string } };
   let parsed: ErrorBody | null = null;
   try {
     parsed = JSON.parse(bodyText) as ErrorBody;
@@ -120,6 +123,12 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
   const requestId = parsed?.error?.request_id;
   const base = { status, requestId };
 
+  // A native seat that ended (refunded, replaced, or past its window): the Service words it for a
+  // trial or a bought pass, so its sentence is shown as is (2026-10-14: a refunded pass read
+  // "참여 코드를 확인할 수 없습니다 … 코드 발급 담당자에게 문의").
+  const serviceLine = typeof parsed?.error?.message === "string" && parsed.error.message.length <= 200 ? parsed.error.message : null;
+  if (status === 401 && code === "trial_revoked_or_reissued")
+    return { ...base, reason: "rejected", friendly: serviceLine ?? NATIVE_SEAT_ENDED_FRIENDLY };
   if (status === 401) {
     if (code === "expired") return { ...base, reason: "expired", friendly: TOKEN_EXPIRED_FRIENDLY };
     if (code === "wrong_role") {
@@ -128,7 +137,7 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
     return { ...base, reason: "rejected", friendly: PROFILE_REJECTED_FRIENDLY };
   }
   if (status === 403) {
-    if (code === "trial_expired") return { ...base, reason: "expired", friendly: "개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다. 다시 체험하려면 코드 발급 담당자에게 새 체험을 요청해 주세요." };
+    if (code === "trial_expired") return { ...base, reason: "expired", friendly: serviceLine && /이용권/.test(serviceLine) ? serviceLine : "개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다. 다시 체험하려면 코드 발급 담당자에게 새 체험을 요청해 주세요." };
     return { ...base, reason: "forbidden", friendly: "이 수업에 참여할 권한이나 진행 중인 세션이 없습니다. 강사에게 참여 등록과 수업 상태를 확인해주세요." };
   }
   if (status === 400) {

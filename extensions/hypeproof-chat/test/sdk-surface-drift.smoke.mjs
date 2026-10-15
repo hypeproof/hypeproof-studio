@@ -69,6 +69,22 @@ const sdk = await import("@anthropic-ai/claude-agent-sdk");
     undefined,
     "SDK 를 prod dependency 로 두면 빌드가 깨진다 (#349)",
   );
+
+  // The rule holds for every package, not only for these two. With any entry
+  // under `dependencies`, `npm list --production` exits 1 on the injected copy
+  // (the manifest without node_modules), and that is the check
+  // vscode-min-prepack runs (#349). #1587 added three @hypeproof/* entries
+  // there and no test failed. Packages that esbuild inlines belong in
+  // devDependencies as well.
+  const prodDepsOf = (manifest) => Object.keys(manifest.dependencies ?? {});
+  // Control: the probe reports an entry when there is one.
+  assert.deepEqual(prodDepsOf({ dependencies: { "left-pad": "1.3.0" } }), ["left-pad"]);
+  assert.deepEqual(
+    prodDepsOf(pkg),
+    [],
+    `package.json must not declare dependencies (found: ${prodDepsOf(pkg).join(", ")}). ` +
+      "The injected copy has no node_modules, so any entry fails vscode-min-prepack (#349). Use devDependencies.",
+  );
 }
 
 // ─── 4. 게이트가 여전히 그 두 이름을 본다 (드리프트 락) ─────────────────────
@@ -83,6 +99,72 @@ const sdk = await import("@anthropic-ai/claude-agent-sdk");
   );
   // 그리고 그 게이트가 실패했을 때 조용하지 않아야 한다 — 로그 한 줄이라도 남는다.
   assert.match(coach, /managed MCP factory unavailable; capabilities remain disabled/, "게이트 실패가 로그로 남는다");
+}
+
+// ─── 5. A2: hook answers still have the shape the guard knows ────────────────
+// sanitizeHookOutput is an allowlist. If the SDK adds a NEW field to hook
+// answers that can carry an approval, the guard drops it, but nobody learns it
+// exists — and the next person, wondering why the field "does nothing", may
+// add it to the allowlist as is. So the keys of the installed sdk.d.ts hook
+// output types are locked exactly: when they move, stop here and re-read the
+// guard.
+{
+  const dts = readFileSync(join(here, "..", "node_modules", "@anthropic-ai", "claude-agent-sdk", "sdk.d.ts"), "utf8");
+  /** Top-level keys of `export declare type <name> = { … };`, comments removed. */
+  const typeKeys = (name) => {
+    const start = dts.indexOf(`export declare type ${name} = {`);
+    assert.ok(start >= 0, `sdk.d.ts declares ${name}`);
+    let depth = 0;
+    let end = -1;
+    for (let i = dts.indexOf("{", start); i < dts.length; i++) {
+      if (dts[i] === "{") depth++;
+      else if (dts[i] === "}" && --depth === 0) { end = i; break; }
+    }
+    const body = dts.slice(dts.indexOf("{", start) + 1, end).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const keys = [];
+    let level = 0;
+    for (const line of body.split("\n")) {
+      const m = level === 0 ? line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\??\s*:/) : null;
+      if (m) keys.push(m[1]);
+      level += (line.match(/[{(]/g) ?? []).length - (line.match(/[})]/g) ?? []).length;
+    }
+    return keys.sort();
+  };
+  assert.deepEqual(
+    typeKeys("SyncHookJSONOutput"),
+    ["continue", "decision", "hookSpecificOutput", "reason", "stopReason", "suppressOutput", "systemMessage", "terminalSequence"],
+    "the top-level hook answer fields changed: re-read sanitizeHookOutput",
+  );
+  assert.deepEqual(
+    typeKeys("PreToolUseHookSpecificOutput"),
+    ["additionalContext", "hookEventName", "permissionDecision", "permissionDecisionReason", "updatedInput"],
+    "the PreToolUse output fields changed: re-read sanitizeHookOutput",
+  );
+  assert.deepEqual(
+    typeKeys("PostToolUseHookSpecificOutput"),
+    ["additionalContext", "classifierContext", "hookEventName", "updatedMCPToolOutput", "updatedToolOutput"],
+    "the PostToolUse output fields changed: re-read sanitizeHookOutput",
+  );
+  assert.match(
+    dts,
+    /export declare type HookPermissionDecision = 'allow' \| 'deny' \| 'ask' \| 'defer';/,
+    "the permissionDecision values changed: the guard passes only deny and ask",
+  );
+  // Negative controls — if the key extractor measured nothing, the locks above
+  // would mean nothing. A real key must be found, an invented one must not.
+  assert.ok(typeKeys("PreToolUseHookSpecificOutput").includes("permissionDecision"), "the extractor sees a real key");
+  assert.ok(!typeKeys("PreToolUseHookSpecificOutput").includes("thisKeyHasNeverExisted"), "the extractor invents no key");
+
+  // The two events the guard lets through are events the SDK really exports (runtime value).
+  const { ORCHESTRATOR_HOOK_EVENTS } = await import("../src/sdkCoachHelpers.ts");
+  assert.ok(Array.isArray(sdk.HOOK_EVENTS), "the SDK exports HOOK_EVENTS");
+  for (const event of ORCHESTRATOR_HOOK_EVENTS) {
+    assert.ok(sdk.HOOK_EVENTS.includes(event), `${event} is a hook event the SDK knows`);
+  }
+  // The Options keys we pass still exist: a renamed key would be ignored silently.
+  for (const key of ["hooks", "permissionMode", "tools", "allowedTools", "settingSources", "strictMcpConfig", "env"]) {
+    assert.match(dts, new RegExp(`\\n    ${key}\\?:`), `Options.${key} is declared in sdk.d.ts`);
+  }
 }
 
 console.log("sdk-surface-drift smoke OK");
