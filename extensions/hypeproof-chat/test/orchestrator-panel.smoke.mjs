@@ -200,4 +200,126 @@ if (!status.available) {
   ok("GET /v1/profile declares x-hps-orchestrator: hps-agent-roster/1 (the parser's format); an answer without the key is unchanged; /v1/activity does not carry it");
 }
 
+// ── 3. A cut reviewer answer keeps must before should before could (spec §3.3) ─
+
+{
+  const C = await import("../src/consultTool.ts");
+  const AGENT = { name: "design-reviewer", title: "검토 도우미", model: { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" } };
+  const ko = (n, c = "가") => c.repeat(n);
+  const bodyOf = (output) => ({ ok: true, agent: "design-reviewer", version: "1.0.0", model: { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" }, request_id: "req_0123456789abcdef", output });
+  const shaped = (output) => {
+    const text = C.consultSuccessText(AGENT, bodyOf(output));
+    assert.ok(text.length <= C.CONSULT_RESULT_MAX, `≤ ${C.CONSULT_RESULT_MAX} characters (${text.length})`);
+    return { text, json: JSON.parse(text) };
+  };
+  const finding = (rule, severity, i = 0) => ({ rule, where: `${ko(76)}#${String(i).padStart(2, "0")}`, severity, fix: ko(140, "나") });
+  const rules = (json) => json.output.findings.map((f) => `${f.rule}/${f.severity}`);
+
+  // The largest valid S1 design review (A4 report §12; the S1 contract: 8 findings, where ≤ 80,
+  // fix ≤ 140, 5 unverified ≤ 80). Cut from the end it kept must, should, must, should.
+  const S1_RULES = ["target-size", "external-url", "data-block", "font-size", "contrast", "overflow", "nav-link", "motion"];
+  const S1_MAX = {
+    verdict: "unverified",
+    findings: S1_RULES.map((rule, i) => ({ rule, where: ko(80), severity: i % 2 ? "should" : "must", fix: ko(140) })),
+    unverified: Array.from({ length: 5 }, () => ko(80)),
+  };
+  assert.equal(JSON.stringify(S1_MAX).length, 2707, "the fixture is the measured answer");
+  const s1 = shaped(S1_MAX);
+  assert.deepEqual(rules(s1.json), ["target-size/must", "data-block/must", "contrast/must", "nav-link/must"], "every must kept, in the Service's order");
+  assert.equal(s1.json.truncated, true);
+  assert.deepEqual(s1.json.cut, { findings_total: 8, findings_kept: 4, dropped: { should: 4 } }, "the cut says what it left out");
+  assert.equal(s1.json.output.verdict, "unverified");
+  assert.deepEqual(s1.json.output.unverified, S1_MAX.unverified);
+  assert.ok(s1.json.output.findings.every((f) => f.fix.length === 140), "kept findings are whole");
+
+  // The musts served last: a cut from the end would drop exactly them. Two shoulds go (the
+  // later two), and the four musts stay.
+  const lateMust = { verdict: "issues", findings: [...Array.from({ length: 4 }, (_, i) => finding(`s${i}`, "should", i)), ...Array.from({ length: 4 }, (_, i) => finding(`m${i}`, "must", 4 + i))] };
+  const late = shaped(lateMust);
+  assert.deepEqual(late.json.output.findings.map((f) => f.rule), ["s0", "s1", "m0", "m1", "m2", "m3"]);
+  assert.deepEqual(late.json.cut, { findings_total: 8, findings_kept: 6, dropped: { should: 2 } });
+  // Negative control (the instrument tells the two rules apart): the same answer with no
+  // severities is cut from the end, the A4 rule, and loses the last two, the musts' places.
+  const unranked = { verdict: "issues", findings: lateMust.findings.map(({ severity, ...f }) => f) };
+  const u = shaped(unranked);
+  assert.deepEqual(u.json.output.findings.map((f) => f.rule), ["s0", "s1", "s2", "s3", "m0", "m1"]);
+  assert.deepEqual(u.json.cut.dropped, { other: 2 });
+
+  // could goes before should, unranked before could, and the later one first within a severity.
+  const mixed = {
+    verdict: "issues",
+    findings: [
+      finding("a", "could", 0), finding("b", "must", 1), finding("c", "should", 2), finding("d", "high", 3),
+      finding("e", "could", 4), finding("f", "should", 5), finding("g", "must", 6), finding("h", "could", 7),
+    ],
+  };
+  const m = shaped(mixed);
+  const keptRules = m.json.output.findings.map((f) => f.rule);
+  assert.ok(!keptRules.includes("d"), "an unranked finding goes first");
+  const rank = { must: 0, should: 1, could: 2 };
+  const keptWorst = Math.max(...m.json.output.findings.map((f) => rank[f.severity] ?? 3));
+  const droppedBest = Math.min(...mixed.findings.filter((f) => !keptRules.includes(f.rule)).map((f) => rank[f.severity] ?? 3));
+  assert.ok(droppedBest >= keptWorst, `nothing dropped outranks anything kept (${keptRules.join(",")})`);
+  assert.deepEqual(keptRules, [...keptRules].sort(), "the Service's order is kept");
+  const cutCount = Object.values(m.json.cut.dropped).reduce((a, b) => a + b, 0);
+  assert.equal(cutCount, 8 - m.json.output.findings.length, "the marker counts every dropped finding");
+  // Within `could`, a, e, h: the later ones go first, so a cut that keeps one could keeps `a`.
+  const coulds = keptRules.filter((r) => ["a", "e", "h"].includes(r));
+  assert.deepEqual(coulds, ["a", "e", "h"].slice(0, coulds.length));
+  assert.deepEqual(keptRules, ["a", "b", "c", "e", "f", "g"], "the unranked one, then the last could");
+  assert.deepEqual(m.json.cut.dropped, { could: 1, other: 1 });
+  // Deeper: with five unverified lines the cut takes every could before any should.
+  const deep = shaped({ ...mixed, unverified: Array.from({ length: 5 }, () => ko(80)) });
+  assert.deepEqual(rules(deep.json), ["b/must", "c/should", "f/should", "g/must"]);
+  assert.deepEqual(deep.json.cut, { findings_total: 8, findings_kept: 4, dropped: { could: 3, other: 1 } });
+
+  // Positive control: an answer that fits goes whole, exactly as before (no marker).
+  const REVIEW = { verdict: "issues", findings: [{ rule: "contrast", where: "#hero .cta", severity: "must", fix: "글자색을 더 진하게" }, { rule: "alt", where: "img.logo", severity: "should", fix: "alt 추가" }], unverified: ["390px 실제 화면"] };
+  const small = C.consultSuccessText(AGENT, bodyOf(REVIEW));
+  assert.equal(small, JSON.stringify({ ok: true, agent: "design-reviewer", title: "검토 도우미", version: "1.0.0", model: "Claude Haiku 5.5", request_id: "req_0123456789abcdef", output: REVIEW }));
+
+  // Only musts and still too long: the general cut, marked with the real count.
+  const allMust = { verdict: "issues", findings: Array.from({ length: 40 }, (_, i) => finding("contrast", "must", i)) };
+  const am = shaped(allMust);
+  assert.equal(am.json.truncated, true);
+  assert.ok(am.json.output.findings.length >= 1 && am.json.output.findings.length < 40);
+  assert.deepEqual(am.json.cut, { findings_total: 40, findings_kept: am.json.output.findings.length, dropped: { must: 40 - am.json.output.findings.length } });
+
+  // An answer without findings (the advisor's plan) is cut the general way, as before: no `cut`.
+  const plan = { diagnosis: ko(300), plan: Array.from({ length: 30 }, (_, i) => ({ step: `${i} ${ko(90)}` })), stop: false };
+  const p = shaped(plan);
+  assert.equal(p.json.truncated, true);
+  assert.equal("cut" in p.json, false);
+
+  // Never past the cap, whatever the mix.
+  for (const n of [1, 2, 5, 9, 17]) {
+    for (const fixLen of [10, 140, 600]) {
+      const out = { verdict: "issues", findings: Array.from({ length: n }, (_, i) => ({ rule: `r${i}`, where: ko(80), severity: ["must", "should", "could", "x"][i % 4], fix: ko(fixLen) })), unverified: [ko(80)] };
+      shaped(out);
+    }
+  }
+  ok("a cut answer keeps must before should before could (unranked first, later first), in the Service's order, marked with what it left out; the S1 maximum keeps all 4 musts (was 2 of 4); an answer that fits goes whole");
+
+  // Through the consult handler: the coach sees the musts, the timeline counts all eight.
+  const { parseServedRoster } = await import("../src/agentRoster.ts");
+  const roster = parseServedRoster({
+    format: "hps-agent-roster/1", id: "homepage", version: "1.0.0", checks: ["site_check"],
+    agents: [
+      { name: "coach", title: "코치", role: "coach" },
+      { name: "design-reviewer", title: "검토 도우미", role: "helper", trigger: "coach_consult", context: ["learner_goal"], caps: { per_turn: 1, per_session: 6 }, enabled: true, model: { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" } },
+    ],
+  }).roster;
+  const events = [];
+  const res = await C.runConsult({
+    roster, profile: { game: { template_tier: "website" } }, session: new C.OrchestratorSession(), seatKey: "seat-a5-sev",
+    gateway: { url: "https://api.example.test/v1", token: "t0ken" },
+    fetch: async () => new Response(JSON.stringify(bodyOf(S1_MAX)), { status: 200, headers: { "content-type": "application/json" } }),
+    emit: (e) => events.push(e),
+  }, { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" });
+  const tool = JSON.parse(res.content[0].text);
+  assert.deepEqual(rules(tool), ["target-size/must", "data-block/must", "contrast/must", "nav-link/must"]);
+  assert.equal(events.at(-1).label, "🔎 검토 도우미 · Claude Haiku 5.5 — 고칠 곳 8개");
+  ok("consult: the S1 maximum reaches the coach with its 4 musts and the cut marker; the timeline line counts all 8 findings");
+}
+
 console.log(`orchestrator-panel: ${passed} checks passed`);
