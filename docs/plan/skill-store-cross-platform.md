@@ -455,9 +455,38 @@ observed through the actual participation screen; existing codes were reused.
 Evidence under `native-store-20261015/`: `recipient-original-card.txt`,
 `recipient-original-success.txt`, `recipient-original-success.png` and
 `recipient-original-receipt.json`. No operator JSON import or duplicate publication
-was used. The third Studio principal still has API-only store evidence.
+was used. At this observation the third Studio principal had API-only store
+evidence; the later native result follows below.
 
 The20:26KST funding readback (`budget-after-native-recipient.json`) records
 USD0.060136 author spend andUSD0.026030 recipient spend, totalingUSD0.086166
 of the existingUSD1 pool. All three have zero held, overrun and unresolved cost;
 no allocation increased and historical usage remains retained.
+
+### Second native recipient import — 2026-10-15 20:57KST
+
+The third distinct Studio principal joined in the same single Mac Dev app3f1a3f20
+using a separate `recipient-third-workspace` and its existing funded allocation.
+Its normal SDK conversation called the actual store list, selected the retained
+author publication and displayed the exact title, description, subject/body and
+four column mappings in the private review card. Clicking “이 스킬 가져오기”
+completed installation; the tool receipt and coach confirmed success, and the
+actual quest advanced from0/6 to2/6 with Google/setup/execution still pending.
+No operator JSON transfer, duplicate publication, Google reconnect or mail occurred.
+
+Read-only host-state comparison using fresh Service-verified activity IDs found
+three distinct namespaces containing the exact reviewed recipe. The author and
+first recipient copies remained unchanged; the third recipient's store view
+marked the item as not owned by it. This establishes native Mac discovery and
+installation for both recipients, but does not complete SS-07: independent Google
+settings/results, Windows execution and the full denial matrix remain outstanding.
+Workspace reload again required normal code re-entry because this isolated Dev
+app uses memory-only credentials; no Windows credential persistence is claimed.
+
+Evidence under `native-store-20261015/`: `recipient-third-card.txt`,
+`recipient-third-success.txt`, `recipient-third-success.png` and
+`recipient-third-receipt.json`. The20:58KST readback in
+`budget-after-native-third.json` records totalUSD0.113022 spent from the existing
+USD1 pool (author0.060136, first recipient0.026030, third0.026856), held0 and
+overrun0. No allocation increased. Studio documentation headeb6e6797 had all18
+CI checks passing before this evidence-only update; runtime remains3f1a3f20.

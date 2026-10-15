@@ -29,9 +29,11 @@ Current partial evidence, all dated2026-10-15:
   saved and published through the actual conversation and private review card.
   The coach correctly acknowledged completed sharing. Three distinct Studio
   principals listed/fetched the exact version1; only the author had ownership.
-  One distinct recipient subsequently found and imported it through the actual
-  Mac conversation/review card. Persisted author/recipient recipes match exactly
-  in separate activity namespaces; the third principal still has API-only evidence.
+  Both distinct recipients subsequently found and imported it through actual
+  Mac conversations/review cards. Read-only persisted-state checks at20:57KST
+  found the exact reviewed recipe in three separate activity namespaces; the
+  author and first recipient copies remained unchanged. Neither recipient owns
+  the publication. Google setup and execution remain pending.
 - The native attempt exposed a missing SDK recipe contract and misleading save
   recovery. The fixed tool declares the exact schema and stage-specific recovery.
   Automation89/89, types/build pass. All18 runtime CI checks pass after the single
@@ -55,10 +57,10 @@ the memory-only Dev app does not preserve its credentials. No new mail was sent.
 
 Three subjects share aUSD1 sequential test pool under the existingUSD3 ceiling.
 The117-record historical audit retainedUSD1.972794 prior spent/held exposure;
-prior exposure plus the full new pool remainsUSD2.972794. At20:26KST, native
-author/recipient work has settledUSD0.086166 across the pool, held0 and
-overrun0. The author spentUSD0.060136 and first recipientUSD0.026030;
-the third subject has no spend. Pool remaining isUSD0.913834.
+prior exposure plus the full new pool remainsUSD2.972794. At20:58KST, native
+author/recipient work has settledUSD0.113022 across the pool, held0 and
+overrun0. The author spentUSD0.060136, first recipientUSD0.026030 and
+third principalUSD0.026856. Pool remaining isUSD0.886978.
 No limit increased and no usage/token reset occurred. This does not provision the
 real20-person class budget. Preserve the native publication for Windows reuse.
 
