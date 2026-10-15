@@ -78,6 +78,87 @@ async function render(name, props) {
   return renderApi.render(name, props);
 }
 
+// ── The host: chatPanelProvider bundled with a scripted `vscode` ─────────────
+// The clear-history.smoke.mjs idiom. esbuild's CJS interop reads `vscode`'s top-level keys
+// through getters taken at load time, so every key the tests touch exists from the start and
+// the tests change what is under it.
+
+const fakeVscode = {
+  ViewColumn: { One: 1, Two: 2, Beside: -2 },
+  Uri: { file: (p) => ({ fsPath: p, path: p, scheme: "file", toString: () => `file://${p}` }), parse: (s) => ({ toString: () => s }), joinPath: (u, ...parts) => ({ fsPath: [u.fsPath, ...parts].join("/") }) },
+  window: {
+    browserTabs: [],
+    activeBrowserTab: undefined,
+    activeTextEditor: undefined,
+    tabGroups: { all: [] },
+    showWarningMessage: async () => undefined,
+    showInformationMessage: async () => undefined,
+    showErrorMessage: async () => undefined,
+    openBrowserTab: async () => {
+      throw new Error("fake vscode: openBrowserTab not scripted");
+    },
+  },
+  workspace: {
+    workspaceFolders: undefined,
+    getConfiguration: () => ({ get: (_key, fallback) => fallback, update: async () => {} }),
+    fs: { readFile: async () => { throw new Error("fake vscode: fs.readFile not scripted"); }, writeFile: async () => {}, createDirectory: async () => {}, readDirectory: async () => [] },
+  },
+  commands: { executeCommand: async () => undefined, registerCommand: () => ({ dispose() {} }) },
+  env: { appName: "HypeProof Studio", openExternal: async () => true },
+};
+
+let providerApi = null;
+async function provider() {
+  if (!providerApi) {
+    const bundle = await build({
+      entryPoints: [new URL("../src/chatPanelProvider.ts", import.meta.url).pathname],
+      bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "silent",
+    });
+    const module = { exports: {} };
+    vm.runInNewContext(bundle.outputFiles[0].text, {
+      module, exports: module.exports, require: (id) => (id === "vscode" ? fakeVscode : nodeRequire(id)),
+      console, Buffer, process, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask,
+      AbortSignal, AbortController, URL, URLSearchParams, TextEncoder, TextDecoder, fetch, Response, Headers,
+      structuredClone, crypto: globalThis.crypto,
+    });
+    providerApi = module.exports;
+  }
+  return providerApi;
+}
+
+/** The served roster of spec §2.2 / §10.1 (the reviewer on, the advisor off). */
+const ROSTER = {
+  format: "hps-agent-roster/1",
+  id: "homepage",
+  version: "1.0.0",
+  digest: "sha256:" + "a".repeat(64),
+  coach_brief: "검토가 필요하면 검토 도우미에게 물어보세요. 도우미의 의견을 쓸 때는 누구의 의견인지 밝혀 말하세요.",
+  checks: ["site_check", "diff_guard", "archive_before_overwrite"],
+  agents: [
+    { name: "coach", title: "코치", role: "coach" },
+    {
+      name: "design-reviewer", title: "검토 도우미", role: "helper", purpose: "첫 페이지나 새 섹션을 품질 기준으로 검토한다.",
+      trigger: "coach_consult", context: ["file_excerpt", "site_outline", "site_check", "learner_goal"],
+      caps: { per_turn: 1, per_session: 6 }, enabled: true, model: { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
+    },
+    {
+      name: "design-advisor", title: "설계 자문", role: "advisor", trigger: "deterministic_failure",
+      context: ["failure_evidence", "file_excerpt", "site_check", "diff_summary", "learner_goal"],
+      caps: { per_turn: 1, per_session: 2 }, enabled: false, model: { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+    },
+  ],
+};
+const ADULT = { profile_id: "homepage-practice-s1", game: { template_tier: "website" }, coach_runtime: "agent-sdk", sdk_tools: { read: true, write: true } };
+const SEATS = {
+  adultOld: ADULT,
+  adultRoster: { ...ADULT, orchestrator: ROSTER },
+  adultDisabled: { ...ADULT, orchestrator: { enabled: false, reason: "flag_off" } },
+  adultMalformed: { ...ADULT, orchestrator: { ...ROSTER, format: "hps-agent-roster/2" } },
+  kidsRoster: { profile_id: "kids-s1", game: { template_tier: "kids-basic" }, orchestrator: ROSTER },
+  minorFlagRoster: { ...ADULT, profile_id: "teen-s1", minor_cohort: true, orchestrator: ROSTER },
+  unknownTierRoster: { profile_id: "odd-s1", orchestrator: ROSTER },
+};
+
 // ── Old-profile fixtures (no `orchestrator` key anywhere) ────────────────────
 
 const CHOICES = [
@@ -320,6 +401,72 @@ if (!status.available) {
   assert.deepEqual(rules(tool), ["target-size/must", "data-block/must", "contrast/must", "nav-link/must"]);
   assert.equal(events.at(-1).label, "🔎 검토 도우미 · Claude Haiku 5.5 — 고칠 곳 8개");
   ok("consult: the S1 maximum reaches the coach with its 4 musts and the cut marker; the timeline line counts all 8 findings");
+}
+
+// ── 4. The switch, as the panel reads it; the consultHelper approval path (spec §5.1) ─
+
+{
+  const P = await provider();
+  // The panel's switch is A4's: on for an adult with a well-formed roster, off for everything else.
+  for (const [name, seat] of Object.entries(SEATS)) {
+    const roster = P.orchestratorRosterFor(seat);
+    assert.equal(roster ? `${roster.id}@${roster.version}` : null, name === "adultRoster" ? "homepage@1.0.0" : null, name);
+  }
+  assert.equal(P.orchestratorRosterFor(null), null);
+
+  const { readFileSync } = await import("node:fs");
+  const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const setting = manifest.contributes.configuration.properties["hypeproofChat.requireApprovalFor"];
+  // VS Code serves the manifest default whenever the user has not set one (#499).
+  const settings = {};
+  fakeVscode.workspace.getConfiguration = () => ({ get: (key, fallback) => (key in settings ? settings[key] : key === "requireApprovalFor" ? setting.default : fallback) });
+  const modals = [];
+  let pick;
+  fakeVscode.window.showWarningMessage = async (message, options, ...buttons) => {
+    modals.push({ message, options, buttons });
+    return pick;
+  };
+  const host = { coachDisplayName: () => "코치", cachedProfile: SEATS.adultRoster };
+  const approve = async (req) => {
+    let prompted = 0;
+    const approved = await P.ChatPanelProvider.prototype.resolveActionApproval.call(host, { requestId: "r1", ...req }, () => prompted++);
+    return { approved, prompted };
+  };
+  const consult = { kind: "consultHelper", description: "도우미에게 묻기 (design-reviewer): 첫 화면을 검토해 주세요", payload: { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" } };
+
+  // The default policy: no modal, allowed, and the actor is the policy (nothing was prompted).
+  assert.equal(setting.default.includes("consultHelper"), false);
+  assert.deepEqual(await approve(consult), { approved: true, prompted: 0 });
+  assert.equal(modals.length, 0);
+  // Control: the instrument does see a modal for a kind the default lists.
+  pick = "맡기기";
+  assert.deepEqual(await approve({ kind: "delegateAgent", description: "코드리뷰어에게 위임: 검토", payload: {} }), { approved: true, prompted: 1 });
+  assert.equal(modals.length, 1);
+
+  // A machine that lists consultHelper gets one modal per consult, naming the helper and its model.
+  settings.requireApprovalFor = [...setting.default, "consultHelper"];
+  pick = "묻기";
+  assert.deepEqual(await approve(consult), { approved: true, prompted: 1 });
+  const m = modals.at(-1);
+  assert.equal(m.options.modal, true);
+  assert.deepEqual(m.buttons, ["묻기"]);
+  assert.equal(
+    m.message,
+    "코치가 도우미에게 물어보려고 해요:\n\n검토 도우미 · Claude Haiku 5.5에게: 첫 화면을 검토해 주세요\n\n도우미는 대화 기록 없이 작업 파일의 일부만 보고, 파일을 고치지 않아요.",
+  );
+  pick = undefined; // Esc or the close box
+  assert.deepEqual(await approve(consult), { approved: false, prompted: 1 });
+  // A name the roster does not know is shown as it came (the handler refuses it anyway).
+  pick = "묻기";
+  await approve({ ...consult, payload: { agent: "ghost", question: "누구세요" } });
+  assert.match(modals.at(-1).message, /\n\nghost에게: 누구세요\n\n/);
+  // No roster on this seat (an old profile): the wire id, never an invented title.
+  host.cachedProfile = SEATS.adultOld;
+  await approve(consult);
+  assert.match(modals.at(-1).message, /\n\ndesign-reviewer에게: 첫 화면을 검토해 주세요\n\n/);
+  delete settings.requireApprovalFor;
+  fakeVscode.window.showWarningMessage = async () => undefined;
+  ok("consultHelper: allowed without a modal by default (control: delegateAgent still asks); a machine that lists it asks once per consult, naming 검토 도우미 · Claude Haiku 5.5 and the question; Esc denies");
 }
 
 console.log(`orchestrator-panel: ${passed} checks passed`);

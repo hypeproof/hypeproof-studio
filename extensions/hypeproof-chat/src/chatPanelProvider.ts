@@ -135,12 +135,16 @@ import {
 import {
   approvalCopyFor,
   approvalFallbackTitle,
+  asSubject,
   browserApprovalTitle,
   coachDegradedNotice,
   pageAttachedNotice,
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
+// A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels.
+import { resolveOrchestrator } from "./orchestratorSurfaces";
+import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
@@ -250,6 +254,44 @@ class LessonBindingPreflightError extends Error {}
 
 /** What one 팀 브레인 run tells the student (one short sentence per line) and the page to open when it worked. */
 interface BrainRun { lines: string[]; open?: string }
+
+// ── The front-line orchestrator, panel side (A5; ADR 0011, spec §5.1, §5.2, §6.3) ──
+// Pure (no vscode), exported for test/orchestrator-panel.smoke.mjs. Without a roster this
+// seat may use, every one of them answers "off", and the panel does what it did before A5.
+
+/**
+ * The served roster this seat runs under, or null: an older Service, the cohort's flag off,
+ * the header-less answer, a minor or unknown tier, or a roster the parser refuses. The same
+ * switch runSdkCoach uses (A4 resolveOrchestrator); the host arguments are this panel.
+ */
+export function orchestratorRosterFor(profile: ResolvedProfile | null | undefined): ServedRoster | null {
+  const resolved = resolveOrchestrator(profile, {});
+  return resolved.on ? resolved.roster : null;
+}
+
+/**
+ * The modal a machine that lists `consultHelper` in requireApprovalFor shows (spec §5.1): who is
+ * asked, on which model, the question, and what the helper can and cannot do. Without that
+ * setting a consult never reaches it.
+ */
+export function consultApprovalCopy(
+  coachName: string,
+  roster: ServedRoster | null,
+  payload: unknown,
+): { message: string; verb: string } {
+  const p = payload && typeof payload === "object" ? (payload as { agent?: unknown; question?: unknown }) : {};
+  const name = typeof p.agent === "string" ? p.agent.trim().slice(0, 40) : "";
+  const agent = roster && name ? rosterAgent(roster, name) : undefined;
+  const who = agent ? agentLabel(agent) : name || "도우미";
+  const question = typeof p.question === "string" ? p.question.trim().slice(0, 400) : "";
+  return {
+    message:
+      `${asSubject(coachName)} 도우미에게 물어보려고 해요:\n\n` +
+      `${who}${question ? `에게: ${question}` : ""}\n\n` +
+      "도우미는 대화 기록 없이 작업 파일의 일부만 보고, 파일을 고치지 않아요.",
+    verb: "묻기",
+  };
+}
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
@@ -5598,6 +5640,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // at every moment your own artifact changes IS this track's delegation-judgment
     // training.
     const coachName = this.coachDisplayName();
+    // A5 — consult (orchestrator spec §5.1). Only a machine that added consultHelper to
+    // requireApprovalFor reaches this line; the default never does. The modal names the helper
+    // by its title and model (AE-27), not by its wire id.
+    if (req.kind === "consultHelper") {
+      const copy = consultApprovalCopy(coachName, orchestratorRosterFor(this.cachedProfile), req.payload);
+      onPrompted?.();
+      const pick = await vscode.window.showWarningMessage(copy.message, { modal: true }, copy.verb);
+      return pick === copy.verb;
+    }
     const { title, verb } = approvalCopyFor(coachName)[req.kind] ?? {
       title: approvalFallbackTitle(coachName),
       verb: "허용",

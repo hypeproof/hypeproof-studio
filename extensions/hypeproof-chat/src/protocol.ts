@@ -699,7 +699,11 @@ export interface ActionRequest {
   // Its own tier in resolveActionApproval (confirmed once per repository per session) and
   // deliberately NOT in `requireApprovalFor`: a setting must not be able to remove the one
   // confirmation in front of an irreversible "everyone can read this" act.
-  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType" | "publishSite";
+  // "consultHelper" (ADR 0011, orchestrator spec §5.1): the coach asks a roster helper one
+  // question through mcp__hypeproof__consult. The helper has no tools and sees only the
+  // excerpts the host attaches, so it runs without a modal by default: the kind is in
+  // `requireApprovalFor`'s enum but not its default, and a machine that lists it gets one.
+  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType" | "publishSite" | "consultHelper";
   /**
    * epic #431, shell only — the command is unrecoverable if approved by
    * reflex (`rm`, `sudo`, `git push --force`, pipe-to-shell). The host shows
