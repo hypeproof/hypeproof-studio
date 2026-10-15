@@ -633,7 +633,12 @@ prepared locally. Real PowerShell archive/integrity/backup fixtures passed again
 both actual ZIPs, including exact-receipt handover from682dfd37,9d535c87,
 0b57074d,f90b65e3 and3f1a3f20. The candidate gateway passed14 download tests and
 its update-alias/three-principal controls. These tests do not execute Windows.
-The served private installer remains3f1a3f20 until a verified gateway switch.
+The private installer now serves32ba0ac2 through gateway
+391ecb1f-fd15-44b7-abdc-9c45793a6e66. All16 uploaded chunks and the final manifest
+were read back and hash-checked. All23 three-principal/denial/profile/manifest/
+HEAD/exact-installer checks pass. Service deployment and default traffic are
+unchanged. A fresh complete HTTP/2 download is still in progress; it is not yet
+an end-to-end download PASS. The prior3f full-download receipt does not cover32.
 
 Candidate app:196647056 bytes, SHA256
 `4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6`.
@@ -641,6 +646,7 @@ SDK:121940997 bytes, SHA256
 `24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e`.
 Evidence: `integrated-peer/current-source.json` and
 `windows-current-32ba0ac2/{candidate.json,powershell-fixture.log}` under
-`/tmp/hps-email-mvp/`. Runtime32ba0ac2 initially had17 CI checks pass and a
-Windows wrapper PowerShell startup timeout; only that failed job was rerun.
-Its final status must be checked separately from the passing archive fixtures.
+`/tmp/hps-email-mvp/`. Runtime32ba0ac2 has all18 CI checks passing after its Windows wrapper
+PowerShell startup-timeout failed-job rerun. Installer source87f75b6b also has
+all18 CI checks passing. These checks remain separate from native Windows and
+fresh Google acceptance.

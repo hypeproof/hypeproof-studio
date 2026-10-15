@@ -52,8 +52,10 @@ Current partial evidence, all dated2026-10-15:
 The later Google recovery fix32ba0ac2 is now in the single Mac Dev app; relaunch
 restored the existing conversation and2/6 recipe progress. Its Windows package
 and actual archive/backup/upgrade fixtures pass locally, including3f1a3f20
-handover. The served private installer is still3f1a3f20. Fresh Google callback
-and native Windows acceptance remain pending; see the
+handover. The private installer now serves32ba0ac2;23 online access controls and
+all16 uploaded-chunk readback hashes pass. Complete HTTP/2 download readback is
+still in progress. Runtime32ba0ac2 and installer87f75b6b each have18 CI checks
+passing. Fresh Google callback and native Windows acceptance remain pending; see the
 [recovery packaging record](automation-local-acceptance.md#recovery-explanation-follow-up).
 
 The full Mac→store→Windows gate is NOT_RUN. Actual Google alias mapping, recipient
