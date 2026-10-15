@@ -223,3 +223,7 @@ Sheet-read recovery must identify the failed read stage without returning Google
 response bodies, private Sheet IDs or recipient values.403/404/unavailable
 responses must not be described as failure to open the input card. A failed new
 read clears cached rows; an old preview must not be regenerated from that cache.
+
+Drive account-switch progress through the actual `connectGoogle` host wrapper,
+not a manually invoked graph invalidation. A new connection must reopen
+Sheet/preparation/preview/send; verified same-connection reuse retains progress.

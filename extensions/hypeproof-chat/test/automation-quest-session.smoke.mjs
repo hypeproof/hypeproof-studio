@@ -208,8 +208,10 @@ test('reading a private sheet restores verified connection evidence after a canc
 test('shared runner migrates an old plan without inventing personal upload or deployment', async () => {
   const quest = createAutomationQuestSession(async () => {});
   let result = { recoveryRequired: true, sharedRunner: true };
+  let connection = { connected: true, reused: true };
   let sends = 0;
   const host = withAutomationQuest({ runtime: {}, isAllowed: () => true, isSharedRunner: () => true, confirmSend: async () => false,
+    connectGoogle: async () => connection,
     appsScriptPrepare: async () => ({ prepared: true, sharedRunner: true }),
     appsScriptUpload: async () => ({ sharedRunner: true, ready: true, uploaded: false }),
     appsScriptDeploy: async () => ({ sharedRunner: true, ready: true, deployed: false }),
@@ -239,9 +241,16 @@ test('shared runner migrates an old plan without inventing personal upload or de
   for (const id of ['goal', 'skill', 'connect', 'sheet', 'prepare', 'preview']) assert.equal(status(quest, id), 'succeeded');
   for (const id of ['send', 'publish']) assert.equal(status(quest, id), 'current');
   assert.equal(sends, 0, 'review never initiates a send');
-  quest.invalidate(['connect']);
-  for (const id of ['connect', 'sheet', 'prepare', 'preview', 'send', 'publish']) assert.notEqual(status(quest, id), 'succeeded', 'changing account invalidates caller-bound readiness and preview');
+  await host.connectGoogle('reuse');
+  assert.equal(status(quest, 'preview'), 'succeeded', 'verified reuse keeps the same connection evidence');
+  connection = { connected: true, reused: false };
+  await host.connectGoogle('change');
+  assert.equal(status(quest, 'connect'), 'succeeded');
+  for (const id of ['sheet', 'prepare', 'preview', 'send', 'publish']) assert.notEqual(status(quest, id), 'succeeded', 'actual account-change tool receipt invalidates caller-bound readiness and preview');
   assert.equal(status(quest, 'skill'), 'succeeded');
+  await host.appsScriptRun('preview');
+  await host.connectGoogle('reuse');
+  assert.notEqual(status(quest, 'preview'), 'succeeded', 'a reconnect reached from reuse also creates a new connection');
 });
 
 test('shared preview receipts never mark legacy personal-script stages as complete', async () => {

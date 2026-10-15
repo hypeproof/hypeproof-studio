@@ -262,3 +262,16 @@ connected. A01 matched the native graph. When the17 fixtures stopped reporting,
 the board changed them to disconnected/unknown while the actual app stayed
 current; stale approvals disappeared from current approval counts. This is one
 actual local app plus fixtures, not20 real learners.
+
+At `351b27e1`, the TJ native copy reported `sheet_access_denied` for the bot's
+private Sheet, then recovered to its own one-message preview and6/6 completion.
+The rebuilt extension SHA256 is
+`22a013e8049fe422bb7c4c14452f6989a0facbdfef619a8380eaa97d6b52a690`.
+Clarification cancellation was also exercised at `9e43a9c8`: goal/Google/Sheet
+remained confirmed (3/8) and downstream execution required fresh evidence.
+A subsequent Google account change exposed a separate graph bug: old completion
+remained visible although runtime identity checks invalidated execution data.
+The correction now invalidates caller-bound progress through the actual connect
+tool, retaining the saved recipe. Verified same-connection reuse retains progress;
+a reconnect reached through reuse also clears earlier execution. Automation88/88,
+typecheck and extension build pass; native account-change graph retest is pending.

@@ -146,7 +146,12 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
     // evidence inside track's generation guard so a late result cannot mark a new plan.
     saveSkill: host.saveSkill ? recipe => { quest.invalidate(['skill','prepare','upload','deploy','preview','send','publish']); return quest.track('skill', () => host.saveSkill!(recipe), flag('saved'), ['goal']); } : undefined,
     installSkill: host.installSkill ? id => quest.replace('skill', () => host.installSkill!(id), flag('installed'), ['skill','prepare','upload','deploy','preview','send','publish'], ['goal']) : undefined,
-    connectGoogle: host.connectGoogle ? mode => quest.track('connect', () => host.connectGoogle!(mode), flag('connected')) : undefined,
+    connectGoogle: host.connectGoogle ? mode => {
+      const callerBound: readonly Step[] = ['connect', 'sheet', 'prepare', 'upload', 'deploy', 'preview', 'send', 'publish'];
+      if (mode === 'change') quest.invalidate(callerBound);
+      return quest.track('connect', () => quest.replace('connect', () => host.connectGoogle!(mode),
+        value => flag('connected')(value) && (value as { reused?: unknown }).reused !== true, callerBound), flag('connected'));
+    } : undefined,
     // Reading a private sheet succeeds only after the host verifies the current
     // Google connection. Reuse can therefore restore connection evidence too.
     configureSheet: host.configureSheet ? mode => { quest.invalidate(['sheet','preview','send']); return quest.track('sheet', () => host.configureSheet!(mode), value => ok(value) && typeof (value as { rowCount?: unknown }).rowCount === 'number', ['connect']); } : undefined,
