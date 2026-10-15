@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { candidateService, redactEvidence } from './candidate-service.mjs';
+import { candidateService, assertCandidateServiceUnchanged, redactEvidence } from './candidate-service.mjs';
 
 test('candidate provenance rejects wrong or dirty implementation and hashes exact source', () => {
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'hps-candidate-control-'));
@@ -20,8 +20,22 @@ test('candidate provenance rejects wrong or dirty implementation and hashes exac
     assert.equal(result.manifest.commit,pin.sha);assert.match(result.manifest.source_sha256,/^[a-f0-9]{64}$/);
     assert.equal(result.gateway,path.join(root,'worker/test/native-trial-live-server.mjs'));
     assert.throws(()=>candidateService(root,{...pin,sha:'0'.repeat(40)}),/match/);
+    for(const flag of ['assume-unchanged','skip-worktree']){
+      git('update-index','--'+flag,'worker/src/index.ts');
+      assert.throws(()=>candidateService(root,pin),/index conceals/);
+      fs.appendFileSync(path.join(root,'worker/src/index.ts'),'// concealed dirty');
+      assert.equal(git('status','--porcelain','--untracked-files=normal'),'');
+      assert.throws(()=>candidateService(root,pin),/index conceals/);
+      git('update-index','--no-'+flag,'worker/src/index.ts');git('checkout','--','.');
+    }
     fs.appendFileSync(path.join(root,'worker/src/index.ts'),'// dirty');
     assert.throws(()=>candidateService(root,pin),/clean/);
+    assert.throws(()=>assertCandidateServiceUnchanged(root,pin,result.manifest),/clean/);
+    git('checkout','--','.');
+    fs.writeFileSync(path.join(root,'worker/untracked.mjs'),'// untracked candidate source');
+    assert.throws(()=>candidateService(root,pin),/clean/);
+    fs.unlinkSync(path.join(root,'worker/untracked.mjs'));
+    assert.equal(assertCandidateServiceUnchanged(root,pin,result.manifest),true);
     assert.throws(()=>candidateService(root,{...pin,repository:'unrelated/repo'}),/Invalid/);
   } finally { fs.rmSync(root,{recursive:true,force:true}); }
 });
