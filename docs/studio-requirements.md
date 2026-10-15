@@ -1005,8 +1005,12 @@ rows and send outcomes remain outside shared data. Legacy recipes are not assign
 guessed origins. Publication success requires the Service to echo the accepted
 source. This supports Product Intent's useful work and visible human judgment:
 learners can review how their adapted work relates to the original (OWNERSHIP and
-ADAPT observations, without learner-facing scores). Local tests pass; native fork
-acceptance and Ops0047 rollout remain pending.
+ADAPT observations, without learner-facing scores). Local and combined
+three-principal Studio/Service tests pass. Ops0047 is applied only to the backed-up
+isolated test D1; private Servicefa7472b and Mac11b82da2 pass native recipient-fork
+publication with exact source/content readback. Windows659de97d reviewed/imported
+that fork and completed a fresh one-recipient preview at6/6 with retained private
+configuration. Matching-candidate execution remains pending. No new mail was sent.
 
 A generic HTTP429 must not assert a proven budget cause: the message distinguishes
 usage/concurrency checks from possible provider request limits. Increasing the

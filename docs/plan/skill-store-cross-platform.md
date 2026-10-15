@@ -155,7 +155,7 @@ offline limits. Never silently execute a quarantined cached version as fallback.
 Rollback cannot clear an unknown/sent outcome or restore a withdrawn privilege.
 Retain author/license provenance on forks and define what may be redistributed.
 
-## Recipient fork provenance: implemented locally, not deployed
+## Recipient fork provenance: isolated rollout and native Mac publication
 
 Studio persists an installed recipe and `{id,title,version}` origin atomically in
 one activity-scoped `hps-local-automation-draft/1` value. Legacy bare recipes remain
@@ -172,10 +172,20 @@ version and source in one D1 batch, and retains an inert source ID after withdra
 No original content is exposed through that ID. This records declared derivation;
 it is not cryptographic authorship, a license grant or verified license compliance.
 
-Ops0047 is prepared byte-for-byte from the Service proposal and must precede route
-rollout. No existing database was changed. Local host/client/retry tests and
-Service automation/workshop suites pass; native three-account fork acceptance is
-NOT_RUN. Existing pre-change installations have no invented provenance: reimport
+Ops62ab5b8 owns byte-identical0047. It was applied to the isolated test D1 after
+backup/restore integrity verification; five existing recipes and the version row
+were unchanged. Servicefa7472b is active as private version93318bd2 at0% normal
+traffic; production d34da3a5 remains100%. Local host/client/retry tests, Service
+automation/workshop suites and combined three-principal fork lifecycle pass.
+Mac11b82da2 third principal reimported original v1, adapted the audit-evidence
+reminder and published after native source/content review. API readback under all
+three principals confirms exact content/source and owner separation, with unchanged
+original revisions. Windows659de97d reviewed/imported the new fork and completed a fresh one-recipient
+preview with the changed subject/body and retained private configuration at6/6.
+No send. Matching11b82da2 installation remains pending. Evidence:
+`/tmp/hps-email-mvp/mac-native-fork-20261016.json` and
+`/tmp/hps-email-mvp/fork-migration-20261016-receipt.json`.
+Existing pre-change installations have no invented provenance: reimport
 the intended exact store version before testing a recipient fork.
 
 ## Acceptance: Studio-connected store, not an isolated API
@@ -185,7 +195,10 @@ SS-01–10 and SS-12; SS-11 is NOT_RUN and conditional on expanded WAJ implement
 Evidence is revision-bound: Windows659de97d proves non-owner import/preview and
 reviewed v2 update/v1 rollback, Mac b0cc15a0 proves third-user pinning, and Mac
 dbff37ed proves failed lookup recovery. Distinct Google identities/datasets, third
-execution, native fork publication and final matching candidates are not accepted.
+execution and final matching candidates are not accepted. Mac11b82da2 fork
+publication passes; the coach's public-store wording remains inaccurate because
+actual publication visibility is cohort-only. The audit reminder is not the full
+expanded audit workflow or SS-11 acceptance.
 Earlier snapshots below remain supporting history, not the current blanket status.
 
 | Gate | Positive observation | Required rejection or recovery |

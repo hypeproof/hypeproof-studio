@@ -12,16 +12,14 @@ charges/holds); this is not actual spending. Evidence:
 `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
 budget remains separate. No further mail is authorized.
 
-Studio checkpoint dbff37ed integrates main6ad5f9f8 and passes all18 CI checks.
-The following fork-provenance change has local validation; its CI/native acceptance
-are separate from that checkpoint. Windows
+Studio11b82da2 integrates main6ad5f9f8 and passes all18 CI checks. Windows
 659de97d passed verified install/update, portable-profile restoration, non-owner
 store import and private Google preview, then explicit v2 update and v1 rollback
 with fresh previews and unchanged private configuration. Publisher `peer` owns
 the Mac-authored item; `original` is the verified non-owner recipient. Earlier
 peer Windows evidence proves author cross-device reuse, not another recipient.
 
-The single Mac Dev app now runs dbff37ed against the private online Service.
+The single Mac Dev app now runs11b82da2 against the private online Service.
 The third principal's retained v1 pinning was verified at b0cc15a0. On dbff37ed,
 a failed invented version ID recovered through the actual catalogue and returned
 both real revisions without installation or Google actions. The coach still
@@ -30,21 +28,41 @@ but the complete presentation criterion remains PARTIAL. TJ OAuth expired before
 completion; the old browser tab is closed. A fresh user-ready connection and
 third-principal execution remain open. Windows still runs659de97d.
 
-SS-08 fork provenance is implemented locally in Studio and Service9618d234:
+SS-08 fork provenance is implemented in Studio11b82da2 and Service9618d234:
 an installed exact revision is retained with the activity's recipe, shown during
 private publication review, and sent as sourceId for a new recipient-owned family.
 Owner updates retain the family's server-side origin. Recipe/Google data are not
-added to provenance. Ops0047 is prepared; no database migration or runtime rollout
-of this change has occurred. Automation92, types, extension/webview builds and
-Service automation/workshop suites pass. Actual Mac/Windows fork reuse remains open.
+added to provenance. Canonical Ops0047 was applied only to the isolated test D1
+after SQL backup and restored SQLite integrity verification; five recipes and the
+existing version row were unchanged. Automation92, types, extension/webview builds,
+Service automation/workshop suites and the combined three-principal Studio/Service
+fork lifecycle pass.
 
-Private Service781b639f is based on d63d5d7 with main9dbe15c and bounded test
+Mac11b82da2 third principal reimported the exact original v1, adapted it into a
+synthetic audit-evidence reminder and published through the native private review.
+Three-principal API readback confirms the exact new recipe, new owner/family and
+original source revision; original v1/v2 are unchanged. This covers the reminder
+subset of the curriculum need, not an implemented audit dashboard. Windows659de97d
+has reviewed/imported that fork and completed a fresh one-recipient preview with
+the changed subject/body, retained private configuration and6/6 quests. No send.
+Evidence:
+`/tmp/hps-email-mvp/mac-native-fork-20261016.json`.
+
+Private Service93318bd2 is based on fa7472b with main9dbe15c and bounded test
 routes. Production d34da3a5 remains at100%; the test target takes0% normal
-traffic. Ops0046 is applied only to the backed-up isolated database. Remaining
+traffic. Ops0046/0047 are applied only to the backed-up isolated database. Remaining
 gates: distinct Google identities and different private datasets, third-recipient
-execution, recipient fork provenance, final matching app candidates,
+execution, final matching app candidates,
 class/instructor readiness and the separately scoped expanded WAJ design/runtime gates. Current evidence and
 individual boundaries: [store contract](skill-store-cross-platform.md).
+
+The11b82da2 Windows extension candidate is staged with official shell720be661 and
+SDK0.3.299. Its first private R2 upload failed with401; a subsequent small-object
+read succeeded with current authentication. Upload/readback is being retried.
+The installer gateway continues to serve the verified659de97d candidate until both
+new archives and their manifest pass complete readback. No authentication scope was
+expanded. Current coach presentation remains PARTIAL: the Mac response called the
+cohort store public, although the host review correctly says our class.
 
 ## Goal extension: integrated skill store — 2026-10-15
 
