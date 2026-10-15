@@ -40,6 +40,26 @@ body:
         - "Ownership"
     validations:
       required: true
+  - type: dropdown
+    id: smoke
+    attributes:
+      label: Smoke needed?
+      description: >-
+        Best guess: yes if this adds a dependency on another repository or a server
+        (Service, Chalk, ...). Optional here; the PR's Release check section decides.
+      options:
+        - "yes"
+        - "no"
+    validations:
+      required: false
+  - type: textarea
+    id: release_check
+    attributes:
+      label: How the release manager checks it
+      description: "Where → what to click or run → expected result. Optional here; the PR repeats it."
+      placeholder: "Studio app → open the Coach panel and send hi → the reply streams within 5 s"
+    validations:
+      required: false
   - type: textarea
     id: environment
     attributes:

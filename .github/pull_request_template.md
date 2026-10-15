@@ -30,6 +30,21 @@ Closes #<!-- issue number — required so the merge auto-closes it -->
 - [ ] `cd e2e && npm test` (built .app + dev-stack running)
 - [ ] manual: <!-- what you clicked through -->
 
+## Release check
+
+How to verify: <where> → <what to click or run> → <expected result>
+Smoke: <yes|no> — <reason>
+Smoke check: <scripts/release/smoke/checks/sN-*.mjs, or #follow-up-issue; only when the answer is yes>
+
+<!--
+Read the linked issue (the intent) and your diff, then fill the three lines above.
+The release manager reads the first line, so keep "How to verify" first.
+Answer yes for Smoke when this adds a dependency on another repository or a server
+(Service, Chalk, ...). If the issue answered "Smoke needed?" with yes and you answer no,
+add a line "Smoke differs from issue" with the reason.
+Enforced by hype-pr once config/pr-body-contract.json sets release_check.enforced.
+-->
+
 ## Checklist
 
 - [ ] Branched off `main` (no direct push to `main`)
