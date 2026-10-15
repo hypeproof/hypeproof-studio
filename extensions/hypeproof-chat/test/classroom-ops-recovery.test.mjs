@@ -72,8 +72,130 @@ async function hostFixture(t, actions) {
   };
   const settle = async (pred) => { const until = Date.now() + 8000; while (!pred()) { assert.ok(Date.now() < until, 'the follow-up never reached the Service'); await new Promise((r) => setTimeout(r, 100)); } };
   const recovery = (id) => svc.events.filter((e) => e.kind === 'recovery' && e.payload.command_id === id).map((e) => e.payload);
-  return { host, svc, run, settle, recovery };
+  return { host, svc, run, settle, recovery, dir };
 }
+
+test('disconnect waits for an outbox save already in flight before storage teardown may continue', async (t) => {
+  const f = await hostFixture(t, {});
+  await f.settle(() => f.svc.wire.length > 0);
+
+  const fsPromises = createRequire(import.meta.url)('node:fs').promises;
+  const rename = fsPromises.rename;
+  let entered, release;
+  const blocked = new Promise((resolve) => { entered = resolve; });
+  const held = new Promise((resolve) => { release = resolve; });
+  fsPromises.rename = async (from, to) => {
+    if (String(from).includes('classroom-ops-outbox-')) { entered(); await held; }
+    return rename(from, to);
+  };
+  try {
+    f.host.traceResult(204);
+    await blocked;
+    let disconnected = false;
+    const disconnect = f.host.disconnectInteractively().then(() => { disconnected = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(disconnected, false, 'disconnect must retain the outbox until its queued durable save settles');
+    release();
+    await disconnect;
+  } finally {
+    release();
+    fsPromises.rename = rename;
+  }
+});
+
+test('resume cannot open a competing outbox writer before the previous connection drains', async (t) => {
+  const f = await hostFixture(t, {});
+  await f.settle(() => f.svc.wire.length > 0);
+
+  const fsPromises = createRequire(import.meta.url)('node:fs').promises;
+  const rename = fsPromises.rename;
+  let entered, release;
+  const blocked = new Promise((resolve) => { entered = resolve; });
+  const held = new Promise((resolve) => { release = resolve; });
+  fsPromises.rename = async (from, to) => {
+    if (String(from).includes('classroom-ops-outbox-')) { entered(); await held; }
+    return rename(from, to);
+  };
+  try {
+    f.host.traceResult(204);
+    await blocked;
+    let resumed = false;
+    const resume = f.host.resume().then(() => { resumed = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(resumed, false, 'the next instance must not share the temp-file path with a draining instance');
+    release();
+    await resume;
+  } finally {
+    release();
+    fsPromises.rename = rename;
+  }
+});
+
+test('an overlapping disconnect waits for a reconnect drain and prevents the stale reconnect from reopening', async (t) => {
+  const f = await hostFixture(t, {});
+  await f.settle(() => f.svc.wire.length > 0);
+
+  const fsPromises = createRequire(import.meta.url)('node:fs').promises;
+  const rename = fsPromises.rename;
+  let entered, release, renames = 0;
+  const blocked = new Promise((resolve) => { entered = resolve; });
+  const held = new Promise((resolve) => { release = resolve; });
+  fsPromises.rename = async (from, to) => {
+    if (String(from).includes('classroom-ops-outbox-')) { renames++; entered(); await held; }
+    return rename(from, to);
+  };
+  try {
+    f.host.traceResult(204);
+    await blocked;
+    let disconnected = false;
+    const beforeResume = f.host.generation;
+    const resume = f.host.resume();
+    while (f.host.generation === beforeResume) await new Promise((resolve) => setImmediate(resolve));
+    const disconnect = f.host.disconnectInteractively().then(() => { disconnected = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(disconnected, false, 'the second stop must wait for the first stop\'s detached outbox');
+    assert.equal(renames, 1, 'no replacement writer starts while the original rename is held');
+    release();
+    await Promise.all([resume, disconnect]);
+    assert.equal(f.host.helpConnection(), null, 'the earlier resume is stale after the later disconnect');
+    assert.equal(f.host.outbox, null, 'the stale resume did not leave a detached writer behind');
+  } finally {
+    release();
+    fsPromises.rename = rename;
+  }
+});
+
+test('disconnect owns an initial outbox save before the new instance is published', async (t) => {
+  const f = await hostFixture(t, {});
+  await f.settle(() => f.svc.wire.length > 0);
+  await f.host.outbox.close();
+  await rm(join(f.dir, 'classroom-ops-outbox-recovery-grant.json'), { force: true });
+
+  const fsPromises = createRequire(import.meta.url)('node:fs').promises;
+  const rename = fsPromises.rename;
+  let entered, release;
+  const blocked = new Promise((resolve) => { entered = resolve; });
+  const held = new Promise((resolve) => { release = resolve; });
+  const deadline = (promise, label) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(label)), 2000))]);
+  fsPromises.rename = async (from, to) => {
+    if (String(from).includes('classroom-ops-outbox-')) { entered(); await held; }
+    return rename(from, to);
+  };
+  try {
+    const resume = f.host.resume();
+    await deadline(blocked, 'the replacement outbox did not reach its initial rename');
+    let disconnected = false;
+    const disconnect = f.host.disconnectInteractively().then(() => { disconnected = true; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(disconnected, false, 'disconnect must wait even before the opening outbox is assigned to the host');
+    release();
+    await deadline(Promise.all([resume, disconnect]), 'opening outbox shutdown did not settle');
+    assert.equal(f.host.outbox, null, 'the stale initializer cannot publish an outbox after disconnect');
+  } finally {
+    release();
+    fsPromises.rename = rename;
+  }
+});
 
 test('token: a re-check names the issue the app holds; the token itself never leaves; a failed re-check reports no follow-up', async (t) => {
   let verified = true; const f = await hostFixture(t, { refreshProfile: async () => verified });

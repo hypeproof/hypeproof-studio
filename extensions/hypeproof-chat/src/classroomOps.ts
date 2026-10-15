@@ -227,7 +227,11 @@ export class OpsOutbox {
   private uuid: () => string;
   /** Writes are serialized: observers fire `add()` without awaiting, and two saves racing on one temp file lose an event. */
   private chain: Promise<unknown> = Promise.resolve();
-  private persist(): Promise<void> { const next = this.chain.then(() => this.store.save(this.state)); this.chain = next.catch(() => undefined); return next; }
+  /** The latest caller-facing result, kept apart from the recovered chain so close can surface a final disk failure. */
+  private latestWrite: Promise<unknown> = Promise.resolve();
+  /** Once the connection ends, callbacks that were already in flight must not append another write behind shutdown. */
+  private closed = false;
+  private persist(): Promise<void> { const next = this.chain.then(() => this.store.save(this.state)); this.latestWrite = next; this.chain = next.catch(() => undefined); return next; }
   // Explicit fields: the smoke tests load this file with Node's type stripping, which has no parameter properties.
   private constructor(store: OutboxStore, state: OutboxState, now: () => number, uuid: () => string) { this.store = store; this.state = state; this.now = now; this.uuid = uuid; }
 
@@ -250,6 +254,7 @@ export class OpsOutbox {
 
   /** Persisted before it is ever sent. Returns false when the cap refused it. */
   async add(kind: OpsEventKind, payload: Record<string, unknown>, actor: OpsActor = "system"): Promise<boolean> {
+    if (this.closed) return false;
     if (this.state.events.length >= OUTBOX_CAP) { this.state.refused++; await this.persist(); return false; }
     this.state.events.push({ event_id: this.uuid(), seq: this.state.next_seq++, observed_at: this.now(), kind, actor, payload });
     await this.persist();
@@ -269,11 +274,18 @@ export class OpsOutbox {
 
   /** Only the contiguous cursor deletes. A 2xx without it deletes nothing. */
   async acked(bootId: string, contiguousSeq: number): Promise<number> {
+    if (this.closed) return 0;
     if (bootId !== this.state.boot_id || !Number.isSafeInteger(contiguousSeq)) return 0;
     const before = this.state.events.length;
     this.state.events = this.state.events.filter((e) => e.seq > contiguousSeq);
     if (this.state.events.length !== before) await this.persist();
     return before - this.state.events.length;
+  }
+
+  /** Seal the connection and wait for every durable save that began before the seal. */
+  async close(): Promise<void> {
+    this.closed = true;
+    await this.latestWrite;
   }
 }
 

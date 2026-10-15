@@ -113,6 +113,32 @@ test('F4 observers fire without awaiting: concurrent adds are persisted one afte
   assert.deepEqual(saved.events.map((e) => e.seq), [1, 2, 3, 4, 5, 6, 7, 8]);
 });
 
+test('F4 closing an outbox drains prior saves and refuses late callback writes', async () => {
+  let release, saves = 0;
+  const held = new Promise((resolve) => { release = resolve; });
+  const box = await OpsOutbox.open({ load: async () => null, save: async () => { if (++saves > 1) await held; } }, 'review-grant', 'review-boot', () => 1, () => crypto.randomUUID());
+  const add = box.add('runtime', { status: 'running' });
+  let closed = false; const close = box.close().then(() => { closed = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(closed, false, 'a save accepted before close remains part of shutdown');
+  assert.equal(await box.add('runtime', { status: 'idle' }), false, 'a callback after close cannot extend the queue');
+  assert.equal(await box.acked(box.bootId, 1), 0, 'a late sync response cannot rewrite the sealed outbox');
+  release(); await Promise.all([add, close]);
+  assert.equal(saves, 2, 'only the initial state and pre-close event were saved');
+});
+
+test('F4 a disk failure is visible, retains the event, and does not poison the next save', async () => {
+  let saves = 0, saved = null;
+  const box = await OpsOutbox.open({
+    load: async () => null,
+    save: async (state) => { if (++saves === 2) throw new Error('synthetic disk failure'); saved = structuredClone(state); },
+  }, 'review-grant', 'review-boot', () => 1, () => crypto.randomUUID());
+  await assert.rejects(box.add('runtime', { status: 'running' }), /synthetic disk failure/);
+  await box.add('runtime', { status: 'idle' });
+  await box.close();
+  assert.deepEqual(saved.events.map((event) => event.seq), [1, 2], 'the failed event is retained and saved with the next event');
+});
+
 // Seen in the real Mac window (2026-09-20): the learner was told “강사가 ‘reset_runtime’ 조치를…”. A wire id is not a sentence.
 test('the learner is told what is happening in words, not the wire id; an action without a label still says something', async () => {
   const lines = [], run = async (action, executor) => { let saved = null; const r = new CommandRunner({ executors: { [action]: executor }, journal: { load: async () => saved, save: async (s) => { saved = structuredClone(s); } }, monotonic: () => 0, now: () => 1000, epoch: () => 1, notify: (l) => lines.push(l) });
