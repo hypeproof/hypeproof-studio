@@ -13,3 +13,43 @@ REQ-L5와 [설계/감사](../design/usage-observation-audit.md)의 첫 구현 �
 실기는 합성 사용자와 로컬 SQLite만 사용한다. 모델 호출·운영 D1·운영 세션 변경은 없다.
 [보존한 화면과 실행 로그](../research/usage-observation-2026-09-08/README.md)는 에이전트가
 직접 열어 검수했다. 실제 사람의 사용성 평가나 학습 효과 검증으로 분류하지 않는다.
+
+## Owner console release extension (2026-10-14)
+
+Service implementation and OU-01–07 acceptance are in
+[hypeproof-service#76](https://github.com/hypeproof/hypeproof-service/pull/76),
+head `40caf3921e97d7b02df895b877ba408f40835121`. This extends REQ-L5 and
+ADM-08 with `/admin/owner`: a full selected-period view including trials, passes,
+synthetic tests and unclassified history. The browser entry is now
+`https://hypeproof-ai.xyz/admin/owner`, using existing Lab Google/GitHub SSO with
+fresh active HypeProof membership per read. All member roles are authorized by
+the Owner as of 2026-10-15.
+Lab integration: [hypeprooflab#1247](https://github.com/hypeproof/hypeprooflab/issues/1247).
+
+- PASS: Service Hono/SQLite controls and full premerge with the scoped SSO gate.
+- NOT RUN: new SSO head CI and independent verification at documentation time.
+- PASS: implementation-agent Chrome observation with synthetic local SQLite: filters,
+  person/model drill-down, CSV, responsive layout and stale-data clearing.
+- PASS: `node scripts/test-owner-console.mjs` exercises read-only release-smoke
+  behavior: empty data, purpose aggregates, denied access, redirects, broken payloads,
+  network failure and sanitized output. This uses a fake HTTP transport.
+- NOT RUN: production deployment, authenticated production usage, provider invoice
+  reconciliation, and human usability acceptance. The canonical merge policy currently
+  requires one non-author approval for Service #76.
+
+Studio's `deploy-worker` pins the reviewed Service head and runs the smoke controls
+for dry-run and production. A real verified deployment additionally runs
+`node scripts/verify-owner-console.mjs` using the dedicated
+`HPS_OWNER_SERVICE_SECRET` shared with the Worker and Lab server. It only reads
+HTML and aggregates, logs no identities or credentials, requires unauthenticated
+requests to fail, and fails closed on malformed responses or authentication failure.
+It accepts an empty ledger without asserting ingestion completeness.
+
+Set the shared read credential on Lab, Worker and Studio Actions before
+deployment. Lab uses the existing active-member ledger without a separate allowlist. Owner routes reject Basic, student/issuer tokens
+and client-supplied Access headers. Other API authentication is unchanged.
+
+Do not dispatch production until Service #76, the Lab SSO PR and the Studio release
+PR meet their merge gates. Keep the normal activity-compatibility and live-session gates. Rollback
+is the prior Studio deployment ref with Service `399109c0d310f6860457cfbfe789bb1b973a4943`;
+this feature introduces no migration and never changes stored usage or cost data.

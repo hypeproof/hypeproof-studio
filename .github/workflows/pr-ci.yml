@@ -85,6 +85,9 @@ jobs:
       - name: Regression — live-session freeze positive/negative/override controls
         if: ${{ !cancelled() }}
         run: node scripts/test-check-live-sessions.mjs
+      - name: Owner console read-only smoke controls
+        if: ${{ !cancelled() }}
+        run: node scripts/test-owner-console.mjs
       - name: Private Service package integrity and boundary controls
         if: ${{ !cancelled() }}
         run: npm run test:private-service-packages
