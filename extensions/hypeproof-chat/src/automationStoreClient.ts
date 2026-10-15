@@ -1,6 +1,9 @@
 import type { AutomationRecipe, AutomationStoreItem } from './automationProtocol';
 import { validateEmailRecipe } from './googleAutomation.ts';
 import { scanFile } from '@hypeproof/service-contracts/publish-scan';
+export class AutomationPublicationWithdrawnError extends Error {
+  constructor() { super('이전에 철회한 게시 요청이에요. 내용을 다시 확인한 뒤 공유를 요청해 주세요.'); }
+}
 export interface AutomationStoreClient {
   list(): Promise<{ items: AutomationStoreItem[] }>;
   detail(id: string): Promise<{ item: AutomationStoreItem; recipe: AutomationRecipe }>;
@@ -20,6 +23,12 @@ export function createAutomationStoreClient(deps: { baseUrl: string; getToken():
       body: body ? JSON.stringify(body) : undefined, redirect: 'error', signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
+      if (response.status === 409) {
+        // Only this exact server reason permits preparing a new publication
+        // intent. Never expose provider text or treat every conflict as withdrawal.
+        const failure = await response.json().catch(() => null) as { error?: { code?: unknown } } | null;
+        if (failure?.error?.code === 'publication_unpublished') throw new AutomationPublicationWithdrawnError();
+      }
       const messages: Record<number, string> = { 401: '수업 이용권이 만료됐어요. 다시 연결해 주세요.', 403: '이 수업에서는 스토어를 사용할 수 없어요.', 404: '이 자동화를 찾을 수 없거나 우리 반에 공유되지 않았어요.', 409: '같은 게시 요청의 내용이 달라요. 목록을 확인하고 다시 시도해 주세요.', 413: '공유할 내용이 너무 커요.', 429: '게시 한도에 도달했어요. 잠시 후 다시 시도해 주세요.' };
       throw new Error(messages[response.status] ?? '스토어 요청을 완료하지 못했어요. 템플릿에 실제 주소나 비밀값이 없는지 확인해 주세요.');
     }

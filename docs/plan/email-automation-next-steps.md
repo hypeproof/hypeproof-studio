@@ -80,7 +80,8 @@ confirmed the private card, future list/detail denial, four saved recipes and on
 send ledger unchanged. A3d8c0b38 summary check verifies learner-facing wording.
 These are local-Service observations; the served Windows32 candidate still needs
 this follow-up packaged before its final store lifecycle run. Full three-account
-Windows acceptance, update/rollback and same-content re-publication remain open.
+Same-content re-publication now has a local recovery implementation and Service
+route proof; native re-publication, Windows acceptance and update/rollback remain open.
 
 The full Mac→store→Windows gate is NOT_RUN. Actual Google alias mapping, recipient
 private setup/execution, restart, update/rollback and withdrawal still require

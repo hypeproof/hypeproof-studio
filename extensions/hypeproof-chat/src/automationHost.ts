@@ -15,6 +15,7 @@ import type { ChatPanelProvider } from './chatPanelProvider';
 import { createGoogleAutomationRuntime, validateEmailRecipe, type GoogleAutomationRuntime } from './googleAutomation';
 import { createAutomationPanelController, spreadsheetIdFromInput } from './automationPanel';
 import { createAutomationStoreClient } from './automationStoreClient';
+import { publishAutomationRecipe } from './automationPublication';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
 import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
 
@@ -434,7 +435,9 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           const answer = await askQuestion({ kind: 'publish', title: '이 스킬을 우리 반 스토어에 공유할까요?', description: '아래 템플릿과 설명만 공유해요. Google 계정·시트 주소·명단·보낸 메일은 공유하지 않아요.', recipe, private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
-          const result = await store.publish(recipe, 'skill-' + digest(JSON.stringify(recipe)));
+          const result = await publishAutomationRecipe({ storageRoot: context.globalStorageUri.fsPath, namespace: pinned.namespace, store,
+            authorize: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); },
+          }, recipe);
           // Report the completed host confirmation without exposing the private card.
           return { published: true, approvalConfirmed: true, id: result.item.id, title: result.item.title };
         },

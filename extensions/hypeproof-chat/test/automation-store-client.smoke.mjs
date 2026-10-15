@@ -63,3 +63,16 @@ for(const result of [{ok:false},{},null]) {
 const goodReceipt=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async(url,init)=>{assert.equal(init.method,'DELETE');return new Response('{"ok":true}');}});
 assert.deepEqual(await goodReceipt.unpublish('owned'),{ok:true});
 console.log('PASS withdrawal receipt: HTTP200 without explicit success cannot report removal');
+
+// A terminal withdrawn request can be replaced only by a newly reviewed action.
+const {AutomationPublicationWithdrawnError}=await import('../src/automationStoreClient.ts');
+const publicationIds=[];let wasWithdrawn=false;
+const recoveryInspector=createAutomationPanelController({runtime:{},confirmSend:async()=>false,emit:()=>{},store:{
+ list:async()=>({items:[]}),publish:async(_recipe,id)=>{publicationIds.push(id);if(wasWithdrawn)throw new AutomationPublicationWithdrawnError();return{item};},
+}});
+await recoveryInspector.handle({kind:'publish',reviewed:true});const firstRequest=publicationIds.at(-1);
+wasWithdrawn=true;await recoveryInspector.handle({kind:'publish',reviewed:true});
+assert.match(recoveryInspector.view().error,/이전에 철회/);assert.equal(publicationIds.at(-1),firstRequest);
+wasWithdrawn=false;await recoveryInspector.handle({kind:'publish',reviewed:false});assert.equal(publicationIds.length,2);
+await recoveryInspector.handle({kind:'publish',reviewed:true});assert.notEqual(publicationIds.at(-1),firstRequest);
+console.log('PASS inspector republish: withdrawn request replacement requires renewed review');

@@ -72,8 +72,9 @@ Service `worker/src/routes/automations.ts`, `worker/src/lib/automation-recipe.ts
 
 The next delivery sequence is explicit: finish the local feature/lifecycle gaps,
 freeze and verify one Windows candidate, then execute SS-01–12 with actual Windows
-recipients. In particular, same-content re-publication after withdrawal and
-v2/update/rollback are open implementation gaps; successful import or withdrawal
+recipients. Same-content re-publication has a local recovery implementation and
+actual Service-route proof below; native acceptance remains pending. Version2,
+update and rollback remain implementation gaps; successful import or withdrawal
 alone does not close them. Store acceptance remains part of the active delivery
 goal, not a follow-up that can be omitted when the email feature passes.
 
@@ -573,5 +574,34 @@ transport19 checks, types/build pass; its separate CI is still pending. Evidence
 learner-summary.txt,learner-summary.png}` under `/tmp/hps-email-mvp/`.
 The served Windows32 candidate does not include this follow-up. This does not
 implement version updates or rollback. The current Service rejects reuse of an
-unpublished request ID; same-content conversational re-publication/restore remains
-a separate lifecycle gap and must not be claimed as supported.
+unpublished request ID. The later local recovery below addresses new publication
+intent without restoring that tombstone; native acceptance remains separate.
+
+
+### Same-content publication after withdrawal: local recovery
+
+The original content-only request ID stayed permanently withdrawn. The client now
+recognizes only Service409 `error.code=publication_unpublished` as that terminal
+state. It prepares a new request ID in a private, activity-namespaced journal and
+reports that a fresh sharing review is needed. It makes no replacement POST in
+that failed call. A subsequent conversational request must pass the existing
+private confirmation again; cancellation/Stop/revocation cannot publish. The
+inspector similarly clears only the terminal request and requires a newly reviewed
+action. An ordinary conflict or unknown network result never rotates the ID.
+
+The conversation journal contains only content digests/request IDs and uses the
+existing cross-window lock plus atomic0600 file writes, separately from the send
+ledger. A restart or lost response reuses the prepared ID. Corrupt storage refuses
+dispatch; no Google credentials, recipe content or recipient data enter this file.
+The old publication remains withdrawn, and the replacement is a new version1
+publication; this is not version2, an update chain or rollback support.
+
+Focused host/client/journal tests and the91-test automation suite pass, as do
+extension typecheck/build. A local integration ran the actual Service route with
+its migration-backed SQLite database: publish→withdraw→terminal replay→new
+publication→response loss→retry left exactly one visible replacement; a second
+principal could read it but could not withdraw it. No Service source/schema change,
+Google action, mail or live store mutation was required. Evidence under
+`/tmp/hps-email-mvp/`: `republish-automation-tests.log`, `republish-typecheck.log`,
+`republish-build.log`, `republish-service-integration.log` and its script.
+This is local functional evidence, not a native Mac or Windows re-publication PASS.

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { defaultAutomationRecipe, type AutomationAction, type AutomationView, type AutomationRecipe, type AutomationPreview, type AutomationSendRecord } from './automationProtocol.ts';
-import type { AutomationStoreClient } from './automationStoreClient.ts';
+import { AutomationPublicationWithdrawnError, type AutomationStoreClient } from './automationStoreClient.ts';
 export interface AutomationRuntime {
   connect(): Promise<unknown>; disconnect(): Promise<unknown>;
   status(): Promise<{ connected: boolean; configured: boolean; revocationPending?: boolean }>;
@@ -62,7 +62,8 @@ export function createAutomationPanelController(deps: { runtime: AutomationRunti
           if (action.reviewed !== true) throw new Error('공유할 내용을 먼저 확인해 주세요.');
           const content = JSON.stringify(state.recipe);
           if (publication?.content !== content) publication = { content, requestId: randomUUID() };
-          await deps.store.publish(state.recipe, publication.requestId);
+          try { await deps.store.publish(state.recipe, publication.requestId); }
+          catch (error) { if (error instanceof AutomationPublicationWithdrawnError) publication = undefined; throw error; }
           state.items = (await deps.store.list()).items; state.notice = '우리 반 스토어에 올렸어요.'; break;
         }
         case 'unpublish': await deps.store.unpublish(action.id); state.items = (await deps.store.list()).items; state.selected = null; state.notice = '스토어에서 내렸어요.'; break;

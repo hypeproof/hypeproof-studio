@@ -20,15 +20,16 @@ const uri=fsPath=>({fsPath});
 const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{appName:'HypeProof Studio Dev',openExternal:async()=>true},commands:{executeCommand:async(name,key,value)=>{assert.equal(name,'setContext');assert.equal(key,'hypeproofChat.devGoogleOperator');devContext=value;},registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showInputBox:async options=>{operatorOptions=options;return operatorInput;},showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
 const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId,appsScript:appsScriptEnabled}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,cancelConnect:()=>{if(cancelOAuth){cancelOAuth();return true;}return false;},connect:async()=>{if(oauthWait){oauthStarted=true;await oauthWait;}connected++;googleReady=true;},disconnect:async()=>{},previewLatestSheet:async({recipe})=>{previewedRecipe=structuredClone(recipe);return{id:'saved-preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:recipe.subjectTemplate,body:recipe.bodyTemplate}]};},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
 const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/automationHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,external:['vscode'],plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^\.\/(activityConnections|proxyClient|googleAutomation)$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('activityConnections')?`export const ACTIVITY_TOKEN_KEY='token';export const activityConnections=()=>({current:globalThis.fixture.current});`:args.path.endsWith('proxyClient')?`export const fetchProfileResult=(...args)=>globalThis.fixture.fetchProfileResult(...args);`:`export const createGoogleAutomationRuntime=(...args)=>globalThis.fixture.createGoogleAutomationRuntime(...args);export const validateEmailRecipe=value=>{if(value?.schema!=='hps-email-automation/1')throw Error('Invalid recipe');return structuredClone(value);};`,loader:'js'}));}}]});
-let pauseDetail=false,releaseDetail,failPublish=false,unpublished=0,withdrawalMine=true,withdrawalStatus=200;
+let pauseDetail=false,releaseDetail,failPublish=false,unpublished=0,withdrawalMine=true,withdrawalStatus=200,withdrawnPublication=false;
 const fetcher=async (url,init)=>{
   if(url.endsWith('/withdrawal')) {
     if(init.method==='DELETE') { if(withdrawalStatus!==200)return new Response('{}',{status:withdrawalStatus});unpublished++;return new Response(JSON.stringify({ok:true})); }
     return new Response(JSON.stringify({item:{id:'withdrawal',title:recipe.title,version:1,mine:withdrawalMine},recipe}));
   }
   if(init.method==='POST' && failPublish) return new Response('{}',{status:503});
+  if(init.method==='POST' && withdrawnPublication) return new Response(JSON.stringify({error:{code:'publication_unpublished'}}),{status:409});
   if(pauseDetail && url.endsWith('/chosen')) await new Promise(resolve=>{releaseDetail=resolve;});
-  if(init.method==='POST'){published++;const body=JSON.parse(init.body);assert.deepEqual(body.recipe,recipe);assert.match(body.requestId,/^skill-[0-9a-f]{64}$/);return new Response(JSON.stringify({item:{id:'published',title:recipe.title}}));}
+  if(init.method==='POST'){published++;const body=JSON.parse(init.body);assert.deepEqual(body.recipe,recipe);assert.match(body.requestId,/^skill-(?:[0-9a-f]{64}|[0-9a-f-]{36})$/);return new Response(JSON.stringify({item:{id:'published',title:recipe.title}}));}
   return new Response(JSON.stringify({item:{id:'chosen',title:recipe.title},recipe,items:[{id:'chosen',title:recipe.title,description:recipe.description,mine:false}]}));
 };
 const module={exports:{}};const require=createRequire(import.meta.url);
@@ -143,6 +144,17 @@ try {
     assert.equal(published,beforePublished,'Stop before POST must prevent publication');assert.equal(question,null);
     fixture.fetchProfileResult=originalProfile;mcp=await host.getMcpHost();
   }
+  // A withdrawn content ID is terminal. Preparing a replacement cannot POST it
+  // without another private confirmation, even if the model retries immediately.
+  withdrawnPublication=true;const beforeRepublish=published;
+  pending=mcp.publishSkill();const withdrawnResult=assert.rejects(pending,/이전에 철회/);
+  card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await withdrawnResult;
+  assert.equal(published,beforeRepublish);withdrawnPublication=false;mcp=await host.getMcpHost();
+  pending=mcp.publishSkill();card=await waitQuestion();assert.equal(published,beforeRepublish);
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);
+  mcp=await host.getMcpHost();pending=mcp.publishSkill();card=await waitQuestion();assert.equal(published,beforeRepublish);
+  await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).approvalConfirmed,true);
+  assert.equal(published,beforeRepublish+1);
   const preview={id:'preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:'실제 제목',body:'최종 전체 본문'}]};
   pending=mcp.confirmSend(preview);card=await waitQuestion();assert.equal(card.preview.messages[0].body,'최종 전체 본문');grant=false;await handlers.answer({questionId:card.id,approved:true});assert.equal(await pending,false,'revoked at answer must not authorize sending');grant=true;
   pending=mcp.askUser({question:'어떤 표현이 좋을까요?',choices:[],allowFreeText:true});card=await waitQuestion();current.serverId='b'.repeat(64);current.token=token='different-participant';tick();assert.equal((await pending).cancelled,true);assert.equal(question,null);assert.equal(handlers.isWaiting(),false);
