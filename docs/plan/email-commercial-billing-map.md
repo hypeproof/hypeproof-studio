@@ -165,3 +165,14 @@ Each completed row records Studio/Service/site SHA, selected product revision,
 synthetic or gateway-test mode, timestamp, observed result and a redacted
 artifact reference. Provider test acceptance is separate from a real charge;
 never record raw order secrets, credentials or customer identities here.
+
+## Main integration follow-up — 2026-10-15
+
+Service `acfd637` merges main `38d8879` into the email branch, retaining the new
+revoked-native-grant rejection in access admission and the existing paid recovery
+harness. Automation/native-grant/purchase checks passed42/42. The broader run
+passed125 commands; the orchestrator group required explicit workshop fixture
+integration and then passed all nine commands. Typecheck and dry-run build pass;
+exact-head remote CI is separate. No real payment, migration or deployment occurred.
+This integration does not bind a new purchase to the existing workshop identity:
+the continuity gaps and acceptance rows above remain open.
