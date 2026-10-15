@@ -24,8 +24,10 @@ acceptance follows feature implementation and Windows availability. The new gate
 is NOT_RUN. Earlier two-user or Windows preview evidence does not satisfy it. Local follow-up verified19
 three-synthetic-principal Service/D1 controls and added common-client rejection of
 unsafe/mismatched store recipes, with88 automation checks/types/host build passing.
-Those partial controls do not pass the real Mac-to-Windows journey; the current
-installed/online0b57074d candidate does not yet include the client fix.
+Those partial controls do not pass the real Mac-to-Windows journey. The single
+Mac Dev app remains0b57074d; the private online Windows candidate now includes
+the client fix atf90b65e3. Its runtime passed all18 CI checks (one Windows-runner
+startup timeout passed on the failed-job rerun). Actual Windows execution is NOT_RUN.
 
 ## Latest design priority — 2026-10-15
 
@@ -82,7 +84,7 @@ silently interpret the workshop grant as paid recurring subscription consent.
 | Service | Main `012274d6` integrated at `abf79a8`; shared workshop capability retained; final13 CI checks passed | Local server now runs `abf79a8` directly, preserving116 existing tables and the20-seat roster; no production deployment. Additive local migrations0043–0045 applied with an integrity check and rollback backup |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
 | Local product | Earlier native acceptance at720be661 remains revision-bound; the only Peer Check app now runs0b57074d after extension/profile backup | Start page, saved dialogue/recipe and fresh coach request work. Google-dependent stages reset; a non-owner private-Sheet read is denied. After the user completed fresh login, bot own-Sheet read and exact one-recipient preview passed at0b57074d; no new two-account run is claimed |
-| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Private candidate now contains shell720be661 / extension0b57074d / SDK0.3.299 | Current installer is served online. Authenticated full app/SDK downloads match pinned hashes; anonymous downloads deny401. PowerShell archive/backup/682-to-current and9d-to-current handover fixtures pass. Actual Windows install/update/credential reuse remain NOT_RUN |
+| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Private candidate now contains shell720be661 / extensionf90b65e3 / SDK0.3.299 | Current installer is served online. Authenticated full app/SDK downloads match pinned hashes; anonymous downloads deny401. PowerShell archive/backup and exact-receipt handover from682dfd37,9d535c87 and0b57074d pass. Actual Windows install/update/credential reuse remain NOT_RUN |
 | Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported an inert recipe earlier; latest `720be661` real Google execution denies cross-Sheet reads in both directions | One durable sent record and Inbox receipt remain at `624b214f`; latest sequential account-switch test is not a new two-participant store-sharing pass. Credentials remain in-memory in Dev |
 | Store/instructor | Twenty synthetic signed grants and real local D1 cap tests pass; 720be661 actual A02 previously reported failed read4/6, answer wait4/6 and restored preview6/6; after0b57074d restart, native classroom reconnect reports blocked Google connection2/6 then restored preview6/6 | Only Peer Check runs. Refreshed board changed blocked1/normal0/unknown19 → normal1/unknown19 after real preview, and labels the old6/6 as last report while disconnected; not20 actual users. Progress is mail-only; CSV correctness is not automatically observed |
 | Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |

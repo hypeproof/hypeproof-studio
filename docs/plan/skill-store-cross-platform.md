@@ -138,6 +138,20 @@ versus observed, pass/fail/not_run and redacted evidence reference. Keep actual
 account mappings protected locally. Cover allow and deny cases at the API and
 actual Studio UI; mocks, a website catalogue and package hashes alone do not pass.
 
+## Test-environment gap before Windows store acceptance
+
+The current private Windows download gateway admits one fixed test participant
+for participant API routes and forwards to the previously approved remote Service
+revision. The three-principal HTTP audit instead used local Service `abf79a8b`.
+Therefore the current private installer is an email-runtime candidate, not a
+ready three-account store environment. Before SS-01–07, provision/map three real
+Studio principals in the intended test cohort, confirm the remote Service recipe
+contract, and restrict the test gateway to exactly those approved principals.
+Do not remove its authorization check or reuse one participation code for all
+three Google accounts. Preserve the existing single-participant route until its
+replacement has positive and unauthorized-account controls. No production access
+or broad audience expansion follows from packaging this installer.
+
 ## Execution sequence and decisions
 
 1. Finish feature implementation and the current local gate. Inventory current
@@ -182,6 +196,18 @@ placeholders, hidden columns, mismatched item IDs and unsupported wire versions.
 The actual inspector controller plus real store client preserves old work/settings
 on rejection; valid import clears the source binding and neither path calls Google
 or sends mail. Automation suite88/88, extension typecheck and host build passed.
-This is local source/API evidence. The running Mac app and online Windows candidate
-remain pinned to0b57074d until deliberately restaged; no signature, generic bundle
-installer, new version-management UI or Windows acceptance is claimed by this fix.
+This is source/API evidence. Runtimef90b65e3 passed all18 remote checks; one
+Windows PowerShell startup timeout passed the failed-job rerun. The running Mac
+app remains0b57074d to preserve its current connection. The private online Windows
+candidate now includes extensionf90b65e3 on shell720be661 with SDK0.3.299.
+
+Both complete online app/SDK downloads match pinned sizes and SHA256; anonymous
+downloads deny401, and install/update scripts match the canonical installer.
+PowerShell fixtures inspect the actual archives, preserve the previous profile
+and recognize only exact receipts for682dfd37,9d535c87 and0b57074d handover.
+Only the existing private download gateway changed; remote Service binding and
+production traffic remained unchanged. Evidence directory:
+`/tmp/hps-email-mvp/windows-current-f90b65e3/` (candidate, upload, deployment,
+installer-online and online-verification receipts; installer fixture log).
+This does not implement signatures, generic bundles or version-management UI,
+and does not pass actual Windows execution or three-real-account store acceptance.
