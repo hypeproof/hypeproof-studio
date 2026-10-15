@@ -203,7 +203,12 @@ export class AccountSession {
       const b = await this.read(); if (!b) { this.state = { status: 'signedOut' }; this.emit(); return; }
       // Local credentials are removed even offline. Remote revoke failures are visible and retryable on the account site.
       let revoked = true;
-      try { await this.call('/auth/logout', {}, b.accessToken); } catch { revoked = false; }
+      try {
+        // Already inside the cross-window lock: refresh directly, never nest accessToken().
+        let token = b.accessToken;
+        if (b.expiresAt <= this.now() + 60_000) token = this.parseBundle((await this.call('/auth/refresh', {refresh_token:b.refreshToken})).body).accessToken;
+        await this.call('/auth/logout', {}, token);
+      } catch { revoked = false; }
       await this.forget(b, revoked ? '이 기기에서 로그아웃했어요.' : '이 기기의 로그인 정보를 지웠어요. 서버에 연결하지 못해 원격 로그아웃은 확인하지 못했어요. 계정 페이지에서 기기 로그아웃을 확인해 주세요.');
     });
   }

@@ -20,7 +20,7 @@ function harness() {
       return reply(200,bundle(0));
     }
     if(u.pathname.endsWith('/auth/refresh')){world.refresh++;assert.equal(body.refresh_token,`refresh-secret-${world.refresh-1}`,'refresh token is consumed only once');await new Promise(r=>setImmediate(r));return reply(200,bundle(world.refresh));}
-    if(u.pathname.endsWith('/auth/logout'))return reply(200,{ok:true});
+    if(u.pathname.endsWith('/auth/logout')){if(world.now>4_600_000&&new Headers(init.headers).get('authorization')==='Bearer account-secret-0')return reply(401,{error:'invalid_token'});return reply(200,{ok:true});}
     if(world.revoke)return reply(401,{error:'session_revoked'});
     if(u.pathname.endsWith('/me'))return reply(200,{account:{id:'account-one',email:'buyer@example.test',display_name:'테스트 고객',access_token:'do-not-forward'}});
     if(u.pathname.endsWith('/me/passes'))return reply(200,{passes:[{id:'ord_one',product_name:'개인 이용권',status:'active',requests_used:3,requests_limit:10,requests_remaining:7,starts_at:100,expires_at:9000000,amount:100,refresh_token:'never-forward'}]});
@@ -73,4 +73,10 @@ assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),fals
   const {world,client}=harness();await client.start();world.poll='slow';await client.poll();assert.equal(client.view().status,'waiting','Service slow_down preserves the pending approval');
   world.poll='approved';world.failStore=true;await client.poll();assert.equal(world.store.size,0);assert.equal(client.view().status,'signedOut');assert.ok(world.calls.some(c=>c.path.endsWith('/auth/logout')),'an unpersisted session is revoked');
   client.dispose();console.log('PASS polling slowdown retries; failed credential storage revokes the newly issued session');
+}
+
+{
+  const {world,client}=harness();await client.start();world.poll='approved';await client.poll();world.now+=3_700_000;
+  await client.signOut();assert.equal(world.refresh,1,'an expired access token must refresh under the lock before remote logout');assert.equal(world.store.size,0);assert.match(client.view().message,/로그아웃했어요/);assert.equal(world.calls.at(-1).authorization,'Bearer account-secret-1');
+  client.dispose();console.log('PASS online logout after access expiry revokes the rotated session');
 }

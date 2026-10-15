@@ -12,11 +12,13 @@ mkdirSync(out,{recursive:true});
 const app=await electron.launch({executablePath:path.join(receipt.app,'Contents/MacOS/HypeProof Studio'),args:['--user-data-dir='+path.join(state,'user-data'),'--extensions-dir='+path.join(state,'extensions'),'--use-inmemory-secretstorage','--skip-welcome','--skip-release-notes','--disable-workspace-trust','--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--remote-debugging-port=9393','--folder-uri',new URL('file://'+path.join(state,'workspace')).href],env:{...process.env,VSCODE_CLI:'1',HPS_TEST_E2E:'1'},timeout:45000});
 await app.evaluate(({app, BrowserWindow, shell})=>{
  app.dock?.hide();
- const stash=w=>{w.setFocusable(false);w.setPosition(-4000,-4000);w.showInactive();};
+ globalThis.__accountPreviewRevealed=false;
+ const stash=w=>{if(globalThis.__accountPreviewRevealed)return;w.setFocusable(false);w.setPosition(-4000,-4000);w.showInactive();};
  const wire=w=>{stash(w);w.on('show',()=>stash(w));w.once('ready-to-show',()=>stash(w));};
  for(const w of BrowserWindow.getAllWindows())wire(w);
  app.on('browser-window-created',(_e,w)=>wire(w));
  globalThis.__accountPreviewLinks=[];
+ globalThis.__accountPreviewOriginalOpenExternal=shell.openExternal;
  shell.openExternal=async url=>{globalThis.__accountPreviewLinks.push(url);};
 });
 const driver=macWindow({debugPort:9393,realFetch:fetch,out});
@@ -38,7 +40,15 @@ await driver.wait(()=>frame.evaluate("!!document.querySelector('.studio-account-
 await driver.press(frame,'.studio-account-pass .studio-choice:not(:disabled)','Activate own pass');
 await driver.wait(()=>frame.evaluate("document.body.textContent.includes('이 활동 시작하기')"),'pass activity preview',30000);
 await shot('04-pass-activity-preview');console.log('APP_PASS_PREVIEW_READY');
+await app.evaluate(({shell})=>{shell.openExternal=globalThis.__accountPreviewOriginalOpenExternal;});
 console.log('APP_LEFT_RUNNING',await app.process().pid);
 // The customer preview remains alive until its owned stop file is created.
-while(!existsSync(path.join(state,'stop-preview'))){await new Promise(r=>setTimeout(r,5000));}
+let revealed=false;
+while(!existsSync(path.join(state,'stop-preview'))){
+ if(!revealed&&existsSync(path.join(state,'reveal-preview'))){
+  await app.evaluate(({app,BrowserWindow})=>{globalThis.__accountPreviewRevealed=true;app.dock?.show();for(const w of BrowserWindow.getAllWindows()){w.setFocusable(true);w.center();w.show();w.focus();}});
+  revealed=true;console.log('APP_REVEALED_FOR_CUSTOMER');
+ }
+ await new Promise(r=>setTimeout(r,1000));
+}
 await app.close();
