@@ -380,7 +380,7 @@
         {
           "path": "worker/test/owner-usage.test.mjs",
           "repository": "hypeproof/hypeproof-service",
-          "commit": "4b06b29b3b9c33a3f85b96e68bc825f3bff7e843"
+          "commit": "40caf3921e97d7b02df895b877ba408f40835121"
         }
       ]
     },

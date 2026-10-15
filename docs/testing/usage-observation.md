@@ -18,11 +18,12 @@ REQ-L5와 [설계/감사](../design/usage-observation-audit.md)의 첫 구현 �
 
 Service implementation and OU-01–07 acceptance are in
 [hypeproof-service#76](https://github.com/hypeproof/hypeproof-service/pull/76),
-head `4b06b29b3b9c33a3f85b96e68bc825f3bff7e843`. This extends REQ-L5 and
+head `40caf3921e97d7b02df895b877ba408f40835121`. This extends REQ-L5 and
 ADM-08 with `/admin/owner`: a full selected-period view including trials, passes,
 synthetic tests and unclassified history. The browser entry is now
 `https://hypeproof-ai.xyz/admin/owner`, using existing Lab Google/GitHub SSO with
-an explicit Owner allowlist and fresh active admin membership per read.
+fresh active HypeProof membership per read. All member roles are authorized by
+the Owner as of 2026-10-15.
 Lab integration: [hypeprooflab#1247](https://github.com/hypeproof/hypeprooflab/issues/1247).
 
 - PASS: Service Hono/SQLite controls and full premerge with the scoped SSO gate.
@@ -44,8 +45,8 @@ HTML and aggregates, logs no identities or credentials, requires unauthenticated
 requests to fail, and fails closed on malformed responses or authentication failure.
 It accepts an empty ledger without asserting ingestion completeness.
 
-Set `HPS_OWNER_EMAILS` on Lab and the shared read credential on Lab, Worker and
-Studio Actions before deployment. Owner routes reject Basic, student/issuer tokens
+Set the shared read credential on Lab, Worker and Studio Actions before
+deployment. Lab uses the existing active-member ledger without a separate allowlist. Owner routes reject Basic, student/issuer tokens
 and client-supplied Access headers. Other API authentication is unchanged.
 
 Do not dispatch production until Service #76, the Lab SSO PR and the Studio release
