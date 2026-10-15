@@ -191,7 +191,6 @@ export class ImageStaging {
   commit(ids: readonly string[], cwd: string): { relPaths: string[]; failed: number } {
     const relPaths: string[] = [];
     let failed = 0;
-    const dir = path.join(cwd, ATTACHED_IMAGE_DIR);
     for (const id of ids) {
       const s = this.staged.get(id);
       if (!s) {
@@ -200,8 +199,16 @@ export class ImageStaging {
       }
       this.staged.delete(id);
       try {
+        const workspace = fs.realpathSync(cwd);
+        const dir = path.join(workspace, ATTACHED_IMAGE_DIR);
         fs.mkdirSync(dir, { recursive: true });
         const name = freeAttachedImageName(s.name, (n) => fs.existsSync(path.join(dir, n)));
+        // Check the actual destination immediately before copying. lstat also rejects
+        // Windows directory junctions; a workspace opened through a link remains valid.
+        const entry = fs.lstatSync(dir);
+        if (!entry.isDirectory() || entry.isSymbolicLink() || path.relative(workspace, fs.realpathSync(dir)) !== ATTACHED_IMAGE_DIR) {
+          throw new Error("Photo destination is not a workspace directory");
+        }
         // copy + remove rather than rename: the temp folder may sit on another volume.
         fs.copyFileSync(s.file, path.join(dir, name), fs.constants.COPYFILE_EXCL);
         relPaths.push(`${ATTACHED_IMAGE_DIR}/${name}`);

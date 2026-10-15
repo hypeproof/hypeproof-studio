@@ -5027,6 +5027,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/attached-images.smoke.mjs"
+        },
+        {
+          "path": "e2e/photo-only-send.mjs"
         }
       ]
     },

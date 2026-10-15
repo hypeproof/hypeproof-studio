@@ -81,6 +81,19 @@ try {
   assert.equal(fs.existsSync(path.join(root, "p1")), false, "staging emptied on send");
 
   staging.stage("p3", "x.jpg", photo);
+  const outside = path.join(tmp, "outside");
+  const linked = path.join(tmp, "linked-workspace");
+  fs.mkdirSync(outside);
+  fs.mkdirSync(linked);
+  fs.symlinkSync(outside, path.join(linked, "images"), process.platform === "win32" ? "junction" : "dir");
+  assert.deepEqual(staging.commit(["p3"], linked), { relPaths: [], failed: 1 });
+  assert.deepEqual(fs.readdirSync(outside), [], "a linked photo destination never writes outside the workspace");
+  assert.equal(fs.existsSync(path.join(root, "p3")), false, "refused staging is cleaned up");
+  const linkedRoot = path.join(tmp, "workspace-link");
+  fs.symlinkSync(ws, linkedRoot, process.platform === "win32" ? "junction" : "dir");
+  staging.stage("p4", "normal.jpg", photo);
+  assert.deepEqual(staging.commit(["p4"], linkedRoot), { relPaths: ["images/normal.jpg"], failed: 0 }, "a workspace opened through a link still works");
+  assert.deepEqual(fs.readFileSync(path.join(ws, "images/normal.jpg")), photo);
   staging.dispose();
   assert.equal(fs.existsSync(root), false, "never sent → deleted with the window");
   ok("staging: leftovers by owner pid, ×, send into images/, dispose");
