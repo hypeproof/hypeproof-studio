@@ -17,11 +17,11 @@ import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
 import { runCommand } from "../fixtures/app";
 
 // Minimal valid issuer-token payload (HS256-style 3-segment shape, payload
-// has cohort scope c="boah-dental-2026-a"). Signature segment is arbitrary
+// has cohort scope c="dental-pilot-2026-a"). Signature segment is arbitrary
 // — the extension only decodes the payload locally; the worker is mocked.
 const ISSUER_PAYLOAD = Buffer.from(JSON.stringify({
   jti: "test-issuer-jti",
-  c: "boah-dental-2026-a",
+  c: "dental-pilot-2026-a",
   role: "issuer",
   exp: Math.floor(Date.now() / 1000) + 3600,
 })).toString("base64url");
@@ -37,8 +37,8 @@ async function startMockAdmin(): Promise<{ port: number; close: () => Promise<vo
     if (req.method === "GET" && req.url?.endsWith("/profile")) {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({
-        profile_id: "boah-dental-teaser-2026-s1",
-        display_name: "보아치과 v4",
+        profile_id: "dental-teaser-2026-s1",
+        display_name: "예시치과 v4",
         language: "ko",
         series_index: 1, series_total: 1,
         welcome: { greeting_md: "", example_prompts: [] },
@@ -165,8 +165,8 @@ test("REQ-G5: mint command writes the new token to the clipboard", async () => {
     // Walk the 5-step QuickInput cascade. Issuer is preseeded → first step
     // is cohort (default already filled from issuer payload), then profile,
     // then user, then hours.
-    await fillQuickInput(ctx.win, "boah-dental-2026-a");           // cohort
-    await fillQuickInput(ctx.win, "boah-dental-teaser-2026-s1");   // profile
+    await fillQuickInput(ctx.win, "dental-pilot-2026-a");           // cohort
+    await fillQuickInput(ctx.win, "dental-teaser-2026-s1");   // profile
     await fillQuickInput(ctx.win, "test-student-01");              // user
     await fillQuickInput(ctx.win, "2");                            // hours
 

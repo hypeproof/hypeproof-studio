@@ -485,8 +485,8 @@ tasks:
         over-strict board — the failure mode that turns the board into noise
         and gets the tab closed.
       negative: >-
-        SK34-CM6YPX-12 renders red (3 turns in 15 min, 250s mean wait).
-        SK34-CM6YPX-01 and -06 render as quiet (11 min no activity).
+        KW34-CM6YPX-12 renders red (3 turns in 15 min, 250s mean wait).
+        KW34-CM6YPX-01 and -06 render as quiet (11 min no activity).
       derive: >-
         Take the wait-time distribution from the real 16,564 rows. ClassAid's
         240s inactivity threshold is a sanity check on the result, not a

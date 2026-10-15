@@ -7,9 +7,9 @@ HypeProof Studio의 핵심 추상화: **cohort마다 다른 UX**를 코드 수�
 ## 어떤 cohort들이 가능한가
 
 지금까지 검증된 분기:
-- **SK바이오팜 가족 (v126, 4시간 단발 · 2트랙)** — 초3·4 `kids-basic` + 초5·6 `kids-rich`,
-  같은 `cohort_id`(`sk-biopharm-2026-a`)를 공유하고 `profile_id`로만 갈라짐 → [단발 2-트랙 패턴](#단발-2-트랙-패턴-v126-sk바이오팜)
-- **보아치과 (성인 · 2트랙)** — 같은 `cohort_id`(`boah-dental-2026-a`) 안에서 *다른 커리큘럼*을
+- **기업 고객 가족 (v126, 4시간 단발 · 2트랙)** — 초3·4 `kids-basic` + 초5·6 `kids-rich`,
+  같은 `cohort_id`(`kids-workshop-2026-a`)를 공유하고 `profile_id`로만 갈라짐 → [단발 2-트랙 패턴](#단발-2-트랙-패턴-v126-기업-고객)
+- **치과 파일럿 (성인 · 2트랙)** — 같은 `cohort_id`(`dental-pilot-2026-a`) 안에서 *다른 커리큘럼*을
   병렬 트랙으로: 직원 검색엔진(`...teaser...`, `search-webapp` tier) + 원장 웹사이트 카피클론
   (`...director-copyclone...`, `website` tier + `input.image_paste`). 둘 다 `series_total:1, series_index:1`.
   한 cohort가 *동일 레슨 2연령*(SK)이 아니라 *다른 커리큘럼 2역할*도 담을 수 있음을 보여주는 예.
@@ -30,9 +30,9 @@ HypeProof Studio의 핵심 추상화: **cohort마다 다른 UX**를 코드 수�
 ```bash
 cd worker
 npm run scaffold-profile -- \
-  --id sk-biopharm-kids-2026-grade-5-6-s1 \
-  --display "SK바이오팜 가족 AI 창작 워크숍 (5-6학년)" \
-  --cohort sk-biopharm-2026-a \
+  --id kids-2026-grade-5-6-s1 \
+  --display "기업 고객 가족 AI 창작 워크숍 (5-6학년)" \
+  --cohort kids-workshop-2026-a \
   --tier kids-rich --age-min 11 --age-max 12 \
   --hours 4 --series-total 1 --series-index 1 \
   --assets intent_clarity,context_design,verification_reflex,iteration_reflex,taste,ownership
@@ -44,7 +44,7 @@ npm run scaffold-profile -- \
 ### 1. 시스템 프롬프트 작성 (`worker/src/prompts/<profile-id>.md`)
 
 전체 markdown. 페르소나, 행동 규칙, 절대 금지 사항, 안전 룰. 1회차 prompt가 모델로:
-- `worker/src/prompts/sk-biopharm-kids-s1.md`
+- `worker/src/prompts/kids-workshop-s1.md`
 
 길이 가이드: 2000-5000자. 너무 짧으면 AI가 어긋남, 너무 길면 캐시 비용↑.
 
@@ -123,7 +123,7 @@ export const profile: Profile = {
 import { profile as myNewCohort } from "./<profile-id>";
 
 const REGISTRY: Profile[] = [
-  skBiopharmKidsS1,
+  kidsWorkshopS1,
   myNewCohort,        // ← 추가
 ];
 ```
@@ -157,7 +157,7 @@ HPS_SIGNING_SECRET=<secret> node --experimental-strip-types worker/scripts/issue
 같은 cohort의 회차 (s1, s2, s3, s4)는:
 - `session.cohort_id` 동일
 - `session.series_index` 다름 (1, 2, 3, 4)
-- 다른 profile_id (예: `sk-biopharm-kids-2026-grade-3-4-s2`)
+- 다른 profile_id (예: `kids-2026-grade-3-4-s2`)
 - `ux.coach.revisit_on_entry: true`로 두면 자녀가 매 회차 코치 이름 다시 짓기 권유받음
 
 ### Foundation week (s1) 추천 설정
@@ -184,10 +184,10 @@ HPS_SIGNING_SECRET=<secret> node --experimental-strip-types worker/scripts/issue
 - suggestions: "지금 만든 거 다시 처음 봤다고 상상" 같은 reflection chips
 - system prompt: meta 톤 (배운 걸 의심하는 자세)
 
-## 단발 2-트랙 패턴 (v126 SK바이오팜)
+## 단발 2-트랙 패턴 (v126 기업 고객)
 
 연령대만 다른 **단발(single-session)** 워크숍을 두 트랙으로 운영할 때의 패턴.
-SK바이오팜 v126이 모델: 초3·4 / 초5·6이 **같은 7단계·두 레슨**(Context Engineering /
+기업 고객 v126이 모델: 초3·4 / 초5·6이 **같은 7단계·두 레슨**(Context Engineering /
 Feedback Loop)을 지나되 "운전법"만 다르다.
 
 | | 초3·4 (`...grade-3-4-s1`) | 초5·6 (`...grade-5-6-s1`) |
@@ -195,7 +195,7 @@ Feedback Loop)을 지나되 "운전법"만 다르다.
 | `game.template_tier` | `kids-basic` | `kids-rich` |
 | `audience.age_range` | `[8, 10]` | `[11, 12]` |
 | `session` | `series_total: 1, hours: 4` | `series_total: 1, hours: 4` |
-| `session.cohort_id` | `sk-biopharm-2026-a` | `sk-biopharm-2026-a` (**동일**) |
+| `session.cohort_id` | `kids-workshop-2026-a` | `kids-workshop-2026-a` (**동일**) |
 | `assets_focus` | intent_clarity, context_design, iteration_reflex, taste, ownership | + **verification_reflex** (규칙·검증·밸런싱) |
 | `retry_button.show_counter` | `false` (자연 발견) | `true` (반복=성장 신호 가시화) |
 | prompt 운영 | 짧은 문장 여러 번, 캐릭터·장면 중심, 부모 타이핑 보조 허용 | 규칙·점수·난이도, 직접 검증·공정성, 부모는 질문만 |
@@ -203,7 +203,7 @@ Feedback Loop)을 지나되 "운전법"만 다르다.
 핵심 규칙:
 - **같은 `cohort_id`**, 다른 `profile_id`. 두 트랙은 하나의 cohort 안에서 profile로만 갈라진다.
   admin "Start class"에서 회차마다 해당 트랙 profile을 선택한다. 토큰은
-  `--profile <트랙 id> --cohort sk-biopharm-2026-a`로 발급.
+  `--profile <트랙 id> --cohort kids-workshop-2026-a`로 발급.
 - 같은 cohort의 모든 profile은 **`series_total`이 일치**해야 한다 (validator가 강제).
 - v126 자산 매핑: ContextEngineering = `intent_clarity` + `context_design`,
   FeedbackLoop = `iteration_reflex` + `verification_reflex`, 와우·소유 = `taste` + `ownership`.

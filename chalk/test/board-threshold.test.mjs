@@ -215,7 +215,7 @@ console.log("✓ rule 1: all 15 roster seats render; -13 and -15 (zero calls all
 // -14 left at 01:36 and never came back. Not in the spec's summary table, but
 // the rows are unambiguous: 49 minutes of nothing is not "fine".
 {
-  const s = quietBoard.seats.find((x) => x.user_id === "SK34-CM6YPX-14");
+  const s = quietBoard.seats.find((x) => x.user_id === "KW34-CM6YPX-14");
   assert.equal(s.state, "quiet");
   assert.ok(s.idle_ms > 45 * 60_000, `-14 idle ${s.idle_ms} ms`);
 }
@@ -274,7 +274,7 @@ assert.equal(
   for (const [seatIdx, offsetSec, status, latency] of FX.rows) {
     const u = FX.seats[seatIdx];
     const at = BASE_MS + offsetSec * 1000;
-    const broken = u === "SK34-CM6YPX-08" && at > T_QUIET - 5 * 60_000 && at <= T_QUIET;
+    const broken = u === "KW34-CM6YPX-08" && at > T_QUIET - 5 * 60_000 && at <= T_QUIET;
     ins.run(u, FX.cohort_id, latency, broken ? 502 : status, d1Timestamp(at));
   }
   const win = bDb
@@ -297,16 +297,16 @@ assert.equal(
       T_QUIET,
       signal,
     );
-  assert.equal(v("SK34-CM6YPX-08").state, "failing", "an erroring seat outranks a merely healthy one");
-  assert.ok(v("SK34-CM6YPX-08").failures_in_window > 0);
-  assert.equal(v("SK34-CM6YPX-09").state, "ok", "…and does not spill onto its neighbours");
-  assert.equal(v("SK34-CM6YPX-09").failures_in_window, 0, "post-B, a real zero IS a zero");
+  assert.equal(v("KW34-CM6YPX-08").state, "failing", "an erroring seat outranks a merely healthy one");
+  assert.ok(v("KW34-CM6YPX-08").failures_in_window > 0);
+  assert.equal(v("KW34-CM6YPX-09").state, "ok", "…and does not spill onto its neighbours");
+  assert.equal(v("KW34-CM6YPX-09").failures_in_window, 0, "post-B, a real zero IS a zero");
 }
 console.log("✓ post-B replay: a seeded 502 flips exactly one seat to failing; zeros become real");
 
 // Heartbeat is a presence question. Needs no history, so it is testable now.
 {
-  const u = "SK34-CM6YPX-01";
+  const u = "KW34-CM6YPX-01";
   const base = { user_id: u, session: toSessionAgg(u, undefined), window: toWindowAgg(u, undefined) };
   const alive = deriveSeat(
     { ...base, liveness: { ...NO_LIVENESS, heartbeat_at_ms: T_QUIET - 20_000, client_version: "0.1.51" } },
@@ -337,8 +337,8 @@ function controlsPass(th) {
   return (
     FX.labels.fine.every((u) => st(b, u) === "ok") &&
     FX.labels.quiet.every((u) => st(b, u) === "quiet") &&
-    st(b, "SK34-CM6YPX-12") === "stuck" &&
-    st(s, "SK34-CM6YPX-12") === "stuck"
+    st(b, "KW34-CM6YPX-12") === "stuck" &&
+    st(s, "KW34-CM6YPX-12") === "stuck"
   );
 }
 assert.ok(controlsPass(BOARD_THRESHOLDS), "sanity: the shipped thresholds pass");
@@ -377,12 +377,12 @@ assert.equal(d1ToMs("nonsense"), null);
 
 // The seat set — the spec did not settle this, so the behaviour is pinned here.
 {
-  const cumulative = [...FX.roster, "SK34-E87K3K-01", "보아치과-01", "load-01"];
-  const withPrefix = resolveSeatSet({ roster: cumulative, seatPrefix: "SK34-CM6YPX-", observed: ["SK34-CM6YPX-02"] });
+  const cumulative = [...FX.roster, "KW34-E87K3K-01", "pilot-01", "load-01"];
+  const withPrefix = resolveSeatSet({ roster: cumulative, seatPrefix: "KW34-CM6YPX-", observed: ["KW34-CM6YPX-02"] });
   assert.deepEqual(withPrefix.seats, FX.roster, "prefix mode renders the batch, not the 340-row cohort roster");
   assert.equal(withPrefix.complete, true);
-  const observed = resolveSeatSet({ roster: cumulative, seatPrefix: null, observed: ["SK34-CM6YPX-02", "SK34-CM6YPX-02", "SK34-CM6YPX-01"] });
-  assert.deepEqual(observed.seats, ["SK34-CM6YPX-01", "SK34-CM6YPX-02"]);
+  const observed = resolveSeatSet({ roster: cumulative, seatPrefix: null, observed: ["KW34-CM6YPX-02", "KW34-CM6YPX-02", "KW34-CM6YPX-01"] });
+  assert.deepEqual(observed.seats, ["KW34-CM6YPX-01", "KW34-CM6YPX-02"]);
   assert.equal(observed.complete, false, "observed mode can never contain a seat that never connected");
 }
 

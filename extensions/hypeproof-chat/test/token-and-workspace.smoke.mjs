@@ -1,5 +1,5 @@
 // Smoke tests for the #427 + #428 fixes — both pure, both regressions from a real
-// lecture-day failure on the boah-dental-director-copyclone cohort:
+// lecture-day failure on the dental-copyclone cohort:
 //
 //   1. sanitizeWorkshopToken — the instructor console's ONLY copy button emitted
 //      "이름: 토큰", the app stored it verbatim, and the paste 401'd with
@@ -20,7 +20,7 @@ const { withWorkspaceContext, buildSdkQueryOptions, profileToAgentOptions } =
 
 // A real v2 token shape: base64url payload "." base64url signature.
 const TOKEN =
-  "eyJjIjoiYm9haC1kZW50YWwtMjAyNi1hIiwidSI6Imppd29vbmciLCJ2IjoyfQ" +
+  "eyJjIjoiZGVudGFsLXBpbG90LTIwMjYtYSIsInUiOiJqaXdvb25nIiwidiI6Mn0" +
   ".zosT3IuGaktqrtZ7hljoLI-SXBkq1eyL7IBJpIB3kCk";
 
 // ─── sanitizeWorkshopToken ───────────────────────────────────────────────────
@@ -95,7 +95,7 @@ const TOKEN =
 // passes the raw prompt through, which is exactly what it did before #428.
 {
   const profile = {
-    profile_id: "boah-dental-director-copyclone-2026-s1",
+    profile_id: "dental-copyclone-2026-s1",
     sdk_tools: { read: true, write: true },
     game: { template_tier: "website" },
   };

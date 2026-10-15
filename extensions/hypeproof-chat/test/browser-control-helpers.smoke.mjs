@@ -103,23 +103,23 @@ console.log("All browser-control-helpers smoke tests passed.");
   assert.equal(coachTabSlot("http://127.0.0.1:51884/about.html"), "preview");
   assert.equal(coachTabSlot("http://localhost:3000/"), "preview");
   assert.equal(coachTabSlot("127.0.0.1:8080"), "preview", "스킴 없이 와도 루프백이다");
-  assert.equal(coachTabSlot("https://boaclinic.com/"), "reference");
+  assert.equal(coachTabSlot("https://dental.example/"), "reference");
   assert.equal(coachTabSlot("file:///tmp/x.html"), "reference");
 
-  // 실사용에서 실제로 쌓였던 조합: 프리뷰 + 보아치과 2개 + 404
+  // 실사용에서 실제로 쌓였던 조합: 프리뷰 + 예시치과 2개 + 404
   const tabs = [
     "http://127.0.0.1:51884/index.html",   // 0 라이브 프리뷰 (preview 슬롯)
-    "https://boaclinic.com/",              // 1
-    "https://boaclinic.com/about",         // 2
-    "https://boaclinic.com/about-us",      // 3 (404)
+    "https://dental.example/",              // 1
+    "https://dental.example/about",         // 2
+    "https://dental.example/about-us",      // 3 (404)
   ];
   // 바깥 주소로 간다 → 참고 슬롯 첫 탭을 재사용, 나머지 참고 탭만 정리.
   // 프리뷰(0)는 목록에 없다 — 다른 슬롯은 건드리지 않는다.
-  assert.deepEqual(planCoachBrowserTabs(tabs, "https://boaclinic.com/vision"),
+  assert.deepEqual(planCoachBrowserTabs(tabs, "https://dental.example/vision"),
     { reuse: 1, close: [2, 3] });
 
   // 이미 열려 있는 주소로 가면 **그 탭**을 고른다 (이동조차 필요 없다)
-  assert.deepEqual(planCoachBrowserTabs(tabs, "https://boaclinic.com/about"),
+  assert.deepEqual(planCoachBrowserTabs(tabs, "https://dental.example/about"),
     { reuse: 2, close: [1, 3] });
 
   // ── 회귀: 루프백 하위 페이지 (#519 주 원인) ──────────────────────────────
@@ -142,10 +142,10 @@ console.log("All browser-control-helpers smoke tests passed.");
   // ── 양성 대조군: 두 슬롯은 공존해야 한다 ────────────────────────────────
   // 커리큘럼이 "정답지와 내 결과물을 비교"를 요구한다(코호트 프롬프트 :107-109).
   // 전신은 다음 주소가 루프백일 때도 바깥 탭을 전부 닫아서 정답지를 죽였다.
-  const both = ["http://127.0.0.1:51884/", "https://boaclinic.com/"];
+  const both = ["http://127.0.0.1:51884/", "https://dental.example/"];
   assert.deepEqual(planCoachBrowserTabs(both, "http://127.0.0.1:51884/about.html"),
     { reuse: 0, close: [] }, "프리뷰로 이동해도 정답지 탭은 살아 있어야 한다");
-  assert.deepEqual(planCoachBrowserTabs(both, "https://boaclinic.com/vision"),
+  assert.deepEqual(planCoachBrowserTabs(both, "https://dental.example/vision"),
     { reuse: 1, close: [] }, "정답지로 이동해도 결과물 탭은 살아 있어야 한다");
 
   // ── 음성 대조군: 슬롯이 비어 있으면 새로 연다 ───────────────────────────
@@ -176,12 +176,12 @@ console.log("All browser-control-helpers smoke tests passed.");
   const base = "http://127.0.0.1:51884";
   const walk = [
     `${base}/`,
-    "https://boaclinic.com/",
+    "https://dental.example/",
     `${base}/about.html`,
-    "https://boaclinic.com/about",
+    "https://dental.example/about",
     `${base}/contact.html`,
     `${base}/about.html`,               // 재방문
-    "https://boaclinic.com/vision",
+    "https://dental.example/vision",
     `${base}/`,
   ];
   let tabs = [];
@@ -190,7 +190,7 @@ console.log("All browser-control-helpers smoke tests passed.");
     assert.ok(tabs.length <= 2, `탐색 ${url} 뒤 탭이 ${tabs.length}개 — 슬롯 수(2)를 넘었다`);
   }
   // 마지막 상태: 결과물 하나 + 정답지 하나, 각각 마지막으로 간 주소.
-  assert.deepEqual(tabs.sort(), ["http://127.0.0.1:51884/", "https://boaclinic.com/vision"]);
+  assert.deepEqual(tabs.sort(), ["http://127.0.0.1:51884/", "https://dental.example/vision"]);
 
   // 프리뷰만 계속 도는 경우 (주 원인 시나리오) — 끝까지 탭 1개.
   let only = [];
@@ -227,7 +227,7 @@ console.log("All browser-control-helpers smoke tests passed.");
 
   // 양성 — 라벨이 30자에서 잘려 `…` 로 끝나도 접두사로 인정한다(코어 getName 은 truncate).
   assert.equal(
-    pickRevealTabIndex([T(0, "보아치과 강남점 임플란트 전문…", true)], "보아치과 강남점 임플란트 전문 클리닉 (https://boaclinic.com/)"),
+    pickRevealTabIndex([T(0, "예시치과 임플란트 전문…", true)], "예시치과 임플란트 전문 클리닉 (https://dental.example/)"),
     0,
   );
 

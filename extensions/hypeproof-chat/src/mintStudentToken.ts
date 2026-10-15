@@ -71,7 +71,7 @@ export async function runMintStudentToken(deps: MintCommandDeps): Promise<MintRe
           prompt:
             cohorts.length === 1
               ? "issuer 토큰 scope에서 가져왔어요"
-              : "issuer 토큰에서 cohort를 읽지 못했어요 — 직접 입력하세요 (예: boah-dental-2026-a)",
+              : "issuer 토큰에서 cohort를 읽지 못했어요 — 직접 입력하세요 (예: dental-pilot-2026-a)",
           ignoreFocusOut: true,
         });
   if (c === undefined || c.trim() === "") return undefined;
@@ -92,7 +92,7 @@ export async function runMintStudentToken(deps: MintCommandDeps): Promise<MintRe
           prompt:
             scopedProfiles.length === 1
               ? "issuer 토큰 scope에서 가져왔어요"
-              : "예: boah-dental-teaser-2026-s1",
+              : "예: dental-teaser-2026-s1",
           ignoreFocusOut: true,
         });
   if (p === undefined || p.trim() === "") return undefined;

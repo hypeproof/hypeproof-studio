@@ -14,7 +14,7 @@
 //   billable ITPM sum(input_tokens + cache_creation_input_tokens) over a
 //                 sliding 60s window, attributed at REQUEST START.
 //                 cache_read is EXCLUDED — that is the "billable" sense used
-//                 in the 보아치과 analysis. The cache-inclusive variant is
+//                 in the 예시치과 analysis. The cache-inclusive variant is
 //                 also reported as `peak_itpm_incl_cache_read` so a reader can
 //                 tell which convention a number came from.
 //   OTPM          sum(output_tokens) over a sliding 60s window, attributed at

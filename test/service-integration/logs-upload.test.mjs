@@ -23,6 +23,9 @@ import {
 } from "@hypeproof/service-testkit/test/harness/index.mjs";
 
 const { issue } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { serviceProfiles } = await import("../fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
 const app = await bootApp();
 
 // canary-sdk-contract 가 upload_session_logs: true 인 유일한 프로필 — 양성 대조군.
@@ -77,18 +80,18 @@ function putReq(filename, { token = CANARY_TOKEN, sessionId = SID, day = DAY, bo
 }
 
 // ─── 음성 — opt-in 없는 실코호트는 fail-closed 403 ──────────────────────────
-// 2026-08-21 — 대조군을 보아치과로 교체. 원래는 기본 코호트(SK 아동)였는데,
+// 2026-08-21: the control moved to the dental pilot cohort. It used to be the default kids cohort,
 // 갤러리 연동으로 그 코호트가 upload_session_logs:true 가 되면서 "opt-in 없는
 // 코호트" 라는 이 대조군의 전제 자체가 무너졌다(200 이 나와 이 테스트가 잡았다 —
-// 음성 대조군이 제 몫을 한 것). opt-in 게이트는 roster 검사보다 먼저라 보아
+// 음성 대조군이 제 몫을 한 것). opt-in 게이트는 roster 검사보다 먼저라 파일럿
 // 코호트의 roster 를 시드하지 않아도 이 403 은 순수하게 플래그에서 나온다.
 {
   const env = createMockEnv();
-  const { token: BOA_TOKEN } = await issue(
-    { u: "보아-테스트", c: "boah-dental-2026-a", p: "boah-dental-director-copyclone-2026-s1" },
+  const { token: PILOT_TOKEN } = await issue(
+    { u: "pilot-test", c: SP.pilotCohort, p: SP.copyclone.id },
     1, TEST_SECRET,
   );
-  const r = await app.fetch(putReq("events.jsonl", { token: BOA_TOKEN }), env, makeCtx());
+  const r = await app.fetch(putReq("events.jsonl", { token: PILOT_TOKEN }), env, makeCtx());
   assert.equal(r.status, 403);
   const j = await r.json();
   assert.equal(j.error.type, "upload_disabled", "플래그 없는 코호트 = 서버가 거부");

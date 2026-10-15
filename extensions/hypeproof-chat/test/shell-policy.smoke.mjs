@@ -162,7 +162,7 @@ const { evaluateSdkToolUse, permittedToolsFor, profileToAgentOptions, buildSdkQu
     ["https://jiwoong:ghp_" + "f".repeat(36) + "@github.com/x/y.git", ".git-credentials line"],
     ["CLOUDFLARE_API_TOKEN=abcdef1234567890", "env assignment"],
     ["GH_TOKEN: supersecretvalue123", "yaml-ish assignment"],
-    ["eyJjIjoiYm9haC1kZW50YWwiLCJ2IjoyfQ.zosT3IuGaktqrtZ7hljoLI-SXBkq1eyL", "workshop token"],
+    ["eyJjIjoiZGVudGFsLXBpbG90IiwidiI6Mn0.zosT3IuGaktqrtZ7hljoLI-SXBkq1eyL", "workshop token"],
   ];
   for (const [secret, label] of cases) {
     const out = scrubSecrets(`배포 로그\n${secret}\n끝`);
@@ -185,7 +185,7 @@ const { evaluateSdkToolUse, permittedToolsFor, profileToAgentOptions, buildSdkQu
 
   // Ordinary build output must survive untouched, or scrubbing becomes noise.
   for (const clean of [
-    "✨ Deployed to https://boa-dental.pages.dev",
+    "✨ Deployed to https://dental-demo.pages.dev",
     "[main 1a2b3c4] 1차 초안\n 2 files changed, 40 insertions(+)",
     "added 214 packages in 3s",
     "index.html  context.md  치과이미지_ex.jpeg",
@@ -199,7 +199,7 @@ const { evaluateSdkToolUse, permittedToolsFor, profileToAgentOptions, buildSdkQu
 // ─── wiring: profile flag → Bash granted → ask (not deny) ────────────────────
 {
   const shellCohort = {
-    profile_id: "boah-dental-director-copyclone-2026-s1",
+    profile_id: "dental-copyclone-2026-s1",
     sdk_tools: { read: true, write: true, shell: true },
     game: { template_tier: "website" },
   };
@@ -278,7 +278,7 @@ console.log("✓ shell-policy smoke passed");
   // 양성 대조군: 실사용에서 강한 확인을 띄웠던 읽기 전용 명령들.
   // 파이썬 정규식의 `<[^>]+>` 안에 있는 `>]` 를 출력 리다이렉트로 읽었다.
   const readOnly = [
-    `curl -sL "https://boaclinic.com/x" | python3 -c "import re,sys; print(re.sub(r'<[^>]+>','',sys.stdin.read()))"`,
+    `curl -sL "https://dental.example/x" | python3 -c "import re,sys; print(re.sub(r'<[^>]+>','',sys.stdin.read()))"`,
     `curl -s "https://x.com" | sed -n 's/<[^>]*>//gp'`,
     `git commit -m "fix: <div> 태그 정리"`,
     `echo "a > b"`,

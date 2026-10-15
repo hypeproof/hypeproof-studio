@@ -56,7 +56,9 @@ const REVIEW_ROUTES = CURRICULUM_ROUTES.filter((r) => /\/projects\/:id\/review(\
 const DAY = 24 * 3600_000;
 /** Profiles for CR-T49's filters: an adult profile whose switch the test turns off, and a minors profile (never allowed, switch on or off). */
 const OFF_PROFILE = "studio-model-practice";
-const MINORS_PROFILE = "sk-biopharm-kids-2026-grade-5-6-s1";
+const { serviceProfiles } = await import("../fixtures/service-profiles.mjs");
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const MINORS_PROFILE = serviceProfiles(listProfiles).kidsUpper.id;
 const MIGRATIONS = ["0032-curriculum-runtime-publish", "0033-curriculum-runtime-evidence", "0034-curriculum-runtime-memory", "0038-curriculum-runtime-review"];
 const SECTIONS = review.REVIEW_SECTION_IDS;
 

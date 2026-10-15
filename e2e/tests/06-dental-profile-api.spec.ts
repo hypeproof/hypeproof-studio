@@ -1,4 +1,4 @@
-// T1.A — Deterministic /v1/profile API checks for boah-dental-teaser-2026-s1
+// T1.A — Deterministic /v1/profile API checks for the dental search teaser profile
 // (issue #79). Hits wrangler dev directly — no .app required.
 //
 // API-exposed fields only. Internal-shape contract (essences_focus, audience,
@@ -14,8 +14,8 @@ test.beforeAll(async () => {
   profile = await fetchDentalProfile();
 });
 
-test("T1.A.2 — display_name contains 보아치과", () => {
-  expect(profile.display_name).toContain("보아치과");
+test("T1.A.2 — display_name is set", () => {
+  expect(profile.display_name.trim().length).toBeGreaterThan(0);
 });
 
 test("T1.A.3 — top-level language == ko", () => {
@@ -35,7 +35,7 @@ test("T1.A.5 — example_prompts ≥ 3 and dental-themed (임플란트/스케일
   }
 });
 
-// #174/#187 — chip option B: boa-search-skill-creator meta-skill drives the
+// #174/#187 — chip option B: search-skill-creator meta-skill drives the
 // 7자산 Q&A in chat, so the chip rack is reduced to one starter + empty
 // follow_up. Previous 5+8 contract retired.
 

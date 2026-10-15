@@ -71,7 +71,7 @@ AI는 실행).
    |---|---|
    | 강의 · 트랙레코드 · 워크숍 · 강의 컨텐츠 | `theme:education` |
    | Studio 제품 · 배포 · 워커 · 토큰 · 스킬 | `theme:product` |
-   | 비트리 · 인바운드 · 세일즈 · 파트너 퍼널 | `theme:sales` |
+   | 파트너사 · 인바운드 · 세일즈 · 파트너 퍼널 | `theme:sales` |
    | 헌법 · 정관 · 법률 · IP · 법인화 | `theme:governance` |
    | Sediment · 지식DB · AX 케어 · ARR | `theme:sediment` |
 

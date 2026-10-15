@@ -17,7 +17,7 @@ Epic: [#44](https://github.com/jayleekr/hypeproof-studio/issues/44) (closed)
 | #49 | S-07 Structured error + request-id | [#59](https://github.com/jayleekr/hypeproof-studio/pull/59) | 2 |
 | #52 | S-06 D1 nightly backup → R2 | [#60](https://github.com/jayleekr/hypeproof-studio/pull/60) | 2 |
 
-## Operator surface during 보아치과 티저 세션 (2026-05-26)
+## Operator surface during 치과 파일럿 티저 세션 (2026-05-26)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐

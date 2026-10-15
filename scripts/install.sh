@@ -24,6 +24,10 @@
 #   INSTALLER_NO_MODIFY_PATH=1  never touch PATH / rc files
 #   HPS_SKIP_STUDIO=1           skip Studio app + SDK seed (deps only)
 #   HPS_DEBUG=1                 xtrace
+#   --kit <dir> | HPS_KIT_DIR=<dir>
+#                               class kit (docs/INSTALL-CLASS-KIT.ko.md): take the
+#                               Studio archive and the SDK seeder from this folder
+#                               instead of GitHub. No GitHub login is used.
 # =============================================================================
 
 set -eu
@@ -61,6 +65,18 @@ RAW_BASE="${HPS_RAW_BASE:-https://raw.githubusercontent.com/hypeproof/hypeproof-
 HPS_HOME="${HOME}/.hypeproof"
 RECEIPT="${HPS_HOME}/receipt.json"
 STUDIO_SUPPORT="${HOME}/Library/Application Support/HypeProof-Studio"  # mac path; overridden on Linux below
+# Where the Studio app goes. HPS_APPS_DIR is a test seam: scripts/test-installer-kit.sh
+# points it at a temporary folder so a test run cannot touch a real installation.
+APPS_DIR="${HPS_APPS_DIR:-/Applications}"
+STUDIO_APP="${APPS_DIR}/HypeProof Studio.app"
+
+# Class kit (instructor hand-off for participants who are not organization
+# members). The folder is built by scripts/make-class-kit.sh and carries the two
+# things this script otherwise fetches from the private repositories: the Studio
+# archive and the SDK seeder. Empty = the normal member install from GitHub.
+KIT_DIR="${HPS_KIT_DIR:-}"
+KIT_SUMS_NAME="SHA256SUMS"
+KIT_INFO_NAME="kit-info.txt"
 
 [ "${HPS_DEBUG:-0}" = "1" ] && set -x
 
@@ -86,17 +102,34 @@ die()   { printf '%s\n' "${C_RED}${C_BOLD}✗ $*${C_RESET}" >&2; exit 1; }
 # 2. Flags / interactivity
 # ----------------------------------------------------------------------------- #
 NONINTERACTIVE="${HPS_NONINTERACTIVE:-0}"
+_kit_arg=0
 for arg in "$@"; do
+  if [ "$_kit_arg" = "1" ]; then
+    _kit_arg=0; KIT_DIR="$arg"
+    [ -n "$KIT_DIR" ] || die "--kit needs the class kit folder"
+    continue
+  fi
   case "$arg" in
     -y|--yes|--noninteractive) NONINTERACTIVE=1 ;;
+    --kit) _kit_arg=1 ;;
+    --kit=*) KIT_DIR="${arg#--kit=}"; [ -n "$KIT_DIR" ] || die "--kit needs the class kit folder" ;;
     -h|--help)
-      printf 'Usage: install.sh [-y]\n  -y  unattended (HPS_NONINTERACTIVE=1)\n'
+      printf 'Usage: install.sh [-y] [--kit <dir>]\n  -y           unattended (HPS_NONINTERACTIVE=1)\n  --kit <dir>  install from a class kit folder, not from GitHub (HPS_KIT_DIR)\n'
       exit 0 ;;
     *) warn "ignoring unknown argument: $arg" ;;
   esac
 done
+[ "$_kit_arg" = "0" ] || die "--kit needs the class kit folder"
+if [ -n "$KIT_DIR" ]; then
+  KIT_DIR="$(CDPATH='' cd -- "$KIT_DIR" 2>/dev/null && pwd)" || die "class kit folder not found (--kit / HPS_KIT_DIR)"
+fi
 # stdin is the piped script under curl|bash, so prompts are impossible there.
 [ -t 0 ] || NONINTERACTIVE=1
+# Homebrew 7 asks "Do you want to proceed with the installation? [y/n]" before any
+# install with dependencies. The participant already agreed to the tools here, and
+# the English question stops a Korean install halfway (#1645). Older Homebrew
+# ignores the variable, where `--yes` would be an unknown option.
+export HOMEBREW_NO_ASK=1
 
 # --- curl | bash 안전장치: 자기 자신을 파일로 다시 실행한다 ------------------- #
 # 파이프로 오면 bash 는 이 스크립트를 stdin 에서 조금씩 읽어가며 실행한다. 그런데
@@ -129,6 +162,8 @@ fetch_bootstrap_script() {
 }
 
 if [ -z "${HPS_REEXEC:-}" ] && _hps_is_piped; then
+  # Class kit: re-run from the kit's own copy, so nothing is fetched from GitHub.
+  [ -z "$KIT_DIR" ] || HPS_REEXEC=1 exec bash "${KIT_DIR}/install.sh" "$@"
   _self="$(mktemp -t hps-install)" || die "mktemp failed"
   fetch_bootstrap_script install.sh "$_self" \
     || die "installer re-fetch failed: ${RAW_BASE}/install.sh"
@@ -143,6 +178,59 @@ confirm() {  # confirm "question" -> 0 yes / 1 no; auto-yes when noninteractive
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# ----------------------------------------------------------------------------- #
+# 2b. Class kit (--kit <dir> / HPS_KIT_DIR)
+# ----------------------------------------------------------------------------- #
+# Every kit file is checked against the kit's SHA256SUMS before it is used. That
+# catches a damaged or half-copied kit. It does not authenticate the person who
+# handed the folder over: whoever can change a file can change SHA256SUMS too.
+sha256_of() {  # sha256_of <file> -> lowercase hex digest
+  if have shasum; then shasum -a 256 "$1" | awk '{print $1}'
+  else sha256sum "$1" | awk '{print $1}'; fi
+}
+
+# kit_verify <name> — die unless <name> is a plain file name listed in the kit's
+# SHA256SUMS and the file in the kit has exactly that SHA-256.
+kit_verify() {
+  case "$1" in ''|*[!A-Za-z0-9._-]*) die "class kit: invalid file name '$1'" ;; esac
+  _want="$(awk -v n="$1" '{ sub(/\r$/, "") } $2 == n { print $1; exit }' "${KIT_DIR}/${KIT_SUMS_NAME}")"
+  [ -n "$_want" ] || die "class kit: $1 is not listed in ${KIT_SUMS_NAME}"
+  [ -f "${KIT_DIR}/$1" ] || die "class kit: $1 is missing from ${KIT_DIR}"
+  [ "$(sha256_of "${KIT_DIR}/$1")" = "$_want" ] \
+    || die "class kit: SHA-256 mismatch for $1 — the copy is damaged. Ask your instructor for the kit again."
+}
+
+# kit_asset_name <glob> — first file name in the kit's SHA256SUMS matching <glob>.
+kit_asset_name() {
+  awk '{ sub(/\r$/, ""); print $2 }' "${KIT_DIR}/${KIT_SUMS_NAME}" | while IFS= read -r _kit_name; do
+    # shellcheck disable=SC2254  # $1 is a glob on purpose, as in gh_asset_url
+    case "$_kit_name" in $1) printf '%s\n' "$_kit_name"; break ;; esac
+  done
+}
+
+# Verify the whole kit before anything is installed, then pin the Studio version
+# it holds. A damaged kit should stop here, not after ten minutes of Homebrew.
+kit_preflight() {
+  step "Checking the class kit"
+  [ -f "${KIT_DIR}/${KIT_SUMS_NAME}" ] \
+    || die "class kit: ${KIT_SUMS_NAME} not found in ${KIT_DIR} — this folder is not a class kit"
+  _kit_names="$(awk '{ sub(/\r$/, "") } NF == 0 { next }
+      NF != 2 || length($1) != 64 || $1 !~ /^[0-9a-f]+$/ || $2 !~ /^[A-Za-z0-9._-]+$/ || ($2 in seen) { exit 1 }
+      { seen[$2] = 1; print $2 }' "${KIT_DIR}/${KIT_SUMS_NAME}")" || die "class kit: ${KIT_SUMS_NAME} is malformed"
+  _kit_count=0
+  for _kit_file in $_kit_names; do
+    kit_verify "$_kit_file"
+    _kit_count=$((_kit_count + 1))
+  done
+  kit_verify "$KIT_INFO_NAME"
+  _kit_version="$(sed -n 's/^studio_version=//p' "${KIT_DIR}/${KIT_INFO_NAME}" | head -n1 | tr -d '\r')"
+  printf '%s' "$_kit_version" | grep -Eq '^[0-9]+(\.[0-9]+)+(-[0-9A-Za-z.]+)?$' \
+    || die "class kit: ${KIT_INFO_NAME} has no usable studio_version"
+  # The kit holds exactly one Studio version, so it decides (HPS_STUDIO_VERSION is ignored).
+  STUDIO_VERSION="$_kit_version"
+  ok "class kit verified: Studio ${STUDIO_VERSION}, ${_kit_count} file(s) match ${KIT_SUMS_NAME}"
+}
 
 # ----------------------------------------------------------------------------- #
 # 3. Detect OS / arch / shell
@@ -222,6 +310,29 @@ resolve_brew() {
   return 1
 }
 
+# The Homebrew installer runs with stdin from /dev/null (see below), which switches
+# it to non-interactive mode: it then checks sudo with `sudo -n` only and aborts
+# with "Insufficient permissions" on any Mac where sudo needs a password (#1646).
+# So ask for the Mac password here, once, and keep it fresh until Homebrew and the
+# Command Line Tools are installed (longer than sudo's 5-minute timeout).
+BREW_SUDO_KEEPALIVE=""
+brew_sudo_begin() {
+  sudo -n true 2>/dev/null && return 0
+  printf '\n    Homebrew를 설치하려면 이 Mac의 로그인 암호가 한 번 필요합니다.\n'
+  printf '    암호를 입력해도 화면에는 아무것도 표시되지 않습니다. 다 입력하고 Enter를 누르세요.\n\n'
+  sudo -v -p '    Mac 암호: ' </dev/tty \
+    || die "Mac 암호를 확인하지 못했습니다. 암호를 다시 확인하고 설치를 다시 실행하세요. 이 Mac의 관리자 계정이 아니라면 관리자 계정으로 실행해야 합니다."
+  ( while kill -0 "$$" 2>/dev/null; do sudo -n true 2>/dev/null || true; sleep 50; done ) &
+  BREW_SUDO_KEEPALIVE=$!
+}
+brew_sudo_end() {
+  [ -n "$BREW_SUDO_KEEPALIVE" ] || return 0
+  # set -e: a killed child makes `wait` return 143, which would end the install.
+  kill "$BREW_SUDO_KEEPALIVE" 2>/dev/null || true
+  wait "$BREW_SUDO_KEEPALIVE" 2>/dev/null || true
+  BREW_SUDO_KEEPALIVE=""
+}
+
 ensure_brew() {
   step "Ensuring package manager (Homebrew)"
   if resolve_brew; then ok "brew present: $BREW"; return 0; fi
@@ -229,13 +340,15 @@ ensure_brew() {
     if confirm "Homebrew not found. Install it now (also triggers Xcode CLT)?"; then
       NONINTERACTIVE_BREW=""
       [ "$NONINTERACTIVE" = "1" ] && NONINTERACTIVE_BREW="NONINTERACTIVE=1"
+      [ "$NONINTERACTIVE" = "1" ] || brew_sudo_begin
       # </dev/null 은 이중 안전장치다. 위쪽 re-exec 가 이미 stdin 의존을 없앴지만,
       # brew 설치기와 그것이 부르는 softwareupdate 가 stdin 을 읽는다는 사실 자체는
       # 그대로이므로 여기서도 끊어둔다 (누가 re-exec 를 걷어내도 안 터지게).
       env $NONINTERACTIVE_BREW /bin/bash -c \
         "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
         </dev/null \
-        || die "Homebrew install failed. See https://brew.sh"
+        || { brew_sudo_end; die "Homebrew install failed. See https://brew.sh"; }
+      brew_sudo_end
       resolve_brew || die "Homebrew installed but 'brew' not on PATH; open a new shell and re-run."
       ensure_path_entry "$(dirname "$BREW")"
       ok "Homebrew installed: $BREW"
@@ -435,7 +548,8 @@ check_deps() {
     install_one_dep "$_id"
   done
   # Post: warn (not fail) if gh is unauthenticated — matches manifest gh.post.
-  if have gh; then
+  # Class kit: a participant needs no GitHub login to install, so do not ask for one.
+  if [ -z "$KIT_DIR" ] && have gh; then
     if gh auth status >/dev/null 2>&1; then ok "gh: authenticated"; else warn "gh: not authenticated — run 'gh auth login' before using PR/review skills"; fi
   fi
 }
@@ -479,39 +593,54 @@ install_studio_mac() {
     # x64 glob once a matching asset ships.
     darwin-x64)   die "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: jayleekr/hypeproof-studio#331)" ;;
   esac
-  if [ -d "/Applications/HypeProof Studio.app" ]; then
+  if [ -d "$STUDIO_APP" ]; then
     # Idempotent upgrade: only replace if version differs.
-    _cur="$(defaults read "/Applications/HypeProof Studio.app/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "?")"
+    _cur="$(defaults read "${STUDIO_APP}/Contents/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "?")"
     if [ "$_cur" = "$STUDIO_VERSION" ]; then ok "Studio ${STUDIO_VERSION} already installed"; return 0; fi
     info "Studio ${_cur} -> ${STUDIO_VERSION} (upgrading)"
   fi
-  _url="$(gh_asset_url "$_glob")"
-  [ -n "$_url" ] || die "No Studio asset matching '${_glob}' in ${STUDIO_RELEASES_REPO} v${STUDIO_VERSION} (fail-closed: ${PLATFORM} build may not exist yet)"
-  _tmp="$(mktemp -d)"; _zip="${_tmp}/studio.zip"
-  printf '%s' "$_url" | grep -Eq '^https://api\.github\.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/[0-9]+$' || die "Untrusted release asset URL"
-  _digest="$(gh api "$_url" --jq '.digest')" || die "Cannot read asset digest"
-  printf '%s' "$_digest" | grep -Eq '^sha256:[a-fA-F0-9]{64}$' || die "Missing release SHA-256"
-  info "Downloading verified private release…"
-  gh api "$_url" -H 'Accept: application/octet-stream' > "$_zip" || die "Private release download failed"
-  _actual="$(shasum -a 256 "$_zip" | awk '{print $1}')"
-  [ "$_actual" = "${_digest#sha256:}" ] || die "Release SHA-256 mismatch"
-  info "Unzipping to /Applications…"
+  if [ -n "$KIT_DIR" ]; then
+    # Class kit: the archive is already in the kit folder. Check it against the
+    # kit's SHA256SUMS where the member path checks the release API digest.
+    _asset="$(kit_asset_name "$_glob")"
+    [ -n "$_asset" ] || die "No Studio archive matching '${_glob}' in the class kit (it was built without ${PLATFORM})"
+    kit_verify "$_asset"
+    _tmp="$(mktemp -d)"; _zip="${KIT_DIR}/${_asset}"
+    info "Using the verified archive from the class kit…"
+  else
+    _url="$(gh_asset_url "$_glob")"
+    [ -n "$_url" ] || die "No Studio asset matching '${_glob}' in ${STUDIO_RELEASES_REPO} v${STUDIO_VERSION} (fail-closed: ${PLATFORM} build may not exist yet)"
+    _tmp="$(mktemp -d)"; _zip="${_tmp}/studio.zip"
+    printf '%s' "$_url" | grep -Eq '^https://api\.github\.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/[0-9]+$' || die "Untrusted release asset URL"
+    _digest="$(gh api "$_url" --jq '.digest')" || die "Cannot read asset digest"
+    printf '%s' "$_digest" | grep -Eq '^sha256:[a-fA-F0-9]{64}$' || die "Missing release SHA-256"
+    info "Downloading verified private release…"
+    gh api "$_url" -H 'Accept: application/octet-stream' > "$_zip" || die "Private release download failed"
+    _actual="$(shasum -a 256 "$_zip" | awk '{print $1}')"
+    [ "$_actual" = "${_digest#sha256:}" ] || die "Release SHA-256 mismatch"
+  fi
+  info "Unzipping to ${APPS_DIR}…"
   ( cd "$_tmp" && unzip -q -o "$_zip" ) || die "unzip failed"
   _app="$(cd "$_tmp" && find . -maxdepth 2 -name '*.app' -type d | head -n1)"
   [ -n "$_app" ] || die "no .app found in downloaded archive"
-  rm -rf "/Applications/HypeProof Studio.app"
-  cp -R "${_tmp}/${_app#./}" "/Applications/HypeProof Studio.app" 2>/dev/null || \
-    ditto "${_tmp}/${_app#./}" "/Applications/HypeProof Studio.app"
-  xattr -dr com.apple.quarantine "/Applications/HypeProof Studio.app" 2>/dev/null || true
+  rm -rf "$STUDIO_APP"
+  cp -R "${_tmp}/${_app#./}" "$STUDIO_APP" 2>/dev/null || \
+    ditto "${_tmp}/${_app#./}" "$STUDIO_APP"
+  xattr -dr com.apple.quarantine "$STUDIO_APP" 2>/dev/null || true
   rm -rf "$_tmp"
   receipt_note "studio" "$STUDIO_VERSION"
-  ok "Studio ${STUDIO_VERSION} installed to /Applications"
+  ok "Studio ${STUDIO_VERSION} installed to ${APPS_DIR}"
 }
 
 # Resolve the canonical seed script: prefer a local sibling (repo checkout or a
 # curl -O download); otherwise fetch it from the same raw base as install.sh.
 # Echoes the path to run, or empty on failure.
 resolve_seed_script() {
+  # Class kit: the kit's seeder, which seed_sdk has already checked against the
+  # kit's SHA256SUMS. Never a sibling file, never a fetch.
+  if [ -n "$KIT_DIR" ]; then
+    printf '%s\n' "${KIT_DIR}/${SEED_SCRIPT_NAME}"; return 0
+  fi
   _self_dir=""
   # $0 is meaningful only when run from a file (not curl | bash).
   case "$0" in
@@ -527,18 +656,40 @@ resolve_seed_script() {
   return 1
 }
 
+# app_sdk_version — the native SDK binary version the installed Studio app loads. The
+# build vendors the Agent SDK package into the bundled extension
+# (scripts/inject-builtin-extensions.sh); its optionalDependencies name the native
+# package for each platform with the exact version. Empty when no app is installed,
+# the file is missing, or the platform is not darwin-arm64 (the only Mac build).
+app_sdk_version() {
+  _pkg="${STUDIO_APP}/Contents/Resources/app/extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json"
+  [ -f "$_pkg" ] || return 0
+  grep -o '"@anthropic-ai/claude-agent-sdk-darwin-arm64" *: *"[0-9][0-9A-Za-z.-]*"' "$_pkg" \
+    | head -n1 | sed 's/.*: *"\([^"]*\)"$/\1/'
+}
+
 seed_sdk() {
   # Delegate to the canonical seed-sdk-binary.sh (single source of truth for the
   # package, pinned version 0.3.207, sha512 table, seeded location, and the
   # runtime-trusted marker). An earlier inline copy here drifted (wrong package/
   # version, a marker schema + linux path the Studio runtime would not trust).
   step "Seeding native SDK binary (canonical ${SEED_SCRIPT_NAME})"
+  # Class kit: a damaged seeder stops the install here. Verified in this shell,
+  # because a die inside the command substitution below would only be a warning.
+  [ -z "$KIT_DIR" ] || kit_verify "$SEED_SCRIPT_NAME"
   _seed="$(resolve_seed_script)" || {
     warn "Could not obtain ${SEED_SCRIPT_NAME} (local or ${RAW_BASE}) — Studio will self-heal on first run"
     return 0
   }
+  # Seed the SDK version the installed app loads, not the seeder's own pin: the
+  # seeder comes from main, which can pin a newer SDK than the latest release
+  # (after #1634 main pinned 0.3.299 while v0.1.56 loads 0.3.207, and a seeded
+  # binary of another version is never found). The seeder takes a non-pinned
+  # version's integrity from the npm registry.
+  _sdk_version="${HPS_SDK_VERSION:-$(app_sdk_version)}"
+  [ -n "$_sdk_version" ] && info "SDK version the installed app loads: ${_sdk_version}"
   # Pass --platform on Linux where auto-detect may need help; darwin auto-detects.
-  if bash "$_seed" ${HPS_SDK_VERSION:+--version "$HPS_SDK_VERSION"}; then
+  if bash "$_seed" ${_sdk_version:+--version "$_sdk_version"}; then
     # Record the version the seeder actually wrote (from its verified marker).
     _mk="$(find "${STUDIO_SUPPORT%/*}/HypeProof-Studio/sdk" \
              "${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk" \
@@ -591,12 +742,13 @@ doctor() {
   done
 
   # gh auth is a warn, never a doctor failure (matches manifest gh.post).
-  if have gh; then
+  # Class kit: no GitHub login is involved, so there is nothing to report.
+  if [ -z "$KIT_DIR" ] && have gh; then
     if gh auth status >/dev/null 2>&1; then ok "gh: authenticated"; else warn "gh: unauthenticated (run 'gh auth login')"; fi
   fi
 
   if [ "${HPS_SKIP_STUDIO:-0}" != "1" ] && [ "$OS" = "darwin" ]; then
-    if [ -d "/Applications/HypeProof Studio.app" ]; then ok "Studio: installed"; else warn "Studio: not found — remediation: re-run installer"; _fail=1; fi
+    if [ -d "$STUDIO_APP" ]; then ok "Studio: installed"; else warn "Studio: not found — remediation: re-run installer"; _fail=1; fi
     # Canonical marker written by seed-sdk-binary.sh is <version>/claude.verified.json
     # (darwin under Application Support, linux under XDG_CONFIG_HOME).
     if ls "${STUDIO_SUPPORT}/sdk"/*/claude.verified.json >/dev/null 2>&1 \
@@ -626,6 +778,7 @@ printf '%s\n' "${C_BOLD}HypeProof bootstrap — platform ${PLATFORM}, manifest s
 
 have curl || die "curl is required to bootstrap and was not found."
 
+if [ -n "$KIT_DIR" ]; then kit_preflight; fi
 ensure_brew
 check_deps
 install_studio
@@ -633,6 +786,6 @@ doctor
 
 step "Done"
 ok "HypeProof is ready. Open a new terminal (or 'source ${RC_FILE}') so PATH edits take effect."
-[ "$OS" = "darwin" ] && [ -d "/Applications/HypeProof Studio.app" ] && \
-  info "Launch: open '/Applications/HypeProof Studio.app'"
+[ "$OS" = "darwin" ] && [ -d "$STUDIO_APP" ] && \
+  info "Launch: open '${STUDIO_APP}'"
 exit 0

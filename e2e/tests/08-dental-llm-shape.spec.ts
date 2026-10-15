@@ -1,4 +1,4 @@
-// T2 — Semi-deterministic LLM response shape checks for boah-dental v4
+// T2 — Semi-deterministic LLM response shape checks for dental-pilot v4
 // (issue #79). Direct /v1/chat/completions calls via the dental token; the
 // worker injects the per-cohort system prompt server-side.
 //

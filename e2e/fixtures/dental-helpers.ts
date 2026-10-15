@@ -1,4 +1,4 @@
-// Helpers for boah-dental-teaser-2026-s1 cohort tests (issue #79).
+// Helpers for dental-teaser-2026-s1 cohort tests (issue #79).
 //
 // Used by 06/07/08 spec files. Hit wrangler dev directly (no .app required for
 // T1.A profile-shape and T2.* LLM-shape tests).

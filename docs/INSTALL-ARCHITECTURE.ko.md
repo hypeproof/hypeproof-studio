@@ -37,7 +37,7 @@ exit 0으로 끝난다.
 
 | 오디언스 | 니즈 | 경로 |
 |---|---|---|
-| **비개발자 워크숍 참가자** (예: SK바이오팜 가족) | 터미널 없이, 클릭만으로. | **자족형 앱** — 서명/설치된 Studio를 받아 실행, 토큰만 붙여넣기. 원라인은 이 과정을 자동으로 대신 수행한다. |
+| **비개발자 워크숍 참가자** (예: 기업 고객 가족) | 터미널 없이, 클릭만으로. | **자족형 앱** — 서명/설치된 Studio를 받아 실행, 토큰만 붙여넣기. 원라인은 이 과정을 자동으로 대신 수행한다. |
 | **멤버 / 어드밴스드** (개발·기여자) | 런타임 의존성까지 완비된 재현 가능한 환경. | **원라인 부트스트랩** — mac `curl\|bash`, win `irm\|iex`. 의존성 provisioning + Studio + SDK seed + doctor 전부. |
 
 핵심은 **두 경로가 하나의 명령으로 수렴**한다는 점이다. 원라인 부트스트랩은
@@ -127,8 +127,10 @@ flowchart TD
   대신 **명확한 메시지와 함께 중단**한다.
 - **2. Ensure package manager:** mac은 `brew`가 없으면 Homebrew 설치(Xcode CLT
   트리거); win은 `winget`(App Installer) 존재 보장, 없으면 winget-cli release
-  msixbundle을 side-load. 대화형 프롬프트가 살아 있도록 Homebrew의
-  `bash -c "$(...)"` / winget UAC를 사용.
+  msixbundle을 side-load. Homebrew 설치기는 stdin을 `/dev/null`로 받아 비대화형으로
+  돌기 때문에 `sudo -n`만 시도한다. 그래서 대화형 설치에서는 그 전에 Mac 암호를 한 번
+  받아(`sudo -v`) 설치가 끝날 때까지 유지한다(#1646). brew 설치 확인 질문은
+  `HOMEBREW_NO_ASK=1`로 끈다(#1645). win은 winget UAC를 사용.
 - **3. Guarantee a POSIX shell (Windows 핵심 수정):** winget으로 `Git.Git`을 설치
   → Git Bash가 함께 들어온다. `C:\Program Files\Git\bin\bash.exe`를 등록하고 PATH에
   추가해서 번들된 모든 `SKILL.md`와 `.sh`가 실행되게 한다. WSL은 fallback. mac은
@@ -297,7 +299,7 @@ SDK 체크가 mac/win 양쪽에서 동일하게 green을 요구한다.
 
 ## 9. 단계적 롤아웃 (Phased Rollout)
 
-현재 가이드(hypeproof-ai.xyz/adult-edu/boa #download)는 터미널 없는 수동 흐름이다 —
+현재 가이드(hypeproof-ai.xyz 성인 교육 페이지의 #download)는 터미널 없는 수동 흐름이다 —
 unsigned installer를 받아 OS 경고를 클릭으로 넘기고 토큰을 붙여넣는데, **의존성
 프로비저닝이 전혀 없어서** 번들 skill이 Windows에서 깨진다. 이를 단계적으로 교체한다.
 
@@ -330,4 +332,5 @@ unsigned installer를 받아 OS 경고를 클릭으로 넘기고 토큰을 붙�
 | `install.sh` | macOS/Linux 부트스트래퍼 |
 | `install.ps1` | Windows 부트스트래퍼 |
 | `docs/INSTALL.md` | 워크숍 사용자용 5분 설치 가이드 |
+| `docs/INSTALL-CLASS-KIT.ko.md` | 조직 멤버가 아닌 수업 참가자용 설치 키트 (강사 전달, `make-class-kit.sh`) |
 | `docs/MEMBER-GUIDE.ko.md` | 멤버 온보딩(플랫폼 정책 §0) |

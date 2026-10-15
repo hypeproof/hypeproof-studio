@@ -427,7 +427,7 @@ export function ChatPanel(props: Props) {
   const coachName = resolveCoachIdentity(config?.coach, { ux }).name;
 
   // Tone for hard-coded chat-panel labels — game (kids) vs search-webapp
-  // (보아치과 teaser) vs website (보아치과 원장 copyclone) vs world
+  // (예시치과 teaser) vs website (치과 원장 copyclone) vs world
   // ("내가 만든 미래"). Centralized in chatPanelHelpers (appToneOf/TONE_LABELS)
   // but mirrored here so the webview stays vscode-free (chatPanelHelpers
   // imports Node `Buffer`).

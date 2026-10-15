@@ -8,7 +8,7 @@ version: 0.1.5
 last_reviewed: 2026-05-22
 audience: product reviewers
 source_paths:
-  - docs/curriculum-snapshots/boah-dental-v4
+  - e2e/tests/99-dental-demo.spec.ts
   - e2e/tests/99-screenshots.spec.ts
 quality_gates:
   - screenshots-present
@@ -20,10 +20,12 @@ quality_gates:
 
 ## Evidence Set
 
-The current evidence set is the Boah Dental v4 workshop capture under
-`docs/curriculum-snapshots/boah-dental-v4`. It includes PNG screenshots such as
-`01-greeting.png`, `02-chip-pick.png`, `07-verdict.png`, and
-`10-roll-input.png`. These screenshots are product evidence, not decoration.
+The last evidence set was the dental teaser v4 workshop capture
+(`01-greeting.png`, `02-chip-pick.png`, `07-verdict.png`, `10-roll-input.png`).
+It identified a customer, so it is no longer kept in this repository; it
+remains in the private archive. `e2e/tests/99-dental-demo.spec.ts` regenerates
+the same set into `docs/curriculum-snapshots/dental-teaser-v4/`; do not commit
+a capture that shows a customer's name. These screenshots are product evidence, not decoration.
 They show whether the panel expresses the intended workshop flow, whether the
 coach tone and choice chips are legible, and whether the generated artifact path
 is understandable to a participant.

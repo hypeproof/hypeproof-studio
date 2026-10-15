@@ -1,7 +1,7 @@
 # Vessel and Modules
 
 > Plan spec. Execution graph: [dag.yaml](./dag.yaml).
-> Written 2026-09-04. Evidence: SK바이오팜 1회차 (2026-08-22), production D1/R2,
+> Written 2026-09-04. Evidence: 기업 고객 1회차 (2026-08-22), production D1/R2,
 > `.github/workflows/`, *Hypeproof Lab Philosophy* §10 · §11 · §18.
 
 Studio becomes the vessel that holds modules. This spec names the layers, fixes
@@ -156,8 +156,8 @@ R2 session-log upload is a manual button. Nobody who gave up, or whose app died,
 ever presses it. 2026-08-22 actual:
 
 ```
-present:  SK34-CM6YPX-02 .. -10
-missing:  SK34-CM6YPX-01 · -11 · -12 · -13 · -14
+present:  KW34-CM6YPX-02 .. -10
+missing:  KW34-CM6YPX-01 · -11 · -12 · -13 · -14
 ```
 
 The two worst seats of the day are in the missing set. R2 retention is 90 days,
@@ -231,7 +231,7 @@ children under 14. The sensitive payload is **prompt text**.
 full stop. That is not what the harness does, and the difference matters.
 `validate.py:282-294` hard-fails a child cohort **only when no consent
 assertion is present**; a truthy `child.upload_consent_key` downgrades it to a
-warning. Both `sk-biopharm-kids-*` profiles set `upload_session_logs: true`
+warning. Both `kids-workshop-*` profiles set `upload_session_logs: true`
 today with `child_upload_consent: "2026-08-21 shin_bro — …보호자 사전설문으로
 동의 확보"`, so children's prompt text from the 2026-08-22 session is in R2 by
 design, not by accident.

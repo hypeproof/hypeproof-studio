@@ -52,8 +52,11 @@ function makeEnv(overrides = {}) {
 }
 const env = makeEnv();
 
-const COHORT = "boah-dental-2026-a";
-const COPYCLONE = "boah-dental-director-copyclone-2026-s1";
+const { listProfiles } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { serviceProfiles } = await import("../../test/fixtures/service-profiles.mjs");
+const SP = serviceProfiles(listProfiles);
+const COHORT = SP.pilotCohort;
+const COPYCLONE = SP.copyclone.id;
 
 async function fetchOnce(path, { method = "GET", headers = {}, body, env: e = env } = {}) {
   const req = new Request("https://chalk.test" + path, {
@@ -167,7 +170,7 @@ await check("state: admin Basic is NOT an auth path on Chalk → 401", async () 
 });
 
 await check("state: issuer scoped to a different cohort → 403", async () => {
-  const { status, text } = await fetchOnce(`/admin/cohorts/sk-biopharm-2026-a/state`, { headers: BEARER });
+  const { status, text } = await fetchOnce(`/admin/cohorts/${SP.kidsCohort}/state`, { headers: BEARER });
   assert.equal(status, 403, `got ${status}: ${text}`);
 });
 

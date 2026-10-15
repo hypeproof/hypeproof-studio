@@ -6,13 +6,13 @@
 // Write a whole index.html — the real kids-quest skeletons are 11.8-14.0 KB
 // (worker/src/skeletons/kids-quest/*.html), i.e. thousands of output tokens.
 // A tool-less harness therefore understates output tokens ~25x on exactly the
-// turns that produced the 보아치과 p99 of 211s.
+// turns that produced the 예시치과 p99 of 211s.
 //
 // Tool names are the Agent SDK's, confirmed in
 // extensions/hypeproof-chat/src/sdkCoachHelpers.ts:112,261
 // (SDK_WRITE_TOOL_NAMES = ["Write","Edit"]) — CamelCase, per
 // isClassifiedSdkToolName. The cohort grants sdk_tools:{read,write}
-// (sk-biopharm-kids-*.ts), so Read + Write + Edit is the real grant.
+// (kids-workshop-*.ts), so Read + Write + Edit is the real grant.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

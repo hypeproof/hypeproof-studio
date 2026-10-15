@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 회귀 TC — install.ps1 의 Update-ProcessPath 가 **PATH 를 잃지 않는가**.
 #
-# 왜 이게 필요한가 (2026-08-21, SK바이오팜 헬프데스크 실기기 13대 중 6대):
+# 왜 이게 필요한가 (2026-08-21, 기업 고객 헬프데스크 실기기 13대 중 6대):
 #   Update-ProcessPath 가 $env:Path 를 레지스트리 Machine+User 로 **덮어썼다**.
 #   레지스트리는 "방금 설치된 것"의 권위이지 살아있는 프로세스 PATH 의 상위집합이
 #   아니다. 갓 이미징한 Windows 프로필은 User PATH 가 비어 있을 수 있고, 그때
@@ -104,7 +104,7 @@ PS1
 
 # --- winget 소스 고정 ------------------------------------------------------
 # 기업망 TLS 검사에서 msstore 소스의 인증서 검증이 깨지면, 소스를 안 고른 winget
-# 은 그 소스 하나 때문에 명령 전체를 실패로 끝낸다(0x8a15005e). SK바이오팜
+# 은 그 소스 하나 때문에 명령 전체를 실패로 끝낸다(0x8a15005e). 기업 고객
 # 2026-08-21 현장이 이것이었다. install 경로 **둘 다**(user scope, machine scope
 # 재시도) 소스가 고정돼 있어야 한다 -- 재시도에서 빠뜨리면 반만 고친 것이 된다.
 installs=$(grep -c "^\s*'install', '--id'\|& winget install --id" "$SCRIPT")

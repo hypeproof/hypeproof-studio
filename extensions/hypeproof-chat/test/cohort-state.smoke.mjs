@@ -26,11 +26,11 @@ function makeToken(payload) {
 
 // ─── Bucket keys isolate cohort A/B ──────────────────────────────────
 {
-  const a = "boah-dental-2026-a";
-  const b = "sk-biopharm-2026-a";
-  assert.equal(historyKeyForCohort(a), `${LEGACY_HISTORY_KEY}:boah-dental-2026-a`);
-  assert.equal(coachKeyForCohort(a), `${LEGACY_COACH_KEY}:boah-dental-2026-a`);
-  assert.equal(coachRitualDoneKeyForCohort(a), `${LEGACY_COACH_RITUAL_DONE_KEY}:boah-dental-2026-a`);
+  const a = "dental-pilot-2026-a";
+  const b = "kids-workshop-2026-a";
+  assert.equal(historyKeyForCohort(a), `${LEGACY_HISTORY_KEY}:dental-pilot-2026-a`);
+  assert.equal(coachKeyForCohort(a), `${LEGACY_COACH_KEY}:dental-pilot-2026-a`);
+  assert.equal(coachRitualDoneKeyForCohort(a), `${LEGACY_COACH_RITUAL_DONE_KEY}:dental-pilot-2026-a`);
   assert.notEqual(historyKeyForCohort(a), historyKeyForCohort(b));
   assert.notEqual(coachKeyForCohort(a), coachKeyForCohort(b));
 }
@@ -50,8 +50,8 @@ function makeToken(payload) {
 // ─── HypeProof token payload `c` drives the bucket ────────────────────
 {
   assert.equal(
-    extractCohortIdUnverified(makeToken({ c: "boah-dental-2026-a", p: "s1" })),
-    "boah-dental-2026-a",
+    extractCohortIdUnverified(makeToken({ c: "dental-pilot-2026-a", p: "s1" })),
+    "dental-pilot-2026-a",
   );
   assert.equal(extractCohortIdUnverified(makeToken({ p: "s1" })), undefined);
   assert.equal(extractCohortIdUnverified("not-a-token"), undefined);
