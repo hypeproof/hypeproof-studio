@@ -552,3 +552,13 @@ normal0 and unknown19, matching the host's incomplete OAuth state. The pairing
 was real; no fixture progress was injected and no mail was sent. Evidence:
 /tmp/hps-email-mvp/final-0b57074d-acceptance/instructor-reconnect.{png,json}.
 All18 CI checks also passed at installer/documentation headc724b743.
+
+At18:03 KST, the user completed a fresh Google login after the earlier listener
+had expired. The same0b57074d native app then read the protected bot-owned Sheet
+and created one fresh shared-runner preview. Recipient, subject and body matched
+the protected synthetic fixture; the private card explicitly said no mail had
+been sent. Acknowledging this preview did not send mail. The connected instructor
+board changed to A02 completed6/6, normal1/unknown19. This closes bot reconnect
+and own-preview recovery for0b57074d, not a new two-account isolation run or
+Windows persistence. Evidence: /tmp/hps-email-mvp/final-0b57074d-acceptance/
+bot-preview-restored.json and instructor-preview-restored.png.

@@ -89,6 +89,39 @@ email plan's KRW50,000 is a quality benchmark. The workshop's 30-day grant,
 ordinary one-hour trial and any public free-trial offer are separate contracts;
 do not copy one duration or allowance across them.
 
+## Continuity integration constraints confirmed from current code
+
+The follow-up source inspection at Service `abf79a8b` and Studio runtime
+`0b57074d` narrows the required bridge; it does not implement or activate it.
+
+- Service already has immutable `access_accounts` and `access_seats` plus
+  `accountForToken()` in `worker/src/lib/access-contracts.ts`. An account token
+  proves identity only; token issuance creates no paid entitlement. Reuse this
+  ownership contract rather than treating a Google email or new order ID as
+  proof of workshop ownership.
+- `PUT /admin/access/accounts/:id/seats` explicitly refuses a new link after
+  class/seat budgets or reservations exist (`seat_link_requires_budget_migration`).
+  The current synthetic class has initialized budgets. Retrofitting its identity
+  by inserting a link would evade the existing migration guard; a transfer must
+  preserve settled usage, outstanding reservations and the existing caps.
+- `worker/src/routes/automations.ts` currently rejects account tokens, requires
+  a cohort-bound student and stores owner/visibility as `(cohort_id, user_id)`.
+  Merely issuing a personal account token therefore cannot preserve store access.
+  A future bridge must separately specify private recipe ownership and retained
+  cohort membership; payment must not grant access to a different class.
+- The purchase route still creates a fresh `pass-...` seat for each order. An
+  authenticated binding must be fixed before checkout, retained through lost
+  responses/reissue and checked at claim. A supplied learner ID, Google callback
+  or paid return query alone cannot authorize the binding.
+
+Before this bridge ships, its acceptance must cover both a new class linked
+before budget creation and an already-used class with unresolved reservations;
+wrong-account claim, duplicate payment callbacks, lost claim response, refund,
+expiry and explicit repurchase must preserve ownership and usage without
+replaying a previous mail approval. These are implementation gates, not executed
+continuity tests. No selected product, recurring charge or production migration
+is inferred from this audit.
+
 ## Executed focused regression checks
 
 On 2026-10-15, without real payments or paid AI:
