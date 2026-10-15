@@ -435,7 +435,8 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
           const result = await store.publish(recipe, 'skill-' + digest(JSON.stringify(recipe)));
-          return { published: true, id: result.item.id, title: result.item.title };
+          // Report the completed host confirmation without exposing the private card.
+          return { published: true, approvalConfirmed: true, id: result.item.id, title: result.item.title };
         },
         listSkills: async () => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');

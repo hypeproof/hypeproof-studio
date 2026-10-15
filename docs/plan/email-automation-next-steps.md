@@ -38,6 +38,16 @@ combined prior exposure plus the new limit is USD2.972794. No usage/token reset,
 model call, email or payment occurred. Concurrency remains1 for sequential pilot
 testing; this does not provision the real20-person class budget.
 
+Native Mac follow-up listed and republished a reviewed saved recipe through the
+actual conversational store UI, with exact local D1 persistence confirmed. It
+also established that the retained Mac activity targets local Service8794, while
+the Windows installer targets the private online Service; the published item is
+not present online. Final cross-platform acceptance must first align those
+environments through normal Studio activity setup. The publication-success tool
+receipt now explicitly confirms the completed private approval, fixing missing
+evidence behind confusing coach narration. Source regression passes; native copy
+verification and inclusion in the next Mac/Windows candidate remain pending.
+
 ## Latest design priority — 2026-10-15
 
 DEC-024 expands the intended learner experience beyond the email implementation

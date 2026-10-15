@@ -887,6 +887,16 @@ EA-01–EA-09 in [email-automation.md](requirements/email-automation.md) specify
 
 EA-02 includes optional operator packaging of an external Google Desktop client into the installed extension, with default omission, resolved client-ID binding and no user tokens. EA-03 binds conversational preview and publication to the saved skill; explicit `skill_save` changes it. Synthetic coverage: `google-desktop-packaging.smoke.mjs` and `automation-conversation-host.smoke.mjs`. Real packaged Windows OAuth acceptance remains separate.
 
+EA-06 publication returns `approvalConfirmed: true` to the coach only after the
+current private publication card was approved and the store accepted the recipe.
+Cancellation, stale authorization and storage failure cannot return a successful
+publication receipt. The receipt excludes the card contents and grants no future
+publication or sending authority. This supports human judgment through an accurate
+acknowledgment of the learner's completed decision; it does not repeat the approval
+question or describe its result as unknown. Host regression covers approve, cancel,
+duplicate answer, store failure and Stop races; native narration remains a separate
+acceptance observation.
+
 EA-02 managed-runner disconnect invalidates local previews/login and revokes the Google grant once. Unconfirmed revocation keeps a private retry credential across restart, blocks execution and shows explicit retry; unknown/sent ledgers remain intact. Account switching alone does not revoke the previous grant. Fixture evidence lives in `appsScriptRuntime.test.ts`; actual Google revocation and OS-backed storage remain separate acceptance.
 
 EA-09 also requires a private website-copy / PowerShell-paste installation path

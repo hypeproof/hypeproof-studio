@@ -158,6 +158,38 @@ third Studio grant is a test identity, not proof of a third Google account login
 Map and verify all three actual Google aliases during native acceptance, retaining
 one Mac Dev app. Do not reuse one Studio code across all three Google accounts.
 
+## Native Mac publication observation — 2026-10-15
+
+The retained Mac app at `0b57074d` listed three existing recipes through the
+conversation's real `email_skill_list` tool, then displayed the exact stored
+recipe in its private publication card. The privacy checkbox and explicit share
+button were exercised. Local Service `abf79a8b` persisted the exact reviewed title,
+description, placeholder templates and four column names, with no unpublish marker.
+This republished an already-imported recipe; it is not new-from-scratch authoring.
+
+The Mac session is currently attached to the local Service on port8794. All three
+private online principals receive404 for this local publication ID. This is an
+environment boundary, not evidence of failed cross-account authorization: the
+Mac local store and the Windows gateway store have distinct backing state. Before
+the final journey, connect author and recipients to the same intended test Service
+and verify their distinct principals. Do not copy the JSON through an operator API
+and label that Studio-to-store transfer. Preserve existing local Google bindings
+when selecting the online activity; any missing new-activity connection remains
+a separate setup step.
+
+The native coach incorrectly said it could not confirm the card approval after
+the host had completed it. The follow-up source change returns a minimal
+`approvalConfirmed` receipt only after approved publication succeeds and explains
+its scope in the shared MCP tool description. Approval/cancellation/store-failure
+and Stop-race fixtures pass; corrected native narration is NOT_RUN. The running
+Mac and pinned Windows package have not been restaged for this receipt change.
+
+Evidence: `/tmp/hps-email-mvp/native-store-20261015/receipt.json`, with sanitized
+`publish-card.txt` and `publish-result.txt`. No mail, Google reconnect or model
+gateway allocation was used; the coach used the existing local CLI subscription.
+This supports the local portion of SS-02/03 only. All complete SS gates above
+remain NOT_RUN, including same-Service Mac-to-Windows reuse.
+
 ## Execution sequence and decisions
 
 1. Finish feature implementation and the current local gate. Inventory current
