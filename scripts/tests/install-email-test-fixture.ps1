@@ -279,5 +279,32 @@ try {
     Assert-HpsEmailNotRunning (Join-Path $directory 'unrelated')
     Expect-Failure { Assert-HpsEmailSharedProfileIdle } 'every HypeProof'
     Write-Host 'PASS: running test application blocks installation; unrelated apps preserved'
+
+    function Get-Process { @() }
+    $legacy.artifacts[0].sha256 = '378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1'
+    [IO.File]::WriteAllText($legacyReceipt, ($legacy | ConvertTo-Json -Depth 4))
+    $portableState = Join-Path $previous 'data/user-data/User/globalStorage/state.vscdb'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $portableState) -Force | Out-Null
+    [IO.File]::WriteAllText($portableState, 'synthetic portable encrypted storage')
+    $portableDestination = Join-Path $pilotBase 'e3ab008b'
+    New-Item -ItemType Directory -Path $portableDestination -Force | Out-Null
+    $oldExe = Join-Path $previous 'HypeProof Studio.exe'
+    Restore-HpsEmailPortableProfile $pilotBase $portableDestination $oldExe
+    $restored = Join-Path $portableDestination 'data/user-data/User/globalStorage/state.vscdb'
+    $portableSnapshot = Join-Path $pilotBase 'rollback-portable-before-e3ab008b/data/user-data/User/globalStorage/state.vscdb'
+    foreach ($copy in @($restored,$portableSnapshot,$portableState)) {
+        if ([IO.File]::ReadAllText($copy) -cne 'synthetic portable encrypted storage') { throw 'Portable profile bytes were not retained.' }
+    }
+    [IO.File]::WriteAllText($restored, 'recipient changes after update')
+    Restore-HpsEmailPortableProfile $pilotBase $portableDestination $oldExe
+    if ([IO.File]::ReadAllText($restored) -cne 'recipient changes after update') { throw 'Rerun overwrote the active portable profile.' }
+    if ([IO.File]::ReadAllText($portableSnapshot) -cne 'synthetic portable encrypted storage') { throw 'Rerun overwrote the portable rollback snapshot.' }
+    $unrecognized = Join-Path $pilotBase 'unrecognized-profile'
+    New-Item -ItemType Directory -Path (Join-Path $unrecognized 'data') -Force | Out-Null
+    Expect-Failure { Restore-HpsEmailPortableProfile $pilotBase $unrecognized $oldExe } 'no migration receipt'
+    Remove-Item -LiteralPath (Join-Path $pilotBase 'rollback-portable-before-e3ab008b/complete.json')
+    Expect-Failure { Restore-HpsEmailPortableProfile $pilotBase (Join-Path $pilotBase 'retry-profile') $oldExe } 'Incomplete portable'
+    Expect-Failure { Restore-HpsEmailPortableProfile $pilotBase $portableDestination (Join-Path $directory 'unrelated.exe') } 'unrelated'
+    Write-Host 'PASS: portable profile bytes copied and verified, original/snapshot preserved, rerun retains new work, unknown target/incomplete snapshot/unrelated source refused'
 } finally { Remove-Item -LiteralPath $directory -Recurse -Force }
 Write-Host 'PASS: installer fixtures complete. Real Windows installation remains NOT RUN.'

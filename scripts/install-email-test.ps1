@@ -166,6 +166,68 @@ function Backup-HpsEmailUserData([string]$Base) {
     [IO.File]::WriteAllText($receipt, ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 }
 
+function Copy-HpsEmailProfileTree([string]$Source, [string]$Destination) {
+    Assert-HpsEmailDirectory $Source
+    Assert-HpsEmailDirectory $Destination
+    if (Test-Path -LiteralPath $Destination) { throw 'Profile copy destination already exists. It was preserved.' }
+    $entries = @(Get-ChildItem -LiteralPath $Source -Recurse -Force -ErrorAction Stop)
+    if (@($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
+        throw 'User profile contains linked files. It was preserved.'
+    }
+    Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force -ErrorAction Stop
+    foreach ($entry in @($entries | Where-Object { -not $_.PSIsContainer })) {
+        $relative = $entry.FullName.Substring($Source.TrimEnd('\', '/').Length).TrimStart('\', '/')
+        $copy = Join-Path $Destination $relative
+        if (-not (Test-Path -LiteralPath $copy -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256).Hash -cne (Get-FileHash -LiteralPath $copy -Algorithm SHA256).Hash) {
+            throw 'Profile copy verification failed. Original data was preserved.'
+        }
+    }
+}
+
+function Restore-HpsEmailPortableProfile([string]$Base, [string]$Destination, [string]$PreviousExecutable) {
+    if (-not $PreviousExecutable -or $PreviousExecutable -ieq (Join-Path $Destination 'HypeProof Studio.exe')) { return }
+    Assert-HpsEmailShortcutTarget $PreviousExecutable $Base (Join-Path $Destination 'HypeProof Studio.exe')
+    $source = Join-Path (Split-Path -Parent $PreviousExecutable) 'data'
+    if (-not (Test-Path -LiteralPath $source)) { return }
+    if ($env:VSCODE_PORTABLE -or $env:VSCODE_APPDATA -or $env:VSCODE_DEV) { throw 'Custom Studio profile routing requires an operator backup before updating.' }
+    Assert-HpsEmailSharedProfileIdle
+    Assert-HpsEmailDirectory $source
+    $target = Join-Path $Destination 'data'
+    $markerName = '.email-profile-migration.json'
+    if (Test-Path -LiteralPath $target) {
+        Assert-HpsEmailDirectory $target
+        $marker = Join-Path $target $markerName
+        if (-not (Test-Path -LiteralPath $marker -PathType Leaf) -or
+            ((Get-Item -LiteralPath $marker -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Existing portable profile has no migration receipt. It was preserved.' }
+        $saved = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+        if ($saved.build -cne 'e3ab008b' -or $saved.source -ine $source) { throw 'Unexpected portable profile receipt. It was preserved.' }
+        return
+    }
+    $backup = Join-Path $Base 'rollback-portable-before-e3ab008b'
+    Assert-HpsEmailDirectory $backup
+    $receipt = Join-Path $backup 'complete.json'
+    $snapshot = Join-Path $backup 'data'
+    if (Test-Path -LiteralPath $backup) {
+        if (-not (Test-Path -LiteralPath $receipt -PathType Leaf) -or
+            ((Get-Item -LiteralPath $receipt -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Incomplete portable rollback snapshot. It was preserved.' }
+        $saved = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+        if ($saved.build -cne 'e3ab008b' -or $saved.source -ine $source -or
+            -not (Test-Path -LiteralPath $snapshot -PathType Container)) { throw 'Unexpected portable rollback snapshot. It was preserved.' }
+    } else {
+        New-Item -ItemType Directory -Path $backup | Out-Null
+        Copy-HpsEmailProfileTree $source $snapshot
+        $saved = @{build='e3ab008b';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
+        [IO.File]::WriteAllText($receipt, ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    }
+    $stage = Join-Path $Destination ('.portable-profile-' + [Guid]::NewGuid().ToString('N'))
+    Copy-HpsEmailProfileTree $snapshot $stage
+    [IO.File]::WriteAllText((Join-Path $stage $markerName), ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    Assert-HpsEmailSharedProfileIdle
+    Move-Item -LiteralPath $stage -Destination $target -ErrorAction Stop
+    Write-Host 'Portable activity and credential storage were copied and verified; the original and rollback snapshot are retained.'
+}
+
 function Assert-HpsEmailSharedProfileIdle {
     foreach ($process in @(Get-Process -ErrorAction Stop)) {
         if ($process.ProcessName -ieq 'HypeProof Studio') {
@@ -306,6 +368,15 @@ function Install-HpsEmailTest {
         }
         Assert-HpsEmailSharedProfileIdle
         Backup-HpsEmailUserData $base
+        $previousExecutable = $shortcut.TargetPath
+        $previousShortcut = Join-Path $base 'rollback-before-e3ab008b.lnk'
+        if ($previousExecutable -ieq $executable -and (Test-Path -LiteralPath $previousShortcut -PathType Leaf)) {
+            if ((Get-Item -LiteralPath $previousShortcut -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Rollback shortcut is linked. It was preserved.' }
+            $prior = $shell.CreateShortcut($previousShortcut)
+            if ($prior.Arguments) { throw 'Rollback shortcut uses custom arguments. It was preserved.' }
+            $previousExecutable = $prior.TargetPath
+        }
+        Restore-HpsEmailPortableProfile $base $destination $previousExecutable
         if ((Test-Path -LiteralPath $shortcutPath) -and $shortcut.TargetPath -ine $executable) {
             $previousShortcut = Join-Path $base 'rollback-before-e3ab008b.lnk'
             if (Test-Path -LiteralPath $previousShortcut) { throw 'Rollback shortcut already exists. It was preserved; ask the operator for help.' }

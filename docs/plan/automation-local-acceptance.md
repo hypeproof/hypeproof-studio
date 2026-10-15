@@ -747,3 +747,9 @@ Studio/Service integration and host cancellation/private-setup checks pass; see
 [the store checkpoint](skill-store-cross-platform.md#immutable-revisions-checkpoint--2026-10-16).
 This is not a native runtime observation. Mac9b4dd233 and Windowse3ab008b are
 unchanged and do not include this follow-up. Fork provenance remains outstanding.
+
+## Windows portable-profile repair — 2026-10-16
+
+Actual Windows682dfd37→e3ab008b download, hash verification, SDK preparation and launch passed. First launch did not restore activities because old credentials/activity storage lived in the old install's portable `data` tree; default roaming-profile backup alone was insufficient. The original remained intact. A tested installer repair now selects a verified old/rollback shortcut, preserves and hashes the full portable tree, creates a separate snapshot, atomically activates the new profile and never replaces active recipient edits on rerun. The live repair restored saved activities, the same workspace and conversation without re-entering the Studio participation code. The graph is2/6; Google token reuse and online store import/preview are still pending, so this is not full SS-02/SS-04/SS-08 acceptance.
+
+Source installer fixtures (including actual app/SDK archives), gateway routing and23 online access controls pass. Gateway1a566b74 serves the repaired installer with unchanged e3ab008b archives, three-principal allowlist, expiry and pinned Service. No new paid AI or mail occurred.
