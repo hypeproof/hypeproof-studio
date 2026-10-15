@@ -22,16 +22,24 @@ import { pathToFileURL } from "node:url";
 import { crMcpRegistration } from "./crHostWiring";
 import {
   buildHypeproofMcpServer,
+  buildHypeproofToolsOnlyServer,
   crBrowserOpenRefusal,
   HYPEPROOF_MCP_SERVER_NAME,
   hypeproofMcpRegistration,
   MCP_BROWSER_OPEN,
   resolveAlreadyOpen,
+  withServerTools,
   type BrowserMcpHost,
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
 import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
+import {
+  resolveOrchestrator,
+  startOrchestratorTurn,
+  type OrchestratorHostArgs,
+  type OrchestratorTurn,
+} from "./orchestratorSurfaces.ts";
 import type { AssetScoreChunk, Citation, ResolvedProfile } from "./protocol";
 import { ProxyAuthError } from "./proxyClient";
 import {
@@ -53,6 +61,8 @@ import {
   resolveZodModule,
   sdkBinaryMarkerPath,
   coachSeatKeyFor,
+  MCP_ORCHESTRATOR_TOOLS,
+  sdkBusyPolicyFor,
   sdkConfigDirFor,
   sdkToolToActionRequest,
   seededSdkBinaryPath,
@@ -67,6 +77,8 @@ import type { SdkTurnEnd } from "./sdkCoachHelpers";
 export type { BrowserMcpHost } from "./browserMcp";
 
 export type { CoachToolAction } from "./sdkCoachHelpers";
+
+export type { OrchestratorEvent, OrchestratorHostArgs } from "./orchestratorSurfaces.ts";
 
 /**
  * Thrown when the agent-sdk runtime is selected but the SDK package isn't
@@ -168,6 +180,15 @@ export interface SdkCoachArgs {
    */
   browserHost?: BrowserMcpHost;
   emailAutomationHost?: GoogleAutomationMcpHost;
+  /**
+   * A4 (ADR 0011) — the front-line orchestrator host. Read only when the served profile
+   * carries a roster this seat may use (resolveOrchestrator: an adult seat and a
+   * well-formed `orchestrator` value, then A2's orchestratorBindingFor). Then the turn
+   * gets consult and site_check on the hypeproof MCP server, the Pre/PostToolUse check
+   * hooks, A2's headers and env pins, and the busy notice. Absent, or no such roster →
+   * today's turn, byte for byte (test/orchestrator-switch.smoke.mjs).
+   */
+  orchestrator?: OrchestratorHostArgs;
   /**
    * #282 W4a — the hypeproofChat.sdkBinaryPath setting (highest-priority
    * binary override). Undefined/empty = unset; resolution then walks
@@ -521,10 +542,48 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   diagnostic('binary_ready');
   const sdk = args.sdk ?? (await loadSdk());
   diagnostic('sdk_ready');
-  const opts = profileToAgentOptions(args.profile, {
-    model: args.model,
-    systemPrompt: args.systemPrompt,
-  });
+  // A4 — the front-line orchestrator (ADR 0011). On only with the host's arguments, an
+  // adult seat and a well-formed served roster, and only when A2's binding takes it
+  // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
+  // exactly as it did before A4.
+  const orchestratorHost = args.orchestrator;
+  const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
+  const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
+  if (
+    orchestratorHost && !orchestrator.on && servedRoster && typeof servedRoster === "object" &&
+    (servedRoster as { enabled?: unknown }).enabled !== false
+  ) {
+    // A roster was served and refused here: "configured but inert" must leave a trace.
+    console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
+  }
+  const opts = profileToAgentOptions(
+    args.profile,
+    orchestrator.on
+      ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
+      : { model: args.model, systemPrompt: args.systemPrompt },
+  );
+  const orchestratorTurn: OrchestratorTurn | null =
+    orchestrator.on && orchestratorHost && opts.orchestrator
+      ? startOrchestratorTurn({
+          roster: orchestrator.roster,
+          binding: opts.orchestrator,
+          profile: args.profile,
+          host: orchestratorHost,
+          seatKey: coachSeatKeyFor(args),
+          turnId: args.turnId,
+          gateway: {
+            url: args.gatewayUrl,
+            token: args.token,
+            lessonBinding: args.lessonBinding,
+            fundingSource: args.fundingSource,
+          },
+          workspaceRoot: args.cwd,
+          lessonStep: args.lessonStep,
+          sitePort: args.browserHost ?? null,
+          signal: args.signal,
+          canonicalize: canonicalizeFsPath,
+        })
+      : null;
 
   // Compose the transcript into a single prompt string for now. A follow-up
   // switches to the SDK streaming-input session API to preserve real history.
@@ -550,22 +609,32 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   let mcpServers: Options["mcpServers"];
   let grantedMcpTools: readonly string[] = [];
   diagnostic('tools_loading');
-  if (opts.permittedMcpTools.length > 0 && (args.browserHost || args.emailAutomationHost)) {
+  // Each server registers only its own granted tools; absent hosts cannot borrow
+  // capabilities from the email, browser/publishing or orchestrator path.
+  const emailNames: readonly string[] = ALL_AUTOMATION_MCP_TOOLS;
+  const orchestratorNames: readonly string[] = MCP_ORCHESTRATOR_TOOLS;
+  const emailGrants = opts.permittedMcpTools.filter(name => emailNames.includes(name));
+  const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name) && !orchestratorNames.includes(name));
+  const orchestratorGrants = opts.permittedMcpTools.filter(name => orchestratorNames.includes(name));
+  const registerBrowser = !!args.browserHost && browserGrants.length > 0;
+  const registerEmail = !!args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => emailGrants.includes(name));
+  if (registerBrowser || registerEmail || (orchestratorTurn && orchestratorGrants.length > 0)) {
     const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
     if (hasFactory && z) {
-      const factory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
+      const factory: SdkMcpFactory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
       const servers: NonNullable<Options["mcpServers"]> = {};
       const grants: string[] = [];
-      const emailNames: readonly string[] = ALL_AUTOMATION_MCP_TOOLS;
-      const emailGrants = opts.permittedMcpTools.filter(name => emailNames.includes(name));
-      const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name));
-      if (args.browserHost && browserGrants.length) {
-        servers[HYPEPROOF_MCP_SERVER_NAME] = buildHypeproofMcpServer(factory, z, args.browserHost,
-          { ...crMcpRegistration(browserGrants), ...hypeproofMcpRegistration(browserGrants) }) as NonNullable<Options["mcpServers"]>[string];
-        grants.push(...browserGrants);
+      const extra = orchestratorTurn ? orchestratorTurn.mcpTools(factory, z, orchestratorGrants) : { tools: [], names: [] };
+      const server = registerBrowser
+        ? buildHypeproofMcpServer(withServerTools(factory, extra.tools), z, args.browserHost!,
+          { ...crMcpRegistration(browserGrants), ...hypeproofMcpRegistration(browserGrants) })
+        : extra.tools.length > 0 ? buildHypeproofToolsOnlyServer(factory, extra.tools) : null;
+      if (server) {
+        servers[HYPEPROOF_MCP_SERVER_NAME] = server as NonNullable<Options["mcpServers"]>[string];
+        grants.push(...(registerBrowser ? browserGrants : []), ...extra.names);
       }
-      if (args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => opts.permittedMcpTools.includes(name))) {
+      if (args.emailAutomationHost && registerEmail) {
         const host = args.emailAutomationHost;
         const humanWait = async <T>(work: () => Promise<T>): Promise<T> => {
           awaitingUser++;
@@ -659,6 +728,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // #507 — 떠 있는 라이브 서버 주소(없으면 생략). 코치가 미리보기 포트를
       // 추측하던 유일한 이유는 이 값이 컨텍스트에 없었기 때문이다.
       ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
+      // A4 — the check hooks (diff guard, archive, site-check summary). They report
+      // through additionalContext only; A2's guardOrchestratorHooks drops anything else.
+      ...(orchestratorTurn?.hooks ? { hooks: orchestratorTurn.hooks } : {}),
     }),
     // Every tool call routes here (allowedTools is empty — an entry there
     // would auto-approve and bypass this gate). The pure policy matrix
@@ -781,6 +853,12 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       yield event;
     }
   })();
+  // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
+  // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
+  const observed = orchestratorTurn ? orchestratorTurn.tap(diagnosedStream) : diagnosedStream;
+  // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
+  // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
+  const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
 
   // Map SDK messages → the proxyChat callback shape via the pure consumer
   // (sdkCoachHelpers.consumeSdkStream — unit-tested). Three exits besides
@@ -805,7 +883,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // (onCitations / onAssetScore are wired for parity but the SDK stream
   // mapping for those lands in a later phase.)
   const stallMs = args.stallTimeoutMs ?? SDK_STREAM_STALL_MS;
-  return await consumeSdkStream(diagnosedStream, {
+  return await consumeSdkStream(observed, {
     isAborted: () => args.signal.aborted,
     makeAbortError: abortError,
     abortQuery: () => abortController.abort(),
@@ -842,6 +920,19 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // running (one budget of slack after the decision — a long subagent gets
     // ~2 budgets total before the watchdog calls it wedged, a never-returning
     // one still ends in a message rather than a hang).
-    isTurnBlocked: () => awaitingUser > 0 || args.emailAutomationHost?.isAwaitingUser?.() === true || Date.now() - lastToolCallAt < stallMs,
-  });
+    // A4 — a running consult or site check is host work, not a stall.
+    isTurnBlocked: () => awaitingUser > 0 || args.emailAutomationHost?.isAwaitingUser?.() === true || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
+    ...(busy ? { busy } : {}),
+  }).then(
+    // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.
+    // The value and the error pass through as they are.
+    (end) => {
+      orchestratorTurn?.end(end);
+      return end;
+    },
+    (err: unknown) => {
+      orchestratorTurn?.end(null);
+      throw err;
+    },
+  );
 }
