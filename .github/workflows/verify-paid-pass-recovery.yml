@@ -1,0 +1,91 @@
+name: Hosted paid-pass restart and offline recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact Studio driver SHA to verify
+        required: true
+        type: string
+      app_tag:
+        description: Exact public App release tag
+        required: true
+        default: v0.1.56
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - id: service
+        shell: bash
+        run: node e2e/paid-pass-recovery/resolve-service.mjs "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-harness
+          fetch-depth: 0
+      - name: Verify ephemeral Keychain before the long observation
+        shell: bash
+        env:
+          APP_TAG: ${{ inputs.app_tag }}
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-harness
+        run: bash e2e/paid-pass-recovery/hosted-run.sh preflight
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paid-pass-recovery-preflight
+          path: ${{ runner.temp }}/paid-recovery-preflight-upload/
+          retention-days: 14
+
+  full:
+    needs: preflight
+    runs-on: macos-15
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - id: service
+        shell: bash
+        run: node e2e/paid-pass-recovery/resolve-service.mjs "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-harness
+          fetch-depth: 0
+      - name: Observe the same grant across forty-one actual offline minutes
+        shell: bash
+        env:
+          APP_TAG: ${{ inputs.app_tag }}
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-harness
+        run: bash e2e/paid-pass-recovery/hosted-run.sh full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paid-pass-recovery-full
+          path: ${{ runner.temp }}/paid-recovery-full-upload/
+          retention-days: 14
