@@ -15,8 +15,8 @@ function Expect-Failure([scriptblock]$Action, [string]$Match) {
     try { & $Action } catch { $message = $_.Exception.Message }
     if (-not $message -or $message -notmatch $Match) { throw "Expected refusal matching $Match, got $message" }
 }
-$manifest = [pscustomobject]@{ schema=1; build='3f1a3f20'; artifacts=@(
-    [pscustomobject]@{name='app.zip';path='/install/files/app.zip';sha256='4472b4c05630a31e4e658b5ccbf1e54490a424ff88fb3953f3d6981868143ea4';bytes=196646585},
+$manifest = [pscustomobject]@{ schema=1; build='32ba0ac2'; artifacts=@(
+    [pscustomobject]@{name='app.zip';path='/install/files/app.zip';sha256='4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6';bytes=196647056},
     [pscustomobject]@{name='sdk.zip';path='/install/files/sdk.zip';sha256='24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e';bytes=121940997}
 )}
 Assert-HpsEmailManifest $manifest
@@ -122,7 +122,7 @@ try {
     )}
     $legacyReceipt = Join-Path $previous '.email-test-install.json'
     [IO.File]::WriteAllText($legacyReceipt, ($legacy | ConvertTo-Json -Depth 4))
-    $newExe = Join-Path $pilotBase '3f1a3f20/HypeProof Studio.exe'
+    $newExe = Join-Path $pilotBase '32ba0ac2/HypeProof Studio.exe'
     Assert-HpsEmailShortcutTarget (Join-Path $previous 'HypeProof Studio.exe') $pilotBase $newExe
     Assert-HpsEmailShortcutTarget $newExe $pilotBase $newExe
     Expect-Failure { Assert-HpsEmailShortcutTarget (Join-Path $directory 'unrelated.exe') $pilotBase $newExe } 'unrelated'
@@ -176,6 +176,21 @@ try {
     Expect-Failure { Assert-HpsEmailShortcutTarget (Join-Path $priorStore 'HypeProof Studio.exe') $pilotBase $newExe } 'pinned'
     Write-Host 'PASS: the f90b65e3 store pilot requires its exact pinned receipt for handover'
 
+    $priorRecovery = Join-Path $pilotBase '3f1a3f20'
+    New-Item -ItemType Directory -Path $priorRecovery -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $priorRecovery 'HypeProof Studio.exe'), 'prior recovery app kept')
+    $recoveryManifest = $manifest | ConvertTo-Json -Depth 4 | ConvertFrom-Json
+    $recoveryManifest.build = '3f1a3f20'
+    $recoveryManifest.artifacts[0].sha256 = '4472b4c05630a31e4e658b5ccbf1e54490a424ff88fb3953f3d6981868143ea4'
+    $recoveryManifest.artifacts[0].bytes = 196646585
+    $recoveryReceipt = Join-Path $priorRecovery '.email-test-install.json'
+    [IO.File]::WriteAllText($recoveryReceipt, ($recoveryManifest | ConvertTo-Json -Depth 4))
+    Assert-HpsEmailShortcutTarget (Join-Path $priorRecovery 'HypeProof Studio.exe') $pilotBase $newExe
+    $recoveryManifest.artifacts[0].sha256 = '0'*64
+    [IO.File]::WriteAllText($recoveryReceipt, ($recoveryManifest | ConvertTo-Json -Depth 4))
+    Expect-Failure { Assert-HpsEmailShortcutTarget (Join-Path $priorRecovery 'HypeProof Studio.exe') $pilotBase $newExe } 'pinned'
+    Write-Host 'PASS: the 3f1a3f20 pilot requires its exact pinned receipt for handover'
+
     $oldAppData = $env:APPDATA
     try {
         $env:APPDATA = Join-Path $directory 'profile-appdata'
@@ -184,34 +199,19 @@ try {
         $state = Join-Path $profile 'state.vscdb'
         [IO.File]::WriteAllText($state, 'synthetic encrypted storage bytes')
         Backup-HpsEmailUserData $pilotBase
-        $snapshot = Join-Path $pilotBase 'rollback-before-3f1a3f20/profile/User/globalStorage/state.vscdb'
+        $snapshot = Join-Path $pilotBase 'rollback-before-32ba0ac2/profile/User/globalStorage/state.vscdb'
         if ([IO.File]::ReadAllText($snapshot) -cne [IO.File]::ReadAllText($state)) { throw 'Profile snapshot lost bytes.' }
         [IO.File]::WriteAllText($state, 'new version changed storage')
         Backup-HpsEmailUserData $pilotBase
         if ([IO.File]::ReadAllText($snapshot) -cne 'synthetic encrypted storage bytes') { throw 'Rerun overwrote the pre-update profile.' }
         if ([IO.File]::ReadAllText($state) -cne 'new version changed storage') { throw 'Backup changed live user data.' }
-        Remove-Item -LiteralPath (Join-Path $pilotBase 'rollback-before-3f1a3f20/complete.json')
+        Remove-Item -LiteralPath (Join-Path $pilotBase 'rollback-before-32ba0ac2/complete.json')
         Expect-Failure { Backup-HpsEmailUserData $pilotBase } 'incomplete rollback'
         Write-Host 'PASS: pre-update profile is copied, rerun preserves original bytes, incomplete snapshot blocks launch'
     } finally { $env:APPDATA = $oldAppData }
 
     if ($SdkZip) {
-        $priorStore = Join-Path $pilotBase 'f90b65e3'
-    New-Item -ItemType Directory -Path $priorStore -Force | Out-Null
-    [IO.File]::WriteAllText((Join-Path $priorStore 'HypeProof Studio.exe'), 'prior store app kept')
-    $storeManifest = $manifest | ConvertTo-Json -Depth 4 | ConvertFrom-Json
-    $storeManifest.build = 'f90b65e3'
-    $storeManifest.artifacts[0].sha256 = '6b30b955a6f3365521300db8dfab78716f7710ebded9ec6720c52604de7b6b29'
-    $storeManifest.artifacts[0].bytes = 196645861
-    $storeReceipt = Join-Path $priorStore '.email-test-install.json'
-    [IO.File]::WriteAllText($storeReceipt, ($storeManifest | ConvertTo-Json -Depth 4))
-    Assert-HpsEmailShortcutTarget (Join-Path $priorStore 'HypeProof Studio.exe') $pilotBase $newExe
-    $storeManifest.artifacts[0].sha256 = '0'*64
-    [IO.File]::WriteAllText($storeReceipt, ($storeManifest | ConvertTo-Json -Depth 4))
-    Expect-Failure { Assert-HpsEmailShortcutTarget (Join-Path $priorStore 'HypeProof Studio.exe') $pilotBase $newExe } 'pinned'
-    Write-Host 'PASS: the f90b65e3 store pilot requires its exact pinned receipt for handover'
-
-    $oldAppData = $env:APPDATA; $oldTemp = $env:TEMP; $oldSystem = $env:SystemRoot
+        $oldAppData = $env:APPDATA; $oldTemp = $env:TEMP; $oldSystem = $env:SystemRoot
         try {
             $env:APPDATA = Join-Path $directory 'appdata'; $env:TEMP = $directory
             $bundle = Join-Path $directory 'sdk-bundle'
@@ -248,7 +248,7 @@ try {
         $sdkPackage = Get-Content -LiteralPath (Join-Path $ext 'dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json') -Raw | ConvertFrom-Json
         $candidate = Get-Content -LiteralPath (Join-Path $app '.email-candidate-source.json') -Raw | ConvertFrom-Json
         if ($product.commit -cne '720be6610200bc8da81686bd3eb20591d6407d88' -or
-            $candidate.extension_source -cne '3f1a3f20375611b9303c060ec567c6b783c00330' -or
+            $candidate.extension_source -cne '32ba0ac2d24763387c4ad54f400bf2e3bbf2feff' -or
             $sdkPackage.version -cne '0.3.299') { throw 'Packaged shell/extension/SDK version drift.' }
         foreach ($entry in $candidate.field_files.psobject.Properties) {
             if ((Get-FileHash -LiteralPath (Join-Path $ext $entry.Name) -Algorithm SHA256).Hash -ine $entry.Value) { throw 'Packaged extension hash drift.' }
@@ -256,10 +256,10 @@ try {
         foreach ($name in @('oauth/google-desktop-client.json','resources/google-shared-runner.json')) {
             if (-not (Test-Path -LiteralPath (Join-Path $ext $name) -PathType Leaf)) { throw 'Operator Google configuration missing.' }
         }
-        Write-Host 'PASS: actual app ZIP hash and extraction; shell720be661, extension3f1a3f20, SDK0.3.299, seven extension hashes and operator resources (Windows NOT executed)'
+        Write-Host 'PASS: actual app ZIP hash and extraction; shell720be661, extension32ba0ac2, SDK0.3.299, seven extension hashes and operator resources (Windows NOT executed)'
     }
 
-    function Get-Process { @([pscustomobject]@{Path=(Join-Path $directory '3f1a3f20/HypeProof Studio.exe');ProcessName='HypeProof Studio'}) }
+    function Get-Process { @([pscustomobject]@{Path=(Join-Path $directory '32ba0ac2/HypeProof Studio.exe');ProcessName='HypeProof Studio'}) }
     Expect-Failure { Assert-HpsEmailNotRunning $directory } 'Close HypeProof'
     Assert-HpsEmailNotRunning (Join-Path $directory 'unrelated')
     Expect-Failure { Assert-HpsEmailSharedProfileIdle } 'every HypeProof'

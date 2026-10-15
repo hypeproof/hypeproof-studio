@@ -622,7 +622,25 @@ the SDK tool handler and local HTTP MCP transport: missing callback, missing
 client setup, unknown private error and user cancellation. It checks one attempt,
 no downstream Google request, retained credentials/unknown-send ledger, listener
 cleanup and no raw error leakage. Focused33 checks, automation89 checks, extension
-typecheck and extension build pass. The currently running native app and served
-Windows candidate remain3f1a3f20; this source follow-up has not yet been packaged
-or validated with real Google/coach behavior. No new OAuth request or mail follows
-from these tests.
+typecheck and extension build pass. The recovery implementation is32ba0ac2. At21:30KST it was packaged into the
+single Mac Dev app; the existing conversation, saved recipe and2/6 progress
+restored after relaunch. Google operator resources retained their hashes. This
+is launch/state restoration evidence, not real Google/coach recovery acceptance.
+No new OAuth request or mail followed these tests.
+
+A Windows candidate using extension32ba0ac2, shell720be661 and SDK0.3.299 was
+prepared locally. Real PowerShell archive/integrity/backup fixtures passed against
+both actual ZIPs, including exact-receipt handover from682dfd37,9d535c87,
+0b57074d,f90b65e3 and3f1a3f20. The candidate gateway passed14 download tests and
+its update-alias/three-principal controls. These tests do not execute Windows.
+The served private installer remains3f1a3f20 until a verified gateway switch.
+
+Candidate app:196647056 bytes, SHA256
+`4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6`.
+SDK:121940997 bytes, SHA256
+`24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e`.
+Evidence: `integrated-peer/current-source.json` and
+`windows-current-32ba0ac2/{candidate.json,powershell-fixture.log}` under
+`/tmp/hps-email-mvp/`. Runtime32ba0ac2 initially had17 CI checks pass and a
+Windows wrapper PowerShell startup timeout; only that failed job was rerun.
+Its final status must be checked separately from the passing archive fixtures.

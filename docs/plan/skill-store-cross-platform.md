@@ -33,7 +33,10 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 ## What is implemented today
 
 Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
-Current Mac runtime: `3f1a3f20`; online Service remains pinned to
+Current Mac runtime: `32ba0ac2` (Google recovery follow-up); the served Windows
+candidate remains `3f1a3f20`, with `32ba0ac2` locally packaged and fixture-tested.
+Native three-principal store evidence below was recorded on `3f1a3f20`.
+The online Service remains pinned to
 `email-local-accepted-ffef7bc-peer`. Later observations below are revision-bound.
 
 | Layer | Current source fact | Limit |

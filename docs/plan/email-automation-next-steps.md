@@ -49,6 +49,13 @@ Current partial evidence, all dated2026-10-15:
   hashes:196646585 app bytes in76.39s and121940997 SDK bytes in35.41s. Earlier
   slow/timeout attempts remain recorded; their cause is unconfirmed. Actual Windows execution is NOT_RUN.
 
+The later Google recovery fix32ba0ac2 is now in the single Mac Dev app; relaunch
+restored the existing conversation and2/6 recipe progress. Its Windows package
+and actual archive/backup/upgrade fixtures pass locally, including3f1a3f20
+handover. The served private installer is still3f1a3f20. Fresh Google callback
+and native Windows acceptance remain pending; see the
+[recovery packaging record](automation-local-acceptance.md#recovery-explanation-follow-up).
+
 The full Mac→store→Windows gate is NOT_RUN. Actual Google alias mapping, recipient
 private setup/execution, restart, update/rollback and withdrawal still require
 native evidence. The new online activity has no Google connection. Earlier local
