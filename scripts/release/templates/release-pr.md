@@ -57,5 +57,6 @@ PRs after the smoke baseline without a `smoke:` line.
 ## 8. Approval
 
 - Release manager: {{RELEASE_MANAGER}}
-- Conditions: smoke PASS, every box above ticked, an approving review from the release manager.
+- Conditions: smoke PASS, every box above ticked, an approving review from that member.
+- After the approval the v tag goes on the same commit as `{{RC_TAG}}`; the publish gate checks this.
 - On approval, `{{FINAL_TAG}}` is tagged on `{{CANDIDATE_SHORT}}` and published.
