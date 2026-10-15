@@ -11,6 +11,8 @@ on:
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'scripts/email-test-participant-auth.mjs'
+      - 'scripts/tests/email-test-participant-auth.test.mjs'
       - 'test/service-integration/**'
       - 'chalk/**'
       - 'extensions/hypeproof-chat/**'
@@ -73,6 +75,9 @@ jobs:
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
+      - name: Private pilot participant restrictions
+        if: ${{ !cancelled() }}
+        run: node --test scripts/tests/email-test-participant-auth.test.mjs
       # dag.yaml task A control: the --prerelease decision used by
       # build-mac.yml / build-windows.yml must be testable without cutting a
       # real tag. Runs in milliseconds, no build/app required.

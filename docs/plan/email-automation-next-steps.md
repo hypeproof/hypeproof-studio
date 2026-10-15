@@ -28,6 +28,13 @@ Those partial controls do not pass the real Mac-to-Windows journey. The single
 Mac Dev app remains0b57074d; the private online Windows candidate now includes
 the client fix atf90b65e3. Its runtime passed all18 CI checks (one Windows-runner
 startup timeout passed on the failed-job rerun). Actual Windows execution is NOT_RUN.
+The private gateway now admits three distinct Studio principals; online Service/D1
+publication/ownership/withdrawal19 and download/profile/access23 controls pass.
+The third test grant added no budget or model spend. Actual Google identity
+mapping and native Mac/Windows reuse remain unverified. Fresh access views expose
+an additional prerequisite: only the existing peer has available AI allocation;
+original/third paid-coach admission is not ready. Held/unknown amounts and the
+approved overall spending ceiling are preserved.
 
 ## Latest design priority — 2026-10-15
 

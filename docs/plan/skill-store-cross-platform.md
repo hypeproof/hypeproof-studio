@@ -138,19 +138,25 @@ versus observed, pass/fail/not_run and redacted evidence reference. Keep actual
 account mappings protected locally. Cover allow and deny cases at the API and
 actual Studio UI; mocks, a website catalogue and package hashes alone do not pass.
 
-## Test-environment gap before Windows store acceptance
+## Private test environment readiness
 
-The current private Windows download gateway admits one fixed test participant
-for participant API routes and forwards to the previously approved remote Service
-revision. The three-principal HTTP audit instead used local Service `abf79a8b`.
-Therefore the current private installer is an email-runtime candidate, not a
-ready three-account store environment. Before SS-01–07, provision/map three real
-Studio principals in the intended test cohort, confirm the remote Service recipe
-contract, and restrict the test gateway to exactly those approved principals.
-Do not remove its authorization check or reuse one participation code for all
-three Google accounts. Preserve the existing single-participant route until its
-replacement has positive and unauthorized-account controls. No production access
-or broad audience expansion follows from packaging this installer.
+The private online gateway now admits exactly three separately provisioned Studio
+principals through one operator-owned allowlist used by API and installer routes.
+Missing/invalid configuration, duplicates, more than three entries and removed
+credentials fail closed. The legacy single-participant secret is retained only
+for explicit rollback; a configured list supersedes it. Installer downloads also
+recheck the token through the pinned Service access route, so a stale allowlist
+alone cannot bypass token expiry/revocation or roster denial. Failures/version
+mismatches block download before object lookup; response bodies are not forwarded.
+Store API calls retain Service's separate signature/cohort/grant/ownership checks.
+
+The gateway still forwards to the previously approved remote Service revision
+`email-local-accepted-ffef7bc-peer`; the local audit uses `abf79a8b`. The updated
+client's bounded recipe contract was exercised against both. No production
+traffic, remote schema, existing budget or Google connection was changed. The
+third Studio grant is a test identity, not proof of a third Google account login.
+Map and verify all three actual Google aliases during native acceptance, retaining
+one Mac Dev app. Do not reuse one Studio code across all three Google accounts.
 
 ## Execution sequence and decisions
 
@@ -211,3 +217,35 @@ production traffic remained unchanged. Evidence directory:
 installer-online and online-verification receipts; installer fixture log).
 This does not implement signatures, generic bundles or version-management UI,
 and does not pass actual Windows execution or three-real-account store acceptance.
+
+### Online three-principal preparation
+
+The private online Service/D1 passed19 publication, retry/conflict, exact two-peer
+download, owner-only withdrawal and all-three subsequent denial controls. The
+only new audit publication was withdrawn and its direct fetch returned404.
+Separately,23 access controls passed: each principal obtained the samef90b65e3
+installer manifest and exact app/SDK HEAD metadata and an automation-enabled
+profile; anonymous, unlisted and previously revoked peer credentials were denied
+for store/manifest/download; install/update scripts matched the canonical bytes.
+The revoked credential was also absent from the gateway list, so this live case
+alone does not isolate Service revocation; the actual download helper's focused
+control covers a listed token receiving Service401/403 and fails closed.
+
+The third grant was issued through roster append and token issuance, with no
+budget mutation or model/mail call. Existing peer access choices were unchanged.
+Actual gateway/API/download tests and four shared-helper controls passed; CI now
+includes the shared helper. Evidence: `/tmp/hps-email-mvp/store-three-account-gateway/`
+contains `deployment-receipt.json`, `store-api-receipt.json`, `access-receipt.json`
+and local gateway checks. Current gateway version is
+`b61bcf9c-22fc-4d2f-a2af-da5d4dd43a2c`. These preparation results do not complete
+SS-01–12: native Google mapping, Mac author UI, Windows execution and the expanded
+workflow still require their own observations.
+
+AI admission remains a separate prerequisite: the fresh access views show one
+active source for all three principals, but only the existing peer currently has
+available allocation. Original and third are unavailable for paid model turns;
+store and deterministic preview authorization are not proof of coach funding.
+The peer view retains342706 microUSD remaining,201814 spent and455480 held under
+a1000000-microUSD active limit. This is a timestamped readiness observation, not
+new spending authority. Do not release held/unknown amounts or increase the
+approved overall cap to make the three-account test appear ready.
