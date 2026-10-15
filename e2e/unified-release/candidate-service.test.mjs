@@ -43,3 +43,18 @@ test('compatibility and deployment consume one immutable Service pin and do not 
   const pin=JSON.parse(fs.readFileSync(new URL('config/service-deployment.json',root),'utf8'));
   assert.equal(pin.repository,'hypeproof/hypeproof-service');assert.match(pin.sha,/^[a-f0-9]{40}$/);
 });
+
+test('HTTP 200 cannot replace completed work or conceal failed, missing or over-budget attempts',async()=>{
+  const {assertServiceActivity}=await import('./candidate-service.mjs');
+  const result={status:'PASS',initial_file_created:true,revised_file_created:true,original_preserved:true};
+  const api={request_limit:12,attempts:10,calls:Array.from({length:10},()=>({status:200})),failures:[]};
+  assert.doesNotThrow(()=>assertServiceActivity(result,api));
+  for(const field of Object.keys(result))assert.throws(()=>assertServiceActivity({...result,[field]:false},api));
+  for(const bad of [
+    {...api,request_limit:24}, {...api,request_limit:undefined}, {...api,attempts:undefined},
+    {...api,attempts:13,calls:[...api.calls,{status:200},{status:200}]},
+    {...api,attempts:13,calls:[...api.calls,{status:200},{status:200},{status:200}]},
+    {...api,failures:[{kind:'stream_error'}]}, {...api,failures:undefined},
+    {...api,calls:api.calls.map((c,i)=>i?c:{status:500})}, {...api,attempts:0,calls:[]},
+  ])assert.throws(()=>assertServiceActivity(result,bad));
+});

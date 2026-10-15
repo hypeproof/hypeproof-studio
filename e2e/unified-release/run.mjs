@@ -8,7 +8,7 @@ import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {appIdentity,treeHash,sha256,assertReceipt} from './artifact.mjs';
 import {checkSeededSdk} from './sdk-seed.mjs';
-import {candidateService,redactEvidence} from './candidate-service.mjs';
+import {candidateService,redactEvidence,assertServiceActivity} from './candidate-service.mjs';
 import {serviceSourceManifest} from '../service-provenance.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const [appDirectory,assetDirectory,outputDirectory,sourceSha,version,publicAppSha]=process.argv.slice(2);
@@ -66,9 +66,8 @@ try{
   if(serviceOnly){
    const api=JSON.parse(fs.readFileSync(path.join(evidence,'api-evidence.json'),'utf8'));
    const {calls}=api;
-   if(api.request_limit!==12||!Number.isInteger(api.attempts)||api.attempts!==calls.length||api.attempts>12||!Array.isArray(api.failures)||api.failures.length)throw Error('Candidate Service budget or transport failure');
-   if(result.status!=='PASS'||!result.initial_file_created||!result.revised_file_created||!result.original_preserved||!calls.length||calls.length>12||calls.some(c=>c.status!==200))throw Error('Service compatibility acceptance failed');
-   // serviceSha is the legacy release gate's acceptance-driver SHA; package metadata identifies the Service implementation.
+   assertServiceActivity(result,api);
+   // serviceSha is the legacy release gate's acceptance-driver SHA; servicePackage.commit identifies the deployed Service implementation.
    activities.push({kind,serviceSha:sourceSha,servicePackage,result,modelCalls:calls.length,requestLimit:api.request_limit,attempts:api.attempts});
   }else{
    const turns=JSON.parse(fs.readFileSync(path.join(evidence,'unified-live-turns.json'),'utf8'));

@@ -5,8 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export function serviceSourceManifest() {
-const packageFile = fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/package.json'));
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/src/index.ts'))));
+  const packageFile = fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/package.json'));
+  const root = path.dirname(path.dirname(fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/src/index.ts'))));
 
   const files = [];
   function walk(directory) {

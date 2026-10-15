@@ -23,3 +23,9 @@ export function redactEvidence(text, secrets) {
   for (const secret of secrets.filter(Boolean).sort((a,b) => b.length-a.length)) result = result.split(secret).join('[REDACTED]');
   return result.replace(/Bearer\s+[^\s"']+/gi, 'Bearer [REDACTED]').replace(/sk-ant-[\w-]+/g, '[REDACTED]');
 }
+
+export function assertServiceActivity(result, api) {
+  const { calls } = api;
+  if (api.request_limit !== 12 || !Number.isInteger(api.attempts) || !Array.isArray(calls) || api.attempts !== calls.length || api.attempts > 12 || !Array.isArray(api.failures) || api.failures.length) throw Error('Candidate Service budget or transport failure');
+  if (result.status !== 'PASS' || result.initial_file_created !== true || result.revised_file_created !== true || result.original_preserved !== true || !calls.length || calls.some(call => call.status !== 200)) throw Error('Service compatibility acceptance failed');
+}
