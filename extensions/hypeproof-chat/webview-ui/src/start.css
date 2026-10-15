@@ -453,3 +453,11 @@
 .hp-inbox-quiet .hp-inbox-link-url { font-size: 12px; opacity: .8; overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox-quiet button { font: inherit; color: inherit; background: none; border: 1px solid currentColor; border-radius: 6px; min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .hp-inbox-quiet :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Personal account preview: a single primary sign-in action and plain pass choices. */
+.studio-account { border-bottom: 1px solid var(--vscode-widget-border, #ffffff20); padding-bottom: 20px; margin-bottom: 8px; }
+.studio-account h3 { font-size: 16px; margin: 14px 0 8px; }
+.studio-account-identity { display: flex; flex-direction: column; gap: 4px; }
+.studio-account-identity span, .studio-account-pass > span { font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); overflow-wrap: anywhere; }
+.studio-account-pass { display: flex; flex-direction: column; gap: 7px; padding: 14px 0; }
+.studio-account-pass .studio-choice { margin-top: 4px; }

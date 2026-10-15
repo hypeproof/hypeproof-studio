@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
+import type { AccountPassBinding } from './accountSession';
 import type { ResolvedProfile } from './protocol';
 import type { ActivitySummary } from './startPageProtocol';
 export type { ActivitySummary } from './startPageProtocol';
@@ -13,7 +14,7 @@ const PREFIX = 'hps.activity.credential.';
 const ACTIVE = 'hps.activity.active';
 export interface ActivityRecord extends ActivitySummary {
   version: 1; service: string; serverId: string;
-  token: string; savedAt: number;
+  token: string; savedAt: number; accountPass?: AccountPassBinding;
 }
 const digest = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
 export function activityService(url: string): string {
@@ -43,6 +44,7 @@ export class ActivityConnections {
     private validate: (token: string) => Promise<ResolvedProfile>) {
     this.dir = path.join(raw.globalStorageUri.fsPath, 'activity-bindings');
   }
+  accountToken?: (binding: AccountPassBinding) => Promise<string | undefined>;
   get current(): ActivityRecord | undefined { return this.active; }
   get scope(): string | undefined { return this.active?.id; }
   get matchesService(): boolean { try { return !!this.active && this.active.service === activityService(this.service()); } catch { return false; } }
@@ -82,9 +84,24 @@ export class ActivityConnections {
   async candidate(ref: string): Promise<ActivityRecord> {
     const r = await this.read(ref);
     if (!r || r.service !== activityService(this.service())) throw new ActivityConnectionError('현재 서버의 저장된 활동이 아닙니다.');
+    if (r.accountPass) { const token = await this.accountToken?.(r.accountPass); if (!token) throw new ActivityConnectionError('Google로 다시 로그인해 주세요.'); return { ...r, token }; }
     return r;
   }
-  async token(): Promise<string | undefined> { return this.matchesService ? this.active?.token : undefined; }
+  async token(): Promise<string | undefined> {
+    if (!this.matchesService || !this.active) return;
+    return this.active.accountPass ? this.accountToken?.(this.active.accountPass) : this.active.token;
+  }
+  /** Revoking an account removes only that session's credentials; classroom records and files remain. */
+  async forgetAccount(sessionId: string): Promise<boolean> {
+    const wasActive = this.active?.accountPass?.sessionId === sessionId;
+    if (wasActive) await this.disconnect();
+    for (const key of await this.raw.secrets.keys()) {
+      if (!key.startsWith(PREFIX)) continue;
+      const r = await this.read(key);
+      if (r?.accountPass?.sessionId === sessionId) await this.raw.secrets.delete(key);
+    }
+    return wasActive;
+  }
   private bindingPath(root: string): string { return path.join(this.dir, digest(canonical(root)) + '.json'); }
   private claim(root: string, id: string, takeover = false): void {
     fs.mkdirSync(this.dir, {recursive:true,mode:0o700});
@@ -110,7 +127,7 @@ export class ActivityConnections {
       prepare();
     } finally { release(); }
   }
-  async commit(token: string, p: ResolvedProfile, root: string): Promise<() => Promise<void>> {
+  async commit(token: string, p: ResolvedProfile, root: string, accountPass?: AccountPassBinding): Promise<() => Promise<void>> {
     if (!/^[a-f0-9]{64}$/.test(p.activity_id ?? '')) throw new ActivityConnectionError('서버가 활동 분리를 지원하지 않습니다. 연결 서버를 업데이트해 주세요.');
     const service = activityService(this.service()), workspace = canonical(root);
     const id = digest(JSON.stringify([service,p.activity_id]));
@@ -122,7 +139,7 @@ export class ActivityConnections {
     const oldBinding = fs.existsSync(bindingFile) ? fs.readFileSync(bindingFile,'utf8') : undefined;
     const sameWindowRoot = !!this.root() && canonical(this.root()!) === workspace;
     const ref = PREFIX + crypto.randomUUID();
-    const next: ActivityRecord = {version:1,ref,id,service,serverId:p.activity_id!,workspace,token,
+    const next: ActivityRecord = {version:1,ref,id,service,serverId:p.activity_id!,workspace,token,...(accountPass ? {accountPass} : {}),
       name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),savedAt:Date.now()};
     const restore = () => {
       if (!fs.existsSync(bindingFile)) return;
@@ -209,7 +226,7 @@ export class ActivityConnections {
       store:async (key,value) => {
         if (key!==ACTIVITY_TOKEN_KEY) return original.store(key,value);
         const root=this.root(); if (!root) throw new ActivityConnectionError('작업 폴더를 먼저 선택해 주세요.');
-        await this.commit(value,await this.validate(value),root);
+        await this.commit(value,await this.validate(value),root,value === await this.token() ? this.active?.accountPass : undefined);
       },
       delete:key => key===ACTIVITY_TOKEN_KEY ? this.disconnect() : original.delete(key),
       keys:()=>original.keys(), onDidChange:original.onDidChange,
