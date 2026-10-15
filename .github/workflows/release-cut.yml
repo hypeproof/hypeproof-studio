@@ -1,22 +1,32 @@
-# Release cut, dry-run only (#1608).
+# Release cut (#1608).
 #
-# Computes the range since the last stable v tag, runs smoke on the candidate and
-# writes the release PR body (or the smoke-failure issue body) as an artifact.
-# It creates no tag, PR or issue: permissions are read-only. Creating them, the
-# approval gate and the weekly schedule are separate follow-ups.
+# cut (read-only): computes the range since the last stable v tag, runs smoke on the candidate and
+# writes the release PR body (or the smoke-failure issue body) and plan.json as an artifact.
+# create (mode=create only, write permissions): scripts/release/create.mjs creates what the plan says —
+# the rc tag, the rc builds, branch release/<version> and the release PR, or the smoke-failure issue.
+# The v tag and publication come after a member approves the release PR (approval workflow, follow-up).
 name: release-cut
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "dry-run writes the artifact only; create also makes the rc tag and release PR"
+        type: choice
+        options: [dry-run, create]
+        default: dry-run
       candidate:
         description: "Candidate ref (default: main)"
         required: false
         default: "origin/main"
       since:
-        description: "Trial only: treat the last main commit before this time as the baseline (e.g. '7 days ago')"
+        description: "Trial only, dry-run only: treat the last main commit before this time as the baseline (e.g. '7 days ago')"
         required: false
         default: ""
+      accept_not_run:
+        description: "create only: cut even when a smoke check is NOT_RUN (the PR shows it)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,6 +42,8 @@ jobs:
   dry-run:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      exit: ${{ steps.cut.outputs.exit }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,17 +54,27 @@ jobs:
           node-version: "22"
 
       - name: Controls
-        run: node --test scripts/release/test/release-cut.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs
 
-      - name: Release cut (dry-run)
+      - name: Release cut
         id: cut
         env:
           GH_TOKEN: ${{ github.token }}
+          # Smoke credentials, scoped to non-production cohorts only (docs/dev/06-release-process.md#smoke).
+          # S4 opens a 1 h session on canary-internal; S3 reads its issuer when it is implemented.
+          # Without a secret the check reports NOT_RUN. The admin password is never passed here.
+          HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
+          HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
+          MODE: ${{ inputs.mode }}
           CANDIDATE: ${{ inputs.candidate }}
           SINCE: ${{ inputs.since }}
         run: |
           set +e
-          args=(--out "$RUNNER_TEMP/release-cut" --candidate "$CANDIDATE")
+          if [[ "$MODE" == create && -n "$SINCE" ]]; then
+            echo "::error::since is a dry-run trial; a created release needs the real baseline"
+            exit 1
+          fi
+          args=(--out "$RUNNER_TEMP/release-cut" --candidate "$CANDIDATE" --mode "$MODE")
           if [[ -n "$SINCE" ]]; then args+=(--since "$SINCE"); fi
           node scripts/release/release-cut.mjs "${args[@]}"
           code=$?
@@ -60,8 +82,9 @@ jobs:
           for f in release-pr.md smoke-failure-issue.md; do
             if [[ -f "$RUNNER_TEMP/release-cut/$f" ]]; then cat "$RUNNER_TEMP/release-cut/$f" >> "$GITHUB_STEP_SUMMARY"; fi
           done
-          # 0 PASS or skipped, 2 NOT_RUN: the dry-run itself succeeded. 1 is a smoke FAIL.
-          if [[ $code -eq 1 ]]; then exit 1; fi
+          # 0 PASS or skipped, 2 NOT_RUN: the cut itself succeeded. 1 is a smoke FAIL; in create mode
+          # the create job still runs to open the failure issue.
+          if [[ $code -eq 1 && "$MODE" != create ]]; then exit 1; fi
           exit 0
 
       - uses: actions/upload-artifact@v4
@@ -71,3 +94,42 @@ jobs:
           path: ${{ runner.temp }}/release-cut/
           if-no-files-found: warn
           retention-days: 14
+
+  create:
+    needs: dry-run
+    if: inputs.mode == 'create' && needs.dry-run.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-cut
+          path: ${{ runner.temp }}/release-cut
+
+      - name: Create from the plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACCEPT_NOT_RUN: ${{ inputs.accept_not_run }}
+        run: |
+          set -euo pipefail
+          plan="$RUNNER_TEMP/release-cut/plan.json"
+          # Skipped cycle (no commits since the last release): nothing was planned.
+          if [[ ! -f "$plan" ]]; then echo "No plan: nothing to create." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          flags=()
+          if [[ "$ACCEPT_NOT_RUN" == true ]]; then flags+=(--accept-not-run); fi
+          node scripts/release/create.mjs --plan "$plan" "${flags[@]}"

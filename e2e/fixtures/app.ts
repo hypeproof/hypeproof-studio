@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { APP_BINARY, TOKEN_FILE } from "./global-setup";
+import { APP_BINARY, TOKEN_FILE } from "./global-setup.ts";
 
 export interface AppContext {
   app: ElectronApplication;
@@ -72,10 +72,53 @@ export interface LaunchOptions {
  * surface directly, so DOM interaction and `page.screenshot` keep working.
  */
 const QUIET = process.env.HPS_QUIET !== "0";
+const STARTUP_EVALUATION_ATTEMPTS = 4;
+const STARTUP_EVALUATION_DELAY_MS = 100;
+const STARTUP_EVALUATION_TIMEOUT_MS = 5_000;
+const APP_CLOSE_TIMEOUT_MS = 5_000;
+
+async function withFixtureDeadline<T>(operation: Promise<T>, label: string, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} did not settle within ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTransientStartupEvaluationError(error: unknown): boolean {
+  return error instanceof Error && /Execution context was destroyed, most likely because of a navigation\.?/i.test(error.message);
+}
+
+/**
+ * Electron can replace its initial main-process execution context immediately
+ * after launch. Retry only that one startup transition; every other failure is
+ * surfaced on the first attempt and the retry count stays bounded.
+ */
+export async function evaluateDuringElectronStartup<T>(
+  evaluate: () => Promise<T>,
+  wait: (delayMs: number) => Promise<void> = delayMs => new Promise(resolve => setTimeout(resolve, delayMs)),
+  evaluationTimeoutMs = STARTUP_EVALUATION_TIMEOUT_MS,
+): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await withFixtureDeadline(evaluate(), "Electron startup evaluation", evaluationTimeoutMs);
+    } catch (error) {
+      if (!isTransientStartupEvaluationError(error) || attempt >= STARTUP_EVALUATION_ATTEMPTS) throw error;
+      await wait(STARTUP_EVALUATION_DELAY_MS * attempt);
+    }
+  }
+}
 
 async function applyQuietMode(app: ElectronApplication): Promise<void> {
   if (!QUIET) return;
-  await app.evaluate(({ app: electronApp, BrowserWindow }) => {
+  await evaluateDuringElectronStartup(() => app.evaluate(({ app: electronApp, BrowserWindow }) => {
     try {
       (electronApp as unknown as { dock?: { hide(): void } }).dock?.hide();
     } catch {
@@ -87,6 +130,7 @@ async function applyQuietMode(app: ElectronApplication): Promise<void> {
       setFocusable(focusable: boolean): void;
       once?(ev: string, cb: () => void): void;
       on?(ev: string, cb: () => void): void;
+      __hpsQuietModeWired?: boolean;
     };
     const stash = (w: Win) => {
       try {
@@ -104,16 +148,61 @@ async function applyQuietMode(app: ElectronApplication): Promise<void> {
     // surfacing event so it never actually lands on a physical display.
     const wire = (w: Win) => {
       stash(w);
+      if (w.__hpsQuietModeWired) return;
       try {
         w.once?.("ready-to-show", () => stash(w));
         w.on?.("show", () => stash(w));
+        w.__hpsQuietModeWired = true;
       } catch {
         /* ignore */
       }
     };
     for (const w of BrowserWindow.getAllWindows()) wire(w as Win);
-    electronApp.on("browser-window-created", (_e: unknown, w: unknown) => wire(w as Win));
-  });
+    const quietApp = electronApp as typeof electronApp & { __hpsQuietModeHooked?: boolean };
+    if (!quietApp.__hpsQuietModeHooked) {
+      quietApp.on("browser-window-created", (_e: unknown, w: unknown) => wire(w as Win));
+      quietApp.__hpsQuietModeHooked = true;
+    }
+  }));
+}
+
+type ClosableElectronApplication = Pick<ElectronApplication, "close">;
+
+/** Close the launched process and delete an owned profile only after confirmed shutdown. */
+export async function failLaunchAfterCleanup(
+  primaryError: unknown,
+  app: ClosableElectronApplication | undefined,
+  userDataDir: string,
+  ownsUserDataDir: boolean,
+  removeUserDataDir: (directory: string) => void = directory => fs.rmSync(directory, { recursive: true, force: true }),
+  closeTimeoutMs = APP_CLOSE_TIMEOUT_MS,
+): Promise<never> {
+  const cleanupErrors: unknown[] = [];
+  let shutdownConfirmed = !app;
+  if (app) {
+    try {
+      await withFixtureDeadline(app.close(), "Electron app close", closeTimeoutMs);
+      shutdownConfirmed = true;
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (ownsUserDataDir && shutdownConfirmed) {
+    try {
+      removeUserDataDir(userDataDir);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
+    throw new AggregateError(
+      [primaryError, ...cleanupErrors],
+      `App launch failed: ${describe(primaryError)}; cleanup also failed: ${cleanupErrors.map(describe).join("; ")}`,
+      { cause: primaryError },
+    );
+  }
+  throw primaryError;
 }
 
 async function hideAppAfterReady(app: ElectronApplication): Promise<void> {
@@ -150,6 +239,7 @@ export async function launchApp(opts: LaunchOptions = { preseedToken: true }): P
   // realpathSync: macOS os.tmpdir() is /var/… which symlinks to /private/var/….
   // The SDK canonicalizes paths, so an un-resolved workspace root fails the
   // workspace-containment check and every coach Write is auto-denied (#384).
+  const ownsUserDataDir = !opts.reuseUserDataDir;
   const userDataDir = opts.reuseUserDataDir ? fs.realpathSync(opts.reuseUserDataDir) : fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hps-e2e-")));
   if(opts.reuseUserDataDir && (path.dirname(userDataDir)!==fs.realpathSync(os.tmpdir()) || !path.basename(userDataDir).startsWith('hps-e2e-') || !fs.existsSync(path.join(userDataDir,'User','hps-test-state.json'))))throw Error('not a fixture-owned user data directory');
   const userDir = path.join(userDataDir, "User");
@@ -228,52 +318,57 @@ export async function launchApp(opts: LaunchOptions = { preseedToken: true }): P
   const wsDir = path.join(userDataDir, "ws");
   fs.mkdirSync(wsDir, { recursive: true });
 
-  const app = await electron.launch({
-    executablePath: APP_BINARY,
-    args: [
-      `--user-data-dir=${userDataDir}`,
-      `--extensions-dir=${path.join(userDataDir, "extensions")}`,
-      "--disable-workspace-trust",
-      ...(opts.hostResolverRules ? ["--host-resolver-rules=" + opts.hostResolverRules] : []),
-      ...(opts.persistentTestSecrets ? [] : ["--use-inmemory-secretstorage"]), // default fixtures never touch the OS keychain
-      "--disable-updates",
-      "--skip-welcome",
-      "--skip-release-notes",
-      "--no-sandbox",
-      // Quiet mode hides / off-screens the window (see applyQuietMode). A
-      // hidden/occluded Chromium renderer normally throttles timers + pauses
-      // rAF (measured ~5x slowdown), which risks tripping LLM-spec timeouts.
-      // These switches keep it running at full speed while invisible.
-      ...(QUIET
-        ? [
-            "--disable-background-timer-throttling",
-            "--disable-renderer-backgrounding",
-            "--disable-backgrounding-occluded-windows",
-          ]
-        : []),
-      "--folder-uri", pathToFileURL(wsDir).href, // explicit folder; Electron consumes positional args
-    ],
-    env,
-    timeout: 30_000,
-  });
+  let app: ElectronApplication | undefined;
+  try {
+    app = await electron.launch({
+      executablePath: APP_BINARY,
+      args: [
+        `--user-data-dir=${userDataDir}`,
+        `--extensions-dir=${path.join(userDataDir, "extensions")}`,
+        "--disable-workspace-trust",
+        ...(opts.hostResolverRules ? ["--host-resolver-rules=" + opts.hostResolverRules] : []),
+        ...(opts.persistentTestSecrets ? [] : ["--use-inmemory-secretstorage"]), // default fixtures never touch the OS keychain
+        "--disable-updates",
+        "--skip-welcome",
+        "--skip-release-notes",
+        "--no-sandbox",
+        // Quiet mode hides / off-screens the window (see applyQuietMode). A
+        // hidden/occluded Chromium renderer normally throttles timers + pauses
+        // rAF (measured ~5x slowdown), which risks tripping LLM-spec timeouts.
+        // These switches keep it running at full speed while invisible.
+        ...(QUIET
+          ? [
+              "--disable-background-timer-throttling",
+              "--disable-renderer-backgrounding",
+              "--disable-backgrounding-occluded-windows",
+            ]
+          : []),
+        "--folder-uri", pathToFileURL(wsDir).href, // explicit folder; Electron consumes positional args
+      ],
+      env,
+      timeout: 30_000,
+    });
 
-  // Stash the window off-screen ASAP (before we even resolve firstWindow) so
-  // it doesn't linger on Jay's display during the run.
-  await applyQuietMode(app);
+    // Stash the window off-screen ASAP (before we even resolve firstWindow) so
+    // it doesn't linger on Jay's display during the run.
+    await applyQuietMode(app);
 
-  const win = await app.firstWindow({ timeout: 30_000 });
-  // Wait for workbench to be ready (presence of activity bar)
-  await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
+    const win = await app.firstWindow({ timeout: 30_000 });
+    // Wait for workbench to be ready (presence of activity bar)
+    await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
 
-  // Now that the workbench is up, hide the app so focus returns to Jay.
-  await hideAppAfterReady(app);
-  await reportQuietState(app);
+    // Now that the workbench is up, hide the app so focus returns to Jay.
+    await hideAppAfterReady(app);
+    await reportQuietState(app);
 
-  if (opts.preseedToken !== false && !opts.stayOnStart) {
-    const start = await startFrame(win);
-    await start.getByRole("button", { name: /^(?:이어서 하기|수업 시작하기)$/ }).click({ timeout: 30_000 });
+    if (opts.preseedToken !== false && !opts.stayOnStart) {
+      const start = await startFrame(win);
+      await start.getByRole("button", { name: /^(?:이어서 하기|수업 시작하기)$/ }).click({ timeout: 30_000 });
+    }
+    return { app, win, userDataDir, token, wsDir };
+  } catch (error) {
+    return failLaunchAfterCleanup(error, app, userDataDir, ownsUserDataDir);
   }
-  return { app, win, userDataDir, token, wsDir };
 }
 
 export async function closeApp(ctx: AppContext): Promise<void> {

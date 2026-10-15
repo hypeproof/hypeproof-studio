@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
-import {classify, howToCheck, parseTitle, render} from '../checklist.mjs';
+import {classify, howToCheck, parseTitle, render, smokeOf} from '../checklist.mjs';
 import s1 from '../smoke/checks/s1-service-health.mjs';
 import s3 from '../smoke/checks/s3-cohort-token.mjs';
 import s4 from '../smoke/checks/s4-chat-api.mjs';
+import {judge} from '../smoke/checks/s5-candidate-ci.mjs';
 
 const pr = (number, title, files = [], extra = {}) => ({
   number, title, body: '', author: {login: 'dev'},
@@ -52,6 +53,58 @@ test('render folds features by scope and marks a missing author check', () => {
   assert.equal(automatic, 'None.');
 });
 
+const TEMPLATE = `## Release check
+
+How to verify: <where> → <what to click or run> → <expected result>
+Smoke: <yes|no> — <reason>
+Smoke check: <scripts/release/smoke/checks/sN-*.mjs, or #follow-up-issue; only when the answer is yes>
+
+<!--
+Answer yes for Smoke when this adds a dependency on another repository or a server.
+-->
+
+## Checklist
+- [ ] x`;
+
+const FILLED = `## Release check
+
+How to verify: Chalk → create a track plan → the plan lists three sessions
+Smoke: yes — calls the Chalk server for the plan
+Smoke check: scripts/release/smoke/checks/s2-chalk-health.mjs
+
+## Checklist`;
+
+test('howToCheck: the Release check first line drops its label; the unfilled template is not a check', () => {
+  assert.equal(howToCheck(FILLED), 'Chalk → create a track plan → the plan lists three sessions');
+  assert.equal(howToCheck(TEMPLATE), null);
+});
+
+test('smokeOf: reads the answer, reason and check; null for the unfilled template', () => {
+  assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Chalk server for the plan',
+    check: 'scripts/release/smoke/checks/s2-chalk-health.mjs'});
+  assert.deepEqual(smokeOf('## Release check\nHow to verify: a → b → c\nSmoke: no — UI copy only, nothing external\n'),
+    {answer: 'no', reason: 'UI copy only, nothing external', check: null});
+  assert.equal(smokeOf(TEMPLATE), null);
+  assert.equal(smokeOf(''), null);
+});
+
+test('render shows the linked issue and the smoke decision for features and dependency PRs', () => {
+  const closes = {closingIssuesReferences: {nodes: [{number: 77}]}};
+  const {groups} = classify([
+    pr(1, 'feat(chalk): plan', [], {body: FILLED, ...closes}),
+    pr(2, 'feat(start): copy'),
+    pr(3, 'chore(deploy): pin', ['.github/workflows/deploy-worker.yml'], {body: FILLED, ...closes}),
+  ]);
+  const {features, dependency} = render({groups});
+  assert.match(features, /#1 feat\(chalk\): plan — @dev · closes #77/);
+  assert.match(features, /smoke: yes — calls the Chalk server for the plan \(check: scripts\/release\/smoke\/checks\/s2-chalk-health\.mjs\)/);
+  assert.match(features, /#2 feat\(start\): copy — @dev · _no linked issue_/);
+  assert.match(features, /smoke: _not given by the author_/);
+  assert.match(dependency, /#3 chore\(deploy\): pin — @dev · closes #77/);
+  assert.match(dependency, /how to check: Chalk → create a track plan/);
+  assert.match(dependency, /smoke: yes —/);
+});
+
 async function withHealth(body, fn) {
   const server = http.createServer((_, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(body)); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -68,6 +121,20 @@ test('S1 passes a healthy versioned Service and fails the rest', async () => {
   assert.equal(ok.version, 'w1.0.0');
   assert.equal((await withHealth({ok: false, version: 'w1'}, url => s1.run({serviceUrl: url}))).result, 'FAIL');
   assert.equal((await withHealth({ok: true, version: 'unknown'}, url => s1.run({serviceUrl: url}))).result, 'FAIL');
+});
+
+test('S5 leaves out the release-cut run itself, and only that run', () => {
+  const run = (name, status, conclusion, id) => ({name, status, conclusion, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
+  const done = run('build', 'completed', 'success', 100);
+  const self = run('dry-run', 'in_progress', '', 200);
+  // the bug: our own job counted as still running
+  assert.equal(judge([done, self], undefined).result, 'NOT_RUN');
+  assert.equal(judge([done, self], '200').result, 'PASS');
+  // negative control: another run still in progress keeps NOT_RUN
+  assert.equal(judge([done, self, run('macos', 'in_progress', '', 300)], '200').result, 'NOT_RUN');
+  assert.equal(judge([run('test', 'completed', 'failure', 100), self], '200').result, 'FAIL');
+  // a run id that is a prefix of another run id does not match it
+  assert.equal(judge([done, run('lint', 'in_progress', '', 2001)], '200').result, 'NOT_RUN');
 });
 
 test('S3 and S4 are NOT_RUN without their scoped credential, even with the admin password', async () => {

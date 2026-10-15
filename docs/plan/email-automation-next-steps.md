@@ -29,6 +29,13 @@ served installer still contains32ba0ac2. Private R2 download-handler controls no
 pass locally; no R2 deployment or new-candidate download/Windows PASS is claimed.
 Installer ZIP transport and the D1 skill catalog are distinct delivery surfaces.
 
+Latest main integration: `05efefdb` adds project switching and release operations.
+The PR merge typecheck exposed a new `voiceLogChannel` call against this branch's
+renamed `coachLogChannel`; integration preserves main's switch behavior and uses
+the existing coach channel. Local types, automation90 checks, publish/local-runtime
+controls and webview/extension builds pass. Native Mac3d8c0b38 and Windows e3ab008b
+candidate evidence predates this integration; do not treat it as new native proof.
+
 Current partial evidence, all dated2026-10-15:
 
 - Single Mac Dev runtime `3f1a3f20`, SDK0.3.299: during store validation normal activity setup targeted

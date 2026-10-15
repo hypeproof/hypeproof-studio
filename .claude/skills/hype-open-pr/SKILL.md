@@ -61,11 +61,35 @@ The template has placeholders. Gather, in the contributor's language:
 - **AI Native Asset(s)** — for chat-panel changes, cite the §4.5 asset name(s)
   from METAPLAN. Challenge "serves none" for a chat-panel change.
 - **Tested** — check the `Run & test` layer(s) actually run (DEV-GUIDE §4).
+- **Release check** — read the linked issue (the intent) and the diff, then fill
+  the three lines. `How to verify: <where> → <what to click or run> → <expected
+  result>` stays first: the weekly release manager reads that line.
+  `Smoke: yes|no — <reason>`: yes when the change adds a dependency on another
+  repository or a server (Service, Chalk, ...). With yes, `Smoke check:` names a
+  file under `scripts/release/smoke/checks/` or a follow-up issue `#N`. If the
+  issue answered "Smoke needed?" with yes and the PR says no, add
+  `Smoke differs from issue: <reason>`.
 - **Checklist** — confirm branched off main, no secrets in diff, submodule
   pin untouched (unless this PR is an intentional bump).
 
 Write the assembled body to a temp file and apply:
 `gh pr edit <url> --body-file <tmp>`. Then `rm` the temp file.
+
+### Hotfix PRs
+A released build is broken (issue filed with the **Hotfix** form, label `hotfix`):
+1. Branch `hotfix/<tag>` from the last v tag, e.g. `hotfix/v2026.1013.0`. If it
+   already exists for that tag, reuse it: hotfixes from one tag share a branch.
+2. Fix on `fix/issue-<N>-<slug>` cut from that branch. Open the PR with
+   `--base hotfix/<tag>` and the `hotfix` label. Release check: How to verify may
+   be left out (the release manager's checklist is skipped); the Smoke lines are
+   still required (smoke is not skipped).
+3. After it merges, the next tag (`v<year>.<month><day>.<n>`) goes on the tip of
+   `hotfix/<tag>`.
+4. Bring the same fix to `main` in a second PR with the `hotfix-forward` label
+   (never `hotfix`) and a line `Forward-port of #<hotfix PR>`. That PR closes the
+   issue; the hotfix PR cannot, because only merges into `main` close issues.
+`scripts/open-pr.sh` targets `main`; for step 2 run
+`gh pr create --fill --base hotfix/<tag> --label hotfix` instead.
 
 ### 5. Confirm
 Show the PR URL. Remind: review is optional, merge when green; the

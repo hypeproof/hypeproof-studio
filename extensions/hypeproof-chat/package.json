@@ -195,6 +195,11 @@
         "title": "HypeProof: 배포 등록 해제"
       },
       {
+        "command": "hypeproof-chat.switchProject",
+        "title": "HypeProof: 프로젝트 변경",
+        "enablement": "hypeproof-chat.sitePublishEnabled"
+      },
+      {
         "command": "hypeproof-chat.publishTestVersion",
         "title": "HypeProof: 사용자 테스트용으로 공개하기",
         "icon": "$(globe)",
@@ -364,6 +369,10 @@
         },
         {
           "command": "hypeproof-chat.publishSiteUnregister",
+          "when": "hypeproof-chat.sitePublishEnabled"
+        },
+        {
+          "command": "hypeproof-chat.switchProject",
           "when": "hypeproof-chat.sitePublishEnabled"
         },
         {

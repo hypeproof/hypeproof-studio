@@ -77,6 +77,8 @@ interface Props {
   onPublish: () => void;
   /** One-click publish to GitHub Pages (shown when the host says `config.sitePublish`). */
   onPublishSite?: () => void;
+  /** "프로젝트 변경": list the participant's GitHub projects and switch the class folder (same gate as publishing). */
+  onSwitchProject?: () => void;
   streaming: boolean;
   /**
    * WHICH message is streaming, not just whether one is (#429). `streaming` is
@@ -965,6 +967,17 @@ export function ChatPanel(props: Props) {
               aria-label="인터넷에 올리기"
             >
               인터넷에 올리기
+            </button>
+          )}
+          {config?.sitePublish === true && props.onSwitchProject && (
+            <button
+              className="hps-site-publish-btn"
+              onClick={props.onSwitchProject}
+              disabled={props.streaming}
+              title="GitHub에 있는 다른 프로젝트로 바꿔요"
+              aria-label="프로젝트 변경"
+            >
+              프로젝트 변경
             </button>
           )}
           <button onClick={props.onSetToken} title="연결된 활동 확인 및 변경">

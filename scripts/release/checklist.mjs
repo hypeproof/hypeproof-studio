@@ -20,14 +20,47 @@ export function parseTitle(title) {
   return m ? {type: m[1].toLowerCase(), scope: (m[2] ?? '').toLowerCase(), text: m[3]} : {type: 'other', scope: '', text: title};
 }
 
-// The author's own check: a "Release check" section, else a filled "manual:" line under Tested. null when absent.
+const PLACEHOLDER = /<[^<>\n]+>/;
+
+// The "Release check" section without the template's guidance comments. null when absent.
+export function releaseSection(body = '') {
+  const m = body.match(/^#{2,}\s*(?:Release check|릴리스 확인)[^\n]*\n([\s\S]*?)(?=^#{1,6}\s|(?![\s\S]))/im);
+  return m ? m[1].replace(/<!--[\s\S]*?-->/g, '') : null;
+}
+
+function field(section, name) {
+  const m = section.match(new RegExp(`^\\s*(?:[-*]\\s*)?${name}\\s*:\\s*(.*)$`, 'im'));
+  return m ? m[1].trim() : null;
+}
+
+// The author's own check: the first line of a "Release check" section (its "How to verify:"
+// label dropped), else a filled "manual:" line under Tested. null when absent or still a placeholder.
 export function howToCheck(body = '') {
-  const section = body.match(/^#{2,}\s*(?:Release check|릴리스 확인)[^\n]*\n([\s\S]*?)(?=\n#{2,}\s|$)/im);
-  if (section && section[1].trim()) return section[1].trim().split('\n')[0].slice(0, 160);
+  const section = releaseSection(body);
+  if (section && section.trim()) {
+    const first = section.trim().split('\n')[0].trim().replace(/^(?:[-*]\s*)?How to verify\s*:\s*/i, '');
+    if (first && !PLACEHOLDER.test(first)) return first.slice(0, 160);
+  }
   const manual = body.match(/-\s*\[[ xX]\]\s*manual:\s*(.+)/i);
   if (manual && !manual[1].includes('<!--')) return manual[1].trim().slice(0, 160);
   return null;
 }
+
+// The author's smoke decision from the Release check section (#1608 follow-up). null when absent.
+export function smokeOf(body = '') {
+  const section = releaseSection(body);
+  const m = (section && field(section, 'Smoke') || '').match(/^(yes|no)\b\s*(?:[—–:-]+\s*)?(.*)$/i);
+  if (!m) return null;
+  const check = field(section, 'Smoke check');
+  return {answer: m[1].toLowerCase(), reason: m[2].trim(), check: check && !PLACEHOLDER.test(check) ? check : null};
+}
+
+function smokeLine(smoke) {
+  if (!smoke) return '_not given by the author_';
+  return `${smoke.answer}${smoke.reason ? ` — ${smoke.reason}` : ''}${smoke.check ? ` (check: ${smoke.check})` : ''}`.slice(0, 200);
+}
+
+const linked = item => (item.issues ? ` · closes ${item.issues}` : ' · _no linked issue_');
 
 export function classify(prs) {
   const groups = {dependency: [], features: [], automatic: []};
@@ -38,7 +71,7 @@ export function classify(prs) {
     const login = pr.author?.login ?? 'unknown';
     if (!/dependabot/.test(login)) authors.add(login);
     const issues = (pr.closingIssuesReferences?.nodes ?? []).map(i => `#${i.number}`).join(', ');
-    const item = {...t, number: pr.number, title: pr.title, login, issues, check: howToCheck(pr.body ?? '')};
+    const item = {...t, number: pr.number, title: pr.title, login, issues, check: howToCheck(pr.body ?? ''), smoke: smokeOf(pr.body ?? '')};
     const depFiles = files.filter(f => DEPENDENCY_PATHS.some(re => re.test(f)));
     if (depFiles.length) groups.dependency.push({...item, depFiles});
     else if (FEATURE_TYPES.has(t.type) && !AUTOMATIC_SCOPES.has(t.scope)) groups.features.push(item);
@@ -49,7 +82,12 @@ export function classify(prs) {
 
 export function render({groups}) {
   const dependency = groups.dependency.length
-    ? groups.dependency.map(d => `- [ ] #${d.number} ${d.title} — @${d.login}\n  - files: ${d.depFiles.map(f => `\`${f}\``).join(', ')}`).join('\n')
+    ? groups.dependency.map(d => [
+      `- [ ] #${d.number} ${d.title} — @${d.login}${linked(d)}`,
+      `  - files: ${d.depFiles.map(f => `\`${f}\``).join(', ')}`,
+      `  - how to check: ${d.check ?? '_not given by the author_'}`,
+      `  - smoke: ${smokeLine(d.smoke)}`,
+    ].join('\n')).join('\n')
     : 'None.';
 
   const byScope = new Map();
@@ -65,8 +103,9 @@ export function render({groups}) {
   for (const [scope, items] of [...byScope.entries()].sort((a, b) => b[1].length - a[1].length)) {
     lines.push(`<details><summary><b>${scope}</b> — ${items.length}</summary>\n`);
     for (const f of items) {
-      lines.push(`- [ ] #${f.number} ${f.title} — @${f.login}${f.issues ? ` · closes ${f.issues}` : ''}`);
+      lines.push(`- [ ] #${f.number} ${f.title} — @${f.login}${linked(f)}`);
       lines.push(`  - how to check: ${f.check ?? '_not given by the author_'}`);
+      lines.push(`  - smoke: ${smokeLine(f.smoke)}`);
     }
     lines.push('\n</details>\n');
   }

@@ -300,12 +300,16 @@ hash the full bytes before extraction; an HTTP200/header is not that verificatio
 The handler and existing authorization suite pass13 local controls, including
 real composition of allowlist/grant checks, revoked access after a prior success,
 missing/malformed storage, stream cancellation and metadata privacy. CI now runs
-these controls. No new bucket, object upload, gateway deployment or performance
-improvement is claimed. The prepared e3ab008b archive is local only;32ba0ac2 remains
-served. Before switching: use a dedicated private bucket, verify no public access,
-apply a seven-day retention policy, read back and hash both archives, publish the
-manifest last, retain the old transport for rollback, then verify complete
-authenticated downloads for the candidate. Actual Windows remains a separate gate.
+these controls. A dedicated `hps-studio-email-test-20261015` bucket now exists:
+r2.dev is disabled, no custom domains are attached, and the `install/` lifecycle
+expires objects and incomplete multipart uploads after seven days. The prepared
+handler additionally enforces its fixed seven-day deadline. App upload is running;
+no completed object readback, gateway deployment or performance improvement is
+claimed.32ba0ac2 remains served. Before switching: read back and hash both archives,
+publish the manifest last, retain the old transport for rollback, then verify
+complete authenticated downloads. Actual Windows remains a separate gate.
+The preparation receipt and live upload checkpoint are under
+`/tmp/hps-email-mvp/windows-current-e3ab008b/`; a running process is not upload success.
 
 
 ## Implementation/evidence follow-up — 2026-10-15
