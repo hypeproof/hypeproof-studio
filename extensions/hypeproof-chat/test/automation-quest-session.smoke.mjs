@@ -267,3 +267,28 @@ test('new requirement questions reopen old skill completion until the next saved
  assert.equal(quest.snapshot().nodes.find(n=>n.id==='goal').status,'succeeded');
  assert.equal(quest.snapshot().nodes.find(n=>n.id==='skill').status,'current');
 });
+
+test('column clarification preserves verified account and sheet while reopening design and execution',async()=>{
+ for(const answer of [{answer:'Use the deadline column'},{cancelled:true}]){
+  const quest=createAutomationQuestSession(async()=>{});let resolveQuestion,started;
+  const questionStarted=new Promise(resolve=>{started=resolve;});
+  const host=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,isSharedRunner:()=>true,
+   askUser:()=>new Promise(resolve=>{resolveQuestion=resolve;started();}),saveSkill:async()=>({saved:true}),
+   appsScriptRun:async()=>({sharedRunner:true,previewed:true})},quest);
+  await host.workflowPlan({title:'Column correction',nodes:[
+   {id:'goal',label:'Goal',dependsOn:[]},{id:'skill',label:'Skill',dependsOn:['goal']},
+   {id:'connect',label:'Account',dependsOn:['goal']},{id:'sheet',label:'Sheet',dependsOn:['connect']},
+   {id:'prepare',label:'Prepare',dependsOn:['skill','connect']},{id:'preview',label:'Preview',dependsOn:['prepare','sheet']},
+   {id:'send',label:'Send',dependsOn:['preview']},
+  ]});
+  await host.appsScriptRun('preview');
+  const question=host.askUser({question:'Correct the deadline column?',choices:[],allowFreeText:true});
+  await questionStarted;
+  for(const id of ['goal','connect','sheet'])assert.equal(status(quest,id),'succeeded',id+' retains its real receipt while clarification is pending');
+  for(const id of ['skill','prepare','preview','send'])assert.notEqual(status(quest,id),'succeeded',id+' cannot reuse prior execution evidence');
+  resolveQuestion(answer);await question;
+  for(const id of ['connect','sheet'])assert.equal(status(quest,id),'succeeded','cancellation does not disconnect the account or sheet');
+  await host.saveSkill({});
+  assert.equal(status(quest,'skill'),'succeeded');assert.notEqual(status(quest,'preview'),'succeeded','saving the correction still needs a fresh preview');
+ }
+});

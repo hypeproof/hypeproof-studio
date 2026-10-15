@@ -132,11 +132,15 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
   const flag = (key: string) => (value: unknown) => ok(value) && (value as Record<string, unknown>)[key] === true;
   return { ...host,
     workflowPlan: plan => quest.plan(host.isSharedRunner?.() ? sharedRunnerPlan(plan) : plan),
-    askUser: host.askUser ? args => {
-      // A new requirement question reopens the saved recipe's design evidence.
-      // Keep the actual recipe; do not show its previous completion as the new task.
-      quest.invalidate(['goal']);
-      return quest.track('goal', () => host.askUser!(args), ok);
+    askUser: host.askUser ? async args => {
+      // Follow-up design questions reopen the recipe and execution evidence,
+      // not independently verified Google/Sheet connections. Cancelling a
+      // clarification must not erase those receipts either.
+      const establishedGoal = quest.snapshot()?.nodes.some(node => node.id === 'goal' && node.status === 'succeeded');
+      quest.invalidate(['skill', 'prepare', 'upload', 'deploy', 'preview', 'send', 'publish']);
+      if (!establishedGoal) return quest.track('goal', () => host.askUser!(args), ok);
+      await quest.redraw();
+      return host.askUser!(args);
     } : undefined,
     // A validated recipe is host evidence for a concrete goal. Apply related
     // evidence inside track's generation guard so a late result cannot mark a new plan.

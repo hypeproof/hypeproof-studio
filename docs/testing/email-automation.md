@@ -211,7 +211,8 @@ uncertainty. The runtime retains the existing per-account local ledger key; it
 never clears ambiguous earlier attempts during migration.
 
 Native acceptance must show a new requirement question reopens previous design
-completion, one inline card at a time, saved skill → own Google → private Sheet →
+completion while retaining independently verified Google and Sheet connections,
+including a cancelled column-name clarification. One inline card at a time, saved skill → own Google → private Sheet →
 shared preparation → Google preview. Upload/deploy compatibility calls must not
 claim a personal project was created. Preview review is not send approval.
 Windows acceptance begins only after local native success and uses the same

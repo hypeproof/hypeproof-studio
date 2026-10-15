@@ -225,3 +225,21 @@ recipient, project and credential values remain outside Git. Temporary project
 IAM roles were already revoked and were not regranted. Commercial Google
 verification and standard-project onboarding for 20 unrelated learners remain
 unverified; no merge or general production release is asserted.
+
+## Integrated native observation — 2026-10-15
+
+The isolated Mac copy at Studio `5838f1bc` and local Service `21033b32`
+used a distinct synthetic workshop participant and the bot Google identity.
+After the sponsor approved Sheets read access, the native flow read one row
+from the bot's private synthetic Sheet and obtained one preview through the
+managed shared runner. The private review card was acknowledged; no mail was
+sent. The graph displayed6/8, with send and sharing still optional and pending.
+The composer returned after review. The official installed app was unchanged.
+
+A real column-name clarification (`기한` to `마감일`) incorrectly reset the
+independent Google/Sheet progress indicators. The follow-up fix retains those
+receipts while reopening recipe/preparation/preview/send evidence, including
+cancellation. Automation86/86 and typecheck pass; native verification of this
+fix and the second-identity imported-recipe path remain open. The native copy
+uses local Claude CLI and in-memory secrets, so this observation does not
+establish production SDK packaging, persistent credentials or Windows parity.

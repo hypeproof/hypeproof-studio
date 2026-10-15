@@ -35,10 +35,10 @@ silently interpret the workshop grant as paid recurring subscription consent.
 | Area | State as inspected | Limit |
 | --- | --- | --- |
 | Studio source | Main `53c5e567` integrated at `960497e8`; retryable Google revocation at `20e7e6d0` | PR1605 remains draft; CI and live acceptance must bind the final pushed revision |
-| Main integration | All four conflicts resolved; main paid-pass/start behavior and automation retained; SDK0.3.299 pinned | Full extension checks ran in segments after fixing three SDK expectation conflicts; final one-shot CI still required |
+| Main integration | All four conflicts resolved; main paid-pass/start behavior and automation retained; SDK0.3.299 pinned | Full extension checks ran in segments; Studio CI18/18 passed at `5838f1bc`; later changes require their own CI |
 | Service | Main integrated at `79f37fdb`; shared workshop capability enabled at `21033b32` | Source and local tests, not production deployment |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
-| Local product | Historical native shared preview/graph6/6; latest automation85/85, browser conversation/start/graph checks pass | Historical native app remains on `ab0a13a7`; current-source native acceptance NOT_RUN |
+| Local product | Current native bot shared preview:1 real row,1 private preview, graph6/8 at `5838f1bc`; automation86/86 after clarification fix | Second identity and fixed clarification native acceptance remain open; local Claude CLI does not establish bundled SDK or Windows parity |
 | Windows | Historical shell `682dfd37`, source `ab0a13a7` authenticated test update | Latest source, fresh install and current SDK NOT_RUN; every class may use different Windows PCs |
 | Account isolation | Prior read-only two-account probe passed; current adapter preflight requires reconnect for both saved test grants | Full shipped recipe two-account acceptance remains open; expired/inadequate grants are not passing evidence |
 | Store/instructor | Twenty synthetic signed grants, real local D1 concurrent individual/total caps, stale/revoked instructor HTTP states pass | Not twenty actual Windows/Google users or current rendered instructor acceptance |
