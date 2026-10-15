@@ -41,8 +41,10 @@ candidate was cancelled after563.56s/13238272 app bytes; same-artifact HEAD
 returned200 in4.680s. The transfer bottleneck is unconfirmed. Full download and
 native Windows execution remain unverified; no automatic replacement was started.
 An updated extension `e3ab008b` archive has since been staged locally (same runtime
-code as `3d8c0b38`). It has not replaced the served installer or passed the new
-candidate's PowerShell/native Windows gates. A private R2 installer transport is
+code as `3d8c0b38`). The repository installer is now pinned to it; actual archive
+extraction, SDK verification, profile backup and exact-receipt handover from six
+prior pilots through32ba0ac2 pass in local PowerShell. It has not replaced the
+served installer or passed native Windows gates. A private R2 installer transport is
 under preparation; this does not migrate the skill catalog from D1.
 Native three-principal store evidence below was recorded on `3f1a3f20`.
 The online Service remains pinned to

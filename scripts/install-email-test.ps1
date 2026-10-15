@@ -26,9 +26,9 @@ function Get-HpsEmailArtifact([string]$Origin, [string]$Path, [string]$Token, [s
     }
 }
 
-function Assert-HpsEmailManifest($Manifest, [string]$Build = '32ba0ac2') {
+function Assert-HpsEmailManifest($Manifest, [string]$Build = 'e3ab008b') {
     $expected = @{
-        'app.zip' = @{ sha256 = '4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6'; bytes = 196647056 }
+        'app.zip' = @{ sha256 = 'd86cf425f4715fa0f66c8289a8fed29bbf7b179f409ed7d05abaca5a7a920e5c'; bytes = 196648104 }
         'sdk.zip' = @{ sha256 = '24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e'; bytes = 121940997 }
     }
     if ($Build -ceq '682dfd37') {
@@ -45,7 +45,9 @@ function Assert-HpsEmailManifest($Manifest, [string]$Build = '32ba0ac2') {
         $expected['app.zip'] = @{ sha256 = '6b30b955a6f3365521300db8dfab78716f7710ebded9ec6720c52604de7b6b29'; bytes = 196645861 }
     } elseif ($Build -ceq '3f1a3f20') {
         $expected['app.zip'] = @{ sha256 = '4472b4c05630a31e4e658b5ccbf1e54490a424ff88fb3953f3d6981868143ea4'; bytes = 196646585 }
-    } elseif ($Build -cne '32ba0ac2') { throw 'Unexpected installation build.' }
+    } elseif ($Build -ceq '32ba0ac2') {
+        $expected['app.zip'] = @{ sha256 = '4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6'; bytes = 196647056 }
+    } elseif ($Build -cne 'e3ab008b') { throw 'Unexpected installation build.' }
     if ($Manifest.schema -ne 1 -or $Manifest.build -cne $Build -or @($Manifest.artifacts).Count -ne 2) { throw 'Unexpected installation manifest.' }
     $seen = @{}
     foreach ($artifact in $Manifest.artifacts) {
@@ -105,7 +107,7 @@ function Assert-HpsEmailDirectory([string]$Path) {
     }
 }
 
-function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = '32ba0ac2') {
+function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = 'e3ab008b') {
     if (-not (Test-Path -LiteralPath $Destination)) { return $false }
     Assert-HpsEmailDirectory $Destination
     $receiptPath = Join-Path $Destination '.email-test-install.json'
@@ -123,7 +125,7 @@ function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = '32
 
 function Assert-HpsEmailShortcutTarget([string]$Target, [string]$Base, [string]$Executable) {
     if ($Target -ieq $Executable) { return }
-    foreach ($build in @('682dfd37', '9d535c87', '0b57074d', 'f90b65e3', '3f1a3f20')) {
+    foreach ($build in @('682dfd37', '9d535c87', '0b57074d', 'f90b65e3', '3f1a3f20', '32ba0ac2')) {
         $previous = Join-Path $Base $build
         if ($Target -ieq (Join-Path $previous 'HypeProof Studio.exe') -and
             (Test-HpsEmailExistingInstall $previous $build)) { return }
@@ -139,7 +141,7 @@ function Backup-HpsEmailUserData([string]$Base) {
     $source = Join-Path $env:APPDATA 'HypeProof Studio'
     if (-not (Test-Path -LiteralPath $source)) { return }
     Assert-HpsEmailDirectory $source
-    $backup = Join-Path $Base 'rollback-before-32ba0ac2'
+    $backup = Join-Path $Base 'rollback-before-e3ab008b'
     Assert-HpsEmailDirectory $backup
     $receipt = Join-Path $backup 'complete.json'
     if (Test-Path -LiteralPath $backup) {
@@ -148,7 +150,7 @@ function Backup-HpsEmailUserData([string]$Base) {
             throw 'An incomplete rollback snapshot exists. It was preserved; ask the operator for help.'
         }
         $saved = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
-        if ($saved.build -cne '32ba0ac2' -or $saved.source -ine $source -or
+        if ($saved.build -cne 'e3ab008b' -or $saved.source -ine $source -or
             -not (Test-Path -LiteralPath (Join-Path $backup 'profile') -PathType Container)) {
             throw 'Unexpected rollback snapshot. It was preserved.'
         }
@@ -160,7 +162,7 @@ function Backup-HpsEmailUserData([string]$Base) {
     }
     New-Item -ItemType Directory -Path $backup | Out-Null
     Copy-Item -LiteralPath $source -Destination (Join-Path $backup 'profile') -Recurse -Force -ErrorAction Stop
-    $saved = @{build='32ba0ac2';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
+    $saved = @{build='e3ab008b';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
     [IO.File]::WriteAllText($receipt, ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 }
 
@@ -242,7 +244,7 @@ function Install-HpsEmailTest {
     if (-not $env:LOCALAPPDATA -or -not $env:TEMP) { throw 'Windows user folders are unavailable.' }
     $origin = 'https://hps-studio-email-test-20261013.jayleekr0125.workers.dev'
     $base = Join-Path $env:LOCALAPPDATA 'HypeProof-Studio-Email-Test'
-    $destination = Join-Path $base '32ba0ac2'
+    $destination = Join-Path $base 'e3ab008b'
     Assert-HpsEmailDirectory $base
     Assert-HpsEmailNotRunning $base
     Assert-HpsEmailSharedProfileIdle
@@ -305,7 +307,7 @@ function Install-HpsEmailTest {
         Assert-HpsEmailSharedProfileIdle
         Backup-HpsEmailUserData $base
         if ((Test-Path -LiteralPath $shortcutPath) -and $shortcut.TargetPath -ine $executable) {
-            $previousShortcut = Join-Path $base 'rollback-before-32ba0ac2.lnk'
+            $previousShortcut = Join-Path $base 'rollback-before-e3ab008b.lnk'
             if (Test-Path -LiteralPath $previousShortcut) { throw 'Rollback shortcut already exists. It was preserved; ask the operator for help.' }
             Copy-Item -LiteralPath $shortcutPath -Destination $previousShortcut
         }
