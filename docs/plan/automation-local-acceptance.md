@@ -542,3 +542,13 @@ online-verification.json,installer-online.json,powershell-archives.log,upload-re
 The earlier visually identical page screenshot is retained at
 /tmp/hps-email-mvp/windows-current-9d535c87/install-page.png. This is a protected
 pilot download, not a public release or completed Windows acceptance.
+
+
+At17:56 KST, root reconnected the sole0b57074d native app to existing synthetic
+seatA02 using a fresh one-use pairing ticket. Before reconnect, the refreshed
+board correctly marked the seat unavailable and labelled6/6 as its last report.
+After the actual app connected, the board showed blocked Google connection2/6,
+normal0 and unknown19, matching the host's incomplete OAuth state. The pairing
+was real; no fixture progress was injected and no mail was sent. Evidence:
+/tmp/hps-email-mvp/final-0b57074d-acceptance/instructor-reconnect.{png,json}.
+All18 CI checks also passed at installer/documentation headc724b743.
