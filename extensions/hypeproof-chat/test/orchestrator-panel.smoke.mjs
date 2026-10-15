@@ -373,6 +373,13 @@ if (!status.available) {
   assert.ok(am.json.output.findings.length >= 1 && am.json.output.findings.length < 40);
   assert.deepEqual(am.json.cut, { findings_total: 40, findings_kept: am.json.output.findings.length, dropped: { must: 40 - am.json.output.findings.length } });
 
+  // A must too long on its own is shortened by the general rule, not dropped by the severity pass
+  // (that pass never takes a must: here it would have left no finding at all).
+  const longMust = shaped({ verdict: "issues", findings: [{ rule: "contrast", where: "#hero", severity: "must", fix: ko(3000) }, { rule: "alt", where: "img", severity: "must", fix: "alt 추가" }] });
+  assert.deepEqual(longMust.json.output.findings.map((f) => f.rule), ["contrast"]);
+  assert.ok(longMust.json.output.findings[0].fix.length < 3000 && longMust.json.output.findings[0].fix.endsWith("…"), "shortened, marked with …");
+  assert.deepEqual(longMust.json.cut, { findings_total: 2, findings_kept: 1, dropped: { must: 1 } });
+
   // An answer without findings (the advisor's plan) is cut the general way, as before: no `cut`.
   const plan = { diagnosis: ko(300), plan: Array.from({ length: 30 }, (_, i) => ({ step: `${i} ${ko(90)}` })), stop: false };
   const p = shaped(plan);
