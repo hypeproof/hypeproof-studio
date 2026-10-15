@@ -78,6 +78,31 @@ test('browser registration cannot grant email tools when the email host is missi
  assert.equal((await opts.canUseTool('mcp__hypeproof__browser_read',{}, {signal:new AbortController().signal})).behavior,'allow');
 });
 
+test('email and publishing registrations preserve independent grants on the combined SDK path',async()=>{
+ const publishing={enabled:true,strategy:'per_user_github_pages'};
+ const profile={game:{template_tier:'website'},automations:capability,publishing};
+ const host={isAllowed:()=>true,confirmSend:async()=>false,runtime:{}};
+ const browserHost={openBrowser:async()=>{},screenshot:async()=>null,startLivePreview:async()=>null};
+ const publish='mcp__hypeproof__publish_site';
+ const signal=new AbortController().signal;
+ const both=await turn({host,browserHost,profile});
+ assert.deepEqual(Object.keys(both.mcpServers).sort(),['hypeproof','hypeproof_email']);
+ assert.deepEqual(both.mcpServers.hypeproof.tools.map(t=>t.name),['publish_site'],'publish-only grant must not expose browser tools');
+ assert.equal((await both.canUseTool(publish,{check_only:true},{signal})).behavior,'allow');
+ assert.equal((await both.canUseTool(publish,{},{signal})).behavior,'deny','publication still requires human approval');
+ assert.equal((await both.canUseTool(names[0],{},{signal})).behavior,'allow');
+ assert.equal((await both.canUseTool('mcp__hypeproof__browser_read',{},{signal})).behavior,'deny');
+ const emailOnly=await turn({host,profile});
+ assert.deepEqual(Object.keys(emailOnly.mcpServers),['hypeproof_email']);
+ assert.equal((await emailOnly.canUseTool(publish,{check_only:true},{signal})).behavior,'deny','a granted but absent publisher cannot execute');
+ const publishOnly=await turn({browserHost,profile});
+ assert.deepEqual(Object.keys(publishOnly.mcpServers),['hypeproof']);
+ assert.equal((await publishOnly.canUseTool(names[0],{},{signal})).behavior,'deny');
+ const revoked=await turn({host,browserHost,profile:{...profile,publishing:{...publishing,enabled:false}}});
+ assert.deepEqual(Object.keys(revoked.mcpServers),['hypeproof_email']);
+ assert.equal((await revoked.canUseTool(publish,{check_only:true},{signal})).behavior,'deny');
+});
+
 test('inline human questions pause the SDK stall clock and stop cancels the pending question',async()=>{
  for(const cancel of [false,true]){
   const ctrl=new AbortController();let release,waited=false,cancelled=0;

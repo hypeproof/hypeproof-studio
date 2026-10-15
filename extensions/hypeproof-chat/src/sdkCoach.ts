@@ -24,6 +24,7 @@ import {
   buildHypeproofMcpServer,
   crBrowserOpenRefusal,
   HYPEPROOF_MCP_SERVER_NAME,
+  hypeproofMcpRegistration,
   MCP_BROWSER_OPEN,
   resolveAlreadyOpen,
   type BrowserMcpHost,
@@ -561,7 +562,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name));
       if (args.browserHost && browserGrants.length) {
         servers[HYPEPROOF_MCP_SERVER_NAME] = buildHypeproofMcpServer(factory, z, args.browserHost,
-          crMcpRegistration(browserGrants)) as NonNullable<Options["mcpServers"]>[string];
+          { ...crMcpRegistration(browserGrants), ...hypeproofMcpRegistration(browserGrants) }) as NonNullable<Options["mcpServers"]>[string];
         grants.push(...browserGrants);
       }
       if (args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => opts.permittedMcpTools.includes(name))) {
@@ -758,6 +759,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor);
       } finally {
         awaitingUser -= 1;
+        // The tool runs from NOW, not from when it was requested. Without this restamp a long
+        // tool approved after a slow modal (publish_site waits on GitHub for minutes) would
+        // lose the modal's time from its stall-watchdog slack and be aborted mid-run.
+        lastToolCallAt = Date.now();
       }
       return ok
         ? { behavior: "allow" as const, updatedInput: input }

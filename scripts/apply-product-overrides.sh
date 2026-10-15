@@ -47,6 +47,10 @@ echo "  version = $HPS_RESOLVED_VERSION"
 # A real commit is injected by exporting BUILD_SOURCEVERSION before build.sh
 # (run-build.sh defaults it to the repo HEAD) — see resolve-version.sh / #206.
 
+# linkProtectionTrustedDomains: the one-click publish opens https://github.com/login/device (the
+# sign-in code page) and the published https://<login>.github.io/<repo>/ address. VSCodium trusts
+# only open-vsx.org, so each open first asked "Do you want HypeProof Studio to open the external
+# website?" in English (measured 2026-10-13 in the hands-on E2E, a participant-facing stop).
 tmp=$(mktemp)
 jq \
   --arg version             "$HPS_RESOLVED_VERSION" \
@@ -83,6 +87,7 @@ jq \
    | .serverApplicationName = ($applicationName + "-server")
    | .serverDataFolderName  = ($dataFolderName + "-server")
    | .extensionEnabledApiProposals = ((.extensionEnabledApiProposals // {}) + {"hypeproof.hypeproof-chat": ["browser"]})
+   | .linkProtectionTrustedDomains = (((.linkProtectionTrustedDomains // []) + ["https://github.com", "https://*.github.io"]) | unique)
   ' "$PRODUCT_JSON" > "$tmp"
 
 mv "$tmp" "$PRODUCT_JSON"
@@ -103,4 +108,4 @@ mv "$tmp" "$PRODUCT_JSON"
 # About screen shows as the product version.
 
 echo "Done. Verify with:"
-echo "  jq '.version, .commit, .nameShort, .applicationName, .darwinBundleIdentifier, .tunnelApplicationName, .linuxIconName' $PRODUCT_JSON"
+echo "  jq '.version, .commit, .nameShort, .applicationName, .darwinBundleIdentifier, .tunnelApplicationName, .linuxIconName, .linkProtectionTrustedDomains' $PRODUCT_JSON"

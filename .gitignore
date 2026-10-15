@@ -52,3 +52,4 @@ extensions/hypeproof-chat/webview-ui/src/*.js
 
 # Opt-in packaged Desktop app identification is a release input, never source.
 **/oauth/google-desktop-client.json
+.service-source/

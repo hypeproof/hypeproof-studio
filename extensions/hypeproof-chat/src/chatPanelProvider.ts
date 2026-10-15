@@ -15,6 +15,9 @@ import { modelEchoVerdict, modelEchoNotice, describeModelEcho, type ModelEchoInp
 type ModelEchoContext = Omit<ModelEchoInput, 'resolved'>;
 import * as vscode from "vscode";
 import * as path from "path";
+import * as os from "node:os";
+// hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
+import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -204,6 +207,7 @@ import {
   resolveInstructorTokenFromSecrets,
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
+import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
 import {
   SessionSpool,
   spoolIdentityFromToken,
@@ -211,6 +215,12 @@ import {
   type SpoolArtifactSource,
 } from "./sessionSpool";
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
+import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
+import type { PublishEndpoints } from "./publish/publishConfig";
+import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract";
+import { nextFreeFolder } from "./publish/githubContinue";
+import type { GithubContinueSource } from "./startPage";
+import { isMinorProfile } from "./sdkCoachHelpers";
 import {
   ArtifactChangeGate,
   startHeartbeat,
@@ -572,6 +582,116 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.logChannel;
   }
   private cachedProfile: ResolvedProfile | null = null;
+
+  // ── One-click publish (src/publish/) ──────────────────────────────────────
+  private sitePublisherInstance: SitePublisher | null = null;
+  private publishEndpoints: PublishEndpoints | null = null;
+
+  /** Called once by activate(): where the publish talks to (test overrides already gated). */
+  initSitePublish(endpoints: PublishEndpoints): void {
+    this.publishEndpoints = endpoints;
+    this.sitePublisherInstance = null; // rebuilt with these endpoints on first use
+    this.refreshSitePublishContext();
+  }
+
+  /** Mirror "may the publish button be shown here" (the served profile for this seat's token). */
+  private refreshSitePublishContext(): void {
+    void vscode.commands.executeCommand("setContext", SITE_PUBLISH_CONTEXT_KEY, this.sitePublisher().available());
+  }
+
+  /** Lazily built so a cohort that never publishes never resolves `gh`. */
+  private sitePublisher(): SitePublisher {
+    this.sitePublisherInstance ??= new SitePublisher({
+      profile: () => this.cachedProfile,
+      isMinor: (p) => isMinorProfile(p),
+      workspaceRoot: () => this.resolveCoachCwd(),
+      idle: () => !this.hasActiveStream(),
+      postToChat: (text) => this.postAppReply(text),
+      notice: (text) => this.postPageNotice(text),
+      log: (line) => this.coachLogChannel().appendLine(line),
+      stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
+      store: this.context.globalState,
+      endpoints: this.publishEndpoints ?? { refused: [] },
+      checkAccess: () => this.checkSitePublishAccess(),
+      // ensureProfile(true) re-reads the profile and re-sets the context key; postConfig carries
+      // the new answer to the chat header button.
+      refreshProfile: async () => {
+        await this.ensureProfile(true);
+        await this.postConfig();
+      },
+      // The folder the class connected in; the profile's workspace_root when no activity is recorded.
+      classFolder: () => {
+        try {
+          const current = activityConnections(this.context)?.current?.workspace;
+          if (current) return current;
+        } catch {
+          /* an unreadable activity record: fall back to the profile */
+        }
+        const root = this.cachedProfile?.workspace_root;
+        return (root && resolveWorkspaceRoot(root)) || undefined;
+      },
+      sameFolder: (a, b) => canonicalizeForCompare(a) === canonicalizeForCompare(b),
+    });
+    return this.sitePublisherInstance;
+  }
+
+  /**
+   * One fresh /v1/profile for the token in this seat: the publish press's token gate. Read
+   * apart from the cache on purpose — the cached profile outlives the token in an app left open
+   * — and with the same activity rule as ensureProfile, so the two never disagree on a seat.
+   */
+  private async checkSitePublishAccess(): Promise<AccessCheck> {
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    if (!token) return { kind: "no_token" };
+    const connections = activityConnections(this.context);
+    if (connections && !connections.matchesService) return { kind: "profile", publishing: null, minor: false };
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const r = await fetchProfileResult({ proxyUrl, token }).catch(() => null);
+    if (!r) return { kind: "failure", reason: "network" };
+    if (!r.ok) return { kind: "failure", reason: r.failure.reason };
+    if (connections?.current && r.profile.activity_id !== connections.current.serverId) return { kind: "profile", publishing: null, minor: false };
+    return { kind: "profile", publishing: r.profile.publishing, minor: isMinorProfile(r.profile) };
+  }
+
+  /**
+   * "GitHub에서 이어하기" for the start page (startPage.ts): the publish module's GitHub side, for
+   * profiles behind the same gate as the publish button and naming a class folder.
+   */
+  githubContinueSource(): GithubContinueSource {
+    const classRoot = (p: ResolvedProfile) => (p.workspace_root ? resolveWorkspaceRoot(p.workspace_root) : null);
+    return {
+      allowed: (p) => sitePublishAllowed(p.publishing, isMinorProfile(p)).ok && !!classRoot(p),
+      find: () => this.sitePublisher().findClassRepos(),
+      signIn: () => this.sitePublisher().signInForContinue(),
+      prepare: (args) => this.sitePublisher().prepareContinue(args),
+      newFolder: (root) => nextFreeFolder(root),
+      classRoot,
+    };
+  }
+
+  /** "배포 등록 해제" — forget a persisted publish registration. */
+  async unregisterSitePublish(): Promise<void> {
+    await this.sitePublisher().unregisterFromCommand();
+  }
+
+  /** The "홈페이지 올리기" command. The manifest hides it; this re-checks (a command can run without its menu). */
+  async publishSite(): Promise<void> {
+    await this.sitePublisher().runFromButton();
+  }
+
+  /**
+   * An app-written reply bubble in the transcript, the same channel the team-brain answers use:
+   * the webview shows it and the next turn's history carries it, so the coach can continue
+   * from the button's outcome instead of asking what happened.
+   */
+  private async postAppReply(text: string): Promise<void> {
+    const sid = randomId();
+    const aid = randomId();
+    void this.post({ type: "streamStart", streamId: sid, messageId: aid });
+    void this.post({ type: "streamChunk", streamId: sid, delta: text });
+    void this.post({ type: "streamEnd", streamId: sid });
+    await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+  }
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
   /**
@@ -1461,6 +1581,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (this.crDirector.on) void this.refreshCrDirectorContext(true).catch(() => undefined);
     }, CR_DIRECTOR_REPROBE_MS);
     context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
+    // D-028 — staged photos that were never sent go with the window.
+    context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
   }
 
   /**
@@ -2233,6 +2355,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.nativeHistoryScope = null;
     // CR-10 — the token changed: the delete command follows the new identity.
     void this.refreshCrBytesContext();
+    // The profile is gone, and with it the publish button (token gate).
+    this.refreshSitePublishContext();
     // #1298 — re-check instructor status + brief after token change.
     this._instructorMode.reset();
   }
@@ -2341,6 +2465,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void vscode.commands.executeCommand("setContext", CR_CONTEXT_KEY, crContextKeyValue(p));
         // Learning wiki and deck generator commands follow the cohort's own switch.
         void vscode.commands.executeCommand("setContext", "hypeproof-chat.learningWikiEnabled", p?.learning_wiki?.enabled === true);
+        // One-click publish: the button shows only where the served profile allows it.
+        this.refreshSitePublishContext();
         if (!isCurriculumRuntimeEnabled(p)) this.clearElementContext();
         // CR-10 — the delete command follows whoever is signed in now (no disk I/O).
         void this.refreshCrBytesContext();
@@ -2649,6 +2775,103 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       state: "done",
     });
     return { note: pastedImageNote(relPaths, cwd), relPaths };
+  }
+
+  /** D-028 — this panel's staging folder, created on the first attached photo. */
+  private imageStaging: ImageStaging | null = null;
+
+  /**
+   * D-028 — keep a photo dropped or pasted into the chat until the message is sent. Only a
+   * cohort with `input.image_files` takes photos this way; a refusal goes back to the panel
+   * so the chip disappears with the reason instead of the photo vanishing on send.
+   */
+  private async stageAttachedImage(stageId: string, name: string, mime: string, base64: string): Promise<void> {
+    const refusal = this.stageImageBytes(stageId, name, mime, Buffer.from(base64, "base64"));
+    if (refusal) void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+  }
+
+  /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */
+  private stageImageBytes(stageId: string, name: string, mime: string, bytes: Buffer): string | null {
+    if (!this.isImageFilesEnabled()) return "이 수업에서는 사진을 붙일 수 없어요.";
+    const refusal = attachedImageRefusal({ name, mime, bytes: bytes.length, alreadyStaged: this.imageStaging?.count() ?? 0 });
+    if (refusal) return refusal;
+    try {
+      if (!this.imageStaging) {
+        const { rootParent, root } = stagingRootFor(os.tmpdir(), process.pid, randomId());
+        this.imageStaging = new ImageStaging(rootParent, root);
+        this.imageStaging.purgeLeftovers();
+      }
+      this.imageStaging.stage(stageId, safeAttachedImageName(name, attachedImageExt(name, mime) ?? "jpg"), bytes);
+      return null;
+    } catch (err) {
+      console.warn("[attached-images] staging failed:", err);
+      return "사진을 잠시 보관하지 못했어요. 다시 끌어다 놓아 주세요.";
+    }
+  }
+
+  /** D-028 — does this cohort take photos into the chat as files? */
+  isImageFilesEnabled(): boolean {
+    return this.cachedProfile?.input?.image_files === true;
+  }
+
+  /** D-028 — is this file already inside the class folder (an existing photo being viewed)? */
+  isInsideWorkspace(fsPath: string): boolean {
+    const roots = [this.resolveCoachCwd(), ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)].filter(
+      (r): r is string => !!r,
+    );
+    return roots.some((r) => {
+      const rel = path.relative(r, fsPath);
+      return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+    });
+  }
+
+  /**
+   * D-028 — a photo dropped onto Studio from Finder. VS Code takes such a drop before the
+   * chat webview sees it and opens the file as an editor tab (see #384), so extension.ts
+   * hands the opened file here: it is staged like a dropped photo and its chip appears in
+   * the chat. Returns false when it was not taken (the reason is shown in the chat).
+   */
+  async stageImageFromFile(fsPath: string): Promise<boolean> {
+    const name = path.basename(fsPath);
+    const ext = attachedImageExt(name, "") ?? "";
+    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext ? `image/${ext}` : "";
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(fsPath)));
+    } catch {
+      void this.post({ type: "imageStageRefused", stageId: "", reason: "사진 파일을 읽지 못했어요. 다시 끌어다 놓아 주세요." });
+      return false;
+    }
+    const stageId = randomId().replace(/[^A-Za-z0-9_-]/g, "");
+    const refusal = this.stageImageBytes(stageId, name, mime, bytes);
+    if (refusal) {
+      void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+      return false;
+    }
+    // The preview needs the bytes in the webview; a very large photo goes without one.
+    const preview = bytes.length <= 8 * 1024 * 1024 && mime && !/hei[cf]$/.test(mime) ? `data:${mime};base64,${bytes.toString("base64")}` : undefined;
+    void this.post({ type: "imageStagedByHost", stageId, name, ...(preview ? { dataUrl: preview } : {}) });
+    return true;
+  }
+
+  /** D-028 — move this send's staged photos into images/ and return the note for the model. */
+  private commitAttachedImages(ids: string[] | undefined, streamId: string): string {
+    if (!ids?.length || !this.imageStaging) return "";
+    const cwd = this.resolveCoachCwd();
+    if (!cwd) {
+      for (const id of ids) this.imageStaging.discard(id);
+      this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(ids.length), state: "error" });
+      return "";
+    }
+    const { relPaths, failed } = this.imageStaging.commit(ids, cwd);
+    if (failed > 0) this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(failed), state: "error" });
+    if (relPaths.length === 0) return "";
+    this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: attachedImagesSavedLabel(relPaths), state: "done" });
+    const note = attachedImagesNote(relPaths);
+    // The sent bubble gets the same lines, so the history the panel sends back next turn
+    // still names the files.
+    void this.post({ type: "attachedImagesSaved", note });
+    return note;
   }
 
   /** #278 Phase 1 — does this cohort's profile request the native live-server preview? */
@@ -3035,10 +3258,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // That gap is filled with one timeline line. It turns done when it really comes
     // up and error when it fails, so the state "said it was up but it was not" never
     // stays on screen (R0).
-    const revealLogId = randomId();
+    // D-027 — a summary cohort sees the line only while the preview opens: a `pending-` id is
+    // hidden once done. Five Edits in one turn used to leave five "미리보기를 열었어요".
+    const summaryActivity = toolActivityMode(this.cachedProfile) === "summary";
+    const revealLogId = summaryActivity ? `pending-reveal-${randomId()}` : randomId();
     const logReveal = (state: "running" | "done" | "error", label: string): void => {
       if (!opts?.streamId) return;
-      this.postToolLog(opts.streamId, { id: revealLogId, icon: "🖼️", label, state });
+      const shown = summaryActivity && state === "running" ? PREVIEW_PHRASE.label : label;
+      this.postToolLog(opts.streamId, { id: revealLogId, icon: "🖼️", label: shown, state });
     };
 
     logReveal("running", "미리보기 여는 중");
@@ -3372,6 +3599,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       crEnabled: () => this.isCurriculumRuntimeEnabled(),
       // cr-verify — the same session the proxy path runs (CR-03).
       verify: async (name: string, input: Record<string, unknown>) => toMcpToolResult(await this.runVerifyTool(name, input)),
+      // One-click publish: the same pipeline and lock as the toolbar button.
+      publishSite: (input) => this.sitePublisher().runForTool(input),
       crScope: (url: string) => checkAgentOrigin(url, this.crBrowserOptions().allowedOrigins()),
       // #507 — the address of the live server currently up. It does not start one
       // (giving a lookup a side effect would mean "what is the address?" turns the
@@ -3524,6 +3753,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // Any message from the panel is evidence of a human. See `lastActivityAt`.
     this.lastActivityAt = Date.now();
+    // D-028 — a send that is turned away here never reaches handleSend, so its staged photos
+    // are deleted now; they are not part of the text handed back to the input box.
+    if ((this.opsHold || this.connectionChanging) && msg.type === "sendMessage") {
+      for (const id of msg.attachments ?? []) this.imageStaging?.discard(id);
+    }
     if (this.opsHold && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
       // #751 — only a NEW AI run is held; the typed text goes back into the box, nothing is lost.
       await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images});
@@ -3748,7 +3982,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports));
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments);
+        return;
+      case "stageImage":
+        await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
+        return;
+      case "discardStagedImage":
+        this.imageStaging?.discard(msg.stageId);
         return;
       case "retryMessage":
         // #358 — carry the failed turn's image(s) through the retry so the
@@ -3874,6 +4114,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "publishToGallery":
         void this.publishToGallery();
         return;
+      case "publishSite":
+        // The visible "Studio button": HP shell defaults hide editor/view title actions (#725),
+        // so the chat header is where a participant can actually press it.
+        void this.publishSite();
+        return;
       case "webviewError":
         // S-04 (#48). Log to output channel so the trace survives a panel
         // reload; don't crash the host.
@@ -3993,6 +4238,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     rawHistory: ChatMessage[],
     images?: string[],
     instructorPromptRefs?: Array<{ object_id: string; revision: number }>,
+    attachments?: string[],
   ): Promise<void> {
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
     if (this.verifySession?.running) {
@@ -4260,6 +4506,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // it would fill the work folder with files the participant never asked for.
     const savedImages = await this.savePastedImages(images, streamId);
     if (savedImages.note) userTextForModel = `${userTextForModel}\n\n${savedImages.note}`;
+    // D-028 — photos attached as files move into images/ now, and the message carries their
+    // paths. The same lines go into the saved history, so later turns can still name them.
+    const attachedNote = this.commitAttachedImages(attachments, streamId);
+    if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
+    const historyText = attachedNote ? `${text}\n\n${attachedNote}` : text;
 
     let assistantText = "";
     // REQ-D2: auto-reveal as soon as a renderable HTML block completes in
@@ -4377,11 +4628,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // result and the next call).
       let pendingShown = false;
       const PENDING_ID = `pending-${streamId}`;
+      // D-027 — a "summary" cohort gets one Korean line per stretch of work in place of a line
+      // per tool call (toolActivity.ts). The pending line below becomes that line.
+      const work = toolActivityMode(profile) === "summary"
+        ? new WorkLine(PENDING_ID, (entry) => this.postToolLog(streamId, entry))
+        : null;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
       // was 3 minutes and the last line was `Read ✓`, so children and adults alike
       // misread it as "still reading". That stretch is filled with one live line.
       const showPending = () => {
+        if (work) {
+          pendingShown = true;
+          work.show(NEXT_STEP_PHRASE);
+          return;
+        }
         if (pendingShown) return;
         pendingShown = true;
         this.postToolLog(streamId, { id: PENDING_ID, icon: "…", label: "다음 단계를 준비하는 중…", state: "running" });
@@ -4394,6 +4655,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const clearPending = () => {
         if (!pendingShown) return;
         pendingShown = false;
+        if (work) {
+          work.close(pendingCloseLabel(wroteOk));
+          return;
+        }
         this.postToolLog(streamId, {
           id: PENDING_ID,
           icon: "✍️",
@@ -4439,10 +4704,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           this.postToolLog(streamId, { id, icon, label, state, ...(a.at ? { at: a.at } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
+            if (work) {
+              pendingShown = true;
+              work.show(THINKING_PHRASE);
+              break;
+            }
             // One entry that ticks in place; the completed block replaces it.
             log(`think-${thinkingIndex}`, "💭", `응답 준비 중 · ${a.tokens} 토큰`, "running");
             break;
           case "thinking":
+            // D-027 — a summary cohort sees that the coach is thinking, not what it thinks.
+            if (work) {
+              pendingShown = true;
+              work.show(THINKING_PHRASE);
+              break;
+            }
             // 2026-08-20 — thinking is also "doing something". A child's inner
             // thoughts are hidden (below), so without this line the screen goes
             // completely quiet — 3 minutes of silence after Read ✓ on a real device.
@@ -4459,7 +4735,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // Pass the workspace root so the path is shown relative to it. Leaving
             // only the filename makes "normal · relative path refused · outside the
             // workspace" all read as the same characters.
-            clearPending();
+            if (!work) clearPending();
             const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd())})`;
             toolLabels.set(a.id, label);
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
@@ -4480,14 +4756,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 htmlWrites.set(a.id, fp);
               }
             }
-            log(a.id, "🔧", label, "running");
+            if (work) {
+              pendingShown = true;
+              work.show(workPhrase(a.name, a.input));
+            } else {
+              log(a.id, "🔧", label, "running");
+            }
             break;
           }
           case "tool_result":
             // A failure leaves a mark in the label — an icon alone disappears once the
             // scroll passes it. In real use a Write failure was missed and
             // "저장됐습니다" was believed as it stood (2026-07-26).
-            log(
+            // D-027 — a summary cohort gets no per-call line, failures included: the coach
+            // retries on its own, and the turn's own text has to say what did not work (R0).
+            if (!work) log(
               a.id,
               "🔧",
               a.isError
@@ -4865,7 +5148,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // window is reopened.
         await this.saveAgentMdIfPresent(assistantText, streamId);
         await this.appendHistory([
-          { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+          { id: randomId(), role: "user", content: historyText, createdAt: Date.now() },
           ...this.finishTurnItems(
             streamId,
             messageId,
@@ -5356,6 +5639,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return pick === "열기";
     }
 
+    // Tier 1.6 — publishing the workspace to a public GitHub repository (publish_site).
+    // Asked until the repository is REGISTERED (persisted per GitHub login + repository, shared
+    // with the toolbar button — publishRegistry.ts), then never again until "배포 등록 해제".
+    // Not configurable through requireApprovalFor (see the ActionRequest kind comment).
+    // check_only never reaches here.
+    if (req.kind === "publishSite") {
+      const payload = (req.payload as { repo_name?: string; stage?: string } | null | undefined) ?? {};
+      const publisher = this.sitePublisher();
+      if (!publisher.allowed()) return false;
+      const repo = publisher.repoNameFor({ repo_name: payload.repo_name || undefined });
+      return publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
+    }
+
     // Tier 2 — file access must target the active workspace (write and read).
     if (req.kind === "writeFile" || req.kind === "readFile") {
       const target = (req.payload as { path?: string } | null | undefined)?.path;
@@ -5580,6 +5876,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate,
+        ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
         ...(instructorConnection ? { instructorConnection } : {}),

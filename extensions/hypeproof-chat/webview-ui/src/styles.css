@@ -835,6 +835,19 @@ html, body, #root {
   cursor: pointer;
 }
 .hps-attachment-remove:hover { background: rgba(0, 0, 0, 0.85); }
+/* D-028 — a staged photo whose format the webview cannot draw (HEIC) shows its file name. */
+.hps-attachment-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+  word-break: break-all;
+  color: var(--vscode-descriptionForeground, #aaa);
+}
 
 /* Thumbnails rendered inside a sent user bubble. */
 .hps-msg-images {
