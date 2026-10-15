@@ -18,7 +18,11 @@ export function AccountEntry({ account, checking, post }: { account: AccountView
       {account.passes?.map(pass => {
         const deadline = pass.expires_at ?? pass.activation_deadline_at;
         const usable = ['paid','active','available','ready'].includes(pass.status) && pass.requests_remaining > 0 && (!deadline || deadline * 1000 > Date.now());
-        return <div className="studio-account-pass" key={pass.id}><strong>{pass.product_name}</strong><span>AI 요청 {pass.requests_remaining.toLocaleString('ko-KR')} / {pass.requests_limit.toLocaleString('ko-KR')}회 남음</span><span>{pass.expires_at ? `종료일 · ${date(pass.expires_at)}` : `${pass.duration_seconds > 0 ? `처음 사용부터 ${Math.ceil(pass.duration_seconds / 86400)}일` : '아직 시작하지 않았어요'}${pass.activation_deadline_at ? ` · 시작 가능 기한 ${date(pass.activation_deadline_at)}` : ''}`}</span>
+        return <div className="studio-account-pass" key={pass.id}><strong>{pass.product_name}</strong><span>AI 요청 {pass.requests_remaining.toLocaleString('ko-KR')} / {pass.requests_limit.toLocaleString('ko-KR')}회 남음</span>
+          {pass.expires_at ? <span>종료일 · {date(pass.expires_at)}</span> : <>
+            <span>{pass.duration_seconds > 0 ? `처음 사용부터 최대 ${Math.ceil(pass.duration_seconds / 86400)}일` : '아직 시작하지 않았어요'}</span>
+            {pass.activation_deadline_at && <><span>전체 제공 기한 · {date(pass.activation_deadline_at)}</span><span>시작한 날과 관계없이 이 기한에 이용이 종료돼요.</span></>}
+          </>}
           <button className="studio-choice" disabled={disabled || !usable} onClick={() => post({type:'accountActivate',passId:pass.id})}>{usable ? '이 이용권으로 시작하기' : '지금 사용할 수 없는 이용권'} <span aria-hidden="true">→</span></button></div>;
       })}
       <div className="studio-course-actions"><button className="studio-text-button" disabled={disabled} onClick={() => post({type:'accountRefresh'})}>이용권 새로고침</button><button className="studio-text-button" onClick={() => post({type:'accountManage'})}>계정·기기·영수증 관리 ↗</button><button className="studio-text-button" onClick={() => post({type:'accountSignOut'})}>로그아웃</button></div>
