@@ -26,12 +26,19 @@ function Get-HpsEmailArtifact([string]$Origin, [string]$Path, [string]$Token, [s
     }
 }
 
-function Assert-HpsEmailManifest($Manifest) {
+function Assert-HpsEmailManifest($Manifest, [string]$Build = '9d535c87') {
     $expected = @{
-        'app.zip' = @{ sha256 = '378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1'; bytes = 196839798 }
-        'sdk.zip' = @{ sha256 = 'f099b98ef4b2d048973d189928186ffc1835ef2de099aa9e62ee045b31889d05'; bytes = 80241659 }
+        'app.zip' = @{ sha256 = '9bf8d7f49f3dfcf00eeba349460c7820bc8a0237b156ce46841dfa30f517e168'; bytes = 196644907 }
+        'sdk.zip' = @{ sha256 = '24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e'; bytes = 121940997 }
     }
-    if ($Manifest.schema -ne 1 -or $Manifest.build -cne '682dfd37' -or @($Manifest.artifacts).Count -ne 2) { throw 'Unexpected installation manifest.' }
+    if ($Build -ceq '682dfd37') {
+        # Read-only recognition of the previous pilot for shortcut handover.
+        $expected = @{
+            'app.zip' = @{ sha256 = '378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1'; bytes = 196839798 }
+            'sdk.zip' = @{ sha256 = 'f099b98ef4b2d048973d189928186ffc1835ef2de099aa9e62ee045b31889d05'; bytes = 80241659 }
+        }
+    } elseif ($Build -cne '9d535c87') { throw 'Unexpected installation build.' }
+    if ($Manifest.schema -ne 1 -or $Manifest.build -cne $Build -or @($Manifest.artifacts).Count -ne 2) { throw 'Unexpected installation manifest.' }
     $seen = @{}
     foreach ($artifact in $Manifest.artifacts) {
         if (-not $expected.ContainsKey([string]$artifact.name) -or $seen.ContainsKey([string]$artifact.name)) { throw 'Unexpected or duplicate artifact.' }
@@ -90,7 +97,7 @@ function Assert-HpsEmailDirectory([string]$Path) {
     }
 }
 
-function Test-HpsEmailExistingInstall([string]$Destination) {
+function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = '9d535c87') {
     if (-not (Test-Path -LiteralPath $Destination)) { return $false }
     Assert-HpsEmailDirectory $Destination
     $receiptPath = Join-Path $Destination '.email-test-install.json'
@@ -102,12 +109,62 @@ function Test-HpsEmailExistingInstall([string]$Destination) {
         }
     }
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
-    Assert-HpsEmailManifest $receipt
+    Assert-HpsEmailManifest $receipt $Build
     return $true
 }
 
+function Assert-HpsEmailShortcutTarget([string]$Target, [string]$Base, [string]$Executable) {
+    if ($Target -ieq $Executable) { return }
+    $previous = Join-Path $Base '682dfd37'
+    if ($Target -ine (Join-Path $previous 'HypeProof Studio.exe') -or
+        -not (Test-HpsEmailExistingInstall $previous '682dfd37')) {
+        throw 'An unrelated shortcut has the same name. It was not changed.'
+    }
+}
+
+function Backup-HpsEmailUserData([string]$Base) {
+    # Both pilot shells have the same product identity. Preserve the complete
+    # profile before its first use by this version, including encrypted storage.
+    if ($env:VSCODE_PORTABLE -or $env:VSCODE_APPDATA -or $env:VSCODE_DEV) { throw 'Custom Studio profile routing requires an operator backup before updating.' }
+    if (-not $env:APPDATA) { throw 'Windows roaming user folder is unavailable.' }
+    $source = Join-Path $env:APPDATA 'HypeProof Studio'
+    if (-not (Test-Path -LiteralPath $source)) { return }
+    Assert-HpsEmailDirectory $source
+    $backup = Join-Path $Base 'rollback-before-9d535c87'
+    Assert-HpsEmailDirectory $backup
+    $receipt = Join-Path $backup 'complete.json'
+    if (Test-Path -LiteralPath $backup) {
+        if (-not (Test-Path -LiteralPath $receipt -PathType Leaf) -or
+            ((Get-Item -LiteralPath $receipt -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'An incomplete rollback snapshot exists. It was preserved; ask the operator for help.'
+        }
+        $saved = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+        if ($saved.build -cne '9d535c87' -or $saved.source -ine $source -or
+            -not (Test-Path -LiteralPath (Join-Path $backup 'profile') -PathType Container)) {
+            throw 'Unexpected rollback snapshot. It was preserved.'
+        }
+        return
+    }
+    $entries = @(Get-ChildItem -LiteralPath $source -Recurse -Force -ErrorAction Stop)
+    if (@($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) {
+        throw 'User profile contains linked files. Ask the operator to preserve it before updating.'
+    }
+    New-Item -ItemType Directory -Path $backup | Out-Null
+    Copy-Item -LiteralPath $source -Destination (Join-Path $backup 'profile') -Recurse -Force -ErrorAction Stop
+    $saved = @{build='9d535c87';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
+    [IO.File]::WriteAllText($receipt, ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+}
+
+function Assert-HpsEmailSharedProfileIdle {
+    foreach ($process in @(Get-Process -ErrorAction Stop)) {
+        if ($process.ProcessName -ieq 'HypeProof Studio') {
+            throw 'Close every HypeProof Studio window before updating its shared user profile.'
+        }
+    }
+}
+
 function Test-HpsEmailSdkReady {
-    $dir = Join-Path $env:APPDATA 'HypeProof-Studio\sdk\0.3.207'
+    $dir = Join-Path $env:APPDATA 'HypeProof-Studio\sdk\0.3.299'
     Assert-HpsEmailDirectory $dir
     $binary = Join-Path $dir 'claude.exe'
     $marker = $binary + '.verified.json'
@@ -118,15 +175,15 @@ function Test-HpsEmailSdkReady {
     try { $receipt = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json }
     catch { return $false }
     $size = (Get-Item -LiteralPath $binary).Length
-    return ($receipt.sdkVersion -eq '0.3.207' -and $receipt.size -eq $size -and $size -ge 157286400 -and
-        $receipt.tarballSha512 -ceq 'sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg==')
+    return ($receipt.sdkVersion -eq '0.3.299' -and $receipt.size -eq $size -and $size -ge 157286400 -and
+        $receipt.tarballSha512 -ceq 'sha512-PWHbjAdrecVlmR0kdgsX20QvUiFgWQl4zskuWd6Ieg3e5w+Ol0FZGXYRLS+Erd+pYUEZBNjDCqK2yd2KdBbDQw==')
 }
 
 function Install-HpsEmailOfflineSdk([string]$Tarball) {
     # Pinned offline adapter for seed-sdk-binary.ps1 / sdkBinaryManifest.ts.
     # Keep version, SRI, marker and destination in lockstep; never eval another script.
-    $version = '0.3.207'
-    $sri = 'sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg=='
+    $version = '0.3.299'
+    $sri = 'sha512-PWHbjAdrecVlmR0kdgsX20QvUiFgWQl4zskuWd6Ieg3e5w+Ol0FZGXYRLS+Erd+pYUEZBNjDCqK2yd2KdBbDQw=='
     $sha = [Security.Cryptography.SHA512]::Create()
     $stream = [IO.File]::OpenRead($Tarball)
     try { $actual = 'sha512-' + [Convert]::ToBase64String($sha.ComputeHash($stream)) }
@@ -176,9 +233,10 @@ function Install-HpsEmailTest {
     if (-not $env:LOCALAPPDATA -or -not $env:TEMP) { throw 'Windows user folders are unavailable.' }
     $origin = 'https://hps-studio-email-test-20261013.jayleekr0125.workers.dev'
     $base = Join-Path $env:LOCALAPPDATA 'HypeProof-Studio-Email-Test'
-    $destination = Join-Path $base '682dfd37'
+    $destination = Join-Path $base '9d535c87'
     Assert-HpsEmailDirectory $base
     Assert-HpsEmailNotRunning $base
+    Assert-HpsEmailSharedProfileIdle
     $tmp = Join-Path $env:TEMP ('hps-email-install-' + [Guid]::NewGuid().ToString('N'))
     $stage = $null
     $secret = $null
@@ -216,7 +274,7 @@ function Install-HpsEmailTest {
             $stage = Join-Path $base ('.staging-' + [Guid]::NewGuid().ToString('N'))
             Expand-HpsEmailZip (Join-Path $tmp 'app.zip') $stage
             if (-not (Test-Path -LiteralPath (Join-Path $stage 'HypeProof Studio.exe') -PathType Leaf)) { throw 'Application executable is missing.' }
-            $tarball = Join-Path $sdk 'claude-agent-sdk-win32-x64-0.3.207.tgz'
+            $tarball = Join-Path $sdk 'claude-agent-sdk-win32-x64-0.3.299.tgz'
             if (-not (Test-Path -LiteralPath $tarball -PathType Leaf)) { throw 'SDK tarball is missing.' }
             Write-Host 'Preparing the verified offline SDK ...'
             Install-HpsEmailOfflineSdk $tarball
@@ -231,11 +289,22 @@ function Install-HpsEmailTest {
         $shortcutPath = Join-Path $desktop 'HypeProof Studio Email Test.lnk'
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
-        if ((Test-Path -LiteralPath $shortcutPath) -and $shortcut.TargetPath -ine $executable) { throw 'An unrelated shortcut has the same name. It was not changed.' }
+        if (Test-Path -LiteralPath $shortcutPath) {
+            Assert-HpsEmailShortcutTarget $shortcut.TargetPath $base $executable
+            if ($shortcut.Arguments) { throw 'The existing shortcut uses custom arguments. It was preserved; ask the operator for help.' }
+        }
+        Assert-HpsEmailSharedProfileIdle
+        Backup-HpsEmailUserData $base
+        if ((Test-Path -LiteralPath $shortcutPath) -and $shortcut.TargetPath -ine $executable) {
+            $previousShortcut = Join-Path $base 'rollback-682dfd37.lnk'
+            if (Test-Path -LiteralPath $previousShortcut) { throw 'Rollback shortcut already exists. It was preserved; ask the operator for help.' }
+            Copy-Item -LiteralPath $shortcutPath -Destination $previousShortcut
+        }
         $shortcut.TargetPath = $executable
         $shortcut.WorkingDirectory = $destination
         $shortcut.Description = 'Private HypeProof Studio email workshop test'
         $shortcut.Save()
+        Write-Host 'Previous version and SDK are retained. The operator can restore the pre-update profile from the rollback snapshot.'
         Write-Host 'Ready. In Studio, paste the same participation code and start an activity.'
         Write-Host 'Choose: Isolated Windows email test. Google consent happens inside Studio.'
         Start-Process -FilePath $executable -WorkingDirectory $destination | Out-Null

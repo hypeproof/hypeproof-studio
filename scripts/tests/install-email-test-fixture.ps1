@@ -1,4 +1,4 @@
-param([string]$SdkZip = '')
+param([string]$SdkZip = '', [string]$AppZip = '')
 # Run with pwsh -NoProfile -File scripts/tests/install-email-test-fixture.ps1.
 # Real PowerShell functions and archive IO; no Windows/Google acceptance claim.
 $ErrorActionPreference = 'Stop'
@@ -15,9 +15,9 @@ function Expect-Failure([scriptblock]$Action, [string]$Match) {
     try { & $Action } catch { $message = $_.Exception.Message }
     if (-not $message -or $message -notmatch $Match) { throw "Expected refusal matching $Match, got $message" }
 }
-$manifest = [pscustomobject]@{ schema=1; build='682dfd37'; artifacts=@(
-    [pscustomobject]@{name='app.zip';path='/install/files/app.zip';sha256='378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1';bytes=196839798},
-    [pscustomobject]@{name='sdk.zip';path='/install/files/sdk.zip';sha256='f099b98ef4b2d048973d189928186ffc1835ef2de099aa9e62ee045b31889d05';bytes=80241659}
+$manifest = [pscustomobject]@{ schema=1; build='9d535c87'; artifacts=@(
+    [pscustomobject]@{name='app.zip';path='/install/files/app.zip';sha256='9bf8d7f49f3dfcf00eeba349460c7820bc8a0237b156ce46841dfa30f517e168';bytes=196644907},
+    [pscustomobject]@{name='sdk.zip';path='/install/files/sdk.zip';sha256='24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e';bytes=121940997}
 )}
 Assert-HpsEmailManifest $manifest
 foreach ($mutation in @(
@@ -112,17 +112,55 @@ try {
     if ([IO.File]::ReadAllText($userData) -ne 'preserve me') { throw 'Existing user data changed.' }
     Write-Host 'PASS: rerun reuses matching receipt only; unknown/old folders and user data preserved'
 
+    $pilotBase = Join-Path $directory 'pilot'
+    $previous = Join-Path $pilotBase '682dfd37'
+    New-Item -ItemType Directory -Path $previous -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $previous 'HypeProof Studio.exe'), 'old app kept')
+    $legacy = [pscustomobject]@{schema=1;build='682dfd37';artifacts=@(
+        [pscustomobject]@{name='app.zip';path='/install/files/app.zip';sha256='378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1';bytes=196839798},
+        [pscustomobject]@{name='sdk.zip';path='/install/files/sdk.zip';sha256='f099b98ef4b2d048973d189928186ffc1835ef2de099aa9e62ee045b31889d05';bytes=80241659}
+    )}
+    $legacyReceipt = Join-Path $previous '.email-test-install.json'
+    [IO.File]::WriteAllText($legacyReceipt, ($legacy | ConvertTo-Json -Depth 4))
+    $newExe = Join-Path $pilotBase '9d535c87/HypeProof Studio.exe'
+    Assert-HpsEmailShortcutTarget (Join-Path $previous 'HypeProof Studio.exe') $pilotBase $newExe
+    Assert-HpsEmailShortcutTarget $newExe $pilotBase $newExe
+    Expect-Failure { Assert-HpsEmailShortcutTarget (Join-Path $directory 'unrelated.exe') $pilotBase $newExe } 'unrelated'
+    $legacy.artifacts[0].sha256 = '0'*64
+    [IO.File]::WriteAllText($legacyReceipt, ($legacy | ConvertTo-Json -Depth 4))
+    Expect-Failure { Assert-HpsEmailShortcutTarget (Join-Path $previous 'HypeProof Studio.exe') $pilotBase $newExe } 'pinned'
+    Write-Host 'PASS: shortcut handover accepts only the current target or a verified previous pilot; unrelated/corrupt installs are preserved'
+
+    $oldAppData = $env:APPDATA
+    try {
+        $env:APPDATA = Join-Path $directory 'profile-appdata'
+        $profile = Join-Path $env:APPDATA 'HypeProof Studio/User/globalStorage'
+        New-Item -ItemType Directory -Path $profile -Force | Out-Null
+        $state = Join-Path $profile 'state.vscdb'
+        [IO.File]::WriteAllText($state, 'synthetic encrypted storage bytes')
+        Backup-HpsEmailUserData $pilotBase
+        $snapshot = Join-Path $pilotBase 'rollback-before-9d535c87/profile/User/globalStorage/state.vscdb'
+        if ([IO.File]::ReadAllText($snapshot) -cne [IO.File]::ReadAllText($state)) { throw 'Profile snapshot lost bytes.' }
+        [IO.File]::WriteAllText($state, 'new version changed storage')
+        Backup-HpsEmailUserData $pilotBase
+        if ([IO.File]::ReadAllText($snapshot) -cne 'synthetic encrypted storage bytes') { throw 'Rerun overwrote the pre-update profile.' }
+        if ([IO.File]::ReadAllText($state) -cne 'new version changed storage') { throw 'Backup changed live user data.' }
+        Remove-Item -LiteralPath (Join-Path $pilotBase 'rollback-before-9d535c87/complete.json')
+        Expect-Failure { Backup-HpsEmailUserData $pilotBase } 'incomplete rollback'
+        Write-Host 'PASS: pre-update profile is copied, rerun preserves original bytes, incomplete snapshot blocks launch'
+    } finally { $env:APPDATA = $oldAppData }
+
     if ($SdkZip) {
         $oldAppData = $env:APPDATA; $oldTemp = $env:TEMP; $oldSystem = $env:SystemRoot
         try {
             $env:APPDATA = Join-Path $directory 'appdata'; $env:TEMP = $directory
             $bundle = Join-Path $directory 'sdk-bundle'
             Expand-HpsEmailZip $SdkZip $bundle
-            $tarball = Join-Path $bundle 'claude-agent-sdk-win32-x64-0.3.207.tgz'
+            $tarball = Join-Path $bundle 'claude-agent-sdk-win32-x64-0.3.299.tgz'
             $canonical = [IO.File]::ReadAllText((Join-Path $bundle 'seed-sdk-binary.ps1'))
             $manifestSource = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '../../extensions/hypeproof-chat/src/sdkBinaryManifest.ts'))
-            $sri = 'sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg=='
-            if (-not $canonical.Contains($sri) -or -not $manifestSource.Contains($sri) -or -not $canonical.Contains('0.3.207')) { throw 'Offline SDK pins drifted from canonical sources.' }
+            $sri = 'sha512-PWHbjAdrecVlmR0kdgsX20QvUiFgWQl4zskuWd6Ieg3e5w+Ol0FZGXYRLS+Erd+pYUEZBNjDCqK2yd2KdBbDQw=='
+            if (-not $canonical.Contains($sri) -or -not $manifestSource.Contains($sri) -or -not $canonical.Contains('0.3.299')) { throw 'Offline SDK pins drifted from canonical sources.' }
             if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
                 $env:SystemRoot = Join-Path $directory 'mock-windows'
                 New-Item -ItemType Directory -Path (Join-Path $env:SystemRoot 'System32') | Out-Null
@@ -130,7 +168,7 @@ try {
             }
             Install-HpsEmailOfflineSdk $tarball
             if (-not (Test-HpsEmailSdkReady)) { throw 'Extracted actual SDK was not accepted by the runtime marker contract.' }
-            $marker = Join-Path $env:APPDATA 'HypeProof-Studio/sdk/0.3.207/claude.exe.verified.json'
+            $marker = Join-Path $env:APPDATA 'HypeProof-Studio/sdk/0.3.299/claude.exe.verified.json'
             $before = [IO.File]::ReadAllText($marker)
             Install-HpsEmailOfflineSdk $tarball
             if ([IO.File]::ReadAllText($marker) -cne $before) { throw 'Rerun replaced a valid SDK receipt.' }
@@ -141,9 +179,30 @@ try {
         } finally { $env:APPDATA=$oldAppData; $env:TEMP=$oldTemp; $env:SystemRoot=$oldSystem }
     }
 
-    function Get-Process { @([pscustomobject]@{Path=(Join-Path $directory '682dfd37/HypeProof Studio.exe')}) }
+    if ($AppZip) {
+        Assert-HpsEmailHash $AppZip $manifest.artifacts[0]
+        $app = Join-Path $directory 'actual-app'
+        Expand-HpsEmailZip $AppZip $app
+        $product = Get-Content -LiteralPath (Join-Path $app 'resources/app/product.json') -Raw | ConvertFrom-Json
+        $ext = Join-Path $app 'resources/app/extensions/hypeproof-chat'
+        $sdkPackage = Get-Content -LiteralPath (Join-Path $ext 'dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json') -Raw | ConvertFrom-Json
+        $candidate = Get-Content -LiteralPath (Join-Path $app '.email-candidate-source.json') -Raw | ConvertFrom-Json
+        if ($product.commit -cne '720be6610200bc8da81686bd3eb20591d6407d88' -or
+            $candidate.extension_source -cne '9d535c87b133a99d83f92a1e176b833253a6ac23' -or
+            $sdkPackage.version -cne '0.3.299') { throw 'Packaged shell/extension/SDK version drift.' }
+        foreach ($entry in $candidate.field_files.psobject.Properties) {
+            if ((Get-FileHash -LiteralPath (Join-Path $ext $entry.Name) -Algorithm SHA256).Hash -ine $entry.Value) { throw 'Packaged extension hash drift.' }
+        }
+        foreach ($name in @('oauth/google-desktop-client.json','resources/google-shared-runner.json')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $ext $name) -PathType Leaf)) { throw 'Operator Google configuration missing.' }
+        }
+        Write-Host 'PASS: actual app ZIP hash and extraction; shell720be661, extension9d535c87, SDK0.3.299, seven extension hashes and operator resources (Windows NOT executed)'
+    }
+
+    function Get-Process { @([pscustomobject]@{Path=(Join-Path $directory '9d535c87/HypeProof Studio.exe');ProcessName='HypeProof Studio'}) }
     Expect-Failure { Assert-HpsEmailNotRunning $directory } 'Close HypeProof'
     Assert-HpsEmailNotRunning (Join-Path $directory 'unrelated')
+    Expect-Failure { Assert-HpsEmailSharedProfileIdle } 'every HypeProof'
     Write-Host 'PASS: running test application blocks installation; unrelated apps preserved'
 } finally { Remove-Item -LiteralPath $directory -Recurse -Force }
 Write-Host 'PASS: installer fixtures complete. Real Windows installation remains NOT RUN.'

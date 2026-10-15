@@ -451,3 +451,38 @@ packaged branding/version and vendored SDK JS, then launches the executable with
 native SDK binary is seeded separately. Operator Google resources are not supplied
 by that workflow. New A5 extension changes and private pilot resources must be
 staged before the user-PC installation/upgrade check. No public release was made.
+
+
+## Current private Windows candidate (2026-10-15)
+
+The downloaded portable archive from run38694734487 contains shell720be661 and
+vendor SDK JS0.3.299. An external staging copy overlays the clean9d535c87 field
+bundle, packages the approved Desktop OAuth identity and shared-runner resource,
+and uses the isolated test Service as its default. No user Google credentials
+are packaged. The shell source and extension source are recorded separately in
+`.email-candidate-source.json`; this is not a new full-shell build or public release.
+
+Candidate artifacts in `/tmp/hps-email-mvp/windows-current-9d535c87/upload/`:
+
+| File | Bytes | SHA256 |
+| --- | ---: | --- |
+| app.zip | 196644907 | 9bf8d7f49f3dfcf00eeba349460c7820bc8a0237b156ce46841dfa30f517e168 |
+| sdk.zip | 121940997 | 24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e |
+
+`scripts/install-email-test.ps1` now pins these complete archives and SDK0.3.299.
+It installs to a new9d535c87 directory and retains the previous shell/SDK.
+Shortcut handover accepts only the current target or the exact682dfd37 pilot
+receipt; unrelated targets and custom shortcut/profile routing are refused.
+Before launch it requires all Studio windows closed and preserves the full
+default roaming profile in an owner-local rollback directory. A rerun does not
+overwrite that original snapshot; an incomplete snapshot prevents launch.
+The old extension-only quest updater remains specific to682dfd37 and must not
+be used to establish0.3.299 package parity.
+
+Actual PowerShell fixture runs on macOS passed manifest/hash/traversal/redirect
+checks, legacy shortcut recognition, profile-copy/rerun/incomplete-backup checks,
+real SDK tarball extraction/marker/reuse and real app ZIP extraction. Extracted
+shell/extension/SDK versions, all seven field-file hashes and operator resources
+match. Windows executable and DPAPI credential reuse/rollback were NOT RUN.
+The live download service still serves the previous installer until the new
+immutable chunks/manifest and gateway handler are uploaded and verified.
