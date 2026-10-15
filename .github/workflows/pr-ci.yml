@@ -70,6 +70,9 @@ jobs:
           node --test e2e/unified-release/candidate-service.test.mjs
           node --test e2e/paid-pass-recovery/proxy.test.mjs e2e/paid-pass-recovery/contract.test.mjs e2e/paid-pass-recovery/lifecycle.test.mjs
           node scripts/test-unified-launcher.mjs
+      - name: Release cut and publish gate controls
+        if: ${{ !cancelled() }}
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
