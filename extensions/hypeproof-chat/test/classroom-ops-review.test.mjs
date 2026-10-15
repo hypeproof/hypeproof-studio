@@ -155,7 +155,7 @@ test('the learner is told what is happening in words, not the wire id; an action
 test('a deliberate instructor stop is never routed to the error banner, and the learner is told who stopped it', () => {
   const src = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
   const provider = src('../src/chatPanelProvider.ts'), app = src('../webview-ui/src/App.tsx');
-  assert.match(provider, /if \(!ctrl\.signal\.aborted\) await this\.handleSendError\(err, streamId\);/, 'judged by this turn\'s abort signal, not by the error\'s shape');
+  assert.match(provider, /if \(!ctrl\.signal\.aborted\) await this\.handleSendError\(err, streamId(?:, \{ profile, proxyUrl, token, signal: ctrl\.signal \})?\);/, 'judged by this turn\'s abort signal, not by the error\'s shape');
   assert.match(provider, /opsRequestStop\(\): void \{[\s\S]{0,300}?type: "streamStopped", streamId, by: "instructor"/, 'the classroom stop says it is the instructor\'s');
   const notice = app.match(/const INSTRUCTOR_STOP_NOTICE = "([^"]+)"/)?.[1] ?? '';
   assert.ok(notice.includes('강사') && notice.includes('그대로'), 'names the instructor and says nothing was lost'); assert.ok(!/연결|오류|문제/.test(notice), 'and does not describe a fault');

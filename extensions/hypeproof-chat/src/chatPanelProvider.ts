@@ -29,8 +29,8 @@ import {observationHeaders} from './proxyClientHelpers.ts';
 import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
-import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, type ProfileFailure } from "./proxyClientHelpers";
-import { runSdkCoach, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
+import { runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -5282,7 +5282,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #751 U3 — a turn the Service refused under the lesson-binding contract is closed from the Service's record of it.
       const refused = bindingKey ? bindingRefusalCode(err) : null;
       if (refused && !ctrl.signal.aborted) await this.endRefusedTurn({ code: refused, streamId, proxyUrl, token, text, images });
-      else if (!ctrl.signal.aborted) await this.handleSendError(err, streamId);
+      else if (!ctrl.signal.aborted) await this.handleSendError(err, streamId, { profile, proxyUrl, token, signal: ctrl.signal });
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
@@ -5563,14 +5563,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * input box (teacher pastes a fresh one). Session/roster → friendly nudge
    * to call the teacher.
    */
-  private async handleSendError(err: unknown, streamId: string): Promise<void> {
+  private async handleSendError(
+    err: unknown,
+    streamId: string,
+    current?: { profile: ResolvedProfile | null; proxyUrl: string; token?: string; signal?: AbortSignal },
+  ): Promise<void> {
     // User-initiated stop (cancelStream) surfaces as an AbortError on both the
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
-    if (isAbortError(err)) return;
+    if (isAbortError(err) || current?.signal?.aborted) return;
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }
+    // REQ-L12 — the SDK's api_retry carries only 401, which is not enough to
+    // call a code refunded or expired. For a profile already typed as a bought
+    // pass, re-read the authenticated profile endpoint and trust only its exact
+    // native-seat ending code. A valid profile, network failure, malformed code,
+    // trial profile or any other answer continues through the generic 401 path.
+    if (err instanceof SdkGatewayAuthError && current?.profile?.pass && current.token) {
+      const refreshed = await fetchProfileResult({ proxyUrl: current.proxyUrl, token: current.token, signal: current.signal }).catch(() => null);
+      // A Stop during the bounded profile read owns the final UI state. Do not
+      // replace streamStopped with either paid-pass copy or generic auth recovery.
+      if (current.signal?.aborted) return;
+      const notice = refreshed && !refreshed.ok ? paidPassEndNotice(current.profile.pass, refreshed.failure) : null;
+      if (notice) {
+        void this.post({ type: "streamError", streamId, error: notice });
+        return;
+      }
+    }
     if (err instanceof ProxyAuthError) {
       if (err.requestId) this.lastRequestId = err.requestId;
       void this.post({
