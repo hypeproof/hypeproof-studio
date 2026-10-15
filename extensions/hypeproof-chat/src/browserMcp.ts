@@ -38,6 +38,8 @@ import {
   resolveLivePreviewUrl,
 } from "./browserControlHelpers.ts";
 import { MCP_PUBLISH_SITE, PUBLISH_SITE_TOOL_NAME, type PublishSiteInput } from "./publish/publishContract.ts";
+// Type only (erased): the site-check runner's page port, which the host implements here.
+import type { SiteCheckPage } from "./siteCheckRunner.ts";
 
 /** Server key in the SDK `mcpServers` option → tool prefix `mcp__hypeproof__`. */
 export const HYPEPROOF_MCP_SERVER_NAME = "hypeproof";
@@ -234,6 +236,16 @@ export interface BrowserMcpHost {
    * `PublishSiteResult` as JSON text. Optional: a host without it answers isError.
    */
   publishSite?(input: PublishSiteInput): Promise<McpToolResult>;
+  /**
+   * A4 (orchestrator spec §6.1) — a CDP session on the page the host keeps for the site
+   * check, showing `wrapperUrl` (the live server's `/__hp_viewport` wrapper). The runner
+   * (siteCheckRunner.ts) measures inside it, and navigates it to the wrapper when it shows
+   * another page of the live server; it never runs anything on a page of another origin.
+   * Null when no browser page can be had. Optional: without it every site check is
+   * `unverified` (`no_cdp`), never `pass`. Used only on an orchestrator seat whose roster
+   * lists `site_check`, with or without the browser tools.
+   */
+  viewportPage?(wrapperUrl: string): Promise<SiteCheckPage | null>;
 }
 
 /**
@@ -435,6 +447,33 @@ export interface ZodLike {
   boolean?(): unknown;
   /** CR-06 — for browser_scroll's dy. */
   number?(): unknown;
+  /** A4 — consult's `agent` (the served roster's names) and `focus` (orchestrator spec §3.2). */
+  enum?(values: readonly [string, ...string[]]): unknown;
+  object?(shape: Record<string, unknown>): unknown;
+  array?(item: unknown): unknown;
+}
+
+/**
+ * A4 — the same factory, whose server also carries `tools` (consult, site_check),
+ * appended after the server's own. No tools → the factory itself, so a seat without the
+ * orchestrator builds exactly the server it built before.
+ */
+export function withServerTools(factory: SdkMcpFactory, tools: readonly unknown[]): SdkMcpFactory {
+  if (tools.length === 0) return factory;
+  return {
+    tool: factory.tool,
+    createSdkMcpServer: (options) =>
+      factory.createSdkMcpServer({ ...options, tools: [...(options.tools ?? []), ...tools] }),
+  };
+}
+
+/**
+ * A4 — the hypeproof server for a seat granted orchestrator tools but not the browser:
+ * the given tools only (spec §3.2; A2 `permittedMcpToolsFor`). Same name and version as
+ * buildHypeproofMcpServer's, so the tools are `mcp__hypeproof__<name>` either way.
+ */
+export function buildHypeproofToolsOnlyServer(factory: SdkMcpFactory, tools: readonly unknown[]): unknown {
+  return factory.createSdkMcpServer({ name: HYPEPROOF_MCP_SERVER_NAME, version: "1.0.0", tools: [...tools] });
 }
 
 /** `schema.optional()` when the injected zod schema has it (the real one); else as is. */
@@ -788,7 +827,7 @@ export function buildHypeproofMcpServer(
           repo_name: optionalSchema(z.string()),
           custom_domain: optionalSchema(z.string()),
           // `stage` is a string here and validated in the handler: the injected zod surface
-          // (ZodLike) has no enum, and an unknown stage must fall back to the safe default
+          // (ZodLike) may lack enum (it is optional there), and an unknown stage must fall back to the safe default
           // rather than make the whole server fail to build.
           stage: optionalSchema(z.string()),
           ...(typeof z.boolean === "function" ? { check_only: optionalSchema(z.boolean()) } : {}),
