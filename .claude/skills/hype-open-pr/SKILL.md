@@ -75,6 +75,22 @@ The template has placeholders. Gather, in the contributor's language:
 Write the assembled body to a temp file and apply:
 `gh pr edit <url> --body-file <tmp>`. Then `rm` the temp file.
 
+### Hotfix PRs
+A released build is broken (issue filed with the **Hotfix** form, label `hotfix`):
+1. Branch `hotfix/<tag>` from the last v tag, e.g. `hotfix/v2026.1013.0`. If it
+   already exists for that tag, reuse it: hotfixes from one tag share a branch.
+2. Fix on `fix/issue-<N>-<slug>` cut from that branch. Open the PR with
+   `--base hotfix/<tag>` and the `hotfix` label. Release check: How to verify may
+   be left out (the release manager's checklist is skipped); the Smoke lines are
+   still required (smoke is not skipped).
+3. After it merges, the next tag (`v<year>.<month><day>.<n>`) goes on the tip of
+   `hotfix/<tag>`.
+4. Bring the same fix to `main` in a second PR with the `hotfix-forward` label
+   (never `hotfix`) and a line `Forward-port of #<hotfix PR>`. That PR closes the
+   issue; the hotfix PR cannot, because only merges into `main` close issues.
+`scripts/open-pr.sh` targets `main`; for step 2 run
+`gh pr create --fill --base hotfix/<tag> --label hotfix` instead.
+
 ### 5. Confirm
 Show the PR URL. Remind: review is optional, merge when green; the
 `main-guard` CI passes because this reached `main` via a PR. Delete the branch

@@ -1,0 +1,52 @@
+name: "Hotfix"
+description: "A released build is broken and must be fixed before the next weekly release"
+title: "hotfix: "
+labels: ["hotfix"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A hotfix is cut from the last v tag into `hotfix/<tag>`, merged there, tagged, and then
+        brought to `main` in a second PR (`--forward-of`). This issue stays open until that
+        second PR merges. Hotfixes from the same tag share one `hotfix/<tag>` branch.
+  - type: textarea
+    id: incident
+    attributes:
+      label: What is broken
+      description: What fails, and since when.
+      placeholder: "Since v2026.1013.0, the Chalk plan page shows an error for every cohort."
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who is affected, in which build, and how many.
+    validations:
+      required: true
+  - type: input
+    id: cause
+    attributes:
+      label: Cause PR
+      description: "The PR that introduced it (#N), or \"unknown\"."
+    validations:
+      required: true
+  - type: input
+    id: tag
+    attributes:
+      label: Affected tag
+      description: "The released tag the hotfix branch is cut from, e.g. v2026.1013.0."
+    validations:
+      required: true
+  - type: dropdown
+    id: smoke
+    attributes:
+      label: Smoke needed?
+      description: >-
+        Best guess: yes if the fix touches a dependency on another repository or a server
+        (Service, Chalk, ...). Smoke is not skipped for hotfixes; the PR decides.
+      options:
+        - "yes"
+        - "no"
+    validations:
+      required: false
