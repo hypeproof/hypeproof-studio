@@ -309,3 +309,50 @@ Sheet execution or additional send was requested. Installed extension SHA256:
 The durable one-message `sent` ledger survived this update. This focused
 integration smoke covers tool registration/graph after the orchestrator merge;
 the actual Google execution/delivery evidence remains bound to `624b214f`.
+
+### Actual lecture need rehearsal — 2026-10-15
+
+The sponsor supplied the local `업무자동화_강의_재설계_20261015` course redesign.
+Its order-versus-ERP comparison need (PAD-88) was exercised as a coding-beginner
+order clerk, using the course's explicitly synthetic first/second CSV sets.
+Root entered the need through the actual `65c5f1c9` Studio coach, selected an
+installation-free HTML tool, supplied the four inputs in the learner workspace,
+and fed back business rules and observed defects through the same conversation.
+Studio's coach authored the tool; root did not replace it with an externally
+authored implementation. The local subscription CLI provider was used.
+
+Root selected files and ran the generated page in a real browser. First input:
+missing1, quantity mismatch1, duplicate review1, additional registration1, match1.
+Second input: missing2, duplicate review1, additional registration1, match2.
+Both downloaded CSV reports match the source answer key (5 and6 distinct keys).
+Repeating inputs does not accumulate rows. Additional real browser checks passed:
+blank/non-numeric quantity holds the key without false missing classification;
+blank keys mark the entire validation incomplete; independently ordered columns
+work; quoted multiline fields preserve physical source lines; unclosed quotes and
+duplicate required headers stop with download disabled; changing inputs clears
+the previous result and download. Original inputs remain unchanged.
+
+The final generated HTML SHA256 is
+`9dfbe22ecedb3c36ff225a6fc938ef0b7fe408c4d022f251621430ac65d503a7`.
+Local delivery: `~/Downloads/Studio_발주대조_20261015.zip`, containing the standalone
+HTML, synthetic inputs, two actual downloaded reports, screenshots and a JSON
+verification receipt. No additional email was sent. This is a completed local
+file-processing rehearsal, not a published email recipe, scheduled ERP job,
+Windows acceptance or proof against actual company data. Excel UI encoding,
+OS file-read failure injection and interaction during an in-flight read were
+not exercised.
+
+A02 was replaced with an actual second native connection (not a fixture). The
+instructor board observed its question wait, cancellation, disconnect and fresh
+pairing. After the150-second stale threshold, current normal count changed2→1
+and unknown18→19; the normal filter excluded A02 and the unknown filter showed
+its lost signal. Reconnection restored normal2/unknown18. A03–A18 remain stale
+fixtures and A19–A20 unconnected; this is still not20 real learner devices.
+
+The rehearsal exposed a scope ambiguity: the existing email graph remains when
+the learner creates a CSV tool. Chalk now explicitly labels these rows/details
+as **mail automation**, uses “실행 준비” for managed execution preparation, and
+states that the count cannot measure CSV work or its correctness. Root verified
+the live page and the classroom-ops surface contract test passed. General
+non-email workflow telemetry and automatic result checking remain unimplemented;
+the label correction does not claim to add them.

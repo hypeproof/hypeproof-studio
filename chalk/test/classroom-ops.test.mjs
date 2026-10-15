@@ -18,15 +18,15 @@ try {
   }
   assert.equal(waiting.map(source=>({...source,signal:'stale',attention:'unknown'})).filter(approvalWait).length,0);
   const automationText = runInNewContext(script.slice(script.indexOf('const automationPhases='), script.indexOf('const seatHelp=')) + '; automationText');
-  assert.match(automationText({signal:'fresh',automation:{phase:'waiting_user',step_id:'sheet',completed:2,total:8}}), /명단 연결 · 답변 대기 · 2\/8/);
+  assert.match(automationText({signal:'fresh',automation:{phase:'waiting_user',step_id:'sheet',completed:2,total:8}}), /^메일 자동화 · 명단 연결 · 답변 대기 · 2\/8/);
   assert.ok(automationText({signal:'stale',automation:{phase:'completed',completed:8,total:8}}).includes('현재 확인 불가'));
   assert.ok(automationText({signal:'stale',automation:{phase:'waiting_approval',step_id:'send',completed:7,total:8}}).includes('승인 대기 · 7/8 · 마지막 보고 (현재 확인 불가)'),'the detail preserves history while current counts exclude it');
-  assert.equal(automationText({observes:{automation:true}}),'자동화 진행 보고 없음');
+  assert.equal(automationText({observes:{automation:true}}),'메일 자동화 진행 보고 없음');
   assert.ok(automationText({observes:{automation:false}}).includes('확인 불가'));
   const seatStatus = runInNewContext(script.slice(script.indexOf('function seatStatus('), script.indexOf('function renderSeats(')) + '; seatStatus', {
     approvalWait, automationText, seatHelp:()=>0, reasonLabels:{waiting_approval:['학생의 승인을 기다리는 중']}, attentionLabels:{ok:'정상'},
   });
-  assert.equal(seatStatus({signal:'fresh',attention:'ok',reason:'waiting_approval',automation:{phase:'waiting_approval',step_id:'upload',completed:5,total:8}}).stage,'Google 저장 · 승인 대기 · 5/8','runtime approval status must not hide actual automation progress');
+  assert.equal(seatStatus({signal:'fresh',attention:'ok',reason:'waiting_approval',automation:{phase:'waiting_approval',step_id:'upload',completed:5,total:8}}).stage,'메일 자동화 · Google 저장 · 승인 대기 · 5/8','runtime approval status must not hide actual automation progress');
   assert.ok(!/localStorage|sessionStorage|\.innerHTML\s*=|insertAdjacentHTML|document\.cookie/.test(script), 'ticket and token stay in page memory and are rendered as text');
   for (const label of ['현황 새로 확인', '도움 요청 응대', '확인 불가', '발급은 연결 완료가 아닙니다', '개별 PC 초기화를 권하지 않습니다', '만료로 단정하지 말고']) assert.ok(html.includes(label), label);
   // Red is reserved for a confirmed block; silence and staleness render with the neutral class.
