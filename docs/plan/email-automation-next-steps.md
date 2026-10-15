@@ -13,8 +13,9 @@ its saved Google connection and private one-row test Sheet, and completed the
 Google Apps Script preview with an explicit no-send instruction. The native
 workflow reached6/6. Evidence: `/tmp/hps-email-mvp/windows-store-preview-20261016-safe.png`.
 The private Service version is673c20d1 with the exact tool-admission repair;
-public production remains unchanged at100%. Remaining gates include a fresh
-post-preview restart, the third-user native lifecycle, newer version/update/
+public production remains unchanged at100%. A full exit/relaunch and fresh
+Google preview also passed at01:30KST, preserving the activity and private
+configuration without login. Remaining gates include the third-user native lifecycle, newer version/update/
 rollback acceptance, canonical operations migration and the expanded WAJ build.
 Earlier dated snapshots below are historical, not the current Windows status.
 

@@ -142,7 +142,7 @@ authorization is not a source for missing business facts.
 | Fact | Why it is needed |
 | --- | --- |
 | Class date/time, protected roster and managed-domain contacts | Issue actual seats, plan token-expiry handling and preflight. |
-| Aggregate class cost cap and per-seat allocation | Convert bounded test execution into actual class spending limits; do not replace the existing USD3 test cap by inference. |
+| Aggregate class cost cap and per-seat allocation | Convert bounded test execution into actual class spending limits; the explicitly approved USD10 development/test ceiling does not authorize a live-class budget. |
 | Seller/legal identity, verified domain, public support/deletion owner | Publish accurate policy/consent information and route real requests. |
 | Retention periods, backups, deletion procedure and subprocessors | Complete an operationally true privacy disclosure. |
 | Actual offer: trial duration, price, included limits, renewal, cancellation/refund | Connect workshop completion to an explicit purchase; the 30-day grant is not recurring-charge consent. |

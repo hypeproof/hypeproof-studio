@@ -674,3 +674,13 @@ Evidence: `/tmp/hps-email-mvp/windows-store-preview-20261016-safe.png`.
 The installation/profile repair preserved this configuration; a fresh restart
 after this preview and the complete three-account update/rollback lifecycle
 remain unverified. It does not establish the expanded WAJ web-app deployment.
+
+Follow-up at01:30KST: exited the Windows app through File > Exit, observed the
+desktop, relaunched the installed shortcut and reopened the saved recipient
+activity. Conversation and recipe survived. The workflow correctly returned to
+2/6 until the saved Google connection and private one-row Sheet were checked
+again. After explicitly reselecting the existing entitlement, the native tools
+reused both, produced a fresh Google preview, and returned to6/6 without new
+login, credential entry or mail. This passes recipient restart/reuse for
+e3ab008b; version update/rollback and third-user lifecycle remain open.
+Evidence: `/tmp/hps-email-mvp/windows-store-restart-20261016-safe.png`.
