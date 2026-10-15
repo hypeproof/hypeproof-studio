@@ -519,6 +519,7 @@ export type WebviewMessage = (
   | { type: "publishToGallery" }
   // One-click publish (src/publish/): the chat header button. The host re-checks the gate.
   | { type: "publishSite" }
+  | { type: "switchProject" }
   // Trace signals (#9). Webview fires; host forwards via POST /v1/trace/event.
   // The host-side HTTP forwarding lands in a follow-up — keep these in sync
   // with worker/src/routes/trace.ts TraceEvent union.

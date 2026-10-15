@@ -19,6 +19,7 @@ import { classFolderCheck, pressAccess, publishError, resolveRepoName, sitePubli
 import { BUTTON_BUDGET_MS, toolBudgetMs, type PublishEndpoints } from "./publishConfig";
 import { resultChatText, runPublishSite, stepLabel } from "./publishSite";
 import { markerSummary } from "./sitePreflight";
+import { cloneFolderFor, decideTarget, folderMatches, listSwitchTargets, localFiles, pullInto, type SwitchTarget, type TargetAction } from "./projectSwitch";
 import { consentDecision, PublishRegistry, registrationPrompt, type RegistryStore } from "./publishRegistry";
 
 /** Context key the manifest gates the toolbar button on. */
@@ -366,6 +367,206 @@ export class SitePublisher {
       return { ok: true, folder: dest, downloaded: true };
     } catch (err) {
       this.host.log(`[continue] ${login}/${repo.name}: ${err instanceof Error ? err.message : String(err)}`);
+      return { ok: false, message: continueFailureMessage(err instanceof GitHubTransportError ? "network" : "unexpected") };
+    }
+  }
+
+  // ── "프로젝트 변경" (command, or the chat sentence) ───────────────────────────
+
+  /**
+   * List the participant's repositories, leave the current folder's work on its own repository
+   * (asked), and bring the picked one into its own folder: cloned, pulled, or opened as it is.
+   * Returns the folder to open, or undefined when the participant stopped or something failed
+   * (they were told why). Opening the folder is the caller's: it reloads the window.
+   */
+  async switchProject(classRoot: string | undefined): Promise<{ folder: string; repo: string; action: TargetAction; backup?: string } | undefined> {
+    if (!this.available()) {
+      this.host.notice(publishError("not_allowed").message_ko);
+      return;
+    }
+    if (!this.host.idle()) {
+      this.host.notice("코치가 답하는 중이에요. 답이 끝난 뒤 다시 해 주세요.");
+      return;
+    }
+    if (this.running) {
+      this.host.notice("홈페이지를 올리는 중이에요. 끝난 뒤 다시 해 주세요.");
+      return;
+    }
+    const gate = pressAccess(await this.host.checkAccess());
+    if (!gate.ok) {
+      if (gate.refreshProfile) await this.host.refreshProfile().catch(() => undefined);
+      this.host.notice(publishError(gate.code).message_ko);
+      return;
+    }
+    const workspace = this.host.workspaceRoot();
+    const folder = classFolderCheck({ workspaceRoot: workspace, classFolder: this.host.classFolder(), same: (a, b) => this.host.sameFolder(a, b) });
+    if (!folder.ok || !workspace || !classRoot) {
+      this.host.notice("수업 폴더를 연 상태에서만 프로젝트를 바꿀 수 있어요.");
+      return;
+    }
+
+    let gh: { api: GitHubApi; login: string } | null;
+    try {
+      gh = await this.signedInApi();
+      if (!gh && (await this.signInForContinue())) gh = await this.signedInApi();
+    } catch (err) {
+      this.host.log(`[switch] sign-in: ${err instanceof Error ? err.message : String(err)}`);
+      gh = null;
+    }
+    if (!gh) {
+      this.host.notice("GitHub에 로그인하지 못해 프로젝트 목록을 불러오지 않았어요.");
+      return;
+    }
+    const { api, login } = gh;
+    const listed = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "GitHub에서 프로젝트 목록을 불러오는 중" }, () =>
+      listSwitchTargets(api, login).catch((err): { ok: false; detail: string } => ({ ok: false, detail: err instanceof Error ? err.message : String(err) })),
+    );
+    if (!listed.ok) {
+      this.host.log(`[switch] list: ${listed.detail}`);
+      this.host.notice("GitHub에서 프로젝트 목록을 불러오지 못했어요. 잠시 뒤 다시 해 주세요.");
+      return;
+    }
+    const current = this.registry.boundRepo(login, workspace, (a, b) => this.host.sameFolder(a, b));
+    const target = await this.pickSwitchTarget(listed.targets, current);
+    if (!target) return;
+    if (current && target.name.toLowerCase() === current.toLowerCase()) {
+      this.host.notice(`이미 ${target.name} 프로젝트에서 작업하고 있어요.`);
+      return;
+    }
+    if (!target.classSite) {
+      const go = await vscode.window.showWarningMessage(
+        `${target.name}에서 이어서 작업할까요?`,
+        { modal: true, detail: "Studio에서 만든 홈페이지가 아닐 수 있어요. 이 저장소에서 올리면 그 안의 파일이 지금 작업으로 바뀌어요." },
+        "이어서 작업",
+      );
+      if (go !== "이어서 작업") return;
+    }
+
+    const currentRepo = current ? listed.targets.find((t) => t.name.toLowerCase() === current.toLowerCase()) : undefined;
+    if (!(await this.leaveCurrentWork(api, login, workspace, current, currentRepo?.defaultBranch))) return;
+
+    const prepared = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `${target.name} 가져오는 중` }, () =>
+      this.prepareSwitchTarget(api, login, target, workspace, classRoot),
+    );
+    if (!prepared.ok) {
+      this.host.notice(prepared.message);
+      return;
+    }
+    return { folder: prepared.folder, repo: target.name, action: prepared.action, ...(prepared.backup ? { backup: prepared.backup } : {}) };
+  }
+
+  private async pickSwitchTarget(targets: SwitchTarget[], current: string | undefined): Promise<SwitchTarget | undefined> {
+    if (!targets.length) {
+      this.host.notice("GitHub에 바꿀 수 있는 프로젝트가 없어요. 먼저 홈페이지를 한 번 올려 주세요.");
+      return;
+    }
+    type Item = vscode.QuickPickItem & { target?: SwitchTarget };
+    const when = (iso: string) => (iso ? new Date(iso).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "올린 적 없음");
+    const row = (t: SwitchTarget): Item => ({
+      label: t.name,
+      description: current && t.name.toLowerCase() === current.toLowerCase() ? "지금 작업 중" : undefined,
+      detail: `마지막으로 올린 때: ${when(t.pushedAt)} · ${t.htmlUrl}`,
+      target: t,
+    });
+    const classes = targets.filter((t) => t.classSite);
+    const others = targets.filter((t) => !t.classSite);
+    const items: Item[] = [
+      ...(classes.length ? [{ label: "수업 홈페이지", kind: vscode.QuickPickItemKind.Separator } as Item, ...classes.map(row)] : []),
+      ...(others.length ? [{ label: "다른 저장소", kind: vscode.QuickPickItemKind.Separator } as Item, ...others.map(row)] : []),
+    ];
+    const pick = await vscode.window.showQuickPick(items, { title: "프로젝트 변경", placeHolder: "이어서 작업할 프로젝트(GitHub 저장소)를 고르세요", matchOnDetail: true });
+    return pick?.target;
+  }
+
+  /**
+   * Before leaving: the current folder's work goes to its own repository if the participant says
+   * so — the same publish as the button, so a published site keeps its workflow. Nothing is asked
+   * when the folder already equals its repository. False means stop the switch.
+   */
+  private async leaveCurrentWork(api: GitHubApi, login: string, workspace: string, current: string | undefined, branch: string | undefined): Promise<boolean> {
+    const UPLOAD = current ? "올리고 바꾸기" : "새 저장소로 올리고 바꾸기";
+    const SKIP = "올리지 않고 바꾸기";
+    if (current) {
+      const head = await remoteHead(api, login, current, branch ?? "main").catch(() => null);
+      const same = head ? await folderMatches(api, login, current, head, workspace).catch(() => null) : null;
+      if (same === true) return true;
+    } else if (localFiles(workspace).size === 0) {
+      return true;
+    }
+    const choice = await vscode.window.showWarningMessage(
+      current ? `지금까지 한 작업을 ${current}에 올리고 바꿀까요?` : "이 폴더는 아직 GitHub에 올린 적이 없어요. 올리고 바꿀까요?",
+      {
+        modal: true,
+        detail: current
+          ? "올리면 그 저장소의 인터넷 주소에도 지금 내용이 반영돼요. 올리지 않아도 이 컴퓨터의 폴더는 그대로 남아요."
+          : "올리면 새 저장소가 생기고, 나중에 '프로젝트 변경'으로 이 작업에 돌아올 수 있어요. 올리지 않으면 이 폴더는 이 컴퓨터에만 남아요.",
+      },
+      UPLOAD,
+      SKIP,
+    );
+    if (!choice) return false;
+    if (choice === SKIP) return true;
+    const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "지금 작업 올리기", cancellable: false }, (progress) =>
+      this.run({}, "button", (line) => progress.report({ message: line })),
+    );
+    await this.host.postToChat(resultChatText(result)).catch(() => undefined);
+    if (result.ok) return true;
+    const go = await vscode.window.showWarningMessage(
+      result.error?.message_ko ?? "지금 작업을 올리지 못했어요.",
+      { modal: true, detail: "그래도 프로젝트를 바꿀까요? 지금 폴더는 이 컴퓨터에 그대로 남아요." },
+      "그래도 바꾸기",
+    );
+    return go === "그래도 바꾸기";
+  }
+
+  /**
+   * The picked repository's folder on this computer, bound to it so the button publishes there.
+   * Its own folder is the one its registration names — never the folder being left, so one folder
+   * keeps one repository.
+   */
+  private async prepareSwitchTarget(
+    api: GitHubApi,
+    login: string,
+    target: SwitchTarget,
+    leaving: string,
+    classRoot: string,
+  ): Promise<{ ok: true; folder: string; action: TargetAction; backup?: string } | { ok: false; message: string }> {
+    try {
+      const reg = this.registry.get(login, target.name);
+      const own = reg?.workspace && fs.existsSync(reg.workspace) && !this.host.sameFolder(reg.workspace, leaving) ? reg.workspace : undefined;
+      const head = await remoteHead(api, login, target.name, target.defaultBranch);
+      const matchesHead = own && head ? await folderMatches(api, login, target.name, head, own) : null;
+      const action = decideTarget({ hasFolder: !!own, head, ...(reg?.lastPushedSha ? { lastPushedSha: reg.lastPushedSha } : {}), matchesHead });
+      const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "");
+      let folder: string;
+      let backup: string | undefined;
+      if (action === "clone") {
+        if (!head) return { ok: false, message: `${target.name}에는 아직 올린 파일이 없어서 가져올 것이 없어요.` };
+        folder = cloneFolderFor(classRoot, target.name);
+        const d = await downloadRepo(api, login, target.name, target.defaultBranch, folder);
+        if (!d.ok) {
+          this.host.log(`[switch] clone ${login}/${target.name} → ${folder}: ${d.code} ${d.detail}`);
+          return { ok: false, message: continueFailureMessage(d.code) };
+        }
+      } else if (action === "pull") {
+        folder = own!;
+        const matchesLast = reg?.lastPushedSha ? await folderMatches(api, login, target.name, reg.lastPushedSha, folder) : null;
+        const p = await pullInto(api, login, target.name, target.defaultBranch, folder, { keepBackup: matchesLast !== true, stamp });
+        if (!p.ok) {
+          this.host.log(`[switch] pull ${login}/${target.name} → ${folder}: ${p.code} ${p.detail}`);
+          return { ok: false, message: continueFailureMessage(p.code) };
+        }
+        backup = p.backup;
+      } else {
+        folder = own!;
+      }
+      await this.registry.register(login, target.name, folder);
+      if (head) await this.registry.recordPush(login, target.name, head, folder);
+      await this.registry.setLastLogin(login);
+      this.host.log(`[switch] ${login}/${target.name}${head ? `@${head.slice(0, 7)}` : ""} ${action} → ${folder}${backup ? ` (backup ${backup})` : ""}`);
+      return { ok: true, folder, action, ...(backup ? { backup } : {}) };
+    } catch (err) {
+      this.host.log(`[switch] ${login}/${target.name}: ${err instanceof Error ? err.message : String(err)}`);
       return { ok: false, message: continueFailureMessage(err instanceof GitHubTransportError ? "network" : "unexpected") };
     }
   }

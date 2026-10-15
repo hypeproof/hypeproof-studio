@@ -4975,6 +4975,9 @@
           "path": "extensions/hypeproof-chat/src/publish/githubContinue.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/publish/projectSwitch.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/publish/pagesPublisher.ts"
         },
         {

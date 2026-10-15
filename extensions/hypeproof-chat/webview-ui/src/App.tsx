@@ -557,6 +557,7 @@ export function App() {
           postToHost({ type: "publishToGallery" });
         }}
         onPublishSite={() => postToHost({ type: "publishSite" })}
+        onSwitchProject={() => postToHost({ type: "switchProject" })}
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
         error={state.error}

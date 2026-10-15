@@ -6,6 +6,11 @@ import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
 import { runInstructorTurn, INSTRUCTOR_TOOL_PROFILE } from './chalk/instructorTurn';
 import { ActivityConnectionError, activityConnections } from './activityConnections';
+import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwitch";
+
+/** The first-turn note a project switch leaves for the folder it opens (takeProjectSwitchBrief). */
+const PROJECT_SWITCH_BRIEF_KEY = "hps.projectSwitch.brief.v1";
+const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
@@ -772,6 +777,49 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       newFolder: (root) => nextFreeFolder(root),
       classRoot,
     };
+  }
+
+  /** Opens a class folder as this activity's workspace (extension.ts: ensureWorkspace + activity commit). Reloads the window. */
+  private projectOpener?: (folder: string) => Promise<void>;
+  setProjectOpener(open: (folder: string) => Promise<void>): void {
+    this.projectOpener = open;
+  }
+
+  /**
+   * The model-only note for the first turn after a project switch, once, and only in the folder
+   * the switch opened: the window reloads in between, so the note waits in globalState.
+   */
+  private async takeProjectSwitchBrief(): Promise<string | null> {
+    const pending = this.context.globalState.get<{ folder?: string; repo?: string; at?: number }>(PROJECT_SWITCH_BRIEF_KEY);
+    if (!pending?.folder || !pending.repo) return null;
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root || canonicalizeForCompare(root) !== canonicalizeForCompare(pending.folder)) return null;
+    await this.context.globalState.update(PROJECT_SWITCH_BRIEF_KEY, undefined);
+    if (Date.now() - (pending.at ?? 0) > PROJECT_SWITCH_BRIEF_TTL_MS) return null;
+    return projectSwitchBrief(pending.repo, fs.existsSync(path.join(root, "agent.md")));
+  }
+
+  /** "프로젝트 변경" — the command and the chat sentence (isProjectSwitchRequest) both land here. */
+  async switchProject(): Promise<void> {
+    const profile = this.cachedProfile ?? (await this.ensureProfile());
+    const classRoot = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) ?? undefined : undefined;
+    const switched = await this.sitePublisher().switchProject(classRoot);
+    if (!switched) return;
+    const how =
+      switched.action === "clone" ? "새 폴더로 내려받았어요" : switched.action === "pull" ? "GitHub의 최신 내용으로 받아왔어요" : "이 컴퓨터에 있던 폴더를 그대로 열어요";
+    const note = switched.backup ? `\n\n받기 전 폴더는 ${switched.backup} 에 그대로 남겨 뒀어요.` : "";
+    await this.postAppReply(`프로젝트를 **${switched.repo}**(으)로 바꿨어요. ${how}. 이제 이 프로젝트에서 이어서 작업하면 돼요.${note}`).catch(() => undefined);
+    if (!this.projectOpener) {
+      this.postPageNotice(`폴더를 열지 못했어요: ${switched.folder}`);
+      return;
+    }
+    await this.context.globalState.update(PROJECT_SWITCH_BRIEF_KEY, { folder: switched.folder, repo: switched.repo, at: Date.now() });
+    try {
+      await this.projectOpener(switched.folder);
+    } catch (err) {
+      this.voiceLogChannel().appendLine(`[switch] open ${switched.folder}: ${err instanceof Error ? err.message : String(err)}`);
+      this.postPageNotice(err instanceof ActivityConnectionError ? err.message : `폴더를 열지 못했어요: ${switched.folder}`);
+    }
   }
 
   /** "배포 등록 해제" — forget a persisted publish registration. */
@@ -4234,6 +4282,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "publishToGallery":
         void this.publishToGallery();
         return;
+      case "switchProject":
+        void this.switchProject();
+        return;
       case "publishSite":
         // The visible "Studio button": HP shell defaults hide editor/view title actions (#725),
         // so the chat header is where a participant can actually press it.
@@ -4429,6 +4480,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // No game yet → fall through to the AI, which will guide them to make one.
     }
 
+    // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
+    // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
+    if (isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
+      await this.appendHistory([{ id: randomId(), role: "user", content: text, createdAt: Date.now() }]);
+      await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.");
+      // After this send settles: switchProject refuses while a send is pending (idle()).
+      setTimeout(() => void this.switchProject(), 0);
+      return;
+    }
+
     // 2026-08-19 — "다른 친구도 있어?" is answered instantly from the profile's
     // worlds. This used to spend one LLM turn (10–40 s) — the app already holds the
     // list.
@@ -4496,6 +4557,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // cr-verify — a test run or fix request rides with the student's own sentence, model-only, while the switch is on.
     const verifyContextText = this.verifySession.takeCoachContext();
     if (verifyContextText && this.isCurriculumRuntimeEnabled()) userTextForModel = `${verifyContextText}\n\n${userTextForModel}`;
+    // 2026-10-15 — the first turn in a folder "프로젝트 변경" opened reads that project's agent.md first.
+    const switchBrief = await this.takeProjectSwitchBrief();
+    if (switchBrief) userTextForModel = `${switchBrief}\n\n${userTextForModel}`;
     // #751 G2 — what the learner saved on this step's work surface travels with the turn (their words, labelled).
     if (profile?.lesson && turnFocus.step) {
       const step = profile.lesson.content.steps.find((x) => x.id === turnFocus.step);
