@@ -32,7 +32,26 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 
 ## What is implemented today
 
-Current checked delivery (2026-10-16): Windows extension659de97d runs on official
+Current follow-up (2026-10-16): source db049d62 passes all18 CI checks.
+Mac now runs that source and a real read-only coach turn correctly reports
+cohort-only sharing and unperformed body comparison using a real catalogue
+revision. No internal IDs appear in the final answer, although a technical
+`contentsCompared=false` marker remains a copy-quality issue. Google connection
+and third-recipient preview remain unverified after the TJ callback timeout.
+Windows installer882be60a pins the same source; full R2 readback and23 online
+access checks pass on gateway893165ad, preserving Servicea245457b and the
+rehearsal classroom routes. Windows installed the exact candidate, restored
+its activity, and actually launched the retained11b82da2 rollback shortcut.
+The new portable profile remained intact. After resuming db049d62, the
+non-owner reviewed/reimported the exact audit-reminder fork and confirmed a
+fresh one-recipient Google preview at6/6 using saved private settings, with no
+Google login or mail. The native reply correctly describes cohort-only sharing.
+The existing instructor connection reported the real2/6 import wait and6/6
+completion. Installer882be60a also passes all18 CI checks. Evidence:
+`/tmp/hps-email-mvp/mac-audience-db049d62.json` and
+`/tmp/hps-email-mvp/windows-current-db049d62/{deployment,access}-receipt.json`.
+
+Historical659de97d checkpoint: Windows extension659de97d runs on official
 shell720be661 / SDK0.3.299, served by private R2 gateway6b13dfc4. Both archives
 passed full readback SHA256 checks and23 online access controls. The actual PC
 installed the update, retained the rollback snapshot, restored activity/workspace/
@@ -49,7 +68,7 @@ superseded. Native v2 publication, non-owner update and rollback now pass on Win
 with exact private preview contents. Third-recipient execution remains open;
 persisted v1 pinning is verified on the current Mac checkpoint below.
 
-The private Service target is781b639f at0% normal traffic, based on d63d5d7 with
+At that historical checkpoint, the private Service target was781b639f at0% normal traffic, based on d63d5d7 with
 main9dbe15c and bounded test routes. Ops0046 is applied only to the backed-up test
 D1, retaining all four existing recipes. Production d34da3a5 stays at100%.
 The single Mac native runtime was backed up and restaged to dbff37ed with the
@@ -205,8 +224,11 @@ proves one current host's online observation, not three Google identities or a
 The complete three-account gate remains open. Current row status is PARTIAL for
 SS-01–10 and SS-12; SS-11 is NOT_RUN and conditional on expanded WAJ implementation.
 The audience/content-comparison source follow-up adds explicit cohort-only and
-not-compared receipts plus installed coach guidance. Automated checks pass; its
-native conversation acceptance is NOT_RUN and must not inherit11b82da2 evidence.
+not-compared receipts plus installed coach guidance. Automated checks pass. A real db049d62 Mac list/version turn correctly describes
+cohort-only visibility and unperformed body comparison without internal IDs in
+the final answer. It still exposes a technical marker. Windows db049d62
+reimport/preview also correctly describes cohort-only sharing. Native publication
+wording on db049d62 remains unverified; no11b82da2 evidence is relabelled.
 Evidence is revision-bound: Windows659de97d proves non-owner import/preview and
 reviewed v2 update/v1 rollback, Mac b0cc15a0 proves third-user pinning, and Mac
 dbff37ed proves failed lookup recovery. Distinct Google identities/datasets, third

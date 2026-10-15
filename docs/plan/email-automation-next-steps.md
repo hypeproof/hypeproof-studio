@@ -12,7 +12,7 @@ charges/holds); this is not actual spending. Evidence:
 `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
 budget remains separate. No further mail is authorized.
 
-Studio11b82da2 integrates main6ad5f9f8; implementation, installer8ba30b73 and
+Integration checkpoint11b82da2 includes main6ad5f9f8; implementation, installer8ba30b73 and
 documentation checkpoint36dc4401 pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
 ETXTBSY job rerun; no application test failed in that run. Windows
 659de97d passed verified install/update, portable-profile restoration, non-owner
@@ -21,14 +21,14 @@ with fresh previews and unchanged private configuration. Publisher `peer` owns
 the Mac-authored item; `original` is the verified non-owner recipient. Earlier
 peer Windows evidence proves author cross-device reuse, not another recipient.
 
-The single Mac Dev app now runs11b82da2 against the private online Service.
+The earlier single Mac Dev checkpoint was11b82da2 against the private online Service.
 The third principal's retained v1 pinning was verified at b0cc15a0. On dbff37ed,
 a failed invented version ID recovered through the actual catalogue and returned
 both real revisions without installation or Google actions. The coach still
 invented the first ID and exposed internal IDs in its final table: recovery passes,
 but the complete presentation criterion remains PARTIAL. TJ OAuth expired before
 completion; the old browser tab is closed. A fresh user-ready connection and
-third-principal execution remain open. Windows now runs11b82da2.
+third-principal execution remain open. Current Mac/Windows are db049d62; see the verified follow-up below.
 
 SS-08 fork provenance is implemented in Studio11b82da2 and Service9618d234:
 an installed exact revision is retained with the activity's recipe, shown during
@@ -62,9 +62,9 @@ execution, remaining lifecycle checks on the matching candidates,
 class/instructor readiness and the separately scoped expanded WAJ design/runtime gates. Current evidence and
 individual boundaries: [store contract](skill-store-cross-platform.md).
 
-The11b82da2 Windows candidate uses official shell720be661 and SDK0.3.299. After
+The earlier11b82da2 Windows candidate used official shell720be661 and SDK0.3.299. After
 the initial401, both archives and the final manifest passed full R2 readback with
-matching hashes. Gatewaydf27fdc5 now serves the same candidate; four gateway groups
+matching hashes. Gatewaydf27fdc5 served that candidate; four gateway groups
 and23 online access checks pass. Installer8ba30b73 pins the exact archives and
 recognizes659de97d for receipt-checked handover. Actual extraction, profile backup,
 migration and refusal fixtures pass, followed by the native upgrade above.
@@ -75,9 +75,25 @@ marker in list receipts, and reinforces catalogue-first/no-internal-ID guidance
 in the installed SDK contract. Source db049d62 passes all18 CI checks,
 automation92, local runtime8, typecheck and the extension build. The single Mac
 Dev app now runs db049d62 with its existing third-principal activity restored.
-Windows still runs11b82da2; the db049d62 package passes real ZIP extraction,
-profile preservation and receipt-checked11b82da2 handover fixtures. Its private
-R2 upload/readback is in progress; native wording acceptance is not yet claimed.
+The Mac read-only native turn now correctly identifies cohort-only sharing
+and that body comparison was not performed, using a real catalogue revision.
+Its final answer contains no internal IDs, but still exposes a technical
+`contentsCompared=false` marker. No Google actions or mail were performed.
+Windows db049d62 has installed and restored the saved activity. The retained
+rollback shortcut actually launched11b82da2 with its old activity, while the
+new profile remained intact. After returning to db049d62, the non-owner
+recipient reviewed/reimported the exact Mac-authored audit reminder and
+completed a fresh one-recipient Google preview at6/6 without Google login or
+mail. The native reply correctly says our class only. The real instructor board
+received2/6 waiting-for-import, then6/6 completed through the preserved connection.
+Receipts: `/tmp/hps-email-mvp/windows-upgrade-db049d62.json` and
+`/tmp/hps-email-mvp/online-instructor-20261016/status-db049d62.json`.
+Installer882be60a passes all18 CI checks and real ZIP
+extraction, profile preservation and receipt-checked11b82da2 handover fixtures.
+Both R2 archives and manifest pass full readback; gateway893165ad serves these
+pins with23 online access checks passing and existing classroom routes retained.
+Evidence: `/tmp/hps-email-mvp/mac-audience-db049d62.json` and
+`/tmp/hps-email-mvp/windows-current-db049d62/deployment-receipt.json`.
 
 The third principal's TJ connection reached Google's unverified-app
 interstitial but expired before a callback. The timeout was observed before

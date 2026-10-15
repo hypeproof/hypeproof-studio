@@ -781,3 +781,35 @@ Evidence: `/tmp/hps-email-mvp/online-instructor-20261016/` contains
 `status-receipt.json`, and the inspected `board-safe.png`. Credentials and raw
 screenshots remain outside Git in protected local storage. The earlier local
 9b4dd233 board evidence remains a separate observation.
+
+## Matching db049d62 candidate follow-up — 2026-10-16
+
+Mac and Windows now run extension db049d62 on the existing private Service.
+Installer882be60a and source db049d62 each pass all18 CI checks. Real app/SDK
+archive extraction and profile-preservation/refusal fixtures pass; both uploaded
+archives and the final manifest pass full R2 readback. Gateway893165ad preserves
+Servicea245457b, the three-principal restrictions and classroom routes; all23
+online access checks pass. No production Service or schema change was made.
+
+The native Windows update restored the saved activity. The retained rollback
+shortcut then actually ran11b82da2 with its saved activity, while the new portable
+profile remained intact. This tests the portable rollback path, not restoring
+a snapshot over the shared roaming profile. After returning to db049d62, the
+non-owner reviewed/imported the exact Mac-authored audit reminder and confirmed
+a fresh one-recipient Google preview at6/6, without Google login or mail.
+The native final reply identifies cohort-only sharing.
+
+Mac's real read-only version query also correctly identifies cohort-only sharing
+and unperformed body comparison without internal IDs in its final answer. A
+technical marker remains visible; native publication wording is still untested.
+The TJ callback timed out before this update; the expired tab was closed. No
+third-principal Google execution or distinct-Google/different-dataset acceptance
+is claimed. These two bounded coach turns used existing grants under the USD10
+total development/test ceiling; no grant was added.
+
+The preserved Windows classroom connection reported an actual2/6 import wait
+and then6/6 completion to the online Service; the local Chalk surface shows
+normal1, unknown2. This remains one real host, not a20-person rehearsal.
+Evidence: `/tmp/hps-email-mvp/mac-audience-db049d62.json`,
+`/tmp/hps-email-mvp/windows-upgrade-db049d62.json`, and
+`/tmp/hps-email-mvp/online-instructor-20261016/status-db049d62.json`.
