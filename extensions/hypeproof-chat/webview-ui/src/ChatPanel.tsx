@@ -1,6 +1,7 @@
 import { AccessControl, requiresFundingSelection } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { activityLabel, passEnd } from "./activityLabel";
+import { errorBannerPresentation } from "./errorBannerPresentation";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -2103,12 +2104,7 @@ function ErrorBanner({
   // Spot common transport-layer signals so the framing is honest about the
   // recovery path. We don't try to classify perfectly — just enough to pick
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
-  const isAuth = /참여 코드|토큰|세션|강사|만료|등록|인가/.test(message);
-  const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort/i.test(message);
-  // REQ-L12 — a spent, refunded or ended pass is an account state, not a fault.
-  const isPass = /이용권|환불/.test(message);
-  const icon = isPass ? "🎟️" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
-  const title = isPass ? "이용권을 더 쓸 수 없어요" : isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
+  const { icon, title } = errorBannerPresentation(message);
 
   return (
     <div className="hps-error-banner" role="alert">

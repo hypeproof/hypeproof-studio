@@ -403,6 +403,8 @@ function isAssetScoreChunk(value: unknown): value is AssetScoreChunk {
 interface FetchProfileArgs {
   proxyUrl: string;
   token: string;
+  /** Optional caller lifecycle; always combined with the profile read's own 15 s bound. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -423,7 +425,9 @@ export async function fetchProfileResult(args: FetchProfileArgs): Promise<Profil
     res = await fetch(url, {
       method: "GET",
       headers: profileRequestHeaders(token),
-      signal: AbortSignal.timeout(15_000),
+      signal: args.signal
+        ? AbortSignal.any([args.signal, AbortSignal.timeout(15_000)])
+        : AbortSignal.timeout(15_000),
     });
   } catch {
     // We never reached the server — the token is not the suspect.

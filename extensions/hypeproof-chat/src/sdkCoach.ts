@@ -111,6 +111,18 @@ export class CoachStallError extends Error {
 }
 
 export type SdkDiagnosticPhase = 'starting' | 'binary_ready' | 'sdk_ready' | 'tools_loading' | 'tools_ready' | 'config_ready' | 'query_options_ready' | 'query_created' | 'first_event' | 'stalled';
+/**
+ * The Agent SDK exposes a rejected gateway request as status-only `api_retry`.
+ * The host may use this marker to re-read `/profile`; the error itself stays
+ * generic and non-destructive until that authenticated read names a cause.
+ */
+export class SdkGatewayAuthError extends ProxyAuthError {
+  readonly status = 401;
+  constructor() {
+    super("missing", GATEWAY_AUTH_FAILED_FRIENDLY);
+    this.name = "SdkGatewayAuthError";
+  }
+}
 
 export interface SdkCoachArgs {
   /** Fixed phase names only: never emit prompts, credentials, paths or raw SDK diagnostics. */
@@ -898,9 +910,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
           `REQ-M13); 400 = malformed request, not auth.`,
       );
       return status === 401
-        ? // NOT "expired": we cannot tell, and that kind DELETES the stored token.
-          // "missing" reopens the token input without destroying a valid token.
-          new ProxyAuthError("missing", GATEWAY_AUTH_FAILED_FRIENDLY)
+        ? // NOT "expired": this status cannot tell. The host may re-read the
+          // authoritative profile; without that proof this remains generic.
+          new SdkGatewayAuthError()
         : new ProxyAuthError("other", GATEWAY_BAD_REQUEST_FRIENDLY);
     },
     onDelta: args.onDelta,

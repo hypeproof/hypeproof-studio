@@ -1,4 +1,5 @@
 import { OBSERVATION_FORMAT_V2, CAPABILITY_MODEL_HEADER } from "./nativeObservationContract.ts";
+import type { PassStatus } from "./protocol.ts";
 // Pure helpers for proxyClient.ts. Kept vscode-free + fetch-free so they can
 // be unit-tested under plain Node — mirrors mintStudentTokenHelpers.ts.
 
@@ -79,6 +80,10 @@ export interface ProfileFailure {
   status?: number;
   /** #49 — server request_id, when the response carried one. */
   requestId?: string;
+  /** Authenticated Service error code. Kept so callers do not infer a cause from HTTP status. */
+  code?: string;
+  /** Short Service-owned copy, when present. Never raw JSON and capped before storage. */
+  serviceMessage?: string;
 }
 
 export const PROFILE_ISSUER_TOKEN_FRIENDLY =
@@ -94,6 +99,10 @@ export const PROFILE_REJECTED_FRIENDLY =
 /** A trial or pass code that was refunded or replaced, when the Service sent no sentence of its own. */
 export const NATIVE_SEAT_ENDED_FRIENDLY =
   "환불했거나 새 코드로 바뀐 코드라 더 쓸 수 없습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
+export const PAID_PASS_REVOKED_FRIENDLY =
+  "환불했거나 새 코드로 바뀐 이용권이라 더 쓸 수 없어요. 만든 파일과 대화는 그대로 있어요. 더 쓰려면 시작 화면의 '이용권으로 시작하기'에서 새 이용권을 살 수 있어요.";
+export const PAID_PASS_EXPIRED_FRIENDLY =
+  "이용권 기간이 끝났어요. 만든 파일과 대화는 그대로 있어요. 더 쓰려면 시작 화면의 '이용권으로 시작하기'에서 새 이용권을 살 수 있어요.";
 export const PROFILE_UNKNOWN_COHORT_FRIENDLY =
   "참여 코드에 연결된 수업을 찾을 수 없습니다. 코드 발급 담당자에게 수업 정보를 확인해 주세요.";
 export const PROFILE_SERVER_FRIENDLY =
@@ -121,12 +130,17 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
   }
   const code = parsed?.error?.code;
   const requestId = parsed?.error?.request_id;
-  const base = { status, requestId };
+  const serviceLine = typeof parsed?.error?.message === "string" && parsed.error.message.length <= 200 ? parsed.error.message : null;
+  const base = {
+    status,
+    ...(requestId ? { requestId } : {}),
+    ...(code ? { code } : {}),
+    ...(serviceLine ? { serviceMessage: serviceLine } : {}),
+  };
 
   // A native seat that ended (refunded, replaced, or past its window): the Service words it for a
   // trial or a bought pass, so its sentence is shown as is (2026-10-14: a refunded pass read
   // "참여 코드를 확인할 수 없습니다 … 코드 발급 담당자에게 문의").
-  const serviceLine = typeof parsed?.error?.message === "string" && parsed.error.message.length <= 200 ? parsed.error.message : null;
   if (status === 401 && code === "trial_revoked_or_reissued")
     return { ...base, reason: "rejected", friendly: serviceLine ?? NATIVE_SEAT_ENDED_FRIENDLY };
   if (status === 401) {
@@ -144,6 +158,30 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
     return { ...base, reason: "unknown_cohort", friendly: PROFILE_UNKNOWN_COHORT_FRIENDLY };
   }
   return { ...base, reason: "server", friendly: PROFILE_SERVER_FRIENDLY };
+}
+
+/**
+ * A bare Agent SDK 401 proves only that the CLI request was rejected. A second,
+ * authenticated profile read can prove why. We show paid-pass copy only when
+ * both facts are present: the profile that started this turn was a bought pass,
+ * and the Service now reports the exact native-seat ending code.
+ */
+export function paidPassEndNotice(
+  pass: PassStatus | undefined,
+  failure: ProfileFailure,
+): string | null {
+  if (!pass) return null;
+  if (failure.status === 401 && failure.code === "trial_revoked_or_reissued") {
+    return failure.serviceMessage && /이용권/.test(failure.serviceMessage)
+      ? failure.serviceMessage
+      : PAID_PASS_REVOKED_FRIENDLY;
+  }
+  if (failure.status === 403 && failure.code === "trial_expired") {
+    return failure.serviceMessage && /이용권/.test(failure.serviceMessage)
+      ? failure.serviceMessage
+      : PAID_PASS_EXPIRED_FRIENDLY;
+  }
+  return null;
 }
 
 interface BuildHeadersArgs {
