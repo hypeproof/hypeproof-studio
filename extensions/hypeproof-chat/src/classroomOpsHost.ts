@@ -86,6 +86,10 @@ export interface ClassroomOpsObserver {
 export class ClassroomOpsHost implements ClassroomOpsObserver {
   private loop: OpsSyncLoop | null = null;
   private outbox: OpsOutbox | null = null;
+  /** Every overlapping stop waits for the same lifecycle tail, even after the first caller detaches `outbox`. */
+  private stopping: Promise<void> | null = null;
+  /** Published before mkdir/open starts so shutdown also owns an outbox that has not been assigned yet. */
+  private openingOutbox: Promise<OpsOutbox> | null = null;
   private readonly appInstanceId = randomUUID();
   private readonly runtimeGate = new ChangeGate<RuntimeStatus>();
   private readonly activationGate = new ChangeGate<string>();
@@ -347,7 +351,9 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     if (res.status !== 201) { void vscode.window.showWarningMessage("연결 코드가 맞지 않거나 이미 사용됐거나 시간이 지났습니다. 강사에게 새 코드를 요청하세요."); return; }
     const b = (await res.json()) as ConnectionMeta & { credential: string };
     // A new pairing replaces whatever this window was connected to; responses still in flight for it are void.
-    this.stopConnection();
+    const stopped = this.stopConnection(), stopGeneration = this.generation;
+    await stopped;
+    if (stopGeneration !== this.generation) return; // a newer connect/disconnect owns the window now
     await this.context.secrets.store(CREDENTIAL_KEY, b.credential);
     const meta: ConnectionMeta = { grant_id: b.grant_id, class_run_id: b.class_run_id, seat_id: b.seat_id, expires_at: b.expires_at, poll_after_ms: b.poll_after_ms, connected_at: Date.now(), ...(b.student ? { student: b.student } : {}), ...(b.run ? { run: b.run } : {}), lesson: b.lesson ? { course_id: b.lesson.course_id, version: b.lesson.version } : null };
     await this.context.globalState.update(META_KEY, meta);
@@ -425,16 +431,29 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
   }
 
   /** End the current connection in this window: no late response, queued approval or pause may act after this line. */
-  private stopConnection(): void {
+  private stopConnection(): Promise<void> {
+    const outbox = this.outbox, openingOutbox = this.openingOutbox;
     this.generation++; this.inbox = null; this.inboxStore = null;
     this.loop?.stop(); this.runner?.close(); this.loop = null; this.runner = null; this.outbox = null;
     // Disconnecting ends the instructor's pause on this device; the Service's own admission still applies.
     this.paused = false; this.stopUnconfirmed = false; this.applyHold();
     this.recoveryWatch.clear(); this.faultClass = null;
+    const prior = this.stopping;
+    const operation = (async () => {
+      let failure: unknown;
+      try { await prior; } catch (err) { failure = err; }
+      try { await openingOutbox; } catch (err) { failure ??= err; }
+      try { await outbox?.close(); } catch (err) { failure ??= err; }
+      if (failure !== undefined) throw failure;
+    })();
+    this.stopping = operation;
+    return operation.finally(() => { if (this.stopping === operation) this.stopping = null; });
   }
   private async forget(): Promise<void> {
     const mine = this.meta?.grant_id, was = this.credential;
-    this.stopConnection(); this.credential = ""; this.meta = null;
+    const stopped = this.stopConnection(), stopGeneration = this.generation; this.credential = ""; this.meta = null;
+    await stopped;
+    if (stopGeneration !== this.generation) return; // a newer connection must keep its own shared secret and metadata
     // Secrets and globalState are shared between windows where the OS keychain backs them: a window that was replaced must not
     // delete the connection the replacing window has just stored. (Keychain sharing itself was not run — see the test record.)
     const stored = this.context.globalState.get<ConnectionMeta>(META_KEY);
@@ -445,16 +464,27 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
   }
 
   private async start(meta: ConnectionMeta, credential: string): Promise<void> {
-    this.stopConnection();
-    const gen = this.generation, live = () => gen === this.generation;
+    const stopped = this.stopConnection(), gen = this.generation;
+    await stopped;
+    if (gen !== this.generation) return;
+    const live = () => gen === this.generation;
     this.credential = credential; this.meta = meta; void this.resumePendingUploads();
-    const dir = this.context.globalStorageUri.fsPath; await fs.mkdir(dir, { recursive: true });
+    const dir = this.context.globalStorageUri.fsPath;
     // One file per grant: a shared PC's next learner never inherits the previous seat's queue.
     const file = path.join(dir, `classroom-ops-outbox-${meta.grant_id}.json`);
-    this.outbox = await OpsOutbox.open({
-      load: async () => { try { return JSON.parse(await fs.readFile(file, "utf8")) as OutboxState; } catch { return null; } },
-      save: async (s) => { const tmp = `${file}.${process.pid}.tmp`; await fs.writeFile(tmp, JSON.stringify(s), "utf8"); await fs.rename(tmp, file); },
-    }, meta.grant_id, randomUUID(), () => Date.now(), randomUUID);
+    const openingOutbox = (async () => {
+      await fs.mkdir(dir, { recursive: true });
+      return OpsOutbox.open({
+        load: async () => { try { return JSON.parse(await fs.readFile(file, "utf8")) as OutboxState; } catch { return null; } },
+        save: async (s) => { const tmp = `${file}.${process.pid}.tmp`; await fs.writeFile(tmp, JSON.stringify(s), "utf8"); await fs.rename(tmp, file); },
+      }, meta.grant_id, randomUUID(), () => Date.now(), randomUUID);
+    })();
+    this.openingOutbox = openingOutbox;
+    let outbox: OpsOutbox;
+    try { outbox = await openingOutbox; }
+    finally { if (this.openingOutbox === openingOutbox) this.openingOutbox = null; }
+    if (!live()) { await outbox.close(); return; }
+    this.outbox = outbox;
     const executors = this.executors(), journalFile = path.join(dir, `classroom-ops-journal-${meta.grant_id}.json`);
     const runner = new CommandRunner({
       executors, monotonic: () => performance.now(), now: () => Date.now(), epoch: () => this.epoch, log: this.log,
@@ -484,14 +514,14 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
       ...(inbox ? { distribution: inbox } : {}),
       capabilities: [...OPS_CLIENT_CAPABILITIES, RECOVERY_FOLLOWUP_CAPABILITY, "commands", ...Object.keys(executors), ...(inbox ? [INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY] : [])], onEpoch: (e) => { if (live()) this.epoch = e; },
       commands: runner as unknown as NonNullable<Parameters<typeof startOpsSync>[0]["commands"]>,
-      post: (body, timeoutMs) => this.post(credential, body, timeoutMs), outbox: this.outbox, appInstanceId: this.appInstanceId,
+      post: (body, timeoutMs) => this.post(credential, body, timeoutMs), outbox, appInstanceId: this.appInstanceId,
       sample: () => { const r = this.runtime(); const changed = this.runtimeGate.next(r.status); if (changed) void this.outbox?.add("runtime", runtimePayload(changed)); return { idle_ms: Math.max(0, Math.round(r.idleMs)), runtime_status: r.status, control_revision: this.controlRevision }; },
       // The revision is reported only after the hold is actually in place on this device.
       onControl: (control) => { if (!live()) return; this.paused = control.paused; this.applyHold(); this.controlRevision = control.control_revision; },
       now: () => Date.now(), random: Math.random, setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
       log: this.log,
       // Normal expiry keeps the credential for the upload-only afterlife; a revoked or replaced connection is dropped outright.
-      onDisconnected: (reason) => { if (!live()) return; this.log(`[ops] disconnected: ${reason}`); if (reason === "ops_grant_expired") { void this.inboxExpired(); this.stopConnection(); void this.resumeUploadOnly(meta, credential); } else { void this.hideInbox(meta.grant_id); void this.forget(); } },
+      onDisconnected: (reason) => { if (!live()) return; this.log(`[ops] disconnected: ${reason}`); if (reason === "ops_grant_expired") { void this.inboxExpired(); const stopped = this.stopConnection(), stopGeneration = this.generation; void stopped.then(() => { if (stopGeneration === this.generation) return this.resumeUploadOnly(meta, credential); }).catch((err) => this.log(`[ops] expiry shutdown: ${(err as Error).message}`)); } else { void this.hideInbox(meta.grant_id); void this.forget().catch((err) => this.log(`[ops] disconnect shutdown: ${(err as Error).message}`)); } },
     }, meta.poll_after_ms);
     this.context.subscriptions.push({ dispose: () => this.loop?.stop() });
     // The usual order in a class is "token first, pair later": the token was verified BEFORE this connection existed, so that
@@ -566,7 +596,7 @@ export class ClassroomOpsHost implements ClassroomOpsObserver {
     // Shared PC: someone else signed in. This seat's connection must not report, run commands or upload for them.
     if (r.ok && seat && id.u && id.c && (id.u !== seat.u || id.c !== seat.c)) {
       this.log("[ops] a different learner signed in on this device — classroom connection dropped");
-      void this.forget(); void vscode.window.showInformationMessage("다른 사용자로 로그인되어 이전 수업 연결을 끊었습니다. 이번 수업에 연결하려면 강사에게 새 연결 코드를 받으세요."); return;
+      void this.forget().catch((err) => this.log(`[ops] identity-change shutdown: ${(err as Error).message}`)); void vscode.window.showInformationMessage("다른 사용자로 로그인되어 이전 수업 연결을 끊었습니다. 이번 수업에 연결하려면 강사에게 새 연결 코드를 받으세요."); return;
     }
     if (!this.outbox) return;
     if (r.ok) {
