@@ -25,9 +25,9 @@ Key context from the #282 Phase-0 review (2026-07-13):
 
 ## Why "verify the user's age" is the wrong frame for this product
 
-HypeProof Studio is **not an open consumer service**. There is no public
-signup, no anonymous access, and no path from the open internet to a model
-response. Age verification in the consumer sense (ID checks, age gates) exists
+The **classroom path** is a closed enrollment service. Its instructor codes,
+rosters and session windows remain unchanged by the personal-account preview.
+Age verification in the consumer sense (ID checks, age gates) exists
 to sort an *unknown* population into age bands. Our population is *known before
 the product is ever opened*: every participant is enrolled by name in a
 specific workshop cohort by the operating team, and the cohort itself carries
@@ -36,6 +36,27 @@ the age band.
 The compliance question therefore reduces to: **can anyone other than the
 enrolled, age-known participants reach the model?** The gating chain below is
 designed so the answer is no.
+
+## Personal-account preview: public signup for 14+ only
+
+The October 2026 account plan adds a separate public signup path for people
+who self-declare they are **14 or older**. Under-14 signup is refused with
+“수업 참여 코드를 받아 시작해 주세요”. Lab records the age declaration and
+required consent versions before Service creates an account. This declaration
+is an age gate, not independently verified identity or age evidence.
+
+Children's cohorts remain instructor-code-only. A personal account or its paid
+pass never authorizes a minor cohort profile; classroom roster, moderation and
+guardian-consent controls below still apply. A Google identity alone grants no
+model access. Service must validate the account session and an owned, usable
+pass for the personal path. The previous “no public signup” premise applies
+only to the classroom path, not to this new account flow.
+
+Studio currently exposes this flow only behind an off-by-default loopback
+preview flag. Local synthetic signup and native-app checks do not establish
+production legal approval, Google-provider acceptance or guardian consent.
+Production terms, privacy/overseas-transfer wording and the age policy remain
+owner-reviewed release work; see [the account preview scope](dev/studio-account-preview.md).
 
 ## The gating chain
 

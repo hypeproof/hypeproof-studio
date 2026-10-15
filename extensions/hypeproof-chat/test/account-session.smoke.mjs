@@ -23,7 +23,7 @@ function harness() {
     if(u.pathname.endsWith('/auth/logout')){if(world.now>4_600_000&&new Headers(init.headers).get('authorization')==='Bearer account-secret-0')return reply(401,{error:'invalid_token'});return reply(200,{ok:true});}
     if(world.revoke)return reply(401,{error:'session_revoked'});
     if(u.pathname.endsWith('/me'))return reply(200,{account:{id:'account-one',email:'buyer@example.test',display_name:'테스트 고객',access_token:'do-not-forward'}});
-    if(u.pathname.endsWith('/me/passes'))return reply(200,{passes:[{id:'ord_one',product_name:'개인 이용권',status:'active',requests_used:3,requests_limit:10,requests_remaining:7,starts_at:100,expires_at:9000000,amount:100,refresh_token:'never-forward'}]});
+    if(u.pathname.endsWith('/me/passes'))return reply(200,{passes:[{id:'ord_one',product_name:'개인 이용권',status:'active',requests_used:3,requests_limit:10,requests_remaining:7,starts_at:null,expires_at:null,duration_seconds:2592000,activation_deadline_at:9000000,amount:100,refresh_token:'never-forward'}]});
     if(u.pathname.endsWith('/activate'))return reply(200,{access_token:`pass-secret-${world.refresh}`,expires_in:3600,pass:{}});
     throw new Error('Unexpected request '+u.pathname);
   };
@@ -41,6 +41,8 @@ assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),fals
   await client.poll(); assert.equal(world.store.size,0,'pending approval grants no credentials');
   world.poll='approved'; await client.poll(); assert.equal(client.view().status,'signedIn');
   const view=JSON.stringify(client.view()); for(const secret of ['account-secret','refresh-secret','device-secret','do-not-forward','never-forward'])assert.equal(view.includes(secret),false);
+  assert.equal(client.view().passes[0].expires_at,null,'an unstarted pass must not present its activation deadline as its usage end');
+  assert.equal(client.view().passes[0].duration_seconds,2592000);assert.equal(client.view().passes[0].activation_deadline_at,9000000);
   assert.equal(world.opened[0],SITE+'/studio/connect?code=HPDX-4K7Q');
   const active=await client.activate('ord_one'); assert.equal(active.token,'pass-secret-0');
   world.now+=3_550_000;

@@ -4,6 +4,7 @@ export interface AccountIdentity { id: string; email: string; display_name: stri
 export interface AccountPass {
   id: string; product_name: string; status: string; requests_used: number; requests_limit: number;
   requests_remaining: number; starts_at: number | null; expires_at: number | null; amount: number;
+  duration_seconds: number; activation_deadline_at: number | null;
 }
 export interface AccountView {
   status: 'signedOut' | 'waiting' | 'signedIn'; busy?: boolean; message?: string;
@@ -132,7 +133,7 @@ export class AccountSession {
       const a = identity(me.account); if (!a || !Array.isArray(passes.passes)) throw new AccountError('invalid_response', friendly('invalid_response'));
       if ((await this.read())?.sessionId !== initial.sessionId) return;
       // Whitelist fields, even if a server accidentally adds credentials to an account response.
-      this.state = { status: 'signedIn', account: a, passes: passes.passes.filter((p: any) => record(p) && typeof p.id === 'string').map((p: any) => ({ id: p.id, product_name: String(p.product_name ?? '이용권'), status: String(p.status), requests_used: Number(p.requests_used), requests_limit: Number(p.requests_limit), requests_remaining: Number(p.requests_remaining), starts_at: p.starts_at ?? null, expires_at: p.expires_at ?? null, amount: Number(p.amount) })) };
+      this.state = { status: 'signedIn', account: a, passes: passes.passes.filter((p: any) => record(p) && typeof p.id === 'string').map((p: any) => ({ id: p.id, product_name: String(p.product_name ?? '이용권'), status: String(p.status), requests_used: Number(p.requests_used), requests_limit: Number(p.requests_limit), requests_remaining: Number(p.requests_remaining), starts_at: p.starts_at ?? null, expires_at: p.expires_at ?? null, amount: Number(p.amount), duration_seconds: Number(p.duration_seconds) || 0, activation_deadline_at: p.activation_deadline_at ?? null })) };
     } catch (e) { this.state = { ...this.state, message: e instanceof AccountError ? e.message : friendly('unavailable') }; }
     this.emit();
   }
