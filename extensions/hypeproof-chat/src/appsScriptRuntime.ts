@@ -18,7 +18,9 @@ export class AppsScriptBlockedError extends Error {
 /** Only fixed, host-owned messages cross the model boundary; never Google response bodies. */
 export class AppsScriptRecoveryError extends Error {
   readonly recovery: 'reconnect' | 'retry' | 'operator';
-  constructor(recovery: 'reconnect' | 'retry' | 'operator', message: string) { super(message); this.recovery = recovery; }
+  readonly reason?: 'oauth_callback_incomplete';
+  constructor(recovery: 'reconnect' | 'retry' | 'operator', message: string,
+    reason?: 'oauth_callback_incomplete') { super(message); this.recovery = recovery; this.reason = reason; }
 }
 export interface AppsScriptDeps {
   clientId: string; clientSecret?: string;
@@ -196,7 +198,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
         await deps.openBrowser(url.toString());
         let callback: URL;
         try { callback = await listener.wait; }
-        catch { throw new AppsScriptRecoveryError('reconnect', 'Google 로그인 시간이 끝났거나 창을 닫았어요. 다시 연결하면 이 단계부터 이어갈 수 있어요.'); }
+        catch { throw new AppsScriptRecoveryError('reconnect', 'Google 로그인 완료 응답을 받지 못했어요. 준비되면 새 로그인 요청으로 다시 연결해 주세요.', 'oauth_callback_incomplete'); }
         if (attempt.cancelled) return fail('Google 연결을 취소했어요. 다시 연결할 수 있어요.');
         if (pendingConnect === attempt) pendingConnect = undefined;
         if (callback.origin + callback.pathname === listener.redirectUri && callback.searchParams.getAll('state').length === 1 && callback.searchParams.get('state') === csrf && callback.searchParams.getAll('error').length === 1 && !callback.searchParams.has('code')) throw oauthError(callback.searchParams.get('error'));

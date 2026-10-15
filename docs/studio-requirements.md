@@ -928,6 +928,8 @@ EA-04/05 Apps Script approval digests bind ordered message values, independent o
 
 EA-02/11 commercial-onboarding preparation distinguishes fixed-code Google recovery states: quota/outage retry, revoked/missing consent reconnect, and operator/client/Workspace-policy configuration. Private setup cards offer relevant actions and pause without clearing credentials or send ledgers. Unknown 403 remains setup-blocked; no Cloud IAM grant is requested and no raw provider response reaches the model. Root runtime/host regression coverage is in `appsScriptRuntime.test.ts` and `automation-apps-script-host.smoke.mjs`. The separate [commercial onboarding plan](plan/google-commercial-onboarding.md) records external launch gates; this improvement does not establish twenty-account production readiness.
 
+EA-02 recovery also distinguishes an unfinished Google login callback from an unconfirmed connection or operator setup failure. The shared SDK/local tool returns only a fixed stage, recovery category and next-user-action receipt; it never forwards provider error text or infers that the browser did not open, the user closed it, or an existing credential changed. An unsuccessful attempt does not authorize another login, Sheet read, preview or send. This supports observable VERIFY/OWNERSHIP through truthful recovery choices. Synthetic runtime-to-tool and local HTTP MCP coverage is in `local-email-runtime.smoke.mjs`; native coach wording and real Google reconnection remain separate acceptance.
+
 SDK integration (EA-01 / REQ-M26): a served orchestrator retains its bounded
 busy retry policy; other seats stop immediately on capacity/budget 429 and ask
 for explicit recovery. Provider error bodies never become conversation text.

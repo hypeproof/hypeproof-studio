@@ -1,5 +1,6 @@
 import type { SdkMcpFactory, ZodLike, McpToolResult } from './browserMcp.ts';
 import { GoogleSheetReadError, validateEmailRecipe, type EmailPreview, type GoogleAutomationRuntime } from './googleAutomation.ts';
+import { AppsScriptRecoveryError } from './appsScriptRuntime.ts';
 
 export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
 export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan'] as const;
@@ -63,7 +64,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     sent: false,
     message: `No preview or email was produced. This activity runs on Google Apps Script. Call apps_script_run using its registered automation tool name with mode="${mode}". Follow its setup/recovery result; never claim completion or fall back to email_preview/email_send. Sending still requires the host's exact-recipient/content approval.`,
   });
-  const run = async (work: () => Promise<unknown>, failureStage?: 'skill_save'): Promise<McpToolResult> => {
+  const run = async (work: () => Promise<unknown>, failureStage?: 'skill_save' | 'google_connect'): Promise<McpToolResult> => {
     try {
       if (host.refreshAuthorization && !await host.refreshAuthorization()) throw new Error('Capability unavailable');
       if (!host.isAllowed()) throw new Error('Capability unavailable');
@@ -85,6 +86,20 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
         recipeContract: skillRecipeContract,
         guidance: '이 단계는 Google 연결·시트 읽기·실행 준비·게시 승인이 필요하지 않습니다. 그 도구로 우회하지 마세요. 형식 오류는 위 계약으로 고쳐 skill_save를 다시 호출하고, 수업 권한 문제라면 멈추고 수업 연결을 확인하세요. 사용자에게 JSON 작성을 요구하거나 오류에 실제 입력·계정 값을 옮기지 마세요.',
       }) }] };
+      if (failureStage === 'google_connect') {
+        const recovery = error instanceof AppsScriptRecoveryError ? error.recovery : 'check_connection';
+        const callbackIncomplete = error instanceof AppsScriptRecoveryError && error.reason === 'oauth_callback_incomplete';
+        return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+          failureStage, reason: callbackIncomplete ? 'oauth_callback_incomplete' : 'google_connection_unconfirmed',
+          connectionConfirmed: false, nextAction: 'wait_for_user', recovery,
+          message: callbackIncomplete
+            ? '로그인 요청 이후 Google의 완료 응답을 받지 못했어요. 준비되면 새 요청으로 다시 연결해 주세요.'
+            : recovery === 'operator'
+              ? 'Google 연결 설정을 운영자가 확인해야 해요. 설정 확인 전에는 로그인을 반복하지 마세요.'
+              : '이번 Google 연결 완료를 확인하지 못했어요. 연결 상태를 확인한 뒤 다시 요청해 주세요.',
+          guidance: 'Google 연결 단계의 실패입니다. 확인된 결과만 설명하고, 로그인 창이 열리지 않았다거나 사용자가 창을 닫았다고 추정하지 마세요. 계정·권한·기존 연결 상태나 스킬 변경을 추정하지 마세요. 자동으로 로그인·시트 읽기·미리보기·발송을 재시도하지 말고 사용자의 다음 요청을 기다리세요.',
+        }) }] };
+      }
       return { isError: true, content: [{ type: 'text', text: '자동화를 완료하지 못했어요. 입력과 수업 연결을 확인한 뒤 다시 시도해 주세요. 이미 보낸 메일은 다시 보내지 않아요.' }] };
     }
   };
@@ -122,7 +137,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (!host.saveSkill || typeof args.recipe !== 'string' || args.recipe.length > 32768) throw new Error('Invalid skill');
       return host.saveSkill(validateEmailRecipe(JSON.parse(args.recipe)));
     }, 'skill_save')),
-    factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); })),
+    factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다. 실패하면 반환된 단계와 복구 안내만 설명하고 사용자의 다음 요청을 기다린다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); }, 'google_connect')),
     factory.tool('sheet_configure', 'mode=reuse는 기존 비공개 시트 설정을 재사용하며 없을 때만 주소를 묻는다. 시트를 바꾸려는 명시적 요청에만 mode=change를 쓴다. 행 수와 열 이름만 반환한다.', { mode: z.string() }, async args => run(async () => { if (!host.configureSheet || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.configureSheet(args.mode as 'reuse' | 'change'); })),
     factory.tool('skill_publish', '현재 저장한 스킬의 공유 내용을 별도 질문으로 확인받은 뒤 우리 반 스토어에 올린다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.', {}, async () => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(); })),
     factory.tool('skill_list', '우리 반 스토어의 스킬 목록을 보여준다. 설치는 skill_install로 별도 확인한다.', {}, async () => run(async () => { if (!host.listSkills) throw new Error('Unavailable'); return host.listSkills(); })),

@@ -607,3 +607,22 @@ The10-minute callback request may expire; do not reuse an expired request as suc
 Evidence: `instructor-integrated/current-main-native-reconnect.{json,txt,png}`,
 `current-main-reconnect-pending.txt` and
 `integrated-peer/current-local-revalidation.json` under `/tmp/hps-email-mvp/`.
+
+### Recovery explanation follow-up
+
+The pending login later ended with failure. The native coach described it as
+unable to start even though the login request had reached Google. A bounded
+follow-up preserves the runtime's callback-incomplete category in the shared
+SDK/local MCP response. It supplies fixed recovery guidance, waits for the user's
+next request and does not expose raw errors or infer that credentials changed.
+Operator setup errors are distinguished from a request to log in again.
+
+The synthetic test exercises actual Apps Script runtime failures through both
+the SDK tool handler and local HTTP MCP transport: missing callback, missing
+client setup, unknown private error and user cancellation. It checks one attempt,
+no downstream Google request, retained credentials/unknown-send ledger, listener
+cleanup and no raw error leakage. Focused33 checks, automation89 checks, extension
+typecheck and extension build pass. The currently running native app and served
+Windows candidate remain3f1a3f20; this source follow-up has not yet been packaged
+or validated with real Google/coach behavior. No new OAuth request or mail follows
+from these tests.

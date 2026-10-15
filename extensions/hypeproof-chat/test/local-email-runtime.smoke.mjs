@@ -2,7 +2,52 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { localEmailTools, localTurnBudget } from '../src/localRuntime/emailTools.ts';
 import { startToolServer } from '../src/localRuntime/toolServer.mjs';
+import { createAppsScriptRuntime, APPS_SCRIPT_TOKEN_KEY } from '../src/appsScriptRuntime.ts';
+import { buildGoogleAutomationMcpServer } from '../src/googleAutomationMcp.ts';
 const profile={automations:{enabled:true,provider:'gmail',maxRecipients:20},game:{template_tier:'website'}};
+
+test('SDK and local tools distinguish unfinished Google login from setup failure without leaking errors or retrying',async()=>{
+ for(const transport of ['sdk','local']) for(const scenario of ['callback','operator','unknown','cancelled']){
+  let opened=0,closed=0,network=0,attempts=0,rejectCallback;
+  const wait=new Promise((_,reject)=>{rejectCallback=reject;});void wait.catch(()=>{});
+  const secrets=new Map([[APPS_SCRIPT_TOKEN_KEY,'synthetic-existing-credential'],['send-ledger','synthetic-unknown-send']]);
+  const before=[...secrets];
+  const runtime=createAppsScriptRuntime({clientId:scenario==='operator'?'':'synthetic-client',isAllowed:()=>true,
+   secrets:{get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)},
+   listenOAuth:async()=>({redirectUri:'http://127.0.0.1:23456/oauth/callback',wait,close(){closed++;}}),
+   openBrowser:async()=>{opened++;rejectCallback(new Error('private-callback-url-and-token'));},
+   fetchImpl:async()=>{network++;throw Error('unexpected Google request');},
+  });
+  const host={runtime:{},isAllowed:()=>true,confirmSend:async()=>false,connectGoogle:async()=>{
+   attempts++;if(scenario==='cancelled')return{cancelled:true};
+   if(scenario==='unknown')throw Error('private-provider-body-and-account');
+   await runtime.connect();return{connected:true};
+  }};
+  let result;
+  if(transport==='sdk'){
+   const server=buildGoogleAutomationMcpServer({tool:(name,description,schema,handler)=>({name,handler}),createSdkMcpServer:s=>s},{string:()=>({})},host);
+   result=await server.tools.find(t=>t.name==='google_connect').handler({mode:'change'});
+  }else{
+   const tools=localEmailTools({profile,host,signal:new AbortController().signal});
+   const server=await startToolServer(tools.definitions,tools.call,new AbortController().signal);
+   try{
+    const response=await fetch(server.url,{method:'POST',headers:{authorization:'Bearer '+server.token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'email_google_connect',arguments:{mode:'change'}}})});
+    result=(await response.json()).result;
+   }finally{server.close();}
+   assert.equal(tools.isWaiting(),false);
+  }
+  const text=result.content.map(c=>c.text??'').join('\n');assert.ok(!text.includes('private-'));
+  const data=JSON.parse(text);
+  if(scenario==='cancelled'){assert.deepEqual(data,{cancelled:true});assert.notEqual(result.isError,true);}
+  else{
+   assert.equal(result.isError,true);assert.equal(data.failureStage,'google_connect');assert.equal(data.connectionConfirmed,false);assert.equal(data.nextAction,'wait_for_user');
+   assert.equal(data.reason,scenario==='callback'?'oauth_callback_incomplete':'google_connection_unconfirmed');
+   assert.equal(data.recovery,scenario==='callback'?'reconnect':scenario==='operator'?'operator':'check_connection');
+  }
+  assert.equal(attempts,1);assert.equal(network,0);assert.deepEqual([...secrets],before);
+  assert.equal(opened,scenario==='callback'?1:0);assert.equal(closed,opened);
+ }
+});
 
 test('local subscription MCP uses the same profile gates, private metadata and human send approval',async()=>{
   const controller=new AbortController();let approved=false,sends=0,questions=0;
