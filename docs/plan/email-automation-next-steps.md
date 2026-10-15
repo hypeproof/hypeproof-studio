@@ -12,8 +12,8 @@ charges/holds); this is not actual spending. Evidence:
 `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
 budget remains separate. No further mail is authorized.
 
-Studio11b82da2 integrates main6ad5f9f8; implementation and installer8ba30b73 both
-pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
+Studio11b82da2 integrates main6ad5f9f8; implementation, installer8ba30b73 and
+documentation checkpoint36dc4401 pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
 ETXTBSY job rerun; no application test failed in that run. Windows
 659de97d passed verified install/update, portable-profile restoration, non-owner
 store import and private Google preview, then explicit v2 update and v1 rollback
@@ -54,7 +54,7 @@ snapshot were read back on Windows. Evidence:
 `/tmp/hps-email-mvp/mac-native-fork-20261016.json` and
 `/tmp/hps-email-mvp/windows-native-fork-reuse-20261016.json`.
 
-Private Service93318bd2 is based on fa7472b with main9dbe15c and bounded test
+Private Servicea245457b is based on fa7472b with main9dbe15c and bounded test
 routes. Production d34da3a5 remains at100%; the test target takes0% normal
 traffic. Ops0046/0047 are applied only to the backed-up isolated database. Remaining
 gates: distinct Google identities and different private datasets, third-recipient
@@ -64,18 +64,29 @@ individual boundaries: [store contract](skill-store-cross-platform.md).
 
 The11b82da2 Windows candidate uses official shell720be661 and SDK0.3.299. After
 the initial401, both archives and the final manifest passed full R2 readback with
-matching hashes. Gateway70207707 serves the new candidate; four gateway groups
+matching hashes. Gatewaydf27fdc5 now serves the same candidate; four gateway groups
 and23 online access checks pass. Installer8ba30b73 pins the exact archives and
 recognizes659de97d for receipt-checked handover. Actual extraction, profile backup,
 migration and refusal fixtures pass, followed by the native upgrade above.
 No authentication scope was expanded. Current coach presentation remains PARTIAL: the Mac response called the
 cohort store public, although the host review correctly says our class.
 
-Current online instructor acceptance is a separate gap: the isolated Service
-configuration does not enable HPS_CLASSROOM_OPS, and its bounded participant routes
-do not admit classroom connect/sync. Earlier local instructor9b4dd233 evidence is
-valid only for that local setup. Prepare bounded classroom linkage and observe the
-current host's real progress before claiming the online teacher surface works.
+Current online instructor observation passes for Windows11b82da2. The private
+wrapper enables classroom operations only for the rehearsal transport: one
+cohort/run, instructor status/configuration/pairing, and device connect/sync.
+The existing Service validates instructor and device credentials; command,
+collection, report and delivery flags remain off. Eight online refusal checks
+and nine existing participant profile/store/installer reads pass.
+
+Windows consumed its one-time A01 pairing through the native command. The remote
+Service records a fresh system observation of6/6 completed; the actual Chalk
+board shows normal1 and unknown2. The board is served locally at127.0.0.1:8797
+and reads the online test Service; this is not a production Chalk deployment or
+a20-real-learner rehearsal. No synthetic progress was posted, and this verification
+made no AI or email calls. Evidence:
+`/tmp/hps-email-mvp/online-instructor-20261016/{deployment-receipt,status-receipt,run-prepared,participant-regression}.json`
+and `board-safe.png`. Full class readiness and the remaining store/Google gates
+remain open.
 
 ## Goal extension: integrated skill store — 2026-10-15
 

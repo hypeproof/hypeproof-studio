@@ -753,3 +753,31 @@ unchanged and do not include this follow-up. Fork provenance remains outstanding
 Actual Windows682dfd37→e3ab008b download, hash verification, SDK preparation and launch passed. First launch did not restore activities because old credentials/activity storage lived in the old install's portable `data` tree; default roaming-profile backup alone was insufficient. The original remained intact. A tested installer repair now selects a verified old/rollback shortcut, preserves and hashes the full portable tree, creates a separate snapshot, atomically activates the new profile and never replaces active recipient edits on rerun. The live repair restored saved activities, the same workspace and conversation without re-entering the Studio participation code. The graph is2/6; Google token reuse and online store import/preview are still pending, so this is not full SS-02/SS-04/SS-08 acceptance.
 
 Source installer fixtures (including actual app/SDK archives), gateway routing and23 online access controls pass. Gateway1a566b74 serves the repaired installer with unchanged e3ab008b archives, three-principal allowlist, expiry and pinned Service. No new paid AI or mail occurred.
+
+## Windows to online instructor observation — 2026-10-16
+
+Windows11b82da2 now connects to the private online Servicea245457b (sourcefa7472b)
+through gatewaydf27fdc5. The production version remains d34da3a5 at100%; the
+test version has0% normal traffic. No schema changes were needed. Installer
+archives and their existing three-principal restrictions are unchanged.
+
+The private wrapper admits only the named rehearsal's status/configuration/
+pairing routes and device connect/sync. Existing Service authorization remains
+authoritative. Anonymous/forged instructor access, participant-as-instructor,
+anonymous sync, malformed pairing, commands, another run and expanded issuer
+scope are refused. The three principals' profile/store/installer reads still pass.
+
+The expired old test session was preserved in history; an eight-hour synthetic
+rehearsal registered the three existing principals, with observation enabled and
+command/collection/report/delivery/distribution flags off. The Windows app itself
+consumed A01's one-time code. No synthetic events were posted. Remote readback
+records a fresh system automation observation with phase completed and6/6.
+The actual Chalk board at127.0.0.1:8797/manage reads that online Service and shows
+normal1, unknown2. It is a local instructor surface, not a deployed production
+Chalk acceptance or twenty-person rehearsal. No AI requests or mail sends.
+
+Evidence: `/tmp/hps-email-mvp/online-instructor-20261016/` contains
+`deployment-receipt.json`, `run-prepared.json`, `participant-regression.json`,
+`status-receipt.json`, and the inspected `board-safe.png`. Credentials and raw
+screenshots remain outside Git in protected local storage. The earlier local
+9b4dd233 board evidence remains a separate observation.

@@ -1018,3 +1018,12 @@ No new mail was sent.
 A generic HTTP429 must not assert a proven budget cause: the message distinguishes
 usage/concurrency checks from possible provider request limits. Increasing the
 funding ceiling does not promise that every provider rate limit disappears.
+
+EA-10 current online observation (2026-10-16): Windows11b82da2 consumed a native
+one-time classroom code and reported its completed6/6 quest to private
+Servicefa7472b. The real Chalk board, served locally against that online Service,
+shows A01 normal and the other two registered test principals unknown. Eight
+access-refusal checks and nine profile/store/installer readbacks pass. The bounded
+test transport grants no command, collection, report or delivery capability.
+This closes the current one-host online linkage gap; twenty real learners,
+production Chalk deployment and three distinct Google datasets remain unverified.

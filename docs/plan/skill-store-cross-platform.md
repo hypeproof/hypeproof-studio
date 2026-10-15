@@ -174,7 +174,7 @@ it is not cryptographic authorship, a license grant or verified license complian
 
 Ops62ab5b8 owns byte-identical0047. It was applied to the isolated test D1 after
 backup/restore integrity verification; five existing recipes and the version row
-were unchanged. Servicefa7472b is active as private version93318bd2 at0% normal
+were unchanged. Servicefa7472b is active as private versiona245457b at0% normal
 traffic; production d34da3a5 remains100%. Local host/client/retry tests, Service
 automation/workshop suites and combined three-principal fork lifecycle pass.
 Mac11b82da2 third principal reimported original v1, adapted the audit-evidence
@@ -189,6 +189,16 @@ the changed subject/body passed at6/6 without Google login or mail. Evidence:
 `/tmp/hps-email-mvp/windows-native-fork-reuse-20261016.json`.
 Existing pre-change installations have no invented provenance: reimport
 the intended exact store version before testing a recipient fork.
+
+The same Windows11b82da2 recipient now reports its real6/6 progress through the
+online private Service. A01 consumed a native one-time classroom pairing; the
+Chalk board (local surface reading online Service) shows normal1, unknown2 for
+the three existing principals. Eight access refusals and nine profile/store/
+installer readbacks pass with the bounded classroom transport enabled. This
+proves one current host's online observation, not three Google identities or a
+20-person rehearsal. No AI or mail calls were made. Receipt and safe board image:
+`/tmp/hps-email-mvp/online-instructor-20261016/status-receipt.json` and
+`/tmp/hps-email-mvp/online-instructor-20261016/board-safe.png`.
 
 ## Acceptance: Studio-connected store, not an isolated API
 
