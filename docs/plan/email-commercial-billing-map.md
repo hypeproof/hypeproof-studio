@@ -4,11 +4,12 @@
 [email automation delivery](email-automation-next-steps.md). This records
 implementation facts, not a verified live sale or selected commercial offer.
 
-Sources: Studio `9416321d290afc02b642b32fda6d013724ffbc54` integration worktree;
-Service `origin/main` `dbcd1a8ede5f0564e4ab191a52334fc3b1cb7c35` read with
-`git show` without switching its working tree; Lab local main
-`912341557b2342a0172106f473144d4fd043daf4`. No payment, external mutation or
-test execution was performed for this audit.
+Sources: Studio `720be6610200bc8da81686bd3eb20591d6407d88`, Service integration
+`abf79a8bbe8a64e71f738366c9138f7c722c210f`, and Lab remote main
+`c1274f543aa9e29354a8f994067c5c187137d245`, inspected with `git show` without
+switching or changing its working tree. Focused tests used synthetic providers;
+public-site checks used GET only. No order, charge, refund or entitlement was
+created on a live service.
 
 ## Existing path and reuse boundary
 
@@ -29,12 +30,31 @@ checkout URL and product configuration are all valid. A source-level path is
 not evidence that those settings or migration `0043-purchase-orders.sql` are
 active in production. Read operational configuration without printing secrets.
 
-The locally available Lab tree contains `/studio/trial`, product and installer
-pages, but no `/studio/checkout` implementation. Therefore the latest checkout
-source, actual deployed checkout URL, payment consent copy and support/refund
-page remain **uninspected**, not proven missing from production. Obtain the
-current website revision and inspect its server-side order-secret handling
-before modifying or claiming acceptance of the browser purchase flow.
+The current Lab source includes `/studio/checkout` and web purchase routes. This
+supersedes the earlier audit of stale local main `91234155`:
+
+- `checkout/start/route.ts` validates the product and sales switch, then stores
+  the order secret in an HttpOnly, SameSite=Lax cookie scoped to
+  `/studio/checkout` (Secure on HTTPS, two-hour lifetime). The redirect carries
+  only the order ID. A server-only shared key can bind rate limiting to the
+  buyer address rather than the website's server address.
+- `studioCheckout.ts` accepts only the Service's order shape and return origin.
+  `PayButton.tsx` opens Toss's card window; Service performs confirmation.
+  The page says the purchase is one-time and does not renew automatically.
+- `checkout/done/page.tsx` reads the order again: a forged `result=paid` cannot
+  produce paid status or a claim. `checkout/claim/route.ts` requires the secret
+  cookie, calls the existing claim API and stores the returned participation
+  code in a separate HttpOnly cookie for 24 hours. Explicit reissue replaces a
+  lost code. These mechanisms do not authenticate a previous workshop identity.
+
+At approximately 15:56–15:58 KST on 2026-10-15, public pricing and refund pages
+returned HTTP200. A read-only GET to `/v1/purchase/products` returned the same
+three amounts and allowances as Lab's `STUDIO_PUBLIC_OFFER`/`studioOffer.ts`:
+KRW33,000 / 200 requests, KRW55,000 / 350, and KRW108,900 / 700; each duration is
+720 hours. Amounts include VAT. The first Python-default request returned403;
+a browser User-Agent with JSON Accept returned200. This is catalogue/HTTP
+evidence, not payment-window, consent, gateway or refund acceptance. Current
+deployment SHA and the selected email-enabled product profile remain unverified.
 
 ## Concrete gaps for workshop-to-paid continuity
 
@@ -63,29 +83,49 @@ before modifying or claiming acceptance of the browser purchase flow.
    controls and unresolved reservations. Do not infer margin from one measured
    authoring conversation or the marketing price benchmark.
 
-Lab `web/src/lib/pricing.ts` has older Day/Cohort/Solo ladder values and an
-included-token margin concern. The email plan's KRW50,000 quality benchmark,
-the workshop's 30-day grant, the ordinary one-hour trial, and a public free-trial
-offer are separate inputs. Resolve the actual product contract against current
-pricing source and gateway configuration; do not copy one number across them.
+Lab `web/src/lib/pricing.ts` now exposes `STUDIO_PUBLIC_OFFER`, tested against
+the public offer module. Its basic pass costs KRW55,000 including VAT, while the
+email plan's KRW50,000 is a quality benchmark. The workshop's 30-day grant,
+ordinary one-hour trial and any public free-trial offer are separate contracts;
+do not copy one duration or allowance across them.
+
+## Executed focused regression checks
+
+On 2026-10-15, without real payments or paid AI:
+
+- Service `worker`: `npm run test:purchase`, **8/8 pass** at `abf79a8b`.
+  Covers disabled configuration, confirmed capture, duplicate/uncertain
+  recovery, claim/roster recovery, forged returns, provider refund revocation
+  and buyer rate limits.
+- Studio: `node test/pass-purchase.smoke.mjs` and
+  `node test/start-page-purchase.smoke.mjs`, **both pass** at `720be661`.
+  Covers pending-order persistence, trusted checkout origin, secret-before-open,
+  recovery and claim handling. This is not a live checkout test.
+- Lab: unchanged `studioCheckout.test.ts`, `studioWebPurchase.test.ts` and
+  `studioOffer.test.ts`, **15/15 pass** at `c1274f54`. Ran extracted source in an
+  isolated directory with Vitest4.1.11; no full site build or route/browser test.
+  Validates order/result parsing, one-time claim/reissue request construction,
+  gateway-unavailable responses and source/public-price consistency.
+
+Local audit artifacts: `/tmp/hps-email-billing-audit-c1274f5/` (`SOURCE.json`,
+`live-readonly.json`). These checks establish the reusable purchase baseline;
+they do not close the workshop-to-paid identity boundary below.
 
 ## Acceptance evidence template
 
-Run existing Service `worker/test/purchase.test.mjs` and Studio
-`test/pass-purchase.smoke.mjs` / `test/start-page-purchase.smoke.mjs` on the
-integrated revisions before adding duplicate tests. Then cover the actual
-new continuity boundary with synthetic gateway responses and no paid AI.
+The focused checks above cover existing behavior. Complete the actual new
+continuity boundary with synthetic gateway responses before any live pilot.
 
 | Scenario | Required result | Evidence |
 | --- | --- | --- |
 | Workshop ends, no purchase | No charge or automatic entitlement; saved work remains accessible under policy. | not_run |
 | Exact selected pass purchased | Explicit offer/consent, provider-confirmed amount, one grant, expected email capability. | not_run |
-| Return URL forged or wrong amount | No entitlement from browser-supplied success. | not_run |
-| Payment response lost, app restarts | Same pending order recovered; no second charge or duplicate grant. | not_run |
-| Claim answer lost | Explicit reissue preserves prior window and usage. | not_run |
+| Return URL forged or wrong amount | No entitlement from browser-supplied success. | Synthetic Service checks pass; Lab forged-paid helper passes; live not_run |
+| Payment response lost, app restarts | Same pending order recovered; no second charge or duplicate grant. | Service recovery and Studio persistence fixtures pass; real restart with gateway not_run |
+| Claim answer lost | Explicit reissue preserves prior window and usage. | Service/Studio synthetic checks pass; browser request-construction check passes; live not_run |
 | Workshop-to-paid identity | Same authorized learner, preserved local work/Google connection/ledger; intended cohort recipe access; no cross-account exposure. | not_run |
 | Pass expires/exhausts | New paid AI denied; no automatic personal/cohort funding switch; work/export access follows requirements. | not_run |
-| Provider refund or partial refund | Verified gateway record, accurate refunded state and access revocation; no claim/reissue restores it. | not_run |
+| Provider refund or partial refund | Verified gateway record, accurate refunded state and access revocation; no claim/reissue restores it. | Synthetic provider refund/revocation pass; live/partial-refund operational acceptance not_run |
 | Proposed recurring renewal | Keep unavailable until its contract, consent, charge and cancellation behavior are separately implemented and accepted. | not_run |
 
 Each completed row records Studio/Service/site SHA, selected product revision,

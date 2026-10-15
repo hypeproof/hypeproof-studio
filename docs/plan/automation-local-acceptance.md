@@ -356,3 +356,36 @@ states that the count cannot measure CSV work or its correctness. Root verified
 the live page and the classroom-ops surface contract test passed. General
 non-email workflow telemetry and automatic result checking remain unimplemented;
 the label correction does not claim to add them.
+
+## 2026-10-15: current-main integration and single-app update
+
+Studio `720be6610200bc8da81686bd3eb20591d6407d88` integrates main `fbde0482`.
+Main's browser/subagent policy is retained; the email-only minor restriction no
+longer returns early and removes unrelated browser grants. Automation88/88,
+orchestrator6/6, automation-SDK12/12 and affected SDK helpers passed, as did
+typecheck/build and all18 exact-head CI checks. The independent pre-A4 fixture
+was recomputed from `624b214f` plus main's approved age-policy changes; only
+kidsPolluted/unknownTier profiles changed, not adult baselines.
+
+At the sponsor's request, original Dev and Local Check were closed. Root
+updated only Peer Check using `studio-dev.py prepare`, then relaunched it with
+the existing isolated workspace/user data. Exactly one Dev main process remains.
+The installed extension equals the prepared build, SHA256
+`7974ee9a009507fe4456d06b058a970c1d8c10824d29304c79a7443b6ea0f2e9`.
+Actual native UI shows the workshop start page, retained conversation and saved
+recipe graph2/6 with Google reconnect required. CSV HTML remains byte-identical
+to the prior artifact (`9dfbe22e…`), and the existing durable ledger still has
+one sent entry. This is retained historical send protection, not a new send.
+Google credentials remain in-memory in this development mode; latest-SHA real
+Google execution and production credential persistence are not claimed.
+
+Full Windows build
+[38694734487](https://github.com/hypeproof/hypeproof-studio/actions/runs/38694734487)
+targets the full40-character `720be661` commit. The first dispatch
+38694625591 failed at checkout because a short SHA was treated as a branch;
+the corrected dispatch passed checkout and was still building at this audit.
+No release/tag was published. Official SDK0.3.299 win32-x64 package download
+matched lockfile SHA512 (121,929,597 bytes); it was not executed on this Mac.
+The prior private updater's SDK0.3.207 and old shell do not prove parity with
+this candidate. Fresh install, upgrade/rollback, Google resource packaging and
+real Windows login/preview still require the completed candidate and host.
