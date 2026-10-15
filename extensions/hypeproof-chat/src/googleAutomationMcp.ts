@@ -1,6 +1,7 @@
 import type { SdkMcpFactory, ZodLike, McpToolResult } from './browserMcp.ts';
 import { GoogleSheetReadError, validateEmailRecipe, type EmailPreview, type GoogleAutomationRuntime } from './googleAutomation.ts';
 import { AppsScriptRecoveryError } from './appsScriptRuntime.ts';
+import { AutomationPublicationWithdrawnError } from './automationStoreClient.ts';
 
 export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
 export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan','mcp__hypeproof_email__skill_unpublish'] as const;
@@ -82,6 +83,12 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (!host.isAllowed()) throw new Error('Capability unavailable');
       return { content: [{ type: 'text', text: JSON.stringify(await work()) }] }; }
     catch (error) {
+      if (error instanceof AutomationPublicationWithdrawnError) return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+        failureStage: 'skill_publish', reason: 'publication_unpublished', published: false,
+        nextAction: 'request_fresh_publication_approval',
+        message: '이전에 회수한 공유 요청이에요. 다시 공유하려면 내용을 새로 확인하고 승인해 주세요.',
+        guidance: '새 게시물은 아직 만들어지지 않았습니다. Google 연결이나 수업 연결 오류로 설명하지 마세요. 자동 재시도하지 말고 사용자의 새 공유 요청을 기다리세요. 새 요청에서도 비공개 공유 확인이 필요합니다.',
+      }) }] };
       if (error instanceof GoogleSheetReadError) return { isError: true, content: [{ type: 'text', text: JSON.stringify({
         failureStage: 'sheet_read', reason: error.reason, nextAction: 'wait_for_user',
         message: error.reason === 'sheet_access_denied'
@@ -131,7 +138,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       factory.tool('apps_script_deploy', '이전 클라이언트 호환용이다. 공통 실행기는 Studio가 관리하므로 수강생 개인 배포를 만들지 않는다. 반환된 nextTool을 따르며 deployed=false를 배포 성공으로 표현하지 않는다.', {}, async () => scriptRun(async () => { if (!host.appsScriptDeploy) throw new Error('Unavailable'); return host.appsScriptDeploy(); })),
       factory.tool('apps_script_run', 'mode=preview는 내 Google 권한으로 시트를 읽어 비공개 메일 미리보기를 만든다. nextAction=wait_for_user이면 결과를 짧게 알리고 턴을 종료한다. reviewed=true는 발송 승인이 아니다. 사용자가 발송을 요청했을 때만 mode=send를 호출하며 수신자·내용을 별도 카드에서 직접 승인해야 한다. 불명확한 결과는 재발송하지 않는다.', { mode: z.string() }, async args => scriptRun(async () => { if (!host.appsScriptRun || !['preview','send'].includes(String(args.mode))) throw new Error('Unavailable'); return host.appsScriptRun(args.mode as 'preview' | 'send'); })),
     ] : []),
-    factory.tool('ask_user', '사용자의 업무 의도나 선택 중 필요한 한 가지만 묻는 공개 대화 카드다. 비공개 입력이라고 적어도 비공개가 되지 않는다. 시트 주소·명단은 sheet_configure(mode=reuse), Google 계정 연결은 google_connect(mode=reuse)를 호출한다. 이 도구가 recoveryRequired를 반환하면 질문을 다시 쓰지 말고 nextTool을 호출한다.', { question: z.string(), choices: z.string(), allowFreeText: z.string() }, async args => run(async () => {
+    factory.tool('ask_user', '사용자의 업무 의도나 선택 중 필요한 한 가지만 묻는 공개 대화 카드다. 답변은 저장·게시·발송의 실행 결과나 승인이 아니다. 게시 요청은 skill_publish가 직접 여는 비공개 검토를 사용한다. 비공개 입력이라고 적어도 비공개가 되지 않는다. 시트 주소·명단은 sheet_configure(mode=reuse), Google 계정 연결은 google_connect(mode=reuse)를 호출한다. 이 도구가 recoveryRequired를 반환하면 질문을 다시 쓰지 말고 nextTool을 호출한다.', { question: z.string(), choices: z.string(), allowFreeText: z.string() }, async args => run(async () => {
       if (!host.askUser || typeof args.question !== 'string' || !args.question.trim() || args.question.length > 500 || typeof args.choices !== 'string' || args.choices.length > 2000 || !['true','false'].includes(String(args.allowFreeText))) throw new Error('Invalid question');
       const choices = JSON.parse(args.choices);
       if (!Array.isArray(choices) || choices.length > 4 || choices.some(choice => !choice || typeof choice.id !== 'string' || !choice.id || choice.id.length > 40 || typeof choice.label !== 'string' || !choice.label || choice.label.length > 120) || new Set(choices.map(choice => choice.id)).size !== choices.length) throw new Error('Invalid choices');
@@ -151,7 +158,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     }, 'skill_save')),
     factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다. 실패하면 반환된 단계와 복구 안내만 설명하고 사용자의 다음 요청을 기다린다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); }, 'google_connect')),
     factory.tool('sheet_configure', 'mode=reuse는 기존 비공개 시트 설정을 재사용하며 없을 때만 주소를 묻는다. 시트를 바꾸려는 명시적 요청에만 mode=change를 쓴다. 행 수와 열 이름만 반환한다.', { mode: z.string() }, async args => run(async () => { if (!host.configureSheet || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.configureSheet(args.mode as 'reuse' | 'change'); })),
-    factory.tool('skill_publish', '새 게시에는 parentId를 생략한다. 기존 본인 스킬의 새 버전은 목록에서 확인한 최신 id를 parentId로 지정한다. 과거 버전을 덮어쓰거나 다른 사람에게 자동 적용하지 않는다. 현재 저장한 스킬의 공유 내용을 별도 질문으로 확인받은 뒤 우리 반 스토어에 올린다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.' + storeReplyGuidance, { parentId: optionalId() }, async args => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(readOptionalId(args.parentId)); })),
+    factory.tool('skill_publish', '새 게시에는 parentId를 생략한다. 다른 사람에게 받은 스킬을 내 새 스킬로 공유할 때도 빈 인자 {}를 사용한다. 원본 출처는 호스트가 보존한 sourceId로 처리하므로 parentId에 넣지 않는다. 기존 본인 스킬의 새 버전은 목록에서 확인한 최신 id를 parentId로 지정한다. 과거 버전을 덮어쓰거나 다른 사람에게 자동 적용하지 않는다. 이 도구를 호출하면 호스트가 현재 저장한 스킬의 비공개 공유 검토 카드를 직접 열고 승인된 내용만 우리 반 스토어에 올린다. ask_user로 게시 검토를 대체하지 않는다. 이 도구의 published=true 결과 전에는 게시 완료라고 말하지 않는다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.' + storeReplyGuidance, { parentId: optionalId() }, async args => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(readOptionalId(args.parentId)); })),
     factory.tool('skill_unpublish', '사용자가 철회를 요청한 본인 게시물만 내린다. skill_list의 mine=true인 정확한 id를 사용하며, 호스트 카드에서 해당 게시물의 철회를 별도로 확인받는다. 이미 설치한 복사본·Google 연결·발송 기록은 삭제하거나 취소하지 않는다. unpublished=true일 때만 게시 철회 완료를 알린다. 실패하거나 결과가 불명확하면 목록을 다시 확인하고 자동으로 철회를 재시도하지 않는다.' + storeReplyGuidance, { id: z.string() }, async args => run(async () => { if (!host.unpublishSkill || typeof args.id !== 'string' || !args.id || args.id.length > 200) throw new Error('Invalid skill'); return host.unpublishSkill(args.id); })),
     factory.tool('skill_list', 'id를 생략하면 우리 반 스토어의 최신 스킬 목록을 보여준다. 제목만 알면 먼저 id 없이 조회한다. id에는 실제 목록 결과의 식별자만 쓰며 제목을 넣거나 사용자에게 내부 식별자를 요구하지 않는다. id를 넣으면 해당 스킬의 버전 목록을 조회한다. 목록은 요약 정보이므로 제목·설명이 같다는 이유로 버전 내용이 같다고 판단하지 않는다. 업데이트나 이전 버전 복원을 원하면 먼저 버전 목록을 보여주고 사용자가 선택한 정확한 id를 skill_install에 전달한다. 설치는 skill_install로 별도 확인한다.' + storeReplyGuidance, { id: optionalId() }, async args => run(async () => {
       if (!host.listSkills) throw new Error('Unavailable');

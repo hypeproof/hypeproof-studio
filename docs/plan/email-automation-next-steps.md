@@ -148,7 +148,7 @@ completed a bot-owned one-row preview with App/instructor6/6. Its saved send
 ledger stayed unchanged. That evidence remains tied to9b4dd233 and the old
 local Service; it is not current online Mac acceptance.
 
-Current partial evidence, all dated2026-10-15:
+Historical observations from2026-10-15 (superseded by the current checkpoint above):
 
 - Single Mac Dev runtime `3f1a3f20`, SDK0.3.299: during store validation normal activity setup targeted
   the same private online Service as Windows. A new synthetic recipe was authored,
@@ -263,20 +263,20 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 ## Verified state and evidence limits
 
-| Area | State as inspected | Limit |
+| Area | Verified current evidence | Remaining boundary |
 | --- | --- | --- |
-| Studio source | Main05efefdb integrated at9b4dd233; current622cc4e4 adds renewed-approval re-publication recovery | All18 CI checks pass at622cc4e4. Automation91, types/build and actual Service-route/SQLite re-publication controls pass. Native9b4dd233 and Windows e3ab008b remain distinct revision evidence |
-| Main integration | Main browser/subagent age policy and outbox drain retained; email-specific minor gate remains; SDK0.3.299 pinned | Automation88/88, orchestrator6/6 and automation-SDK12/12, SDK/browser helpers, types/build pass. Independent pre-A4 characterization updated only for main's policy delta; no current-output baseline recording |
-| Service | Active local server remains2ce0b2e with13 passing CI checks. Isolated follow-up e76d1c2 adds immutable recipe revisions and re-runnable metadata migration0046 | Local API15, readiness3, classroom-ops10 independent commands, types and dry-run build pass. Migration0046 is not applied to the running local or remote Service; canonical Ops DDL and coordinated deployment remain pending |
-| Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
-| Local product | Single Mac Dev app9b4dd233 against local Service2ce0b2e, local subscription coach | Fresh Google callback, bot-owned Sheet and exact1-recipient preview pass; native App and instructor both6/6. One durable send ledger hash is unchanged; no new mail. Source622cc4e4 native re-publication and two-recipient Windows reuse remain unverified |
-| Windows | Private R2 gateway7a9c50d2 serves shell720be661 / extensione3ab008b / SDK0.3.299 | Both stored archive hashes, final manifest, local PowerShell extraction/backup/handover and23 online access controls pass. Authenticated HTTP/2 app download timed out at300.02s/28818717 bytes (curl28); no complete-download PASS. HTTP/1.1 also timed out at300.02s/11611200 bytes (curl28). Repeating the same Mac transfer is not the next gate; verify the Windows network and installer. Actual Windows update from682dfd37 toe3ab008b downloaded and verified both archives, prepared SDK and launched the new app on2026-10-16. Workspace/credential restoration and store reuse remain IN_PROGRESS; no20-seat bandwidth guarantee |
-| Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported an inert recipe earlier; latest `720be661` real Google execution denies cross-Sheet reads in both directions | One durable sent record and Inbox receipt remain at `624b214f`; latest sequential account-switch test is not a new two-participant store-sharing pass. Credentials remain in-memory in Dev |
-| Store/instructor | Twenty synthetic signed grants and real local D1 cap tests pass; 720be661 actual A02 previously reported failed read4/6, answer wait4/6 and restored preview6/6; after0b57074d restart, native classroom reconnect reports blocked Google connection2/6 then restored preview6/6 | Only Peer Check runs. Refreshed board changed blocked1/normal0/unknown19 → normal1/unknown19 after real preview, and labels the old6/6 as last report while disconnected; not20 actual users. Progress is mail-only; CSV correctness is not automatically observed |
-| Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |
-| Cost | Workshop pins Haiku4.5; class estimate USD30–60, proposed cap USD100 total / USD5 per seat | Estimate assumptions below; not an applied spending authorization or measured class total |
-| Real lecture need | Coding-beginner order clerk created a CSV order/ERP comparison tool through Studio; first/second inputs, repeated runs, reports and error handling verified in browser | Course inputs are synthetic. Standalone local HTML delivered; not a shared email recipe, unattended automation, Windows or real-company-data acceptance |
-| Existing billing | Service purchase8/8, Studio purchase/start-page checks and Lab checkout/offer15/15 pass; current public catalogue matches the website's three one-time passes | No real payment. Stable workshop-to-paid account binding and selected email-enabled profile remain incomplete; see the billing audit |
+| Source/main integration | Studio db049d62 contains current main6ad5f9f8. Runtime, installer882be60a and documentation69adde22 each pass18 CI checks; the PR is mergeable. Servicefa7472b passes13 CI checks. | Draft PRs; human-only merge under DEC-022. |
+| Isolated deployment | Servicea245457b, gateway893165ad and Ops62ab5b8 canonical0046/0047 support the test environment. Backups and integrity/readback receipts are retained. | No production database migration or general release is claimed. |
+| Mac | One Dev app runs db049d62. Native store version lookup identifies cohort-only visibility and unperformed body comparison. The third principal authored the audit-reminder fork at11b82da2. | TJ Google callback expired; fresh third-principal execution remains open. Dev uses memory-only secrets. |
+| Windows | db049d62 on official shell720be661/SDK0.3.299: authenticated exact archive install, saved activity restoration, actual portable rollback to11b82da2, return to the new build and fresh non-owner fork preview6/6 all pass. | This is the private pilot package. Shared-roaming-profile snapshot restoration and20-seat bandwidth are not verified. |
+| Store/identity | Three Studio principals, exact recipe ownership/provenance, import, versions, withdrawal and access controls have revision-bound evidence. Non-owner Windows runs the Mac-authored recipe using saved private settings. | Three underlying Google identities/different datasets, third-user useful execution and the remaining matching-candidate lifecycle gates remain open. |
+| Google isolation | Earlier live shared-runner tests passed own-Sheet reads, cross-Sheet denials and caller-isolated state without learner IAM. | Do not relabel the earlier isolation run as current three-account store acceptance. |
+| Instructor/admission | Synthetic20-seat admission, budget, expiry/revocation and concurrency controls pass. Current Windows emits a real2/6 import wait then6/6 completion; the local Chalk surface reading online Service shows normal1, unknown2. | Not20 real learners or production Chalk. Real roster, class window and live-class budget are missing. |
+| Exact self-mail | The sponsor-approved shared-runner bot self-mail was sent once at624b214f; sent1/unknown0 and matching Inbox receipt at15:04 KST are retained. | Approval consumed. No repeat send is authorized. |
+| Cost | Development/test ceiling USD10 includes historical charges/holds. Reconciled maximum exposure USD5.972794; no new grants in the latest native tests. | Exposure is not actual spending. Class estimate USD30–60 and proposed USD100/seatUSD5 cap are not authorized class spending. |
+| Curriculum/design | Five-stage journey, four template families, ten supplied needs, six common assets and the120-minute lab are documented. A synthetic CSV comparison and an audit-reminder subset have actual product evidence. | Expanded learner-owned web-app/background automation runtime is not implemented; neither example passes SS-11. |
+| Commercial OAuth | Public-page readback, technical disclosure, scope rationale and operator submission packet are prepared. | Actual privacy/retention/support ownership, production branding/domain proof and Google submission/approval remain open. |
+| Existing billing | Existing purchase/claim/refund behavior and public offer were audited; synthetic Service8/8, Studio purchase/start-page and Lab15/15 checks passed at their recorded revisions. | Stable workshop-to-paid identity binding, chosen email-enabled offer and real conversion/payment acceptance are not implemented/verified. |
 
 Authoritative acceptance: [shared runner](google-shared-runner-isolation-evidence.md),
 [local/Windows/instructor audit](automation-local-acceptance.md),
@@ -372,7 +372,7 @@ release coordination and current-revision CI remain open. Keep the running Mac
 9b4dd233 and private Windows candidatee3ab008b evidence separate. Do not restart
 the current successful Google connection just to claim a newer runtime.
 
-## Windows live checkpoint — 2026-10-16
+## Historical Windows checkpoint — 2026-10-16
 
 The user made the existing Windows test PC available. Its682dfd37 app closed normally; the approved private installer downloaded app196648104 bytes and SDK121940997 bytes, enforced both pinned hashes, preserved the older install/shortcut, and launch-stage reached the newe3ab008b welcome screen. This proves delivery on that Windows network, despite the earlier Mac transfer timeouts. Exact installed receipt/profile backup readback, existing workspace/credential restoration, store import and recipient execution are the next live checks; do not infer them from successful installation. No new mail or paid call occurred.
 
@@ -382,7 +382,7 @@ The first live launch exposed a real upgrade defect: the prior682dfd37 install u
 
 Private gateway1a566b74-00eb-430b-b0b3-5770b7277bd6 serves only this installer repair; app/SDK hashes, expiry and Service binding are unchanged. Served script matches source;23 online access controls and real PowerShell archive/profile fixtures pass. New source commits still require current-head CI.
 
-## Approved test budget increase — 2026-10-16
+## Approved test budget increase and historical allocation receipts — 2026-10-16
 
 The user explicitly chose “총 US$10로 인상”. This supersedes the USD3 development/test ceiling only. Historical spending and unresolved holds count toward the USD10 total; it is not USD10 per account or a new class budget. The prior USD1 three-seat pool remains intact; an additional USD1 Windows-recipient allocation was created and read back. Historical spending/holds plus all active allocations total at most USD3.972794, below the approved USD10 ceiling. No additional model call or mail was used to apply this increase. At the latest check, the recipient had USD0.273198 available. Windows SDK requests returned403 with a model/feature-entitlement refusal; a later private-gateway health check returned503 `Test version unavailable`, while public health remained200. These are separate from a low balance. Preserve the prior store item and do not claim Windows import/execution passed. Installer fix1501537e has all18 CI checks passing.
 
@@ -420,3 +420,31 @@ diagnosis claims. Incorrect review cards were cancelled before publication.
 SDK/local/MCP guidance now requires the actual save result and stops after
 cancellation without inventing a connection error. Typecheck and automation91
 pass; native behavioral acceptance of this guidance change is NOT RUN.
+
+
+### Withdrawal and cached-copy checkpoint — 2026-10-16
+
+On native Mac/Windows db049d62, the third principal withdrew its synthetic
+`감사 증빙 제출 안내 · 파생 시험` through the private confirmation. All three
+Studio principals then saw no list entry and received404 for detail/version
+requests. Original v1/v2 hashes stayed unchanged. The Windows non-owner retained
+its installed copy and private configuration, produced a fresh one-recipient
+preview, and reviewed it without login or mail send.
+
+The first re-publication correctly required a replacement intent but MCP hid the
+typed withdrawal conflict behind generic connection advice. The follow-up coach
+also mistook an ask_user answer for publication, then incorrectly used the
+other author's source revision as parentId. Neither attempt published anything.
+The new source maps only the typed conflict to fresh-review recovery and clarifies
+that ask_user is not publication and fork source is not parentId. SDK/local
+transport and publication lifecycle tests pass10/10, plus typecheck/build. This
+source correction is not yet installed in native Mac/Windows; native coaching
+acceptance remains PARTIAL. After explicitly selecting a new publication with no
+parentId, native Mac displayed the correct private review and republished it.
+All three principals confirm the same recipe, correct owner and original source;
+the old withdrawn revision remains404 and original v1/v2 stay unchanged. The
+coach still exposed approvalConfirmed in its final answer. Recovery succeeds
+with operator correction; autonomous coaching quality is not accepted.
+
+Evidence: `/tmp/hps-email-mvp/store-withdrawal-db049d62-{before,withdrawn,republished}.json`
+and `/tmp/hps-email-mvp/windows-withdrawn-cached-preview-db049d62-safe.png`.

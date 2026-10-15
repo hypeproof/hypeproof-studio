@@ -4,7 +4,36 @@ import { localEmailTools, localTurnBudget } from '../src/localRuntime/emailTools
 import { startToolServer } from '../src/localRuntime/toolServer.mjs';
 import { createAppsScriptRuntime, APPS_SCRIPT_TOKEN_KEY } from '../src/appsScriptRuntime.ts';
 import { buildGoogleAutomationMcpServer } from '../src/googleAutomationMcp.ts';
+import { AutomationPublicationWithdrawnError } from '../src/automationStoreClient.ts';
 const profile={automations:{enabled:true,provider:'gmail',maxRecipients:20},game:{template_tier:'website'}};
+
+test('SDK and local publication report withdrawn intent without leaking errors or retrying',async()=>{
+ for(const transport of ['sdk','local']) for(const typed of [true,false]){
+  let attempts=0;
+  const host={isAllowed:()=>true,runtime:{},confirmSend:async()=>false,publishSkill:async()=>{
+   attempts++;
+   if(typed)throw new AutomationPublicationWithdrawnError();
+   throw Object.assign(new Error('private-provider-body'),{name:'AutomationPublicationWithdrawnError',reason:'publication_unpublished'});
+  }};
+  let text;
+  if(transport==='sdk'){
+   const server=buildGoogleAutomationMcpServer({tool:(name,description,schema,handler)=>({name,handler}),createSdkMcpServer:s=>s},{string:()=>({})},host);
+   const result=await server.tools.find(t=>t.name==='skill_publish').handler({});
+   assert.equal(result.isError,true);text=result.content[0].text;
+  }else{
+   const tools=localEmailTools({profile,host,signal:new AbortController().signal});
+   await assert.rejects(tools.call('email_skill_publish',{}),error=>{text=error.message;return true;});
+   assert.equal(tools.isWaiting(),false);
+  }
+  assert.equal(attempts,1);assert.ok(!text.includes('private-provider-body'));
+  if(typed){
+   const data=JSON.parse(text);
+   assert.equal(data.failureStage,'skill_publish');assert.equal(data.reason,'publication_unpublished');
+   assert.equal(data.published,false);assert.equal(data.nextAction,'request_fresh_publication_approval');
+   assert.match(data.guidance,/자동 재시도하지/);
+  }else assert.ok(!text.includes('request_fresh_publication_approval'));
+ }
+});
 
 test('SDK and local tools distinguish unfinished Google login from setup failure without leaking errors or retrying',async()=>{
  for(const transport of ['sdk','local']) for(const scenario of ['callback','operator','unknown','cancelled']){

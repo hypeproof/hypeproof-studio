@@ -924,6 +924,9 @@ Service withdrawal-conflict code may prepare a replacement intent; another priva
 sharing confirmation is required before dispatch. Persist the replacement ID
 before any later POST so restart/unknown response cannot duplicate publication.
 Generic conflicts, corrupt journal state and changed authorization fail closed.
+SDK and local tools identify only this typed withdrawal conflict as requiring
+fresh sharing approval; they report no new publication and never automatically
+retry or describe it as a Google/classroom connection failure.
 Never restore the old tombstone or alter Google settings/send history. This is a
 new publication, not version update/rollback. Local host, client, journal and
 actual Service-route evidence is recorded in the [store contract](plan/skill-store-cross-platform.md).

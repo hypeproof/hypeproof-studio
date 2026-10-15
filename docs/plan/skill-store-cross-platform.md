@@ -849,3 +849,31 @@ Evidence: `/tmp/hps-email-mvp/windows-native-version2-20261016.json`,
 `windows-native-version2-published-20261016-safe.png`,
 `windows-original-version2-preview-20261016-safe.png` and
 `windows-original-version1-rollback-preview-20261016-safe.png` in that directory.
+
+
+### Withdrawal and cached-copy checkpoint — 2026-10-16
+
+On native Mac/Windows db049d62, the third principal withdrew its synthetic
+`감사 증빙 제출 안내 · 파생 시험` through the private confirmation. All three
+Studio principals then saw no list entry and received404 for detail/version
+requests. Original v1/v2 hashes stayed unchanged. The Windows non-owner retained
+its installed copy and private configuration, produced a fresh one-recipient
+preview, and reviewed it without login or mail send.
+
+The first re-publication correctly required a replacement intent but MCP hid the
+typed withdrawal conflict behind generic connection advice. The follow-up coach
+also mistook an ask_user answer for publication, then incorrectly used the
+other author's source revision as parentId. Neither attempt published anything.
+The new source maps only the typed conflict to fresh-review recovery and clarifies
+that ask_user is not publication and fork source is not parentId. SDK/local
+transport and publication lifecycle tests pass10/10, plus typecheck/build. This
+source correction is not yet installed in native Mac/Windows; native coaching
+acceptance remains PARTIAL. After explicitly selecting a new publication with no
+parentId, native Mac displayed the correct private review and republished it.
+All three principals confirm the same recipe, correct owner and original source;
+the old withdrawn revision remains404 and original v1/v2 stay unchanged. The
+coach still exposed approvalConfirmed in its final answer. Recovery succeeds
+with operator correction; autonomous coaching quality is not accepted.
+
+Evidence: `/tmp/hps-email-mvp/store-withdrawal-db049d62-{before,withdrawn,republished}.json`
+and `/tmp/hps-email-mvp/windows-withdrawn-cached-preview-db049d62-safe.png`.
