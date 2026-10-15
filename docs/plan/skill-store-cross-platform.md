@@ -36,7 +36,9 @@ Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
 Current Mac runtime and served private Windows candidate: `32ba0ac2` (Google
 recovery follow-up), with installer source `87f75b6b`. Archive/backup/upgrade
 fixtures and23 online access controls pass. Full HTTP/2 readback of this new
-candidate is in progress; native Windows execution remains NOT_RUN.
+candidate was cancelled after563.56s/13238272 app bytes; same-artifact HEAD
+returned200 in4.680s. The transfer bottleneck is unconfirmed. Full download and
+native Windows execution remain unverified; no automatic replacement was started.
 Native three-principal store evidence below was recorded on `3f1a3f20`.
 The online Service remains pinned to
 `email-local-accepted-ffef7bc-peer`. Later observations below are revision-bound.

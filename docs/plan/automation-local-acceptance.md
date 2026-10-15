@@ -637,8 +637,19 @@ The private installer now serves32ba0ac2 through gateway
 391ecb1f-fd15-44b7-abdc-9c45793a6e66. All16 uploaded chunks and the final manifest
 were read back and hash-checked. All23 three-principal/denial/profile/manifest/
 HEAD/exact-installer checks pass. Service deployment and default traffic are
-unchanged. A fresh complete HTTP/2 download is still in progress; it is not yet
-an end-to-end download PASS. The prior3f full-download receipt does not cover32.
+unchanged. The complete HTTP/2 readback was deliberately stopped after563.56s,
+with13238272 of196647056 app bytes received (curl exit-15). This is an
+operator-cancelled incomplete transfer, not a measured network timeout or a
+full-download PASS. SDK download was not reached in this attempt. A simultaneous
+HEAD request to the same authenticated artifact returned200 over HTTP/2 in4.680s.
+Access works; the body-transfer bottleneck is unconfirmed. Do not assume a storage
+migration resolves it. Prior3f full-app download evidence does not cover32.
+
+Retain `http2-long-progress.json`, `download-stop-receipt.json` and
+`slow-download-head-control.json` in the candidate evidence directory. No
+replacement download was started. Next: measure actual Windows download on its
+network before native install/update and store-use acceptance. Successful local
+archive tests and uploaded-chunk hashes do not close this delivery gate.
 
 Candidate app:196647056 bytes, SHA256
 `4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6`.
