@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // #751 review follow-up — the path the earlier browser test skipped, end to end with real parts:
 //   built Studio webview (real click) → the provider's step mapping → the REAL ClassroomOpsHost (VS Code stubbed at the
 //   bundle boundary) → real Service routes + SQLite → actual Chalk /manage in Chromium.
@@ -15,11 +16,11 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
 import { chromium } from '@playwright/test';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps } from './service-fixture.mjs';
 import { SessionSpool } from '../../extensions/hypeproof-chat/src/sessionSpool.ts';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-ops-roster'); mkdirSync(out, { recursive: true });
 const local = await localOps(); const { default: chalk } = await import('../../chalk/src/index.ts');
-const { setEvaluatorTransport } = await import('../../worker/src/routes/classroom-reports.ts'), { setResendFetch } = await import('../../worker/src/routes/classroom-delivery.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts');
+const { setEvaluatorTransport } = await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts'), { setResendFetch } = await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const { lessonStepSignal } = await import('../../extensions/hypeproof-chat/src/chatPanelHelpers.ts');
 const realFetch = globalThis.fetch;
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? local.app.fetch(new Request(url, init), local.env, { waitUntil() {} }) : realFetch(url, init);

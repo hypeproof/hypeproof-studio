@@ -1,12 +1,13 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {mkdirSync} from 'node:fs';
 import {chromium} from '@playwright/test';
-import {localAuthoring} from '../../worker/test/harness/dental-authoring.mjs';
+import {localAuthoring} from '@hypeproof/service-testkit/test/harness/dental-authoring.mjs';
 const local=await localAuthoring();
 const {default:chalk}=await import('../../chalk/src/index.ts');
-const {TEST_SECRET}=await import('../../worker/test/harness/index.mjs');
+const {TEST_SECRET}=await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const env={...local.env,HPS_SIGNING_SECRET:TEST_SECRET,ENVIRONMENT:'dev',HPS_SERVICE_ORIGIN:local.origin};
 const realFetch=globalThis.fetch;
 globalThis.fetch=(url,options)=>String(url).startsWith(local.origin)?local.fetcher(url,options):realFetch(url,options);

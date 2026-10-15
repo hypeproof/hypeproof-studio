@@ -11,8 +11,8 @@
 // events by `productVerification` for exactly this version (CR-81); nothing here sets it.
 // The project's test origin joins the Experiment Browser's allowed origins (CR-11).
 
-import { productVerification } from "../../../worker/src/lib/measurement-core/verification.ts";
-import type { ObservationEvent } from "../../../worker/src/lib/measurement-core/legacy-observation.ts";
+import { productVerification } from "@hypeproof/measurement-core/verification";
+import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import { buildPublishSet, publishSetRefusalText, type PublishSet } from "./publishSet.ts";
 import { curriculumRequest, publishTestVersion, type CurriculumResult } from "./galleryPublish.ts";
 import type { PublishExperimentView, PublishForm, PublishLinkView, PublishView } from "./publishView.ts";

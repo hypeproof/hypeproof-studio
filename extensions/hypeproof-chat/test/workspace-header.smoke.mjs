@@ -43,12 +43,12 @@ const parse = (raw) => {
 
 // ─── 한글 폴더명 — 인코딩 없이 넣으면 헤더가 던진다 ─────────────────────────
 {
-  const env = gw({ workspace: "/Users/학생/보아치과 홈페이지" });
+  const env = gw({ workspace: "/Users/학생/예시치과 홈페이지" });
   const raw = env.ANTHROPIC_CUSTOM_HEADERS;
   // 헤더 값은 바이트 안전해야 한다 — 비ASCII 가 남아 있으면 안 된다.
   assert.ok(!/[^\x00-\x7F]/.test(raw), "헤더 값에 비ASCII 가 남으면 안 된다");
   const h = parse(raw);
-  assert.equal(decodeURIComponent(h["x-hps-workspace"]), "/Users/학생/보아치과 홈페이지");
+  assert.equal(decodeURIComponent(h["x-hps-workspace"]), "/Users/학생/예시치과 홈페이지");
   console.log("✓ 한글 폴더명 — 인코딩되어 실리고 복원된다");
 }
 

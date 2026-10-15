@@ -7,8 +7,8 @@
 
 | ID | 동작과 완료 기준 | 구현·검증 |
 |---|---|---|
-| MU-01 | 서버 시크릿만 사용. 기존 수업은 유지하고 명시적 성인 proxy 실습만 공급자별 모델을 선택 | studio-model-practice; 기존 선택 UI; 실제 Mac |
-| MU-02 | 허용 모델만 전송. 다른 공급자로 자동 대체하지 않고 한 사용자 요청에 상류 호출 한 번 | 실제 Hono 계약; 401/403/400/409/429/503 대조 |
+| MU-01 | 서버 시크릿만 사용. 기존 수업은 유지하고 명시적 성인 proxy 실습만 공급자별 모델을 선택. 비교 메뉴는 '검토된 카탈로그 전체' 로 정의돼 있어(Service main `399109c` `profiles/studio-model-practice.ts:11-16`) 카탈로그에 id 를 넣으면 메뉴가 저절로 넓어진다 — **카탈로그가 바뀔 때마다 이 메뉴를 다시 승인한다.** 2026-10-14 Claude 5.5·GPT-6 추가로 메뉴는 15개→21개(Claude 12·GPT 6·Gemini 2·GLM 1; `worker/test/model-usage.test.mjs:23-25`)가 되고 `gpt-6-astra` 는 소유자 결정(싼 것 먼저)으로 뺐다. 21개 전체의 재승인은 운영 반영 전 소유자 확인 항목이다. 메뉴의 `max_tokens` 4096 은 Claude 5.5 의 기본 thinking·GPT-6 reasoning 토큰과 나눠 쓴다(잘림 빈도 미측정) | studio-model-practice; 기존 선택 UI; 실제 Mac |
+| MU-02 | 허용 모델만 전송. 다른 공급자로 자동 대체하지 않고 한 사용자 요청에 상류 호출 한 번. 요청별 모델 라우터는 없다 — 도입하려면 새 ADR 이 먼저다(2026-10-14 결정) | 실제 Hono 계약; 401/403/400/409/429/503 대조 |
 | MU-03 | 호출 전에 회차·사용자 요청 횟수와 사용자 동시 슬롯 1개를 원자적으로 예약 | model_usage_requests; SQLite 20개 동시 예약 |
 | MU-04 | 토큰 재발급은 회차 사용 횟수를 초기화하지 않음. 실패한 호출도 시도에 포함 | 실제 route + 재발급 테스트 |
 | MU-05 | 서버 요청 ID + UUID에 실제 provider/requested/returned model과 측정 상태를 보존. 중복 정산 불가 | 멱등 terminal update; 정상·오류·늦은 보고 |

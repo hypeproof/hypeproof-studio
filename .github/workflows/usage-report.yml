@@ -9,7 +9,7 @@ name: usage-report
 #
 # 나가는 것은 합계뿐이다. 자유 SQL 입력은 받지 않는다 — 같은 DB 에 수업 트레이스와
 # 수강생 발화가 있어서, 그건 집계 권한이 아니라 대화 열람 권한이 된다.
-# 질의문은 worker/scripts/usage-report.mjs 가 allowlist 로 만든다.
+# 질의문은 공개 Service 패키지의 usage-report.mjs 가 allowlist 로 만든다.
 
 on:
   workflow_dispatch:
@@ -48,11 +48,23 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: worker/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      - name: Install worker dependencies
-        working-directory: worker
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install pinned public Service tooling
         run: npm ci
+
+      - name: Resolve installed Service configuration
+        id: service
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { dirname } from 'node:path';
+          import { fileURLToPath } from 'node:url';
+          console.log('directory=' + dirname(fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/wrangler.toml'))));
+          NODE
 
       - name: Fail early when the token is missing
         # 토큰이 없으면 wrangler 는 대화형 로그인을 시도하다 알 수 없는 형태로 죽는다.
@@ -65,7 +77,7 @@ jobs:
 
       - name: Query usage_log
         id: query
-        working-directory: worker
+        working-directory: ${{ steps.service.outputs.directory }}
         # 입력을 `${{ }}` 로 run 본문에 직접 박지 않는다 — 그건 셸 인젝션이고,
         # 이 러너에는 CLOUDFLARE_API_TOKEN 이 있다. env 로 넘기면 값이 셸에
         # 해석되지 않고 변수로만 들어간다. (스크립트가 값을 다시 검증한다 —

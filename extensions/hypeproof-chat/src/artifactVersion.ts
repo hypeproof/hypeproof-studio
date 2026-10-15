@@ -23,7 +23,7 @@
 import { createHash } from "node:crypto";
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
-import { digestOf } from "../../../worker/src/lib/measurement-core/local-record.ts";
+import { digestOf } from "@hypeproof/measurement-core/local-record";
 import { resolveWithinRoot } from "./liveServerHelpers.ts";
 import type { ArtifactFileRef, ArtifactVersionRef } from "./experimentBrowser.ts";
 

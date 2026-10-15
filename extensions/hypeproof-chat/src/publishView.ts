@@ -1,6 +1,6 @@
 // The "사용자 테스트용으로 공개" panel state (cr-publish, #1393). Types only, shared by the
 // host (publishSession.ts) and the webview (PublishPanel.tsx): no node or vscode imports.
-import type { ProductVerification } from "../../../worker/src/lib/measurement-core/verification.ts";
+import type { ProductVerification } from "@hypeproof/measurement-core/verification";
 
 export interface PublishLinkView {
   id: string;

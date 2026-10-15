@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751) — a Mac session a PERSON can sit in front of, from the prepared dev host.
 //
 //   node e2e/classroom/mac-devhost.mjs prepare                                        # once per source change (copy + current build + SDK JS)
@@ -20,9 +21,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { localOps } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps } from './service-fixture.mjs';
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), serviceRepo = repo, home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
 const servicePort = Number(process.env.HPS_DEMO_SERVICE_PORT || 18761), boardPort = Number(process.env.HPS_DEMO_BOARD_PORT || 18762), prefix = 'demo-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex'), json = (p) => JSON.parse(readFileSync(p, 'utf8'));
 const manifest = json(path.join(home, 'manifest.json')), copy = path.join(home, 'HypeProof Studio (ops devhost).app'), ext = path.join(copy, 'Contents/Resources/app/extensions/hypeproof-chat');
@@ -33,12 +34,12 @@ assert.equal(execFileSync('git', ['diff', manifest.extension.source_sha, head, '
 const sdk = manifest.agent_sdk?.vendored === true && manifest.agent_sdk.binary && process.env.HPS_GUI_NO_SDK !== '1';
 
 // ── Service: real router + SQLite, synthetic class run ──
-const local = await localOps(), { setRoster } = await import(serviceRepo + '/worker/src/lib/kv.ts');
+const local = await localOps(), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const seats = Array.from({length:6},(_,i)=>({seat_id:'A'+(i+1),student_id:prefix+(i+1)}));
 await setRoster(local.env.HPS_KV, local.cohort, seats.map((s) => s.student_id)); await local.freeze();
 assert.equal((await local.configure(seats, 0, { flags: { ops_observe: true, ops_commands: true, ops_collect:true, ops_reports:true, ops_delivery:true } })).status, 201);
 // The harness instructor token lives one hour; a participant token may not outlive its issuer, so this one is issued for longer.
-const { issueIssuer } = await import(serviceRepo + '/worker/src/lib/tokens.ts'), { TEST_SECRET } = await import(serviceRepo + '/worker/test/harness/index.mjs'), { OPS_ALL } = await import(serviceRepo + '/worker/test/harness/classroom-ops.mjs');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs'), { OPS_ALL } = await import('@hypeproof/service-testkit/test/harness/classroom-ops.mjs');
 const inviter = (await issueIssuer({ issuer: 'teacher-a', scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: OPS_ALL }] }, 4, TEST_SECRET)).token;
 const invite = await local.request(`/admin/cohorts/${local.cohort}/authoring/${local.lesson.course_id}/versions/${local.lesson.version}/participants`, 'POST', { user: seats[0].student_id, hours: 1 }, inviter);
 assert.equal(invite.status, 200, invite.raw); const token = invite.json.token;
@@ -75,8 +76,8 @@ const workHashes = () => Object.fromEntries(readdirSync(ws).filter((f) => statSy
 
 
 const {default:chalk}=await import('../../chalk/src/index.ts');
-const {setEvaluatorTransport}=await import(serviceRepo+'/worker/src/routes/classroom-reports.ts');
-const {setResendFetch}=await import(serviceRepo+'/worker/src/routes/classroom-delivery.ts');
+const {setEvaluatorTransport}=await import('@hypeproof/service-testkit/src/routes/classroom-reports.ts');
+const {setResendFetch}=await import('@hypeproof/service-testkit/src/routes/classroom-delivery.ts');
 local.env.HPS_CLASSROOM_EVALUATOR='service-anthropic';
 let evaluatorCalls=0; const mails=[];
 setEvaluatorTransport(async request=>{evaluatorCalls++;const own=JSON.parse(request.messages[0].content).evidence_catalog.find(q=>q.basis);return Response.json({content:[{type:'text',text:JSON.stringify({findings:own?[{capability:'FRAMING',status:'observed',claim:'확인할 조건을 말로 제시했습니다.',evidence:[{quote_id:own.quote_id}],assistance:'unknown'}]:[],next_experiment:'다음에는 확인 조건을 두 개 적고 결과를 비교해 보세요.'})}],usage:{input_tokens:10,output_tokens:5}});});

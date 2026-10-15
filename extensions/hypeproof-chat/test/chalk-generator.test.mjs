@@ -76,12 +76,12 @@ await check('T-G3 execSetInputs correct path, body includes vocab, request_id au
   }, async (port) => {
     // expected_revision, request_id는 모델이 넘기지 않는다 — exec가 자동 생성
     await execSetInputs(fakeCtx(port), {
-      cohort: 'sk-biopharm-kids-s1', course: 'lesson-01',
+      cohort: 'kids-workshop-s1', course: 'lesson-01',
       audience: '어린이', assets: ['INTENT', 'VERIFY'],
       teaching_style: '탐구', requirements: '없음', format: 'workshop',
       vocab: { goals: ['concept_understanding'], conditions: ['no_prior'] },
     });
-    assert.match(capturedPath, /\/admin\/chalk\/cohorts\/sk-biopharm-kids-s1\/courses\/lesson-01\/inputs/,
+    assert.match(capturedPath, /\/admin\/chalk\/cohorts\/kids-workshop-s1\/courses\/lesson-01\/inputs/,
       `inputs 경로 불일치: ${capturedPath}`);
     assert.ok(capturedBody.includes('"vocab"'), `vocab 필드가 바디에 없다`);
     const parsed = JSON.parse(capturedBody);

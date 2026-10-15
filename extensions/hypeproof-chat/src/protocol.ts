@@ -1,3 +1,5 @@
+/** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
+export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -94,7 +96,7 @@ export interface EffortRequestRecord {
   reason: 'selected' | 'course_default' | 'unsupported_model'; status: number; created_at: string;
 }
 export interface ChatConfig {
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean};
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
@@ -108,6 +110,12 @@ export interface ChatConfig {
   coach: CoachInfo;
   profile: ResolvedProfile | null;
   update?: UpdateOffer | null;             // #72 — auto-update banner state
+  /**
+   * One-click publish is allowed for this seat (host-computed `sitePublishAllowed`: publishing
+   * enabled + per_user_github_pages + not a minor). Sent as a decision rather than mirrored in
+   * the webview, so the button and the host gate cannot drift apart.
+   */
+  sitePublish?: boolean;
   // #1298 — true when the active token verified as an issuer via GET /admin/chalk/whoami.
   // Drives rendering of InstructorChatPanel (header band + unrestricted model select).
   isInstructor?: boolean;
@@ -155,6 +163,8 @@ export interface ResolvedProfile {
   activity_id?: string;
   /** Presentation only; derived from authenticated Service access, never grants authority. */
   activity_kind?: "trial" | "personal" | "classroom";
+  /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
+  pass?: PassStatus;
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -238,7 +248,14 @@ export interface ResolvedProfile {
     example_prompts: string[];
   };
   ux: UxConfig;
-  publishing: { enabled: boolean; strategy: string };
+  /**
+   * `default_repo_name` and `custom_domain` belong to the one-click GitHub Pages publish
+   * (`strategy: "per_user_github_pages"`, src/publish/). Both are optional because a Service
+   * older than that feature omits them: a missing repo name falls back to `dental-homepage`
+   * and a missing `custom_domain` hides nothing (the coach may still pass a domain; this flag
+   * only says whether the cohort's skill offers it).
+   */
+  publishing: { enabled: boolean; strategy: string; default_repo_name?: string; custom_domain?: boolean };
   preview: { type: "iframe" | "live_server"; auto_start: boolean };
   // #422 — the cohort's on-disk workspace folder (e.g. "~/HypeProofClinic" for
   // the dental website cohort, "~/HypeProofGames" for kids). The extension opens
@@ -246,11 +263,25 @@ export interface ResolvedProfile {
   workspace_root?: string | null;
   workspace_start?: 'empty' | 'html';
   /** Optional input capabilities (default off). #278 / website-copyclone. */
-  input?: { page_context?: boolean; image_paste?: boolean };
+  input?: {
+    page_context?: boolean;
+    image_paste?: boolean;
+    /** Photos attached as files saved to `images/`, paths only to the model (attachedImages.ts). hype-dental D-028. */
+    image_files?: boolean;
+  };
+  /** Classroom-operation panels per cohort (classroomPanels.ts); absent → shown. hype-dental D-025. */
+  classroom_panels?: import("./classroomPanels").ClassroomPanelsSetting;
+  /** How much tool work the timeline draws (toolActivity.ts); absent → "detailed". hype-dental D-027. */
+  tool_activity?: import("./toolActivity").ToolActivityMode;
   /** #278 Phase 3 — coach's client-driven browser control loop (default off). */
   browser_control?: { enabled: boolean; max_iterations?: number };
   /** CR-02 — Curriculum Runtime switch (`curriculum_runtime.enabled`), off when absent. */
   curriculum_runtime?: { enabled: boolean };
+  /**
+   * Learning wiki and deck generator (App-side generic skills), off when absent. `plan` is the
+   * cohort's specialization: folder, audience, session label, deck template and per-session focus.
+   */
+  learning_wiki?: { enabled: boolean; plan?: LearningWikiPlan };
   /**
    * #306 — hardened native-browser session for minor cohorts. `mode: "safe"`
    * makes the host enable the locked-down `persist:hp-safe` integrated-browser
@@ -404,7 +435,13 @@ export type WebviewMessage = (
   | { type: "selectModelDirect"; modelId: string }
   | { type: "selectEffort"; value: CourseEffort }
   | { type: "refreshEffort" }
-  | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }> }
+  | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }>;
+      /** D-028 — stage ids of photos attached as files; the host moves them into images/ on send. */
+      attachments?: string[] }
+  /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
+  | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
+  /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
+  | { type: "discardStagedImage"; stageId: string }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[] }
   | { type: "cancelStream"; streamId: string }
   | { type: "requestAction"; action: ActionRequest }
@@ -429,6 +466,8 @@ export type WebviewMessage = (
    * not what is on screen.
    */
   | { type: "publishToGallery" }
+  // One-click publish (src/publish/): the chat header button. The host re-checks the gate.
+  | { type: "publishSite" }
   // Trace signals (#9). Webview fires; host forwards via POST /v1/trace/event.
   // The host-side HTTP forwarding lands in a follow-up — keep these in sync
   // with worker/src/routes/trace.ts TraceEvent union.
@@ -490,6 +529,12 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | {type:'inputRejected';text:string;images?:string[]}
+  /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
+  | {type:'imageStageRefused';stageId:string;reason:string}
+  /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */
+  | {type:'imageStagedByHost';stageId:string;name:string;dataUrl?:string}
+  /** D-028 — the photos of the message just sent were saved; `note` is the `[첨부한 사진]` list. */
+  | {type:'attachedImagesSaved';note:string}
   | {type:'activityFreeze';frozen:boolean;nonce?:string}
   | {type:'activityDraftError';error:string}
   /** #897 (VO-01) — a request to run the probe. Raised only by a command, never at activation time. */
@@ -614,7 +659,11 @@ export interface ActionRequest {
   // read-only subagent (코드리뷰어/리서처) via the SDK Agent/Task tool. The
   // modal makes the student consciously decide the delegation — the
   // delegation_judgment asset IS this decision (docs/seven-assets.md §5).
-  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType";
+  // "publishSite": the coach's publish_site tool makes the workspace public on GitHub Pages.
+  // Its own tier in resolveActionApproval (confirmed once per repository per session) and
+  // deliberately NOT in `requireApprovalFor`: a setting must not be able to remove the one
+  // confirmation in front of an irreversible "everyone can read this" act.
+  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType" | "publishSite";
   /**
    * epic #431, shell only — the command is unrecoverable if approved by
    * reflex (`rm`, `sudo`, `git push --force`, pipe-to-shell). The host shows
@@ -636,4 +685,20 @@ export interface ElementPreview {
   sentText: string;
   /** The element crop as it will be sent, or null when the cohort sends no images. */
   imageDataUrl: string | null;
+}
+
+/** Cohort plan for the learning wiki and deck skills (served as `learning_wiki.plan`; learningWiki.ts re-exports it). */
+export interface LearningWikiPlan {
+  /** What students call the wiki in the chat and in the copy (default "팀 브레인"). */
+  name?: string;
+  /** Folder in the workspace (default "wiki"). */
+  dir?: string;
+  /** Who the learners are, in the prompt's words (default "학습 팀"). */
+  audience?: string;
+  /** What one session is called (default "회차"; the founder course says "주차"). */
+  session_label?: string;
+  /** Deck template for the deck skill; `hint` tells the skill what the slide must and must not show. */
+  deck?: { title?: string; slides: Array<{ no: number; title: string; question: string; hint?: string }> };
+  /** Per session: the slides the deck skill drafts that session and the session's question. */
+  sessions?: Array<{ session: number; focus?: number[]; question?: string }>;
 }

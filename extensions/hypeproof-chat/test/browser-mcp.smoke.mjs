@@ -264,36 +264,36 @@ function makeHost(initial = null) {
     openBrowser: async () => {},
     screenshot: async () => null,
     startLivePreview: async () => null,
-    currentPage: async () => ({ url: "https://boaclinic.com/", title: "보아치과" }),
+    currentPage: async () => ({ url: "https://dental.example/", title: "예시치과" }),
   };
   const twoSlots = {
     ...base,
     openPages: async () => [
       { url: "http://127.0.0.1:5432/", title: "내 홈페이지" },
-      { url: "https://boaclinic.com/", title: "보아치과" },
+      { url: "https://dental.example/", title: "예시치과" },
     ],
   };
   // 양성 대조군 — 다른 슬롯에 이미 떠 있으면 모달 없이 통과해야 한다.
   assert.equal((await resolveAlreadyOpen(twoSlots, "http://127.0.0.1:5432")).alreadyOpen, true,
     "다른 슬롯에 이미 떠 있는 페이지에 승인 모달이 또 뜨면 안 된다");
-  assert.equal((await resolveAlreadyOpen(twoSlots, "https://boaclinic.com/")).alreadyOpen, true);
+  assert.equal((await resolveAlreadyOpen(twoSlots, "https://dental.example/")).alreadyOpen, true);
 
   // 음성 대조군 — 안 떠 있는 주소는 여전히 모달을 거친다(게이트 우회 금지).
-  assert.equal((await resolveAlreadyOpen(twoSlots, "https://boaclinic.com/vision")).alreadyOpen, false);
+  assert.equal((await resolveAlreadyOpen(twoSlots, "https://dental.example/vision")).alreadyOpen, false);
   assert.equal((await resolveAlreadyOpen(twoSlots, "http://127.0.0.1:5432/about.html")).alreadyOpen, false);
   // 정책 위반은 openPages 가 있어도 절대 통과 못 한다.
   assert.equal((await resolveAlreadyOpen(twoSlots, "javascript:alert(1)")).alreadyOpen, false);
 
   // openPages 없는 호스트는 예전 동작(currentPage 비교) 그대로 — 능력은 optional.
   assert.equal((await resolveAlreadyOpen(base, "http://127.0.0.1:5432")).alreadyOpen, false);
-  assert.equal((await resolveAlreadyOpen(base, "https://boaclinic.com/")).alreadyOpen, true);
+  assert.equal((await resolveAlreadyOpen(base, "https://dental.example/")).alreadyOpen, true);
 
   // 조회가 던지거나 이상한 값을 주면 '모름' → currentPage 폴백 (짐작하지 않는다).
   const broken = { ...base, openPages: async () => { throw new Error("탭 조회 실패"); } };
-  assert.equal((await resolveAlreadyOpen(broken, "https://boaclinic.com/")).alreadyOpen, true);
+  assert.equal((await resolveAlreadyOpen(broken, "https://dental.example/")).alreadyOpen, true);
   assert.equal((await resolveAlreadyOpen(broken, "http://127.0.0.1:5432")).alreadyOpen, false);
   const junk = { ...base, openPages: async () => null };
-  assert.equal((await resolveAlreadyOpen(junk, "https://boaclinic.com/")).alreadyOpen, true);
+  assert.equal((await resolveAlreadyOpen(junk, "https://dental.example/")).alreadyOpen, true);
 
   console.log("✓ #519: openPages — 열린 탭 전부와 비교(슬롯 2개), 미지원/실패는 예전 동작으로 폴백");
 }
@@ -306,7 +306,7 @@ function makeHost(initial = null) {
   // 재현 시나리오: 참고 사이트를 보다가 프리뷰로 옮겨간 뒤, 다시 참고 사이트를
   // 열어달라는 요청. 그 탭은 이미 떠 있으므로 열리지 않는다 — 그런데 타깃은?
   const PREVIEW = { url: "http://127.0.0.1:5432/", title: "내 홈페이지" };
-  const REFERENCE = { url: "https://boaclinic.com/", title: "보아치과" };
+  const REFERENCE = { url: "https://dental.example/", title: "예시치과" };
   function makeTwoSlotHost() {
     // targetTab 을 흉내낸다: 지금 운전 중인 페이지(=프리뷰). 실기기에서는
     // live_preview_start 가 setTargetTab 으로 여기까지 옮겨놓은 상태다.
@@ -336,7 +336,7 @@ function makeHost(initial = null) {
     buildHypeproofMcpServer(factory, fakeZ, host);
     const open = registered.find((t) => t.name === "browser_open");
 
-    const res = await open.handler({ url: "https://boaclinic.com/" }, {});
+    const res = await open.handler({ url: "https://dental.example/" }, {});
     assert.equal(state.opens.length, 0, "이미 떠 있으므로 열지 않는다 (#415 유지)");
     assert.equal(
       state.target.url,
@@ -374,7 +374,7 @@ function makeHost(initial = null) {
     buildHypeproofMcpServer(factory, fakeZ, spied);
     const open = registered.find((t) => t.name === "browser_open");
 
-    await open.handler({ url: "https://boaclinic.com/vision" }, {});
+    await open.handler({ url: "https://dental.example/vision" }, {});
     assert.equal(state.opens.length, 1, "안 떠 있는 주소는 열어야 한다");
     assert.equal(focusCalls, 0, "여는 경로에서 focusOpenPage 를 부를 이유가 없다");
   }
@@ -387,7 +387,7 @@ function makeHost(initial = null) {
     buildHypeproofMcpServer(factory, fakeZ, host);
     const open = registered.find((t) => t.name === "browser_open");
 
-    const res = await open.handler({ url: "https://boaclinic.com/" }, {});
+    const res = await open.handler({ url: "https://dental.example/" }, {});
     assert.equal(state.opens.length, 0);
     assert.equal(state.target.url, PREVIEW.url, "능력이 없으면 예전 동작 그대로");
     assert.ok(res.content.map((c) => c.text).join("\n").includes("이미"));
@@ -407,7 +407,7 @@ function makeHost(initial = null) {
       buildHypeproofMcpServer(factory, fakeZ, host);
       const open = registered.find((t) => t.name === "browser_open");
 
-      const res = await open.handler({ url: "https://boaclinic.com/" }, {});
+      const res = await open.handler({ url: "https://dental.example/" }, {});
       assert.ok(!res.isError, "고정 실패가 멀쩡한 결과를 오류로 바꾸면 안 된다");
       assert.ok(res.content.map((c) => c.text).join("\n").includes("이미"));
     }
@@ -448,12 +448,12 @@ function makeHost(initial = null) {
 
   // 양성 대조군 — 참고 슬롯에 있던 다른 사이트가 밀려나면 결과가 그것을 말한다.
   {
-    const { host, state } = makeSlotHost({ url: "https://boaclinic.com/", title: "보아치과" });
+    const { host, state } = makeSlotHost({ url: "https://dental.example/", title: "예시치과" });
     const res = await openOf(host).handler({ url: "https://otherclinic.com/" }, {});
     const text = res.content.map((c) => c.text).join("\n");
     assert.equal(state.opens.length, 1);
     assert.ok(text.includes("https://otherclinic.com/"), "요청한 주소는 그대로 보고한다");
-    assert.ok(text.includes("보아치과"), "밀려난 페이지를 이름으로 알려준다");
+    assert.ok(text.includes("예시치과"), "밀려난 페이지를 이름으로 알려준다");
     assert.ok(
       text.includes("이동했어요"),
       "밀려났다는 사실을 말해야 코치가 '나란히 떠 있다'고 착각하지 않는다",
@@ -468,18 +468,18 @@ function makeHost(initial = null) {
   // 음성 대조군 ① — 밀려난 게 없으면 예전 문장 그대로. 없는 상실을 지어내지 않는다.
   {
     const { host } = makeSlotHost(undefined);
-    const res = await openOf(host).handler({ url: "https://boaclinic.com/" }, {});
+    const res = await openOf(host).handler({ url: "https://dental.example/" }, {});
     const text = res.content.map((c) => c.text).join("\n");
-    assert.equal(text.split("\n")[0], "브라우저에서 열었어요: https://boaclinic.com/");
+    assert.equal(text.split("\n")[0], "브라우저에서 열었어요: https://dental.example/");
     assert.ok(!text.includes("이동했어요"));
   }
 
   // 음성 대조군 ② — 같은 주소가 "밀려났다"고 보고돼도 참가자 눈엔 아무것도 안
   // 사라졌다. 그걸 상실로 적으면 코치에게 없는 사실을 가르친다(정규화 차이 포함).
   {
-    for (const same of ["https://boaclinic.com/", "https://boaclinic.com"]) {
-      const { host } = makeSlotHost({ url: same, title: "보아치과" });
-      const res = await openOf(host).handler({ url: "https://boaclinic.com/" }, {});
+    for (const same of ["https://dental.example/", "https://dental.example"]) {
+      const { host } = makeSlotHost({ url: same, title: "예시치과" });
+      const res = await openOf(host).handler({ url: "https://dental.example/" }, {});
       assert.ok(
         !res.content.map((c) => c.text).join("\n").includes("이동했어요"),
         `같은 주소(${same})는 상실이 아니다`,
@@ -498,7 +498,7 @@ function makeHost(initial = null) {
         currentPage: async () => null,
         openPages: async () => [],
       };
-      const res = await openOf(host).handler({ url: "https://boaclinic.com/" }, {});
+      const res = await openOf(host).handler({ url: "https://dental.example/" }, {});
       assert.ok(!res.isError);
       assert.equal(opens.length, 1);
       assert.ok(res.content.map((c) => c.text).join("\n").includes("브라우저에서 열었어요"));

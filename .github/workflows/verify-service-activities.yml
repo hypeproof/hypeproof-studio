@@ -1,11 +1,19 @@
 name: Service compatibility with both Studio activities
 on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Exact Studio driver SHA to verify without deployment
+        required: true
+        type: string
   workflow_call:
     inputs:
       ref:
         required: true
         type: string
     secrets:
+      HYPEPROOF_READ_TOKEN:
+        required: true
       HPS_ACCEPTANCE_ANTHROPIC_API_KEY:
         required: true
 permissions:
@@ -46,6 +54,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Resolve pinned Service source
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+      - name: Install candidate Service dependencies
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
       - name: Prepare public App and test dependencies
         shell: bash
         env:
@@ -55,7 +80,6 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ANTHROPIC_API_KEY" || { echo 'BLOCKED missing acceptance credential'; exit 1; }
-          npm ci --prefix worker
           npm ci --prefix e2e
           mkdir -p "$RUNNER_TEMP/public-assets" "$RUNNER_TEMP/public-app" "$RUNNER_TEMP/service-evidence"
           gh release download "$TAG" --dir "$RUNNER_TEMP/public-assets" --pattern '*.zip'
@@ -87,6 +111,7 @@ jobs:
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
           SERVICE_SHA: ${{ needs.resolve.outputs.service_sha }}
           APP_SHA: ${{ needs.resolve.outputs.app_sha }}
           TAG: ${{ needs.resolve.outputs.tag }}

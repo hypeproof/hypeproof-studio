@@ -9,7 +9,7 @@ last_reviewed: 2026-05-22
 audience: maintainers
 source_paths:
   - extensions
-  - worker
+  - config/service-deployment.json
   - e2e
   - scripts
 quality_gates:

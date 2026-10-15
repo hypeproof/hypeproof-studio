@@ -42,6 +42,7 @@ import { decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
 import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
+import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/publishConfig";
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
 
@@ -170,14 +171,24 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
   providerRef = provider;
+  // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
+  // pointing at a loopback mock (resolvePublishEndpoints explains why only then).
+  provider.initSitePublish(
+    resolvePublishEndpoints({
+      env: process.env as Record<string, string | undefined>,
+      testRun: isTestRun,
+      devHost: context.extensionMode === vscode.ExtensionMode.Development,
+      testState: backdoors.publishOverrides,
+    }),
+  );
   // CR-10 — show the delete command when an earlier session stored browser-result bytes.
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
-  const startPage = new StartPage(context, provider, async (profile, commit) => {
-    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit);
-  });
+  const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
+    return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
+  }, provider.githubContinueSource());
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
@@ -465,7 +476,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showWarningMessage("Chalk 초안 검사는 강사 모드에서만 사용할 수 있습니다. issuer 토큰을 먼저 등록하세요.");
         return;
       }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: sk-biopharm-kids-s1" });
+      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: kids-workshop-s1" });
       if (!cohort) return;
       const course = await vscode.window.showInputBox({ prompt: "강의 ID", placeHolder: "예: lesson-01" });
       if (!course) return;
@@ -488,7 +499,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz");
       const enabled = await chalkToolsEnabled(context.secrets);
       if (!enabled) { vscode.window.showWarningMessage("강사 모드에서만 사용할 수 있습니다."); return; }
-      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: sk-biopharm-kids-s1" });
+      const cohort = await vscode.window.showInputBox({ prompt: "코호트 ID", placeHolder: "예: kids-workshop-s1" });
       if (!cohort) return;
       const course = await vscode.window.showInputBox({ prompt: "강의 ID", placeHolder: "예: lesson-01" });
       if (!course) return;
@@ -634,8 +645,14 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.testMyProduct", () => provider.testMyProduct()),
     // cr-publish — "Publish for user test" (CR-17). Gated in the manifest, re-checked in the handler.
     vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => provider.publishTestVersion()),
+    // One-click publish to GitHub Pages. Gated in the manifest (sitePublishEnabled), re-checked in the handler.
+    vscode.commands.registerCommand("hypeproof-chat.publishSite", () => provider.publishSite()),
+    // Forget the persisted "publish without asking" registration (publishRegistry.ts).
+    vscode.commands.registerCommand("hypeproof-chat.publishSiteUnregister", () => provider.unregisterSitePublish()),
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
+    vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
+    vscode.commands.registerCommand("hypeproof-chat.deckDraft", () => provider.deckDraft()),
     vscode.commands.registerCommand("hypeproof-chat.curriculumSkills", () => provider.curriculumSkills()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReview", () => provider.weeklyReview()),
     vscode.commands.registerCommand("hypeproof-chat.weeklyReviewDirector", () => provider.weeklyReviewDirector()),
@@ -650,13 +667,32 @@ export async function activate(context: vscode.ExtensionContext) {
     // feature. image_paste-gated; the user still confirms via a one-click
     // notification (never silent).
     vscode.window.tabGroups.onDidChangeTabs(async (e) => {
-      if (!provider.isImagePasteEnabled()) return;
+      const asFiles = provider.isImageFilesEnabled();
+      if (!provider.isImagePasteEnabled() && !asFiles) return;
       for (const tab of e.opened) {
         const input = tab.input as { uri?: vscode.Uri } | undefined;
         const uri = input?.uri;
         if (!uri || uri.scheme !== "file") continue;
-        if (!/\.(png|jpe?g|gif|webp)$/i.test(uri.fsPath)) continue;
+        if (!(asFiles ? /\.(png|jpe?g|gif|webp|heic|heif|avif)$/i : /\.(png|jpe?g|gif|webp)$/i).test(uri.fsPath)) continue;
         const name = uri.path.split("/").pop() ?? "이미지";
+        if (asFiles) {
+          // D-028 — the photo goes into the chat as a file (saved to images/ on send). A photo
+          // already in the class folder is just being looked at, not attached.
+          if (provider.isInsideWorkspace(uri.fsPath)) continue;
+          const pick = await vscode.window.showInformationMessage(imageAttachPrompt(provider.coachDisplayName(), name), "붙이기");
+          if (pick !== "붙이기") continue;
+          if (await provider.stageImageFromFile(uri.fsPath)) {
+            // The tab VS Code opened for the drop covers the work; the photo now lives in the chat.
+            // Look the tab up again by its file: the Tab object from the event can be stale after
+            // the prompt (2026-10-14 app run: closing it left the photo tab open).
+            const same = vscode.window.tabGroups.all
+              .flatMap((g) => g.tabs)
+              .filter((t) => (t.input as { uri?: vscode.Uri } | undefined)?.uri?.toString() === uri.toString());
+            try { if (same.length) await vscode.window.tabGroups.close(same); } catch { /* already closed */ }
+          }
+          await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+          continue;
+        }
         const pick = await vscode.window.showInformationMessage(
           imageAttachPrompt(provider.coachDisplayName(), name),
           "붙이기",
@@ -927,7 +963,8 @@ export function resolveWorkspaceRoot(raw: string): string | null {
 
 /**
  * Make sure the learner has a real folder to work in, matching their cohort.
- * The folder path comes from `profile.workspace_root` and the starter page from
+ * The folder path comes from a local selection or `profile.workspace_root`, kept
+ * separate so a selection cannot authorize pass takeover. The starter page comes from
  * `profile.game.template_tier` (website vs game) — #422. When the profile is
  * absent (called before onboarding resolves it) or carries no workspace_root,
  * we fall back to the legacy `~/HypeProofGames` + game starter, so existing
@@ -950,12 +987,15 @@ export function resolveWorkspaceRoot(raw: string): string | null {
  * folder would briefly see workspaceFolders empty, fire openFolder, and
  * reload mid-onboard, racing the setToken QuickInput.
  */
-async function ensureWorkspace(
+export async function ensureWorkspace(
   profile?: ResolvedProfile | null,
   context?: vscode.ExtensionContext,
   isTestRun = false,
   commit: (directory?: string) => Promise<void> = async () => {},
+  selectedDirectory?: string,
 ): Promise<boolean> {
+  const desiredRoot = selectedDirectory ? resolveWorkspaceRoot(selectedDirectory)
+    : profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
   let open: string[] = [];
   for (let i = 0; i < 10; i++) {
     const folders = vscode.workspace.workspaceFolders;
@@ -970,14 +1010,14 @@ async function ensureWorkspace(
     const attempted = context?.globalState.get<string>(WORKSPACE_SWITCH_ATTEMPT_KEY) ?? null;
     const decision = decideWorkspaceSwitch({
       openFolders: open,
-      desiredRoot: profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null,
+      desiredRoot,
       lastAttemptedRoot: attempted,
       // Reuse the env OR file fixture verdict from activation (same as spool).
       isE2E: isTestRun,
       canonicalize: canonicalizeFsPath,
     });
     if (!decision.switch) {
-      const desired = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
+      const desired = desiredRoot;
       if (!isTestRun && desired && !isSameLocation(open[0], desired, canonicalizeFsPath)) {
         await clearWorkspaceSwitchAttempt(context);
         throw new Error('Activity workspace is not the active root');
@@ -1008,7 +1048,7 @@ async function ensureWorkspace(
 
   // Folder + starter are cohort-driven; legacy fallback keeps old cohorts intact
   // and guarantees an absolute path (a relative workspace_root resolves to null).
-  const resolved = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) : null;
+  const resolved = desiredRoot;
   const dir = resolved ?? path.join(os.homedir(), LEGACY_WORKSPACE_DIRNAME);
   return await openWorkspaceFolder(dir, profile, commit, context);
 }
@@ -1048,7 +1088,7 @@ async function openWorkspaceFolder(
 
 async function applyTestBackdoors(
   context: vscode.ExtensionContext,
-): Promise<{ testStateFileFound: boolean }> {
+): Promise<{ testStateFileFound: boolean; publishOverrides?: PublishOverrideSource }> {
   // Source 1: env vars (works when Playwright passes them through to the
   // extension host, which is inconsistent across VS Code versions).
   let token = process.env.HPS_TEST_TOKEN;
@@ -1057,6 +1097,10 @@ async function applyTestBackdoors(
   let coachPersonality = process.env.HPS_TEST_COACH_PERSONALITY ?? "";
   let history: Array<{ id: string; role: "user" | "assistant" | "system"; content: string; createdAt: number }> | undefined;
   let issuerToken = process.env.HPS_TEST_ISSUER_TOKEN;
+  // One-click publish e2e: the mock GitHub's addresses and a fake gh. Read here because env
+  // reaches the extension host inconsistently (see above); resolvePublishEndpoints still
+  // refuses them outside a test/dev run and for non-loopback URLs.
+  let publishOverrides: PublishOverrideSource | undefined;
 
   // Source 2: a JSON file the test fixture writes into the user-data-dir,
   // typically <userDataDir>/User/hps-test-state.json. Always wins over env
@@ -1077,12 +1121,14 @@ async function applyTestBackdoors(
           coach?: { name?: string; personality?: string };
           history?: typeof history;
           issuerToken?: string;
+          publish?: PublishOverrideSource;
         };
         if (j.token) token = j.token;
         if (j.coach?.name) coachName = j.coach.name;
         if (j.coach?.personality) coachPersonality = j.coach.personality;
         if (Array.isArray(j.history)) history = j.history;
         if (j.issuerToken) issuerToken = j.issuerToken;
+        if (j.publish && typeof j.publish === "object") publishOverrides = j.publish;
         break;
       }
     }
@@ -1176,7 +1222,7 @@ async function applyTestBackdoors(
       } catch { /* ignore — best effort */ }
     }
   }
-  return { testStateFileFound };
+  return { testStateFileFound, ...(publishOverrides ? { publishOverrides } : {}) };
 }
 
 export function deactivate() {

@@ -35,7 +35,7 @@
 // Run (from e2e/): node --experimental-strip-types --experimental-sqlite curriculum-runtime/publish-runtime.real.mjs [--out result.json]
 // Exit: 0 every check and control held · 1 a check or a control failed · 2 could not run.
 
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 import { chromium, devices } from "@playwright/test";
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
@@ -45,8 +45,8 @@ import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ext = join(here, "../../extensions/hypeproof-chat");
-const { localCurriculum } = await import("../../worker/test/harness/curriculum.mjs");
-const { PARTICIPANT_SNIPPET } = await import("../../worker/src/lib/curriculum/participant-snippet.ts");
+const { localCurriculum } = await import("@hypeproof/service-testkit/test/harness/curriculum.mjs");
+const { PARTICIPANT_SNIPPET } = await import("@hypeproof/service-testkit/src/lib/curriculum/participant-snippet.ts");
 // The pre-fix snippet's behaviour: every entry load adopts the server's candidate session.
 const OLD_SNIPPET = PARTICIPANT_SNIPPET.replace("x=g(S,K);if(!(x&&V.test(x.pseudonym)&&x.session_id))x=null;", "x=null;");
 if (OLD_SNIPPET === PARTICIPANT_SNIPPET) throw new Error("the old-snippet plant did not apply");
@@ -92,7 +92,7 @@ const PORT = server.address().port;
 f = await localCurriculum({ testOrigin: `http://{project}.test.invalid:${PORT}` });
 // One synthetic student publishes 11 Projects here (each case needs its own origin), past the
 // per-student policy bound; the bound itself is checked in worker/test/cr-publish.test.mjs.
-const { PUBLISH_LIMITS } = await import("../../worker/src/routes/curriculum.ts");
+const { PUBLISH_LIMITS } = await import("@hypeproof/service-testkit/src/routes/curriculum.ts");
 PUBLISH_LIMITS.maxProjectsPerStudent = 50;
 
 // A login wall the negative control serves (a link variant that sends the participant to log in).

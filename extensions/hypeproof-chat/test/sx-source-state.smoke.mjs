@@ -17,7 +17,7 @@ import {
   partitionBySourceState,
   sourceStateLabel,
 } from "../webview-ui/src/evidenceDrawerLogic.ts";
-import { SOURCE_STATES } from "../../../worker/src/lib/measurement-core/learning-events.ts";
+import { SOURCE_STATES } from "@hypeproof/measurement-core/learning-events";
 
 const CTX = { week: 4, step_id: "s1", task: "task-1", module_version: "m2026.09.20-1" };
 const row = (extra = {}) => ({

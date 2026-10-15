@@ -78,7 +78,7 @@ assert.equal(selectedModel(otherStudent,selection,{scope:modelSelectionScope(fir
   const { fileURLToPath } = await import('node:url');
   const { dirname, join } = await import('node:path');
   const here = dirname(fileURLToPath(import.meta.url));
-  const policy = readFileSync(join(here, '..', '..', '..', 'worker', 'src', 'lib', 'lesson-model-policy.ts'), 'utf8');
+  const policy = readFileSync(new URL(import.meta.resolve('@hypeproof/service-testkit/src/lib/lesson-model-policy.ts')), 'utf8');
   const m = /export interface ModelChoice \{([^}]*)\}/.exec(policy);
   assert.ok(m, '워커의 ModelChoice 선언을 못 찾았다 — 이 대조의 기준점이 사라졌다');
   const serverFields = [...m[1].matchAll(/(\w+)\??\s*:/g)].map(x => x[1]).sort();

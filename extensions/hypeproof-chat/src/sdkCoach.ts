@@ -22,14 +22,23 @@ import { pathToFileURL } from "node:url";
 import { crMcpRegistration } from "./crHostWiring";
 import {
   buildHypeproofMcpServer,
+  buildHypeproofToolsOnlyServer,
   crBrowserOpenRefusal,
   HYPEPROOF_MCP_SERVER_NAME,
+  hypeproofMcpRegistration,
   MCP_BROWSER_OPEN,
   resolveAlreadyOpen,
+  withServerTools,
   type BrowserMcpHost,
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
+import {
+  resolveOrchestrator,
+  startOrchestratorTurn,
+  type OrchestratorHostArgs,
+  type OrchestratorTurn,
+} from "./orchestratorSurfaces.ts";
 import type { AssetScoreChunk, Citation, ResolvedProfile } from "./protocol";
 import { ProxyAuthError } from "./proxyClient";
 import {
@@ -51,6 +60,8 @@ import {
   resolveZodModule,
   sdkBinaryMarkerPath,
   coachSeatKeyFor,
+  MCP_ORCHESTRATOR_TOOLS,
+  sdkBusyPolicyFor,
   sdkConfigDirFor,
   sdkToolToActionRequest,
   seededSdkBinaryPath,
@@ -65,6 +76,8 @@ import type { SdkTurnEnd } from "./sdkCoachHelpers";
 export type { BrowserMcpHost } from "./browserMcp";
 
 export type { CoachToolAction } from "./sdkCoachHelpers";
+
+export type { OrchestratorEvent, OrchestratorHostArgs } from "./orchestratorSurfaces.ts";
 
 /**
  * Thrown when the agent-sdk runtime is selected but the SDK package isn't
@@ -161,6 +174,15 @@ export interface SdkCoachArgs {
    * browser-less. Implemented by chatPanelProvider (it has the vscode API).
    */
   browserHost?: BrowserMcpHost;
+  /**
+   * A4 (ADR 0011) — the front-line orchestrator host. Read only when the served profile
+   * carries a roster this seat may use (resolveOrchestrator: an adult seat and a
+   * well-formed `orchestrator` value, then A2's orchestratorBindingFor). Then the turn
+   * gets consult and site_check on the hypeproof MCP server, the Pre/PostToolUse check
+   * hooks, A2's headers and env pins, and the busy notice. Absent, or no such roster →
+   * today's turn, byte for byte (test/orchestrator-switch.smoke.mjs).
+   */
+  orchestrator?: OrchestratorHostArgs;
   /**
    * #282 W4a — the hypeproofChat.sdkBinaryPath setting (highest-priority
    * binary override). Undefined/empty = unset; resolution then walks
@@ -510,10 +532,48 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   }
 
   const sdk = args.sdk ?? (await loadSdk());
-  const opts = profileToAgentOptions(args.profile, {
-    model: args.model,
-    systemPrompt: args.systemPrompt,
-  });
+  // A4 — the front-line orchestrator (ADR 0011). On only with the host's arguments, an
+  // adult seat and a well-formed served roster, and only when A2's binding takes it
+  // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
+  // exactly as it did before A4.
+  const orchestratorHost = args.orchestrator;
+  const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
+  const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
+  if (
+    orchestratorHost && !orchestrator.on && servedRoster && typeof servedRoster === "object" &&
+    (servedRoster as { enabled?: unknown }).enabled !== false
+  ) {
+    // A roster was served and refused here: "configured but inert" must leave a trace.
+    console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
+  }
+  const opts = profileToAgentOptions(
+    args.profile,
+    orchestrator.on
+      ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
+      : { model: args.model, systemPrompt: args.systemPrompt },
+  );
+  const orchestratorTurn: OrchestratorTurn | null =
+    orchestrator.on && orchestratorHost && opts.orchestrator
+      ? startOrchestratorTurn({
+          roster: orchestrator.roster,
+          binding: opts.orchestrator,
+          profile: args.profile,
+          host: orchestratorHost,
+          seatKey: coachSeatKeyFor(args),
+          turnId: args.turnId,
+          gateway: {
+            url: args.gatewayUrl,
+            token: args.token,
+            lessonBinding: args.lessonBinding,
+            fundingSource: args.fundingSource,
+          },
+          workspaceRoot: args.cwd,
+          lessonStep: args.lessonStep,
+          sitePort: args.browserHost ?? null,
+          signal: args.signal,
+          canonicalize: canonicalizeFsPath,
+        })
+      : null;
 
   // Compose the transcript into a single prompt string for now. A follow-up
   // switches to the SDK streaming-input session API to preserve real history.
@@ -538,22 +598,41 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
 
   let mcpServers: Options["mcpServers"];
   let grantedMcpTools: readonly string[] = [];
-  if (opts.permittedMcpTools.length > 0 && args.browserHost) {
+  // A4 — since A2 the permitted list can hold consult/site_check without the browser
+  // grant, so each part registers from its own names: the server's own tools (browser,
+  // CR, publish_site) with their grants and a host, as before; the orchestrator tools
+  // only on an orchestrator turn. Without a roster the first part is the whole list and
+  // nothing else changes.
+  const orchestratorNames = MCP_ORCHESTRATOR_TOOLS as readonly string[];
+  const serverGrant = opts.permittedMcpTools.filter((t) => !orchestratorNames.includes(t));
+  const orchestratorGrant = opts.permittedMcpTools.filter((t) => orchestratorNames.includes(t));
+  const registerServer = serverGrant.length > 0 && !!args.browserHost;
+  if (registerServer || (orchestratorTurn && orchestratorGrant.length > 0)) {
     const hasFactory =
       typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
     if (hasFactory && z) {
-      const server = buildHypeproofMcpServer(
-        { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! },
-        z,
-        args.browserHost,
-        // CR-02 — register the Experiment Browser tools only where they were granted.
-        crMcpRegistration(opts.permittedMcpTools),
-      );
-      mcpServers = {
-        [HYPEPROOF_MCP_SERVER_NAME]: server as NonNullable<Options["mcpServers"]>[string],
-      };
-      grantedMcpTools = opts.permittedMcpTools;
+      const factory: SdkMcpFactory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
+      const extra = orchestratorTurn ? orchestratorTurn.mcpTools(factory, z, orchestratorGrant) : { tools: [], names: [] };
+      const server = registerServer
+        ? buildHypeproofMcpServer(
+            withServerTools(factory, extra.tools),
+            z,
+            args.browserHost!,
+            // CR-02 — register the Experiment Browser tools only where they were granted; the
+            // browser and publish_site parts likewise follow their own grants, so a cohort with
+            // only the publish grant gets a server carrying publish_site alone.
+            { ...crMcpRegistration(opts.permittedMcpTools), ...hypeproofMcpRegistration(opts.permittedMcpTools) },
+          )
+        : extra.tools.length > 0
+          ? buildHypeproofToolsOnlyServer(factory, extra.tools)
+          : null;
+      if (server) {
+        mcpServers = {
+          [HYPEPROOF_MCP_SERVER_NAME]: server as NonNullable<Options["mcpServers"]>[string],
+        };
+        grantedMcpTools = [...(registerServer ? serverGrant : []), ...extra.names];
+      }
     } else {
       console.warn(
         "[coach] profile grants browser MCP tools but the SDK/zod factory is unavailable — running browser-less",
@@ -600,6 +679,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // #507 — 떠 있는 라이브 서버 주소(없으면 생략). 코치가 미리보기 포트를
       // 추측하던 유일한 이유는 이 값이 컨텍스트에 없었기 때문이다.
       ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
+      // A4 — the check hooks (diff guard, archive, site-check summary). They report
+      // through additionalContext only; A2's guardOrchestratorHooks drops anything else.
+      ...(orchestratorTurn?.hooks ? { hooks: orchestratorTurn.hooks } : {}),
     }),
     // Every tool call routes here (allowedTools is empty — an entry there
     // would auto-approve and bypass this gate). The pure policy matrix
@@ -700,6 +782,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor);
       } finally {
         awaitingUser -= 1;
+        // The tool runs from NOW, not from when it was requested. Without this restamp a long
+        // tool approved after a slow modal (publish_site waits on GitHub for minutes) would
+        // lose the modal's time from its stall-watchdog slack and be aborted mid-run.
+        lastToolCallAt = Date.now();
       }
       return ok
         ? { behavior: "allow" as const, updatedInput: input }
@@ -709,6 +795,12 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   };
 
   const stream = sdk.query({ prompt, options });
+  // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
+  // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
+  const observed = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
+  // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
+  // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
+  const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
 
   // Map SDK messages → the proxyChat callback shape via the pure consumer
   // (sdkCoachHelpers.consumeSdkStream — unit-tested). Three exits besides
@@ -731,7 +823,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // (onCitations / onAssetScore are wired for parity but the SDK stream
   // mapping for those lands in a later phase.)
   const stallMs = args.stallTimeoutMs ?? SDK_STREAM_STALL_MS;
-  return await consumeSdkStream(stream, {
+  return await consumeSdkStream(observed, {
     isAborted: () => args.signal.aborted,
     makeAbortError: abortError,
     abortQuery: () => abortController.abort(),
@@ -767,6 +859,19 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // running (one budget of slack after the decision — a long subagent gets
     // ~2 budgets total before the watchdog calls it wedged, a never-returning
     // one still ends in a message rather than a hang).
-    isTurnBlocked: () => awaitingUser > 0 || Date.now() - lastToolCallAt < stallMs,
-  });
+    // A4 — a running consult or site check is host work, not a stall.
+    isTurnBlocked: () => awaitingUser > 0 || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
+    ...(busy ? { busy } : {}),
+  }).then(
+    // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.
+    // The value and the error pass through as they are.
+    (end) => {
+      orchestratorTurn?.end(end);
+      return end;
+    },
+    (err: unknown) => {
+      orchestratorTurn?.end(null);
+      throw err;
+    },
+  );
 }

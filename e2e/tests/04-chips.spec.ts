@@ -2,8 +2,8 @@
 // input box, follow-up chips appear after assistant response.
 //
 // These specs require a profile with at least one weak chip AND non-empty
-// follow_up. Current dev-stack default (boah-dental) is option B (1 starter
-// chip, no weak, empty follow_up — #187). Skip until sk-biopharm-kids
+// follow_up. Current dev-stack default (dental-pilot) is option B (1 starter
+// chip, no weak, empty follow_up — #187). Skip until kids-workshop
 // run-mode is wired into the e2e harness (epic #200 follow-up).
 
 import { test, expect } from "@playwright/test";

@@ -60,7 +60,7 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
 
   let upstream: Response;
   try {
-    upstream = await fetch(target, { method, headers, body });
+    upstream = await fetch(target, { method, headers, body, redirect: "error", signal: AbortSignal.timeout(8_000) });
   } catch (err) {
     console.error(`[${rid}] forward to ${origin} failed:`, err);
     return c.json(

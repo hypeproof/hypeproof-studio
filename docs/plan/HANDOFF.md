@@ -131,7 +131,7 @@ Before retrieval is used:
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' \
   -H 'cf-access-authenticated-user-email: attacker@example.com' \
-  https://chalk.hypeproof-ai.xyz/admin/cohorts/sk-biopharm-2026-a/logs
+  https://chalk.hypeproof-ai.xyz/admin/cohorts/kids-workshop-2026-a/logs
 # expect 401 or an Access redirect — NOT 200
 ```
 

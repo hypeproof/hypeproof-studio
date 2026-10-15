@@ -18,7 +18,7 @@
 // Pure and vscode-free.
 
 import { createHash } from "node:crypto";
-import { canonicalJson, digestOf, redactDeep } from "../../../worker/src/lib/measurement-core/local-record.ts";
+import { canonicalJson, digestOf, redactDeep } from "@hypeproof/measurement-core/local-record";
 import type { ArtifactFileRef, Observation, PageRecordKind } from "./experimentBrowser.ts";
 
 export const BROWSER_RESULT_FORMAT = "hps-browser-result/1";

@@ -40,7 +40,7 @@ export interface GhRelease {
   html_url: string;
   prerelease?: boolean;
   draft?: boolean;
-  assets: Array<{ name: string; browser_download_url: string; size: number; digest?: string }>;
+  assets: Array<{ name: string; browser_download_url: string; url?: string; size: number; digest?: string }>;
 }
 
 export interface UpdateInfo {
@@ -185,7 +185,7 @@ export function parseLatestRelease(
   return {
     available: true,
     version,
-    downloadUrl: asset.browser_download_url,
+    downloadUrl: asset.url ?? "",
     releaseUrl: release.html_url,
     notes: typeof release.body === "string" ? release.body : "",
     sizeBytes: typeof asset.size === "number" ? asset.size : 0,

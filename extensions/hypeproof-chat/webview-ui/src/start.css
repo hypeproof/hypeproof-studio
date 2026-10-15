@@ -407,6 +407,34 @@
 .studio-choice:hover:enabled { background: var(--studio-bg); }
 .studio-choice:disabled { opacity:.55; cursor:default; }
 
+/* REQ-L12 — passes are a list of peer choices (SX-04): the selected one gets a border, never a second Primary. */
+.studio-plans { display:grid; gap:8px; margin-bottom:14px; }
+.studio-plan { width:100%; display:grid; grid-template-columns:1fr auto; gap:2px 12px; text-align:left; padding:13px 15px; border:1px solid var(--studio-line); border-radius:7px; background:transparent; color:var(--studio-text); cursor:pointer; font:inherit; word-break:keep-all; }
+.studio-plan[aria-checked="true"] { border-color:var(--studio-accent); background:var(--studio-bg); }
+.studio-plan:hover:enabled { background:var(--studio-bg); }
+.studio-plan:disabled { opacity:.55; cursor:default; }
+.studio-plan-name { font-size:14px; font-weight:650; }
+.studio-plan-name em { margin-left:8px; font-style:normal; font-size:11px; font-weight:500; color:var(--studio-accent); }
+.studio-plan-price { font-size:14px; font-weight:650; text-align:right; }
+.studio-plan-for, .studio-plan-what { grid-column:1 / -1; font-size:12px; color:var(--studio-muted); }
+.studio-purchase-actions { display:flex; flex-wrap:wrap; gap:4px 16px; }
+
+/* "GitHub에서 이어하기" — the choice that replaces the one Primary while a code is confirmed and
+ * the seat's GitHub already holds a site: continue (Primary) or start new (a peer option). */
+.studio-github { display: grid; gap: 10px; }
+.studio-github h3 { font-size: 13px; font-weight: 650; margin: 0; }
+.studio-repo-list { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+.studio-repo-list legend { font-size: 11px; color: var(--studio-muted); padding: 0; margin-bottom: 6px; }
+.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: 10px; border: 1px solid var(--studio-line); border-radius: 7px; padding: 10px 12px; margin: 0; font-size: 13px; cursor: pointer; }
+.studio-repo-list label:has(input:checked) { border-color: #D5F279; }
+/* `.studio-connect input` styles the code field (width:100%, padding, border); undo it for radios,
+ * or the radio takes the row and the name wraps one letter per line (seen in c-01-pick.png). */
+.studio-repo-list input[type="radio"] { width: auto; flex: none; margin: 0; padding: 0; border: 0; border-radius: 50%; background: none; accent-color: #D5F279; }
+.studio-repo-list span, .studio-repo-one span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.studio-repo-list small, .studio-repo-one small { flex-shrink: 0; font-size: 11px; color: var(--studio-muted); }
+.studio-repo-one { cursor: default; }
+.studio-github .studio-help { margin: 0; }
+
 .studio-saved-activities button { display: block; text-align: left; max-width: 100%; overflow-wrap: anywhere; }
 .studio-saved-activities small { display: block; font-size: .8em; opacity: .75; }
 .hps-activity-header { padding: 8px 16px; font-size: .9em; overflow-wrap: anywhere; }

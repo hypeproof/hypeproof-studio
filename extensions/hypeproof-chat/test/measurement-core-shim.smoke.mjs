@@ -1,7 +1,7 @@
 // #1042 — the App observation contract is the common measurement core, not a copy.
 import assert from 'node:assert/strict';
 const app = await import('../src/nativeObservationContract.ts');
-const core = await import('../../../worker/src/lib/measurement-core/index.ts');
+const core = await import('@hypeproof/measurement-core');
 for (const name of ['validateObservation', 'validateFindings', 'observableAssets', 'OBSERVATION_FORMAT', 'OBSERVATION_ASSETS'])
   assert.equal(app[name], core[name], `App ${name} is not the core export`);
 // Control: the recorder built on that contract still refuses a changed scope.

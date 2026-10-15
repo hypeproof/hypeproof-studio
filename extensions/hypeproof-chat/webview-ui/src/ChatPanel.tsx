@@ -1,5 +1,6 @@
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
+import { activityLabel, passEnd } from "./activityLabel";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -30,6 +31,7 @@ import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
+import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import {
   RUNNER_PHRASE_MS,
@@ -69,6 +71,8 @@ interface Props {
     | { state: "error"; message: string }
     | null;
   onPublish: () => void;
+  /** One-click publish to GitHub Pages (shown when the host says `config.sitePublish`). */
+  onPublishSite?: () => void;
   streaming: boolean;
   /**
    * WHICH message is streaming, not just whether one is (#429). `streaming` is
@@ -83,7 +87,7 @@ interface Props {
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   canRetryLast: boolean;
-  onSend: (text: string, images?: string[], imports?: ImportRef[]) => void;
+  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[]) => void;
   onRetry: (prompt: string) => void;
   onRetryLast: () => void;
   onDismissError: () => void;
@@ -176,6 +180,54 @@ async function fitDataUrl(original: string): Promise<string> {
   return out; // best effort — worker cap still guards the extreme tail
 }
 
+// hype-dental D-028 — photos attached as files (cohorts with `input.image_files`). The bytes
+// go to the host's staging folder as they are; the host moves them into images/ on send and
+// the model gets their paths. Limits mirror the host's attachedImages.ts.
+const MAX_FILE_PHOTOS = 10;
+const MAX_FILE_PHOTO_BYTES = 25 * 1024 * 1024;
+interface StagedPhoto { id: string; name: string; thumb: string | null; ready: boolean }
+
+function newStageId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return c?.randomUUID ? c.randomUUID().replace(/-/g, "") : `${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** A photo file? HEIC from an iPhone often arrives with an empty type, so the name counts too. */
+function isPhotoFile(f: File): boolean {
+  return f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp|gif|avif)$/i.test(f.name);
+}
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(typeof r.result === "string" ? r.result : "");
+    r.onerror = () => reject(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+/** A small preview for the chip; null when the browser cannot draw the format (HEIC). */
+async function photoThumb(dataUrl: string): Promise<string | null> {
+  try {
+    const img: HTMLImageElement = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("decode failed"));
+      el.src = dataUrl;
+    });
+    const scale = Math.min(1, 160 / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return null;
+  }
+}
+
 const DEFAULT_UX: UxConfig = {
   coach: {
     naming_mode: "fixed",
@@ -210,6 +262,9 @@ export function ChatPanel(props: Props) {
   // a brief reason when a paste is rejected (too big / too many).
   const [pendingImages, setPendingImages] = useState<string[]>(config?.activityDraft?.images ?? []);
   const [imgNote, setImgNote] = useState<string | null>(null);
+  // D-028 — photos staged in the host until this message is sent. Not part of the saved draft:
+  // the host deletes staged files when the window closes.
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
   // #416 — the ONE message parked while a turn is running (null = none).
   const [queued, setQueued] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
@@ -317,6 +372,20 @@ export function ChatPanel(props: Props) {
     });
     return off;
   }, [activityId]);
+  // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
+  // one itself (dropped from Finder, it opened as a tab): draw its chip.
+  useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "imageStageRefused") {
+      setStagedPhotos((prev) => prev.filter((p) => p.id !== msg.stageId));
+      setImgNote(msg.reason);
+      return;
+    }
+    if (msg.type !== "imageStagedByHost") return;
+    const { stageId, name, dataUrl } = msg;
+    setImgNote(null);
+    setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev : [...prev, { id: stageId, name, thumb: null, ready: true }]));
+    if (dataUrl) void photoThumb(dataUrl).then((thumb) => setStagedPhotos((prev) => prev.map((p) => (p.id === stageId ? { ...p, thumb } : p))));
+  }), []);
   // SX-14·15·17 — take the learning state the host sent as-is. Why it is not filtered
   // by activity id: the gate is per **task**, and the host already sends only that
   // task's events.
@@ -394,6 +463,8 @@ export function ChatPanel(props: Props) {
   // gate server-side, this just keeps the UI honest (no thumbnail, plain text
   // paste). Absent on older cached /v1/profile responses → treated as off.
   const imagePasteEnabled = config?.profile?.input?.image_paste === true;
+  // D-028 — photos as files, paths only to the model. Takes over drop and paste where on.
+  const imageFilesEnabled = config?.profile?.input?.image_files === true;
   // #649 — switching worlds is **click-only**. Only for cohorts whose profile carries
   // worlds (kids-quest), the friend strip is always up, right above the composer. It
   // must not disappear once the conversation has started — in v0.1.48, which had only
@@ -419,6 +490,9 @@ export function ChatPanel(props: Props) {
    * two sides do not diverge.
    */
   const publishing = config?.profile?.publishing;
+  // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
+  // are drawn; absent → shown (classroomPanels.ts).
+  const classroomPanels = classroomPanelsShown(config?.profile);
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -426,7 +500,7 @@ export function ChatPanel(props: Props) {
   const coachName = resolveCoachIdentity(config?.coach, { ux }).name;
 
   // Tone for hard-coded chat-panel labels — game (kids) vs search-webapp
-  // (보아치과 teaser) vs website (보아치과 원장 copyclone) vs world
+  // (예시치과 teaser) vs website (치과 원장 copyclone) vs world
   // ("내가 만든 미래"). Centralized in chatPanelHelpers (appToneOf/TONE_LABELS)
   // but mirrored here so the webview stays vscode-free (chatPanelHelpers
   // imports Node `Buffer`).
@@ -474,15 +548,18 @@ export function ChatPanel(props: Props) {
 
   const submit = (text?: string) => {
     const value = (text ?? draft).trim();
-    if ((!value && pendingImages.length === 0) || streaming || unavailable || props.sendLocked) return;
+    if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked) return;
+    if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return; }
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
-    props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined);
+    props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined);
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
+    // The host now owns these files (it moves them into images/), so no discard here.
+    setStagedPhotos([]);
     setImgNote(null);
     setRollExpand(null);
   };
@@ -555,6 +632,29 @@ export function ChatPanel(props: Props) {
     }
   };
 
+  // D-028 — keep dropped or pasted photos as files in the host until the message is sent.
+  const stagePhotoFiles = (files: File[]) => {
+    setImgNote(null);
+    let count = stagedPhotos.length;
+    for (const f of files) {
+      if (count >= MAX_FILE_PHOTOS) { setImgNote(`사진은 한 번에 ${MAX_FILE_PHOTOS}장까지 보낼 수 있어요.`); break; }
+      if (f.size > MAX_FILE_PHOTO_BYTES) { setImgNote("사진이 너무 커요(25MB까지). 휴대폰에서 보통 크기로 다시 보내 주세요."); continue; }
+      count++;
+      const id = newStageId();
+      setStagedPhotos((prev) => [...prev, { id, name: f.name, thumb: null, ready: false }]);
+      readAsDataUrl(f)
+        .then(async (url) => {
+          postToHost({ type: "stageImage", stageId: id, name: f.name, mime: f.type, base64: url.slice(url.indexOf(",") + 1) });
+          const thumb = await photoThumb(url);
+          setStagedPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, thumb, ready: true } : p)));
+        })
+        .catch(() => {
+          setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+          setImgNote("사진을 읽지 못했어요. 다시 끌어다 놓아 주세요.");
+        });
+    }
+  };
+
   // #384 — attach an image handed over by the host (an image opened in an
   // editor tab, e.g. a dropped screenshot). Same downscale + thumbnail path as
   // paste, just from a data URL. Re-runs on nonce so the same file re-attaches.
@@ -581,7 +681,7 @@ export function ChatPanel(props: Props) {
   // next turn instead of pasting raw text. A normal text paste falls through
   // to the textarea default (we only preventDefault when we found image data).
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    if (!imagePasteEnabled) return;          // text-only cohort — let default text paste happen
+    if (!imagePasteEnabled && !imageFilesEnabled) return;          // text-only cohort — let default text paste happen
     const items = e.clipboardData?.items;
     if (!items) return;
     const imageFiles: File[] = [];
@@ -594,7 +694,8 @@ export function ChatPanel(props: Props) {
     }
     if (imageFiles.length === 0) return;     // plain text paste — let default happen
     e.preventDefault();
-    attachImageFiles(imageFiles);
+    if (imageFilesEnabled) stagePhotoFiles(imageFiles);
+    else attachImageFiles(imageFiles);
   };
 
   // #384 — drag a screenshot file from Finder/desktop straight onto the input.
@@ -630,7 +731,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업"} · {config.activity.name}
+        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{passEnd(config.activity.pass) && <> · {passEnd(config.activity.pass)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -649,19 +750,27 @@ export function ChatPanel(props: Props) {
     );
   }
   const handleDragOver = (e: React.DragEvent<HTMLElement>) => {
-    if (!imagePasteEnabled) return;
+    if (!imagePasteEnabled && !imageFilesEnabled) return;
     if (!Array.from(e.dataTransfer.items ?? []).some((it) => it.kind === "file")) return;
     e.preventDefault();
     if (!dragActive) setDragActive(true);
   };
   const handleDragLeave = () => setDragActive(false);
   const handleDrop = (e: React.DragEvent<HTMLElement>) => {
-    if (!imagePasteEnabled) return;
-    const files = Array.from(e.dataTransfer.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (!imagePasteEnabled && !imageFilesEnabled) return;
+    const files = Array.from(e.dataTransfer.files ?? []).filter(imageFilesEnabled ? isPhotoFile : (f) => f.type.startsWith("image/"));
     if (files.length === 0) { setDragActive(false); return; }
     e.preventDefault();
     setDragActive(false);
-    attachImageFiles(files);
+    if (imageFilesEnabled) stagePhotoFiles(files);
+    else attachImageFiles(files);
+  };
+
+  /** D-028 — the × on a staged photo: it was never sent, so the host deletes the file. */
+  const removeStagedPhoto = (id: string) => {
+    postToHost({ type: "discardStagedImage", stageId: id });
+    setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
+    setImgNote(null);
   };
 
   const removePendingImage = (idx: number) => {
@@ -783,6 +892,19 @@ export function ChatPanel(props: Props) {
                   : "🖼️ 갤러리"}
             </button>
           )}
+          {/* One-click publish. The decision comes from the host (config.sitePublish) so it
+              cannot drift from the host gate; the host re-checks on click anyway. */}
+          {config?.sitePublish === true && props.onPublishSite && (
+            <button
+              className="hps-site-publish-btn"
+              onClick={props.onPublishSite}
+              disabled={props.streaming}
+              title="홈페이지를 내 GitHub 주소로 올려요"
+              aria-label="인터넷에 올리기"
+            >
+              인터넷에 올리기
+            </button>
+          )}
           <button onClick={props.onSetToken} title="연결된 활동 확인 및 변경">
             활동 변경
           </button>
@@ -821,7 +943,8 @@ export function ChatPanel(props: Props) {
         // step the record holds.
         busy={streaming || awaitingRecord}
         activity={config?.activity ? {
-          label: config.activity.kind === "trial" ? "AI 체험" : config.activity.kind === "classroom" ? "수업" : "개인 작업",
+          label: activityLabel(config.activity.kind, config.activity.pass),
+          ...(passEnd(config.activity.pass) ? { detail: passEnd(config.activity.pass)! } : {}),
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}
@@ -876,11 +999,11 @@ export function ChatPanel(props: Props) {
       <InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} />
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
-      {!props.instructor && <HelpRequest view={help} post={postToHost} />}
+      {!props.instructor && classroomPanels.help && <HelpRequest view={help} post={postToHost} />}
       {/* #751 U1b — the learner's approval of their page as the class result, next to help (drawn only for a learner in class).
           Closed by default, no Primary; the button opens the host's question, which shows the exact version first. */}
       {/* #1298 — hidden for instructor mode. */}
-      {!props.instructor && help && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
+      {!props.instructor && help && classroomPanels.approval && <details className="hp-inbox hp-rail-lesson" data-artifact-approval="">
         <summary>수업 결과물 승인</summary>
         <p className="hp-rail-lesson-note">작업 폴더의 index.html 지금 판을 수업 결과물로 승인하거나 승인을 취소합니다. 누르면 그 판의 지문을 먼저 보여 주고 고르게 합니다. 승인한 판만 ‘학생이 승인한 결과물’ 회수에 들어가며, 이 버튼은 아무것도 보내지 않습니다. 고치면 새 판은 다시 승인해야 합니다.</p>
         <button type="button" className="hp-cta-quiet" data-artifact-approve="" onClick={() => postToHost({ type: "artifactApprove" })}>지금 결과물 확인하고 승인·취소</button>
@@ -1131,6 +1254,27 @@ export function ChatPanel(props: Props) {
               </div>
             ))}
           </div>
+        )}
+        {stagedPhotos.length > 0 && (
+          <>
+            <div className="hps-attachments" aria-label="첨부한 사진">
+              {stagedPhotos.map((p) => (
+                <div key={p.id} className="hps-attachment hps-attachment-file" title={p.name}>
+                  {p.thumb ? <img src={p.thumb} alt={p.name} /> : <span className="hps-attachment-name">{p.ready ? p.name : "준비 중…"}</span>}
+                  <button
+                    type="button"
+                    className="hps-attachment-remove"
+                    onClick={() => removeStagedPhoto(p.id)}
+                    title="사진 빼기"
+                    aria-label={`${p.name} 빼기`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="hps-img-note">보내면 작업 폴더의 images 폴더에 저장돼요.</div>
+          </>
         )}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
@@ -1886,8 +2030,10 @@ function ErrorBanner({
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
   const isAuth = /참여 코드|토큰|세션|강사|만료|등록|인가/.test(message);
   const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort/i.test(message);
-  const icon = isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
-  const title = isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
+  // REQ-L12 — a spent, refunded or ended pass is an account state, not a fault.
+  const isPass = /이용권|환불/.test(message);
+  const icon = isPass ? "🎟️" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️";
+  const title = isPass ? "이용권을 더 쓸 수 없어요" : isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요";
 
   return (
     <div className="hps-error-banner" role="alert">

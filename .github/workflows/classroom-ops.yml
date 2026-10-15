@@ -7,7 +7,6 @@ on:
   pull_request:
     paths:
       - 'chalk/**'
-      - 'worker/**'
       - 'extensions/hypeproof-chat/**'
       - 'scripts/classroom-*.mjs'
       - 'e2e/classroom/**'
@@ -15,6 +14,11 @@ on:
       - '.github/workflows/classroom-ops.yml'
 permissions:
   contents: read
+
+# Pull request only: a newer push replaces the run in progress.
+concurrency:
+  group: classroom-ops-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   classroom-browser:
     name: classroom / browser
@@ -25,17 +29,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test e2e/classroom/mac-devhost.test.mjs
-      - run: npm ci
-        working-directory: worker
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
         working-directory: chalk
+      # Webview typechecks shared App protocols, which consume Service packages.
+      - run: npm ci --ignore-scripts --omit=optional
+        working-directory: extensions/hypeproof-chat
       - run: npm ci
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm run build
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm ci
         working-directory: e2e
+      - run: node --test e2e/classroom/mac-devhost.test.mjs
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
       - run: npm run test:classroom
@@ -93,6 +102,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
         working-directory: extensions/hypeproof-chat
       - run: npm ci

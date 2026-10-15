@@ -1,0 +1,528 @@
+{
+  "scope": "literal relative imports and file references; dynamic paths need manual review",
+  "dependencies": [
+    {
+      "consumer": "worker/scripts/dental-authoring.mjs",
+      "reference": "../../docs/curriculum/dental-ownership/program.json",
+      "target": "docs/curriculum/dental-ownership/program.json",
+      "exists": true
+    },
+    {
+      "consumer": "worker/scripts/dental-authoring.mjs",
+      "reference": "../../docs/curriculum/dental-ownership/generated/",
+      "target": "docs/curriculum/dental-ownership/generated",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/curriculum/publish-scan.ts",
+      "reference": "../../../../packages/service-contracts/src/publish-scan.ts",
+      "target": "packages/service-contracts/src/publish-scan.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/curriculum/venture.ts",
+      "reference": "../../../../packages/service-contracts/src/publish-path.ts",
+      "target": "packages/service-contracts/src/publish-path.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/curriculum/venture.ts",
+      "reference": "../../../../packages/service-contracts/src/publish-path.ts",
+      "target": "packages/service-contracts/src/publish-path.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/capability-models.ts",
+      "reference": "../../../../packages/measurement-core/src/capability-models.ts",
+      "target": "packages/measurement-core/src/capability-models.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/evidence.ts",
+      "reference": "../../../../packages/measurement-core/src/evidence.ts",
+      "target": "packages/measurement-core/src/evidence.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/index.ts",
+      "reference": "../../../../packages/measurement-core/src/index.ts",
+      "target": "packages/measurement-core/src/index.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/interpretation.ts",
+      "reference": "../../../../packages/measurement-core/src/interpretation.ts",
+      "target": "packages/measurement-core/src/interpretation.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/learning-events.ts",
+      "reference": "../../../../packages/measurement-core/src/learning-events.ts",
+      "target": "packages/measurement-core/src/learning-events.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/legacy-observation.ts",
+      "reference": "../../../../packages/measurement-core/src/legacy-observation.ts",
+      "target": "packages/measurement-core/src/legacy-observation.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/local-record.ts",
+      "reference": "../../../../packages/measurement-core/src/local-record.ts",
+      "target": "packages/measurement-core/src/local-record.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/normalize.ts",
+      "reference": "../../../../packages/measurement-core/src/normalize.ts",
+      "target": "packages/measurement-core/src/normalize.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/participant-evidence.ts",
+      "reference": "../../../../packages/measurement-core/src/participant-evidence.ts",
+      "target": "packages/measurement-core/src/participant-evidence.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/src/lib/measurement-core/verification.ts",
+      "reference": "../../../../packages/measurement-core/src/verification.ts",
+      "target": "packages/measurement-core/src/verification.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/authoring-d1.test.mjs",
+      "reference": "../../.github/workflows/deploy-worker.yml",
+      "target": ".github/workflows/deploy-worker.yml",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/browser-contract.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/browserMcp.ts",
+      "target": "extensions/hypeproof-chat/src/browserMcp.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-collect-kinds.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/sessionSpool.ts",
+      "target": "extensions/hypeproof-chat/src/sessionSpool.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-collect-kinds.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-collect-kinds.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/sessionSpool.ts",
+      "target": "extensions/hypeproof-chat/src/sessionSpool.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomOpsCommands.ts",
+      "target": "extensions/hypeproof-chat/src/classroomOpsCommands.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomOps.ts",
+      "target": "extensions/hypeproof-chat/src/classroomOps.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-distribution-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomOps.ts",
+      "target": "extensions/hypeproof-chat/src/classroomOps.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-distribution-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomInbox.ts",
+      "target": "extensions/hypeproof-chat/src/classroomInbox.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-distribution-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomInboxStore.ts",
+      "target": "extensions/hypeproof-chat/src/classroomInboxStore.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-lesson-settings-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomOps.ts",
+      "target": "extensions/hypeproof-chat/src/classroomOps.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-lesson-settings-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomInbox.ts",
+      "target": "extensions/hypeproof-chat/src/classroomInbox.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-lesson-settings-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/classroomInboxStore.ts",
+      "target": "extensions/hypeproof-chat/src/classroomInboxStore.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-lesson-settings-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/lessonBinding.ts",
+      "target": "extensions/hypeproof-chat/src/lessonBinding.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-report-sessions.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/sessionSpool.ts",
+      "target": "extensions/hypeproof-chat/src/sessionSpool.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-report-sessions.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-reports.test.mjs",
+      "reference": "../../scripts/classroom-report-runner.mjs",
+      "target": "scripts/classroom-report-runner.mjs",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-reports.test.mjs",
+      "reference": "../../scripts/classroom-report-runner.mjs",
+      "target": "scripts/classroom-report-runner.mjs",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-reports.test.mjs",
+      "reference": "../../scripts/classroom-legacy-hain7.mjs",
+      "target": "scripts/classroom-legacy-hain7.mjs",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-reports.test.mjs",
+      "reference": "../../skills/hain7-report/examples/sample-session/events.jsonl",
+      "target": "skills/hain7-report/examples/sample-session/events.jsonl",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-reports.test.mjs",
+      "reference": "../../skills/hain7-report/examples/sample-context.json",
+      "target": "skills/hain7-report/examples/sample-context.json",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-review.test.mjs",
+      "reference": "../../scripts/classroom-report-runner.mjs",
+      "target": "scripts/classroom-report-runner.mjs",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-snapshot-device.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-spool-seq.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/sessionSpool.ts",
+      "target": "extensions/hypeproof-chat/src/sessionSpool.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-spool-seq.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/classroom-ops-staging-config.test.mjs",
+      "reference": "../../",
+      "target": ".",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/codex-rehearsal.test.mjs",
+      "reference": "../../scripts/lib/codex-local-client.mjs",
+      "target": "scripts/lib/codex-local-client.mjs",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-evidence.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "target": "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-evidence.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/evidenceSession.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceSession.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-evidence.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/evidenceView.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceView.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-memory.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "target": "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-memory.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/memoryView.ts",
+      "target": "extensions/hypeproof-chat/src/memoryView.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-publish.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "target": "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-publish.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/publishSession.ts",
+      "target": "extensions/hypeproof-chat/src/publishSession.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-publish.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/artifactVersion.ts",
+      "target": "extensions/hypeproof-chat/src/artifactVersion.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-publish.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/crHostWiring.ts",
+      "target": "extensions/hypeproof-chat/src/crHostWiring.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-publish.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/experimentBrowser.ts",
+      "target": "extensions/hypeproof-chat/src/experimentBrowser.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-recon.test.mjs",
+      "reference": "../../",
+      "target": ".",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-review.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "target": "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-review.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/reviewSession.ts",
+      "target": "extensions/hypeproof-chat/src/reviewSession.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-review.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/reviewView.ts",
+      "target": "extensions/hypeproof-chat/src/reviewView.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-review.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/skillSession.ts",
+      "target": "extensions/hypeproof-chat/src/skillSession.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-review.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/skillView.ts",
+      "target": "extensions/hypeproof-chat/src/skillView.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-skills.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "target": "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-skills.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/skillSession.ts",
+      "target": "extensions/hypeproof-chat/src/skillSession.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-skills.test.mjs",
+      "reference": "../../",
+      "target": ".",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-switch.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "target": "extensions/hypeproof-chat/src/curriculumRuntime.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-switch.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/browserMcp.ts",
+      "target": "extensions/hypeproof-chat/src/browserMcp.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-traceability.test.mjs",
+      "reference": "../../docs/testing/curriculum-runtime.md",
+      "target": "docs/testing/curriculum-runtime.md",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-traceability.test.mjs",
+      "reference": "../../docs/intents/curriculum-runtime.md",
+      "target": "docs/intents/curriculum-runtime.md",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-traceability.test.mjs",
+      "reference": "../../config/requirement-work.json",
+      "target": "config/requirement-work.json",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-verify.test.mjs",
+      "reference": "../../packages/measurement-core/src/verification.ts",
+      "target": "packages/measurement-core/src/verification.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-verify.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/verifyRunner.ts",
+      "target": "extensions/hypeproof-chat/src/verifyRunner.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-verify.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/verifySession.ts",
+      "target": "extensions/hypeproof-chat/src/verifySession.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/cr-verify.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/verifyView.ts",
+      "target": "extensions/hypeproof-chat/src/verifyView.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/harness/classroom-ops.mjs",
+      "reference": "../../../extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "target": "extensions/hypeproof-chat/src/evidenceSnapshot.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/lesson-pedagogy.test.mjs",
+      "reference": "../../docs/curriculum/dental-ownership/generated/drafts.json",
+      "target": "docs/curriculum/dental-ownership/generated/drafts.json",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/liveness-trace.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/heartbeat.ts",
+      "target": "extensions/hypeproof-chat/src/heartbeat.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/liveness-trace.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/heartbeat.ts",
+      "target": "extensions/hypeproof-chat/src/heartbeat.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/logs-upload.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/spoolUploader.ts",
+      "target": "extensions/hypeproof-chat/src/spoolUploader.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/measurement-core.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "target": "extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/measurement-core.test.mjs",
+      "reference": "../../packages/measurement-core/src/",
+      "target": "packages/measurement-core/src",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/measurement-core.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "target": "extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/native-observation.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "target": "extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/native-observation.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "target": "extensions/hypeproof-chat/src/nativeObservationContract.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/native-trial-live-server.mjs",
+      "reference": "../../scripts/lib/codex-local-client.mjs",
+      "target": "scripts/lib/codex-local-client.mjs",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/observation-format-served.test.mjs",
+      "reference": "../../extensions/hypeproof-chat/src/proxyClientHelpers.ts",
+      "target": "extensions/hypeproof-chat/src/proxyClientHelpers.ts",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/session-design-learning.test.mjs",
+      "reference": "../../docs/design/ui-philosophy-2026-09-18.md",
+      "target": "docs/design/ui-philosophy-2026-09-18.md",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/sx-traceability.test.mjs",
+      "reference": "../../docs/requirements/studio-learning-experience.md",
+      "target": "docs/requirements/studio-learning-experience.md",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/sx-traceability.test.mjs",
+      "reference": "../../docs/testing/studio-learning-experience.md",
+      "target": "docs/testing/studio-learning-experience.md",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/trial-evidence.test.mjs",
+      "reference": "../../docs/curriculum/studio-trial/program.json",
+      "target": "docs/curriculum/studio-trial/program.json",
+      "exists": true
+    },
+    {
+      "consumer": "worker/test/trial-evidence.test.mjs",
+      "reference": "../../docs/curriculum/studio-trial/personas.json",
+      "target": "docs/curriculum/studio-trial/personas.json",
+      "exists": true
+    }
+  ],
+  "captured_stage": "first local source extraction, before switching consumers to packages-v0.1.0; exists records refer to capture time"
+}

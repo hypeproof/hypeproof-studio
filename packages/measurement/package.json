@@ -1,31 +1,17 @@
 {
-  "name": "@hypeproof/measurement",
+  "name": "hypeproof-measurement-consumer-check",
   "version": "0.3.4",
   "type": "module",
-  "description": "Project-scoped Codex and Claude Code evidence synchronization",
+  "description": "Temporary Studio compatibility checks against the released Service measurement package",
   "engines": {
     "node": ">=22"
   },
-  "bin": {
-    "hypeproof-measure": "dist/cli.mjs"
-  },
-  "exports": {
-    ".": "./dist/core.mjs",
-    "./sync": "./dist/sync.mjs",
-    "./adapters": "./dist/adapters.mjs",
-    "./observer": "./dist/observer.mjs",
-    "./observer-contract": "./dist/observer-contract.mjs"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
   "scripts": {
     "build": "node build.mjs",
-    "test": "npm run build && node --test test/sync.test.mjs test/observer*.test.mjs",
-    "prepack": "npm run build"
+    "test": "npm run build && node --test test/sync.test.mjs test/observer*.test.mjs"
   },
-  "devDependencies": {
-    "esbuild": "0.25.12"
-  }
+  "dependencies": {
+    "@hypeproof/measurement": "file:../../.private-service-cache/hypeproof-measurement-0.3.5.tgz"
+  },
+  "private": true
 }

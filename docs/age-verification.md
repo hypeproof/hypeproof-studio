@@ -44,7 +44,7 @@ passes the shared trust gate `worker/src/lib/chat-gate.ts` — the two routes
 cannot drift (REQ-M9). In order:
 
 1. **Enrollment (offline, identity-known).** Participants register for a
-   specific workshop (e.g. SK바이오팜 가족 워크숍) through the client
+   specific workshop (e.g. 기업 고객 가족 워크숍) through the client
    organization. For minors' cohorts, enrollment is mediated by
    parents/guardians — the SK kids workshops are family workshops where the
    accompanying parent registers the child (`audience.parent_coaching: true`).

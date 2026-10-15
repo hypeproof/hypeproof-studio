@@ -5,9 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import {spawn,execFileSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath,pathToFileURL} from 'node:url';
 import {appIdentity,treeHash,sha256,assertReceipt} from './artifact.mjs';
 import {checkSeededSdk} from './sdk-seed.mjs';
+import {candidateService,assertCandidateServiceUnchanged,redactEvidence,assertServiceActivity} from './candidate-service.mjs';
+import {serviceSourceManifest} from '../service-provenance.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const [appDirectory,assetDirectory,outputDirectory,sourceSha,version,publicAppSha]=process.argv.slice(2);
 const serviceOnly=!!publicAppSha;
@@ -18,8 +20,16 @@ const command=(exe,args,options={})=>new Promise((resolve,reject)=>{
  child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('Acceptance process failed: '+code)));
 });
 let temporary,gateway,log;
+let activeEvidence,activeLog;
+function preserveGatewayLog(){
+ if(!activeEvidence||!activeLog||!fs.existsSync(activeLog))return;
+ const secrets=Object.entries(process.env).filter(([name])=>/KEY|SECRET|TOKEN|PASSWORD/.test(name)).map(([,value])=>value);
+ for(const name of fs.readdirSync(temporary))if(name.includes('-token'))secrets.push(fs.readFileSync(path.join(temporary,name),'utf8'));
+ fs.writeFileSync(path.join(activeEvidence,'gateway.log'),redactEvidence(fs.readFileSync(activeLog,'utf8'),secrets),{mode:0o600});
+}
 try{
  if(!platform||!appDirectory||!assetDirectory||!outputDirectory||!sourceSha||!version)throw Error('Usage: run.mjs APP ASSETS OUTPUT SOURCE_SHA VERSION (Mac/Windows only)');
+ fs.rmSync(path.join(outputDirectory,'receipt.json'),{force:true});
  if(!process.env.ANTHROPIC_API_KEY)throw Error('BLOCKED: acceptance model credential missing; no skipped PASS');
  if(git('rev-parse','HEAD')!==sourceSha||git('status','--porcelain','--untracked-files=no'))throw Error('Acceptance requires clean pinned source');
  for(const flag of ['HPS_NATIVE_ISOLATED_KEYCHAIN','HPS_CODEX_REHEARSAL','HPS_MODEL_REHEARSAL'])if(process.env[flag])throw Error('Incompatible acceptance override: '+flag);
@@ -31,14 +41,19 @@ try{
  const assets=Object.fromEntries(fs.readdirSync(assetDirectory).filter(n=>/\.(zip|exe)$/.test(n)).map(n=>[n,sha256(path.join(assetDirectory,n))]));
  fs.mkdirSync(outputDirectory,{recursive:true});
  temporary=fs.mkdtempSync(path.join(os.tmpdir(),'hps-unified-acceptance-'));
- const activities=[];
+ const servicePin=serviceOnly?JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8')):null;
+ const candidate=serviceOnly?candidateService(process.env.HPS_SERVICE_SOURCE,servicePin):null;
+ const activities=[],servicePackage=candidate?.manifest??serviceSourceManifest();
+ fs.writeFileSync(path.join(outputDirectory,'service-source.json'),JSON.stringify(servicePackage,null,2));
  for(const kind of ['trial','classroom']){
   const evidence=path.resolve(outputDirectory,kind);fs.mkdirSync(evidence,{recursive:true});
   const server=net.createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));
   const token=path.join(temporary,kind+'-token');
   const env={...process.env,HPS_APP_PATH:path.resolve(appDirectory),HPS_E2E_TOKEN_FILE:token,HPS_E2E_PROXY_URL:`http://127.0.0.1:${port}/v1`,HPS_NATIVE_PORT:String(port),HPS_NATIVE_EVIDENCE_DIR:evidence,HPS_UNIFIED_SWITCH:serviceOnly?'0':'1',HPS_SERVICE_ACCEPTANCE:serviceOnly?'1':'0',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_LIVE:'1',HPS_NATIVE_MANAGED:kind==='trial'?'1':'0',HPS_TEST_REAL_WORKSPACE:'1',HPS_QUIET:'1',HPS_QUIET_NO_HIDE:'1'};
-  log=fs.openSync(path.join(temporary,kind+'-gateway.log'),'w',0o600);
-  gateway=spawn(process.execPath,['--experimental-strip-types','worker/test/native-trial-live-server.mjs'],{cwd:root,env,stdio:['ignore',log,log]});
+  activeEvidence=evidence;activeLog=path.join(temporary,kind+'-gateway.log');
+  log=fs.openSync(activeLog,'w',0o600);
+  if(candidate)assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
+  gateway=spawn(process.execPath,['--experimental-strip-types','--import',candidate?pathToFileURL(candidate.loader).href:'@hypeproof/service-testkit/test/harness/loader.mjs',candidate?.gateway??fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/test/native-trial-live-server.mjs'))],{cwd:path.join(root,'e2e'),env:{...env,HPS_CODEX_ADAPTER_MODULE:new URL('../../scripts/lib/codex-local-client.mjs',import.meta.url).href},stdio:['ignore',log,log]});
   let launchError;gateway.on('error',error=>{launchError=error;});
   let ready=false;
   for(let attempt=0;attempt<60;attempt++){
@@ -52,14 +67,17 @@ try{
   await command(process.execPath,['node_modules/@playwright/test/cli.js','test','--config=native-trial.config.ts','--workers=1','--retries=0'],{cwd:path.join(root,'e2e'),env:appEnv});
   const result=JSON.parse(fs.readFileSync(path.join(evidence,serviceOnly?'result.json':'unified-switch.json'),'utf8'));
   if(serviceOnly){
-   const calls=JSON.parse(fs.readFileSync(path.join(evidence,'api-evidence.json'),'utf8')).calls;
-   if(result.status!=='PASS'||!result.initial_file_created||!result.revised_file_created||!result.original_preserved||!calls.length||calls.length>8||calls.some(c=>c.status!==200))throw Error('Service compatibility acceptance failed');
-   activities.push({kind,serviceSha:sourceSha,result,modelCalls:calls.length});
+   assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
+   const api=JSON.parse(fs.readFileSync(path.join(evidence,'api-evidence.json'),'utf8'));
+   const {calls}=api;
+   assertServiceActivity(result,api);
+   // serviceSha is the legacy release gate's acceptance-driver SHA; servicePackage.commit identifies the deployed Service implementation.
+   activities.push({kind,serviceSha:sourceSha,servicePackage,result,modelCalls:calls.length,requestLimit:api.request_limit,attempts:api.attempts});
   }else{
    const turns=JSON.parse(fs.readFileSync(path.join(evidence,'unified-live-turns.json'),'utf8'));
-   activities.push({kind,serviceSha:sourceSha,payloadIsolation:turns.payload_isolation===true,result});
+   activities.push({kind,serviceSha:sourceSha,servicePackage,payloadIsolation:turns.payload_isolation===true,result});
   }
-  const stopped=new Promise(resolve=>gateway.once('exit',resolve));gateway.kill();await stopped;gateway=null;fs.closeSync(log);log=undefined;
+  const stopped=new Promise(resolve=>gateway.once('exit',resolve));gateway.kill();await stopped;gateway=null;fs.closeSync(log);log=undefined;preserveGatewayLog();
  }
  const receipt={schema:'hps-unified-acceptance/1',status:'PASS',sourceSha,sourceDirty:false,platform,mode:'candidate-unmodified',app,assets,treeBefore:before,treeAfter:treeHash(appDirectory),activities};
  if(platform==='win32-x64'&&!serviceOnly){
@@ -68,6 +86,7 @@ try{
  }
  if(serviceOnly){
   if(before!==receipt.treeAfter)throw Error('Public App modified');
+  assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
   receipt.schema='hps-service-compatibility/1';receipt.mode='public-app-unmodified';
  }else assertReceipt(receipt,{sha:sourceSha,version,platform,assets,requirePublic:false});
  fs.writeFileSync(path.join(outputDirectory,'receipt.json'),JSON.stringify(receipt,null,2));
@@ -76,5 +95,8 @@ try{
 finally{
  if(gateway){const stopped=new Promise(resolve=>gateway.once('exit',resolve));gateway.kill();await Promise.race([stopped,new Promise(resolve=>setTimeout(resolve,3000))]);}
  if(log!==undefined)fs.closeSync(log);
- if(temporary){fs.rmSync(temporary,{recursive:true,force:true});}
+ if(temporary){
+  preserveGatewayLog();
+  fs.rmSync(temporary,{recursive:true,force:true});
+ }
 }

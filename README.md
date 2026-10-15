@@ -109,12 +109,21 @@ in the running Studio? Open the Command Palette → **HypeProof Chat: 문제
 ## Quickstart (contributors)
 
 ```bash
-git clone --recursive git@github.com:jayleekr/hypeproof-studio.git
+git clone --recursive git@github.com:hypeproof/hypeproof-studio.git
 cd hypeproof-studio
+node scripts/bootstrap-service-packages.mjs  # authenticated gh access to private Service
+npm ci
 cp hypeproof-studio.env.example hypeproof-studio.env   # fill in secrets
 bash scripts/dev-stack.sh                              # wrangler dev + roster + token
 cd e2e && npm install && npm test                      # 13 e2e tests against the built app
 ```
+
+Service development packages remain private. Bootstrap downloads the immutable
+release assets pinned in `config/service-packages.json`, verifies SHA256, and stages
+them only in ignored `.private-service-cache/`. Run bootstrap before installing any
+consumer package. CI uses the existing `HYPEPROOF_READ_TOKEN` with Service contents
+read access; missing access or mismatched bytes fail closed. Package source and
+tarballs must not be committed to Studio or copied into its releases.
 
 Worker dev runs at `http://localhost:8787` (admin UI at `/`). Cloned without
 `--recursive`? Run `git submodule update --init`.

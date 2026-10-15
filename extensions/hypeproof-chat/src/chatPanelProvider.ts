@@ -1,5 +1,6 @@
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
+import { passSpentNotice } from "./passPurchase";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
@@ -14,6 +15,9 @@ import { modelEchoVerdict, modelEchoNotice, describeModelEcho, type ModelEchoInp
 type ModelEchoContext = Omit<ModelEchoInput, 'resolved'>;
 import * as vscode from "vscode";
 import * as path from "path";
+import * as os from "node:os";
+// hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
+import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -43,6 +47,9 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
+import { applyWikiProposal, archiveNotes, brainIntent, brainIntro, brainName, brainSummary, coachContext, defaultIngestSession, firstCoachTurn, ingestReport, initWiki, josa, jsonFromText, loadState, productTitle, readNotes, renderWikiPages, ro, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type BrainIntent, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
+import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun } from "./deckGenerator";
+import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { ReviewSession, directorAvailable } from "./reviewSession";
 import { qrDataUrl } from "./testQr";
 import { uploadSessionSnapshot } from "./spoolUploader";
@@ -87,7 +94,7 @@ import {
   type BlobSink,
 } from "./crHostWiring";
 import { FileRecordStorage, LOCAL_RECORD_DIR } from "./localRecordFile";
-import { LocalRecord } from "../../../worker/src/lib/measurement-core/local-record";
+import { LocalRecord } from "@hypeproof/measurement-core/local-record";
 import {
   toMcpToolResult,
   BROWSER_OPEN_TOOL_DEF,
@@ -199,6 +206,7 @@ import {
   resolveInstructorTokenFromSecrets,
 } from "./chatPanelHelpers";
 import { buildChatPanelCsp } from "./cspBuilder";
+import { toolActivityMode, workPhrase, WorkLine, THINKING_PHRASE, NEXT_STEP_PHRASE, PREVIEW_PHRASE } from "./toolActivity";
 import {
   SessionSpool,
   spoolIdentityFromToken,
@@ -206,6 +214,12 @@ import {
   type SpoolArtifactSource,
 } from "./sessionSpool";
 import type { ProxyStreamUsage } from "./proxyClientHelpers";
+import { SitePublisher, SITE_PUBLISH_CONTEXT_KEY } from "./publish/publishHost";
+import type { PublishEndpoints } from "./publish/publishConfig";
+import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract";
+import { nextFreeFolder } from "./publish/githubContinue";
+import type { GithubContinueSource } from "./startPage";
+import { isMinorProfile } from "./sdkCoachHelpers";
 import {
   ArtifactChangeGate,
   startHeartbeat,
@@ -233,6 +247,9 @@ function promptRefs(raw: unknown): Array<{ object_id: string; revision: number }
 }
 /** #751 U3 — the switch was recorded but the new profile could not be verified: the turn is not sent, the input is returned. */
 class LessonBindingPreflightError extends Error {}
+
+/** What one 팀 브레인 run tells the student (one short sentence per line) and the page to open when it worked. */
+interface BrainRun { lines: string[]; open?: string }
 
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
@@ -551,6 +568,116 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.logChannel;
   }
   private cachedProfile: ResolvedProfile | null = null;
+
+  // ── One-click publish (src/publish/) ──────────────────────────────────────
+  private sitePublisherInstance: SitePublisher | null = null;
+  private publishEndpoints: PublishEndpoints | null = null;
+
+  /** Called once by activate(): where the publish talks to (test overrides already gated). */
+  initSitePublish(endpoints: PublishEndpoints): void {
+    this.publishEndpoints = endpoints;
+    this.sitePublisherInstance = null; // rebuilt with these endpoints on first use
+    this.refreshSitePublishContext();
+  }
+
+  /** Mirror "may the publish button be shown here" (the served profile for this seat's token). */
+  private refreshSitePublishContext(): void {
+    void vscode.commands.executeCommand("setContext", SITE_PUBLISH_CONTEXT_KEY, this.sitePublisher().available());
+  }
+
+  /** Lazily built so a cohort that never publishes never resolves `gh`. */
+  private sitePublisher(): SitePublisher {
+    this.sitePublisherInstance ??= new SitePublisher({
+      profile: () => this.cachedProfile,
+      isMinor: (p) => isMinorProfile(p),
+      workspaceRoot: () => this.resolveCoachCwd(),
+      idle: () => !this.hasActiveStream(),
+      postToChat: (text) => this.postAppReply(text),
+      notice: (text) => this.postPageNotice(text),
+      log: (line) => this.voiceLogChannel().appendLine(line),
+      stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
+      store: this.context.globalState,
+      endpoints: this.publishEndpoints ?? { refused: [] },
+      checkAccess: () => this.checkSitePublishAccess(),
+      // ensureProfile(true) re-reads the profile and re-sets the context key; postConfig carries
+      // the new answer to the chat header button.
+      refreshProfile: async () => {
+        await this.ensureProfile(true);
+        await this.postConfig();
+      },
+      // The folder the class connected in; the profile's workspace_root when no activity is recorded.
+      classFolder: () => {
+        try {
+          const current = activityConnections(this.context)?.current?.workspace;
+          if (current) return current;
+        } catch {
+          /* an unreadable activity record: fall back to the profile */
+        }
+        const root = this.cachedProfile?.workspace_root;
+        return (root && resolveWorkspaceRoot(root)) || undefined;
+      },
+      sameFolder: (a, b) => canonicalizeForCompare(a) === canonicalizeForCompare(b),
+    });
+    return this.sitePublisherInstance;
+  }
+
+  /**
+   * One fresh /v1/profile for the token in this seat: the publish press's token gate. Read
+   * apart from the cache on purpose — the cached profile outlives the token in an app left open
+   * — and with the same activity rule as ensureProfile, so the two never disagree on a seat.
+   */
+  private async checkSitePublishAccess(): Promise<AccessCheck> {
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    if (!token) return { kind: "no_token" };
+    const connections = activityConnections(this.context);
+    if (connections && !connections.matchesService) return { kind: "profile", publishing: null, minor: false };
+    const proxyUrl = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const r = await fetchProfileResult({ proxyUrl, token }).catch(() => null);
+    if (!r) return { kind: "failure", reason: "network" };
+    if (!r.ok) return { kind: "failure", reason: r.failure.reason };
+    if (connections?.current && r.profile.activity_id !== connections.current.serverId) return { kind: "profile", publishing: null, minor: false };
+    return { kind: "profile", publishing: r.profile.publishing, minor: isMinorProfile(r.profile) };
+  }
+
+  /**
+   * "GitHub에서 이어하기" for the start page (startPage.ts): the publish module's GitHub side, for
+   * profiles behind the same gate as the publish button and naming a class folder.
+   */
+  githubContinueSource(): GithubContinueSource {
+    const classRoot = (p: ResolvedProfile) => (p.workspace_root ? resolveWorkspaceRoot(p.workspace_root) : null);
+    return {
+      allowed: (p) => sitePublishAllowed(p.publishing, isMinorProfile(p)).ok && !!classRoot(p),
+      find: () => this.sitePublisher().findClassRepos(),
+      signIn: () => this.sitePublisher().signInForContinue(),
+      prepare: (args) => this.sitePublisher().prepareContinue(args),
+      newFolder: (root) => nextFreeFolder(root),
+      classRoot,
+    };
+  }
+
+  /** "배포 등록 해제" — forget a persisted publish registration. */
+  async unregisterSitePublish(): Promise<void> {
+    await this.sitePublisher().unregisterFromCommand();
+  }
+
+  /** The "홈페이지 올리기" command. The manifest hides it; this re-checks (a command can run without its menu). */
+  async publishSite(): Promise<void> {
+    await this.sitePublisher().runFromButton();
+  }
+
+  /**
+   * An app-written reply bubble in the transcript, the same channel the team-brain answers use:
+   * the webview shows it and the next turn's history carries it, so the coach can continue
+   * from the button's outcome instead of asking what happened.
+   */
+  private async postAppReply(text: string): Promise<void> {
+    const sid = randomId();
+    const aid = randomId();
+    void this.post({ type: "streamStart", streamId: sid, messageId: aid });
+    void this.post({ type: "streamChunk", streamId: sid, delta: text });
+    void this.post({ type: "streamEnd", streamId: sid });
+    await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+  }
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
   /**
@@ -959,6 +1086,211 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postMemoryState();
   }
 
+  // ── Learning wiki and deck generator (generic skills; a cohort specializes them via learning_wiki.plan) ──
+
+  /** Is the learning wiki on for the served profile? Re-read at every use. */
+  isLearningWikiEnabled(): boolean {
+    return this.cachedProfile?.learning_wiki?.enabled === true;
+  }
+
+  private learningWikiPlan(): LearningWikiPlan | undefined {
+    return this.cachedProfile?.learning_wiki?.plan;
+  }
+
+  /** The command "팀 브레인에 정리하기": always asks which session (the palette is where any session can be picked). */
+  async wikiIngest(): Promise<void> {
+    const run = await this.runWikiIngest({ ask: true });
+    if (run) await this.showBrainRun(run);
+  }
+
+  /** The command "팀 브레인으로 덱 만들기": the student picks the slides (the latest session's focus is preselected). */
+  async deckDraft(): Promise<void> {
+    const run = await this.runDeckDraft({ ask: true });
+    if (run) await this.showBrainRun(run);
+  }
+
+  /** A command's result: in-chat, not a toast (a notification pauses the integrated browser over the weekly pack). */
+  private async showBrainRun(run: BrainRun): Promise<void> {
+    this.postPageNotice(run.lines.join(" "));
+    if (run.open) await this.openBrainFile(run.open);
+  }
+
+  private async openBrainFile(file: string): Promise<void> {
+    await vscode.commands.executeCommand(file.endsWith(".html") ? "hypeproof-chat.previewActiveFile" : "vscode.open", vscode.Uri.file(file));
+  }
+
+  /**
+   * The wiki called by name in the chat ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘",
+   * "팀 브레인에 뭐 있어?"). The skill runs here instead of a coach turn and its report is the reply
+   * bubble; the stream stays open while it works, so the chat shows it is busy. The student's sentence
+   * and the reply are recorded like the other answers the App writes itself (show intent, guest list),
+   * and neither goes to the spool, so the next ingest reads only the class conversation.
+   */
+  private async answerBrainCall(text: string, intent: BrainIntent): Promise<void> {
+    const name = brainName(this.learningWikiPlan());
+    const uid = randomId();
+    const aid = randomId();
+    void this.post({ type: "streamStart", streamId: uid, messageId: aid });
+    let run: BrainRun | undefined;
+    try {
+      run = intent.kind === "show" ? this.brainShow() : intent.kind === "deck" ? await this.runDeckDraft({ ask: false }) : await this.runWikiIngest({ ask: false, session: intent.session });
+      run ??= { lines: [intent.kind === "deck" ? "덱 초안은 쓰지 않았어요." : `정리하지 않았어요. ${josa(name, "은", "는")} 그대로예요.`] };
+    } catch (err) {
+      this.logChannel?.appendLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
+      run = { lines: [`${name} 작업이 중간에 멈췄어요. 잠시 뒤 다시 해 주세요.`] };
+    }
+    // Markdown hard breaks: one short sentence per line in one bubble.
+    const reply = run.lines.join("  \n");
+    void this.post({ type: "streamChunk", streamId: uid, delta: reply });
+    void this.post({ type: "streamEnd", streamId: uid });
+    await this.appendHistory([
+      { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+      { id: aid, role: "assistant", content: reply, createdAt: Date.now(), assistantName: this.coachDisplayName() },
+    ]);
+    if (run.open) await this.openBrainFile(run.open);
+  }
+
+  /** "팀 브레인에 뭐 있어?": the summary from the wiki state; no model call, nothing opened. */
+  private brainShow(): BrainRun {
+    const plan = this.learningWikiPlan();
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const dir = root ? wikiDir(root, plan) : null;
+    return { lines: brainSummary(dir ? loadState(dir) : null, plan, dir ? path.basename(dir) : "") };
+  }
+
+  /**
+   * The wiki skill on this session's conversation (the spool's events.jsonl) and the notes in
+   * <wiki>/notes/, then, when the plan names slides for that session, the deck skill on those slides.
+   * Each skill is one non-streaming coach-route request; only cited items are kept. Nothing is stored
+   * on the Service. Returns what to tell the student, or undefined when the student closed the pick.
+   */
+  private async runWikiIngest(opts: { ask: boolean; session?: number }): Promise<BrainRun | undefined> {
+    const plan = this.learningWikiPlan();
+    const name = brainName(plan);
+    if (!this.isLearningWikiEnabled()) return { lines: [`이 수업에서는 ${josa(name, "을", "를")} 쓸 수 없어요.`] };
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return { lines: ["작업 폴더를 먼저 열어 주세요."] };
+    const label = sessionLabel(plan);
+    const dir = wikiDir(folder.uri.fsPath, plan);
+    const state = initWiki(dir, productTitle(folder.uri.fsPath) ?? folder.name, plan);
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    const session = await this.ingestSession(state, plan, today, opts);
+    if (session === undefined) return undefined;
+    try { await this.spool?.flush(); } catch {}
+    const sessionDir = this.spool?.currentSessionDir() ?? null;
+    let events = "";
+    try { if (sessionDir) events = fs.readFileSync(path.join(sessionDir, "events.jsonl"), "utf8"); } catch {}
+    const sources = { turns: turnsFromEvents(events), notes: readNotes(dir) };
+    if (!sources.turns.length && !Object.keys(sources.notes).length) return { lines: ["정리할 대화나 메모가 아직 없어요."] };
+    const sid = sessionHash(session, sources);
+    if (state.sessions_ingested.includes(sid)) return { lines: [`${session}${label} 이 대화는 이미 정리했어요.`] };
+    const answer = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: `HypeProof: ${name}에 정리하는 중` },
+      () => this.completeSkill(wikiPrompt(state, session, sources, plan), {}),
+    );
+    const proposal = answer.ok ? jsonFromText<WikiProposal>(answer.text) : null;
+    if (!proposal) return { lines: [`정리하지 못했어요. ${josa(name, "은", "는")} 그대로예요. 잠시 뒤 다시 해 주세요.`] };
+    const r = applyWikiProposal(state, session, sources, proposal, sid, today, plan);
+    saveState(dir, r.state);
+    writeFiles(dir, renderWikiPages(r.state, plan));
+    archiveNotes(dir, sources.notes);
+    const focus = sessionFocus(plan, session);
+    const deck = plan?.deck && focus.length ? await this.draftDeck(dir, r.state, plan, focus, session) : null;
+    const info = { session, turns: sources.turns.length, notes: Object.keys(sources.notes).length };
+    return {
+      lines: ingestReport(state, r, info, plan, { deck: deck ? deckReport(deck) : undefined, opened: plan?.deck ? "덱 미리보기를 열었어요." : "index.md를 열었어요." }),
+      open: path.join(dir, plan?.deck ? "deck.html" : "index.md"),
+    };
+  }
+
+  /**
+   * Which session an ingest files under. The command always asks. A chat call takes the session the
+   * student named ("2주차 …"), else the next session without a click, and asks only when the latest
+   * session was already filed today (defaultIngestSession).
+   */
+  private async ingestSession(state: WikiState, plan: LearningWikiPlan | undefined, today: string, opts: { ask: boolean; session?: number }): Promise<number | undefined> {
+    const label = sessionLabel(plan);
+    if (opts.session !== undefined && opts.session >= 1 && opts.session <= sessionCount(plan)) return opts.session;
+    if (opts.ask || opts.session !== undefined) return this.pickSession(state, plan, `몇 ${label} 수업을 정리할까요?`);
+    const d = defaultIngestSession(state, plan, today);
+    if (!d.ambiguous) return d.session;
+    return this.pickSession(state, plan, `오늘 ${d.last}${josa(label, "을", "를")} 이미 정리했어요. 어느 ${label}에 정리할까요?`, [d.last, d.session]);
+  }
+
+  /** The deck skill on the latest session's slides: the plan's focus in the chat, the student's pick from the command (or when there is no focus). */
+  private async runDeckDraft(opts: { ask: boolean }): Promise<BrainRun | undefined> {
+    const plan = this.learningWikiPlan();
+    const name = brainName(plan);
+    if (!this.isLearningWikiEnabled()) return { lines: ["이 수업에서는 덱 초안을 쓸 수 없어요."] };
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder || !plan?.deck) return { lines: ["이 수업에는 덱 템플릿이 없어요."] };
+    const dir = wikiDir(folder.uri.fsPath, plan);
+    const state = loadState(dir);
+    if (!state || !state.sessions.length) return { lines: [`먼저 수업 내용을 ${name}에 정리해 주세요. "${name}에 정리해 줘"라고 말하면 돼요.`] };
+    const last = Math.max(...state.sessions);
+    let slides = sessionFocus(plan, last);
+    if (opts.ask || !slides.length) {
+      const focus = new Set(slides);
+      const picked = await vscode.window.showQuickPick(
+        plan.deck.slides.map((x) => ({ label: `${x.no} · ${x.title}`, description: x.question, picked: focus.has(x.no), no: x.no })),
+        { canPickMany: true, placeHolder: "초안을 쓸 장을 고르세요" },
+      );
+      if (!picked?.length) return undefined;
+      slides = picked.map((x) => x.no);
+    }
+    const d = await this.draftDeck(dir, state, plan, slides, last);
+    return { lines: [deckReport(d), "덱 미리보기를 열었어요."], open: path.join(dir, "deck.html") };
+  }
+
+  /** One deck-skill run; writes deck/ and deck.html and returns what happened (deckReport words it). */
+  private async draftDeck(dir: string, state: WikiState, plan: LearningWikiPlan, slides: number[], session: number): Promise<DeckRun> {
+    const template = plan.deck!;
+    const answer = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: "HypeProof: 덱 초안 쓰는 중" },
+      () => this.completeSkill(deckPrompt(state, template, slides, plan), {}),
+    );
+    const proposal = answer.ok ? jsonFromText<DeckProposal>(answer.text) : null;
+    if (!proposal) {
+      writeFiles(dir, renderDeck(state, template, plan));
+      return { written: [], drafted: Object.keys(state.deck).length, total: template.slides.length, refused: 0, failed: true };
+    }
+    let r = applyDeckProposal(state, template, slides, proposal, session);
+    // One repair round for slides the gate refused (no resolvable citation, or a number the evidence lacks).
+    const refused = refusedSlides(r.dropped);
+    if (refused.length) {
+      const again = await this.completeSkill(deckRepairPrompt(r.state, template, refused, plan), {});
+      const fix = again.ok ? jsonFromText<DeckProposal>(again.text) : null;
+      if (fix) {
+        const r2 = applyDeckProposal(r.state, template, refused.map((x) => x.no), fix, session);
+        r = { state: r2.state, dropped: r2.dropped, written: [...r.written, ...r2.written] };
+      }
+    }
+    // The humanizer skill on what was written (quotes stay verbatim; a rewrite that adds a number is refused).
+    const texts = slideTextItems(r.state, r.written);
+    if (texts.length) {
+      const h = await this.completeSkill(humanizePrompt(texts, "발표 슬라이드 문장"), {});
+      const fixed = applyHumanized(texts, h.ok ? jsonFromText<HumanizeProposal>(h.text) : null);
+      r = { ...r, state: applySlideText(r.state, fixed.items) };
+    }
+    saveState(dir, r.state);
+    writeFiles(dir, { ...renderWikiPages(r.state, plan), ...renderDeck(r.state, template, plan) });
+    return { written: r.written, drafted: Object.keys(r.state.deck).length, total: template.slides.length, refused: r.dropped.length, failed: false };
+  }
+
+  /** Every session, or only `only` ([the session filed today, the next one]) when a chat call was ambiguous. */
+  private async pickSession(state: WikiState, plan: LearningWikiPlan | undefined, placeHolder: string, only?: number[]): Promise<number | undefined> {
+    const label = sessionLabel(plan);
+    const count = sessionCount(plan);
+    const last = state.sessions.length ? Math.max(...state.sessions) : 0;
+    const next = Math.min(last + 1, count);
+    const describe = (n: number) => (only ? (n === last ? `오늘 정리한 ${label}에 더하기` : `다음 ${ro(label)} 새로 정리`) : n === next ? `이번 ${label}` : undefined);
+    const pick = await vscode.window.showQuickPick(
+      (only ?? Array.from({ length: count }, (_, i) => i + 1)).map((n) => ({ label: `${n}${label}`, description: describe(n), n })),
+      { placeHolder },
+    );
+    return pick?.n;
+  }
+
   // ── Curriculum skills (cr-skills, #1396) ────────────────────────────────────
   /**
    * The skills panel over the same Project the publish panel remembers. The skill list and every
@@ -1235,6 +1567,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (this.crDirector.on) void this.refreshCrDirectorContext(true).catch(() => undefined);
     }, CR_DIRECTOR_REPROBE_MS);
     context.subscriptions.push({ dispose: () => clearInterval(directorProbe) });
+    // D-028 — staged photos that were never sent go with the window.
+    context.subscriptions.push({ dispose: () => this.imageStaging?.dispose() });
   }
 
   /**
@@ -1964,6 +2298,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.nativeHistoryScope = null;
     // CR-10 — the token changed: the delete command follows the new identity.
     void this.refreshCrBytesContext();
+    // The profile is gone, and with it the publish button (token gate).
+    this.refreshSitePublishContext();
     // #1298 — re-check instructor status + brief after token change.
     this._instructorMode.reset();
   }
@@ -2070,6 +2406,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         );
         // CR-02 (recon R3) — mirror the Curriculum Runtime switch; CR commands are gated on it.
         void vscode.commands.executeCommand("setContext", CR_CONTEXT_KEY, crContextKeyValue(p));
+        // Learning wiki and deck generator commands follow the cohort's own switch.
+        void vscode.commands.executeCommand("setContext", "hypeproof-chat.learningWikiEnabled", p?.learning_wiki?.enabled === true);
+        // One-click publish: the button shows only where the served profile allows it.
+        this.refreshSitePublishContext();
         if (!isCurriculumRuntimeEnabled(p)) this.clearElementContext();
         // CR-10 — the delete command follows whoever is signed in now (no disk I/O).
         void this.refreshCrBytesContext();
@@ -2378,6 +2718,103 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       state: "done",
     });
     return { note: pastedImageNote(relPaths, cwd), relPaths };
+  }
+
+  /** D-028 — this panel's staging folder, created on the first attached photo. */
+  private imageStaging: ImageStaging | null = null;
+
+  /**
+   * D-028 — keep a photo dropped or pasted into the chat until the message is sent. Only a
+   * cohort with `input.image_files` takes photos this way; a refusal goes back to the panel
+   * so the chip disappears with the reason instead of the photo vanishing on send.
+   */
+  private async stageAttachedImage(stageId: string, name: string, mime: string, base64: string): Promise<void> {
+    const refusal = this.stageImageBytes(stageId, name, mime, Buffer.from(base64, "base64"));
+    if (refusal) void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+  }
+
+  /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */
+  private stageImageBytes(stageId: string, name: string, mime: string, bytes: Buffer): string | null {
+    if (!this.isImageFilesEnabled()) return "이 수업에서는 사진을 붙일 수 없어요.";
+    const refusal = attachedImageRefusal({ name, mime, bytes: bytes.length, alreadyStaged: this.imageStaging?.count() ?? 0 });
+    if (refusal) return refusal;
+    try {
+      if (!this.imageStaging) {
+        const { rootParent, root } = stagingRootFor(os.tmpdir(), process.pid, randomId());
+        this.imageStaging = new ImageStaging(rootParent, root);
+        this.imageStaging.purgeLeftovers();
+      }
+      this.imageStaging.stage(stageId, safeAttachedImageName(name, attachedImageExt(name, mime) ?? "jpg"), bytes);
+      return null;
+    } catch (err) {
+      console.warn("[attached-images] staging failed:", err);
+      return "사진을 잠시 보관하지 못했어요. 다시 끌어다 놓아 주세요.";
+    }
+  }
+
+  /** D-028 — does this cohort take photos into the chat as files? */
+  isImageFilesEnabled(): boolean {
+    return this.cachedProfile?.input?.image_files === true;
+  }
+
+  /** D-028 — is this file already inside the class folder (an existing photo being viewed)? */
+  isInsideWorkspace(fsPath: string): boolean {
+    const roots = [this.resolveCoachCwd(), ...(vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath)].filter(
+      (r): r is string => !!r,
+    );
+    return roots.some((r) => {
+      const rel = path.relative(r, fsPath);
+      return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+    });
+  }
+
+  /**
+   * D-028 — a photo dropped onto Studio from Finder. VS Code takes such a drop before the
+   * chat webview sees it and opens the file as an editor tab (see #384), so extension.ts
+   * hands the opened file here: it is staged like a dropped photo and its chip appears in
+   * the chat. Returns false when it was not taken (the reason is shown in the chat).
+   */
+  async stageImageFromFile(fsPath: string): Promise<boolean> {
+    const name = path.basename(fsPath);
+    const ext = attachedImageExt(name, "") ?? "";
+    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext ? `image/${ext}` : "";
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(fsPath)));
+    } catch {
+      void this.post({ type: "imageStageRefused", stageId: "", reason: "사진 파일을 읽지 못했어요. 다시 끌어다 놓아 주세요." });
+      return false;
+    }
+    const stageId = randomId().replace(/[^A-Za-z0-9_-]/g, "");
+    const refusal = this.stageImageBytes(stageId, name, mime, bytes);
+    if (refusal) {
+      void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+      return false;
+    }
+    // The preview needs the bytes in the webview; a very large photo goes without one.
+    const preview = bytes.length <= 8 * 1024 * 1024 && mime && !/hei[cf]$/.test(mime) ? `data:${mime};base64,${bytes.toString("base64")}` : undefined;
+    void this.post({ type: "imageStagedByHost", stageId, name, ...(preview ? { dataUrl: preview } : {}) });
+    return true;
+  }
+
+  /** D-028 — move this send's staged photos into images/ and return the note for the model. */
+  private commitAttachedImages(ids: string[] | undefined, streamId: string): string {
+    if (!ids?.length || !this.imageStaging) return "";
+    const cwd = this.resolveCoachCwd();
+    if (!cwd) {
+      for (const id of ids) this.imageStaging.discard(id);
+      this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(ids.length), state: "error" });
+      return "";
+    }
+    const { relPaths, failed } = this.imageStaging.commit(ids, cwd);
+    if (failed > 0) this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(failed), state: "error" });
+    if (relPaths.length === 0) return "";
+    this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: attachedImagesSavedLabel(relPaths), state: "done" });
+    const note = attachedImagesNote(relPaths);
+    // The sent bubble gets the same lines, so the history the panel sends back next turn
+    // still names the files.
+    void this.post({ type: "attachedImagesSaved", note });
+    return note;
   }
 
   /** #278 Phase 1 — does this cohort's profile request the native live-server preview? */
@@ -2764,10 +3201,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // That gap is filled with one timeline line. It turns done when it really comes
     // up and error when it fails, so the state "said it was up but it was not" never
     // stays on screen (R0).
-    const revealLogId = randomId();
+    // D-027 — a summary cohort sees the line only while the preview opens: a `pending-` id is
+    // hidden once done. Five Edits in one turn used to leave five "미리보기를 열었어요".
+    const summaryActivity = toolActivityMode(this.cachedProfile) === "summary";
+    const revealLogId = summaryActivity ? `pending-reveal-${randomId()}` : randomId();
     const logReveal = (state: "running" | "done" | "error", label: string): void => {
       if (!opts?.streamId) return;
-      this.postToolLog(opts.streamId, { id: revealLogId, icon: "🖼️", label, state });
+      const shown = summaryActivity && state === "running" ? PREVIEW_PHRASE.label : label;
+      this.postToolLog(opts.streamId, { id: revealLogId, icon: "🖼️", label: shown, state });
     };
 
     logReveal("running", "미리보기 여는 중");
@@ -3101,6 +3542,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       crEnabled: () => this.isCurriculumRuntimeEnabled(),
       // cr-verify — the same session the proxy path runs (CR-03).
       verify: async (name: string, input: Record<string, unknown>) => toMcpToolResult(await this.runVerifyTool(name, input)),
+      // One-click publish: the same pipeline and lock as the toolbar button.
+      publishSite: (input) => this.sitePublisher().runForTool(input),
       crScope: (url: string) => checkAgentOrigin(url, this.crBrowserOptions().allowedOrigins()),
       // #507 — the address of the live server currently up. It does not start one
       // (giving a lookup a side effect would mean "what is the address?" turns the
@@ -3240,6 +3683,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // Any message from the panel is evidence of a human. See `lastActivityAt`.
     this.lastActivityAt = Date.now();
+    // D-028 — a send that is turned away here never reaches handleSend, so its staged photos
+    // are deleted now; they are not part of the text handed back to the input box.
+    if ((this.opsHold || this.connectionChanging) && msg.type === "sendMessage") {
+      for (const id of msg.attachments ?? []) this.imageStaging?.discard(id);
+    }
     if (this.opsHold && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
       // #751 — only a NEW AI run is held; the typed text goes back into the box, nothing is lost.
       await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images});
@@ -3453,7 +3901,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports));
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments);
+        return;
+      case "stageImage":
+        await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
+        return;
+      case "discardStagedImage":
+        this.imageStaging?.discard(msg.stageId);
         return;
       case "retryMessage":
         // #358 — carry the failed turn's image(s) through the retry so the
@@ -3578,6 +4032,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "publishToGallery":
         void this.publishToGallery();
         return;
+      case "publishSite":
+        // The visible "Studio button": HP shell defaults hide editor/view title actions (#725),
+        // so the chat header is where a participant can actually press it.
+        void this.publishSite();
+        return;
       case "webviewError":
         // S-04 (#48). Log to output channel so the trace survives a panel
         // reload; don't crash the host.
@@ -3697,6 +4156,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     rawHistory: ChatMessage[],
     images?: string[],
     instructorPromptRefs?: Array<{ object_id: string; revision: number }>,
+    attachments?: string[],
   ): Promise<void> {
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
     if (this.verifySession?.running) {
@@ -3724,6 +4184,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the only path out to the model, so they are filtered once right at the entrance.
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
     const history = modelHistory(activityConnections(this.context) ? this.getHistory() : rawHistory);
+    // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
+    // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
+    // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
+    // always a real turn. Reads the profile already held (no await before the turn's first one).
+    const wikiSwitch = this.cachedProfile?.learning_wiki;
+    const brainCall = wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    if (brainCall) {
+      await this.answerBrainCall(text, brainCall);
+      return;
+    }
     // "Show me / open it / run it" — if the kid asks to see the game in plain
     // language and a game already exists, just open it. Don't make them hunt
     // for the ▶ Run button or burn an AI round-trip on a deflection. Skipped
@@ -3873,6 +4343,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const notice = openWorldNotice(open);
       if (notice) userTextForModel = `${notice}\n\n${userTextForModel}`;
     }
+    // Learning wiki: on the first coach turn of a conversation (calls of the wiki by name, answered by
+    // the App, do not count), the team's summary (and, from the cohort's plan, the next session's
+    // question and deck focus) is laid in front of the model input, not the student's bubble, so the
+    // coach can open with the last session's test. On an empty conversation, even with an empty wiki,
+    // the coach is also told to mention the wiki by name once, so students know they can call it.
+    if (this.isLearningWikiEnabled()) {
+      const plan = this.learningWikiPlan();
+      if (firstCoachTurn(history, brainName(plan), sessionLabel(plan))) {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const wiki = root ? loadState(wikiDir(root, plan)) : null;
+        const lead = [wiki?.sessions.length ? coachContext(wiki, plan) : "", history.length === 0 ? brainIntro(plan) : ""].filter(Boolean).join("\n\n");
+        if (lead) userTextForModel = `${lead}\n\n${userTextForModel}`;
+      }
+    }
     // #278 Phase 2 — fold any queued page screenshot into this turn's images.
     // CR-09 — a picked element's crop joins the queued page screenshot; neither replaces the other.
     const pageImage = this.pendingPageImage;
@@ -3923,6 +4407,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // it would fill the work folder with files the participant never asked for.
     const savedImages = await this.savePastedImages(images, streamId);
     if (savedImages.note) userTextForModel = `${userTextForModel}\n\n${savedImages.note}`;
+    // D-028 — photos attached as files move into images/ now, and the message carries their
+    // paths. The same lines go into the saved history, so later turns can still name them.
+    const attachedNote = this.commitAttachedImages(attachments, streamId);
+    if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
+    const historyText = attachedNote ? `${text}\n\n${attachedNote}` : text;
 
     let assistantText = "";
     // REQ-D2: auto-reveal as soon as a renderable HTML block completes in
@@ -4039,11 +4528,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // result and the next call).
       let pendingShown = false;
       const PENDING_ID = `pending-${streamId}`;
+      // D-027 — a "summary" cohort gets one Korean line per stretch of work in place of a line
+      // per tool call (toolActivity.ts). The pending line below becomes that line.
+      const work = toolActivityMode(profile) === "summary"
+        ? new WorkLine(PENDING_ID, (entry) => this.postToolLog(streamId, entry))
+        : null;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
       // was 3 minutes and the last line was `Read ✓`, so children and adults alike
       // misread it as "still reading". That stretch is filled with one live line.
       const showPending = () => {
+        if (work) {
+          pendingShown = true;
+          work.show(NEXT_STEP_PHRASE);
+          return;
+        }
         if (pendingShown) return;
         pendingShown = true;
         this.postToolLog(streamId, { id: PENDING_ID, icon: "…", label: "다음 단계를 준비하는 중…", state: "running" });
@@ -4056,6 +4555,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const clearPending = () => {
         if (!pendingShown) return;
         pendingShown = false;
+        if (work) {
+          work.close(pendingCloseLabel(wroteOk));
+          return;
+        }
         this.postToolLog(streamId, {
           id: PENDING_ID,
           icon: "✍️",
@@ -4101,10 +4604,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           this.postToolLog(streamId, { id, icon, label, state, ...(a.at ? { at: a.at } : {}) });
         switch (a.kind) {
           case "thinking_tokens":
+            if (work) {
+              pendingShown = true;
+              work.show(THINKING_PHRASE);
+              break;
+            }
             // One entry that ticks in place; the completed block replaces it.
             log(`think-${thinkingIndex}`, "💭", `응답 준비 중 · ${a.tokens} 토큰`, "running");
             break;
           case "thinking":
+            // D-027 — a summary cohort sees that the coach is thinking, not what it thinks.
+            if (work) {
+              pendingShown = true;
+              work.show(THINKING_PHRASE);
+              break;
+            }
             // 2026-08-20 — thinking is also "doing something". A child's inner
             // thoughts are hidden (below), so without this line the screen goes
             // completely quiet — 3 minutes of silence after Read ✓ on a real device.
@@ -4121,7 +4635,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // Pass the workspace root so the path is shown relative to it. Leaving
             // only the filename makes "normal · relative path refused · outside the
             // workspace" all read as the same characters.
-            clearPending();
+            if (!work) clearPending();
             const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd())})`;
             toolLabels.set(a.id, label);
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
@@ -4142,14 +4656,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 htmlWrites.set(a.id, fp);
               }
             }
-            log(a.id, "🔧", label, "running");
+            if (work) {
+              pendingShown = true;
+              work.show(workPhrase(a.name, a.input));
+            } else {
+              log(a.id, "🔧", label, "running");
+            }
             break;
           }
           case "tool_result":
             // A failure leaves a mark in the label — an icon alone disappears once the
             // scroll passes it. In real use a Write failure was missed and
             // "저장됐습니다" was believed as it stood (2026-07-26).
-            log(
+            // D-027 — a summary cohort gets no per-call line, failures included: the coach
+            // retries on its own, and the turn's own text has to say what did not work (R0).
+            if (!work) log(
               a.id,
               "🔧",
               a.isError
@@ -4522,7 +5043,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // window is reopened.
         await this.saveAgentMdIfPresent(assistantText, streamId);
         await this.appendHistory([
-          { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+          { id: randomId(), role: "user", content: historyText, createdAt: Date.now() },
           ...this.finishTurnItems(
             streamId,
             messageId,
@@ -4831,6 +5352,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
     if (isAbortError(err)) return;
+    // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
+    const spent = passSpentNotice(err);
+    if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }
     if (err instanceof ProxyAuthError) {
       if (err.requestId) this.lastRequestId = err.requestId;
       void this.post({
@@ -4983,6 +5507,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return true;
       }
       return pick === "열기";
+    }
+
+    // Tier 1.6 — publishing the workspace to a public GitHub repository (publish_site).
+    // Asked until the repository is REGISTERED (persisted per GitHub login + repository, shared
+    // with the toolbar button — publishRegistry.ts), then never again until "배포 등록 해제".
+    // Not configurable through requireApprovalFor (see the ActionRequest kind comment).
+    // check_only never reaches here.
+    if (req.kind === "publishSite") {
+      const payload = (req.payload as { repo_name?: string; stage?: string } | null | undefined) ?? {};
+      const publisher = this.sitePublisher();
+      if (!publisher.allowed()) return false;
+      const repo = publisher.repoNameFor({ repo_name: payload.repo_name || undefined });
+      return publisher.approveForTool(repo, payload.stage === "save" ? "save" : "publish", onPrompted);
     }
 
     // Tier 2 — file access must target the active workspace (write and read).
@@ -5198,7 +5735,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile},
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
           activityDraft:this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
@@ -5207,6 +5744,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate,
+        ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
         ...(instructorConnection ? { instructorConnection } : {}),

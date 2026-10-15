@@ -27,15 +27,15 @@ hdr "2. Submodule"
 if [ -f vscodium-base/.git ] || [ -d vscodium-base/.git ]; then ok "vscodium-base present"
 else todo "git submodule update --init"; git submodule update --init && ok "submodule initialised"; fi
 
-hdr "3. Secrets (worker/.dev.vars — gitignored)"
-if [ -f worker/.dev.vars ]; then ok "worker/.dev.vars exists"
-else cp worker/.dev.vars.example worker/.dev.vars && ok "created from .example"; fi
-if bash scripts/dev-secrets.sh >/dev/null 2>&1; then ok "Gemini key pulled from ~/.env"
-else todo "set keys in worker/.dev.vars (see DEV-GUIDE 'Keys & providers')"; fi
+hdr "3. Dependencies"
+( node scripts/bootstrap-service-packages.mjs && npm ci --silent >/dev/null 2>&1 ) && ok "private Service development artifact" || todo "node scripts/bootstrap-service-packages.mjs && npm ci"
+( cd extensions/hypeproof-chat && npm ci --omit=optional --silent >/dev/null 2>&1 ) && ok "App dependencies" || todo "npm ci --prefix extensions/hypeproof-chat --omit=optional"
+( cd extensions/hypeproof-chat/webview-ui && npm ci --silent >/dev/null 2>&1 ) && ok "webview dependencies" || todo "npm ci --prefix extensions/hypeproof-chat/webview-ui"
+( cd chalk && npm ci --silent >/dev/null 2>&1 ) && ok "Chalk consumer dependencies" || todo "npm ci --prefix chalk"
+( cd e2e && npm ci --silent >/dev/null 2>&1 ) && ok "e2e dependencies" || todo "npm ci --prefix e2e"
 
-hdr "4. Dependencies"
-( cd worker && npm install --silent >/dev/null 2>&1 ) && ok "worker deps" || todo "cd worker && npm install"
-( cd e2e && npm install --silent >/dev/null 2>&1 ) && ok "e2e deps" || todo "cd e2e && npm install"
+hdr "4. Optional local Service"
+todo "For the local Service only: bash scripts/dev-secrets.sh; configure its development .dev.vars, then bash scripts/dev-stack.sh"
 
 hdr "5. PR-safety guard"
 git config core.hooksPath .githooks && ok "pre-push guard enabled (blocks accidental main push)"

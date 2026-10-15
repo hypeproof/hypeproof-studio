@@ -8,6 +8,7 @@ vscodium-base/VSCodium-*/
 # pattern matches directories only, so `git add -A` would otherwise stage a
 # node_modules symlink — see the #318 worktree leak).
 **/node_modules
+/test/service-integration/.evidence/
 **/dist/
 
 # Logs / local state
@@ -45,3 +46,8 @@ extensions/hypeproof-chat/webview-ui/src/*.js
 **/.wrangler/
 **/.dev.vars
 .dev.vars
+
+# Proprietary Service artifacts are authenticated local/CI inputs, never Studio source.
+.private-service-cache/
+
+.service-source/

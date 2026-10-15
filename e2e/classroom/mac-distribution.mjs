@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Remote classroom operations (#751, U2) — AT-44 M1: distribution of a notice from the REAL Chalk UI to a REAL Studio window on this Mac.
 //
 //   HPS_DEVHOST_SOURCE="<official shell>.app" HPS_DEVHOST_DIR=e2e/test-results/classroom-devhost-u2 node e2e/classroom/mac-devhost.mjs prepare
@@ -23,7 +24,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
 
@@ -39,11 +40,11 @@ assert.ok(manifest.agent_sdk?.vendored === true && manifest.agent_sdk.binary, 't
 const steps = []; const step = (name, detail = {}) => { steps.push({ at: new Date().toISOString(), name, ...detail }); console.log('STEP ' + name + (Object.keys(detail).length ? ' ' + JSON.stringify(detail) : '')); };
 
 // ── Service: real router + SQLite, synthetic class of three seats, distribution switched ON for this run only ──
-const local = await localOps(), { setRoster } = await import('../../worker/src/lib/kv.ts');
+const local = await localOps(), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
 const seats = ['A1', 'A2', 'A3'].map((id, i) => ({ seat_id: id, student_id: prefix + (i + 1) }));
 await setRoster(local.env.HPS_KV, local.cohort, seats.map((s) => s.student_id)); await local.freeze();
 assert.equal((await local.configure(seats, 0, { flags: { ops_observe: true, ops_commands: true, ops_distribute: true } })).status, 201);
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts'), { TEST_SECRET } = await import('../../worker/test/harness/index.mjs');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts'), { TEST_SECRET } = await import('@hypeproof/service-testkit/test/harness/index.mjs');
 const teacherToken = (await issueIssuer({ issuer: 'teacher-a' /* the lesson was drafted and frozen by this instructor id; the invite endpoint is per author */, scopes: [{ cohort: local.cohort, profiles: [local.profile], ops: [...OPS_ALL, 'distribute'] }] }, 4, TEST_SECRET)).token;
 const invite = await local.request(`/admin/cohorts/${local.cohort}/authoring/${local.lesson.course_id}/versions/${local.lesson.version}/participants`, 'POST', { user: seats[0].student_id, hours: 3 }, teacherToken);
 assert.equal(invite.status, 200, invite.raw); const token = invite.json.token;

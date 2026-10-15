@@ -28,8 +28,8 @@ curl -fsS -X POST https://api.hypeproof-ai.xyz/admin/cohorts/<COHORT_ID>/session
   -d "{\"profile_id\":\"<PROFILE_ID>\",\"starts_at\":\"$NOW\",\"ends_at\":\"$END\"}"
 ```
 
-Replace `<COHORT_ID>` (e.g. `boah-dental-2026-a`) and `<PROFILE_ID>`
-(e.g. `boah-dental-teaser-2026-s1`). The cohort + profile must match your
+Replace `<COHORT_ID>` (e.g. `dental-pilot-2026-a`) and `<PROFILE_ID>`
+(e.g. `dental-teaser-2026-s1`). The cohort + profile must match your
 token's scope or the worker returns 403 with a clear message.
 
 End the session early (e.g. workshop wrapped before window closes):

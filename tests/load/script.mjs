@@ -2,7 +2,7 @@
 //
 // Not invented. Every line below traces to a real source:
 //   - guest roster + flow steps 1-7:
-//       worker/src/prompts/sk-biopharm-kids-quest-3-4.md
+//       worker/src/prompts/kids-quest-3-4.md
 //   - "[Studio 안내: 아이가 …]" prefix, verbatim shape:
 //       extensions/hypeproof-chat/src/chatPanelProvider.ts:1368
 //   - "[게스트 결과] 성공|실패 · k=v …" + the trailing instruction line:

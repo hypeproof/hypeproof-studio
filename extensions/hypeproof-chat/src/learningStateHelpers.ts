@@ -22,9 +22,9 @@ import {
   type PreviousVerification,
   type SourceKind,
   type SourceState,
-} from "../../../worker/src/lib/measurement-core/learning-events.ts";
-import type { ObservationEvent } from "../../../worker/src/lib/measurement-core/legacy-observation.ts";
-import type { CurriculumPhase } from "../../../worker/src/lib/measurement-core/local-record.ts";
+} from "@hypeproof/measurement-core/learning-events";
+import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
+import type { CurriculumPhase } from "@hypeproof/measurement-core/local-record";
 
 /** One row of the session design's `learning.completion[]`. `label` goes to the screen verbatim. */
 export interface CompletionItem {

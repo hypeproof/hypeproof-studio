@@ -32,7 +32,7 @@
 // loop-coach.mjs, and its control routes and recorders are service-control.mjs; cr-e2e owns and pins both,
 // and this file only calls in. Every request passes service-gate.mjs first: through a tunnel
 // (cr-dev-kit.sh --phone) only the published runtime `/l/…` is reachable.
-import "../../worker/test/harness/loader.mjs";
+import "@hypeproof/service-testkit/test/harness/loader.mjs";
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
@@ -52,9 +52,9 @@ if (REAL_MODEL && !process.env.ANTHROPIC_API_KEY) {
   console.error("HPS_CR_MODEL=real needs ANTHROPIC_API_KEY in the environment");
   process.exit(2);
 }
-const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("../../worker/test/harness/index.mjs");
-const { getProfile } = await import("../../worker/src/profiles/index.ts");
-const { issue, issueIssuer } = await import("../../worker/src/lib/tokens.ts");
+const { bootApp, createMockEnv, makeCtx, TEST_SECRET } = await import("@hypeproof/service-testkit/test/harness/index.mjs");
+const { getProfile } = await import("@hypeproof/service-testkit/src/profiles/index.ts");
+const { issue, issueIssuer } = await import("@hypeproof/service-testkit/src/lib/tokens.ts");
 // The kit's exposed mode (one shared test origin, a tunnel: --phone) and paid mode (--real-model) sign
 // tokens with a secret made for this run: TEST_SECRET is in the repository, so with it anyone who has
 // the source could sign a student's or a director's token for this Service.
@@ -81,10 +81,10 @@ const env = createMockEnv({
 if (modeArg === "publish") {
   const { DatabaseSync } = await import("node:sqlite");
   const { readFileSync } = await import("node:fs");
-  const { sqliteBinding, memoryR2 } = await import("../../worker/test/harness/curriculum.mjs");
+  const { sqliteBinding, memoryR2 } = await import("@hypeproof/service-testkit/test/harness/curriculum.mjs");
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys=ON");
-  db.exec(readFileSync(new URL("../../worker/schema.sql", import.meta.url), "utf8"));
+  db.exec(readFileSync(new URL(import.meta.resolve("@hypeproof/service-testkit/schema.sql")), "utf8"));
   // The rows usage accounting references (as the classroom-ops fixture mirrors them), so a turn's usage row is not refused.
   db.prepare("INSERT OR IGNORE INTO cohorts(id, display_name) VALUES(?, ?)").run(cohort, cohort);
   db.prepare("INSERT OR IGNORE INTO sessions(id, cohort_id, profile_id, starts_at, ends_at) VALUES(?, ?, ?, ?, ?)").run("cr-app-session", cohort, profile.id, new Date(Date.now() - 60_000).toISOString(), new Date(Date.now() + 6 * 3600_000).toISOString());

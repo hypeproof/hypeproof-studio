@@ -1,3 +1,4 @@
+import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // #1013 feedback-loop — the whole loop in the real pages: a learner's share gets a person's feedback, the learner answers it
 // on /sharing (revise/keep/hold + why) and the instructor sees that answer on /manage, the instructor writes a retrospective
 // of the version that ran on /authoring (07) from the shares they received, a withdrawn share drops out of it, the
@@ -15,12 +16,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
-import { localOps, OPS_ALL } from '../../worker/test/harness/classroom-ops.mjs';
-import { makeCtx, TEST_SECRET } from '../../worker/test/harness/index.mjs';
+import { localOps, OPS_ALL } from './service-fixture.mjs';
+import { makeCtx, TEST_SECRET } from '@hypeproof/service-testkit/test/harness/index.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), out = path.join(repo, 'e2e/test-results/classroom-feedback-loop'); mkdirSync(out, { recursive: true });
-const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('../../worker/src/lib/kv.ts');
-const { issueIssuer } = await import('../../worker/src/lib/tokens.ts');
+const local = await localOps(), { default: chalk } = await import('../../chalk/src/index.ts'), { setRoster } = await import('@hypeproof/service-testkit/src/lib/kv.ts');
+const { issueIssuer } = await import('@hypeproof/service-testkit/src/lib/tokens.ts');
 local.env.HPS_FEEDBACK_LOOP = 'enabled';
 const realFetch = globalThis.fetch, toService = (url, init) => local.app.fetch(new Request(url, init), local.env, makeCtx());
 globalThis.fetch = (url, init) => String(url).startsWith('https://service.test') ? toService(url, init) : realFetch(url, init);

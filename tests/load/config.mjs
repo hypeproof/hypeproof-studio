@@ -4,6 +4,8 @@
 // 판정 기준을 세우기 전에 대상을 열어본다 — and once set, do not move them to
 // make a run pass). Each one names the observation it came from.
 
+import { serviceDefault } from "../rehearsal/helpers/env.mjs";
+
 /* ------------------------------------------------------------------ *
  * PASS/FAIL thresholds — frozen 2026-08-19, before the first run.
  * ------------------------------------------------------------------ */
@@ -15,7 +17,7 @@ export const THRESHOLDS = {
   // Whole turn, request → [DONE].
   turn_p95_ms: 25_000,
 
-  // 보아치과 2026-07-29 measured 211s at p99 — that is the number this
+  // 예시치과 2026-07-29 measured 211s at p99 — that is the number this
   // gate exists to prevent repeating.
   turn_p99_ms: 60_000,
 
@@ -35,14 +37,14 @@ export const THRESHOLDS = {
 /* ------------------------------------------------------------------ *
  * Cohort / profile wiring — read from the live worker, not guessed.
  * ------------------------------------------------------------------ */
-export const COHORT_ID = process.env.LOAD_COHORT ?? "sk-biopharm-2026-a";
+export const COHORT_ID = process.env.LOAD_COHORT ?? serviceDefault("kids-cohort");
 
-// Both SK kids profiles declare coach_runtime: "agent-sdk"
-// (worker/src/profiles/sk-biopharm-kids-*.ts), so production traffic for
+// Both kids quest profiles declare coach_runtime: "agent-sdk"
+// (Service worker/src/profiles), so production traffic for
 // these cohorts is Anthropic-native POST /v1/messages, NOT the OpenAI-shaped
 // /v1/chat/completions proxy path. Default the harness to production truth.
-export const PROFILE_GRADE_3_4 = "sk-biopharm-kids-2026-grade-3-4-s1";
-export const PROFILE_GRADE_5_6 = "sk-biopharm-kids-2026-grade-5-6-s1";
+export const PROFILE_GRADE_3_4 = serviceDefault("kids-lower");
+export const PROFILE_GRADE_5_6 = serviceDefault("kids-upper");
 
 // Requested classroom split (13 × 5-6학년, 10 × 3-4학년).
 // ⚠ A single cohort can only have ONE active session, and chat-gate.ts:159
@@ -103,5 +105,5 @@ export const RUN = {
 };
 
 // Output-token buckets, chosen to line up with the dental analysis
-// (2000+ token turns were 21.8% of sk-biopharm turns).
+// (2000+ token turns were 21.8% of kids-workshop turns).
 export const OUTPUT_BUCKETS = [0, 200, 500, 1000, 2000, 4000, 8000, 16384];

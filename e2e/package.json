@@ -39,11 +39,13 @@
     "test:classroom-ops-g1-wrap": "node --experimental-strip-types --experimental-sqlite classroom/ops-g1-wrap.mjs",
     "test:classroom-authoring-g2": "node --experimental-strip-types --experimental-sqlite classroom/authoring-g2.mjs",
     "test:classroom-authoring-mission": "node --experimental-strip-types --experimental-sqlite classroom/authoring-mission.mjs",
-    "test:classroom-feedback-loop": "node --experimental-strip-types --experimental-sqlite classroom/feedback-loop.mjs"
+    "test:classroom-feedback-loop": "node --experimental-strip-types --experimental-sqlite classroom/feedback-loop.mjs",
+    "test:workshop-element": "node --experimental-strip-types curriculum-runtime/workshop-element-trial.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "esbuild": "^0.28.2",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "@hypeproof/service-testkit": "file:../.private-service-cache/hypeproof-service-testkit-0.1.2.tgz"
   }
 }

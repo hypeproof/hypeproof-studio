@@ -1,6 +1,6 @@
 name: mirror-release
 
-# 미러 저장소(jayleekr/hypeproof-studio-releases)로 릴리즈 자산을 복제한다.
+# 미러 저장소(hypeproof/hypeproof-studio-releases)로 릴리즈 자산을 복제한다.
 # `install.sh` · `scripts/install-win.ps1` · 앱 내 업데이트 배너(updateChecker.ts)가
 # **전부 이 미러의 /releases/latest** 를 읽는다. 여기가 비면 설치도 넛지도
 # "이미 최신"이라고 조용히 거짓말한다.
@@ -73,7 +73,7 @@ jobs:
     timeout-minutes: 180
     env:
       SOURCE_REPO: ${{ github.repository }}
-      TARGET_REPO: jayleekr/hypeproof-studio-releases
+      TARGET_REPO: hypeproof/hypeproof-studio-releases
       TAG: ${{ inputs.tag || github.event.release.tag_name }}
       # 릴리즈 트리거는 항상 실제 발행이다 — dry run 은 수동 실행에만 있다.
       DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
@@ -181,7 +181,7 @@ jobs:
           cat > mirror-release-notes.md <<EOF
           ## HypeProof Studio $TAG
 
-          This is the public installer/update mirror for HypeProof Studio. Use
+          This is the private member installer/update mirror for HypeProof Studio. Use
           this page when installing the app or checking that the latest workshop
           build is available.
 
@@ -189,10 +189,11 @@ jobs:
 
           ### macOS
 
-          Recommended one-line install:
+          First sign in with a member GitHub account using GitHub CLI. Then:
 
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install-mac.sh | bash
+          gh api repos/hypeproof/hypeproof-studio-releases/contents/install-mac.sh -H 'Accept: application/vnd.github.raw' > /tmp/hps-install.sh
+          bash /tmp/hps-install.sh
           \`\`\`
 
           Manual download:
@@ -201,10 +202,11 @@ jobs:
 
           ### Windows
 
-          Recommended PowerShell install:
+          After signing in with GitHub CLI, in PowerShell:
 
           \`\`\`powershell
-          iwr -useb https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install-win.ps1 | iex
+          gh api repos/hypeproof/hypeproof-studio-releases/contents/install-win.ps1 -H 'Accept: application/vnd.github.raw' | Out-File -Encoding utf8 install-win.ps1
+          ./install-win.ps1
           \`\`\`
 
           Manual downloads:
@@ -245,6 +247,15 @@ jobs:
           gh release create "$TAG" --repo "$TARGET_REPO" --title "${name:-HypeProof Studio $TAG}" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-} 2>/dev/null || true
           gh release edit "$TAG" --repo "$TARGET_REPO" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-}
           gh release upload "$TAG" --repo "$TARGET_REPO" dist/* --clobber
+          # Installer bundle (#1617): this tag's two installers and two SDK seeders
+          # as release assets, so a participation-code install can assemble a class
+          # kit from the release alone (Lab /studio/install). Taken from the tag, so
+          # they always match the app they install.
+          mkdir -p install-bundle
+          for f in install.sh install.ps1 seed-sdk-binary.sh seed-sdk-binary.ps1; do
+            git show "$TAG:scripts/$f" > "install-bundle/$f"
+          done
+          gh release upload "$TAG" --repo "$TARGET_REPO" install-bundle/* --clobber
 
       - name: Verify mirror
         if: env.DRY_RUN != 'true'

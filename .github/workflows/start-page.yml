@@ -6,13 +6,20 @@ on:
       - 'extensions/hypeproof-chat/**'
       - 'e2e/start-page/**'
       - 'e2e/trial-ux/**'
+      - 'e2e/service-provenance.mjs'
       - 'e2e/voice-conversation/**'
       - 'e2e/sx/goal-browser.mjs'
-      - 'worker/src/profiles/**'
+      - 'e2e/curriculum-runtime/workshop-element-trial.mjs'
+      - 'e2e/curriculum-runtime/fixtures/dental-element-trial/**'
       - 'e2e/package*.json'
       - '.github/workflows/start-page.yml'
 permissions:
   contents: read
+
+# Pull request only: a newer push replaces the run in progress.
+concurrency:
+  group: start-page-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   start-page-browser:
     runs-on: ubuntu-latest
@@ -22,6 +29,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # Webview typechecks shared App protocols, which consume Service packages.
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - run: npm ci --ignore-scripts --omit=optional
+        working-directory: extensions/hypeproof-chat
       - run: npm ci
         working-directory: extensions/hypeproof-chat/webview-ui
       - run: npm run build
@@ -39,6 +53,9 @@ jobs:
       # AE-01 (#554): the learner's goal over time in the built webview (late lesson, answers, typed text).
       - run: npm run test:goal:browser
         working-directory: e2e
+      - name: Workshop element selection at desktop and mobile widths
+        run: npm run test:workshop-element
+        working-directory: e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -48,4 +65,5 @@ jobs:
             e2e/test-results/trial-ux/
             e2e/test-results/voice-popup/
             e2e/test-results/goal-browser/
+            e2e/test-results/workshop-element-trial/
           retention-days: 14

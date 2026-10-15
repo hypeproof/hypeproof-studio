@@ -11,8 +11,10 @@
 //   4. buildSdkQueryOptions — pathToClaudeCodeExecutable passed when resolved,
 //      OMITTED otherwise (dev keeps node_modules resolution);
 //   5. minor-safety unaffected — binary presence never widens tool policy;
-//   6. pinned-manifest consistency — sdkBinaryManifest.ts ===
-//      package-lock.json === scripts/seed-sdk-binary.sh (version + sha512).
+//   6. pinned-manifest consistency — package.json (exact pin) ===
+//      package-lock.json === sdkBinaryManifest.ts === scripts/seed-sdk-binary.sh
+//      === scripts/seed-sdk-binary.ps1 (version + sha512 per platform), each
+//      judge with positive and negative controls.
 // Run: node --experimental-strip-types test/sdk-binary.smoke.mjs
 
 import assert from "node:assert/strict";
@@ -295,48 +297,218 @@ const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : 
   assert.deepEqual(agent.permittedMcpTools, [], "no browser MCP without the profile flag, regardless of binary");
 }
 
-// ─── pinned-manifest consistency: manifest === package-lock === seed script ──
-{
-  const lock = JSON.parse(readFileSync(join(here, "..", "package-lock.json"), "utf8"));
-  const sdkLock = lock.packages["node_modules/@anthropic-ai/claude-agent-sdk"];
-  assert.equal(
-    SDK_BINARY_VERSION,
-    sdkLock.version,
-    "sdkBinaryManifest SDK_BINARY_VERSION must equal the locked @anthropic-ai/claude-agent-sdk version — bump them together",
-  );
+// ─── pinned-manifest consistency ─────────────────────────────────────────────
+// package.json === package-lock.json === sdkBinaryManifest.ts === both seed
+// scripts, per platform. Each judge below returns the problems it finds. The
+// shipped files must yield none (positive control), and a copy broken on
+// purpose must yield exactly the planted problem (negative control), so a
+// judge that quietly stopped measuring fails here instead of passing
+// (.claude/rules/verification.md rules 2 and 3).
+const SDK_PKG = "@anthropic-ai/claude-agent-sdk";
+// Platform packages the SDK ships that Studio deliberately does not seed: the
+// seed scripts detect glibc Linux, macOS and Windows only.
+const UNSEEDED_PLATFORMS = new Set(["linux-x64-musl", "linux-arm64-musl"]);
 
-  for (const [key, entry] of Object.entries(SDK_BINARY_MANIFEST)) {
-    const locked = lock.packages[`node_modules/${entry.packageName}`];
-    assert.ok(locked, `${entry.packageName} present in package-lock.json (optionalDependency)`);
-    assert.equal(locked.version, SDK_BINARY_VERSION, `${key}: lockfile version matches`);
-    assert.equal(entry.sha512, locked.integrity, `${key}: manifest sha512 === lockfile integrity`);
-    assert.equal(entry.url, locked.resolved, `${key}: manifest URL === lockfile resolved tarball URL`);
-    assert.ok(entry.unpackedSize > SDK_BINARY_MIN_BYTES, `${key}: unpackedSize sane`);
+function lockPinProblems({ pkg, lock, manifest, version }) {
+  const problems = [];
+  const declared = pkg.devDependencies?.[SDK_PKG];
+  if (declared !== version) {
+    problems.push(`package.json devDependencies ${SDK_PKG} is "${declared}", not the exact pin "${version}"`);
   }
-
-  // Seed script embeds the same pin (self-contained on venue machines).
-  const script = readFileSync(join(here, "..", "..", "..", "scripts", "seed-sdk-binary.sh"), "utf8");
-  const pinned = script.match(/^PINNED_VERSION="([^"]+)"/m);
-  assert.ok(pinned, "seed script declares PINNED_VERSION");
-  assert.equal(pinned[1], SDK_BINARY_VERSION, "seed script PINNED_VERSION matches the manifest");
-  for (const [key, entry] of Object.entries(SDK_BINARY_MANIFEST)) {
-    if (key.startsWith("linux") || key.startsWith("darwin") || key.startsWith("win32")) {
-      assert.ok(
-        script.includes(entry.sha512),
-        `seed script embeds the pinned sha512 for ${key}`,
-      );
+  if (pkg.dependencies?.[SDK_PKG] !== undefined) {
+    problems.push(`${SDK_PKG} is a prod dependency (#349: breaks vscode-min-prepack)`);
+  }
+  if (lock.packages?.[""]?.devDependencies?.[SDK_PKG] !== declared) {
+    problems.push("package-lock.json root devDependencies disagree with package.json");
+  }
+  const sdk = lock.packages?.[`node_modules/${SDK_PKG}`];
+  if (!sdk) return [...problems, `${SDK_PKG} missing from package-lock.json`];
+  if (sdk.version !== version) problems.push(`package-lock.json ${SDK_PKG} is ${sdk.version}, manifest ${version}`);
+  for (const name of Object.keys(sdk.optionalDependencies ?? {})) {
+    const platform = name.slice(SDK_PKG.length + 1);
+    if (!(platform in manifest) && !UNSEEDED_PLATFORMS.has(platform)) {
+      problems.push(`${platform}: shipped by the SDK but neither seeded nor knowingly unseeded`);
     }
   }
-  // The seeded destination in the script matches seededSdkBinaryPath (darwin).
+  for (const [platform, entry] of Object.entries(manifest)) {
+    if (entry.packageName !== `${SDK_PKG}-${platform}`) problems.push(`${platform}: packageName ${entry.packageName}`);
+    if (sdk.optionalDependencies?.[entry.packageName] !== version) {
+      problems.push(`${platform}: the locked SDK does not declare ${entry.packageName}@${version}`);
+    }
+    const locked = lock.packages?.[`node_modules/${entry.packageName}`];
+    if (!locked) {
+      problems.push(`${platform}: ${entry.packageName} missing from package-lock.json`);
+      continue;
+    }
+    if (locked.version !== version) problems.push(`${platform}: package-lock.json version ${locked.version}`);
+    if (locked.integrity !== entry.sha512) problems.push(`${platform}: manifest sha512 differs from lockfile integrity`);
+    if (locked.resolved !== entry.url) problems.push(`${platform}: manifest url differs from lockfile resolved`);
+    if (!(entry.unpackedSize > SDK_BINARY_MIN_BYTES)) problems.push(`${platform}: unpackedSize below the binary floor`);
+  }
+  return problems;
+}
+
+/** A seed script's platform → sha512 table against the expected one, both ways. */
+function seedTableProblems(label, table, expected) {
+  const problems = [];
+  for (const [platform, sha512] of Object.entries(expected)) {
+    if (table[platform] !== sha512) {
+      problems.push(`${label} ${platform}: ${table[platform] ? "sha512 differs from the manifest" : "no pinned sha512"}`);
+    }
+  }
+  for (const platform of Object.keys(table)) {
+    if (!(platform in expected)) problems.push(`${label} ${platform}: pinned but not in the manifest`);
+  }
+  return problems;
+}
+
+function shSeedProblems(script, { manifest, version }) {
+  const problems = [];
+  const pinned = script.match(/^PINNED_VERSION="([^"]+)"/m)?.[1];
+  if (pinned !== version) problems.push(`seed-sdk-binary.sh PINNED_VERSION is ${pinned}, manifest ${version}`);
+  // The case arms of pinned_sha512(): `darwin-arm64) printf '%s' "sha512-…" ;;`.
+  // The .sh keeps all six values even though it hands win32 to the .ps1.
+  const table = {};
+  for (const m of script.matchAll(/^\s*([a-z0-9]+-[a-z0-9]+)\)\s*printf '%s' "(sha512-[A-Za-z0-9+/=]+)"/gm)) {
+    table[m[1]] = m[2];
+  }
+  const expected = Object.fromEntries(Object.entries(manifest).map(([p, e]) => [p, e.sha512]));
+  return [...problems, ...seedTableProblems("seed-sdk-binary.sh", table, expected)];
+}
+
+function ps1SeedProblems(script, { manifest, version }) {
+  const problems = [];
+  const pinned = script.match(/^\$PinnedVersion\s*=\s*"([^"]+)"/m)?.[1];
+  if (pinned !== version) problems.push(`seed-sdk-binary.ps1 $PinnedVersion is ${pinned}, manifest ${version}`);
+  // `$PinnedSha512 = @{ "win32-x64" = "sha512-…" … }`. The file is CRLF with a
+  // BOM (.gitattributes *.ps1 eol=crlf), which these patterns tolerate.
+  const block = script.match(/^\$PinnedSha512\s*=\s*@\{([\s\S]*?)^\}/m)?.[1] ?? "";
+  const table = {};
+  for (const m of block.matchAll(/"([a-z0-9]+-[a-z0-9]+)"\s*=\s*"(sha512-[A-Za-z0-9+/=]+)"/g)) table[m[1]] = m[2];
+  const expected = Object.fromEntries(
+    Object.entries(manifest).filter(([p]) => p.startsWith("win32-")).map(([p, e]) => [p, e.sha512]),
+  );
+  return [...problems, ...seedTableProblems("seed-sdk-binary.ps1", table, expected)];
+}
+
+{
+  const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8"));
+  const lock = JSON.parse(readFileSync(join(here, "..", "package-lock.json"), "utf8"));
+  const sh = readFileSync(join(here, "..", "..", "..", "scripts", "seed-sdk-binary.sh"), "utf8");
+  const ps1 = readFileSync(join(here, "..", "..", "..", "scripts", "seed-sdk-binary.ps1"), "utf8");
+  const pin = { manifest: SDK_BINARY_MANIFEST, version: SDK_BINARY_VERSION };
+
+  // Positive controls: the shipped files agree with each other.
+  assert.deepEqual(
+    lockPinProblems({ pkg, lock, ...pin }),
+    [],
+    "package.json, package-lock.json and sdkBinaryManifest.ts pin the same SDK and platform binaries",
+  );
+  assert.deepEqual(shSeedProblems(sh, pin), [], "seed-sdk-binary.sh embeds the manifest version and sha512 per platform");
+  assert.deepEqual(ps1SeedProblems(ps1, pin), [], "seed-sdk-binary.ps1 embeds the manifest version and win32 sha512 values");
+
+  // Negative controls: each judge reports the drift it exists for.
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+  const shaA = SDK_BINARY_MANIFEST["darwin-arm64"].sha512;
+  const shaB = SDK_BINARY_MANIFEST["darwin-x64"].sha512;
+  {
+    const ranged = clone(pkg);
+    ranged.devDependencies[SDK_PKG] = `^${SDK_BINARY_VERSION}`;
+    assert.match(lockPinProblems({ pkg: ranged, lock, ...pin }).join("\n"), /not the exact pin/, "a ^range is not an exact pin");
+    const drifted = clone(lock);
+    drifted.packages[`node_modules/${SDK_PKG}-darwin-arm64`].integrity = shaB;
+    assert.deepEqual(
+      lockPinProblems({ pkg, lock: drifted, ...pin }),
+      ["darwin-arm64: manifest sha512 differs from lockfile integrity"],
+      "a lockfile integrity the manifest does not carry is reported for that platform",
+    );
+    const newPlatform = clone(lock);
+    newPlatform.packages[`node_modules/${SDK_PKG}`].optionalDependencies[`${SDK_PKG}-freebsd-x64`] = SDK_BINARY_VERSION;
+    assert.deepEqual(
+      lockPinProblems({ pkg, lock: newPlatform, ...pin }),
+      ["freebsd-x64: shipped by the SDK but neither seeded nor knowingly unseeded"],
+      "a platform package the SDK starts shipping is a decision, not silence",
+    );
+  }
+  {
+    // Two values swapped between case arms: both still occur in the file (the
+    // former includes() check passed this), but each arm would now refuse the
+    // real tarball at seed time.
+    const swapped = sh.replace(shaA, "\u0000").replace(shaB, shaA).replace("\u0000", shaB);
+    assert.ok(swapped !== sh && swapped.includes(shaA) && swapped.includes(shaB), "the control is a pure swap");
+    assert.deepEqual(shSeedProblems(swapped, pin), [
+      "seed-sdk-binary.sh darwin-arm64: sha512 differs from the manifest",
+      "seed-sdk-binary.sh darwin-x64: sha512 differs from the manifest",
+    ]);
+    const stale = sh.replace(`PINNED_VERSION="${SDK_BINARY_VERSION}"`, 'PINNED_VERSION="0.3.207"');
+    assert.deepEqual(shSeedProblems(stale, pin), [`seed-sdk-binary.sh PINNED_VERSION is 0.3.207, manifest ${SDK_BINARY_VERSION}`]);
+  }
+  {
+    const winX64 = SDK_BINARY_MANIFEST["win32-x64"].sha512;
+    assert.deepEqual(ps1SeedProblems(ps1.replace(winX64, "sha512-c3RhbGU="), pin), [
+      "seed-sdk-binary.ps1 win32-x64: sha512 differs from the manifest",
+    ]);
+    assert.deepEqual(ps1SeedProblems(ps1.replace(/^\s*"win32-arm64"\s*=.*$/m, ""), pin), [
+      "seed-sdk-binary.ps1 win32-arm64: no pinned sha512",
+    ]);
+    const stale = ps1.replace(`$PinnedVersion = "${SDK_BINARY_VERSION}"`, '$PinnedVersion = "0.3.207"');
+    assert.deepEqual(ps1SeedProblems(stale, pin), [`seed-sdk-binary.ps1 $PinnedVersion is 0.3.207, manifest ${SDK_BINARY_VERSION}`]);
+  }
+
+  // Each seeder writes where seededSdkBinaryPath looks, plus the trusted marker.
   assert.ok(
-    script.includes('$HOME/Library/Application Support/HypeProof-Studio/sdk/$VERSION'),
-    "seed script darwin destination matches seededSdkBinaryPath",
+    sh.includes('$HOME/Library/Application Support/HypeProof-Studio/sdk/$VERSION'),
+    "seed-sdk-binary.sh darwin destination matches seededSdkBinaryPath",
   );
   assert.ok(
-    script.includes('${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk/$VERSION'),
-    "seed script linux destination matches seededSdkBinaryPath",
+    sh.includes('${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk/$VERSION'),
+    "seed-sdk-binary.sh linux destination matches seededSdkBinaryPath",
   );
-  assert.ok(script.includes('.verified.json'), "seed script writes the runtime-trusted marker");
+  assert.ok(sh.includes('.verified.json'), "seed-sdk-binary.sh writes the runtime-trusted marker");
+  assert.ok(
+    ps1.includes('Join-Path $env:APPDATA "HypeProof-Studio\\sdk\\$Version"') && ps1.includes('Join-Path $destDir "claude.exe"'),
+    "seed-sdk-binary.ps1 win32 destination matches seededSdkBinaryPath",
+  );
+  assert.ok(ps1.includes('"$destBin.verified.json"'), "seed-sdk-binary.ps1 writes the runtime-trusted marker");
+}
+
+// ─── approval policy for the roster consult (ADR 0011 §5.1) ─────────────────
+// The consult tool reaches tool-less, read-only roster helpers, so it runs
+// without a modal by default, yet a machine must still be able to require
+// one: `consultHelper` is offered in requireApprovalFor's enum and kept out of
+// its default. It sits here because WP A1 owns package.json and this file;
+// manifest-security-scope.smoke.mjs keeps the full approval-policy lock.
+function consultApprovalProblems(pkg) {
+  const setting = pkg.contributes?.configuration?.properties?.["hypeproofChat.requireApprovalFor"];
+  if (!setting) return ["requireApprovalFor is not declared"];
+  const problems = [];
+  if (!(setting.items?.enum ?? []).includes("consultHelper")) {
+    problems.push("enum does not offer consultHelper (a machine could not require the modal)");
+  }
+  if ((setting.default ?? []).includes("consultHelper")) {
+    problems.push("default requires consultHelper (every consult would open a modal)");
+  }
+  return problems;
+}
+
+{
+  const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8"));
+  assert.deepEqual(consultApprovalProblems(pkg), [], "consultHelper is offered in requireApprovalFor and kept out of its default");
+
+  // Negative controls on copies: drop it from the enum, then add it to the default.
+  const setting = pkg.contributes.configuration.properties["hypeproofChat.requireApprovalFor"];
+  const withSetting = (patch) => {
+    const copy = JSON.parse(JSON.stringify(pkg));
+    Object.assign(copy.contributes.configuration.properties["hypeproofChat.requireApprovalFor"], patch);
+    return copy;
+  };
+  assert.deepEqual(
+    consultApprovalProblems(withSetting({ items: { ...setting.items, enum: setting.items.enum.filter((k) => k !== "consultHelper") } })),
+    ["enum does not offer consultHelper (a machine could not require the modal)"],
+  );
+  assert.deepEqual(consultApprovalProblems(withSetting({ default: [...setting.default, "consultHelper"] })), [
+    "default requires consultHelper (every consult would open a modal)",
+  ]);
 }
 
 console.log("sdk-binary.smoke: all assertions passed");

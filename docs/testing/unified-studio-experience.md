@@ -112,3 +112,15 @@ US-T21의 사람 관찰은 기술 release gate와 별도 채택 근거다. 사�
 PASS/BLOCKED/NOT RUN, 실제 Mac 화면 및 아직 없는 최종 패키지 인수를 기록했다.
 명령·CI 자격·실행기 복구는 [공통 릴리스 절차](../dev/unified-release-and-migration.md)를
 따른다. 위 표는 행 전체 인수 상태이며 부분 PASS로 자동 갱신하지 않는다.
+
+### US-T19/20 Service candidate controls (#1651)
+
+`node --test e2e/unified-release/candidate-service.test.mjs` rejects a mismatched or
+dirty Service checkout and checks secret redaction and the shared deployment pin.
+The live driver validates the first file only after the first turn finishes, and
+retains synthetic failure artifacts before closing the App. The Service harness
+records rejected budget attempts and transport/stream failures. Service compatibility
+requires both activities on both OSes, complete turns and file assertions, no recorded
+failures, and at most 12 total upstream attempts per activity (including SDK titles).
+A local control pass does not establish the live matrix result; retain each run's
+actual receipt or failure stage.

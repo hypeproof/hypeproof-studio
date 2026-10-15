@@ -120,7 +120,7 @@ export function looksLikeIssuerTokenUnverified(token: string | null | undefined)
 /**
  * Pick the coach name + personality to send to the proxy / show in the UI.
  *
- * For cohorts with `naming_mode === "fixed"` (e.g. boah-dental), any
+ * For cohorts with `naming_mode === "fixed"` (e.g. dental-pilot), any
  * user-supplied name carried over from a different cohort's user-data-dir
  * must be ignored — fallback_name wins, no personality bleed. (#140)
  *
@@ -149,8 +149,8 @@ export type AppTone = "game" | "search" | "site" | "quest";
 /**
  * Pick the UI tone for hard-coded chat-panel labels.
  *
- * `search-webapp` tier (e.g. boah-dental teaser) → "search" tone (검색엔진 어휘).
- * `website` tier (보아치과 원장 copyclone) → "site" tone (웹사이트 어휘).
+ * `search-webapp` tier (e.g. dental-pilot teaser) → "search" tone (검색엔진 어휘).
+ * `website` tier (치과 원장 copyclone) → "site" tone (웹사이트 어휘).
  * `kids-quest` tier ("게스트 퀘스트") → "quest" tone (게스트를 돕는 어휘, "게임" 없음).
  * Anything else (kids-basic, etc.) → "game" tone — the legacy default.
  *

@@ -10,7 +10,7 @@ audience: maintainers
 source_paths:
   - extensions/hypeproof-chat/src/chatPanelProvider.ts
   - extensions/hypeproof-chat/src/proxyClient.ts
-  - worker/src/routes
+  - config/service-deployment.json
 quality_gates:
   - runtime-flows-present
   - failure-paths-documented

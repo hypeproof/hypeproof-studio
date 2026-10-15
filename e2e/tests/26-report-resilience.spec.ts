@@ -23,8 +23,8 @@ async function startMock(reportStatus = 200): Promise<{ port: number; close: () 
     if (req.method === "GET" && req.url?.endsWith("/profile")) {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({
-        profile_id: "boah-dental-teaser-2026-s1",
-        display_name: "보아치과 v4", language: "ko", series_index: 1, series_total: 1,
+        profile_id: "dental-teaser-2026-s1",
+        display_name: "예시치과 v4", language: "ko", series_index: 1, series_total: 1,
         welcome: { greeting_md: "", example_prompts: [] },
         ux: {
           coach: { naming_mode: "fixed", fallback_name: "코디", naming_prompt_md: "", personality_prompt_md: "" },

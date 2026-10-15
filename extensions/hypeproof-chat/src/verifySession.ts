@@ -21,7 +21,7 @@
 //   5. "검증됨" only for a version with an all-pass report bound to it (CR-81).
 
 import { randomUUID } from "node:crypto";
-import type { ObservationEvent } from "../../../worker/src/lib/measurement-core/legacy-observation.ts";
+import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import {
   CRITERIA_MAX,
   VERIFY_RESULT_TEXT_CAP,
@@ -41,7 +41,7 @@ import {
   versionHex,
   type CriterionInput,
   type VerifyPlan,
-} from "../../../worker/src/lib/measurement-core/verification.ts";
+} from "@hypeproof/measurement-core/verification";
 import { VERSION_CHANGED, runCriterionPlan, verdictLine, type VerifyExecutor } from "./verifyRunner.ts";
 import { scrubSecrets } from "./shellPolicy.ts";
 import type { ActiveRun, VerifyCriterion, VerifyProposal, VerifyView } from "./verifyView.ts";

@@ -54,6 +54,16 @@ jobs:
       - name: Install PyYAML
         run: pip install --quiet pyyaml
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Bootstrap pinned private Service packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install pinned private Service contract fixtures
+        run: npm ci --ignore-scripts
+
       - name: Check product registry
         run: python3 scripts/check-registry.py
 
@@ -73,7 +83,7 @@ jobs:
           rmdir __nc_probe__
 
           # NC2 — a drift_lock pointing at a missing file must be rejected.
-          sed -i 's|drift_lock: worker/test/.*|drift_lock: worker/test/__nc_missing__.mjs|' products.yaml
+          sed -i 's|drift_lock: test/service-integration/.*|drift_lock: test/service-integration/__nc_missing__.mjs|' products.yaml
           python3 scripts/check-registry.py >/dev/null 2>&1 \
             && { cp /tmp/products.bak products.yaml; fail "NC2 passed: a missing drift_lock was accepted"; }
           cp /tmp/products.bak products.yaml
@@ -83,3 +93,10 @@ jobs:
           python3 scripts/check-registry.py || fail "positive control regressed"
 
           echo "self-test OK: both negative controls fire, positive control clean"
+
+      - name: Install App contract dependencies
+        working-directory: extensions/hypeproof-chat
+        run: npm ci --ignore-scripts
+
+      - name: Execute preserved registry contracts against the private Service
+        run: npm run test:registry-contracts

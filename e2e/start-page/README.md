@@ -33,7 +33,7 @@ extension (extension package 0.1.5). Exact injected artifact hashes are in
 - Practice folder: `/private/tmp/hps-start-20260907/workspace`
 - Local Service: `http://127.0.0.1:8797/v1`; CDP: 9348
 - Synthetic roster/session opened through the normal admin API for the actual
-  `boah-dental-director-copyclone-2026-s1` registry profile.
+  `dental-copyclone-2026-s1` registry profile.
 - No token preseed for this observed flow: entered via the new password form.
 - Invalid code → actual 401 inline error → valid code → real dental course/coach
   confirmation → rejected replacement preserves connection → begin → actual

@@ -31,6 +31,7 @@ EXT_DST="$VSCODE_TREE/extensions/hypeproof-chat"
 PRODUCT_JSON="$VSCODE_TREE/product.json"
 
 # 1. Build the webview + extension bundle
+node "$REPO_ROOT/scripts/bootstrap-service-packages.mjs"
 echo "Building hypeproof-chat..."
 (
   cd "$EXT_SRC"

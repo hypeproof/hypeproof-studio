@@ -89,7 +89,7 @@ test("DIAG — real coach runtime trace", async () => {
     try { fs.rmSync(watch, { force: true }); } catch { /* ignore */ }
     const t0 = Date.now();
 
-    await ta.fill(process.env.HPS_BRIEF || "보아치과 홈페이지 만들어줘. 완성된 단일 HTML을 index.html 파일로 저장해줘. 브라우저 열지 마.");
+    await ta.fill(process.env.HPS_BRIEF || "예시치과 홈페이지 만들어줘. 완성된 단일 HTML을 index.html 파일로 저장해줘. 브라우저 열지 마.");
     await ta.press("Enter");
 
     // Observe until the homepage is written AND its size stabilizes (the coach

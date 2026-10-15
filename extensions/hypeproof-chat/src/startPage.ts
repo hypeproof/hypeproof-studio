@@ -3,12 +3,39 @@ import { ChatPanelProvider } from "./chatPanelProvider";
 import { ActivityConnectionError, activityConnections } from "./activityConnections";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
+import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
+import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import type { ClassReposOutcome } from "./publish/publishHost";
+import type { ClassRepo } from "./publish/githubContinue";
+
+/**
+ * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
+ * seat's GitHub first; offer to continue a site from there, or to start new. The GitHub work
+ * lives in the publish module (publishHost.ts); absent → the feature is off.
+ */
+export interface GithubContinueSource {
+  /** The cohort publishes to GitHub (the button's gate) and names a class folder. */
+  allowed(profile: ResolvedProfile): boolean;
+  find(): Promise<ClassReposOutcome>;
+  signIn(): Promise<boolean>;
+  prepare(args: { login: string; repo: ClassRepo; reuse?: string; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }>;
+  /** The folder "새로 하기" opens: the class folder, else the first free `<class folder>-N`. */
+  newFolder(classRoot: string): string;
+  classRoot(profile: ResolvedProfile): string | null;
+}
+
+/** A GitHub look that has not answered by then is treated as unavailable: entry is never held up. */
+const GITHUB_LOOK_MS = 15_000;
 
 const entryError = (error:unknown) => error instanceof ActivityConnectionError || error instanceof ProxyTransportError
   ? error.message : "활동을 열지 못했습니다. 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.";
 const TOKEN_KEY = "hypeproofChat.workshopToken";
+/** REQ-L12 — the order a buyer is in the middle of paying. Kept until the seat is claimed, so a restart cannot lose a paid order. */
+const PENDING_PURCHASE_KEY = "hypeproofChat.pendingPurchase";
+const DEFAULT_PROXY_URL = "https://api.hypeproof-ai.xyz/v1";
+const DEFAULT_SITE_BASE = "https://hypeproof-ai.xyz";
 
 /**
  * 활동 분리 **이전**에 쌓인 대화 기록 키인가 (#960).
@@ -27,18 +54,102 @@ export function shouldHideSidebar(allTabGroups: readonly { tabs: readonly unknow
   return allTabGroups.every(g => g.tabs.length === 0) && !chatViewVisible;
 }
 
+type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string };
+/** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
+type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
+
 /** App entry surface; authentication and cohort authority remain in Service. */
 export class StartPage {
   private panel?: vscode.WebviewPanel;
   private busy = false;
   private error?: string;
   private started = false;
-  private candidate?: { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string };
+  private candidate?: Candidate;
+  // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
+  private products?: PassProduct[] | null;
+  private order?: PendingOrder;
+  private purchaseStage?: PurchaseView["stage"];
+  private purchaseMessage?: string;
+  private purchaseTimer?: ReturnType<typeof setTimeout>;
+  /** The code issued for the saved order, while its activity is previewed but not yet entered. */
+  private purchaseToken?: string;
+  private github?: GithubLook;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
-    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>) => Promise<boolean>,
+    private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
+    private githubSource?: GithubContinueSource,
   ) {}
+
+  /** The look that belongs to the candidate on screen, if any. */
+  private look(): GithubLook | undefined {
+    return this.candidate && this.github?.candidate === this.candidate ? this.github : undefined;
+  }
+
+  /** Look at the candidate's GitHub; the answer lands in the start state when it comes. */
+  private lookAtGithub(candidate: Candidate, classRoot: string): void {
+    const source = this.githubSource;
+    if (!source) return;
+    const entry: GithubLook = { candidate, classRoot, state: { status: "checking" } };
+    this.github = entry;
+    const timeout = new Promise<ClassReposOutcome>((r) => setTimeout(() => r({ status: "unavailable", detail: "timeout" }), GITHUB_LOOK_MS));
+    const found = source.find().catch((e): ClassReposOutcome => ({ status: "unavailable", detail: String(e) }));
+    void Promise.race([found, timeout]).then(async (r) => {
+      if (this.github !== entry || this.candidate !== candidate) return; // another code, or cancelled
+      if (r.status === "found") {
+        entry.login = r.login;
+        entry.repos = r.repos;
+        entry.state = { status: "found", repos: r.repos.map(({ name, pushedAt }) => ({ name, pushedAt })), newFolder: path.basename(source.newFolder(classRoot)) };
+      } else entry.state = { status: r.status };
+      await this.refresh();
+    });
+  }
+
+  /** Sign in from the candidate card when gh is not signed in, then look again. */
+  private async signInToGithub(): Promise<void> {
+    const gh = this.look(), source = this.githubSource;
+    if (!gh || !source || gh.state.status !== "signin" || this.busy) return;
+    this.busy = true; this.error = undefined; gh.state = { status: "signin", working: "signin" };
+    await this.refresh();
+    let signedIn = false;
+    try { signedIn = await source.signIn(); } catch { signedIn = false; } finally { this.busy = false; }
+    if (this.github !== gh || this.candidate !== gh.candidate) return;
+    if (!signedIn) {
+      gh.state = { status: "signin" };
+      this.error = "GitHub 로그인이 끝나지 않았어요. 다시 눌러 주세요.";
+      await this.refresh();
+      return;
+    }
+    this.lookAtGithub(gh.candidate, gh.classRoot);
+    await this.refresh();
+  }
+
+  /** "GitHub에서 이어하기" / "새로 하기": settle the candidate's folder, then start as usual. */
+  private async startFromGithubChoice(msg: Extract<StartRequest, { type: "continueFromGithub" | "startNew" }>): Promise<void> {
+    const gh = this.look(), source = this.githubSource;
+    if (!gh || !source || gh.state.status !== "found" || this.busy) return;
+    const candidate = gh.candidate;
+    if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
+    let folder: string;
+    if (msg.type === "startNew") folder = source.newFolder(gh.classRoot);
+    else {
+      const repo = gh.repos?.find((r) => r.name === msg.repo);
+      if (!repo || !gh.login) return;
+      this.busy = true; this.error = undefined; gh.state = { ...gh.state, working: "download" };
+      await this.refresh();
+      let prepared: Awaited<ReturnType<GithubContinueSource["prepare"]>>;
+      try { prepared = await source.prepare({ login: gh.login, repo, classRoot: gh.classRoot, ...(candidate.workspace ? { reuse: candidate.workspace } : {}) }); }
+      catch { prepared = { ok: false, message: "GitHub에서 홈페이지를 내려받지 못했어요. 잠시 뒤 다시 눌러 주세요." }; }
+      finally { this.busy = false; gh.state = { ...gh.state, working: undefined }; }
+      if (this.candidate !== candidate) return;
+      if (!prepared.ok) { this.error = prepared.message; await this.refresh(); return; }
+      folder = prepared.folder;
+    }
+    // The folder travels as the local choice (`begin`'s selectedDirectory), not as a rewrite of
+    // the served profile: the profile stays what the Service said.
+    candidate.workspace = folder;
+    await this.handle({ type: "beginCourse" });
+  }
 
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
   inboxChanged(): void { if (this.panel) void this.refresh(); }
@@ -75,8 +186,142 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.stopPurchaseWait(); } });
     this.context.subscriptions.push(panel);
+    void this.resumePurchase();
+  }
+
+  private settings() {
+    const config = vscode.workspace.getConfiguration("hypeproofChat");
+    return { proxyUrl: config.get<string>("proxyUrl", DEFAULT_PROXY_URL), siteBase: config.get<string>("siteBase", DEFAULT_SITE_BASE) };
+  }
+  private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
+  private purchaseView(): PurchaseView {
+    return {
+      available: !!this.products?.length || !!this.order,
+      ...(this.products?.length ? { products: this.products } : {}),
+      ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
+      ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
+      ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
+    };
+  }
+  /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
+  private async loadProducts(force = false): Promise<void> {
+    if (this.products !== undefined && !force) return;
+    this.products = await fetchProducts(this.settings().proxyUrl);
+  }
+  private async savedOrder(): Promise<PendingOrder | null> {
+    const { proxyUrl, siteBase } = this.settings();
+    return restorePendingOrder(await this.context.secrets.get(PENDING_PURCHASE_KEY), proxyUrl, siteBase);
+  }
+  /** A paid order must survive a closed tab or a restart: pick the wait back up where it stopped. */
+  private async resumePurchase(): Promise<void> {
+    // The tab was closed and opened again: the order is still held, but its timer died with the panel.
+    if (this.order) { if (this.purchaseStage === "waiting") this.schedulePurchasePoll(0); return; }
+    const saved = await this.savedOrder();
+    if (!saved) return;
+    this.order = saved;
+    // A claimed record means a code was issued and the activity was never entered. Replacing that code
+    // rotates the credential, so it happens only when the buyer asks, never by itself.
+    if (saved.claimed) { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.unfinished; await this.refresh(); return; }
+    this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+    await this.refresh();
+    this.schedulePurchasePoll(0);
+  }
+  private schedulePurchasePoll(delay = POLL_INTERVAL_MS): void {
+    this.stopPurchaseWait();
+    if (!this.panel || !this.order) return;
+    this.purchaseTimer = setTimeout(() => { void this.purchaseTick(); }, delay);
+  }
+  private async endPurchase(message: string): Promise<void> {
+    this.stopPurchaseWait();
+    await this.context.secrets.delete(PENDING_PURCHASE_KEY);
+    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message;
+    await this.refresh();
+  }
+  private async purchaseTick(): Promise<void> {
+    const order = this.order;
+    if (!order || !this.panel) return;
+    const state = await pollOrder(order);
+    if (this.order !== order) return;
+    const next = waitDecision(state, order, Date.now());
+    if (next === "wait") {
+      const message = state === "confirming" ? PURCHASE_COPY.confirming : PURCHASE_COPY.waiting;
+      if (message !== this.purchaseMessage) { this.purchaseMessage = message; await this.refresh(); }
+      this.schedulePurchasePoll();
+      return;
+    }
+    if (next !== "claim") { await this.endPurchase(PURCHASE_COPY[next]); return; }
+    await this.claimPurchase(order);
+  }
+  private async claimPurchase(order: PendingOrder): Promise<void> {
+    this.stopPurchaseWait();
+    this.purchaseStage = "connecting"; this.purchaseMessage = PURCHASE_COPY.connecting;
+    await this.refresh();
+    const claim = await claimWithRecovery(order);
+    if (this.order !== order) return;
+    if (!claim.ok) {
+      // The payment is confirmed and the order is kept, so "다시 연결" can try again without paying twice.
+      this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.claimFailed;
+      await this.refresh();
+      return;
+    }
+    // Keep the record, marked claimed, until the activity is entered (see the commit in beginCourse).
+    // If anything fails before that, "다시 연결" replaces the code instead of the buyer paying again.
+    const claimed: PendingOrder = { ...order, claimed: true };
+    await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(claimed));
+    this.order = claimed;
+    // From here the issued code is an ordinary participation code and takes the ordinary entry path.
+    await this.handle({ type: "connectCourse", token: claim.code });
+    if (this.candidate?.token === claim.code) {
+      this.purchaseToken = claim.code; this.order = undefined; this.purchaseStage = undefined; this.purchaseMessage = undefined; this.error = undefined;
+    } else { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.claimFailed; }
+    await this.refresh();
+  }
+  private async handlePurchase(msg: StartRequest): Promise<void> {
+    if (msg.type === "purchaseOpen") {
+      await this.loadProducts(true);
+      if (!this.order) { this.purchaseStage = this.products?.length ? "choosing" : "stopped"; this.purchaseMessage = this.products?.length ? undefined : PURCHASE_COPY.unavailable; }
+      await this.refresh(); return;
+    }
+    if (msg.type === "purchaseCancel") {
+      // Cancelling stops the wait only. A saved paid order is never thrown away from here.
+      this.stopPurchaseWait();
+      if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
+      else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      await this.refresh(); return;
+    }
+    if (msg.type === "purchaseHide") {
+      // Back to the other ways to start. The order stays saved and the choice list offers it again.
+      this.stopPurchaseWait();
+      if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
+      await this.refresh(); return;
+    }
+    if (msg.type === "purchaseReopen") {
+      if (this.order) await vscode.env.openExternal(vscode.Uri.parse(this.order.checkoutUrl));
+      return;
+    }
+    if (msg.type === "purchaseRetry") {
+      const order = this.order ?? await this.savedOrder();
+      if (!order) { this.purchaseStage = this.products?.length ? "choosing" : undefined; this.purchaseMessage = undefined; await this.refresh(); return; }
+      this.order = order;
+      if (order.claimed) { await this.claimPurchase(order); return; }
+      this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+      await this.refresh(); this.schedulePurchasePoll(0); return;
+    }
+    if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
+    if (!this.products?.some(p => p.id === msg.productId)) return;
+    const { proxyUrl, siteBase } = this.settings();
+    this.busy = true; await this.refresh();
+    try {
+      const order = await createOrder(proxyUrl, msg.productId, siteBase);
+      if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
+      // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
+      await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
+      this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+      await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl));
+      this.schedulePurchasePoll();
+    } finally { this.busy = false; await this.refresh(); }
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
@@ -97,12 +342,14 @@ export class StartPage {
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
-      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
+      purchase: this.purchaseView(),
+      ...(this.look() ? { github: this.look()!.state } : {}),
+      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
-        series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: p.workspace_root ?? "현재 작업 폴더" } } : {}),
+        series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
     await this.panel?.webview.postMessage({ type: "startState", state });
   }
@@ -110,7 +357,8 @@ export class StartPage {
   private async handle(msg: StartRequest): Promise<void> {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
-    if (msg.type === "startReady") { await this.refresh(); return; }
+    if (msg.type === "startReady") { await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
+    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {
@@ -127,6 +375,8 @@ export class StartPage {
       }
       return;
     }
+    if (msg.type === "githubSignIn") { await this.signInToGithub(); return; }
+    if (msg.type === "continueFromGithub" || msg.type === "startNew") { await this.startFromGithubChoice(msg); return; }
     if (this.busy) return;
     const connections = activityConnections(this.context);
     if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
@@ -146,7 +396,7 @@ export class StartPage {
         if (!record) throw new ActivityConnectionError('저장된 활동을 찾지 못했습니다.');
         const result = await fetchProfileResult({proxyUrl:record.service,token:record.token});
         if (!result.ok) {this.error=result.failure.friendly; return;}
-        this.candidate = {token:record.token,proxyUrl:record.service,profile:{...result.profile,workspace_root:record.workspace},workspace:record.workspace,previousConnected:!!connections?.current};
+        this.candidate = {token:record.token,proxyUrl:record.service,profile:result.profile,workspace:record.workspace,previousConnected:!!connections?.current};
         this.error = undefined;
       } catch (error) { this.error = entryError(error); }
       finally { this.busy=false; await this.refresh(); }
@@ -154,7 +404,7 @@ export class StartPage {
     }
     if (msg.type === 'chooseActivityFolder' && this.candidate) {
       const choice = await vscode.window.showOpenDialog({canSelectFiles:false,canSelectFolders:true,canSelectMany:false,openLabel:'이 활동의 작업 폴더 선택'});
-      if (choice?.[0]) { this.candidate.workspace=choice[0].fsPath; this.candidate.profile={...this.candidate.profile,workspace_root:choice[0].fsPath}; }
+      if (choice?.[0]) this.candidate.workspace=choice[0].fsPath;
       await this.refresh(); return;
     }
     if (msg.type === "cancelCandidate") {
@@ -189,7 +439,8 @@ export class StartPage {
           if (proxyUrl !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           const result = await fetchProfileResult({ proxyUrl, token: candidate.token });
           if (!result.ok) { this.error = result.failure.friendly; return; }
-          profile = candidate.workspace ? {...result.profile,workspace_root:candidate.workspace} : result.profile;
+          // Service authority stays separate from the local navigation choice.
+          profile = result.profile;
           if (!profile?.profile_id || !profile.display_name || !profile.ux?.coach || !profile.welcome) throw new Error("Invalid activity profile");
         } else profile = await this.chat.ensureProfile(true);
         if (!profile) {
@@ -212,13 +463,15 @@ export class StartPage {
             rollback = await connections.commit(candidate.token,profile!,root);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
+          // REQ-L12 — the purchased activity is entered; the order record has done its job.
+          if (this.purchaseToken === candidate.token) { this.purchaseToken = undefined; await this.context.secrets.delete(PENDING_PURCHASE_KEY); }
           this.chat.invalidateProfile();
           if (vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") !== candidate.proxyUrl) throw new Error("Activity Service changed during confirmation");
           if (!await this.chat.ensureProfile(true)) throw new Error('connection validation failed');
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
           this.candidate = undefined;
         };
-        if (await this.begin(profile, commit)) return; // workspace switch reloads the window
+        if (await this.begin(profile, commit, candidate?.workspace)) return; // workspace switch reloads the window
         await commit();
         if (!this.panel) throw new Error('Entry page was closed');
         await this.openChat();
@@ -265,7 +518,11 @@ export class StartPage {
       // Preview only. Existing runtime and credential stay bound until workspace preparation succeeds.
       const running = await this.chat.ensureProfile(), connections = activityConnections(this.context);
       const workspace = reentryWorkspace({ candidateActivity: p.activity_id, record: connections?.current ?? null, recordServiceMatches: !!connections?.matchesService, openFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, runningActivity: running?.activity_id });
-      this.candidate = { token, profile: workspace ? { ...p, workspace_root: workspace } : p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
+      this.candidate = { token, profile: p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
+      // GitHub first (user requirement 2026-10-13): the served profile names the class folder.
+      const classRoot = this.githubSource?.allowed(p) ? this.githubSource.classRoot(p) : null;
+      if (classRoot) this.lookAtGithub(this.candidate, classRoot);
+      else this.github = undefined;
     } catch (error) {
       console.error('[startPage] connectCourse failed:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       this.error = "수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";

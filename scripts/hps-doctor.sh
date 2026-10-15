@@ -473,9 +473,17 @@ if [ "$SKIP_STUDIO" != "1" ]; then
   IFS="$OLDIFS"
 
   if [ -z "$VERIFIED_FILE" ]; then
-    # Not yet seeded is not fatal: Studio self-heals the SDK on first launch.
-    warn "native SDK not seeded (no claude[.exe].verified.json under any HypeProof-Studio/sdk)" \
-         "launch Studio once to self-heal, or run: bash scripts/seed-sdk-binary.sh"
+    # A warning, not a hard fail: the toolchain works without it. But nothing
+    # fetches it later. The shipped App has no runtime SDK download; the binary
+    # only comes from scripts/seed-sdk-binary.{sh,ps1}, and until one has run
+    # the agent-sdk coach falls back to the proxy runtime (sdkCoach.ts).
+    if [ "$OS" = "windows" ]; then
+      _seed_cmd="powershell -ExecutionPolicy Bypass -File scripts\\seed-sdk-binary.ps1"
+    else
+      _seed_cmd="bash scripts/seed-sdk-binary.sh"
+    fi
+    warn "native SDK not seeded (no claude[.exe].verified.json under any HypeProof-Studio/sdk); Studio does not download it on launch" \
+         "run the seed script:  $_seed_cmd"
   else
     SEEDED_BIN="${VERIFIED_FILE%.verified.json}"
     MK_VER="$(sed -n 's/.*"sdkVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$VERIFIED_FILE" 2>/dev/null | head -n1)"
