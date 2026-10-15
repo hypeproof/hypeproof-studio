@@ -241,11 +241,39 @@ and local gateway checks. Current gateway version is
 SS-01–12: native Google mapping, Mac author UI, Windows execution and the expanded
 workflow still require their own observations.
 
-AI admission remains a separate prerequisite: the fresh access views show one
-active source for all three principals, but only the existing peer currently has
-available allocation. Original and third are unavailable for paid model turns;
-store and deterministic preview authorization are not proof of coach funding.
-The peer view retains342706 microUSD remaining,201814 spent and455480 held under
-a1000000-microUSD active limit. This is a timestamped readiness observation, not
-new spending authority. Do not release held/unknown amounts or increase the
-approved overall cap to make the three-account test appear ready.
+### Three-participant test funding
+
+The initial read found only the peer funded. A complete, non-truncated audit of
+all four prior period ledgers reconciled the three participant views with117
+actual request records:1972794 microUSD spent/held in total. Existing unpriced
+attempts remain reserved, including ended-but-unpriced requests; no estimate was
+substituted for provider evidence and nothing was released.
+
+The prior active test contract was suspended before activating a new private
+validation contract using the already approved plan/price and unchanged end date.
+Its1000000-microUSD pool is split333333 /333334 /333333 across the existing
+original/peer and new third subjects. Aggregate concurrency remains1 for these
+sequential test accounts. The prior exposure plus the new full limit is2972794
+microUSD, below the previously approved3000000-microUSD overall pilot ceiling.
+This is a private test allocation, not a new purchase, commercial renewal, reset
+of learner usage or approval of the proposed20-person class budget.
+
+Fresh Service access views show exactly one active, available source for all
+three participants and the exact allocations with zero new spent/held amounts.
+All117 historical attempt records, native trial request counts and tokens are
+unchanged. The migration made zero model calls, sent no mail and created no
+payment. It does not prove the next SDK response, Google execution or Windows
+installation succeeds. Existing installations may need to select the new active
+test pass once; Google connections and saved recipes were not migrated or erased.
+
+Receipt: `/tmp/hps-email-mvp/store-budget-readiness/allocation-receipt.json`.
+Protected HTTP receipts and a durable journal retain each operation. The root
+creation returned HTTP201; the initial harness expected200 and stopped. Recovery
+read that successful receipt and the existing empty pool, then allocated its
+three children without replaying contract/root creation or increasing the limit.
+Runtime/helper revisione36ff624 has all18 remote CI checks passing; later evidence
+commits have their own CI state.
+
+After allocation, the same23 live profile/download/denial controls passed again.
+Installer bytes and candidate revision remained unchanged; no Google or model
+execution was used for that confirmation.

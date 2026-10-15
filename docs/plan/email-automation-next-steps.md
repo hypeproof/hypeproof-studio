@@ -30,11 +30,13 @@ the client fix atf90b65e3. Its runtime passed all18 CI checks (one Windows-runne
 startup timeout passed on the failed-job rerun). Actual Windows execution is NOT_RUN.
 The private gateway now admits three distinct Studio principals; online Service/D1
 publication/ownership/withdrawal19 and download/profile/access23 controls pass.
-The third test grant added no budget or model spend. Actual Google identity
-mapping and native Mac/Windows reuse remain unverified. Fresh access views expose
-an additional prerequisite: only the existing peer has available AI allocation;
-original/third paid-coach admission is not ready. Held/unknown amounts and the
-approved overall spending ceiling are preserved.
+Actual Google identity mapping and native Mac/Windows reuse remain unverified.
+The three existing Studio subjects now each have an available test allocation
+(~USD0.333), under a USD1 active pool and the unchanged USD3 overall ceiling.
+A full117-record ledger audit retained USD1.972794 prior spent/held amounts;
+combined prior exposure plus the new limit is USD2.972794. No usage/token reset,
+model call, email or payment occurred. Concurrency remains1 for sequential pilot
+testing; this does not provision the real20-person class budget.
 
 ## Latest design priority — 2026-10-15
 
