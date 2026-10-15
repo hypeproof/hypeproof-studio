@@ -34,7 +34,7 @@ const fetcher=async (url,init)=>{
   if(init.method==='POST' && failPublish) return new Response('{}',{status:503});
   if(init.method==='POST' && withdrawnPublication) return new Response(JSON.stringify({error:{code:'publication_unpublished'}}),{status:409});
   if(pauseDetail && url.endsWith('/chosen')) await new Promise(resolve=>{releaseDetail=resolve;});
-  if(init.method==='POST'){published++;const body=JSON.parse(init.body);versionPosts.push(body);assert.deepEqual(body.recipe,recipe);assert.match(body.requestId,/^skill-(?:[0-9a-f]{64}|[0-9a-f-]{36})$/);return new Response(JSON.stringify({item:{id:'published',title:recipe.title}}));}
+  if(init.method==='POST'){published++;const body=JSON.parse(init.body);versionPosts.push(body);assert.deepEqual(body.recipe,recipe);assert.match(body.requestId,/^skill-(?:[0-9a-f]{64}|[0-9a-f-]{36})$/);return new Response(JSON.stringify({item:{id:'published',title:recipe.title,sourceId:body.sourceId??null}}));}
   return new Response(JSON.stringify({item:{id:'chosen',title:recipe.title},recipe,items:[{id:'chosen',title:recipe.title,description:recipe.description,mine:false}]}));
 };
 const module={exports:{}};const require=createRequire(import.meta.url);
@@ -64,7 +64,7 @@ try {
   await handlers.answer({questionId:'stale',choiceId:'documents'});assert.equal(handlers.isWaiting(),true);
   await handlers.answer({questionId:card.id,text:'actual@example.invalid'});assert.match(question.error,/비공개/);assert.equal(handlers.isWaiting(),true);
   await handlers.answer({questionId:card.id,choiceId:'documents'});assert.deepEqual(JSON.parse(JSON.stringify(await pending)),{choiceId:'documents'});assert.equal(question,null);
-  await assert.rejects(mcp.previewSavedSkill(),/Invalid recipe/);
+  await assert.rejects(mcp.previewSavedSkill(),/Invalid recipe|자동화 형식/);
   await mcp.saveSkill(recipe);assert.deepEqual([...globals.values()][0],recipe);
   const toolHandlers={};buildGoogleAutomationMcpServer({tool:(name,_description,_schema,handler)=>{toolHandlers[name]=handler;return{name};},createSdkMcpServer:value=>value},{string:()=>({})},mcp);
   const previewResult=await toolHandlers.email_preview({recipe:JSON.stringify({...recipe,bodyTemplate:'An unsaved model rewrite must never execute.'})});
@@ -173,16 +173,31 @@ try {
   assert.equal(rollback.version,1);assert.equal(rollback.id,'version-root');assert.deepEqual(rollback.recipe,olderRecipe);
   assert.equal(connected,beforeVersionConnections);assert.deepEqual([...secrets],beforeVersionSetup,'version installation cannot replace Google/Sheet credentials');
   await mcp.saveSkill(recipe);
+  // A modified installed recipe retains the exact origin, even across reentry.
+  mcp=await host.getMcpHost();
+  pending=mcp.publishSkill();card=await waitQuestion();
+  assert.match(card.description,/출처: 자료 요청 버전 1/);assert.equal(card.description.includes('version-root'),false);
+  const beforeFork=versionPosts.length;
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);
+  assert.equal(versionPosts.length,beforeFork,'declining source review cannot publish');
+  mcp=await host.getMcpHost();pending=mcp.publishSkill();card=await waitQuestion();
+  await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).published,true);
+  assert.equal(versionPosts.at(-1).sourceId,'version-root');assert.equal(versionPosts.at(-1).parentId,undefined);
+  assert.deepEqual(versionPosts.at(-1).recipe,recipe,'origin metadata must stay outside the exported recipe');
   pending=mcp.publishSkill('version-root');card=await waitQuestion();assert.match(card.title,/버전 2/);
   const beforeVersionPosts=versionPosts.length;assert.equal(versionPosts.at(-1).parentId,undefined);
   await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).published,true);
-  assert.equal(versionPosts.length,beforeVersionPosts+1);assert.equal(versionPosts.at(-1).parentId,'version-root');
+  assert.equal(versionPosts.length,beforeVersionPosts+1);assert.equal(versionPosts.at(-1).parentId,'version-root');assert.equal(versionPosts.at(-1).sourceId,undefined,'owner updates inherit server lineage without overwriting origin');
   const preview={id:'preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:'실제 제목',body:'최종 전체 본문'}]};
   pending=mcp.confirmSend(preview);card=await waitQuestion();assert.equal(card.preview.messages[0].body,'최종 전체 본문');grant=false;await handlers.answer({questionId:card.id,approved:true});assert.equal(await pending,false,'revoked at answer must not authorize sending');grant=true;
   pending=mcp.askUser({question:'어떤 표현이 좋을까요?',choices:[],allowFreeText:true});card=await waitQuestion();current.serverId='b'.repeat(64);current.token=token='different-participant';tick();assert.equal((await pending).cancelled,true);assert.equal(question,null);assert.equal(handlers.isWaiting(),false);
   assert.ok([...globals.values()].every(value=>!('rows'in value)&&!('sheetUrl'in value)));
   // A slow cohort download cannot display its old recipe in a new activity.
-  mcp=await host.getMcpHost();pauseDetail=true;
+  mcp=await host.getMcpHost();await mcp.saveSkill(recipe);
+  pending=mcp.publishSkill();card=await waitQuestion();assert.doesNotMatch(card.description,/출처:/);
+  await handlers.answer({questionId:card.id,approved:true});await pending;
+  assert.equal(versionPosts.at(-1).sourceId,undefined,'another activity cannot inherit an origin');
+  pauseDetail=true;
   const installing=mcp.installSkill('chosen').then(value=>({value}),error=>({error}));
   for(let i=0;i<100&&!releaseDetail;i++)await new Promise(resolve=>setTimeout(resolve,2));assert.ok(releaseDetail);
   current.serverId='c'.repeat(64);current.token=token='third-participant';await host.getMcpHost();

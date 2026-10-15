@@ -15,6 +15,7 @@ import type { ChatPanelProvider } from './chatPanelProvider';
 import { createGoogleAutomationRuntime, validateEmailRecipe, type GoogleAutomationRuntime } from './googleAutomation';
 import { createAutomationPanelController, spreadsheetIdFromInput } from './automationPanel';
 import { createAutomationStoreClient } from './automationStoreClient';
+import { readAutomationDraft, automationDraftValue } from './automationDraft';
 import { publishAutomationRecipe } from './automationPublication';
 import { automationNamespace, createAutomationLedger } from './automationLedger';
 import { validateAutomationAnswer, type AutomationAction, type AutomationView, type AutomationQuestion, type AutomationAnswer } from './automationProtocol';
@@ -98,6 +99,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
   }
   provider.setAutomationConversationHandlers?.({ answer: answerQuestion, cancel: cancelQuestion, isWaiting: () => !!pendingQuestion });
   const recipeKey = (owner: Binding) => `hps.automation.recipe.${owner.namespace}`;
+  const savedDraft = (owner: Binding) => readAutomationDraft(context.globalState.get(recipeKey(owner)));
   const reusable = (value: unknown) => {
     const recipe = validateEmailRecipe(value);
     if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}|docs\.google\.com\/spreadsheets/i.test(JSON.stringify(recipe))) throw new Error('재사용 스킬에는 실제 주소·시트·비밀값을 넣지 마세요.');
@@ -211,7 +213,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       },
     });
     const saved = context.globalState.get<unknown>(`hps.automation.recipe.${pinned.namespace}`);
-    if (saved) { try { controller.importRecipe(validateEmailRecipe(saved)); } catch { /* A malformed draft never prevents a fresh template. */ } }
+    if (saved) { try { const draft = readAutomationDraft(saved); controller.importRecipe(draft.recipe, draft.source); } catch { /* A malformed draft never prevents a fresh template. */ } }
   }
   async function handle(entry: Queued): Promise<void> {
     const { message, source, owner } = entry;
@@ -241,7 +243,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         await authorize(); if (!valid()) return; activeController.importRecipe(recipe);
       } else { await activeController.handle(action); }
       if (!valid()) return;
-      try { const recipe = validateEmailRecipe(activeController.view().recipe); await context.globalState.update(`hps.automation.recipe.${binding!.namespace}`, recipe); } catch { /* Incomplete edits remain in memory; no credentials or rows are persisted. */ }
+      try { const recipe = validateEmailRecipe(activeController.view().recipe); await context.globalState.update(recipeKey(owner), automationDraftValue(recipe, activeController.view().source ?? null)); } catch { /* Incomplete edits remain in memory; no credentials or rows are persisted. */ }
     } catch (error) {
       if (!valid()) return;
       const view = activeController?.view();
@@ -289,7 +291,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
     // A validated local recipe proves the saved intent and skill, not any
     // remote Google connection, upload, deployment or execution outcome.
     try {
-      reusable(context.globalState.get(recipeKey(binding)));
+      reusable(savedDraft(binding).recipe);
       await quest.track('skill', async () => ({ saved: true }), () => true, ['goal']);
     } catch { /* Missing or malformed local state never invents completion. */ }
   }
@@ -365,7 +367,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           const ledger = createAutomationLedger(context.globalStorageUri.fsPath, pinned.namespace);
         appsTools = { epoch, host: createSharedRunnerHost({ runtime: appsRuntime, maxRecipients: pinned.maxRecipients,
           allowed: async () => await refreshAuthorization() && pinned.appsScript,
-          recipe: () => reusable(context.globalState.get(recipeKey(pinned))),
+          recipe: () => reusable(savedDraft(pinned).recipe),
           ask: question => askQuestion(question, pinned, epoch),
           sheet: currentSheet, lock: appsLock, ledger,
         }) };
@@ -378,7 +380,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         readConfiguredSheet,
         previewSavedSkill: async () => {
           if (!await refreshAuthorization()) throw new Error('Changed activity');
-          const recipe = reusable(context.globalState.get(recipeKey(pinned)));
+          const recipe = reusable(savedDraft(pinned).recipe);
           const preview = await activeRuntime.previewLatestSheet({ recipe });
           if (!live()) throw new Error('Changed activity');
           return preview;
@@ -399,9 +401,10 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         saveSkill: async value => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const recipe = reusable(value);
-          await context.globalState.update(recipeKey(pinned), recipe);
+          const source = context.globalState.get(recipeKey(pinned)) ? savedDraft(pinned).source : null;
+          await context.globalState.update(recipeKey(pinned), automationDraftValue(recipe, source));
           if (!live()) throw new Error('Changed activity');
-          controller?.importRecipe(recipe);
+          controller?.importRecipe(recipe, source);
           return { saved: true, title: recipe.title };
         },
         connectGoogle: async (mode = 'reuse') => {
@@ -431,15 +434,16 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
         },
         publishSkill: async parentId => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
-          const recipe = reusable(context.globalState.get(recipeKey(pinned)));
+          const recipe = reusable(savedDraft(pinned).recipe);
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
+          const source = parentId ? null : savedDraft(pinned).source;
           const parent = parentId ? await store.detail(parentId) : null;
           if (parent && parent.item.mine !== true) throw new Error('내가 공유한 스킬에만 새 버전을 올릴 수 있어요.');
-          const answer = await askQuestion({ kind: 'publish', title: parent ? `${parent.item.title} 버전 ${parent.item.version + 1}로 공유할까요?` : '이 스킬을 우리 반 스토어에 공유할까요?', description: '아래 템플릿과 설명만 공유해요. Google 계정·시트 주소·명단·보낸 메일은 공유하지 않아요.', recipe, private: true }, pinned, epoch);
+          const answer = await askQuestion({ kind: 'publish', title: parent ? `${parent.item.title} 버전 ${parent.item.version + 1}로 공유할까요?` : '이 스킬을 우리 반 스토어에 공유할까요?', description: `${source ? `출처: ${source.title} 버전 ${source.version}. 원본과 연결된 내 스킬로 새로 공유해요. ` : ''}아래 템플릿과 설명만 공유해요. Google 계정·시트 주소·명단·보낸 메일은 공유하지 않아요.`, recipe, private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
           const result = await publishAutomationRecipe({ storageRoot: context.globalStorageUri.fsPath, namespace: pinned.namespace, store,
             authorize: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); },
-          }, recipe, parentId);
+          }, recipe, parentId, source?.id);
           // Report the completed host confirmation without exposing the private card.
           return { published: true, approvalConfirmed: true, id: result.item.id, version: result.item.version, familyId: result.item.familyId, title: result.item.title };
         },
@@ -459,18 +463,19 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
           const result = id ? await store.versions(id) : await store.list();
-          return { items: result.items.map(({ id, title, description, mine, version, familyId, parentId }) => ({ id, title, description, mine, version, familyId, parentId })) };
+          return { items: result.items.map(({ id, title, description, mine, version, familyId, parentId, sourceId }) => ({ id, title, description, mine, version, familyId, parentId, sourceId })) };
         },
         installSkill: async id => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
           const detail = await store.detail(id);
           const recipe = reusable(detail.recipe);
+          const source = { id: detail.item.id, title: recipe.title, version: detail.item.version };
           const answer = await askQuestion({ kind: 'install', title: `${recipe.title} 버전 ${detail.item.version}을 가져올까요?`, description: '현재 템플릿을 선택한 버전으로 바꿔요. 새 버전은 자동 적용되지 않아요. 내 Google 연결과 발송 기록은 유지하며, 발송 전에는 다시 미리보고 확인해요.', recipe, private: true }, pinned, epoch);
           if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
-          await context.globalState.update(recipeKey(pinned), recipe);
+          await context.globalState.update(recipeKey(pinned), automationDraftValue(recipe, source));
           if (!live()) throw new Error('Changed activity');
-          controller?.importRecipe(recipe);
+          controller?.importRecipe(recipe, source);
           return { installed: true, id: detail.item.id, version: detail.item.version, familyId: detail.item.familyId, recipe };
         },
       }, quest);

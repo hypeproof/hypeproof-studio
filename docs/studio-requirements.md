@@ -991,4 +991,23 @@ and invalid arguments do not enter that recovery. Version metadata alone cannot
 establish equal recipe contents. This keeps the useful-work/human-judgment intent
 observable: learners choose named versions from real results, and the coach only
 claims comparisons supported by evidence. Coverage: `google-automation.smoke.mjs`;
-native follow-up acceptance remains NOT RUN.
+native dbff37ed recovery passes, but catalogue-first behavior and hiding internal
+IDs remain PARTIAL.
+
+
+### Recipient derivation and cost-limit clarity (2026-10-16)
+
+EA-06/07/09 and SS-08 preserve the exact installed source revision separately from
+owner update lineage. The activity-scoped recipe and origin are saved together;
+edits preserve origin, a reviewed new root publication displays it, and retry binds
+it. A fresh local-file import clears the previous source. Credentials, recipient
+rows and send outcomes remain outside shared data. Legacy recipes are not assigned
+guessed origins. Publication success requires the Service to echo the accepted
+source. This supports Product Intent's useful work and visible human judgment:
+learners can review how their adapted work relates to the original (OWNERSHIP and
+ADAPT observations, without learner-facing scores). Local tests pass; native fork
+acceptance and Ops0047 rollout remain pending.
+
+A generic HTTP429 must not assert a proven budget cause: the message distinguishes
+usage/concurrency checks from possible provider request limits. Increasing the
+funding ceiling does not promise that every provider rate limit disappears.

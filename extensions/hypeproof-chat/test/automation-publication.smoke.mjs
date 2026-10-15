@@ -9,14 +9,16 @@ const storageRoot = await mkdtemp(join(tmpdir(), 'hps-publication-'));
 const namespace = 'a'.repeat(64);
 const recipe = { schema:'hps-email-automation/1', category:'email', title:'자료 요청', description:'공유 시험', subjectTemplate:'{{name}}님', bodyTemplate:'{{document}}를 {{dueDate}}까지', columns:{email:'Email',name:'Name',document:'Document',dueDate:'Due date'} };
 const journal = join(storageRoot, 'email-automation', namespace, 'publications.json');
+const bodies = [];
 const sent = [], records = new Map();
 let allowed = true, loseResponse = false, conflict = false;
 const store = createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async(_url, init)=>{
-  const {requestId} = JSON.parse(init.body); sent.push(requestId);
+  bodies.push(JSON.parse(init.body));
+  const {requestId} = bodies.at(-1); sent.push(requestId);
   if(conflict)return new Response(JSON.stringify({error:{code:'request_conflict',private:'must-not-echo'}}),{status:409});
   const previous=records.get(requestId);
   if(previous?.withdrawn)return new Response(JSON.stringify({error:{code:'publication_unpublished'}}),{status:409});
-  const item=previous??{id:`publication-${records.size+1}`,title:recipe.title};records.set(requestId,item);
+  const item=previous??{id:`publication-${records.size+1}`,title:recipe.title,sourceId:bodies.at(-1).sourceId??null};records.set(requestId,item);
   if(loseResponse){loseResponse=false;throw Error('response lost');}
   return new Response(JSON.stringify({item}));
 }});
@@ -36,6 +38,16 @@ try {
   assert.equal((await attempt()).item.id,'publication-2');assert.equal(records.size,2);
   assert.equal(records.get(original).withdrawn,true,'old publication stays withdrawn');
   console.log('PASS publication lifecycle: withdrawal stays hidden; reapproval can republish; response loss/restart retain one new intent');
+
+  const fork=sourceId=>publishAutomationRecipe({storageRoot,namespace,store,authorize:async()=>{}},recipe,undefined,sourceId);
+  loseResponse=true;await assert.rejects(fork('exact-source-v1'),/response lost/);const forkRequest=sent.at(-1);
+  await fork('exact-source-v1');assert.equal(sent.at(-1),forkRequest,'response loss preserves the origin-bound intent');
+  assert.equal(bodies.at(-1).sourceId,'exact-source-v1');assert.equal(bodies.at(-1).parentId,undefined);
+  await fork('exact-source-v2');assert.notEqual(sent.at(-1),forkRequest,'another source cannot replay the old request');
+  assert.notEqual(sent.at(-1),replacement,'same recipe without provenance is a separate intent');
+  const dispatches=sent.length;
+  await assert.rejects(publishAutomationRecipe({storageRoot,namespace,store,authorize:async()=>{}},recipe,'parent','source'));
+  assert.equal(sent.length,dispatches,'ambiguous provenance never reaches the network');
 
   const before=await readFile(journal,'utf8');conflict=true;
   await assert.rejects(attempt(),error=>!error.message.includes('must-not-echo')&&!(error instanceof AutomationPublicationWithdrawnError));

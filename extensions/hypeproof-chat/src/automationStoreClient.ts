@@ -9,7 +9,7 @@ export interface AutomationStoreClient {
   list(): Promise<{ items: AutomationStoreItem[] }>;
   versions(id: string): Promise<{ items: AutomationStoreItem[] }>;
   detail(id: string): Promise<{ item: AutomationStoreItem; recipe: AutomationRecipe }>;
-  publish(recipe: AutomationRecipe, requestId: string, parentId?: string): Promise<{ item: AutomationStoreItem }>;
+  publish(recipe: AutomationRecipe, requestId: string, parentId?: string, sourceId?: string): Promise<{ item: AutomationStoreItem }>;
   unpublish(id: string): Promise<{ ok: true }>;
 }
 export function createAutomationStoreClient(deps: { baseUrl: string; getToken(): Promise<string>; fetchImpl?: typeof fetch }): AutomationStoreClient {
@@ -48,6 +48,7 @@ export function createAutomationStoreClient(deps: { baseUrl: string; getToken():
         || typeof release.familyId !== 'string' || !release.familyId || release.familyId.length > 200
         || !/^[a-f0-9]{64}$/.test(release.recipeSha256 ?? '')
         || (release.version > 1 && (typeof release.parentId !== 'string' || !release.parentId || release.parentId.length > 200))) throw new Error('Invalid release');
+      if (release.sourceId != null && (typeof release.sourceId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(release.sourceId))) throw new Error('Invalid source');
       const recipe = validateEmailRecipe(value.recipe);
       const serialized = JSON.stringify(recipe);
       if (release.formatVersion === 1 && createHash('sha256').update(serialized).digest('hex') !== release.recipeSha256) throw new Error('Changed content');
@@ -73,5 +74,10 @@ export function createAutomationStoreClient(deps: { baseUrl: string; getToken():
     if (result?.ok !== true) throw new Error('게시 철회 결과를 확인할 수 없어요. 스토어 목록을 확인해 주세요.');
     return { ok: true };
   }
-  return { list: () => request(''), versions: id => request(`${itemPath(id)}/versions`), detail, publish: (recipe, requestId, parentId) => request('', 'POST', { recipe, requestId, ...(parentId ? { parentId } : {}) }), unpublish };
+  return { list: () => request(''), versions: id => request(`${itemPath(id)}/versions`), detail, publish: async (recipe, requestId, parentId, sourceId) => {
+    if (parentId && sourceId) throw new Error('새 버전과 새 출처를 함께 지정할 수 없어요.');
+    const result = await request<{ item: AutomationStoreItem }>('', 'POST', { recipe, requestId, ...(parentId ? { parentId } : {}), ...(sourceId ? { sourceId } : {}) });
+    if (sourceId && result?.item?.sourceId !== sourceId) throw new Error('게시물의 출처 저장을 확인하지 못했어요. 같은 요청으로 다시 확인해 주세요.');
+    return result;
+  }, unpublish };
 }

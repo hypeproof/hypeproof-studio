@@ -8,7 +8,7 @@ export function AutomationPanel({ view, onAction, onClose }: { view: AutomationV
   const [reviewed, setReviewed] = useState(false);
   const [shareReviewed, setShareReviewed] = useState(false);
   useEffect(() => { setReviewed(false); }, [view.preview?.id]);
-  useEffect(() => { setShareReviewed(false); }, [JSON.stringify(view.recipe)]);
+  useEffect(() => { setShareReviewed(false); }, [JSON.stringify(view.recipe), view.source?.id]);
   const edit = (patch: Partial<AutomationRecipe>, sheetUrl = view.sheetUrl, range = view.range) => onAction({ kind: 'edit', recipe: { ...view.recipe, ...patch }, sheetUrl, range });
   const act = (kind: 'connect' | 'disconnect' | 'preview' | 'list') => onAction({ kind });
   return <section className="automation-panel" aria-label="업무 자동화" data-testid="automation-panel">
@@ -43,7 +43,8 @@ export function AutomationPanel({ view, onAction, onClose }: { view: AutomationV
           <button className="automation-primary" disabled={!reviewed || view.busy || !!view.records.length || !view.preview.messages.length} onClick={() => onAction({ kind: 'send', previewId: view.preview!.id, reviewed })}>{view.preview.messages.length}명에게 전송 요청</button></>}
         {view.records.length > 0 && <div aria-label="전송 결과"><p>{view.records.filter(r => r.status === 'sent').length}건 완료 / {view.records.length}건 처리{view.preview && view.preview.messages.length > view.records.length ? ` · ${view.preview.messages.length - view.records.length}건 미전송` : ''}</p>{view.records.some(r => r.status === 'unknown' || r.status === 'sending') && <p className="automation-error">전송 여부가 확실하지 않은 메일은 다시 보내지 마세요. Gmail 보낸편지함에서 먼저 확인해 주세요.</p>}</div>}
       </div>
-      <details className="automation-step"><summary>04　우리 반에 템플릿 공유하기</summary><p>아래 내용만 공유해요. 명단·Google 연결 정보는 포함하지 않아요. 제목과 본문에 직접 쓴 실제 업무 정보도 지워 주세요.</p><pre className="automation-share-preview">{JSON.stringify(view.recipe, null, 2)}</pre><label className="automation-check"><input type="checkbox" checked={shareReviewed} onChange={e => setShareReviewed(e.target.checked)} />실제 이름·주소·회사 정보·비밀값이 없는 템플릿임을 확인했어요.</label><button disabled={!shareReviewed || view.busy} onClick={() => onAction({ kind: 'publish', reviewed: shareReviewed })}>우리 반 스토어에 올리기</button></details>
+      <details className="automation-step"><summary>04　우리 반에 템플릿 공유하기</summary><p>아래 내용만 공유해요. 명단·Google 연결 정보는 포함하지 않아요. 제목과 본문에 직접 쓴 실제 업무 정보도 지워 주세요.</p><pre className="automation-share-preview">{JSON.stringify(view.recipe, null, 2)}</pre>{view.source && <p className="automation-muted">출처: {view.source.title} 버전 {view.source.version}. 원본과 연결된 내 스킬로 공유해요.</p>}
+        <label className="automation-check"><input type="checkbox" checked={shareReviewed} onChange={e => setShareReviewed(e.target.checked)} />실제 이름·주소·회사 정보·비밀값이 없는 템플릿임을 확인했어요.</label><button disabled={!shareReviewed || view.busy} onClick={() => onAction({ kind: 'publish', reviewed: shareReviewed })}>우리 반 스토어에 올리기</button></details>
     </> : <div className="automation-store"><div className="automation-store-heading"><div><h2>함께 만든 자동화</h2><p>우리 반에 공유된 이메일 템플릿이에요.</p></div><button disabled={view.busy} onClick={() => act('list')}>새로고침</button></div>
       {!view.items.length && <p className="automation-empty">아직 공유된 자동화가 없어요. 첫 템플릿을 올려 보세요.</p>}
       <ul className="automation-cards">{view.items.map(item => <li key={item.id}><span className="automation-eyebrow">이메일 · v{item.version}{item.mine ? ' · 내가 만든 자동화' : ''}</span><h3>{item.title}</h3><p>{item.description}</p><button disabled={view.busy} onClick={() => onAction({ kind: 'detail', id: item.id })}>내용 보기</button></li>)}</ul>

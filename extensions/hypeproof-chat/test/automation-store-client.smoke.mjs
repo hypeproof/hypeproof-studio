@@ -81,11 +81,26 @@ const {createHash}=await import('node:crypto');
 const release={...item,version:2,formatVersion:1,familyId:'root',parentId:'root',recipeSha256:createHash('sha256').update(JSON.stringify(recipe)).digest('hex')};
 body={item:release,recipe};
 assert.deepEqual((await distribution.detail(item.id)).recipe,recipe,'release number differs from supported package format');
-for(const damaged of [{...release,formatVersion:2},{...release,recipeSha256:'0'.repeat(64)},{...release,parentId:null},{...release,version:1.5},{...release,familyId:''}]) {
+for(const damaged of [{...release,formatVersion:2},{...release,recipeSha256:'0'.repeat(64)},{...release,parentId:null},{...release,version:1.5},{...release,familyId:''},{...release,sourceId:12},{...release,sourceId:'https://private.invalid'}]) {
  body={item:damaged,recipe};await assert.rejects(distribution.detail(item.id),/스토어/);
 }
 let route,posted;
-const versionsClient=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async(url,init)=>{route=url;if(init.body)posted=JSON.parse(init.body);return new Response(JSON.stringify({items:[release],item:release}));}});
+const versionsClient=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async(url,init)=>{route=url;if(init.body)posted=JSON.parse(init.body);return new Response(JSON.stringify({items:[release],item:{...release,sourceId:posted?.sourceId??null}}));}});
 await versionsClient.versions('root');assert.equal(route,'https://service.example.test/v1/automations/root/versions');
 await versionsClient.publish(recipe,'new-version','root');assert.equal(posted.parentId,'root');
 console.log('PASS version downloads: explicit format, digest and parent verification; version history and publication bind exact parent');
+
+await versionsClient.publish(recipe,'new-fork',undefined,'exact-source');assert.equal(posted.sourceId,'exact-source');assert.equal(posted.parentId,undefined);
+
+const lostOrigin=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async()=>new Response(JSON.stringify({item}))});
+await assert.rejects(lostOrigin.publish(recipe,'fork-review',undefined,'exact-source'),/출처 저장/,'a server that drops provenance cannot report success');
+const {readAutomationDraft,automationDraftValue}=await import('../src/automationDraft.ts');
+const origin={id:item.id,title:recipe.title,version:1};
+const restored=readAutomationDraft(JSON.parse(JSON.stringify(automationDraftValue(recipe,origin))));
+assert.deepEqual(restored,{recipe,source:origin},'restart preserves recipe and origin together');
+assert.deepEqual(readAutomationDraft(recipe),{recipe,source:null},'legacy drafts are usable without invented origins');
+await inspector.handle({kind:'edit',recipe:{...recipe,title:'Recipient edit'},sheetUrl:privateSheet,range:'A1:D21'});
+assert.deepEqual(inspector.view().source,origin,'editing a downloaded recipe retains its origin');
+inspector.importRecipe(recipe);assert.equal(inspector.view().source,null,'a local file replaces the old origin');
+assert.throws(()=>readAutomationDraft({schema:'hps-local-automation-draft/1',recipe,source:{...origin,id:''}}),/출처 기록/,'damaged provenance must not silently publish as original work');
+console.log('PASS fork provenance: exact-source receipt, atomic local persistence, legacy compatibility and deliberate local replacement');

@@ -7,33 +7,43 @@ Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-0
 
 Current checkpoint (2026-10-16): development/test ceiling is USD10, including
 historical charges and unresolved holds. The reconciled maximum exposure is
-USD4.972794 (USD3 in unique active root grants plus USD1.972794 historical
+USD5.972794 (USD4 in unique active root grants plus USD1.972794 historical
 charges/holds); this is not actual spending. Evidence:
 `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
 budget remains separate. No further mail is authorized.
 
-Studio source b0cc15a0 integrates main6ad5f9f8 and passes all18 CI checks. Windows
+Studio checkpoint dbff37ed integrates main6ad5f9f8 and passes all18 CI checks.
+The following fork-provenance change has local validation; its CI/native acceptance
+are separate from that checkpoint. Windows
 659de97d passed verified install/update, portable-profile restoration, non-owner
 store import and private Google preview, then explicit v2 update and v1 rollback
 with fresh previews and unchanged private configuration. Publisher `peer` owns
 the Mac-authored item; `original` is the verified non-owner recipient. Earlier
 peer Windows evidence proves author cross-device reuse, not another recipient.
 
-The single Mac Dev app has now been backed up and restaged to b0cc15a0 and the
-same private online Service. Its third-principal activity retained the exact v1
-recipe after v2 publication and the other recipient's update/rollback. Native
-catalogue/version lookup confirmed both revisions; no install was performed.
-Third-principal Google connection reached TJ's unverified-app notice and requires
-human continuation. Updated Mac execution is not yet proven. The native coach
-also mistook a title for an ID; a bounded lookup-recovery fix is under validation.
-Windows still runs659de97d, so it does not include the latest wording change.
+The single Mac Dev app now runs dbff37ed against the private online Service.
+The third principal's retained v1 pinning was verified at b0cc15a0. On dbff37ed,
+a failed invented version ID recovered through the actual catalogue and returned
+both real revisions without installation or Google actions. The coach still
+invented the first ID and exposed internal IDs in its final table: recovery passes,
+but the complete presentation criterion remains PARTIAL. TJ OAuth expired before
+completion; the old browser tab is closed. A fresh user-ready connection and
+third-principal execution remain open. Windows still runs659de97d.
+
+SS-08 fork provenance is implemented locally in Studio and Service9618d234:
+an installed exact revision is retained with the activity's recipe, shown during
+private publication review, and sent as sourceId for a new recipient-owned family.
+Owner updates retain the family's server-side origin. Recipe/Google data are not
+added to provenance. Ops0047 is prepared; no database migration or runtime rollout
+of this change has occurred. Automation92, types, extension/webview builds and
+Service automation/workshop suites pass. Actual Mac/Windows fork reuse remains open.
 
 Private Service781b639f is based on d63d5d7 with main9dbe15c and bounded test
 routes. Production d34da3a5 remains at100%; the test target takes0% normal
 traffic. Ops0046 is applied only to the backed-up isolated database. Remaining
 gates: distinct Google identities and different private datasets, third-recipient
 execution, recipient fork provenance, final matching app candidates,
-class/instructor readiness and expanded WAJ delivery. Current evidence and
+class/instructor readiness and the separately scoped expanded WAJ design/runtime gates. Current evidence and
 individual boundaries: [store contract](skill-store-cross-platform.md).
 
 ## Goal extension: integrated skill store — 2026-10-15
@@ -55,7 +65,8 @@ until decided. Public discovery and generic executable packages are not implemen
 
 Completion order: finish the native three-account store journey and coach
 regression, preserve author/recipient identity evidence, then close remaining
-class/commercial and expanded journey requirements. Private R2 distributes the
+class/commercial requirements. SS-11 applies after the expanded WAJ runtime is
+implemented; DEC-024 design completion does not claim runtime completion. Private R2 distributes the
 Windows installer; D1 distributes inert recipes. Installer transport alone does
 not pass store execution. The current artifact and runtime checkpoints above
 supersede the earlier version references below.

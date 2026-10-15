@@ -143,9 +143,9 @@ function handlers(overrides = {}) {
   assert.equal(calls.aborted, 0);
 }
 
-// A budget refusal is terminal for this turn, including the real Windows
+// A rate-limit refusal is terminal for this turn, including the real Windows
 // synthetic assistant envelope. Do not wait for another event, emit its raw
-// request details, or misclassify it as token expiry.
+// request details, or infer token expiry or a confirmed budget shortage.
 for (const failure of [apiRetry(429, 'rate_limit'), {
   type:'assistant',error:'rate_limit',isApiErrorMessage:true,
   message:{model:'<synthetic>',content:[{type:'text',text:'API Error: Request rejected (429) private synthetic request details'}]},
@@ -155,6 +155,7 @@ for (const failure of [apiRetry(429, 'rate_limit'), {
  assert.equal(err?.name,'SdkApiError');assert.equal(calls.aborted,1);assert.equal(pulled.length,1);
  assert.deepEqual(calls.deltas,[]);assert.equal(err.message.includes('private'),false);
  assert.equal(err.message.includes('만료'),false);
+ if(err.status===429){assert.doesNotMatch(err.message,/예산.*때문/);assert.match(err.message,/AI 서비스의 요청 제한/);}
  if(failure.error==='rate_limit')assert.equal(err.status,429);
 }
 {

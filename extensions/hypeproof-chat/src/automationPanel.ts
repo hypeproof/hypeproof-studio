@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { defaultAutomationRecipe, type AutomationAction, type AutomationView, type AutomationRecipe, type AutomationPreview, type AutomationSendRecord } from './automationProtocol.ts';
+import { defaultAutomationRecipe, type AutomationSource, type AutomationAction, type AutomationView, type AutomationRecipe, type AutomationPreview, type AutomationSendRecord } from './automationProtocol.ts';
 import { AutomationPublicationWithdrawnError, type AutomationStoreClient } from './automationStoreClient.ts';
 export interface AutomationRuntime {
   connect(): Promise<unknown>; disconnect(): Promise<unknown>;
@@ -55,14 +55,14 @@ export function createAutomationPanelController(deps: { runtime: AutomationRunti
         case 'detail': state.selected = await deps.store.detail(action.id); break;
         case 'import': {
           const entry = await deps.store.detail(action.id);
-          state.recipe = entry.recipe; state.sheetUrl = ''; state.range = 'A1:D21'; invalidate();
+          state.recipe = entry.recipe; state.source = { id: entry.item.id, title: entry.recipe.title, version: entry.item.version }; state.sheetUrl = ''; state.range = 'A1:D21'; invalidate();
           state.notice = '템플릿을 가져왔어요. 내 명단을 연결해 미리보기를 만들어 주세요.'; break;
         }
         case 'publish': {
           if (action.reviewed !== true) throw new Error('공유할 내용을 먼저 확인해 주세요.');
-          const content = JSON.stringify(state.recipe);
+          const content = JSON.stringify({ recipe: state.recipe, sourceId: state.source?.id });
           if (publication?.content !== content) publication = { content, requestId: randomUUID() };
-          try { await deps.store.publish(state.recipe, publication.requestId); }
+          try { await deps.store.publish(state.recipe, publication.requestId, undefined, state.source?.id); }
           catch (error) { if (error instanceof AutomationPublicationWithdrawnError) publication = undefined; throw error; }
           state.items = (await deps.store.list()).items; state.notice = '우리 반 스토어에 올렸어요.'; break;
         }
@@ -73,5 +73,5 @@ export function createAutomationPanelController(deps: { runtime: AutomationRunti
       state.error = error instanceof Error ? error.message : '작업을 완료하지 못했어요.';
     } finally { state.busy = false; emit(); }
   }
-  return { handle, view: snapshot, importRecipe(recipe: AutomationRecipe) { if (state.busy) return; state.recipe = structuredClone(recipe); state.sheetUrl = ''; invalidate(); state.notice = '템플릿을 가져왔어요. 내 명단을 연결해 주세요.'; state.error = null; emit(); } };
+  return { handle, view: snapshot, importRecipe(recipe: AutomationRecipe, source: AutomationSource | null = null) { if (state.busy) return; state.recipe = structuredClone(recipe); state.source = source; state.sheetUrl = ''; invalidate(); state.notice = '템플릿을 가져왔어요. 내 명단을 연결해 주세요.'; state.error = null; emit(); } };
 }

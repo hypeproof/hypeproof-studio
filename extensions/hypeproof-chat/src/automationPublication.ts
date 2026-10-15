@@ -10,10 +10,11 @@ import type { AutomationRecipe } from './automationProtocol';
 export async function publishAutomationRecipe(deps: {
   storageRoot: string; namespace: string; store: AutomationStoreClient;
   authorize(): Promise<void>;
-}, recipe: AutomationRecipe, parentId?: string) {
+}, recipe: AutomationRecipe, parentId?: string, sourceId?: string) {
+  if (parentId && sourceId) throw new Error('새 버전과 새 출처를 함께 지정할 수 없어요.');
   const ledger = createAutomationLedger(deps.storageRoot, deps.namespace);
   return ledger.withLock(async () => {
-    const hash = createHash('sha256').update(parentId ? JSON.stringify({ recipe, parentId }) : JSON.stringify(recipe)).digest('hex');
+    const hash = createHash('sha256').update(parentId ? JSON.stringify({ recipe, parentId }) : sourceId ? JSON.stringify({ recipe, sourceId }) : JSON.stringify(recipe)).digest('hex');
     const file = join(deps.storageRoot, 'email-automation', deps.namespace, 'publications.json');
     let requests: Record<string, string> = {};
     try {
@@ -36,7 +37,7 @@ export async function publishAutomationRecipe(deps: {
     };
     await deps.authorize();
     const requestId = requests[hash] ?? `skill-${hash}`;
-    try { return await deps.store.publish(recipe, requestId, parentId); }
+    try { return await deps.store.publish(recipe, requestId, parentId, sourceId); }
     catch (error) {
       if (error instanceof AutomationPublicationWithdrawnError) {
         // Never replay a withdrawn intent as a new publication automatically.

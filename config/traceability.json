@@ -5028,6 +5028,9 @@
           "path": "extensions/hypeproof-chat/src/automationHost.ts"
         },
         {
+          "path": "extensions/hypeproof-chat/src/automationDraft.ts"
+        },
+        {
           "path": "extensions/hypeproof-chat/src/automationLedger.ts"
         },
         {

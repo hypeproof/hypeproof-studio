@@ -52,13 +52,14 @@ persisted v1 pinning is verified on the current Mac checkpoint below.
 The private Service target is781b639f at0% normal traffic, based on d63d5d7 with
 main9dbe15c and bounded test routes. Ops0046 is applied only to the backed-up test
 D1, retaining all four existing recipes. Production d34da3a5 stays at100%.
-The single Mac native runtime was backed up and restaged to b0cc15a0 with the
+The single Mac native runtime was backed up and restaged to dbff37ed with the
 same private online Service. Its third Studio principal retained the exact v1
 recipe after v2 publication and the other recipient's update/rollback; the live
 catalogue/version flow returned both versions without installing either again.
 Read-only receipt: `/tmp/hps-email-mvp/mac-third-pinned-v1-20261016.json`.
-TJ Google connection reached the unverified-app notice and awaits human action;
-the Google identity mapping and different-dataset execution are not yet accepted.
+TJ Google connection reached the unverified-app notice but expired; that tab is
+closed. A fresh user-ready connection is required. Google identity mapping and
+different-dataset execution are not yet accepted.
 Earlier local/online snapshots below are historical.
 R2 hosts installer artifacts; the cohort recipe catalogue remains in D1.
 
@@ -97,7 +98,9 @@ lookup for known titles, forbids metadata-only content comparisons, and returns 
 bounded catalogue recovery for failed version lookups. Authorization/invalid-input
 failures remain closed; catalogue failure stops without Google or write actions.
 Automation92/92, local-runtime8/8, typecheck and extension bundle pass for this
-follow-up. Native acceptance remains NOT RUN; the running Mac is still b0cc15a0.
+follow-up. Native dbff37ed recovery now passes: invented ID → actual catalogue → actual
+version list, with no mutation. Catalogue-first behavior and hiding internal IDs
+still fail in the observed response, so the full guidance gate remains PARTIAL.
 
 The [source-backed distribution research](skill-store-distribution-research.md)
 compares official pricing, access semantics, n8n/Open VSX/ORAS/Sigstore/TUF patterns
@@ -152,10 +155,38 @@ offline limits. Never silently execute a quarantined cached version as fallback.
 Rollback cannot clear an unknown/sent outcome or restore a withdrawn privilege.
 Retain author/license provenance on forks and define what may be redistributed.
 
+## Recipient fork provenance: implemented locally, not deployed
+
+Studio persists an installed recipe and `{id,title,version}` origin atomically in
+one activity-scoped `hps-local-automation-draft/1` value. Legacy bare recipes remain
+readable without inferred origins. Editing retains the selected origin; explicitly
+importing a local file clears it. Cancellation and another activity do not inherit
+or change the origin. The local envelope is never distributed as recipe JSON.
+
+New root publication reviews the original title/version and exact current recipe,
+then binds sourceId into the durable retry intent. A response that omits/mismatches
+that source is not success. Owner version updates send parentId alone and inherit
+family provenance on Service. Changing the source cannot replay a prior request.
+Service9618d234 rejects unavailable/cross-cohort source revisions, writes recipe,
+version and source in one D1 batch, and retains an inert source ID after withdrawal.
+No original content is exposed through that ID. This records declared derivation;
+it is not cryptographic authorship, a license grant or verified license compliance.
+
+Ops0047 is prepared byte-for-byte from the Service proposal and must precede route
+rollout. No existing database was changed. Local host/client/retry tests and
+Service automation/workshop suites pass; native three-account fork acceptance is
+NOT_RUN. Existing pre-change installations have no invented provenance: reimport
+the intended exact store version before testing a recipient fork.
+
 ## Acceptance: Studio-connected store, not an isolated API
 
-All rows below are **NOT_RUN for this new three-account/cross-platform gate**.
-Historical two-account tests remain supporting evidence at their recorded SHA.
+The complete three-account gate remains open. Current row status is PARTIAL for
+SS-01–10 and SS-12; SS-11 is NOT_RUN and conditional on expanded WAJ implementation.
+Evidence is revision-bound: Windows659de97d proves non-owner import/preview and
+reviewed v2 update/v1 rollback, Mac b0cc15a0 proves third-user pinning, and Mac
+dbff37ed proves failed lookup recovery. Distinct Google identities/datasets, third
+execution, native fork publication and final matching candidates are not accepted.
+Earlier snapshots below remain supporting history, not the current blanket status.
 
 | Gate | Positive observation | Required rejection or recovery |
 | --- | --- | --- |

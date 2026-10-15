@@ -1536,7 +1536,7 @@ function sdkApiFailure(msg: Record<string, unknown>): Error | null {
     || ['authentication_failed','oauth_org_not_allowed','billing_error','overloaded','invalid_request','model_not_found','server_error','unknown'].includes(String(msg.error ?? '')));
   if (!rateLimit && !assistantFailure) return null;
   return Object.assign(new Error(rateLimit
-    ? '사용 가능한 예산 또는 동시 실행 한도 때문에 요청이 거절됐어요. 이용권·사용량을 확인하고, 다른 작업이 실행 중이면 끝난 뒤 다시 보내 주세요. (429)'
+    ? '요청이 제한됐어요. 이용권·사용량과 실행 중인 작업을 확인한 뒤 다시 보내 주세요. 잔액이 있어도 AI 서비스의 요청 제한이 적용될 수 있어요. (429)'
     : 'AI 서비스가 요청을 처리하지 못했어요. 작업 파일은 보존돼 있습니다. 연결과 이용권을 확인한 뒤 다시 보내 주세요.'),
     { name: 'SdkApiError', ...(rateLimit ? { status: 429 } : {}) });
 }
