@@ -2,7 +2,7 @@
 import {chromium, expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {createRequire} from 'node:module';
+import {build} from 'esbuild';
 import {mkdtemp,readFile,writeFile,mkdir,rm} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +10,6 @@ import {fileURLToPath} from 'node:url';
 import {chatPanelProps} from '../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const ext=path.join(root,'extensions/hypeproof-chat');
-const {build}=createRequire(path.join(ext,'package.json'))('esbuild');
 const temp=await mkdtemp(path.join(os.tmpdir(),'hps-photo-send-'));
 const out=path.join(root,'e2e/test-results/photo-only-send');await mkdir(out,{recursive:true});
 const fixture=chatPanelProps();fixture.config.profile.input={image_files:true};
