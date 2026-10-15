@@ -4483,16 +4483,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
     if (isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
-      const reply = "GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.";
-      const uid = randomId();
-      const aid = randomId();
-      void this.post({ type: "streamStart", streamId: uid, messageId: aid });
-      void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-      void this.post({ type: "streamEnd", streamId: uid });
-      await this.appendHistory([
-        { id: randomId(), role: "user", content: text, createdAt: Date.now() },
-        { id: aid, role: "assistant", content: reply, createdAt: Date.now(), assistantName: this.coachDisplayName() },
-      ]);
+      await this.appendHistory([{ id: randomId(), role: "user", content: text, createdAt: Date.now() }]);
+      await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.");
       // After this send settles: switchProject refuses while a send is pending (idle()).
       setTimeout(() => void this.switchProject(), 0);
       return;
