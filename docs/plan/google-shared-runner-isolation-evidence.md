@@ -112,3 +112,31 @@ CLI and in-memory Google credentials. It does not establish bundled SDK delivery
 OS credential persistence, the latest Windows package or20 actual classroom seats.
 See [local acceptance](automation-local-acceptance.md) for per-revision integration
 and instructor evidence. Final source/CI and production rollout remain separate.
+
+## Integrated native Google execution — 2026-10-15, 16:28 KST
+
+Root rechecked the installed `720be661` implementation (documentation head
+`3b101961`) with one running Dev app and two Google identities sequentially:
+
+- TJ reconnected with the already approved permissions. Its own private Sheet
+  produced one real shared-runner preview; the bot's private Sheet returned
+  `sheet_access_denied` without rows or a preview.
+- Changing Google identity to the bot retained the imported recipe but reset
+  caller-dependent progress to3/6. The bot's own Sheet produced one preview;
+  its recipient matched the approved self address in a local-only comparison.
+- The bot could not read TJ's private Sheet either (`sheet_access_denied`).
+  Restoring its own Sheet recovered the actual native graph to6/6.
+- No send operation was requested. The durable ledger still contains exactly
+  one historical sent record. This does not reuse the consumed self-mail approval.
+
+The packaged Desktop client exists and the shared-runner resource bytes match
+the approved protected configuration. No changes exist between `624b214f` and
+`720be661` in `googleAutomation.ts`, `appsScriptRuntime.ts`,
+`sharedRunnerConfig.ts` or `scripts/google-shared-runner/runner.gs`; the earlier
+approved send/Inbox receipt stays bound to its original revision.
+
+This latest pass uses the existing imported recipe under one Studio participant;
+the distinct-participant publish/import evidence remains the earlier acceptance
+above. It is not a new latest-SHA store-sharing test, Windows execution, narrowed
+legacy Google grant, production OAuth approval or OS credential-storage proof.
+Local redacted receipt: `/tmp/hps-email-mvp/final-720be661-acceptance/summary.json`.

@@ -389,3 +389,21 @@ matched lockfile SHA512 (121,929,597 bytes); it was not executed on this Mac.
 The prior private updater's SDK0.3.207 and old shell do not prove parity with
 this candidate. Fresh install, upgrade/rollback, Google resource packaging and
 real Windows login/preview still require the completed candidate and host.
+
+At16:28 KST, root completed latest-implementation Google execution in the one
+running Dev: TJ and bot each previewed their own private synthetic Sheet; both
+cross-account directions returned `sheet_access_denied`. Google account change
+retained the recipe and reset caller-dependent graph evidence to3/6; recovery
+to the bot's own Sheet completed6/6. No new mail was sent; durable sent count
+remains1. See [shared-runner evidence](google-shared-runner-isolation-evidence.md)
+for the distinction between this sequential Google-identity pass and the earlier
+two-Studio-participant publish/import pass.
+
+Restart had also ended the live classroom connection, so root issued a fresh
+ticket for existing synthetic seatA02 and connected the actual app through its
+native command. The instructor board then matched actual host transitions:
+failed Sheet read4/6, private input `waiting_user`4/6, then completed preview6/6.
+It shows exactly normal1 / unknown19: the other app was closed,16 fixture reports
+are stale and2 seats were never connected. The board's six completed steps cover
+the preview plan, not sending or all workshop work. Current screenshot and
+redacted receipt: `/tmp/hps-email-mvp/final-720be661-acceptance/`.
