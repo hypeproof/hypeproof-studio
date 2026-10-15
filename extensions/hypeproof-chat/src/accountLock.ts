@@ -26,10 +26,15 @@ export function accountLock(directory: string): <T>(work: () => Promise<T>) => P
   return async function locked<T>(work: () => Promise<T>): Promise<T> {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     const nonce = randomUUID();
+    const ownerFile = path.join(directory, `account-session.owner.${process.pid}.${nonce}`);
+    // Publish a complete owner record atomically. A crash before link leaves an
+    // unreferenced temporary file, never an empty lock that blocks later hosts.
+    fs.writeFileSync(ownerFile, JSON.stringify({pid:process.pid,nonce}), {flag:'wx',mode:0o600});
+    try {
     for (let attempt = 0; attempt < 300; attempt++) {
       if (recovering()) { await new Promise(resolve => setTimeout(resolve, 100)); continue; }
       let acquired = false;
-      try { fs.writeFileSync(file, JSON.stringify({ pid: process.pid, nonce }), { flag: 'wx', mode: 0o600 }); acquired = true; }
+      try { fs.linkSync(ownerFile, file); acquired = true; }
       catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
       if (acquired && recovering()) { fs.unlinkSync(file); continue; }
       if (acquired) {
@@ -48,5 +53,6 @@ export function accountLock(directory: string): <T>(work: () => Promise<T>) => P
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     throw new Error('계정 연결이 다른 창에서 갱신 중이에요. 잠시 뒤 다시 시도해 주세요.');
+    } finally { fs.unlinkSync(ownerFile); }
   };
 }

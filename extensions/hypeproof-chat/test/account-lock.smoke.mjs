@@ -11,6 +11,7 @@ try{
  const b=await build({stdin:{contents:"export * from './src/accountLock.ts';export * from './src/accountSession.ts';",resolveDir:new URL('..',import.meta.url).pathname},bundle:true,platform:'node',format:'cjs',write:false});
  fs.writeFileSync(path.join(dir,'host.cjs'),b.outputFiles[0].text);
  fs.writeFileSync(path.join(dir,'credential.json'),JSON.stringify({service:'http://127.0.0.1:8793/v1',accessToken:'old-access',refreshToken:'old-refresh',sessionId:'session-one',expiresAt:1}));
+ fs.writeFileSync(path.join(dir,'account-session.owner.2147483647.crashed-before-publish'),'');
  fs.mkdirSync(path.join(dir,'account-session.recovery.2147483647.crashed-owner'));
  fs.writeFileSync(path.join(dir,'account-session.lock'),JSON.stringify({pid:2147483647,nonce:'dead-host'}));
  fs.writeFileSync(path.join(dir,'child.cjs'),`
