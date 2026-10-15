@@ -5,6 +5,24 @@ implementation and delivery with minimal approval interruptions. Exact email
 content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
 
+## Goal extension: integrated skill store — 2026-10-15
+
+DEC-025 adds an explicit completion gate to the active objective: after feature
+implementation, Mac-created workplace automation must be published in the Studio
+store, then downloaded, privately configured and successfully run in Windows
+Studio by a different person. Use all three existing test account aliases
+(locolor, locolorbot, TJ) with distinct Studio principals and Google connections.
+The [cross-platform store contract](skill-store-cross-platform.md) defines
+SS-01–12, including third-user isolation, version/update/rollback, withdrawal,
+package integrity, source privacy, permissions and incremental storage costs.
+
+[Completed research](skill-store-distribution-research.md) compares current Service/D1 with private Cloudflare R2, Supabase,
+Google and GitHub/open-source distribution patterns. Final audience remains a
+product question; current cohort visibility must not be mistaken for cross-class
+or public access. Store research/planning is current work; actual Mac→Windows
+acceptance follows feature implementation and Windows availability. The new gate
+is NOT_RUN. Earlier two-user or Windows preview evidence does not satisfy it.
+
 ## Latest design priority — 2026-10-15
 
 DEC-024 expands the intended learner experience beyond the email implementation
@@ -18,7 +36,7 @@ including background data processing. Exact customer-send approval remains requi
 The former personal-script/unattended-schedule deferral below describes the current
 email baseline only; it is superseded for the expanded design destination.
 P0 design is documented; P1–P5 implementation and WAJ acceptance are NOT_RUN.
-The latest user request is design work. Existing email delivery, Windows readiness,
+DEC-024 requested design work; DEC-025 adds store research and post-implementation cross-platform acceptance. Existing email delivery, Windows readiness,
 commercial consent and billing remain separate outstanding work, not proof that
 the new learner journey is already delivered. Implement future packets separately
 and preserve the current email runner and ledgers during that transition.
@@ -79,7 +97,7 @@ fresh console inspection in this audit.
 | Order / repository | Work | Completion criterion |
 | --- | --- | --- |
 | 1 / Studio, with Service/Ops compatibility | Integrate current main preserving both start-page work and automation capabilities; resolve dependency/SDK conflicts; reconcile stale owner-script docs | New exact SHA passes focused local regressions and required CI; no discarded unrelated work; reviewer can assess a conflict-free PR |
-| 2 / Studio + Service | Validate the final shared path with two real learner identities: publish/import the same recipe, own private Sheets, cross-account denial, separate preview/ledger; new-answer invalidation and reconnect recovery | Both real accounts execute through the shipped adapter without company IAM, one cannot use the other's data/approval; no mail required for this gate |
+| 2 / Studio + Service | After feature implementation, perform DEC-025 three-account Mac→store→Windows reuse per SS-01–12, including recipient-owned setup, third-user isolation, update/rollback and withdrawal. Validate the final shared path with two real learner identities: publish/import the same recipe, own private Sheets, cross-account denial, separate preview/ledger; new-answer invalidation and reconnect recovery | Three distinct Studio/Google identities; Mac author and actual Windows recipients execute the same pinned package using their own data. Unauthorized audiences and shared approval are denied; no new mail required. Expanded WAJ packages repeat this gate after implementation |
 | 3 / Studio + Google runner | Prepare one exact self-mail preview, request recipient/content approval, then send once and inspect Inbox | Same pinned runner/version, one sent result and matching receipt; ambiguous outcome stays unknown with no automatic retry. Do not reuse the prior owner-script approval |
 | 4 / Service + Ops + instructor UI | Twenty distinct identities/grants, cohort separation, individual and total budget caps, expiry/revocation, stale/disconnected/in-progress/failed/completed states | Unpaid synthetic20-seat failure/concurrency matrix; real local stage receipts match instructor display. Roster/date/aggregate class budget are required before provisioning actual seats |
 | 5 / product site + Google operations | Final runner scopes and branding, public support/privacy/deletion facts, test versus production setup and OAuth review evidence | Accurate reachable pages, operator-configured consent, actual submission/approval receipts. Managed-company blocks produce an actionable stop. Review completion is an external dependency |
@@ -100,8 +118,9 @@ onboarding/release documentation. Assign precise files before parallel edits.
 The parent performs final verification directly, not a subagent rechecking its
 own work. Cross-repository contract changes are serialized before packaging.
 
-Local tests carry the broad MECE failure matrix. Windows covers only installation,
-credential reuse, a shared preview/graph/composer path and, if approved, one send.
+Local tests carry the broad MECE failure matrix. Windows covers installation, credential reuse, the shared preview/graph/composer
+path, and DEC-025 actual store download/configure/run/update/rollback with distinct
+recipients. A new send requires separate exact approval.
 Re-run only tests affected by a new SHA or unresolved failure. Use synthetic data
 and no paid AI for concurrency tests. Preserve unknown cost/send reservations;
 keep the existing USD3 test cap unless a concrete new budget is approved.

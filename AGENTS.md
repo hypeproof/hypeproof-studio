@@ -72,6 +72,17 @@ mark the expanded runtime implemented. The four-template taxonomy and detailed
 UX are design proposals under this direction, not separately confirmed human
 choices. Canonical design: [workplace automation journey](docs/requirements/workplace-automation-journey.md).
 
+### Confirmed cross-platform store verification — 2026-10-15
+
+| ID | Proposal | Human decision | Evidence |
+|---|---|---|---|
+| DEC-025 | Verify store reuse after feature implementation and investigate secure distribution | Extend the goal and acceptance criteria to three existing test accounts, including a Mac-authored automation published through the Studio-connected store and downloaded/configured/executed by another person in Windows Studio. Research storage format, security, distribution and efficient open-source/community practices using existing Supabase, Cloudflare, Google and GitHub options; use a low-reasoning subagent for research and update the documents. | TJ explicitly requested these outcomes and low-reasoning research on 2026-10-15. |
+
+Canonical contract: [cross-platform skill store](docs/plan/skill-store-cross-platform.md).
+This approves research and acceptance planning, not a chosen storage vendor,
+public audience, new paid subscription, executable-package trust grant or new
+mail send. Three Google logins alone do not establish three Studio principals.
+
 ## 이번 레포 정리의 목표와 필수 원칙 — 2026-10-10
 
 ### 궁극적인 목표

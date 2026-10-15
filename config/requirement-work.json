@@ -807,7 +807,7 @@
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "8ef4955a7adf979a6dd852ca50ca5c9b9914df39fd750cc5c300515379378334",
+      "sha256": "d458b81ce2e679a15aa9c5c6851394c257b12a47b15974a83454d5c742bb932a",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
@@ -831,7 +831,7 @@
         "WAJ-13"
       ],
       "inline_prefixes": [],
-      "sha256": "3c0287bcdd85cc4d594cbf819e8b89c35c2f384967fea7ccd7df36af03803dde",
+      "sha256": "3543b89a4be153ca3c3878920b5657d8e0fcf4b125067a15a59f2802ffc8f3d4",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/workplace-automation-journey.md",
@@ -3978,11 +3978,11 @@
         }
       ],
       "depends_on": [],
-      "next_action": "DEC-023 shared-runner architecture passed real two-account no-IAM/no-script-file-access isolation: seven live no-mail calls and a post-test lock check, source68c37857. Execution-only pinned shared runner and per-account approval/ledger integration passed native local conversation-to-skill-to-real-preview with graph6/6, no mail. Windows sourceab0a13a7 passed eight installed hashes and real shared preview, reused Google/Sheet, graph6/6 and restored composer on 2026-10-15; no mail sent. Keep commercial launch gates separate. Personal export was deferred for this email baseline; DEC-024 expands the separate workplace design toward learner-owned Apps Script deployment. Production OAuth and twenty real pre-class logins remain open. No new mail is authorized.",
+      "next_action": "DEC-025: finish feature implementation, then verify three distinct Studio/Google test identities in the integrated store: Mac author -> Windows recipients, private setup, actual execution, third-user isolation, immutable version/update/rollback and withdrawal. SS-01-12 are NOT_RUN; prior two-user/Windows evidence is revision-bound. Current0b57074d bot reconnect/own preview and instructor6/6 passed; no new mail authorized. Preserve commercial and20-real-learner gates.",
       "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
       "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
       "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",
-      "evidence_required": "Pinned App/Service/Ops revisions, automated controls, actual Google OAuth and receipt, Windows installed-app execution, A/B sharing and measured model usage with price basis.",
+      "evidence_required": "Pinned App/Service/Ops revisions, automated controls, actual Google OAuth and receipt, Windows installed-app execution, A/B sharing and measured model usage with price basis. DEC-025 SS-01-12 receipts including all three principals, Mac publisher, actual Windows download/install/run, package version/digest, separate Google data and update/withdrawal evidence.",
       "implementation_paths": [
         "extensions/hypeproof-chat/src/automationHost.ts",
         "extensions/hypeproof-chat/src/googleAutomation.ts",
@@ -4003,7 +4003,8 @@
         "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs",
         "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts",
         "extensions/hypeproof-chat/test/automationQuest.test.ts",
-        "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
+        "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs",
+        "docs/plan/skill-store-cross-platform.md"
       ]
     },
     {
@@ -4033,7 +4034,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "DEC-024 P0 design is documented with a representative concept image and acceptance matrix; no new runtime acceptance. Parent Epic1603 is a tracking reference, not expanded-scope implementation completion. Decompose P1-P5 into separate execution packets before implementation; preserve the email runner, Windows and commercial gates.",
+      "next_action": "DEC-024 P0 design is documented with a representative concept image and acceptance matrix; no new runtime acceptance. Parent Epic1603 is a tracking reference, not expanded-scope implementation completion. Decompose P1-P5 into separate execution packets before implementation; preserve the email runner, Windows and commercial gates. DEC-025 adds post-implementation Mac-to-Windows store reuse for the expanded templates, with source/package trust research and recipient-owned deployment; do not count email-only evidence as WAJ completion.",
       "design_delta": "Conversational problem framing, two choices per decision, one template outcome image, nine evidence-based quests, learner-owned Google assets and Apps Script web app, background processing and iterative improvement; four proposed template families cover ten curriculum cases.",
       "positive_control": "A learner agrees on one real problem, verifies a template with synthetic inputs, opens their own deployed web app, observes scheduled processing with Studio closed, then handles a second input and a versioned improvement.",
       "negative_control": "Unconfirmed choices, concept images, saved code, deployment URL strings and installed triggers cannot establish runtime success. Missing inputs, cross-account access, stale evidence, duplicated output and unapproved or uncertain mail remain blocked.",

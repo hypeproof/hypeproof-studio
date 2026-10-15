@@ -32,6 +32,11 @@ template quests and improvement to learner-owned Google automation. Its acceptan
 matrix and P0–P5 delivery plan are in the same document. Design only; expanded
 runtime acceptance is NOT_RUN, separately from EA-01–11 email evidence.
 
+DEC-025 adds the [three-account Mac-to-Windows store gate](../plan/skill-store-cross-platform.md)
+and [secure distribution research](../plan/skill-store-distribution-research.md).
+EA-06/07/09 track actual Studio publication, download, private setup and execution;
+expanded WAJ packages repeat the gate after implementation. New acceptance is NOT_RUN.
+
 | ID | Area | Acceptance criteria | Primary paths |
 |---|---|---|---|
 | REQ-STUDIO-AUTOONBOARD | first launch | workspace opens, trust suppressed, chat panel focused, token prompt shown when needed | `extension.ts`, `chatPanelProvider.ts` |

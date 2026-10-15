@@ -227,3 +227,14 @@ read clears cached rows; an old preview must not be regenerated from that cache.
 Drive account-switch progress through the actual `connectGoogle` host wrapper,
 not a manually invoked graph invalidation. A new connection must reopen
 Sheet/preparation/preview/send; verified same-connection reuse retains progress.
+
+## Three-account Mac-to-Windows store gate (DEC-025)
+
+Run [SS-01–12](../plan/skill-store-cross-platform.md) after feature implementation.
+Author in Mac Studio; recipients discover/download/configure/run in actual Windows
+Studio with distinct Studio and Google identities. Check third-user isolation,
+unauthorized audience denial, exact package bytes/version, private settings, restart,
+updates, rollback, withdrawal and side-effect ledgers. A manual JSON transfer or
+Google-only identity switch is insufficient. All new matrix rows begin NOT_RUN.
+The already-sent self-mail is not authorization for another send. Personal GAS
+web-app/background templates repeat this gate only after WAJ implementation.

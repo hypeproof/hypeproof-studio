@@ -34,7 +34,7 @@ instruction sets the follow-up trial to one month, implemented as 30 days.
 | EA-08 | The workshop uses a dedicated 30-day bounded grant, preserving the existing one-hour trial default. AI usage and configured spending limits are server-enforced; deterministic rendering and sending make no model requests. Usage observations and monetary estimates are distinguished. |
 | EA-10 | The graphics area displays the conversational workflow dependency graph. Only host-observed outcomes advance stages; cancelled, blocked, stale and failed actions cannot appear complete. A successful authenticated private Sheet read restores observed connection evidence when reusing a saved skill. |
 | EA-11 | The commercial default is a Studio-managed immutable Apps Script runner, executing bounded saved recipes under each learner's own Google identity without company Cloud IAM or script editor access. Personal Apps Script export is deferred. Two non-IAM Google accounts must demonstrate own-data execution, cross-account denial and isolated state before this path is accepted. The existing owner-script prototype is not proof of the shared contract. Changed account/recipe/runner version invalidates previews and approval; prior Gmail or Apps Script attempts cannot automatically resend. Known provider machine codes distinguish quota/outage, missing consent and operator/client/Workspace-policy configuration. Recovery offers relevant private actions and pause without losing work; raw provider details never enter the conversation. |
-| EA-09 | A real Windows installation and two distinct learners' publish/import/run flow are required release evidence. Provider fixtures, a webview build and an app launch do not prove Google delivery or Windows acceptance. |
+| EA-09 | A real Mac-author → Studio store → Windows-recipient publish/install/configure/run flow and all three existing test accounts with distinct Studio principals are required release evidence (DEC-025). Apply SS-01–12 in the cross-platform store contract, including independent recipient setup, third-user isolation, version/update/rollback and withdrawal; classify new coverage separately from historical two-learner checks. Provider fixtures, a webview build and an app launch do not prove Google delivery or Windows acceptance. |
 
 The sponsor corrected the primary interaction on 2026-10-13: conversation first,
 not a standalone automation form or a fixed wizard. The optional inspector must
@@ -77,3 +77,7 @@ User data, Google credentials, SDK and the ordinary Studio installation stay int
 The Apps Script direction and rollout boundaries are in
 [conversational quests](../plan/apps-script-quests.md). Arbitrary executable code
 remains excluded; this slice compiles the saved bounded email recipe.
+
+DEC-025 acceptance extension: [Studio-connected cross-platform skill store](../plan/skill-store-cross-platform.md).
+Current cohort sharing remains the implemented audience; broader discovery and
+executable packages require their separate design/implementation gates.
