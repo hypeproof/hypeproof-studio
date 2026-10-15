@@ -63,9 +63,12 @@ submission version as needed.
 | 5. Reuse | Publish a sanitized recipe, import with learner B, preview using B's private Sheet. | Imported recipe carries account, Sheet, recipient or credential data. |
 | 6. Recovery | Disconnect local connection, reconnect, and explain Google grant removal and retained send ledger. | Claiming disconnect deleted all Google data or revoked grants without evidence. |
 
-Prepare segments 1–3 and 5–6 without mail. Segment 4 waits for the reviewable
-exact self-mail approval. A preview-only video is an incomplete demonstration
-of `gmail.send`; do not submit it as proof of sending.
+Prepare segments 1–3 and 5–6 without mail. The exact self-mail test was approved
+and completed at624b214f on2026-10-15; its matching Inbox receipt was observed
+at15:04KST. That approval is consumed and does not authorize another recording
+send. Retained test evidence is not an OAuth-review video. If segment4 needs a
+new send, prepare its exact preview for a new approval. A preview-only video is
+an incomplete demonstration of `gmail.send`; do not submit it as proof of sending.
 
 ### Technical disclosure facts and unresolved implementation
 
@@ -105,15 +108,15 @@ a redacted artifact plus its revision/time; private rosters remain outside Git.
 
 | Gate | Required observation | Status / artifact reference |
 | --- | --- | --- |
-| Source | Studio, Service and Ops exact SHA; required checks; immutable runner release/version/content digest | not_run |
+| Source | Studio, Service and Ops exact SHA; required checks; immutable runner release/version/content digest | Partial: Studio b48be48a has18 successful CI checks; Service2ce0b2e has13, including the full premerge gate. These source checks do not establish a production package, merge or current native acceptance. |
 | Isolation | A and B use shipped adapter, separate private Sheets, bidirectional cross-Sheet denial, separate approval/ledger, no company IAM | not_run |
 | Google configuration | Tier, Desktop client binding, script's common project, API configuration, manifest scopes, actual console review state | not_run |
 | OAuth lifecycle | Production credential reuse, revoked access, test-token expiry, old-scope migration, managed-domain denial with actionable recovery | not_run |
 | Windows installation | Fresh standard-user installation from pinned package; first login/private preview; no instructor credentials | not_run |
 | Upgrade/rollback | Existing install updated with its credentials, skills and ledgers preserved; rollback preserves unknown/sent state | not_run |
 | Class preflight | 20 actual distinct seats each log in, read their own synthetic Sheet and complete no-send preview; count readiness separately from fixture tests | not_run |
-| Class limits | Synthetic 20-seat simultaneous admission, individual/aggregate cap, expiry/revocation, stale/disconnected/failed/completed instructor states | not_run |
-| Sending | Exact approval reference, one attempt, confirmed result, separately observed matching Inbox receipt | not_run |
+| Class limits | Synthetic 20-seat simultaneous admission, individual/aggregate cap, expiry/revocation, stale/disconnected/failed/completed instructor states | Synthetic Service contracts pass at integrationacfd637, including real local D1 cap enforcement and instructor HTTP states. This does not provision or verify20 real learners. See Service `docs/migration/email-workshop-readiness.md`. |
+| Sending | Exact approval reference, one attempt, confirmed result, separately observed matching Inbox receipt | Historical pass: Mac624b214f, shared runner, sent1/unknown0, matching Inbox at2026-10-15 15:04KST. No retry/new send; current package and OAuth-review recording remain separate. See [delivery evidence](google-shared-runner-isolation-evidence.md). |
 | Commercial offer | Current product catalogue, payment consent and grant semantics, support/refund owner; [billing audit](email-commercial-billing-map.md) gates resolved | not_run |
 | Release | Merge/deploy/package references; production smoke; support and rollback ownership | not_run |
 
@@ -143,8 +146,15 @@ authorization is not a source for missing business facts.
 | Seller/legal identity, verified domain, public support/deletion owner | Publish accurate policy/consent information and route real requests. |
 | Retention periods, backups, deletion procedure and subprocessors | Complete an operationally true privacy disclosure. |
 | Actual offer: trial duration, price, included limits, renewal, cancellation/refund | Connect workshop completion to an explicit purchase; the 30-day grant is not recurring-charge consent. |
-| Exact self-mail recipient and preview approval | Complete the shared-runner mail test when the reviewable preview exists. |
+| Any new recording-send recipient and preview approval | The earlier one-mail authorization was used successfully. A new recording send, if needed, requires its own exact approval. |
 
 Repository sources were read on 2026-10-15 while integration was in progress.
 This packet needs revision-bound execution evidence, not another approval for
 already authorized preparation.
+
+Public-page readback at20:46KST on2026-10-15 found a reachable Studio product
+homepage plus paid terms/refund pages with support contact. The inspected public
+links did not identify a privacy policy, and `/studio/privacy` and `/privacy`
+returned404. The policy URL is requested, not assumed absent site-wide. See
+[onboarding evidence](google-commercial-onboarding.md#current-observed-gaps).
+Reachable public pages do not prove domain verification or OAuth submission.

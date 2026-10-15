@@ -7,7 +7,9 @@ as commercial launch approval. Parent: Epic1603 / issue1604 / PR1605, EA-02/08/1
 ## Confirmed architecture and bounded verification
 
 TJ selected the managed shared Google executor on 2026-10-14 (DEC-023).
-Personal Apps Script export is deferred. Learners supply bounded saved recipes;
+Personal Apps Script export is deferred in the current email baseline; DEC-024
+separately designs learner-owned deployment for the expanded workplace journey.
+Learners supply bounded saved recipes;
 Studio manages the immutable execution code, and each call must use the learner's
 own Google identity. No company Cloud IAM or script editor role is part of learner
 onboarding. Real sending still requires exact recipient/content approval.
@@ -30,9 +32,12 @@ further call returned `not_configured`; the probe cannot currently read data.
 
 The probe establishes the narrow identity/data-isolation premise. Subsequent
 Studio source `ab0a13a7` passed real local and Windows shared-runner preview and
-graph acceptance on 2026-10-15. Commercial OAuth approval, shared-runner live mail
-delivery, full-product two-account acceptance and twenty real learner logins remain
-separate gates. The current ordered work plan is
+graph acceptance on 2026-10-15. A later Mac test at `624b214f` sent the one
+sponsor-approved shared-runner self-mail and matched its Inbox receipt at15:04KST.
+This historical delivery proof does not establish current Windows acceptance,
+production credential storage or a Google-review demo recording. Commercial
+OAuth approval, current three-account store reuse and twenty real learner logins
+remain separate gates. The current ordered work plan is
 [goal and remaining delivery](email-automation-next-steps.md). Detailed acceptance:
 [shared runner evidence](google-shared-runner-isolation-evidence.md).
 
@@ -44,6 +49,18 @@ publication disabled pending branding; homepage,
 privacy, terms and authorized domains empty; declared scope tables empty.
 User support/developer contacts exist. No setting was changed. Runtime OAuth
 scope requests are present: empty declaration tables do not mean no permissions.
+
+Public-page readback on2026-10-15 at20:46KST found the
+[Studio product page](https://hypeproof-ai.xyz/product/hypeproof-studio?lang=ko),
+[paid terms](https://hypeproof-ai.xyz/studio/terms) and
+[refund policy](https://hypeproof-ai.xyz/studio/refund) reachable without login.
+The terms/refund pages contain a support contact. This is a usable homepage
+candidate, not verified Google Console branding or domain-ownership evidence.
+The guessed `/studio`, `/studio/privacy` and `/privacy` routes returned404;
+the inspected homepage/terms links did not identify a privacy policy. This limited
+read does not prove no policy exists elsewhere. The existing policy URL has been
+requested from the owner; do not substitute the paid terms for a Google-data
+privacy disclosure. Receipt: `/tmp/hps-email-mvp/commercial-public-pages-20261015.json`.
 
 The earlier owner-script Windows proof used an operator-assisted standard-project association and
 later revoked the temporary IAM roles. That cannot be expanded into unattended
@@ -61,7 +78,7 @@ scope verification are separate from a pilot-user list.
 | Priority / owner | Work | Required evidence / current state |
 | --- | --- | --- |
 | P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Shared executor approved; personal export deferred (DEC-023). Architecture isolation and native shared-preview integration passed; full-product two-account reuse is next. |
-| P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Two independent external accounts with zero company IAM; own-Sheet success, cross-Sheet denial and per-user state. Read-only spike passed six local and seven live calls. Pinned learner runtime/distribution, preview UI and ledger guards passed local/Windows acceptance. Full-product two-account and approved live shared-runner delivery remain open. |
+| P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Own-Sheet reads, cross-Sheet denial and per-user state have revision-bound live evidence. The approved shared-runner self-mail passed at624b214f with matching Inbox receipt at15:04KST on2026-10-15. Current three-account Mac-to-Windows store reuse and production credential persistence remain open; see the canonical store contract. |
 | P0 Product/site owner | Publish product homepage, accurate privacy/deletion policy, support contact; verify company domain | URLs reachable without login and domain ownership verified. Technical disclosure draft below is prepared; publication and legal/retention facts need owner confirmation. |
 | P0 Google project owner | Production OAuth project/client, required APIs, branding and least-privilege scope declarations; submit demo and rationale | Separate production and test configuration; submission receipt then Google approval. Never infer approval from a Publish button. |
 | P0 Service/Ops | Twenty distinct learner identities, cohort membership, 30-day grants, individual and aggregate budgets, revocation | Dry-run manifest first; no shared instructor token. Sum of exposures fits approved class budget. Date confirmed as 2026-10-16; actual roster and spending cap remain unconfigured. Existing isolated test cap remains USD3. |

@@ -173,6 +173,7 @@ revoked-native-grant rejection in access admission and the existing paid recover
 harness. Automation/native-grant/purchase checks passed42/42. The broader run
 passed125 commands; the orchestrator group required explicit workshop fixture
 integration and then passed all nine commands. Typecheck and dry-run build pass;
-exact-head remote CI is separate. No real payment, migration or deployment occurred.
+The documentation follow-up2ce0b2e passed all13 remote CI checks, including
+premerge. No real payment, migration or remote deployment occurred.
 This integration does not bind a new purchase to the existing workshop identity:
 the continuity gaps and acceptance rows above remain open.
