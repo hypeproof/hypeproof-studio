@@ -27,6 +27,19 @@ async function grantState() {
   }>;
 }
 
+async function settledGrantState(phase: 'before' | 'after', minimumUsed: number) {
+  let state: Awaited<ReturnType<typeof grantState>> | undefined;
+  await expect.poll(async () => {
+    state = await grantState();
+    writeFileSync(join(output, `grant-${phase}.json`), JSON.stringify(state, null, 2));
+    const grant = state.grants[0];
+    return state.grants.length === 1 && !grant.busy && grant.requests_used >= minimumUsed
+      && Object.keys(state.request_statuses).length === 1
+      && state.request_statuses.completed === grant.requests_used;
+  }, { timeout: 30_000, intervals: [100, 250, 1000] }).toBe(true);
+  return state!;
+}
+
 async function encryptedStorage(ctx: AppContext) {
   return ctx.app.evaluate(({ app, safeStorage }) => ({ name: app.getName(), encrypted: safeStorage.isEncryptionAvailable() }));
 }
@@ -116,6 +129,7 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     const input = chat.getByRole('textbox', { name: /보낼 메시지/ });
     await input.fill(`합성 복구 검사입니다. 현재 작업 폴더에 recovery-marker.txt 파일을 만들고 내용은 ${marker} 한 줄만 넣어 주세요. 저장 뒤 다시 읽어 확인하세요. 셸, 브라우저, 외부 전송은 사용하지 마세요.`);
     await input.press('Enter');
+    await expect(chat.locator('.hps-btn-stop')).toBeVisible({ timeout: 10_000 });
     const file = join(ctx.wsDir, 'recovery-marker.txt');
     await expect.poll(() => existsSync(file), { timeout: 180_000, intervals: [1000, 3000] }).toBe(true);
     await expect(chat.locator('.hps-btn-stop')).toHaveCount(0, { timeout: 180_000 });
@@ -125,7 +139,7 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     expect(firstAssistantText).toContain(marker);
     const retainedBytes = readFileSync(file);
     expect(retainedBytes.toString('utf8').trim()).toBe(marker);
-    const before = await grantState();
+    const before = await settledGrantState('before', 1);
     expect(before.grants).toHaveLength(1);
     expect(before.grants[0]).toMatchObject({ profile_id: 'synthetic-release-acceptance', duration_ms: 7200000, request_limit: 8, revoked: false, busy: false });
     expect(before.grants[0].requests_used).toBeGreaterThan(0);
@@ -140,11 +154,21 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     ctx = await launchApp({ reuseUserDataDir: userDataDir, preseedToken: false, stayOnStart: true, persistentTestSecrets: true, preseedCoach: { name: '코치' } });
     expect(await encryptedStorage(ctx)).toEqual({ name: 'HypeProof Studio', encrypted: true });
     const offlineStart = await startFrame(ctx.win);
-    await expect(offlineStart.locator('input[type=password]:visible')).toHaveCount(0, { timeout: 30_000 });
+    // A profile fetch can fail offline while the credential remains in SecretStorage.
+    // Observe that UI independently; recovery is proved only after connectivity returns.
+    await expect.poll(() => offlineStart.locator('.studio-error:visible, .studio-verified:visible').count(), { timeout: 30_000 }).toBeGreaterThan(0);
+    const offlineError = offlineStart.locator('.studio-error');
+    const offlineCopy = {
+      code_input_visible: await offlineStart.locator('input[type=password]:visible').count() > 0,
+      error: ((await offlineError.count() ? await offlineError.textContent() : '') ?? '').replaceAll(ctx.token, '[REDACTED]').slice(0, 2000),
+      code_entered_during_outage: false,
+    };
+    writeFileSync(join(output, 'offline-start.json'), JSON.stringify(offlineCopy, null, 2));
     const offlineElapsedMs = await waitActualDuration(outageMs);
     expect(offlineElapsedMs).toBeGreaterThanOrEqual(outageMs);
     expect((await control('/state')).listening).toBe(false);
     const during = await grantState();
+    writeFileSync(join(output, 'grant-during.json'), JSON.stringify(during, null, 2));
     expect(during.grants[0].grant_fingerprint).toBe(before.grants[0].grant_fingerprint);
     expect(during.grants[0].requests_used).toBe(before.grants[0].requests_used);
     expect(during.request_statuses).toEqual(before.request_statuses);
@@ -160,13 +184,16 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     await expect(chat.locator('.hps-msg-user').filter({ hasText: 'recovery-marker.txt' }).first()).toContainText(firstUserText);
     await expect(chat.locator('.hps-msg-assistant').filter({ hasText: marker }).first()).toContainText(firstAssistantText);
     expect(readFileSync(file)).toEqual(retainedBytes);
+    const previousAssistantCount = await chat.locator('.hps-msg-assistant').count();
     const recoveredInput = chat.getByRole('textbox', { name: /보낼 메시지/ });
     await recoveredInput.fill('recovery-marker.txt를 읽고 파일에 실제로 있는 한 줄만 그대로 답해 주세요. 파일을 바꾸지 말고 셸, 브라우저, 외부 전송은 사용하지 마세요.');
     await recoveredInput.press('Enter');
+    await expect(chat.locator('.hps-btn-stop')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => chat.locator('.hps-msg-assistant').count(), { timeout: 180_000 }).toBeGreaterThan(previousAssistantCount);
+    await expect(chat.locator('.hps-msg-assistant').last()).toContainText(marker, { timeout: 180_000 });
     await expect(chat.locator('.hps-btn-stop')).toHaveCount(0, { timeout: 180_000 });
-    await expect(chat.locator('.hps-msg-assistant').last()).toContainText(marker);
     expect(readFileSync(file)).toEqual(retainedBytes);
-    const after = await grantState();
+    const after = await settledGrantState('after', before.grants[0].requests_used + 1);
     expect(after.grants).toHaveLength(1);
     expect(after.grants[0].grant_fingerprint).toBe(before.grants[0].grant_fingerprint);
     expect(after.grants[0].started_at).toBe(before.grants[0].started_at);
@@ -187,10 +214,8 @@ test('paid pass survives a real offline restart without code re-entry', async ()
       'same grant resumed after proxy restoration',
       'successful request completed after recovery',
       'workspace file bytes retained',
+      'prior user and assistant chat retained',
     ];
-    writeFileSync(join(output, 'grant-before.json'), JSON.stringify(before, null, 2));
-    writeFileSync(join(output, 'grant-during.json'), JSON.stringify(during, null, 2));
-    writeFileSync(join(output, 'grant-after.json'), JSON.stringify(after, null, 2));
     writeFileSync(join(output, 'result.json'), JSON.stringify({
       schema: 'hps-paid-recovery-app/1', status: 'PASS', mode: process.env.HPS_RECOVERY_MODE,
       code_entries: codeEntries, same_grant: true, file_retained: true,
@@ -200,6 +225,7 @@ test('paid pass survives a real offline restart without code re-entry', async ()
       observed_copy: {
         start_before: startCopyBefore, chat_before: chatCopyBefore,
         start_after: startCopyAfter, chat_after: chatCopyAfter,
+        offline_start: offlineCopy,
         limitation: startCopyBefore.allowance_and_expiry_rendered ? null : 'public App does not render paid allowance or expiry copy; Service grant state is recorded separately',
       },
       checks,
