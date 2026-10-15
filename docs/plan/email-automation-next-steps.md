@@ -326,3 +326,20 @@ Non-owner Windows checkpoint (2026-10-16,02:12KST): native e3ab008b opened the e
 
 
 Native upgrade checkpoint (2026-10-16,02:19KST): the existing Windows installer fetched both candidate659de97d archives, verified them, reused SDK0.3.299 and migrated the prior portable profile. Read-only installed receipt and process checks show build659de97d, appSHA503517c347224672630822ead80091d616517624c4ab1d57cc2af9d4ee4cfee9, ProfileMigrated=True, RollbackRetained=True and ActiveBuild=True. The original non-owner activity, workspace and conversation were restored. After selecting its existing test grant, Apps Script preparation and a fresh one-recipient no-send preview completed6/6 without login, retaining the imported template and activity-bound Google/Sheet configuration. The model could reuse verified saved configuration; the quest restored prerequisites only after successful fresh execution. No new mail. Native recipe revision publication/update/rollback and distinct underlying Google identity verification remain open. Evidence: `/tmp/hps-email-mvp/windows-upgrade-659de97d-receipt-safe.png` and `/tmp/hps-email-mvp/windows-original-upgrade-preview-659de97d-safe.png`.
+
+
+Native version lifecycle checkpoint (2026-10-16): Windows659de97d published an
+exact reviewed v2 of the Mac-authored store recipe; server readback confirms v1
+unchanged and v2 parent/digest/content. Non-owner `original` selected v2 through
+version history and host review, previewed its `[v2]` subject with existing private
+configuration, then restored v1 through another review and previewed the original
+subject. No mail, login or configuration change. Full SS-08 remains open for
+third-recipient pinning and fork provenance; distinct Google identities and
+different recipient datasets are still unverified. Details and evidence are in
+[the store lifecycle checkpoint](skill-store-cross-platform.md#native-immutable-version-lifecycle--2026-10-16).
+
+The live publisher coach exposed unsupported save-completion and cancellation
+diagnosis claims. Incorrect review cards were cancelled before publication.
+SDK/local/MCP guidance now requires the actual save result and stops after
+cancellation without inventing a connection error. Typecheck and automation91
+pass; native behavioral acceptance of this guidance change is NOT RUN.

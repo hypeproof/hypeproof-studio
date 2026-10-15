@@ -32,23 +32,28 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 
 ## What is implemented today
 
-Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
-Current Mac runtime: `9b4dd233` (main05efefdb integration, conversational withdrawal
-and learner wording). Native reconnect, bot-owned Sheet preview and App/instructor6/6 are verified;
-prior three-principal store observations retain their original revision boundaries.
-The served private Windows candidate is now `e3ab008b` (same extension code as
-3d8c0b38), shell720be661 / SDK0.3.299, through private R2 gateway7a9c50d2. Stored
-app/SDK full byte counts and hashes, final manifest readback and23 online access
-controls pass. Actual archive extraction, SDK verification, profile backup and
-exact-receipt handover from six prior pilots through32ba0ac2 passed in local
-PowerShell. Complete authenticated HTTP download and native Windows remain open.
-The candidate predates native9b4dd233 and the source622cc4e4 re-publication fix.
-Old32ba0ac2 KV transport is retained for rollback; its prior incomplete transfer
-is historical evidence, not a current e3 download result. R2 serves installer
-files only and does not migrate the skill catalog from D1.
-Native three-principal store evidence below was recorded on `3f1a3f20`.
-The online Service remains pinned to
-`email-local-accepted-ffef7bc-peer`. Later observations below are revision-bound.
+Current checked delivery (2026-10-16): Windows extension659de97d runs on official
+shell720be661 / SDK0.3.299, served by private R2 gateway6b13dfc4. Both archives
+passed full readback SHA256 checks and23 online access controls. The actual PC
+installed the update, retained the rollback snapshot, restored activity/workspace/
+conversation and completed a fresh no-send preview with its saved Google/Sheet
+settings. Source integration includes Studio main6ad5f9f8; later commits are
+installer/evidence changes. Evidence below is tied to each actual runtime.
+
+Non-owner `original` imported peer-owned Mac publicationa1370573, with mine=false
+and host import review, then previewed one recipient at6/6 both before and after
+the Windows update. This proves distinct Studio-principal reuse. The underlying
+Google identity difference remains unverified. Earlier peer Windows evidence
+proves author cross-device reuse only; its former recipient interpretation is
+superseded. Native v2 publication, non-owner update and rollback now pass on Windows659de97d
+with exact private preview contents. Third-recipient execution and pinning remain open.
+
+The private Service target is781b639f at0% normal traffic, based on d63d5d7 with
+main9dbe15c and bounded test routes. Ops0046 is applied only to the backed-up test
+D1, retaining all four existing recipes. Production d34da3a5 stays at100%.
+The Mac native runtime remains9b4dd233 and has not yet been upgraded for current
+revision lifecycle acceptance. Earlier local/online snapshots below are historical.
+R2 hosts installer artifacts; the cohort recipe catalogue remains in D1.
 
 | Layer | Current source fact | Limit |
 | --- | --- | --- |
@@ -71,9 +76,10 @@ Service `worker/src/routes/automations.ts`, `worker/src/lib/automation-recipe.ts
 The next delivery sequence is explicit: finish the local feature/lifecycle gaps,
 freeze and verify one Windows candidate, then execute SS-01–12 with actual Windows
 recipients. Same-content re-publication has a local recovery implementation and
-actual Service-route proof below; native acceptance remains pending. Version2, update and rollback now have a local implementation and three-principal
-integration proof (checkpoint below); native acceptance and fork provenance remain
-open. Successful import or withdrawal alone does not close SS-08. Store acceptance remains part of the active delivery
+actual Service-route proof below; its native acceptance remains pending. Version2,
+update and rollback have local integration proof plus the Windows lifecycle
+checkpoint below. Third-user pinning, current Mac acceptance and fork provenance
+remain open. Successful import or withdrawal alone does not close SS-08. Store acceptance remains part of the active delivery
 goal, not a follow-up that can be omitted when the email feature passes.
 
 The [source-backed distribution research](skill-store-distribution-research.md)
@@ -712,3 +718,35 @@ Non-owner Windows checkpoint (2026-10-16,02:12KST): native e3ab008b opened the e
 
 
 Native upgrade checkpoint (2026-10-16,02:19KST): the existing Windows installer fetched both candidate659de97d archives, verified them, reused SDK0.3.299 and migrated the prior portable profile. Read-only installed receipt and process checks show build659de97d, appSHA503517c347224672630822ead80091d616517624c4ab1d57cc2af9d4ee4cfee9, ProfileMigrated=True, RollbackRetained=True and ActiveBuild=True. The original non-owner activity, workspace and conversation were restored. After selecting its existing test grant, Apps Script preparation and a fresh one-recipient no-send preview completed6/6 without login, retaining the imported template and activity-bound Google/Sheet configuration. The model could reuse verified saved configuration; the quest restored prerequisites only after successful fresh execution. No new mail. Native recipe revision publication/update/rollback and distinct underlying Google identity verification remain open. Evidence: `/tmp/hps-email-mvp/windows-upgrade-659de97d-receipt-safe.png` and `/tmp/hps-email-mvp/windows-original-upgrade-preview-659de97d-safe.png`.
+
+
+### Native immutable-version lifecycle — 2026-10-16
+
+Windows659de97d publisher `peer` saved and explicitly reviewed v2 of Mac-authored
+`온라인 스토어 재사용 시험`. Published v2 is
+`88df4030-8e8e-4e4b-aa30-0a57a38fc596`, parent
+`a1370573-7db3-4083-9224-49782bf5a315`. Authenticated readback confirms
+exact expected v2, unchanged v1 and non-owner access by `original`. Only the
+email subject gained `[v2]`; recipe title, description, body and mappings stayed
+unchanged. No existing recipient was automatically updated.
+
+In `StoreOriginalRecipient`, the non-owner requested version history, reviewed
+and installed v2, then reused the activity's Google/Sheet configuration for a
+one-recipient preview with `[v2]`. It subsequently selected and reviewed v1,
+restored it and produced the original subject without `[v2]`. No login, account
+change, Sheet change or mail send was needed. This proves native explicit
+update/rollback and useful preview; it does not establish distinct Google
+identities, third-user pinning, fork provenance or SS-08 as a whole.
+
+The publisher coach initially claimed saving without a new save-tool call and
+misdescribed cancelled review as a connection failure. Incorrect cards were
+cancelled before publication; the exact recipe was saved with the actual tool
+and reviewed before v2 approval. Strengthened save-result/cancellation guidance
+is now in SDK/local coach and MCP descriptions. Typecheck and automation91 pass;
+those guidance changes are not yet installed or behaviorally verified in the
+native apps. Prompt wording alone is not proof the behavior is fixed.
+
+Evidence: `/tmp/hps-email-mvp/windows-native-version2-20261016.json`,
+`windows-native-version2-published-20261016-safe.png`,
+`windows-original-version2-preview-20261016-safe.png` and
+`windows-original-version1-rollback-preview-20261016-safe.png` in that directory.

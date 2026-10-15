@@ -7,7 +7,7 @@ export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','
 export const APPS_SCRIPT_MCP_TOOLS = ['mcp__hypeproof_email__apps_script_prepare','mcp__hypeproof_email__apps_script_upload','mcp__hypeproof_email__apps_script_setup','mcp__hypeproof_email__apps_script_deploy','mcp__hypeproof_email__apps_script_run'] as const;
 export const ALL_AUTOMATION_MCP_TOOLS = [...GOOGLE_AUTOMATION_MCP_TOOLS, ...APPS_SCRIPT_MCP_TOOLS] as const;
 
-const storeReplyGuidance = ' 사용자에게는 스킬 이름과 실제 결과를 자연스러운 한국어로 설명한다. mine·id·approvalConfirmed·published·unpublished 같은 내부 필드명, 불리언 값이나 게시물 식별번호를 답변에 옮기지 않는다.';
+const storeReplyGuidance = ' 사용자에게는 스킬 이름과 실제 결과를 자연스러운 한국어로 설명한다. mine·id·approvalConfirmed·published·unpublished 같은 내부 필드명, 불리언 값이나 게시물 식별번호를 답변에 옮기지 않는다. cancelled=true는 작업이 확정되지 않았다는 결과다. 카드가 열리지 않았다거나 연결 오류라고 추측하지 말고, 완료되지 않았음을 짧게 알린 뒤 새 요청을 기다린다. 자동 재시도하지 않는다.';
 
 const skillRecipeContract = 'recipe는 다음 필드만 가진 JSON 문자열이다: {"schema":"hps-email-automation/1","category":"email","title":"스킬 제목","description":"업무 설명","subjectTemplate":"{{name}}님 서류 제출 요청","bodyTemplate":"{{document}}를 {{dueDate}}까지 보내 주세요.","columns":{"email":"이메일","name":"이름","document":"서류","dueDate":"마감일"}}. title·description·subjectTemplate·bodyTemplate과 열 이름은 사용자 업무에 맞게 바꾼다. 템플릿 변수는 {{name}}, {{document}}, {{dueDate}}만 허용한다.';
 
@@ -145,7 +145,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       };
       return host.askUser({ question: args.question, choices, allowFreeText: args.allowFreeText === 'true' || !choices.length });
     })),
-    factory.tool('skill_save', '대화에서 이해한 업무에 맞춰 만든 재사용 이메일 스킬을 로컬에 저장한다. Google 연결이나 게시 승인은 저장의 전제조건이 아니다. 사용자에게 JSON 작성이나 파일 가져오기를 요구하지 않는다. 실제 개인정보·계정·시트 주소를 포함하지 않는다. ' + skillRecipeContract, { recipe: z.string() }, async args => run(async () => {
+    factory.tool('skill_save', '대화에서 이해한 업무에 맞춰 만든 재사용 이메일 스킬을 로컬에 저장한다. 수정할 때도 이 도구를 실제 호출하고 saved=true를 받은 뒤에만 저장 완료라고 말한다. 대화에 JSON이나 변경 내용을 적는 것만으로 저장되지 않는다. 사용자가 바꾸라고 한 필드만 수정하고 스킬 제목·설명과 메일 제목을 구분한다. Google 연결이나 게시 승인은 저장의 전제조건이 아니다. 사용자에게 JSON 작성이나 파일 가져오기를 요구하지 않는다. 실제 개인정보·계정·시트 주소를 포함하지 않는다. ' + skillRecipeContract, { recipe: z.string() }, async args => run(async () => {
       if (!host.saveSkill || typeof args.recipe !== 'string' || args.recipe.length > 32768) throw new Error('Invalid skill');
       return host.saveSkill(validateEmailRecipe(JSON.parse(args.recipe)));
     }, 'skill_save')),
