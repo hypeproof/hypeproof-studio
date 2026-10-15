@@ -4,6 +4,15 @@ Status: approved implementation scope, not released. Human sponsor: TJ.
 Source: user decisions on 2026-10-13; Epic #1603; execution #1604.
 Parent: PRODUCT-INTENT.md, useful work first and human judgment stays visible.
 
+Scope update, 2026-10-15 (DEC-024): the expanded learner journey is defined in
+[workplace automation journey](workplace-automation-journey.md), WAJ-01–13.
+It covers problem definition, two-choice negotiation, a template outcome image,
+quests and improvement, targeting learner-owned Google assets and an Apps Script
+web app. EA-01–11 below remain the existing bounded email implementation contract;
+EA-11's personal-export deferral does not constrain the new design destination.
+Scheduled data processing in WAJ does not relax EA-04's exact-send approval gate.
+New design acceptance is NOT_RUN and cannot inherit email acceptance evidence.
+
 Twenty office workers install Studio during a seven-hour Windows workshop. They
 describe their work in the main coach conversation. The coach asks one relevant
 user question at a time and creates a bounded reusable skill. Learners connect

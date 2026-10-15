@@ -59,6 +59,19 @@ This changes the intended commercial execution contract. It does not claim the
 shared runner is integrated, accepted, or released. Existing owner-script MVP
 evidence remains historical evidence of that implementation only.
 
+### Confirmed learner-experience design direction — 2026-10-15
+
+| ID | Proposal | Human decision | Evidence |
+|---|---|---|---|
+| DEC-024 | Extend the email-only journey into reusable workplace automation | Update the design to cover conversational problem definition; proactive structure negotiation with two choices per decision; one final-outcome image inside the template; a visual quest roadmap; and iterative improvement. Prefer automatic Google integration and learner-owned Apps Script web-app deployment as the destination. Incorporate the supplied curriculum's ten needs, six assets and personal-account background processing. | TJ's explicit five-part design-update request and the curriculum response supplied in the same message on 2026-10-15. |
+
+DEC-024 supersedes DEC-023's personal-script/scheduling deferral **for the expanded
+design destination**. DEC-023 still describes the existing shared email runner.
+This does not authorize unattended customer mail, claim new scope consent, or
+mark the expanded runtime implemented. The four-template taxonomy and detailed
+UX are design proposals under this direction, not separately confirmed human
+choices. Canonical design: [workplace automation journey](docs/requirements/workplace-automation-journey.md).
+
 ## 이번 레포 정리의 목표와 필수 원칙 — 2026-10-10
 
 ### 궁극적인 목표

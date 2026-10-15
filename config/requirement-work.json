@@ -807,11 +807,35 @@
       "inline_prefixes": [
         "EA"
       ],
-      "sha256": "c0f860fba86701d9ebb5abfe798ceab9510cdb4d03fdba8e75d0b99f07863df7",
+      "sha256": "8ef4955a7adf979a6dd852ca50ca5c9b9914df39fd750cc5c300515379378334",
       "owner": "TJ-kr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/email-automation.md",
       "test": "docs/testing/email-automation.md"
+    },
+    {
+      "path": "docs/requirements/workplace-automation-journey.md",
+      "ids": [
+        "WAJ-01",
+        "WAJ-02",
+        "WAJ-03",
+        "WAJ-04",
+        "WAJ-05",
+        "WAJ-06",
+        "WAJ-07",
+        "WAJ-08",
+        "WAJ-09",
+        "WAJ-10",
+        "WAJ-11",
+        "WAJ-12",
+        "WAJ-13"
+      ],
+      "inline_prefixes": [],
+      "sha256": "3c0287bcdd85cc4d594cbf819e8b89c35c2f384967fea7ccd7df36af03803dde",
+      "owner": "TJ-kr",
+      "intent": "docs/PRODUCT-INTENT.md",
+      "design": "docs/requirements/workplace-automation-journey.md",
+      "test": "docs/requirements/workplace-automation-journey.md"
     }
   ],
   "work_items": [
@@ -3954,7 +3978,7 @@
         }
       ],
       "depends_on": [],
-      "next_action": "DEC-023 shared-runner architecture passed real two-account no-IAM/no-script-file-access isolation: seven live no-mail calls and a post-test lock check, source68c37857. Execution-only pinned shared runner and per-account approval/ledger integration passed native local conversation-to-skill-to-real-preview with graph6/6, no mail. Windows sourceab0a13a7 passed eight installed hashes and real shared preview, reused Google/Sheet, graph6/6 and restored composer on 2026-10-15; no mail sent. Keep commercial launch gates separate. Personal export deferred. Production OAuth and twenty real pre-class logins remain open. No new mail is authorized.",
+      "next_action": "DEC-023 shared-runner architecture passed real two-account no-IAM/no-script-file-access isolation: seven live no-mail calls and a post-test lock check, source68c37857. Execution-only pinned shared runner and per-account approval/ledger integration passed native local conversation-to-skill-to-real-preview with graph6/6, no mail. Windows sourceab0a13a7 passed eight installed hashes and real shared preview, reused Google/Sheet, graph6/6 and restored composer on 2026-10-15; no mail sent. Keep commercial launch gates separate. Personal export was deferred for this email baseline; DEC-024 expands the separate workplace design toward learner-owned Apps Script deployment. Production OAuth and twenty real pre-class logins remain open. No new mail is authorized.",
       "design_delta": "Use Service-granted Google MCP tools, native exact-preview confirmation, local credentials and rows, deterministic rendering, and template-only cohort sharing with bounded30-day access.",
       "positive_control": "Learner A reads a Sheet, reviews and sends; publishes a recipe that B imports with B credentials. Local UI/store and synthetic runtime checks pass before real provider/device acceptance.",
       "negative_control": "Revoked or narrowed capability, stale activity/account preview, cancelled confirmation, unsafe recipe, cross-cohort lookup, duplicate publication and ambiguous delivery cannot bypass ownership/approval.",
@@ -3980,6 +4004,47 @@
         "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts",
         "extensions/hypeproof-chat/test/automationQuest.test.ts",
         "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
+      ]
+    },
+    {
+      "id": "workplace-automation-journey-design",
+      "title": "Template-based workplace automation learner journey",
+      "issue": 1603,
+      "kind": "design",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/workplace-automation-journey.md",
+          "ids": [
+            "WAJ-01",
+            "WAJ-02",
+            "WAJ-03",
+            "WAJ-04",
+            "WAJ-05",
+            "WAJ-06",
+            "WAJ-07",
+            "WAJ-08",
+            "WAJ-09",
+            "WAJ-10",
+            "WAJ-11",
+            "WAJ-12",
+            "WAJ-13"
+          ]
+        }
+      ],
+      "depends_on": [],
+      "next_action": "DEC-024 P0 design is documented with a representative concept image and acceptance matrix; no new runtime acceptance. Parent Epic1603 is a tracking reference, not expanded-scope implementation completion. Decompose P1-P5 into separate execution packets before implementation; preserve the email runner, Windows and commercial gates.",
+      "design_delta": "Conversational problem framing, two choices per decision, one template outcome image, nine evidence-based quests, learner-owned Google assets and Apps Script web app, background processing and iterative improvement; four proposed template families cover ten curriculum cases.",
+      "positive_control": "A learner agrees on one real problem, verifies a template with synthetic inputs, opens their own deployed web app, observes scheduled processing with Studio closed, then handles a second input and a versioned improvement.",
+      "negative_control": "Unconfirmed choices, concept images, saved code, deployment URL strings and installed triggers cannot establish runtime success. Missing inputs, cross-account access, stale evidence, duplicated output and unapproved or uncertain mail remain blocked.",
+      "evidence_required": "WAJ-01-13 acceptance matrix; independent expected outputs; two real Google identities; deployed web-app access and version; actual scheduled run and stop; second-input and rollback evidence; truthful instructor status. All new runtime acceptance NOT_RUN.",
+      "implementation_paths": [
+        "extensions/hypeproof-chat/src/automationProtocol.ts",
+        "extensions/hypeproof-chat/src/automationQuest.ts",
+        "extensions/hypeproof-chat/src/appsScriptRuntime.ts"
+      ],
+      "verification_inputs": [
+        "docs/requirements/workplace-automation-journey.md"
       ]
     }
   ]

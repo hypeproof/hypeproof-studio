@@ -850,6 +850,19 @@ reissue to the same handle still cannot reset one.
 |---|---|---|
 | REQ-STUDIO-SYNTHETIC-ACCEPTANCE | A cohort whose every profile declares `synthetic: true` refuses any roster write (replace, append, session open) or token mint naming a handle outside `synthetic-` with `400 synthetic_handle_required`, and `GET /admin/cohorts` reports `synthetic` for every cohort. `synthetic-release-acceptance` is served exactly what `studio-native-trial` is served and is hidden from the console. Each acceptance run mints a fresh handle's classroom code (session open) and trial code, and revokes the trial grant and closes the session in `finally`. The freeze ignores a live session only on a cohort reported exactly `synthetic: true` running one of its own profiles, names what it ignored, and still blocks a real class beside it; a missing or non-boolean flag, a foreign profile or an undecidable window blocks. The real workflow run with these credentials is NOT RUN. | `worker/src/lib/synthetic-cohort.ts`, `worker/src/profiles/synthetic-release-acceptance.ts`, `worker/src/routes/admin.ts`, `scripts/check-live-sessions.mjs`, `e2e/unified-release/public.mjs`; `worker/test/synthetic-cohort.test.mjs`, `worker/test/profile-serving-snapshot.test.mjs`, `scripts/test-check-live-sessions.mjs` |
 
+## Workplace automation learner journey — design extension
+
+DEC-024 (2026-10-15) expands the email baseline through
+[WAJ-01–13](requirements/workplace-automation-journey.md): problem definition,
+two-choice structure negotiation, one template outcome image, visual quests and
+iterative improvement. Four proposed template families cover the ten supplied
+curriculum cases. The destination is learner-owned Google assets, Apps Script
+web-app deployment and background data processing; exact customer-send approval
+remains required. The canonical document includes the runtime contracts,
+120-minute lab, instructor states, phased delivery and positive/negative acceptance
+criteria. This is design work; expanded runtime tests are NOT_RUN and existing
+EA evidence is not expanded-workflow acceptance.
+
 ## Team brain: learning wiki and deck generator (founder course first)
 
 Two App-side skills, generic and off by default, that keep a team's record across sessions and draft

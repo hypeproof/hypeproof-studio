@@ -5,7 +5,25 @@ implementation and delivery with minimal approval interruptions. Exact email
 content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
 
-## Intended outcome
+## Latest design priority — 2026-10-15
+
+DEC-024 expands the intended learner experience beyond the email implementation
+below. The canonical [workplace automation journey](../requirements/workplace-automation-journey.md)
+specifies all five requested stages, four proposed template families covering ten
+curriculum cases, one representative outcome image, nine evidence-based quests,
+six learner-owned Google assets, the 120-minute lab and improvement/version recovery.
+Its target is personal Google integration and Apps Script web-app deployment,
+including background data processing. Exact customer-send approval remains required.
+
+The former personal-script/unattended-schedule deferral below describes the current
+email baseline only; it is superseded for the expanded design destination.
+P0 design is documented; P1–P5 implementation and WAJ acceptance are NOT_RUN.
+The latest user request is design work. Existing email delivery, Windows readiness,
+commercial consent and billing remain separate outstanding work, not proof that
+the new learner journey is already delivered. Implement future packets separately
+and preserve the current email runner and ledgers during that transition.
+
+## Existing email implementation outcome
 
 Twenty office workers install Studio during a seven-hour Windows workshop,
 describe their own task, answer one relevant question at a time and create a
@@ -18,9 +36,12 @@ recipient rows or credentials. The business objective is retained Studio
 subscriptions; KRW50,000/month is the sponsor's quality benchmark, not evidence
 of willingness to pay or a currently implemented commercial offer.
 
-Default execution is the managed immutable Google runner. Learners receive no
-company IAM or script editing access. Personal script export, arbitrary generated
-code, non-Google mail, unattended schedules and public seller payouts are deferred.
+For this existing email baseline, default execution is the managed immutable Google
+runner. Learners receive no company IAM or script editing access. Personal script
+export and unattended schedules were deferred in this baseline; DEC-024 now includes
+personal deployment and scheduled data processing in the expanded design.
+Arbitrary generated code, non-Google mail and public seller payouts remain outside
+the bounded email implementation.
 The original skill-sales ambition remains a later product outcome; the current
 cohort-sharing MVP does not implement buying, selling or settlement.
 
