@@ -484,5 +484,61 @@ checks, legacy shortcut recognition, profile-copy/rerun/incomplete-backup checks
 real SDK tarball extraction/marker/reuse and real app ZIP extraction. Extracted
 shell/extension/SDK versions, all seven field-file hashes and operator resources
 match. Windows executable and DPAPI credential reuse/rollback were NOT RUN.
-The live download service still serves the previous installer until the new
-immutable chunks/manifest and gateway handler are uploaded and verified.
+The9d535c87 download was subsequently uploaded and both full authenticated
+archive hashes passed. It is superseded by the0b57074d package below.
+
+
+## Paid-pass integration and online full installer (2026-10-15)
+
+Runtime source0b57074df2b916fa47be077a8b56dc1df56fdd03 integrates main171279dc.
+The only merge conflict retained both the existing safe SDK diagnostic phase type
+and main's SdkGatewayAuthError. Full extension tests, typecheck and webview/host
+build pass. Four actual SDK paid-ending controls pass: authoritative revocation,
+authoritative expiry, cancellation during lookup and generic negative controls.
+All18 remote CI checks passed at this runtime SHA. No production merge was made.
+
+The sole Mac Peer Check was closed, its extension and full user-data directory
+backed up, then restaged and ad-hoc signature verified. Installed extension SHA256
+is15969519c2f853f5d2eefdb7fdadbe2e3399c53e8d956af9a35876cc3c109a67.
+The start page, saved dialogue/skill and new real coach request were observed.
+Google-dependent stages reset instead of preserving old completed previews.
+A non-owner private-Sheet read denied access at the read stage without a send.
+The first profile-selection attempt did not establish the intended bot identity;
+its denial is not a fresh two-account pass. A new bot connection reached Google's
+unverified-app warning and requires native completion; Browser Use paused that
+response. Own-preview recovery on this source remains pending. Dev secrets are
+still in-memory; no Windows credential-persistence claim follows.
+
+The private Windows package combines the unchanged720be661 shell, clean0b57074d
+field bundle and SDK0.3.299. Approved Desktop/runner resources match; no user
+Google credentials are included. Both prior682dfd37 and intermediate9d535c87
+shortcut targets require their exact installation receipts. The current installer
+backs up the complete profile and shortcut under version-specific names, retains
+old apps/SDKs and refuses custom routing or incomplete backups.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| app.zip | 196645359 | cb0faa1c19bd710833a6539a5f31d8f1e224d20946da67c60493cf0592da0fff |
+| sdk.zip | 121940997 | 24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e |
+
+PowerShell fixtures executed on both actual archives on macOS: hash/extraction,
+seven field-file hashes, resources, SDK marker/reuse, shortcut ownership and full
+profile backup/rerun/refusal passed. Fourteen download-handler tests and the
+private gateway delegation/authentication controls passed. The real Windows
+executable, DPAPI reuse, restart and rollback remain NOT_RUN.
+
+Sixteen immutable chunks were uploaded to email-test-download/0b57074d with
+readback hashes and the manifest published last. Only the existing private test
+gateway was switched, version e5ef94e3-43ee-4994-9175-3b594b85e56d. Existing
+participant authentication, service binding and version-pinned Service routing
+were retained; no default production traffic or Google permissions changed.
+
+Real endpoint verification passed: anonymous manifest/app/SDK requests return401;
+authenticated HEAD size/digest metadata match; both complete downloads match the
+pinned bytes/hashes; install.ps1 and update.ps1 match the canonical installer.
+The public installation page and copy button were observed in the browser.
+Evidence: /tmp/hps-email-mvp/windows-current-0b57074d/{candidate.json,
+online-verification.json,installer-online.json,powershell-archives.log,upload-receipt.json}.
+The earlier visually identical page screenshot is retained at
+/tmp/hps-email-mvp/windows-current-9d535c87/install-page.png. This is a protected
+pilot download, not a public release or completed Windows acceptance.
