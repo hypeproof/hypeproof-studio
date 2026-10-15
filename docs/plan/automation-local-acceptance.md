@@ -661,3 +661,21 @@ Evidence: `integrated-peer/current-source.json` and
 PowerShell startup-timeout failed-job rerun. Installer source87f75b6b also has
 all18 CI checks passing. These checks remain separate from native Windows and
 fresh Google acceptance.
+
+
+### Native conversational store withdrawal — 2026-10-15 22:12KST
+
+Mac62aff11d against local Service2ce0b2e found the owned synthetic fixture,
+showed its title/version and retained-copy warning in a private card, then
+unpublished it after checkbox/button confirmation. API setup created only the
+fixture; publication was not claimed as native in this run. Independent readback
+confirmed list absence/detail404 and identical hashes for four saved recipes and
+one durable send ledger. No Google connection, read, preview or send occurred.
+Automation90, focused21, browser-card, types/build and all18 CI checks pass.
+
+The same Mac app now runs prompt-only3d8c0b38; a no-action summary request
+verified natural-language results without internal fields or IDs. Its SDK/local19
+checks and types/build pass; remote CI is tracked separately. Native withdrawal
+execution evidence stays attached to62aff11d. Windows still serves32ba0ac2 and
+has neither this new lifecycle acceptance nor a successful current full download.
+Evidence is in `/tmp/hps-email-mvp/native-store-withdrawal-20261015/`.

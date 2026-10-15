@@ -33,8 +33,9 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 ## What is implemented today
 
 Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
-Current Mac runtime and served private Windows candidate: `32ba0ac2` (Google
-recovery follow-up), with installer source `87f75b6b`. Archive/backup/upgrade
+Current Mac runtime: `3d8c0b38` (conversational withdrawal and learner wording).
+The served private Windows candidate remains `32ba0ac2` (Google recovery), with
+installer source `87f75b6b`; it does not yet contain conversational withdrawal. Archive/backup/upgrade
 fixtures and23 online access controls pass. Full HTTP/2 readback of this new
 candidate was cancelled after563.56s/13238272 app bytes; same-artifact HEAD
 returned200 in4.680s. The transfer bottleneck is unconfirmed. Full download and
@@ -501,8 +502,8 @@ CI checks passing before this evidence-only update; runtime remains3f1a3f20.
 
 ### Conversational withdrawal follow-up
 
-The current conversation exposes publish/list/install, while owner withdrawal was
-reachable only in the retained inspector. The new source adds `skill_unpublish`
+Before62aff11d the conversation exposed publish/list/install, while owner withdrawal
+was reachable only in the retained inspector. The new source adds `skill_unpublish`
 to the SDK and local subscription transports. A private card names the exact
 owner publication and explains that installed copies and Google connections
 remain. Host checks cover cancellation, Stop at both authorization stages,
@@ -511,8 +512,20 @@ send records. Only a successful explicit store receipt can report withdrawal;
 only publication quest evidence is invalidated, with a generation guard.
 
 Automation90/90, focused21 checks, types/build and real App browser-card tests pass
-locally. Native conversation verification is pending. Existing runtime/Windows32
-and their download evidence do not include this follow-up yet. This does not
+locally. At22:12KST, native Mac62aff11d completed the owner withdrawal through
+the actual conversation and private review card against local Service2ce0b2e.
+An API-created synthetic fixture supplied the target; this is not a new native
+publication test. Readback confirmed list absence and detail404; hashes of four
+saved recipes and one durable ledger remained unchanged. All18 CI checks pass
+at62aff11d. No Google action or mail was performed.
+
+A prompt-only follow-up3d8c0b38 prevents copying internal receipt fields into the
+learner reply. After restaging the same Mac app, an actual no-action summary
+request produced natural-language results without those keys/IDs. Its SDK/local
+transport19 checks, types/build pass; its separate CI is still pending. Evidence:
+`native-store-withdrawal-20261015/{receipt.json,confirmation.txt,success.txt,
+learner-summary.txt,learner-summary.png}` under `/tmp/hps-email-mvp/`.
+The served Windows32 candidate does not include this follow-up. This does not
 implement version updates or rollback. The current Service rejects reuse of an
 unpublished request ID; same-content conversational re-publication/restore remains
 a separate lifecycle gap and must not be claimed as supported.
