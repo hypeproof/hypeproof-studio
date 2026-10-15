@@ -1,99 +1,123 @@
-# Release v0.1.0 — checklist
+# Studio Release Checklist
 
-Use this before any release-cutting action. Source of truth for Phase 7 decision gate.
+Use this checklist on release day. The rules and the reasons are in
+[docs/dev/06-release-process.md](dev/06-release-process.md).
 
-## Pre-cut
+The previous checklist for v0.1.0 is archived in
+[docs/archive/release/RELEASE-CHECKLIST-v0.1.0.md](archive/release/RELEASE-CHECKLIST-v0.1.0.md).
 
-- [ ] All Phase decision gates passed (METAPLAN §10 status table updated)
-- [ ] `scripts/check-env.sh` clean on dev machine
-- [ ] Mac build: `bash scripts/build-all.sh` produces `HypeProof Studio.app`
-- [ ] `bash scripts/verify-branding.sh` exits 0
-- [ ] Manual smoke: open app → activity bar 💬 → set token → send "hello" → response streams
-- [ ] Manual smoke: open app → request file write → modal appears → deny → no write
-- [ ] Win CI: `gh workflow run build-windows.yml --ref main` → green
-- [ ] Win artifact extracted on a real/VM Windows box → installer runs → app opens
-- [ ] `announcements-extra.json` welcome message correct
-- [ ] `docs/INSTALL.md` reviewed by 1 non-technical reader
+## 1. Before the cut
 
-## Cut
+- [ ] Make sure that no class is live. The release workflows stop for a live session.
+- [ ] Make sure that the PRs for this release are merged into `main`. Later merges go to
+      the next release.
+- [ ] Select the release manager for this week. The release manager is a member with
+      write access.
 
-- [ ] Choose release tag: `v0.1.0` style. On tagged builds, this tag is the
-      canonical shipped version (`HPS_VERSION` → `scripts/resolve-version.sh`
-      → product.json / Info.plist / bundled extension). Only bump
-      `extensions/hypeproof-chat/package.json` when changing the untagged
-      local/dev fallback version.
-- [ ] `git tag v0.1.0 && git push --tags` → auto-triggers Win build
-- [ ] Wait for Win artifact to land
-- [ ] Zip Mac .app: `cd vscodium-base/VSCode-darwin-arm64 && zip -ry ../../dist/HypeProof-Studio-darwin-arm64.zip "HypeProof Studio.app"`
-- [ ] Create GitHub Release v0.1.0:
-  - Attach: `HypeProof-Studio-darwin-arm64.zip`, `HypeProof Studio Setup *.exe`, `HypeProof Studio-x64.zip`
-  - Body: copy and complete `docs/RELEASE-NOTES-template.md`
-  - Body must include: summary, highlights, install/update guidance, asset list,
-    verification run links, mirror status, production deploy status, known notes,
-    and changelog links.
-- [ ] Mirror release body is installer-facing, not a verbatim copy of the main
-      repo engineering release notes.
-- [ ] Verify one-line installers resolve to the new release (test from a fresh shell)
-- [ ] Verify ordinary and personal-trial entry paths use the same released App
-      artifact/update channel. On macOS, both regular shortcuts resolve to
-      `/Applications/HypeProof Studio.app`; preserve separate user-data/workspaces.
-- [ ] After restart, record actual executable path, App version/commit and bundled
-      extension version for both paths. Merely staging/downloading is not delivery.
-- [ ] Record each path's Service health version, authenticated profile and Module
-      pin/compiled prompt revision. Label localhost rehearsals separately; never
-      count an old local gateway as the newly deployed public Service.
-- [ ] If either entry path has not passed, report that gap explicitly. Do not mark
-      trial and classroom delivery complete from mirror success alone. Follow
-      [the shared delivery contract](dev/06-release-process.md#trial-and-classroom-delivery).
+## 2. Release cut
 
-## Endpoint / config change → re-cut
+1. Open the Actions tab of `hypeproof/hypeproof-studio`.
+2. Select the `release-cut` workflow.
+3. Click **Run workflow**. Set `mode` to `create`.
+4. If a smoke credential is not available, set `accept_not_run`. The release PR then shows
+   the `NOT_RUN` checks.
+5. Wait for the run to finish. Read the job summary.
 
-When a shipped default changes (e.g. the `hypeproofChat.proxyUrl` host), every
-distributed build is stale — run the full **Cut + Dogfood**, plus:
+- [ ] If smoke failed: open the smoke failure issue. Find the cause with the authors in the
+      range. Merge a fix. Then run the release cut again.
+- [ ] If smoke passed: record the rc tag, the two build runs and the release PR link.
 
-- **Identify the population first — one message per group, never one for all:**
-  - *Old build* (its default was the now-dead host): needs the re-cut build;
-    stopgap = set `hypeproofChat.proxyUrl` to the new URL + reload.
-  - *Current-code build*: default is **already** the new URL — the proxyUrl
-    step is a **no-op**. Do not send it; it only confuses.
-  - *Any build, no token*: URL ≠ token. Without a workshop token the server
-    returns 401/403 regardless of URL.
-- **The blocker is usually the token, not the URL.** Any operator message must
-  carry the token path ("토큰 필요 화면이 뜨면 <연락처>로 요청") — a message
-  that only flips a setting will not make chat work on a token-less device.
-- **Broadcast self-check (before sending ANY operator message):** on a *clean*
-  instance, follow the message's own steps and reproduce the failure it claims
-  to fix. If you can't reproduce it as written, the message is wrong. (The #8
-  lesson: Message ① was a no-op on a clean current build.)
-- **On the new build:** operators must **clear** any interim
-  `hypeproofChat.proxyUrl` override — a leftover override silently shadows the
-  correct new default.
+## 3. rc build
 
-## Dogfood (6 operators)
+The rc builds take one to two hours for each OS. They run the automatic E2E on macOS and
+Windows. Then they publish the rc as a prerelease.
 
-- [ ] 6명에게 install link 공유 (`docs/INSTALL.md` 또는 https://raw.githubusercontent.com/jayleekr/hypeproof-studio-releases/main/install-mac.sh)
-- [ ] 6명 모두 install 성공 확인 (kakaotalk 단톡방)
-- [ ] 6명 모두 token 등록 + 첫 메시지 응답 OK
-- [ ] 발견된 이슈 → GitHub Issues 또는 hotfix v0.1.1
-- [ ] (endpoint/config re-cut only) operators cleared any interim `hypeproofChat.proxyUrl` override
+- [ ] Make sure that `verify-unified-release` passed for the rc tag.
+- [ ] Download the rc build from the prerelease page. The release PR has the link.
+- [ ] Install it. Make sure that the product version is the rc version.
 
-## Dry-run (1–2 자녀, 4시간)
+Installed Apps do not update to a prerelease. Install the rc build by hand.
 
-- [ ] 게임 만들기 골든 path: "삼각형 게임 만들어줘" → 게임 미리보기 → 수정 요청
-- [ ] 파일 쓰기 modal 동작 확인
-- [ ] 4시간 세션 끝까지 conversation history 유지 확인
-- [ ] 종료 후 피드백 수집 (오디오 또는 메모)
+## 4. Release manager check
 
-## Go / No-go (기업 고객 1회차)
+Do these steps on the rc build.
 
-다음이 **모두 true**이면 GO:
-- [ ] 6 operator install rate = 100%
-- [ ] Dogfood 0 P0 issue
-- [ ] Dry-run 4h 완주
-- [ ] Plan B trigger date (2026-05-28) 통과
+1. Read section 3 of the release PR (dependency and deploy changes). Confirm what each PR
+   needs before the release goes out.
+2. Do each check in section 4 (feature checklist). Follow the `how to check` line.
+3. Mark each item: `checked`, `could not check — <reason>`, or `problem → #<issue>`.
+4. If an item has no `how to check` line, ask the author or read the linked issue.
+5. Tick the boxes in the release PR.
 
-## Post-launch
+- [ ] If you found a problem that blocks the release: do not approve. Open an issue. Merge
+      a fix. Run the release cut again. It creates the next rc and updates the release PR.
 
-- [ ] 1회차 끝나고 24h 내 retro (참가자 + 운영진)
-- [ ] v0.1.1 hotfix 후보 issue 분류
-- [ ] METAPLAN §11 미해결 결정 업데이트
+## 5. Approval and publication
+
+1. Approve the release PR. Use an account with write access.
+2. Make sure that the approval is on the latest commit of the release PR.
+
+Until the approval workflow exists, also do these steps:
+
+3. Push the `v` tag on the rc commit. Replace the version and the rc number:
+
+   ```bash
+   git fetch origin --tags
+   git tag v2026.1013.0 'v2026.1013.0-rc.1^{}'
+   git push origin v2026.1013.0
+   ```
+
+4. Wait for the `v` tag builds and `verify-unified-release`. The publish gate checks the
+   approval. Then the release becomes public and the mirror updates.
+5. Merge the release PR.
+
+- [ ] If the release stayed a draft: read the publish gate result in the job summary. Fix
+      the cause. Run `verify-unified-release` again for the tag.
+
+## 6. After publication
+
+Record these items separately for the personal trial path and the classroom path.
+The reason for each item is in
+[Trial and classroom delivery](dev/06-release-process.md#trial-and-classroom-delivery).
+
+- [ ] The public App tag, the asset digest and the source commit.
+- [ ] After the restart: the executable path, the App version and commit, and the bundled
+      extension version.
+- [ ] The Service `/v1/health` version and the profile, from the authenticated API.
+- [ ] The Module pin, or the compiled Service prompt revision.
+- [ ] On macOS, both shortcuts open `/Applications/HypeProof Studio.app`.
+- [ ] If one path is old or not tested, report the delivery as incomplete. Name the path and
+      the action.
+
+## 7. Endpoint or configuration change
+
+When a default that the App ships changes (for example the Service host), all distributed
+builds are old. Do a full release, and also do these steps:
+
+- [ ] Find the groups of users first. Send one message for each group, not one message for all.
+  - Users of an old build need the new build.
+  - Users of the current build already have the new default. Do not send them a settings change.
+  - Users without a token get 401 or 403 for every URL. Tell them how to get a token.
+- [ ] Before you send a message, follow its steps on a clean installation. If you cannot
+      reproduce the failure that it fixes, the message is wrong.
+- [ ] On the new build, tell users to remove an old `hypeproofChat.proxyUrl` setting.
+      An old setting hides the new default.
+
+## 8. Hotfix
+
+Use the [hotfix process](dev/06-release-process.md#hotfix). Skip sections 3 to 5 of this
+checklist. Do sections 6 and 7.
+
+- [ ] The hotfix PR goes into `hotfix/<last v tag>` and has the `hotfix` label.
+- [ ] CI and smoke passed.
+- [ ] The tag is the next version number of the day.
+- [ ] The forward-port PR to `main` is open.
+
+## 9. Rollback
+
+Use the [rollback process](dev/06-release-process.md#rollback).
+
+- [ ] Change the broken release to a draft or a prerelease in the main repository and in the
+      public mirror.
+- [ ] Revert the cause on `main`.
+- [ ] Release the fix as a hotfix.
