@@ -148,6 +148,7 @@ import {
 import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
 import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
+import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
@@ -3264,6 +3265,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * A5 (orchestrator spec §6.3) — before revealBuilt saves index.html on an adult orchestrator
+   * seat whose roster lists `archive_before_overwrite`, keep the current page in
+   * .hypeproof/history (A3 archiveBeforeOverwrite: identical content is skipped, the newest 20
+   * are kept), with one timeline line. The same file saveGameToWorkspace writes: the first
+   * workspace folder's index.html. No model call, no modal, never throws: an archive that fails
+   * does not stop the save.
+   */
+  private archiveAdultPage(nextHtml: string, streamId?: string): void {
+    try {
+      const roster = orchestratorRosterFor(this.cachedProfile);
+      if (!roster?.checks.includes("archive_before_overwrite")) return;
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) return;
+      const outcome = archiveBeforeOverwrite({
+        seat: { profile: this.cachedProfile, orchestrator: true },
+        workspaceRoot: root,
+        file: "index.html",
+        nextContent: nextHtml,
+      });
+      if (!outcome.archived || !outcome.path || !streamId) return;
+      const label = outcome.timeline ?? adultArchiveTimelineLabel(outcome.path);
+      this.postToolLog(streamId, { id: randomId(), icon: "🗂", label: label.replace(/^🗂\s*/, ""), state: "done" });
+    } catch {
+      /* the learner's save comes first */
+    }
+  }
+
   async revealBuilt(
     html: string,
     opts?: {
@@ -3344,6 +3373,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (isWorldCohort(this.cachedProfile)) {
       this.lastArchivedWorldFile = await this.archiveCurrentWorld(checked.html, opts?.streamId);
     }
+    // A5 (orchestrator spec §6.3, FO-10) — adults on an orchestrator seat get the same safety
+    // before this same overwrite: the page about to be replaced is copied to .hypeproof/history.
+    // Kids never reach it (their worlds archive above; the gate fails closed for minors and
+    // unknown tiers), and neither does a seat without the roster's archive check.
+    this.archiveAdultPage(checked.html, opts?.streamId);
     // Swap the engine in **after** the archive is done (the archived copy takes the
     // old engine inlined).
     if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs);

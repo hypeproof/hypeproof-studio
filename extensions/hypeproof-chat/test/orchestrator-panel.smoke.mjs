@@ -948,4 +948,107 @@ if (!status.available) {
   ok("the student SDK turn's runSdkCoach call passes orchestratorHostArgs with the seat's session, its turn and its timeline (control: a planted removal is caught); orchestrator seats fetch the per-request record");
 }
 
+// ── 7. The adult archive before revealBuilt overwrites index.html (spec §6.3, FO-10) ─
+
+{
+  const P = await provider();
+  const os = await import("node:os");
+  const fsm = await import("node:fs");
+  const pathm = await import("node:path");
+  const scratch = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "hps-a5-archive-")));
+  const OLD = "<!doctype html><html lang=\"ko\"><title>빵집</title><p>예전 영업시간</p></html>\n";
+  const NEW = "<!doctype html><html lang=\"ko\"><title>빵집</title><p>새 영업시간</p></html>\n";
+  /** A workspace with the learner's page, and a host whose save records what was archived by then. */
+  const seat = (profile, name) => {
+    const ws = pathm.join(scratch, name);
+    fsm.mkdirSync(ws, { recursive: true });
+    fsm.writeFileSync(pathm.join(ws, "index.html"), OLD);
+    const order = [];
+    const lines = [];
+    const history = () => {
+      try {
+        return fsm.readdirSync(pathm.join(ws, ".hypeproof", "history"));
+      } catch {
+        return null;
+      }
+    };
+    const host = {
+      cachedProfile: profile,
+      opsLastArtifact: undefined,
+      lastArchivedWorldFile: null,
+      postToolLog: (_streamId, entry) => {
+        lines.push({ ...entry });
+        order.push(`line:${entry.icon}`);
+      },
+      surfaceStructureIssues: () => order.push("structure"),
+      archiveCurrentWorld: async () => {
+        order.push("world-archive");
+        return null;
+      },
+      archiveAdultPage: P.ChatPanelProvider.prototype.archiveAdultPage,
+      saveEngineToWorkspace: async () => order.push("engine"),
+      saveGameToWorkspace: async (html) => {
+        const kept = history();
+        order.push(`save(archived=${kept ? kept.length : "none"})`);
+        fsm.writeFileSync(pathm.join(ws, "index.html"), html);
+      },
+      isLiveServerPreview: () => false,
+      openInLiveServer: async () => false,
+      inlineEngineIfNeeded: async (html) => html,
+      preview: { show: () => order.push("preview") },
+    };
+    const reveal = (html, opts) => {
+      fakeVscode.workspace.workspaceFolders = [{ uri: { fsPath: ws } }];
+      return P.ChatPanelProvider.prototype.revealBuilt.call(host, html, opts);
+    };
+    return { ws, host, order, lines, history, reveal };
+  };
+  try {
+    // An adult orchestrator seat: the old page is copied before the save overwrites it.
+    const a = seat(SEATS.adultRoster, "adult");
+    assert.equal(await a.reveal(NEW, { streamId: "turn-a", artifactSource: "assistant_response" }), true);
+    assert.deepEqual(a.order, ["line:🖼️", "line:🗂", "save(archived=1)", "preview", "line:🖼️"], "archived (with its line) before the save");
+    const kept = a.history();
+    assert.equal(kept.length, 1);
+    assert.match(kept[0], /^index-\d{8}-\d{6}\.html$/);
+    assert.equal(fsm.readFileSync(pathm.join(a.ws, ".hypeproof", "history", kept[0]), "utf8"), OLD, "the copy is the page as it was");
+    assert.equal(fsm.readFileSync(pathm.join(a.ws, "index.html"), "utf8"), NEW);
+    const archiveLine = a.lines.find((l) => l.icon === "🗂");
+    assert.equal(archiveLine.label, `이전 버전 보관 (.hypeproof/history) — ${kept[0]}`);
+    assert.equal(archiveLine.state, "done");
+    // The same page again (the coach's own Write already saved it): nothing new is kept.
+    a.order.length = 0;
+    await a.reveal(NEW, { streamId: "turn-a", artifactSource: "assistant_tool" });
+    assert.equal(a.history().length, 1);
+    assert.deepEqual(a.order, ["line:🖼️", "save(archived=1)", "preview", "line:🖼️"], "no archive line for an identical page");
+    // ▶ Run (no turn): the page is still kept, and no line is drawn anywhere.
+    const run = seat(SEATS.adultRoster, "adult-run");
+    await run.reveal(NEW, { artifactSource: "manual_preview" });
+    assert.equal(run.history().length, 1);
+    assert.equal(run.lines.length, 0);
+    // A blocked page never reaches the save, so nothing is archived for it.
+    const blocked = seat(SEATS.adultRoster, "adult-blocked");
+    assert.equal(await blocked.reveal("<!doctype html><p>a</p><!-- 닫히지 않은 주석", { streamId: "turn-b" }), false);
+    assert.equal(blocked.history(), null);
+
+    // Never for minors or unknown tiers, and never without the roster (or its archive check).
+    const noArchiveCheck = { ...ADULT, orchestrator: { ...ROSTER, checks: ["site_check", "diff_guard"] } };
+    const worldKids = { profile_id: "kids-quest-s1", game: { template_tier: "kids-quest" }, minor_cohort: true, orchestrator: ROSTER };
+    for (const [name, profile] of Object.entries({ ...SEATS, noArchiveCheck, worldKids })) {
+      if (name === "adultRoster") continue;
+      const s = seat(profile, `off-${name}`);
+      await s.reveal(NEW, { streamId: "turn-c", artifactSource: "assistant_response" });
+      assert.equal(s.history(), null, `${name}: no .hypeproof/history`);
+      assert.equal(fsm.existsSync(pathm.join(s.ws, ".hypeproof")), false, `${name}: no .hypeproof at all`);
+      assert.equal(s.lines.some((l) => l.icon === "🗂"), false, `${name}: no archive line`);
+      assert.equal(fsm.readFileSync(pathm.join(s.ws, "index.html"), "utf8"), NEW, `${name}: the save itself still happens`);
+      assert.equal(s.order.includes("world-archive"), name === "worldKids", `${name}: the kids' own world archive runs only for a world cohort`);
+    }
+  } finally {
+    fakeVscode.workspace.workspaceFolders = undefined;
+    fsm.rmSync(scratch, { recursive: true, force: true });
+  }
+  ok("revealBuilt: on an adult orchestrator seat the old index.html is copied to .hypeproof/history before the save, with one 🗂 line (identical pages and blocked pages keep nothing; ▶ Run keeps it without a line); never for kids, a minor flag, an unknown tier, an old profile, a disabled roster or a roster without the archive check, while the save itself is unchanged");
+}
+
 console.log(`orchestrator-panel: ${passed} checks passed`);
