@@ -10,7 +10,7 @@ audience: operators
 source_paths:
   - scripts/install-mac.sh
   - scripts/verify-prod.sh
-  - worker
+  - config/service-deployment.json
 quality_gates:
   - setup-documented
   - failure-paths-documented

@@ -1524,6 +1524,18 @@
         },
         {
           "path": "scripts/verify-owner-console.mjs"
+        },
+        {
+          "path": "config/service-deployment.json"
+        },
+        {
+          "path": "e2e/unified-release/candidate-service.mjs"
+        },
+        {
+          "path": "e2e/service-provenance.mjs"
+        },
+        {
+          "path": ".github/workflows/pr-ci.yml"
         }
       ]
     },
@@ -1558,6 +1570,9 @@
         },
         {
           "path": "e2e/tests/native-trial-live.spec.ts"
+        },
+        {
+          "path": "e2e/unified-release/candidate-service.test.mjs"
         }
       ]
     },

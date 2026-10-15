@@ -9,7 +9,7 @@ last_reviewed: 2026-05-22
 audience: maintainers
 source_paths:
   - extensions/hypeproof-chat/src
-  - worker/src
+  - config/service-deployment.json
   - vscodium-base
 quality_gates:
   - c4-views-present

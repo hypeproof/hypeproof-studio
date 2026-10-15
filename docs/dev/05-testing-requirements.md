@@ -10,7 +10,7 @@ audience: maintainers
 source_paths:
   - e2e
   - tests/rehearsal
-  - worker/test
+  - config/service-deployment.json
 quality_gates:
   - unit-layer-present
   - e2e-layer-present

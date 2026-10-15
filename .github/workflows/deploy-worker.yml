@@ -87,11 +87,16 @@ jobs:
           # (depth-1, no-tags) checkout would hide.
           fetch-depth: 0
 
+      - name: Resolve pinned Service source
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+
       - name: Checkout pinned Service source (deployment ownership unchanged)
         uses: actions/checkout@v4
         with:
           repository: hypeproof/hypeproof-service
-          ref: 40caf3921e97d7b02df895b877ba408f40835121
+          ref: ${{ steps.service.outputs.sha }}
           token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
           path: .service-source
 
