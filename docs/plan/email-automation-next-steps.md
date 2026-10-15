@@ -93,7 +93,7 @@ native evidence. The new online activity has no Google connection. Earlier local
 Google preview evidence remains valid only at its recorded revision; restarting
 the memory-only Dev app does not preserve its credentials. No new mail was sent.
 
-Three subjects share aUSD1 sequential test pool under the existingUSD3 ceiling.
+Three subjects currently share aUSD1 sequential test pool. The user raised the overall development/test ceiling to USD10 on2026-10-16; a verified additional USD1 Windows-recipient allocation is active.
 The117-record historical audit retainedUSD1.972794 prior spent/held exposure;
 prior exposure plus the full new pool remainsUSD2.972794. At20:58KST, native
 author/recipient work has settledUSD0.113022 across the pool, held0 and
@@ -209,7 +209,7 @@ path, and DEC-025 actual store download/configure/run/update/rollback with disti
 recipients. A new send requires separate exact approval.
 Re-run only tests affected by a new SHA or unresolved failure. Use synthetic data
 and no paid AI for concurrency tests. Preserve unknown cost/send reservations;
-keep the existing USD3 test cap unless a concrete new budget is approved.
+keep the user-approved USD10 total development/test cap (raised on2026-10-16), including historical spending, held charges and all live allocations.
 
 Collect setup/authoring token cost, deterministic Google execution/quota, support
 minutes, storage and failed/retried runs separately. Recompute the prior operating
@@ -232,7 +232,7 @@ quota and operator effort are separate. The30-day/600-attempt grant is not a
 30-day USD5 guarantee. Keep workshop-day and post-class budgets distinct.
 Sources: [Haiku4.5](https://platform.claude.com/docs/en/models/haiku-4-5/overview),
 [pricing](https://platform.claude.com/docs/en/about-claude/pricing), checked2026-10-15.
-Existing development cap remains USD3; no new live class budget was applied.
+Development/test ceiling is USD10 following the explicit2026-10-16 approval; this does not authorize the proposed live-class budget.
 
 Missing human facts: real learner identities when registering the pilot, actual
 class time if a scheduled window is used, accepted class/post-class spending caps,
@@ -275,3 +275,9 @@ Current source6b73873f passes all18 Studio CI checks. Servicee76d1c2 currently r
 The first live launch exposed a real upgrade defect: the prior682dfd37 install used `data/user-data` portable storage, while the installer only backed up the default roaming profile. Original data remained intact, but activities appeared absent. The installer now follows only a verified prior shortcut (including the retained rollback shortcut on repair), copies the portable tree with per-file SHA256 verification, retains a separate rollback snapshot, atomically activates `data`, and preserves recipient edits on rerun. Unknown targets, incomplete snapshots, linked files and custom routing fail closed. Actual Windows rerun restored the saved activities, work folder and conversation without entering a new Studio participation code. The native graph currently reports2/6 and Google credential reuse is not yet proven.
 
 Private gateway1a566b74-00eb-430b-b0b3-5770b7277bd6 serves only this installer repair; app/SDK hashes, expiry and Service binding are unchanged. Served script matches source;23 online access controls and real PowerShell archive/profile fixtures pass. New source commits still require current-head CI.
+
+## Approved test budget increase — 2026-10-16
+
+The user explicitly chose “총 US$10로 인상”. This supersedes the USD3 development/test ceiling only. Historical spending and unresolved holds count toward the USD10 total; it is not USD10 per account or a new class budget. The prior USD1 three-seat pool remains intact; an additional USD1 Windows-recipient allocation was created and read back. Historical spending/holds plus all active allocations total at most USD3.972794, below the approved USD10 ceiling. No additional model call or mail was used to apply this increase. At the latest check, the recipient had USD0.273198 available. Windows SDK requests returned403 with a model/feature-entitlement refusal; a later private-gateway health check returned503 `Test version unavailable`, while public health remained200. These are separate from a low balance. Preserve the prior store item and do not claim Windows import/execution passed. Installer fix1501537e has all18 CI checks passing.
+
+Readback evidence: `/tmp/hps-email-mvp/raised-budget-20261016-receipt.json`. New funding source: `email-windows-extra-contract-20261016`. The prior test route was removed by a concurrent deployment at2026-10-15T15:51:32Z; restoring the previously approved0% test version retained the current public version d34da3a5 at100%, and private health returned200 with the expected test marker. The SDK refusal is `tool_not_entitled_or_metered`; do not widen execution permissions as a workaround.
