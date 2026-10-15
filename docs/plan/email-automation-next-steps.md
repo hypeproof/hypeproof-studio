@@ -16,45 +16,48 @@ The [cross-platform store contract](skill-store-cross-platform.md) defines
 SS-01–12, including third-user isolation, version/update/rollback, withdrawal,
 package integrity, source privacy, permissions and incremental storage costs.
 
-[Completed research](skill-store-distribution-research.md) compares current Service/D1 with private Cloudflare R2, Supabase,
-Google and GitHub/open-source distribution patterns. Final audience remains a
-product question; current cohort visibility must not be mistaken for cross-class
-or public access. Store research/planning is current work; actual Mac→Windows
-acceptance follows feature implementation and Windows availability. The new gate
-is NOT_RUN. Earlier two-user or Windows preview evidence does not satisfy it. Local follow-up verified19
-three-synthetic-principal Service/D1 controls and added common-client rejection of
-unsafe/mismatched store recipes, with88 automation checks/types/host build passing.
-Those partial controls do not pass the real Mac-to-Windows journey. The single
-Mac Dev app remains0b57074d; the private online Windows candidate now includes
-the client fix atf90b65e3. Its runtime passed all18 CI checks (one Windows-runner
-startup timeout passed on the failed-job rerun). Actual Windows execution is NOT_RUN.
-The private gateway now admits three distinct Studio principals; online Service/D1
-publication/ownership/withdrawal19 and download/profile/access23 controls pass.
-Actual Google identity mapping and native Mac/Windows reuse remain unverified.
-The three existing Studio subjects now each have an available test allocation
-(~USD0.333), under a USD1 active pool and the unchanged USD3 overall ceiling.
-A full117-record ledger audit retained USD1.972794 prior spent/held amounts;
-combined prior exposure plus the new limit is USD2.972794. No usage/token reset,
-model call, email or payment occurred. Concurrency remains1 for sequential pilot
-testing; this does not provision the real20-person class budget.
+[Completed research](skill-store-distribution-research.md) compares current Service/D1,
+private Cloudflare R2, Supabase, Google and GitHub/open-source distribution patterns.
+Use current D1 for bounded recipes; add private R2 only when larger reviewed assets
+justify it. Final audience remains a product question; use cohort-only visibility
+until decided. Public discovery and generic executable packages are not implemented.
 
-Native Mac follow-up listed and republished a reviewed saved recipe through the
-actual conversational store UI, with exact local D1 persistence confirmed. It
-also established that the retained Mac activity targets local Service8794, while
-the Windows installer targets the private online Service; the published item is
-not present online. Final cross-platform acceptance must first align those
-environments through normal Studio activity setup. The publication-success tool
-receipt now explicitly confirms the completed private approval, fixing missing
-evidence behind confusing coach narration. Source regression passes; native copy
-verification and inclusion in the next Mac/Windows candidate remain pending.
+Current partial evidence, all dated2026-10-15:
 
-The retained Mac copy is now `06c1d92b`, in a separate online workspace with the
-same private Service as Windows and a verified0.3.299 native/JS SDK installation.
-The first Service-funded authoring turn exposed a generic save failure followed
-by an inappropriate Google-setup recovery; it was stopped before connection or
-publication. The shared tool now declares its exact recipe shape and save-specific
-recovery;89 automation checks and types/build pass, with native retry pending.
-This actual call settledUSD0.031423 with no held cost and no budget increase.
+- Single Mac Dev runtime `3f1a3f20`, SDK0.3.299: normal activity setup now targets
+  the same private online Service as Windows. A new synthetic recipe was authored,
+  saved and published through the actual conversation and private review card.
+  The coach correctly acknowledged completed sharing. Three distinct Studio
+  principals listed/fetched the exact version1; only the author had ownership.
+- The native attempt exposed a missing SDK recipe contract and misleading save
+  recovery. The fixed tool declares the exact schema and stage-specific recovery.
+  Automation89/89, types/build pass. All18 runtime CI checks pass after the single
+  classroom-browser failed-job rerun. A test helper race that could select the
+  preceding command is corrected separately; it changes no packaged runtime.
+- Store/API controls pass19 publication/ownership/withdrawal and23 access/download
+  checks. Common client validation rejects unsafe or mismatched recipes. These
+  checks and API recipient reads do not prove native recipient installation or use.
+- Windows candidate `3f1a3f20` on shell720be661 is prepared locally with matching
+  SDK0.3.299. Actual archive/integrity, backup and exact-receipt upgrade fixtures
+  pass, including priorf90b65e3. The private installer now serves3f1a3f20; all23
+  three-principal access checks pass. Full download verification is incomplete:
+  a bounded HTTP/2 attempt received41.4MB of196.6MB in180s and timed out, after
+  an earlier slow HTTP/1.1 attempt was stopped. Transport cause is unconfirmed. Actual Windows execution is NOT_RUN.
+
+The full Mac→store→Windows gate is NOT_RUN. Actual Google alias mapping, recipient
+private setup/execution, restart, update/rollback and withdrawal still require
+native evidence. The new online activity has no Google connection. Earlier local
+Google preview evidence remains valid only at its recorded revision; restarting
+the memory-only Dev app does not preserve its credentials. No new mail was sent.
+
+Three subjects share aUSD1 sequential test pool under the existingUSD3 ceiling.
+The117-record historical audit retainedUSD1.972794 prior spent/held exposure;
+prior exposure plus the full new pool remainsUSD2.972794. The two actual online
+Mac turns have now settledUSD0.060136, held0, leavingUSD0.273198 for their subject.
+No limit increased and no usage/token reset occurred. This does not provision the
+real20-person class budget. Preserve the native publication for Windows reuse.
+
+Evidence and exact revision boundaries: [store acceptance](skill-store-cross-platform.md).
 
 ## Latest design priority — 2026-10-15
 
@@ -106,12 +109,12 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 | Area | State as inspected | Limit |
 | --- | --- | --- |
-| Studio source | Main `171279dc` integrated at `0b57074d`, retaining the learner-journey design and existing automation diagnostics | Full extension tests, types/build and four actual SDK paid-ending controls pass; all18 remote CI checks pass at0b57074d. Single Mac Dev app is staged at0b57074d; bot reconnect/own-preview recovery passed; final two-identity scope remains revision-bound |
+| Studio source | Main `171279dc` integrated at `0b57074d`, retaining the learner-journey design and existing automation diagnostics | Full extension tests, types/build and four actual SDK paid-ending controls pass; all18 remote CI checks pass at0b57074d. Current single Mac Dev app is3f1a3f20; native online save/share passed. Bot reconnect/own-preview passed earlier at0b57074d; Google execution remains revision-bound |
 | Main integration | Main browser/subagent age policy and outbox drain retained; email-specific minor gate remains; SDK0.3.299 pinned | Automation88/88, orchestrator6/6 and automation-SDK12/12, SDK/browser helpers, types/build pass. Independent pre-A4 characterization updated only for main's policy delta; no current-output baseline recording |
 | Service | Main `012274d6` integrated at `abf79a8`; shared workshop capability retained; final13 CI checks passed | Local server now runs `abf79a8` directly, preserving116 existing tables and the20-seat roster; no production deployment. Additive local migrations0043–0045 applied with an integrity check and rollback backup |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
-| Local product | Earlier native acceptance at720be661 remains revision-bound; the only Peer Check app now runs0b57074d after extension/profile backup | Start page, saved dialogue/recipe and fresh coach request work. Google-dependent stages reset; a non-owner private-Sheet read is denied. After the user completed fresh login, bot own-Sheet read and exact one-recipient preview passed at0b57074d; no new two-account run is claimed |
-| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Private candidate now contains shell720be661 / extensionf90b65e3 / SDK0.3.299 | Current installer is served online. Authenticated full app/SDK downloads match pinned hashes; anonymous downloads deny401. PowerShell archive/backup and exact-receipt handover from682dfd37,9d535c87 and0b57074d pass. Actual Windows install/update/credential reuse remain NOT_RUN |
+| Local product | Earlier native acceptance at720be661 and0b57074d remains revision-bound; current Peer Check app is3f1a3f20 in a separate online activity | Start page, saved dialogue/recipe and fresh coach request work. Google-dependent stages reset; a non-owner private-Sheet read is denied. After the user completed fresh login, bot own-Sheet read and exact one-recipient preview passed at0b57074d; no new two-account run is claimed |
+| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Latest private candidate contains shell720be661 / extension3f1a3f20 / SDK0.3.299 | Current installer and23 access controls are verified online; anonymous downloads deny401. Current full archive download/hash remains incomplete because of slow transfer; the previousf90b65e3 full-download success cannot validate this candidate. PowerShell archive/backup and exact-receipt handover from682dfd37,9d535c87,0b57074d andf90b65e3 pass. Actual Windows install/update/credential reuse remain NOT_RUN |
 | Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported an inert recipe earlier; latest `720be661` real Google execution denies cross-Sheet reads in both directions | One durable sent record and Inbox receipt remain at `624b214f`; latest sequential account-switch test is not a new two-participant store-sharing pass. Credentials remain in-memory in Dev |
 | Store/instructor | Twenty synthetic signed grants and real local D1 cap tests pass; 720be661 actual A02 previously reported failed read4/6, answer wait4/6 and restored preview6/6; after0b57074d restart, native classroom reconnect reports blocked Google connection2/6 then restored preview6/6 | Only Peer Check runs. Refreshed board changed blocked1/normal0/unknown19 → normal1/unknown19 after real preview, and labels the old6/6 as last report while disconnected; not20 actual users. Progress is mail-only; CSV correctness is not automatically observed |
 | Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |

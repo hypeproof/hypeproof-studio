@@ -32,7 +32,9 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 
 ## What is implemented today
 
-Source inspection: Studio runtime `0b57074d`, Service integration `abf79a8b`.
+Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
+Current Mac runtime: `3f1a3f20`; online Service remains pinned to
+`email-local-accepted-ffef7bc-peer`. Later observations below are revision-bound.
 
 | Layer | Current source fact | Limit |
 | --- | --- | --- |
@@ -167,7 +169,7 @@ button were exercised. Local Service `abf79a8b` persisted the exact reviewed tit
 description, placeholder templates and four column names, with no unpublish marker.
 This republished an already-imported recipe; it is not new-from-scratch authoring.
 
-The Mac session is currently attached to the local Service on port8794. All three
+That earlier Mac session was attached to the local Service on port8794. All three
 private online principals receive404 for this local publication ID. This is an
 environment boundary, not evidence of failed cross-account authorization: the
 Mac local store and the Windows gateway store have distinct backing state. Before
@@ -181,8 +183,8 @@ The native coach incorrectly said it could not confirm the card approval after
 the host had completed it. The follow-up source change returns a minimal
 `approvalConfirmed` receipt only after approved publication succeeds and explains
 its scope in the shared MCP tool description. Approval/cancellation/store-failure
-and Stop-race fixtures pass; corrected native narration is NOT_RUN. The running
-Mac and pinned Windows package have not been restaged for this receipt change.
+and Stop-race fixtures pass. The later online3f1a3f20 observation below confirms
+corrected native narration; the historical local observation did not.
 
 Evidence: `/tmp/hps-email-mvp/native-store-20261015/receipt.json`, with sanitized
 `publish-card.txt` and `publish-result.txt`. No mail, Google reconnect or model
@@ -190,7 +192,7 @@ gateway allocation was used; the coach used the existing local CLI subscription.
 This supports the local portion of SS-02/03 only. All complete SS gates above
 remain NOT_RUN, including same-Service Mac-to-Windows reuse.
 
-## Execution sequence and decisions
+## Online Mac authoring and publication — 2026-10-15
 
 Online Mac follow-up at `06c1d92b` used the normal participation-code UI with the
 existing `peer` principal and a separate online workspace. The app now targets
@@ -203,16 +205,48 @@ passed; no production package was changed.
 
 The first actual online model turn failed `skill_save`, then incorrectly attempted
 publication and Google setup. The private Google setup card was cancelled and the
-turn stopped. No new publication exists in the online catalogue, and no Google
-connection or email was performed. Its original malformed input was not retained,
+turn stopped. That attempt created no online publication, Google connection or email. Its original malformed input was not retained,
 so the precise validation cause is unconfirmed. Source inspection did confirm
 that only the local-CLI prompt described the exact recipe shape; the shared SDK
 tool description omitted it and returned an undifferentiated error. The follow-up
 adds the recipe contract to the tool and fixed save-specific recovery guidance.
-Automation89/89 and types/build pass; a native retry of the new contract is pending.
+Automation89/89 and types/build pass; the following native retry confirms saving
+and publication with the declared contract.
 The attempt settledUSD0.031423, held0, leavingUSD0.301911 of this subject's existing
 USD0.333334 allocation. Evidence: `native-store-20261015/online-attempt.json` under
 the same protected temporary evidence root. No cap was increased.
+
+The retained single Mac Dev app was restaged to `3f1a3f20` and a fresh normal
+conversation created “온라인 스토어 재사용 시험” from scratch. The host saved the
+exact bounded recipe, displayed its content in the private publication card,
+and published only after the checkbox/share-button action. Native tool success
+was followed by “공유 완료되었습니다”; the earlier missing-approval narration did
+not recur. No Google setup was attempted in this successful flow.
+
+A read-only authenticated readback then used all three distinct Studio principals:
+each listed and fetched the same version1 and exact reviewed recipe; only `peer`
+was the owner. Canonical recipe SHA256:
+`108ccb87a3065b9030a98d55b1c1f63714cad8e3a86ce78ddfdd2d44562d0bc9`.
+Publication remains available for Windows acceptance. Recipients here used API
+reads, not native installation; Google aliases are not yet mapped to these grants.
+This passes the bounded email author's native save/review/publication steps only.
+It does not pass SS-01–12 as a whole, recipient execution or the expanded GAS flow.
+
+Current subject funding after both online turns:USD0.060136 spent,0 held,
+USD0.273198 remaining ofUSD0.333334. The existing pool andUSD3 ceiling are unchanged.
+The new activity has no Google connection; memory-only Dev credentials from earlier
+runs are not restart-persistence evidence. No new email was sent.
+
+Evidence under `/tmp/hps-email-mvp/native-store-20261015/`:
+`online-publish-card.txt`, `online-success.txt`, `online-publication.json` and
+`online-reviewed-recipe.json`. Earlier `receipt.json` is local-only evidence and
+`online-attempt.json` records the failed first SDK attempt; neither is overwritten.
+Runtime3f1a3f20 now has all18 CI checks passing after one classroom-browser
+failed-job rerun. Inspection found the retention test could confuse a command
+from the preceding scenario with its new click; the follow-up test helper waits
+for an ID absent before that click. This changes no packaged application code.
+
+## Execution sequence and decisions
 
 1. Finish feature implementation and the current local gate. Inventory current
    store/runtime gaps; retain existing approvals and sent/unknown records.
@@ -226,7 +260,7 @@ the same protected temporary evidence root. No cap was increased.
    not mark the entire store complete from email-only evidence.
 
 Public versus invited sharing is the only immediate product question. Provider
-selection is an engineering recommendation pending research; no new paid service,
+selection follows the completed research recommendation; no new paid service,
 public bucket, permission grant, production rollout or sender payout is authorized
 by this design update. Ask about Windows access at execution time, not now.
 
@@ -257,8 +291,8 @@ The actual inspector controller plus real store client preserves old work/settin
 on rejection; valid import clears the source binding and neither path calls Google
 or sends mail. Automation suite88/88, extension typecheck and host build passed.
 This is source/API evidence. Runtimef90b65e3 passed all18 remote checks; one
-Windows PowerShell startup timeout passed the failed-job rerun. The running Mac
-app remains0b57074d to preserve its current connection. The private online Windows
+Windows PowerShell startup timeout passed the failed-job rerun. At that observation the Mac
+app was0b57074d. The private online Windows
 candidate now includes extensionf90b65e3 on shell720be661 with SDK0.3.299.
 
 Both complete online app/SDK downloads match pinned sizes and SHA256; anonymous
@@ -290,10 +324,10 @@ budget mutation or model/mail call. Existing peer access choices were unchanged.
 Actual gateway/API/download tests and four shared-helper controls passed; CI now
 includes the shared helper. Evidence: `/tmp/hps-email-mvp/store-three-account-gateway/`
 contains `deployment-receipt.json`, `store-api-receipt.json`, `access-receipt.json`
-and local gateway checks. Current gateway version is
+and local gateway checks. The gateway version at that observation was
 `b61bcf9c-22fc-4d2f-a2af-da5d4dd43a2c`. These preparation results do not complete
-SS-01–12: native Google mapping, Mac author UI, Windows execution and the expanded
-workflow still require their own observations.
+SS-01–12: native Google mapping, Windows execution and the expanded workflow
+remain open. The subsequent Mac author observation is recorded above.
 
 ### Three-participant test funding
 
@@ -331,3 +365,30 @@ commits have their own CI state.
 After allocation, the same23 live profile/download/denial controls passed again.
 Installer bytes and candidate revision remained unchanged; no Google or model
 execution was used for that confirmation.
+
+### Windows candidate for the native store fixes
+
+A local candidate now pins shell720be661 / extension3f1a3f20 / SDK0.3.299,
+including explicit publication acknowledgment and SDK recipe/save recovery.
+PowerShell fixtures inspect both real archives, verify seven extension file
+hashes and packaged resources, preserve profile backups and accept upgrades only
+from exact receipts for682dfd37,9d535c87,0b57074d andf90b65e3. Fourteen download
+controls and the current three-participant gateway controls pass locally.
+Candidate artifacts: `/tmp/hps-email-mvp/windows-current-3f1a3f20/`.
+Private gateway29267565-35ea-4eed-9387-e4a05493c00b now serves3f1a3f20.
+The three-principal access helper and pinned remote Service binding are unchanged.
+Sixteen immutable download chunks and the manifest passed upload/readback with
+a7-day TTL. All23 current three-principal manifest/profile/download metadata,
+outsider/revoked/anonymous denial and exact installer-script checks pass. Complete
+end-user archive download/hash readback is incomplete. HTTP/1.1 was stopped
+after more than360s; a separate bounded HTTP/2 attempt received41432480 of
+196646585 bytes in180.03s and exited28 (timeout). Neither proves the full archive
+hash. All source archive hashes and16 upload-chunk readbacks passed; those do
+not substitute for this end-user download gate. The transport cause is unconfirmed.
+Compare the current temporary KV installer transport with private R2 delivery
+before treating this as20-seat classroom readiness; do not assume a protocol
+change alone fixes it. No R2 migration or new subscription was performed.
+This preparation does not establish native Windows installation or credential reuse.
+
+The retention-test helper correction passed all18 local AT-41 browser result cases.
+The installer/test follow-up commit is `d1a8d6a5`; it does not change runtime3f1a3f20.

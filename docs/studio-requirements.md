@@ -894,8 +894,10 @@ publication receipt. The receipt excludes the card contents and grants no future
 publication or sending authority. This supports human judgment through an accurate
 acknowledgment of the learner's completed decision; it does not repeat the approval
 question or describe its result as unknown. Host regression covers approve, cancel,
-duplicate answer, store failure and Stop races; native narration remains a separate
-acceptance observation.
+duplicate answer, store failure and Stop races. Native Mac `3f1a3f20` subsequently
+confirmed the reviewed online publication and correct coach acknowledgment;
+three-principal API readback matched the exact recipe. Recipient installation and
+Windows execution remain separate acceptance in [the store contract](plan/skill-store-cross-platform.md).
 
 EA-01/03 expose the exact bounded recipe contract in `skill_save` itself, so the
 Service-funded SDK path does not depend on a developer-only local prompt. Failed
