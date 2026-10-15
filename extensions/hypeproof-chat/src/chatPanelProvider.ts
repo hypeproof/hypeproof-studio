@@ -143,9 +143,12 @@ import {
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
-// A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels.
-import { resolveOrchestrator } from "./orchestratorSurfaces";
+// A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
+// the seat's session and the host arguments runSdkCoach takes.
+import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
 import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
+import { OrchestratorSession } from "./consultTool";
+import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
@@ -294,6 +297,66 @@ export function consultApprovalCopy(
   };
 }
 
+function withoutIcon(label: string, icon: string): string {
+  return icon && label.startsWith(icon) ? label.slice(icon.length).trimStart() : label;
+}
+
+/**
+ * The timeline line an orchestrator event becomes (spec §5.2), or null for one the learner is
+ * not shown. Quiet by default: one line per consult (running → done | error, in place), one
+ * line per page per turn for the site check (the latest verdict, in place), one per archive,
+ * and the busy notice. The diff summary goes to the coach only (A4 D13). A4 builds each label
+ * with its icon in front; the line draws the icon itself, so it is taken off the label.
+ */
+export function orchestratorToolEntry(event: OrchestratorEvent, turnId: string): ToolEntry | null {
+  const at = typeof event.at === "number" && Number.isFinite(event.at) ? { at: event.at } : {};
+  if (event.kind === "notice") return { id: event.id, icon: "⏳", label: event.text, state: "done", ...at };
+  if (event.kind === "consult") {
+    return { id: event.id, icon: event.icon, label: withoutIcon(event.label, event.icon), state: event.state, ...at };
+  }
+  if (event.name === "diff") return null;
+  if (event.name === "site_check") {
+    // 통과 is the only ✓: a failure or an unmeasured page reads ⚠️ (no claim it did not observe).
+    return {
+      id: `check:site_check:${turnId}:${event.path}`,
+      icon: event.icon,
+      label: withoutIcon(event.label, event.icon),
+      state: event.verdict === "pass" ? "done" : "error",
+      ...at,
+    };
+  }
+  return { id: event.id, icon: event.icon, label: withoutIcon(event.label, event.icon), state: "done", ...at };
+}
+
+/** The learner's own goal for this lesson revision, as a consult may attach it (`learner_goal`). */
+export function learnerGoalText(view: StudentGoalView | null | undefined): string | null {
+  const goal = view?.goal?.trim();
+  if (!goal) return null;
+  const criteria = (view?.criteria ?? []).map((c) => c.trim()).filter(Boolean);
+  return criteria.length ? `${goal} (완료 기준: ${criteria.join(" · ")})` : goal;
+}
+
+/**
+ * What runSdkCoach takes as `orchestrator` (A4 OrchestratorHostArgs): this seat's session, the
+ * timeline, and the learner's goal. Passing it is the panel saying it runs the orchestrator;
+ * runSdkCoach still turns it on only for a seat the served roster is on for.
+ */
+export function orchestratorHostArgs(deps: {
+  session: OrchestratorSession;
+  turnId: string;
+  post: (entry: ToolEntry) => void;
+  learnerGoal: () => string | null;
+}): OrchestratorHostArgs {
+  return {
+    session: deps.session,
+    onEvent: (event) => {
+      const entry = orchestratorToolEntry(event, deps.turnId);
+      if (entry) deps.post(entry);
+    },
+    learnerGoal: deps.learnerGoal,
+  };
+}
+
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
   /** #897 H-13 — has the model-substitution notice already been attached to this turn? One turn per seat (REQ-M37 ③). */
@@ -301,6 +364,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortScope?: string;
   private effortResult?: import('./protocol').ChatConfig['effortResult'];
   private effortTurn?: { id: string; url: string; token: string; scope: string };
+  /**
+   * A5 — the orchestrator session of the seat this window runs (spec §3.2: uses per session,
+   * the last check of each page, failure events). Another seat starts a new one, and so does
+   * "대화 지우기". The Service keeps its own per-session cap either way.
+   */
+  private orchestratorState?: { seatKey: string; session: OrchestratorSession };
+  private orchestratorSessionFor(seatKey: string): OrchestratorSession {
+    if (this.orchestratorState?.seatKey !== seatKey) this.orchestratorState = { seatKey, session: new OrchestratorSession() };
+    return this.orchestratorState.session;
+  }
 
   private async refreshEffortResult(): Promise<void> {
     const turn = this.effortTurn;
@@ -2270,6 +2343,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       );
       if (choice !== "대화 지우기" || this.hasActiveStream() || key !== this.historyKey()) return;
       await this.context.workspaceState.update(key, []);
+      // A5 — a new conversation starts the orchestrator session over (A4 §9).
+      this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
       // A cleared chat starts a new conversation, not a new trial allowance.
       void this.post({ type: "aiDisclosure", text: this.aiDisclosure.noticeForHistoryClear() });
@@ -4458,7 +4533,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // has to be able to resend it to the worker's trace. The worker validates turn_id
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
-    if (token && profile && selection?.choices.some(c=>c.effort)) {
+    // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
+    // policy: the details list is where each request's agent and model are shown.
+    if (token && profile && (selection?.choices.some(c=>c.effort) || orchestratorRosterFor(profile))) {
       this.effortTurn = {id:streamId,url:proxyUrl,token,scope:modelSelectionScope(profile)};
       this.effortResult = {state:'loading',requests:[]};
       void this.postConfig();
@@ -5071,6 +5148,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // MCP tools. Always passed; runSdkCoach registers the server only
             // when the profile grants sdk_tools.browser (minors never do).
             browserHost: this.buildBrowserMcpHost(),
+            // A5 (ADR 0011) — the front-line orchestrator host. Always passed, like browserHost:
+            // runSdkCoach turns the orchestrator on only for a seat the served roster is on for (an
+            // adult with a well-formed roster, A2's binding); otherwise the turn is today's, byte for
+            // byte (test/orchestrator-switch.smoke.mjs). Its consult and check lines join this turn's
+            // timeline; the learner's goal is read when a consult declares learner_goal.
+            orchestrator: orchestratorHostArgs({
+              session: this.orchestratorSessionFor(coachSeatKeyFor({ token, profile })),
+              turnId: streamId,
+              post: (entry) => this.postToolLog(streamId, entry),
+              learnerGoal: () =>
+                learnerGoalText(goalViewOf(profile.lesson, activityConnections(this.context)?.current?.id ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY))),
+            }),
           });
           // #751 U4 — the SDK closed the stream normally but its result said the turn failed (the learner already read the
           // notice). Not thrown: the notice and the words stay in the conversation exactly as shown, nothing is re-sent. The

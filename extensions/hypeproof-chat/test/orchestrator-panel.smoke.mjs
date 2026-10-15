@@ -107,18 +107,25 @@ const fakeVscode = {
   env: { appName: "HypeProof Studio", openExternal: async () => true },
 };
 
+/** What `fetch` is inside the bundle (the orchestrator's default agent-run transport). */
+let bundleFetch = globalThis.fetch;
 let providerApi = null;
+/** chatPanelProvider's exports plus runSdkCoach, in ONE bundle: one copy of every module. */
 async function provider() {
   if (!providerApi) {
     const bundle = await build({
-      entryPoints: [new URL("../src/chatPanelProvider.ts", import.meta.url).pathname],
+      stdin: {
+        contents: `export * from "./src/chatPanelProvider.ts";\nexport { runSdkCoach } from "./src/sdkCoach.ts";`,
+        resolveDir: new URL("../", import.meta.url).pathname, loader: "ts", sourcefile: "orchestrator-panel-host.ts",
+      },
       bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "silent",
     });
     const module = { exports: {} };
     vm.runInNewContext(bundle.outputFiles[0].text, {
       module, exports: module.exports, require: (id) => (id === "vscode" ? fakeVscode : nodeRequire(id)),
       console, Buffer, process, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, queueMicrotask,
-      AbortSignal, AbortController, URL, URLSearchParams, TextEncoder, TextDecoder, fetch, Response, Headers,
+      AbortSignal, AbortController, URL, URLSearchParams, TextEncoder, TextDecoder, Response, Headers,
+      fetch: (...args) => bundleFetch(...args),
       structuredClone, crypto: globalThis.crypto,
     });
     providerApi = module.exports;
@@ -730,6 +737,215 @@ if (!status.available) {
   assert.ok(opened[0].tab.cdp.includes("Runtime.evaluate(measure)"));
   fakeVscode.window.browserTabs = [];
   ok("host: the BrowserMcpHost's viewportPage opens one background tab without focus at the wrapper, hides it from the coach's tab logic while it runs, measures 390 and 1280 through CdpSession, then detaches and closes it; the preview tab gets no CDP message");
+}
+
+// ── 6. Timeline lines, and the host passed into runSdkCoach (spec §5.2, §14) ──
+
+{
+  const P = await provider();
+  const E = (event) => P.orchestratorToolEntry(event, "turn-1");
+  const plain = (v) => (v === null ? null : { ...v });
+  const consult = (state, label, extra = {}) => ({ kind: "consult", id: "consult:c1", agent: "design-reviewer", title: "검토 도우미", model: "Claude Haiku 5.5", state, summary: "", icon: "🔎", label, at: 1000, ...extra });
+  const check = (name, verdict, label, icon, path = "index.html") => ({ kind: "check", id: `check:${name}:1`, name, verdict, summary: label, path, state: "done", icon, label, at: 2000 });
+
+  // One line per consult, in place; the icon is drawn by the line, not repeated in the label.
+  assert.deepEqual(plain(E(consult("running", "🔎 검토 도우미 · Claude Haiku 5.5 — 묻는 중"))), { id: "consult:c1", icon: "🔎", label: "검토 도우미 · Claude Haiku 5.5 — 묻는 중", state: "running", at: 1000 });
+  assert.deepEqual(plain(E(consult("done", "🔎 검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개"))), { id: "consult:c1", icon: "🔎", label: "검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개", state: "done", at: 1000 });
+  assert.equal(E(consult("error", "🔎 검토 도우미 · Claude Haiku 5.5 — 횟수를 다 씀")).state, "error");
+  // The site check: one line per page per turn, the latest verdict in place; only 통과 is ✓.
+  const pass = E(check("site_check", "pass", "📏 390·1280px 확인 — 통과", "📏"));
+  const fail = E({ ...check("site_check", "fail", "📏 390px에서 2곳 넘침", "📏"), id: "check:site_check:2" });
+  const unverified = E(check("site_check", "unverified", "📏 미확인(미리보기 꺼짐)", "📏"));
+  assert.deepEqual([pass.id, fail.id, unverified.id], ["check:site_check:turn-1:index.html", "check:site_check:turn-1:index.html", "check:site_check:turn-1:index.html"]);
+  assert.deepEqual([pass.label, fail.label, unverified.label], ["390·1280px 확인 — 통과", "390px에서 2곳 넘침", "미확인(미리보기 꺼짐)"]);
+  assert.deepEqual([pass.state, fail.state, unverified.state], ["done", "error", "error"]);
+  assert.notEqual(E(check("site_check", "pass", "📏 390·1280px 확인 — 통과", "📏", "about.html")).id, pass.id, "another page, another line");
+  assert.notEqual(P.orchestratorToolEntry(check("site_check", "pass", "📏 390·1280px 확인 — 통과", "📏"), "turn-2").id, pass.id, "another turn, another line");
+  // The archive: its own line. The diff: none (the coach reads it in the save's result).
+  assert.deepEqual(plain(E(check("archive", "archived", "🗂 이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html", "🗂"))), { id: "check:archive:1", icon: "🗂", label: "이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html", state: "done", at: 2000 });
+  assert.equal(E(check("diff", "rewrite", "✏️ 저장 비교 — index.html: 기존 내용의 78% 바뀜", "✏️")), null);
+  // The busy notice.
+  assert.deepEqual(plain(E({ kind: "notice", id: "notice:1", text: "지금 요청이 많아 잠시 기다리는 중이에요. 자동으로 다시 시도합니다.", at: 3000 })), { id: "notice:1", icon: "⏳", label: "지금 요청이 많아 잠시 기다리는 중이에요. 자동으로 다시 시도합니다.", state: "done", at: 3000 });
+  // A label without its icon in front is left alone (control for the icon strip).
+  assert.equal(E(consult("done", "검토 도우미 — 고칠 곳 없음")).label, "검토 도우미 — 고칠 곳 없음");
+
+  // The learner's goal, as a consult attaches it.
+  assert.equal(P.learnerGoalText(null), null);
+  assert.equal(P.learnerGoalText({ goal: "  ", criteria: ["x"] }), null);
+  assert.equal(P.learnerGoalText({ goal: "영업시간을 혼자 고친다", criteria: [] }), "영업시간을 혼자 고친다");
+  assert.equal(P.learnerGoalText({ goal: "영업시간을 혼자 고친다", criteria: ["휴대폰에서 보인다", " ", "정보블록 안만 바뀐다"] }), "영업시간을 혼자 고친다 (완료 기준: 휴대폰에서 보인다 · 정보블록 안만 바뀐다)");
+
+  // One session per seat; another seat starts a new one; 대화 지우기 starts over.
+  const seatHost = {};
+  const s1 = P.ChatPanelProvider.prototype.orchestratorSessionFor.call(seatHost, "seat-a");
+  assert.equal(P.ChatPanelProvider.prototype.orchestratorSessionFor.call(seatHost, "seat-a"), s1);
+  const s2 = P.ChatPanelProvider.prototype.orchestratorSessionFor.call(seatHost, "seat-b");
+  assert.notEqual(s2, s1);
+  const clearHost = {
+    ...seatHost, historyKey: () => "h", hasActiveStream: () => false,
+    context: { workspaceState: { update: async () => {} } }, post: async () => {}, aiDisclosure: { noticeForHistoryClear: () => "AI" },
+  };
+  fakeVscode.window.showWarningMessage = async () => undefined;
+  await P.ChatPanelProvider.prototype.clearHistory.call(clearHost);
+  assert.ok(clearHost.orchestratorState, "cancelled: the session stays");
+  fakeVscode.window.showWarningMessage = async () => "대화 지우기";
+  await P.ChatPanelProvider.prototype.clearHistory.call(clearHost);
+  assert.equal(clearHost.orchestratorState, undefined, "cleared: the next turn starts a new session");
+  fakeVscode.window.showWarningMessage = async () => undefined;
+  ok("timeline: one consult line in place (icon not repeated), one site-check line per page per turn with only 통과 as ✓, one archive line, the busy notice, no diff line; the learner's goal text; one session per seat, reset by 대화 지우기");
+
+  // ── The real runSdkCoach with the panel's host arguments ──
+  const { sdkToolToActionRequest } = await import("../src/sdkCoachHelpers.ts");
+  const os = await import("node:os");
+  const fsm = await import("node:fs");
+  const pathm = await import("node:path");
+  const scratch = fsm.realpathSync(fsm.mkdtempSync(pathm.join(os.tmpdir(), "hps-a5-panel-")));
+  const WS = pathm.join(scratch, "ws");
+  fsm.mkdirSync(pathm.join(scratch, "home"), { recursive: true });
+  fsm.mkdirSync(WS, { recursive: true });
+  fsm.writeFileSync(pathm.join(WS, "index.html"), "<!doctype html><title>빵집</title><section id=\"hours\"><h2>영업시간</h2></section>\n");
+  const savedEnv = { ...process.env };
+  process.env.HOME = pathm.join(scratch, "home");
+  for (const k of ["APPDATA", "USERPROFILE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_CUSTOM_HEADERS", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_GATEWAY_HINT_HEADERS", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"]) delete process.env[k];
+  const fakeZod = () => {
+    const mk = (d) => {
+      const s = { __zod: d };
+      for (const m of ["min", "max", "optional", "describe"]) s[m] = () => mk(d);
+      return s;
+    };
+    return { string: () => mk("string"), boolean: () => mk("boolean"), number: () => mk("number"), enum: () => mk("enum"), object: () => mk("object"), array: () => mk("array") };
+  };
+  const REVIEW = { verdict: "issues", findings: [{ rule: "contrast", where: "#hero .cta", severity: "must", fix: "글자색을 더 진하게" }, { rule: "alt", where: "img.logo", severity: "should", fix: "alt 추가" }], unverified: [] };
+  const agentRuns = [];
+  bundleFetch = async (url, init) => {
+    agentRuns.push({ url: String(url), headers: { ...init.headers }, body: String(init.body) });
+    return new Response(JSON.stringify({ ok: true, agent: "design-reviewer", version: "1.0.0", model: { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" }, output: REVIEW, request_id: "req_a5" }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  // The approval path the panel uses: canUseTool → requestApproval → resolveActionApproval.
+  const approvalHost = { coachDisplayName: () => "코치", cachedProfile: null };
+  const modals = [];
+  fakeVscode.window.showWarningMessage = async (m) => {
+    modals.push(m);
+    return undefined;
+  };
+  const turn = async (profile) => {
+    approvalHost.cachedProfile = profile;
+    const posted = [];
+    const seen = {};
+    const sdk = {
+      createSdkMcpServer: (o) => ({ __server: true, name: o.name, tools: o.tools ?? [] }),
+      tool: (name, description, inputSchema, handler) => ({ name, description, inputSchema, handler }),
+      query({ options }) {
+        seen.options = options;
+        return (async function* () {
+          const consultTool = options.mcpServers?.hypeproof?.tools?.find((t) => t.name === "consult");
+          // (spread into this realm: the bundle made the array, with its own Array.prototype)
+          seen.toolNames = [...(options.mcpServers?.hypeproof?.tools ?? [])].map((t) => t.name);
+          if (consultTool) {
+            const input = { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" };
+            seen.decision = await options.canUseTool("mcp__hypeproof__consult", { ...input }, { toolUseID: "toolu_c1", signal: new AbortController().signal });
+            seen.result = await consultTool.handler(input, {});
+          }
+          yield { type: "system", subtype: "init", timestamp: 1 };
+          yield { type: "system", subtype: "api_retry", error_status: 429, attempt: 1, max_retries: 10, retry_delay_ms: 1, error: "rate_limit", timestamp: 2 };
+          yield { type: "assistant", message: { id: "m1", model: "claude-sonnet-5-5", content: [{ type: "text", text: "검토 도우미가 대비 부족을 짚었어요." }], usage: { input_tokens: 1, output_tokens: 1 } }, timestamp: 3 };
+          yield { type: "result", subtype: "success", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, timestamp: 4 };
+        })();
+      },
+    };
+    const token = "hps-token-a5";
+    // runSdkCoach logs where the binary came from, and A4 D14's line for a refused roster.
+    const { info, warn } = console;
+    const logged = [];
+    console.info = (...a) => logged.push(a.join(" "));
+    console.warn = (...a) => logged.push(a.join(" "));
+    seen.logged = logged;
+    const end = await P.runSdkCoach({
+      gatewayUrl: "https://api.hypeproof-ai.xyz/v1", token, model: "claude-sonnet-5-5", turnId: "11111111-2222-4333-8444-555555555555",
+      profile, systemPrompt: "", history: [], userText: "홈페이지 첫 화면을 검토해 줘", signal: new AbortController().signal, cwd: WS,
+      stallTimeoutMs: 0, binaryResolution: { available: true, source: "setting", path: "/opt/claude", reasons: [] }, sdk, zod: fakeZod(),
+      onDelta: () => {}, onCitations: () => {}, onAssetScore: () => {},
+      // As chatPanelProvider's runSdkCoach call does it (sdkToolToActionRequest is pure).
+      requestApproval: async (action) => {
+        let prompted = false;
+        const approved = await P.ChatPanelProvider.prototype.resolveActionApproval.call(approvalHost, { requestId: "r", ...sdkToolToActionRequest(action) }, () => { prompted = true; });
+        return { approved, actor: prompted ? "user" : "policy" };
+      },
+      orchestrator: P.orchestratorHostArgs({
+        session: P.ChatPanelProvider.prototype.orchestratorSessionFor.call(seatHost, `seat:${profile.profile_id}`),
+        turnId: "11111111-2222-4333-8444-555555555555",
+        post: (entry) => posted.push({ ...entry }),
+        learnerGoal: () => P.learnerGoalText({ goal: "영업시간을 혼자 고친다", criteria: [] }),
+      }),
+    }).finally(() => {
+      console.info = info;
+      console.warn = warn;
+    });
+    const headers = String(seen.options.env.ANTHROPIC_CUSTOM_HEADERS ?? "").split("\n").filter(Boolean);
+    return { end, posted, seen, headers };
+  };
+  try {
+    const on = await turn(SEATS.adultRoster);
+    assert.equal(on.end.failed, false);
+    // Every CLI request of the turn carries the coach's label and the roster (A2 env, spec §4.1).
+    assert.ok(on.headers.includes("x-hps-agent: coach@1.0.0"), on.headers.join(" | "));
+    assert.ok(on.headers.includes("x-hps-roster: homepage@1.0.0"));
+    assert.ok(on.headers.includes("x-hps-orchestrator: hps-agent-roster/1"));
+    // The consult: allowed by the panel's own approval path without a modal, then one agent run.
+    assert.deepEqual(on.seen.toolNames.filter((n) => n === "consult"), ["consult"]);
+    assert.equal(on.seen.decision.behavior, "allow");
+    assert.equal(modals.length, 0, "no modal for a consult by default");
+    assert.equal(agentRuns.length, 1);
+    assert.equal(agentRuns[0].url, "https://api.hypeproof-ai.xyz/v1/agents/design-reviewer/run", "the helper request names its agent");
+    assert.match(agentRuns[0].headers["x-hps-agent-call"], /^[0-9a-f-]{36}$/);
+    assert.equal(JSON.parse(agentRuns[0].body).context.learner_goal, "영업시간을 혼자 고친다", "the panel's goal reaches the declared context");
+    assert.equal(JSON.parse(on.seen.result.content[0].text).ok, true);
+    // The timeline: the consult line, running then done in place, and the busy notice.
+    const lines = on.posted.map((e) => `${e.icon} ${e.label} [${e.state}]`);
+    assert.deepEqual(lines, [
+      "🔎 검토 도우미 · Claude Haiku 5.5 — 묻는 중 [running]",
+      "🔎 검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개 [done]",
+      "⏳ 지금 요청이 많아 잠시 기다리는 중이에요. 자동으로 다시 시도합니다. [done]",
+    ]);
+    assert.equal(on.posted[0].id, on.posted[1].id);
+
+    // Negative controls: the same host arguments on an old profile, a minor or a disabled roster
+    // change nothing: no label, no consult tool, no request, no line.
+    for (const name of ["adultOld", "adultDisabled", "kidsRoster", "minorFlagRoster", "unknownTierRoster"]) {
+      const before = agentRuns.length;
+      const off = await turn(SEATS[name]);
+      assert.equal(off.headers.some((h) => /^x-hps-(agent|roster|orchestrator):/.test(h)), false, `${name}: no orchestrator header`);
+      assert.equal((off.seen.toolNames ?? []).includes("consult"), false, `${name}: no consult tool`);
+      assert.equal(agentRuns.length, before, `${name}: no agent run`);
+      assert.deepEqual(off.posted, [], `${name}: no orchestrator line`);
+      // A roster served to a minor is a Service bug, and it leaves a trace (A4 D14); none for an old profile.
+      const traced = off.seen.logged.some((l) => l.includes("served orchestrator roster not used"));
+      assert.equal(traced, ["kidsRoster", "minorFlagRoster", "unknownTierRoster"].includes(name), `${name}: trace`);
+    }
+  } finally {
+    bundleFetch = globalThis.fetch;
+    fakeVscode.window.showWarningMessage = async () => undefined;
+    for (const k of Object.keys(process.env)) if (!(k in savedEnv)) delete process.env[k];
+    Object.assign(process.env, savedEnv);
+    fsm.rmSync(scratch, { recursive: true, force: true });
+  }
+  ok("runSdkCoach with the panel's host arguments: every CLI request labelled coach@1.0.0 with the roster, the consult allowed by the panel's approval path without a modal and sent as one design-reviewer run with a call id and the learner's goal, the timeline's consult line in place plus the busy notice; the same arguments on an old profile, a disabled roster, kids, a minor flag or an unknown tier add nothing");
+
+  // The turn itself passes them. handleSend cannot run here, so its one runSdkCoach call is read
+  // as source: the switch needs the host's argument (A4 D1), and without it nothing above runs.
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  const call = (s) => {
+    const at = s.indexOf("const sdkEnd = await runSdkCoach({");
+    return at < 0 ? "" : s.slice(at, s.indexOf("\n          });", at));
+  };
+  const WIRED = /\n\s*orchestrator: orchestratorHostArgs\(\{\s*session: this\.orchestratorSessionFor\(coachSeatKeyFor\(\{ token, profile \}\)\),\s*turnId: streamId,\s*post: \(entry\) => this\.postToolLog\(streamId, entry\),/;
+  assert.match(call(src), WIRED, "the student SDK turn passes the orchestrator host");
+  assert.equal((src.match(/await runSdkCoach\(\{/g) ?? []).length, 1, "one SDK turn call site");
+  assert.doesNotMatch(call(src.replace(/\n\s*orchestrator: orchestratorHostArgs\(/, "\n            orchestratorOff: orchestratorHostArgs(")), WIRED, "planted: a turn without the host is caught");
+  // An orchestrator seat reads the per-request record whatever its effort policy (the details list).
+  assert.match(src, /if \(token && profile && \(selection\?\.choices\.some\(c=>c\.effort\) \|\| orchestratorRosterFor\(profile\)\)\) \{\s*this\.effortTurn = /);
+  ok("the student SDK turn's runSdkCoach call passes orchestratorHostArgs with the seat's session, its turn and its timeline (control: a planted removal is caught); orchestrator seats fetch the per-request record");
 }
 
 console.log(`orchestrator-panel: ${passed} checks passed`);
