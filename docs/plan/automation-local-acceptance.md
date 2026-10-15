@@ -275,3 +275,37 @@ The correction now invalidates caller-bound progress through the actual connect
 tool, retaining the saved recipe. Verified same-connection reuse retains progress;
 a reconnect reached through reuse also clears earlier execution. Automation88/88,
 typecheck and extension build pass; native account-change graph retest is pending.
+
+
+At `624b214f`, the isolated bot copy completed a fresh own-Sheet preview. A
+subsequent explicit Google change reopened caller-bound stages (2/6 while waiting,
+3/6 after successful reconnection), retaining the goal and saved recipe. A new
+Sheet selection/preview restored completion. Its installed extension SHA256 was
+`e874019ee80bd093139031e342921f870e308b431b125759ee9e5c41885a0530`.
+
+The sponsor explicitly approved one exact bot self-mail after reviewing its
+recipient/content. The native final approval card matched that one recipient and
+unchanged subject/body. One click sent one message through the shared runner;
+the app reported sent1/unknown0 and its durable local ledger contains exactly
+one `sent` record. Root opened the matching message in the bot Gmail Inbox at
+2026-10-15 15:04 KST and checked its subject/body. No repeat send was attempted.
+Raw account/address, IDs and screenshots stay in protected local storage; a
+masked Inbox proof was shown to the sponsor. This supersedes the earlier open
+shared-runner delivery gate, without asserting Windows or commercial readiness.
+
+Main `21bd15ba` was subsequently integrated at `3bd59281` and classroom outbox
+drain fix `c18ef5db` at `65c5f1c9`. Email/browser/orchestrator grants remain separate;
+classroom disconnect both drains pending storage and resets automation progress.
+Root passed automation88/88, orchestrator-switch6/6 and classroom review47/47;
+typecheck and extension build passed. Final integrated native smoke and exact-head
+CI are tracked separately from the `624b214f` live-send receipt.
+
+
+At integrated source `65c5f1c9`, the rebuilt isolated native app launched, restored
+its conversation, executed real `email_skill_list` and `email_workflow_plan`
+through the coach, rendered the graph and restored the composer. No reconnect,
+Sheet execution or additional send was requested. Installed extension SHA256:
+`920523cef141537a2a3119ddc2129d9ff370d47f2ece8174820173c00e48fa27`.
+The durable one-message `sent` ledger survived this update. This focused
+integration smoke covers tool registration/graph after the orchestrator merge;
+the actual Google execution/delivery evidence remains bound to `624b214f`.

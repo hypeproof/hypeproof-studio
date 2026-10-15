@@ -34,15 +34,15 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 | Area | State as inspected | Limit |
 | --- | --- | --- |
-| Studio source | Main `48cf6d86` integrated at `415e5672`; native-discovered clarification/read-error fixes through `351b27e1` | PR1605 remains draft; CI and live acceptance must bind the final pushed revision |
-| Main integration | Both integration rounds resolved; main publishing/classroom/photos and automation retained; SDK0.3.299 pinned | Full extension checks ran in segments; Studio CI18/18 passed at `5838f1bc`; later changes require their own CI |
+| Studio source | Main `c18ef5db` integrated at `65c5f1c9`; native-discovered clarification/read-error/account-change fixes through `624b214f` | PR1605 remains draft; CI and live acceptance must bind the final pushed revision |
+| Main integration | Main publishing/classroom/photos/orchestrator and automation retained; outbox drain preserved; SDK0.3.299 pinned | Focused automation88/88, orchestrator6/6, classroom47/47, types/build and integrated native tool/graph smoke pass; final exact-head CI remains authoritative |
 | Service | Main integrated at `79f37fdb`; shared workshop capability enabled at `21033b32` | Source and local tests, not production deployment |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
-| Local product | Bot native preview/publish at `5838f1bc`; peer import/TJ own preview and clarification cancellation at `9e43a9c8`; latest `351b27e1` reports cross-account read denial and recovers own preview6/6; automation88/88 | Account-change graph correction awaits native validation; local Claude CLI does not establish bundled SDK or Windows parity |
+| Local product | Bot native preview/publish at `5838f1bc`; peer import/TJ own preview and clarification cancellation at `9e43a9c8`; latest `351b27e1` reports cross-account read denial and recovers own preview6/6; automation88/88 | Account-change graph and fresh preview recovery passed at `624b214f`; integrated `65c5f1c9` native tool/graph smoke also passed; local Claude CLI does not establish bundled SDK or Windows parity |
 | Windows | Historical shell `682dfd37`, source `ab0a13a7` authenticated test update | Latest source, fresh install and current SDK NOT_RUN; every class may use different Windows PCs |
-| Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported inert recipe and used own Sheet; TJ cannot read bot private Sheet | Native recovery passed at `351b27e1`; final send ledger acceptance remains open; old probe tokens are not current product evidence |
+| Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported inert recipe and used own Sheet; TJ cannot read bot private Sheet | Native recovery passed at `351b27e1`; one durable sent record and Inbox receipt at `624b214f`; old probe tokens are not current product evidence |
 | Store/instructor | Twenty synthetic signed grants, real local D1 concurrent individual/total caps, stale/revoked instructor HTTP states pass | Current board matches actual native A01 at7/8 plus17 labelled fixtures and2 unconnected seats; stale reports become unknown. Not20 actual Windows/Google users |
-| Sending | Prior owner-script self-mail received | Final shared runner has no exact approved live-send/Inbox receipt yet |
+| Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |
 | Cost | Workshop pins Haiku4.5; class estimate USD30–60, proposed cap USD100 total / USD5 per seat | Estimate assumptions below; not an applied spending authorization or measured class total |
 
 Authoritative acceptance: [shared runner](google-shared-runner-isolation-evidence.md),

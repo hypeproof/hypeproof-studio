@@ -87,3 +87,28 @@ Production OAuth review,
 managed-domain policy, quotas and twenty actual pre-class logins remain separate
 gates. Personal Apps Script export is deferred. Real mail needs fresh explicit
 approval of the exact recipient and content.
+
+
+## Two-identity native acceptance and approved delivery — 2026-10-15
+
+The bot published an inert recipe from the native app (`5838f1bc`); a separate
+workshop participant imported it and connected TJ with separately approved scopes
+(`9e43a9c8`). TJ's own private synthetic Sheet produced a distinct preview. At
+`351b27e1`, reading the bot's private Sheet returned the safe read-stage
+`sheet_access_denied` result; selecting TJ's own Sheet recovered its preview.
+No author account, Sheet data or company IAM was inherited. Clarification
+cancellation preserved independent Google/Sheet evidence. At `624b214f`, explicit
+Google reconnection cleared caller-bound progress, and new own-Sheet selection
+restored the bot preview.
+
+The sponsor then approved the exact one-recipient bot self-mail. The native final
+card was checked against that approval and submitted once. Shared execution
+reported sent1/unknown0; the durable local ledger contains one `sent` record.
+The same subject/body was opened in the bot's Gmail Inbox at15:04 KST. Receipt
+screenshots and private identifiers remain outside Git. No retry was performed.
+
+This is real shared-runner delivery from the isolated Mac copy, using local Claude
+CLI and in-memory Google credentials. It does not establish bundled SDK delivery,
+OS credential persistence, the latest Windows package or20 actual classroom seats.
+See [local acceptance](automation-local-acceptance.md) for per-revision integration
+and instructor evidence. Final source/CI and production rollout remain separate.
