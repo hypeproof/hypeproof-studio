@@ -48,6 +48,14 @@ receipt now explicitly confirms the completed private approval, fixing missing
 evidence behind confusing coach narration. Source regression passes; native copy
 verification and inclusion in the next Mac/Windows candidate remain pending.
 
+The retained Mac copy is now `06c1d92b`, in a separate online workspace with the
+same private Service as Windows and a verified0.3.299 native/JS SDK installation.
+The first Service-funded authoring turn exposed a generic save failure followed
+by an inappropriate Google-setup recovery; it was stopped before connection or
+publication. The shared tool now declares its exact recipe shape and save-specific
+recovery;89 automation checks and types/build pass, with native retry pending.
+This actual call settledUSD0.031423 with no held cost and no budget increase.
+
 ## Latest design priority — 2026-10-15
 
 DEC-024 expands the intended learner experience beyond the email implementation

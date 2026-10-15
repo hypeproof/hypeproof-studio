@@ -897,6 +897,14 @@ question or describe its result as unknown. Host regression covers approve, canc
 duplicate answer, store failure and Stop races; native narration remains a separate
 acceptance observation.
 
+EA-01/03 expose the exact bounded recipe contract in `skill_save` itself, so the
+Service-funded SDK path does not depend on a developer-only local prompt. Failed
+saves return a fixed stage-specific recovery result without private input/error
+details: repair the recipe or check activity authorization. Google setup and
+publication approval cannot repair a save failure. The malformed-input, denied
+capability and storage-failure controls retain prior work; a corrected recipe can
+then be saved without connecting Google or sending mail.
+
 EA-02 managed-runner disconnect invalidates local previews/login and revokes the Google grant once. Unconfirmed revocation keeps a private retry credential across restart, blocks execution and shows explicit retry; unknown/sent ledgers remain intact. Account switching alone does not revoke the previous grant. Fixture evidence lives in `appsScriptRuntime.test.ts`; actual Google revocation and OS-backed storage remain separate acceptance.
 
 EA-09 also requires a private website-copy / PowerShell-paste installation path

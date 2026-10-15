@@ -6,6 +6,8 @@ export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','
 export const APPS_SCRIPT_MCP_TOOLS = ['mcp__hypeproof_email__apps_script_prepare','mcp__hypeproof_email__apps_script_upload','mcp__hypeproof_email__apps_script_setup','mcp__hypeproof_email__apps_script_deploy','mcp__hypeproof_email__apps_script_run'] as const;
 export const ALL_AUTOMATION_MCP_TOOLS = [...GOOGLE_AUTOMATION_MCP_TOOLS, ...APPS_SCRIPT_MCP_TOOLS] as const;
 
+const skillRecipeContract = 'recipe는 다음 필드만 가진 JSON 문자열이다: {"schema":"hps-email-automation/1","category":"email","title":"스킬 제목","description":"업무 설명","subjectTemplate":"{{name}}님 서류 제출 요청","bodyTemplate":"{{document}}를 {{dueDate}}까지 보내 주세요.","columns":{"email":"이메일","name":"이름","document":"서류","dueDate":"마감일"}}. title·description·subjectTemplate·bodyTemplate과 열 이름은 사용자 업무에 맞게 바꾼다. 템플릿 변수는 {{name}}, {{document}}, {{dueDate}}만 허용한다.';
+
 /** Reject explicit private-value collection, not business questions about email. */
 function privateSetupTool(question: string): 'sheet_configure' | 'google_connect' | undefined {
   const text = question.normalize('NFKC').toLowerCase();
@@ -61,7 +63,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     sent: false,
     message: `No preview or email was produced. This activity runs on Google Apps Script. Call apps_script_run using its registered automation tool name with mode="${mode}". Follow its setup/recovery result; never claim completion or fall back to email_preview/email_send. Sending still requires the host's exact-recipient/content approval.`,
   });
-  const run = async (work: () => Promise<unknown>): Promise<McpToolResult> => {
+  const run = async (work: () => Promise<unknown>, failureStage?: 'skill_save'): Promise<McpToolResult> => {
     try {
       if (host.refreshAuthorization && !await host.refreshAuthorization()) throw new Error('Capability unavailable');
       if (!host.isAllowed()) throw new Error('Capability unavailable');
@@ -75,6 +77,13 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
             ? '현재 계정으로 해당 시트를 찾을 수 없어요. 비공개 입력에서 주소와 접근 권한을 확인해 주세요.'
             : 'Google 시트 읽기 요청이 완료되지 않았어요. 연결 상태를 확인한 뒤 다시 요청해 주세요.',
         guidance: '시트 읽기 단계의 실패입니다. 입력 창이 열리지 않았다고 설명하거나 계정 권한·공유 설정을 자동 변경하지 마세요. 새 읽기 결과나 메일 미리보기가 만들어졌다고 주장하지 마세요.',
+      }) }] };
+      if (failureStage === 'skill_save') return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+        failureStage, reason: 'skill_save_unconfirmed', saved: false,
+        nextAction: 'check_recipe_and_activity',
+        message: '스킬 저장 성공을 확인하지 못했어요. 입력 형식과 현재 수업의 자동화 권한을 확인하세요.',
+        recipeContract: skillRecipeContract,
+        guidance: '이 단계는 Google 연결·시트 읽기·실행 준비·게시 승인이 필요하지 않습니다. 그 도구로 우회하지 마세요. 형식 오류는 위 계약으로 고쳐 skill_save를 다시 호출하고, 수업 권한 문제라면 멈추고 수업 연결을 확인하세요. 사용자에게 JSON 작성을 요구하거나 오류에 실제 입력·계정 값을 옮기지 마세요.',
       }) }] };
       return { isError: true, content: [{ type: 'text', text: '자동화를 완료하지 못했어요. 입력과 수업 연결을 확인한 뒤 다시 시도해 주세요. 이미 보낸 메일은 다시 보내지 않아요.' }] };
     }
@@ -109,10 +118,10 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       };
       return host.askUser({ question: args.question, choices, allowFreeText: args.allowFreeText === 'true' || !choices.length });
     })),
-    factory.tool('skill_save', '대화에서 이해한 업무에 맞춰 만든 재사용 이메일 스킬을 로컬에 저장한다. 사용자에게 JSON 작성이나 파일 가져오기를 요구하지 않는다. 실제 개인정보·계정·시트 주소를 포함하지 않는다.', { recipe: z.string() }, async args => run(async () => {
+    factory.tool('skill_save', '대화에서 이해한 업무에 맞춰 만든 재사용 이메일 스킬을 로컬에 저장한다. Google 연결이나 게시 승인은 저장의 전제조건이 아니다. 사용자에게 JSON 작성이나 파일 가져오기를 요구하지 않는다. 실제 개인정보·계정·시트 주소를 포함하지 않는다. ' + skillRecipeContract, { recipe: z.string() }, async args => run(async () => {
       if (!host.saveSkill || typeof args.recipe !== 'string' || args.recipe.length > 32768) throw new Error('Invalid skill');
       return host.saveSkill(validateEmailRecipe(JSON.parse(args.recipe)));
-    })),
+    }, 'skill_save')),
     factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); })),
     factory.tool('sheet_configure', 'mode=reuse는 기존 비공개 시트 설정을 재사용하며 없을 때만 주소를 묻는다. 시트를 바꾸려는 명시적 요청에만 mode=change를 쓴다. 행 수와 열 이름만 반환한다.', { mode: z.string() }, async args => run(async () => { if (!host.configureSheet || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.configureSheet(args.mode as 'reuse' | 'change'); })),
     factory.tool('skill_publish', '현재 저장한 스킬의 공유 내용을 별도 질문으로 확인받은 뒤 우리 반 스토어에 올린다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.', {}, async () => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(); })),

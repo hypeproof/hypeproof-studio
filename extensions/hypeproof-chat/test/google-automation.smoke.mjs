@@ -106,6 +106,28 @@ test('provider limits and capability revocation fail closed; sender accounts hav
   p=await f.runtime.preview({recipe,rows});await f.runtime.send({previewId:p.id,approved:true});assert.equal(f.sends,2);
 });
 
+test('skill-save failures preserve the saved recipe and guide repair without Google setup or private error details',async()=>{
+  const f=fixture();let saved;let writes=0;let googleCalls=0;let allowed=true;let storageFails=false;
+  const factory={tool:(name,description,schema,handler)=>({name,description,schema,handler}),createSdkMcpServer:x=>x};
+  const server=buildGoogleAutomationMcpServer(factory,{string:()=>({})},{runtime:f.runtime,isAllowed:()=>allowed,
+    saveSkill:async value=>{if(storageFails)throw Error('private@example.invalid synthetic-secret');writes++;saved=value;return{saved:true};},
+    connectGoogle:async()=>{googleCalls++;return{};},confirmSend:async()=>false});
+  const save=server.tools.find(t=>t.name==='skill_save');
+  assert.match(save.description,/"category":"email"/,'SDK authoring gets the required contract even without a local-CLI prompt');
+  const valid=await save.handler({recipe:JSON.stringify(recipe)});assert.equal(JSON.parse(valid.content[0].text).saved,true);
+  const missingCategory={...recipe};delete missingCategory.category;
+  for(const input of ['{"private@example.invalid":',JSON.stringify(missingCategory),JSON.stringify({...recipe,columns:{...recipe.columns,due_date:'기한'}})]) {
+    const result=await save.handler({recipe:input});assert.equal(result.isError,true);
+    const failure=JSON.parse(result.content[0].text);assert.equal(failure.failureStage,'skill_save');assert.equal(failure.saved,false);assert.equal(failure.nextAction,'check_recipe_and_activity');
+    assert.doesNotMatch(JSON.stringify(result),/private@example.invalid|synthetic-secret/);
+    assert.deepEqual(saved,recipe);assert.equal(writes,1);
+  }
+  storageFails=true;let result=await save.handler({recipe:JSON.stringify(recipe)});assert.equal(result.isError,true);assert.doesNotMatch(JSON.stringify(result),/private@example.invalid|synthetic-secret/);storageFails=false;
+  allowed=false;result=await save.handler({recipe:JSON.stringify(recipe)});assert.equal(result.isError,true);assert.equal(writes,1);
+  allowed=true;const corrected={...recipe,title:'수정한 자료 요청'};result=await save.handler({recipe:JSON.stringify(corrected)});
+  assert.equal(JSON.parse(result.content[0].text).saved,true);assert.deepEqual(saved,corrected);assert.equal(writes,2);assert.equal(googleCalls,0);assert.equal(f.sends,0);
+});
+
 test('actual loopback callback binds localhost, returns a URL, and closes',async()=>{
   const { listenGoogleOAuth }=await import('../src/googleAutomation.ts');
   const listener=await listenGoogleOAuth();

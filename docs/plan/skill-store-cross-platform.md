@@ -192,6 +192,28 @@ remain NOT_RUN, including same-Service Mac-to-Windows reuse.
 
 ## Execution sequence and decisions
 
+Online Mac follow-up at `06c1d92b` used the normal participation-code UI with the
+existing `peer` principal and a separate online workspace. The app now targets
+the same private Service as Windows. The local-CLI development provider correctly
+refused a remote Service, so testing switched to the Service-funded SDK. The old
+Mac test copy lacked both the seeded native0.3.299 binary and vendored JS closure;
+both were restored from the pinned official seed and the verified Windows
+candidate's platform-independent vendor tree. Import and ad-hoc signature checks
+passed; no production package was changed.
+
+The first actual online model turn failed `skill_save`, then incorrectly attempted
+publication and Google setup. The private Google setup card was cancelled and the
+turn stopped. No new publication exists in the online catalogue, and no Google
+connection or email was performed. Its original malformed input was not retained,
+so the precise validation cause is unconfirmed. Source inspection did confirm
+that only the local-CLI prompt described the exact recipe shape; the shared SDK
+tool description omitted it and returned an undifferentiated error. The follow-up
+adds the recipe contract to the tool and fixed save-specific recovery guidance.
+Automation89/89 and types/build pass; a native retry of the new contract is pending.
+The attempt settledUSD0.031423, held0, leavingUSD0.301911 of this subject's existing
+USD0.333334 allocation. Evidence: `native-store-20261015/online-attempt.json` under
+the same protected temporary evidence root. No cap was increased.
+
 1. Finish feature implementation and the current local gate. Inventory current
    store/runtime gaps; retain existing approvals and sent/unknown records.
 2. Finish storage/security research and choose one incremental architecture;
