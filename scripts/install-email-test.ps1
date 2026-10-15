@@ -26,9 +26,9 @@ function Get-HpsEmailArtifact([string]$Origin, [string]$Path, [string]$Token, [s
     }
 }
 
-function Assert-HpsEmailManifest($Manifest, [string]$Build = 'e3ab008b') {
+function Assert-HpsEmailManifest($Manifest, [string]$Build = '659de97d') {
     $expected = @{
-        'app.zip' = @{ sha256 = 'd86cf425f4715fa0f66c8289a8fed29bbf7b179f409ed7d05abaca5a7a920e5c'; bytes = 196648104 }
+        'app.zip' = @{ sha256 = '503517c347224672630822ead80091d616517624c4ab1d57cc2af9d4ee4cfee9'; bytes = 196654871 }
         'sdk.zip' = @{ sha256 = '24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e'; bytes = 121940997 }
     }
     if ($Build -ceq '682dfd37') {
@@ -47,7 +47,9 @@ function Assert-HpsEmailManifest($Manifest, [string]$Build = 'e3ab008b') {
         $expected['app.zip'] = @{ sha256 = '4472b4c05630a31e4e658b5ccbf1e54490a424ff88fb3953f3d6981868143ea4'; bytes = 196646585 }
     } elseif ($Build -ceq '32ba0ac2') {
         $expected['app.zip'] = @{ sha256 = '4ce6a985b94ad876c7ce7ec57aa9616f635fc32a8cf0866607075d84b7b7c3d6'; bytes = 196647056 }
-    } elseif ($Build -cne 'e3ab008b') { throw 'Unexpected installation build.' }
+    } elseif ($Build -ceq 'e3ab008b') {
+        $expected['app.zip'] = @{ sha256 = 'd86cf425f4715fa0f66c8289a8fed29bbf7b179f409ed7d05abaca5a7a920e5c'; bytes = 196648104 }
+    } elseif ($Build -cne '659de97d') { throw 'Unexpected installation build.' }
     if ($Manifest.schema -ne 1 -or $Manifest.build -cne $Build -or @($Manifest.artifacts).Count -ne 2) { throw 'Unexpected installation manifest.' }
     $seen = @{}
     foreach ($artifact in $Manifest.artifacts) {
@@ -107,7 +109,7 @@ function Assert-HpsEmailDirectory([string]$Path) {
     }
 }
 
-function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = 'e3ab008b') {
+function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = '659de97d') {
     if (-not (Test-Path -LiteralPath $Destination)) { return $false }
     Assert-HpsEmailDirectory $Destination
     $receiptPath = Join-Path $Destination '.email-test-install.json'
@@ -125,7 +127,7 @@ function Test-HpsEmailExistingInstall([string]$Destination, [string]$Build = 'e3
 
 function Assert-HpsEmailShortcutTarget([string]$Target, [string]$Base, [string]$Executable) {
     if ($Target -ieq $Executable) { return }
-    foreach ($build in @('682dfd37', '9d535c87', '0b57074d', 'f90b65e3', '3f1a3f20', '32ba0ac2')) {
+    foreach ($build in @('682dfd37', '9d535c87', '0b57074d', 'f90b65e3', '3f1a3f20', '32ba0ac2', 'e3ab008b')) {
         $previous = Join-Path $Base $build
         if ($Target -ieq (Join-Path $previous 'HypeProof Studio.exe') -and
             (Test-HpsEmailExistingInstall $previous $build)) { return }
@@ -141,7 +143,7 @@ function Backup-HpsEmailUserData([string]$Base) {
     $source = Join-Path $env:APPDATA 'HypeProof Studio'
     if (-not (Test-Path -LiteralPath $source)) { return }
     Assert-HpsEmailDirectory $source
-    $backup = Join-Path $Base 'rollback-before-e3ab008b'
+    $backup = Join-Path $Base 'rollback-before-659de97d'
     Assert-HpsEmailDirectory $backup
     $receipt = Join-Path $backup 'complete.json'
     if (Test-Path -LiteralPath $backup) {
@@ -150,7 +152,7 @@ function Backup-HpsEmailUserData([string]$Base) {
             throw 'An incomplete rollback snapshot exists. It was preserved; ask the operator for help.'
         }
         $saved = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
-        if ($saved.build -cne 'e3ab008b' -or $saved.source -ine $source -or
+        if ($saved.build -cne '659de97d' -or $saved.source -ine $source -or
             -not (Test-Path -LiteralPath (Join-Path $backup 'profile') -PathType Container)) {
             throw 'Unexpected rollback snapshot. It was preserved.'
         }
@@ -162,7 +164,7 @@ function Backup-HpsEmailUserData([string]$Base) {
     }
     New-Item -ItemType Directory -Path $backup | Out-Null
     Copy-Item -LiteralPath $source -Destination (Join-Path $backup 'profile') -Recurse -Force -ErrorAction Stop
-    $saved = @{build='e3ab008b';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
+    $saved = @{build='659de97d';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
     [IO.File]::WriteAllText($receipt, ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
 }
 
@@ -201,10 +203,10 @@ function Restore-HpsEmailPortableProfile([string]$Base, [string]$Destination, [s
         if (-not (Test-Path -LiteralPath $marker -PathType Leaf) -or
             ((Get-Item -LiteralPath $marker -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Existing portable profile has no migration receipt. It was preserved.' }
         $saved = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
-        if ($saved.build -cne 'e3ab008b' -or $saved.source -ine $source) { throw 'Unexpected portable profile receipt. It was preserved.' }
+        if ($saved.build -cne '659de97d' -or $saved.source -ine $source) { throw 'Unexpected portable profile receipt. It was preserved.' }
         return
     }
-    $backup = Join-Path $Base 'rollback-portable-before-e3ab008b'
+    $backup = Join-Path $Base 'rollback-portable-before-659de97d'
     Assert-HpsEmailDirectory $backup
     $receipt = Join-Path $backup 'complete.json'
     $snapshot = Join-Path $backup 'data'
@@ -212,12 +214,12 @@ function Restore-HpsEmailPortableProfile([string]$Base, [string]$Destination, [s
         if (-not (Test-Path -LiteralPath $receipt -PathType Leaf) -or
             ((Get-Item -LiteralPath $receipt -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Incomplete portable rollback snapshot. It was preserved.' }
         $saved = Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
-        if ($saved.build -cne 'e3ab008b' -or $saved.source -ine $source -or
+        if ($saved.build -cne '659de97d' -or $saved.source -ine $source -or
             -not (Test-Path -LiteralPath $snapshot -PathType Container)) { throw 'Unexpected portable rollback snapshot. It was preserved.' }
     } else {
         New-Item -ItemType Directory -Path $backup | Out-Null
         Copy-HpsEmailProfileTree $source $snapshot
-        $saved = @{build='e3ab008b';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
+        $saved = @{build='659de97d';source=$source;createdAt=(Get-Date).ToUniversalTime().ToString('o')}
         [IO.File]::WriteAllText($receipt, ($saved | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
     }
     $stage = Join-Path $Destination ('.portable-profile-' + [Guid]::NewGuid().ToString('N'))
@@ -306,7 +308,7 @@ function Install-HpsEmailTest {
     if (-not $env:LOCALAPPDATA -or -not $env:TEMP) { throw 'Windows user folders are unavailable.' }
     $origin = 'https://hps-studio-email-test-20261013.jayleekr0125.workers.dev'
     $base = Join-Path $env:LOCALAPPDATA 'HypeProof-Studio-Email-Test'
-    $destination = Join-Path $base 'e3ab008b'
+    $destination = Join-Path $base '659de97d'
     Assert-HpsEmailDirectory $base
     Assert-HpsEmailNotRunning $base
     Assert-HpsEmailSharedProfileIdle
@@ -369,7 +371,7 @@ function Install-HpsEmailTest {
         Assert-HpsEmailSharedProfileIdle
         Backup-HpsEmailUserData $base
         $previousExecutable = $shortcut.TargetPath
-        $previousShortcut = Join-Path $base 'rollback-before-e3ab008b.lnk'
+        $previousShortcut = Join-Path $base 'rollback-before-659de97d.lnk'
         if ($previousExecutable -ieq $executable -and (Test-Path -LiteralPath $previousShortcut -PathType Leaf)) {
             if ((Get-Item -LiteralPath $previousShortcut -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Rollback shortcut is linked. It was preserved.' }
             $prior = $shell.CreateShortcut($previousShortcut)
@@ -378,7 +380,7 @@ function Install-HpsEmailTest {
         }
         Restore-HpsEmailPortableProfile $base $destination $previousExecutable
         if ((Test-Path -LiteralPath $shortcutPath) -and $shortcut.TargetPath -ine $executable) {
-            $previousShortcut = Join-Path $base 'rollback-before-e3ab008b.lnk'
+            $previousShortcut = Join-Path $base 'rollback-before-659de97d.lnk'
             if (Test-Path -LiteralPath $previousShortcut) { throw 'Rollback shortcut already exists. It was preserved; ask the operator for help.' }
             Copy-Item -LiteralPath $shortcutPath -Destination $previousShortcut
         }
