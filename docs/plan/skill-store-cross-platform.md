@@ -877,3 +877,31 @@ with operator correction; autonomous coaching quality is not accepted.
 
 Evidence: `/tmp/hps-email-mvp/store-withdrawal-db049d62-{before,withdrawn,republished}.json`
 and `/tmp/hps-email-mvp/windows-withdrawn-cached-preview-db049d62-safe.png`.
+
+
+### Recovery follow-up — 2026-10-16, native944a20c5
+
+The native Mac updated to944a20c5, restored the third principal's existing activity
+and selected its existing grant; no new grant or Google permission was created.
+It withdrew the re-published test fork. All three principals again receive404
+and no catalogue entry; original v1/v2 remain unchanged. The model then twice
+sent `parentId:""` for a new publication despite the optional schema, so validation
+stopped before any private review or POST. The typed withdrawal recovery was
+therefore not reached. The audit-reminder fork is currently withdrawn; the
+Windows cached copy and original versions remain available under their existing
+rules. Do not carry forward the earlier restored status as current.
+
+The follow-up source reports malformed selectors as an argument problem before
+host dispatch, with SDK/local parity and no raw-value disclosure, rather than
+misleading Google/classroom advice. Exact typed withdrawal handling remains.
+Tests pass10/10 plus typecheck/build; native acceptance of this latest correction
+is pending. Real Zod JSON Schema confirms parentId/id are optional, not required.
+
+CI944a20c5 exposed an unintended store-package import in dependency-free Windows
+smokes. f62a2826 moves the shared error type into a dependency-free module and
+retains the store-client re-export. All four platform smokes pass in an isolated
+checkout with no node_modules. This is local execution of the same checks;
+remote Windows CI is tracked independently.
+Evidence: `/tmp/hps-email-mvp/withdrawal-recovery-no-deps.json`,
+`/tmp/hps-email-mvp/store-withdrawal-944a20c5-withdrawn.json`, and the protected
+native app's source receipt. Windows stays db049d62; no new package was deployed.

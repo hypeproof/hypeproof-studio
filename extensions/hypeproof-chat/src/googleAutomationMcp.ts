@@ -27,6 +27,11 @@ function privateSetupTool(question: string): 'sheet_configure' | 'google_connect
   return undefined;
 }
 
+class InvalidSkillSelectorError extends Error {
+  readonly field: 'parentId' | 'id';
+  constructor(field: 'parentId' | 'id') { super('Invalid skill selector'); this.field = field; }
+}
+
 export interface GoogleAutomationMcpHost {
   runtime: GoogleAutomationRuntime;
   workflowPlan?(plan: unknown): Promise<unknown>;
@@ -63,9 +68,9 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     const schema = z.string() as { optional?: () => unknown };
     return typeof schema.optional === 'function' ? schema.optional() : schema;
   };
-  const readOptionalId = (value: unknown) => {
+  const readOptionalId = (value: unknown, field: 'parentId' | 'id') => {
     if (value === undefined) return undefined;
-    if (typeof value !== 'string' || !value || value.length > 200) throw new Error('Invalid skill');
+    if (typeof value !== 'string' || !value || value.length > 200) throw new InvalidSkillSelectorError(field);
     return value;
   };
   const appsScriptSession = host.isAppsScriptAllowed?.() === true;
@@ -83,6 +88,14 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (!host.isAllowed()) throw new Error('Capability unavailable');
       return { content: [{ type: 'text', text: JSON.stringify(await work()) }] }; }
     catch (error) {
+      if (error instanceof InvalidSkillSelectorError) return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+        reason: 'invalid_skill_selector', field: error.field, hostActionStarted: false,
+        nextAction: 'correct_tool_arguments',
+        message: error.field === 'parentId'
+          ? '새 공유는 parentId 필드 자체를 생략하세요. 빈 문자열은 허용하지 않습니다. 본인 스킬의 새 버전일 때만 실제 목록의 최신 식별자를 사용하세요.'
+          : '전체 목록은 id 필드를 생략하세요. 버전 목록은 실제 목록에서 확인한 식별자만 사용하세요.',
+        guidance: '도구 입력 검사에서 중단됐습니다. Google·수업 연결 문제나 게시 완료로 설명하지 마세요. 이미 확인된 사용자 의도에 맞게 인자를 고치세요. 게시 실행은 여전히 비공개 검토와 승인이 필요합니다.',
+      }) }] };
       if (error instanceof AutomationPublicationWithdrawnError) return { isError: true, content: [{ type: 'text', text: JSON.stringify({
         failureStage: 'skill_publish', reason: 'publication_unpublished', published: false,
         nextAction: 'request_fresh_publication_approval',
@@ -158,11 +171,11 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     }, 'skill_save')),
     factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다. 실패하면 반환된 단계와 복구 안내만 설명하고 사용자의 다음 요청을 기다린다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); }, 'google_connect')),
     factory.tool('sheet_configure', 'mode=reuse는 기존 비공개 시트 설정을 재사용하며 없을 때만 주소를 묻는다. 시트를 바꾸려는 명시적 요청에만 mode=change를 쓴다. 행 수와 열 이름만 반환한다.', { mode: z.string() }, async args => run(async () => { if (!host.configureSheet || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.configureSheet(args.mode as 'reuse' | 'change'); })),
-    factory.tool('skill_publish', '새 게시에는 parentId를 생략한다. 다른 사람에게 받은 스킬을 내 새 스킬로 공유할 때도 빈 인자 {}를 사용한다. 원본 출처는 호스트가 보존한 sourceId로 처리하므로 parentId에 넣지 않는다. 기존 본인 스킬의 새 버전은 목록에서 확인한 최신 id를 parentId로 지정한다. 과거 버전을 덮어쓰거나 다른 사람에게 자동 적용하지 않는다. 이 도구를 호출하면 호스트가 현재 저장한 스킬의 비공개 공유 검토 카드를 직접 열고 승인된 내용만 우리 반 스토어에 올린다. ask_user로 게시 검토를 대체하지 않는다. 이 도구의 published=true 결과 전에는 게시 완료라고 말하지 않는다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.' + storeReplyGuidance, { parentId: optionalId() }, async args => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(readOptionalId(args.parentId)); })),
+    factory.tool('skill_publish', '새 게시에는 parentId를 생략한다. 다른 사람에게 받은 스킬을 내 새 스킬로 공유할 때도 빈 인자 {}를 사용한다. 원본 출처는 호스트가 보존한 sourceId로 처리하므로 parentId에 넣지 않는다. 기존 본인 스킬의 새 버전은 목록에서 확인한 최신 id를 parentId로 지정한다. 과거 버전을 덮어쓰거나 다른 사람에게 자동 적용하지 않는다. 이 도구를 호출하면 호스트가 현재 저장한 스킬의 비공개 공유 검토 카드를 직접 열고 승인된 내용만 우리 반 스토어에 올린다. ask_user로 게시 검토를 대체하지 않는다. 이 도구의 published=true 결과 전에는 게시 완료라고 말하지 않는다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.' + storeReplyGuidance, { parentId: optionalId() }, async args => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(readOptionalId(args.parentId, 'parentId')); })),
     factory.tool('skill_unpublish', '사용자가 철회를 요청한 본인 게시물만 내린다. skill_list의 mine=true인 정확한 id를 사용하며, 호스트 카드에서 해당 게시물의 철회를 별도로 확인받는다. 이미 설치한 복사본·Google 연결·발송 기록은 삭제하거나 취소하지 않는다. unpublished=true일 때만 게시 철회 완료를 알린다. 실패하거나 결과가 불명확하면 목록을 다시 확인하고 자동으로 철회를 재시도하지 않는다.' + storeReplyGuidance, { id: z.string() }, async args => run(async () => { if (!host.unpublishSkill || typeof args.id !== 'string' || !args.id || args.id.length > 200) throw new Error('Invalid skill'); return host.unpublishSkill(args.id); })),
     factory.tool('skill_list', 'id를 생략하면 우리 반 스토어의 최신 스킬 목록을 보여준다. 제목만 알면 먼저 id 없이 조회한다. id에는 실제 목록 결과의 식별자만 쓰며 제목을 넣거나 사용자에게 내부 식별자를 요구하지 않는다. id를 넣으면 해당 스킬의 버전 목록을 조회한다. 목록은 요약 정보이므로 제목·설명이 같다는 이유로 버전 내용이 같다고 판단하지 않는다. 업데이트나 이전 버전 복원을 원하면 먼저 버전 목록을 보여주고 사용자가 선택한 정확한 id를 skill_install에 전달한다. 설치는 skill_install로 별도 확인한다.' + storeReplyGuidance, { id: optionalId() }, async args => run(async () => {
       if (!host.listSkills) throw new Error('Unavailable');
-      const id = readOptionalId(args.id);
+      const id = readOptionalId(args.id, 'id');
       try { return await host.listSkills(id); }
       catch {
         // Only a failed authorized lookup reaches this recovery. Do not echo

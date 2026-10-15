@@ -190,7 +190,16 @@ test('local and SDK version selectors remain optional and reject malformed ident
  const server=buildGoogleAutomationMcpServer({tool:(name,description,schema,handler)=>({name,schema,handler}),createSdkMcpServer:s=>s},{string:()=>({optional:()=>({optional:true})})},host);
  for(const [name,key]of [['skill_publish','parentId'],['skill_list','id']]){
   const tool=server.tools.find(t=>t.name===name);assert.equal(tool.schema[key].optional,true);
-  for(const bad of ['',42,'x'.repeat(201)])assert.equal((await tool.handler({[key]:bad})).isError,true);
+  for(const bad of ['',42,'private-selector-'.repeat(20)]){
+   const result=await tool.handler({[key]:bad});assert.equal(result.isError,true);
+   const data=JSON.parse(result.content[0].text);
+   assert.equal(data.reason,'invalid_skill_selector');assert.equal(data.field,key);
+   assert.equal(data.hostActionStarted,false);assert.equal(data.nextAction,'correct_tool_arguments');
+   assert.ok(!result.content[0].text.includes('private-selector-'));
+   await assert.rejects(local.call('email_'+name,{[key]:bad}),error=>{
+    assert.deepEqual(JSON.parse(error.message),data);return true;
+   });
+  }
  }
  assert.equal(calls.length,4,'malformed selectors never reach a host action');
 });
