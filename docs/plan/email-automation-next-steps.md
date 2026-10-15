@@ -12,7 +12,9 @@ charges/holds); this is not actual spending. Evidence:
 `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
 budget remains separate. No further mail is authorized.
 
-Studio11b82da2 integrates main6ad5f9f8 and passes all18 CI checks. Windows
+Studio11b82da2 integrates main6ad5f9f8; implementation and installer8ba30b73 both
+pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
+ETXTBSY job rerun; no application test failed in that run. Windows
 659de97d passed verified install/update, portable-profile restoration, non-owner
 store import and private Google preview, then explicit v2 update and v1 rollback
 with fresh previews and unchanged private configuration. Publisher `peer` owns
@@ -26,7 +28,7 @@ both real revisions without installation or Google actions. The coach still
 invented the first ID and exposed internal IDs in its final table: recovery passes,
 but the complete presentation criterion remains PARTIAL. TJ OAuth expired before
 completion; the old browser tab is closed. A fresh user-ready connection and
-third-principal execution remain open. Windows still runs659de97d.
+third-principal execution remain open. Windows now runs11b82da2.
 
 SS-08 fork provenance is implemented in Studio11b82da2 and Service9618d234:
 an installed exact revision is retained with the activity's recipe, shown during
@@ -45,27 +47,35 @@ original source revision; original v1/v2 are unchanged. This covers the reminder
 subset of the curriculum need, not an implemented audit dashboard. Windows659de97d
 has reviewed/imported that fork and completed a fresh one-recipient preview with
 the changed subject/body, retained private configuration and6/6 quests. No send.
-Evidence:
-`/tmp/hps-email-mvp/mac-native-fork-20261016.json`.
+After upgrading to11b82da2, the same Windows recipient explicitly reimported that
+exact fork and completed another fresh preview at6/6 without Google login or mail.
+The exact installed source, active process, migrated profile and retained rollback
+snapshot were read back on Windows. Evidence:
+`/tmp/hps-email-mvp/mac-native-fork-20261016.json` and
+`/tmp/hps-email-mvp/windows-native-fork-reuse-20261016.json`.
 
 Private Service93318bd2 is based on fa7472b with main9dbe15c and bounded test
 routes. Production d34da3a5 remains at100%; the test target takes0% normal
 traffic. Ops0046/0047 are applied only to the backed-up isolated database. Remaining
 gates: distinct Google identities and different private datasets, third-recipient
-execution, final matching app candidates,
+execution, remaining lifecycle checks on the matching candidates,
 class/instructor readiness and the separately scoped expanded WAJ design/runtime gates. Current evidence and
 individual boundaries: [store contract](skill-store-cross-platform.md).
 
-The11b82da2 Windows extension candidate is staged with official shell720be661 and
-SDK0.3.299. Its first private R2 upload failed with401; a subsequent small-object
-read succeeded with current authentication. Upload/readback is being retried.
-The pinned PowerShell installer now targets11b82da2 and recognizes659de97d only
-for exact-receipt upgrade handover. Actual app/SDK archive extraction, hashes,
-profile backup/migration and refusal fixtures pass; native upgrade remains pending.
-The installer gateway continues to serve the verified659de97d candidate until both
-new archives and their manifest pass complete readback. No authentication scope was
-expanded. Current coach presentation remains PARTIAL: the Mac response called the
+The11b82da2 Windows candidate uses official shell720be661 and SDK0.3.299. After
+the initial401, both archives and the final manifest passed full R2 readback with
+matching hashes. Gateway70207707 serves the new candidate; four gateway groups
+and23 online access checks pass. Installer8ba30b73 pins the exact archives and
+recognizes659de97d for receipt-checked handover. Actual extraction, profile backup,
+migration and refusal fixtures pass, followed by the native upgrade above.
+No authentication scope was expanded. Current coach presentation remains PARTIAL: the Mac response called the
 cohort store public, although the host review correctly says our class.
+
+Current online instructor acceptance is a separate gap: the isolated Service
+configuration does not enable HPS_CLASSROOM_OPS, and its bounded participant routes
+do not admit classroom connect/sync. Earlier local instructor9b4dd233 evidence is
+valid only for that local setup. Prepare bounded classroom linkage and observe the
+current host's real progress before claiming the online teacher surface works.
 
 ## Goal extension: integrated skill store — 2026-10-15
 

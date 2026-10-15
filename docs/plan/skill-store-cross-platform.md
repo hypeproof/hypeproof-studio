@@ -182,9 +182,11 @@ reminder and published after native source/content review. API readback under al
 three principals confirms exact content/source and owner separation, with unchanged
 original revisions. Windows659de97d reviewed/imported the new fork and completed a fresh one-recipient
 preview with the changed subject/body and retained private configuration at6/6.
-No send. Matching11b82da2 installation remains pending. Evidence:
+No send. Windows was subsequently upgraded to11b82da2 with profile/rollback
+preservation and reimported the fork through native review. A fresh preview of
+the changed subject/body passed at6/6 without Google login or mail. Evidence:
 `/tmp/hps-email-mvp/mac-native-fork-20261016.json` and
-`/tmp/hps-email-mvp/fork-migration-20261016-receipt.json`.
+`/tmp/hps-email-mvp/windows-native-fork-reuse-20261016.json`.
 Existing pre-change installations have no invented provenance: reimport
 the intended exact store version before testing a recipient fork.
 
@@ -195,7 +197,8 @@ SS-01–10 and SS-12; SS-11 is NOT_RUN and conditional on expanded WAJ implement
 Evidence is revision-bound: Windows659de97d proves non-owner import/preview and
 reviewed v2 update/v1 rollback, Mac b0cc15a0 proves third-user pinning, and Mac
 dbff37ed proves failed lookup recovery. Distinct Google identities/datasets, third
-execution and final matching candidates are not accepted. Mac11b82da2 fork
+execution and the remaining final lifecycle matrix are not accepted. Matching
+Mac/Windows11b82da2 fork publication/import/preview passes. Mac11b82da2 fork
 publication passes; the coach's public-store wording remains inaccurate because
 actual publication visibility is cohort-only. The audit reminder is not the full
 expanded audit workflow or SS-11 acceptance.

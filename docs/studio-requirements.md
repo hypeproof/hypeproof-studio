@@ -1010,7 +1010,10 @@ three-principal Studio/Service tests pass. Ops0047 is applied only to the backed
 isolated test D1; private Servicefa7472b and Mac11b82da2 pass native recipient-fork
 publication with exact source/content readback. Windows659de97d reviewed/imported
 that fork and completed a fresh one-recipient preview at6/6 with retained private
-configuration. Matching-candidate execution remains pending. No new mail was sent.
+configuration. Matching Mac/Windows11b82da2 fork reuse subsequently passed native
+review and a fresh preview at6/6 after credential-preserving Windows upgrade.
+Third-principal Google execution and the full lifecycle matrix remain pending.
+No new mail was sent.
 
 A generic HTTP429 must not assert a proven budget cause: the message distinguishes
 usage/concurrency checks from possible provider request limits. Increasing the
