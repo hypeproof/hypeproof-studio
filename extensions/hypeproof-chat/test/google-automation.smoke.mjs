@@ -95,6 +95,32 @@ test('a rejected private Sheet read reports its real stage without exposing prov
   }
 });
 
+test('store lookup recovery uses the catalogue without private errors, writes or bypassing authorization',async()=>{
+  const f=fixture();let allowed=true;let refreshAllowed=true;let catalogueFails=false;const lookups=[];
+  const factory={tool:(name,_description,_schema,handler)=>({name,handler}),createSdkMcpServer:x=>x};
+  const host={runtime:f.runtime,isAllowed:()=>allowed,refreshAuthorization:async()=>refreshAllowed,confirmSend:async()=>false,
+    listSkills:async id=>{lookups.push(id);if(id==='release-one')return{versions:[{id:'release-one',version:1}]};if(id||catalogueFails)throw Error('private@example.invalid synthetic-secret');return{skills:[{id:'release-one',title:'합성 업무'}]};},
+    connectGoogle:async()=>assert.fail('lookup must not connect Google'),saveSkill:async()=>assert.fail('lookup must not save'),
+    installSkill:async()=>assert.fail('lookup must not install'),publishSkill:async()=>assert.fail('lookup must not publish')};
+  const list=buildGoogleAutomationMcpServer(factory,{string:()=>({})},host).tools.find(t=>t.name==='skill_list');
+  const failed=await list.handler({id:'합성 업무'});const recovery=JSON.parse(failed.content[0].text);
+  assert.equal(recovery.failureStage,'store_versions');assert.equal(recovery.listReturned,false);
+  assert.equal(recovery.nextTool,'skill_list');assert.deepEqual(recovery.arguments,{});
+  assert.deepEqual(lookups,['합성 업무'],'a failed lookup does not silently retry');
+  assert.doesNotMatch(JSON.stringify(failed),/private@example|synthetic-secret/);
+  const catalogue=JSON.parse((await list.handler(recovery.arguments)).content[0].text);
+  const versions=JSON.parse((await list.handler({id:catalogue.skills[0].id})).content[0].text);
+  assert.equal(versions.versions[0].version,1,'opaque IDs from real results remain supported');
+  catalogueFails=true;
+  const stopped=JSON.parse((await list.handler({})).content[0].text);
+  assert.equal(stopped.failureStage,'store_catalogue');assert.equal(stopped.nextAction,'wait_for_user');assert.equal(stopped.nextTool,undefined);
+  const before=lookups.length;
+  assert.equal((await list.handler({id:17})).isError,true);
+  allowed=false;assert.equal((await list.handler({id:'release-one'})).isError,true);
+  allowed=true;refreshAllowed=false;assert.equal((await list.handler({})).isError,true);
+  assert.equal(lookups.length,before);assert.equal(f.sends,0);
+});
+
 test('provider limits and capability revocation fail closed; sender accounts have separate durable receipts',async()=>{
   let allowed=true;
   const f=fixture({maxRecipients:1,isAllowed:()=>allowed});

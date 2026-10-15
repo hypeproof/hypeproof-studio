@@ -46,13 +46,20 @@ the Windows update. This proves distinct Studio-principal reuse. The underlying
 Google identity difference remains unverified. Earlier peer Windows evidence
 proves author cross-device reuse only; its former recipient interpretation is
 superseded. Native v2 publication, non-owner update and rollback now pass on Windows659de97d
-with exact private preview contents. Third-recipient execution and pinning remain open.
+with exact private preview contents. Third-recipient execution remains open;
+persisted v1 pinning is verified on the current Mac checkpoint below.
 
 The private Service target is781b639f at0% normal traffic, based on d63d5d7 with
 main9dbe15c and bounded test routes. Ops0046 is applied only to the backed-up test
 D1, retaining all four existing recipes. Production d34da3a5 stays at100%.
-The Mac native runtime remains9b4dd233 and has not yet been upgraded for current
-revision lifecycle acceptance. Earlier local/online snapshots below are historical.
+The single Mac native runtime was backed up and restaged to b0cc15a0 with the
+same private online Service. Its third Studio principal retained the exact v1
+recipe after v2 publication and the other recipient's update/rollback; the live
+catalogue/version flow returned both versions without installing either again.
+Read-only receipt: `/tmp/hps-email-mvp/mac-third-pinned-v1-20261016.json`.
+TJ Google connection reached the unverified-app notice and awaits human action;
+the Google identity mapping and different-dataset execution are not yet accepted.
+Earlier local/online snapshots below are historical.
 R2 hosts installer artifacts; the cohort recipe catalogue remains in D1.
 
 | Layer | Current source fact | Limit |
@@ -78,9 +85,19 @@ freeze and verify one Windows candidate, then execute SS-01–12 with actual Win
 recipients. Same-content re-publication has a local recovery implementation and
 actual Service-route proof below; its native acceptance remains pending. Version2,
 update and rollback have local integration proof plus the Windows lifecycle
-checkpoint below. Third-user pinning, current Mac acceptance and fork provenance
+checkpoint below. Current Mac execution acceptance and fork provenance
 remain open. Successful import or withdrawal alone does not close SS-08. Store acceptance remains part of the active delivery
 goal, not a follow-up that can be omitted when the email feature passes.
+
+The b0cc15a0 Mac coach attempted a title as the version lookup ID, then requested
+an internal ID from the learner. An explicit catalogue request recovered the
+lookup. It also inferred identical content from equal descriptions, which is not
+content comparison evidence. The follow-up tool contract instructs catalogue-first
+lookup for known titles, forbids metadata-only content comparisons, and returns a
+bounded catalogue recovery for failed version lookups. Authorization/invalid-input
+failures remain closed; catalogue failure stops without Google or write actions.
+Automation92/92, local-runtime8/8, typecheck and extension bundle pass for this
+follow-up. Native acceptance remains NOT RUN; the running Mac is still b0cc15a0.
 
 The [source-backed distribution research](skill-store-distribution-research.md)
 compares official pricing, access semantics, n8n/Open VSX/ORAS/Sigstore/TUF patterns

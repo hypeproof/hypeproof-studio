@@ -982,3 +982,13 @@ restoration, parent-bound retry, downloaded digest/format checks and atomic D1
 metadata. Runtime permissions and private setup never travel with a recipe.
 [SS-08](plan/skill-store-cross-platform.md) remains PARTIAL until native Mac/Windows
 reuse, recipient-fork provenance and coordinated schema/release validation pass.
+
+EA-07/09 store discovery must resolve a learner's title through the actual
+catalogue, never request an internal ID or treat a title as one. A failed version
+lookup permits one catalogue recovery; failed catalogue retrieval stops without
+changing Google setup or installing/publishing/sending anything. Revoked capability
+and invalid arguments do not enter that recovery. Version metadata alone cannot
+establish equal recipe contents. This keeps the useful-work/human-judgment intent
+observable: learners choose named versions from real results, and the coach only
+claims comparisons supported by evidence. Coverage: `google-automation.smoke.mjs`;
+native follow-up acceptance remains NOT RUN.

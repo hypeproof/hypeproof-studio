@@ -5,34 +5,36 @@ implementation and delivery with minimal approval interruptions. Exact email
 content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
 
-Current checkpoint (2026-10-16): the overall development/test ceiling is USD10.
-The original additional USD1 allocation was selected by `peer` in Windows.
-A further USD1 allocation for non-owner `original` is now created and verified;
-its native selection and no-send preview have passed. Reconciliation against
-unique active root budgets gives an exposure upper bound of USD4.972794:
-USD3 in active root grants plus USD1.972794 historical charges/unresolved holds.
-The earlier USD6.972794 bound double-counted shared fallback views. Neither
-figure is actual spending. Evidence: `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. Both increments are
-within the total USD10 authorization. On native Windows
-e3ab008b, test principal `peer` imported the Mac-authored store recipe, reused
-its saved Google connection and private one-row test Sheet, and completed the
-Google Apps Script preview with an explicit no-send instruction. The native
-workflow reached6/6. Evidence: `/tmp/hps-email-mvp/windows-store-preview-20261016-safe.png`.
-The private Service version is781b639f, based on d63d5d7 with bounded version-history routes;
-public production remains unchanged at100%. A full exit/relaunch and fresh
-Google preview also passed at01:30KST, preserving the activity and private
-configuration without login. Remaining gates include the third-user native lifecycle, newer version/update/
-rollback acceptance and the expanded WAJ build. Canonical Ops migration0046
-is applied only to the isolated test database; all four existing recipes remain unchanged.
-Earlier dated snapshots below are historical, not the current Windows status.
+Current checkpoint (2026-10-16): development/test ceiling is USD10, including
+historical charges and unresolved holds. The reconciled maximum exposure is
+USD4.972794 (USD3 in unique active root grants plus USD1.972794 historical
+charges/holds); this is not actual spending. Evidence:
+`/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
+budget remains separate. No further mail is authorized.
 
-Ownership correction (2026-10-16): fresh Service readback identifies `peer` as
-the owner of the Mac-authored publication a1370573-7db3-4083-9224-49782bf5a315.
-Thus the Windows execution/restart above proves the author's cross-device reuse,
-not a different recipient's reuse. `original` and `third` are non-owners; repeat
-the Windows import and private execution under one of those identities before
-passing the cross-person gate. Previous statements calling `peer` a distinct
-recipient are superseded by this direct ownership evidence.
+Studio source b0cc15a0 integrates main6ad5f9f8 and passes all18 CI checks. Windows
+659de97d passed verified install/update, portable-profile restoration, non-owner
+store import and private Google preview, then explicit v2 update and v1 rollback
+with fresh previews and unchanged private configuration. Publisher `peer` owns
+the Mac-authored item; `original` is the verified non-owner recipient. Earlier
+peer Windows evidence proves author cross-device reuse, not another recipient.
+
+The single Mac Dev app has now been backed up and restaged to b0cc15a0 and the
+same private online Service. Its third-principal activity retained the exact v1
+recipe after v2 publication and the other recipient's update/rollback. Native
+catalogue/version lookup confirmed both revisions; no install was performed.
+Third-principal Google connection reached TJ's unverified-app notice and requires
+human continuation. Updated Mac execution is not yet proven. The native coach
+also mistook a title for an ID; a bounded lookup-recovery fix is under validation.
+Windows still runs659de97d, so it does not include the latest wording change.
+
+Private Service781b639f is based on d63d5d7 with main9dbe15c and bounded test
+routes. Production d34da3a5 remains at100%; the test target takes0% normal
+traffic. Ops0046 is applied only to the backed-up isolated database. Remaining
+gates: distinct Google identities and different private datasets, third-recipient
+execution, recipient fork provenance, final matching app candidates,
+class/instructor readiness and expanded WAJ delivery. Current evidence and
+individual boundaries: [store contract](skill-store-cross-platform.md).
 
 ## Goal extension: integrated skill store — 2026-10-15
 
@@ -51,25 +53,18 @@ Use current D1 for bounded recipes; add private R2 only when larger reviewed ass
 justify it. Final audience remains a product question; use cohort-only visibility
 until decided. Public discovery and generic executable packages are not implemented.
 
-Completion order: close local lifecycle gaps (including re-publication and
-version/update/rollback), freeze the Windows candidate, then run the three-account
-Studio journey on Windows. Private R2 now serves the e3ab008b installer candidate
-(shell720be661 / SDK0.3.299), with both stored archives and manifest read back and
-hashed. All23 online access controls pass. Complete authenticated HTTP download
-and native Windows acceptance remain separate gates. The current native Mac is
-9b4dd233; source622cc4e4 adds re-publication recovery and the current follow-up adds locally tested immutable versions against Servicee76d1c2. Native version acceptance and recipient fork provenance remain open. Installer ZIP
-transport and the D1 skill catalog are distinct delivery surfaces.
+Completion order: finish the native three-account store journey and coach
+regression, preserve author/recipient identity evidence, then close remaining
+class/commercial and expanded journey requirements. Private R2 distributes the
+Windows installer; D1 distributes inert recipes. Installer transport alone does
+not pass store execution. The current artifact and runtime checkpoints above
+supersede the earlier version references below.
 
-Latest main integration: `05efefdb` adds project switching and release operations.
-The PR merge typecheck exposed a new `voiceLogChannel` call against this branch's
-renamed `coachLogChannel`; integration preserves main's switch behavior and uses
-the existing coach channel. Local types, automation90 checks, publish/local-runtime
-controls and webview/extension builds pass. The single native Mac app now runs
-9b4dd233; its initial A02 classroom reconnect reported2/6 to the instructor board.
-The Windows e3ab008b candidate predates this integration; its evidence does not
-cover the integrated extension. A fresh Google reconnect and bot-owned private
-Sheet preview now pass on native9b4dd233; App and instructor show6/6. The old
-send ledger hash is unchanged, with no new mail. This does not cover622cc4e4.
+Historical integration: main05efefdb introduced project switching. The
+voiceLogChannel/coachLogChannel conflict was resolved, and native Mac9b4dd233
+completed a bot-owned one-row preview with App/instructor6/6. Its saved send
+ledger stayed unchanged. That evidence remains tied to9b4dd233 and the old
+local Service; it is not current online Mac acceptance.
 
 Current partial evidence, all dated2026-10-15:
 
