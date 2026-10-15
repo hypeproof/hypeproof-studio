@@ -4,7 +4,7 @@
 // 1. Old-profile render identity: a /v1/profile answer with no `orchestrator` key renders
 //    exactly as it did on Studio main before A5. The real webview components are rendered
 //    (as test/sx-render.mjs does) and their markup is compared with digests taken on main
-//    21bd15ba with this same file (BASE). A served roster changes nothing on the screen by
+//    (21bd15ba, and fbde0482) with this same file (BASE). A served roster changes nothing on the screen by
 //    itself (control), and an attributed request row is noticed (control).
 //
 // Run: node --experimental-strip-types test/orchestrator-panel.smoke.mjs
@@ -207,7 +207,10 @@ const OLD_SCREENS = {
   "EffortControl/nothing": () => ["EffortControl", { config: adultConfig(), post() {} }],
 };
 
-/** Taken on main 21bd15ba (before A5) with HPS_A5_RECORD_BASE=1; two runs gave the same digests. */
+/**
+ * Taken on main before A5 with HPS_A5_RECORD_BASE=1: on 21bd15ba, and again on fbde0482 (#1527, the
+ * branch's rebase base), where they were identical. Two runs on each gave the same digests.
+ */
 const BASE = {
   "ChatPanel/adult-plain": "10df95da41ec08638d40440233fc00c6f843bc6bcd35a9c328413b06d442fdb8",
   "ChatPanel/adult-effort-observed": "2ba790f80c7bdad44fe675b27e2d6973bb318f6e37fc15a40595991726c0dfd4",
@@ -245,7 +248,7 @@ if (!status.available) {
   for (const [name, digest] of Object.entries(digests)) {
     assert.equal(digest, BASE[name], `${name}: an old profile renders differently from main before A5`);
   }
-  ok(`old-profile render identity: ${Object.keys(digests).length} screens equal main 21bd15ba`);
+  ok(`old-profile render identity: ${Object.keys(digests).length} screens equal main before A5`);
 }
 
 // ── 2. The capability header on GET /v1/profile (spec §2.2 condition 4, §4.1) ─
