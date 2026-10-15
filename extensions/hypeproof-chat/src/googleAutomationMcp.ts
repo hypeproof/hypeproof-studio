@@ -1,7 +1,7 @@
 import type { SdkMcpFactory, ZodLike, McpToolResult } from './browserMcp.ts';
 import { GoogleSheetReadError, validateEmailRecipe, type EmailPreview, type GoogleAutomationRuntime } from './googleAutomation.ts';
 import { AppsScriptRecoveryError } from './appsScriptRuntime.ts';
-import { AutomationPublicationWithdrawnError } from './automationStoreClient.ts';
+import { AutomationPublicationWithdrawnError } from './automationErrors.ts';
 
 export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
 export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan','mcp__hypeproof_email__skill_unpublish'] as const;

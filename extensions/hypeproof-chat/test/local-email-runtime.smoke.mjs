@@ -4,7 +4,7 @@ import { localEmailTools, localTurnBudget } from '../src/localRuntime/emailTools
 import { startToolServer } from '../src/localRuntime/toolServer.mjs';
 import { createAppsScriptRuntime, APPS_SCRIPT_TOKEN_KEY } from '../src/appsScriptRuntime.ts';
 import { buildGoogleAutomationMcpServer } from '../src/googleAutomationMcp.ts';
-import { AutomationPublicationWithdrawnError } from '../src/automationStoreClient.ts';
+import { AutomationPublicationWithdrawnError } from '../src/automationErrors.ts';
 const profile={automations:{enabled:true,provider:'gmail',maxRecipients:20},game:{template_tier:'website'}};
 
 test('SDK and local publication report withdrawn intent without leaking errors or retrying',async()=>{

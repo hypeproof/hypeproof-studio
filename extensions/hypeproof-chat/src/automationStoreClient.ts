@@ -2,9 +2,8 @@ import { createHash } from 'node:crypto';
 import type { AutomationRecipe, AutomationStoreItem } from './automationProtocol';
 import { validateEmailRecipe } from './googleAutomation.ts';
 import { scanFile } from '@hypeproof/service-contracts/publish-scan';
-export class AutomationPublicationWithdrawnError extends Error {
-  constructor() { super('이전에 철회한 게시 요청이에요. 내용을 다시 확인한 뒤 공유를 요청해 주세요.'); }
-}
+import { AutomationPublicationWithdrawnError } from './automationErrors.ts';
+export { AutomationPublicationWithdrawnError } from './automationErrors.ts';
 export interface AutomationStoreClient {
   list(): Promise<{ items: AutomationStoreItem[] }>;
   versions(id: string): Promise<{ items: AutomationStoreItem[] }>;
