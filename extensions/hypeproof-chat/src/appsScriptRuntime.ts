@@ -10,6 +10,7 @@ export const APPS_SCRIPT_OAUTH_SCOPES = [
   ...APPS_SCRIPT_EXECUTION_SCOPES,
 ] as const;
 export const APPS_SCRIPT_TOKEN_KEY = 'hps.google.apps-script.v1';
+export const APPS_SCRIPT_REVOCATION_KEY = 'hps.google.apps-script.revocation.v1';
 export class AppsScriptBlockedError extends Error {
   readonly code = 'APPS_SCRIPT_SETUP_REQUIRED';
   constructor() { super('Google Apps Script API와 계정의 API 접근을 켜고, 스크립트 설정에서 Studio OAuth와 같은 표준 Google Cloud 프로젝트를 연결해 주세요. 회사 관리자의 제한도 확인해 주세요.'); }
@@ -66,10 +67,13 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
   const ownerOnly = () => { if (shared) throw new AppsScriptRecoveryError('operator', '공통 실행기는 Studio가 관리해요. 개인 프로젝트 생성이나 코드 배포는 이 경로에서 지원하지 않아요.'); };
   let epoch = 0, busy = false;
   let pendingConnect: { cancelled: boolean; listener?: OAuthListener } | undefined;
+  let disconnecting: Promise<void> | undefined;
+  let locallyDisconnected = false;
   let current: { deployment: AppsScriptDeployment; preview: EmailPreview } | undefined;
   const allowed = () => { if (!deps.isAllowed()) fail('현재 활동에서는 이 작업을 할 수 없어요.'); };
   const rawRequest = async (url: string, init: RequestInit) => request(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(url.includes(':run') ? 370000 : 30000) });
   async function stored(): Promise<Token | null> {
+    if (locallyDisconnected || await deps.secrets.get(APPS_SCRIPT_REVOCATION_KEY)) return null;
     const raw = await deps.secrets.get(APPS_SCRIPT_TOKEN_KEY);
     if (!raw) return null;
     try {
@@ -171,7 +175,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
         recipe: canonical, recipeDigest, sharedReleaseId: shared.releaseId, maxRecipients });
     },
     getConnectionIdentity,
-    async status() { return { connected: !!await stored(), configured: !!deps.clientId.trim() }; },
+    async status() { return { connected: !!await stored(), configured: !!deps.clientId.trim(), revocationPending: !!await deps.secrets.get(APPS_SCRIPT_REVOCATION_KEY) }; },
     async isConnected() { return !!await getConnectionIdentity(); },
     getPreview(id: string) { return current?.preview.id === id ? current.preview : undefined; },
     cancelConnect() {
@@ -179,6 +183,7 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
       pendingConnect.cancelled = true; pendingConnect.listener?.close(); return true;
     },
     async connect() { return exclusive(async () => {
+      if (disconnecting || await deps.secrets.get(APPS_SCRIPT_REVOCATION_KEY)) throw new AppsScriptRecoveryError('retry', 'Google 권한 해제가 아직 확인되지 않았어요. 권한 해제 다시 시도를 먼저 눌러 주세요.');
       if (!deps.clientId.trim()) throw new AppsScriptRecoveryError('operator', '운영자가 Studio의 Google 로그인 설정을 먼저 완료해야 해요. 설정 후 이 단계에서 다시 연결할 수 있어요.');
       const state = epoch, attempt = { cancelled: false, listener: undefined as OAuthListener | undefined };
       pendingConnect = attempt;
@@ -202,10 +207,43 @@ export function createAppsScriptRuntime(deps: AppsScriptDeps) {
         if (!plain(user) || typeof user.sub !== 'string' || !user.sub) return fail('Google 계정을 확인하지 못했어요.');
         allowed(); if (state !== epoch) return fail('Google 연결이 변경됐어요.');
         t.accountId = hash(user.sub); t.connectionId = nonce();
-        await deps.secrets.store(APPS_SCRIPT_TOKEN_KEY, JSON.stringify(t)); epoch++; current = undefined;
+        await deps.secrets.store(APPS_SCRIPT_TOKEN_KEY, JSON.stringify(t));
+        if (state !== epoch) { await deps.secrets.delete(APPS_SCRIPT_TOKEN_KEY); return fail('Google 연결이 변경됐어요.'); }
+        locallyDisconnected = false; epoch++; current = undefined;
       } finally { if (pendingConnect === attempt) pendingConnect = undefined; listener?.close(); }
     }); },
-    async disconnect() { epoch++; current = undefined; await deps.secrets.delete(APPS_SCRIPT_TOKEN_KEY); },
+    async disconnect() {
+      // Invalidate approval and any in-flight login before waiting for storage or Google.
+      epoch++; current = undefined; locallyDisconnected = true;
+      if (pendingConnect) { pendingConnect.cancelled = true; pendingConnect.listener?.close(); }
+      if (disconnecting) return disconnecting;
+      const revoke = async () => {
+        try {
+          let pending = await deps.secrets.get(APPS_SCRIPT_REVOCATION_KEY);
+          if (!pending) {
+            const raw = await deps.secrets.get(APPS_SCRIPT_TOKEN_KEY);
+            const value: unknown = raw ? JSON.parse(raw) : null;
+            if (plain(value)) pending = typeof value.refreshToken === 'string' && value.refreshToken
+              ? value.refreshToken : typeof value.accessToken === 'string' ? value.accessToken : undefined;
+            // The pending marker survives restart and makes the old connection unusable.
+            if (pending) await deps.secrets.store(APPS_SCRIPT_REVOCATION_KEY, pending);
+          }
+          await deps.secrets.delete(APPS_SCRIPT_TOKEN_KEY);
+          if (!pending) return;
+          const response = await rawRequest('https://oauth2.googleapis.com/revoke', {
+            method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ token: pending }),
+          });
+          // Neither an error body nor an uncertain network result proves revocation.
+          if (response.status !== 200) throw new Error('revocation_unconfirmed');
+          await deps.secrets.delete(APPS_SCRIPT_REVOCATION_KEY);
+        } catch {
+          throw new AppsScriptRecoveryError('retry', 'Studio 연결은 중지했지만 Google 권한 해제는 확인하지 못했어요. 권한 해제 다시 시도를 눌러 주세요. 계속 실패하면 Google 계정의 앱 액세스에서 권한을 제거하고 운영자에게 알려 주세요.');
+        }
+      };
+      disconnecting = revoke();
+      try { await disconnecting; } finally { disconnecting = undefined; }
+    },
     async createProject(title: string) { return exclusive(async () => {
       ownerOnly();
       if (typeof title !== 'string' || !title.trim() || title.length > 120 || /[\x00-\x1f]/.test(title)) return fail('프로젝트 이름을 확인해 주세요.');

@@ -168,7 +168,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       const appSecrets = {
         get: (key: string) => context.secrets.get(prefix + key),
         store: async (key: string, value: string) => { await authorize(); if (binding !== pinned || !matches() || lockedEpoch !== operationEpoch) throw new Error('Changed activity'); await context.secrets.store(prefix + key, value); if (key === APPS_SCRIPT_TOKEN_KEY) await context.secrets.store(prefix + 'hps.google.email-automation.v1', value); },
-        delete: (key: string) => context.secrets.delete(prefix + key),
+        delete: async (key: string) => { await context.secrets.delete(prefix + key); if (key === APPS_SCRIPT_TOKEN_KEY) await context.secrets.delete(prefix + 'hps.google.email-automation.v1'); },
       };
       const sharedRunner = await loadSharedRunnerConfig(context.extensionUri.fsPath);
       if (!sharedRunner) throw new Error('공통 Google 실행기 설정이 없는 설치본이에요. 운영자에게 Studio 업데이트를 요청해 주세요.');
@@ -182,11 +182,23 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
       // OAuth mutation and refresh share the send lock across windows so an old
       // refresh cannot overwrite a newly connected account while authorization awaits.
       connect: () => runLocked(() => pinned.appsScript && appsRuntime ? appsRuntime.connect() : baseRuntime.connect()),
-      ensureConnected: () => runLocked(() => baseRuntime.ensureConnected()),
-      disconnect: () => runLocked(async () => { await baseRuntime.disconnect(); await appsRuntime?.disconnect(); }),
-      readSheet: args => runLocked(() => baseRuntime.readSheet(args)),
-      previewLatestSheet: async args => { await authorize(); return baseRuntime.previewLatestSheet(args); },
-      send: args => runLocked(() => baseRuntime.send(args)),
+      status: () => pinned.appsScript && appsRuntime ? appsRuntime.status() : baseRuntime.status(),
+      getConnectionIdentity: () => appsRuntime ? appsRuntime.getConnectionIdentity() : baseRuntime.getConnectionIdentity(),
+      ensureConnected: () => runLocked(async () => (!appsRuntime || await appsRuntime.isConnected()) && await baseRuntime.ensureConnected()),
+      disconnect: () => runLocked(() => appsRuntime ? appsRuntime.disconnect() : baseRuntime.disconnect()),
+      readSheet: args => runLocked(async () => {
+        if (appsRuntime && !await appsRuntime.isConnected()) throw new Error('Google 연결을 확인해 주세요. 권한 해제가 진행 중이면 먼저 완료해 주세요.');
+        return baseRuntime.readSheet(args);
+      }),
+      previewLatestSheet: async args => {
+        await authorize();
+        if (appsRuntime && !await appsRuntime.isConnected()) throw new Error('Google 연결이 해제됐어요. 연결 후 미리보기를 다시 만들어 주세요.');
+        return baseRuntime.previewLatestSheet(args);
+      },
+      send: args => runLocked(async () => {
+        if (appsRuntime && !await appsRuntime.isConnected()) throw new Error('Google 연결이 해제됐어요. 이전 미리보기로 보낼 수 없어요.');
+        return baseRuntime.send(args);
+      }),
     };
     controller = createAutomationPanelController({ runtime,
       store: createAutomationStoreClient({ baseUrl: pinned.service, getToken: async () => { await authorize(); if (binding !== pinned) throw new Error('활동이 변경됐어요.'); return pinned.token; } }), emit: view => { if (binding === pinned) emit(view); },

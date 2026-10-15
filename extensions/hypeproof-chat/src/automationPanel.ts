@@ -3,7 +3,7 @@ import { defaultAutomationRecipe, type AutomationAction, type AutomationView, ty
 import type { AutomationStoreClient } from './automationStoreClient.ts';
 export interface AutomationRuntime {
   connect(): Promise<unknown>; disconnect(): Promise<unknown>;
-  status(): Promise<{ connected: boolean; configured: boolean }>;
+  status(): Promise<{ connected: boolean; configured: boolean; revocationPending?: boolean }>;
   readSheet(input: { spreadsheetId: string; range: string }): Promise<string[][]>;
   preview(input: { recipe: AutomationRecipe; rows: string[][] }): AutomationPreview | Promise<AutomationPreview>;
   send(input: { previewId: string; approved: boolean }): Promise<{ records: AutomationSendRecord[] }>;
@@ -29,7 +29,11 @@ export function createAutomationPanelController(deps: { runtime: AutomationRunti
       switch (action.kind) {
         case 'refresh': Object.assign(state, await deps.runtime.status()); break;
         case 'connect': await deps.runtime.connect(); Object.assign(state, await deps.runtime.status()); invalidate(); break;
-        case 'disconnect': await deps.runtime.disconnect(); Object.assign(state, await deps.runtime.status()); invalidate(); state.notice = 'Google 연결을 해제했어요.'; break;
+        case 'disconnect':
+          invalidate(); emit();
+          try { await deps.runtime.disconnect(); state.notice = 'Google 연결을 해제했어요.'; }
+          finally { Object.assign(state, await deps.runtime.status()); }
+          break;
         case 'preview': {
           invalidate();
           const rows = await deps.runtime.readSheet({ spreadsheetId: spreadsheetIdFromInput(state.sheetUrl), range: state.range });

@@ -9,6 +9,12 @@ Automated local checks:
   valid refresh versus revoked credentials, private Sheet reuse/change,
   PKCE/state/scope, MIME header rejection, limits, account isolation,
   expiry, exact snapshot approval, unknown outcome, duplicates and MCP privacy.
+  Explicit managed-runner disconnect invalidates previews/login immediately,
+  revokes once through Google's HTTPS endpoint, and preserves unknown/sent ledgers.
+  Failed/uncertain revocation remains disconnected with a SecretStorage-only
+  pending marker across restart; only an explicit retry sends another request.
+  The inspector exposes that retry and never shows successful revocation on an
+  error. Account switching alone does not revoke the old account.
 - Controller/client: edit invalidates preview, explicit native confirmation,
   ambiguous network results never enable blind retry, stable publication request ID,
   authorization header, redirect rejection, no secrets in shared payload.
@@ -30,6 +36,11 @@ Automated local checks:
   30-day grant opt-in and preservation of original trial defaults and usage counters.
 
 Commands live in the extension's `test:automation` and Service `test:automations`.
+`test/appsScriptRuntime.test.ts` includes synthetic revocation transport,
+restart/retry, in-flight login cancellation, and controller status cases.
+No real Google grant is revoked by those tests. Google accepts revocation at
+HTTP 200; errors remain unconfirmed, and propagation may be delayed. Project-wide
+scope/client impact follows the [official Desktop OAuth revocation contract](https://developers.google.com/identity/protocols/oauth2/native-app#tokenrevoke).
 The actual App browser interaction test is
 `node test/automation-conversation-ui.browser.mjs` from `extensions/hypeproof-chat`
 (after installing the repository's `e2e` Playwright Chromium dependency). It uses

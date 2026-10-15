@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
-import { createAppsScriptRuntime, generateAppsScriptEmailProject, APPS_SCRIPT_TOKEN_KEY, AppsScriptBlockedError, AppsScriptRecoveryError } from '../src/appsScriptRuntime.ts';
+import { createAppsScriptRuntime, generateAppsScriptEmailProject, APPS_SCRIPT_TOKEN_KEY, APPS_SCRIPT_REVOCATION_KEY, AppsScriptBlockedError, AppsScriptRecoveryError } from '../src/appsScriptRuntime.ts';
+import { createAutomationPanelController } from '../src/automationPanel.ts';
 import type { EmailRecipe } from '../src/googleAutomation.ts';
 
 const recipe: EmailRecipe = { schema: 'hps-email-automation/1', title: '자료 요청', description: '자료 제출 요청', category: 'email', subjectTemplate: '{{name}}님 {{document}}', bodyTemplate: '{{dueDate}}까지 보내 주세요.', columns: { email: 'email', name: 'name', document: 'document', dueDate: 'dueDate' } };
@@ -20,6 +21,7 @@ function fixture() {
     secrets: { get: async (k: string) => secrets.get(k), store: async (k: string, v: string) => { secrets.set(k,v); }, delete: async (k: string) => { secrets.delete(k); } },
     openBrowser: async (_url: string) => {},
     fetchImpl: (async (url: string | URL | Request, init: RequestInit = {}) => {
+      if (String(url) === 'https://oauth2.googleapis.com/revoke') return new Response(null, { status: 200 });
       const u = String(url), body = init.body ? JSON.parse(String(init.body)) : undefined;
       calls.push({ url: u, body });
       if (failRun && u.endsWith(':run')) throw new Error('synthetic lost execution response');
@@ -56,6 +58,119 @@ test('create/upload/private version/deploy/preview/approve executes the exact im
   const runs = f.calls.filter(c => c.url.endsWith(':run'));
   assert.equal(runs.length, 2); assert.ok(runs.every(c => c.url.includes('/scripts/synthetic_deployment_id:run') && c.body.devMode === false));
   assert.deepEqual(runs.map(c => c.body.function), ['hpsPreview','hpsSendApproved']);
+});
+
+test('explicit disconnect immediately invalidates approval, revokes once with a body token and preserves unrelated ledgers', async () => {
+  const f = fixture();
+  await f.runtime.uploadProject('synthetic_script_id', f.bundle, f.bundle.digest);
+  const deployment = await f.runtime.deployProject('synthetic_script_id', f.bundle, f.bundle.digest);
+  // Prepare the preview on the runtime whose revoke transport can remain in flight.
+  let finish!: (response: Response) => void;
+  const requests: { url: string; init: RequestInit }[] = [];
+  const runtime = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async (url, init = {}) => {
+    if (String(url) !== 'https://oauth2.googleapis.com/revoke') return f.deps.fetchImpl(url, init);
+    requests.push({ url: String(url), init });
+    return new Promise<Response>(resolve => { finish = resolve; });
+  }) as typeof fetch });
+  const value = JSON.parse(f.secrets.get(APPS_SCRIPT_TOKEN_KEY)!);
+  f.secrets.set(APPS_SCRIPT_TOKEN_KEY, JSON.stringify({ ...value, refreshToken: 'synthetic-refresh' }));
+  f.secrets.set('synthetic-send-ledger', JSON.stringify({ previous: { status: 'unknown' } }));
+  const preview = await runtime.preview(deployment, { spreadsheetId: 'synthetic_sheet_id', range: 'A1:D21' });
+  const first = runtime.disconnect(), second = runtime.disconnect();
+  assert.equal(runtime.getPreview(preview.id), undefined);
+  await assert.rejects(runtime.sendApproved(deployment, preview.id, true));
+  while (!finish) await new Promise(resolve => setImmediate(resolve));
+  assert.equal((await runtime.status()).connected, false);
+  assert.equal((await runtime.status()).revocationPending, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://oauth2.googleapis.com/revoke');
+  assert.equal(requests[0].init.method, 'POST');
+  assert.equal(requests[0].init.redirect, 'error');
+  assert.ok(requests[0].init.signal instanceof AbortSignal);
+  assert.equal(new URLSearchParams(String(requests[0].init.body)).get('token'), 'synthetic-refresh');
+  assert.equal(f.secrets.has(APPS_SCRIPT_TOKEN_KEY), false);
+  finish(new Response(null, { status: 200 }));
+  await Promise.all([first, second]);
+  assert.equal((await runtime.status()).revocationPending, false);
+  assert.equal(f.secrets.has(APPS_SCRIPT_REVOCATION_KEY), false);
+  assert.equal(f.secrets.get('synthetic-send-ledger'), '{"previous":{"status":"unknown"}}');
+  await runtime.disconnect();
+  assert.equal(requests.length, 1, 'an already disconnected runtime does not revoke again');
+});
+
+test('unknown or rejected revocation stays disconnected across restart and retries only on explicit disconnect', async () => {
+  for (const failure of ['network', 400, 503] as const) {
+    const f = fixture();
+    let calls = 0;
+    const runtime = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async () => {
+      calls++;
+      if (failure === 'network') throw new Error('synthetic-secret-in-error');
+      return new Response('{"error":"synthetic-secret-in-body"}', { status: failure });
+    }) as typeof fetch });
+    await assert.rejects(runtime.disconnect(), error => {
+      assert(error instanceof AppsScriptRecoveryError);
+      assert.match(error.message, /권한 해제는 확인하지 못/);
+      assert.doesNotMatch(error.message, /synthetic-secret/);
+      return true;
+    });
+    assert.equal(calls, 1);
+    assert.equal(f.secrets.has(APPS_SCRIPT_TOKEN_KEY), false);
+    assert.ok(f.secrets.has(APPS_SCRIPT_REVOCATION_KEY));
+    const restarted = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async () => { calls++; return new Response(null, { status: 200 }); }) as typeof fetch });
+    assert.equal(await restarted.getConnectionIdentity(), null);
+    assert.deepEqual(await restarted.status(), { connected: false, configured: true, revocationPending: true });
+    await assert.rejects(restarted.connect(), /권한 해제/);
+    assert.equal(calls, 1, 'checking state or reconnecting does not automatically retry revocation');
+    await restarted.disconnect();
+    assert.equal(calls, 2);
+    assert.equal(f.secrets.has(APPS_SCRIPT_REVOCATION_KEY), false);
+  }
+});
+
+test('disconnect cancels an in-flight account change and does not let its late OAuth callback restore credentials', async () => {
+  const f = fixture();
+  let accept!: (url: URL) => void, opened!: URL, closed = false, revoked = 0;
+  const runtime = createAppsScriptRuntime({ ...f.deps,
+    listenOAuth: async () => ({ redirectUri: 'http://127.0.0.1:41234/oauth/callback', wait: new Promise<URL>(resolve => { accept = resolve; }), close() { closed = true; } }),
+    openBrowser: async url => { opened = new URL(url); },
+    fetchImpl: (async url => { assert.equal(String(url), 'https://oauth2.googleapis.com/revoke'); revoked++; return new Response(null, { status: 200 }); }) as typeof fetch,
+  });
+  const connecting = runtime.connect();
+  const stopped = assert.rejects(connecting, /취소|변경/);
+  while (!opened) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(revoked, 0, 'opening account change does not revoke the prior account');
+  await runtime.disconnect();
+  accept(new URL('http://127.0.0.1:41234/oauth/callback?code=synthetic-code&state=' + opened.searchParams.get('state')));
+  await stopped;
+  assert.equal(closed, true);
+  assert.equal(revoked, 1);
+  assert.equal((await runtime.status()).connected, false);
+  assert.equal(f.secrets.has(APPS_SCRIPT_TOKEN_KEY), false);
+});
+
+test('panel clears stale preview and exposes durable revocation retry without a false success notice', async () => {
+  const f = fixture();
+  let confirmed = false;
+  const runtime = createAppsScriptRuntime({ ...f.deps, fetchImpl: (async () => new Response(null, { status: confirmed ? 200 : 503 })) as typeof fetch });
+  const controller = createAutomationPanelController({
+    runtime: { connect: () => runtime.connect(), disconnect: () => runtime.disconnect(), status: () => runtime.status(),
+      readSheet: async () => rows, preview: () => f.preview, send: async () => { throw new Error('must not send'); } },
+    store: {} as any, confirmSend: async () => { throw new Error('must not confirm'); }, emit() {},
+  });
+  await controller.handle({ kind: 'edit', recipe, sheetUrl: 'synthetic_sheet_id_long_enough', range: 'A1:D21' });
+  await controller.handle({ kind: 'preview' });
+  assert.ok(controller.view().preview);
+  await controller.handle({ kind: 'disconnect' });
+  assert.equal(controller.view().preview, null);
+  assert.equal(controller.view().connected, false);
+  assert.equal(controller.view().revocationPending, true);
+  assert.equal(controller.view().notice, '');
+  assert.match(controller.view().error!, /확인하지 못/);
+  confirmed = true;
+  await controller.handle({ kind: 'disconnect' });
+  assert.equal(controller.view().revocationPending, false);
+  assert.equal(controller.view().error, null);
+  assert.match(controller.view().notice, /해제했어요/);
 });
 
 test('forged code, stale account, changed deployment and denied grant never send; setup errors are actionable and sanitized', async () => {

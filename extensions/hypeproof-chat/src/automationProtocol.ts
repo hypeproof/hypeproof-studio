@@ -9,6 +9,7 @@ export interface AutomationSendRecord { id: string; status: 'sending' | 'sent' |
 export interface AutomationStoreItem { id: string; version: number; title: string; description: string; ownerId: string; updatedAt: string; mine: boolean }
 export interface AutomationView {
   recipe: AutomationRecipe; sheetUrl: string; range: string; connected: boolean; configured: boolean;
+  revocationPending?: boolean;
   busy: boolean; notice: string; error: string | null; preview: AutomationPreview | null;
   records: AutomationSendRecord[]; items: AutomationStoreItem[];
   selected: { item: AutomationStoreItem; recipe: AutomationRecipe } | null;

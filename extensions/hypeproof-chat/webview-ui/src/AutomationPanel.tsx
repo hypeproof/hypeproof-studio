@@ -18,7 +18,8 @@ export function AutomationPanel({ view, onAction, onClose }: { view: AutomationV
     {view.notice && <p className="automation-notice" role="status">{view.notice}</p>}
     {view.busy && <p role="status" className="automation-muted">처리하고 있어요…</p>}
     {tab === 'create' ? <>
-      <div className="automation-step"><span>01</span><h2>Google 연결</h2><div className="automation-connection"><b>{view.connected ? '연결됨' : '연결 전'}</b><button disabled={view.busy || !view.configured} onClick={() => act(view.connected ? 'disconnect' : 'connect')}>{view.connected ? '연결 해제' : 'Google 계정 연결'}</button></div>
+      <div className="automation-step"><span>01</span><h2>Google 연결</h2><div className="automation-connection"><b>{view.revocationPending ? 'Google 권한 해제 확인 필요' : view.connected ? '연결됨' : '연결 전'}</b><button disabled={view.busy || (!view.configured && !view.revocationPending)} onClick={() => act(view.connected || view.revocationPending ? 'disconnect' : 'connect')}>{view.revocationPending ? '권한 해제 다시 시도' : view.connected ? '연결 해제' : 'Google 계정 연결'}</button></div>
+        {(view.connected || view.revocationPending) && <p className="automation-muted">연결을 해제하면 이 Google 앱에 허용한 권한도 제거해요. 다른 기기의 연결도 다시 허용해야 할 수 있어요. 작업과 메일 전송 기록은 유지해요.</p>}
         {!view.configured && <p className="automation-muted">Google 연결 준비가 필요해요. 강사에게 알려 주세요.</p>}
         <p className="automation-muted">Google에서 명단 읽기와 Gmail 전송 권한을 확인해 주세요.</p>
       </div>
