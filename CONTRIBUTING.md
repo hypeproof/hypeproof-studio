@@ -24,3 +24,8 @@ No terminal? File issues via the web forms
 [bug](.github/ISSUE_TEMPLATE/bug_report.yml)). Team: [CONTRIBUTORS.md](./CONTRIBUTORS.md).
 Policy and rules live in [CLAUDE.md](./CLAUDE.md) and
 [.claude/rules/](.claude/rules/).
+
+Every PR fills the template's **Release check** section: how the release manager
+verifies the change (where → what to click or run → expected result) and whether
+it needs a release smoke check. The weekly release checklist is built from it.
+The contract is [config/pr-body-contract.json](config/pr-body-contract.json).

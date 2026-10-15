@@ -61,6 +61,14 @@ The template has placeholders. Gather, in the contributor's language:
 - **AI Native Asset(s)** — for chat-panel changes, cite the §4.5 asset name(s)
   from METAPLAN. Challenge "serves none" for a chat-panel change.
 - **Tested** — check the `Run & test` layer(s) actually run (DEV-GUIDE §4).
+- **Release check** — read the linked issue (the intent) and the diff, then fill
+  the three lines. `How to verify: <where> → <what to click or run> → <expected
+  result>` stays first: the weekly release manager reads that line.
+  `Smoke: yes|no — <reason>`: yes when the change adds a dependency on another
+  repository or a server (Service, Chalk, ...). With yes, `Smoke check:` names a
+  file under `scripts/release/smoke/checks/` or a follow-up issue `#N`. If the
+  issue answered "Smoke needed?" with yes and the PR says no, add
+  `Smoke differs from issue: <reason>`.
 - **Checklist** — confirm branched off main, no secrets in diff, submodule
   pin untouched (unless this PR is an intentional bump).
 

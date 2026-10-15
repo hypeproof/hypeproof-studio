@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
-import {classify, howToCheck, parseTitle, render} from '../checklist.mjs';
+import {classify, howToCheck, parseTitle, render, smokeOf} from '../checklist.mjs';
 import s1 from '../smoke/checks/s1-service-health.mjs';
 import s3 from '../smoke/checks/s3-cohort-token.mjs';
 import s4 from '../smoke/checks/s4-chat-api.mjs';
@@ -51,6 +51,58 @@ test('render folds features by scope and marks a missing author check', () => {
   assert.match(features, /how to check: _not given by the author_/);
   assert.equal(dependency, 'None.');
   assert.equal(automatic, 'None.');
+});
+
+const TEMPLATE = `## Release check
+
+How to verify: <where> → <what to click or run> → <expected result>
+Smoke: <yes|no> — <reason>
+Smoke check: <scripts/release/smoke/checks/sN-*.mjs, or #follow-up-issue; only when the answer is yes>
+
+<!--
+Answer yes for Smoke when this adds a dependency on another repository or a server.
+-->
+
+## Checklist
+- [ ] x`;
+
+const FILLED = `## Release check
+
+How to verify: Chalk → create a track plan → the plan lists three sessions
+Smoke: yes — calls the Chalk server for the plan
+Smoke check: scripts/release/smoke/checks/s2-chalk-health.mjs
+
+## Checklist`;
+
+test('howToCheck: the Release check first line drops its label; the unfilled template is not a check', () => {
+  assert.equal(howToCheck(FILLED), 'Chalk → create a track plan → the plan lists three sessions');
+  assert.equal(howToCheck(TEMPLATE), null);
+});
+
+test('smokeOf: reads the answer, reason and check; null for the unfilled template', () => {
+  assert.deepEqual(smokeOf(FILLED), {answer: 'yes', reason: 'calls the Chalk server for the plan',
+    check: 'scripts/release/smoke/checks/s2-chalk-health.mjs'});
+  assert.deepEqual(smokeOf('## Release check\nHow to verify: a → b → c\nSmoke: no — UI copy only, nothing external\n'),
+    {answer: 'no', reason: 'UI copy only, nothing external', check: null});
+  assert.equal(smokeOf(TEMPLATE), null);
+  assert.equal(smokeOf(''), null);
+});
+
+test('render shows the linked issue and the smoke decision for features and dependency PRs', () => {
+  const closes = {closingIssuesReferences: {nodes: [{number: 77}]}};
+  const {groups} = classify([
+    pr(1, 'feat(chalk): plan', [], {body: FILLED, ...closes}),
+    pr(2, 'feat(start): copy'),
+    pr(3, 'chore(deploy): pin', ['.github/workflows/deploy-worker.yml'], {body: FILLED, ...closes}),
+  ]);
+  const {features, dependency} = render({groups});
+  assert.match(features, /#1 feat\(chalk\): plan — @dev · closes #77/);
+  assert.match(features, /smoke: yes — calls the Chalk server for the plan \(check: scripts\/release\/smoke\/checks\/s2-chalk-health\.mjs\)/);
+  assert.match(features, /#2 feat\(start\): copy — @dev · _no linked issue_/);
+  assert.match(features, /smoke: _not given by the author_/);
+  assert.match(dependency, /#3 chore\(deploy\): pin — @dev · closes #77/);
+  assert.match(dependency, /how to check: Chalk → create a track plan/);
+  assert.match(dependency, /smoke: yes —/);
 });
 
 async function withHealth(body, fn) {
