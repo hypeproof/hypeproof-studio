@@ -480,6 +480,10 @@ if (!status.available) {
   assert.match(modals.at(-1).message, /\n\ndesign-reviewer에게: 첫 화면을 검토해 주세요\n\n/);
   delete settings.requireApprovalFor;
   fakeVscode.window.showWarningMessage = async () => undefined;
+  // The kind is declared now, so A2's request builder needs no cast (typecheck is the real guard).
+  const H = await import("../src/sdkCoachHelpers.ts");
+  assert.equal(H.sdkToolToActionRequest({ toolName: "mcp__hypeproof__consult", input: { agent: "design-reviewer", question: "첫 화면을 검토해 주세요" } }).kind, "consultHelper");
+  assert.doesNotMatch(readFileSync(new URL("../src/sdkCoachHelpers.ts", import.meta.url), "utf8"), /CONSULT_HELPER_KIND as string as/, "A2's temporary cast is gone");
   ok("consultHelper: allowed without a modal by default (control: delegateAgent still asks); a machine that lists it asks once per consult, naming 검토 도우미 · Claude Haiku 5.5 and the question; Esc denies");
 }
 
