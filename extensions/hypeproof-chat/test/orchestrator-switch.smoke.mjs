@@ -1,19 +1,19 @@
 // A4 (ADR 0011; spec §2.3, §5.4, §13.2 A4, §15): the front-line orchestrator's switch.
 //
 // 1. Byte-identity: without a served roster this seat may use, runSdkCoach does exactly
-//    what it did at Studio main 7b8a315 (before A4). A matrix of profiles × served values
-//    × host arguments runs through the real runSdkCoach with a scripted CLI; what the CLI
-//    would receive (prompt, options, the MCP server, canUseTool's answers, the stream's
-//    callbacks) is hashed and compared with digests taken at 7b8a315 with this same
-//    matrix. Cases with the orchestrator on must differ (positive control), and a
-//    one-field change must be noticed (negative control).
+//    what it does on Studio main without A4. A matrix of profiles × served values × host
+//    arguments runs through the real runSdkCoach with a scripted CLI; what the CLI would
+//    receive (prompt, options, the MCP server, canUseTool's answers, the stream's
+//    callbacks) is hashed and compared with digests taken on main trees without A4 with
+//    this same matrix (BASE, section 1). Cases with the orchestrator on must differ
+//    (positive control), and a one-field change must be noticed (negative control).
 // 2. The switch-off inventory (ORCHESTRATOR_SURFACES): with the switch off there is no
 //    orchestrator tool, no hook, no header, no env pin, no agent-run request and no
 //    event; with it on, every surface is there.
 // 3. A full consult turn through runSdkCoach against a fake gateway.
 //
 // Run: node --experimental-strip-types test/orchestrator-switch.smoke.mjs
-// Record the base digests (only on an unmodified 7b8a315 tree):
+// Record the base digests (only on a main tree without A4, with this file copied in):
 //   HPS_A4_RECORD_BASE=1 node --experimental-strip-types test/orchestrator-switch.smoke.mjs
 
 import assert from "node:assert/strict";
@@ -252,6 +252,9 @@ const PROFILES = {
   adultCR: { profile_id: "cr-s1", game: { template_tier: "website" }, sdk_tools: { browser: true }, curriculum_runtime: { enabled: true } },
   minorFlagAdultTier: { profile_id: "teen-s1", minor_cohort: true, game: { template_tier: "website" }, sdk_tools: { read: true, write: true, browser: true } },
   unknownTier: { profile_id: "odd-s1", sdk_tools: { read: true, write: true, browser: true } },
+  // One-click publish (#1650): publish_site is a second MCP grant that does not need the browser.
+  adultPublishOnly: { profile_id: "publish-s1", game: { template_tier: "website" }, sdk_tools: { read: true, write: true }, publishing: { enabled: true, strategy: "per_user_github_pages" } },
+  adultBrowserPublish: { profile_id: "publish-s2", game: { template_tier: "website" }, sdk_tools: { read: true, write: true, browser: true }, publishing: { enabled: true, strategy: "per_user_github_pages" } },
 };
 
 /** The served roster of spec §2.2 / §10.1 (the reviewer on, the advisor off). */
@@ -284,7 +287,7 @@ const SERVED = {
   noCoach: { ...ROSTER, agents: ROSTER.agents.slice(1) },
 };
 const HOSTS = { none: null, host: {} };
-const ADULTS = new Set(["adultRW", "adultWide", "adultSubagents", "adultCR"]);
+const ADULTS = new Set(["adultRW", "adultWide", "adultSubagents", "adultCR", "adultPublishOnly", "adultBrowserPublish"]);
 
 /** Case name → is the orchestrator on? Only an adult, a well-formed roster and a host that asked for it. */
 const CASES = [];
@@ -326,11 +329,13 @@ const ok = (name) => {
   console.log(`✓ ${name}`);
 };
 
-// ── 1. Byte-identity with Studio main 7b8a315 ───────────────────────────────
-// Taken with HPS_A4_RECORD_BASE=1 on 7b8a315 (A1+A2+A3 merged, no A4 change): all ten
-// cases of a profile had the same digest there, because nothing before A4 reads the
-// served `orchestrator` value or the host's `orchestrator` argument.
-const BASE_7B8A315 = {
+// ── 1. Byte-identity with Studio main ───────────────────────────────────────
+// Taken with HPS_A4_RECORD_BASE=1 on main trees without A4: all ten cases of a profile have
+// the same digest there, because nothing before A4 reads the served `orchestrator` value or
+// the host's `orchestrator` argument. The first eight were taken at 7b8a315 (A1+A2+A3
+// merged) and came out identical at d2a73755, d3ebcbd1 and 48cf6d86. The two publish
+// profiles were taken at 48cf6d86, where one-click publish (#1650) added publish_site.
+const BASE = {
   kidsChat: "e4650ad1dc31c51b",
   kidsPolluted: "c6e30e39c05012d9",
   adultRW: "7ddfb7c2911645e8",
@@ -339,25 +344,27 @@ const BASE_7B8A315 = {
   adultCR: "6cda00d7ffa4fdd6",
   minorFlagAdultTier: "99035f6bafb010d6",
   unknownTier: "3b83f67a44c1d4f3",
+  adultPublishOnly: "277052a7471ddaf3",
+  adultBrowserPublish: "39edc7360c618388",
 };
 {
-  assert.deepEqual(Object.keys(BASE_7B8A315), Object.keys(PROFILES), "every profile has a base digest");
-  const offDrift = CASES.filter((c) => !c.on && digest(observed[c.name].snapshot) !== BASE_7B8A315[c.name.split("/")[0]]);
-  assert.deepEqual(offDrift.map((c) => c.name), [], "a turn without the orchestrator drifted from 7b8a315");
+  assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
+  const offDrift = CASES.filter((c) => !c.on && digest(observed[c.name].snapshot) !== BASE[c.name.split("/")[0]]);
+  assert.deepEqual(offDrift.map((c) => c.name), [], "a turn without the orchestrator drifted from main");
   // Positive control: the cases that are on really differ, so the comparison can see A4.
   const onCases = CASES.filter((c) => c.on);
-  assert.equal(onCases.length, 4, "four adult profiles with a roster and a host");
+  assert.equal(onCases.length, 6, "six adult profiles with a roster and a host");
   for (const c of onCases) {
-    assert.notEqual(digest(observed[c.name].snapshot), BASE_7B8A315[c.name.split("/")[0]], `${c.name}: the orchestrator changes the turn`);
+    assert.notEqual(digest(observed[c.name].snapshot), BASE[c.name.split("/")[0]], `${c.name}: the orchestrator changes the turn`);
   }
   // Negative control: one changed field in one snapshot is noticed.
   const tampered = structuredClone(observed["adultWide/none/none"].snapshot);
   tampered.options.hooks = { PostToolUse: [] };
-  assert.notEqual(digest(tampered), BASE_7B8A315.adultWide, "an added hooks key changes the digest");
+  assert.notEqual(digest(tampered), BASE.adultWide, "an added hooks key changes the digest");
   const tampered2 = structuredClone(observed["adultRW/roster/none"].snapshot);
   tampered2.env.set.CLAUDE_CODE_GATEWAY_HINT_HEADERS = "1";
-  assert.notEqual(digest(tampered2), BASE_7B8A315.adultRW, "an added env pin changes the digest");
-  ok(`byte-identity: ${CASES.length - onCases.length} turns without the orchestrator equal 7b8a315 (no host, no roster, a disabled or malformed roster, minors and unknown tiers with a roster); the ${onCases.length} on-cases differ; a planted hook or env pin is caught`);
+  assert.notEqual(digest(tampered2), BASE.adultRW, "an added env pin changes the digest");
+  ok(`byte-identity: ${CASES.length - onCases.length} turns without the orchestrator equal main (no host, no roster, a disabled or malformed roster, minors and unknown tiers with a roster, publish seats); the ${onCases.length} on-cases differ; a planted hook or env pin is caught`);
 }
 
 // ── 2. The switch-off inventory ─────────────────────────────────────────────
@@ -419,6 +426,11 @@ function surfacesOf({ call, seen }) {
   assert.deepEqual(names("adultWide/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "consult", "site_check"]);
   assert.deepEqual(names("adultWide/none/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type"]);
   assert.deepEqual(names("adultRW/roster/host"), ["consult", "site_check"], "a seat without the browser grant gets the orchestrator tools only");
+  // One-click publish (#1650) is a second grant that needs no browser: it keeps its server part,
+  // and the orchestrator tools follow it.
+  assert.deepEqual(names("adultPublishOnly/none/host"), ["publish_site"], "main's publish-only server, unchanged");
+  assert.deepEqual(names("adultPublishOnly/roster/host"), ["publish_site", "consult", "site_check"]);
+  assert.deepEqual(names("adultBrowserPublish/roster/host"), ["browser_open", "browser_screenshot", "live_preview_start", "browser_read", "browser_click", "browser_type", "publish_site", "consult", "site_check"]);
   assert.equal("mcpServers" in observed["adultRW/none/host"].call.options, false, "…and nothing without the roster");
   assert.deepEqual(names("adultCR/roster/host").slice(-2), ["consult", "site_check"]);
   assert.ok(names("adultCR/roster/host").includes("browser_observe"), "CR tools still follow their own switch");
