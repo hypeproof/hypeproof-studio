@@ -8,7 +8,8 @@ const TAG = 'v2026.1013.0';
 const SHA = 'a'.repeat(40);
 const rc = [{name: `${TAG}-rc.1`, sha: SHA}];
 const writers = new Set(['minhan']);
-const releasePr = (reviews, labels = ['release']) => [{number: 9, labels, reviews}];
+const HEAD = 'd'.repeat(40);
+const releasePr = (reviews, labels = ['release']) => [{number: 9, labels, head: HEAD, reviews: reviews.map(r => ({commit: HEAD, ...r}))}];
 const hotfixPr = (sha, extra = {}) => ({number: 7, labels: ['hotfix'], base: 'hotfix/v2026.1006.0', mergeCommit: sha, ...extra});
 
 test('a prerelease tag is not gated', () => {
@@ -32,6 +33,10 @@ test('approval route refuses: non-writer, later change request, missing label, r
   assert.equal(decide({...base, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}, {user: 'minhan', state: 'CHANGES_REQUESTED'}])}).allow, false);
   assert.equal(decide({...base, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}], [])}).allow, false);
   assert.equal(decide({...base, rcTags: [{name: `${TAG}-rc.1`, sha: 'c'.repeat(40)}], releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}])}).allow, false);
+  // an approval of an earlier candidate (the branch moved for a later rc) does not count
+  const stale = decide({...base, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED', commit: 'e'.repeat(40)}])});
+  assert.equal(stale.allow, false);
+  assert.match(stale.reasons.join('\n'), /approved an earlier candidate/);
   // a comment after the approval does not withdraw it
   assert.equal(decide({...base, releasePrs: releasePr([{user: 'minhan', state: 'APPROVED'}, {user: 'minhan', state: 'COMMENTED'}])}).allow, true);
 });

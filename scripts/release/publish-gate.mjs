@@ -4,8 +4,10 @@
 //   node scripts/release/publish-gate.mjs --tag v2026.1013.0 [--repo owner/name]
 //
 // Exit 0 allows publication, exit 1 keeps the release a draft. A stable tag passes when
-//   (approval) a `release` PR from `release/<tag>` has an Approve from a repository writer,
-//              as that reviewer's latest review, and an `<tag>-rc.N` tag points at the same commit; or
+//   (approval) a `release` PR from `release/<tag>` has an Approve from a repository writer, as that
+//              reviewer's latest review and given on the PR's current head (a later rc moves the branch,
+//              so an approval of an earlier candidate does not count), and an `<tag>-rc.N` tag points at
+//              the same commit as the tag; or
 //   (hotfix)   every first-parent commit since the last published stable release is the merge
 //              commit of a `hotfix`-labelled PR whose base is a `hotfix/*` branch.
 // A prerelease tag (-rc.N) is not gated: the in-app updater ignores prereleases.
@@ -16,17 +18,17 @@ import {execFileSync} from 'node:child_process';
 
 const APP_STABLE = /^v\d+\.\d+\.\d+$/;
 
-export function latestReviewStates(reviews) {
+export function latestReviewStates(reviews, head) {
   const latest = new Map();
   for (const r of reviews) {
     if (!r.user || r.state === 'COMMENTED' || r.state === 'PENDING') continue;
-    latest.set(r.user, r.state);
+    latest.set(r.user, r.state === 'APPROVED' && head && r.commit !== head ? 'STALE' : r.state);
   }
   return latest;
 }
 
 // Pure decision. Every input is already fetched.
-//   releasePrs: [{number, labels, reviews: [{user, state}]}] in review order
+//   releasePrs: [{number, labels, head, reviews: [{user, state, commit}]}] in review order
 //   writers:    Set of logins with write access (only reviewers need to be in it)
 //   rangePrs:   [{sha, prs: [{number, labels, base, mergeCommit}]}]; rangeTooLong: commit count when not read
 export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new Set(), previous, rangePrs = [], rangeTooLong}) {
@@ -36,10 +38,13 @@ export function decide({tag, tagSha, rcTags = [], releasePrs = [], writers = new
   const rcAtTag = rcTags.filter(t => t.sha === tagSha).map(t => t.name);
   for (const pr of releasePrs) {
     if (!pr.labels.includes('release')) { reasons.push(`#${pr.number}: no release label`); continue; }
-    const approvers = [...latestReviewStates(pr.reviews)].filter(([, s]) => s === 'APPROVED').map(([u]) => u);
+    const states = latestReviewStates(pr.reviews, pr.head);
+    const approvers = [...states].filter(([, s]) => s === 'APPROVED').map(([u]) => u);
+    const stale = [...states].filter(([, s]) => s === 'STALE').map(([u]) => u);
     const writerApprovers = approvers.filter(u => writers.has(u));
     if (!writerApprovers.length) {
-      reasons.push(`#${pr.number}: no current approval from a writer${approvers.length ? ` (approved by ${approvers.join(', ')})` : ''}`);
+      reasons.push(`#${pr.number}: no current approval from a writer${approvers.length ? ` (approved by ${approvers.join(', ')})` : ''}`
+        + (stale.length ? `; ${stale.join(', ')} approved an earlier candidate` : ''));
       continue;
     }
     if (!rcAtTag.length) { reasons.push(`#${pr.number}: approved, but no ${tag}-rc.N tag points at ${tagSha.slice(0, 8)}`); continue; }
@@ -76,8 +81,8 @@ export function gatherApproval({tag, repo}) {
     .map(name => ({name, sha: git('rev-parse', `${name}^{commit}`)}));
 
   const releasePrs = gh(`repos/${repo}/pulls?state=all&head=${repo.split('/')[0]}:release/${tag}&per_page=100`)
-    .map(p => ({number: p.number, labels: p.labels.map(l => l.name),
-      reviews: gh(`repos/${repo}/pulls/${p.number}/reviews?per_page=100`).map(r => ({user: r.user?.login, state: r.state}))}));
+    .map(p => ({number: p.number, labels: p.labels.map(l => l.name), head: p.head.sha,
+      reviews: gh(`repos/${repo}/pulls/${p.number}/reviews?per_page=100`).map(r => ({user: r.user?.login, state: r.state, commit: r.commit_id}))}));
   const writers = new Set();
   for (const login of new Set(releasePrs.flatMap(p => p.reviews.map(r => r.user)).filter(Boolean))) {
     const perm = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/collaborators/${login}/permission`], {encoding: 'utf8'})).permission;
