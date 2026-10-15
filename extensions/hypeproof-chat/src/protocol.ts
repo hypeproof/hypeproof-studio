@@ -330,6 +330,42 @@ export interface ResolvedProfile {
   coach_runtime?: "proxy" | "agent-sdk";
   /** #596 — session-log upload opt-in. The client uses it only to decide UI exposure (the server enforces). */
   analytics?: { upload_session_logs?: boolean };
+  /**
+   * ADR 0011 (orchestrator spec §2.2, §14) — the front-line orchestrator's roster. Served only
+   * to an app that sent `x-hps-orchestrator` (proxyClient), and only to an adult agent-sdk seat
+   * outside a frozen lesson whose cohort has it on; `{ enabled: false, reason }` when one of
+   * those fails, and absent from an older Service or without the header. Never to a minor.
+   * Wire data, unvalidated: agentRoster.ts parses it (fail closed) before anything reads it,
+   * and a value it refuses is no roster.
+   */
+  orchestrator?: ServedOrchestratorWire | { enabled: false; reason: string };
+}
+
+/**
+ * The served `hps-agent-roster/1` roster as it arrives (spec §2.2). Prompts and output contracts
+ * stay in the Service: the app gets labels, caps and the context it may attach. Structural only,
+ * so the webview build never follows a Node-side import from here.
+ */
+export interface ServedOrchestratorWire {
+  format: string;
+  id: string;
+  version: string;
+  digest?: string;
+  /** Korean; rendered into the consult tool description. */
+  coach_brief?: string;
+  checks?: string[];
+  agents: Array<{
+    name: string;
+    /** Korean product copy shown to the learner, e.g. 검토 도우미. */
+    title?: string;
+    role: string;
+    purpose?: string;
+    trigger?: string;
+    context?: string[];
+    caps?: { per_turn: number; per_session: number };
+    enabled?: boolean;
+    model?: { id: string; label: string };
+  }>;
 }
 
 export interface UxConfig {

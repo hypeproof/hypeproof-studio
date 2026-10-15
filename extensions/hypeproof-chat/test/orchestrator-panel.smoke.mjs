@@ -160,4 +160,44 @@ if (!status.available) {
   ok(`old-profile render identity: ${Object.keys(digests).length} screens equal main 21bd15ba`);
 }
 
+// ── 2. The capability header on GET /v1/profile (spec §2.2 condition 4, §4.1) ─
+
+{
+  const PC = await import("../src/proxyClient.ts");
+  const { ORCHESTRATOR_FORMAT } = await import("../src/sdkCoachHelpers.ts");
+  const { parseServedRoster } = await import("../src/agentRoster.ts");
+  const OLD_PROFILE = resolvedProfile(3, { game: { template_tier: "website" } });
+  const seen = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    seen.push({ url: String(url), headers: { ...(init?.headers ?? {}) } });
+    const body = String(url).endsWith("/activity") ? { activity_id: "act-1" } : OLD_PROFILE;
+    return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const r = await PC.fetchProfileResult({ proxyUrl: "https://api.example.test/v1/", token: "t0ken" });
+    assert.equal(seen[0].url, "https://api.example.test/v1/profile");
+    assert.equal(seen[0].headers["x-hps-orchestrator"], "hps-agent-roster/1", "the app declares the roster format it can run");
+    assert.equal(seen[0].headers["x-hps-orchestrator"], ORCHESTRATOR_FORMAT, "the same value A2 sends on CLI requests");
+    assert.equal(seen[0].headers.authorization, "Bearer t0ken");
+    assert.equal(seen[0].headers["x-hps-observation-format"], "hps-observation/2", "the observation negotiation is kept");
+    // An older Service answers without the key: the profile comes back as it was sent.
+    assert.equal(r.ok, true);
+    assert.deepEqual(r.profile, OLD_PROFILE);
+    assert.equal("orchestrator" in r.profile, false);
+    // The declared format is the one the bundled parser accepts (and only that one).
+    const roster = { format: seen[0].headers["x-hps-orchestrator"], id: "homepage", version: "1.0.0", agents: [{ name: "coach", title: "코치", role: "coach" }] };
+    assert.equal(parseServedRoster(roster).ok, true);
+    assert.equal(parseServedRoster({ ...roster, format: "hps-agent-roster/2" }).ok, false);
+    // Negative control: /v1/activity is not a roster route (spec §4.1 lists profile, messages, agents).
+    await PC.verifyActivity({ proxyUrl: "https://api.example.test/v1", token: "t0ken" }, "act-1");
+    assert.equal(seen[1].url, "https://api.example.test/v1/activity");
+    assert.equal(seen[1].headers["x-hps-orchestrator"], undefined);
+    assert.equal(seen[1].headers["x-hps-observation-format"], "hps-observation/2");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  ok("GET /v1/profile declares x-hps-orchestrator: hps-agent-roster/1 (the parser's format); an answer without the key is unchanged; /v1/activity does not carry it");
+}
+
 console.log(`orchestrator-panel: ${passed} checks passed`);
