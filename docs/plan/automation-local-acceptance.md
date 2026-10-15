@@ -580,3 +580,30 @@ private online three-principal store activity remains a separate environment.
 Evidence: `/tmp/hps-email-mvp/instructor-integrated/current-main-stale-board.json`,
 plus `.txt` and `.png` captures. The Service health label is still the historical
 local configuration string; it must not be treated as the running source SHA.
+
+## Current integrated Service: native reconnect — 2026-10-15 21:16KST
+
+The same single Mac Dev app3f1a3f20 now targets local Service2ce0b2e for fresh
+acceptance. Its earlier online settings were backed up; online store recipes and
+all three activity namespaces remain retained. The machine-scoped Service setting
+was changed explicitly in this isolated app: a workspace setting cannot redirect
+the Service. The local participant code still returned200 and was not reissued.
+The unchanged runtime was relaunched with the existing local-subscription coach
+and memory-only development storage; no new gateway allocation was made.
+
+A fresh pairing for existing synthetic seatA02 connected through the actual Studio
+command. The app's pending Google reconnect emitted running/connect2/6. Both the
+live Service API and actual instructor board report fresh/normalA02 and19 unknown,
+replacing the historical6/6 display with this current host result. This closes the
+latest-integration native classroom reconnect observation, not Google completion.
+
+The existing bot-account OAuth flow reached Google's re-login page without a new
+scope request. After Continue, the browser remained at Google and Studio's callback
+was pending; human completion was requested. An earlier attempt used the external
+dialog's shortened display URL and was stopped; the replacement uses the complete
+original URL. No Google success, Sheet read, preview or new send is claimed.
+The10-minute callback request may expire; do not reuse an expired request as success.
+
+Evidence: `instructor-integrated/current-main-native-reconnect.{json,txt,png}`,
+`current-main-reconnect-pending.txt` and
+`integrated-peer/current-local-revalidation.json` under `/tmp/hps-email-mvp/`.
