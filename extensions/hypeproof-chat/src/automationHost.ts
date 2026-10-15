@@ -445,7 +445,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
             authorize: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); },
           }, recipe, parentId, source?.id);
           // Report the completed host confirmation without exposing the private card.
-          return { published: true, approvalConfirmed: true, id: result.item.id, version: result.item.version, familyId: result.item.familyId, title: result.item.title };
+          return { published: true, approvalConfirmed: true, visibility: 'cohort', id: result.item.id, version: result.item.version, familyId: result.item.familyId, title: result.item.title };
         },
         unpublishSkill: async id => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
@@ -463,7 +463,7 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
           const result = id ? await store.versions(id) : await store.list();
-          return { items: result.items.map(({ id, title, description, mine, version, familyId, parentId, sourceId }) => ({ id, title, description, mine, version, familyId, parentId, sourceId })) };
+          return { visibility: 'cohort', contentsCompared: false, items: result.items.map(({ id, title, description, mine, version, familyId, parentId, sourceId }) => ({ id, title, description, mine, version, familyId, parentId, sourceId })) };
         },
         installSkill: async id => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');

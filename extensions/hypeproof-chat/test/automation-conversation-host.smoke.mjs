@@ -95,7 +95,7 @@ try {
   assert.equal(connectionChecks,checksBefore,'credential refresh must not run while another window holds the account lock');
   releaseLock();await held;assert.equal((await mcp.connectGoogle()).reused,true);assert.equal(connectionChecks,checksBefore+1);
   pending=mcp.publishSkill();card=await waitQuestion();assert.equal(card.kind,'publish');assert.deepEqual(card.recipe,recipe);assert.deepEqual(card.recipe,previewedRecipe,'published skill must match the saved skill used for execution');await handlers.answer({questionId:card.id,cancelled:true});const cancelledPublication=await pending;assert.equal(cancelledPublication.cancelled,true);assert.equal(cancelledPublication.approvalConfirmed,undefined);assert.equal(published,0);mcp=await host.getMcpHost();
-  pending=mcp.publishSkill();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});const publicationReceipt=await pending;assert.equal(publicationReceipt.published,true);assert.equal(publicationReceipt.approvalConfirmed,true,'coach receives evidence of the completed private confirmation');assert.equal('recipe' in publicationReceipt,false,'receipt must not echo private card contents');assert.equal(published,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(published,1);
+  pending=mcp.publishSkill();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});const publicationReceipt=await pending;assert.equal(publicationReceipt.published,true);assert.equal(publicationReceipt.approvalConfirmed,true,'coach receives evidence of the completed private confirmation');assert.equal(publicationReceipt.visibility,'cohort','a successful publication must identify its actual restricted audience');assert.equal('recipe' in publicationReceipt,false,'receipt must not echo private card contents');assert.equal(published,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(published,1);
   failPublish=true;pending=mcp.publishSkill();const rejectedPublication=assert.rejects(pending,/스토어 요청/);card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await rejectedPublication;assert.equal(published,1,'approval alone cannot report a successful publication');failPublish=false;mcp=await host.getMcpHost();
   // Withdrawal is owner-bound and never erases installed skills, credentials or uncertain send outcomes.
   const durableRecords={['d'.repeat(64)]:{id:'d'.repeat(64),status:'unknown'}};
@@ -163,7 +163,7 @@ try {
   // Version selection is a host review, never an automatic update or execution.
   mcp=await host.getMcpHost();
   const beforeVersionSetup=[...secrets];const beforeVersionConnections=connected;
-  const history=await mcp.listSkills('version-root');assert.deepEqual(history.items.map(i=>i.version),[2,1]);
+  const history=await mcp.listSkills('version-root');assert.deepEqual(history.items.map(i=>i.version),[2,1]);assert.equal(history.visibility,'cohort');assert.equal(history.contentsCompared,false,'version metadata must not claim the bodies were compared');const catalogue=await mcp.listSkills();assert.equal(catalogue.visibility,'cohort');assert.equal(catalogue.contentsCompared,false);
   const savedBeforeVersion=JSON.stringify([...globals]);
   pending=mcp.installSkill('version-root');card=await waitQuestion();assert.match(card.title,/버전 1/);
   await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);

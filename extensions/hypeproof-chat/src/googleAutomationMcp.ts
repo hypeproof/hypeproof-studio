@@ -7,7 +7,7 @@ export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','
 export const APPS_SCRIPT_MCP_TOOLS = ['mcp__hypeproof_email__apps_script_prepare','mcp__hypeproof_email__apps_script_upload','mcp__hypeproof_email__apps_script_setup','mcp__hypeproof_email__apps_script_deploy','mcp__hypeproof_email__apps_script_run'] as const;
 export const ALL_AUTOMATION_MCP_TOOLS = [...GOOGLE_AUTOMATION_MCP_TOOLS, ...APPS_SCRIPT_MCP_TOOLS] as const;
 
-const storeReplyGuidance = ' 사용자에게는 스킬 이름과 실제 결과를 자연스러운 한국어로 설명한다. mine·id·approvalConfirmed·published·unpublished 같은 내부 필드명, 불리언 값이나 게시물 식별번호를 답변에 옮기지 않는다. cancelled=true는 작업이 확정되지 않았다는 결과다. 카드가 열리지 않았다거나 연결 오류라고 추측하지 말고, 완료되지 않았음을 짧게 알린 뒤 새 요청을 기다린다. 자동 재시도하지 않는다.';
+const storeReplyGuidance = ' 공유 범위는 같은 수업 참가자뿐이다. visibility=cohort는 우리 반 공유이며 인터넷 전체 공개·공개 스토어·공개 게시라고 설명하지 않는다. 사용자에게는 스킬 이름과 실제 결과를 자연스러운 한국어로 설명한다. mine·id·approvalConfirmed·published·unpublished 같은 내부 필드명, 불리언 값이나 게시물 식별번호를 답변에 옮기지 않는다. contentsCompared=false인 목록은 버전 본문을 비교한 결과가 아니므로 같은 내용이라고 단정하지 않는다. cancelled=true는 작업이 확정되지 않았다는 결과다. 카드가 열리지 않았다거나 연결 오류라고 추측하지 말고, 완료되지 않았음을 짧게 알린 뒤 새 요청을 기다린다. 자동 재시도하지 않는다.';
 
 const skillRecipeContract = 'recipe는 다음 필드만 가진 JSON 문자열이다: {"schema":"hps-email-automation/1","category":"email","title":"스킬 제목","description":"업무 설명","subjectTemplate":"{{name}}님 서류 제출 요청","bodyTemplate":"{{document}}를 {{dueDate}}까지 보내 주세요.","columns":{"email":"이메일","name":"이름","document":"서류","dueDate":"마감일"}}. title·description·subjectTemplate·bodyTemplate과 열 이름은 사용자 업무에 맞게 바꾼다. 템플릿 변수는 {{name}}, {{document}}, {{dueDate}}만 허용한다.';
 

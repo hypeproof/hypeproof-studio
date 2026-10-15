@@ -70,6 +70,15 @@ recognizes659de97d for receipt-checked handover. Actual extraction, profile back
 migration and refusal fixtures pass, followed by the native upgrade above.
 No authentication scope was expanded. Current coach presentation remains PARTIAL: the Mac response called the
 cohort store public, although the host review correctly says our class.
+The source follow-up now returns explicit cohort visibility and a not-compared
+marker in list receipts, and reinforces catalogue-first/no-internal-ID guidance
+in the installed SDK contract. Automation92, local runtime8, typecheck and the
+extension build pass. Mac/Windows still run11b82da2; this follow-up has not yet
+been installed or accepted as a natural-language correction.
+
+The third principal's fresh TJ connection reached Google's unverified-app
+interstitial in the TJ Chrome profile. User handoff is pending. Do not restart
+the app or claim connection/preview until the actual callback is confirmed.
 
 Current online instructor observation passes for Windows11b82da2. The private
 wrapper enables classroom operations only for the rehearsal transport: one

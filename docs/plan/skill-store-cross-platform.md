@@ -204,6 +204,9 @@ proves one current host's online observation, not three Google identities or a
 
 The complete three-account gate remains open. Current row status is PARTIAL for
 SS-01–10 and SS-12; SS-11 is NOT_RUN and conditional on expanded WAJ implementation.
+The audience/content-comparison source follow-up adds explicit cohort-only and
+not-compared receipts plus installed coach guidance. Automated checks pass; its
+native conversation acceptance is NOT_RUN and must not inherit11b82da2 evidence.
 Evidence is revision-bound: Windows659de97d proves non-owner import/preview and
 reviewed v2 update/v1 rollback, Mac b0cc15a0 proves third-user pinning, and Mac
 dbff37ed proves failed lookup recovery. Distinct Google identities/datasets, third

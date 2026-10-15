@@ -1027,3 +1027,11 @@ access-refusal checks and nine profile/store/installer readbacks pass. The bound
 test transport grants no command, collection, report or delivery capability.
 This closes the current one-host online linkage gap; twenty real learners,
 production Chalk deployment and three distinct Google datasets remain unverified.
+
+Store reply correction: successful publication and listing receipts explicitly
+identify cohort-only visibility. Lists also report that recipe bodies were not
+compared. Shared tool guidance and the installed SDK contract explain these
+limits, resolve titles through actual catalogue results, and keep identifiers
+out of learner-facing summaries. This addresses observed public-store wording
+and an unsupported same-content claim. Host/SDK/local-runtime checks pass;
+natural-language behavior on the updated installed candidate remains NOT_RUN.
