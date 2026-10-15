@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Release cut, dry-run only (#1608). Writes what a release would create; creates nothing on GitHub.
+// Release cut (#1608). Computes and writes what a release creates, plus plan.json; creates nothing on
+// GitHub itself. scripts/release/create.mjs reads plan.json and creates it (release-cut.yml, mode=create).
 //
 //   node scripts/release/release-cut.mjs                         # candidate = origin/main
 //   node scripts/release/release-cut.mjs --candidate v0.1.56     # skip case (no commits)
 //   node scripts/release/release-cut.mjs --service-url https://example.invalid   # smoke failure case
 //   node scripts/release/release-cut.mjs --since "7 days ago"    # trial: pretend the last release was a week ago
+//   node scripts/release/release-cut.mjs --mode create           # body without the DRY-RUN banner
 //
 // Steps: baseline (last stable v tag) → candidate → range → smoke → failure issue body | rc tag + release PR body.
 // Exit: 0 PASS or skipped, 1 smoke FAIL, 2 smoke NOT_RUN (a real cut would stop there).
@@ -15,6 +17,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {classify, fetchPrs, render} from './checklist.mjs';
 import {exitCode, printSmoke, runSmoke} from './smoke/smoke.mjs';
+import {nextRcTag, versionFor} from './version.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -53,11 +56,15 @@ if (subjects.length === 0) {
 const prNumbers = subjects.map(s => s.match(/\(#(\d+)\)$/)?.[1]).filter(Boolean).map(Number);
 const withoutPr = subjects.length - prNumbers.length;
 
-// 4. Date version. A second cut on the same day gets the next rc number.
+// 4. Date version (version.mjs). A second cut on the same day gets the next rc number of the same
+// version until that version is released; after that the day's next version.
 const day = arg('--date', new Date().toLocaleDateString('sv-SE', {timeZone: 'Asia/Seoul'}));
-const [y, m, d] = day.split('-').map(Number);
-const version = `v${y}.${m}.${d}`;
-const rcTag = `${version}-rc.${git('tag', '-l', `${version}-rc.*`).split('\n').filter(Boolean).length + 1}`;
+const allTags = git('tag', '-l', 'v*').split('\n').filter(Boolean);
+const version = versionFor(day, allTags.filter(t => !t.includes('-')));
+const rcTag = nextRcTag(version, allTags);
+const branch = `release/${version}`;
+const mode = arg('--mode', 'dry-run');
+const trial = Boolean(arg('--since'));
 
 // 5. Smoke on the candidate.
 console.log(`[4] smoke on ${short}`);
@@ -77,17 +84,25 @@ const rendered = render({groups});
 const fill = (name, values) => fs.readFileSync(path.join(here, 'templates', name), 'utf8')
   .replace(/\{\{(\w+)\}\}/g, (_, k) => values[k] ?? `{{${k}}}`);
 const common = {
-  DRY_RUN_BANNER: `> **DRY-RUN** — generated ${new Date().toISOString()}. Nothing was created.\n`,
+  DRY_RUN_BANNER: mode === 'create' ? '' : `> **DRY-RUN** — generated ${new Date().toISOString()}. Nothing was created.\n`,
   VERSION: version, CANDIDATE_SHA: candidate, CANDIDATE_SHORT: short, BASELINE: baseline,
   PR_COUNT: String(prNumbers.length) + (withoutPr ? ` (+${withoutPr} commits without a PR number)` : ''),
-  SMOKE_ROWS: smokeRows, RELEASE_MANAGER: '(assignment not decided yet)',
+  SMOKE_ROWS: smokeRows, RELEASE_MANAGER: 'any member with write access; the team decides who checks this week',
 };
+const plan = {
+  schema: 'hps-release-plan/0', mode, trial, version, rcTag, branch, candidate, baseline,
+  smoke: smoke.result, title: `release: ${version}`, prBody: null, issueBody: null,
+  issueTitle: `Smoke failed — release ${version} stopped`,
+};
+const writePlan = () => fs.writeFileSync(path.join(out, 'plan.json'), JSON.stringify(plan, null, 2));
 
 // 7. Branch on the smoke verdict.
 if (smoke.result === 'FAIL') {
   fs.writeFileSync(path.join(out, 'smoke-failure-issue.md'), fill('smoke-failure-issue.md', {
     ...common, AUTHORS: authors.map(a => `- @${a}`).join('\n') || 'None.',
   }));
+  plan.issueBody = 'smoke-failure-issue.md';
+  writePlan();
   console.log(`\n→ smoke FAIL. A real cut would create:`);
   console.log(`   · issue "smoke failed — release ${version} stopped"  (${path.join(out, 'smoke-failure-issue.md')})`);
   console.log(`   · a Discord notification`);
@@ -98,18 +113,20 @@ if (smoke.result === 'FAIL') {
 fs.writeFileSync(path.join(out, 'release-pr.md'), fill('release-pr.md', {
   ...common,
   RC_TAG: rcTag, FINAL_TAG: version,
-  RC_BUILD_LINK: '(prerelease link, created when the rc tag is pushed)',
+  RC_BUILD_LINK: `https://github.com/${REPO}/releases/tag/${rcTag}`,
   SERVICE_VERSION: smoke.service_version ?? 'unknown', CHALK_VERSION: smoke.chalk_version ?? 'unknown',
   SMOKE_RESULT: smoke.result,
   DEPENDENCY_ITEMS: rendered.dependency, FEATURE_ITEMS: rendered.features, AUTOMATIC_ITEMS: rendered.automatic,
   SMOKE_MISSING: 'No baseline commit for smoke declarations yet. Listed from the baseline onward.',
-  ROLLBACK: 'Not decided yet. Until it is, a broken release is replaced by the next version as a hotfix.',
+  ROLLBACK: 'Turn the broken release back into a draft or prerelease so no new download gets it, revert the cause on main, and ship the fix through the hotfix route.',
 }));
+plan.prBody = 'release-pr.md';
+writePlan();
 
 console.log(`\n→ smoke ${smoke.result}. A real cut would create:`);
 if (smoke.result !== 'PASS') console.log('   ⚠ a check is NOT_RUN. A real cut stops here; the rest is a preview.');
 console.log(`   · tag ${rcTag} on ${short} (starts build-mac, build-windows and the automatic E2E)`);
-console.log(`   · branch release/${day} adding releases/${day}.md`);
-console.log(`   · release PR "release: ${version}"  (${path.join(out, 'release-pr.md')})`);
+console.log(`   · branch ${branch} adding releases/${version}.md`);
+console.log(`   · release PR "${plan.title}"  (${path.join(out, 'release-pr.md')})`);
 console.log(`     ${groups.features.length} feature checks · ${groups.dependency.length} dependency/deploy · ${groups.automatic.length} automatic\n`);
 process.exit(exitCode(smoke.result));
