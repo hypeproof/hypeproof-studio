@@ -238,3 +238,10 @@ updates, rollback, withdrawal and side-effect ledgers. A manual JSON transfer or
 Google-only identity switch is insufficient. All new matrix rows begin NOT_RUN.
 The already-sent self-mail is not authorization for another send. Personal GAS
 web-app/background templates repeat this gate only after WAJ implementation.
+
+Store-client regression: HTTP200 is not package trust. Reject extra executable
+fields, private identifiers/secrets, bad placeholders, wrong requested item or
+unsupported wire version before either UI installs. A malformed JSON response
+must not echo payload fragments. With the actual inspector controller and store
+client, failed import preserves previous recipe/private setup; successful import
+requires recipient setup and invokes no execution/send.

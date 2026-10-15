@@ -155,3 +155,33 @@ Public versus invited sharing is the only immediate product question. Provider
 selection is an engineering recommendation pending research; no new paid service,
 public bucket, permission grant, production rollout or sender payout is authorized
 by this design update. Ask about Windows access at execution time, not now.
+
+
+## Implementation/evidence follow-up — 2026-10-15
+
+Three synthetic Studio principals used real HTTP against local Service `abf79a8b`
+and persisted D1:19 checks passed for author publish, retry/conflict, two peers'
+list/detail, peer unpublish denial, private-address/extra-code-field rejection,
+author unpublish, all-three future-read denial and tombstone replay rejection.
+Only the new test publication was withdrawn. No mail, Google calls or real account
+provisioning occurred. Receipt: /tmp/hps-email-mvp/store-three-principal-audit/receipt.json.
+These API observations support SS-02/03/07/09; they do not pass the three-real-account
+native Windows journey or the unauthorized-cohort case.
+
+Source follow-up after84404b34 closes a client-side validation gap: the shared
+store client previously returned an HTTP200 JSON recipe unchecked. The conversation
+path had an additional validator, but the inspector could accept the unchecked
+recipe. The client now requires the requested item/version, validates the recipe,
+applies publication privacy/placeholder/control-character restrictions and the
+existing shared secret scanner before returning data. Malformed JSON and rejected
+content produce fixed errors without remote payload text.
+
+A failing control reproduced acceptance of an extra executable field before the
+fix. Focused checks now reject that field, private addresses/URLs/token text, unknown
+placeholders, hidden columns, mismatched item IDs and unsupported wire versions.
+The actual inspector controller plus real store client preserves old work/settings
+on rejection; valid import clears the source binding and neither path calls Google
+or sends mail. Automation suite88/88, extension typecheck and host build passed.
+This is local source/API evidence. The running Mac app and online Windows candidate
+remain pinned to0b57074d until deliberately restaged; no signature, generic bundle
+installer, new version-management UI or Windows acceptance is claimed by this fix.

@@ -21,7 +21,11 @@ Google and GitHub/open-source distribution patterns. Final audience remains a
 product question; current cohort visibility must not be mistaken for cross-class
 or public access. Store research/planning is current work; actual Mac→Windows
 acceptance follows feature implementation and Windows availability. The new gate
-is NOT_RUN. Earlier two-user or Windows preview evidence does not satisfy it.
+is NOT_RUN. Earlier two-user or Windows preview evidence does not satisfy it. Local follow-up verified19
+three-synthetic-principal Service/D1 controls and added common-client rejection of
+unsafe/mismatched store recipes, with88 automation checks/types/host build passing.
+Those partial controls do not pass the real Mac-to-Windows journey; the current
+installed/online0b57074d candidate does not yet include the client fix.
 
 ## Latest design priority — 2026-10-15
 
