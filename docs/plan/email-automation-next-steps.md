@@ -6,18 +6,32 @@ content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
 
 Current checkpoint (2026-10-16): the overall development/test ceiling is USD10.
-An additional USD1 recipient allocation is verified and selected in Windows;
-combined maximum exposure at allocation was USD3.972794. On native Windows
-e3ab008b, the distinct recipient imported the Mac-authored store recipe, reused
+The original additional USD1 allocation was selected by `peer` in Windows.
+A further USD1 allocation for non-owner `original` is now created and verified;
+its native selection is pending. The latest conservative exposure bound is
+USD6.972794, including historical charges/holds and active allocations. This
+overcounts shared fallback views and is not actual spending; retain that
+conservative bound until account-level reconciliation. Both increments are
+within the total USD10 authorization. On native Windows
+e3ab008b, test principal `peer` imported the Mac-authored store recipe, reused
 its saved Google connection and private one-row test Sheet, and completed the
 Google Apps Script preview with an explicit no-send instruction. The native
 workflow reached6/6. Evidence: `/tmp/hps-email-mvp/windows-store-preview-20261016-safe.png`.
-The private Service version is673c20d1 with the exact tool-admission repair;
+The private Service version is781b639f, based on d63d5d7 with bounded version-history routes;
 public production remains unchanged at100%. A full exit/relaunch and fresh
 Google preview also passed at01:30KST, preserving the activity and private
 configuration without login. Remaining gates include the third-user native lifecycle, newer version/update/
-rollback acceptance, canonical operations migration and the expanded WAJ build.
+rollback acceptance and the expanded WAJ build. Canonical Ops migration0046
+is applied only to the isolated test database; all four existing recipes remain unchanged.
 Earlier dated snapshots below are historical, not the current Windows status.
+
+Ownership correction (2026-10-16): fresh Service readback identifies `peer` as
+the owner of the Mac-authored publication a1370573-7db3-4083-9224-49782bf5a315.
+Thus the Windows execution/restart above proves the author's cross-device reuse,
+not a different recipient's reuse. `original` and `third` are non-owners; repeat
+the Windows import and private execution under one of those identities before
+passing the cross-person gate. Previous statements calling `peer` a distinct
+recipient are superseded by this direct ownership evidence.
 
 ## Goal extension: integrated skill store — 2026-10-15
 
@@ -295,3 +309,13 @@ Private gateway1a566b74-00eb-430b-b0b3-5770b7277bd6 serves only this installer r
 The user explicitly chose “총 US$10로 인상”. This supersedes the USD3 development/test ceiling only. Historical spending and unresolved holds count toward the USD10 total; it is not USD10 per account or a new class budget. The prior USD1 three-seat pool remains intact; an additional USD1 Windows-recipient allocation was created and read back. Historical spending/holds plus all active allocations total at most USD3.972794, below the approved USD10 ceiling. No additional model call or mail was used to apply this increase. At the latest check, the recipient had USD0.273198 available. Windows SDK requests returned403 with a model/feature-entitlement refusal; a later private-gateway health check returned503 `Test version unavailable`, while public health remained200. These are separate from a low balance. Preserve the prior store item and do not claim Windows import/execution passed. Installer fix1501537e has all18 CI checks passing.
 
 Readback evidence: `/tmp/hps-email-mvp/raised-budget-20261016-receipt.json`. New funding source: `email-windows-extra-contract-20261016`. The prior test route was removed by a concurrent deployment at2026-10-15T15:51:32Z; restoring the previously approved0% test version retained the current public version d34da3a5 at100%, and private health returned200 with the expected test marker. The SDK refusal is `tool_not_entitled_or_metered`; do not widen execution permissions as a workaround.
+
+
+Budget readback update (2026-10-16): the non-owner `original` now has a verified
+additional USD1 allocation under `email-windows-recipient-contract-20261016`.
+The allocator conservatively counted USD5.972794 before this increment and
+USD6.972794 after it, below the approved USD10 total. Shared fallback views
+are counted more than once in that upper bound; it is not measured spending.
+No historical charges, holds or previous allocations were reset, and applying
+the increase sent no mail and made no model call. Native funding selection
+remains pending. Receipt: `/tmp/hps-email-mvp/raised-recipient-budget-20261016-receipt.json`.

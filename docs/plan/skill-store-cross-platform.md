@@ -684,3 +684,25 @@ reused both, produced a fresh Google preview, and returned to6/6 without new
 login, credential entry or mail. This passes recipient restart/reuse for
 e3ab008b; version update/rollback and third-user lifecycle remain open.
 Evidence: `/tmp/hps-email-mvp/windows-store-restart-20261016-safe.png`.
+
+### Ownership correction and next candidate — 2026-10-16
+
+Direct three-principal Service readback establishes that publication
+a1370573-7db3-4083-9224-49782bf5a315 is owned by `peer`; `original` and `third`
+receive `mine:false`. The Windows test used `peer`. Its real import, Google
+preview and full restart remain valid, but they prove author cross-device reuse,
+not cross-person reuse. Earlier Windows recipient-PASS wording is superseded.
+Repeat the exact Mac-authored publication under `original` or `third`, including
+their separately verified Google identity; do not infer identity from browser
+aliases or from a successful import.
+
+Studio main6ad5f9f8 is integrated at659de97d. The Windows candidate at that
+extension revision retains shell720be661 and SDK0.3.299. Both archives were built
+and locally checked; real PowerShell extraction, all seven extension hashes,
+exact e3ab008b upgrade recognition and portable-profile preservation pass.
+Source71caaaaf pins this installer. R2 upload/readback is still in progress;
+the active Windows installation remains e3ab008b. This is not native acceptance
+of the newer version lifecycle.
+
+
+Candidate delivery checkpoint (2026-10-16): extension659de97d / official shell720be661 / SDK0.3.299 is available from private gateway6b13dfc4. Both full R2 archive readbacks match their pinned SHA256 hashes; the manifest was published only after both passed. Four gateway test groups and23 live access/manifest/HEAD/script checks pass for the three existing Studio principals. The Service target remains private781b639f. This proves candidate delivery and access controls, not the still-pending native Windows upgrade or cross-person reuse. Evidence: `/tmp/hps-email-mvp/windows-current-659de97d/r2-upload-receipt.json` and `access-receipt.json`.
