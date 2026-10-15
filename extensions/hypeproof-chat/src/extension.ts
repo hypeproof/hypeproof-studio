@@ -190,6 +190,19 @@ export async function activate(context: vscode.ExtensionContext) {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource());
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
+  // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
+  // the start page enters a folder (activity commit, then ensureWorkspace switches and reloads).
+  provider.setProjectOpener(async (folder) => {
+    const profile = await provider.ensureProfile(true);
+    if (!profile) throw new Error("profile unavailable");
+    const connections = activityConnections(context);
+    const token = connections ? await connections.token() : undefined;
+    const commit = async (directory?: string) => {
+      if (connections && token) await connections.commit(token, profile, directory ?? folder);
+    };
+    await ensureWorkspace(profile, context, false, commit, folder);
+  });
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.switchProject", () => provider.switchProject()));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 
