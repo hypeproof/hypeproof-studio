@@ -218,3 +218,8 @@ claim a personal project was created. Preview review is not send approval.
 Windows acceptance begins only after local native success and uses the same
 pinned eight-file update; rollback must remove a newly introduced configuration
 while preserving OAuth, SDK and user data. Actual mail remains separately gated.
+
+Sheet-read recovery must identify the failed read stage without returning Google
+response bodies, private Sheet IDs or recipient values.403/404/unavailable
+responses must not be described as failure to open the input card. A failed new
+read clears cached rows; an old preview must not be regenerated from that cache.

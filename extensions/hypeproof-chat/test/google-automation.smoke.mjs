@@ -77,6 +77,24 @@ test('MCP cannot grant itself capability or manufacture human approval',async()=
   permitted=false;assert.equal((await send.handler({previewId:p.id})).isError,true);assert.equal(confirmed,1);
 });
 
+test('a rejected private Sheet read reports its real stage without exposing provider data',async()=>{
+  for (const [status,reason] of [[403,'sheet_access_denied'],[404,'sheet_not_found'],[503,'sheet_read_unavailable']]) {
+    let rejectRead=false;
+    const f=fixture({fetchImpl:async()=>rejectRead ? new Response('private-sheet-id private@example.invalid synthetic-token',{status}) : new Response(JSON.stringify({values:rows}))});
+    await f.runtime.readSheet({spreadsheetId:'own_synthetic_sheet',range:'A1:D21'});
+    rejectRead=true;
+    const factory={tool:(name,_description,_schema,handler)=>({name,handler}),createSdkMcpServer:x=>x};
+    const server=buildGoogleAutomationMcpServer(factory,{string:()=>({})},{runtime:f.runtime,isAllowed:()=>true,confirmSend:async()=>false,
+      configureSheet:async()=>f.runtime.readSheet({spreadsheetId:'private_sheet_id',range:'A1:D21'})});
+    const result=await server.tools.find(x=>x.name==='sheet_configure').handler({mode:'change'});
+    assert.equal(result.isError,true);
+    const safe=JSON.parse(result.content[0].text);
+    assert.equal(safe.failureStage,'sheet_read');assert.equal(safe.reason,reason);assert.equal(safe.nextAction,'wait_for_user');
+    assert.doesNotMatch(JSON.stringify(result),/private.sheet.id|private@example|synthetic-token/);
+    await assert.rejects(f.runtime.previewLatestSheet({recipe}),/시트를 다시 읽어/);assert.equal(f.sends,0);
+  }
+});
+
 test('provider limits and capability revocation fail closed; sender accounts have separate durable receipts',async()=>{
   let allowed=true;
   const f=fixture({maxRecipients:1,isAllowed:()=>allowed});

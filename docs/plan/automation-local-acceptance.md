@@ -243,3 +243,22 @@ cancellation. Automation86/86 and typecheck pass; native verification of this
 fix and the second-identity imported-recipe path remain open. The native copy
 uses local Claude CLI and in-memory secrets, so this observation does not
 establish production SDK packaging, persistent credentials or Windows parity.
+
+The bot published the inert recipe at `5838f1bc` (7/8). A distinct synthetic
+participant in an isolated `9e43a9c8` copy installed that exact recipe (2/6),
+then connected the TJ Google identity with the sponsor's explicit Sheets-read
+and Gmail-send scope approval. The author Google connection and Sheet were
+not inherited. TJ's private synthetic Sheet produced one real shared-runner
+preview with its own distinct content (6/8); no mail was sent. Trying the bot's
+private Sheet failed and reset Sheet/preview progress. The old generic error
+caused the coach to incorrectly describe this as an input-card failure. The
+follow-up fix exposes only a typed public Sheet-read failure classification,
+never provider payloads, private IDs or contacts. Its live native retest remains
+open; do not infer an HTTP status from the older generic-error observation.
+
+The current Chalk page displayed20 synthetic seats: A01 was the real bot app
+reporting7/8, A02–A18 were explicitly synthetic reports, and A19/A20 never
+connected. A01 matched the native graph. When the17 fixtures stopped reporting,
+the board changed them to disconnected/unknown while the actual app stayed
+current; stale approvals disappeared from current approval counts. This is one
+actual local app plus fixtures, not20 real learners.

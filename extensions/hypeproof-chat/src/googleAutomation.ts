@@ -10,6 +10,15 @@ export interface EmailMessage { readonly id: string; readonly to: string; readon
 export interface EmailPreview { readonly id: string; readonly createdAt: number; readonly messages: readonly EmailMessage[] }
 export interface SendRecord { id: string; status: 'sending' | 'sent' | 'unknown' | 'failed'; providerId?: string; error?: string }
 export interface OAuthListener { redirectUri: string; wait: Promise<URL>; close(): void }
+/** Only public classifications cross the coach boundary; never provider bodies or URLs. */
+export class GoogleSheetReadError extends Error {
+  readonly reason: 'sheet_access_denied' | 'sheet_not_found' | 'sheet_read_unavailable';
+  constructor(status: number) {
+    super('시트 읽기에 실패했어요.');
+    this.name = 'GoogleSheetReadError';
+    this.reason = status === 403 ? 'sheet_access_denied' : status === 404 ? 'sheet_not_found' : 'sheet_read_unavailable';
+  }
+}
 export interface GoogleAutomationDeps {
   clientId: string; clientSecret?: string; maxRecipients?: number;
   secrets: { get(key: string): PromiseLike<string | undefined>; store(key: string, value: string): PromiseLike<void>; delete(key: string): PromiseLike<void> };
@@ -294,7 +303,7 @@ export function createGoogleAutomationRuntime(deps: GoogleAutomationDeps) {
       if (revisionFor(account) !== revision) return fail('Google 연결이 변경됐어요. 시트를 다시 읽어 주세요.');
       const accessToken = account.accessToken;
       const response = await request(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(args.spreadsheetId)}/values/${encodeURIComponent(args.range)}?valueRenderOption=FORMATTED_VALUE`, { headers: { authorization: `Bearer ${accessToken}` } });
-      if (!response.ok) return fail('시트를 읽지 못했어요. 접근 권한과 범위를 확인해 주세요.');
+      if (!response.ok) throw new GoogleSheetReadError(response.status);
       const result = await response.json() as { values?: unknown };
       if (!Array.isArray(result.values) || result.values.length > maxRecipients + 1 || result.values.some(row => !Array.isArray(row) || row.length > 100 || row.some(cell => typeof cell !== 'string' || cell.length > 10000))) return fail(`시트 형식 또는 크기를 확인해 주세요. 최대 ${maxRecipients}명의 수신자를 지원해요.`);
       if (!deps.isAllowed() || requestId !== sheetRequestId || revision !== await connectionRevision()) return fail('Google 연결 또는 선택한 시트가 변경됐어요. 시트를 다시 읽어 주세요.');

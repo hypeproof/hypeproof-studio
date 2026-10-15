@@ -1,5 +1,5 @@
 import type { SdkMcpFactory, ZodLike, McpToolResult } from './browserMcp.ts';
-import { validateEmailRecipe, type EmailPreview, type GoogleAutomationRuntime } from './googleAutomation.ts';
+import { GoogleSheetReadError, validateEmailRecipe, type EmailPreview, type GoogleAutomationRuntime } from './googleAutomation.ts';
 
 export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
 export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan'] as const;
@@ -66,7 +66,18 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
       if (host.refreshAuthorization && !await host.refreshAuthorization()) throw new Error('Capability unavailable');
       if (!host.isAllowed()) throw new Error('Capability unavailable');
       return { content: [{ type: 'text', text: JSON.stringify(await work()) }] }; }
-    catch { return { isError: true, content: [{ type: 'text', text: '자동화를 완료하지 못했어요. 입력과 수업 연결을 확인한 뒤 다시 시도해 주세요. 이미 보낸 메일은 다시 보내지 않아요.' }] }; }
+    catch (error) {
+      if (error instanceof GoogleSheetReadError) return { isError: true, content: [{ type: 'text', text: JSON.stringify({
+        failureStage: 'sheet_read', reason: error.reason, nextAction: 'wait_for_user',
+        message: error.reason === 'sheet_access_denied'
+          ? 'Google에서 현재 계정의 시트 읽기를 거절했어요. 본인 계정으로 읽을 수 있는 시트인지 확인해 주세요.'
+          : error.reason === 'sheet_not_found'
+            ? '현재 계정으로 해당 시트를 찾을 수 없어요. 비공개 입력에서 주소와 접근 권한을 확인해 주세요.'
+            : 'Google 시트 읽기 요청이 완료되지 않았어요. 연결 상태를 확인한 뒤 다시 요청해 주세요.',
+        guidance: '시트 읽기 단계의 실패입니다. 입력 창이 열리지 않았다고 설명하거나 계정 권한·공유 설정을 자동 변경하지 마세요. 새 읽기 결과나 메일 미리보기가 만들어졌다고 주장하지 마세요.',
+      }) }] };
+      return { isError: true, content: [{ type: 'text', text: '자동화를 완료하지 못했어요. 입력과 수업 연결을 확인한 뒤 다시 시도해 주세요. 이미 보낸 메일은 다시 보내지 않아요.' }] };
+    }
   };
   const scriptRun = (work: () => Promise<unknown>) => run(async () => {
     if (!host.isAppsScriptAllowed?.()) throw new Error('Apps Script capability unavailable');
