@@ -4282,6 +4282,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "publishToGallery":
         void this.publishToGallery();
         return;
+      case "switchProject":
+        void this.switchProject();
+        return;
       case "publishSite":
         // The visible "Studio button": HP shell defaults hide editor/view title actions (#725),
         // so the chat header is where a participant can actually press it.
