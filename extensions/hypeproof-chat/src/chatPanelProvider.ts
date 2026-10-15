@@ -101,6 +101,7 @@ import {
   LIVE_PREVIEW_START_TOOL_DEF,
   runBrowserOpen,
   runLivePreviewStart,
+  SiteCheckViewports,
 } from "./browserMcp";
 
 // #525 — a plain editor command registered in the core. The browser-only API cannot
@@ -1860,7 +1861,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return false;
       }
     };
-    const tab = onPreview(pinned) ? pinned : (vscode.window.browserTabs ?? []).find((t) => onPreview(t));
+    const tab = onPreview(pinned) ? pinned : this.coachBrowserTabs().find((t) => onPreview(t));
     if (!tab) {
       this.postPageNotice("먼저 미리보기를 연 뒤에 요소를 고를 수 있어요.");
       return;
@@ -2221,7 +2222,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const column = () => (this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One);
     const driven = this.mcpBrowser?.currentTab();
     return recoverLearnerPreview<vscode.BrowserTab>({
-      tabs: () => vscode.window.browserTabs ?? [],
+      tabs: () => this.coachBrowserTabs(),
       serverUrl: () => this.liveServer.currentUrl(),
       recover: () => this.liveServer.recover(answers),
       fetchPage: async (url) => { const res = await fetch(url, { signal: AbortSignal.timeout(4000) }); return { status: res.status, contentType: res.headers.get("content-type") }; },
@@ -3332,7 +3333,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // loopback preview tab" (port-independent): reuse the one already on the
       // current URL via SSE reload; otherwise close any STALE preview tabs
       // (dead port from a prior server start) and open exactly one fresh tab.
-      const tabs = vscode.window.browserTabs ?? [];
+      const tabs = this.coachBrowserTabs();
       const isPreviewTab = (u?: string): boolean =>
         !!u && /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(u);
       const current = tabs.find((t) => t.url?.startsWith(base));
@@ -3482,8 +3483,56 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * A5 (orchestrator spec §6.1) — the site check's own browser tabs, while a check holds one.
+   * The coach's tab plans (browser_open, live_preview_start, the duplicate check) never see them,
+   * so a check tab is neither reused as the preview nor closed under a running check.
+   */
+  private readonly siteCheckTabs = new Set<vscode.BrowserTab>();
+  private siteCheckPages?: SiteCheckViewports<vscode.BrowserTab>;
+
+  /** The browser tabs the coach's tab logic works on: every tab but the site check's. */
+  private coachBrowserTabs(): readonly vscode.BrowserTab[] {
+    const tabs = vscode.window.browserTabs ?? [];
+    return this.siteCheckTabs.size ? tabs.filter((t) => !this.siteCheckTabs.has(t)) : tabs;
+  }
+
+  /**
+   * The page a site check measures in (BrowserMcpHost.viewportPage; browserMcp.ts
+   * SiteCheckViewports): the learner's own 화면 크기 검수 tab for this page when one is open,
+   * otherwise a background tab opened without focus and closed after the check. The learner's
+   * preview tab is never navigated.
+   */
+  private siteCheckViewports(): SiteCheckViewports<vscode.BrowserTab> {
+    this.siteCheckPages ??= new SiteCheckViewports<vscode.BrowserTab>({
+      tabs: () => this.coachBrowserTabs(),
+      urlOf: (tab) => tab.url,
+      open: async (url) => {
+        const tab = await vscode.window.openBrowserTab(url, {
+          viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One,
+          preserveFocus: true,
+          background: true,
+        });
+        this.siteCheckTabs.add(tab);
+        return tab;
+      },
+      close: async (tab) => {
+        try {
+          await tab.close();
+        } finally {
+          this.siteCheckTabs.delete(tab);
+        }
+      },
+      attach: (tab) => CdpSession.attach(tab),
+    });
+    return this.siteCheckPages;
+  }
+
   private buildBrowserMcpHost(): BrowserMcpHost {
     return {
+      // A5 — the site check's page (spec §6.1). Asked only on an orchestrator turn whose roster
+      // lists site_check; the live server is never started for it (livePreviewUrl below).
+      viewportPage: (wrapperUrl: string) => this.siteCheckViewports().page(wrapperUrl),
       openBrowser: async (url: string) => {
         // #519 — **this navigates; it does not open.**
         //
@@ -3501,7 +3550,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const v = checkAgentOrigin(url, this.crBrowserOptions().allowedOrigins());
           if (!v.ok) throw new Error(v.reason);
         }
-        const tabs = vscode.window.browserTabs ?? [];
+        const tabs = this.coachBrowserTabs();
         const plan = planCoachBrowserTabs(tabs.map((t) => t.url), url);
         // Clean up only the surplus tabs already stacked in the same slot (the legacy pile-up).
         for (const i of plan.close) {
@@ -3611,7 +3660,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // on screen" alone misses the other slot that is already up and raises an
       // unnecessary approval modal.
       openPages: async () =>
-        (vscode.window.browserTabs ?? [])
+        this.coachBrowserTabs()
           .filter((t) => !!t.url)
           .map((t) => ({ url: t.url, title: t.title })),
       // #523 — pins the tab judged "already open" as the drive target. openPages
@@ -3623,7 +3672,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // background the screen is unchanged. It brings it forward as well
       // (revealBrowserTab — a failure is silently ignored).
       focusOpenPage: async (url: string) => {
-        const tab = (vscode.window.browserTabs ?? []).find(
+        const tab = this.coachBrowserTabs().find(
           (t) => !!t.url && isSameBrowserUrl(t.url, url),
         );
         if (!tab?.url) return null;

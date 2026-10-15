@@ -469,4 +469,267 @@ if (!status.available) {
   ok("consultHelper: allowed without a modal by default (control: delegateAgent still asks); a machine that lists it asks once per consult, naming 검토 도우미 · Claude Haiku 5.5 and the question; Esc denies");
 }
 
+// ── 5. The site check's page (spec §6.1): 390 and 1280 measured, the preview untouched ─
+
+{
+  const { SiteCheckViewports, isViewportWrapperUrl } = await import("../src/browserMcp.ts");
+  const { runSiteCheck } = await import("../src/siteCheckRunner.ts");
+  const { siteCheckTimelineLabel } = await import("../src/siteCheck.ts");
+  const LIVE = "http://127.0.0.1:5173/";
+  const WRAPPER = "http://127.0.0.1:5173/__hp_viewport?path=%2Findex.html";
+  /** One measured width, in the shape A3's script returns (as test/site-check-runner.smoke.mjs). */
+  const W = (w, extra = {}) => ({
+    w, inner: w, scroll: w, root_clips: false, offenders: [], offender_count: 0, clipped: 0,
+    viewport_meta: true, img_without_alt: 0, external_urls: 0, external_hosts: [], body_font_px: 16,
+    small_targets: 0, small_target_sample: [], ...extra,
+  });
+  const GOOD = { path: "/index.html", widths: [W(390), W(1280)] };
+  const OVERFLOW = { path: "/index.html", widths: [W(390, { scroll: 512, offenders: ["table.prices", ".hero h1"], offender_count: 2 }), W(1280)] };
+
+  /**
+   * A scripted integrated browser. A tab has a page; a new tab shows about:blank for
+   * `loadAfter` location reads, then the URL it was opened at, loaded. Everything that touches
+   * a tab is logged, so "the learner's preview was never touched" is countable.
+   */
+  function browser({ measure = GOOD, loadAfter = 2, neverLoads = false, openFails = false, attachFails = false, learnerWrapper = false } = {}) {
+    const log = [];
+    const tabs = [{ name: "preview", url: LIVE, ready: "complete" }];
+    if (learnerWrapper) tabs.push({ name: "learner-wrapper", url: WRAPPER, ready: "complete" });
+    let openedSeq = 0;
+    let openNow = 0;
+    let maxOpen = 0;
+    const port = {
+      tabs: () => tabs.filter((t) => !t.closed),
+      urlOf: (t) => t.url,
+      async open(url, ...rest) {
+        log.push(["open", url, ...rest]);
+        if (openFails) throw new Error("the shell refused to open a tab");
+        const t = { name: `check-${++openedSeq}`, url: "about:blank", target: url, ready: "complete", reads: 0, temp: true };
+        tabs.push(t);
+        maxOpen = Math.max(maxOpen, ++openNow);
+        return t;
+      },
+      async close(t) {
+        log.push(["close", t.name]);
+        if (!t.closed && t.temp) openNow--;
+        t.closed = true;
+      },
+      async attach(t) {
+        log.push(["attach", t.name]);
+        if (attachFails) throw new Error("CDP: no page target to attach to");
+        return {
+          async send(method, params = {}) {
+            log.push([method + (params.awaitPromise ? "(measure)" : ""), t.name]);
+            if (method === "Runtime.evaluate" && !params.awaitPromise) {
+              if (t.temp && !neverLoads && ++t.reads > loadAfter) {
+                t.url = t.target;
+                t.ready = "complete";
+              } else if (t.temp && t.url === "about:blank") {
+                t.ready = t.reads > 1 ? "complete" : "loading";
+              }
+              return { result: { type: "string", value: JSON.stringify({ href: t.url, ready: t.ready }) } };
+            }
+            if (method === "Page.navigate") {
+              t.url = params.url;
+              return { frameId: "f" };
+            }
+            if (method === "Runtime.evaluate" && params.awaitPromise) return { result: { type: "object", value: structuredClone(measure) } };
+            throw new Error(`unexpected CDP ${method}`);
+          },
+          async close() {
+            log.push(["detach", t.name]);
+          },
+        };
+      },
+    };
+    const touched = (name) => log.filter((e) => e[1] === name || e[2] === name);
+    return { port, log, tabs, touched, maxOpen: () => maxOpen, openNow: () => openNow };
+  }
+  const fast = { pollMs: 5, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
+  const checkWith = (b, opts = fast) => {
+    const pages = new SiteCheckViewports(b.port, opts);
+    return { pages, run: (path = "index.html") => runSiteCheck({ livePreviewUrl: async () => LIVE, viewportPage: (u) => pages.page(u) }, { path }) };
+  };
+
+  // A page with nothing over the edge: measured at both widths in a check tab of its own.
+  {
+    const b = browser();
+    const r = await checkWith(b).run();
+    assert.equal(r.verdict, "pass", JSON.stringify(r));
+    assert.deepEqual(r.widths.map((w) => [w.w, w.measured]), [[390, true], [1280, true]]);
+    assert.equal(siteCheckTimelineLabel(r), "📏 390·1280px 확인 — 통과");
+    const opens = b.log.filter((e) => e[0] === "open");
+    assert.deepEqual(opens.map((e) => e[1]), [WRAPPER], "one tab, at the wrapper of the checked page");
+    assert.deepEqual(b.touched("preview"), [], "the learner's preview tab is never attached, read or navigated");
+    assert.equal(b.log.filter((e) => e[0] === "Page.navigate").length, 0, "the check tab opened at the wrapper: nothing to navigate");
+    assert.deepEqual(b.log.slice(-2), [["detach", "check-1"], ["close", "check-1"]], "the session and the check tab go when the check is over");
+    assert.equal(b.openNow(), 0);
+  }
+  // The page is handed over only once the wrapper has loaded (a slow tab: five blank reads).
+  {
+    const b = browser({ loadAfter: 5 });
+    const page = await new SiteCheckViewports(b.port, fast).page(WRAPPER);
+    const tab = b.tabs.find((t) => t.temp);
+    assert.equal(tab.url, WRAPPER, "loaded when handed over");
+    assert.equal(b.log.filter((e) => e[0] === "Runtime.evaluate").length, 6, "five reads of about:blank, then the wrapper");
+    await page.release();
+    assert.equal(tab.closed, true);
+  }
+  // The planted overflow fails, with its offenders, through the same page.
+  {
+    const b = browser({ measure: OVERFLOW });
+    const r = await checkWith(b).run();
+    assert.equal(r.verdict, "fail");
+    assert.deepEqual(r.fail_reasons, ["overflow@390"]);
+    assert.equal(siteCheckTimelineLabel(r), "📏 390px에서 2곳 넘침");
+    assert.equal(b.openNow(), 0);
+  }
+  // The learner already shows this page's 화면 크기 검수: measured there, and the tab stays.
+  {
+    const b = browser({ learnerWrapper: true });
+    const r = await checkWith(b).run();
+    assert.equal(r.verdict, "pass");
+    assert.equal(b.log.filter((e) => e[0] === "open" || e[0] === "close").length, 0, "nothing opened or closed");
+    assert.deepEqual(b.log.at(-1), ["detach", "learner-wrapper"]);
+    assert.deepEqual(b.touched("preview"), []);
+  }
+  // Negative control: without the host's page every check is 미확인, never 통과 (A4's floor).
+  {
+    const r = await runSiteCheck({ livePreviewUrl: async () => LIVE }, { path: "index.html" });
+    assert.equal(r.verdict, "unverified");
+    assert.equal(siteCheckTimelineLabel(r), "📏 미확인(브라우저 연결 없음)");
+  }
+  // Only the live server's own wrapper is ever opened.
+  {
+    const b = browser();
+    const pages = new SiteCheckViewports(b.port, fast);
+    for (const url of ["https://example.com/__hp_viewport?path=%2Findex.html", "http://127.0.0.1:5173/index.html", "file:///tmp/__hp_viewport", "http://127.0.0.1.evil.test/__hp_viewport", "not a url"]) {
+      assert.equal(isViewportWrapperUrl(url), false, url);
+      assert.equal(await pages.page(url), null, url);
+    }
+    assert.equal(isViewportWrapperUrl(WRAPPER), true);
+    assert.equal(b.log.length, 0, "a refused address opens nothing");
+  }
+  // A page that never loads, a tab that cannot be opened, a session that cannot attach:
+  // null in time, nothing left open, and the next check still runs.
+  {
+    const b = browser({ neverLoads: true });
+    const pages = new SiteCheckViewports(b.port, { ...fast, readyMs: 120 });
+    const t0 = Date.now();
+    assert.equal(await pages.page(WRAPPER), null);
+    assert.ok(Date.now() - t0 < 1000, "bounded by readyMs");
+    assert.equal(b.openNow(), 0, "the check tab is closed");
+    const r = await runSiteCheck({ livePreviewUrl: async () => LIVE, viewportPage: (u) => pages.page(u) }, { path: "index.html" });
+    assert.equal(r.verdict, "unverified");
+    for (const failing of [{ openFails: true }, { attachFails: true }]) {
+      const f = browser(failing);
+      const p = new SiteCheckViewports(f.port, fast);
+      assert.equal(await p.page(WRAPPER), null, JSON.stringify(failing));
+      assert.equal(f.openNow(), 0);
+      const again = browser();
+      assert.equal((await checkWith(again).run()).verdict, "pass");
+    }
+  }
+  // One check page at a time, and a page the runner never releases is released anyway.
+  {
+    const b = browser();
+    const pages = new SiteCheckViewports(b.port, { ...fast, holdMs: 60 });
+    const first = await pages.page(WRAPPER);
+    assert.ok(first);
+    let secondDone = false;
+    const second = pages.page(WRAPPER).then((p) => {
+      secondDone = true;
+      return p;
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(secondDone, false, "the second check waits for the first page");
+    // The hold timer is unref'd (it must not keep a closing host alive), so this ref'd guard keeps
+    // the test's event loop up while the hold releases the first page.
+    const p2 = await Promise.race([second, new Promise((_, reject) => setTimeout(() => reject(new Error("the hold never released the first page")), 1000))]);
+    assert.ok(p2);
+    await p2.release();
+    await first.release(); // a late release is harmless
+    assert.equal(b.maxOpen(), 1, "never two check tabs at once");
+    assert.equal(b.openNow(), 0);
+  }
+  ok("viewportPage: a background check tab at the wrapper, measured at 390 and 1280 once loaded, then closed; the learner's own 화면 크기 검수 tab is reused and kept; the preview tab is never touched; no host page → 미확인 (control); bad addresses, never-loading pages and failed opens give null with nothing left open; one page at a time; an unreleased page is released");
+
+  // The host's own port (chatPanelProvider → vscode.window.openBrowserTab + CdpSession), through
+  // the BrowserMcpHost that runSdkCoach hands to the runner.
+  const P = await provider();
+  const opened = [];
+  /** A raw `vscode.BrowserCDPSession` for a tab: the attach handshake, location reads, the measurement. */
+  const rawSession = (tab) => {
+    const listeners = new Set();
+    return {
+      onDidReceiveMessage(l) {
+        listeners.add(l);
+        return { dispose: () => listeners.delete(l) };
+      },
+      onDidClose: () => ({ dispose() {} }),
+      async sendMessage(msg) {
+        const reply = (result) => queueMicrotask(() => [...listeners].forEach((l) => l({ id: msg.id, result, ...(msg.sessionId ? { sessionId: msg.sessionId } : {}) })));
+        tab.cdp.push(msg.method + (msg.params?.awaitPromise ? "(measure)" : ""));
+        if (msg.method === "Target.setDiscoverTargets") return reply({});
+        if (msg.method === "Target.getTargets") return reply({ targetInfos: [{ type: "page", targetId: "T1" }] });
+        if (msg.method === "Target.attachToTarget") return reply({ sessionId: "S1" });
+        if (msg.method === "Runtime.evaluate" && !msg.params.awaitPromise) return reply({ result: { type: "string", value: JSON.stringify({ href: tab.url, ready: "complete" }) } });
+        if (msg.method === "Runtime.evaluate") return reply({ result: { type: "object", value: structuredClone(GOOD) } });
+        return reply({});
+      },
+      async close() {
+        tab.detached++;
+      },
+    };
+  };
+  const preview = { url: LIVE, title: "우리 동네 빵집", cdp: [], detached: 0, startCDPSession: async () => rawSession(preview), close: async () => {} };
+  fakeVscode.window.browserTabs = [preview];
+  fakeVscode.window.openBrowserTab = async (url, options) => {
+    const tab = { url, title: "화면 크기 검수", cdp: [], detached: 0, closed: false };
+    tab.startCDPSession = async () => rawSession(tab);
+    tab.close = async () => {
+      tab.closed = true;
+      fakeVscode.window.browserTabs = fakeVscode.window.browserTabs.filter((t) => t !== tab);
+    };
+    opened.push({ url, options, tab });
+    fakeVscode.window.browserTabs = [...fakeVscode.window.browserTabs, tab];
+    return tab;
+  };
+  const host = {
+    siteCheckTabs: new Set(),
+    editorChat: undefined,
+    liveServer: { currentUrl: () => LIVE },
+    coachBrowserTabs: P.ChatPanelProvider.prototype.coachBrowserTabs,
+    siteCheckViewports: P.ChatPanelProvider.prototype.siteCheckViewports,
+  };
+  const mcpHost = P.ChatPanelProvider.prototype.buildBrowserMcpHost.call(host);
+  let during = null;
+  const realPage = mcpHost.viewportPage.bind(mcpHost);
+  const r = await runSiteCheck(
+    {
+      livePreviewUrl: () => mcpHost.livePreviewUrl(),
+      viewportPage: async (u) => {
+        const page = await realPage(u);
+        during = { held: host.siteCheckTabs.size, coachSees: host.coachBrowserTabs().map((t) => t.title) };
+        return page;
+      },
+    },
+    { path: "index.html" },
+  );
+  assert.equal(r.verdict, "pass", JSON.stringify(r));
+  assert.deepEqual(r.widths.map((w) => w.w), [390, 1280]);
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].url, WRAPPER);
+  // (spread: the options object was made in the bundle's realm, whose Object.prototype differs)
+  assert.deepEqual({ ...opened[0].options }, { viewColumn: 1, preserveFocus: true, background: true }, "in the background, without taking focus");
+  assert.deepEqual(during, { held: 1, coachSees: ["우리 동네 빵집"] }, "while it runs, the coach's tab logic does not see the check tab");
+  assert.equal(opened[0].tab.closed, true, "closed after the check");
+  assert.equal(opened[0].tab.detached, 1);
+  assert.equal(host.siteCheckTabs.size, 0);
+  assert.deepEqual(preview.cdp, [], "the learner's preview got no CDP message");
+  assert.ok(opened[0].tab.cdp.includes("Runtime.evaluate(measure)"));
+  fakeVscode.window.browserTabs = [];
+  ok("host: the BrowserMcpHost's viewportPage opens one background tab without focus at the wrapper, hides it from the coach's tab logic while it runs, measures 390 and 1280 through CdpSession, then detaches and closes it; the preview tab gets no CDP message");
+}
+
 console.log(`orchestrator-panel: ${passed} checks passed`);
