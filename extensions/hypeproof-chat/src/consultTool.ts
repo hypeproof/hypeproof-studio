@@ -19,7 +19,9 @@
 //    retried, except one wait of up to 20 s while the pass seat's one request lease is
 //    held (`trial_busy`).
 // 5. The answer is the Service's contract-validated `output`, as JSON text of at most
-//    2,000 characters, or a typed refusal in Korean. Nothing is written back.
+//    2,000 characters, or a typed refusal in Korean. Nothing is written back. An answer
+//    too long for that keeps its `must` findings before `should` and `should` before
+//    `could`, and says what it left out (A5, `consultSuccessText`).
 // 6. One timeline event per consult (running → done | error), and the cap is counted.
 
 import * as fs from "node:fs";
@@ -962,6 +964,75 @@ function fitJson(value: unknown, wrap: (v: unknown) => unknown, max: number): { 
   return { value: v, cut };
 }
 
+// ── Severity-aware cut (A5) ─────────────────────────────────────────────────
+// A reviewer answer can be longer than the tool result: the largest valid S1 design review
+// is 2,707 characters (A4 report §12). Cut from the end, it lost two of its four `must`
+// findings while two `should` ones stayed. So when an answer with `findings` must be cut,
+// findings go lowest severity first: unranked, then `could`, then `should`, the later one
+// first within a severity. `must` findings are cut only after every other finding is gone,
+// and then only by the general rule below. The kept findings keep the Service's order, and
+// `cut` says what was left out, by severity, so the coach never reads a partial list as the
+// whole review.
+
+/** Highest first. A finding whose severity is none of these ranks below `could`. */
+export const FINDING_SEVERITIES = ["must", "should", "could"] as const;
+export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
+
+/** What a cut answer says it left out (spec §3.3 `truncated`, made specific). */
+export interface ConsultCut {
+  findings_total: number;
+  findings_kept: number;
+  /** Findings left out, by severity; `other` for one without a known severity. */
+  dropped: Partial<Record<FindingSeverity | "other", number>>;
+}
+
+/** 0 must, 1 should, 2 could, 3 anything else. */
+function severityRank(finding: unknown): number {
+  const s = finding && typeof finding === "object" && !Array.isArray(finding) ? (finding as Record<string, unknown>).severity : undefined;
+  const i = typeof s === "string" ? (FINDING_SEVERITIES as readonly string[]).indexOf(s) : -1;
+  return i < 0 ? FINDING_SEVERITIES.length : i;
+}
+
+function severityName(finding: unknown): FindingSeverity | "other" {
+  const r = severityRank(finding);
+  return r < FINDING_SEVERITIES.length ? FINDING_SEVERITIES[r] : "other";
+}
+
+/** `total` findings, of which `kept` remain: the counts left out per severity. */
+export function consultCutOf(total: readonly unknown[], kept: readonly unknown[]): ConsultCut {
+  const count = (list: readonly unknown[]) => {
+    const n: Record<string, number> = {};
+    for (const f of list) n[severityName(f)] = (n[severityName(f)] ?? 0) + 1;
+    return n;
+  };
+  const before = count(total);
+  const after = count(kept);
+  const dropped: ConsultCut["dropped"] = {};
+  for (const key of [...FINDING_SEVERITIES, "other"] as const) {
+    const d = (before[key] ?? 0) - (after[key] ?? 0);
+    if (d > 0) dropped[key] = d;
+  }
+  return { findings_total: total.length, findings_kept: kept.length, dropped };
+}
+
+/**
+ * The findings to keep, in the Service's order: the fewest drops, lowest severity first, for
+ * which `fits` holds. Returns null when even the `must` findings alone do not fit.
+ */
+export function keepBySeverity(findings: readonly unknown[], fits: (kept: unknown[]) => boolean): unknown[] | null {
+  const order = findings
+    .map((f, i) => ({ i, r: severityRank(f) }))
+    .filter((x) => x.r > 0)
+    .sort((a, b) => b.r - a.r || b.i - a.i);
+  const gone = new Set<number>();
+  for (const d of order) {
+    gone.add(d.i);
+    const kept = findings.filter((_, i) => !gone.has(i));
+    if (fits(kept)) return kept;
+  }
+  return null;
+}
+
 /** The success text: §3.3's object, within CONSULT_RESULT_MAX. */
 export function consultSuccessText(agent: ServedAgent, body: Record<string, unknown>): string {
   const modelLabel =
@@ -977,8 +1048,31 @@ export function consultSuccessText(agent: ServedAgent, body: Record<string, unkn
     request_id: typeof body.request_id === "string" ? body.request_id.slice(0, 80) : null,
   };
   const wrap = (output: unknown) => ({ ...head, output });
-  const fitted = fitJson(body.output, wrap, CONSULT_RESULT_MAX - 20);
-  return JSON.stringify(fitted.cut ? { ...wrap(fitted.value), truncated: true } : wrap(fitted.value));
+  const output: unknown = JSON.parse(JSON.stringify(body.output ?? null));
+  const findings =
+    output && typeof output === "object" && !Array.isArray(output) && Array.isArray((output as Record<string, unknown>).findings)
+      ? ((output as Record<string, unknown>).findings as unknown[])
+      : null;
+  const whole = JSON.stringify(wrap(output));
+  if (!findings || whole.length <= CONSULT_RESULT_MAX - 20) {
+    // An answer that fits goes whole; one without findings is cut the general way, as before.
+    const fitted = fitJson(output, wrap, CONSULT_RESULT_MAX - 20);
+    return JSON.stringify(fitted.cut ? { ...wrap(fitted.value), truncated: true } : wrap(fitted.value));
+  }
+  const cutText = (out: Record<string, unknown>, cut: ConsultCut) => JSON.stringify({ ...wrap(out), truncated: true, cut });
+  const rest = output as Record<string, unknown>;
+  const kept = keepBySeverity(findings, (k) => cutText({ ...rest, findings: k }, consultCutOf(findings, k)).length <= CONSULT_RESULT_MAX);
+  if (kept) return cutText({ ...rest, findings: kept }, consultCutOf(findings, kept));
+  // Only `must` findings are left and they still do not fit: shorten and drop the general way,
+  // measured against the largest marker this answer could need, then report the real one.
+  const mustOnly = { ...rest, findings: findings.filter((f) => severityRank(f) === 0) };
+  const n = findings.length;
+  const widest: ConsultCut = { findings_total: n, findings_kept: n, dropped: { must: n, should: n, could: n, other: n } };
+  const fitted = fitJson(mustOnly, (v) => ({ ...wrap(v), truncated: true, cut: widest }), CONSULT_RESULT_MAX);
+  const left = fitted.value && typeof fitted.value === "object" && Array.isArray((fitted.value as Record<string, unknown>).findings)
+    ? ((fitted.value as Record<string, unknown>).findings as unknown[])
+    : [];
+  return JSON.stringify({ ...wrap(fitted.value), truncated: true, cut: consultCutOf(findings, left) });
 }
 
 export function consultErrorText(agentName: string, code: ConsultCode, message?: string): string {

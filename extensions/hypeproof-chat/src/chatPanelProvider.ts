@@ -101,6 +101,7 @@ import {
   LIVE_PREVIEW_START_TOOL_DEF,
   runBrowserOpen,
   runLivePreviewStart,
+  SiteCheckViewports,
 } from "./browserMcp";
 
 // #525 — a plain editor command registered in the core. The browser-only API cannot
@@ -135,12 +136,20 @@ import {
 import {
   approvalCopyFor,
   approvalFallbackTitle,
+  asSubject,
   browserApprovalTitle,
   coachDegradedNotice,
   pageAttachedNotice,
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
+// A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
+// the seat's session and the host arguments runSdkCoach takes.
+import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
+import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
+import { OrchestratorSession } from "./consultTool";
+import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
+import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
@@ -251,6 +260,106 @@ class LessonBindingPreflightError extends Error {}
 /** What one 팀 브레인 run tells the student (one short sentence per line) and the page to open when it worked. */
 interface BrainRun { lines: string[]; open?: string }
 
+// ── The front-line orchestrator, panel side (A5; ADR 0011, spec §5.1, §5.2, §6.3) ──
+// Pure (no vscode), exported for test/orchestrator-panel.smoke.mjs. Without a roster this
+// seat may use, every one of them answers "off", and the panel does what it did before A5.
+
+/**
+ * The served roster this seat runs under, or null: an older Service, the cohort's flag off,
+ * the header-less answer, a minor or unknown tier, or a roster the parser refuses. The same
+ * switch runSdkCoach uses (A4 resolveOrchestrator); the host arguments are this panel.
+ */
+export function orchestratorRosterFor(profile: ResolvedProfile | null | undefined): ServedRoster | null {
+  const resolved = resolveOrchestrator(profile, {});
+  return resolved.on ? resolved.roster : null;
+}
+
+/**
+ * The modal a machine that lists `consultHelper` in requireApprovalFor shows (spec §5.1): who is
+ * asked, on which model, the question, and what the helper can and cannot do. Without that
+ * setting a consult never reaches it.
+ */
+export function consultApprovalCopy(
+  coachName: string,
+  roster: ServedRoster | null,
+  payload: unknown,
+): { message: string; verb: string } {
+  const p = payload && typeof payload === "object" ? (payload as { agent?: unknown; question?: unknown }) : {};
+  const name = typeof p.agent === "string" ? p.agent.trim().slice(0, 40) : "";
+  const agent = roster && name ? rosterAgent(roster, name) : undefined;
+  const who = agent ? agentLabel(agent) : name || "도우미";
+  const question = typeof p.question === "string" ? p.question.trim().slice(0, 400) : "";
+  return {
+    message:
+      `${asSubject(coachName)} 도우미에게 물어보려고 해요:\n\n` +
+      `${who}${question ? `에게: ${question}` : ""}\n\n` +
+      "도우미는 대화 기록 없이 작업 파일의 일부만 보고, 파일을 고치지 않아요.",
+    verb: "묻기",
+  };
+}
+
+function withoutIcon(label: string, icon: string): string {
+  return icon && label.startsWith(icon) ? label.slice(icon.length).trimStart() : label;
+}
+
+/**
+ * The timeline line an orchestrator event becomes (spec §5.2), or null for one the learner is
+ * not shown. Quiet by default: one line per consult (running → done | error, in place), one
+ * line per page per turn for the site check (the latest verdict, in place), one per archive,
+ * and the busy notice. The diff summary goes to the coach only (A4 D13). A4 builds each label
+ * with its icon in front; the line draws the icon itself, so it is taken off the label.
+ */
+export function orchestratorToolEntry(event: OrchestratorEvent, turnId: string): ToolEntry | null {
+  const at = typeof event.at === "number" && Number.isFinite(event.at) ? { at: event.at } : {};
+  if (event.kind === "notice") return { id: event.id, icon: "⏳", label: event.text, state: "done", ...at };
+  if (event.kind === "consult") {
+    return { id: event.id, icon: event.icon, label: withoutIcon(event.label, event.icon), state: event.state, ...at };
+  }
+  if (event.name === "diff") return null;
+  if (event.name === "site_check") {
+    // `done` whatever the verdict (spec §5.2's table): the check ran, and the label says what it
+    // found, 통과 or 넘침 or 미확인 — never a pass it did not measure. The error state is for a line
+    // the learner must act on (#746 B4); a failing page is the coach's to fix.
+    return {
+      id: `check:site_check:${turnId}:${event.path}`,
+      icon: event.icon,
+      label: withoutIcon(event.label, event.icon),
+      state: "done",
+      ...at,
+    };
+  }
+  return { id: event.id, icon: event.icon, label: withoutIcon(event.label, event.icon), state: "done", ...at };
+}
+
+/** The learner's own goal for this lesson revision, as a consult may attach it (`learner_goal`). */
+export function learnerGoalText(view: StudentGoalView | null | undefined): string | null {
+  const goal = view?.goal?.trim();
+  if (!goal) return null;
+  const criteria = (view?.criteria ?? []).map((c) => c.trim()).filter(Boolean);
+  return criteria.length ? `${goal} (완료 기준: ${criteria.join(" · ")})` : goal;
+}
+
+/**
+ * What runSdkCoach takes as `orchestrator` (A4 OrchestratorHostArgs): this seat's session, the
+ * timeline, and the learner's goal. Passing it is the panel saying it runs the orchestrator;
+ * runSdkCoach still turns it on only for a seat the served roster is on for.
+ */
+export function orchestratorHostArgs(deps: {
+  session: OrchestratorSession;
+  turnId: string;
+  post: (entry: ToolEntry) => void;
+  learnerGoal: () => string | null;
+}): OrchestratorHostArgs {
+  return {
+    session: deps.session,
+    onEvent: (event) => {
+      const entry = orchestratorToolEntry(event, deps.turnId);
+      if (entry) deps.post(entry);
+    },
+    learnerGoal: deps.learnerGoal,
+  };
+}
+
 export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortNotice?: string;
   /** #897 H-13 — has the model-substitution notice already been attached to this turn? One turn per seat (REQ-M37 ③). */
@@ -258,6 +367,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private effortScope?: string;
   private effortResult?: import('./protocol').ChatConfig['effortResult'];
   private effortTurn?: { id: string; url: string; token: string; scope: string };
+  /**
+   * A5 — the orchestrator session of the seat this window runs (spec §3.2: uses per session,
+   * the last check of each page, failure events). Another seat starts a new one, and so does
+   * "대화 지우기". The Service keeps its own per-session cap either way.
+   */
+  private orchestratorState?: { seatKey: string; session: OrchestratorSession };
+  private orchestratorSessionFor(seatKey: string): OrchestratorSession {
+    if (this.orchestratorState?.seatKey !== seatKey) this.orchestratorState = { seatKey, session: new OrchestratorSession() };
+    return this.orchestratorState.session;
+  }
 
   private async refreshEffortResult(): Promise<void> {
     const turn = this.effortTurn;
@@ -1818,7 +1937,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return false;
       }
     };
-    const tab = onPreview(pinned) ? pinned : (vscode.window.browserTabs ?? []).find((t) => onPreview(t));
+    const tab = onPreview(pinned) ? pinned : this.coachBrowserTabs().find((t) => onPreview(t));
     if (!tab) {
       this.postPageNotice("먼저 미리보기를 연 뒤에 요소를 고를 수 있어요.");
       return;
@@ -2179,7 +2298,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const column = () => (this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One);
     const driven = this.mcpBrowser?.currentTab();
     return recoverLearnerPreview<vscode.BrowserTab>({
-      tabs: () => vscode.window.browserTabs ?? [],
+      tabs: () => this.coachBrowserTabs(),
       serverUrl: () => this.liveServer.currentUrl(),
       recover: () => this.liveServer.recover(answers),
       fetchPage: async (url) => { const res = await fetch(url, { signal: AbortSignal.timeout(4000) }); return { status: res.status, contentType: res.headers.get("content-type") }; },
@@ -2227,6 +2346,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       );
       if (choice !== "대화 지우기" || this.hasActiveStream() || key !== this.historyKey()) return;
       await this.context.workspaceState.update(key, []);
+      // A5 — a new conversation starts the orchestrator session over (A4 report §9).
+      this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
       // A cleared chat starts a new conversation, not a new trial allowance.
       void this.post({ type: "aiDisclosure", text: this.aiDisclosure.noticeForHistoryClear() });
@@ -3146,6 +3267,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * A5 (orchestrator spec §6.3) — before revealBuilt saves index.html on an adult orchestrator
+   * seat whose roster lists `archive_before_overwrite`, keep the current page in
+   * .hypeproof/history (A3 archiveBeforeOverwrite: identical content is skipped, the newest 20
+   * are kept), with one timeline line. The same file saveGameToWorkspace writes: the first
+   * workspace folder's index.html. No model call, no modal, never throws: an archive that fails
+   * does not stop the save.
+   */
+  private archiveAdultPage(nextHtml: string, streamId?: string): void {
+    try {
+      const roster = orchestratorRosterFor(this.cachedProfile);
+      if (!roster?.checks.includes("archive_before_overwrite")) return;
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) return;
+      const outcome = archiveBeforeOverwrite({
+        seat: { profile: this.cachedProfile, orchestrator: true },
+        workspaceRoot: root,
+        file: "index.html",
+        nextContent: nextHtml,
+      });
+      if (!outcome.archived || !outcome.path || !streamId) return;
+      const label = outcome.timeline ?? adultArchiveTimelineLabel(outcome.path);
+      this.postToolLog(streamId, { id: randomId(), icon: "🗂", label: label.replace(/^🗂\s*/, ""), state: "done" });
+    } catch {
+      /* the learner's save comes first */
+    }
+  }
+
   async revealBuilt(
     html: string,
     opts?: {
@@ -3226,6 +3375,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (isWorldCohort(this.cachedProfile)) {
       this.lastArchivedWorldFile = await this.archiveCurrentWorld(checked.html, opts?.streamId);
     }
+    // A5 (orchestrator spec §6.3, FO-10) — adults on an orchestrator seat get the same safety
+    // before this same overwrite: the page about to be replaced is copied to .hypeproof/history.
+    // Kids never reach it (their worlds archive above; the gate fails closed for minors and
+    // unknown tiers), and neither does a seat without the roster's archive check.
+    this.archiveAdultPage(checked.html, opts?.streamId);
     // Swap the engine in **after** the archive is done (the archived copy takes the
     // old engine inlined).
     if (opts?.engineJs !== undefined) await this.saveEngineToWorkspace(opts.engineJs);
@@ -3290,7 +3444,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // loopback preview tab" (port-independent): reuse the one already on the
       // current URL via SSE reload; otherwise close any STALE preview tabs
       // (dead port from a prior server start) and open exactly one fresh tab.
-      const tabs = vscode.window.browserTabs ?? [];
+      const tabs = this.coachBrowserTabs();
       const isPreviewTab = (u?: string): boolean =>
         !!u && /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/i.test(u);
       const current = tabs.find((t) => t.url?.startsWith(base));
@@ -3440,8 +3594,56 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * A5 (orchestrator spec §6.1) — the site check's own browser tabs, while a check holds one.
+   * The coach's tab plans (browser_open, live_preview_start, the duplicate check) never see them,
+   * so a check tab is neither reused as the preview nor closed under a running check.
+   */
+  private readonly siteCheckTabs = new Set<vscode.BrowserTab>();
+  private siteCheckPages?: SiteCheckViewports<vscode.BrowserTab>;
+
+  /** The browser tabs the coach's tab logic works on: every tab but the site check's. */
+  private coachBrowserTabs(): readonly vscode.BrowserTab[] {
+    const tabs = vscode.window.browserTabs ?? [];
+    return this.siteCheckTabs.size ? tabs.filter((t) => !this.siteCheckTabs.has(t)) : tabs;
+  }
+
+  /**
+   * The page a site check measures in (BrowserMcpHost.viewportPage; browserMcp.ts
+   * SiteCheckViewports): the learner's own 화면 크기 검수 tab for this page when one is open,
+   * otherwise a background tab opened without focus and closed after the check. The learner's
+   * preview tab is never navigated.
+   */
+  private siteCheckViewports(): SiteCheckViewports<vscode.BrowserTab> {
+    this.siteCheckPages ??= new SiteCheckViewports<vscode.BrowserTab>({
+      tabs: () => this.coachBrowserTabs(),
+      urlOf: (tab) => tab.url,
+      open: async (url) => {
+        const tab = await vscode.window.openBrowserTab(url, {
+          viewColumn: this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One,
+          preserveFocus: true,
+          background: true,
+        });
+        this.siteCheckTabs.add(tab);
+        return tab;
+      },
+      close: async (tab) => {
+        try {
+          await tab.close();
+        } finally {
+          this.siteCheckTabs.delete(tab);
+        }
+      },
+      attach: (tab) => CdpSession.attach(tab),
+    });
+    return this.siteCheckPages;
+  }
+
   private buildBrowserMcpHost(): BrowserMcpHost {
     return {
+      // A5 — the site check's page (spec §6.1). Asked only on an orchestrator turn whose roster
+      // lists site_check; the live server is never started for it (livePreviewUrl below).
+      viewportPage: (wrapperUrl: string) => this.siteCheckViewports().page(wrapperUrl),
       openBrowser: async (url: string) => {
         // #519 — **this navigates; it does not open.**
         //
@@ -3459,7 +3661,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const v = checkAgentOrigin(url, this.crBrowserOptions().allowedOrigins());
           if (!v.ok) throw new Error(v.reason);
         }
-        const tabs = vscode.window.browserTabs ?? [];
+        const tabs = this.coachBrowserTabs();
         const plan = planCoachBrowserTabs(tabs.map((t) => t.url), url);
         // Clean up only the surplus tabs already stacked in the same slot (the legacy pile-up).
         for (const i of plan.close) {
@@ -3569,7 +3771,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // on screen" alone misses the other slot that is already up and raises an
       // unnecessary approval modal.
       openPages: async () =>
-        (vscode.window.browserTabs ?? [])
+        this.coachBrowserTabs()
           .filter((t) => !!t.url)
           .map((t) => ({ url: t.url, title: t.title })),
       // #523 — pins the tab judged "already open" as the drive target. openPages
@@ -3581,7 +3783,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // background the screen is unchanged. It brings it forward as well
       // (revealBrowserTab — a failure is silently ignored).
       focusOpenPage: async (url: string) => {
-        const tab = (vscode.window.browserTabs ?? []).find(
+        const tab = this.coachBrowserTabs().find(
           (t) => !!t.url && isSameBrowserUrl(t.url, url),
         );
         if (!tab?.url) return null;
@@ -4367,7 +4569,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // has to be able to resend it to the worker's trace. The worker validates turn_id
     // strictly as a UUID (routes/trace.ts), so a UUID is used instead of randomId().
     const streamId = crypto.randomUUID();
-    if (token && profile && selection?.choices.some(c=>c.effort)) {
+    // A5 (spec §5.2) — an orchestrator seat reads the per-request record too, whatever its effort
+    // policy: the details list is where each request's agent and model are shown.
+    if (token && profile && (selection?.choices.some(c=>c.effort) || orchestratorRosterFor(profile))) {
       this.effortTurn = {id:streamId,url:proxyUrl,token,scope:modelSelectionScope(profile)};
       this.effortResult = {state:'loading',requests:[]};
       void this.postConfig();
@@ -4980,6 +5184,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // MCP tools. Always passed; runSdkCoach registers the server only
             // when the profile grants sdk_tools.browser (minors never do).
             browserHost: this.buildBrowserMcpHost(),
+            // A5 (ADR 0011) — the front-line orchestrator host. Always passed, like browserHost:
+            // runSdkCoach turns the orchestrator on only for a seat the served roster is on for (an
+            // adult with a well-formed roster, A2's binding); otherwise the turn is today's, byte for
+            // byte (test/orchestrator-switch.smoke.mjs). Its consult and check lines join this turn's
+            // timeline; the learner's goal is read when a consult declares learner_goal.
+            orchestrator: orchestratorHostArgs({
+              session: this.orchestratorSessionFor(coachSeatKeyFor({ token, profile })),
+              turnId: streamId,
+              post: (entry) => this.postToolLog(streamId, entry),
+              learnerGoal: () =>
+                learnerGoalText(goalViewOf(profile.lesson, activityConnections(this.context)?.current?.id ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY))),
+            }),
           });
           // #751 U4 — the SDK closed the stream normally but its result said the turn failed (the learner already read the
           // notice). Not thrown: the notice and the words stay in the conversation exactly as shown, nothing is re-sent. The
@@ -5598,6 +5814,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // at every moment your own artifact changes IS this track's delegation-judgment
     // training.
     const coachName = this.coachDisplayName();
+    // A5 — consult (orchestrator spec §5.1). Only a machine that added consultHelper to
+    // requireApprovalFor reaches this line; the default never does. The modal names the helper
+    // by its title and model (AE-27), not by its wire id.
+    if (req.kind === "consultHelper") {
+      const copy = consultApprovalCopy(coachName, orchestratorRosterFor(this.cachedProfile), req.payload);
+      onPrompted?.();
+      const pick = await vscode.window.showWarningMessage(copy.message, { modal: true }, copy.verb);
+      return pick === copy.verb;
+    }
     const { title, verb } = approvalCopyFor(coachName)[req.kind] ?? {
       title: approvalFallbackTitle(coachName),
       verb: "허용",

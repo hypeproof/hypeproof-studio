@@ -13,6 +13,22 @@ import {
   type ProfileFailure,
   type ProxyStreamUsage,
 } from "./proxyClientHelpers.ts";
+import { ORCHESTRATOR_FORMAT } from "./sdkCoachHelpers.ts";
+
+/**
+ * A5 (orchestrator spec §2.2 condition 4, §2.3, §4.1) — this build's capability declaration on
+ * GET /v1/profile: it can parse and run a served `hps-agent-roster/1` roster (agentRoster.ts).
+ * The same ceiling-not-an-order rule as the observation format header: the Service still serves
+ * the roster only to an adult agent-sdk seat whose cohort has it on, and never to a minor. A
+ * Service without the feature ignores the header, so its answer has no `orchestrator` key and
+ * the app runs exactly as before (test/orchestrator-panel.smoke.mjs).
+ */
+export const ORCHESTRATOR_CAPABILITY_HEADER = "x-hps-orchestrator";
+
+/** The GET /v1/profile request headers: the observation negotiation, plus the roster capability. */
+export function profileRequestHeaders(token: string): Record<string, string> {
+  return { ...observationHeaders(token), [ORCHESTRATOR_CAPABILITY_HEADER]: ORCHESTRATOR_FORMAT };
+}
 
 /**
  * Auth/session failures need different handling than generic errors:
@@ -406,7 +422,7 @@ export async function fetchProfileResult(args: FetchProfileArgs): Promise<Profil
   try {
     res = await fetch(url, {
       method: "GET",
-      headers: observationHeaders(token),
+      headers: profileRequestHeaders(token),
       signal: AbortSignal.timeout(15_000),
     });
   } catch {

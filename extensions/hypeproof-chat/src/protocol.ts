@@ -93,7 +93,22 @@ export interface AssetScoreChunk {
 export type CourseEffort = 'low' | 'medium' | 'high';
 export interface EffortRequestRecord {
   request_id: string; model: string; requested: CourseEffort | null; applied: CourseEffort | null;
-  reason: 'selected' | 'course_default' | 'unsupported_model'; status: number; created_at: string;
+  /**
+   * `no_receipt` (S4): recorded for its agent attribution alone, with no effort receipt (both levels
+   * null). `unknown`: the Service sent a reason this build does not know; observedEffortResult marks
+   * that row only (modelSelection.ts).
+   */
+  reason: 'selected' | 'course_default' | 'unsupported_model' | 'no_receipt' | 'unknown'; status: number; created_at: string;
+  /**
+   * ADR 0011 (orchestrator spec §4.6, §5.2, §14) — who sent this request, as the Service recorded
+   * it: `coach`, a roster helper's name, or `aux` for Claude Code's own background calls. Absent
+   * from a Service without the agent ledger, and then the row reads exactly as before.
+   */
+  agent?: string;
+  /** That agent's Korean title, e.g. 검토 도우미. */
+  agent_title?: string;
+  /** Claude Code's purpose marker: main | subagent | workflow | compaction | auxiliary. */
+  request_class?: string;
 }
 export interface ChatConfig {
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
@@ -330,6 +345,42 @@ export interface ResolvedProfile {
   coach_runtime?: "proxy" | "agent-sdk";
   /** #596 — session-log upload opt-in. The client uses it only to decide UI exposure (the server enforces). */
   analytics?: { upload_session_logs?: boolean };
+  /**
+   * ADR 0011 (orchestrator spec §2.2, §14) — the front-line orchestrator's roster. Served only
+   * to an app that sent `x-hps-orchestrator` (proxyClient), and only to an adult agent-sdk seat
+   * outside a frozen lesson whose cohort has it on; `{ enabled: false, reason }` when one of
+   * those fails, and absent from an older Service or without the header. Never to a minor.
+   * Wire data, unvalidated: agentRoster.ts parses it (fail closed) before anything reads it,
+   * and a value it refuses is no roster.
+   */
+  orchestrator?: ServedOrchestratorWire | { enabled: false; reason: string };
+}
+
+/**
+ * The served `hps-agent-roster/1` roster as it arrives (spec §2.2). Prompts and output contracts
+ * stay in the Service: the app gets labels, caps and the context it may attach. Structural only,
+ * so the webview build never follows a Node-side import from here.
+ */
+export interface ServedOrchestratorWire {
+  format: string;
+  id: string;
+  version: string;
+  digest?: string;
+  /** Korean; rendered into the consult tool description. */
+  coach_brief?: string;
+  checks?: string[];
+  agents: Array<{
+    name: string;
+    /** Korean product copy shown to the learner, e.g. 검토 도우미. */
+    title?: string;
+    role: string;
+    purpose?: string;
+    trigger?: string;
+    context?: string[];
+    caps?: { per_turn: number; per_session: number };
+    enabled?: boolean;
+    model?: { id: string; label: string };
+  }>;
 }
 
 export interface UxConfig {
@@ -663,7 +714,11 @@ export interface ActionRequest {
   // Its own tier in resolveActionApproval (confirmed once per repository per session) and
   // deliberately NOT in `requireApprovalFor`: a setting must not be able to remove the one
   // confirmation in front of an irreversible "everyone can read this" act.
-  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType" | "publishSite";
+  // "consultHelper" (ADR 0011, orchestrator spec §5.1): the coach asks a roster helper one
+  // question through mcp__hypeproof__consult. The helper has no tools and sees only the
+  // excerpts the host attaches, so it runs without a modal by default: the kind is in
+  // `requireApprovalFor`'s enum but not its default, and a machine that lists it gets one.
+  kind: "writeFile" | "executeShell" | "readFile" | "webSearch" | "openBrowser" | "delegateAgent" | "browserClick" | "browserType" | "publishSite" | "consultHelper";
   /**
    * epic #431, shell only — the command is unrecoverable if approved by
    * reflex (`rm`, `sudo`, `git push --force`, pipe-to-shell). The host shows

@@ -31,7 +31,21 @@ export function selectedEffort(profile: ResolvedProfile, selection: ModelSelecti
   return { value, allowed: policy.allowed };
 }
 
-/** Unknown/malformed Service data cannot become a claim of applied settings. */
+/**
+ * The `reason` values the details list can word. `no_receipt` (orchestrator S4,
+ * hypeproof-service#88): a row written for its agent attribution alone. No effort receipt
+ * exists, `requested` and `applied` are null, and nothing is claimed about the effort used.
+ */
+export const KNOWN_EFFORT_REASONS = ['selected', 'course_default', 'unsupported_model', 'no_receipt'] as const;
+
+/**
+ * Unknown/malformed Service data cannot become a claim of applied settings: the envelope and each
+ * row's id, model, levels, status and time must be well formed, or the whole record reads unknown.
+ * The reason is the one field read row by row. A reason this build does not know (a newer
+ * Service, or none at all) becomes `unknown` on that row only: the row keeps its model and levels
+ * and marks just its reason, so one new word never turns the whole list into 미확인. Rows with a
+ * known reason are passed through as they came.
+ */
 export function observedEffortResult(data: unknown): import('./protocol').ChatConfig['effortResult'] {
   const unknown = { state: 'unknown' as const, requests: [] };
   if (!data || typeof data !== 'object') return unknown;
@@ -40,8 +54,8 @@ export function observedEffortResult(data: unknown): import('./protocol').ChatCo
   if (!Array.isArray(requests) || !requests.length || requests.length > 100 || typeof truncated !== 'boolean') return unknown;
   if (!requests.every(r => r && typeof r === 'object' && typeof r.request_id === 'string'
     && typeof r.model === 'string' && level(r.requested) && level(r.applied)
-    && ['selected', 'course_default', 'unsupported_model'].includes(r.reason)
     && Number.isInteger(r.status) && r.status >= 100 && r.status <= 599
     && typeof r.created_at === 'string')) return unknown;
-  return { state: 'observed', requests, truncated };
+  const known = KNOWN_EFFORT_REASONS as readonly unknown[];
+  return { state: 'observed', requests: requests.map(r => (known.includes(r.reason) ? r : { ...r, reason: 'unknown' })), truncated };
 }
