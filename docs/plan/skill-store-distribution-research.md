@@ -9,6 +9,16 @@ Keep Service as the store authority. Keep today's small inert recipes directly i
 
 Supabase Postgres RLS + private Storage is a credible alternative if product identity/permissions are deliberately consolidated into Supabase later. Running two catalogs or independent entitlement systems now would create a consistency and authorization burden. These are design recommendations, not implemented or approved behavior.
 
+Operational boundary: Studio's roughly319 MB private app/SDK installer is not a
+learner skill package. A separate R2 streaming comparison for that installer is
+being prepared after an incomplete download; it does not justify moving today's
+32 KiB recipes or prove a storage provider caused the transfer problem. Keep
+installer assets and future learner bundles in separate namespaces/access policies,
+and prefer a dedicated private pilot bucket over reusing an unrelated bucket.
+Any R2 deployment must check public access, expiry, complete byte verification and
+existing account usage separately. Current local handler tests are preparation,
+not a live R2 or cross-platform store result.
+
 ## Current local evidence and scope boundary
 
 Inspected Studio AGENTS.md/CLAUDE.md and the Service integration checkout at `/tmp/hps-email-service-integration-20261015` after its AGENTS.md. Runtime references: Studio `0b57074d`, Service `abf79a8b`. Local source evidence:

@@ -40,6 +40,10 @@ fixtures and23 online access controls pass. Full HTTP/2 readback of this new
 candidate was cancelled after563.56s/13238272 app bytes; same-artifact HEAD
 returned200 in4.680s. The transfer bottleneck is unconfirmed. Full download and
 native Windows execution remain unverified; no automatic replacement was started.
+An updated extension `e3ab008b` archive has since been staged locally (same runtime
+code as `3d8c0b38`). It has not replaced the served installer or passed the new
+candidate's PowerShell/native Windows gates. A private R2 installer transport is
+under preparation; this does not migrate the skill catalog from D1.
 Native three-principal store evidence below was recorded on `3f1a3f20`.
 The online Service remains pinned to
 `email-local-accepted-ffef7bc-peer`. Later observations below are revision-bound.
@@ -61,6 +65,13 @@ Service `worker/src/routes/automations.ts`, `worker/src/lib/automation-recipe.ts
 `worker/migrations/0045-automation-recipes.sql`.
 
 ## Proposed delivery and trust model
+
+The next delivery sequence is explicit: finish the local feature/lifecycle gaps,
+freeze and verify one Windows candidate, then execute SS-01–12 with actual Windows
+recipients. In particular, same-content re-publication after withdrawal and
+v2/update/rollback are open implementation gaps; successful import or withdrawal
+alone does not close them. Store acceptance remains part of the active delivery
+goal, not a follow-up that can be omitted when the email feature passes.
 
 The [source-backed distribution research](skill-store-distribution-research.md)
 compares official pricing, access semantics, n8n/Open VSX/ORAS/Sigstore/TUF patterns
@@ -271,6 +282,28 @@ Public versus invited sharing is the only immediate product question. Provider
 selection follows the completed research recommendation; no new paid service,
 public bucket, permission grant, production rollout or sender payout is authorized
 by this design update. Ask about Windows access at execution time, not now.
+
+### Private installer transport preparation (not a skill-store migration)
+
+The unexplained incomplete32ba0ac2 download motivates a bounded comparison with
+R2 streaming. `scripts/email-test-r2-download.mjs` now provides a local-only
+candidate handler: every request rechecks the existing participant allowlist and
+pinned Service access grant, then reads only two immutable, digest-addressed
+archives named by a pinned manifest. It denies expired pilots, partial requests,
+wrong manifests, wrong sizes and available checksum mismatches; it forwards the
+R2 stream without assembling the ZIP in Worker memory. Public responses contain
+only selected manifest fields, never operator metadata. The client must still
+hash the full bytes before extraction; an HTTP200/header is not that verification.
+
+The handler and existing authorization suite pass13 local controls, including
+real composition of allowlist/grant checks, revoked access after a prior success,
+missing/malformed storage, stream cancellation and metadata privacy. CI now runs
+these controls. No new bucket, object upload, gateway deployment or performance
+improvement is claimed. The prepared e3ab008b archive is local only;32ba0ac2 remains
+served. Before switching: use a dedicated private bucket, verify no public access,
+apply a seven-day retention policy, read back and hash both archives, publish the
+manifest last, retain the old transport for rollback, then verify complete
+authenticated downloads for the candidate. Actual Windows remains a separate gate.
 
 
 ## Implementation/evidence follow-up — 2026-10-15

@@ -22,6 +22,13 @@ Use current D1 for bounded recipes; add private R2 only when larger reviewed ass
 justify it. Final audience remains a product question; use cohort-only visibility
 until decided. Public discovery and generic executable packages are not implemented.
 
+Completion order: close local lifecycle gaps (including re-publication and
+version/update/rollback), freeze the Windows candidate, then run the three-account
+Studio journey on Windows. Latest extension e3ab008b is staged locally but the
+served installer still contains32ba0ac2. Private R2 download-handler controls now
+pass locally; no R2 deployment or new-candidate download/Windows PASS is claimed.
+Installer ZIP transport and the D1 skill catalog are distinct delivery surfaces.
+
 Current partial evidence, all dated2026-10-15:
 
 - Single Mac Dev runtime `3f1a3f20`, SDK0.3.299: during store validation normal activity setup targeted
