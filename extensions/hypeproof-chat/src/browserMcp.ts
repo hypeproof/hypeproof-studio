@@ -244,8 +244,193 @@ export interface BrowserMcpHost {
    * Null when no browser page can be had. Optional: without it every site check is
    * `unverified` (`no_cdp`), never `pass`. Used only on an orchestrator seat whose roster
    * lists `site_check`, with or without the browser tools.
+   *
+   * A5: chatPanelProvider implements it with `SiteCheckViewports` below.
    */
   viewportPage?(wrapperUrl: string): Promise<SiteCheckPage | null>;
+}
+
+// ── The site check's page (A5; orchestrator spec §6.1) ──────────────────────
+// The runner measures inside the live server's `/__hp_viewport` wrapper, because the shipped
+// shell ignores CDP emulation. It must never take over the learner's own preview: navigating
+// that tab to the wrapper on every save would turn the preview into the 390px inspection view
+// (A4 D8 left the choice here). So a check measures in:
+// 1. a tab that already shows exactly this wrapper (the learner opened 화면 크기 검수), left
+//    open afterwards; or else
+// 2. a tab of its own, opened in the background without focus and closed when the check is
+//    over.
+// One check page at a time. The host is handed the page only once the wrapper has finished
+// loading, and a page the runner never releases (it gave up first) is released anyway, so a
+// check tab cannot linger. Every failure is null, which the runner reports as unverified,
+// never as a pass.
+
+/** The live server's own viewport wrapper: loopback http(s), path `/__hp_viewport`. */
+export function isViewportWrapperUrl(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  return isLoopbackUrl(u.href) && (u.protocol === "http:" || u.protocol === "https:") && u.pathname === "/__hp_viewport";
+}
+
+/** The CDP session a check page carries (CdpSession fits it). */
+export interface ViewportCdp {
+  send(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<any>;
+  close(): Promise<void>;
+}
+
+/** What the host's integrated browser gives `SiteCheckViewports`. vscode-free; the host implements it. */
+export interface ViewportTabsPort<Tab> {
+  /** The open browser tabs, without the check tabs this class opened. */
+  tabs(): readonly Tab[];
+  urlOf(tab: Tab): string | undefined;
+  /** Open `url` in a new tab that takes neither the focus nor the foreground. */
+  open(url: string): Promise<Tab>;
+  /** Close a tab `open` gave. Best effort. */
+  close(tab: Tab): Promise<void>;
+  /** A CDP session on the tab's page. */
+  attach(tab: Tab): Promise<ViewportCdp>;
+}
+
+export interface SiteCheckViewportOptions {
+  /** How long opening, attaching and loading the wrapper may take. */
+  readyMs?: number;
+  /** Between two reads of the page's location while it loads. */
+  pollMs?: number;
+  /** A page not released by then is released anyway. */
+  holdMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** Inside the runner's 5 s budget, with time left for the measurement itself. */
+export const VIEWPORT_READY_MS = 2500;
+export const VIEWPORT_POLL_MS = 100;
+/** Longer than any check (the runner's budget is 5 s), short enough that a stray tab goes soon. */
+export const VIEWPORT_HOLD_MS = 15_000;
+
+class ViewportTimeout extends Error {}
+
+/** `p`, or a ViewportTimeout after `ms`; what `p` brings after that goes to `late`. */
+function within<T>(p: Promise<T>, ms: number, late: (value: T) => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      done = true;
+      reject(new ViewportTimeout("viewport page not ready in time"));
+    }, Math.max(1, ms));
+    p.then(
+      (v) => {
+        if (done) return late(v);
+        done = true;
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+export class SiteCheckViewports<Tab> {
+  private queue: Promise<void> = Promise.resolve();
+  private readonly port: ViewportTabsPort<Tab>;
+  private readonly opts: SiteCheckViewportOptions;
+
+  constructor(port: ViewportTabsPort<Tab>, opts: SiteCheckViewportOptions = {}) {
+    this.port = port;
+    this.opts = opts;
+  }
+
+  /** A page showing `wrapperUrl`, loaded, for one check; or null. Never throws. */
+  async page(wrapperUrl: string): Promise<SiteCheckPage | null> {
+    if (!isViewportWrapperUrl(wrapperUrl)) return null;
+    const now = this.opts.now ?? (() => Date.now());
+    const sleep = this.opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const readyMs = this.opts.readyMs ?? VIEWPORT_READY_MS;
+
+    // One check page at a time, in call order.
+    let endTurn!: () => void;
+    const turn = new Promise<void>((resolve) => (endTurn = resolve));
+    const previous = this.queue;
+    this.queue = previous.then(() => turn);
+    await previous;
+
+    const startedAt = now();
+    const left = () => readyMs - (now() - startedAt);
+    let session: ViewportCdp | null = null;
+    let opened: { tab: Tab } | null = null;
+    let released = false;
+    const release = async (): Promise<void> => {
+      if (released) return;
+      released = true;
+      clearTimeout(hold);
+      try {
+        await session?.close();
+      } catch {
+        /* a session that cannot be closed is gone already */
+      }
+      if (opened) {
+        try {
+          await this.port.close(opened.tab);
+        } catch {
+          /* best effort: the tab may have been closed by the learner */
+        }
+      }
+      endTurn();
+    };
+    const hold = setTimeout(() => void release(), this.opts.holdMs ?? VIEWPORT_HOLD_MS);
+    (hold as { unref?: () => void }).unref?.();
+
+    try {
+      const existing = this.port.tabs().find((t) => isSameBrowserUrl(this.port.urlOf(t) ?? "", wrapperUrl));
+      let tab: Tab;
+      if (existing !== undefined) {
+        tab = existing;
+      } else {
+        tab = await within(this.port.open(wrapperUrl), left(), (late) => void this.port.close(late).catch(() => {}));
+        opened = { tab };
+      }
+      session = await within(this.port.attach(tab), left(), (late) => void late.close().catch(() => {}));
+      const target = new URL(wrapperUrl);
+      for (;;) {
+        const r = await within(
+          session.send(
+            "Runtime.evaluate",
+            { expression: "JSON.stringify({ href: String(location.href), ready: String(document.readyState) })", returnByValue: true },
+            Math.max(1, left()),
+          ),
+          left(),
+          () => {},
+        ).catch(() => null);
+        let at: URL | null = null;
+        let ready = "";
+        try {
+          const v = JSON.parse(String(r?.result?.value ?? "null")) as { href?: unknown; ready?: unknown } | null;
+          if (v && typeof v.href === "string") {
+            at = new URL(v.href);
+            ready = String(v.ready ?? "");
+          }
+        } catch {
+          at = null;
+        }
+        if (at && at.origin === target.origin && at.pathname === target.pathname && ready === "complete") break;
+        if (left() <= 0) throw new ViewportTimeout("viewport page not ready in time");
+        await sleep(Math.min(this.opts.pollMs ?? VIEWPORT_POLL_MS, Math.max(1, left())));
+      }
+      const cdp = session;
+      return { cdp, release };
+    } catch {
+      await release();
+      return null;
+    }
+  }
 }
 
 /**

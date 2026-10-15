@@ -407,3 +407,47 @@ It shows exactly normal1 / unknown19: the other app was closed,16 fixture report
 are stale and2 seats were never connected. The board's six completed steps cover
 the preview plan, not sending or all workshop work. Current screenshot and
 redacted receipt: `/tmp/hps-email-mvp/final-720be661-acceptance/`.
+
+
+## Integrated local Service runtime (2026-10-15, 16:45 KST)
+
+The isolated server on127.0.0.1:8794 now loads Service `abf79a8` directly. The
+previous temporary profile wrapper is no longer needed: the integrated workshop
+profile already grants the approved shared-runner capability. Existing D1/KV/R2
+state and operator credentials were backed up before transition. Additive local
+migrations0043–0045 preserved every record in116 pre-existing tables; SQLite
+integrity_check returned `ok`. No production resources were changed.
+
+GET /v1/health returns200 with `local-email-abf79a8`. The same instructor token
+still retrieves the identical run and20-seat roster. The existing single native
+Peer Check retains6/6 and its classroom connection. After re-entering the existing
+operator credentials following a browser reload, the live instructor board shows
+A02 completed6/6, normal1 / unknown19. No learner grant was reissued and no mail
+was sent. This verifies local state continuity, not Windows credential persistence.
+
+Local receipt: `/tmp/hps-email-mvp/local/integrated-service-upgrade.json`.
+Screenshot: `/tmp/hps-email-mvp/final-720be661-acceptance/instructor-integrated-service.png`.
+Rollback retains the pre-transition config, launcher and persistence snapshot in
+the owner-only backup directory named in the receipt.
+
+
+## Main A5 compatibility and Windows package (2026-10-15)
+
+PR CI run38699388441 exposed a real integration mismatch with newly merged
+main `b7977629`: the new orchestrator-panel negative control injected429 into
+non-orchestrator seats and expected a successful retry. The email branch already
+ends these budget/concurrency refusals immediately. Preserve that behavior and
+the orchestrator's bounded retry policy. The negative control now checks529
+recovery without orchestrator UI and separately requires SdkApiError429 on every
+non-orchestrator fixture. No runtime policy was weakened to satisfy the test.
+The focused panel suite passes14 checks. Full `npm test`, extension typecheck,
+and webview/extension builds all pass on this merged tree. Remote CI is pending.
+The native app remains720be661, so its earlier UI evidence does not cover A5.
+
+Windows run38694734487 completed successfully at source720be661 and produced
+artifact11956496826 (`hypeproof-studio-windows-x64`). The CI smoke validates
+packaged branding/version and vendored SDK JS, then launches the executable with
+`--disable-extensions`; this is not an email/Google/native-SDK acceptance. The
+native SDK binary is seeded separately. Operator Google resources are not supplied
+by that workflow. New A5 extension changes and private pilot resources must be
+staged before the user-PC installation/upgrade check. No public release was made.

@@ -2565,14 +2565,13 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   }
   // A2 — consult reaches the approval path as its own kind (spec §5.1), so
   // resolveActionApproval decides from requireApprovalFor: allowed without a
-  // modal by default, a modal where a machine lists consultHelper. protocol.ts
-  // (A5) adds the kind to ActionRequest["kind"] (spec §14); until then it
-  // travels as a string, which the host treats like any unlisted kind (Tier 3).
+  // modal by default, a modal where a machine lists consultHelper. The kind is
+  // part of ActionRequest["kind"] (protocol.ts, A5; spec §14).
   if (action.toolName === MCP_CONSULT) {
     const agent = firstString(action.input, ["agent"]) ?? "";
     const question = firstString(action.input, ["question"]) ?? "";
     return {
-      kind: CONSULT_HELPER_KIND as string as ActionRequest["kind"],
+      kind: CONSULT_HELPER_KIND,
       description: `도우미에게 묻기${agent ? ` (${agent})` : ""}: ${question.slice(0, 120)}`,
       payload: { agent, question },
     };
