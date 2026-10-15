@@ -72,13 +72,17 @@ No authentication scope was expanded. Current coach presentation remains PARTIAL
 cohort store public, although the host review correctly says our class.
 The source follow-up now returns explicit cohort visibility and a not-compared
 marker in list receipts, and reinforces catalogue-first/no-internal-ID guidance
-in the installed SDK contract. Automation92, local runtime8, typecheck and the
-extension build pass. Mac/Windows still run11b82da2; this follow-up has not yet
-been installed or accepted as a natural-language correction.
+in the installed SDK contract. Source db049d62 passes all18 CI checks,
+automation92, local runtime8, typecheck and the extension build. The single Mac
+Dev app now runs db049d62 with its existing third-principal activity restored.
+Windows still runs11b82da2; the db049d62 package passes real ZIP extraction,
+profile preservation and receipt-checked11b82da2 handover fixtures. Its private
+R2 upload/readback is in progress; native wording acceptance is not yet claimed.
 
-The third principal's fresh TJ connection reached Google's unverified-app
-interstitial in the TJ Chrome profile. User handoff is pending. Do not restart
-the app or claim connection/preview until the actual callback is confirmed.
+The third principal's TJ connection reached Google's unverified-app
+interstitial but expired before a callback. The timeout was observed before
+updating the Mac app. No further login is started without a ready user handoff;
+third-principal Google connection/preview remain unverified.
 
 Current online instructor observation passes for Windows11b82da2. The private
 wrapper enables classroom operations only for the rehearsal transport: one
