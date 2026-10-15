@@ -177,3 +177,51 @@ The documentation follow-up2ce0b2e passed all13 remote CI checks, including
 premerge. No real payment, migration or remote deployment occurred.
 This integration does not bind a new purchase to the existing workshop identity:
 the continuity gaps and acceptance rows above remain open.
+
+
+## Concrete continuity design boundary — 2026-10-16
+
+Read again at Servicefa7472b and Studiofd6f276e. This is the proposed bridge,
+not a shipped payment path or an approved offer.
+
+`activityIdentity()` hashes native-trial/classroom mode, cohort, user, account
+claim, profile and lesson identity. Studio hashes that verified activity ID and
+Service origin to locate the recipe, Google settings and durable send ledger.
+Keeping only the same user name is insufficient: changing trial mode, profile or
+account-token shape also selects a different activity. Do not weaken this
+isolation or copy credentials to make paid continuation appear seamless.
+
+The intended path keeps the existing verified workshop activity and lets the
+learner explicitly select a personal funding contract. The existing
+`accessChoices()` already supports account-linked seats where the course policy
+allows personal funding. A payment grants funding only; it must not create or
+extend membership in another cohort. Recommended implementation boundaries:
+
+1. Bind authenticated account ownership to the order before checkout in a
+   separate immutable order-owner record. Preserve the existing per-order seat
+   and unique user constraint for legacy unbound purchases; do not rewrite old
+   orders or accept a client-supplied workshop user ID as identity proof.
+2. For a bound purchase, provider-confirmed payment activates exactly one
+   account-owned access contract with the selected approved plan revision and
+   explicit period. Claim/reissue returns recovery of that contract, not a new
+   activity identity. Keep legacy native-pass claims unchanged.
+3. Link new workshop seats before budget initialization. Already-used seats
+   require a dedicated atomic migration that preserves old subject charges,
+   outstanding reservations and concurrency/cap enforcement. The existing
+   `seat_link_requires_budget_migration` guard stays in place until that migration
+   has race/restart evidence. An order or login must never reset these amounts.
+4. Refund/expiry disables only the paid contract. The current legacy refund
+   path revokes its purchase native grant; attaching that to an existing class
+   credential could revoke unrelated classroom access. Bound contracts need
+   separate receipt-backed revocation and cannot replay prior email approval.
+5. Keep the activity's existing Google/Sheet settings and hashed send ledger in
+   place. Refresh credentials only through the authorized existing identity;
+   never retain a pending preview/send approval across funding or token changes.
+
+Required evidence extends the table above: unchanged verified activity ID and
+local namespace across explicit funding selection; independent paid/class
+expiry and refunds; wrong-account denial at create/claim; concurrent duplicate
+callbacks; unresolved pre-link reservations; same recipe/store ownership and
+an unchanged unknown-send record. A selected email-enabled paid plan, its price,
+limits and support/refund terms remain human/product decisions. No real payment
+or production migration was performed for this design.
