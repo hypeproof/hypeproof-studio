@@ -178,7 +178,9 @@ lock check. Both callers had no company IAM or script-file access; own-sheet and
 identity digests matched, cross-sheet reads were denied, and same-namespace state
 remained per-user. The non-allowlisted owner was blocked. See the
 [actual evidence](../plan/google-shared-runner-isolation-evidence.md). Installed
-Studio integration and shared-runner mail execution remain NOT RUN.
+Studio integration subsequently passed native local and Windows shared-preview
+acceptance on 2026-10-15 (source `ab0a13a7`). Shared-runner live mail delivery
+remains NOT RUN.
 
 ## Shared-runner default (DEC-023)
 

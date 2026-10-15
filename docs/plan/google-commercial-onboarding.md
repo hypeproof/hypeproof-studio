@@ -28,10 +28,12 @@ manifest were compared against immutable version1 before deploying. No email or
 paid AI call occurred. After evidence collection the allowlist was disabled and a
 further call returned `not_configured`; the probe cannot currently read data.
 
-This proves the shared API architecture's narrow identity/data-isolation premise.
-It does not replace the installed owner-script runtime, establish commercial
-OAuth approval, test mail delivery under the shared runner, or prove twenty real
-learner accounts. The integration work below remains open. Detailed acceptance:
+The probe establishes the narrow identity/data-isolation premise. Subsequent
+Studio source `ab0a13a7` passed real local and Windows shared-runner preview and
+graph acceptance on 2026-10-15. Commercial OAuth approval, shared-runner live mail
+delivery, full-product two-account acceptance and twenty real learner logins remain
+separate gates. The current ordered work plan is
+[goal and remaining delivery](email-automation-next-steps.md). Detailed acceptance:
 [shared runner evidence](google-shared-runner-isolation-evidence.md).
 
 ## Current observed gaps
@@ -43,7 +45,7 @@ privacy, terms and authorized domains empty; declared scope tables empty.
 User support/developer contacts exist. No setting was changed. Runtime OAuth
 scope requests are present: empty declaration tables do not mean no permissions.
 
-The Windows proof used an operator-assisted standard-project association and
+The earlier owner-script Windows proof used an operator-assisted standard-project association and
 later revoked the temporary IAM roles. That cannot be expanded into unattended
 onboarding merely by adding twenty tester addresses. Current owner-only API
 execution requires the caller and script to share a standard Cloud project.
@@ -58,8 +60,8 @@ scope verification are separate from a pilot-user list.
 
 | Priority / owner | Work | Required evidence / current state |
 | --- | --- | --- |
-| P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Shared executor approved; personal export deferred (DEC-023). Integration remains gated on live two-account isolation. |
-| P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Two independent external accounts with zero company IAM; own-Sheet success, cross-Sheet denial and per-user state. Read-only spike passed six local and seven live calls. Learner runtime, version distribution, exact preview approval and cross-version duplicate-send integration remain open. |
+| P0 Studio + sponsor | Choose managed shared executor versus learner-owned script | Shared executor approved; personal export deferred (DEC-023). Architecture isolation and native shared-preview integration passed; full-product two-account reuse is next. |
+| P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Two independent external accounts with zero company IAM; own-Sheet success, cross-Sheet denial and per-user state. Read-only spike passed six local and seven live calls. Pinned learner runtime/distribution, preview UI and ledger guards passed local/Windows acceptance. Full-product two-account and approved live shared-runner delivery remain open. |
 | P0 Product/site owner | Publish product homepage, accurate privacy/deletion policy, support contact; verify company domain | URLs reachable without login and domain ownership verified. Technical disclosure draft below is prepared; publication and legal/retention facts need owner confirmation. |
 | P0 Google project owner | Production OAuth project/client, required APIs, branding and least-privilege scope declarations; submit demo and rationale | Separate production and test configuration; submission receipt then Google approval. Never infer approval from a Publish button. |
 | P0 Service/Ops | Twenty distinct learner identities, cohort membership, 30-day grants, individual and aggregate budgets, revocation | Dry-run manifest first; no shared instructor token. Sum of exposures fits approved class budget. Actual roster, date and budget not supplied. Existing isolated test cap remains USD3. |

@@ -1,7 +1,13 @@
 # Conversational automation quests on Google Apps Script
 
 Approved direction: TJ, 2026-10-13. Extends Epic #1603 / implementation #1604.
-Status: implemented behind an explicit new capability. A prior adapter-level
+Current direction (DEC-023): the shared runner is the default; personal Apps Script
+export is deferred. Local/Windows shared preview and graph acceptance passed at
+`ab0a13a7`; see [current evidence](google-shared-runner-isolation-evidence.md) and
+[remaining delivery plan](email-automation-next-steps.md). The owner-script flow
+below is historical and must not be used as the current onboarding design.
+
+Historical owner-script status: implemented behind an explicit new capability. A prior adapter-level
 Google preview completed; current native local persona and Windows acceptance
 remain separate and incomplete. See `automation-local-acceptance.md`. This is the email vertical, not arbitrary code authoring.
 
