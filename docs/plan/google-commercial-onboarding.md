@@ -64,13 +64,13 @@ scope verification are separate from a pilot-user list.
 | P0 Studio | Local runner/bridge prototype, pin code/version, bind user and approval, preserve unknown-send ledger | Two independent external accounts with zero company IAM; own-Sheet success, cross-Sheet denial and per-user state. Read-only spike passed six local and seven live calls. Pinned learner runtime/distribution, preview UI and ledger guards passed local/Windows acceptance. Full-product two-account and approved live shared-runner delivery remain open. |
 | P0 Product/site owner | Publish product homepage, accurate privacy/deletion policy, support contact; verify company domain | URLs reachable without login and domain ownership verified. Technical disclosure draft below is prepared; publication and legal/retention facts need owner confirmation. |
 | P0 Google project owner | Production OAuth project/client, required APIs, branding and least-privilege scope declarations; submit demo and rationale | Separate production and test configuration; submission receipt then Google approval. Never infer approval from a Publish button. |
-| P0 Service/Ops | Twenty distinct learner identities, cohort membership, 30-day grants, individual and aggregate budgets, revocation | Dry-run manifest first; no shared instructor token. Sum of exposures fits approved class budget. Actual roster, date and budget not supplied. Existing isolated test cap remains USD3. |
+| P0 Service/Ops | Twenty distinct learner identities, cohort membership, 30-day grants, individual and aggregate budgets, revocation | Dry-run manifest first; no shared instructor token. Sum of exposures fits approved class budget. Date confirmed as 2026-10-16; actual roster and spending cap remain unconfigured. Existing isolated test cap remains USD3. |
 | P0 Studio | Actionable connection recovery | Implemented locally: typed quota/outage, consent, invalid-client/disabled-API/admin-policy errors; private pause/retry/reconnect questions; no destructive reset or auto-send. |
 | P1 Studio/site/release | Versioned installer with selected production client, no instructor tokens, update/rollback and support diagnostic | Clean Windows installation plus credential-preserving upgrade. Existing private test installer is not a public production package. |
 | P1 Studio + Service | Twenty-participant admission/status concurrency and per-account isolation | Local synthetic failure/load matrix, then two-account external Google transport. Existing instructor20-seat simulation is not twenty real Google connections. |
 | P1 Instructor | Pre-class checklist for all twenty actual accounts and managed-domain administrators | Before class: each identity logs in, reads its own synthetic Sheet and completes no-send preview. Track counts/stage only; account list stays protected. |
 | P1 Product/operator | Revoke/disconnect/export/delete/support and cancellation ownership | Disconnection behavior documented; deletion/retention rules implemented and checked. Current disconnect is not deletion of Google scripts, messages or store content. |
-| Release owner | PR review, approved merge/deploy, production smoke and rollback | Current request authorizes preparation/implementation, not previously excluded general rollout. No extra email without exact approval. |
+| Release owner | PR review, approved merge/deploy, production smoke and rollback | The sponsor authorized continued implementation and delivery on 2026-10-15; exact release gates still apply. No extra email without exact approval. |
 
 Dependencies: architecture spike → stable data/scopes → final policy/demo →
 Google review → limited pilot → commercial release. Domain/policy drafts and
@@ -117,9 +117,12 @@ upload has been authorized/performed by this plan.
   prevent duplicate sends. Google user properties also retain delivery markers.
   Removing a ledger can lose duplicate protection; deletion must stop execution
   and disclose that tradeoff rather than silently resetting unknown sends.
-- Disconnect clears local connection credentials; it does not promise revocation
-  of all Google grants, deletion of Google scripts, prior messages or recipes.
-  Provide separate Google-account access removal and owned-data deletion guidance.
+- Disconnect invalidates the local connection immediately and requests Google token
+  revocation. Only a successful Google response clears the persistent pending flag;
+  an unconfirmed response blocks reconnection and execution until retry succeeds.
+  Google may revoke the whole app grant for this account, including other sessions.
+  This does not delete prior messages, recipes, scripts or duplicate-send ledgers.
+  Provide separate owned-data deletion guidance.
 - Before publication, the accountable company must supply actual legal identity,
   public support/deletion contact, retention periods, backup deletion process,
   subprocessors and user-rights procedure. Do not invent those facts or claim a

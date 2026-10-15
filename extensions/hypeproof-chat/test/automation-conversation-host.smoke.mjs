@@ -111,6 +111,10 @@ try {
   assert.ok(installed.error,'stale download must be rejected');assert.equal(question,null,'old cohort recipe must never be shown in the new activity');
   // A new host restores only locally evidenced intent+skill, never Google work.
   appsScriptEnabled=true;
+  const missingRunner=module.exports.registerAutomationHost(ctx,{});
+  assert.equal(await missingRunner.getMcpHost(),undefined,'shared capability without packaged runner must expose no execution tools');
+  assert.equal(missingRunner.getRuntime(),undefined,'missing runner must not fall back to direct Gmail');
+  await assert.rejects(()=>missingRunner.refreshRuntime(),/공통 Google 실행기 설정/);
   await mkdir(join(storage,'resources'),{mode:0o755});
   await writeFile(join(storage,'resources','google-shared-runner.json'),JSON.stringify({scriptId:'synthetic-shared-script',deploymentId:'synthetic-shared-deployment',versionNumber:1,protocol:'hps-email-v1',releaseId:'synthetic-v1'}),{mode:0o644});
   const savedRecipeKey='hps.automation.recipe.'+automationNamespace(current.service,current.serverId);

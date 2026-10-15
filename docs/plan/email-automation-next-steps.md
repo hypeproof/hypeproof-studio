@@ -1,7 +1,8 @@
 # Studio email automation: goal and remaining delivery plan
 
-Audit date: 2026-10-15 KST. Sponsor: TJ. This is a planning/status update,
-not approval to merge, release generally, send mail, or change Google access.
+Updated: 2026-10-15 KST. Sponsor: TJ. The sponsor authorized continuing
+implementation and delivery with minimal approval interruptions. Exact email
+content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
 
 ## Intended outcome
@@ -33,16 +34,16 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 | Area | State as inspected | Limit |
 | --- | --- | --- |
-| Studio source | Local/remote `9277348d`, source `ab0a13a7`; clean checkout before this documentation update | PR1605 is OPEN/DRAFT, CONFLICTING with main; current check rollup empty |
-| Main integration | Fetched `origin/main` at `53c5e567`; non-mutating merge-tree found four conflicted paths | package.json, package-lock.json, sdkCoachHelpers.ts, webview StartPage.tsx; other automatically merged interaction paths still require behavioral checking |
-| Service | `a50be76`, OPEN/DRAFT; twelve current-head CI checks successful | Isolated runtime remains `ffef7bc`; new coach prompt is source-only, supported by the installed Studio SDK override |
-| Ops | PR2 `8b7344cc`, OPEN/DRAFT, mergeable; check successful | No merge or production migration claimed |
-| Local product | Native questions → skill → private connection/Sheet → actual shared preview → graph6/6; composer restored | Acceptance is revision-bound; no new shared-runner mail delivery |
-| Windows | Existing shell `682dfd37`, eight-file source `ab0a13a7` update; all hashes matched; saved skill/Google/Sheet reused, preview and graph6/6 | Accepted authenticated test update, not a fresh commercial installer |
-| Account isolation | Earlier read-only probe: two non-IAM identities, own-data success, bidirectional cross-data denial, isolated state | Full shipped recipe runner has native single-account preview evidence; close the full-product two-account gap |
-| Store/instructor/UI | Earlier actual publish/import; local real learner plus labelled20-seat instructor fixture; resize300→480 and persona transitions | Recheck changed shared-runner paths after integration; not20 real concurrently connected learners |
-| Sending | Prior owner-script Windows self-mail and Inbox receipt passed | New shared-runner transport has deterministic controls but no approved live send/receipt yet |
-| Cost | Last minimal Windows conversation added USD0.057188 to settled token ledger; unresolved reservations unchanged | One run, not per-student monthly cost, invoice reconciliation or subscription profitability |
+| Studio source | Main `53c5e567` integrated at `960497e8`; retryable Google revocation at `20e7e6d0` | PR1605 remains draft; CI and live acceptance must bind the final pushed revision |
+| Main integration | All four conflicts resolved; main paid-pass/start behavior and automation retained; SDK0.3.299 pinned | Full extension checks ran in segments after fixing three SDK expectation conflicts; final one-shot CI still required |
+| Service | Main integrated at `79f37fdb`; shared workshop capability enabled at `21033b32` | Source and local tests, not production deployment |
+| Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
+| Local product | Historical native shared preview/graph6/6; latest automation85/85, browser conversation/start/graph checks pass | Historical native app remains on `ab0a13a7`; current-source native acceptance NOT_RUN |
+| Windows | Historical shell `682dfd37`, source `ab0a13a7` authenticated test update | Latest source, fresh install and current SDK NOT_RUN; every class may use different Windows PCs |
+| Account isolation | Prior read-only two-account probe passed; current adapter preflight requires reconnect for both saved test grants | Full shipped recipe two-account acceptance remains open; expired/inadequate grants are not passing evidence |
+| Store/instructor | Twenty synthetic signed grants, real local D1 concurrent individual/total caps, stale/revoked instructor HTTP states pass | Not twenty actual Windows/Google users or current rendered instructor acceptance |
+| Sending | Prior owner-script self-mail received | Final shared runner has no exact approved live-send/Inbox receipt yet |
+| Cost | Workshop pins Haiku4.5; class estimate USD30–60, proposed cap USD100 total / USD5 per seat | Estimate assumptions below; not an applied spending authorization or measured class total |
 
 Authoritative acceptance: [shared runner](google-shared-runner-isolation-evidence.md),
 [local/Windows/instructor audit](automation-local-acceptance.md),
@@ -87,7 +88,27 @@ minutes, storage and failed/retried runs separately. Recompute the prior operati
 cost and break-even model using these observations; one successful USD0.057188
 conversation cannot establish the margin of a KRW50,000 monthly subscription.
 
-Decisions still requiring human facts: class date and protected roster, class-wide
-budget, public trial/price/renewal offer, actual privacy retention/support owner,
-and release/merge authorization. Obtain the exact mail approval only when its
-reviewable preview is ready. No new permissions or mail were requested in this audit.
+Class date is confirmed as **2026-10-16**. No fixed learner PC or shared filesystem
+path is assumed. Assign seats01–20 and let each learner connect on their own Windows
+session. The operator-only roster location is a storage decision, not a classroom
+prerequisite: use the protected local task directory, outside Git; retain only
+seat/account mapping needed for access. Do not invent real learner identities.
+
+Class cost model:20 learners ×60–120 model calls ×(15,000 uncached input +2,000
+output tokens) ×Haiku4.5 prices gives USD30–60. Each call is USD0.025; the proposed
+USD100 aggregate / USD5 individual caps leave room for retries and longer contexts.
+The call count and context length are planning assumptions, not measured usage.
+Longer conversations or extra model calls can reach the cap sooner. Deterministic
+Sheet preview and approved send use Google execution, not an AI call; account
+quota and operator effort are separate. The30-day/600-attempt grant is not a
+30-day USD5 guarantee. Keep workshop-day and post-class budgets distinct.
+Sources: [Haiku4.5](https://platform.claude.com/docs/en/models/haiku-4-5/overview),
+[pricing](https://platform.claude.com/docs/en/about-claude/pricing), checked2026-10-15.
+Existing development cap remains USD3; no new live class budget was applied.
+
+Missing human facts: real learner identities when registering the pilot, actual
+class time if a scheduled window is used, accepted class/post-class spending caps,
+public offer and privacy/support ownership. Obtain exact mail approval when its
+reviewable preview exists. Prepared commercial evidence and billing findings:
+[operator packet](email-commercial-operator-packet.md),
+[billing continuity](email-commercial-billing-map.md).
