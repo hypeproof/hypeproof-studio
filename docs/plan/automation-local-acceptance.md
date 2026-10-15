@@ -707,3 +707,33 @@ Evidence under `/tmp/hps-email-mvp/`: `instructor-recovery-before-fix.log`,
 The repaired real instructor view is captured in
 `instructor-integrated/native-9b4dd233-recovered.png`; the same-page recovery
 transition is proved by the browser regression, not by reloading the screenshot.
+
+
+## Fresh Google callback and own-Sheet preview on integrated Mac — 2026-10-15
+
+Native9b4dd233 completed a fresh existing-account Google connection in the bot
+Chrome profile. The external-link dialog abbreviates its visible URL: transferring
+that text caused an invalid-request page. Copying the actual address through the
+native Copy action and native Chrome address bar preserved response_type, state
+and PKCE. The corrected login completed; do not reuse the abbreviated display URL.
+No new scope consent was requested by the agent.
+
+The bot-owned private test Sheet was entered in the private card. The shared Google
+runner produced the expected one-recipient subject/body; a local comparison matched
+the protected bot recipient without exposing it in conversation evidence. The
+preview-only acknowledgement completed all6 stages. One existing send-ledger file
+matches its earlier hash exactly; no new mail was sent. The current source622cc4e4
+and Windows e3ab008b have not been established by this native9b4dd233 observation.
+
+The instructor initially showed expired connections because its persisted run
+schedule still ended at13:22UTC, despite the active class session being reopened.
+Re-saving the same20-seat run through the existing CAS API copied the active
+session times; seat identities/revisions were unchanged. A02 rejoined through the
+actual native one-time pairing command and reported6/6. No synthetic progress was
+injected. Instructor API and real UI show the completed native journey;19 others
+remain unknown and runtime-ready remains0. This is not20-learner readiness.
+
+Evidence: `/tmp/hps-email-mvp/integrated-peer/native-google-preview-9b4dd233-receipt.json`,
+redacted `native-preview-9b4dd233.png`, and
+`instructor-integrated/{after-preview-9b4dd233.json,native-preview-9b4dd233-instructor.png}`.
+The raw screenshot and Google resource stay in protected local storage.

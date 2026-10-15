@@ -24,19 +24,23 @@ until decided. Public discovery and generic executable packages are not implemen
 
 Completion order: close local lifecycle gaps (including re-publication and
 version/update/rollback), freeze the Windows candidate, then run the three-account
-Studio journey on Windows. Latest extension e3ab008b is staged locally but the
-served installer still contains32ba0ac2. Private R2 download-handler controls now
-pass locally; no R2 deployment or new-candidate download/Windows PASS is claimed.
-Installer ZIP transport and the D1 skill catalog are distinct delivery surfaces.
+Studio journey on Windows. Private R2 now serves the e3ab008b installer candidate
+(shell720be661 / SDK0.3.299), with both stored archives and manifest read back and
+hashed. All23 online access controls pass. Complete authenticated HTTP download
+and native Windows acceptance remain separate gates. The current native Mac is
+9b4dd233; source622cc4e4 adds locally tested re-publication recovery. Installer ZIP
+transport and the D1 skill catalog are distinct delivery surfaces.
 
 Latest main integration: `05efefdb` adds project switching and release operations.
 The PR merge typecheck exposed a new `voiceLogChannel` call against this branch's
 renamed `coachLogChannel`; integration preserves main's switch behavior and uses
 the existing coach channel. Local types, automation90 checks, publish/local-runtime
 controls and webview/extension builds pass. The single native Mac app now runs
-9b4dd233; its actual A02 classroom reconnect reports2/6 to the instructor board.
+9b4dd233; its initial A02 classroom reconnect reported2/6 to the instructor board.
 The Windows e3ab008b candidate predates this integration; its evidence does not
-cover the integrated extension. No fresh Google execution or mail was performed.
+cover the integrated extension. A fresh Google reconnect and bot-owned private
+Sheet preview now pass on native9b4dd233; App and instructor show6/6. The old
+send ledger hash is unchanged, with no new mail. This does not cover622cc4e4.
 
 Current partial evidence, all dated2026-10-15:
 
@@ -155,12 +159,12 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 | Area | State as inspected | Limit |
 | --- | --- | --- |
-| Studio source | Main `171279dc` integrated at `0b57074d`, retaining the learner-journey design and existing automation diagnostics | Full extension tests, types/build and four actual SDK paid-ending controls pass; all18 remote CI checks pass at0b57074d. Current single Mac Dev app is9b4dd233; native online save/share and both-recipient import passed earlier at3f1a3f20. Runtime32ba0ac2 and installer87f75b6b each passed18 CI checks. Bot reconnect/own-preview passed earlier at0b57074d; Google execution remains revision-bound |
+| Studio source | Main05efefdb integrated at9b4dd233; current622cc4e4 adds renewed-approval re-publication recovery | All18 CI checks pass at622cc4e4. Automation91, types/build and actual Service-route/SQLite re-publication controls pass. Native9b4dd233 and Windows e3ab008b remain distinct revision evidence |
 | Main integration | Main browser/subagent age policy and outbox drain retained; email-specific minor gate remains; SDK0.3.299 pinned | Automation88/88, orchestrator6/6 and automation-SDK12/12, SDK/browser helpers, types/build pass. Independent pre-A4 characterization updated only for main's policy delta; no current-output baseline recording |
 | Service | Main `38d8879` integrated at `acfd637`; revoked-grant checks and agent routing retained alongside workshop model/output bounds and terminal settlement. Typecheck/build and focused42 checks pass; full independent run125 commands passed plus the corrected nine-command orchestrator group rerun. Documentation head2ce0b2e passed all13 CI checks, including premerge | Local Dev server watches the integrated checkout and reloads code. A21:01KST read-only instructor refresh agrees with live API:20 unknown/0 normal; staleA02 keeps6/6 only as a last report. At21:16KST, actual nativeA02 classroom reconnect produced fresh running/connect2/6 in both API and UI. The21:16 Google request later failed before callback completion; current32ba0ac2 native classroom reconnect and Google preview remain pending; earlier successful preview belongs toabf79a8. Existing DB/20-seat roster and online pilot unchanged; no new migration or remote deployment. Earlier local migrations0043–0045 and13 CI checks belong toabf79a8 |
 | Ops | PR2 `8b7344cc`; existing schema supports class readiness | No production migration claimed |
-| Local product | Earlier native acceptance at720be661 and0b57074d remains revision-bound; current Peer Check app is9b4dd233 against local Service2ce0b2e; relaunch restored dialogue, saved recipe and2/6 progress | Recovery32ba0ac2 has launch/state-restoration evidence; a fresh Google callback and coach recovery wording are not yet verified. Earlier start-page and coach observations are revision-bound. Google-dependent stages reset; a non-owner private-Sheet read is denied. After the user completed fresh login, bot own-Sheet read and exact one-recipient preview passed at0b57074d; no new two-account run is claimed |
-| Windows | Historical shell `682dfd37`; full shell720be661 build run38694734487 passed packaging/CI smoke. Latest private candidate contains shell720be661 / extension32ba0ac2 / SDK0.3.299; installer87f75b6b | Gateway391ecb1f serves the new candidate;23 access controls and16 uploaded-chunk readbacks pass. Complete32ba0ac2 HTTP/2 readback was operator-cancelled at563.56s/13238272 bytes; same-artifact HEAD200 took4.680s. Root cause is unconfirmed and no full-download PASS is claimed. Prior3f1a3f20 full-download evidence (76.39s/35.41s) does not cover these new bytes. PowerShell archive/backup and exact-receipt handover from682dfd37,9d535c87,0b57074d,f90b65e3 and3f1a3f20 pass. No20-seat bandwidth guarantee follows. Actual Windows install/update/credential reuse remain NOT_RUN |
+| Local product | Single Mac Dev app9b4dd233 against local Service2ce0b2e, local subscription coach | Fresh Google callback, bot-owned Sheet and exact1-recipient preview pass; native App and instructor both6/6. One durable send ledger hash is unchanged; no new mail. Source622cc4e4 native re-publication and two-recipient Windows reuse remain unverified |
+| Windows | Private R2 gateway7a9c50d2 serves shell720be661 / extensione3ab008b / SDK0.3.299 | Both stored archive hashes, final manifest, local PowerShell extraction/backup/handover and23 online access controls pass. Authenticated HTTP/2 app download timed out at300.02s/28818717 bytes (curl28); no complete-download PASS. A bounded HTTP/1.1 comparison is running. Native Windows install/update/credential reuse remain NOT_RUN; no20-seat bandwidth guarantee |
 | Account isolation | Bot and TJ connected with sponsor-approved scopes; separate participant imported an inert recipe earlier; latest `720be661` real Google execution denies cross-Sheet reads in both directions | One durable sent record and Inbox receipt remain at `624b214f`; latest sequential account-switch test is not a new two-participant store-sharing pass. Credentials remain in-memory in Dev |
 | Store/instructor | Twenty synthetic signed grants and real local D1 cap tests pass; 720be661 actual A02 previously reported failed read4/6, answer wait4/6 and restored preview6/6; after0b57074d restart, native classroom reconnect reports blocked Google connection2/6 then restored preview6/6 | Only Peer Check runs. Refreshed board changed blocked1/normal0/unknown19 → normal1/unknown19 after real preview, and labels the old6/6 as last report while disconnected; not20 actual users. Progress is mail-only; CSV correctness is not automatically observed |
 | Sending | Sponsor-approved exact bot self-mail sent once through shared runner at `624b214f`; durable ledger sent1/unknown0 and matching Gmail Inbox at15:04 KST | No repeat send; source integration, Windows and general rollout remain separately gated |

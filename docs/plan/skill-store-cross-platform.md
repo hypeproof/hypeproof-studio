@@ -34,20 +34,18 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 
 Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
 Current Mac runtime: `9b4dd233` (main05efefdb integration, conversational withdrawal
-and learner wording). Native classroom reconnect and2/6 progress are verified;
-prior store/Google observations retain their original revision boundaries.
-The served private Windows candidate remains `32ba0ac2` (Google recovery), with
-installer source `87f75b6b`; it does not yet contain conversational withdrawal. Archive/backup/upgrade
-fixtures and23 online access controls pass. Full HTTP/2 readback of this new
-candidate was cancelled after563.56s/13238272 app bytes; same-artifact HEAD
-returned200 in4.680s. The transfer bottleneck is unconfirmed. Full download and
-native Windows execution remain unverified; no automatic replacement was started.
-An updated extension `e3ab008b` archive has since been staged locally (same runtime
-code as `3d8c0b38`). The repository installer is now pinned to it; actual archive
-extraction, SDK verification, profile backup and exact-receipt handover from six
-prior pilots through32ba0ac2 pass in local PowerShell. It has not replaced the
-served installer or passed native Windows gates. A private R2 installer transport is
-under preparation; this does not migrate the skill catalog from D1.
+and learner wording). Native reconnect, bot-owned Sheet preview and App/instructor6/6 are verified;
+prior three-principal store observations retain their original revision boundaries.
+The served private Windows candidate is now `e3ab008b` (same extension code as
+3d8c0b38), shell720be661 / SDK0.3.299, through private R2 gateway7a9c50d2. Stored
+app/SDK full byte counts and hashes, final manifest readback and23 online access
+controls pass. Actual archive extraction, SDK verification, profile backup and
+exact-receipt handover from six prior pilots through32ba0ac2 passed in local
+PowerShell. Complete authenticated HTTP download and native Windows remain open.
+The candidate predates native9b4dd233 and the source622cc4e4 re-publication fix.
+Old32ba0ac2 KV transport is retained for rollback; its prior incomplete transfer
+is historical evidence, not a current e3 download result. R2 serves installer
+files only and does not migrate the skill catalog from D1.
 Native three-principal store evidence below was recorded on `3f1a3f20`.
 The online Service remains pinned to
 `email-local-accepted-ffef7bc-peer`. Later observations below are revision-bound.
@@ -309,13 +307,18 @@ expires objects and incomplete multipart uploads after seven days. The prepared
 handler additionally enforces its fixed seven-day deadline. The first large upload
 terminated with HTTP401 and a subsequent GET confirmed no app object. A small
 synthetic PUT then succeeded with the existing authorization; no new permission
-was requested. A single archive retry is running. Token expiry is a possible,
-unproven explanation; neither a permissions nor a performance fix is established.
-App upload remains in progress;
-no completed object readback, gateway deployment or performance improvement is
-claimed.32ba0ac2 remains served. Before switching: read back and hash both archives,
-publish the manifest last, retain the old transport for rollback, then verify
-complete authenticated downloads. Actual Windows remains a separate gate.
+was requested. The single retry completed: app196648104 bytes and SDK121940997 bytes were
+read back with exact SHA256 values, then the manifest was published and read back.
+Token expiry remains a possible, unproven cause
+of the first failure. Gateway7a9c50d2-650f-4659-b9f9-bdf11135662a now serves the
+R2 candidate; the existing pinned Service test version and production traffic
+allocation were preserved. All23 online access controls pass. Complete HTTP body
+verification is still required before claiming successful delivery or a performance
+improvement. The authenticated HTTP/2 app GET terminated at300.02s with
+28818717 bytes and curl28 (timeout); the partial digest is not an archive hash.
+A bounded HTTP/1.1 comparison is running to check a different transport used by
+Windows clients. R2 object readback does not pass gateway delivery. Actual Windows
+remains a separate gate.
 The preparation receipt and live upload checkpoint are under
 `/tmp/hps-email-mvp/windows-current-e3ab008b/`; a running process is not upload success.
 
