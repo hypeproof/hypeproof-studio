@@ -59,6 +59,9 @@ individual boundaries: [store contract](skill-store-cross-platform.md).
 The11b82da2 Windows extension candidate is staged with official shell720be661 and
 SDK0.3.299. Its first private R2 upload failed with401; a subsequent small-object
 read succeeded with current authentication. Upload/readback is being retried.
+The pinned PowerShell installer now targets11b82da2 and recognizes659de97d only
+for exact-receipt upgrade handover. Actual app/SDK archive extraction, hashes,
+profile backup/migration and refusal fixtures pass; native upgrade remains pending.
 The installer gateway continues to serve the verified659de97d candidate until both
 new archives and their manifest pass complete readback. No authentication scope was
 expanded. Current coach presentation remains PARTIAL: the Mac response called the
