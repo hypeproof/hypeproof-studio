@@ -11,6 +11,7 @@ try{
  const b=await build({stdin:{contents:"export * from './src/accountLock.ts';export * from './src/accountSession.ts';",resolveDir:new URL('..',import.meta.url).pathname},bundle:true,platform:'node',format:'cjs',write:false});
  fs.writeFileSync(path.join(dir,'host.cjs'),b.outputFiles[0].text);
  fs.writeFileSync(path.join(dir,'credential.json'),JSON.stringify({service:'http://127.0.0.1:8793/v1',accessToken:'old-access',refreshToken:'old-refresh',sessionId:'session-one',expiresAt:1}));
+ fs.mkdirSync(path.join(dir,'account-session.recovery.2147483647.crashed-owner'));
  fs.writeFileSync(path.join(dir,'account-session.lock'),JSON.stringify({pid:2147483647,nonce:'dead-host'}));
  fs.writeFileSync(path.join(dir,'child.cjs'),`
  const fs=require('node:fs'),path=require('node:path');
@@ -30,5 +31,6 @@ try{
  await Promise.all(Array.from({length:6},()=>promisify(execFile)(process.execPath,[path.join(dir,'child.cjs')])));
  assert.equal(fs.readFileSync(path.join(dir,'rotations'),'utf8'),'one\n');
  assert.equal(fs.existsSync(path.join(dir,'account-session.lock')),false);
- console.log('PASS six processes recover a dead host and rotate one refresh token exactly once');
+ assert.equal(fs.readdirSync(dir).some(p=>p.startsWith('account-session.recovery.')),false,'a crash immediately after barrier mkdir cannot brick future hosts');
+ console.log('PASS six processes recover a dead host and its abandoned barrier, then rotate one refresh token exactly once');
 }finally{fs.rmSync(dir,{recursive:true,force:true});}
