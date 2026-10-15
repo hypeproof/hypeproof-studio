@@ -497,3 +497,22 @@ Evidence under `native-store-20261015/`: `recipient-third-card.txt`,
 USD1 pool (author0.060136, first recipient0.026030, third0.026856), held0 and
 overrun0. No allocation increased. Studio documentation headeb6e6797 had all18
 CI checks passing before this evidence-only update; runtime remains3f1a3f20.
+
+
+### Conversational withdrawal follow-up
+
+The current conversation exposes publish/list/install, while owner withdrawal was
+reachable only in the retained inspector. The new source adds `skill_unpublish`
+to the SDK and local subscription transports. A private card names the exact
+owner publication and explains that installed copies and Google connections
+remain. Host checks cover cancellation, Stop at both authorization stages,
+revocation, server failure, duplicate answers and unchanged credentials/unknown
+send records. Only a successful explicit store receipt can report withdrawal;
+only publication quest evidence is invalidated, with a generation guard.
+
+Automation90/90, focused21 checks, types/build and real App browser-card tests pass
+locally. Native conversation verification is pending. Existing runtime/Windows32
+and their download evidence do not include this follow-up yet. This does not
+implement version updates or rollback. The current Service rejects reuse of an
+unpublished request ID; same-content conversational re-publication/restore remains
+a separate lifecycle gap and must not be claimed as supported.

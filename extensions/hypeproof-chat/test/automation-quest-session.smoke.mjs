@@ -301,3 +301,16 @@ test('column clarification preserves verified account and sheet while reopening 
   assert.equal(status(quest,'skill'),'succeeded');assert.notEqual(status(quest,'preview'),'succeeded','saving the correction still needs a fresh preview');
  }
 });
+
+test('withdrawal clears only publication evidence after success and ignores a late receipt',async()=>{
+  const quest=createAutomationQuestSession(async()=>{});
+  const publicationPlan={title:'공유 철회',nodes:[{id:'skill',label:'스킬',dependsOn:[]},{id:'publish',label:'공유',dependsOn:['skill']}]};
+  await quest.plan(publicationPlan);await quest.track('skill',async()=>true);await quest.track('publish',async()=>true);
+  let result={cancelled:true},finish;
+  const host=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,unpublishSkill:async()=>result},quest);
+  await host.unpublishSkill('owned');assert.equal(status(quest,'publish'),'succeeded');
+  result={unpublished:true};await host.unpublishSkill('owned');assert.notEqual(status(quest,'publish'),'succeeded');assert.equal(status(quest,'skill'),'succeeded');
+  const slow=withAutomationQuest({runtime:{},isAllowed:()=>true,confirmSend:async()=>false,unpublishSkill:()=>new Promise(resolve=>{finish=resolve;})},quest);
+  const pending=slow.unpublishSkill('old');quest.clear();await quest.plan(publicationPlan);await quest.track('skill',async()=>true);await quest.track('publish',async()=>true);
+  finish({unpublished:true});await pending;assert.equal(status(quest,'publish'),'succeeded','late withdrawal cannot erase a new activity publication');
+});

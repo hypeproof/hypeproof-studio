@@ -72,6 +72,13 @@ assert.equal(await page.locator('.hps-input textarea').inputValue(),'추가 입�
 assert.equal(await page.getByRole('button',{name:'중지',exact:true}).isVisible(),true);
 assert.equal(await page.getByText('이미 요청을 처리하고 있어요. 추가 입력은 초안에 보관했어요.',{exact:true}).isVisible(),true);
 await emit({type:'streamEnd',streamId:'duplicate-guard',activityId});
+await question({id:'withdraw-review',kind:'unpublish',title:'자료 요청 (버전 1) 게시물을 내릴까요?',description:'새 다운로드는 중지되고 이미 설치한 복사본과 Google 연결은 남아요.',private:true});
+const withdrawButton=page.getByRole('button',{name:'이 게시물 내리기',exact:true});
+assert.equal(await withdrawButton.isEnabled(),false);
+await page.getByRole('checkbox',{name:'이 게시물을 스토어에서 내리고, 이미 설치한 복사본은 남는다는 점을 확인했어요.'}).check();
+await withdrawButton.click();
+assert.deepEqual(await page.evaluate(()=>window.__posts.filter(m=>m.type==='automationAnswer'&&m.questionId==='withdraw-review')),[{type:'automationAnswer',questionId:'withdraw-review',approved:true,activityId}]);
+await emit({type:'automationQuestion',question:null,activityId});
 await question({id:'script-review',kind:'script',title:'이 코드를 Google에 저장할까요?',private:true,script:{action:'upload',digest:'a'.repeat(64),files:[{name:'Code',source:'function example() { return "<script>unsafe</script>"; }'}],scopes:['https://www.googleapis.com/auth/script.projects']}});
 assert.equal(await page.getByRole('button',{name:'확인한 코드를 Google에 저장'}).isDisabled(),true);
 await page.getByText('코드와 요청 권한 확인',{exact:true}).click();

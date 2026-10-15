@@ -3,7 +3,7 @@ import { GoogleSheetReadError, validateEmailRecipe, type EmailPreview, type Goog
 import { AppsScriptRecoveryError } from './appsScriptRuntime.ts';
 
 export const GOOGLE_AUTOMATION_MCP_SERVER = 'hypeproof_email';
-export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan'] as const;
+export const GOOGLE_AUTOMATION_MCP_TOOLS = ['mcp__hypeproof_email__sheet_read','mcp__hypeproof_email__email_preview','mcp__hypeproof_email__email_send','mcp__hypeproof_email__ask_user','mcp__hypeproof_email__skill_save','mcp__hypeproof_email__google_connect','mcp__hypeproof_email__sheet_configure','mcp__hypeproof_email__skill_publish','mcp__hypeproof_email__skill_list','mcp__hypeproof_email__skill_install','mcp__hypeproof_email__workflow_plan','mcp__hypeproof_email__skill_unpublish'] as const;
 export const APPS_SCRIPT_MCP_TOOLS = ['mcp__hypeproof_email__apps_script_prepare','mcp__hypeproof_email__apps_script_upload','mcp__hypeproof_email__apps_script_setup','mcp__hypeproof_email__apps_script_deploy','mcp__hypeproof_email__apps_script_run'] as const;
 export const ALL_AUTOMATION_MCP_TOOLS = [...GOOGLE_AUTOMATION_MCP_TOOLS, ...APPS_SCRIPT_MCP_TOOLS] as const;
 
@@ -46,6 +46,7 @@ export interface GoogleAutomationMcpHost {
   readConfiguredSheet?(): Promise<unknown>;
   previewSavedSkill?(): Promise<EmailPreview>;
   publishSkill?(): Promise<unknown>;
+  unpublishSkill?(id: string): Promise<unknown>;
   listSkills?(): Promise<unknown>;
   installSkill?(id: string): Promise<unknown>;
 }
@@ -140,6 +141,7 @@ export function buildGoogleAutomationMcpServer(factory: SdkMcpFactory, z: ZodLik
     factory.tool('google_connect', 'mode=reuse는 기존 Google 연결을 재사용하고 필요할 때만 동의를 묻는다. 다른 계정으로 바꾸려는 명시적 요청에만 mode=change를 쓴다. 계정 값은 반환하지 않는다. 실패하면 반환된 단계와 복구 안내만 설명하고 사용자의 다음 요청을 기다린다.', { mode: z.string() }, async args => run(async () => { if (!host.connectGoogle || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.connectGoogle(args.mode as 'reuse' | 'change'); }, 'google_connect')),
     factory.tool('sheet_configure', 'mode=reuse는 기존 비공개 시트 설정을 재사용하며 없을 때만 주소를 묻는다. 시트를 바꾸려는 명시적 요청에만 mode=change를 쓴다. 행 수와 열 이름만 반환한다.', { mode: z.string() }, async args => run(async () => { if (!host.configureSheet || !['reuse','change'].includes(String(args.mode))) throw new Error('Unavailable'); return host.configureSheet(args.mode as 'reuse' | 'change'); })),
     factory.tool('skill_publish', '현재 저장한 스킬의 공유 내용을 별도 질문으로 확인받은 뒤 우리 반 스토어에 올린다. 단순 저장·실행 동의를 게시 동의로 취급하지 않는다. published=true와 approvalConfirmed=true는 비공개 카드에서 이번 게시 승인을 받고 저장까지 완료했다는 결과다. 이 경우 승인 여부를 다시 묻거나 확인하지 못했다고 말하지 않는다. 이후 게시나 메일 발송까지 승인된 것은 아니다.', {}, async () => run(async () => { if (!host.publishSkill) throw new Error('Unavailable'); return host.publishSkill(); })),
+    factory.tool('skill_unpublish', '사용자가 철회를 요청한 본인 게시물만 내린다. skill_list의 mine=true인 정확한 id를 사용하며, 호스트 카드에서 해당 게시물의 철회를 별도로 확인받는다. 이미 설치한 복사본·Google 연결·발송 기록은 삭제하거나 취소하지 않는다. unpublished=true일 때만 게시 철회 완료를 알린다. 실패하거나 결과가 불명확하면 목록을 다시 확인하고 자동으로 철회를 재시도하지 않는다.', { id: z.string() }, async args => run(async () => { if (!host.unpublishSkill || typeof args.id !== 'string' || !args.id || args.id.length > 200) throw new Error('Invalid skill'); return host.unpublishSkill(args.id); })),
     factory.tool('skill_list', '우리 반 스토어의 스킬 목록을 보여준다. 설치는 skill_install로 별도 확인한다.', {}, async () => run(async () => { if (!host.listSkills) throw new Error('Unavailable'); return host.listSkills(); })),
     factory.tool('skill_install', '사용자가 고른 스킬의 내용과 설치를 확인받고 로컬에 저장한다. Google 계정·실제 명단·발송 권한은 가져오지 않는다.', { id: z.string() }, async args => run(async () => { if (!host.installSkill || typeof args.id !== 'string' || !args.id || args.id.length > 200) throw new Error('Invalid skill'); return host.installSkill(args.id); })),
     factory.tool('sheet_read', '비공개 설정에서 사용자가 연결한 시트만 다시 읽는다. 주소나 범위를 입력으로 받지 않는다. 행 수와 열 이름만 반환한다.', {}, async args => run(async () => {

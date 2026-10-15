@@ -438,6 +438,18 @@ export function registerAutomationHost(context: vscode.ExtensionContext, provide
           // Report the completed host confirmation without exposing the private card.
           return { published: true, approvalConfirmed: true, id: result.item.id, title: result.item.title };
         },
+        unpublishSkill: async id => {
+          if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
+          const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });
+          const detail = await store.detail(id);
+          if (!live()) throw new Error('Changed activity');
+          if (detail.item.mine !== true) throw new Error('내가 공유한 스킬만 스토어에서 내릴 수 있어요.');
+          const answer = await askQuestion({ kind: 'unpublish', title: `${detail.recipe.title} (버전 ${detail.item.version}) 게시물을 내릴까요?`, description: '우리 반 스토어에서 새로 찾거나 가져올 수 없게 돼요. 이미 설치한 복사본과 Google 연결·메일 발송 기록은 그대로 남아요.', private: true }, pinned, epoch);
+          if (!answer.approved || answer.cancelled || !live()) return { cancelled: true };
+          await store.unpublish(id);
+          if (!live()) throw new Error('Changed activity');
+          return { unpublished: true, approvalConfirmed: true, id, installedCopiesRetained: true, googleConnectionsRetained: true };
+        },
         listSkills: async () => {
           if (!await refreshAuthorization() || !pinned) throw new Error('Changed activity');
           const store = createAutomationStoreClient({ baseUrl: pinned.service, fetchImpl: guardedFetch, getToken: async () => { if (!await refreshAuthorization()) throw new Error('Changed activity'); return pinned.token; } });

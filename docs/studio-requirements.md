@@ -899,6 +899,18 @@ confirmed the reviewed online publication and correct coach acknowledgment;
 three-principal API readback matched the exact recipe. Recipient installation and
 Windows execution remain separate acceptance in [the store contract](plan/skill-store-cross-platform.md).
 
+EA-06/07 also provide conversational owner-only withdrawal via `skill_unpublish`.
+The host fetches the exact publication and checks ownership, presents a private
+confirmation card naming its title/version, and rechecks activity/grant authority
+before DELETE. Cancellation, Stop, revocation or a missing success receipt cannot
+claim completion. Withdrawal hides future discovery/download; it retains installed
+copies, Google connections and durable send outcomes. Only publication progress
+is invalidated after success; a late result cannot change a replacement activity.
+The same tool and human-wait behavior apply to SDK and local subscription paths.
+Coverage: conversation-host, store-client, quest-session, local-email-runtime and
+real App question-card browser tests. Native and Windows observations remain
+separate; this does not implement version update/rollback or personal GAS packages.
+
 EA-01/03 expose the exact bounded recipe contract in `skill_save` itself, so the
 Service-funded SDK path does not depend on a developer-only local prompt. Failed
 saves return a fixed stage-specific recovery result without private input/error

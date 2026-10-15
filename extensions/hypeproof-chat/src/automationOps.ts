@@ -24,7 +24,7 @@ export function automationOpsProgress(snapshot?: AutomationQuestSnapshot, questi
     : completed === snapshot.nodes.length ? 'completed'
     : active?.status === 'running' ? 'running' : active?.status === 'failed' ? 'failed' : active?.status === 'blocked' ? 'blocked' : 'planned';
   const questionStep: Partial<Record<AutomationQuestion['kind'], AutomationOpsProgress['step_id']>> = {
-    connect: 'connect', sheet: 'sheet', preview_review: 'preview', preview: 'send', publish: 'publish', install: 'skill',
+    connect: 'connect', sheet: 'sheet', preview_review: 'preview', preview: 'send', publish: 'publish', unpublish: 'publish', install: 'skill',
   };
   const step = question && questionStep[question.kind] || active?.id as AutomationOpsProgress['step_id'];
   return { phase, ...(step ? { step_id: step } : {}), completed, total: snapshot.nodes.length };

@@ -93,6 +93,12 @@ export function createAutomationQuestSession(show: (html: string) => Promise<voi
       return { displayed: true, steps: next.nodes.map(node => node.id), completion: 'host-evidence-only' };
     },
     invalidate,
+    async invalidateAfter<T>(work: () => Promise<T>, succeeded: (value: T) => boolean, ids: readonly Step[]): Promise<T> {
+      const epoch = generation;
+      const value = await work();
+      if (epoch === generation && succeeded(value)) { invalidate(ids); await draw(); }
+      return value;
+    },
     /** A declined/failed replacement leaves the existing saved skill intact.
      * Only its successful receipt can revoke old execution evidence. */
     async replace<T>(step: Step, work: () => Promise<T>, succeeded: (value: T) => boolean, invalidates: readonly Step[], establishes: readonly Step[] = []): Promise<T> {
@@ -156,6 +162,7 @@ export function withAutomationQuest(host: GoogleAutomationMcpHost, quest: Return
     // Google connection. Reuse can therefore restore connection evidence too.
     configureSheet: host.configureSheet ? mode => { quest.invalidate(['sheet','preview','send']); return quest.track('sheet', () => host.configureSheet!(mode), value => ok(value) && typeof (value as { rowCount?: unknown }).rowCount === 'number', ['connect']); } : undefined,
     publishSkill: host.publishSkill ? () => quest.track('publish', () => host.publishSkill!(), flag('published')) : undefined,
+    unpublishSkill: host.unpublishSkill ? id => quest.invalidateAfter(() => host.unpublishSkill!(id), flag('unpublished'), ['publish']) : undefined,
     // Preparation validates the persisted recipe, including reuse without skill_save.
     appsScriptPrepare: host.appsScriptPrepare ? () => quest.track('prepare', () => host.appsScriptPrepare!(), flag('prepared'), ['goal', 'skill']) : undefined,
     appsScriptUpload: host.appsScriptUpload ? () => quest.track('upload', () => host.appsScriptUpload!(), flag('uploaded')) : undefined,

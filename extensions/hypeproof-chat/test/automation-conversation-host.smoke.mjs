@@ -20,8 +20,12 @@ const uri=fsPath=>({fsPath});
 const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{appName:'HypeProof Studio Dev',openExternal:async()=>true},commands:{executeCommand:async(name,key,value)=>{assert.equal(name,'setContext');assert.equal(key,'hypeproofChat.devGoogleOperator');devContext=value;},registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showInputBox:async options=>{operatorOptions=options;return operatorInput;},showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
 const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId,appsScript:appsScriptEnabled}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,cancelConnect:()=>{if(cancelOAuth){cancelOAuth();return true;}return false;},connect:async()=>{if(oauthWait){oauthStarted=true;await oauthWait;}connected++;googleReady=true;},disconnect:async()=>{},previewLatestSheet:async({recipe})=>{previewedRecipe=structuredClone(recipe);return{id:'saved-preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:recipe.subjectTemplate,body:recipe.bodyTemplate}]};},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
 const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/automationHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,external:['vscode'],plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^\.\/(activityConnections|proxyClient|googleAutomation)$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('activityConnections')?`export const ACTIVITY_TOKEN_KEY='token';export const activityConnections=()=>({current:globalThis.fixture.current});`:args.path.endsWith('proxyClient')?`export const fetchProfileResult=(...args)=>globalThis.fixture.fetchProfileResult(...args);`:`export const createGoogleAutomationRuntime=(...args)=>globalThis.fixture.createGoogleAutomationRuntime(...args);export const validateEmailRecipe=value=>{if(value?.schema!=='hps-email-automation/1')throw Error('Invalid recipe');return structuredClone(value);};`,loader:'js'}));}}]});
-let pauseDetail=false,releaseDetail,failPublish=false;
+let pauseDetail=false,releaseDetail,failPublish=false,unpublished=0,withdrawalMine=true,withdrawalStatus=200;
 const fetcher=async (url,init)=>{
+  if(url.endsWith('/withdrawal')) {
+    if(init.method==='DELETE') { if(withdrawalStatus!==200)return new Response('{}',{status:withdrawalStatus});unpublished++;return new Response(JSON.stringify({ok:true})); }
+    return new Response(JSON.stringify({item:{id:'withdrawal',title:recipe.title,version:1,mine:withdrawalMine},recipe}));
+  }
   if(init.method==='POST' && failPublish) return new Response('{}',{status:503});
   if(pauseDetail && url.endsWith('/chosen')) await new Promise(resolve=>{releaseDetail=resolve;});
   if(init.method==='POST'){published++;const body=JSON.parse(init.body);assert.deepEqual(body.recipe,recipe);assert.match(body.requestId,/^skill-[0-9a-f]{64}$/);return new Response(JSON.stringify({item:{id:'published',title:recipe.title}}));}
@@ -87,6 +91,45 @@ try {
   pending=mcp.publishSkill();card=await waitQuestion();assert.equal(card.kind,'publish');assert.deepEqual(card.recipe,recipe);assert.deepEqual(card.recipe,previewedRecipe,'published skill must match the saved skill used for execution');await handlers.answer({questionId:card.id,cancelled:true});const cancelledPublication=await pending;assert.equal(cancelledPublication.cancelled,true);assert.equal(cancelledPublication.approvalConfirmed,undefined);assert.equal(published,0);mcp=await host.getMcpHost();
   pending=mcp.publishSkill();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});const publicationReceipt=await pending;assert.equal(publicationReceipt.published,true);assert.equal(publicationReceipt.approvalConfirmed,true,'coach receives evidence of the completed private confirmation');assert.equal('recipe' in publicationReceipt,false,'receipt must not echo private card contents');assert.equal(published,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(published,1);
   failPublish=true;pending=mcp.publishSkill();const rejectedPublication=assert.rejects(pending,/스토어 요청/);card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await rejectedPublication;assert.equal(published,1,'approval alone cannot report a successful publication');failPublish=false;mcp=await host.getMcpHost();
+  // Withdrawal is owner-bound and never erases installed skills, credentials or uncertain send outcomes.
+  const durableRecords={['d'.repeat(64)]:{id:'d'.repeat(64),status:'unknown'}};
+  await otherWindowLedger.save(durableRecords);
+  const beforeWithdrawalGlobals=JSON.stringify([...globals]);
+  const beforeWithdrawalSecrets=JSON.stringify([...secrets]);
+  withdrawalMine=false;
+  await assert.rejects(mcp.unpublishSkill('withdrawal'),/내가 공유한/);
+  assert.equal(question,null);assert.equal(unpublished,0);
+  withdrawalMine=true;
+  pending=mcp.unpublishSkill('withdrawal');card=await waitQuestion();
+  assert.equal(card.kind,'unpublish');assert.match(card.description,/이미 설치한 복사본/);
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(unpublished,0);
+  mcp=await host.getMcpHost();
+  pending=mcp.unpublishSkill('withdrawal');card=await waitQuestion();
+  await handlers.answer({questionId:card.id,approved:true});const withdrawal=await pending;
+  assert.equal(withdrawal.unpublished,true);assert.equal(withdrawal.approvalConfirmed,true);
+  assert.equal(withdrawal.installedCopiesRetained,true);assert.equal(withdrawal.googleConnectionsRetained,true);
+  assert.equal(unpublished,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(unpublished,1);
+  assert.equal(JSON.stringify([...globals]),beforeWithdrawalGlobals);assert.equal(JSON.stringify([...secrets]),beforeWithdrawalSecrets);
+  assert.deepEqual(await otherWindowLedger.load(),durableRecords);
+  withdrawalStatus=503;
+  pending=mcp.unpublishSkill('withdrawal');const failedWithdrawal=assert.rejects(pending,/스토어 요청/);
+  card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await failedWithdrawal;assert.equal(unpublished,1);
+  withdrawalStatus=200;mcp=await host.getMcpHost();
+  pending=mcp.unpublishSkill('withdrawal');card=await waitQuestion();grant=false;
+  const revokedWithdrawal=pending.then(value=>({value}),error=>({error}));
+  await handlers.answer({questionId:card.id,approved:true});await revokedWithdrawal;assert.equal(unpublished,1);
+  grant=true;mcp=await host.getMcpHost();
+  for(const pauseAt of [1,2]) {
+    const removing=mcp.unpublishSkill('withdrawal');const removal=await waitQuestion();
+    const originalProfile=fixture.fetchProfileResult;let profileCalls=0,releaseGate;
+    fixture.fetchProfileResult=async()=>{if(++profileCalls===pauseAt)await new Promise(resolve=>{releaseGate=resolve;});return originalProfile();};
+    const answered=handlers.answer({questionId:removal.id,approved:true});
+    const outcome=removing.then(value=>({value}),error=>({error}));
+    for(let i=0;i<100&&!releaseGate;i++)await new Promise(resolve=>setTimeout(resolve,2));
+    assert.ok(releaseGate);mcp.cancelPendingQuestion();releaseGate();await answered;await outcome;
+    assert.equal(unpublished,1,'Stop before DELETE must prevent withdrawal');assert.equal(question,null);
+    fixture.fetchProfileResult=originalProfile;mcp=await host.getMcpHost();
+  }
   // Stop must survive both answer authorization and the later store token check.
   for(const pauseAt of [1,2]) {
     const beforePublished=published;

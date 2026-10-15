@@ -50,10 +50,10 @@ test('SDK and local tools distinguish unfinished Google login from setup failure
 });
 
 test('local subscription MCP uses the same profile gates, private metadata and human send approval',async()=>{
-  const controller=new AbortController();let approved=false,sends=0,questions=0;
-  const host={isAllowed:()=>true,askUser:async()=>{questions++;return{answer:'자료 요청'};},readConfiguredSheet:async()=>({rowCount:1,columns:['이메일','이름','서류','기한']}),confirmSend:async()=>approved,runtime:{getPreview:()=>({id:'snapshot',messages:[{id:'row',to:'synthetic@example.invalid',subject:'제목',body:'비공개 본문'}]}),send:async()=>{sends++;return{records:[{id:'row',status:'sent',providerId:'private-provider-id'}]};}}};
+  const controller=new AbortController();let approved=false,sends=0,questions=0,withdrawals=0;
+  const host={isAllowed:()=>true,unpublishSkill:async id=>{assert.equal(id,'owned-publication');withdrawals++;return{cancelled:true};},askUser:async()=>{questions++;return{answer:'자료 요청'};},readConfiguredSheet:async()=>({rowCount:1,columns:['이메일','이름','서류','기한']}),confirmSend:async()=>approved,runtime:{getPreview:()=>({id:'snapshot',messages:[{id:'row',to:'synthetic@example.invalid',subject:'제목',body:'비공개 본문'}]}),send:async()=>{sends++;return{records:[{id:'row',status:'sent',providerId:'private-provider-id'}]};}}};
   for(const rejected of [{},{...profile,automations:{enabled:false,provider:'gmail'}},{...profile,game:{template_tier:'kids-rich'}}])assert.equal(localEmailTools({profile:rejected,host,signal:controller.signal}).definitions.length,0);
-  const tools=localEmailTools({profile,host,signal:controller.signal});assert.equal(tools.definitions.length,11);assert.ok(tools.definitions.some(tool=>tool.name==='email_workflow_plan'));
+  const tools=localEmailTools({profile,host,signal:controller.signal});assert.equal(tools.definitions.length,12);assert.ok(tools.definitions.some(tool=>tool.name==='email_workflow_plan'));
   const server=await startToolServer(tools.definitions,tools.call,controller.signal);
   const invoke=async(name,args)=>{const response=await fetch(server.url,{method:'POST',headers:{authorization:'Bearer '+server.token,'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})});return(await response.json()).result;};
   try{
@@ -62,7 +62,9 @@ test('local subscription MCP uses the same profile gates, private metadata and h
     assert.equal((await invoke('email_sheet_read',{spreadsheetId:'invented'})).isError,true);
     await invoke('email_email_send',{previewId:'snapshot'});assert.equal(sends,0);
     approved=true;const receipt=await invoke('email_email_send',{previewId:'snapshot'});assert.equal(sends,1);assert.equal(JSON.stringify(receipt).includes('private-provider-id'),false);
-    controller.abort();await assert.rejects(tools.call('email_email_send',{previewId:'snapshot'}));assert.equal(sends,1);
+    assert.equal((await invoke('email_skill_unpublish',{id:''})).isError,true);assert.equal(withdrawals,0);
+    const withdrawal=await invoke('email_skill_unpublish',{id:'owned-publication'});assert.equal(withdrawal.isError,undefined);assert.equal(withdrawals,1);assert.match(JSON.stringify(withdrawal),/cancelled/);
+    controller.abort();await assert.rejects(tools.call('email_skill_unpublish',{id:'owned-publication'}));assert.equal(withdrawals,1);await assert.rejects(tools.call('email_email_send',{previewId:'snapshot'}));assert.equal(sends,1);
   }finally{server.close();}
 });
 
@@ -131,4 +133,14 @@ test('local Apps Script tools require both grants and keep OAuth wait outside th
  await new Promise(resolve=>setTimeout(resolve,0));assert.equal(tools.isWaiting(),true);
  release({cancelled:true});assert.equal(JSON.parse(await pending).cancelled,true);assert.equal(tools.isWaiting(),false);
  host.isAppsScriptAllowed=()=>false;await assert.rejects(()=>tools.call('email_apps_script_upload',{}));
+});
+
+test('withdrawal confirmation pauses the local model budget until the private answer settles',async()=>{
+  const abort=new AbortController();let answer;
+  const host={isAllowed:()=>true,runtime:{},confirmSend:async()=>false,unpublishSkill:()=>new Promise(resolve=>{answer=resolve;})};
+  const tools=localEmailTools({profile,host,signal:abort.signal});
+  const pending=tools.call('email_skill_unpublish',{id:'owned'});
+  for(let i=0;i<20&&!answer;i++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(typeof answer,'function');assert.equal(tools.isWaiting(),true);
+  answer({cancelled:true});await pending;assert.equal(tools.isWaiting(),false);
 });

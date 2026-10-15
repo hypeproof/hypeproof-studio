@@ -55,3 +55,11 @@ assert.equal(inspector.view().sheetUrl,'','valid import still requires recipient
 assert.equal(inspector.view().preview,null);
 assert.equal(executions,0,'neither valid nor invalid installation executes Google or sends mail');
 console.log('PASS inspector install: rejected data preserves work; valid import requires private setup and never executes');
+
+for(const result of [{ok:false},{},null]) {
+ const badReceipt=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async()=>new Response(JSON.stringify(result))});
+ await assert.rejects(badReceipt.unpublish('owned'),/철회 결과/);
+}
+const goodReceipt=createAutomationStoreClient({baseUrl:'https://service.example.test',getToken:async()=>'synthetic',fetchImpl:async(url,init)=>{assert.equal(init.method,'DELETE');return new Response('{"ok":true}');}});
+assert.deepEqual(await goodReceipt.unpublish('owned'),{ok:true});
+console.log('PASS withdrawal receipt: HTTP200 without explicit success cannot report removal');

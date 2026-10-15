@@ -50,5 +50,10 @@ export function createAutomationStoreClient(deps: { baseUrl: string; getToken():
       throw new Error('스토어 스킬의 형식이나 공유 내용을 확인할 수 없어요. 설치하지 않았어요.');
     }
   }
-  return { list: () => request(''), detail, publish: (recipe, requestId) => request('', 'POST', { recipe, requestId }), unpublish: id => request(itemPath(id), 'DELETE') };
+  async function unpublish(id: string): Promise<{ ok: true }> {
+    const result = await request<{ ok?: unknown }>(itemPath(id), 'DELETE');
+    if (result?.ok !== true) throw new Error('게시 철회 결과를 확인할 수 없어요. 스토어 목록을 확인해 주세요.');
+    return { ok: true };
+  }
+  return { list: () => request(''), detail, publish: (recipe, requestId) => request('', 'POST', { recipe, requestId }), unpublish };
 }
