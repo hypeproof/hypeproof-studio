@@ -29,6 +29,7 @@ function preserveGatewayLog(){
 }
 try{
  if(!platform||!appDirectory||!assetDirectory||!outputDirectory||!sourceSha||!version)throw Error('Usage: run.mjs APP ASSETS OUTPUT SOURCE_SHA VERSION (Mac/Windows only)');
+ fs.rmSync(path.join(outputDirectory,'receipt.json'),{force:true});
  if(!process.env.ANTHROPIC_API_KEY)throw Error('BLOCKED: acceptance model credential missing; no skipped PASS');
  if(git('rev-parse','HEAD')!==sourceSha||git('status','--porcelain','--untracked-files=no'))throw Error('Acceptance requires clean pinned source');
  for(const flag of ['HPS_NATIVE_ISOLATED_KEYCHAIN','HPS_CODEX_REHEARSAL','HPS_MODEL_REHEARSAL'])if(process.env[flag])throw Error('Incompatible acceptance override: '+flag);

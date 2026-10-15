@@ -162,8 +162,8 @@ test('native trial: enter code, use real API, create and revise an actual work f
     if (connected) {
       const chat = await chatFrame(ctx.win).catch(() => null);
       if (chat) writeFileSync(join(output, 'failure-transcript.txt'), redact(await chat.locator('.hps-messages').innerText().catch(() => 'unavailable')));
-      // Mask inputs, including any unexpected credential dialog.
-      await ctx.win.screenshot({ path: join(output, 'failure.png'), mask: [ctx.win.locator('input, textarea')] }).catch(() => {});
+      // Capture only the post-entry message area, never a credential dialog.
+      if (chat) await chat.locator('.hps-messages').screenshot({ path: join(output, 'failure.png') }).catch(() => {});
     }
     throw error;
   } finally {
