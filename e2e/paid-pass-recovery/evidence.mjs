@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export const EVIDENCE_ALLOWLIST = [
   'receipt.json', 'failure.json', 'cleanup-failure.json', 'gateway.log', 'result.json',
-  'grant-before.json', 'grant-during.json', 'grant-after.json',
+  'grant-before.json', 'grant-during.json', 'grant-after.json', 'offline-start.json',
   'service/api-evidence.json', 'service/grant-evidence.json',
 ];
 

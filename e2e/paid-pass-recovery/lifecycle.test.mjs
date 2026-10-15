@@ -33,8 +33,11 @@ test('evidence staging scans all source files and copies only the explicit allow
     fs.writeFileSync(path.join(source, 'unlisted.txt'), secret);
     assert.throws(() => stageEvidence(source, destination, [secret]), /secret-like value/);
     fs.writeFileSync(path.join(source, 'unlisted.txt'), 'harmless but not allowlisted');
+    const offline = { code_input_visible: true, error: '연결 상태를 확인하세요.', code_entered_during_outage: false };
+    fs.writeFileSync(path.join(source, 'offline-start.json'), JSON.stringify(offline));
     stageEvidence(source, destination, [secret]);
     assert.equal(fs.existsSync(path.join(destination, 'receipt.json')), true);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(destination, 'offline-start.json'), 'utf8')), offline);
     assert.equal(fs.existsSync(path.join(destination, 'unlisted.txt')), false);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
