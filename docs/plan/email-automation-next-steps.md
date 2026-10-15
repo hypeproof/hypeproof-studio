@@ -319,3 +319,6 @@ are counted more than once in that upper bound; it is not measured spending.
 No historical charges, holds or previous allocations were reset, and applying
 the increase sent no mail and made no model call. Native funding selection
 remains pending. Receipt: `/tmp/hps-email-mvp/raised-recipient-budget-20261016-receipt.json`.
+
+
+Non-owner Windows checkpoint (2026-10-16,02:12KST): native e3ab008b opened the explicitly selected `original` principal in a new `StoreOriginalRecipient` workspace. The live store returned `mine=false` for peer-owned publication a1370573-7db3-4083-9224-49782bf5a315. The host displayed the inert template review and installed it after confirmation. The activity reused its existing Google connection and one-row Sheet; Apps Script preparation and a reviewed no-send preview reached6/6 with the imported subject/body. No other activity settings were copied and no mail was sent. This establishes non-owner Studio-principal import and useful preview. Distinct underlying Google identities between author and recipient are not yet verified; do not infer them from separate Studio principals. Candidate659de97d upgrade and native revision/update/rollback remain pending. Evidence: `/tmp/hps-email-mvp/windows-original-import-20261016-safe.png` and `/tmp/hps-email-mvp/windows-original-preview-20261016-safe.png`.
