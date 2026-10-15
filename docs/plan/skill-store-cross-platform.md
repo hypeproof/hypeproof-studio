@@ -1,5 +1,28 @@
 # Studio skill store: Mac authoring, Windows reuse
 
+Current native recovery checkpoint (2026-10-16,08:00KST): Studio fd6f276e
+passes all18 CI checks and is installed in the single Mac Dev app. In a real
+re-publication turn, the model's empty parentId was rejected before host dispatch;
+it corrected the arguments without operator intervention and opened the actual
+private review. The exact withdrawn-intent conflict then produced fresh-approval
+advice and stopped, without claiming publication or automatically retrying.
+A new sharing request opened a fresh private review and published successfully.
+Three-principal readback confirms identical recipe, correct owner/source, old
+withdrawn revision still404 and unchanged original v1/v2. No Google call or mail.
+The coach still prints an internal approval marker in its final answer; this
+presentation defect remains open rather than invalidating the verified backend
+lifecycle. Evidence: `/tmp/hps-email-mvp/store-withdrawal-fd6f276e-republished.json`
+and `/tmp/hps-email-mvp/mac-republished-fd6f276e-safe.png`.
+
+The matching Windows fd6f276e package is built locally on official shell720be661
+and SDK0.3.299, with unchanged approved Google runner configuration. App SHA256
+is58998211f36da5b7d2e92e72c55cd562c59ab962986235cc4e6e9aed9f080a69;
+SDK SHA256 remains24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e.
+`/tmp/hps-email-mvp/windows-current-fd6f276e/candidate.json` records preparation
+only. Upload/readback, installer pin update and actual Windows upgrade/reuse are
+not yet performed; Windows and the download gateway remain on db049d62.
+
+
 Updated 2026-10-16. Sponsor: TJ. DEC-025 extends the active delivery goal;
 this is a design and acceptance contract, not completed implementation.
 Requirements: EA-06/07/09, and the reusable-template destination in WAJ-03/06/07/11.

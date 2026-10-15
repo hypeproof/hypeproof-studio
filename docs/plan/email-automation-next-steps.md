@@ -12,6 +12,28 @@ charges/holds); this is not actual spending. Evidence:
 `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. The proposed live-class
 budget remains separate. No further mail is authorized.
 
+Current native recovery checkpoint (2026-10-16,08:00KST): Studio fd6f276e
+passes all18 CI checks and is installed in the single Mac Dev app. In a real
+re-publication turn, the model's empty parentId was rejected before host dispatch;
+it corrected the arguments without operator intervention and opened the actual
+private review. The exact withdrawn-intent conflict then produced fresh-approval
+advice and stopped, without claiming publication or automatically retrying.
+A new sharing request opened a fresh private review and published successfully.
+Three-principal readback confirms identical recipe, correct owner/source, old
+withdrawn revision still404 and unchanged original v1/v2. No Google call or mail.
+The coach still prints an internal approval marker in its final answer; this
+presentation defect remains open rather than invalidating the verified backend
+lifecycle. Evidence: `/tmp/hps-email-mvp/store-withdrawal-fd6f276e-republished.json`
+and `/tmp/hps-email-mvp/mac-republished-fd6f276e-safe.png`.
+
+The matching Windows fd6f276e package is built locally on official shell720be661
+and SDK0.3.299, with unchanged approved Google runner configuration. App SHA256
+is58998211f36da5b7d2e92e72c55cd562c59ab962986235cc4e6e9aed9f080a69;
+SDK SHA256 remains24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e.
+`/tmp/hps-email-mvp/windows-current-fd6f276e/candidate.json` records preparation
+only. Upload/readback, installer pin update and actual Windows upgrade/reuse are
+not yet performed; Windows and the download gateway remain on db049d62.
+
 Integration checkpoint11b82da2 includes main6ad5f9f8; implementation, installer8ba30b73 and
 documentation checkpoint36dc4401 pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
 ETXTBSY job rerun; no application test failed in that run. Windows
@@ -265,9 +287,9 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 | Area | Verified current evidence | Remaining boundary |
 | --- | --- | --- |
-| Source/main integration | Studio db049d62 contains current main6ad5f9f8. Runtime, installer882be60a and documentation69adde22 each pass18 CI checks; the PR is mergeable. Servicefa7472b passes13 CI checks. | Draft PRs; human-only merge under DEC-022. |
+| Source/main integration | Studio fd6f276e contains main6ad5f9f8 and passes18 CI checks. Servicefa7472b passes13 CI checks. Installer882be60a still pins db049d62. | Draft PRs; human-only merge under DEC-022. |
 | Isolated deployment | Servicea245457b, gateway893165ad and Ops62ab5b8 canonical0046/0047 support the test environment. Backups and integrity/readback receipts are retained. | No production database migration or general release is claimed. |
-| Mac | One Dev app runs db049d62. Native store version lookup identifies cohort-only visibility and unperformed body comparison. The third principal authored the audit-reminder fork at11b82da2. | TJ Google callback expired; fresh third-principal execution remains open. Dev uses memory-only secrets. |
+| Mac | One Dev app runs fd6f276e. Native argument correction and withdrawn-intent recovery reach a fresh reviewed publication; three-principal readback confirms contents, owner/source and old-ID denial. | TJ Google callback expired; fresh third-principal execution remains open. Dev uses memory-only secrets. |
 | Windows | db049d62 on official shell720be661/SDK0.3.299: authenticated exact archive install, saved activity restoration, actual portable rollback to11b82da2, return to the new build and fresh non-owner fork preview6/6 all pass. | This is the private pilot package. Shared-roaming-profile snapshot restoration and20-seat bandwidth are not verified. |
 | Store/identity | Three Studio principals, exact recipe ownership/provenance, import, versions, withdrawal and access controls have revision-bound evidence. Non-owner Windows runs the Mac-authored recipe using saved private settings. | Three underlying Google identities/different datasets, third-user useful execution and the remaining matching-candidate lifecycle gates remain open. |
 | Google isolation | Earlier live shared-runner tests passed own-Sheet reads, cross-Sheet denials and caller-isolated state without learner IAM. | Do not relabel the earlier isolation run as current three-account store acceptance. |
