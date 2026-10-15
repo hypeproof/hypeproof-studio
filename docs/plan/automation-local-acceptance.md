@@ -679,3 +679,31 @@ checks and types/build pass; remote CI is tracked separately. Native withdrawal
 execution evidence stays attached to62aff11d. Windows still serves32ba0ac2 and
 has neither this new lifecycle acceptance nor a successful current full download.
 Evidence is in `/tmp/hps-email-mvp/native-store-withdrawal-20261015/`.
+
+
+## Integrated native classroom and instructor recovery — 2026-10-15
+
+The single Mac Dev app was restaged to9b4dd233 with shell720be661 and SDK0.3.299.
+A02 rejoined the existing synthetic classroom through the actual App command and
+one-time pairing flow. Its native email journey reports2/6, with Google connection
+next; no fixture progress was written. The instructor page shows20 synthetic seats,
+normal1 and unknown19, with runtime-ready0. This is one real native connection,
+not20 ready learners. The expired synthetic class was reopened for two hours;
+no participant roster or budget was reset. No model call, Google action or mail
+was needed for this reconnect.
+
+A failed board read followed by recovery exposed a stale detail warning claiming
+that actions were still blocked. The UI now clears that specific outage warning
+when a fresh status arrives, retaining the draft question and unrelated action
+results. The browser→Chalk→Service regression failed before the fix and passed
+afterward:503 disables actions, recovery re-enables them, the unsent draft remains,
+no question is sent by refresh, and a different validation error survives refresh.
+Chalk's existing surface contract also passes. This does not assert all AT-18
+fault combinations or Windows behavior passed.
+
+Evidence under `/tmp/hps-email-mvp/`: `instructor-recovery-before-fix.log`,
+`instructor-recovery-after-fix.log`, `instructor-recovery-surface.log`, and
+`instructor-integrated/native-reconnect-9b4dd233-receipt.json`.
+The repaired real instructor view is captured in
+`instructor-integrated/native-9b4dd233-recovered.png`; the same-page recovery
+transition is proved by the browser regression, not by reloading the screenshot.

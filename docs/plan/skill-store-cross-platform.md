@@ -33,7 +33,9 @@ the unauthorized audience unless membership is explicitly changed and recorded.
 ## What is implemented today
 
 Baseline source inspection: Studio `0b57074d`, local Service `abf79a8b`.
-Current Mac runtime: `3d8c0b38` (conversational withdrawal and learner wording).
+Current Mac runtime: `9b4dd233` (main05efefdb integration, conversational withdrawal
+and learner wording). Native classroom reconnect and2/6 progress are verified;
+prior store/Google observations retain their original revision boundaries.
 The served private Windows candidate remains `32ba0ac2` (Google recovery), with
 installer source `87f75b6b`; it does not yet contain conversational withdrawal. Archive/backup/upgrade
 fixtures and23 online access controls pass. Full HTTP/2 readback of this new
@@ -303,7 +305,12 @@ missing/malformed storage, stream cancellation and metadata privacy. CI now runs
 these controls. A dedicated `hps-studio-email-test-20261015` bucket now exists:
 r2.dev is disabled, no custom domains are attached, and the `install/` lifecycle
 expires objects and incomplete multipart uploads after seven days. The prepared
-handler additionally enforces its fixed seven-day deadline. App upload is running;
+handler additionally enforces its fixed seven-day deadline. The first large upload
+terminated with HTTP401 and a subsequent GET confirmed no app object. A small
+synthetic PUT then succeeded with the existing authorization; no new permission
+was requested. A single archive retry is running. Token expiry is a possible,
+unproven explanation; neither a permissions nor a performance fix is established.
+App upload remains in progress;
 no completed object readback, gateway deployment or performance improvement is
 claimed.32ba0ac2 remains served. Before switching: read back and hash both archives,
 publish the manifest last, retain the old transport for rollback, then verify

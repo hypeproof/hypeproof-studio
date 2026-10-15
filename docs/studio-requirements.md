@@ -882,6 +882,13 @@ How confirmed decisions later reach the server project memory (cr-memory, #1450)
 | REQ-STUDIO-DECK-GENERATOR | Drafts only the requested template slides from the wiki: one claim headline, one visual (number, quote, the student's product page, steps, before/after, statement), at most two supporting lines, speaker notes. A slide is kept only when its references resolve in the wiki and every number on its face appears in the entries it cites; a refused or missing slide gets one repair request with the reasons. Citations, notes and unconfirmed items stay behind the "발표자 노트·근거" switch; the basis tag on the slide is computed from the cited evidence. A humanizer pass rewrites the slide text once; a rewrite that adds a number or balloons is refused, a quote is never rewritten, dashes are stripped. | `src/deckGenerator.ts`, `src/humanizer.ts`; `test/learning-wiki.smoke.mjs` |
 | REQ-STUDIO-TEAM-BRAIN-CALL | Students call the wiki by name in the chat: "팀 브레인에 정리해 줘" ingests (the next session unless the student names one; asks only when the latest session was already filed today), "팀 브레인으로 덱 만들어 줘" drafts the plan's focus slides, "팀 브레인 보여 줘" shows a summary without a model call. Messages without the name, longer than 40 characters, with two sentences, or asking about the feature do not trigger. The answer says what was added and the deck progress. The commands "HypeProof: 팀 브레인에 정리하기" / "HypeProof: 팀 브레인으로 덱 만들기" do the same, gated on `hypeproof-chat.learningWikiEnabled`. | `brainIntent` in `src/learningWiki.ts`; `chatPanelProvider`; `test/learning-wiki.smoke.mjs`, `test/cr-switch.smoke.mjs` (manifest gating) |
 
+Instructor status recovery (ADM-02/09, AT-18) must remove its own unavailable-board
+warning only after a successful status read, re-enable valid actions, and retain
+unsent questions and unrelated action results. Refresh must never send a draft.
+The actual browser regression in `e2e/classroom/ops.mjs` reproduces outage/recovery;
+[native classroom observations](plan/automation-local-acceptance.md) remain distinct
+from synthetic20-seat readiness and Windows acceptance.
+
 ## Email automation workshop (2026-10-13)
 
 EA-01–EA-09 in [email-automation.md](requirements/email-automation.md) specify the approved Google Sheets/email/cohort-store slice (Epic #1603, execution #1604). Human-reviewed sending and data-free sharing extend useful-work and human-judgment intent. Release observations remain separate from local tests.
