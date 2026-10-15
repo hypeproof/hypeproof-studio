@@ -67,6 +67,7 @@ jobs:
         run: |
           node e2e/unified-release/gate.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
+          node --test e2e/unified-release/candidate-service.test.mjs
           node scripts/test-unified-launcher.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}

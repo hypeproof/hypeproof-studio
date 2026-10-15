@@ -127,3 +127,26 @@ node scripts/unified-launcher.mjs --restore '/출력된/백업/경로'
 거부한다. App 복귀는 이전 검증된 설치본, Service 복귀는 이전 Worker revision,
 Module 복귀는 이전 pin을 사용한다. DB를 되감아 복구를 연습하지 않는다.
 사용자가 새 앱을 실제 재시작하기 전에는 ‘업데이트 제공’으로만 기록한다.
+
+### Service compatibility diagnostics (#1651)
+
+The Service-only compatibility workflow and deployment read the same immutable
+`config/service-deployment.json` pin. The runner refuses a dirty checkout or a
+mismatched commit, runs that checkout's gateway, and records its commit and source
+hash before launching the unchanged public App. Installed testkit provenance is
+retained for App-release runs; it cannot substitute for the deployment candidate.
+
+The public App performs auxiliary title requests as well as file tools. The failed
+2026-10-15 run spent calls 1 and 5 on titles, calls 2–4 on the initial write/read/final
+answer, and calls 6–8 on the revision before the requested reread completed. The
+Service-only synthetic acceptance now has an explicit total cap of **12 upstream
+attempts per activity**, including titles and retries. Attempt 13 must be recorded
+and rejected before provider dispatch. This changes only the rehearsal cap; no
+production grant, participant quota, or completion assertion changes. Both completed
+turns, correct file contents, the unchanged original, and zero recorded gateway
+failures are required. HTTP 200 alone is insufficient.
+
+Failure evidence preserves the stage, synthetic work files and post-entry transcript,
+plus a sanitized gateway log before temporary credentials are deleted. Credential
+entry is never captured. These artifacts diagnose failures; they do not create a
+passing receipt. `workflow_dispatch` can run compatibility without deploying anything.

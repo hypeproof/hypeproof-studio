@@ -12,6 +12,8 @@ test('native trial: enter code, use real API, create and revise an actual work f
   const output = resolve(process.env.HPS_NATIVE_EVIDENCE_DIR || 'test-results/native-trial');
   mkdirSync(output, { recursive: true });
   let stopped = false;
+  let connected = false;
+  let stage = 'code-entry';
   // Synthetic participant approves this test's requested local file operations.
   // This does not count as evidence of a human's delegation ability.
   const approvals = (async () => {
@@ -40,6 +42,8 @@ test('native trial: enter code, use real API, create and revise an actual work f
     await expect(start.locator('input[type=password]')).toHaveCount(0);
     await ctx.win.screenshot({ path: join(output, 'connected.png') });
     await start.getByRole('button', { name: /^(?:이어서 하기|수업 시작하기|이 활동 시작하기)$/ }).click();
+    connected = true;
+    stage = 'initial-turn';
     const chat = await chatFrame(ctx.win);
     const input = chat.locator('.hps-input textarea').first();
     await input.waitFor({ state: 'visible', timeout: 60000 });
@@ -48,13 +52,14 @@ test('native trial: enter code, use real API, create and revise an actual work f
     await expect(chat.locator('.hps-btn-stop')).toBeVisible();
     const first = join(ctx.wsDir, 'handover-v1.md');
     await expect.poll(() => existsSync(first), { timeout: 240000, intervals: [1000, 3000] }).toBe(true);
+    await expect(chat.locator('.hps-btn-stop')).toHaveCount(0, { timeout: 180000 });
     const before = readFileSync(first, 'utf8');
     expect(hasClosingTime(before, 18)).toBe(true);
     expect(before).toMatch(/10|열/);
     expect(before).toMatch(/주문/);
     writeFileSync(join(output, 'handover-v1.md'), before);
-    await expect(chat.locator('.hps-btn-stop')).toHaveCount(0, { timeout: 180000 });
     writeFileSync(join(output, 'initial-transcript.txt'), await chat.locator('.hps-messages').innerText());
+    stage = 'revision-turn';
     await input.fill('영업시간이 잘못됐어. 오후 7시 마감으로 바꾸고 주문 확인 절차는 유지해줘. 첫 파일은 그대로 두고 handover-v2.md로 저장해줘. 두 파일을 다시 읽어 차이를 확인하고, 실제로 확인한 것만 설명해줘.');
     await input.press('Enter');
     await expect(chat.locator('.hps-btn-stop')).toBeVisible();
@@ -145,6 +150,22 @@ test('native trial: enter code, use real API, create and revise an actual work f
       observation: process.env.HPS_NATIVE_OBSERVATION==='1'?'PASS actual host records, real assessment, UI and correction':'NOT_RUN',
       storage: process.env.HPS_NATIVE_MANAGED==='1'?'local SQLite grants and synthetic memory cohort bindings; no production state':'synthetic memory bindings; no production state',
     }, null, 2));
+  } catch (error) {
+    // Only synthetic work files and post-entry UI are retained. Never capture
+    // the code-entry screen or the app's credential-bearing user-data tree.
+    const redact = (text: string) => text.split(ctx.token).join('[REDACTED]');
+    for (const name of ['handover-v1.md', 'handover-v2.md']) {
+      const file = join(ctx.wsDir, name);
+      if (existsSync(file)) writeFileSync(join(output, 'failure-' + name), redact(readFileSync(file, 'utf8')));
+    }
+    writeFileSync(join(output, 'failure.json'), JSON.stringify({ status: 'FAIL', stage, message: redact(String(error)) }, null, 2));
+    if (connected) {
+      const chat = await chatFrame(ctx.win).catch(() => null);
+      if (chat) writeFileSync(join(output, 'failure-transcript.txt'), redact(await chat.locator('.hps-messages').innerText().catch(() => 'unavailable')));
+      // Mask inputs, including any unexpected credential dialog.
+      await ctx.win.screenshot({ path: join(output, 'failure.png'), mask: [ctx.win.locator('input, textarea')] }).catch(() => {});
+    }
+    throw error;
   } finally {
     stopped = true;
     await approvals;

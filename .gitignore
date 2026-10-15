@@ -49,3 +49,5 @@ extensions/hypeproof-chat/webview-ui/src/*.js
 
 # Proprietary Service artifacts are authenticated local/CI inputs, never Studio source.
 .private-service-cache/
+
+.service-source/
