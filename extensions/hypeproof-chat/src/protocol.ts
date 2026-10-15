@@ -93,7 +93,12 @@ export interface AssetScoreChunk {
 export type CourseEffort = 'low' | 'medium' | 'high';
 export interface EffortRequestRecord {
   request_id: string; model: string; requested: CourseEffort | null; applied: CourseEffort | null;
-  reason: 'selected' | 'course_default' | 'unsupported_model'; status: number; created_at: string;
+  /**
+   * `no_receipt` (S4): recorded for its agent attribution alone, with no effort receipt (both levels
+   * null). `unknown`: the Service sent a reason this build does not know; observedEffortResult marks
+   * that row only (modelSelection.ts).
+   */
+  reason: 'selected' | 'course_default' | 'unsupported_model' | 'no_receipt' | 'unknown'; status: number; created_at: string;
   /**
    * ADR 0011 (orchestrator spec §4.6, §5.2, §14) — who sent this request, as the Service recorded
    * it: `coach`, a roster helper's name, or `aux` for Claude Code's own background calls. Absent

@@ -20,13 +20,22 @@ function servedAgents(profile: ResolvedProfile | null | undefined) {
   return served && 'agents' in served && Array.isArray(served.agents) ? served.agents : [];
 }
 
-/** Who sent the request: the Service's title, else the roster's, else the wire name; '' when not recorded. */
+/** S4's own values: an `x-hps-agent` it could not read, and a request class the orchestrator never sends. */
+export const UNKNOWN_AGENT_LABEL = '담당 미확인';
+export const ANOMALY_AGENT_LABEL = '예상 밖 요청';
+
+/**
+ * Who sent the request: the Service's title, else the roster's, else the wire name ('' when not
+ * recorded). `coach`, `aux`, `unknown` and `anomaly:<class>` are worded here when no title came.
+ */
 export function requestAgentLabel(r: EffortRequestRecord, profile: ResolvedProfile | null | undefined): string {
   if (r.request_class === 'auxiliary' || r.agent === 'aux') return AUX_REQUEST_LABEL;
   if (typeof r.agent_title === 'string' && r.agent_title.trim()) return oneLabel(r.agent_title);
   if (typeof r.agent !== 'string' || !r.agent.trim()) return '';
+  if (r.agent === 'unknown') return UNKNOWN_AGENT_LABEL;
+  if (r.agent.startsWith('anomaly:')) return ANOMALY_AGENT_LABEL;
   const served = servedAgents(profile).find(a => a.name === r.agent);
-  return oneLabel(served?.title || r.agent);
+  return oneLabel(served?.title || (r.agent === 'coach' ? '코치' : r.agent));
 }
 
 /** The model as the learner's menu names it (as before), else as the served roster does, else its id. */
@@ -57,9 +66,11 @@ export function EffortControl({config,post}:{config:ChatConfig;post:(m:WebviewMe
         <p>서버에서 확인된 요청별 전송 설정입니다. 응답 내용의 정확성을 뜻하지 않습니다.</p>
         <ul>{result.requests.map(r=>{
           const who=requestAgentLabel(r,config.profile);
+          // no_receipt: no effort was recorded for this request, so no level is claimed either way.
+          // unknown: a reason this build cannot word; only that part is marked.
           return <li key={r.request_id} data-agent={who?r.agent||undefined:undefined}>
-            {who?`${who} · `:null}{requestModelLabel(r,config.profile)}: 요청 {r.requested?labels[r.requested]:'수업 기본값'} → 적용 {r.applied?labels[r.applied]:'처리 수준 미지원'}
-            {r.reason==='course_default'?' · 수업 기본값':''}{r.status>=400?' · 요청 실패':''}
+            {who?`${who} · `:null}{requestModelLabel(r,config.profile)}: {r.reason==='no_receipt'?'처리 수준 기록 없음':<>요청 {r.requested?labels[r.requested]:'수업 기본값'} → 적용 {r.applied?labels[r.applied]:'처리 수준 미지원'}</>}
+            {r.reason==='course_default'?' · 수업 기본값':''}{r.reason==='unknown'?' · 적용 이유 미확인':''}{r.status>=400?' · 요청 실패':''}
           </li>;
         })}</ul>
         {result.truncated && <p>처음 100개 요청만 표시합니다.</p>}

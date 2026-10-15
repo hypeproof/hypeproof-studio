@@ -1152,4 +1152,119 @@ if (status.available) {
   console.log(`NOT RUN orchestrator panel details/timeline renders — ${status.detail}`);
 }
 
+// ── 9. S4's rows (hypeproof-service#88): `no_receipt`, and a reason this build does not know ─
+
+{
+  const { observedEffortResult, KNOWN_EFFORT_REASONS } = await import("../src/modelSelection.ts");
+  // The served shape of GET /v1/request-settings/:turn after S4: the seven old keys first, then the
+  // attribution (agent, agent_title, non-null fields). A row written for its attribution alone has no
+  // effort receipt: requested and applied null, reason `no_receipt`.
+  const S4_ROWS = [
+    { request_id: "8d0f6c1e-0001", model: "claude-haiku-5-5", requested: null, applied: null, reason: "no_receipt", status: 200, created_at: "2026-10-15 06:00:01",
+      agent: "design-reviewer", agent_title: "검토 도우미", roster: "homepage@1.0.0", capability: "text.fast", resolution: "roster", stop_reason: "end_turn", agent_call_id: "5b1e2f6a-7c3d-4e8f-9a0b-1c2d3e4f5a6b" },
+    { request_id: "8d0f6c1e-0002", model: "claude-sonnet-5-5", requested: null, applied: null, reason: "no_receipt", status: 200, created_at: "2026-10-15 06:00:02",
+      agent: "coach", agent_title: "코치", request_class: "main", roster: "homepage@1.0.0", capability: "code.general", resolution: "learner_selection", stop_reason: "tool_use" },
+    { request_id: "8d0f6c1e-0003", model: "claude-haiku-5-5", requested: null, applied: null, reason: "no_receipt", status: 200, created_at: "2026-10-15 06:00:03",
+      agent: "aux", agent_title: "보조", request_class: "auxiliary", roster: "homepage@1.0.0", capability: "text.fast", resolution: "aux_fast", stop_reason: "end_turn" },
+  ];
+  const OLD_ROWS = [
+    { request_id: "r1", model: "claude-sonnet-5-5", requested: "low", applied: "low", reason: "selected", status: 200, created_at: "2026-10-15 06:01:00" },
+    { request_id: "r2", model: "claude-sonnet-5-5", requested: null, applied: "medium", reason: "course_default", status: 200, created_at: "2026-10-15 06:01:01" },
+    { request_id: "r3", model: "claude-haiku-5-5", requested: "high", applied: null, reason: "unsupported_model", status: 529, created_at: "2026-10-15 06:01:02" },
+  ];
+  const FUTURE = { request_id: "r4", model: "claude-sonnet-5-5", requested: "low", applied: "high", reason: "provider_override", status: 200, created_at: "2026-10-15 06:01:03" };
+
+  assert.deepEqual([...KNOWN_EFFORT_REASONS], ["selected", "course_default", "unsupported_model", "no_receipt"]);
+  // An older Service's rows pass through as they came (the same objects).
+  const old = observedEffortResult({ requests: OLD_ROWS, truncated: false });
+  assert.equal(old.state, "observed");
+  assert.ok(old.requests.every((r, i) => r === OLD_ROWS[i]), "known reasons are not copied or changed");
+  // S4's no_receipt rows are read, not refused.
+  const s4 = observedEffortResult({ requests: S4_ROWS, truncated: false });
+  assert.equal(s4.state, "observed");
+  assert.ok(s4.requests.every((r, i) => r === S4_ROWS[i]));
+  // A reason this build does not know marks that row only; the list, and the row's model and levels, stay.
+  const missing = { ...OLD_ROWS[0], request_id: "r5" };
+  delete missing.reason;
+  const nulled = { ...OLD_ROWS[1], request_id: "r6", reason: null };
+  const mixed = observedEffortResult({ requests: [OLD_ROWS[0], S4_ROWS[0], FUTURE, missing, nulled], truncated: false });
+  assert.equal(mixed.state, "observed", "one new word never turns the whole list into 미확인");
+  assert.deepEqual(mixed.requests.map((r) => r.reason), ["selected", "no_receipt", "unknown", "unknown", "unknown"]);
+  assert.deepEqual({ ...mixed.requests[2], reason: FUTURE.reason }, FUTURE, "only the reason is marked; model and levels are kept");
+  assert.equal(FUTURE.reason, "provider_override", "the Service's row is not mutated");
+  assert.equal(mixed.requests[0], OLD_ROWS[0]);
+  // Negative controls: every other field is as strict as before, a known or unknown reason alike.
+  for (const [why, rows, envelope = { truncated: false }] of [
+    ["a level outside low/medium/high", [{ ...S4_ROWS[0], applied: "max" }]],
+    ["a future reason with a string status", [{ ...FUTURE, status: "200" }]],
+    ["a level that is not a level", [{ ...FUTURE, requested: "maximum" }]],
+    ["no model", [(() => { const r = { ...S4_ROWS[1] }; delete r.model; return r; })()]],
+    ["a time that is not text", [{ ...OLD_ROWS[0], created_at: 1760508060 }]],
+    ["no truncated flag", S4_ROWS, {}],
+    ["no rows", []],
+    ["101 rows", Array.from({ length: 101 }, (_, i) => ({ ...OLD_ROWS[0], request_id: `x${i}` }))],
+  ]) {
+    assert.equal(observedEffortResult({ requests: rows, ...envelope }).state, "unknown", why);
+  }
+
+  if (status.available) {
+    const { visibleText } = await import("./sx-render.mjs");
+    const items = (html) => [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visibleText(m[1]));
+    const listOf = async (result, profile = adultConfig().profile) => render("EffortControl", { config: adultConfig({ effort: POLICY, effortResult: result, profile }), post() {} });
+    // S4's rows read as what they are: no effort was recorded, so no level is claimed.
+    assert.deepEqual(items(await listOf(s4, { ...adultConfig().profile, orchestrator: ROSTER })), [
+      "검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음",
+      "코치 · Claude Sonnet 5.5: 처리 수준 기록 없음",
+      "보조 작업 · Claude Haiku 5.5: 처리 수준 기록 없음",
+    ]);
+    const failed = observedEffortResult({ requests: [{ ...S4_ROWS[0], status: 502 }], truncated: false });
+    assert.deepEqual(items(await listOf(failed)), ["검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음 · 요청 실패"]);
+    // The unknown reason marks its own row; the rows around it read as before.
+    assert.deepEqual(items(await listOf(mixed)), [
+      "Claude Sonnet 5.5: 요청 Low → 적용 Low",
+      "검토 도우미 · Claude Haiku 5.5: 처리 수준 기록 없음",
+      "Claude Sonnet 5.5: 요청 Low → 적용 High · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 Low → 적용 Low · 적용 이유 미확인",
+      "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 적용 이유 미확인",
+    ]);
+    // S4's own agent values, without a title: worded, never shown as English wire values.
+    const worded = observedEffortResult({ requests: [
+      { ...S4_ROWS[1], request_id: "w1", agent: "unknown", agent_title: undefined },
+      { ...S4_ROWS[1], request_id: "w2", agent: "anomaly:subagent", agent_title: undefined, request_class: "subagent" },
+      { ...S4_ROWS[1], request_id: "w3", agent_title: undefined },
+    ], truncated: false });
+    assert.deepEqual(items(await listOf(worded)).map((t) => t.split(" · ")[0]), ["담당 미확인", "예상 밖 요청", "코치"]);
+    // Control: a list the envelope rule refuses still reads 미확인, so the instrument can tell them apart.
+    const refused = observedEffortResult({ requests: [{ ...FUTURE, applied: "max" }], truncated: false });
+    const refusedHtml = await listOf(refused);
+    assert.match(visibleText(refusedHtml), /적용 기록 미확인/);
+    assert.equal(items(refusedHtml).length, 0);
+    assert.doesNotMatch(visibleText(await listOf(mixed)), /적용 기록 미확인/);
+  }
+
+  // The host reads the Service's answer through the same parser and keeps the list.
+  const P = await provider();
+  let configs = 0;
+  const host = {
+    effortTurn: { id: "turn-s4", url: "https://api.example.test/v1", token: "t0ken", scope: "s" },
+    context: { secrets: { get: async () => "t0ken" } },
+    postConfig: async () => configs++,
+  };
+  const asked = [];
+  bundleFetch = async (url, init) => {
+    asked.push({ url: String(url), auth: init?.headers?.authorization });
+    return new Response(JSON.stringify({ requests: [...S4_ROWS, FUTURE], truncated: false }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  try {
+    await P.ChatPanelProvider.prototype.refreshEffortResult.call(host);
+  } finally {
+    bundleFetch = globalThis.fetch;
+  }
+  assert.deepEqual(asked, [{ url: "https://api.example.test/v1/request-settings/turn-s4", auth: "Bearer t0ken" }]);
+  assert.equal(host.effortResult.state, "observed");
+  assert.deepEqual([...host.effortResult.requests].map((r) => `${r.agent ?? "-"}:${r.reason}`), ["design-reviewer:no_receipt", "coach:no_receipt", "aux:no_receipt", "-:unknown"]);
+  assert.equal(configs, 1);
+  ok("S4 rows: no_receipt is read (worded 처리 수준 기록 없음, no level claimed), a reason this build does not know marks only its row (적용 이유 미확인) while the list and the row's model stay; old rows pass through unchanged; S4's unknown and anomaly agents are worded; every other malformed field still turns the list 미확인 (controls); the host keeps the list");
+}
+
 console.log(`orchestrator-panel: ${passed} checks passed`);
