@@ -1051,4 +1051,78 @@ if (!status.available) {
   ok("revealBuilt: on an adult orchestrator seat the old index.html is copied to .hypeproof/history before the save, with one 🗂 line (identical pages and blocked pages keep nothing; ▶ Run keeps it without a line); never for kids, a minor flag, an unknown tier, an old profile, a disabled roster or a roster without the archive check, while the save itself is unchanged");
 }
 
+// ── 8. The details list names each request's agent; the lines render as designed (spec §5.2) ─
+
+if (status.available) {
+  const { visibleText } = await import("./sx-render.mjs");
+  const row = (over) => ({ request_id: `req_${Math.random().toString(16).slice(2, 10)}`, model: "claude-sonnet-5-5", requested: null, applied: "medium", reason: "course_default", status: 200, created_at: "2026-10-15T02:00:00Z", ...over });
+  const ATTRIBUTED = [
+    row({ request_id: "r_coach", agent: "coach", agent_title: "코치", request_class: "main" }),
+    row({ request_id: "r_rev", agent: "design-reviewer", agent_title: "검토 도우미", model: "claude-haiku-5-5", applied: "low", reason: "selected" }),
+    row({ request_id: "r_aux", agent: "aux", request_class: "auxiliary", model: "claude-haiku-5-5", applied: null, reason: "unsupported_model" }),
+    row({ request_id: "r_untitled", agent: "design-reviewer", model: "claude-haiku-5-5", applied: "low", reason: "selected", status: 502 }),
+  ];
+  const effortProps = (requests, profileOver = {}) => ({
+    config: adultConfig({ effort: POLICY, effortResult: { state: "observed", requests }, profile: { ...adultConfig().profile, ...profileOver } }),
+    post() {},
+  });
+  const items = (html) => [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/g)].map((m) => visibleText(m[1]));
+  const html = await render("EffortControl", effortProps(ATTRIBUTED, { orchestrator: ROSTER }));
+  assert.deepEqual(items(html), [
+    "코치 · Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "보조 작업 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
+    "검토 도우미 · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+  ], "one agent label per request, before the model (spec §5.2's copy)");
+  assert.deepEqual([...html.matchAll(/data-agent="([^"]+)"/g)].map((m) => m[1]), ["coach", "design-reviewer", "aux", "design-reviewer"]);
+  assert.match(html, /<details><summary>Effort 설정 확인<\/summary>/, "closed until opened: visible on demand");
+  // The untitled row took its title from the served roster; without the roster it shows the wire name.
+  assert.equal(items(await render("EffortControl", effortProps([ATTRIBUTED[3]])))[0], "design-reviewer · Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패");
+  // A helper model the learner's menu does not list is named by the roster, else by its id (as before).
+  const noHaiku = { model_selection: { ...MODEL_SELECTION, choices: [CHOICES[0]] } };
+  assert.match(items(await render("EffortControl", effortProps([ATTRIBUTED[1]], { ...noHaiku, orchestrator: ROSTER })))[0], /^검토 도우미 · Claude Haiku 5\.5:/);
+  assert.match(items(await render("EffortControl", effortProps([ATTRIBUTED[1]], noHaiku)))[0], /^검토 도우미 · claude-haiku-5-5:/);
+  // Negative control: the same rows without the agent fields read exactly as today.
+  const bare = ATTRIBUTED.map(({ agent, agent_title, request_class, ...r }) => r);
+  assert.deepEqual(items(await render("EffortControl", effortProps(bare, { orchestrator: ROSTER }))), [
+    "Claude Sonnet 5.5: 요청 수업 기본값 → 적용 Medium · 수업 기본값",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 처리 수준 미지원",
+    "Claude Haiku 5.5: 요청 수업 기본값 → 적용 Low · 요청 실패",
+  ]);
+  assert.doesNotMatch(await render("EffortControl", effortProps(bare)), /data-agent/);
+  // A served roster changes no screen by itself (it is labels for attributed rows, never UI):
+  // every old screen, with the roster or its disabled form added, still equals main.
+  for (const served of [ROSTER, { enabled: false, reason: "flag_off" }]) {
+    for (const [name, make] of Object.entries(OLD_SCREENS)) {
+      const [component, props] = make();
+      const withServed = { ...props, config: { ...props.config, profile: { ...props.config.profile, orchestrator: served } } };
+      assert.equal(sha(await render(component, withServed)), BASE[name], `${name} with orchestrator=${served.enabled === false ? "disabled" : "roster"}`);
+    }
+  }
+  // The timeline draws the host's lines as designed (spec §5.2 examples), through ChatPanel.
+  const P = await provider();
+  const toMessage = (entry, i) => ({ id: entry.id, role: "tool", content: "", createdAt: i + 1, tool: { icon: entry.icon, label: entry.label, state: entry.state } });
+  const entries = [
+    P.orchestratorToolEntry({ kind: "consult", id: "consult:c1", agent: "design-reviewer", title: "검토 도우미", model: "Claude Haiku 5.5", state: "done", summary: "고칠 곳 2개", icon: "🔎", label: "🔎 검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개", at: 1 }, "t"),
+    P.orchestratorToolEntry({ kind: "check", id: "check:s1", name: "site_check", verdict: "pass", summary: "", path: "index.html", state: "done", icon: "📏", label: "📏 390·1280px 확인 — 통과", at: 2 }, "t"),
+    P.orchestratorToolEntry({ kind: "check", id: "check:s2", name: "site_check", verdict: "fail", summary: "", path: "about.html", state: "done", icon: "📏", label: "📏 390px에서 2곳 넘침", at: 3 }, "t"),
+    P.orchestratorToolEntry({ kind: "check", id: "check:s3", name: "site_check", verdict: "unverified", summary: "", path: "menu.html", state: "done", icon: "📏", label: "📏 미확인(미리보기 꺼짐)", at: 4 }, "t"),
+    P.orchestratorToolEntry({ kind: "check", id: "check:a1", name: "archive", verdict: "archived", summary: "", path: "index.html", state: "done", icon: "🗂", label: "🗂 이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html", at: 5 }, "t"),
+  ];
+  const panel = await render("ChatPanel", chatPanelProps({ config: adultConfig(), messages: entries.map(toMessage) }));
+  const shown = [...panel.matchAll(/<div class="hps-tool-log-line hps-tool-(\w+)"[^>]*>([\s\S]*?)<\/div>/g)].map((m) => `${visibleText(m[2])} [${m[1]}]`);
+  assert.deepEqual(shown, [
+    "🔎검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개✓ [done]",
+    "📏390·1280px 확인 — 통과✓ [done]",
+    "📏390px에서 2곳 넘침⚠️ [error]",
+    "📏미확인(미리보기 꺼짐)⚠️ [error]",
+    "🗂이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html✓ [done]",
+  ]);
+  assert.doesNotMatch(panel, /🔎\s*🔎|📏\s*📏|🗂\s*🗂/, "no icon twice");
+  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 9 old screens; the timeline renders consult, check and archive lines with one icon each, ✓ only for 통과");
+} else {
+  console.log(`NOT RUN orchestrator panel details/timeline renders — ${status.detail}`);
+}
+
 console.log(`orchestrator-panel: ${passed} checks passed`);

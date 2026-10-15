@@ -1,6 +1,41 @@
-import type { ChatConfig, CourseEffort, WebviewMessage } from '../../src/protocol';
+import type { ChatConfig, CourseEffort, EffortRequestRecord, ResolvedProfile, WebviewMessage } from '../../src/protocol';
 
 const labels: Record<CourseEffort,string> = {low:'Low',medium:'Medium',high:'High'};
+
+// ADR 0011 (orchestrator spec §5.2, AE-27) — on an orchestrator seat the Service records which
+// agent sent each request, and each row names it before the model: `검토 도우미 · Claude Haiku
+// 5.5: 요청 수업 기본값 → 적용 Low`. Claude Code's own background calls read `보조 작업`. Quiet by
+// default: the rows live behind the closed details. A row without an agent (an older Service, or a
+// seat without the orchestrator) reads exactly as before.
+export const AUX_REQUEST_LABEL = '보조 작업';
+const AGENT_LABEL_MAX = 40;
+
+function oneLabel(value: string): string {
+  const t = value.replace(/\s+/g, ' ').trim();
+  return t.length > AGENT_LABEL_MAX ? t.slice(0, AGENT_LABEL_MAX) : t;
+}
+
+function servedAgents(profile: ResolvedProfile | null | undefined) {
+  const served = profile?.orchestrator;
+  return served && 'agents' in served && Array.isArray(served.agents) ? served.agents : [];
+}
+
+/** Who sent the request: the Service's title, else the roster's, else the wire name; '' when not recorded. */
+export function requestAgentLabel(r: EffortRequestRecord, profile: ResolvedProfile | null | undefined): string {
+  if (r.request_class === 'auxiliary' || r.agent === 'aux') return AUX_REQUEST_LABEL;
+  if (typeof r.agent_title === 'string' && r.agent_title.trim()) return oneLabel(r.agent_title);
+  if (typeof r.agent !== 'string' || !r.agent.trim()) return '';
+  const served = servedAgents(profile).find(a => a.name === r.agent);
+  return oneLabel(served?.title || r.agent);
+}
+
+/** The model as the learner's menu names it (as before), else as the served roster does, else its id. */
+export function requestModelLabel(r: EffortRequestRecord, profile: ResolvedProfile | null | undefined): string {
+  return profile?.model_selection?.choices.find(c=>c.id===r.model)?.label
+    ?? servedAgents(profile).find(a => a.model?.id === r.model)?.model?.label
+    ?? r.model;
+}
+
 export function EffortControl({config,post}:{config:ChatConfig;post:(m:WebviewMessage)=>void}) {
   const policy = config.effort;
   const result = config.effortResult;
@@ -20,10 +55,13 @@ export function EffortControl({config,post}:{config:ChatConfig;post:(m:WebviewMe
       {result?.state==='unknown' && <p>적용 기록 미확인 — 기록이 늦거나 연결되지 않았을 수 있습니다.</p>}
       {result?.state==='observed' && <>
         <p>서버에서 확인된 요청별 전송 설정입니다. 응답 내용의 정확성을 뜻하지 않습니다.</p>
-        <ul>{result.requests.map(r=><li key={r.request_id}>
-          {config.profile?.model_selection?.choices.find(c=>c.id===r.model)?.label??r.model}: 요청 {r.requested?labels[r.requested]:'수업 기본값'} → 적용 {r.applied?labels[r.applied]:'처리 수준 미지원'}
-          {r.reason==='course_default'?' · 수업 기본값':''}{r.status>=400?' · 요청 실패':''}
-        </li>)}</ul>
+        <ul>{result.requests.map(r=>{
+          const who=requestAgentLabel(r,config.profile);
+          return <li key={r.request_id} data-agent={who?r.agent||undefined:undefined}>
+            {who?`${who} · `:null}{requestModelLabel(r,config.profile)}: 요청 {r.requested?labels[r.requested]:'수업 기본값'} → 적용 {r.applied?labels[r.applied]:'처리 수준 미지원'}
+            {r.reason==='course_default'?' · 수업 기본값':''}{r.status>=400?' · 요청 실패':''}
+          </li>;
+        })}</ul>
         {result.truncated && <p>처음 100개 요청만 표시합니다.</p>}
       </>}
       {result && <button type="button" onClick={()=>post({type:'refreshEffort'})}>적용 기록 다시 확인</button>}

@@ -94,6 +94,16 @@ export type CourseEffort = 'low' | 'medium' | 'high';
 export interface EffortRequestRecord {
   request_id: string; model: string; requested: CourseEffort | null; applied: CourseEffort | null;
   reason: 'selected' | 'course_default' | 'unsupported_model'; status: number; created_at: string;
+  /**
+   * ADR 0011 (orchestrator spec §4.6, §5.2, §14) — who sent this request, as the Service recorded
+   * it: `coach`, a roster helper's name, or `aux` for Claude Code's own background calls. Absent
+   * from a Service without the agent ledger, and then the row reads exactly as before.
+   */
+  agent?: string;
+  /** That agent's Korean title, e.g. 검토 도우미. */
+  agent_title?: string;
+  /** Claude Code's purpose marker: main | subagent | workflow | compaction | auxiliary. */
+  request_class?: string;
 }
 export interface ChatConfig {
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
