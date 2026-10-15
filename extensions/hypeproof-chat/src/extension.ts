@@ -42,6 +42,7 @@ import { decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
 import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
+import { resolvePublishEndpoints, type PublishOverrideSource } from "./publish/publishConfig";
 
 const TOKEN_KEY = "hypeproofChat.workshopToken";
 
@@ -170,6 +171,16 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
   providerRef = provider;
+  // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
+  // pointing at a loopback mock (resolvePublishEndpoints explains why only then).
+  provider.initSitePublish(
+    resolvePublishEndpoints({
+      env: process.env as Record<string, string | undefined>,
+      testRun: isTestRun,
+      devHost: context.extensionMode === vscode.ExtensionMode.Development,
+      testState: backdoors.publishOverrides,
+    }),
+  );
   // CR-10 — show the delete command when an earlier session stored browser-result bytes.
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
@@ -177,7 +188,7 @@ export async function activate(context: vscode.ExtensionContext) {
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
-  });
+  }, provider.githubContinueSource());
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
@@ -634,6 +645,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.testMyProduct", () => provider.testMyProduct()),
     // cr-publish — "Publish for user test" (CR-17). Gated in the manifest, re-checked in the handler.
     vscode.commands.registerCommand("hypeproof-chat.publishTestVersion", () => provider.publishTestVersion()),
+    // One-click publish to GitHub Pages. Gated in the manifest (sitePublishEnabled), re-checked in the handler.
+    vscode.commands.registerCommand("hypeproof-chat.publishSite", () => provider.publishSite()),
+    // Forget the persisted "publish without asking" registration (publishRegistry.ts).
+    vscode.commands.registerCommand("hypeproof-chat.publishSiteUnregister", () => provider.unregisterSitePublish()),
     vscode.commands.registerCommand("hypeproof-chat.experimentEvidence", () => provider.experimentEvidence()),
     vscode.commands.registerCommand("hypeproof-chat.ventureMemory", () => provider.ventureMemory()),
     vscode.commands.registerCommand("hypeproof-chat.wikiIngest", () => provider.wikiIngest()),
@@ -652,13 +667,32 @@ export async function activate(context: vscode.ExtensionContext) {
     // feature. image_paste-gated; the user still confirms via a one-click
     // notification (never silent).
     vscode.window.tabGroups.onDidChangeTabs(async (e) => {
-      if (!provider.isImagePasteEnabled()) return;
+      const asFiles = provider.isImageFilesEnabled();
+      if (!provider.isImagePasteEnabled() && !asFiles) return;
       for (const tab of e.opened) {
         const input = tab.input as { uri?: vscode.Uri } | undefined;
         const uri = input?.uri;
         if (!uri || uri.scheme !== "file") continue;
-        if (!/\.(png|jpe?g|gif|webp)$/i.test(uri.fsPath)) continue;
+        if (!(asFiles ? /\.(png|jpe?g|gif|webp|heic|heif|avif)$/i : /\.(png|jpe?g|gif|webp)$/i).test(uri.fsPath)) continue;
         const name = uri.path.split("/").pop() ?? "이미지";
+        if (asFiles) {
+          // D-028 — the photo goes into the chat as a file (saved to images/ on send). A photo
+          // already in the class folder is just being looked at, not attached.
+          if (provider.isInsideWorkspace(uri.fsPath)) continue;
+          const pick = await vscode.window.showInformationMessage(imageAttachPrompt(provider.coachDisplayName(), name), "붙이기");
+          if (pick !== "붙이기") continue;
+          if (await provider.stageImageFromFile(uri.fsPath)) {
+            // The tab VS Code opened for the drop covers the work; the photo now lives in the chat.
+            // Look the tab up again by its file: the Tab object from the event can be stale after
+            // the prompt (2026-10-14 app run: closing it left the photo tab open).
+            const same = vscode.window.tabGroups.all
+              .flatMap((g) => g.tabs)
+              .filter((t) => (t.input as { uri?: vscode.Uri } | undefined)?.uri?.toString() === uri.toString());
+            try { if (same.length) await vscode.window.tabGroups.close(same); } catch { /* already closed */ }
+          }
+          await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
+          continue;
+        }
         const pick = await vscode.window.showInformationMessage(
           imageAttachPrompt(provider.coachDisplayName(), name),
           "붙이기",
@@ -1054,7 +1088,7 @@ async function openWorkspaceFolder(
 
 async function applyTestBackdoors(
   context: vscode.ExtensionContext,
-): Promise<{ testStateFileFound: boolean }> {
+): Promise<{ testStateFileFound: boolean; publishOverrides?: PublishOverrideSource }> {
   // Source 1: env vars (works when Playwright passes them through to the
   // extension host, which is inconsistent across VS Code versions).
   let token = process.env.HPS_TEST_TOKEN;
@@ -1063,6 +1097,10 @@ async function applyTestBackdoors(
   let coachPersonality = process.env.HPS_TEST_COACH_PERSONALITY ?? "";
   let history: Array<{ id: string; role: "user" | "assistant" | "system"; content: string; createdAt: number }> | undefined;
   let issuerToken = process.env.HPS_TEST_ISSUER_TOKEN;
+  // One-click publish e2e: the mock GitHub's addresses and a fake gh. Read here because env
+  // reaches the extension host inconsistently (see above); resolvePublishEndpoints still
+  // refuses them outside a test/dev run and for non-loopback URLs.
+  let publishOverrides: PublishOverrideSource | undefined;
 
   // Source 2: a JSON file the test fixture writes into the user-data-dir,
   // typically <userDataDir>/User/hps-test-state.json. Always wins over env
@@ -1083,12 +1121,14 @@ async function applyTestBackdoors(
           coach?: { name?: string; personality?: string };
           history?: typeof history;
           issuerToken?: string;
+          publish?: PublishOverrideSource;
         };
         if (j.token) token = j.token;
         if (j.coach?.name) coachName = j.coach.name;
         if (j.coach?.personality) coachPersonality = j.coach.personality;
         if (Array.isArray(j.history)) history = j.history;
         if (j.issuerToken) issuerToken = j.issuerToken;
+        if (j.publish && typeof j.publish === "object") publishOverrides = j.publish;
         break;
       }
     }
@@ -1182,7 +1222,7 @@ async function applyTestBackdoors(
       } catch { /* ignore — best effort */ }
     }
   }
-  return { testStateFileFound };
+  return { testStateFileFound, ...(publishOverrides ? { publishOverrides } : {}) };
 }
 
 export function deactivate() {

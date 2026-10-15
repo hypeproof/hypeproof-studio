@@ -3,9 +3,31 @@ import { ChatPanelProvider } from "./chatPanelProvider";
 import { ActivityConnectionError, activityConnections } from "./activityConnections";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
+import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
 import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import type { ClassReposOutcome } from "./publish/publishHost";
+import type { ClassRepo } from "./publish/githubContinue";
+
+/**
+ * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
+ * seat's GitHub first; offer to continue a site from there, or to start new. The GitHub work
+ * lives in the publish module (publishHost.ts); absent → the feature is off.
+ */
+export interface GithubContinueSource {
+  /** The cohort publishes to GitHub (the button's gate) and names a class folder. */
+  allowed(profile: ResolvedProfile): boolean;
+  find(): Promise<ClassReposOutcome>;
+  signIn(): Promise<boolean>;
+  prepare(args: { login: string; repo: ClassRepo; reuse?: string; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }>;
+  /** The folder "새로 하기" opens: the class folder, else the first free `<class folder>-N`. */
+  newFolder(classRoot: string): string;
+  classRoot(profile: ResolvedProfile): string | null;
+}
+
+/** A GitHub look that has not answered by then is treated as unavailable: entry is never held up. */
+const GITHUB_LOOK_MS = 15_000;
 
 const entryError = (error:unknown) => error instanceof ActivityConnectionError || error instanceof ProxyTransportError
   ? error.message : "활동을 열지 못했습니다. 다시 시도해 주세요. 기존 연결과 작업 파일은 보존됩니다.";
@@ -32,13 +54,17 @@ export function shouldHideSidebar(allTabGroups: readonly { tabs: readonly unknow
   return allTabGroups.every(g => g.tabs.length === 0) && !chatViewVisible;
 }
 
+type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string };
+/** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
+type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
+
 /** App entry surface; authentication and cohort authority remain in Service. */
 export class StartPage {
   private panel?: vscode.WebviewPanel;
   private busy = false;
   private error?: string;
   private started = false;
-  private candidate?: { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string };
+  private candidate?: Candidate;
   // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
   private products?: PassProduct[] | null;
   private order?: PendingOrder;
@@ -47,11 +73,83 @@ export class StartPage {
   private purchaseTimer?: ReturnType<typeof setTimeout>;
   /** The code issued for the saved order, while its activity is previewed but not yet entered. */
   private purchaseToken?: string;
+  private github?: GithubLook;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
     private begin: (profile: ResolvedProfile, commit: (directory?: string) => Promise<void>, selectedDirectory?: string) => Promise<boolean>,
+    private githubSource?: GithubContinueSource,
   ) {}
+
+  /** The look that belongs to the candidate on screen, if any. */
+  private look(): GithubLook | undefined {
+    return this.candidate && this.github?.candidate === this.candidate ? this.github : undefined;
+  }
+
+  /** Look at the candidate's GitHub; the answer lands in the start state when it comes. */
+  private lookAtGithub(candidate: Candidate, classRoot: string): void {
+    const source = this.githubSource;
+    if (!source) return;
+    const entry: GithubLook = { candidate, classRoot, state: { status: "checking" } };
+    this.github = entry;
+    const timeout = new Promise<ClassReposOutcome>((r) => setTimeout(() => r({ status: "unavailable", detail: "timeout" }), GITHUB_LOOK_MS));
+    const found = source.find().catch((e): ClassReposOutcome => ({ status: "unavailable", detail: String(e) }));
+    void Promise.race([found, timeout]).then(async (r) => {
+      if (this.github !== entry || this.candidate !== candidate) return; // another code, or cancelled
+      if (r.status === "found") {
+        entry.login = r.login;
+        entry.repos = r.repos;
+        entry.state = { status: "found", repos: r.repos.map(({ name, pushedAt }) => ({ name, pushedAt })), newFolder: path.basename(source.newFolder(classRoot)) };
+      } else entry.state = { status: r.status };
+      await this.refresh();
+    });
+  }
+
+  /** Sign in from the candidate card when gh is not signed in, then look again. */
+  private async signInToGithub(): Promise<void> {
+    const gh = this.look(), source = this.githubSource;
+    if (!gh || !source || gh.state.status !== "signin" || this.busy) return;
+    this.busy = true; this.error = undefined; gh.state = { status: "signin", working: "signin" };
+    await this.refresh();
+    let signedIn = false;
+    try { signedIn = await source.signIn(); } catch { signedIn = false; } finally { this.busy = false; }
+    if (this.github !== gh || this.candidate !== gh.candidate) return;
+    if (!signedIn) {
+      gh.state = { status: "signin" };
+      this.error = "GitHub 로그인이 끝나지 않았어요. 다시 눌러 주세요.";
+      await this.refresh();
+      return;
+    }
+    this.lookAtGithub(gh.candidate, gh.classRoot);
+    await this.refresh();
+  }
+
+  /** "GitHub에서 이어하기" / "새로 하기": settle the candidate's folder, then start as usual. */
+  private async startFromGithubChoice(msg: Extract<StartRequest, { type: "continueFromGithub" | "startNew" }>): Promise<void> {
+    const gh = this.look(), source = this.githubSource;
+    if (!gh || !source || gh.state.status !== "found" || this.busy) return;
+    const candidate = gh.candidate;
+    if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
+    let folder: string;
+    if (msg.type === "startNew") folder = source.newFolder(gh.classRoot);
+    else {
+      const repo = gh.repos?.find((r) => r.name === msg.repo);
+      if (!repo || !gh.login) return;
+      this.busy = true; this.error = undefined; gh.state = { ...gh.state, working: "download" };
+      await this.refresh();
+      let prepared: Awaited<ReturnType<GithubContinueSource["prepare"]>>;
+      try { prepared = await source.prepare({ login: gh.login, repo, classRoot: gh.classRoot, ...(candidate.workspace ? { reuse: candidate.workspace } : {}) }); }
+      catch { prepared = { ok: false, message: "GitHub에서 홈페이지를 내려받지 못했어요. 잠시 뒤 다시 눌러 주세요." }; }
+      finally { this.busy = false; gh.state = { ...gh.state, working: undefined }; }
+      if (this.candidate !== candidate) return;
+      if (!prepared.ok) { this.error = prepared.message; await this.refresh(); return; }
+      folder = prepared.folder;
+    }
+    // The folder travels as the local choice (`begin`'s selectedDirectory), not as a rewrite of
+    // the served profile: the profile stays what the Service said.
+    candidate.workspace = folder;
+    await this.handle({ type: "beginCourse" });
+  }
 
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
   inboxChanged(): void { if (this.panel) void this.refresh(); }
@@ -245,6 +343,7 @@ export class StartPage {
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
+      ...(this.look() ? { github: this.look()!.state } : {}),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
@@ -276,6 +375,8 @@ export class StartPage {
       }
       return;
     }
+    if (msg.type === "githubSignIn") { await this.signInToGithub(); return; }
+    if (msg.type === "continueFromGithub" || msg.type === "startNew") { await this.startFromGithubChoice(msg); return; }
     if (this.busy) return;
     const connections = activityConnections(this.context);
     if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
@@ -418,6 +519,10 @@ export class StartPage {
       const running = await this.chat.ensureProfile(), connections = activityConnections(this.context);
       const workspace = reentryWorkspace({ candidateActivity: p.activity_id, record: connections?.current ?? null, recordServiceMatches: !!connections?.matchesService, openFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, runningActivity: running?.activity_id });
       this.candidate = { token, profile: p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
+      // GitHub first (user requirement 2026-10-13): the served profile names the class folder.
+      const classRoot = this.githubSource?.allowed(p) ? this.githubSource.classRoot(p) : null;
+      if (classRoot) this.lookAtGithub(this.candidate, classRoot);
+      else this.github = undefined;
     } catch (error) {
       console.error('[startPage] connectCourse failed:', error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       this.error = "수업에 연결하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";

@@ -24,6 +24,7 @@ import {
   buildHypeproofMcpServer,
   crBrowserOpenRefusal,
   HYPEPROOF_MCP_SERVER_NAME,
+  hypeproofMcpRegistration,
   MCP_BROWSER_OPEN,
   resolveAlreadyOpen,
   type BrowserMcpHost,
@@ -547,8 +548,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! },
         z,
         args.browserHost,
-        // CR-02 — register the Experiment Browser tools only where they were granted.
-        crMcpRegistration(opts.permittedMcpTools),
+        // CR-02 — register the Experiment Browser tools only where they were granted; the
+        // browser and publish_site parts likewise follow their own grants, so a cohort with
+        // only the publish grant gets a server carrying publish_site alone.
+        { ...crMcpRegistration(opts.permittedMcpTools), ...hypeproofMcpRegistration(opts.permittedMcpTools) },
       );
       mcpServers = {
         [HYPEPROOF_MCP_SERVER_NAME]: server as NonNullable<Options["mcpServers"]>[string],
@@ -700,6 +703,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         decision(ok, typeof approval === 'boolean' ? 'policy' : approval.actor);
       } finally {
         awaitingUser -= 1;
+        // The tool runs from NOW, not from when it was requested. Without this restamp a long
+        // tool approved after a slow modal (publish_site waits on GitHub for minutes) would
+        // lose the modal's time from its stall-watchdog slack and be aborted mid-run.
+        lastToolCallAt = Date.now();
       }
       return ok
         ? { behavior: "allow" as const, updatedInput: input }

@@ -37,6 +37,7 @@ import {
   isLoopbackUrl,
   resolveLivePreviewUrl,
 } from "./browserControlHelpers.ts";
+import { MCP_PUBLISH_SITE, PUBLISH_SITE_TOOL_NAME, type PublishSiteInput } from "./publish/publishContract.ts";
 
 /** Server key in the SDK `mcpServers` option → tool prefix `mcp__hypeproof__`. */
 export const HYPEPROOF_MCP_SERVER_NAME = "hypeproof";
@@ -93,6 +94,21 @@ export const MCP_CR_BROWSER_TOOLS = [
 export const MCP_VERIFY_CRITERION = "mcp__hypeproof__verify_criterion";
 export const MCP_VERIFY_PROPOSE = "mcp__hypeproof__verify_propose_criteria";
 export const MCP_CR_VERIFY_TOOLS = [MCP_VERIFY_CRITERION, MCP_VERIFY_PROPOSE] as const;
+
+/**
+ * One-click publish (src/publish/). Its own grant (`publishing` strategy
+ * `per_user_github_pages`, adults only — permittedMcpToolsFor), independent of the browser
+ * flag: a cohort may publish without the coach driving a browser, and vice versa.
+ */
+export { MCP_PUBLISH_SITE } from "./publish/publishContract.ts";
+
+/** Which parts of the server to register, derived from the tools the profile granted. */
+export function hypeproofMcpRegistration(permittedMcpTools: readonly string[]): { browser: boolean; publishSite: boolean } {
+  return {
+    browser: (MCP_BROWSER_TOOLS as readonly string[]).some((t) => permittedMcpTools.includes(t)),
+    publishSite: permittedMcpTools.includes(MCP_PUBLISH_SITE),
+  };
+}
 
 /** MCP CallToolResult content we produce (structural subset of the MCP SDK type). */
 export type McpContentBlock =
@@ -213,6 +229,11 @@ export interface BrowserMcpHost {
   crScope?(url: string): { ok: true } | { ok: false; reason: string };
   /** cr-verify — run `verify_criterion` / `verify_propose_criteria` (VerifySession). */
   verify?(name: string, input: Record<string, unknown>): Promise<McpToolResult>;
+  /**
+   * One-click publish — run the same pipeline the toolbar button runs and return its
+   * `PublishSiteResult` as JSON text. Optional: a host without it answers isError.
+   */
+  publishSite?(input: PublishSiteInput): Promise<McpToolResult>;
 }
 
 /**
@@ -558,7 +579,9 @@ export function buildHypeproofMcpServer(
   factory: SdkMcpFactory,
   z: ZodLike,
   host: BrowserMcpHost,
-  opts: { curriculumRuntime?: boolean } = {},
+  // `browser` defaults to true so existing callers keep today's server; sdkCoach passes the
+  // flags from hypeproofMcpRegistration so a publish-only cohort gets no browser tool.
+  opts: { curriculumRuntime?: boolean; browser?: boolean; publishSite?: boolean } = {},
 ): unknown {
   const browserOpen = factory.tool(
     BROWSER_OPEN_TOOL_DEF.name,
@@ -755,9 +778,57 @@ export function buildHypeproofMcpServer(
     );
   }
 
+  const publishTools: unknown[] = [];
+  if (opts.publishSite === true) {
+    publishTools.push(
+      factory.tool(
+        PUBLISH_SITE_TOOL_NAME,
+        PUBLISH_SITE_TOOL_DESCRIPTION,
+        {
+          repo_name: optionalSchema(z.string()),
+          custom_domain: optionalSchema(z.string()),
+          // `stage` is a string here and validated in the handler: the injected zod surface
+          // (ZodLike) has no enum, and an unknown stage must fall back to the safe default
+          // rather than make the whole server fail to build.
+          stage: optionalSchema(z.string()),
+          ...(typeof z.boolean === "function" ? { check_only: optionalSchema(z.boolean()) } : {}),
+        },
+        async (args: Record<string, unknown>) => {
+          if (!host.publishSite) return { content: [{ type: "text", text: "지금은 홈페이지 올리기를 쓸 수 없어요." }], isError: true };
+          return host.publishSite(publishInputFromArgs(args));
+        },
+      ),
+    );
+  }
+
+  const browserTools = opts.browser === false ? [] : [browserOpen, browserScreenshot, livePreviewStart, browserRead, browserClick, browserType, ...crTools];
   return factory.createSdkMcpServer({
     name: HYPEPROOF_MCP_SERVER_NAME,
     version: "1.0.0",
-    tools: [browserOpen, browserScreenshot, livePreviewStart, browserRead, browserClick, browserType, ...crTools],
+    tools: [...browserTools, ...publishTools],
   });
+}
+
+/**
+ * The model reads this description to decide when and how to call the tool. It restates the
+ * Service skill's contract (publish-homepage.md) in one place so a coach without that skill
+ * loaded still never claims an unverified address.
+ */
+export const PUBLISH_SITE_TOOL_DESCRIPTION =
+  "작업 폴더의 홈페이지를 참가자의 GitHub에 올린다(사전 검사·로그인·저장소·커밋·Pages·확인까지 매번 같은 순서). " +
+  "stage: \"save\" 는 저장만(Pages 끔, 예정 주소 planned_url), \"publish\"(기본)는 인터넷 주소까지 만든다. " +
+  "check_only: true 는 아무것도 올리지 않고 지금 상태만 본다. 결과 JSON 의 verified 가 true 일 때만 url 을 주소로 말한다. " +
+  "needs_user 가 있으면 그 코드를 참가자에게 보여 주고 참가자가 직접 입력하게 한다(대신 누르지 않는다). " +
+  "error 가 있으면 message_ko 와 next_action_ko 를 그대로 전한다.";
+
+/** Tool arguments → pipeline input. Unknown/invalid values become absent, never a guess. */
+export function publishInputFromArgs(args: Record<string, unknown>): PublishSiteInput {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const stage = args["stage"] === "save" ? "save" : args["stage"] === "publish" ? "publish" : undefined;
+  return {
+    ...(str(args["repo_name"]) ? { repo_name: str(args["repo_name"]) } : {}),
+    ...(str(args["custom_domain"]) ? { custom_domain: str(args["custom_domain"]) } : {}),
+    ...(args["check_only"] === true ? { check_only: true } : {}),
+    ...(stage ? { stage } : {}),
+  };
 }

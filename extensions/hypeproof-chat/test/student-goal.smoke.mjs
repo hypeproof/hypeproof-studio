@@ -347,6 +347,8 @@ function makeHost(context, profile, provider = proto) {
     refreshCrDirectorContext: async () => {},
     _instructorMode: { reset() {}, handleAutoReadResult() { return null; } },
     getCoach: () => ({ name: "코치", personality: "", configured: true }),
+    // postConfig asks whether the one-click publish button may show (src/publish/).
+    sitePublisher: () => ({ available: () => false }),
     post: async (msg) => { posts.push(msg); return true; },
     // Everything a completion, a step move or a record would go through. A goal save must reach none of them.
     spool: { recordWorkflow: (r) => effects.push(["spool", r.event]) },

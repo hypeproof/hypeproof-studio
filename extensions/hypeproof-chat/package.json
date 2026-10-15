@@ -180,6 +180,16 @@
         "enablement": "hypeproof-chat.curriculumRuntimeEnabled"
       },
       {
+        "command": "hypeproof-chat.publishSite",
+        "title": "HypeProof: 홈페이지 인터넷에 올리기",
+        "icon": "$(cloud-upload)",
+        "enablement": "hypeproof-chat.sitePublishEnabled"
+      },
+      {
+        "command": "hypeproof-chat.publishSiteUnregister",
+        "title": "HypeProof: 배포 등록 해제"
+      },
+      {
         "command": "hypeproof-chat.publishTestVersion",
         "title": "HypeProof: 사용자 테스트용으로 공개하기",
         "icon": "$(globe)",
@@ -260,6 +270,11 @@
           "group": "navigation@5"
         },
         {
+          "command": "hypeproof-chat.publishSite",
+          "when": "view == hypeproof-chat.panel && hypeproof-chat.sitePublishEnabled",
+          "group": "navigation@5"
+        },
+        {
           "command": "hypeproof-chat.testMyProduct",
           "when": "view == hypeproof-chat.panel && hypeproof-chat.curriculumRuntimeEnabled",
           "group": "navigation@6"
@@ -291,6 +306,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "hypeproof-chat.publishSite",
+          "when": "activeWebviewPanelId == 'hypeproof.start' && hypeproof-chat.sitePublishEnabled",
+          "group": "navigation@1"
+        },
         {
           "command": "hypeproof-chat.previewActiveFile",
           "when": "resourceExtname == .html || resourceExtname == .htm",
@@ -324,6 +344,14 @@
         {
           "command": "hypeproof-chat.publishTestVersion",
           "when": "hypeproof-chat.curriculumRuntimeEnabled"
+        },
+        {
+          "command": "hypeproof-chat.publishSite",
+          "when": "hypeproof-chat.sitePublishEnabled"
+        },
+        {
+          "command": "hypeproof-chat.publishSiteUnregister",
+          "when": "hypeproof-chat.sitePublishEnabled"
         },
         {
           "command": "hypeproof-chat.experimentEvidence",

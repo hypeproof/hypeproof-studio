@@ -48,6 +48,14 @@ export function StartPage() {
   const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
   // Leaving keeps a saved order: the host stops waiting and the choice list offers it again.
   const leavePurchase = () => { postToHost({ type: purchase?.order ? "purchaseHide" : "purchaseCancel" }); setEntry(null); };
+  // "GitHub에서 이어하기": only while a code is being confirmed.
+  const gh = state.candidate ? state.github : undefined;
+  const ghChoice = gh?.status === "found" && !!gh.repos?.length;
+  const ghBusy = gh?.status === "checking" || !!gh?.working;
+  const status = gh?.working === "download" ? "GitHub에서 홈페이지를 내려받고 있어요…"
+    : gh?.working === "signin" ? "GitHub 로그인 창에서 코드를 입력해 주세요."
+    : gh?.status === "checking" ? "GitHub에 올린 홈페이지가 있는지 확인하고 있어요…"
+    : state.checking ? "연결 정보를 확인하고 있습니다." : "";
 
   return <main className="studio-start">
     <header className="studio-top"><Brand/><nav className="studio-nav" aria-label="Studio 탐색"><button onClick={() => postToHost({ type: "openLocalReview" })}>나의 변화 기록</button><button onClick={() => postToHost({ type: "openStudioFiles" })}>파일</button><button onClick={() => postToHost({ type: "openStudioSettings" })}>설정</button></nav></header>
@@ -68,10 +76,12 @@ export function StartPage() {
         <p className="studio-card-description">{showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? "발급받은 참여 코드로 수업을 확인하세요." : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
         {state.profile && !editing ? <>
           <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
-          <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <span aria-hidden="true">↗</span></button>
+          {ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <span aria-hidden="true">↗</span></button>}
+          {gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
+          {gh?.status === "unavailable" && <p className="studio-help">GitHub에 올린 홈페이지를 확인하지 못했어요. 새로 시작해도 돼요.</p>}
           {/* #751 U2 — a quiet line under the one Primary (SX-02/04): the same list, from the same host read, as the work screen. */}
           {!state.candidate && <InstructorInbox inbox={state.inbox ?? null} post={postToHost} quiet />}
-          {state.candidate && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({type:"chooseActivityFolder"})}>다른 작업 폴더 선택</button>}
+          {state.candidate && !ghChoice && <button className="studio-text-button" disabled={state.checking || ghBusy} onClick={() => postToHost({type:"chooseActivityFolder"})}>다른 작업 폴더 선택</button>}
           <div className="studio-course-actions"><button className="studio-text-button" onClick={() => { setEditing(true); setEntry(null); setToken(""); }} disabled={state.checking}>다른 활동 선택</button><button className="studio-text-button" onClick={() => postToHost({ type: state.candidate ? "cancelCandidate" : "disconnectCourse" })} disabled={state.checking}>{state.candidate ? "선택 취소" : "연결 해제"}</button></div>
         </> : buying ? <div className="studio-purchase">
           {purchase?.stage === "waiting" || purchase?.stage === "connecting" ? <>
@@ -121,13 +131,42 @@ export function StartPage() {
         {!!state.activities?.length && !state.candidate && <nav aria-label="저장된 활동" className="studio-saved-activities"><h3>저장된 활동</h3>{state.activities.map(a => <button className="studio-text-button" key={a.ref} disabled={state.checking} onClick={() => postToHost({type:"selectActivity",ref:a.ref})}>{activityLabel(a.kind, a.pass)} · {a.name}<small>{a.workspace}</small></button>)}</nav>}
         {state.legacyConnection && !state.profile && <p className="studio-help">이전 연결은 이 기기에 보관돼 있습니다. 사용할 서버의 참여 코드를 다시 입력해 주세요.</p>}
         {state.legacyHistory && <button className="studio-text-button" disabled={state.checking} onClick={()=>postToHost({type:'exportLegacyHistory'})}>이전 기록 내보내기</button>}
-        <div aria-live="polite" role="status" className="studio-status">{state.checking ? "연결 정보를 확인하고 있습니다." : ""}</div>
+        <div aria-live="polite" role="status" className="studio-status">{status}</div>
         {state.error && <div className="studio-error" id="connection-error" role="alert">{state.error}{(state.previousConnected ?? (!state.candidate && !!state.profile)) && <p>기존 활동 연결은 유지됩니다.</p>}</div>}
         <div className="studio-card-footer">{buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 공개 가입은 아직 지원하지 않습니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
     <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <span aria-hidden="true">↗</span></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">MAKE · VERIFY · OWN</span></footer>
   </main>;
+}
+
+function pushedLabel(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : `${d.getMonth() + 1}월 ${d.getDate()}일에 올림`;
+}
+
+/**
+ * The seat's GitHub already holds a class site: continue it (the one Primary) or start new (a
+ * peer option, SX-04). Several sites → pick one; the most recently published is preselected.
+ */
+function GithubChoice({ github, checking }: { github: NonNullable<StartState["github"]>; checking: boolean }) {
+  const repos = github.repos ?? [];
+  const names = repos.map((r) => r.name).join("\n");
+  const [pick, setPick] = useState(repos[0]?.name ?? "");
+  useEffect(() => { if (!repos.some((r) => r.name === pick)) setPick(repos[0]?.name ?? ""); }, [names]);
+  const busy = checking || !!github.working;
+  return <div className="studio-github" role="group" aria-labelledby="studio-github-title">
+    <h3 id="studio-github-title">GitHub에 올린 홈페이지가 있어요</h3>
+    {repos.length > 1
+      ? <fieldset className="studio-repo-list" disabled={busy}>
+          <legend>이어서 만들 홈페이지를 고르세요</legend>
+          {repos.map((r) => <label key={r.name}><input type="radio" name="studio-github-repo" value={r.name} checked={pick === r.name} onChange={() => setPick(r.name)} /><span>{r.name}</span><small>{pushedLabel(r.pushedAt)}</small></label>)}
+        </fieldset>
+      : <p className="studio-repo-one"><span>{repos[0]?.name}</span><small>{pushedLabel(repos[0]?.pushedAt ?? "")}</small></p>}
+    <button className="studio-primary" disabled={busy || !pick} aria-busy={github.working === "download"} onClick={() => postToHost({ type: "continueFromGithub", repo: pick })}>{github.working === "download" ? "내려받는 중…" : "GitHub에서 이어하기"} <span aria-hidden="true">↗</span></button>
+    <button className="studio-choice" disabled={busy} onClick={() => postToHost({ type: "startNew" })}>새로 하기 <span aria-hidden="true">→</span></button>
+    <p className="studio-help">이어하기는 고른 홈페이지를 이 컴퓨터로 내려받아 이어서 만들어요. 새로 하기는 새 폴더{github.newFolder ? `(${github.newFolder})` : ""}에서 시작하고, 올릴 때 새 저장소를 만들어요.</p>
+  </div>;
 }
 
 export function DisconnectedChat({ open, coachName }: { open: () => void; coachName?: string }) {

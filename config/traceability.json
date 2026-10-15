@@ -4913,6 +4913,142 @@
           "path": "scripts/test/bootstrap-service-packages.test.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-PUBLISH",
+      "stage": "requirement",
+      "owner": "JeHyeong2",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## P. 배포 자동화 (코치 스킬 · #431 결과물 2번)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PUBLISH",
+      "stage": "test",
+      "owner": "JeHyeong2",
+      "depends_on": [
+        "ST-REQ-PUBLISH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/publish-site.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/publish-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/publish-integration.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/github-continue.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/mock-github.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PUBLISH",
+      "stage": "implementation",
+      "owner": "JeHyeong2",
+      "depends_on": [
+        "ST-REQ-PUBLISH",
+        "ST-TEST-PUBLISH"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/publish/customDomain.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/githubApi.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/githubAuth.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/githubContinue.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/pagesPublisher.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishConfig.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishRegistry.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/publishSite.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/publish/sitePreflight.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-SEMINAR-SURFACE",
+      "stage": "requirement",
+      "owner": "JeHyeong2",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Service-gated seminar surface (hype-dental, 2026-10)"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SEMINAR-SURFACE",
+      "stage": "test",
+      "owner": "JeHyeong2",
+      "depends_on": [
+        "ST-REQ-SEMINAR-SURFACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/classroom-panels.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/tool-activity.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/attached-images.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SEMINAR-SURFACE",
+      "stage": "implementation",
+      "owner": "JeHyeong2",
+      "depends_on": [
+        "ST-REQ-SEMINAR-SURFACE",
+        "ST-TEST-SEMINAR-SURFACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/classroomPanels.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/toolActivity.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/attachedImages.ts"
+        }
+      ]
     }
   ]
 }
