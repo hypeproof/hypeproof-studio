@@ -3,5 +3,10 @@
   "release_check": {
     "enforced": false,
     "smoke_check_prefix": "scripts/release/smoke/checks/"
+  },
+  "hotfix": {
+    "base_prefix": "hotfix/",
+    "label": "hotfix",
+    "forward_label": "hotfix-forward"
   }
 }

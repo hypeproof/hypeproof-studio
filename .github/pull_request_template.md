@@ -42,6 +42,8 @@ The release manager reads the first line, so keep "How to verify" first.
 Answer yes for Smoke when this adds a dependency on another repository or a server
 (Service, Chalk, ...). If the issue answered "Smoke needed?" with yes and you answer no,
 add a line "Smoke differs from issue" with the reason.
+Hotfix PR (base hotfix/<tag>): How to verify may be left out; the Smoke lines are still required.
+Port of a hotfix to main: add a line "Forward-port of #<hotfix PR>".
 Enforced by hype-pr once config/pr-body-contract.json sets release_check.enforced.
 -->
 
