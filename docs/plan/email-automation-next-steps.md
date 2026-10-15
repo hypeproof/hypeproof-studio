@@ -5,6 +5,19 @@ implementation and delivery with minimal approval interruptions. Exact email
 content approval and required external permission/release gates still apply.
 Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-023.
 
+Current checkpoint (2026-10-16): the overall development/test ceiling is USD10.
+An additional USD1 recipient allocation is verified and selected in Windows;
+combined maximum exposure at allocation was USD3.972794. On native Windows
+e3ab008b, the distinct recipient imported the Mac-authored store recipe, reused
+its saved Google connection and private one-row test Sheet, and completed the
+Google Apps Script preview with an explicit no-send instruction. The native
+workflow reached6/6. Evidence: `/tmp/hps-email-mvp/windows-store-preview-20261016-safe.png`.
+The private Service version is673c20d1 with the exact tool-admission repair;
+public production remains unchanged at100%. Remaining gates include a fresh
+post-preview restart, the third-user native lifecycle, newer version/update/
+rollback acceptance, canonical operations migration and the expanded WAJ build.
+Earlier dated snapshots below are historical, not the current Windows status.
+
 ## Goal extension: integrated skill store — 2026-10-15
 
 DEC-025 adds an explicit completion gate to the active objective: after feature
@@ -99,7 +112,7 @@ prior exposure plus the full new pool remainsUSD2.972794. At20:58KST, native
 author/recipient work has settledUSD0.113022 across the pool, held0 and
 overrun0. The author spentUSD0.060136, first recipientUSD0.026030 and
 third principalUSD0.026856. Pool remaining isUSD0.886978.
-No limit increased and no usage/token reset occurred. This does not provision the
+The pool figures above predate the approved USD10 ceiling and additional USD1 allocation; no usage/token reset occurred. This does not provision the
 real20-person class budget. Preserve the native publication for Windows reuse.
 
 A20:14KST default Service deployment removed the pilot zero-percent version.

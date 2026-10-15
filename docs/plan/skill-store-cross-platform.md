@@ -660,3 +660,17 @@ Source installer fixtures (including actual app/SDK archives), gateway routing a
 The installed e3ab008b client advertised `mcp__hypeproof_email__skill_unpublish`, while the private Service admission list omitted it. This rejected even store discovery with403 before a provider request. Service8733539 adds exactly the existing owner-only tool under the existing email-automation entitlement; missing-feature and unknown-tool cases still fail before reservation. Budget admission, typecheck and build pass. The private runtime preserves the accepted Apps Script overlay and plan approvals over ffef7bc plus this fix (version673c20d1); current productiond34da3a5 remains100%, private test0%. Gateway94c6b553 uses that pin, and temporary tool-name diagnostics were removed. Windows now completed actual store list and reached the import review card for the Mac-authored target. Windows host confirmation then completed import of the exact Mac-authored recipe a1370573-7db3-4083-9224-49782bf5a315. The native reply and tool result confirmed installation without Google/Sheet configuration or mail. Evidence: `/tmp/hps-email-mvp/windows-store-import-20261016-safe.png`. Recipient Google execution remains pending.
 
 User-approved development/test ceiling is now USD10, including historical spending/holds. An additional USD1 Windows-recipient allocation was read back; maximum combined exposure was USD3.972794 at allocation time. This is separate from the real-class budget.
+
+### Windows recipient preview — 2026-10-16
+
+The recipient selected the additional USD1 entitlement in the native app and
+requested existing Google connection reuse, private test-roster preview and no
+mail. The host tools reused the saved Google connection and one-row Sheet,
+prepared the Apps Script runner, and displayed the Google-generated preview for
+one recipient. After the user-facing preview acknowledgment, native e3ab008b
+reported6/6 and explicitly confirmed no mail was sent. This extends the import
+evidence to actual recipient execution using retained private configuration.
+Evidence: `/tmp/hps-email-mvp/windows-store-preview-20261016-safe.png`.
+The installation/profile repair preserved this configuration; a fresh restart
+after this preview and the complete three-account update/rollback lifecycle
+remain unverified. It does not establish the expanded WAJ web-app deployment.
