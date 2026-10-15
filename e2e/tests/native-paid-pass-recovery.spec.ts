@@ -27,6 +27,19 @@ async function grantState() {
   }>;
 }
 
+async function settledGrantState(phase: 'before' | 'after', minimumUsed: number) {
+  let state: Awaited<ReturnType<typeof grantState>> | undefined;
+  await expect.poll(async () => {
+    state = await grantState();
+    writeFileSync(join(output, `grant-${phase}.json`), JSON.stringify(state, null, 2));
+    const grant = state.grants[0];
+    return state.grants.length === 1 && !grant.busy && grant.requests_used >= minimumUsed
+      && Object.keys(state.request_statuses).length === 1
+      && state.request_statuses.completed === grant.requests_used;
+  }, { timeout: 30_000, intervals: [100, 250, 1000] }).toBe(true);
+  return state!;
+}
+
 async function encryptedStorage(ctx: AppContext) {
   return ctx.app.evaluate(({ app, safeStorage }) => ({ name: app.getName(), encrypted: safeStorage.isEncryptionAvailable() }));
 }
@@ -116,6 +129,7 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     const input = chat.getByRole('textbox', { name: /보낼 메시지/ });
     await input.fill(`합성 복구 검사입니다. 현재 작업 폴더에 recovery-marker.txt 파일을 만들고 내용은 ${marker} 한 줄만 넣어 주세요. 저장 뒤 다시 읽어 확인하세요. 셸, 브라우저, 외부 전송은 사용하지 마세요.`);
     await input.press('Enter');
+    await expect(chat.locator('.hps-btn-stop')).toBeVisible({ timeout: 10_000 });
     const file = join(ctx.wsDir, 'recovery-marker.txt');
     await expect.poll(() => existsSync(file), { timeout: 180_000, intervals: [1000, 3000] }).toBe(true);
     await expect(chat.locator('.hps-btn-stop')).toHaveCount(0, { timeout: 180_000 });
@@ -125,13 +139,12 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     expect(firstAssistantText).toContain(marker);
     const retainedBytes = readFileSync(file);
     expect(retainedBytes.toString('utf8').trim()).toBe(marker);
-    const before = await grantState();
+    const before = await settledGrantState('before', 1);
     expect(before.grants).toHaveLength(1);
     expect(before.grants[0]).toMatchObject({ profile_id: 'synthetic-release-acceptance', duration_ms: 7200000, request_limit: 8, revoked: false, busy: false });
     expect(before.grants[0].requests_used).toBeGreaterThan(0);
     expect(Object.keys(before.request_statuses)).toEqual(['completed']);
     expect(before.request_statuses.completed).toBe(before.grants[0].requests_used);
-    writeFileSync(join(output, 'grant-before.json'), JSON.stringify(before, null, 2));
     const userDataDir = ctx.userDataDir;
     await ctx.app.close();
     const pausedAt = new Date().toISOString();
@@ -171,14 +184,16 @@ test('paid pass survives a real offline restart without code re-entry', async ()
     await expect(chat.locator('.hps-msg-user').filter({ hasText: 'recovery-marker.txt' }).first()).toContainText(firstUserText);
     await expect(chat.locator('.hps-msg-assistant').filter({ hasText: marker }).first()).toContainText(firstAssistantText);
     expect(readFileSync(file)).toEqual(retainedBytes);
+    const previousAssistantCount = await chat.locator('.hps-msg-assistant').count();
     const recoveredInput = chat.getByRole('textbox', { name: /보낼 메시지/ });
     await recoveredInput.fill('recovery-marker.txt를 읽고 파일에 실제로 있는 한 줄만 그대로 답해 주세요. 파일을 바꾸지 말고 셸, 브라우저, 외부 전송은 사용하지 마세요.');
     await recoveredInput.press('Enter');
+    await expect(chat.locator('.hps-btn-stop')).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => chat.locator('.hps-msg-assistant').count(), { timeout: 180_000 }).toBeGreaterThan(previousAssistantCount);
+    await expect(chat.locator('.hps-msg-assistant').last()).toContainText(marker, { timeout: 180_000 });
     await expect(chat.locator('.hps-btn-stop')).toHaveCount(0, { timeout: 180_000 });
-    await expect(chat.locator('.hps-msg-assistant').last()).toContainText(marker);
     expect(readFileSync(file)).toEqual(retainedBytes);
-    const after = await grantState();
-    writeFileSync(join(output, 'grant-after.json'), JSON.stringify(after, null, 2));
+    const after = await settledGrantState('after', before.grants[0].requests_used + 1);
     expect(after.grants).toHaveLength(1);
     expect(after.grants[0].grant_fingerprint).toBe(before.grants[0].grant_fingerprint);
     expect(after.grants[0].started_at).toBe(before.grants[0].started_at);
