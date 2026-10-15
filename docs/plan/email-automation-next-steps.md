@@ -8,10 +8,11 @@ Scope: Epic1603 / issue1604, Studio1605 / Service50 / Ops2, EA-01–11 and DEC-0
 Current checkpoint (2026-10-16): the overall development/test ceiling is USD10.
 The original additional USD1 allocation was selected by `peer` in Windows.
 A further USD1 allocation for non-owner `original` is now created and verified;
-its native selection is pending. The latest conservative exposure bound is
-USD6.972794, including historical charges/holds and active allocations. This
-overcounts shared fallback views and is not actual spending; retain that
-conservative bound until account-level reconciliation. Both increments are
+its native selection and no-send preview have passed. Reconciliation against
+unique active root budgets gives an exposure upper bound of USD4.972794:
+USD3 in active root grants plus USD1.972794 historical charges/unresolved holds.
+The earlier USD6.972794 bound double-counted shared fallback views. Neither
+figure is actual spending. Evidence: `/tmp/hps-email-mvp/reconciled-budget-20261016.json`. Both increments are
 within the total USD10 authorization. On native Windows
 e3ab008b, test principal `peer` imported the Mac-authored store recipe, reused
 its saved Google connection and private one-row test Sheet, and completed the
@@ -322,3 +323,6 @@ remains pending. Receipt: `/tmp/hps-email-mvp/raised-recipient-budget-20261016-r
 
 
 Non-owner Windows checkpoint (2026-10-16,02:12KST): native e3ab008b opened the explicitly selected `original` principal in a new `StoreOriginalRecipient` workspace. The live store returned `mine=false` for peer-owned publication a1370573-7db3-4083-9224-49782bf5a315. The host displayed the inert template review and installed it after confirmation. The activity reused its existing Google connection and one-row Sheet; Apps Script preparation and a reviewed no-send preview reached6/6 with the imported subject/body. No other activity settings were copied and no mail was sent. This establishes non-owner Studio-principal import and useful preview. Distinct underlying Google identities between author and recipient are not yet verified; do not infer them from separate Studio principals. Candidate659de97d upgrade and native revision/update/rollback remain pending. Evidence: `/tmp/hps-email-mvp/windows-original-import-20261016-safe.png` and `/tmp/hps-email-mvp/windows-original-preview-20261016-safe.png`.
+
+
+Native upgrade checkpoint (2026-10-16,02:19KST): the existing Windows installer fetched both candidate659de97d archives, verified them, reused SDK0.3.299 and migrated the prior portable profile. Read-only installed receipt and process checks show build659de97d, appSHA503517c347224672630822ead80091d616517624c4ab1d57cc2af9d4ee4cfee9, ProfileMigrated=True, RollbackRetained=True and ActiveBuild=True. The original non-owner activity, workspace and conversation were restored. After selecting its existing test grant, Apps Script preparation and a fresh one-recipient no-send preview completed6/6 without login, retaining the imported template and activity-bound Google/Sheet configuration. The model could reuse verified saved configuration; the quest restored prerequisites only after successful fresh execution. No new mail. Native recipe revision publication/update/rollback and distinct underlying Google identity verification remain open. Evidence: `/tmp/hps-email-mvp/windows-upgrade-659de97d-receipt-safe.png` and `/tmp/hps-email-mvp/windows-original-upgrade-preview-659de97d-safe.png`.
