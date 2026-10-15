@@ -752,13 +752,14 @@ if (!status.available) {
   assert.deepEqual(plain(E(consult("running", "🔎 검토 도우미 · Claude Haiku 5.5 — 묻는 중"))), { id: "consult:c1", icon: "🔎", label: "검토 도우미 · Claude Haiku 5.5 — 묻는 중", state: "running", at: 1000 });
   assert.deepEqual(plain(E(consult("done", "🔎 검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개"))), { id: "consult:c1", icon: "🔎", label: "검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개", state: "done", at: 1000 });
   assert.equal(E(consult("error", "🔎 검토 도우미 · Claude Haiku 5.5 — 횟수를 다 씀")).state, "error");
-  // The site check: one line per page per turn, the latest verdict in place; only 통과 is ✓.
+  // The site check: one line per page per turn, the latest verdict in place. `done` whatever the
+  // verdict (spec §5.2's table): the label says 통과, 넘침 or 미확인; error is for lines the learner acts on.
   const pass = E(check("site_check", "pass", "📏 390·1280px 확인 — 통과", "📏"));
   const fail = E({ ...check("site_check", "fail", "📏 390px에서 2곳 넘침", "📏"), id: "check:site_check:2" });
   const unverified = E(check("site_check", "unverified", "📏 미확인(미리보기 꺼짐)", "📏"));
   assert.deepEqual([pass.id, fail.id, unverified.id], ["check:site_check:turn-1:index.html", "check:site_check:turn-1:index.html", "check:site_check:turn-1:index.html"]);
   assert.deepEqual([pass.label, fail.label, unverified.label], ["390·1280px 확인 — 통과", "390px에서 2곳 넘침", "미확인(미리보기 꺼짐)"]);
-  assert.deepEqual([pass.state, fail.state, unverified.state], ["done", "error", "error"]);
+  assert.deepEqual([pass.state, fail.state, unverified.state], ["done", "done", "done"]);
   assert.notEqual(E(check("site_check", "pass", "📏 390·1280px 확인 — 통과", "📏", "about.html")).id, pass.id, "another page, another line");
   assert.notEqual(P.orchestratorToolEntry(check("site_check", "pass", "📏 390·1280px 확인 — 통과", "📏"), "turn-2").id, pass.id, "another turn, another line");
   // The archive: its own line. The diff: none (the coach reads it in the save's result).
@@ -792,7 +793,7 @@ if (!status.available) {
   await P.ChatPanelProvider.prototype.clearHistory.call(clearHost);
   assert.equal(clearHost.orchestratorState, undefined, "cleared: the next turn starts a new session");
   fakeVscode.window.showWarningMessage = async () => undefined;
-  ok("timeline: one consult line in place (icon not repeated), one site-check line per page per turn with only 통과 as ✓, one archive line, the busy notice, no diff line; the learner's goal text; one session per seat, reset by 대화 지우기");
+  ok("timeline: one consult line in place (icon not repeated), one site-check line per page per turn whose label carries the verdict, one archive line, the busy notice, no diff line; the learner's goal text; one session per seat, reset by 대화 지우기");
 
   // ── The real runSdkCoach with the panel's host arguments ──
   const { sdkToolToActionRequest } = await import("../src/sdkCoachHelpers.ts");
@@ -1115,12 +1116,12 @@ if (status.available) {
   assert.deepEqual(shown, [
     "🔎검토 도우미 · Claude Haiku 5.5 — 고칠 곳 2개✓ [done]",
     "📏390·1280px 확인 — 통과✓ [done]",
-    "📏390px에서 2곳 넘침⚠️ [error]",
-    "📏미확인(미리보기 꺼짐)⚠️ [error]",
+    "📏390px에서 2곳 넘침✓ [done]",
+    "📏미확인(미리보기 꺼짐)✓ [done]",
     "🗂이전 버전 보관 (.hypeproof/history) — index-20261015-101500.html✓ [done]",
   ]);
   assert.doesNotMatch(panel, /🔎\s*🔎|📏\s*📏|🗂\s*🗂/, "no icon twice");
-  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 9 old screens; the timeline renders consult, check and archive lines with one icon each, ✓ only for 통과");
+  ok("details: each request row names its agent before the model (코치 · / 검토 도우미 · / 보조 작업 ·), from the Service's title, the roster's, or the wire name; rows without agents read exactly as today (control); a served roster alone changes none of the 9 old screens; the timeline renders consult, check and archive lines with one icon each, the verdict in the label");
 } else {
   console.log(`NOT RUN orchestrator panel details/timeline renders — ${status.detail}`);
 }

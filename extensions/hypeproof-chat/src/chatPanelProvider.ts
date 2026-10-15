@@ -317,12 +317,14 @@ export function orchestratorToolEntry(event: OrchestratorEvent, turnId: string):
   }
   if (event.name === "diff") return null;
   if (event.name === "site_check") {
-    // 통과 is the only ✓: a failure or an unmeasured page reads ⚠️ (no claim it did not observe).
+    // `done` whatever the verdict (spec §5.2's table): the check ran, and the label says what it
+    // found, 통과 or 넘침 or 미확인 — never a pass it did not measure. The error state is for a line
+    // the learner must act on (#746 B4); a failing page is the coach's to fix.
     return {
       id: `check:site_check:${turnId}:${event.path}`,
       icon: event.icon,
       label: withoutIcon(event.label, event.icon),
-      state: event.verdict === "pass" ? "done" : "error",
+      state: "done",
       ...at,
     };
   }
