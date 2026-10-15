@@ -75,11 +75,11 @@ ok("tool name: mcp__hypeproof__publish_site, classified");
 // ── arguments → input: invalid values become absent, never guessed ───────────
 {
   assert.deepEqual(publishInputFromArgs({}), {});
-  assert.deepEqual(publishInputFromArgs({ repo_name: " boa-dental ", stage: "save", check_only: true, custom_domain: "boa.kr" }), {
-    repo_name: "boa-dental",
+  assert.deepEqual(publishInputFromArgs({ repo_name: " dental-demo ", stage: "save", check_only: true, custom_domain: "dental-demo.kr" }), {
+    repo_name: "dental-demo",
     stage: "save",
     check_only: true,
-    custom_domain: "boa.kr",
+    custom_domain: "dental-demo.kr",
   });
   assert.deepEqual(publishInputFromArgs({ stage: "deploy", check_only: "true", repo_name: "" }), {}, "unknown stage → default; string 'true' is not true");
   ok("arguments: exact input contract");
@@ -93,9 +93,9 @@ ok("tool name: mcp__hypeproof__publish_site, classified");
   assert.equal(evaluateSdkToolUse({ toolName: MCP_PUBLISH_SITE, input: { check_only: true }, permittedTools: permitted }).decision, "allow", "a status check uploads nothing");
   assert.equal(evaluateSdkToolUse({ toolName: MCP_PUBLISH_SITE, input: {}, permittedTools: [] }).decision, "deny", "not granted → denied");
   assert.equal(evaluateSdkToolUse({ toolName: MCP_PUBLISH_SITE, input: {}, permittedTools: [] }).drift, undefined, "a routine denial, not drift");
-  const req = sdkToolToActionRequest({ toolName: MCP_PUBLISH_SITE, input: { repo_name: "boa-dental" } });
+  const req = sdkToolToActionRequest({ toolName: MCP_PUBLISH_SITE, input: { repo_name: "dental-demo" } });
   assert.equal(req.kind, "publishSite");
-  assert.deepEqual(req.payload, { repo_name: "boa-dental", stage: "publish" });
+  assert.deepEqual(req.payload, { repo_name: "dental-demo", stage: "publish" });
   assert.equal(sdkToolToActionRequest({ toolName: MCP_PUBLISH_SITE, input: { stage: "save" } }).payload.stage, "save");
   ok("policy: publish/save ask (own kind), check_only allowed, ungranted denied");
 }
@@ -129,11 +129,11 @@ ok("budget: below the stall watchdog");
 // ── the transcript line never calls an unverified address verified ───────────
 {
   const steps = [{ id: "verify", status: "pending", detail_ko: "아직 확인 중" }];
-  const pending = resultChatText({ ok: true, verified: false, repo_name: "boa-dental", planned_url: "https://o.github.io/boa-dental/", steps });
+  const pending = resultChatText({ ok: true, verified: false, repo_name: "dental-demo", planned_url: "https://o.github.io/dental-demo/", steps });
   assert.doesNotMatch(pending, /확인했어요: /);
   assert.match(pending, /예정 주소/);
-  const done = resultChatText({ ok: true, verified: true, url: "https://o.github.io/boa-dental/", repo_name: "boa-dental", steps });
-  assert.match(done, /열리는 것을 확인했어요: https:\/\/o\.github\.io\/boa-dental\//);
+  const done = resultChatText({ ok: true, verified: true, url: "https://o.github.io/dental-demo/", repo_name: "dental-demo", steps });
+  assert.match(done, /열리는 것을 확인했어요: https:\/\/o\.github\.io\/dental-demo\//);
   ok("chat transcript: verified wording only when verified");
 }
 
@@ -145,23 +145,23 @@ ok("budget: below the stall watchdog");
   const store = { get: (k) => backing.get(k), update: async (k, v) => void backing.set(k, JSON.parse(JSON.stringify(v))) };
   let t = 1000;
   const a = new PublishRegistry(store, () => t++);
-  assert.equal(a.isRegistered("JeHyeong2", "boa-dental"), false, "nothing registered at first");
-  await a.register("JeHyeong2", "boa-dental");
+  assert.equal(a.isRegistered("JeHyeong2", "dental-demo"), false, "nothing registered at first");
+  await a.register("JeHyeong2", "dental-demo");
   await a.setLastLogin("JeHyeong2");
   const b = new PublishRegistry(store); // next app session
-  assert.equal(b.isRegistered("jehyeong2", "Boa-Dental"), true, "persisted, case-insensitive like GitHub names");
+  assert.equal(b.isRegistered("jehyeong2", "Dental-Demo"), true, "persisted, case-insensitive like GitHub names");
   assert.equal(b.lastLogin(), "JeHyeong2");
-  assert.equal(b.isRegistered("someone-else", "boa-dental"), false, "another account on the same Mac asks again");
+  assert.equal(b.isRegistered("someone-else", "dental-demo"), false, "another account on the same Mac asks again");
   assert.equal(b.isRegistered("JeHyeong2", "other-site"), false, "another repository asks again");
   await b.register("JeHyeong2", "other-site");
-  assert.deepEqual(b.list().map((r) => r.repo), ["boa-dental", "other-site"]);
-  assert.equal(await b.unregister("JeHyeong2", "boa-dental"), 1);
-  assert.equal(new PublishRegistry(store).isRegistered("JeHyeong2", "boa-dental"), false, "reset persists too");
+  assert.deepEqual(b.list().map((r) => r.repo), ["dental-demo", "other-site"]);
+  assert.equal(await b.unregister("JeHyeong2", "dental-demo"), 1);
+  assert.equal(new PublishRegistry(store).isRegistered("JeHyeong2", "dental-demo"), false, "reset persists too");
   assert.equal(await b.unregister("JeHyeong2", "missing"), 0);
   assert.equal(await b.unregister(), 1, "reset all");
   assert.deepEqual(backing.get(REGISTRY_KEY), {});
-  const p = registrationPrompt("JeHyeong2", "boa-dental");
-  assert.equal(p.title, "이 저장소(JeHyeong2/boa-dental)에 홈페이지를 공개합니다 — 이후 버튼을 누르면 확인 없이 바로 올라갑니다");
+  const p = registrationPrompt("JeHyeong2", "dental-demo");
+  assert.equal(p.title, "이 저장소(JeHyeong2/dental-demo)에 홈페이지를 공개합니다 — 이후 버튼을 누르면 확인 없이 바로 올라갑니다");
   assert.match(p.detail, /배포 등록 해제/);
   ok("registration: persisted per login+repo across sessions, reset one/all");
 }
@@ -188,9 +188,9 @@ ok("budget: below the stall watchdog");
   // The last push is remembered for the divergence check.
   const backing = new Map();
   const reg = new PublishRegistry({ get: (k) => backing.get(k), update: async (k, v) => void backing.set(k, v) });
-  await reg.register("JeHyeong2", "boa-dental", "/ws/clinic");
-  await reg.recordPush("JeHyeong2", "boa-dental", "abc123", "/ws/clinic");
-  assert.equal(reg.get("jehyeong2", "boa-dental").lastPushedSha, "abc123");
+  await reg.register("JeHyeong2", "dental-demo", "/ws/clinic");
+  await reg.recordPush("JeHyeong2", "dental-demo", "abc123", "/ws/clinic");
+  assert.equal(reg.get("jehyeong2", "dental-demo").lastPushedSha, "abc123");
   await reg.recordPush("nobody", "x", "zzz");
   assert.equal(reg.get("nobody", "x"), undefined, "a push never creates a registration");
   ok("token gate: every press asks the Service; a registration never replaces the token");

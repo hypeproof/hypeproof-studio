@@ -221,7 +221,7 @@ export function classFolderCheck(args: {
 /**
  * Lowercase kebab slug, ≤ 30 chars. Narrower than what GitHub accepts on purpose: the name is
  * the URL path the clinic prints on flyers (`<login>.github.io/<slug>/`), and GitHub would
- * accept `Boa.Dental_` and then serve it case-sensitively — the exact class of "works when I
+ * accept `Dental.Demo_` and then serve it case-sensitively — the exact class of "works when I
  * type it, 404 when a patient types it" this feature exists to remove.
  */
 export const REPO_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -231,7 +231,7 @@ export function validateRepoName(name: string): { ok: true } | { ok: false; mess
   if (!name) return { ok: false, message: "저장소 이름이 비어 있어요." };
   if (name.length > REPO_NAME_MAX) return { ok: false, message: `저장소 이름은 ${REPO_NAME_MAX}자까지 쓸 수 있어요.` };
   if (!REPO_NAME_PATTERN.test(name)) {
-    return { ok: false, message: "저장소 이름은 영어 소문자·숫자·하이픈(-)만 쓸 수 있어요. 예: boa-dental" };
+    return { ok: false, message: "저장소 이름은 영어 소문자·숫자·하이픈(-)만 쓸 수 있어요. 예: dental-demo" };
   }
   return { ok: true };
 }
@@ -254,7 +254,7 @@ export function resolveRepoName(input: string | undefined, profileDefault: strin
 const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /**
- * Normalize a participant-typed domain ("https://www.Boa-Dental.co.kr/" → "www.boa-dental.co.kr")
+ * Normalize a participant-typed domain ("https://www.Dental-Demo.co.kr/" → "www.dental-demo.co.kr")
  * or refuse it. Scheme and a trailing slash are forgiven because that is how people copy a
  * domain out of a browser; a path, port, IP literal, wildcard or a `github.io` name is refused
  * because none of them can be a Pages custom domain.
