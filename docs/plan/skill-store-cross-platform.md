@@ -18,9 +18,23 @@ The matching Windows fd6f276e package is built locally on official shell720be661
 and SDK0.3.299, with unchanged approved Google runner configuration. App SHA256
 is58998211f36da5b7d2e92e72c55cd562c59ab962986235cc4e6e9aed9f080a69;
 SDK SHA256 remains24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e.
-`/tmp/hps-email-mvp/windows-current-fd6f276e/candidate.json` records preparation
-only. Upload/readback, installer pin update and actual Windows upgrade/reuse are
-not yet performed; Windows and the download gateway remain on db049d62.
+Both full archive readbacks and the final manifest match their pins. Installer
+7f6868f3 passes18 CI checks and actual archive/profile/refusal fixtures. Private
+gatewayfe77eec4 serves fd6f276e, retaining Servicea245457b and bounded classroom
+routes;23 online access/manifest/HEAD/script checks pass for the three existing
+Studio principals. Native Windows update to fd6f276e completed: the source receipt,
+portable migration from db049d62 and rollback snapshot/shortcut were observed.
+The original recipient activity and existing funding reopened, and the newly
+republished Mac fork873e2439 was imported through its actual private review.
+The saved recipient Google/Sheet settings produced one fresh private preview
+without login or send; after confirmation the graph reached6/6. The subsequent
+coach response hit provider429. Online instructor readback independently records
+automation completed6/6 and attention blocked/provider_rate_limit; this is not
+a budget-exhaustion diagnosis or an error-free final conversation. Evidence:
+`/tmp/hps-email-mvp/windows-upgrade-fd6f276e.json` and
+`/tmp/hps-email-mvp/windows-fork-preview-fd6f276e-safe.png`.
+Evidence: `/tmp/hps-email-mvp/windows-current-fd6f276e/{r2-upload,deployment,access}-receipt.json`.
+No production Service/database change or additional grant was made.
 
 
 Updated 2026-10-16. Sponsor: TJ. DEC-025 extends the active delivery goal;

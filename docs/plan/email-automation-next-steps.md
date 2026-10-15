@@ -30,9 +30,23 @@ The matching Windows fd6f276e package is built locally on official shell720be661
 and SDK0.3.299, with unchanged approved Google runner configuration. App SHA256
 is58998211f36da5b7d2e92e72c55cd562c59ab962986235cc4e6e9aed9f080a69;
 SDK SHA256 remains24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e.
-`/tmp/hps-email-mvp/windows-current-fd6f276e/candidate.json` records preparation
-only. Upload/readback, installer pin update and actual Windows upgrade/reuse are
-not yet performed; Windows and the download gateway remain on db049d62.
+Both full archive readbacks and the final manifest match their pins. Installer
+7f6868f3 passes18 CI checks and actual archive/profile/refusal fixtures. Private
+gatewayfe77eec4 serves fd6f276e, retaining Servicea245457b and bounded classroom
+routes;23 online access/manifest/HEAD/script checks pass for the three existing
+Studio principals. Native Windows update to fd6f276e completed: the source receipt,
+portable migration from db049d62 and rollback snapshot/shortcut were observed.
+The original recipient activity and existing funding reopened, and the newly
+republished Mac fork873e2439 was imported through its actual private review.
+The saved recipient Google/Sheet settings produced one fresh private preview
+without login or send; after confirmation the graph reached6/6. The subsequent
+coach response hit provider429. Online instructor readback independently records
+automation completed6/6 and attention blocked/provider_rate_limit; this is not
+a budget-exhaustion diagnosis or an error-free final conversation. Evidence:
+`/tmp/hps-email-mvp/windows-upgrade-fd6f276e.json` and
+`/tmp/hps-email-mvp/windows-fork-preview-fd6f276e-safe.png`.
+Evidence: `/tmp/hps-email-mvp/windows-current-fd6f276e/{r2-upload,deployment,access}-receipt.json`.
+No production Service/database change or additional grant was made.
 
 Integration checkpoint11b82da2 includes main6ad5f9f8; implementation, installer8ba30b73 and
 documentation checkpoint36dc4401 pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
@@ -287,13 +301,13 @@ silently interpret the workshop grant as paid recurring subscription consent.
 
 | Area | Verified current evidence | Remaining boundary |
 | --- | --- | --- |
-| Source/main integration | Studio fd6f276e contains main6ad5f9f8 and passes18 CI checks. Servicefa7472b passes13 CI checks. Installer882be60a still pins db049d62. | Draft PRs; human-only merge under DEC-022. |
-| Isolated deployment | Servicea245457b, gateway893165ad and Ops62ab5b8 canonical0046/0047 support the test environment. Backups and integrity/readback receipts are retained. | No production database migration or general release is claimed. |
+| Source/main integration | Studio fd6f276e contains main6ad5f9f8 and passes18 CI checks. Servicefa7472b passes13 CI checks. Installer7f6868f3 pins fd6f276e and passes18 CI checks. | Draft PRs; human-only merge under DEC-022. |
+| Isolated deployment | Servicea245457b, gatewayfe77eec4 and Ops62ab5b8 canonical0046/0047 support the test environment. Backups and integrity/readback receipts are retained. | No production database migration or general release is claimed. |
 | Mac | One Dev app runs fd6f276e. Native argument correction and withdrawn-intent recovery reach a fresh reviewed publication; three-principal readback confirms contents, owner/source and old-ID denial. | TJ Google callback expired; fresh third-principal execution remains open. Dev uses memory-only secrets. |
-| Windows | db049d62 on official shell720be661/SDK0.3.299: authenticated exact archive install, saved activity restoration, actual portable rollback to11b82da2, return to the new build and fresh non-owner fork preview6/6 all pass. | This is the private pilot package. Shared-roaming-profile snapshot restoration and20-seat bandwidth are not verified. |
+| Windows | fd6f276e on official shell720be661/SDK0.3.299: authenticated update, source receipt, db049 portable-profile migration, saved activity restoration, reviewed Mac-fork import and fresh one-recipient Google preview6/6 pass. | Post-preview coach follow-up hit provider429. Earlier db049 rollback remains historical; current rollback snapshot/shortcut exist but were not executed. Shared-roaming restoration and20-seat bandwidth remain unverified. |
 | Store/identity | Three Studio principals, exact recipe ownership/provenance, import, versions, withdrawal and access controls have revision-bound evidence. Non-owner Windows runs the Mac-authored recipe using saved private settings. | Three underlying Google identities/different datasets, third-user useful execution and the remaining matching-candidate lifecycle gates remain open. |
 | Google isolation | Earlier live shared-runner tests passed own-Sheet reads, cross-Sheet denials and caller-isolated state without learner IAM. | Do not relabel the earlier isolation run as current three-account store acceptance. |
-| Instructor/admission | Synthetic20-seat admission, budget, expiry/revocation and concurrency controls pass. Current Windows emits a real2/6 import wait then6/6 completion; the local Chalk surface reading online Service shows normal1, unknown2. | Not20 real learners or production Chalk. Real roster, class window and live-class budget are missing. |
+| Instructor/admission | Synthetic20-seat admission, budget, expiry/revocation and concurrency controls pass. Current fd6 Windows emits6/6 completion; online Service then records blocked/provider_rate_limit after a follow-up429, with two other seats unknown. | Not20 real learners or production Chalk. Real roster, class window and live-class budget are missing. |
 | Exact self-mail | The sponsor-approved shared-runner bot self-mail was sent once at624b214f; sent1/unknown0 and matching Inbox receipt at15:04 KST are retained. | Approval consumed. No repeat send is authorized. |
 | Cost | Development/test ceiling USD10 includes historical charges/holds. Reconciled maximum exposure USD5.972794; no new grants in the latest native tests. | Exposure is not actual spending. Class estimate USD30–60 and proposed USD100/seatUSD5 cap are not authorized class spending. |
 | Curriculum/design | Five-stage journey, four template families, ten supplied needs, six common assets and the120-minute lab are documented. A synthetic CSV comparison and an audit-reminder subset have actual product evidence. | Expanded learner-owned web-app/background automation runtime is not implemented; neither example passes SS-11. |
