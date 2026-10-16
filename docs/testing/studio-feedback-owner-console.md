@@ -9,6 +9,13 @@ source plan SHA-256: `97ed022d93dc5260204c136fa8b9aef47df603c995cb9a39fe28122bbc
 The delivery bundle's `acceptance.json` is the immutable T01–T30 criterion set.
 A criteria change requires a new revision; a fix must not weaken the frozen set.
 
+Explorer follow-up ([#1742](https://github.com/hypeproof/hypeproof-studio/issues/1742))
+supersedes the earlier FB-01 layout behavior for subsequent builds: launch, folder
+activation, reload and restart start with Explorer closed; the explicit file-view
+action opens it. The revised contract and checks are US-03 / US-T03. The frozen
+T01/T02 descriptions below and their historical receipts remain unchanged; they
+do not establish acceptance of this new behavior or revise the immutable bundle.
+
 [Product Intent](../PRODUCT-INTENT.md) →
 [Studio behavior contracts](../studio-requirements.md#feedback-delivery-contracts-2026-10-16) →
 [developer index](../dev/04-requirements.md#feedback-delivery-contracts-2026-10-16) →
@@ -20,7 +27,7 @@ owners. Reusing an owner's domain is not a new assignment or merge/release autho
 
 | Working ID | Canonical requirement/domain | Boundary and implementation |
 |---|---|---|
-| FB-01 | ST-REQ-UNIFIED; US-03/10/12 | App: `studioNavigation.ts` initializes Explorer only for a genuinely new profile. Existing native Explorer and commands remain the file surface; later shell layout choices persist. |
+| FB-01 | ST-REQ-UNIFIED; US-03/10/12 | App: `studioNavigation.ts` closes Explorer on every launch/folder activation before activity restoration. Existing native Explorer and explicit file-view actions remain the file surface. See the #1742 follow-up above; frozen T01/T02 retain their historical scope. |
 | FB-02 | ST-REQ-UNIFIED; US-07–10/12/18; ADR 0008 | App activity binding, `studioNavigation.ts`, `workspaceRouting.ts`, StartPage and activation reuse SecretStorage and activity history/draft. Controlled transitions prepare/validate before open; expired, mismatched, cancelled and failed transitions preserve source work. Native menu/restart behavior requires real-app observation. |
 | FB-03 | REQ-STUDIO-EXTERNAL-INSTRUCTIONS; ST-REQ-COACH-RUNTIME; ST-REQ-STUDIO-SAFETY | App public immutable Markdown snapshots and workspace-local selection. Both runtimes receive selected user-turn context. Service system/profile/lesson/tool authority stays in force; importing instructions is not installing executable skills or curriculum. |
 | FB-04 | REQ-STUDIO-REFERENCE-IMAGES; REQ-C11/18; ST-TEST-INBOUND-IMAGES | App SDK/proxy pixels and explicit active-workspace re-reads; browser capture provenance. Service reference-design instruction owns the design workflow. A brief validator or deterministic keyboard fixture alone cannot prove a live model's reference fidelity. |
