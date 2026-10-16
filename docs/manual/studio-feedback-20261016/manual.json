@@ -1,13 +1,13 @@
 {
   "schema": "hps-feedback-manual/1",
-  "status": "candidate_local_implementation_pending_root_integration",
-  "candidate_base_sha": "5d74ec45740d74f9b97821921b2ca89318f99ebf",
-  "manual_revision": "pending_root_integration",
+  "status": "integrated_local_candidate",
+  "candidate_base_sha": "7497be98aaa18e84b61d2d15d8f6371906a42a27",
+  "manual_revision": "2026-10-16-current-ui-r2",
   "acceptance_revision": "ff25b53b1352e89ce243d780cfe5474af671a9da1229d432f1403b083380339d",
   "release_status": "NOT_RUN",
   "human_acceptance": "HUMAN_PENDING",
-  "screenshots": "NOT_RUN",
-  "browser_qa": "NOT_RUN",
+  "screenshots": "PARTIAL_OBSERVED",
+  "browser_qa": "PASS",
   "pages": [
     "index.html",
     "learner.html",
@@ -16,9 +16,103 @@
     "developer.html"
   ],
   "notes": [
-    "No screenshot in this manual represents an observed UI.",
-    "Learner-facing image edit steps are conditional on the explicit image_edit capability and configured provider.",
-    "The owner console currently reads server-stored records; absent records do not prove zero use or cost.",
-    "Manual HTML uses inline CSS and relative links; no external fetch or CDN."
-  ]
+    "이미지 편집 명령과 비교·이전 작업 확인·취소 흐름은 현재 소스에 통합되어 있다. 명령 존재는 활동 허용이나 제공자 설정을 뜻하지 않는다.",
+    "macOS native 캡처는 부분 관측이며 전체 파일/재시작 검증, Windows 및 실제 이미지 제공자 성공으로 확대하지 않는다.",
+    "실제 회원 로그인·운영 반영·인보이스 대조·사람 과제 완료는 각각 별도 증거가 필요하다.",
+    "HTML은 인라인 CSS와 상대 링크를 사용하며 외부 요청·CDN에 의존하지 않는다."
+  ],
+  "final_integration_sha": null,
+  "native_qa": "PARTIAL_INTERRUPTED",
+  "image_provider": "NOT_RUN",
+  "windows_native": "NOT_RUN",
+  "runtime": {
+    "source_sha": "7497be98aaa18e84b61d2d15d8f6371906a42a27",
+    "level": "prepared-injected-native-candidate",
+    "shell_name": "HypeProof Studio Dev",
+    "shell_version": "0.1.51",
+    "shell_commit": "d4db90498fce6c337823a4ce73cbe79c5e688b05",
+    "extension_version": "0.1.5",
+    "extension_sha256": "c8221b140ad5b3c1fa066fd98791e78d5f717aebd29187b4091eaddcf1192ead",
+    "service_sha": "0b764f027af509a79a42c14e05d1688bba411c26",
+    "service_scope": "actual-local-wrangler-not-production",
+    "image_edit_enabled_in_observed_profile": false,
+    "source_evidence": "wp8-native-r3/result.json",
+    "source_evidence_sha256": "03b900cef77cfec161cf70bb6f1723258d7cca5d265cc4361c529c6ceba4d650"
+  },
+  "native_observation": {
+    "status": "PARTIAL_INTERRUPTED",
+    "observed": [
+      "preflight",
+      "native-entry"
+    ],
+    "incomplete_slices": [
+      "T01-explorer-user-layout-reload: CDP Runtime.evaluate timeout",
+      "T01-native-file-save: native Save dialog automation unavailable"
+    ],
+    "interruption": "user requested background-only tests due desktop focus disruption",
+    "interruption_evidence": "wp8-native-r3/interruption.json",
+    "remaining_native_slices": "NOT_RUN to completion",
+    "further_local_foreground_authorized": false
+  },
+  "screenshot_evidence": [
+    {
+      "file": "native-entry.png",
+      "sha256": "823f81ca5a98dcf5aec3837b5c6389ad8501a00851f98a9fb3765f50fb7dce34",
+      "source": "wp8-native-r3/native-entry.png",
+      "scope": "actual macOS development candidate entry only",
+      "privacy_review": "visually inspected existing image before unchanged copy; no credentials or personal data visible",
+      "not_proven": [
+        "file save",
+        "restart continuity",
+        "model calls",
+        "image provider edit",
+        "Windows",
+        "production",
+        "human acceptance"
+      ]
+    }
+  ],
+  "prior_browser_qa": {
+    "status": "PASS",
+    "scope": "local-file-browser",
+    "evidence": "wp7/browser/result.json",
+    "evidence_sha256": "8ec7db0aeca9cbf283d63df6329641c693f460a3dd113eacbf0937342b85cd4a",
+    "viewports": [
+      390,
+      1280
+    ]
+  },
+  "owner_browser_qa": {
+    "status": "PASS",
+    "scope": "synthetic-real-browser",
+    "evidence": "wp6/browser/result.json",
+    "evidence_sha256": "6b76786b40a293e261191999a3b46e50a2e12f5c3b5dcc162e28ef22db5fa08e",
+    "production": false
+  },
+  "browser_qa_evidence": {
+    "status": "PASS",
+    "scope": "manual-html-headless-local-file",
+    "evidence": "wp8/manual-current-browser/result.json",
+    "evidence_sha256": "7c74b1a7a5d198bf049f1ca5802a0cb88df00d931606d36bcc34943ed0c053fe",
+    "viewports": [
+      390,
+      1280
+    ],
+    "checks": [
+      "five manual pages",
+      "relative links and reviewed native image",
+      "no document overflow",
+      "active navigation and keyboard focus",
+      "current image command and recovery labels",
+      "no remote requests or page errors"
+    ],
+    "not_proven": [
+      "report filters (prior separate evidence only)",
+      "installed native lifecycle",
+      "live image provider",
+      "Windows",
+      "production",
+      "human acceptance"
+    ]
+  }
 }
