@@ -32,6 +32,8 @@ let service;try{
  service=spawn(process.execPath,['--experimental-strip-types','--experimental-sqlite',path.join(repo,'e2e/feedback-native/service.mjs'),privateService],{cwd:repo,stdio:'inherit',env:commands.runtimeEnv});
  const manifest=path.join(privateService,'service.json');const end=Date.now()+60000;while(!fs.existsSync(manifest)){if(service.exitCode!==null)throw Error('Actual-source synthetic Service failed to start');if(Date.now()>end)throw Error('Timed out starting actual-source Service');await new Promise(r=>setTimeout(r,150));}
  run(process.platform==='win32'?'python':'python3',['scripts/studio-dev.py','prepare','--base-app',apps[0],'--state-dir',state,'--provider','service','--service','local']);
- run(process.execPath,['e2e/feedback-native/prepare-config.mjs',path.join(state,'receipt.json'),manifest,evidence]);
+ // The disposable hosted desktop must exercise normal persisted credentials across reload.
+ // In-memory SecretStorage cannot establish that acceptance boundary.
+ run(process.execPath,['e2e/feedback-native/prepare-config.mjs',path.join(state,'receipt.json'),manifest,evidence,'--secret-storage=os-keychain']);
  run(process.execPath,['e2e/feedback-native/run.mjs',path.join(evidence,'config.json'),'--allow-foreground']);
 }finally{service?.kill();}
