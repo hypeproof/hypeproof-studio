@@ -43,6 +43,13 @@ export async function initializeFilesLayout(execute: (command: string) => Thenab
   await execute('workbench.action.closeSidebar');
 }
 
+/** Browser previews belong to one session; leave later preview requests alone. */
+export async function closeRestoredBrowserTabs(tabs: readonly Pick<vscode.BrowserTab, 'close'>[]): Promise<void> {
+  const results = await Promise.allSettled([...tabs].map(async tab => { await tab.close(); }));
+  if (results.some(result => result.status === 'rejected'))
+    console.warn('HypeProof: could not close a restored browser preview tab.');
+}
+
 function continuityKeys(scope: string): string[] {
   return [historyKeyForCohort(scope), 'hps.activity.draft.' + scope];
 }

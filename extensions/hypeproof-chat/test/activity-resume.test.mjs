@@ -6,11 +6,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
-const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {resolveActivateBranch,ensureWorkspace} from './src/extension';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:new URL('..',import.meta.url).pathname,loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {activate,resolveActivateBranch,ensureWorkspace} from './src/extension';export {openBrowser} from './src/nativeBrowser';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:new URL('..',import.meta.url).pathname,loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const commands=[], mod={exports:{}};
 const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},workspace:{workspaceFolders:[]},Uri:{joinPath:()=>({}),file:fsPath=>({fsPath})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL});
-const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
+const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,activate,openBrowser,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-resume-'));
 const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link);
 const now=Date.now(),service='https://synthetic.invalid/v1';
@@ -105,4 +105,30 @@ try {
  assert.equal(resolveActivateBranch(undefined,false),'show');assert.equal(resolveActivateBranch(issuer,false),'skip');
  assert.equal(resolveActivateBranch(issuer,true),'resume');assert.equal(resolveActivateBranch(undefined,true),'resume');
  console.log('PASS Explorer closed on every activation, explicit file view opens it, chat entry preserves current layout; validated learner resume wins over issuer');
+ // Exercise real activation up to the activity-store boundary: layout must finish first.
+ const closed=[];
+ const ordinary={label:'notes.md',input:{uri:{fsPath:path.join(a,'notes.md')}}};
+ vscode.window.tabGroups={all:[{tabs:[ordinary]}],close:async()=>assert.fail('startup must not close ordinary editors')};
+ const fresh={close:async()=>closed.push('new-session')};
+ const restored=[{close:async()=>{closed.push('restored-visible');restored.push(fresh);}},
+   {close:async()=>{closed.push('restored-inactive');}}];
+ vscode.window.browserTabs=restored;
+ const untilActivityStore={get globalStorageUri(){closed.push('activity-init');throw Error('activity-store-test-boundary');}};
+ await assert.rejects(activate(untilActivityStore),/activity-store-test-boundary/);
+ assert.deepEqual(closed,['restored-visible','restored-inactive','activity-init'],'visible and inactive restored browser tabs close before activity initialization, without chasing new tabs');
+ assert.deepEqual(commands,['workbench.action.closeSidebar']);commands.length=0;
+ assert.equal(vscode.window.tabGroups.all[0].tabs[0],ordinary,'ordinary file editor remains');
+ vscode.window.openBrowserTab=async url=>{assert.equal(url,'http://127.0.0.1:45000/');restored.push(fresh);return fresh;};
+ await openBrowser('http://127.0.0.1:45000/');
+ assert(!closed.includes('new-session'),'a later explicit preview opens without startup cleanup closing it');
+ closed.length=0;
+ vscode.window.browserTabs=[{close(){throw Error('already disposed');}},
+   {close:async()=>{throw Error('close rejected');}}, {close:async()=>{closed.push('remaining-preview');}}];
+ await assert.rejects(activate(untilActivityStore),/activity-store-test-boundary/);
+ assert.deepEqual(closed,['remaining-preview','activity-init'],'failed/closed preview tabs cannot block other cleanup or activation');
+ commands.length=0;vscode.window.browserTabs=[];
+ await assert.rejects(activate(untilActivityStore),/activity-store-test-boundary/);
+ assert.deepEqual(commands,['workbench.action.closeSidebar'],'an empty browser list needs no editor-wide close command');
+ console.log('PASS actual activation closes restored browser previews before activity storage; ordinary editors, new previews and startup after close failure remain available');
+
 } finally { fs.rmSync(tmp,{recursive:true,force:true}); }
