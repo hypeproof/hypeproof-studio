@@ -1,3 +1,5 @@
+import { restoreInitialSurface } from "./initialSurface";
+export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
 import { initializeFilesLayout, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
@@ -786,22 +788,16 @@ export async function activate(context: vscode.ExtensionContext) {
   // #1298 — if an issuer-shaped token is already stored, the user is likely an instructor; skip the
   // student start page automatically. If whoami later returns rejected the token is deleted and the
   // start page is shown once (handled in postConfig/refresh via instructorMode.handleAutoReadResult).
-  initialSurfaceReady = (async () => {
-    const storedIssuer = await context.secrets.get(ISSUER_TOKEN_KEY);
-    const decision = resumeStatus;
-    const record = activityConnections(context)?.current;
-    if (decision === 'expired') void vscode.window.showInformationMessage('폴더 전환 확인 시간이 지났습니다. 저장된 활동에서 이어가세요. 작업 파일과 연결은 보존됩니다.');
-    if (decision === 'mismatch') void vscode.window.showWarningMessage('폴더 전환 정보가 현재 활동·서버·폴더와 일치하지 않습니다. 저장된 활동을 확인해 주세요.');
-    const bound = record && activityConnections(context)?.matchesService;
-    const branch = resolveActivateBranch(storedIssuer, decision === 'valid' || (decision === 'absent' && !!bound));
-    if (branch === 'resume') {
-      await startPage.show();
-      // Revalidate the saved credential before resuming. This never dispatches an AI turn.
-      if (await provider.ensureProfile(true)) await startPage.openChat();
-    } else if (branch !== 'skip') {
-      await startPage.show();
-    }
-  })();
+  initialSurfaceReady = restoreInitialSurface({
+    getStoredIssuer: () => context.secrets.get(ISSUER_TOKEN_KEY),
+    decision: resumeStatus,
+    connections: () => activityConnections(context),
+    notifyExpired: message => vscode.window.showInformationMessage(message),
+    notifyMismatch: message => vscode.window.showWarningMessage(message),
+    showStart: () => startPage.show(),
+    ensureProfile: () => provider.ensureProfile(true),
+    openChat: () => startPage.openChat(),
+  });
 
   // E2E backdoor for REQ-E1/E2 manual-approve modal. Fires a synthetic
   // actionRequest after the panel mounts and writes the approve/deny result
@@ -859,13 +855,6 @@ async function maybeSynthesizeTestAction(
 // (#422): "~/HypeProofClinic" for the dental website cohort, "~/HypeProofGames"
 // for kids, etc. os.homedir() makes the fallback path always absolute.
 const LEGACY_WORKSPACE_DIRNAME = "HypeProofGames";
-
-/** A saved instructor credential never overrides a validated learner resume. */
-export function resolveActivateBranch(storedIssuer: string | undefined, resume: boolean): 'resume' | 'skip' | 'show' {
-  if (resume) return 'resume';
-  if (storedIssuer && looksLikeIssuerTokenUnverified(storedIssuer)) return 'skip';
-  return 'show';
-}
 
 async function clearWorkspaceSwitchAttempt(context?: vscode.ExtensionContext): Promise<void> {
   if (!context) return;
