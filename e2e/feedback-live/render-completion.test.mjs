@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {completionConfig,createCompletionSession,completionDecision,completionFeedback} from './render-completion.mjs';
 const id='01234567-1234-4321-8123-012345678901';
 const rows=count=>Array.from({length:count},(_,index)=>({attempt:index+1,phase:'complete',status:200}));
-const initial=()=>{const captures=[{source_sha256:'source',page:{url:'owned',frameWidth:390},upstream_pixel_delivery:'OBSERVED'}];return{session:{queries:1,session_sha256:'bound',terminal:{subtype:'success',is_error:false,stop_reason:'end_turn'}},guard:{completion:{enabled:true,held:false},armed:true,request_limit:12,output_cap:4096,render_screenshot_limit:6,attempts:3,candidate_attempts:1,render_screenshot_attempts:1,rows:rows(3),rejected:{}},host:{actions:[],captures,screenshot_attempts:1},captures,sourceSha:'source',wrapperUrl:'owned',deadline:100,now:1};};
-function addCapture(s,width){s.captures.push({...s.captures[0],page:{url:'owned',frameWidth:width}});s.guard.render_screenshot_attempts++;s.host.screenshot_attempts++;}
+const initial=()=>{const captures=[{source_sha256:'source',page:{url:'owned',frameWidth:390},upstream_pixel_delivery:'OBSERVED'}];return{session:{queries:1,session_sha256:'bound',terminal:{subtype:'success',is_error:false,stop_reason:'end_turn'}},guard:{completion:{enabled:true,held:false},armed:true,request_limit:12,output_cap:4096,render_screenshot_limit:6,attempts:3,candidate_attempts:1,render_screenshot_attempts:1,rows:rows(3),rejected:{}},host:{actions:[],captures:captures.map(({upstream_pixel_delivery,...rest})=>structuredClone(rest)),screenshot_attempts:1},captures,verifyCapture:()=>true,sourceSha:'source',wrapperUrl:'owned',deadline:100,now:1};};
+function addCapture(s,width){s.captures.push({...s.captures[0],page:{url:'owned',frameWidth:width}});s.host.captures.push(structuredClone((({upstream_pixel_delivery,...rest})=>rest)(s.captures.at(-1))));s.guard.render_screenshot_attempts++;s.host.screenshot_attempts++;}
 test('explicit opt-in only; exact clean incomplete state can continue within all existing caps',()=>{
  assert.equal(completionConfig({},[],null),false);assert.throws(()=>completionConfig({},['--allow-render-completion'],true));
  assert(completionConfig({renderCompletion:{enabled:true,mode:'missing-width-only'},attempts:[{}]},['--allow-render-completion'],true));
@@ -34,4 +34,13 @@ test('actual event/prompt identity passes through; only observed exact session r
 test('tool failure hook aborts synchronously; wrong session and context cannot silently resume',async()=>{
  let received;const s=createCompletionSession(),o=options();s.wrap({query(i){received=i;return Object.assign((async function*(){})(),{close(){}});}}).query({prompt:'x',options:o});await received.options.hooks.PostToolUseFailure[0].hooks[0]({});assert(o.abortController.signal.aborted);assert.equal(s.snapshot().fatal,'tool_failure');
  const wrong=createCompletionSession(),a=options();for await(const e of wrong.wrap({query(){return Object.assign((async function*(){yield{type:'system',subtype:'init',session_id:id};yield{type:'result',session_id:'another',subtype:'success',is_error:false,stop_reason:'end_turn'};})(),{close(){}});}}).query({prompt:'x',options:a})){}assert.equal(wrong.snapshot().fatal,'terminal_session_mismatch');assert(a.abortController.signal.aborted);
+});
+
+
+test('all historical provenance is validated and charged; only final revision widths complete',()=>{
+ const s=initial();addCapture(s,1280);s.sourceSha='final';assert.deepEqual(completionDecision(s),{status:'INCOMPLETE_EVIDENCE',missing:[390,1280]});
+ addCapture(s,390);s.captures[2].source_sha256=s.host.captures[2].source_sha256='final';assert.deepEqual(completionDecision(s),{status:'INCOMPLETE_EVIDENCE',missing:[1280]});
+ addCapture(s,1280);s.captures[3].source_sha256=s.host.captures[3].source_sha256='final';assert.equal(completionDecision(s).status,'COMPLETE');assert.equal(s.guard.render_screenshot_attempts,4);
+ for(const change of [v=>v.verifyCapture=undefined,v=>v.verifyCapture=()=>false,v=>v.verifyCapture=()=>{throw Error('tampered private snapshot');},v=>v.captures[0].upstream_pixel_delivery='NOT_OBSERVED',v=>v.host.captures[0].source_sha256='unknown',v=>v.session.fatal='sdk_error',v=>v.guard.completion.held=true]){const value=structuredClone({...s,verifyCapture:undefined});value.verifyCapture=s.verifyCapture;change(value);assert.equal(completionDecision(value).status,'STOP_HOLD');}
+ const budget=initial();budget.sourceSha='final';while(budget.captures.length<6)addCapture(budget,390);assert.deepEqual(completionDecision(budget),{status:'INCOMPLETE_BUDGET',missing:[390,1280]});
 });
