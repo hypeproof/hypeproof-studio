@@ -32,10 +32,41 @@ export function inspectorScriptDiagnostic(url,target){
  if(relative!==paths.basename(target.file)&&relative!=='outside-fixture'&&relative!=='unrecognized-script-url')relative='other-file-within-fixture';
  return {relative_fixture:relative,url_sha256:digest(String(url)),matches_expected_pattern:new RegExp(target.urlPattern??breakpointUrlPattern(target.url)).test(url),comparison};
 }
+// Match only encodings of the trusted path, never arbitrary path segments.
+const regexEscape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const percentPattern=value=>encodeURIComponent(value).replace(/%[0-9A-F]{2}/g,part=>part.split('').map(c=>/[A-F]/.test(c)?'['+c.toLowerCase()+c+']':c).join(''));
 export function breakpointUrlPattern(url){
- const escaped=url.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
- // Only drive-letter spelling varies. All other path bytes remain exact.
- return '^'+escaped.replace(/^(file:\/\/\/)([A-Za-z]):/,(all,prefix,drive)=>prefix+'['+drive.toLowerCase()+drive.toUpperCase()+']:')+'$';
+ const parsed=new URL(url);assert(parsed.protocol==='file:'&&!parsed.host&&!parsed.search&&!parsed.hash,'Trusted file URL required');
+ const pathname=decodeURIComponent(parsed.pathname);
+ return '^file://'+[...pathname].map((c,i)=>{
+  if(c==='/')return '/';
+  if(i===1&&/^\/[A-Za-z]:\//.test(pathname))return '['+c.toLowerCase()+c.toUpperCase()+']';
+  if(c===':')return ':';
+  const encoded=percentPattern(c),literal=regexEscape(c);
+  // encodeURIComponent leaves unreserved ASCII literal; explicitly permit its percent form.
+  const bytes=encoded===c?[...Buffer.from(c)].map(byte=>'%'+byte.toString(16).padStart(2,'0').split('').map(x=>/[a-f]/.test(x)?'['+x+x.toUpperCase()+']':x).join('')).join(''):encoded;
+  return /[%?#\\\x00-\x20\x7f]/.test(c)?(c===' '? '(?: |%20)':bytes):'(?:'+literal+'|'+bytes+')';
+ }).join('')+'$';
+}
+export function canonicalScriptPath(url,target,{windows=/^[A-Za-z]:[\\/]/.test(target.file)}={}){
+ assert(typeof url==='string'&&url.startsWith('file:///')&&!/[?#\\\x00-\x1f\x7f]/.test(url),'Unsafe script URL syntax');
+ const raw=url.slice('file://'.length);
+ assert(!/%(?:2f|5c)/i.test(raw),'Encoded path separator refused');
+ const decoded=decodeURIComponent(raw);
+ assert(!/%[0-9a-f]{2}/i.test(decoded),'Ambiguous second decoding refused');
+ assert(!decoded.split('/').some(segment=>segment==='.'||segment==='..'),'Path traversal refused');
+ const parsed=new URL(url);assert(!parsed.host&&!parsed.search&&!parsed.hash,'Script URL authority/query/fragment refused');
+ assert.equal(decodeURIComponent(parsed.pathname),decoded,'URL parsing changed path spelling');
+ const file=fileURLToPath(parsed,{windows});
+ const drive=value=>windows?value.replace(/^[a-z]:/,letter=>letter.toUpperCase()):value;
+ assert.equal(drive(file),drive(target.file),'Canonical script path mismatch');
+ return file;
+}
+export function assertPhysicalScript(url,target){
+ const file=canonicalScriptPath(url,target);
+ assert.equal(fs.realpathSync(file),target.file,'Physical script path mismatch');
+ const stat=fs.lstatSync(file);assert(stat.isFile()&&!stat.isSymbolicLink(),'Regular candidate script required');
+ return file;
 }
 export function activationBreakpoint(file,expectedHash){
  assert(path.isAbsolute(file)&&fs.realpathSync(file)===file,'Exact regular candidate bundle path required');
@@ -109,6 +140,7 @@ export class InspectorPeer{
 export function assertPause({event,scripts,breakpoint,target,source,root,expectedRoot}){
  assert(event.params.hitBreakpoints?.includes(breakpoint),'Pause must hit this gate breakpoint');
  const frame=event.params.callFrames?.[0];assert(frame&&new RegExp(target.urlPattern??breakpointUrlPattern(target.url)).test(scripts.get(frame.location.scriptId)??''),'Paused script URL mismatch');
+ assertPhysicalScript(scripts.get(frame.location.scriptId),target);
  assert.equal(digest(Buffer.from(source)),target.sha256,'Inspector loaded source differs from candidate bundle');
  assert.equal(frame.location.lineNumber,target.lineNumber,'Breakpoint moved to another statement');
  assert(sameDisplayedWorkspace(root,expectedRoot),'Paused destination workspace mismatch');return frame;

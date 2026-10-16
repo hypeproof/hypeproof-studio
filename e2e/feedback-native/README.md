@@ -386,8 +386,32 @@ Progress persists at most15s apart during holds, including script/PID/breakpoint
 durations, notification screenshots, request-count metadata and preservation
 hashes. It never dumps debugger scopes/protocol bodies. Only verified gate pauses
 are resumed. Breakpoints and sockets close before public quit; cleanup failure
-cannot pass and does not replace the primary error. Forced owned termination is
-cleanup only. `extension-inspector.test.mjs` uses disposable Node children for
+cannot pass and does not replace the primary error. A final owned-child stop request is cleanup only; it is never restart evidence.
+Final cleanup records child exit and CDP connection refusal separately, with a 10s
+exit wait and 5s endpoint wait (plus an in-flight bounded probe). A sent signal
+alone cannot set `owned_process_stopped`; timeout remains FAIL. No force-kill or
+unrelated handle/process sweep is used. `extension-inspector.test.mjs` uses disposable Node children for
 protocol/PID/replacement/cleanup controls, not a native App or T05 acceptance pass.
 Actual hosted0.1.56 propagation and long-held behavior remain NOT RUN until root
 executes this exact candidate. The existing ordinary native proof stays separate.
+
+
+T07 closes each of its newly created untouched Untitled skill-preview editors
+through the public **View: Revert and Close Editor** command. Before the command,
+the preview must be the exact newly observed focused resource with unchanged
+rendered content; all other editor resources must match the prior snapshot and
+no foreign dirty editor may exist. Cleanup refuses rather than answering a
+blanket save/discard dialog. T05 also refuses to begin with dirty editors. Saved
+user files, activity drafts, skill storage and history are not rewritten by this
+cleanup; native preservation checks remain required.
+
+Inspector breakpoint URLs admit only literal/percent-encoded spellings generated
+from the exact trusted file path, with existing drive-letter case equivalence.
+At pause, raw URL validation rejects authority, query/fragment, encoded path
+separators, dot segments and ambiguous second decoding. Decoded path equality,
+physical regular-file identity, loaded-source SHA, owned PID, exact statement and
+destination root are still mandatory. Directory case is not relaxed. Portable
+Windows URL controls and actual owned Node controls on Mac are background proof;
+Windows inspector/native execution and the complete T05 holds still require the
+exact candidate's hosted run. The prior raw Windows URL spelling remains unknown;
+this change does not claim a specific encoding was observed.

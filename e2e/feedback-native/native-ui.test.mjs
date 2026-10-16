@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {NativeUI,sessionRefusalObserved} from './native-ui.mjs';
+import {NativeUI,sessionRefusalObserved,assertOwnedPreviewClose} from './native-ui.mjs';
 function fixture(outerVisible){const ui=new NativeUI('http://127.0.0.1:9777');const iframe={name:'visible-webview',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};const control={getBoundingClientRect:()=>({width:700,height:60})};const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[iframe]},getComputedStyle:()=>({display:'inline',visibility:'visible'})})};const target={info:{id:'target'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'frame'}}}:{executionContextId:1},evaluate:expression=>vm.runInNewContext(expression,{document:{visibilityState:'hidden',querySelector:()=>control}})};ui.list=async()=>[{id:'target',type:'iframe',url:'vscode-webview://test/index.html?id=visible-webview&extensionId=hypeproof.hypeproof-chat'}];ui.workbench=async()=>host;ui.target=async()=>target;return {ui,target};}
 test('visible workbench iframe and control geometry work despite Electron Page Visibility false negative',async()=>{const {ui,target}=fixture(true);assert.equal(await ui.frame('textarea',500),target);});
 test('hidden outer webview cannot pass by retaining an inner control geometry',async()=>{const {ui}=fixture(false);await assert.rejects(ui.frame('textarea',1),/Timed out/);});
@@ -316,4 +316,25 @@ test('scoped webview discovery cannot connect to another window iframe even when
  const chat={info:{id:'chat-B'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'inner'}}}:{executionContextId:1},evaluate:()=>true};
  ui.list=async()=>[...pages,...frames];ui.target=async info=>{connected.push(info.id);if(info.id==='B')return host;if(info.id==='chat-B')return chat;assert.fail('Cross-window target '+info.id);};
  assert.equal(await ui.frame('textarea',500),chat);assert(!connected.includes('chat-A'));assert(!connected.includes('A'));
+});
+
+function previewCloseFixture(){
+ const before={resources:['saved.txt'],dirtyResources:[]};
+ const preview={resource:'Untitled-2',resources:['saved.txt','Untitled-2'],editorLabel:'Untitled-2',focused:true,text:'# 외부 지침 스킬 · fixture\nprovenance',dirtyResources:['Untitled-2']};
+ return {before,preview};
+}
+test('only a newly observed unchanged preview is reverted and closed via its public UI command',async()=>{
+ const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777'),calls=[];let state=preview;
+ ui.editorState=async()=>state;ui.palette=async title=>{calls.push(title);state=before;};
+ const proof=await ui.closeOwnedPreview({},before,preview);
+ assert.deepEqual(calls,['View: Revert and Close Editor']);assert(proof.other_editors_preserved);assert.equal(proof.resource,'Untitled-2');
+});
+test('foreign dirty, preexisting, changed, duplicate or unfocused editors cause zero discard actions',async()=>{
+ const {before,preview}=previewCloseFixture();
+ for(const current of [{...preview,dirtyResources:['Untitled-2','saved.txt']},{...preview,text:'user changed text'},{...preview,focused:false},{...preview,resource:'saved.txt'},{...preview,resources:['saved.txt','Untitled-2','Untitled-2']},{...preview,resources:['saved.txt','Untitled-2','foreign.txt']},{...preview,dirtyResources:undefined}]){
+  const ui=new NativeUI('http://127.0.0.1:9777');let calls=0;ui.editorState=async()=>current;ui.palette=async()=>calls++;
+  await assert.rejects(ui.closeOwnedPreview({},before,preview));assert.equal(calls,0);
+ }
+ assert.throws(()=>assertOwnedPreviewClose({...before,resources:['saved.txt','Untitled-2']},preview,preview),/newly observed/);
+ const ui=new NativeUI('http://127.0.0.1:9777');ui.editorState=async()=>({dirtyResources:['unknown.txt']});await assert.rejects(ui.assertNoDirtyEditors({}),/dirty editor/);
 });

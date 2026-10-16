@@ -8,7 +8,7 @@ import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash} from 'node:crypto';
-import {activationBreakpoint,breakpointUrlPattern,inspectorScriptDiagnostic,descendant,listenerCommand,ownedListener,inspectorTarget,assertPause,InspectorPeer,OwnedExtensionGate} from './extension-inspector.mjs';
+import {activationBreakpoint,breakpointUrlPattern,canonicalScriptPath,assertPhysicalScript,inspectorScriptDiagnostic,descendant,listenerCommand,ownedListener,inspectorTarget,assertPause,InspectorPeer,OwnedExtensionGate} from './extension-inspector.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const wait=async fn=>{const end=Date.now()+15000;while(Date.now()<end){const value=await fn();if(value)return value;await new Promise(r=>setTimeout(r,30));}throw Error('Protocol control timeout');};
 const temporary=()=>fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'owned inspector-한글-')));
@@ -48,17 +48,19 @@ test('listener ownership rejects another App, cycles, ambiguous PID and unsafe e
  for(const url of['ws://example.com:9788/'+id,'ws://127.0.0.1:9789/'+id,'ws://user@127.0.0.1:9788/'+id])assert.throws(()=>inspectorTarget([{...target,webSocketDebuggerUrl:url}],9788));assert.throws(()=>inspectorTarget([target,target],9788));
 });
 test('pause requires exact own breakpoint/source/statement/root; no arbitrary expression is accepted',()=>{
+ const dir=temporary();try{
  const windows=new RegExp(breakpointUrlPattern('file:///D:/owned/extension.js'));assert(windows.test('file:///d:/owned/extension.js'));assert(!windows.test('file:///D:/Owned/extension.js'));assert(!windows.test('file:///E:/owned/extension.js'));assert(!windows.test('file:///D:/other/extension.js'));
- const target={url:'file:///owned/extension.js',sha256:hash('source'),lineNumber:5};const event={params:{hitBreakpoints:['ours'],callFrames:[{location:{scriptId:'1',lineNumber:5}}]}};
- const args={event,scripts:new Map([['1',target.url]]),breakpoint:'ours',target,source:'source',root:'/owned/A',expectedRoot:'/owned/A'};assert(assertPause(args));
- for(const delta of[{source:'changed'},{root:'/other/A'},{breakpoint:'someone-else'},{scripts:new Map([['1','file:///other/extension.js']])},{target:{...target,lineNumber:6}}])assert.throws(()=>assertPause({...args,...delta}));
+ const target=fixture(dir);const source=fs.readFileSync(target.file,'utf8');const event={params:{hitBreakpoints:['ours'],callFrames:[{location:{scriptId:'1',lineNumber:target.lineNumber}}]}};
+ const args={event,scripts:new Map([['1',target.url]]),breakpoint:'ours',target,source,root:'/owned/A',expectedRoot:'/owned/A'};assert(assertPause(args));
+ for(const delta of[{source:'changed'},{root:'/other/A'},{breakpoint:'someone-else'},{scripts:new Map([['1','file:///other/extension.js']])},{target:{...target,lineNumber:target.lineNumber+1}}])assert.throws(()=>assertPause({...args,...delta}));
  const peer=new InspectorPeer('ws://127.0.0.1:9788/id',()=>{});assert.throws(()=>peer.send('Runtime.evaluate',{expression:'Date.now=()=>0'}),/not permitted/);assert.throws(()=>peer.send('Debugger.evaluateOnCallFrame',{expression:'context.globalState.update()'}),/not permitted/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('script diagnostics preserve cross-platform URL spelling and redact unrelated paths without admitting them',()=>{
  const url='file:///D:/owned%20inspector-%ED%95%9C%EA%B8%80/extension.cjs',target={file:'D:\\owned inspector-한글\\extension.cjs',url,urlPattern:breakpointUrlPattern(url)};
  const exact=inspectorScriptDiagnostic(url,target);assert.equal(exact.relative_fixture,'extension.cjs');assert.equal(exact.url_sha256,hash(url));assert(exact.matches_expected_pattern);assert(exact.comparison.decoded_path_equal);assert(exact.comparison.serialized_url_equal);
  assert(inspectorScriptDiagnostic(url.replace('/D:','/d:'),target).matches_expected_pattern);
- for(const changed of [url.replace('/D:','/E:'),url.replace('/owned','/Owned'),url.replace('%20',' '),url.replace('/extension.cjs','/other.cjs'),url+'?secret=not-to-be-logged']){
+ for(const changed of [url.replace('/D:','/E:'),url.replace('/owned','/Owned'),url.replace('/extension.cjs','/other.cjs'),url+'?secret=not-to-be-logged']){
   const value=inspectorScriptDiagnostic(changed,target);assert(!value.matches_expected_pattern);assert(!JSON.stringify(value).includes('not-to-be-logged'));assert(!JSON.stringify(value).includes('owned inspector'));
  }
  const posix={file:'/owned fixture/extension.cjs',url:'file:///owned%20fixture/extension.cjs'};
@@ -67,11 +69,11 @@ test('script diagnostics preserve cross-platform URL spelling and redact unrelat
  let receipt;failureDiagnostic({diagnostic:value=>{receipt=value;}},{events:[{phase:'owned-startup-break',pid:123,message:'private application text'}],phase:{label:'initial-startup',deadline:0},protocolDiagnostics:{event_counts:{'Debugger.scriptParsed':2},candidate_scripts:[],last_pause:null,breakpoint_locations:[]}},target,[{snapshot:()=>({pid:123,exit_code:null})}]);
  const observed=JSON.parse(receipt);assert(observed.gate.owned_pid_verified);assert(observed.gate.deadline_expired);assert.equal(observed.gate.protocol.event_counts['Debugger.scriptParsed'],2);assert(!receipt.includes('private application text'));assert(!receipt.includes('D:\\owned'));assert(!receipt.includes('file:///'));
 });
-test('mismatch diagnostics distinguish directory case from URL spelling without accepting either',()=>{
+test('diagnostics distinguish refused directory case from equivalent URL spelling',()=>{
  const url='file:///C:/Users/Runner/owned%20inspector-%ED%95%9C%EA%B8%80/extension.cjs',target={file:'C:\\Users\\Runner\\owned inspector-한글\\extension.cjs',url,urlPattern:breakpointUrlPattern(url)};
  const changedCase=inspectorScriptDiagnostic(url.replace('/Runner/','/runner/'),target);
  assert.equal(changedCase.relative_fixture,'extension.cjs');assert(!changedCase.matches_expected_pattern);assert(!changedCase.comparison.decoded_path_equal);assert(!changedCase.comparison.drive_only_equal);assert(changedCase.comparison.casefold_path_equal);assert.deepEqual(changedCase.comparison.case_difference_positions,[2]);
- const rawSpace=inspectorScriptDiagnostic(url.replace('%20',' '),target);assert(!rawSpace.matches_expected_pattern);assert(rawSpace.comparison.decoded_path_equal);assert(rawSpace.comparison.casefold_path_equal);assert.deepEqual(rawSpace.comparison.case_difference_positions,[]);
+ const rawSpace=inspectorScriptDiagnostic(url.replace('%20',' '),target);assert(rawSpace.matches_expected_pattern);assert(rawSpace.comparison.decoded_path_equal);assert(rawSpace.comparison.casefold_path_equal);assert.deepEqual(rawSpace.comparison.case_difference_positions,[]);
  const drive=inspectorScriptDiagnostic(url.replace('/C:','/c:'),target);assert(drive.matches_expected_pattern);assert(drive.comparison.drive_only_equal);assert.deepEqual(drive.comparison.case_difference_positions,[0]);
  const different=inspectorScriptDiagnostic(url.replace('/Runner/','/Unrelated/'),target);assert(!different.matches_expected_pattern);assert(!different.comparison.casefold_path_equal);
  for(const value of [changedCase,rawSpace,drive,different]){const raw=JSON.stringify(value);for(const text of ['Runner','Unrelated','file:///','owned inspector','한글'])assert(!raw.includes(text));}
@@ -111,4 +113,20 @@ test('lost owned debugger fails immediately and cannot admit a subsequent phase'
  try{await gate.initial.promise;gate.peer.ws.close();await wait(()=>gate.failure);assert.match(gate.failure.message,/disconnected unexpectedly/);await assert.rejects(gate.prepareTransition('/other',610000,'must-not-start'),/disconnected unexpectedly/);await assert.rejects(gate.close(),/socket not open/);assert.equal(gate.events.at(-1).status,'FAIL');}
  catch(error){failureDiagnostic(t,gate,target,[control]);throw error;}
  finally{await gate.close().catch(()=>{});if(child.exitCode===null){child.kill();await once(child,'exit');}fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('portable Windows equivalent URL spellings retain exact path; hostile URL forms fail closed',()=>{
+ const target={file:'D:\\owned fixture-한글\\extension.cjs',url:'file:///D:/owned%20fixture-%ED%95%9C%EA%B8%80/extension.cjs'};
+ const pattern=new RegExp(breakpointUrlPattern(target.url));
+ for(const url of [target.url,target.url.replace('%20',' '),target.url.replace(/%[A-F0-9]{2}/g,v=>v.toLowerCase()),target.url.replace('%ED%95%9C%EA%B8%80','한글'),target.url.replace('owned','%6fwned'),target.url.replace('/D:','/d:')]){
+  assert(pattern.test(url),url);assert.match(canonicalScriptPath(url,target),/extension.cjs$/);
+ }
+ for(const url of [target.url+'?',target.url+'#',target.url+'?token=x',target.url+'#x',target.url.replace('file:///','file://localhost/'),target.url.replace('owned','other'),target.url.replace('owned','Owned'),target.url.replace('/D:','/E:'),target.url.replace('/extension','%2fextension'),target.url.replace('/extension','%5cextension'),target.url.replace('/owned','/a/../owned'),target.url.replace('/owned','/%2e%2e/owned'),target.url.replace('%20','%2520'),target.url.replace('/owned','/./owned')])assert.throws(()=>canonicalScriptPath(url,target),undefined,url);
+});
+test('equivalent URL cannot substitute a different physical file or a symlink',()=>{
+ const dir=temporary();try{
+  const target=fixture(dir),raw=target.url.replace('%20',' ');assert.equal(assertPhysicalScript(raw,target),target.file);
+  const renamed=path.join(dir,'other.cjs');fs.renameSync(target.file,renamed);fs.symlinkSync(renamed,target.file);
+  assert.throws(()=>assertPhysicalScript(raw,target),/Physical script/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
