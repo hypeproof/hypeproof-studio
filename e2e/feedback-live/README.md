@@ -1,8 +1,9 @@
 # Background live runtime acceptance adapter
 
-Nothing in this directory activates an app, browser, native window or CLI UI.
+Default mode activates no app, browser, native window or CLI UI. The explicit
+render-feedback opt-in below launches only owned headless Chromium.
 `run.mjs` invokes the actual `runSdkCoach` or `proxyChat` entrypoint, the real
-Agent SDK **0.3.299**, and the explicitly pinned seeded binary. The VS Code host import is stubbed and an explicit restrictive file-only profile intersection is recorded. There is no fake SDK/query/binary-resolution seam, no
+Agent SDK **0.3.299**, and the explicitly pinned seeded binary. The VS Code host import is stubbed and a restrictive profile intersection is recorded (file-only by default). There is no fake SDK/query/binary-resolution seam, no
 provider simulation in live mode and no production-source changes.
 
 Default invocation is nonbillable dry preflight. Only the delivery owner may add
@@ -238,3 +239,147 @@ and scenario outcomes remain **NOT_RUN** until the delivery owner explicitly
 invokes them.
 
 For the owner-prepared setup, use the existing `service-launch.json` unchanged as `bindingFile`, pin its SHA-256 in `bindingSha256`, and compute `processSha256` from the controlled PID. The prepared setup currently uses dedicated local Service port 8788; 8787 is not the live test target. No production/native state is changed by this adapter.
+
+
+## Explicit owned render-feedback opt-in (new budget required)
+
+The exhausted prior visual activities cannot be reused. This prepares a future
+run; construction, controls and config-only checks do not authorize paid calls.
+A new user-approved independent activity needs a fresh DISARMED guard/ledger,
+workspace and exact Service startup receipt under the existing contracts above.
+Do not reset/restart a guard for the same activity or automatically advance to
+another repetition. Each activity keeps12 total upstream dispatches, including
+aux/count_tokens/retries, output4096/retry0 and at most3 explicit candidate query
+claims. The model's tool loop can exhaust12 before all3 candidates exist.
+
+Add to the runner config, and add the identical `renderRepetitionId` to the
+existing guard config before its first startup:
+
+```json
+"renderFeedback": {
+  "enabled": true,
+  "mode": "owned-headless",
+  "widths": [390, 1280],
+  "maxScreenshots": 6,
+  "repetitionId": "hps-render-20261016-r1-0123456789abcdef0123456789abcdef",
+  "browserDependencyRoot": "/absolute/studio/e2e"
+}
+```
+
+Config and `--allow-render-feedback` are both required. The served profile must
+already grant browser; shell/web/agents/CR/publishing remain removed. Actual
+`canUseTool` remains unchanged. Browser open is restricted by this owned host to
+its own loopback origin; renderer requests to other origins are refused.
+
+The host compiles actual BrowserControl/MCP/static-server helpers separately;
+the existing six pinned App runtime bundles remain byte-identical. It serves
+production `/__hp_viewport` with its actual390/1280 controls. The model receives
+the exact owned wrapper URL in a marked user-context block, then uses existing
+browser_open/read/click/screenshot/live_preview_start tools. It can inspect and
+correct generated output within the same cap; after an edit, live_preview_start
+reloads the owned wrapper. No screenshot tool_result is synthesized. No new MCP
+tool or external browser dependency is introduced; existing Playwright supplies
+owned Chromium's executable, while production raw CDP/AX/Input/capture executes.
+
+The6 candidate screenshot attempts apply across the activity, including later
+runner invocations. Before each host screenshot, an authenticated control request
+to `/__feedback/render-screenshot` synchronously persists the attempt in the
+guard-owned ledger, then acknowledges permission to capture. A failed capture,
+runtime abort or absent next provider request never refunds it. Unknown reservation
+outcome stops without capture or retry. The host resumes the actual guard counter;
+model tool-ID/image hashes remain separate transport diagnostics, never budget
+accounting. Missing counter/repetition mismatch refuses;
+with fewer than2 captures left, preflight stops before dispatch. Reference image
+and selected-instruction delivery are unchanged. Completed candidate validation
+requires actual wrapper frame390/1280 captures and each capture hash in a guarded
+upstream tool_result image block. This is delivery proof, never semantic PASS.
+Freeze the candidate, judge actual same-state pixels independently and only then
+prepare one targeted correction. Preserve previous inputs/results and stop on
+permission failure, exhausted budget, repeated failure or a different root fault.
+
+```bash
+# Offline source/config review: no credentials read, Service/guard contact or browser.
+node e2e/feedback-live/run.mjs /absolute/draft-run.json --allow-render-feedback --config-only
+# After new user budget approval AND fresh bindings, ordinary nonbillable preflight:
+node e2e/feedback-live/run.mjs /absolute/final-run.json --allow-render-feedback
+# Sole delivery owner only, after successful reviewed preflight:
+node e2e/feedback-live/run.mjs /absolute/final-run.json --allow-render-feedback --allow-live --arm-guard
+```
+
+The config-only status is `CONFIG_ONLY_NOT_RUNTIME_PREFLIGHT`; missing future
+bindings are still BLOCKED. No paid execution occurred while preparing this
+option. T11/T13 semantic judgments and T29 missing-original gate are unchanged.
+
+Guard reservation controls require the existing private control key plus exact
+guard/activity/repetition identities and a strict small JSON body. They do not
+arm the provider path. Setup/capture failures close owned CDP, Chromium and HTTP
+resources; cleanup receipts remain explicit, and failed cleanup fails the runner.
+
+### Opt-in missing-width completion (candidate evidence only)
+
+Completion is off by default. It additionally requires runner config
+`"renderCompletion":{"enabled":true,"mode":"missing-width-only"}`,
+`--allow-render-completion`, and a **new** render guard configured with
+`"renderCompletion":true`. The runner refuses nonzero initial dispatch,
+claim, or screenshot counters. This is not a way to reopen R1/R2 or reset a
+budget. Existing explicit render config/flag, current Service/PID/source
+binding, owner arm, and original activity authority still apply.
+
+After a successful SDK `end_turn`, the runner checks original inputs, declared
+outputs/brief, source-bound captures and actual upstream image delivery. Only
+missing 390/1280 evidence permits a factual continuation. It uses the UUID
+observed from the real SDK init event via `options.resume`, in the same isolated
+SDK directory, activity, browser host and original deadline. Candidate outputs
+are copied once to evidence and must remain byte-identical. Continuations
+remove write tools and do not resend an invented text history. At most two
+additional existing candidate claims are permitted; total limits stay 12
+upstream requests, 3 claims, 6 screenshot reservations and 4096 output tokens.
+Only current refs bound to the two actual outer wrapper width buttons receive
+click approval. Other click/type actions retain the normal denial boundary.
+
+Tool errors, policy denial, runtime/validation failure and cancellation stop
+completion. The SDK hook/abort/close alone is **not** an admission guarantee:
+our preserved provider-free Read-error control reached 12 requests despite a
+failure hook. The completion guard therefore inspects the full actual request
+history before reservation, latches on tool-result errors or malformed/unknown
+history, and accepts an authenticated exact-activity one-way hold from the
+host. HTTP/transport failures and cancellation also hold admission. Held guards
+cannot rearm, reserve, refund or resume; their local 423 rejections are counted
+separately from actual upstream forwards. Already admitted concurrent work is
+not retroactively described as undispatched. The guard does not interpret
+error text as an exemption or grant.
+
+Provider-free controls (no native UI or external provider):
+
+```sh
+node --test e2e/feedback-live/{guard,render-host,render-completion}.test.mjs
+HPS_SERVICE_SOURCE=/absolute/clean/service HPS_SERVICE_SHA=EXACT_SERVICE_SHA \
+  node e2e/feedback-native/render-completion-probe.mjs /new/evidence/directory /absolute/installed/claude
+```
+
+The probe uses the real installed SDK, actual Hono/SQLite Service, durable guard
+and actual BrowserControl/CDP against scripted loopback SSE. Its positive case
+forwards seven synthetic upstream requests over two SDK calls sharing one
+session, with actual prior image history and both widths. Error controls check
+that denied/error results produce no additional upstream forward; any local
+held-request attempts remain separately visible. This proves transport and
+bounded continuation behavior, not generated visual quality, native UI,
+production billing or permission to start another live activity. Real execution
+requires independent review of the exact new source/config binding first.
+
+The full CLI control additionally requires a clean committed Studio revision.
+It obtains a real synthetic activity, consumes the synthetic route env before
+Service startup, and passes the observed PID/env receipt to the unchanged CLI.
+The SDK writes both candidate files, then completes both viewport captures in
+the same session. It expects nine scripted forwards, two claims and two captures;
+no candidate output is preseeded. All existing admission and source checks apply.
+
+```sh
+node e2e/feedback-native/render-completion-cli-probe.mjs \
+  /new/cli-proof/evidence /absolute/installed/claude EXACT_STUDIO_SHA \
+  /absolute/clean/service EXACT_SERVICE_SHA --execute
+```
+
+Without `--execute` it writes preparation metadata only. This control uses fresh
+isolated processes and headless browsers; it does not use an existing live
+activity or prove generated visual quality.
