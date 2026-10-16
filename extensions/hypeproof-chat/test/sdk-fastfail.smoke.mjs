@@ -13,6 +13,7 @@
 // Run: node --experimental-strip-types test/sdk-fastfail.smoke.mjs
 
 import assert from "node:assert/strict";
+import { errorBannerPresentation } from '../webview-ui/src/errorBannerPresentation.ts';
 
 const { sdkFatalAuthStatus, consumeSdkStream, extractSdkText, SDK_FATAL_AUTH_STATUSES } =
   await import("../src/sdkCoachHelpers.ts");
@@ -155,7 +156,12 @@ for (const failure of [apiRetry(429, 'rate_limit'), {
  assert.equal(err?.name,'SdkApiError');assert.equal(calls.aborted,1);assert.equal(pulled.length,1);
  assert.deepEqual(calls.deltas,[]);assert.equal(err.message.includes('private'),false);
  assert.equal(err.message.includes('만료'),false);
- if(err.status===429){assert.doesNotMatch(err.message,/예산.*때문/);assert.match(err.message,/AI 서비스의 요청 제한/);}
+ if(err.status===429){
+   assert.doesNotMatch(err.message,/예산.*때문/);assert.match(err.message,/AI 서비스의 요청 제한/);
+   assert.equal(errorBannerPresentation(err.message).title,'AI 요청이 제한됐어요',
+     'a real SDK status-only refusal must not render as a confirmed ended pass');
+ }
+ assert.notEqual(errorBannerPresentation(err.message).title,'이용권을 더 쓸 수 없어요');
  if(failure.error==='rate_limit')assert.equal(err.status,429);
 }
 {

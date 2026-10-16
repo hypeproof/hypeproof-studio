@@ -82,6 +82,8 @@ export function classifyFailure(o: { status?: number; code?: string; networkErro
     return "unknown";
   }
   if (o.status === 402 || code.startsWith("budget")) return "budget_limit";
+  // Legacy wire bucket includes gateway budget/concurrency refusals. A bare
+  // status does not identify the provider as the source; surfaces must say so.
   if (o.status === 429) return "provider_rate_limit";
   if (o.status !== undefined && o.status >= 500) return "provider_5xx";
   return "unknown";

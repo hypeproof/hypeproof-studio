@@ -40,13 +40,26 @@ The original recipient activity and existing funding reopened, and the newly
 republished Mac fork873e2439 was imported through its actual private review.
 The saved recipient Google/Sheet settings produced one fresh private preview
 without login or send; after confirmation the graph reached6/6. The subsequent
-coach response hit provider429. Online instructor readback independently records
-automation completed6/6 and attention blocked/provider_rate_limit; this is not
-a budget-exhaustion diagnosis or an error-free final conversation. Evidence:
+coach response hit429. Online instructor readback independently records
+automation completed6/6 and attention blocked/provider_rate_limit. That legacy
+classification maps every bare429 to the same bucket; it proves neither provider
+throttling nor budget exhaustion. The final conversation was not error-free. Evidence:
 `/tmp/hps-email-mvp/windows-upgrade-fd6f276e.json` and
 `/tmp/hps-email-mvp/windows-fork-preview-fd6f276e-safe.png`.
 Evidence: `/tmp/hps-email-mvp/windows-current-fd6f276e/{r2-upload,deployment,access}-receipt.json`.
 No production Service/database change or additional grant was made.
+
+Follow-up source correction (2026-10-16): the captured SDK429 mentioned checking
+an available pass, but the webview treated any mention of a pass as proof that it
+had ended. The banner now reserves ended-pass copy for explicit end/exhaustion/
+refund notices and gives an unclassified429 a request-limit title. Chalk retains
+the compatible `provider_rate_limit` wire bucket but displays an unconfirmed
+request limit with usage/concurrency checks, without asserting provider fault or
+automatic retry. Captured SDK-event-to-banner regression, four paid-pass recovery
+tests, Chalk classroom surface/typecheck and extension/webview builds pass.
+This is a source correction; the installed fd6f276e candidates still have the
+previous wording until a later candidate update. No paid request or grant was
+needed to diagnose or test it.
 
 Integration checkpoint11b82da2 includes main6ad5f9f8; implementation, installer8ba30b73 and
 documentation checkpoint36dc4401 pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
@@ -304,7 +317,7 @@ silently interpret the workshop grant as paid recurring subscription consent.
 | Source/main integration | Studio fd6f276e contains main6ad5f9f8 and passes18 CI checks. Servicefa7472b passes13 CI checks. Installer7f6868f3 pins fd6f276e and passes18 CI checks. | Draft PRs; human-only merge under DEC-022. |
 | Isolated deployment | Servicea245457b, gatewayfe77eec4 and Ops62ab5b8 canonical0046/0047 support the test environment. Backups and integrity/readback receipts are retained. | No production database migration or general release is claimed. |
 | Mac | One Dev app runs fd6f276e. Native argument correction and withdrawn-intent recovery reach a fresh reviewed publication; three-principal readback confirms contents, owner/source and old-ID denial. | TJ Google callback expired; fresh third-principal execution remains open. Dev uses memory-only secrets. |
-| Windows | fd6f276e on official shell720be661/SDK0.3.299: authenticated update, source receipt, db049 portable-profile migration, saved activity restoration, reviewed Mac-fork import and fresh one-recipient Google preview6/6 pass. | Post-preview coach follow-up hit provider429. Earlier db049 rollback remains historical; current rollback snapshot/shortcut exist but were not executed. Shared-roaming restoration and20-seat bandwidth remain unverified. |
+| Windows | fd6f276e on official shell720be661/SDK0.3.299: authenticated update, source receipt, db049 portable-profile migration, saved activity restoration, reviewed Mac-fork import and fresh one-recipient Google preview6/6 pass. | Post-preview coach follow-up hit429; its specific cause is unconfirmed. Earlier db049 rollback remains historical; current rollback snapshot/shortcut exist but were not executed. Shared-roaming restoration and20-seat bandwidth remain unverified. |
 | Store/identity | Three Studio principals, exact recipe ownership/provenance, import, versions, withdrawal and access controls have revision-bound evidence. Non-owner Windows runs the Mac-authored recipe using saved private settings. | Three underlying Google identities/different datasets, third-user useful execution and the remaining matching-candidate lifecycle gates remain open. |
 | Google isolation | Earlier live shared-runner tests passed own-Sheet reads, cross-Sheet denials and caller-isolated state without learner IAM. | Do not relabel the earlier isolation run as current three-account store acceptance. |
 | Instructor/admission | Synthetic20-seat admission, budget, expiry/revocation and concurrency controls pass. Current fd6 Windows emits6/6 completion; online Service then records blocked/provider_rate_limit after a follow-up429, with two other seats unknown. | Not20 real learners or production Chalk. Real roster, class window and live-class budget are missing. |

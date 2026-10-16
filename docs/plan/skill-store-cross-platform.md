@@ -28,9 +28,10 @@ The original recipient activity and existing funding reopened, and the newly
 republished Mac fork873e2439 was imported through its actual private review.
 The saved recipient Google/Sheet settings produced one fresh private preview
 without login or send; after confirmation the graph reached6/6. The subsequent
-coach response hit provider429. Online instructor readback independently records
-automation completed6/6 and attention blocked/provider_rate_limit; this is not
-a budget-exhaustion diagnosis or an error-free final conversation. Evidence:
+coach response hit429. Online instructor readback independently records
+automation completed6/6 and attention blocked/provider_rate_limit. That legacy
+classification maps every bare429 to the same bucket; it proves neither provider
+throttling nor budget exhaustion. The final conversation was not error-free. Evidence:
 `/tmp/hps-email-mvp/windows-upgrade-fd6f276e.json` and
 `/tmp/hps-email-mvp/windows-fork-preview-fd6f276e-safe.png`.
 Evidence: `/tmp/hps-email-mvp/windows-current-fd6f276e/{r2-upload,deployment,access}-receipt.json`.
