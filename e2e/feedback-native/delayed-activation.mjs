@@ -8,6 +8,14 @@ import {waitFor,sleep} from './native-ui.mjs';
 import {within,sha256,restartOwnedCandidate} from './safety.mjs';
 export const DELAYED_STAGES=Object.freeze([{key:'e',name:'short-propagation',holdMs:2000},{key:'f',name:'slow-valid',holdMs:61000},{key:'g',name:'real-expiry',holdMs:610000}]);
 export const EXPIRY_MESSAGE='폴더 전환 확인 시간이 지났습니다. 저장된 활동에서 이어가세요. 작업 파일과 연결은 보존됩니다.';
+// A failed scripted scenario may intentionally retain its interrupted draft.
+// Never repair it or enter the inspector scenario as if its restoration succeeded.
+export function delayedHistoryPrerequisite(c,tests){
+ if(!c.scenarios.includes('history-streaming'))return;
+ for(const id of ['T03-native-scripted-history-persistence','T06-native-stream-block-and-stop','T06-native-stream-normal-quit-recovery','T06-native-stream-direct-file-open','T06-native-revoked-credential-no-auto-execution']){
+  if(!tests.some(t=>t.id===id&&t.status==='PASS'))throw Object.assign(Error('Delayed activation requires observed '+id+' PASS; preserve prior scenario state'),{blocked:true});
+ }
+}
 export function delayedPrerequisite(c,env=process.env){
  if(!c.delayedActivation)return false;
  assert.deepEqual(c.delayedActivation,{enabled:true,inspectorPort:9788},'Exact reviewed hosted inspector configuration required');
@@ -36,6 +44,16 @@ export function checkExpiredActivation(item,{notification,startVisible,chatVisib
  persist();
  stageObservation(DELAYED_STAGES[2],{notification,startVisible,chatVisible});
  assert.equal(activationCalls.filter(row=>row.path==='/v1/profile').length,0,'Expired resume must not automatically connect/revalidate a profile');
+}
+// Passive activation must preserve bytes. Explicit saved-activity commit may rotate
+// its credential ref, but never the physical root, Service/activity identity or files.
+export function checkDelayedDestination({directory,root,service,activityId,binding,files,workspaceFiles,explicitRecovery=false}){
+ assert.equal(fs.realpathSync(root),root,'Destination physical root unchanged');
+ const current=selectOwnedBinding(directory,root,service,activityId);
+ assert.equal(current.file,binding.file,'Destination binding path unchanged');
+ if(!explicitRecovery)assert.equal(current.sha256,binding.sha256,'Destination binding preserved before explicit recovery');
+ else{const record=JSON.parse(fs.readFileSync(current.file,'utf8'));assert(/^hps\.activity\.credential\.[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(record.ref),'Explicit recovery must retain a well-formed stored credential reference');}
+ assert.deepEqual(workspaceFiles(root),files,'Destination files preserved');return current.sha256;
 }
 export async function runDelayedActivation({c,ui,app,launch,openFromStart,nativeOpenBoundFolder,readDraft,focusChat,workspaceFiles,activityId,bundleHash,draft,saveProgress,requestCandidate,onGate=()=>{}}){
  delayedPrerequisite(c);
@@ -92,17 +110,19 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
     const callsAfter=await serviceCalls();
     checkExpiredActivation(item,{notification:observedNotification.trim(),startVisible:visibleStart,chatVisible:autoChat,uiTimes:{notification:notificationAt,start:startAt,chat_probe_started:chatProbeAt,chat_probe_finished:chatProbeFinishedAt},callsAtPause,callsAfter,baselineAt:activeStage.callsBaselineAt,releasedAt:item.pause.released_at_ms,observedAt:Date.now()},persist);
     await ui.shot(path.join(c.evidence,'delayed-expired-notification.png'));
+    item.binding_sha256=checkDelayedDestination({directory:bindings,root,service:c.service.origin+'/v1',activityId,binding,files:preparedFiles,workspaceFiles});item.binding_preserved_before_recovery=true;persist();
     // Explicit public saved-activity recovery, no credential input or host command bridge.
     await ui.savedActivity(view,root);await waitFor(()=>view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'expired activity explicit saved selection');
     requestCandidate(true);await ui.press(view,'.studio-primary');await ui.frame('.hps-input textarea',60000);requestCandidate(false);
     assert.equal((await readDraft()).value,'','Expired checkpoint draft must not have been imported into fresh destination');item.expired_draft_not_imported=true;item.explicit_saved_activity_recovery=true;
+    item.recovered_binding_sha256=checkDelayedDestination({directory:bindings,root,service:c.service.origin+'/v1',activityId,binding,files:preparedFiles,workspaceFiles,explicitRecovery:true});item.recovered_binding_identity_preserved=true;
    }else{
     const restored=await readDraft();assert.notEqual(restored.chat.info.id,before,'Destination must replace real extension target');stageObservation(stage,{draft:restored.value,expectedDraft});item.fresh_destination_checkpoint_imported=true;
     const w=await ui.workbench(),id=w.info.id;
     for(let i=0;i<10;i++){assert.equal((await ui.workbench()).info.id,id,'No repeated workbench reload');assert.equal((await readDraft()).value,expectedDraft);await sleep(1000);}
     await ui.shot(path.join(c.evidence,'delayed-'+stage.name+'.png'));item.no_ten_second_reload_loop=true;
    }
-   assert.equal(sha256(binding.file),binding.sha256,'Destination binding preserved');assert.deepEqual(workspaceFiles(root),preparedFiles,'Destination files preserved');item.binding_sha256=binding.sha256;
+   if(stage.name!=='real-expiry')item.binding_sha256=checkDelayedDestination({directory:bindings,root,service:c.service.origin+'/v1',activityId,binding,files:preparedFiles,workspaceFiles});
    activeStage=null;const returning=await gate.prepareTransition(c.workspace.a,0,'return-A-'+stage.name);const original=await nativeOpenBoundFolder(c.workspace.a);await returning.finished;
    assert.equal(original.value,expectedDraft,'Explicit native return restores A own persisted draft');
    // Restore the original test draft through real input for the remaining ordinary checks.

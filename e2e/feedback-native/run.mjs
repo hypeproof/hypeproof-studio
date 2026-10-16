@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
-import {runDelayedActivation,delayedPrerequisite} from './delayed-activation.mjs';
+import {runDelayedActivation,delayedPrerequisite,delayedHistoryPrerequisite} from './delayed-activation.mjs';
 import {runOwnedWindows} from './native-windows.mjs';
 import {runHistoryStreaming} from './history-streaming.mjs';
 import {compatibilityEnvironment} from '../unified-release/output-bound.mjs';
@@ -152,6 +152,7 @@ try{
  if(c.scenarios.includes('image-denied'))await step('T16-native-image-capability-denied',async()=>{if(profile.image_edit?.enabled===true)throw blocked('Profile enables images; denied-path test must not dispatch an image or invent disabled capability');await focusChat();await command('hypeproof-chat.editImage');await waitFor(async()=>String(await ui.toasts()).includes('이 활동은 이미지 편집을 허용하지 않아요.'),'profile capability denial');await ui.shot(path.join(c.evidence,'image-denied.png'));return {native_registration:true,profile_capability_denied:true,image_selected:false,provider_dispatch:'NOT_RUN'};});
  if(c.delayedActivation){
   await step('T05-owned-delayed-activation-and-real-expiry',async()=>{
+   delayedHistoryPrerequisite(c,report.tests);
    if(ownedActivityCandidate)throw blocked('Prior candidate remains pending before delayed activation');await ui.assertNoDirtyEditors();
    if(!report.tests.some(t=>t.id==='T05-owned-full-process-credential-draft-restart'&&t.status==='PASS'))throw blocked('Delayed activation requires ordinary credential restart PASS');
    const evidence=await runDelayedActivation({c,ui,app:()=>child,launch:extra=>launchOwned(extra),openFromStart,nativeOpenBoundFolder,readDraft,focusChat,workspaceFiles,activityId:profile.activity_id,bundleHash:report.candidate.extension_sha256,draft,onGate:gate=>{extensionGate=gate;},requestCandidate:value=>{ownedActivityCandidate=value;},saveProgress:value=>{report.delayed_activation=value;save();}});

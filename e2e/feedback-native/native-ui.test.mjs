@@ -142,7 +142,7 @@ test('new preview refuses missing provenance in the actually focused editor',asy
 });
 test('chat focus readiness observes command-produced actual input focus without clicking or focusing it',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');let focused=false;
- const target={evaluate:async expression=>{assert.equal(expression,"document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')");return focused;}};
+ const target={evaluate:async()=>({documentFocused:focused,inputFocused:focused})};
  ui.frame=async()=>target;for(const action of['press','key','input','focusWorkbench'])ui[action]=()=>assert.fail('focus readiness must not synthesize '+action);
  setTimeout(()=>{focused=true;},30);assert.equal(await ui.focusChatReady(500),target);
  focused=false;await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);
@@ -337,4 +337,20 @@ test('foreign dirty, preexisting, changed, duplicate or unfocused editors cause 
  }
  assert.throws(()=>assertOwnedPreviewClose({...before,resources:['saved.txt','Untitled-2']},preview,preview),/newly observed/);
  const ui=new NativeUI('http://127.0.0.1:9777');ui.editorState=async()=>({dirtyResources:['unknown.txt']});await assert.rejects(ui.assertNoDirtyEditors({}),/dirty editor/);
+});
+
+
+test('focus diagnostics observe exact target and safe DOM state without repair or private values',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777','owned-window'),input={value:'private-draft-never-log',tagName:'TEXTAREA',getBoundingClientRect:()=>({x:1,y:2,width:300,height:40})};let active={tagName:'BUTTON'},documentFocused=true;
+ const document={querySelector:selector=>{assert.equal(selector,'.hps-input textarea');return input;},hasFocus:()=>documentFocused,get activeElement(){return active;}};
+ const target={info:{id:'owned-chat'},ownedWorkbenchId:'owned-window',contextId:42,evaluate:expression=>vm.runInNewContext(expression,{document,getComputedStyle:()=>({display:'block',visibility:'visible'})})};
+ let frames=0;ui.frame=async()=>{frames++;return target;};for(const action of['press','key','input','focusWorkbench','palette'])ui[action]=()=>assert.fail('No focus repair '+action);
+ await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);assert.equal(frames,1);assert.deepEqual(ui.phases.map(x=>x.outcome),['start','timeout']);
+ const failure=ui.phases[1];assert.equal(failure.target_id,'owned-chat');assert.equal(failure.owned_workbench_id,'owned-window');assert.equal(failure.context_id,42);assert.equal(failure.state.activeTag,'BUTTON');assert.equal(failure.state.inputFocused,false);assert.equal(failure.state.visible,true);assert(failure.snapshot_age_ms>=0);assert(!JSON.stringify(ui.phases).includes('private-draft'));
+ ui.phases=[];active=input;documentFocused=false;await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);assert.equal(ui.phases[1].state.inputFocused,true);assert.equal(ui.phases[1].state.documentFocused,false);
+ ui.phases=[];documentFocused=true;assert.equal(await ui.focusChatReady(500),target);assert.deepEqual(ui.phases.map(x=>x.outcome),['start','observed']);assert.equal(ui.phases[1].state.inputFocused,true);
+});
+test('diagnostic sampling failure preserves refusal without a terminal resample or raw error message',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let samples=0;ui.frame=async()=>({info:{id:'owned-chat'},evaluate:async()=>{samples++;throw Object.assign(Error('synthetic-private-error'),{name:'synthetic-private-custom-name'});}});
+ await assert.rejects(ui.focusChatReady(1),error=>{assert.match(error.message,/actual webview and textarea focus/);assert.match(error.message,/Chat focus diagnostic sample unavailable/);assert(!String(error).includes('synthetic-private'),'Returned timeout must omit custom name and message');assert(!JSON.stringify({error:error.message,name:error.name}).includes('synthetic-private'),'Serialized step failure must omit private markers');return true;});assert.equal(samples,1,'No extra timeout resample or deadline reset');assert.deepEqual(ui.phases.map(x=>x.outcome),['start','timeout']);assert.equal(ui.phases[1].sample_error,'Error');assert.equal(ui.phases[1].state,null);assert(!JSON.stringify(ui.phases).includes('synthetic-private'),'Neither custom error name nor message may enter diagnostics');
 });

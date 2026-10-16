@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {DELAYED_STAGES,EXPIRY_MESSAGE,delayedPrerequisite,stageObservation,checkExpiredActivation} from './delayed-activation.mjs';
+import {createHash,randomUUID} from 'node:crypto';
+import {DELAYED_STAGES,EXPIRY_MESSAGE,delayedPrerequisite,delayedHistoryPrerequisite,stageObservation,checkExpiredActivation,checkDelayedDestination} from './delayed-activation.mjs';
 test('expiry failure preserves exact UI facts and sanitized request boundaries before the unchanged gate rejects',()=>{
  const baseline=[{seq:1,method:'GET',path:'/v1/profile',subject:'A',status:200}],read={seq:2,method:'GET',path:'/v1/profile',subject:'A',status:200,request_id:'synthetic-request',authorization:'never-record',body:'never-record'};
  const observed={notification:EXPIRY_MESSAGE,startVisible:true,chatVisible:false,uiTimes:{notification:610120,start:610130,chat_probe_started:610140,chat_probe_finished:610180,privateText:'never-record'},callsAtPause:baseline,callsAfter:[...baseline,read],baselineAt:100,releasedAt:610100,observedAt:610200};
@@ -34,4 +35,34 @@ test('delayed gate defaults off and refuses local/attach/inmemory/nonfresh or wr
   for(const delta of[{attach:true},{secretStorage:'inmemory'},{delayedActivation:{enabled:true,inspectorPort:9229}}])assert.throws(()=>delayedPrerequisite({...c,...delta},env));assert.throws(()=>delayedPrerequisite(c,{}));
   fs.writeFileSync(path.join(c.workspace.e,'already-used'),'original');assert.throws(()=>delayedPrerequisite(c,env),/initially empty/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+
+test('configured history chain must complete before any delayed inspector or UI admission',()=>{
+ const ids=['T03-native-scripted-history-persistence','T06-native-stream-block-and-stop','T06-native-stream-normal-quit-recovery','T06-native-stream-direct-file-open','T06-native-revoked-credential-no-auto-execution'];const complete=ids.map(id=>({id,status:'PASS'})),config={scenarios:['history-streaming']};let entered=0;
+ const admission=tests=>{delayedHistoryPrerequisite(config,tests);entered++;};
+ for(const id of ids)for(const status of ['FAIL','BLOCKED','NOT_RUN','missing']){const tests=complete.filter(t=>t.id!==id);if(status!=='missing')tests.push({id,status});const before=JSON.stringify(tests);assert.throws(()=>admission(tests),error=>error.blocked===true&&error.message.includes(id));assert.equal(JSON.stringify(tests),before);}
+ assert.equal(entered,0,'No inspector or UI continuation on any incomplete prerequisite');admission(complete);assert.equal(entered,1);assert.equal(delayedHistoryPrerequisite({scenarios:['folders']},[]),undefined,'Unconfigured history is not invented');
+ const source=fs.readFileSync(new URL('./run.mjs',import.meta.url),'utf8'),section=source.slice(source.indexOf("await step('T05-owned-delayed-activation-and-real-expiry'"));assert(section.indexOf('delayedHistoryPrerequisite(c,report.tests)')<section.indexOf('await ui.assertNoDirtyEditors()'));assert(section.indexOf('delayedHistoryPrerequisite(c,report.tests)')<section.indexOf('await runDelayedActivation('));
+});
+
+
+test('passive expiry retains exact bytes; explicit recovery permits only a valid ref rotation with identical binding identity and files',()=>{
+ const base=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'delayed-binding-'))),root=path.join(base,'owned'),directory=path.join(base,'bindings');fs.mkdirSync(root);fs.mkdirSync(directory);
+ const hash=value=>createHash('sha256').update(value).digest('hex'),service='http://127.0.0.1:9888/v1',activityId='a'.repeat(64),file=path.join(directory,hash(root)+'.json');
+ const original={version:1,id:hash(JSON.stringify([service,activityId])),ref:'hps.activity.credential.'+randomUUID()},write=record=>fs.writeFileSync(file,JSON.stringify(record));write(original);
+ const binding={file,sha256:hash(fs.readFileSync(file))},workspaceFiles=folder=>Object.fromEntries(fs.readdirSync(folder).map(name=>[name,hash(fs.readFileSync(path.join(folder,name)))])),options={directory,root,service,activityId,binding,files:{},workspaceFiles};
+ try{
+  assert.equal(checkDelayedDestination(options),binding.sha256);
+  const recovered={...original,ref:'hps.activity.credential.'+randomUUID()};write(recovered);
+  assert.throws(()=>checkDelayedDestination(options),/before explicit recovery/,'No ref change may precede explicit admission');const changed=checkDelayedDestination({...options,explicitRecovery:true});assert.notEqual(changed,binding.sha256);
+  for(const delta of [{id:'b'.repeat(64)},{version:0},{ref:'hps.activity.credential.not-a-uuid'},{ref:'hps.activity.credential.'},{ref:'private-invalid-ref'}]){write({...recovered,...delta});assert.throws(()=>checkDelayedDestination({...options,explicitRecovery:true}));assert.throws(()=>checkDelayedDestination(options));}
+  write(recovered);for(const delta of [{service:'http://127.0.0.1:9889/v1'},{activityId:'b'.repeat(64)},{binding:{...binding,file:path.join(directory,'another.json')}}])assert.throws(()=>checkDelayedDestination({...options,...delta,explicitRecovery:true}));
+  const otherRoot=path.join(base,'other');fs.mkdirSync(otherRoot);fs.writeFileSync(path.join(directory,hash(otherRoot)+'.json'),JSON.stringify(recovered));assert.throws(()=>checkDelayedDestination({...options,root:otherRoot,explicitRecovery:true}),/binding path/);
+  fs.writeFileSync(path.join(root,'unexpected'),'changed');for(const explicitRecovery of [false,true]){write(original);assert.throws(()=>checkDelayedDestination({...options,explicitRecovery}),/Destination files preserved/);}fs.rmSync(path.join(root,'unexpected'));
+  const outside=path.join(base,'outside-binding');fs.renameSync(file,outside);fs.symlinkSync(outside,file);for(const explicitRecovery of [false,true])assert.throws(()=>checkDelayedDestination({...options,explicitRecovery}),/non-linked/);
+ }finally{fs.rmSync(base,{recursive:true,force:true});}
+ const source=fs.readFileSync(new URL('./delayed-activation.mjs',import.meta.url),'utf8'),section=source.slice(source.indexOf("if(stage.name==='real-expiry'){",source.indexOf('runDelayedActivation')));
+ assert(section.indexOf('item.binding_sha256=checkDelayedDestination')<section.indexOf('await ui.savedActivity'));
+ assert(section.indexOf('item.recovered_binding_sha256=checkDelayedDestination')>section.indexOf("await ui.press(view,'.studio-primary')"));
 });
