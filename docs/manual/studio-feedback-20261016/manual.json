@@ -1,8 +1,8 @@
 {
   "schema": "hps-feedback-manual/1",
-  "status": "integrated_local_candidate",
-  "candidate_base_sha": "7497be98aaa18e84b61d2d15d8f6371906a42a27",
-  "manual_revision": "2026-10-16-current-ui-r2",
+  "status": "partial_candidate_verification",
+  "candidate_base_sha": "bbd4972d42a7708923e7c580cc9c88d66e5955f1",
+  "manual_revision": "2026-10-16-hosted-evidence-refresh-r1",
   "acceptance_revision": "ff25b53b1352e89ce243d780cfe5474af671a9da1229d432f1403b083380339d",
   "release_status": "NOT_RUN",
   "human_acceptance": "HUMAN_PENDING",
@@ -16,80 +16,92 @@
     "developer.html"
   ],
   "notes": [
-    "이미지 편집 명령과 비교·이전 작업 확인·취소 흐름은 현재 소스에 통합되어 있다. 명령 존재는 활동 허용이나 제공자 설정을 뜻하지 않는다.",
-    "macOS native 캡처는 부분 관측이며 전체 파일/재시작 검증, Windows 및 실제 이미지 제공자 성공으로 확대하지 않는다.",
-    "실제 회원 로그인·운영 반영·인보이스 대조·사람 과제 완료는 각각 별도 증거가 필요하다.",
-    "HTML은 인라인 CSS와 상대 링크를 사용하며 외부 요청·CDN에 의존하지 않는다."
+    "Manual content is Korean; metadata fields are English.",
+    "Native evidence is a selected Mac/Windows candidate slice from source 94994422 on official public shell 0.1.56 with injected extension 0.1.5; not the installed release.",
+    "The later extended run on d84 is retained as FAIL on both platforms due automation observation/control failures; the newer bbd background harness has not been hosted-rerun.",
+    "Image editing was explicitly denied by the observed activity profile; the image provider was not called.",
+    "A fresh live Lab SSO Owner session was observed; its listed counts are a time-specific snapshot and new cost collection was not yet deployed.",
+    "Approved same-day public pricing remains distinct from invoice/payment; production publication pending.",
+    "Original manual metadata and its historical screenshot claims are preserved under prior_manual_metadata."
   ],
   "final_integration_sha": null,
-  "native_qa": "PARTIAL_INTERRUPTED",
+  "native_qa": "PARTIAL_SELECTED_SLICE_WITH_LATER_AUTOMATION_FAILURE",
   "image_provider": "NOT_RUN",
-  "windows_native": "NOT_RUN",
+  "windows_native": "PASS_SELECTED_SLICE_AND_LATER_AUTOMATION_FAILURE",
   "runtime": {
-    "source_sha": "7497be98aaa18e84b61d2d15d8f6371906a42a27",
+    "candidate_source_sha": "94994422ad1aa27cfa1714f993b4805854c54779",
+    "source_sha": "94994422ad1aa27cfa1714f993b4805854c54779",
     "level": "prepared-injected-native-candidate",
-    "shell_name": "HypeProof Studio Dev",
-    "shell_version": "0.1.51",
-    "shell_commit": "d4db90498fce6c337823a4ce73cbe79c5e688b05",
+    "shell_repository": "hypeproof/hypeproof-studio",
+    "shell_tag": "v0.1.56",
+    "shell_asset": "HypeProof-Studio-darwin-arm64.zip",
+    "shell_version": "0.1.56",
+    "shell_commit": "f5939d9cf6bbf42588eacd370e2faf9cde7c53bc",
     "extension_version": "0.1.5",
-    "extension_sha256": "c8221b140ad5b3c1fa066fd98791e78d5f717aebd29187b4091eaddcf1192ead",
-    "service_sha": "0b764f027af509a79a42c14e05d1688bba411c26",
-    "service_scope": "actual-local-wrangler-not-production",
+    "extension_sha256": "8937119cd1eac341c9edded3acd010a33eff4c470885aa0d77ad3e3876cc3b76",
+    "service_sha": "eee7cf0957ad02c7a3b7e18be61319ea26d20158",
+    "service_scope": "actual Hono router with synthetic session/roster; not production",
     "image_edit_enabled_in_observed_profile": false,
-    "source_evidence": "wp8-native-r3/result.json",
-    "source_evidence_sha256": "03b900cef77cfec161cf70bb6f1723258d7cca5d265cc4361c529c6ceba4d650"
+    "native_run_id": 38842055501,
+    "native_results": {
+      "mac": "PASS_SELECTED_SLICE",
+      "windows": "PASS_SELECTED_SLICE"
+    },
+    "native_evidence": "wp8/hosted-native-38842055501/summary.json",
+    "later_native_run_id": 38843826441,
+    "later_native_status": "FAIL_PRESERVED_BOTH_PLATFORMS_AUTOMATION_CONTROL_FAILURES",
+    "later_native_evidence": "wp8/hosted-native-38843826441/summary.json",
+    "latest_harness_fix_sha": "bbd4972d42a7708923e7c580cc9c88d66e5955f1",
+    "latest_harness_fix_tests": "52 PASS; hosted native rerun NOT_RUN"
   },
   "native_observation": {
-    "status": "PARTIAL_INTERRUPTED",
-    "observed": [
-      "preflight",
-      "native-entry"
+    "status": "PARTIAL_SELECTED_SLICE",
+    "mac_and_windows": "run 38842055501; selection only",
+    "passed": [
+      "native entry",
+      "T01 native file save",
+      "T02 Explorer layout reload",
+      "T03 same-activity folder continuity",
+      "T04 folder cancel and draft preservation",
+      "T07 native skill preview/select/disable"
     ],
-    "incomplete_slices": [
-      "T01-explorer-user-layout-reload: CDP Runtime.evaluate timeout",
-      "T01-native-file-save: native Save dialog automation unavailable"
+    "not_run": [
+      "model dispatch",
+      "full process restart credentials",
+      "different activity collision in this run",
+      "offline network isolation",
+      "provider application",
+      "public installed release",
+      "human acceptance"
     ],
-    "interruption": "user requested background-only tests due desktop focus disruption",
-    "interruption_evidence": "wp8-native-r3/interruption.json",
-    "remaining_native_slices": "NOT_RUN to completion",
-    "further_local_foreground_authorized": false
+    "later_failure": "run 38843826441 fails both platform suites due restart/quick-input timeout and unusable Windows UI controls; not a full product acceptance result",
+    "latest_fix": "bbd4972d; 52 background tests PASS, hosted rerun not run",
+    "prior_local_foreground_interruption": "historical only; later native observations were hosted"
   },
   "screenshot_evidence": [
     {
       "file": "native-entry.png",
-      "sha256": "823f81ca5a98dcf5aec3837b5c6389ad8501a00851f98a9fb3765f50fb7dce34",
-      "source": "wp8-native-r3/native-entry.png",
-      "scope": "actual macOS development candidate entry only",
-      "privacy_review": "visually inspected existing image before unchanged copy; no credentials or personal data visible",
+      "sha256": "7f679bade647e58b7f52142a77e59022dd856e5b3fae9a185d4d3a3fea8f40ea",
+      "source": "wp8/hosted-native-38842055501/mac/native-entry.png",
+      "source_run_id": 38842055501,
+      "source_sha": "94994422ad1aa27cfa1714f993b4805854c54779",
+      "scope": "macOS prepared injected candidate using official public shell v0.1.56",
+      "shell_asset": "HypeProof-Studio-darwin-arm64.zip",
+      "shell_sha256": "96d4cb31c3845370dc5ba8794a0bfd7682063579b0549bc94b4c19cfb9ad9526",
+      "extension_version": "0.1.5",
+      "extension_sha256": "8937119cd1eac341c9edded3acd010a33eff4c470885aa0d77ad3e3876cc3b76",
+      "privacy_review": "visually inspected; no secret or personal information visible; copied byte-for-byte",
       "not_proven": [
-        "file save",
-        "restart continuity",
-        "model calls",
+        "full process restart",
+        "model response",
         "image provider edit",
-        "Windows",
+        "installed release acceptance",
         "production",
         "human acceptance"
       ]
     }
   ],
   "prior_browser_qa": {
-    "status": "PASS",
-    "scope": "local-file-browser",
-    "evidence": "wp7/browser/result.json",
-    "evidence_sha256": "8ec7db0aeca9cbf283d63df6329641c693f460a3dd113eacbf0937342b85cd4a",
-    "viewports": [
-      390,
-      1280
-    ]
-  },
-  "owner_browser_qa": {
-    "status": "PASS",
-    "scope": "synthetic-real-browser",
-    "evidence": "wp6/browser/result.json",
-    "evidence_sha256": "6b76786b40a293e261191999a3b46e50a2e12f5c3b5dcc162e28ef22db5fa08e",
-    "production": false
-  },
-  "browser_qa_evidence": {
     "status": "PASS",
     "scope": "manual-html-headless-local-file",
     "evidence": "wp8/manual-current-browser/result.json",
@@ -114,5 +126,199 @@
       "production",
       "human acceptance"
     ]
+  },
+  "owner_browser_qa": {
+    "status": "PASS",
+    "scope": "synthetic-real-browser",
+    "evidence": "wp6/browser/result.json",
+    "evidence_sha256": "6b76786b40a293e261191999a3b46e50a2e12f5c3b5dcc162e28ef22db5fa08e",
+    "production": false
+  },
+  "browser_qa_evidence": {
+    "status": "PASS",
+    "scope": "manual-html-headless-local-file-offline",
+    "evidence": "wp8/manual-refresh-final/result.json",
+    "evidence_sha256": "6c6c2cddef418abb720c1edacb9dc470eb644fdc6a4959426ed075914cb57bd8",
+    "viewports": [
+      390,
+      1280
+    ],
+    "cases": 10,
+    "page_errors": [],
+    "remote_requests": [],
+    "checks": [
+      "five manual pages",
+      "relative links and in-directory screenshot",
+      "responsive horizontal overflow",
+      "active navigation and keyboard focus",
+      "offline local-file open and no remote requests",
+      "no page errors"
+    ],
+    "not_proven": [
+      "installed native lifecycle",
+      "offline GitHub snapshot UI isolation",
+      "live image provider",
+      "production price publication",
+      "human acceptance"
+    ]
+  },
+  "owner_session": {
+    "status": "PASS_FRESH_OWNER_SESSION",
+    "url": "https://hypeproof-ai.xyz/admin/owner",
+    "lab_merge_sha": "c6b64f912192fffe7ccfe3cd28f6a97136df95f5",
+    "deployment_run": "38831346886",
+    "observed_at_kst": "2026-10-16 10:37:18",
+    "login": "user completed existing SSO; read-only page reload observed",
+    "stored_records": 342,
+    "users": 13,
+    "cohorts": 4,
+    "limitations": [
+      "new cost collection code not yet deployed; counts were existing stored records",
+      "no permission change",
+      "revoked/nonmember denial verified separately, not by this session"
+    ],
+    "evidence": "wp8/lab-deployed-owner-session.json"
+  },
+  "approved_price_snapshot": {
+    "status": "approved_for_2026-10-16_utc_day; production_publication_pending",
+    "price_digest": "c784f24ce54eb0534533f4292d526a6e981135c362cf1967797df25a9051aa8b",
+    "local_pre_r3": "37 attempts, USD 37.075316 known, 6 attempts unknown",
+    "invoice_or_payment": "NOT_VERIFIED",
+    "local_evidence": "wp8/postfix-cost-reconciliation/reconciliation.json",
+    "production_dry_run": "PASS 38844013812; actual publication still pending"
+  },
+  "live_visual_quality": {
+    "original_repetitions": "FAIL 3 of 3",
+    "post_fix_r1": "FAIL; no accepted candidate",
+    "post_fix_r2": "FAIL; no output candidates",
+    "post_fix_r3": "FAIL; final blind pixel review failed; approved budget exhausted; no more attempts",
+    "status": "NO_ACCEPTED_CANDIDATE_PENDING_NEW_APPROVED_WORK",
+    "limits": "background transport and viewport mechanics do not override visual failure"
+  },
+  "prior_manual_metadata": {
+    "schema": "hps-feedback-manual/1",
+    "status": "integrated_local_candidate",
+    "candidate_base_sha": "7497be98aaa18e84b61d2d15d8f6371906a42a27",
+    "manual_revision": "2026-10-16-current-ui-r2",
+    "acceptance_revision": "ff25b53b1352e89ce243d780cfe5474af671a9da1229d432f1403b083380339d",
+    "release_status": "NOT_RUN",
+    "human_acceptance": "HUMAN_PENDING",
+    "screenshots": "PARTIAL_OBSERVED",
+    "browser_qa": "PASS",
+    "pages": [
+      "index.html",
+      "learner.html",
+      "owner.html",
+      "operator.html",
+      "developer.html"
+    ],
+    "notes": [
+      "이미지 편집 명령과 비교·이전 작업 확인·취소 흐름은 현재 소스에 통합되어 있다. 명령 존재는 활동 허용이나 제공자 설정을 뜻하지 않는다.",
+      "macOS native 캡처는 부분 관측이며 전체 파일/재시작 검증, Windows 및 실제 이미지 제공자 성공으로 확대하지 않는다.",
+      "실제 회원 로그인·운영 반영·인보이스 대조·사람 과제 완료는 각각 별도 증거가 필요하다.",
+      "HTML은 인라인 CSS와 상대 링크를 사용하며 외부 요청·CDN에 의존하지 않는다."
+    ],
+    "final_integration_sha": null,
+    "native_qa": "PARTIAL_INTERRUPTED",
+    "image_provider": "NOT_RUN",
+    "windows_native": "NOT_RUN",
+    "runtime": {
+      "source_sha": "7497be98aaa18e84b61d2d15d8f6371906a42a27",
+      "level": "prepared-injected-native-candidate",
+      "shell_name": "HypeProof Studio Dev",
+      "shell_version": "0.1.51",
+      "shell_commit": "d4db90498fce6c337823a4ce73cbe79c5e688b05",
+      "extension_version": "0.1.5",
+      "extension_sha256": "c8221b140ad5b3c1fa066fd98791e78d5f717aebd29187b4091eaddcf1192ead",
+      "service_sha": "0b764f027af509a79a42c14e05d1688bba411c26",
+      "service_scope": "actual-local-wrangler-not-production",
+      "image_edit_enabled_in_observed_profile": false,
+      "source_evidence": "wp8-native-r3/result.json",
+      "source_evidence_sha256": "03b900cef77cfec161cf70bb6f1723258d7cca5d265cc4361c529c6ceba4d650"
+    },
+    "native_observation": {
+      "status": "PARTIAL_INTERRUPTED",
+      "observed": [
+        "preflight",
+        "native-entry"
+      ],
+      "incomplete_slices": [
+        "T01-explorer-user-layout-reload: CDP Runtime.evaluate timeout",
+        "T01-native-file-save: native Save dialog automation unavailable"
+      ],
+      "interruption": "user requested background-only tests due desktop focus disruption",
+      "interruption_evidence": "wp8-native-r3/interruption.json",
+      "remaining_native_slices": "NOT_RUN to completion",
+      "further_local_foreground_authorized": false
+    },
+    "screenshot_evidence": [
+      {
+        "file": "native-entry.png",
+        "sha256": "823f81ca5a98dcf5aec3837b5c6389ad8501a00851f98a9fb3765f50fb7dce34",
+        "source": "wp8-native-r3/native-entry.png",
+        "scope": "actual macOS development candidate entry only",
+        "privacy_review": "visually inspected existing image before unchanged copy; no credentials or personal data visible",
+        "not_proven": [
+          "file save",
+          "restart continuity",
+          "model calls",
+          "image provider edit",
+          "Windows",
+          "production",
+          "human acceptance"
+        ]
+      }
+    ],
+    "prior_browser_qa": {
+      "status": "PASS",
+      "scope": "local-file-browser",
+      "evidence": "wp7/browser/result.json",
+      "evidence_sha256": "8ec7db0aeca9cbf283d63df6329641c693f460a3dd113eacbf0937342b85cd4a",
+      "viewports": [
+        390,
+        1280
+      ]
+    },
+    "owner_browser_qa": {
+      "status": "PASS",
+      "scope": "synthetic-real-browser",
+      "evidence": "wp6/browser/result.json",
+      "evidence_sha256": "6b76786b40a293e261191999a3b46e50a2e12f5c3b5dcc162e28ef22db5fa08e",
+      "production": false
+    },
+    "browser_qa_evidence": {
+      "status": "PASS",
+      "scope": "manual-html-headless-local-file",
+      "evidence": "wp8/manual-current-browser/result.json",
+      "evidence_sha256": "7c74b1a7a5d198bf049f1ca5802a0cb88df00d931606d36bcc34943ed0c053fe",
+      "viewports": [
+        390,
+        1280
+      ],
+      "checks": [
+        "five manual pages",
+        "relative links and reviewed native image",
+        "no document overflow",
+        "active navigation and keyboard focus",
+        "current image command and recovery labels",
+        "no remote requests or page errors"
+      ],
+      "not_proven": [
+        "report filters (prior separate evidence only)",
+        "installed native lifecycle",
+        "live image provider",
+        "Windows",
+        "production",
+        "human acceptance"
+      ]
+    }
+  },
+  "current_manual_file_sha256": {
+    "index.html": "18f33cdd2b031d63004bc2f74610c744d83c341d25c0870c7a94065d38a67030",
+    "learner.html": "991526fc270955a4b3cc3ff853efc30e12cb63aff3d6e504e0d9b66a01dcd5d8",
+    "owner.html": "4bbe1f026777dc82bd9437666198ed716bb83df58e9996089fc24e430cfcb150",
+    "operator.html": "055d500f15bd9e433c3bb59f1bf38efe6e661cc494c3523b8e15727844481289",
+    "developer.html": "e43600c200ddf4bac9b81873535af54491817bd149578b53a7a18a405d3aede9",
+    "native-entry.png": "7f679bade647e58b7f52142a77e59022dd856e5b3fae9a185d4d3a3fea8f40ea"
   }
 }
