@@ -6,6 +6,7 @@ import {createHash,randomUUID,timingSafeEqual} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {pathToFileURL} from 'node:url';
+import {messageMetadata} from './trace.mjs';
 export const REQUEST_LIMIT=12,OUTPUT_CAP=4096;
 export const digest=value=>createHash('sha256').update(value).digest('hex');
 export function prepareRequest(body,endpoint){
@@ -52,7 +53,7 @@ export async function startGuard({activityId,ledgerFile,keyFile,serviceCredentia
    if(state.attempts>=REQUEST_LIMIT){state.blocked=Math.min(state.blocked+1,1000000);persist();reply(res,429,'activity_request_budget_exhausted');return;}
    const payload=JSON.stringify(body);
    // Reserve and persist synchronously BEFORE every dispatch, including auxiliary calls and retries.
-   row={attempt:++state.attempts,endpoint:url.pathname,model:body.model,body_sha256:digest(payload),body_bytes:Buffer.byteLength(payload),image_sha256:imageHashes(body),external_instruction_sha256:instructionHashes(body),...(url.pathname==='/v1/messages'?{max_tokens:body.max_tokens}:{}),phase:'reserved'};state.rows.push(row);persist();
+   row={attempt:++state.attempts,endpoint:url.pathname,model:body.model,body_sha256:digest(payload),body_bytes:Buffer.byteLength(payload),message_metadata:messageMetadata(body.messages),image_sha256:imageHashes(body),external_instruction_sha256:instructionHashes(body),...(url.pathname==='/v1/messages'?{max_tokens:body.max_tokens}:{}),phase:'reserved'};state.rows.push(row);persist();
    controller=new AbortController();controller.signal.addEventListener('abort',()=>{if(!res.destroyed)res.destroy();},{once:true});const timer=setTimeout(()=>controller.abort(),timeoutMs);res.on('close',()=>{if(!res.writableEnded)controller.abort();});
    const headers={'content-type':'application/json','x-api-key':upstreamKey};for(const name of['anthropic-version','anthropic-beta','accept'])if(typeof req.headers[name]==='string')headers[name]=req.headers[name];
    try{
