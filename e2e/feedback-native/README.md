@@ -308,3 +308,26 @@ claimed. No new native result is PASS until the hosted run actually executes.
 The owned HTTP bridge awaits its once-only response-reader cancellation promise
 before settling the actual Service context and taking the ledger snapshot. This
 orders fixture observation; it does not change Service runtime accounting.
+
+### Hosted simultaneous-window scope
+
+The normal full-process restart now observes restored textarea focus without a
+focus command, click, or `Page.bringToFront` repair. A visible draft alone cannot
+satisfy that focus check.
+
+With scripted hosted mode, the suite opens the already-bound C folder through the
+owned binary's public `--new-window` argument using the same isolated user-data
+profile. It pins each workbench and its webviews to the observed window target ID;
+ambiguous unscoped discovery refuses input. The original window follows the real
+saved-activity chooser A→B and public File Open Folder back to A. The other C
+window must keep its frame, independent draft, binding-file hash and workspace
+files throughout. A ten-second destination observation rejects repeated reloads.
+Cleanup uses native Close Window on the explicitly scoped secondary window only.
+
+This is a new hosted scenario, not executed by background helper tests. Its result
+records `pending_marker_consumption: NOT_OBSERVED`: UI preservation does not
+expose the transient global memento. Existing actual-module controls separately
+cover destination-bound one-shot consumption, stale/expired markers, delayed
+restore, symlink/Korean paths and the 61-second acceptance boundary. Actual native
+slow activation and the expiry notification remain separate unobserved conditions;
+no ten-minute wait, seeded app state or product test backdoor is added.
