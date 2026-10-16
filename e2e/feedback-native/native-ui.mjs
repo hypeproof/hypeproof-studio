@@ -1,8 +1,19 @@
 // Cross-platform form of the existing classroom/mac-window.mjs OOPIF/input contract.
 // Reads DOM state only. Every action uses native CDP keyboard/mouse input, never DOM click(), input setters or postMessage().
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import {loopback} from './safety.mjs';
 export function focusedResource(state){const title=state.editorLabel?.split(',')[0].trim();return !!state.resource&&(title===state.resource||title?.endsWith(' • '+state.resource));}
+// Compare complete absolute identities; only Windows drive spelling and separators
+// are canonicalized. Never accept a matching suffix, another drive or URI text.
+export function sameDisplayedWorkspace(actual,expected,platform=process.platform){
+ if(typeof actual!=='string'||typeof expected!=='string')return false;
+ if(platform!=='win32')return actual===expected;
+ if(!path.win32.isAbsolute(actual)||!path.win32.isAbsolute(expected))return false;
+ const normalize=value=>path.win32.normalize(value).replace(/^[a-z]:/,drive=>drive.toUpperCase());
+ return normalize(actual)===normalize(expected);
+}
+export function skillPreviewOutcome(messages){const text=String(messages);if(text.includes('출처·고정 revision·라이선스·요구 capability'))return 'preview';if(/공개 GitHub|지침 스킬을 처리하지 못했습니다|가져오지/.test(text))return 'failure';return null;}
 export const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export async function waitFor(fn,label,timeout=30000){const end=Date.now()+timeout;let last;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch(error){last=error;}await sleep(150);}throw Error('Timed out: '+label+(last?' ('+last.message+')':''));}
 class Target{
@@ -26,8 +37,15 @@ export class NativeUI{
   await this.input(view,'#course-code',token);await this.clickText(view,'코드 확인하기');
   await waitFor(()=>view.evaluate("!!document.querySelector('.studio-course')&&!document.querySelector('#course-code')&&document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'token B authenticated candidate card');
   await this.clickText(view,'다른 작업 폴더 선택');await this.folder(folder,'이 활동의 작업 폴더 선택');
-  await waitFor(()=>view.evaluate(`document.querySelector('.studio-course dl>div:last-child dd')?.textContent===${JSON.stringify(folder)}`),'candidate explicitly selected folder');
+  await waitFor(async()=>sameDisplayedWorkspace(await view.evaluate("document.querySelector('.studio-course dl>div:last-child dd')?.textContent"),folder),'candidate explicitly selected folder');
   return view;
+ }
+ async cancelActivityCandidate(){
+  let view;try{view=await this.frame('.studio-start',1500);}catch{return false;}
+  if(!await this.hasTextButton(view,'선택 취소'))return false;
+  await this.clickText(view,'선택 취소');
+  await waitFor(async()=>!await this.hasTextButton(view,'선택 취소'),'explicit activity candidate cancellation completed');
+  return true;
  }
  async cdpDown(){try{await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});return false;}catch(error){return error.cause?.code==='ECONNREFUSED'||(Array.isArray(error.cause?.errors)&&error.cause.errors.length>0&&error.cause.errors.every(e=>e.code==='ECONNREFUSED'));}}
  async quitOwned(platform=process.platform){
@@ -69,7 +87,7 @@ export class NativeUI{
  async prompt(title,value){const w=await this.workbench();await waitFor(()=>w.evaluate(`document.querySelector('.quick-input-widget')?.textContent.includes(${JSON.stringify(title)})`),'input prompt '+title);await this.waitQuick(w,s=>s.ready&&s.mode==='picker','input prompt ready');await this.input(w,'.quick-input-widget input',value);await this.key(w,'Enter');await this.selectedQuick(w,value,'input prompt accepted');}
  async editorState(target){return target.evaluate(`(()=>{const e=document.activeElement,editor=e?.closest('.monaco-editor.focused'),group=editor?.closest('.editor-group-container'),tab=group?.querySelector('.tabs-container .tab.active');return {resources:[...document.querySelectorAll('.tabs-container .tab')].map(t=>t.getAttribute('data-resource-name')).filter(Boolean),resource:tab?.getAttribute('data-resource-name'),editorLabel:editor?.parentElement?.getAttribute('aria-label'),focused:!!editor&&(e.matches('textarea.inputarea,.native-edit-context')||e.getAttribute('role')==='textbox'),text:editor?.querySelector('.view-lines')?.textContent.replace(/\\u00a0/g,' ')};})()`);}
  async explorerReady(timeout=30000){const w=await this.workbench();await waitFor(()=>w.evaluate("(()=>{const e=document.querySelector('.explorer-folders-view');return !!e&&e.getBoundingClientRect().width>0&&e.contains(document.activeElement);})()"),'Files command completed with actual Explorer focus',timeout);}
- async focusChatReady(){const chat=await this.frame('.hps-input textarea');await waitFor(()=>chat.evaluate('document.hasFocus()'),'chat reveal completed with actual webview focus');await this.press(chat,'.hps-input textarea');await waitFor(()=>chat.evaluate("document.activeElement===document.querySelector('.hps-input textarea')"),'actual chat input focused');return chat;}
+ async focusChatReady(timeout=30000){const chat=await this.frame('.hps-input textarea');await waitFor(()=>chat.evaluate("document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')"),'chat reveal completed with actual webview and textarea focus',timeout);return chat;}
  async newPreview(target,before,required,timeout=30000){return waitFor(async()=>{const s=await this.editorState(target);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&required.every(text=>s.text?.includes(text))?s:null;},'new preview resource, focused model and rendered provenance',timeout);}
  async isOpenFolder(target){return target.evaluate("(()=>{const e=document.querySelector('.quick-input-widget');const title=e?.querySelector('.quick-input-title')?.textContent.trim();return e?.getBoundingClientRect().height>0&&['Open Folder','폴더 열기'].includes(title);})()");}
  async ownedOpenFolder(directory,timeout=30000){const w=await this.workbench();await waitFor(()=>this.isOpenFolder(w),'declared Open Folder dialog title',timeout);await this.pathDialog(directory,['Open','열기','OK','확인']);}

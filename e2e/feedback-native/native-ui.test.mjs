@@ -140,9 +140,12 @@ test('new preview refuses missing provenance in the actually focused editor',asy
  const ui=new NativeUI('http://127.0.0.1:9777');ui.editorState=async()=>({resource:'Untitled-2',editorLabel:'Untitled-2',focused:true,text:'unrelated document'});
  await assert.rejects(ui.newPreview({}, {resources:['Untitled-1']},['revision'],1),/Timed out/);
 });
-test('chat focus readiness waits actual webview focus before clicking the real textarea',async()=>{
- const ui=new NativeUI('http://127.0.0.1:9777');let focused=false,clicked=false;const chat={evaluate:async expression=>expression==='document.hasFocus()'?focused:clicked};ui.frame=async()=>chat;
- ui.press=async()=>{assert(focused);clicked=true;};const pending=ui.focusChatReady();await new Promise(r=>setTimeout(r,25));assert.equal(clicked,false);focused=true;assert.equal(await pending,chat);assert(clicked);
+test('chat focus readiness observes command-produced actual input focus without clicking or focusing it',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let focused=false;
+ const target={evaluate:async expression=>{assert.equal(expression,"document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')");return focused;}};
+ ui.frame=async()=>target;for(const action of['press','key','input','focusWorkbench'])ui[action]=()=>assert.fail('focus readiness must not synthesize '+action);
+ setTimeout(()=>{focused=true;},30);assert.equal(await ui.focusChatReady(500),target);
+ focused=false;await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);
 });
 test('Open Folder allows observed OK only with its declared visible dialog title',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');let title='Save As';const calls=[];
@@ -203,7 +206,7 @@ test('CDP down requires connection refusal, not HTTP error or timeout',async()=>
 
 test('second activity candidate uses actual StartPage choices, explicit token entry and selected folder UI',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),events=[],token='synthetic-token-B-private',folder='/owned/C';
- const view={evaluate:async expression=>{assert(expression.includes(".studio-course"));events.push(['observe',expression.includes('#connect-title')?'authenticated-candidate':'selected-folder']);return true;}};
+ const view={evaluate:async expression=>{assert(expression.includes(".studio-course"));events.push(['observe',expression.includes('#connect-title')?'authenticated-candidate':'selected-folder']);return expression.includes('#connect-title')?true:folder;}};
  ui.clickText=async(target,label)=>{assert.equal(target,view);events.push(['click',label]);};
  ui.input=async(target,selector,value)=>{assert.equal(target,view);assert.equal(selector,'#course-code');assert.equal(value,token);events.push(['input','explicit-token-B']);};
  ui.folder=async(directory,label)=>events.push(['folder',directory,label]);
@@ -219,4 +222,28 @@ test('restart observes delayed restored draft without focus, palette or token ad
  setTimeout(()=>{restored=true;},25);
  assert.equal(await ui.restoredDraft('persisted-A',500),'persisted-A');assert(reads>=2);
  ui.frame=async()=>({evaluate:async()=> 'wrong-B'});await assert.rejects(ui.restoredDraft('persisted-A',1),/actual restored chat/);
+});
+
+test('Windows displayed folder identity normalizes only complete drive/separator paths, never a suffix or URI',async()=>{
+ const {sameDisplayedWorkspace}=await import('./native-ui.mjs');
+ assert(sameDisplayedWorkspace('d:\\a\\_temp\\candidate\\A','D:/a/_temp/candidate/A','win32'));
+ assert(sameDisplayedWorkspace('D:/a/_temp/candidate/A','D:\\a\\_temp\\candidate\\A','win32'));
+ for(const other of['E:\\a\\_temp\\candidate\\A','D:\\other\\candidate\\A','D:\\a\\_temp\\candidate\\AB','D:\\a\\_temp\\candidate\\A\\child','file:///D:/a/_temp/candidate/A','candidate/A','D:candidate\\A','D:\\a\\_temp\\Candidate\\A'])assert(!sameDisplayedWorkspace(other,'D:\\a\\_temp\\candidate\\A','win32'),other);
+ assert(!sameDisplayedWorkspace('/owned/a','/owned/A','darwin'));
+ assert(!sameDisplayedWorkspace(undefined,'D:\\a','win32'));
+});
+test('failed owned activity cleanup cancels only visible candidate choice, never disconnects another activity',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let pending=false;
+ const view={};ui.frame=async selector=>{assert.equal(selector,'.studio-start');return view;};
+ ui.hasTextButton=async(target,label)=>{assert.equal(target,view);assert.equal(label,'선택 취소');return pending;};
+ ui.clickText=async(target,label)=>{assert.equal(target,view);assert.equal(label,'선택 취소');events.push(label);setTimeout(()=>{pending=false;},25);};
+ assert.equal(await ui.cancelActivityCandidate(),false);assert.deepEqual(events,[]);
+ pending=true;assert.equal(await ui.cancelActivityCandidate(),true);assert.deepEqual(events,['선택 취소']);assert.equal(pending,false);
+ ui.frame=async()=>{throw Error('No visible Start');};assert.equal(await ui.cancelActivityCandidate(),false);
+});
+test('public skill preview outcome distinguishes actual confirmation, canonical failure and unrelated progress',async()=>{
+ const {skillPreviewOutcome}=await import('./native-ui.mjs');
+ assert.equal(skillPreviewOutcome(['출처·고정 revision·라이선스·요구 capability와 지침 내용을 확인했나요?']),'preview');
+ for(const message of['공개 GitHub 다운로드 한도에 도달했습니다.','공개 GitHub 파일을 받지 못했습니다 (403).','지침 스킬을 처리하지 못했습니다. 기존 선택과 작업 결과는 보존됩니다.'])assert.equal(skillPreviewOutcome([message]),'failure');
+ for(const message of['지침 스킬 검사 중','이 활동으로 시작할까요?','다른 알림','고정 revision text without actual confirmation'])assert.equal(skillPreviewOutcome([message]),null);
 });

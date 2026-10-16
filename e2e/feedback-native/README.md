@@ -194,3 +194,25 @@ extra Focus/F1 wait while the screenshot already showed A's draft; that historic
 FAIL remains unchanged. The revised runner records normal child exit, prior CDP
 connection refusal and new PID incrementally before the final draft probe, so a
 later failure retains those observations without claiming full restart PASS.
+
+The Windows d84cec88 run 38843826441 remains FAIL. Its T02 screenshot showed an
+already focused textarea partly below the viewport; readiness now observes the
+Focus command's actual document/textarea focus without clicking to manufacture
+that result. Explicit input still uses the unchanged visibility, bounds and
+hit-test checks. A missing actual focus remains a failure.
+
+The same run displayed the selected folder with lowercase `d:` while its explicit
+configuration used uppercase `D:`. Candidate-folder comparison now checks the
+complete absolute Windows path with drive-letter/separator normalization; it
+never uses a suffix match or equates other drives, folders, URI text or relative
+paths. Case in the remaining path is not broadly folded.
+
+A failed owned activity sequence cancels only its actual visible `선택 취소`
+candidate and waits for that state to disappear. It never clicks `연결 해제`.
+The skill slice requires the original A workspace/chat rather than continuing in
+a pending B candidate; missing prerequisites report BLOCKED. T07's historical
+phases show its import prompt was accepted but no preview was observed. The
+artifact does not establish whether the pending candidate or public download
+caused that failure. Canonical public-download warning outcomes are now captured
+as failures rather than missed until the preview timeout. No automatic import or
+network retry is added; the actual provenance preview is still required to pass.
