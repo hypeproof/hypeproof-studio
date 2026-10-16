@@ -68,7 +68,7 @@ jobs:
       - name: Prepared candidate on dedicated hosted desktop
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
           HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
           HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
           PUBLIC_APP_TAG: ${{ inputs.public_app_tag }}
