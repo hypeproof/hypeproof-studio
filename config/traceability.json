@@ -1264,6 +1264,9 @@
           "path": "worker/src/routes/chat.ts",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/composerFocus.ts"
         }
       ]
     },
@@ -1329,6 +1332,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/composer-focus.smoke.mjs"
         }
       ]
     },
