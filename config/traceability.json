@@ -5505,6 +5505,12 @@
           "path": "e2e/feedback-native/service.mjs"
         },
         {
+          "path": "e2e/feedback-native/service-accounting.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/service-accounting.test.mjs"
+        },
+        {
           "path": "e2e/feedback-live/README.md"
         },
         {
