@@ -5,11 +5,23 @@ import path from 'node:path';
 import net from 'node:net';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {sameDisplayedWorkspace} from './native-ui.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});void promise.catch(()=>{});return {promise,resolve,reject};};
+// Diagnostics only: never used to admit a script, PID, breakpoint or workspace.
+export function inspectorScriptDiagnostic(url,target){
+ const windows=/^[A-Za-z]:[\\/]/.test(target.file),paths=windows?path.win32:path.posix;
+ let relative='unrecognized-script-url';
+ try{const parsed=new URL(url);if(parsed.protocol==='file:'&&!parsed.host&&!parsed.search&&!parsed.hash){
+  const file=fileURLToPath(parsed,{windows}),candidate=paths.relative(paths.dirname(target.file),file);
+  relative=candidate&&!paths.isAbsolute(candidate)&&candidate!=='..'&&!candidate.startsWith('..'+paths.sep)?candidate:'outside-fixture';
+ }}catch{}
+ // Only disclose the known fixture filename; other paths remain hashes.
+ if(relative!==paths.basename(target.file)&&relative!=='outside-fixture'&&relative!=='unrecognized-script-url')relative='other-file-within-fixture';
+ return {relative_fixture:relative,url_sha256:digest(String(url)),matches_expected_pattern:new RegExp(target.urlPattern??breakpointUrlPattern(target.url)).test(url)};
+}
 export function breakpointUrlPattern(url){
  const escaped=url.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
  // Only drive-letter spelling varies. All other path bytes remain exact.
@@ -93,7 +105,7 @@ export function assertPause({event,scripts,breakpoint,target,source,root,expecte
 }
 export class OwnedExtensionGate{
  constructor({port,appPid,target,initialRoot,onProgress=()=>{},observeListener=ownedListener}){
-  this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];
+  this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];this.protocolDiagnostics={event_counts:{},candidate_scripts:[],last_pause:null,breakpoint_locations:[]};
  }
  progress(value){const item={at:new Date().toISOString(),...value};this.events.push(item);assert(this.events.length<=400,'Inspector progress limit');this.onProgress(item);}
  fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message});}}
@@ -115,8 +127,16 @@ export class OwnedExtensionGate{
   assert(pid!==this.previousPid,'Destination must have a new extension-host PID');this.seen.add(info.id);
   const scripts=new Map();let serial=Promise.resolve(),startup=false;const acquired=Date.now(),phase=this.phase;
   const peer=new InspectorPeer(info.webSocketDebuggerUrl,event=>{
+   // Retain bounded structure, never protocol payloads, scopes or application text.
+   const diagnostics=this.protocolDiagnostics,method=['Debugger.scriptParsed','Debugger.breakpointResolved','Debugger.paused','Debugger.resumed','Runtime.executionContextCreated'].includes(event.method)?event.method:'other';
+   diagnostics.event_counts[method]=(diagnostics.event_counts[method]??0)+1;
+   if(event.method==='Debugger.scriptParsed'&&typeof event.params.url==='string'){
+    const name=event.params.url.replaceAll('\\','/').split('/').at(-1),expected=this.target.file.replaceAll('\\','/').split('/').at(-1);
+    if(name?.toLowerCase()===expected?.toLowerCase()&&diagnostics.candidate_scripts.length<8)diagnostics.candidate_scripts.push(inspectorScriptDiagnostic(event.params.url,this.target));
+   }
    if(event.method==='Debugger.scriptParsed')scripts.set(event.params.scriptId,event.params.url);
    if(event.method==='Debugger.paused'){
+    diagnostics.last_pause={reason:['Break on start','other','exception','instrumentation'].includes(event.params.reason)?event.params.reason:'other-reason',hit_own_breakpoint:!!peer.breakpoint&&event.params.hitBreakpoints?.includes(peer.breakpoint)===true,script:event.params.callFrames?.[0]?inspectorScriptDiagnostic(scripts.get(event.params.callFrames[0].location.scriptId)??'',this.target):null};
     peer.paused=true;serial=serial.then(async()=>{
      if(event.params.reason==='Break on start'&&!startup){
       const observed=(await peer.send('Runtime.evaluate',{expression:'process.pid',returnByValue:true})).result?.value;
@@ -141,6 +161,7 @@ export class OwnedExtensionGate{
   },()=>{if(!peer.intentionalClose&&!this.stopped)this.fail(Error('Owned inspector disconnected unexpectedly'));});
   this.peer=peer;await peer.connect();await peer.send('Runtime.enable');await peer.send('Debugger.enable');
   const point=await peer.send('Debugger.setBreakpointByUrl',{urlRegex:this.target.urlPattern,lineNumber:this.target.lineNumber,columnNumber:this.target.columnNumber});assert.equal(typeof point.breakpointId,'string');peer.breakpoint=point.breakpointId;
+  this.protocolDiagnostics.breakpoint_locations=(point.locations??[]).slice(0,8).map(location=>({lineNumber:location.lineNumber,columnNumber:location.columnNumber}));
   for(const location of point.locations??[])assert.equal(location.lineNumber,this.target.lineNumber,'Resolved breakpoint moved');
   this.progress({phase:'owned-inspector-armed',label:phase.label,pid,target_id:info.id});await peer.send('Runtime.runIfWaitingForDebugger');
  }

@@ -8,7 +8,7 @@ import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash} from 'node:crypto';
-import {activationBreakpoint,breakpointUrlPattern,descendant,listenerCommand,ownedListener,inspectorTarget,assertPause,InspectorPeer,OwnedExtensionGate} from './extension-inspector.mjs';
+import {activationBreakpoint,breakpointUrlPattern,inspectorScriptDiagnostic,descendant,listenerCommand,ownedListener,inspectorTarget,assertPause,InspectorPeer,OwnedExtensionGate} from './extension-inspector.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const wait=async fn=>{const end=Date.now()+15000;while(Date.now()<end){const value=await fn();if(value)return value;await new Promise(r=>setTimeout(r,30));}throw Error('Protocol control timeout');};
 const temporary=()=>fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'owned inspector-한글-')));
@@ -23,6 +23,17 @@ async function activate(){
 }
 void activate();setInterval(()=>{},1000);
 `);return activationBreakpoint(file,hash(fs.readFileSync(file)));
+}
+function controlledNode(port,target,marker,root){
+ const child=spawn(process.execPath,['--inspect-brk=127.0.0.1:'+port,target.file,marker,root],{stdio:['ignore','ignore','pipe']});
+ const state={spawned:false,error_code:null,exited:false,closed:false,stderr_bytes:0,stderr_truncated:false},chunks=[];
+ child.on('spawn',()=>{state.spawned=true;});child.on('error',error=>{state.error_code=typeof error.code==='string'?error.code:'unknown';});child.on('exit',()=>{state.exited=true;});child.on('close',()=>{state.closed=true;});
+ child.stderr.on('data',data=>{state.stderr_bytes+=data.length;if(state.stderr_bytes<=65536)chunks.push(data);else state.stderr_truncated=true;});
+ return {child,snapshot(){const stderr=Buffer.concat(chunks),text=stderr.toString('utf8');return {...state,pid:child.pid??null,exit_code:child.exitCode,signal_code:child.signalCode,stderr_sha256:hash(stderr),listening_observed:text.includes('Debugger listening on '),attached_observed:text.includes('Debugger attached.'),waiting_for_disconnect_observed:text.includes('Waiting for the debugger to disconnect')};}};
+}
+function failureDiagnostic(t,gate,target,children){
+ const phases=gate.events.map(({phase,label,pid,target_id,startup_ms})=>({phase,label,pid,target_id,startup_ms}));
+ t.diagnostic(JSON.stringify({schema:'hps-owned-inspector-control-failure/1',platform:process.platform,node:process.version,expected_script:inspectorScriptDiagnostic(target.url,target),bundle_sha256:target.sha256,gate:{phases,current_phase:gate.phase?.label??null,holding:gate.phase?.holding===true,deadline_expired:!!gate.phase&&Date.now()>gate.phase.deadline,peer_present:!!gate.peer,owned_pid_verified:phases.some(event=>event.phase==='owned-startup-break'),paused:gate.peer?.paused??false,owned_pause:gate.peer?.ownedPause??false,socket_state:gate.peer?.ws?.readyState??null,protocol:gate.protocolDiagnostics},children:children.map(control=>control.snapshot())}));
 }
 test('bundle boundary is exact, regular, hashed and before consumption; malformed/duplicate bundles fail',()=>{
  const dir=temporary();try{const target=fixture(dir);assert(target.lineNumber<target.consumeLineNumber);assert.throws(()=>activationBreakpoint(target.file,'0'.repeat(64)),/changed/);const text=fs.readFileSync(target.file,'utf8');fs.writeFileSync(target.file,text.replace("const activationService = 'owned-loopback';","const somethingElse = 'owned-loopback';"));assert.throws(()=>activationBreakpoint(target.file,hash(fs.readFileSync(target.file))),/boundary/);fs.writeFileSync(target.file,text+'\n// const resumeStatus = await consumeActivityResume(\n');assert.throws(()=>activationBreakpoint(target.file,hash(fs.readFileSync(target.file))),/Exactly one/);}finally{fs.rmSync(dir,{recursive:true,force:true});}
@@ -43,9 +54,22 @@ test('pause requires exact own breakpoint/source/statement/root; no arbitrary ex
  for(const delta of[{source:'changed'},{root:'/other/A'},{breakpoint:'someone-else'},{scripts:new Map([['1','file:///other/extension.js']])},{target:{...target,lineNumber:6}}])assert.throws(()=>assertPause({...args,...delta}));
  const peer=new InspectorPeer('ws://127.0.0.1:9788/id',()=>{});assert.throws(()=>peer.send('Runtime.evaluate',{expression:'Date.now=()=>0'}),/not permitted/);assert.throws(()=>peer.send('Debugger.evaluateOnCallFrame',{expression:'context.globalState.update()'}),/not permitted/);
 });
-test('actual owned Node inspector completes startup then holds before statement, and replacement host has a new PID',async()=>{
+test('script diagnostics preserve cross-platform URL spelling and redact unrelated paths without admitting them',()=>{
+ const url='file:///D:/owned%20inspector-%ED%95%9C%EA%B8%80/extension.cjs',target={file:'D:\\owned inspector-한글\\extension.cjs',url,urlPattern:breakpointUrlPattern(url)};
+ assert.deepEqual(inspectorScriptDiagnostic(url,target),{relative_fixture:'extension.cjs',url_sha256:hash(url),matches_expected_pattern:true});
+ assert(inspectorScriptDiagnostic(url.replace('/D:','/d:'),target).matches_expected_pattern);
+ for(const changed of [url.replace('/D:','/E:'),url.replace('/owned','/Owned'),url.replace('%20',' '),url.replace('/extension.cjs','/other.cjs'),url+'?secret=not-to-be-logged']){
+  const value=inspectorScriptDiagnostic(changed,target);assert(!value.matches_expected_pattern);assert(!JSON.stringify(value).includes('not-to-be-logged'));assert(!JSON.stringify(value).includes('owned inspector'));
+ }
+ const posix={file:'/owned fixture/extension.cjs',url:'file:///owned%20fixture/extension.cjs'};
+ assert.equal(inspectorScriptDiagnostic(posix.url,posix).relative_fixture,'extension.cjs');assert(inspectorScriptDiagnostic(posix.url,posix).matches_expected_pattern);
+ assert.equal(inspectorScriptDiagnostic('file:///other/private.cjs',posix).relative_fixture,'outside-fixture');assert.equal(inspectorScriptDiagnostic('not a URL with secret',posix).relative_fixture,'unrecognized-script-url');
+ let receipt;failureDiagnostic({diagnostic:value=>{receipt=value;}},{events:[{phase:'owned-startup-break',pid:123,message:'private application text'}],phase:{label:'initial-startup',deadline:0},protocolDiagnostics:{event_counts:{'Debugger.scriptParsed':2},candidate_scripts:[],last_pause:null,breakpoint_locations:[]}},target,[{snapshot:()=>({pid:123,exit_code:null})}]);
+ const observed=JSON.parse(receipt);assert(observed.gate.owned_pid_verified);assert(observed.gate.deadline_expired);assert.equal(observed.gate.protocol.event_counts['Debugger.scriptParsed'],2);assert(!receipt.includes('private application text'));assert(!receipt.includes('D:\\owned'));assert(!receipt.includes('file:///'));
+});
+test('actual owned Node inspector completes startup then holds before statement, and replacement host has a new PID',async t=>{
  const dir=temporary(),target=fixture(dir),server=net.createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(r=>server.close(r));
- let child,gate;const errors=[];const launch=(root,marker)=>{child=spawn(process.execPath,['--inspect-brk=127.0.0.1:'+port,target.file,marker,root],{stdio:['ignore','ignore','pipe']});child.stderr.on('data',data=>errors.push(data));return child;};
+ let child,gate;const children=[];const launch=(root,marker)=>{const control=controlledNode(port,target,marker,root);children.push(control);return child=control.child;};
  try{
   gate=new OwnedExtensionGate({port,appPid:()=>process.pid,target,initialRoot:dir,observeListener:()=>child?.exitCode===null?child.pid:null}).start();
   const first=launch(dir,path.join(dir,'initial-consumed'));await gate.initial.promise;await wait(()=>fs.existsSync(path.join(dir,'initial-consumed')));const firstPid=first.pid;
@@ -53,8 +77,8 @@ test('actual owned Node inspector completes startup then holds before statement,
   const pending=await gate.prepareTransition(destination,2000,'short-propagation');first.kill();await once(first,'exit');
   const next=launch(destination,marker);await wait(()=>gate.events.some(e=>e.phase==='pre-consumption-paused'&&e.label==='short-propagation'));assert(!fs.existsSync(marker),'Statement cannot execute during hold');
   const proof=await pending.finished;assert(proof.hold_monotonic_ms>=2000&&proof.hold_wall_ms>=2000);assert.equal(proof.previous_host_pid,firstPid);assert.notEqual(proof.pid,firstPid);assert.equal(proof.pid,next.pid);await wait(()=>fs.existsSync(marker));
-  await gate.close();assert.equal(gate.events.at(-1).status,'PASS');assert(!gate.failure);
- }finally{await gate?.close().catch(()=>{});if(child?.exitCode===null){child.kill();await once(child,'exit');}fs.rmSync(dir,{recursive:true,force:true});}
+  await gate.close();assert.equal(gate.events.at(-1).status,'PASS');assert(!gate.failure);assert(gate.protocolDiagnostics.event_counts['Debugger.scriptParsed']>0);assert(gate.protocolDiagnostics.candidate_scripts.some(s=>s.matches_expected_pattern));assert(gate.protocolDiagnostics.candidate_scripts.length<=8);
+ }catch(error){failureDiagnostic(t,gate,target,children);throw error;}finally{await gate?.close().catch(()=>{});if(child?.exitCode===null){child.kill();await once(child,'exit');}fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('cleanup closes socket after remove failure and never resumes an unverified pause',async()=>{
  const gate=new OwnedExtensionGate({port:9788,appPid:()=>2,target:{},initialRoot:'/owned'});const calls=[];gate.peer={breakpoint:'ours',paused:true,ownedPause:false,send:async method=>{calls.push(method);throw Error('seeded refusal');},close:async()=>calls.push('close')};await assert.rejects(gate.close(),/seeded refusal/);assert.deepEqual(calls,['Debugger.removeBreakpoint','close']);assert.equal(gate.events.at(-1).status,'FAIL');
@@ -71,9 +95,10 @@ test('actual owned Node target cannot substitute a different PID and failed clea
  try{await assert.rejects(gate.initial.promise,/PID differs/);assert(!gate.events.some(x=>x.phase==='pre-consumption-paused'));await assert.rejects(gate.close(),/unverified pause/);assert.equal(gate.events.at(-1).status,'FAIL');}
  finally{await gate.close().catch(()=>{});if(child.exitCode===null){child.kill();await once(child,'exit');}fs.rmSync(dir,{recursive:true,force:true});}
 });
-test('lost owned debugger fails immediately and cannot admit a subsequent phase',async()=>{
+test('lost owned debugger fails immediately and cannot admit a subsequent phase',async t=>{
  const dir=temporary(),target=fixture(dir),server=net.createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(r=>server.close(r));
- const child=spawn(process.execPath,['--inspect-brk=127.0.0.1:'+port,target.file,path.join(dir,'initial'),dir],{stdio:'ignore'}),gate=new OwnedExtensionGate({port,appPid:()=>process.pid,target,initialRoot:dir,observeListener:()=>child.exitCode===null?child.pid:null}).start();
+ const control=controlledNode(port,target,path.join(dir,'initial'),dir),child=control.child,gate=new OwnedExtensionGate({port,appPid:()=>process.pid,target,initialRoot:dir,observeListener:()=>child.exitCode===null?child.pid:null}).start();
  try{await gate.initial.promise;gate.peer.ws.close();await wait(()=>gate.failure);assert.match(gate.failure.message,/disconnected unexpectedly/);await assert.rejects(gate.prepareTransition('/other',610000,'must-not-start'),/disconnected unexpectedly/);await assert.rejects(gate.close(),/socket not open/);assert.equal(gate.events.at(-1).status,'FAIL');}
+ catch(error){failureDiagnostic(t,gate,target,[control]);throw error;}
  finally{await gate.close().catch(()=>{});if(child.exitCode===null){child.kill();await once(child,'exit');}fs.rmSync(dir,{recursive:true,force:true});}
 });
