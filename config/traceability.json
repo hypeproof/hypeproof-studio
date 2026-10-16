@@ -5308,6 +5308,9 @@
         },
         {
           "path": "e2e/image-edit/compare.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/image-edit-file-races.smoke.mjs"
         }
       ]
     },
