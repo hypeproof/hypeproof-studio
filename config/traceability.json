@@ -1485,6 +1485,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/workspaceRouting.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/initialSurface.ts"
         }
       ]
     },
@@ -1525,6 +1528,9 @@
         },
         {
           "path": "e2e/feedback-native/history-streaming.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/initial-surface.smoke.mjs"
         }
       ]
     },
