@@ -118,3 +118,44 @@ test('new Untitled tab cannot authorize typing while the old editor still owns f
  const pending=ui.newTextFile('isolated text');await new Promise(r=>setTimeout(r,20));assert.deepEqual(events,[],'changed tab alone must not authorize typing');
  await pending;assert.deepEqual(events,[{method:'Input.insertText',destination:'Untitled-2'}]);
 });
+
+test('command reset to > cannot count as a completed selection or next picker',async()=>{
+ const f=transitionUI();f.state={visible:true,ready:true,mode:'command',value:'>'};let done=false;
+ const pending=f.ui.selectedQuick({},'>Open files','selected').then(()=>{done=true;});
+ await new Promise(r=>setTimeout(r,25));assert.equal(done,false);f.state={visible:false};await pending;
+});
+test('Explorer visibility cannot complete Files while delayed focus still belongs to chat',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let focused=false,done=false;
+ const explorer={getBoundingClientRect:()=>({width:300}),contains:()=>focused};
+ ui.workbench=async()=>({evaluate:expression=>vm.runInNewContext(expression,{document:{querySelector:()=>explorer,activeElement:{}}})});
+ const pending=ui.explorerReady().then(()=>{done=true;});await new Promise(r=>setTimeout(r,25));assert.equal(done,false);focused=true;await pending;
+});
+test('stored preview rejects old matching text and a new tab still bound to the old focused model',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let resource='Untitled-1',model='Untitled-1',done=false;
+ ui.editorState=async()=>({resources:[resource],resource,editorLabel:model,focused:true,text:'revision manifest'});
+ const pending=ui.newPreview({}, {resources:['Untitled-1']},['revision','manifest']).then(()=>{done=true;});
+ await new Promise(r=>setTimeout(r,25));assert.equal(done,false);resource='Untitled-2';await new Promise(r=>setTimeout(r,170));assert.equal(done,false);model='Untitled-2';await pending;
+});
+test('new preview refuses missing provenance in the actually focused editor',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');ui.editorState=async()=>({resource:'Untitled-2',editorLabel:'Untitled-2',focused:true,text:'unrelated document'});
+ await assert.rejects(ui.newPreview({}, {resources:['Untitled-1']},['revision'],1),/Timed out/);
+});
+test('chat focus readiness waits actual webview focus before clicking the real textarea',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let focused=false,clicked=false;const chat={evaluate:async expression=>expression==='document.hasFocus()'?focused:clicked};ui.frame=async()=>chat;
+ ui.press=async()=>{assert(focused);clicked=true;};const pending=ui.focusChatReady();await new Promise(r=>setTimeout(r,25));assert.equal(clicked,false);focused=true;assert.equal(await pending,chat);assert(clicked);
+});
+test('Open Folder allows observed OK only with its declared visible dialog title',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let title='Save As';const calls=[];
+ ui.workbench=async()=>({evaluate:expression=>vm.runInNewContext(expression,{document:{querySelector:()=>({getBoundingClientRect:()=>({height:200}),querySelector:()=>({textContent:title})})}})});
+ ui.pathDialog=async(directory,labels)=>calls.push({directory,labels});
+ await assert.rejects(ui.ownedOpenFolder('/owned/a/',1),/Timed out/);assert.equal(calls.length,0);title='Open Folder';await ui.ownedOpenFolder('/owned/a/');assert.deepEqual(calls,[{directory:'/owned/a/',labels:['Open','열기','OK','확인']}]);
+});
+test('failed owned Open Folder cleanup uses Escape and observes closure; unrelated picker is untouched',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let owned=false,visible=true;
+ ui.workbench=async()=>({});ui.isOpenFolder=async()=>owned;ui.quickState=async()=>({visible});ui.key=async(_w,key)=>{events.push(key);visible=false;};
+ assert.equal(await ui.cancelOwnedOpenFolder(),false);assert.deepEqual(events,[]);owned=true;assert.equal(await ui.cancelOwnedOpenFolder(),true);assert.deepEqual(events,['Escape']);
+});
+test('phase evidence identifies selected command and omits private picker values',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');ui.commandTitle='Public command';ui.quickState=async()=>({visible:false,value:'private-user-text'});
+ await ui.waitQuick({},s=>!s.visible,'selection settled',1);assert.equal(ui.phases[0].command,'Public command');assert.equal(ui.phases[0].outcome,'observed');assert(!JSON.stringify(ui.phases).includes('private-user-text'));
+});
