@@ -12,6 +12,16 @@ async function requestBody(input,init){
  if(ArrayBuffer.isView(body))return new TextDecoder('utf-8',{fatal:true}).decode(new Uint8Array(body.buffer,body.byteOffset,body.byteLength));
  throw Error('unsupported_body');
 }
+const transportNames=new Set(['Error','TypeError','AbortError','TimeoutError']);
+const transportCodes=new Set(['ENOTFOUND','ECONNRESET','ECONNREFUSED','ETIMEDOUT','EAI_AGAIN','UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT','UND_ERR_BODY_TIMEOUT','UND_ERR_SOCKET','CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE','SELF_SIGNED_CERT_IN_CHAIN','DEPTH_ZERO_SELF_SIGNED_CERT']);
+function transportMetadata(error,signal){
+ // Fixed allowlists only: exception prose, stack, URL and arbitrary codes can
+ // contain credentials. Unknown values remain unknown instead of being copied.
+ return {error_class:transportNames.has(error?.name)?error.name:'unknown',
+  error_code:transportCodes.has(error?.code)?error.code:null,
+  cause_code:transportCodes.has(error?.cause?.code)?error.cause.code:null,
+  signal_aborted:signal?.aborted===true};
+}
 export function compatibilityOutputGuard(fetchImpl,onChange=()=>{}){
  const state={schema:'hps-compatibility-output-bound/1',output_cap:COMPATIBILITY_OUTPUT_CAP,forwarded:0,rejected:0,transport_errors:0,calls:[]};
  const snapshot=()=>structuredClone(state);
@@ -33,7 +43,7 @@ export function compatibilityOutputGuard(fetchImpl,onChange=()=>{}){
   const call={kind:generation?'generation':'count_tokens',max_tokens:generation?body.max_tokens:null,state:'dispatching',status:null};
   state.calls.push(call);state.forwarded++;persist();
   try{const response=await fetchImpl(input,init);call.state='response';call.status=response.status;persist();return response;}
-  catch{call.state='transport_error';state.transport_errors++;persist();throw Error('Compatibility upstream transport failed; no automatic retry');}
+  catch(error){call.state='transport_error';call.transport=transportMetadata(error,init?.signal??(input instanceof Request?input.signal:undefined));state.transport_errors++;persist();throw Error('Compatibility upstream transport failed; no automatic retry');}
  }};
 }
 export function assertCompatibilityOutputBound(proof,api){
