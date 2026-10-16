@@ -1,8 +1,8 @@
 {
   "schema": "hps-feedback-manual/1",
   "status": "partial_candidate_verification",
-  "candidate_base_sha": "bbd4972d42a7708923e7c580cc9c88d66e5955f1",
-  "manual_revision": "2026-10-16-hosted-evidence-refresh-r1",
+  "candidate_base_sha": "aea54b427b8ea7b85f15a8be652d5477f72d30ec",
+  "manual_revision": "2026-10-16-native-selected-snapshot-r2",
   "acceptance_revision": "ff25b53b1352e89ce243d780cfe5474af671a9da1229d432f1403b083380339d",
   "release_status": "NOT_RUN",
   "human_acceptance": "HUMAN_PENDING",
@@ -16,86 +16,97 @@
     "developer.html"
   ],
   "notes": [
-    "Manual content is Korean; metadata fields are English.",
-    "Native evidence is a selected Mac/Windows candidate slice from source 94994422 on official public shell 0.1.56 with injected extension 0.1.5; not the installed release.",
-    "The later extended run on d84 is retained as FAIL on both platforms due automation observation/control failures; the newer bbd background harness has not been hosted-rerun.",
-    "Image editing was explicitly denied by the observed activity profile; the image provider was not called.",
-    "A fresh live Lab SSO Owner session was observed; its listed counts are a time-specific snapshot and new cost collection was not yet deployed.",
-    "Approved same-day public pricing remains distinct from invoice/payment; production publication pending.",
-    "Original manual metadata and its historical screenshot claims are preserved under prior_manual_metadata."
+    "Manual text is Korean; status metadata and provenance fields are English.",
+    "As-of snapshot 2026-10-16: hosted prepared candidate source aea54b427b8ea7b85f15a8be652d5477f72d30ec; selected ten native checks PASS on both Mac and Windows. This is not full frozen acceptance or installed-release acceptance.",
+    "Earlier failed hosted native runs 38843826441 and 38845607021 remain historical failures and are not overwritten by the later selected-slice PASS.",
+    "Service #107 merge reference d2d48 is recorded; actual runtime f12 Owner recheck is in progress. Exact Service pin is owned and will be updated separately.",
+    "Image edit provider was not called; observed capability-denied slice PASS is not image generation or edit success.",
+    "Live visual candidate evaluations remain FAIL through r3; no accepted output and approved attempt budget exhausted.",
+    "Owner live SSO login was observed at 2026-10-16 10:37 KST; its counts are a point-in-time snapshot, not unique people or cost coverage.",
+    "Approved public pricing, computed local known costs, provider invoice/payment, and production publication are distinct evidence."
   ],
   "final_integration_sha": null,
-  "native_qa": "PARTIAL_SELECTED_SLICE_WITH_LATER_AUTOMATION_FAILURE",
+  "native_qa": "PASS_SELECTED_SLICE_MAC_AND_WINDOWS",
   "image_provider": "NOT_RUN",
-  "windows_native": "PASS_SELECTED_SLICE_AND_LATER_AUTOMATION_FAILURE",
+  "windows_native": "PASS_SELECTED_SLICE",
   "runtime": {
-    "candidate_source_sha": "94994422ad1aa27cfa1714f993b4805854c54779",
-    "source_sha": "94994422ad1aa27cfa1714f993b4805854c54779",
+    "candidate_source_sha": "aea54b427b8ea7b85f15a8be652d5477f72d30ec",
+    "source_sha": "aea54b427b8ea7b85f15a8be652d5477f72d30ec",
     "level": "prepared-injected-native-candidate",
     "shell_repository": "hypeproof/hypeproof-studio",
-    "shell_tag": "v0.1.56",
-    "shell_asset": "HypeProof-Studio-darwin-arm64.zip",
     "shell_version": "0.1.56",
     "shell_commit": "f5939d9cf6bbf42588eacd370e2faf9cde7c53bc",
     "extension_version": "0.1.5",
-    "extension_sha256": "8937119cd1eac341c9edded3acd010a33eff4c470885aa0d77ad3e3876cc3b76",
-    "service_sha": "eee7cf0957ad02c7a3b7e18be61319ea26d20158",
-    "service_scope": "actual Hono router with synthetic session/roster; not production",
+    "extension_sha256": "7cc591c0d584d70c174a135bef465005f77c1c55372d3195695632148eb62c59",
     "image_edit_enabled_in_observed_profile": false,
-    "native_run_id": 38842055501,
+    "native_run_id": "38846792667",
+    "native_status": "PASS_SELECTED_SLICE_MAC_AND_WINDOWS",
+    "native_evidence": "wp8/hosted-native-38846792667/summary.json",
     "native_results": {
-      "mac": "PASS_SELECTED_SLICE",
-      "windows": "PASS_SELECTED_SLICE"
+      "mac": "PASS_SELECTED_SLICE_10_TESTS",
+      "windows": "PASS_SELECTED_SLICE_10_TESTS"
     },
-    "native_evidence": "wp8/hosted-native-38842055501/summary.json",
-    "later_native_run_id": 38843826441,
-    "later_native_status": "FAIL_PRESERVED_BOTH_PLATFORMS_AUTOMATION_CONTROL_FAILURES",
-    "later_native_evidence": "wp8/hosted-native-38843826441/summary.json",
-    "latest_harness_fix_sha": "bbd4972d42a7708923e7c580cc9c88d66e5955f1",
-    "latest_harness_fix_tests": "52 PASS; hosted native rerun NOT_RUN"
+    "historical_failures": [
+      {
+        "run_id": 38843826441,
+        "status": "FAIL_BOTH_PLATFORMS",
+        "evidence": "wp8/hosted-native-38843826441/summary.json"
+      },
+      {
+        "run_id": 38845607021,
+        "status": "FAIL_BOTH_PLATFORMS",
+        "evidence": "wp8/hosted-native-38845607021/summary.json"
+      }
+    ],
+    "service_pin_ownership": "root; not repeated in this manual snapshot"
   },
   "native_observation": {
-    "status": "PARTIAL_SELECTED_SLICE",
-    "mac_and_windows": "run 38842055501; selection only",
-    "passed": [
-      "native entry",
-      "T01 native file save",
-      "T02 Explorer layout reload",
-      "T03 same-activity folder continuity",
-      "T04 folder cancel and draft preservation",
-      "T07 native skill preview/select/disable"
+    "status": "PASS_SELECTED_SLICE_MAC_AND_WINDOWS",
+    "run_id": "38846792667",
+    "source_sha": "aea54b427b8ea7b85f15a8be652d5477f72d30ec",
+    "selected_tests": [
+      "preflight",
+      "native-entry",
+      "T02-explorer-user-layout-reload",
+      "T01-native-file-save",
+      "T04-folder-cancel-draft",
+      "T03-same-activity-real-folder-continuity",
+      "T05-owned-full-process-credential-draft-restart",
+      "T04-different-activity-collision",
+      "T07-native-skill-preview-select-disable",
+      "T16-native-image-capability-denied"
     ],
-    "not_run": [
-      "model dispatch",
-      "full process restart credentials",
-      "different activity collision in this run",
-      "offline network isolation",
-      "provider application",
-      "public installed release",
-      "human acceptance"
+    "platforms": {
+      "mac": "10/10 PASS",
+      "windows": "10/10 PASS"
+    },
+    "limits": [
+      "model turns/history/streaming NOT_RUN",
+      "T07 offline network isolation and instruction dispatch NOT_RUN",
+      "T16 provider dispatch NOT_RUN",
+      "not all frozen T01-T30",
+      "not installed release, production or human acceptance",
+      "T05 selected restart test is not all frozen T05 cases"
     ],
-    "later_failure": "run 38843826441 fails both platform suites due restart/quick-input timeout and unusable Windows UI controls; not a full product acceptance result",
-    "latest_fix": "bbd4972d; 52 background tests PASS, hosted rerun not run",
-    "prior_local_foreground_interruption": "historical only; later native observations were hosted"
+    "historical_failures_preserved": [
+      "38843826441",
+      "38845607021"
+    ]
   },
   "screenshot_evidence": [
     {
       "file": "native-entry.png",
-      "sha256": "7f679bade647e58b7f52142a77e59022dd856e5b3fae9a185d4d3a3fea8f40ea",
-      "source": "wp8/hosted-native-38842055501/mac/native-entry.png",
-      "source_run_id": 38842055501,
-      "source_sha": "94994422ad1aa27cfa1714f993b4805854c54779",
-      "scope": "macOS prepared injected candidate using official public shell v0.1.56",
-      "shell_asset": "HypeProof-Studio-darwin-arm64.zip",
-      "shell_sha256": "96d4cb31c3845370dc5ba8794a0bfd7682063579b0549bc94b4c19cfb9ad9526",
-      "extension_version": "0.1.5",
-      "extension_sha256": "8937119cd1eac341c9edded3acd010a33eff4c470885aa0d77ad3e3876cc3b76",
-      "privacy_review": "visually inspected; no secret or personal information visible; copied byte-for-byte",
+      "sha256": "a7a30a05c9c7556d0121ed92de98ff88248d95bc86723e3ffafea2fcc51e09e3",
+      "source": "wp8/hosted-native-38846792667/feedback-native-macOS-ba099ed20992dbed5fc917f0eaa40a2f835fad52/native-entry.png",
+      "source_run_id": 38846792667,
+      "source_sha": "aea54b427b8ea7b85f15a8be652d5477f72d30ec",
+      "scope": "Mac prepared injected candidate; native-entry UI observation",
+      "privacy_review": "visually inspected; synthetic activity label visible, no secret or personal information visible; copied byte-for-byte",
       "not_proven": [
-        "full process restart",
         "model response",
         "image provider edit",
-        "installed release acceptance",
+        "full frozen acceptance",
+        "installed release",
         "production",
         "human acceptance"
       ]
@@ -136,9 +147,9 @@
   },
   "browser_qa_evidence": {
     "status": "PASS",
-    "scope": "manual-html-headless-local-file-offline",
-    "evidence": "wp8/manual-refresh-final/result.json",
-    "evidence_sha256": "c616ae7fb4068d585e07c7ab8862cdea63e1ec8889c7f9090060c553eb90049f",
+    "scope": "offline local-file browser QA of five tracked manual pages",
+    "evidence": "wp8/manual-final-20261016/browser/result.json",
+    "evidence_sha256": "1d057b6a9985713aa123256f10d02bfbf97b7753821d762c80142af62dda6798",
     "viewports": [
       390,
       1280
@@ -148,17 +159,18 @@
     "remote_requests": [],
     "checks": [
       "five manual pages",
-      "relative links and in-directory screenshot",
-      "responsive horizontal overflow",
-      "active navigation and keyboard focus",
-      "offline local-file open and no remote requests",
-      "no page errors"
+      "390/1280 responsive overflow check",
+      "relative local links and native screenshot",
+      "keyboard focus reaches a link",
+      "plain user banner and developer-only run/source provenance",
+      "Owner SSO and separate local runtime verification distinctions",
+      "offline local-file open; no remote requests or page errors"
     ],
     "not_proven": [
-      "installed native lifecycle",
-      "offline GitHub snapshot UI isolation",
-      "live image provider",
-      "production price publication",
+      "full native acceptance",
+      "installed release",
+      "production Owner publication",
+      "image provider call",
       "human acceptance"
     ]
   },
@@ -178,15 +190,16 @@
     ],
     "evidence": "wp8/lab-deployed-owner-session.json",
     "user_ids": 13,
-    "count_semantics": "342 existing stored records and 13 aggregated user IDs shown at observation time; not a count of unique people."
+    "count_semantics": "342 existing stored records and 13 aggregated user IDs shown at observation time; not a count of unique people; cost collection status was not tested in this session."
   },
   "approved_price_snapshot": {
-    "status": "approved_for_2026-10-16_utc_day; production_publication_pending",
+    "status": "approved_for_2026-10-16_utc_day; production_publication_not_verified",
     "price_digest": "c784f24ce54eb0534533f4292d526a6e981135c362cf1967797df25a9051aa8b",
     "local_pre_r3": "37 attempts, USD 0.075316 known, 6 attempts unknown (historical pre-r3 subtotal; not invoice or payment).",
     "invoice_or_payment": "NOT_VERIFIED",
     "local_evidence": "wp8/postfix-cost-reconciliation/reconciliation.json",
-    "production_dry_run": "PASS 38844013812; actual publication still pending"
+    "production_dry_run": "PASS 38844013812; actual publication still pending",
+    "production_publication": "NOT_VERIFIED_IN_THIS_SNAPSHOT"
   },
   "live_visual_quality": {
     "original_repetitions": "FAIL 3 of 3",
@@ -315,15 +328,15 @@
     }
   },
   "current_manual_file_sha256": {
-    "index.html": "6b177a191f0cad2d475121047cd3e19075fb2b45a8d319be10f5dcbd7cc7f791",
-    "learner.html": "0f8829317e330f7f619f3f1cef753a662feb63c28fa9b05fe17fddd67744b44c",
-    "owner.html": "9e697c27b48da99e47ceaadd1db12d46d767538cd8c92af82a319975f43665a3",
-    "operator.html": "0cd251f8badaa81511580c6dba8650689a04323a9b01936af2ee8872b6be531c",
-    "developer.html": "a3185de8e84b1fa9e12e9d1b87443350e3b241b06708fdc6c00d00b744dd91b3",
-    "native-entry.png": "7f679bade647e58b7f52142a77e59022dd856e5b3fae9a185d4d3a3fea8f40ea"
+    "index.html": "bf1202e6c36451c1191c3dccfc250e2035885c8c1e1332ed6d138402f7d6f8dd",
+    "learner.html": "a4f99b925967d3e006efa0bd68fd93b86783d12bfc46d674de0b9114a6e5627f",
+    "owner.html": "9edcf434ee8299351571e4864dd782d70f62a0d433a7833d3d5c284c3ae1428b",
+    "operator.html": "81c2317216ff110bfb7fdfcb2099b9543883b2231009a1da4aa6094f94314b56",
+    "developer.html": "65a503e83e9f09d7dc1e38ed7f68debea45b157d55a9c0c5ca4eea1577b0a02b",
+    "native-entry.png": "a7a30a05c9c7556d0121ed92de98ff88248d95bc86723e3ffafea2fcc51e09e3"
   },
   "final_cost_reconciliation": {
-    "status": "PASS_LOCAL_RECONCILIATION; production Owner publication pending",
+    "status": "PASS_LOCAL_RECONCILIATION; publication and invoice not verified",
     "evidence": "wp8/final-cost-reconciliation/reconciliation.json",
     "evidence_sha256": "b74327b52e2409c361f96cd9080fe859cd7e77f1a2d0f6c386370a5082ac5b70",
     "observed_at_utc": "2026-10-16T03:25:10.788180+00:00",
@@ -336,5 +349,39 @@
       "invoice reconciliation and external/direct-provider coverage remain unverified",
       "no Owner API/UI check was performed for this final reconciliation"
     ]
-  }
+  },
+  "owner_runtime_recheck": {
+    "service_issue": 107,
+    "merged_sha": "d2d48f24846cb533d943eca6b892ffedd4a32557",
+    "actual_runtime_sha": "f12f727a55989c937ebb60e77fcc8573229ee797",
+    "identical_git_tree": "2467e535f8f5219fbb0888b59506520e724420f1",
+    "status": "PASS_ACTUAL_LOCAL_OWNER_API_UI_CSV",
+    "observed_at_utc": "2026-10-16T03:50:00.954160Z",
+    "evidence": "wp8/final-owner-local-fixed/verdict.json",
+    "evidence_sha256": "10b5353425c6b539096caa38abdf4c0ba27807945f99ce1045f1023554f774fe",
+    "totals": {
+      "records": 55,
+      "user_ids": 6,
+      "priced_attempts": 49,
+      "known_subtotal": "USD 0.106675",
+      "unknown_attempts": 6,
+      "invoice_reconciliation": "unverified"
+    },
+    "checks": [
+      "actual classroom option and selection at 390/1280",
+      "API/UI/CSV agree",
+      "eight accounting tables unchanged",
+      "GET-only observed paths",
+      "no provider endpoint invoked"
+    ],
+    "historical_failure": "wp8/final-owner-local/verdict.json",
+    "limits": [
+      "actual local Service with synthetic activity and local Owner transport; not production or Lab SSO",
+      "six IDs are not six confirmed people",
+      "six costs unknown",
+      "not invoice settlement or price publication",
+      "no provider call"
+    ]
+  },
+  "owner_local_verdict": "PASS_ACTUAL_LOCAL_OWNER_API_UI_CSV_AFTER_FIX; historical pre-fix FAIL preserved"
 }
