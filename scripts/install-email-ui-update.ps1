@@ -27,10 +27,10 @@ function Get-HpsEmailArtifact([string]$Origin, [string]$Path, [string]$Token, [s
 
 function Assert-HpsEmailManifest($Manifest) {
     $expected = @{
-        'app.zip' = @{ sha256 = '378abcfa30aca94aab866a404b459385ecdbe53057d3d5844bb32c44cca982f1'; bytes = 196839798 }
-        'sdk.zip' = @{ sha256 = 'f099b98ef4b2d048973d189928186ffc1835ef2de099aa9e62ee045b31889d05'; bytes = 80241659 }
+        'app.zip' = @{ sha256 = '58998211f36da5b7d2e92e72c55cd562c59ab962986235cc4e6e9aed9f080a69'; bytes = 196657654 }
+        'sdk.zip' = @{ sha256 = '24be58876b19c2b957a8ed4601b9e62aa20bbc979f55dfbd527965fa6577de2e'; bytes = 121940997 }
     }
-    if ($Manifest.schema -ne 1 -or $Manifest.build -cne '682dfd37' -or @($Manifest.artifacts).Count -ne 2) { throw 'Unexpected installation manifest.' }
+    if ($Manifest.schema -ne 1 -or $Manifest.build -cne 'fd6f276e' -or @($Manifest.artifacts).Count -ne 2) { throw 'Unexpected installation manifest.' }
     $seen = @{}
     foreach ($artifact in $Manifest.artifacts) {
         if (-not $expected.ContainsKey([string]$artifact.name) -or $seen.ContainsKey([string]$artifact.name)) { throw 'Unexpected or duplicate artifact.' }
@@ -100,25 +100,30 @@ function Set-HpsUiAssets([string]$Destination, [string]$Extracted, [string]$Patc
     $productPath = Join-Path $Destination 'resources/app/product.json'
     if (((Get-Item -LiteralPath $productPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unexpected product path.' }
     $product = Get-Content -LiteralPath $productPath -Raw | ConvertFrom-Json
-    if ($product.commit -cne '682dfd37c3511f3fa159f1516aac230dcda2467c' -or $product.version -cne '0.1.5') { throw 'This update only supports private build 682dfd37.' }
+    if ($product.commit -cne '720be6610200bc8da81686bd3eb20591d6407d88' -or $product.version -cne '0.1.5') { throw 'This update only supports private build fd6f276e.' }
     $assets = Join-Path $Destination 'resources/app/extensions/hypeproof-chat/webview-ui/dist/assets'
     Assert-HpsEmailDirectory $assets
     $names = @('index.js', 'index.css')
     $original = @{
-        'index.js'='c82891aac312d02cebd4d3100d2c93860c4308c7cb2d2dc8e93c1ef427d82a95'
-        'index.css'='0d1bce6e14447c6b8312c688a20f1abfdd8936d17fbbc9003b085e6861a1f12f'
+        'index.js'='9a07aee8ff757667be29073f1d73ae82e7e22fee0f57c53537785e5fb46034cd'
+        'index.css'='9848e84126fbc3a844cbbcec1560201acfc1a92dfe6e648f017bce75147a9978'
     }
     $matches = 0
+    $changedFiles = 0
     foreach ($name in $names) {
         $path = Join-Path $assets $name
         if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or
             ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Unexpected installed asset path.' }
         $current = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
         $next = (Get-FileHash -LiteralPath (Join-Path $Extracted $name) -Algorithm SHA256).Hash
-        if ($current -ieq $next) { $matches++ }
-        elseif ($current -ine $original[$name]) { throw 'Installed UI files have other changes. They were preserved.' }
+        if ($current -ine $next -and $current -ine $original[$name]) { throw 'Installed UI files have other changes. They were preserved.' }
+        # An unchanged CSS asset is not evidence of a partially applied patch.
+        if ($next -ine $original[$name]) {
+            $changedFiles++
+            if ($current -ieq $next) { $matches++ }
+        }
     }
-    if ($matches -eq 2) { Write-Host 'This UI update is already installed.'; return }
+    if ($matches -eq $changedFiles) { Write-Host 'This UI update is already installed.'; return }
     if ($matches -ne 0) { throw 'Partial UI update detected. Existing files were preserved; contact the operator.' }
     Assert-HpsEmailNotRunning $Destination
     $backup = Join-Path $Destination ('.ui-backup-' + [Guid]::NewGuid().ToString('N'))
@@ -150,10 +155,10 @@ function Install-HpsEmailUiUpdate {
     foreach ($scope in @('MachinePolicy', 'UserPolicy')) {
         if ((Get-ExecutionPolicy -Scope $scope) -in @('Restricted', 'AllSigned')) { throw 'Organization policy restricts unsigned code. No policy was changed.' }
     }
-    $expectedHash = '724e48534a23a763cd94da1c7e74e86e45e97aee5c71a5180768e95db6095839'
-    $expectedBytes = 168466 # __UI_UPDATE_BYTES__
+    $expectedHash = '5b61fc2e6a030ba9f5ff7301742f108ae8872d9cc56e4be6f604d0a9d1ad066d'
+    $expectedBytes = 174385 # __UI_UPDATE_BYTES__
     if ($expectedHash -cnotmatch '^[a-f0-9]{64}$' -or $expectedBytes -le 0) { throw 'This UI update has not been published yet.' }
-    $destination = Join-Path $env:LOCALAPPDATA 'HypeProof-Studio-Email-Test/682dfd37'
+    $destination = Join-Path $env:LOCALAPPDATA 'HypeProof-Studio-Email-Test/fd6f276e'
     Assert-HpsEmailDirectory $destination
     if (-not (Test-HpsEmailExistingInstall $destination)) { throw 'Install the private test app before updating it.' }
     Assert-HpsEmailNotRunning $destination
