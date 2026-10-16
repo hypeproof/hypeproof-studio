@@ -5503,6 +5503,12 @@
         },
         {
           "path": "e2e/feedback-native/history-streaming.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-windows.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-windows.test.mjs"
         }
       ]
     }

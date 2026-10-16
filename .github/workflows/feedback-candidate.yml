@@ -6,6 +6,7 @@ on:
       - 'e2e/feedback-live/**'
       - '.github/workflows/feedback-candidate.yml'
       - 'scripts/studio-dev.py'
+      - 'scripts/studio-dev-vendor.mjs'
   workflow_dispatch:
     inputs:
       public_app_tag:
