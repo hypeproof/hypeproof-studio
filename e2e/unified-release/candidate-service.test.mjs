@@ -132,3 +132,41 @@ test('explicit gateway preload persists only bounded metadata and refuses oversi
   assert.throws(()=>execFileSync(process.execPath,['--import',preload,'-e',''],{env:{PATH:process.env.PATH},stdio:'pipe'}),/Command failed/,'no implicit preloading outside isolated compatibility');
  }finally{fs.rmSync(directory,{recursive:true,force:true});}
 });
+
+test('normal RC preload persists twelve concurrent reservations including auxiliary requests and refuses the thirteenth before delegation',()=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'hps-rc-output-'));
+ try{
+  const fake='data:text/javascript,'+encodeURIComponent('globalThis.__delegates=0;globalThis.fetch=async()=>{globalThis.__delegates++;await new Promise(r=>setTimeout(r,5));return new Response("ok")};');
+  const preload=new URL('./output-bound-preload.mjs',import.meta.url).href;
+  const script=`const calls=Array.from({length:13},(_,i)=>fetch('https://api.anthropic.com/v1/'+(i%2?'messages/count_tokens':'messages'),{method:'POST',body:JSON.stringify(i%2?{}:{max_tokens:4096})}));const results=await Promise.allSettled(calls);console.log(JSON.stringify({delegates:globalThis.__delegates,failed:results.filter(r=>r.status==='rejected').length}));`;
+  const env={PATH:process.env.PATH,HPS_SERVICE_ACCEPTANCE:'0',HPS_UNIFIED_SWITCH:'1',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_EVIDENCE_DIR:directory};
+  const result=JSON.parse(execFileSync(process.execPath,['--import',fake,'--import',preload,'--input-type=module','-e',script],{env,encoding:'utf8'}));
+  assert.deepEqual(result,{delegates:12,failed:1});
+  const proof=JSON.parse(fs.readFileSync(path.join(directory,'compatibility-output-guard.json'),'utf8'));assert.equal(proof.attempts,13);assert.equal(proof.forwarded,12);assert.equal(proof.request_limit,12);assert.equal(proof.exhausted,true);assert.equal(proof.calls.filter(c=>c.kind==='count_tokens').length,6);
+  assert.throws(()=>assertCompatibilityOutputBound(proof,{request_limit:12,attempts:13,calls:[]}),/mismatched/);
+  assert.throws(()=>execFileSync(process.execPath,['--import',preload,'-e',''],{env,stdio:'pipe'}),/Command failed/,'same activity cannot reset the persisted counter');
+ }finally{fs.rmSync(directory,{recursive:true,force:true});}
+});
+test('preload records the reservation on disk before each bounded delegation and never rewrites body bytes',()=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'hps-rc-order-'));
+ try{
+  const fake='data:text/javascript,'+encodeURIComponent(`import fs from 'node:fs';globalThis.fetch=async(input,init)=>{const p=JSON.parse(fs.readFileSync(process.env.HPS_NATIVE_EVIDENCE_DIR+'/compatibility-output-guard.json','utf8'));if(p.attempts!==1||p.forwarded!==1||p.calls[0].state!=='dispatching'||init.body!=='{"max_tokens":17}')throw Error('bad reservation or mutation');return new Response('ok')};`);
+  const env={PATH:process.env.PATH,HPS_UNIFIED_SWITCH:'1',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_EVIDENCE_DIR:directory};
+  execFileSync(process.execPath,['--import',fake,'--import',new URL('./output-bound-preload.mjs',import.meta.url).href,'--input-type=module','-e',`await fetch('https://api.anthropic.com/v1/messages',{method:'POST',body:'{"max_tokens":17}'});`],{env,stdio:'pipe'});
+  const proof=JSON.parse(fs.readFileSync(path.join(directory,'compatibility-output-guard.json'),'utf8'));assert.equal(proof.attempts,1);assert.equal(proof.calls[0].status,200);
+  // Old pinned gateways lack attempt fields: the source of this independent
+  // reservation is explicitly the preload, while actual request rows must match.
+  const legacy={calls:[{path:'/v1/messages',status:200,request:{max_tokens:17}}]};
+  assert.doesNotThrow(()=>assertCompatibilityOutputBound(proof,{...legacy,request_limit:proof.request_limit,attempts:proof.attempts}));
+ }finally{fs.rmSync(directory,{recursive:true,force:true});}
+});
+test('Anthropic RC guard stays explicit and refuses incompatible rehearsal/public modes without installing itself there',()=>{
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),'hps-rc-scope-'));
+ try{
+  const preload=new URL('./output-bound-preload.mjs',import.meta.url).href;
+  for(const flag of ['HPS_CODEX_REHEARSAL','HPS_MODEL_REHEARSAL','HPS_PUBLIC_ACTIVITY'])assert.throws(()=>execFileSync(process.execPath,['--import',preload,'-e',''],{env:{PATH:process.env.PATH,HPS_UNIFIED_SWITCH:'1',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_EVIDENCE_DIR:directory,[flag]:'1'},stdio:'pipe'}),/Command failed/);
+  assert(!fs.existsSync(path.join(directory,'compatibility-output-guard.json')));
+  const run=fs.readFileSync(new URL('./run.mjs',import.meta.url),'utf8');assert(run.includes('...compatibilityEnvironment(process.env)'));assert(!run.includes("serviceOnly?['--import',new URL('./output-bound-preload.mjs'"));
+  const publicRun=fs.readFileSync(new URL('./public.mjs',import.meta.url),'utf8');assert(!publicRun.includes('output-bound-preload'));assert(!publicRun.includes('compatibilityEnvironment'));
+ }finally{fs.rmSync(directory,{recursive:true,force:true});}
+});
