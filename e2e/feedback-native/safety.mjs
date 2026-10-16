@@ -4,8 +4,9 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
+import {vendorManifest} from '../../scripts/studio-dev-vendor.mjs';
 export const sha256=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-const sourceScopes=['extensions/hypeproof-chat','scripts/studio-dev.py','config/service-packages.json'];
+const sourceScopes=['extensions/hypeproof-chat','scripts/studio-dev.py','scripts/studio-dev-vendor.mjs','config/service-packages.json'];
 export function sourceSnapshot(source){
  const git=(...args)=>execFileSync('git',args,{cwd:source});
  const sha=git('rev-parse','HEAD').toString().trim(),status=git('status','--porcelain=v1','-z','--untracked-files=no'),untracked=git('ls-files','-z','--others','--exclude-standard','--',...sourceScopes);
@@ -46,6 +47,11 @@ export function candidateProof(c){
  if(c.candidate.sourceSha&&c.candidate.sourceSha!==sourceSha)throw Error('Candidate source SHA is stale');
  if(sha256(path.join(path.dirname(c.candidate.receipt),'build/extension.js'))!==actual)throw Error('Preparation stage build output differs from injected candidate');
  const product=JSON.parse(fs.readFileSync(path.join(resources,'product.json'),'utf8')),pkg=JSON.parse(fs.readFileSync(path.join(extension,'package.json'),'utf8'));
+ if(pkg.dependencies?.['@anthropic-ai/claude-agent-sdk']||pkg.devDependencies?.['@anthropic-ai/claude-agent-sdk']){
+  if(receipt.sdk_vendor?.schema!=='hps-dev-sdk-vendor/1')throw Error('Prepared SDK vendor receipt required');
+  const actualVendor=vendorManifest(path.join(extension,'dist/vendor'));
+  if(actualVendor.sha256!==receipt.sdk_vendor.sha256||actualVendor.file_count!==receipt.sdk_vendor.file_count)throw Error('Candidate SDK vendor bytes differ from preparation');
+ }
  return {level:'prepared-injected-native-candidate',source_sha:receipt.source_sha,source_binding:binding,prepared_at:receipt.prepared_at,app,extension_sha256:actual,shell:{name:product.nameLong,version:product.version,commit:product.commit},extension_version:pkg.version,commandTitles:Object.fromEntries(pkg.contributes.commands.map(x=>[x.command,x.title])),commands:pkg.contributes.commands.map(x=>x.command),source_dirty:false,public_release:false};
 }
 export function sanitize(text,secrets=[]){let result=String(text);for(const secret of secrets.filter(Boolean).sort((a,b)=>b.length-a.length))result=result.split(secret).join('[REDACTED]');return result.replace(/Bearer\s+[^\s"']+/gi,'Bearer [REDACTED]');}

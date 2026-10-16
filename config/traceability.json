@@ -1609,6 +1609,9 @@
         },
         {
           "path": "scripts/studio-dev.py"
+        },
+        {
+          "path": "scripts/studio-dev-vendor.mjs"
         }
       ]
     },
@@ -1649,6 +1652,9 @@
         },
         {
           "path": "scripts/test-usage-schema.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/sdk-vendor.test.mjs"
         }
       ]
     },

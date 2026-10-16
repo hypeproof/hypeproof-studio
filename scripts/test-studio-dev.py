@@ -132,6 +132,32 @@ class DevLauncherTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Unbundled runtime dependency'):
             dev.check_runtime_dependencies(source, {}, meta)
 
+    def test_prepared_sdk_replaces_stale_vendor_only_in_owned_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); repo = root/'repo'; base = root/'installed'; state = root/'state'; state.mkdir()
+            source = repo/'extensions/hypeproof-chat'; source.mkdir(parents=True)
+            (source/'package.json').write_text(json.dumps({'dependencies': {'@anthropic-ai/claude-agent-sdk':'1.2.3'}}))
+            payload = base/'resources/app'; shipped = payload/'extensions/hypeproof-chat'
+            (shipped/'dist/vendor').mkdir(parents=True); (shipped/'webview-ui/dist').mkdir(parents=True)
+            (shipped/'dist/vendor/stale.js').write_text('old SDK')
+            (shipped/'dist/extension.js').write_text('old extension')
+            (shipped/'package.json').write_text(json.dumps({'dependencies': {'@anthropic-ai/claude-agent-sdk':'0.0.1'}}))
+            (payload/'product.json').write_text('{}'); (base/'HypeProof Studio.exe').write_bytes(b'owned fixture shell')
+            self.init_repo(repo); before = dev.file_manifest(base)
+            staged = {'schema':'hps-dev-sdk-vendor/1','packages':{'@anthropic-ai/claude-agent-sdk':'1.2.3'},'sha256':'recorded-by-vendor-tool','file_count':1}
+            def build(_repo, stage):
+                (stage/'webview').mkdir(parents=True); (stage/'vendor').mkdir()
+                (stage/'extension.js').write_text('new extension'); (stage/'webview/index.html').write_text('new webview')
+                (stage/'vendor/current.js').write_text('new SDK')
+                return {'hps_sdk_vendor': staged}
+            with patch.object(dev,'build',side_effect=build), patch.object(dev,'app_running',return_value=False), patch('builtins.print'):
+                app = dev.prepare(repo,base,state,'local')
+            vendor = app/'resources/app/extensions/hypeproof-chat/dist/vendor'
+            self.assertFalse((vendor/'stale.js').exists())
+            self.assertEqual((vendor/'current.js').read_text(),'new SDK')
+            self.assertEqual(dev.file_manifest(base),before)
+            self.assertEqual(json.loads((state/'receipt.json').read_text())['sdk_vendor'],staged)
+
     def test_windows_identity_does_not_rename_shell_or_mutate_installed_app(self):
         with tempfile.TemporaryDirectory() as tmp:
             app = Path(tmp)/'Studio'; root = app/'resources/app'; root.mkdir(parents=True)
