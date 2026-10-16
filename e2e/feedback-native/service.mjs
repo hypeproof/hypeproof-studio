@@ -59,7 +59,8 @@ env.HPS_DB={...originalDb,prepare(sql){const statement=originalDb.prepare(sql),b
  return bind.apply(statement,args);
 };return statement;}};
 const server=createServer(async(req,res)=>{
- let reader,row;
+ let reader,row,cancellation;
+ const cancelReader=()=>{if(reader&&!cancellation){row.reader_cancel_calls=(row.reader_cancel_calls??0)+1;cancellation=reader.cancel().then(()=>{row.service_body_cancelled=true;});void cancellation.catch(()=>{});}return cancellation;};
  try{
   if(req.method==='GET'&&req.url==='/__feedback-native/requests'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({calls,blocked_outbound:blockedOutbound,provider_called:false}));return;}
   if(req.method==='GET'&&req.url==='/__feedback-native/identity'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(identity));return;}
@@ -69,13 +70,13 @@ const server=createServer(async(req,res)=>{
   row={seq:calls.length+1,method:req.method,path:req.url.split('?')[0],subject:subject===0?'A':subject===1?'B':'unknown',turn_sha256:typeof req.headers['x-hps-turn-id']==='string'?createHash('sha256').update(req.headers['x-hps-turn-id']).digest('hex'):null,request_class:typeof requestClass==='string'&&/^[a-zA-Z0-9_:-]{1,64}$/.test(requestClass)?requestClass:null,status:null,client_closed:false,service_body_cancelled:false};calls.push(row);
   if(scripted&&req.method==='POST'&&row.path==='/v1/chat/completions')throw Error('Proxy fallback cannot establish actual SDK readiness');
   const ctrl=new AbortController();req.once('aborted',()=>ctrl.abort());
-  res.once('close',()=>{if(!res.writableEnded){row.client_closed=true;ctrl.abort();if(reader)void reader.cancel().then(()=>{row.service_body_cancelled=true;},()=>{});}});
+  res.once('close',()=>{if(!res.writableEnded){row.client_closed=true;ctrl.abort();cancelReader();}});
   const ctx=makeCtx();
   const response=await context.run(row,()=>app.fetch(new Request('https://synthetic.test'+req.url,{method:req.method,headers:req.headers,signal:ctrl.signal,...(bytes?{body:Buffer.concat(parts)}:{})}),env,ctx));
   row.status=response.status;row.request_id=response.headers.get('x-request-id');row.usage_request_id=response.headers.get('x-hps-usage-request-id');
   res.writeHead(response.status,Object.fromEntries(response.headers));
-  if(response.body){reader=response.body.getReader();try{for(;;){const next=await reader.read();if(next.done||res.destroyed)break;if(!res.write(next.value))await new Promise(resolve=>{res.once('drain',resolve);res.once('close',resolve);});}}finally{reader.releaseLock();}}
-  if(!res.destroyed)res.end();await ctx.settle();
+  if(response.body){reader=response.body.getReader();if(res.destroyed)cancelReader();try{for(;;){const next=await reader.read();if(next.done||res.destroyed)break;if(!res.write(next.value))await new Promise(resolve=>{res.once('drain',resolve);res.once('close',resolve);});}}finally{await cancellation;reader.releaseLock();}}
+  if(!res.destroyed)res.end();await cancellation;await ctx.settle();row.context_settled=true;
   if(row.ledger_request_id)row.ledger=harness.db?.prepare('SELECT request_id,evidence_version,execution_state,pricing_state,amount_micro,currency FROM usage_attempt_costs WHERE request_id=?').get(row.ledger_request_id)??null;
  }catch{if(row)row.bridge_error=true;if(!res.headersSent)res.writeHead(500);if(!res.destroyed)res.end();}
 });

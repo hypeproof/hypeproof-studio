@@ -304,3 +304,7 @@ OBSERVED if it naturally occurs; a quiet two-turn probe does not invent it.
 These are synthetic protocol/native proofs; real model quality, real provider
 billing/cancellation, crash recovery and active-stream token revocation are not
 claimed. No new native result is PASS until the hosted run actually executes.
+
+The owned HTTP bridge awaits its once-only response-reader cancellation promise
+before settling the actual Service context and taking the ledger snapshot. This
+orders fixture observation; it does not change Service runtime accounting.
