@@ -1,3 +1,4 @@
+import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { passSpentNotice } from "./passPurchase";
@@ -663,6 +664,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * way, after the fact, to check "did this classroom run on the proxy?".
    */
   private logChannel: vscode.OutputChannel | null = null;
+  private focusDiagnosticCount = 0;
+  /** Existing output channel, opt-in synthetic host only; never changes focus. */
+  focusDiagnostic(phase: FocusDiagnosticPhase, flags: {scope_present?:boolean;delivered?:boolean} = {}): void {
+    if (process.env.HPS_TEST_E2E !== '1' || this.focusDiagnosticCount >= 64) return;
+    const line = focusDiagnosticLine(phase, flags);
+    if (!line) return;
+    try { this.voiceLogChannel().appendLine(line); this.focusDiagnosticCount++; } catch { /* observation cannot change the command */ }
+  }
+
   /**
    * #897 (VO-01) — the voice capability probe in flight. One per command, cleared when
    * a response arrives or it times out. With no webview, or one that does not answer,
@@ -2234,12 +2244,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   focusEditor(): boolean {
-    if (!this.editorChat) return false;
+    if (!this.editorChat) { this.focusDiagnostic('editor_absent'); return false; }
     const editor = this.editorChat;
     editor.reveal(vscode.ViewColumn.One);
+    this.focusDiagnostic('editor_revealed');
     // Revealing a retained webview focuses its document, not its composer.
     // Only this explicit command sends the request; passive restore stays quiet.
-    void editor.webview.postMessage({type:'focusInput',activityId:activityConnections(this.context)?.scope} satisfies HostMessage);
+    const scope = activityConnections(this.context)?.scope;
+    this.focusDiagnostic('message_send', {scope_present:!!scope});
+    try {
+      const sent = editor.webview.postMessage({type:'focusInput',activityId:scope} satisfies HostMessage);
+      if (process.env.HPS_TEST_E2E === '1') void Promise.resolve(sent).then(delivered=>this.focusDiagnostic('message_delivery',{delivered:delivered===true}),()=>this.focusDiagnostic('message_rejected'));
+      else void sent;
+    } catch(error) { this.focusDiagnostic('message_threw'); throw error; }
     return true;
   }
 

@@ -1,3 +1,4 @@
+import {beginFocusObservation} from './focus-diagnostics.mjs';
 // Opt-in hosted public-UI scenario. The debugger only delays existing production execution.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -87,7 +88,9 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
    const root=c.workspace[stage.key],expectedDraft=draft+'-'+stage.name;
    activeStage={root,name:stage.name};
    assert.equal(fs.readdirSync(root).length,0,'Never reuse destination workspace/state');
-   const chat=await focusChat();await ui.input(chat,'.hps-input textarea',expectedDraft);await sleep(500);
+   const observer=await beginFocusObservation((await readDraft()).chat,activityId);let chat;
+   try{chat=await focusChat();}finally{item.focus_diagnostic=await observer.finish();persist();}
+   await ui.input(chat,'.hps-input textarea',expectedDraft);await sleep(500);
    const before=(await readDraft()).chat.info.id;let pending,preparedFiles,binding;
    requestCandidate(true);
    await openFromStart(root,true,async()=>{

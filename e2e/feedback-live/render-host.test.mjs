@@ -124,12 +124,17 @@ test('actual candidate response race immediately aborts and holds once; subseque
  }finally{fs.readFileSync=originalRead;await host?.close();fs.rmSync(base,{recursive:true,force:true});}
 });
 
-for(const mode of ['throw','reject','timeout'])test('response race fatal callback '+mode+' is bounded and retained as cleanup FAIL without unhandled rejection',async()=>{
- const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-response-fatal-reject-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of[workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});const file=path.join(workspace,'keyboard.html');fs.writeFileSync(file,'<p>Owned response</p>');const originalRead=fs.readFileSync;let host,calls=0;
+for(const mode of ['throw','reject','timeout'])test('response race fatal callback '+mode+' is bounded and retained as cleanup FAIL without unhandled rejection',async t=>{
+ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-response-fatal-reject-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of[workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});const file=path.join(workspace,'keyboard.html');fs.writeFileSync(file,'<p>Owned response</p>');const originalRead=fs.readFileSync;let host,calls=0,cleanupVerified=false;
  try{
   host=await startRenderHost({root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:async()=>{throw Error('No capture allowed');},onFatal:()=>{calls++;if(mode==='timeout')return new Promise(()=>{});if(mode==='reject')return Promise.reject(Error('private refusal marker'));throw Error('private refusal marker');}});host.setCandidate(['keyboard.html']);let reads=0;fs.readFileSync=function(target,...args){const value=originalRead.call(this,target,...args);return target===file&&++reads===2?Buffer.from('changed'):value;};assert.equal((await fetch(host.origin+'/keyboard.html')).status,409);fs.readFileSync=originalRead;
-  await host.close();assert.equal(calls,1);assert.equal(host.state.fatal_callback_failed,true);assert.equal(host.state.cleanup.status,'FAIL');assert(host.state.cleanup.errors.includes('fatal_callback'));assert(!JSON.stringify(host.state).includes('private refusal marker'));
- }finally{fs.readFileSync=originalRead;await host?.close();fs.rmSync(base,{recursive:true,force:true});}
+  await host.close();assert.equal(calls,1);assert.equal(host.state.fatal_callback_failed,true);assert.equal(host.state.cleanup.status,'FAIL');assert.deepEqual(host.state.cleanup.errors,['fatal_callback']);assert.equal(host.state.cleanup.chromium_exited,true);assert.equal(host.state.cleanup.server_closed,true);assert.equal(host.state.cleanup.cdp_closed,1);assert.deepEqual(host.state.cleanup.interception,{status:'PASS',pending:0,failures:[]});cleanupVerified=true;assert(!JSON.stringify(host.state).includes('private refusal marker'));
+ }finally{fs.readFileSync=originalRead;await host?.close();t.diagnostic(JSON.stringify({mode,cleanup:host?.state.cleanup??null,removal_admitted:cleanupVerified,temporary_directory:base}));
+  // Windows may temporarily refuse removal after an observed child exit. Retry
+  // only filesystem removal errors, never host shutdown or the tested callback.
+  // Failed resource assertions retain the owned directory; permanent rm errors fail.
+  if(cleanupVerified)await fs.promises.rm(base,{recursive:true,force:true,maxRetries:process.platform==='win32'?3:0,retryDelay:100});
+ }
 });
 
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import {ownedFocusLogs} from './focus-diagnostics.mjs';
 // Native acceptance slice: no DOM event injection, host command bridge, token seeding or provider dispatch.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -197,6 +198,7 @@ try{
   report.cleanup_stop_not_restart_evidence=true;
   if(report.cleanup.status!=='PASS')report.execution_status='FAIL';
  }else report.attached_process_left_running=!!c.attach;
+ report.focus_host_diagnostics=ownedFocusLogs(c.userDataDir);
  report.finished_at=new Date().toISOString();save();console.log('Result: '+path.join(c.evidence,'result.json'));
 }
 if(report.execution_status==='FAIL')process.exitCode=1;else if(report.execution_status==='BLOCKED')process.exitCode=2;
