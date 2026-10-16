@@ -2,7 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {isDeepStrictEqual} from 'node:util';
 export const sha256=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const sourceScopes=['extensions/hypeproof-chat','scripts/studio-dev.py','config/service-packages.json'];
+export function sourceSnapshot(source){
+ const git=(...args)=>execFileSync('git',args,{cwd:source});
+ const sha=git('rev-parse','HEAD').toString().trim(),status=git('status','--porcelain=v1','-z','--untracked-files=no'),untracked=git('ls-files','-z','--others','--exclude-standard','--',...sourceScopes);
+ const names=[...new Set(git('ls-files','-z','--cached','--others','--exclude-standard','--',...sourceScopes).toString('utf8').split('\0').filter(Boolean))].sort((a,b)=>Buffer.compare(Buffer.from(a),Buffer.from(b)));
+ let symlinks=false;
+ const entries=names.map(name=>{const file=path.join(source,name);let stat;try{stat=fs.lstatSync(file);}catch(error){if(error.code==='ENOENT')return[name,'missing',''];throw error;}if(stat.isSymbolicLink()){symlinks=true;return[name,'symlink',fs.readlinkSync(file)];}if(!stat.isFile())throw Error('Cannot bind non-file source input: '+name);return[name,'file',sha256(file)];});
+ return {format:'hps-studio-source/1',sha,dirty:!!(status.length||untracked.length),scopes:sourceScopes,inputs_sha256:createHash('sha256').update(JSON.stringify(entries)).digest('hex'),file_count:entries.length,has_symlinks:symlinks,status_sha256:createHash('sha256').update(status).update(Buffer.from([0])).update(untracked).digest('hex')};
+}
 export function loopback(value){const url=new URL(value);if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.username||url.password||url.search||url.hash)throw Error('Only an explicit credential-free loopback HTTP endpoint is allowed');return url.origin;}
 export function within(child,parent){const rel=path.relative(path.resolve(parent),path.resolve(child));return rel===''||(!rel.startsWith('..'+path.sep)&&rel!=='..'&&!path.isAbsolute(rel));}
 export function validateConfig(c){
@@ -20,13 +30,14 @@ export function candidateProof(c){
  const resources=path.join(app,process.platform==='darwin'?'Contents/Resources/app':'resources/app'),extension=path.join(resources,'extensions/hypeproof-chat');
  const actual=sha256(path.join(extension,'dist/extension.js'));
  if(actual!==receipt.extension_sha256)throw Error('Candidate extension bytes differ from the preparation receipt');
- const source=fs.realpathSync(receipt.source),git=(...args)=>execFileSync('git',args,{cwd:source,encoding:'utf8'}).trim();
- const sourceSha=git('rev-parse','HEAD'),dirty=git('status','--porcelain','--','extensions/hypeproof-chat/src','extensions/hypeproof-chat/webview-ui/src','extensions/hypeproof-chat/package.json');
- if(dirty)throw Error('Candidate source changed since integration; commit/reprepare before acceptance');
+ const source=fs.realpathSync(receipt.source),binding=sourceSnapshot(source),sourceSha=binding.sha;
+ if(!/^[a-f0-9]{40}$/.test(receipt.source_sha??'')||receipt.source_sha!==sourceSha)throw Error('Preparation receipt source SHA is missing or stale; reprepare this exact checkout');
+ if(receipt.source_dirty!==false||receipt.source_binding?.dirty!==false||binding.dirty)throw Error('Candidate source changed or was dirty at preparation; commit/reprepare before acceptance');
+ if(receipt.source_binding?.format!=='hps-studio-source/1'||receipt.source_binding.has_symlinks!==false||binding.has_symlinks||!isDeepStrictEqual(receipt.source_binding,binding))throw Error('Preparation receipt source input binding is missing or changed');
  if(c.candidate.sourceSha&&c.candidate.sourceSha!==sourceSha)throw Error('Candidate source SHA is stale');
  if(sha256(path.join(path.dirname(c.candidate.receipt),'build/extension.js'))!==actual)throw Error('Preparation stage build output differs from injected candidate');
  const product=JSON.parse(fs.readFileSync(path.join(resources,'product.json'),'utf8')),pkg=JSON.parse(fs.readFileSync(path.join(extension,'package.json'),'utf8'));
- return {level:'prepared-injected-native-candidate',source_sha:sourceSha,source_binding:'clean checkout HEAD and matching preparation stage; receipt itself has no source SHA',prepared_at:receipt.prepared_at,app,extension_sha256:actual,shell:{name:product.nameLong,version:product.version,commit:product.commit},extension_version:pkg.version,commandTitles:Object.fromEntries(pkg.contributes.commands.map(x=>[x.command,x.title])),commands:pkg.contributes.commands.map(x=>x.command),source_dirty:false,public_release:false};
+ return {level:'prepared-injected-native-candidate',source_sha:receipt.source_sha,source_binding:binding,prepared_at:receipt.prepared_at,app,extension_sha256:actual,shell:{name:product.nameLong,version:product.version,commit:product.commit},extension_version:pkg.version,commandTitles:Object.fromEntries(pkg.contributes.commands.map(x=>[x.command,x.title])),commands:pkg.contributes.commands.map(x=>x.command),source_dirty:false,public_release:false};
 }
 export function sanitize(text,secrets=[]){let result=String(text);for(const secret of secrets.filter(Boolean).sort((a,b)=>b.length-a.length))result=result.split(secret).join('[REDACTED]');return result.replace(/Bearer\s+[^\s"']+/gi,'Bearer [REDACTED]');}
 export function assertNoBackdoors(userDataDir,launchEnv){
