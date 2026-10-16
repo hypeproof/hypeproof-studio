@@ -19,6 +19,10 @@ export function validateConfig(c){
  if(c?.schema!=='hps-feedback-native/1'||!c.candidate?.app||!c.candidate?.receipt||!c.service?.manifest||!c.workspace?.a||!c.workspace?.b||!c.evidence)throw Error('Missing explicit candidate/Service/workspace/evidence config');
  loopback(c.service.origin);if(c.cdp)loopback(c.cdp);
  for(const p of [c.candidate.app,c.candidate.receipt,c.workspace.a,c.workspace.b,c.evidence,c.userDataDir,c.service.manifest,c.service.tokenAFile])if(typeof p!=='string'||!path.isAbsolute(p))throw Error('All local paths must be explicit absolute paths');
+ if(c.service.tokenBFile!==undefined&&(typeof c.service.tokenBFile!=='string'||!path.isAbsolute(c.service.tokenBFile)))throw Error('tokenBFile must be an explicit absolute path');
+ if(c.workspace.c!==undefined){if(typeof c.workspace.c!=='string'||!path.isAbsolute(c.workspace.c))throw Error('C must be an explicit absolute path');for(const other of[c.candidate.app,c.workspace.a,c.workspace.b])if(within(c.workspace.c,other)||within(other,c.workspace.c))throw Error('C must be isolated from the app and both activity-A folders');}
+ if(c.workspace.c&&fs.existsSync(c.workspace.c)){const real=fs.realpathSync(c.workspace.c);for(const other of[c.candidate.app,c.workspace.a,c.workspace.b])if(fs.existsSync(other)){const target=fs.realpathSync(other);if(within(real,target)||within(target,real))throw Error('Real C must remain isolated, including linked paths');}}
+ if(c.scenarios?.includes('activity-isolation')&&(!c.workspace.c||!c.service.tokenBFile))throw Error('Activity isolation requires explicit token B and third owned folder C');
  if(path.resolve(c.workspace.a)===path.resolve(c.workspace.b))throw Error('A and B must be different real folders');
  if(within(c.userDataDir,c.candidate.app)||within(c.workspace.a,c.candidate.app)||within(c.workspace.b,c.candidate.app)||within(c.evidence,c.candidate.app))throw Error('User data, work and evidence must remain outside the application');
  if(c.secretStorage!=='os-keychain'&&c.secretStorage!=='inmemory')throw Error('Declare secretStorage os-keychain or inmemory; the latter cannot prove process restart credential persistence');
@@ -47,3 +51,22 @@ export function assertNoBackdoors(userDataDir,launchEnv){
 }
 // Config/environment cannot opt a user's desktop into input. Only an explicit invocation flag can.
 export const foregroundAllowed=args=>args.includes('--allow-foreground')&&!args.includes('--preflight');
+
+// Orchestration guard only: callbacks must observe real process/UI transitions.
+// There is deliberately no force-kill, token-entry or fallback callback.
+export async function restartOwnedCandidate({config,child,quit,waitExit,waitCdpDown,launch,observeDraft,expectedDraft}){
+ if(config.attach||config.secretStorage!=='os-keychain')throw Object.assign(Error('Full credential restart requires owned process and OS-backed SecretStorage'),{blocked:true});
+ if(!child||!Number.isInteger(child.pid)||child.exitCode!==null||child.signalCode!==null)throw Error('Owned candidate must be alive before native quit');
+ const oldPid=child.pid;
+ await quit();await waitExit(child);await waitCdpDown();
+ if(child.exitCode!==0||child.signalCode!==null)throw Error('Native quit must produce normal owned child exit, not a signal kill');
+ const restarted=await launch();
+ if(!restarted||!Number.isInteger(restarted.pid)||restarted.pid===oldPid||restarted.exitCode!==null||restarted.signalCode!==null)throw Error('Restart must create a different live owned process');
+ const observed=await observeDraft();
+ if(observed!==expectedDraft)throw Error('Persisted A draft did not restore after full process restart without code entry');
+ return {old_pid:oldPid,new_pid:restarted.pid,owned_child_exit:true,cdp_down:true,same_profile:true,os_secret_storage:true,code_reentry:false,actual_chat_restored:true,draft_preserved:true};
+}
+export function distinctActivities(a,b){
+ if(!/^[a-f0-9]{64}$/.test(a?.activity_id??'')||!/^[a-f0-9]{64}$/.test(b?.activity_id??'')||a.activity_id===b.activity_id)throw Error('Token B must authenticate a different actual Service activity identity');
+ return true;
+}

@@ -25,13 +25,16 @@ private Service manifest outside the checkout:
   "runtime": "actual wrangler; isolated D1",
   "evidence_level": "actual-local-wrangler-not-production",
   "provider": "configured by owner; runner sends no model requests",
-  "token_a_file": "/absolute/private/token-file"
+  "token_a_file": "/absolute/private/token-file",
+  "token_b_file": "/absolute/private/different-activity-token-file"
 }
 ```
 
 Credentials are read only from the explicit file, never printed or persisted in
 results. Parent-provided provenance is labelled as such; preflight independently
-checks the authenticated `/v1/profile` response. Do not claim that this metadata
+checks both authenticated `/v1/profile` responses and requires distinct actual
+`activity_id` values, even if the profile IDs/names are equal. Token B paths are
+validated as absolute and both codes are included in evidence redaction. Do not claim that this metadata
 request proves a provider dispatch or production deployment.
 
 Set these two keys in the **isolated candidate** `User/settings.json`, then reload:
@@ -53,7 +56,7 @@ node e2e/feedback-native/run.mjs /absolute/evidence/config.json --preflight
 node e2e/feedback-native/run.mjs /absolute/evidence/config.json --allow-foreground
 ```
 
-`prepare-config` creates a unique B work folder; attach uses the preparation
+`prepare-config` creates unique B and empty C work folders; attach uses the preparation
 state's existing `workspace` and `user-data`. It never modifies attach settings,
 starts, stops or kills the attached app. Use an isolated acceptance workspace,
 not a learner's live work: the suite deliberately replaces an unsent draft with a
@@ -105,7 +108,9 @@ configured `inmemory` SecretStorage does not prove process-restart persistence.
 |---|---|---|
 | T01/T02 | Files command, native Explorer, user's hidden sidebar across chat/reload, native new-file save and Explorer row | Initial first-launch default is an owner observation; no overwrites |
 | T03/T04 | Native folder picker cancel, same activity B reload, no code reentry, draft carry, native File Open Folder back to A, A draft wins | No history is invented from an empty conversation |
-| T03/T04/T05/T06 remainder | Explicit `NOT_RUN` | Independent-activity collision, persisted model history, multiwindow, process restart and streaming need additional real turns/credentials |
+| T05 | After T03 PASS: real Cmd+Q (Mac) / visible File → Exit (Windows), owned child exit 0, CDP connection refusal, same profile/binary/environment restart with different PID, visible chat and identical A draft | Owned OS-backed SecretStorage only; attach/in-memory is BLOCKED; no `ensureChat`, token entry, force-kill or reseeding may establish PASS |
+| T04 independent activity | Actual Start → different activity → enter B → select bound A → visible rejection → cancel; A draft/files unchanged. Empty owned C admits B without A draft; distinct B draft survives native File Open Folder A→C→A | Requires explicit second token with different Service activity identity and generated C ownership marker; no model history inferred |
+| T05/T06 remainder | Explicit `NOT_RUN` | Persisted model history, multiwindow and streaming still need additional real turns/credentials |
 | T07 | Runtime skill command, public pinned import, visible revision/license/capability preview before explicit select, stored preview, disable | Import uses public GitHub; selected instructions reaching a provider and offline transport isolation remain `NOT_RUN` |
 | T08/T09 | Source regressions elsewhere | Native update/revert/tamper tests not substituted by helper assertions |
 | T16 capability subset | Actual native command registration and disabled-profile notification | No image is selected, uploaded or charged; enabled profile reports `BLOCKED` instead of attempting a paid request |
@@ -139,3 +144,45 @@ provider call. Neither is reported as a native UI pass.
 The optional `feedback-candidate.yml` workflow runs on scoped harness PRs or manual dispatch and has read-only GitHub permissions. It requires `HYPEPROOF_READ_TOKEN` for pinned private Service packages/source, the exact `config/service-deployment.json` Service SHA and published official shell assets. The shell comes from the stable source release in `hypeproof/hypeproof-studio`, using the current-repository contents-read job token; the private mirror is not an authentication fallback. Asset digest/acceptance hash verification still precedes extraction. Only GitHub metadata/download commands receive that token; extraction, preparation, Service and native runner subprocesses use an environment without token/secret/password/PAT/key fields. Root checkout credentials are not persisted. This environment filter is not a filesystem or process sandbox. It confines explicit native foreground input to hosted Mac/Windows desktops. The workflow and hosted native slices are NOT_RUN until an actual run completes; missing credentials, download hashes or a usable desktop remain explicit blockers.
 
 Service provenance is explicit: `service.mjs` refuses an unspecified or mismatched `HPS_SERVICE_SHA`. Hosted checkout derives that SHA from `config/service-deployment.json`; a dispatch assertion must match it. A probe of another explicitly named checkout is only that checkout's synthetic metadata result and cannot stand in for reviewed candidate or deployed Service evidence.
+
+## Full process restart and independent activity fixtures
+
+New configurations select `restart` and `activity-isolation` in addition to the
+existing folder slice. They require the folder test to reach T03 PASS first. The
+hosted entry point already explicitly selects `--secret-storage=os-keychain`;
+local config generation still defaults to in-memory storage and the restart slice
+must report BLOCKED there. Attach mode cannot prove owned exit/relaunch and cannot
+use the generated-owned-C isolation slice. Old explicit configs may omit these
+scenarios, leaving them unexecuted rather than claiming coverage.
+
+The Windows quit path clicks the actual visible File → Exit menu item; CDP
+Alt+F4 is not assumed to reach the OS window manager. The Mac path uses its
+registered Cmd+Q binding. Neither path uses an extension-host quit command.
+
+The full restart reuses the A draft already persisted during the actual A→B→A
+folder test. It performs the platform quit action once, waits for normal exit of
+the exact spawned child and connection refusal from the prior CDP endpoint, then
+launches the same prepared executable, profile, launch args and scrubbed
+credentials-free environment. The new PID must differ. It only reveals/focuses
+the restored chat and observes its draft; it never calls the initial admission
+helper or enters a code after restart. Process cleanup in `finally` is separately
+labelled and never contributes to restart PASS. A hung endpoint, signal kill,
+nonzero exit, reused PID or missing draft cannot satisfy the proof.
+
+The third fresh C folder is necessary because A and B are both bound to activity
+A after T03. Preparation records all three paths in its owned-profile marker.
+Absolute paths, distinct real folders (including linked C aliases), C's initial
+emptiness and distinct authenticated Service identities are checked before B is
+admitted. The actual visible StartPage labels are used; no extension host command
+bridge, DOM event/field mutation or token storage write substitutes for UI input.
+Cancel after rejected B preserves A's actual file hashes and draft. Successful B
+admission must create a new visible extension target and an empty draft. After a
+unique B draft, real File Open Folder A→C→A restores each saved draft without code
+entry. Tests finish on A so later native checks keep their original activity.
+
+Background tests use synthetic process/transport/UI-transition fixtures only.
+They validate ordering, negative controls and refusal; they do not prove native
+restart, OS keychain persistence or actual activity navigation. These new native
+slices remain NOT RUN until the delivery owner executes the committed candidate
+on a dedicated hosted desktop. No local foreground execution, provider call or
+GitHub write is part of the implementation handoff.

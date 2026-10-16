@@ -40,3 +40,29 @@ test('candidate acceptance binds receipt source SHA, clean inputs and injected b
 test('foreground input is default-deny and preflight overrides opt-in',()=>{assert.equal(foregroundAllowed([]),false);assert.equal(foregroundAllowed(['--preflight']),false);assert.equal(foregroundAllowed(['--allow-foreground']),true);assert.equal(foregroundAllowed(['--allow-foreground','--preflight']),false);});
 
 test('Service startup refuses missing or wrong explicit revision before opening a listener',()=>{for(const pin of ['', '0'.repeat(40)]){let stderr;try{execFileSync(process.execPath,[path.join(import.meta.dirname,'service.mjs')],{cwd:process.cwd(),env:{...process.env,HPS_SERVICE_SOURCE:process.cwd(),HPS_SERVICE_SHA:pin},stdio:['ignore','pipe','pipe']});assert.fail('Unpinned Service started');}catch(error){assert.notEqual(error.status,0);stderr=error.stderr.toString();}assert.match(stderr,pin?/HEAD differs/:/must explicitly pin/);}});
+
+test('token B and third C paths are explicit and isolated; a linked C alias cannot pass',()=>{
+ const c=config();c.service.tokenBFile=path.join(tmp,'token-b');c.workspace.c=path.join(tmp,'c');c.scenarios=['folders','activity-isolation'];assert.equal(validateConfig(c),c);
+ for(const mutate of [v=>v.service.tokenBFile='relative',v=>delete v.service.tokenBFile,v=>delete v.workspace.c,v=>v.workspace.c=v.workspace.a,v=>v.workspace.c=path.join(v.workspace.a,'nested'),v=>v.workspace.c=v.candidate.app]){const changed=structuredClone(c);mutate(changed);assert.throws(()=>validateConfig(changed));}
+ const root=path.join(tmp,'aliases'),a=path.join(root,'a'),b=path.join(root,'b'),alias=path.join(root,'c');fs.mkdirSync(a,{recursive:true});fs.mkdirSync(b);fs.symlinkSync(a,alias,process.platform==='win32'?'junction':'dir');
+ const linked=structuredClone(c);linked.workspace={a,b,c:alias};assert.throws(()=>validateConfig(linked),/Real C/);
+});
+test('both explicit tokens are redacted; equal profile does not imply equal activity',async()=>{
+ const {distinctActivities}=await import('./safety.mjs');
+ assert.equal(distinctActivities({profile_id:'same',activity_id:'a'.repeat(64)},{profile_id:'same',activity_id:'b'.repeat(64)}),true);
+ for(const other of [{activity_id:'a'.repeat(64)},{activity_id:''},{}])assert.throws(()=>distinctActivities({activity_id:'a'.repeat(64)},other));
+ assert.equal(sanitize('token-a-value token-b-value',['token-a-value','token-b-value']),'[REDACTED] [REDACTED]');
+});
+function restartFixture(){
+ const events=[],config={attach:false,secretStorage:'os-keychain'},child={pid:10,exitCode:null,signalCode:null};
+ return {events,config,child,expectedDraft:'persisted-A',quit:async()=>events.push('native-quit'),waitExit:async old=>{events.push('normal-exit');old.exitCode=0;},waitCdpDown:async()=>events.push('cdp-refused'),launch:async()=>{events.push('same-profile-new-process');return{pid:11,exitCode:null,signalCode:null};},observeDraft:async()=>{events.push('actual-chat-without-token');return'persisted-A';}};
+}
+test('restart proof requires normal native exit, CDP down, new PID then restored draft in order',async()=>{
+ const {restartOwnedCandidate}=await import('./safety.mjs'),f=restartFixture();const result=await restartOwnedCandidate(f);
+ assert.deepEqual(f.events,['native-quit','normal-exit','cdp-refused','same-profile-new-process','actual-chat-without-token']);assert.equal(result.code_reentry,false);assert.equal(result.new_pid,11);
+});
+test('attach or memory storage blocks before input; exit/endpoint/PID/draft negatives cannot pass',async()=>{
+ const {restartOwnedCandidate}=await import('./safety.mjs');
+ for(const change of [f=>f.config.attach=true,f=>f.config.secretStorage='inmemory']){const f=restartFixture();change(f);await assert.rejects(restartOwnedCandidate(f),e=>e.blocked===true);assert.deepEqual(f.events,[]);}
+ for(const change of [f=>f.child.exitCode=0,f=>f.waitExit=async()=>{},f=>f.waitExit=async old=>{old.exitCode=1;},f=>f.waitExit=async old=>{old.signalCode='SIGTERM';},f=>f.waitCdpDown=async()=>{throw Error('still listening');},f=>f.launch=async()=>({pid:10,exitCode:null,signalCode:null}),f=>f.observeDraft=async()=>'',f=>f.observeDraft=async()=> 'B-draft']){const f=restartFixture();change(f);await assert.rejects(restartOwnedCandidate(f));}
+});

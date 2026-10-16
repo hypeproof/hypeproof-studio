@@ -178,3 +178,36 @@ test('input replacement waits for focus and full selection before inserting, the
  ui.press=async()=>{};ui.key=async()=>{setTimeout(()=>{control.selectionEnd=control.value.length;},50);};
  const pending=ui.input(target,'textarea','new draft');await new Promise(r=>setTimeout(r,20));assert.equal(inserted,false);await pending;assert.equal(control.value,'new draft');
 });
+
+test('owned quit uses Mac CmdQ and actual Windows File Exit after observed focus, never kill or host command',async()=>{
+ for(const platform of['darwin','win32']){
+  const ui=new NativeUI('http://127.0.0.1:9777'),events=[];const target={send:async(method,args)=>events.push([method,args])};
+  ui.workbench=async()=>target;ui.focusWorkbench=async t=>{assert.equal(t,target);events.push(['focused']);};
+  ui.clickText=async(t,label,css)=>{assert.equal(t,target);events.push(['native-click',label,css]);};
+  await ui.quitOwned(platform);assert.equal(events[0][0],'focused');
+  if(platform==='darwin'){assert.equal(events[1][0],'Input.dispatchKeyEvent');assert.equal(events[1][1].key,'q');assert.equal(events[1][1].modifiers,4);assert.equal(events[1][1].type,'keyDown');assert.equal(events[2][1].type,'keyUp');}
+  else assert.deepEqual(events,[['focused'],['native-click','File','.menubar-menu-button'],['native-click','Exit','.monaco-menu .action-label']]);
+ }
+});
+test('visible menu choice matches exact mnemonic label, refusing hidden or neighboring exit labels',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),parent={children:[]};
+ const nodes=[['Exit Other',20],['Exit',0],['Exit',20]].map(([text,width])=>({tagName:'SPAN',textContent:text,parentElement:parent,getBoundingClientRect:()=>({width})}));parent.children=nodes;
+ const document={documentElement:parent,querySelectorAll:selector=>{assert.equal(selector,'.monaco-menu .action-label');return nodes;}};
+ const view={evaluate:expression=>vm.runInNewContext(expression,{document})};
+ assert.equal(await ui.textSelector(view,'Exit','.monaco-menu .action-label'),'html>span:nth-child(3)');
+});
+test('CDP down requires connection refusal, not HTTP error or timeout',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),original=globalThis.fetch;
+ try{for(const [answer,expected]of[[async()=>new Response('',{status:500}),false],[async()=>{throw Object.assign(Error(),{cause:{code:'ECONNREFUSED'}});},true],[async()=>{throw Object.assign(Error(),{name:'TimeoutError'});},false]]){globalThis.fetch=answer;assert.equal(await ui.cdpDown(),expected);}}finally{globalThis.fetch=original;}
+});
+
+test('second activity candidate uses actual StartPage choices, explicit token entry and selected folder UI',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[],token='synthetic-token-B-private',folder='/owned/C';
+ const view={evaluate:async expression=>{assert(expression.includes(".studio-course"));events.push(['observe',expression.includes('#connect-title')?'authenticated-candidate':'selected-folder']);return true;}};
+ ui.clickText=async(target,label)=>{assert.equal(target,view);events.push(['click',label]);};
+ ui.input=async(target,selector,value)=>{assert.equal(target,view);assert.equal(selector,'#course-code');assert.equal(value,token);events.push(['input','explicit-token-B']);};
+ ui.folder=async(directory,label)=>events.push(['folder',directory,label]);
+ assert.equal(await ui.activityCandidate(view,token,folder),view);
+ assert.deepEqual(events,[['click','다른 활동 선택'],['click','수업에 참여하기'],['input','explicit-token-B'],['click','코드 확인하기'],['observe','authenticated-candidate'],['click','다른 작업 폴더 선택'],['folder',folder,'이 활동의 작업 폴더 선택'],['observe','selected-folder']]);
+ assert(!JSON.stringify(ui.phases).includes(token),'private code is not phase evidence');
+});
