@@ -6,14 +6,14 @@ import {NativeUI} from './native-ui.mjs';
 function fixture(outerVisible){const ui=new NativeUI('http://127.0.0.1:9777');const iframe={name:'visible-webview',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};const control={getBoundingClientRect:()=>({width:700,height:60})};const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[iframe]},getComputedStyle:()=>({display:'inline',visibility:'visible'})})};const target={info:{id:'target'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'frame'}}}:{executionContextId:1},evaluate:expression=>vm.runInNewContext(expression,{document:{visibilityState:'hidden',querySelector:()=>control}})};ui.list=async()=>[{id:'target',type:'iframe',url:'vscode-webview://test/index.html?id=visible-webview&extensionId=hypeproof.hypeproof-chat'}];ui.workbench=async()=>host;ui.target=async()=>target;return {ui,target};}
 test('visible workbench iframe and control geometry work despite Electron Page Visibility false negative',async()=>{const {ui,target}=fixture(true);assert.equal(await ui.frame('textarea',500),target);});
 test('hidden outer webview cannot pass by retaining an inner control geometry',async()=>{const {ui}=fixture(false);await assert.rejects(ui.frame('textarea',1),/Timed out/);});
-test('command input retains palette mode prefix instead of switching to file quick-open',async()=>{const ui=new NativeUI('http://127.0.0.1:9777'),typed=[];const target={evaluate:async()=>true};ui.workbench=async()=>target;let state={visible:false};ui.quickState=async()=>state;ui.key=async()=>{state={visible:true,ready:true,mode:'command',value:'>'};};ui.press=async()=>{state={visible:false};};ui.choiceSelector=async()=>'.choice';ui.input=async(_t,_selector,text)=>{typed.push(text);state.value=text;};await ui.palette('HypeProof: 작업 파일 열기');assert.deepEqual(typed,['>HypeProof: 작업 파일 열기']);});
+test('command input retains palette mode prefix instead of switching to file quick-open',async()=>{const ui=new NativeUI('http://127.0.0.1:9777'),typed=[];const target={evaluate:async()=>true};ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};let state={visible:false};ui.quickState=async()=>state;ui.key=async()=>{state={visible:true,ready:true,mode:'command',value:'>'};};ui.press=async()=>{state={visible:false};};ui.choiceSelector=async()=>'.choice';ui.input=async(_t,_selector,text)=>{typed.push(text);state.value=text;};await ui.palette('HypeProof: 작업 파일 열기');assert.deepEqual(typed,['>HypeProof: 작업 파일 열기']);});
 
 test('palette chooses the exact visible command even when another row extends its name',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),pressed=[];
  const rows=['HypeProof Chat: Focus on Chat View','HypeProof Chat: Focus'].map(text=>({querySelector:selector=>selector==='.label-name'?{textContent:text}:null,getBoundingClientRect:()=>({height:22})}));
  for(const row of rows)row.parentElement={children:rows};
  const target={evaluate:async expression=>expression.includes("querySelectorAll('.quick-input-list")?vm.runInNewContext(expression,{document:{querySelectorAll:()=>rows}}):true};
- ui.workbench=async()=>target;let state={visible:false};ui.quickState=async()=>state;ui.key=async()=>{state={visible:true,ready:true,mode:'command',value:'>'};};ui.input=async(_target,_selector,text)=>{state.value=text;};ui.press=async(_target,selector)=>{pressed.push(selector);state={visible:false};};
+ ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};let state={visible:false};ui.quickState=async()=>state;ui.key=async()=>{state={visible:true,ready:true,mode:'command',value:'>'};};ui.input=async(_target,_selector,text)=>{state.value=text;};ui.press=async(_target,selector)=>{pressed.push(selector);state={visible:false};};
  await ui.palette('HypeProof Chat: Focus');
  assert.deepEqual(pressed,['.quick-input-list .monaco-list-row:nth-child(2)']);
 });
@@ -35,7 +35,7 @@ test('simple Save As accepts the observed OK action without accepting an undecla
 // acknowledgment. These assert scheduling and refusal, never native acceptance.
 function transitionUI(){
  const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let state={visible:false,ready:false,mode:'closed'};
- ui.workbench=async()=>({});ui.quickState=async()=>({...state});ui.choiceSelector=async()=>'.declared-choice';
+ ui.workbench=async()=>({});ui.focusWorkbench=async()=>{};ui.quickState=async()=>({...state});ui.choiceSelector=async()=>'.declared-choice';
  ui.key=async(_target,key)=>{events.push(key);state={visible:true,ready:true,mode:'command',value:'>'};};
  ui.input=async(_target,_selector,value)=>{events.push('typed:'+value);state.value=value;};
  return {ui,events,get state(){return state;},set state(value){state=value;}};
@@ -67,14 +67,16 @@ test('exact picker label permits selected marker but never an extended neighbori
  assert.equal(await ui.choiceSelector(target,'internal-comms'),'.quick-input-list .monaco-list-row:nth-child(2)');
 });
 
-test('new file waits for the real focused editor before typing and rendered text before save',async()=>{
- const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let ready=false,rendered=false;
- const target={evaluate:async expression=>expression.includes('document.activeElement')?ready:rendered,send:async(method,args)=>{events.push([method,args.text]);setTimeout(()=>{rendered=true;},30);}};
- ui.workbench=async()=>target;ui.key=async(_w,key)=>{events.push(['key',key]);setTimeout(()=>{ready=true;},30);};
+test('new file waits for a new resource bound to the focused editor before typing and rendering',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let created=false,rendered=false;
+ const target={send:async(method,args)=>{events.push([method,args.text]);setTimeout(()=>{rendered=true;},30);}};
+ ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};ui.editorState=async()=>({resources:created?['old.txt','Untitled-2']:['old.txt'],resource:created?'Untitled-2':'old.txt',editorLabel:created?'Untitled-2':'old.txt',focused:true,text:rendered?'Native file text':'old original'});
+ // The old editor remains ready while the new editor is still being created.
+ ui.key=async(_w,key)=>{events.push(['key',key]);setTimeout(()=>{created=true;},30);};
+ const originalState=ui.editorState;ui.editorState=async()=>{const s=await originalState();if(created&&!rendered)s.text='';return s;};
  const pending=ui.newTextFile('Native file text\n');await new Promise(r=>setTimeout(r,15));assert.deepEqual(events,[['key','n']]);
  assert.equal(await pending,target);assert.equal(rendered,true);assert.deepEqual(events,[['key','n'],['Input.insertText','Native file text\n']]);
 });
-
 test('quick input readiness observes actual hit target and does not expose values in failure metadata',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');const input={value:'>Exact',disabled:false,getBoundingClientRect:()=>({left:0,top:0,width:100,height:20})};let hit=input;
  const widget={querySelector:()=>input,getBoundingClientRect:()=>({width:100,height:40})};const document={querySelector:()=>widget,hasFocus:()=>true,activeElement:{tagName:'INPUT'},elementFromPoint:()=>hit};
@@ -86,4 +88,33 @@ test('only an explicitly expected reload accepts observed target closure after c
  const ui=new NativeUI('http://127.0.0.1:9777'),target={ws:{readyState:WebSocket.CLOSED}};ui.quickState=async()=>{throw Error('Target closed');};
  assert.equal((await ui.selectedQuick(target,'>Reload','reload selection',true)).mode,'reloading-target-closed');
  await assert.rejects(ui.waitQuick(target,s=>!s.visible,'ordinary selection',1),/Target closed/);
+});
+
+test('workbench activation is observed before palette keyboard input, without DOM focus mutation',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let focused=false,state={visible:false};
+ const target={send:async(method)=>{events.push(method);assert.equal(method,'Page.bringToFront');setTimeout(()=>{focused=true;},35);},evaluate:async expression=>{assert.equal(expression,'document.hasFocus()');return focused;}};
+ ui.workbench=async()=>target;ui.quickState=async()=>state;ui.choiceSelector=async()=>'.exact-command';
+ ui.key=async(_target,key)=>{assert(focused,'F1 cannot precede observed native window focus');events.push(key);state={visible:true,ready:true,mode:'command',value:'>'};};
+ ui.input=async(_target,_selector,value)=>{state.value=value;};ui.press=async()=>{state={visible:false};};
+ const pending=ui.palette('Exact command');await new Promise(r=>setTimeout(r,15));assert.deepEqual(events,['Page.bringToFront']);await pending;assert.deepEqual(events,['Page.bringToFront','F1']);
+});
+test('failed workbench activation stops before any keyboard input or retry',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let sends=0,keys=0;
+ ui.workbench=async()=>({send:async method=>{sends++;assert.equal(method,'Page.bringToFront');throw Error('Activation unavailable');}});ui.key=async()=>{keys++;};
+ await assert.rejects(ui.palette('Exact command'),/Activation unavailable/);assert.equal(sends,1);assert.equal(keys,0);
+});
+test('read-only workbench discovery never activates the window',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),calls=[];const target={send:async method=>{calls.push(method);}};
+ ui.list=async()=>[{id:'read-only',type:'page',url:'vscode-file://workbench.html'}];ui.target=async()=>target;
+ assert.equal(await ui.workbench(),target);assert.deepEqual(calls,[]);
+});
+
+test('new Untitled tab cannot authorize typing while the old editor still owns focus',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[];let command=false,modelReady=false,rendered=false;
+ const target={send:async(method,args)=>{assert(modelReady,'never insert into the previous document');events.push({method,destination:'Untitled-2'});rendered=true;}};
+ ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};
+ ui.editorState=async()=>({resources:command?['old.txt','Untitled-2']:['old.txt'],resource:command?'Untitled-2':'old.txt',editorLabel:modelReady?'Untitled-2':'old.txt',focused:true,text:rendered?'isolated text':''});
+ ui.key=async()=>{command=true;setTimeout(()=>{modelReady=true;},45);};
+ const pending=ui.newTextFile('isolated text');await new Promise(r=>setTimeout(r,20));assert.deepEqual(events,[],'changed tab alone must not authorize typing');
+ await pending;assert.deepEqual(events,[{method:'Input.insertText',destination:'Untitled-2'}]);
 });
