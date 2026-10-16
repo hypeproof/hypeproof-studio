@@ -159,3 +159,22 @@ test('phase evidence identifies selected command and omits private picker values
  const ui=new NativeUI('http://127.0.0.1:9777');ui.commandTitle='Public command';ui.quickState=async()=>({visible:false,value:'private-user-text'});
  await ui.waitQuick({},s=>!s.visible,'selection settled',1);assert.equal(ui.phases[0].command,'Public command');assert.equal(ui.phases[0].outcome,'observed');assert(!JSON.stringify(ui.phases).includes('private-user-text'));
 });
+
+test('preview identity accepts the shell content-title suffix but refuses another Untitled resource',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let model='Untitled-1';
+ ui.editorState=async()=>({resource:'Untitled-2',editorLabel:'# 외부 지침 스킬 • '+model,focused:true,text:'revision manifest'});
+ await assert.rejects(ui.newPreview({}, {resources:['Untitled-1']},['revision','manifest'],1),/Timed out/);
+ model='Untitled-2';assert.equal((await ui.newPreview({}, {resources:['Untitled-1']},['revision','manifest'])).resource,'Untitled-2');
+});
+test('Mac select all uses the native key editing command; ordinary and Windows keys do not',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),events=[],target={send:async(method,args)=>events.push({method,...args})};
+ await ui.key(target,'a',4);assert.deepEqual(events[0].commands,['selectAll']);assert.equal(events[1].commands,undefined);
+ events.length=0;await ui.key(target,'a',2);assert(events.every(e=>e.commands===undefined));
+});
+test('input replacement waits for focus and full selection before inserting, then observes final value',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');const control={value:'old draft',selectionStart:0,selectionEnd:0};let inserted=false;
+ const document={querySelector:()=>control,activeElement:control};
+ const target={evaluate:expression=>vm.runInNewContext(expression,{document}),send:async(method,args)=>{assert.equal(control.selectionEnd,control.value.length);assert.equal(method,'Input.insertText');inserted=true;control.value=args.text;}};
+ ui.press=async()=>{};ui.key=async()=>{setTimeout(()=>{control.selectionEnd=control.value.length;},50);};
+ const pending=ui.input(target,'textarea','new draft');await new Promise(r=>setTimeout(r,20));assert.equal(inserted,false);await pending;assert.equal(control.value,'new draft');
+});

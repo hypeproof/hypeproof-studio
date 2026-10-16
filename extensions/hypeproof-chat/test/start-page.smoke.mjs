@@ -257,3 +257,18 @@ console.log('PASS saved activity selection: record drives token/workspace, crede
   assert.equal(starts,startsBefore+1,'panel 없는데 openChat()이 openInEditor를 불렀다');
   console.log('PASS openChat(): panel present calls openInEditor, absent is noop');
 }
+
+// A focus action arriving during slow restore must not open a second chat surface.
+{
+ let release, restored=false, focused=0, shown=0;
+ const restore=new Promise(resolve=>{release=()=>{restored=true;resolve();};});
+ chat.focusEditor=()=>{assert(restored,'focus must wait for restored activity');focused++;return true;};
+ const originalShow=page.show;page.show=async()=>{shown++;};
+ const pending=page.focusAfterRestore(restore);
+ await new Promise(resolve=>setTimeout(resolve,10));assert.equal(focused,0);assert.equal(shown,0);
+ release();await pending;assert.equal(focused,1);assert.equal(shown,0);
+ chat.focusEditor=()=>false;await page.focusAfterRestore(Promise.resolve());assert.equal(shown,1,'closed chat returns to entry');
+ const before=shown;await assert.rejects(page.focusAfterRestore(Promise.reject(Error('restore failed'))),/restore failed/);assert.equal(shown,before,'failed restore cannot bypass into another chat');
+ page.show=originalShow;
+ console.log('PASS chat focus waits for restore and uses entry when closed; no sidebar fallback');
+}

@@ -885,6 +885,9 @@ FB-01/02 reuse [US-03/07–10/12/18](requirements/unified-studio-experience.md),
 [ADR 0008](adr/0008-activity-connection-boundaries.md) and the existing activity
 credential/history/draft stores. `initializeFilesLayout` exposes Explorer only
 for a genuinely new profile; subsequent layout choices are left to the shell.
+Chat focus waits for initial activity restoration and reveals the existing editor
+chat. If no editor chat exists, it opens the entry surface; it must not create a
+second sidebar chat or reopen a sidebar the user hid.
 Controlled StartPage/activity folder navigation prepares and validates the
 existing binding before open, blocks while a send is active, and consumes a
 destination/activity/Service-bound resume marker once (ten-minute maximum age).

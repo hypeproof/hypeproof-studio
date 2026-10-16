@@ -150,6 +150,12 @@ export class StartPage {
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
   inboxChanged(): void { if (this.panel) void this.refresh(); }
 
+  /** A focus request during restore must not create a second sidebar chat. */
+  async focusAfterRestore(restore: Promise<void>): Promise<void> {
+    await restore;
+    if (!this.chat.focusEditor()) await this.show();
+  }
+
   async openChat(): Promise<void> {
     const entry = this.panel;
     if (!entry) return;

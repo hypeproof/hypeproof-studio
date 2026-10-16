@@ -200,6 +200,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource());
+  let initialSurfaceReady: Promise<void> = Promise.resolve();
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
   // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
   // the start page enters a folder (activity commit, then ensureWorkspace switches and reloads).
@@ -263,9 +264,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Preview is no longer a sidebar view — it's an editor-area WebviewPanel
     // created on demand by PreviewProvider.show().
 
-    vscode.commands.registerCommand("hypeproof-chat.focus", () => {
-      if (!provider.focusEditor()) vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-    }),
+    vscode.commands.registerCommand("hypeproof-chat.focus", () => startPage.focusAfterRestore(initialSurfaceReady)),
 
     vscode.commands.registerCommand('hypeproof-chat.openStudioFiles', () => vscode.commands.executeCommand('workbench.view.explorer')),
     // #751 — remote classroom operations: learner-initiated, status-only, droppable.
@@ -787,7 +786,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // #1298 — if an issuer-shaped token is already stored, the user is likely an instructor; skip the
   // student start page automatically. If whoami later returns rejected the token is deleted and the
   // start page is shown once (handled in postConfig/refresh via instructorMode.handleAutoReadResult).
-  void (async () => {
+  initialSurfaceReady = (async () => {
     const storedIssuer = await context.secrets.get(ISSUER_TOKEN_KEY);
     const decision = resumeStatus;
     const record = activityConnections(context)?.current;
