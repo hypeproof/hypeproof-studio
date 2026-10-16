@@ -181,6 +181,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
   providerRef = provider;
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
   // pointing at a loopback mock (resolvePublishEndpoints explains why only then).
   provider.initSitePublish(

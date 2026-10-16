@@ -43,6 +43,9 @@ jobs:
           cache: npm
           cache-dependency-path: packages/measurement/package-lock.json
       - run: pip install --quiet pyyaml
+      - name: Portable feedback evidence integrity
+        if: ${{ !cancelled() }}
+        run: python3 scripts/test-feedback-report.py
       # A bash body on a Windows runner without `shell: bash` parses as
       # PowerShell and dies on its first POSIX token. v0.0.0-rc.2 published a
       # release and then failed exactly that way.

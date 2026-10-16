@@ -2,7 +2,7 @@ export interface ImageEditRequest {schema:'hps-image-edit/1';original:{data_url:
 export interface ImageEditResult {
  schema:'hps-image-edit-result/1';id:string;state:'queued'|'dispatched'|'succeeded'|'failed'|'unknown'|'cancelled'|'completed_after_cancel';
  original_sha256:string;operation:string;transparent:boolean;cancel_requested:boolean;error_code:string|null;
- provider:{name:string;model:string;request_id:string|null};cost:{request_id:string;recording_state:string;pricing:'unknown';amount:null};
+ provider:{name:string;model:string;request_id:string|null};cost:{request_id:string;recording_state:string;pricing:string;amount_micro:number|string|null;currency:string|null;price_revision:string|null;unit:'micro_currency';issues?:string[]};
  output:{sha256:string;mime:'image/png';width:number;height:number;hasAlpha:boolean;transparentPixels:number;opaquePixels:number;partialAlphaPixels:number;expires_at:number}|null;
  semantic_preservation:'not_verified';
 }

@@ -277,6 +277,8 @@ export interface ResolvedProfile {
   // this folder on onboarding. Absent → the legacy default folder is used.
   workspace_root?: string | null;
   workspace_start?: 'empty' | 'html';
+  /** Service-owned image editing capability; absent means unavailable. */
+  image_edit?: { enabled: true };
   /** Optional input capabilities (default off). #278 / website-copyclone. */
   input?: {
     page_context?: boolean;

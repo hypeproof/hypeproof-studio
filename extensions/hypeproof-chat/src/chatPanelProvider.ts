@@ -25,6 +25,7 @@ import * as os from "node:os";
 import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
 import { imagePathsFromNotes, selectReferencedImagePaths, readWorkspaceReferenceImages, referenceImageFailuresNote } from "./referenceImages";
 import { selectedExternalInstructions } from "./externalSkillCommands";
+import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -3899,6 +3900,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return undefined;
   }
 
+  async editImage(): Promise<void> {
+    if (this.hasActiveStream()) {
+      void vscode.window.showWarningMessage("진행 중인 작업을 마친 뒤 이미지를 편집해 주세요.");
+      return;
+    }
+    this.pendingSends++;
+    let releaseActivity: (() => void) | undefined;
+    try {
+      const connections = activityConnections(this.context);
+      if (connections) {
+        releaseActivity = connections.acquire();
+        const token = await connections.token();
+        if (!token || !connections.current) throw new Error("활동 연결을 먼저 확인해 주세요.");
+        await verifyActivity({ token, proxyUrl: connections.current.service }, connections.current.serverId);
+      }
+      const profile = await this.ensureProfile(true);
+      const token = await this.context.secrets.get(TOKEN_KEY);
+      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!profile || !token || !cwd) {
+        void vscode.window.showWarningMessage("활동에 연결하고 작업 폴더를 연 뒤 이미지를 편집해 주세요.");
+        return;
+      }
+      await runImageEdit(this.context, { profile, token, cwd, proxyUrl: this.proxyUrl(),
+        onSelected: async (relativePath) => {
+          await this.postAppReply(`선택한 이미지: ${relativePath}. 다음 요청에 ‘선택한 이미지’라고 적으면 이 파일을 참고합니다. 원본은 그대로 보존됩니다.`);
+        },
+      });
+    } catch {
+      void vscode.window.showWarningMessage("활동 연결을 확인하지 못해 이미지 편집을 시작하지 않았어요. 원본은 보존됩니다.");
+    } finally {
+      try { releaseActivity?.(); } finally { this.pendingSends--; }
+    }
+  }
+
   /** Persist coach info chosen via the in-panel naming card. */
   private async saveCoachFromWebview(name: string, personality: string): Promise<void> {
     const profile = await this.ensureProfile();
@@ -4752,6 +4787,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // The same user-turn content reaches SDK and proxy. Server-owned system
         // prompts, tool grants and curriculum metadata remain authoritative.
         const selected = await selectedExternalInstructions(this.context, instructionRoot);
+        userTextForModel += await selectedImageEditContext(this.context, instructionRoot, text);
         if (selected.text) {
           userTextForModel += `\n\n${selected.text}`;
           this.postToolLog(streamId, { id: randomId(), icon: "📖", label: selected.provenance.map(s => `${s.name} · ${s.revision.slice(0, 12)}`).join(" · "), state: "done" });
