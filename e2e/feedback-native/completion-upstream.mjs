@@ -37,7 +37,7 @@ export async function startCompletionUpstream({directory,config}){
   else if(mode==='browser-error')content=tool('completion_bad_click','mcp__hypeproof__browser_click',{ref:'missing-owned-ref'});
   else if(!get('completion_shot390'))content=tool('completion_shot390','mcp__hypeproof__browser_screenshot',{});
   else if(revision&&!get('completion_edit_html'))content=tool('completion_edit_html','Write',{file_path:path.join(config.workspace,config.outputHtml),content:config.editedHtml});
-  else if(revision&&!get('completion_reload'))content=tool('completion_reload','mcp__hypeproof__browser_open',{url:cliWrapper});
+  else if(revision&&!get('completion_reload'))content=tool('completion_reload','mcp__hypeproof__live_preview_start',{});
   else if(revision&&!get('completion_final390'))content=tool('completion_final390','mcp__hypeproof__browser_screenshot',{});
   else if(!resumed&&mode!=='edit-complete'){content={type:'text',text:'Initial render turn concluded.'};stop='end_turn';}
   else if(!get('completion_read'))content=tool('completion_read','mcp__hypeproof__browser_read',{});

@@ -1,3 +1,4 @@
+import {createRequire} from 'node:module';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
 import {renderConfig,renderProfile,startRenderHost,capturedSourceVersions,captureEvidenceStore,assertCapturedResponse,ownedFetchInterception,priorScreenshotCalls,screenshotReservationClient} from './render-host.mjs';import {toolResultImageHashes,screenshotCallHashes,digest,startGuard} from './guard.mjs';
 import {createCompletionSession} from './render-completion.mjs';
@@ -68,18 +69,18 @@ test('private captured source and served snapshots reject unknown, changed, miss
  }finally{fs.rmSync(base,{recursive:true,force:true});}
 });
 
-test('actual headless capture edit reload recapture retains both source revisions and charges every image',async()=>{
+test('actual MCP duplicate open cannot reload edits; live preview reload retains revisions and stale recapture stays charged',async()=>{
  const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-render-revision-control-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of [workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});
  const file=path.join(workspace,'keyboard.html'),initial=fs.readFileSync(path.join(root,'extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html')),final=Buffer.from(initial.toString()+'\n<p>Owned revision two</p>');assert.notDeepEqual(initial,final);fs.writeFileSync(file,initial);let attempts=0,host;
  try{
   host=await startRenderHost({root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:async()=>({attempt:++attempts,limit:6})});const view=host.setCandidate(['keyboard.html']);
-  await host.host.openBrowser(view.wrapperUrl);assert(!fs.existsSync(path.join(evidence,'private')),'Navigation alone must not copy revisions to disk');await host.host.inspect('browser_screenshot',{});
-  const historical=structuredClone(host.state.captures[0]);assert(host.verifyCapture(historical));fs.writeFileSync(file,final);await host.host.openBrowser(view.wrapperUrl);await host.host.inspect('browser_screenshot',{});
+  const {runBrowserOpen,runLivePreviewStart}=createRequire(import.meta.url)(path.join(temp,'render-build/mcp.cjs'));await runBrowserOpen(host.host,view.wrapperUrl);assert(!fs.existsSync(path.join(evidence,'private')),'Navigation alone must not copy revisions to disk');await host.host.inspect('browser_screenshot',{});
+  const historical=structuredClone(host.state.captures[0]);assert(host.verifyCapture(historical));fs.writeFileSync(file,final);const opens=host.state.actions.filter(x=>x.name==='browser_open').length,duplicate=await runBrowserOpen(host.host,view.wrapperUrl);assert(duplicate.content.some(x=>x.text?.includes('다시 열지 않았어요')));assert.equal(host.state.actions.filter(x=>x.name==='browser_open').length,opens);await runLivePreviewStart(host.host);assert.equal(host.state.actions.filter(x=>x.name==='browser_open').length,opens+1);await host.host.inspect('browser_screenshot',{});
   const read=await host.host.inspect('browser_read',{}),text=read.content.filter(x=>x.type==='text').map(x=>x.text).join('\n'),ref=text.split('\n').find(x=>x.includes('데스크톱 1280px')).match(/ref=(e\d+)/)[1];await host.host.inspect('browser_click',{ref});await host.host.inspect('browser_screenshot',{});
   assert.equal(attempts,3);assert.equal(host.state.screenshot_attempts,3);assert.deepEqual(host.state.captures.map(x=>x.source_sha256),[digest(initial),digest(final),digest(final)]);assert.deepEqual(host.state.captures.map(x=>x.page.frameWidth),[390,390,1280]);assert.deepEqual(host.state.captures[0],historical);
   for(const capture of host.state.captures){assert(host.verifyCapture(capture));assert.notEqual(capture.revision.source.sha256,capture.revision.served.sha256);assert(capture.page.frameId);}
   assert.deepEqual(host.state.source_versions.captured_source_sha256,[digest(initial),digest(final)]);assert.equal(host.state.source_versions.captured_source_version_count,2);assert.equal(host.state.source_versions.exceeds_three_captured_versions,false);assert.equal(host.state.source_versions.uncaptured_source_versions,'UNKNOWN');assert.equal(fs.readdirSync(path.join(evidence,'private/render-revisions')).length,4);assert(fs.readFileSync(path.join(evidence,historical.revision.source.file)).equals(initial));
-  fs.writeFileSync(file,initial);await assert.rejects(host.host.inspect('browser_screenshot',{}),/Candidate changed since its actual HTTP load/);assert.equal(attempts,4,'Failed stale-load capture remains charged');assert.equal(host.state.captures.length,3);assert.equal(host.state.cleanup.status,'PASS');
+  fs.writeFileSync(file,initial);const staleOpen=await runBrowserOpen(host.host,view.wrapperUrl);assert(staleOpen.content.some(x=>x.text?.includes('다시 열지 않았어요')));await assert.rejects(host.host.inspect('browser_screenshot',{}),/Candidate changed since its actual HTTP load/);assert.equal(attempts,4,'Failed stale-load capture remains charged');assert.equal(host.state.captures.length,3);assert.equal(host.state.cleanup.status,'PASS');
  }finally{await host?.close();fs.rmSync(base,{recursive:true,force:true});}
 });
 
