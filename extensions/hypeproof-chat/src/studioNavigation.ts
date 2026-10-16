@@ -7,6 +7,14 @@ import { activityService } from './activityConnections';
 import { historyKeyForCohort } from './chatPanelHelpers';
 import { isSameLocation } from './workspaceRouting';
 
+/**
+ * globalState key holding the root we last tried to switch TO. Written before
+ * the reload, cleared once we land (or once we decide not to switch). Its only
+ * job is to make a failed `vscode.openFolder` fail ONCE: without it, a root that
+ * cannot be opened would be retried on every post-reload activation and the
+ * learner's window would reload forever mid-lecture.
+ */
+export const WORKSPACE_SWITCH_ATTEMPT_KEY = 'hypeproofChat.workspaceSwitchAttempt';
 export const INITIAL_LAYOUT_KEY = 'hypeproofChat.initialFilesLayout';
 export const RESUME_MAX_AGE_MS = 10 * 60_000;
 export interface ActivityResume {
@@ -61,6 +69,11 @@ export async function consumeActivityResume(context: vscode.ExtensionContext, re
       if (Object.prototype.hasOwnProperty.call(marker.state, stateKey) && context.workspaceState.get(stateKey) === undefined)
         await context.workspaceState.update(stateKey, marker.state[stateKey]);
     }
+  }
+  if (decision === 'valid' && root) {
+    const attempted = context.globalState.get<string>(WORKSPACE_SWITCH_ATTEMPT_KEY);
+    if (attempted && isSameLocation(attempted, root, canonical))
+      await context.globalState.update(WORKSPACE_SWITCH_ATTEMPT_KEY, undefined);
   }
   if (marker && key) await context.globalState.update(key, undefined);
   return decision;

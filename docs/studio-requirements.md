@@ -894,6 +894,9 @@ sidebar the user hid.
 Controlled StartPage/activity folder navigation prepares and validates the
 existing binding before open, blocks while a send is active, and consumes a
 destination/activity/Service-bound resume marker once (ten-minute maximum age).
+A validated arrival retires only the matching folder-switch attempt, so a later
+explicit visit can reopen that folder. Invalid or expired arrival information
+must not clear the guard against repeatedly reopening a failed destination.
 Only the current activity's known history/draft keys can fill an empty
 destination; a destination's existing saved work wins. Cancel, failed draft
 flush, failed navigation and invalid credentials preserve the original state.

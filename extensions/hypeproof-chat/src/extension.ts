@@ -1,5 +1,5 @@
 import { registerExternalSkillCommands } from './externalSkillCommands';
-import { initializeFilesLayout, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume } from "./studioNavigation";
+import { initializeFilesLayout, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -860,14 +860,6 @@ async function maybeSynthesizeTestAction(
 // for kids, etc. os.homedir() makes the fallback path always absolute.
 const LEGACY_WORKSPACE_DIRNAME = "HypeProofGames";
 
-/**
- * globalState key holding the root we last tried to switch TO. Written before
- * the reload, cleared once we land (or once we decide not to switch). Its only
- * job is to make a failed `vscode.openFolder` fail ONCE: without it, a root that
- * cannot be opened would be retried on every post-reload activation and the
- * learner's window would reload forever mid-lecture.
- */
-const WORKSPACE_SWITCH_ATTEMPT_KEY = "hypeproofChat.workspaceSwitchAttempt";
 /** A saved instructor credential never overrides a validated learner resume. */
 export function resolveActivateBranch(storedIssuer: string | undefined, resume: boolean): 'resume' | 'skip' | 'show' {
   if (resume) return 'resume';

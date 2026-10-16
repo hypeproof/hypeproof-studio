@@ -6,11 +6,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
-const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {resolveActivateBranch} from './src/extension';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:new URL('..',import.meta.url).pathname,loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {resolveActivateBranch,ensureWorkspace} from './src/extension';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:new URL('..',import.meta.url).pathname,loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const commands=[], mod={exports:{}};
-const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},Uri:{joinPath:()=>({})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
+const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},workspace:{workspaceFolders:[]},Uri:{joinPath:()=>({}),file:fsPath=>({fsPath})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL});
-const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,INITIAL_LAYOUT_KEY,RESUME_MAX_AGE_MS,resolveActivateBranch,ChatPanelProvider,StartPage}=mod.exports;
+const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,INITIAL_LAYOUT_KEY,RESUME_MAX_AGE_MS,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-resume-'));
 const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link);
 const now=Date.now(),service='https://synthetic.invalid/v1';
@@ -28,6 +28,44 @@ try {
  assert.equal(resumeDecision(marker,record,'https://foreign.invalid/v1',a,now),'mismatch');
  assert.equal(resumeDecision(marker,undefined,service,a,now),'mismatch');
  console.log('PASS destination/service/activity/credential generation/time validation, slow restart, symlink and Korean paths');
+ // A successful arrival must retire its own loop guard before a later manual A→B visit.
+ const attemptKey='hypeproofChat.workspaceSwitchAttempt', arrived={...record,workspace:b}, arrival={...marker,workspace:b};
+ const navigation={globalState:state(),workspaceState:state()};
+ await navigation.globalState.update(attemptKey,b);
+ vscode.workspace.workspaceFolders=[{uri:{fsPath:a}}];
+ let committed=0;
+ await assert.rejects(ensureWorkspace({workspace_root:b,workspace_start:'empty'},navigation,false,async()=>{committed++;},b),/Activity workspace is not the active root/,'a failed/unacknowledged B attempt must not auto-loop');
+ assert.equal(committed,0);
+ await navigation.globalState.update(attemptKey,b);
+ await navigation.globalState.update(resumeKey(b),arrival);
+ assert.equal(await consumeActivityResume(navigation,arrived,service,b),'valid');
+ assert.equal(navigation.globalState.get(attemptKey),undefined,'valid actual destination arrival retires only its own loop guard');
+ assert.equal(await ensureWorkspace({workspace_root:b,workspace_start:'empty'},navigation,false,async()=>{committed++;},b),true,'later explicit A→B visit must execute production openFolder');
+ assert.equal(committed,1);assert.deepEqual(commands,['vscode.openFolder']);commands.length=0;
+ vscode.workspace.workspaceFolders=[];
+ console.log('PASS production ensureWorkspace: failed attempt refuses; valid destination arrival permits later explicit revisit');
+ for (const [invalid,status] of [[{...arrival,ref:'stale'},'mismatch'],[{...arrival,at:now-RESUME_MAX_AGE_MS},'expired'],[{...arrival,service:'https://foreign.invalid/v1'},'mismatch']]) {
+  await navigation.globalState.update(attemptKey,b);await navigation.globalState.update(resumeKey(b),invalid);
+  assert.equal(await consumeActivityResume(navigation,arrived,service,b),status);
+  assert.equal(navigation.globalState.get(attemptKey),b,'invalid arrival cannot retire a failed-attempt guard');
+  vscode.workspace.workspaceFolders=[{uri:{fsPath:a}}];
+  await assert.rejects(ensureWorkspace({workspace_root:b,workspace_start:'empty'},navigation,false,async()=>assert.fail('failed attempt must never commit'),b),/Activity workspace is not the active root/);
+ }
+ await navigation.globalState.update(attemptKey,a);await navigation.globalState.update(resumeKey(b),arrival);
+ assert.equal(await consumeActivityResume(navigation,arrived,service,b),'valid');
+ assert.equal(navigation.globalState.get(attemptKey),a,'valid B arrival cannot erase another destination attempt');
+ vscode.workspace.workspaceFolders=[];
+ console.log('PASS stale/expired/foreign arrivals preserve no-retry guards; other destinations remain untouched');
+ await navigation.globalState.update(attemptKey,b);
+ await navigation.globalState.update(resumeKey(b),{...arrival,state:{['hps.activity.draft.'+arrived.id]:{text:'pending'}}});
+ const originalUpdate=navigation.workspaceState.update;navigation.workspaceState.update=async()=>{throw Error('draft storage unavailable');};
+ await assert.rejects(consumeActivityResume(navigation,arrived,service,b),/draft storage unavailable/);
+ assert.equal(navigation.globalState.get(attemptKey),b,'failed destination restore preserves loop guard');
+ assert(navigation.globalState.get(resumeKey(b)),'failed restore retains resume marker for explicit recovery');
+ navigation.workspaceState.update=originalUpdate;
+
+
+
  const ctx={globalState:state(),workspaceState:state(),secrets:{keys:async()=>[]}};
  const own='hypeproofChat.history:'+record.id,foreign='hypeproofChat.history:'+'c'.repeat(64),draft='hps.activity.draft.'+record.id;
  const pending={...marker,state:{[own]:['source history'],[foreign]:['must never import'],[draft]:{text:'saved draft'}}};
