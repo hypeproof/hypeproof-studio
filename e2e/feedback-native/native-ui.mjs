@@ -28,11 +28,39 @@ export function sessionRefusalObserved(state,expected){
 }
 export const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export async function waitFor(fn,label,timeout=30000){const end=Date.now()+timeout;let last;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch(error){last=error;}await sleep(150);}throw Error('Timed out: '+label+(last?' ('+last.message+')':''));}
+// One owned read-only observation budget; callers cannot reset it between awaits.
+function readObservation(timeout,workbench){
+ const deadline=Date.now()+timeout,controller=new AbortController();
+ const check=()=>{if(controller.signal.aborted||Date.now()>=deadline)throw Error('Owned readiness deadline');};
+ const timer=setTimeout(()=>controller.abort(),timeout);
+ const run=async operation=>{check();let aborted;const stopped=new Promise((_,reject)=>{aborted=()=>reject(Error('Owned readiness deadline'));controller.signal.addEventListener('abort',aborted,{once:true});});
+  try{const value=await Promise.race([Promise.resolve().then(()=>{check();return operation();}),stopped]);check();return value;}finally{controller.signal.removeEventListener('abort',aborted);}};
+ const poll=async operation=>{for(;;){check();try{const value=await run(operation);if(value)return value;}catch{check();}await run(()=>sleep(Math.min(150,Math.max(1,deadline-Date.now()))));}};
+ return {signal:controller.signal,workbench,run,poll,check,close(){clearTimeout(timer);controller.abort();}};
+}
+
 class Target{
  constructor(info){this.info=info;this.sequence=0;this.pending=new Map();}
- async connect(){this.ws=new WebSocket(this.info.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{this.ws.onopen=resolve;this.ws.onerror=()=>reject(Error('CDP target connection failed'));});this.ws.onmessage=event=>{const m=JSON.parse(event.data);const pending=this.pending.get(m.id);if(pending){this.pending.delete(m.id);m.error?pending.reject(Error(m.error.message)):pending.resolve(m.result);}};this.ws.onclose=()=>{for(const p of this.pending.values())p.reject(Error('CDP target closed'));this.pending.clear();};await this.send('Page.enable');return this;}
- send(method,params={}){return new Promise((resolve,reject)=>{const id=++this.sequence;const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('CDP request timed out: '+method));},10000);this.pending.set(id,{resolve:value=>{clearTimeout(timer);resolve(value);},reject:error=>{clearTimeout(timer);reject(error);}});this.ws.send(JSON.stringify({id,method,params}));});}
- async evaluate(expression){const r=await this.send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,...(this.contextId?{contextId:this.contextId}:{})});if(r.exceptionDetails)throw Error(r.exceptionDetails.text||'DOM observation failed');return r.result?.value;}
+ async connect(observation){
+  this.ws=new WebSocket(this.info.webSocketDebuggerUrl);
+  try{const connected=()=>new Promise((resolve,reject)=>{this.ws.onopen=resolve;this.ws.onerror=()=>reject(Error('CDP target connection failed'));});await (observation?observation.run(connected):connected());}
+  catch(error){this.ws.close();throw error;}
+  this.ws.onmessage=event=>{const m=JSON.parse(event.data);const pending=this.pending.get(m.id);if(pending){m.error?pending.reject(Error(m.error.message)):pending.resolve(m.result);}};
+  this.ws.onclose=()=>{for(const p of this.pending.values())p.reject(Error('CDP target closed'));this.pending.clear();};
+  try{await this.send('Page.enable',{},observation);return this;}catch(error){this.ws.close();throw error;}
+ }
+ send(method,params={},observation){return new Promise((resolve,reject)=>{
+  if(observation)try{observation.check();}catch(error){reject(error);return;}
+  const id=++this.sequence;let timer;
+  const finish=(settle,value)=>{clearTimeout(timer);observation?.signal.removeEventListener('abort',aborted);this.pending.delete(id);settle(value);};
+  const aborted=()=>finish(reject,Error('Owned readiness deadline'));
+  timer=setTimeout(()=>finish(reject,Error('CDP request timed out: '+method)),10000);
+  this.pending.set(id,{resolve:value=>finish(resolve,value),reject:error=>finish(reject,error)});
+  observation?.signal.addEventListener('abort',aborted,{once:true});
+  try{this.ws.send(JSON.stringify({id,method,params}));}catch(error){finish(reject,error);}
+ });}
+ async evaluate(expression,observation){const r=await this.send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,...(this.contextId?{contextId:this.contextId}:{})},observation);if(r.exceptionDetails)throw Error(r.exceptionDetails.text||'DOM observation failed');return r.result?.value;}
+
  close(){this.ws?.close();}
 }
 export function selectWorkbenchInfo(infos,id){
@@ -92,9 +120,21 @@ export class NativeUI{
   catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
  }
 
- async list(){const r=await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}
- async target(info){let target=this.targets.get(info.id);if(!target||target.ws.readyState!==WebSocket.OPEN){target=await new Target(info).connect();this.targets.set(info.id,target);}return target;}
- async workbench(){return waitFor(async()=>{const info=selectWorkbenchInfo(await this.list(),this.workbenchId);return info?this.target(info):null;},'native workbench'+(this.workbenchId?' '+this.workbenchId:''),60000);}
+ async list(observation){const r=await fetch(this.endpoint+'/json/list',{signal:observation?AbortSignal.any([observation.signal,AbortSignal.timeout(1500)]):AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}
+ async target(info,observation){
+  let target=this.targets.get(info.id);
+  if(!target||target.ws.readyState!==WebSocket.OPEN){
+   target=new Target(info);
+   try{await target.connect(observation);observation?.check();this.targets.set(info.id,target);}catch(error){target.close();throw error;}
+  }
+  return target;
+ }
+ async workbench(observation){
+  const id=observation?.workbench??this.workbenchId;
+  const discover=async()=>{if(observation&&this.workbenchId&&this.workbenchId!==id)throw Error('Owned workbench changed');const infos=await (observation?observation.run(()=>this.list(observation)):this.list());const info=selectWorkbenchInfo(infos,id);return info?(observation?observation.run(()=>this.target(info,observation)):this.target(info)):null;};
+  return observation?observation.poll(discover):waitFor(discover,'native workbench'+(id?' '+id:''),60000);
+ }
+
  async restoredFocus(timeout=30000){
   // Observe startup focus only; no palette, click or Page.bringToFront may repair it.
   const chat=await this.frame('.hps-input textarea');
@@ -110,7 +150,30 @@ export class NativeUI{
  }
  // Activation is an input action, never part of read-only workbench discovery.
  async focusWorkbench(target){await target.send('Page.bringToFront');await waitFor(()=>target.evaluate('document.hasFocus()'),'native workbench window focused');}
- async frame(selector,timeout=30000){return waitFor(async()=>{const matches=[];for(const info of(await this.list()).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){const host=await this.workbench(),name=new URL(info.url).searchParams.get('id');const outerVisible=await host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`);if(!outerVisible)continue;const target=await this.target(info);const tree=await target.send('Page.getFrameTree');const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];for(const node of nodes){const isolated=await target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'});target.contextId=isolated.executionContextId;const visible=await target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);if(visible){target.ownedWorkbenchId=host.info?.id;target.ownedFrameId=node.frame.id;target.ownedLoaderId=node.frame.loaderId;matches.push(target);break;}}}if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];},'visible extension webview '+selector,timeout);}
+ async frame(selector,timeout=30000,observation){
+  const observe=operation=>observation?observation.run(operation):operation();
+  const discover=async()=>{
+   const matches=[];
+   for(const info of (await observe(()=>this.list(observation))).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){
+    const host=await observe(()=>this.workbench(observation));
+    if(observation&&host.info?.id!==observation.workbench)throw Error('Owned workbench changed');
+    const name=new URL(info.url).searchParams.get('id');
+    const outerVisible=await observe(()=>host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`,observation));
+    if(!outerVisible)continue;
+    const target=await observe(()=>this.target(info,observation));
+    const tree=await observe(()=>target.send('Page.getFrameTree',{},observation));
+    const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];
+    for(const node of nodes){
+     const isolated=await observe(()=>target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'},observation));target.contextId=isolated.executionContextId;
+     const visible=await observe(()=>target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`,observation));
+     if(visible){observation?.check();target.ownedWorkbenchId=host.info?.id;target.ownedFrameId=node.frame.id;target.ownedLoaderId=node.frame.loaderId;matches.push(target);break;}
+    }
+   }
+   if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];
+  };
+  return observation?observation.poll(discover):waitFor(discover,'visible extension webview '+selector,timeout);
+ }
+
  // Re-read only a previously observed frame, including when its native window is inactive.
  async retainedFrame(target){
   if(!this.workbenchId)throw Error('Retained frame requires explicit owned window');
@@ -154,18 +217,24 @@ export class NativeUI{
   }catch{const primary=Error('Not a usable visible native control: '+label);record(state?.same===false?'identity-refused':Date.now()>=deadline?'timeout':'unavailable');throw primary;}
   finally{if(objectId)try{await target.send('Runtime.releaseObject',{objectId});}catch{record('handle-release-unavailable');}}
  }
- async chatDocumentIdentity(timeout=30000){
-  const chat=await this.frame('.hps-input textarea',timeout);
+ async chatDocumentIdentity(timeout=30000,observation){
+  const chat=await this.frame('.hps-input textarea',timeout,observation);observation?.check();
   const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
   if(Object.values(identity).some(value=>typeof value!=='string'||!value))throw Error('Owned chat document identity unavailable');
   return identity;
  }
  async reloadedChatReady(before,timeout=30000){
   if(!Number.isFinite(timeout)||timeout<=0||timeout>30000||!before||['workbench','target','frame','loader'].some(key=>typeof before[key]!=='string'||!before[key]))throw Error('Exact previous owned chat document required');
-  let observed;
-  try{const after=await waitFor(async()=>{observed=await this.chatDocumentIdentity(Math.min(timeout,1000));if(!observed||['workbench','target','frame','loader'].some(key=>typeof observed[key]!=='string'||!observed[key]))return null;return ['target','frame','loader'].some(key=>observed[key]!==before[key])?observed:null;},'fresh post-reload owned chat document and textarea',timeout);
-   this.phases.push({at:new Date().toISOString(),phase:'post-reload chat readiness',outcome:'observed',before,after});return after;
+  const observation=readObservation(timeout,before.workbench);let observed;
+  try{const after=await observation.poll(async()=>{const identity=await observation.run(()=>this.chatDocumentIdentity(timeout,observation));
+    if(!identity||['workbench','target','frame','loader'].some(key=>typeof identity[key]!=='string'||!identity[key]))return null;
+    observation.check();observed=identity;
+    if(identity.workbench!==before.workbench)return null;
+    return ['target','frame','loader'].some(key=>identity[key]!==before[key])?identity:null;
+   });observation.check();this.phases.push({at:new Date().toISOString(),phase:'post-reload chat readiness',outcome:'observed',before,after});return after;
   }catch{this.phases.push({at:new Date().toISOString(),phase:'post-reload chat readiness',outcome:'timeout',before,after:observed??null});throw Error('Timed out: fresh post-reload owned chat document and textarea');}
+  finally{observation.close();}
+
  }
 
  async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}

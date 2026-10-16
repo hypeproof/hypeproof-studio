@@ -437,3 +437,51 @@ test('an unresponsive readiness sample consumes the same deadline, releases its 
  const ui=new NativeUI('http://127.0.0.1:9777'),calls=[];const target={send:async(method)=>{calls.push(method);if(method==='Runtime.evaluate')return{result:{objectId:'owned-fixture-object'}};if(method==='Runtime.callFunctionOn')return new Promise(()=>{});if(method==='Runtime.releaseObject')return{};assert.fail('No input after deadline');}};
  const start=Date.now();await assert.rejects(ui.press(target,'#target','synthetic deadline',40),/Not a usable/);assert(Date.now()-start<1000,'No new deadline while a sample is pending');assert.deepEqual(calls,['Runtime.evaluate','Runtime.callFunctionOn','Runtime.releaseObject']);assert.equal(ui.phases.at(-1).outcome,'timeout');
 });
+
+function reloadDiscoveryFixture({workbench='owned-A',waitAt}={}){
+ const before={workbench:'owned-A',target:'old-chat',frame:'old-frame',loader:'old-loader'},ui=new NativeUI('http://127.0.0.1:9777');let release,enteredResolve,attachments=0;
+ const entered=new Promise(resolve=>enteredResolve=resolve),held=new Promise(resolve=>release=resolve);
+ const pause=async phase=>{if(waitAt===phase){enteredResolve();await held;}};
+ const target={info:{id:'new-chat'},evaluate:async()=>{await pause('visible');return true;},send:async method=>{await pause(method);return method==='Page.getFrameTree'?{frameTree:{frame:{id:'new-frame',loaderId:'new-loader'}}}:{executionContextId:1};}};
+ ui.list=async()=>{await pause('list');return[{type:'iframe',id:'new-chat',url:'http://hypeproof-chat.invalid/?id=new-chat'}];};
+ ui.workbench=async()=>{await pause('workbench');return{info:{id:workbench},evaluate:async()=>true};};ui.target=async()=>{attachments++;return target;};
+ return {ui,before,target,entered,release,get attachments(){return attachments;}};
+}
+test('one reload deadline rejects hung discovery and late workbench/CDP/DOM responses without later metadata or phase mutation',async t=>{
+ for(const waitAt of ['list','workbench','Page.getFrameTree','Page.createIsolatedWorld','visible'])await t.test(waitAt,async()=>{
+  const f=reloadDiscoveryFixture({waitAt}),pending=f.ui.reloadedChatReady(f.before,40);await f.entered;
+  await assert.rejects(pending,/fresh post-reload/);const phases=JSON.stringify(f.ui.phases);assert.equal(f.ui.phases.length,1);assert.equal(f.ui.phases[0].outcome,'timeout');assert.equal(f.target.ownedWorkbenchId,undefined);
+  f.release();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.stringify(f.ui.phases),phases,'Late ignored await cannot publish readiness');assert.equal(f.target.ownedWorkbenchId,undefined,'No late frame ownership mutation');assert.equal(f.target.ownedFrameId,undefined);assert.equal(f.target.ownedLoaderId,undefined);
+ });
+});
+test('post-await clock rejection catches a fresh response after expiry even before the abort timer runs',async()=>{
+ const f=reloadDiscoveryFixture();f.ui.workbench=async()=>{const until=Date.now()+35;while(Date.now()<until){}return{info:{id:'owned-A'},evaluate:async()=>true};};
+ await assert.rejects(f.ui.reloadedChatReady(f.before,15),/fresh post-reload/);assert.equal(f.attachments,0);assert.equal(f.ui.phases.at(-1).outcome,'timeout');assert.equal(f.target.ownedWorkbenchId,undefined);
+});
+test('a fresh textarea in another workbench is never admitted or attached as the owned reload',async()=>{
+ const f=reloadDiscoveryFixture({workbench:'unrelated-B'});await assert.rejects(f.ui.reloadedChatReady(f.before,40),/fresh post-reload/);assert.equal(f.attachments,0);assert.equal(f.target.ownedWorkbenchId,undefined);assert.equal(f.ui.phases.at(-1).outcome,'timeout');
+});
+test('reload identity gate rejects another workbench even if a substituted identity method ignores its observation',async()=>{
+ const f=reloadDiscoveryFixture();f.ui.chatDocumentIdentity=async()=>({...f.before,workbench:'unrelated-B',loader:'fresh-loader'});await assert.rejects(f.ui.reloadedChatReady(f.before,20),/fresh post-reload/);assert.equal(f.ui.phases.at(-1).outcome,'timeout');
+});
+test('actual CDP observation abort removes pending requests without closing a preexisting shared target; late connection closes without registration',async()=>{
+ const OriginalWebSocket=globalThis.WebSocket,instances=[];
+ class FixtureSocket{
+  static OPEN=1;static CLOSED=3;
+  constructor(){this.readyState=0;instances.push(this);if(FixtureSocket.openImmediately)queueMicrotask(()=>this.open());}
+  open(){if(this.readyState===3)return;this.readyState=1;this.onopen?.();}
+  send(text){const row=JSON.parse(text);if(row.method==='Page.enable')queueMicrotask(()=>this.reply(row.id,{}));else this.last=row;}
+  reply(id,result){this.onmessage?.({data:JSON.stringify({id,result})});}
+  close(){if(this.readyState===3)return;this.readyState=3;this.closes=(this.closes??0)+1;this.onclose?.();}
+ }
+ globalThis.WebSocket=FixtureSocket;
+ try{
+  FixtureSocket.openImmediately=true;
+  const f=reloadDiscoveryFixture(),info={type:'iframe',id:'new-chat',url:'http://hypeproof-chat.invalid/?id=new-chat',webSocketDebuggerUrl:'ws://127.0.0.1:9777/owned'};f.ui.target=NativeUI.prototype.target.bind(f.ui);f.ui.list=async()=>[info];
+  const shared=await f.ui.target(info),socket=instances[0];assert.equal(shared.pending.size,0);
+  await assert.rejects(f.ui.reloadedChatReady(f.before,30),/fresh post-reload/);assert.equal(shared.pending.size,0,'Aborted request entries and their listeners must settle');assert.equal(socket.readyState,FixtureSocket.OPEN,'Do not close a preexisting owned shared target');assert.equal(f.ui.targets.get(info.id),shared);socket.reply(socket.last.id,{frameTree:{frame:{id:'late',loaderId:'late'}}});await new Promise(resolve=>setImmediate(resolve));assert.equal(shared.ownedWorkbenchId,undefined);assert.equal(shared.pending.size,0);f.ui.close();
+  FixtureSocket.openImmediately=false;
+  const late=reloadDiscoveryFixture();late.ui.target=NativeUI.prototype.target.bind(late.ui);late.ui.list=async()=>[info];
+  await assert.rejects(late.ui.reloadedChatReady(late.before,30),/fresh post-reload/);assert.equal(late.ui.targets.size,0);const pendingSocket=instances.at(-1);assert.equal(pendingSocket.readyState,FixtureSocket.CLOSED);pendingSocket.onopen?.();await new Promise(resolve=>setImmediate(resolve));assert.equal(late.ui.targets.size,0,'A late handshake cannot register a target');assert.equal(pendingSocket.closes,1);
+ }finally{globalThis.WebSocket=OriginalWebSocket;for(const socket of instances)socket.close();}
+});
