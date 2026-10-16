@@ -9,3 +9,18 @@ test('temporary observer records actual receipt/scope boolean and later focus lo
 test('observer caps messages, sanitizes setup/teardown errors and never repairs focus or extends a deadline',async()=>{
  const f=observerFixture(),observer=await beginFocusObservation(f.target,'synthetic');for(let i=0;i<100;i++)f.event('wmessage',{data:{type:'focusInput',activityId:'synthetic'}});const result=await observer.finish();assert.equal(result.records.length,64);assert(result.capped&&result.listeners_removed);const failed=await beginFocusObservation({evaluate:async()=>{throw Error('PRIVATE_ERROR');}},'synthetic');assert.deepEqual(await failed.finish(),{status:'UNAVAILABLE',records:[],listeners_removed:false});assert(!JSON.stringify(await failed.finish()).includes('PRIVATE'));
 });
+
+test('focus observer uses the actual production committed binding scope, not the raw Service activity id',async()=>{
+ const {build}=await import('esbuild'),{createRequire}=await import('node:module'),require=createRequire(import.meta.url);
+ const {selectOwnedBinding}=await import('./native-windows.mjs'),{observedBindingScope}=await import('./focus-diagnostics.mjs');
+ const bundle=await build({entryPoints:[new URL('../../extensions/hypeproof-chat/src/activityConnections.ts',import.meta.url).pathname],bundle:true,platform:'node',format:'cjs',write:false});const module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require,process,console,Buffer,URL});
+ const base=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'focus-production-scope-'))),root=path.join(base,'owned');fs.mkdirSync(root);
+ const state=new Map(),secrets=new Map(),service='http://127.0.0.1:9888/v1',activity='a'.repeat(64),context={globalStorageUri:{fsPath:base},workspaceState:{get:key=>state.get(key),update:async(key,value)=>state.set(key,value)},secrets:{get:async key=>secrets.get(key),store:async(key,value)=>secrets.set(key,value),delete:async key=>secrets.delete(key)}};
+ try{
+  const connections=new module.exports.ActivityConnections(context,()=>service+'/',()=>root,async()=>assert.fail('Diagnostic cannot validate/authenticate'));
+  await connections.commit('synthetic-local-only',{activity_id:activity,display_name:'Synthetic',activity_kind:'test'},root);
+  const binding=selectOwnedBinding(path.join(base,'activity-bindings'),root,service,activity),scope=observedBindingScope(binding);assert.equal(scope,connections.scope);assert.notEqual(scope,activity);
+  const f=observerFixture(),observer=await beginFocusObservation(f.target,scope);f.event('wmessage',{data:{type:'focusInput',activityId:activity}});f.event('wmessage',{data:{type:'focusInput',activityId:connections.scope}});f.event('wmessage',{data:{type:'config',config:{activity:{id:connections.scope}}}});const result=await observer.finish();assert.equal(result.records[1].scope_matches,false);assert.equal(result.records[2].scope_matches,true);assert.equal(result.records[3].scope_matches,true);assert(!JSON.stringify(result).includes(scope));assert(!JSON.stringify(result).includes(activity));
+  fs.appendFileSync(binding.file,' ');assert.throws(()=>observedBindingScope(binding),/scope unavailable/,'Changed snapshot cannot authorize a diagnostic comparison');
+ }finally{fs.rmSync(base,{recursive:true,force:true});}
+});

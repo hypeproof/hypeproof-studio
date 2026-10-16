@@ -1,4 +1,4 @@
-import {beginFocusObservation} from './focus-diagnostics.mjs';
+import {beginFocusObservation,observedBindingScope} from './focus-diagnostics.mjs';
 // Opt-in hosted public-UI scenario. The debugger only delays existing production execution.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -62,6 +62,7 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
  const target=activationBreakpoint(path.join(resources,'extensions/hypeproof-chat/dist/extension.js'),bundleHash);
  await freeInspectorPort(c.delayedActivation.inspectorPort);
  const bindings=path.join(c.userDataDir,'User/globalStorage/hypeproof.hypeproof-chat/activity-bindings'),aFiles=workspaceFiles(c.workspace.a),aBinding=selectOwnedBinding(bindings,fs.realpathSync(c.workspace.a),c.service.origin+'/v1',activityId);
+ const focusScope=observedBindingScope(aBinding);
  const proof={scope:'actual hosted public folder transition; debugger-delayed production activation',status:'RUNNING',clock_changed:false,product_state_seeded:false,extension_development_mode:false,provider_calls:0,stages:[],inspector:[],cleanup:'PENDING'};
  const persist=()=>saveProgress(structuredClone(proof));persist();
  let gate,primary,activeStage;
@@ -88,7 +89,7 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
    const root=c.workspace[stage.key],expectedDraft=draft+'-'+stage.name;
    activeStage={root,name:stage.name};
    assert.equal(fs.readdirSync(root).length,0,'Never reuse destination workspace/state');
-   const observer=await beginFocusObservation((await readDraft()).chat,activityId);let chat;
+   const observer=await beginFocusObservation((await readDraft()).chat,focusScope);let chat;
    try{chat=await focusChat();}finally{item.focus_diagnostic=await observer.finish();persist();}
    await ui.input(chat,'.hps-input textarea',expectedDraft);await sleep(500);
    const before=(await readDraft()).chat.info.id;let pending,preparedFiles,binding;

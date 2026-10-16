@@ -110,7 +110,7 @@ export class NativeUI{
  }
  // Activation is an input action, never part of read-only workbench discovery.
  async focusWorkbench(target){await target.send('Page.bringToFront');await waitFor(()=>target.evaluate('document.hasFocus()'),'native workbench window focused');}
- async frame(selector,timeout=30000){return waitFor(async()=>{const matches=[];for(const info of(await this.list()).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){const host=await this.workbench(),name=new URL(info.url).searchParams.get('id');const outerVisible=await host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`);if(!outerVisible)continue;const target=await this.target(info);const tree=await target.send('Page.getFrameTree');const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];for(const node of nodes){const isolated=await target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'});target.contextId=isolated.executionContextId;const visible=await target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);if(visible){target.ownedWorkbenchId=host.info?.id;matches.push(target);break;}}}if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];},'visible extension webview '+selector,timeout);}
+ async frame(selector,timeout=30000){return waitFor(async()=>{const matches=[];for(const info of(await this.list()).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){const host=await this.workbench(),name=new URL(info.url).searchParams.get('id');const outerVisible=await host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`);if(!outerVisible)continue;const target=await this.target(info);const tree=await target.send('Page.getFrameTree');const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];for(const node of nodes){const isolated=await target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'});target.contextId=isolated.executionContextId;const visible=await target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);if(visible){target.ownedWorkbenchId=host.info?.id;target.ownedFrameId=node.frame.id;target.ownedLoaderId=node.frame.loaderId;matches.push(target);break;}}}if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];},'visible extension webview '+selector,timeout);}
  // Re-read only a previously observed frame, including when its native window is inactive.
  async retainedFrame(target){
   if(!this.workbenchId)throw Error('Retained frame requires explicit owned window');
@@ -121,7 +121,53 @@ export class NativeUI{
   if(!await host.evaluate(`!![...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)})`))throw Error('Observed frame no longer belongs to its owned window');
   return target;
  }
- async press(target,selector,label=selector){const r=await target.evaluate(`(async()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,100));const b=e.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(e);return {x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===e||e.contains(hit)),enabled:!e.disabled};})()`);if(!r||!r.visible||!r.inView||!r.topmost||!r.enabled||r.width<=0||r.height<=0)throw Error('Not a usable visible native control: '+label);for(const type of['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:r.x,y:r.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});}
+ // Retain one remote DOM object: a matching replacement must never inherit an action.
+ async press(target,selector,label=selector,timeout=30000){
+  if(!Number.isFinite(timeout)||timeout<=0||timeout>30000)throw Error('Invalid native control readiness bound');
+  const deadline=Date.now()+timeout;let objectId,state,previous;
+  const bounded=async promise=>{const remaining=deadline-Date.now();if(remaining<=0)throw Error('Control readiness deadline');let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Control readiness deadline')),remaining);})]);}finally{clearTimeout(timer);}};
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'native control readiness',outcome,state:state??null});
+  try{
+   const selected=await bounded(target.send('Runtime.evaluate',{expression:'document.querySelector('+JSON.stringify(selector)+')',returnByValue:false,...(target.contextId?{contextId:target.contextId}:{})}));
+   if(selected.exceptionDetails||!selected.result?.objectId)throw Error('Control absent');objectId=selected.result.objectId;
+   let scroll=true;
+   for(;;){
+    const sample=await bounded(target.send('Runtime.callFunctionOn',{objectId,returnByValue:true,arguments:[{value:selector},{value:scroll}],functionDeclaration:`function(selector,scroll){
+     const same=this.isConnected&&document.querySelector(selector)===this;
+     if(!same)return {same:false};
+     if(scroll)this.scrollIntoView({block:'center',inline:'nearest'});
+     const b=this.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(this);
+     return {same:true,x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===this||this.contains(hit)),enabled:!this.disabled};
+    }` }));scroll=false;
+    if(sample.exceptionDetails)throw Error('Control sample unavailable');state=sample.result?.value;
+    if(!state?.same){record('replaced');throw Error('Control identity changed');}
+    const finite=['x','y','width','height'].every(key=>Number.isFinite(state[key]));
+    const usable=finite&&state.visible&&state.inView&&state.topmost&&state.enabled&&state.width>0&&state.height>0;
+    const stable=usable&&previous&&['x','y','width','height'].every(key=>Math.abs(previous[key]-state[key])<=0.25);
+    if(stable&&Date.now()<deadline){record('observed');break;}
+    previous=usable?state:null;
+    if(Date.now()>=deadline)throw Error('Control readiness deadline');
+    await sleep(Math.min(150,Math.max(1,deadline-Date.now())));
+   }
+   if(Date.now()>=deadline)throw Error('Control readiness deadline');
+   for(const type of ['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:state.x,y:state.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});
+  }catch{const primary=Error('Not a usable visible native control: '+label);record(state?.same===false?'identity-refused':Date.now()>=deadline?'timeout':'unavailable');throw primary;}
+  finally{if(objectId)try{await target.send('Runtime.releaseObject',{objectId});}catch{record('handle-release-unavailable');}}
+ }
+ async chatDocumentIdentity(timeout=30000){
+  const chat=await this.frame('.hps-input textarea',timeout);
+  const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
+  if(Object.values(identity).some(value=>typeof value!=='string'||!value))throw Error('Owned chat document identity unavailable');
+  return identity;
+ }
+ async reloadedChatReady(before,timeout=30000){
+  if(!Number.isFinite(timeout)||timeout<=0||timeout>30000||!before||['workbench','target','frame','loader'].some(key=>typeof before[key]!=='string'||!before[key]))throw Error('Exact previous owned chat document required');
+  let observed;
+  try{const after=await waitFor(async()=>{observed=await this.chatDocumentIdentity(Math.min(timeout,1000));if(!observed||['workbench','target','frame','loader'].some(key=>typeof observed[key]!=='string'||!observed[key]))return null;return ['target','frame','loader'].some(key=>observed[key]!==before[key])?observed:null;},'fresh post-reload owned chat document and textarea',timeout);
+   this.phases.push({at:new Date().toISOString(),phase:'post-reload chat readiness',outcome:'observed',before,after});return after;
+  }catch{this.phases.push({at:new Date().toISOString(),phase:'post-reload chat readiness',outcome:'timeout',before,after:observed??null});throw Error('Timed out: fresh post-reload owned chat document and textarea');}
+ }
+
  async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
  async hasTextButton(target,text){return !!(await this.textSelector(target,text));}
  async clickText(target,text,css){const selector=await waitFor(()=>this.textSelector(target,text,css), 'control '+text);await this.press(target,selector,text);}
@@ -161,7 +207,16 @@ export class NativeUI{
  async isOpenFolder(target){return target.evaluate("(()=>{const e=document.querySelector('.quick-input-widget');const title=e?.querySelector('.quick-input-title')?.textContent.trim();return e?.getBoundingClientRect().height>0&&['Open Folder','폴더 열기'].includes(title);})()");}
  async ownedOpenFolder(directory,timeout=30000){const w=await this.workbench();await waitFor(()=>this.isOpenFolder(w),'declared Open Folder dialog title',timeout);await this.pathDialog(directory,['Open','열기','OK','확인']);}
  async cancelOwnedOpenFolder(){const w=await this.workbench();if(!await this.isOpenFolder(w))return false;await this.key(w,'Escape');await this.waitQuick(w,s=>!s.visible,'failed owned Open Folder dialog canceled');return true;}
- async newTextFile(text){const w=await this.workbench();await this.focusWorkbench(w);const before=await this.editorState(w);await this.key(w,'n',this.modifier);const created=await waitFor(async()=>{const s=await this.editorState(w);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&s.text?.trim()===''?s:null;},'new empty Untitled resource and focused editor identity');await w.send('Input.insertText',{text});await waitFor(async()=>{const s=await this.editorState(w);return s.focused&&s.resource===created.resource&&s.text?.includes(text.trim());},'inserted text rendered in the new Untitled editor');return w;}
+ async newTextFile(text,timeout=30000){
+  if(!Number.isFinite(timeout)||timeout<=0||timeout>30000)throw Error('Invalid new file readiness bound');
+  const w=await this.workbench();await this.focusWorkbench(w);const before=await this.editorState(w);let state;
+  await this.key(w,'n',this.modifier);
+  let created;
+  try{created=await waitFor(async()=>{state=await this.editorState(w);return state.focused&&/^Untitled-[0-9]+$/.test(state.resource??'')&&!before.resources.includes(state.resource)&&focusedResource(state)&&state.text?.trim()===''?state:null;},'new empty Untitled resource and focused editor identity',timeout);}
+  catch(error){this.phases.push({at:new Date().toISOString(),phase:'new text file readiness',outcome:'timeout',state:{focused:state?.focused===true,untitled:/^Untitled-[0-9]+$/.test(state?.resource??''),newResource:!!state?.resource&&!before.resources.includes(state.resource),focusedResource:!!state&&focusedResource(state),empty:typeof state?.text==='string'&&state.text.trim()===''}});throw error;}
+  await w.send('Input.insertText',{text});await waitFor(async()=>{const s=await this.editorState(w);return s.focused&&s.resource===created.resource&&s.text?.includes(text.trim());},'inserted text rendered in the new Untitled editor');return w;
+ }
+
  async folder(directory,label){const w=await this.workbench();await waitFor(()=>w.evaluate("!!document.querySelector('.quick-input-widget input.input')&&document.querySelector('.quick-input-widget').getBoundingClientRect().height>0"),'simple native folder dialog');await this.input(w,'.quick-input-widget input.input',directory+(directory.endsWith('/')||directory.endsWith('\\')?'':process.platform==='win32'?'\\':'/'));await this.clickText(w,label,'button,.monaco-button');}
  async pathDialog(file,labels){const w=await this.workbench();await waitFor(()=>w.evaluate("!!document.querySelector('.quick-input-widget input.input')&&document.querySelector('.quick-input-widget').getBoundingClientRect().height>0"),'simple native path dialog');await this.input(w,'.quick-input-widget input.input',file);for(const label of labels)if(await this.hasTextButton(w,label)){await this.clickText(w,label);return;}throw Error('No declared native dialog action: '+labels.join('/'));}
  async toasts(){const w=await this.workbench();return w.evaluate("[...document.querySelectorAll('.notification-list-item-message,#monaco-dialog-message-text,#monaco-dialog-message-detail')].map(e=>e.textContent)");}

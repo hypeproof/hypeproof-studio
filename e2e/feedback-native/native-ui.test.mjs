@@ -375,3 +375,65 @@ test('quick input cannot be ready when its document lacks focus despite exact ac
  const ui=new NativeUI('http://127.0.0.1:9777'),input={value:'>Exact',getBoundingClientRect:()=>({left:0,top:0,width:100,height:20})};const widget={querySelector:()=>input,getBoundingClientRect:()=>({width:100,height:40})};
  const document={querySelector:()=>widget,hasFocus:()=>false,activeElement:input,elementFromPoint:()=>input};const target={evaluate:expression=>vm.runInNewContext(expression,{document,getComputedStyle:()=>({display:'block',visibility:'visible'})})};const state=await ui.quickState(target);assert.equal(state.inputFocused,true);assert.equal(state.hostFocused,false);assert.equal(state.ready,false);
 });
+
+// Owned headless DOM/CDP controls, not native App acceptance or focus repair.
+test('actual CDP press scrolls once, observes stable usability and dispatches one triplet; stale/disabled/occluded controls get no input',async t=>{
+ const {createRequire}=await import('node:module');const require=createRequire(new URL('../package.json',import.meta.url));const {chromium}=require('playwright');
+ const browser=await chromium.launch({headless:true});
+ try{
+  async function fixture(html){const page=await browser.newPage({viewport:{width:600,height:400}});await page.setContent(html);const cdp=await page.context().newCDPSession(page),calls=[];const target={send:async(method,params)=>{calls.push({method,params});return cdp.send(method,params);}};const ui=new NativeUI('http://127.0.0.1:9777');await page.evaluate(()=>{const element=document.querySelector('#target'),original=element.scrollIntoView;window.fixtureScrolls=0;window.fixtureClicks=0;element.scrollIntoView=function(...args){window.fixtureScrolls++;return original.apply(this,args);};element.addEventListener('click',()=>window.fixtureClicks++);});return{page,target,ui,calls};}
+  const clicks=f=>f.calls.filter(row=>row.method==='Input.dispatchMouseEvent').map(row=>row.params.type);
+  await t.test('real smooth scroll waits beyond its initial offscreen geometry and clicks the original element once',async()=>{
+   const f=await fixture('<style>html{scroll-behavior:smooth}body{margin:0}#target{margin-top:1600px;width:100px;height:40px}</style><button id="target">Synthetic</button>');
+   try{await f.ui.press(f.target,'#target','synthetic smooth scroll',2500);assert.deepEqual(clicks(f),['mouseMoved','mousePressed','mouseReleased']);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.equal(await f.page.evaluate(()=>window.fixtureClicks),1);assert.equal(f.ui.phases.at(-1).outcome,'observed');assert(f.ui.phases.at(-1).state.inView&&f.ui.phases.at(-1).state.topmost);assert.equal(f.calls.filter(row=>row.method==='Runtime.evaluate').length,1);assert.equal(f.calls.filter(row=>row.method==='Runtime.releaseObject').length,1);}finally{await f.page.close();}
+  });
+  await t.test('a delayed disabled-to-enabled transition is observation, without reselecting or scrolling twice',async()=>{
+   const f=await fixture('<button id="target" disabled>Synthetic</button>');
+   try{let disabledObserved;const observed=new Promise(resolve=>disabledObserved=resolve);const send=f.target.send;f.target.send=async(method,params)=>{const result=await send(method,params);if(method==='Runtime.callFunctionOn'&&result.result?.value?.enabled===false)disabledObserved();return result;};const pending=f.ui.press(f.target,'#target','synthetic enable',1500);await observed;assert.deepEqual(clicks(f),[]);await f.page.locator('#target').evaluate(e=>{e.disabled=false;});await pending;assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.deepEqual(clicks(f),['mouseMoved','mousePressed','mouseReleased']);}finally{await f.page.close();}
+  });
+  for(const kind of ['disabled','occluded','replacement'])await t.test(kind+' refuses rather than re-clicking or reacquiring',async()=>{
+   const f=await fixture('<button id="target"'+(kind==='disabled'?' disabled':'')+'>Synthetic</button>'+(kind==='occluded'?'<div style="position:fixed;inset:0;background:white"></div>':''));
+   try{
+    if(kind==='replacement')await f.page.evaluate(()=>{const e=document.querySelector('#target'),original=e.scrollIntoView;e.scrollIntoView=function(...args){const result=original.apply(this,args);requestAnimationFrame(()=>e.replaceWith(e.cloneNode(true)));return result;};});
+    await assert.rejects(f.ui.press(f.target,'#target','synthetic negative',400),/Not a usable visible native control/);assert.deepEqual(clicks(f),[]);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.equal(f.calls.filter(row=>row.method==='Runtime.evaluate').length,1);assert.equal(f.calls.filter(row=>row.method==='Runtime.releaseObject').length,1);
+    const state=f.ui.phases.at(-1).state;if(kind==='disabled')assert.equal(state.enabled,false);if(kind==='occluded')assert.equal(state.topmost,false);if(kind==='replacement')assert.equal(state.same,false);
+    assert(!JSON.stringify(f.ui.phases).includes('Synthetic'),'No control text enters readiness diagnostics');
+   }finally{await f.page.close();}
+  });
+ }finally{await browser.close();}
+});
+
+test('reload readiness refuses an old visible document and unknown identity, then observes an actual new CDP loader without focus actions',async()=>{
+ const {createRequire}=await import('node:module');const require=createRequire(new URL('../package.json',import.meta.url));const {chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.goto('data:text/html,<div class="hps-input"><textarea></textarea></div>');const cdp=await page.context().newCDPSession(page);await cdp.send('Page.enable');
+  const ui=new NativeUI('http://127.0.0.1:9777'),target={info:{id:'owned-target'},ownedWorkbenchId:'owned-workbench'};
+  ui.frame=async()=>{assert(await page.locator('.hps-input textarea').isVisible());const {frameTree}=await cdp.send('Page.getFrameTree');target.ownedFrameId=frameTree.frame.id;target.ownedLoaderId=frameTree.frame.loaderId;return target;};
+  for(const method of['press','key','palette','input','focusWorkbench'])ui[method]=()=>assert.fail('Readiness cannot repair via '+method);
+  const before=await ui.chatDocumentIdentity();await assert.rejects(ui.reloadedChatReady(before,1),/fresh post-reload/);await assert.rejects(ui.reloadedChatReady({...before,loader:null},1),/Exact previous/);
+  const actualIdentity=ui.chatDocumentIdentity.bind(ui);ui.chatDocumentIdentity=async()=>({...before,loader:undefined});await assert.rejects(ui.reloadedChatReady(before,1),/fresh post-reload/);ui.chatDocumentIdentity=actualIdentity;
+  let oldObserved;const observed=new Promise(resolve=>oldObserved=resolve);ui.chatDocumentIdentity=async()=>{const identity=await actualIdentity();if(identity.loader===before.loader)oldObserved();return identity;};
+  let completed=false;const pending=ui.reloadedChatReady(before,2500).then(result=>{completed=true;return result;});await observed;assert.equal(completed,false,'A still visible old textarea cannot admit Focus');await page.reload();const after=await pending;assert.notEqual(after.loader,before.loader);assert.equal(after.workbench,before.workbench);assert.equal(ui.phases.at(-1).outcome,'observed');
+ }finally{await browser.close();}
+});
+
+test('frame discovery retains actual frame and loader identity for reload observation',async()=>{
+ const {ui,target}=fixture(true);const send=target.send;target.send=async(method,args)=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'owned-frame',loaderId:'owned-loader'}}}:send(method,args);ui.workbench=async()=>({info:{id:'owned-workbench'},evaluate:async()=>true});await ui.frame('textarea',500);assert.equal(target.ownedFrameId,'owned-frame');assert.equal(target.ownedLoaderId,'owned-loader');assert.equal(target.ownedWorkbenchId,'owned-workbench');
+});
+
+test('new file failure records only the exact readiness predicates, never content, titles or resource values',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),actions=[],target={send:async()=>assert.fail('No insertion before readiness')};ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};ui.key=async(_target,key)=>actions.push(key);let samples=0;
+ ui.editorState=async()=>samples++===0?{resources:['PRIVATE_EXISTING.txt']}:{resources:['PRIVATE_EXISTING.txt','Untitled-1'],resource:'Untitled-1',editorLabel:'PRIVATE_WRONG_LABEL',focused:true,text:''};
+ await assert.rejects(ui.newTextFile('PRIVATE_INSERT',1),/new empty Untitled/);assert.deepEqual(actions,['n']);assert.deepEqual(ui.phases.at(-1).state,{focused:true,untitled:true,newResource:true,focusedResource:false,empty:true});assert(!JSON.stringify(ui.phases).includes('PRIVATE'));
+});
+
+test('press refuses unknown, oversized and expired readiness bounds without input and sanitizes remote errors',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),calls=[];const target={send:async(method)=>{calls.push(method);throw Error('PRIVATE_CDP_ERROR');}};
+ for(const timeout of [0,NaN,30001,Infinity])await assert.rejects(ui.press(target,'#private','synthetic',timeout),/readiness bound/);assert.deepEqual(calls,[]);
+ await assert.rejects(ui.press(target,'#private','synthetic',50),error=>!error.message.includes('PRIVATE')&&error.message.includes('Not a usable'));assert.deepEqual(calls,['Runtime.evaluate']);assert(!JSON.stringify(ui.phases).includes('PRIVATE'));
+});
+
+test('an unresponsive readiness sample consumes the same deadline, releases its handle and sends no input',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),calls=[];const target={send:async(method)=>{calls.push(method);if(method==='Runtime.evaluate')return{result:{objectId:'owned-fixture-object'}};if(method==='Runtime.callFunctionOn')return new Promise(()=>{});if(method==='Runtime.releaseObject')return{};assert.fail('No input after deadline');}};
+ const start=Date.now();await assert.rejects(ui.press(target,'#target','synthetic deadline',40),/Not a usable/);assert(Date.now()-start<1000,'No new deadline while a sample is pending');assert.deepEqual(calls,['Runtime.evaluate','Runtime.callFunctionOn','Runtime.releaseObject']);assert.equal(ui.phases.at(-1).outcome,'timeout');
+});
