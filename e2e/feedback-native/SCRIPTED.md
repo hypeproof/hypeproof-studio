@@ -52,7 +52,7 @@ HPS_SERVICE_SOURCE=/absolute/clean-pinned-service HPS_SERVICE_SHA=FULL_SHA node 
 ```
 
 This background-only command uses the actual immutable instruction downloader
-and workspace store with owned synthetic GitHub responses. It previews an
+and workspace store with owned synthetic GitHub responses. It prepares and stores an
 inactive snapshot, selects hostile text, and sends that selection through the
 actual sdkCoach, verified SDK binary and pinned Service. Its explicit
 `--scripted-policy` fixture mode emits seven tool calls. It keeps the same

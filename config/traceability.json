@@ -1519,6 +1519,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/workspace-routing.smoke.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.test.mjs"
         }
       ]
     },
@@ -5473,6 +5479,24 @@
         },
         {
           "path": "e2e/feedback-native/session-control.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/SCRIPTED.md"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-sdk-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-upstream.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.test.mjs"
         }
       ]
     }
