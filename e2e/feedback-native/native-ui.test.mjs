@@ -289,11 +289,24 @@ test('restart focus observation refuses visible unfocused input and never repair
  await assert.rejects(ui.restoredFocus(1),/restored native input focus/);focused=true;
  assert.deepEqual(await ui.restoredFocus(500),{input_focus_restored:true,focus_repaired:false});
 });
-test('secondary window close requires exact scope and native window shortcut, never app quit',async()=>{
+test('secondary close requires exact scope, actual focus and public Close Window selection',async()=>{
  const unbound=new NativeUI('http://127.0.0.1:9777');await assert.rejects(unbound.closeOwnedWindow(),/explicitly bound/);
- const ui=new NativeUI('http://127.0.0.1:9777','B'),events=[];let alive=true;
- const w={};ui.workbench=async()=>w;ui.focusWorkbench=async t=>{assert.equal(t,w);events.push('focus-B');};ui.key=async(t,key,mods)=>{assert.equal(t,w);assert.equal(key,'w');assert.equal(mods,ui.modifier|1);events.push('close-B');alive=false;};
- ui.list=async()=>[{id:'A'},...(alive?[{id:'B'}]:[])];await ui.closeOwnedWindow();assert.deepEqual(events,['focus-B','close-B']);
+ const ui=new NativeUI('http://127.0.0.1:9777','B'),events=[];let alive=true,focused=false;
+ const w={evaluate:async expression=>{assert.equal(expression,'document.hasFocus()');return focused;}};ui.workbench=async()=>w;
+ ui.palette=async(title,options)=>{assert.equal(title,'Close Window');assert.deepEqual(options,{expectReload:true});events.push(title);alive=false;};
+ ui.key=()=>assert.fail('No guessed shortcut');ui.list=async()=>[{id:'A'},...(alive?[{id:'B'}]:[])];
+ await assert.rejects(ui.closeOwnedWindow(),/actually focused/);assert.deepEqual(events,[]);
+ focused=true;await ui.closeOwnedWindow();assert.deepEqual(events,['Close Window']);
+});
+test('retained background frame keeps identity and owner without visibility or focus repair',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777','C');
+ const info={id:'chat-C',type:'iframe',url:'vscode-webview://test/index.html?id=outer-C&extensionId=hypeproof.hypeproof-chat'},chat={info};let infos=[info],belongs=true;
+ ui.list=async()=>infos;ui.workbench=async()=>({evaluate:async expression=>{assert(expression.includes('outer-C'));assert(!expression.includes('getBoundingClientRect'));return belongs;}});
+ for(const method of ['frame','target','focusWorkbench','press','key'])ui[method]=()=>assert.fail('Must retain observed target without discovery/input');
+ assert.equal(await ui.retainedFrame(chat),chat);belongs=false;await assert.rejects(ui.retainedFrame(chat),/belongs/);belongs=true;
+ infos=[{...info,id:'replacement'}];await assert.rejects(ui.retainedFrame(chat),/identity/);
+ infos=[{...info,url:info.url+'&changed=1'}];await assert.rejects(ui.retainedFrame(chat),/identity/);
+ ui.workbenchId=undefined;await assert.rejects(ui.retainedFrame(chat),/explicit/);
 });
 test('scoped webview discovery cannot connect to another window iframe even when its inner control is visible',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777','B'),connected=[];

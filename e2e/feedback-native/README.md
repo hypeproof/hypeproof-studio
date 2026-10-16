@@ -322,7 +322,14 @@ ambiguous unscoped discovery refuses input. The original window follows the real
 saved-activity chooser A→B and public File Open Folder back to A. The other C
 window must keep its frame, independent draft, binding-file hash and workspace
 files throughout. A ten-second destination observation rejects repeated reloads.
-Cleanup uses native Close Window on the explicitly scoped secondary window only.
+The currently focused owned window opens the public `Switch Window...` picker
+and selects the exact observed destination title; the destination must then report
+actual focus. Inactive C observation retains its already observed frame identity
+and checks ownership without claiming that its control is visible. Cleanup uses
+the public `Close Window` palette action on the focused, explicitly scoped
+secondary only and observes that exact target disappear. Per-phase progress,
+both window screenshots and target/focus metadata are captured before cleanup.
+The primary error is retained even if diagnostics or cleanup also fail.
 
 This is a new hosted scenario, not executed by background helper tests. Its result
 records `pending_marker_consumption: NOT_OBSERVED`: UI preservation does not

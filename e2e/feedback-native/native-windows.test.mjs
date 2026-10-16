@@ -18,3 +18,20 @@ test('other-window observation rejects wrong frame/root/draft/binding/files rath
  const actual={...expected,inExpectedRoot:true};assertUnchangedOtherWindow(expected,actual);
  for(const changed of [{workbenchId:'A-window'},{frameId:'new-chat'},{draft:'A-draft'},{bindingHash:'changed'},{files:[]},{inExpectedRoot:false}])assert.throws(()=>assertUnchangedOtherWindow(expected,{...actual,...changed}));
 });
+test('public Switch Window starts in focused owner and selects complete observed destination title',async()=>{
+ const {switchOwnedWindow}=await import('./native-windows.mjs');const events=[];let sourceFocus=true,targetFocus=false;
+ const from={workbenchId:'C',endpoint:'http://127.0.0.1:9777',workbench:async()=>({evaluate:async()=>sourceFocus}),palette:async title=>events.push(['palette',title]),quick:async title=>{events.push(['quick',title]);targetFocus=true;sourceFocus=false;}};
+ const to={workbenchId:'A',endpoint:from.endpoint,workbench:async()=>({evaluate:async expression=>expression==='document.title'?'[DEV] Chat — A 전체 경로':targetFocus})};
+ await switchOwnedWindow(from,to);assert.deepEqual(events,[['palette','Switch Window...'],['quick','[DEV] Chat — A 전체 경로']]);
+ events.length=0;await switchOwnedWindow(from,to);assert.deepEqual(events,[],'already focused target is observation only');
+ targetFocus=false;await assert.rejects(switchOwnedWindow(from,to),/actually focused/);assert.deepEqual(events,[]);
+ await assert.rejects(switchOwnedWindow(from,{...to,workbenchId:'C'}),/distinct/);
+ await assert.rejects(switchOwnedWindow(from,{...to,endpoint:'http://127.0.0.1:9999'}),/distinct/);
+});
+test('diagnostics precede cleanup; cleanup and screenshot failure cannot mask first failure',async()=>{
+ const {finishOwnedWindows}=await import('./native-windows.mjs');const events=[],proof={},primary=Error('original focus failure');
+ await assert.rejects(finishOwnedWindows({primary,proof,observe:async()=>{events.push('capture');throw Error('screenshot unavailable');},cleanup:async()=>{events.push('cleanup');throw Error('secondary close failed');},persist:()=>events.push('persist')}),error=>error===primary);
+ assert.deepEqual(events,['capture','cleanup','persist']);assert.equal(proof.diagnostic_error,'screenshot unavailable');assert.equal(proof.cleanup_error,'secondary close failed');
+ await assert.rejects(finishOwnedWindows({proof:{},observe:async()=>{},cleanup:async()=>{throw Error('cleanup only');},persist:()=>{}}),/cleanup only/);
+ let cleaned=false;await finishOwnedWindows({proof:{},observe:async()=>{},cleanup:async()=>{cleaned=true;},persist:()=>{}});assert.equal(cleaned,true);
+});

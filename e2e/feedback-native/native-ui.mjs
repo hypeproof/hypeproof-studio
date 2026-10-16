@@ -95,13 +95,24 @@ export class NativeUI{
  }
  async closeOwnedWindow(){
   if(!this.workbenchId)throw Error('Close requires an explicitly bound owned window');
-  const w=await this.workbench();await this.focusWorkbench(w);
-  try{await this.key(w,'w',this.modifier|1);}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  const w=await this.workbench();
+  if(!await w.evaluate('document.hasFocus()'))throw Error('Owned secondary must be actually focused before Close Window');
+  try{await this.palette('Close Window',{expectReload:true});}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
   await waitFor(async()=>!(await this.list()).some(t=>t.id===this.workbenchId),'owned secondary window closed',30000);
  }
  // Activation is an input action, never part of read-only workbench discovery.
  async focusWorkbench(target){await target.send('Page.bringToFront');await waitFor(()=>target.evaluate('document.hasFocus()'),'native workbench window focused');}
  async frame(selector,timeout=30000){return waitFor(async()=>{const matches=[];for(const info of(await this.list()).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){const host=await this.workbench(),name=new URL(info.url).searchParams.get('id');const outerVisible=await host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`);if(!outerVisible)continue;const target=await this.target(info);const tree=await target.send('Page.getFrameTree');const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];for(const node of nodes){const isolated=await target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'});target.contextId=isolated.executionContextId;const visible=await target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);if(visible){matches.push(target);break;}}}if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];},'visible extension webview '+selector,timeout);}
+ // Re-read only a previously observed frame, including when its native window is inactive.
+ async retainedFrame(target){
+  if(!this.workbenchId)throw Error('Retained frame requires explicit owned window');
+  const info=(await this.list()).find(t=>t.id===target.info.id&&t.type==='iframe'&&t.url===target.info.url);
+  if(!info)throw Error('Previously observed frame identity disappeared');
+  const name=new URL(info.url).searchParams.get('id');if(!name)throw Error('Observed frame has no owner name');
+  const host=await this.workbench();
+  if(!await host.evaluate(`!![...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)})`))throw Error('Observed frame no longer belongs to its owned window');
+  return target;
+ }
  async press(target,selector,label=selector){const r=await target.evaluate(`(async()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,100));const b=e.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(e);return {x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===e||e.contains(hit)),enabled:!e.disabled};})()`);if(!r||!r.visible||!r.inView||!r.topmost||!r.enabled||r.width<=0||r.height<=0)throw Error('Not a usable visible native control: '+label);for(const type of['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:r.x,y:r.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});}
  async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
  async hasTextButton(target,text){return !!(await this.textSelector(target,text));}
