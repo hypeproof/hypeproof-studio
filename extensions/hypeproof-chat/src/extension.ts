@@ -42,7 +42,7 @@ import {
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
-import { decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
+import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
 import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
@@ -872,22 +872,7 @@ async function clearWorkspaceSwitchAttempt(context?: vscode.ExtensionContext): P
  * a redirected profile folder on Windows) must not read as a DIFFERENT root, or
  * we would switch away from the folder we are already in, forever.
  */
-function canonicalizeFsPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeFsPath = canonicalizeExistingPath;
 
 // Per-tone background for the throwaway starter index.html. The title/subtitle
 // come from the single source of truth (TONE_LABELS.aboutTitle/aboutSubtitle),

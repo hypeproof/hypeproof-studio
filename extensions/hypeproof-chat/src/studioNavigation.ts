@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import type { ActivityRecord } from './activityConnections';
-import { activityService } from './activityConnections';
+import { activityService, canonicalRoot } from './activityConnections';
 import { historyKeyForCohort } from './chatPanelHelpers';
 import { isSameLocation } from './workspaceRouting';
 
@@ -20,7 +20,7 @@ export interface ActivityResume {
   version: 1; id: string; service: string; workspace: string; ref: string; at: number;
   state?: Record<string, unknown>;
 }
-const canonical = (root: string) => fs.realpathSync(root);
+const canonical = canonicalRoot;
 export function resumeKey(root: string): string {
   let physical: string;
   try { physical = canonical(root); } catch { physical = path.resolve(root); }
