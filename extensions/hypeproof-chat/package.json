@@ -250,6 +250,11 @@
         "command": "hypeproof-chat.openStudioFiles",
         "title": "HypeProof: 작업 파일 열기",
         "icon": "$(files)"
+      },
+      {
+        "command": "hypeproof-chat.externalSkills",
+        "title": "HypeProof: GitHub 지침 스킬",
+        "icon": "$(book)"
       }
     ],
     "menus": {
@@ -318,6 +323,11 @@
           "command": "hypeproof-chat.weeklyReview",
           "when": "view == hypeproof-chat.panel && hypeproof-chat.curriculumRuntimeEnabled",
           "group": "navigation@11"
+        },
+        {
+          "command": "hypeproof-chat.externalSkills",
+          "when": "view == hypeproof-chat.panel",
+          "group": "navigation@12"
         }
       ],
       "editor/title": [
@@ -335,6 +345,11 @@
           "command": "hypeproof-chat.previewActiveFile",
           "when": "resourceExtname == .html || resourceExtname == .htm",
           "group": "navigation"
+        },
+        {
+          "command": "hypeproof-chat.externalSkills",
+          "when": "activeWebviewPanelId == 'hypeproof.start'",
+          "group": "navigation@12"
         }
       ],
       "explorer/context": [

@@ -1,3 +1,4 @@
+import { registerExternalSkillCommands } from './externalSkillCommands';
 import { initializeFilesLayout, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
@@ -65,6 +66,7 @@ export async function activate(context: vscode.ExtensionContext) {
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   await initializeFilesLayout(context, command => vscode.commands.executeCommand(command));
   context = connections.wrap();
+  registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
   const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot).catch(() => {
