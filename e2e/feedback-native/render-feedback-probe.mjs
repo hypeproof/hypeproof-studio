@@ -2,7 +2,7 @@
 // Provider-free actual SDK/MCP/BrowserControl -> owned headless Chromium proof.
 import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';
 import {createRequire} from 'node:module';import {fileURLToPath} from 'node:url';import {spawn,execFileSync} from 'node:child_process';import {once} from 'node:events';import {createServer} from 'node:http';
-import {runtimeEnvironment} from './hosted-shell.mjs';import {compatibilityEnvironment} from '../unified-release/output-bound.mjs';import {sha256,sourceSnapshot} from './safety.mjs';import {rawHeadlessCdp,waitForHeadlessEndpoint} from './headless-cdp.mjs';
+import {runtimeEnvironment} from './hosted-shell.mjs';import {compatibilityEnvironment} from '../unified-release/output-bound.mjs';import {sha256,sourceSnapshot} from './safety.mjs';import {rawHeadlessCdp,waitForHeadlessEndpoint,waitForHeadlessPageTarget} from './headless-cdp.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),[evidence,binary,sourceHtml]=process.argv.slice(2);
 assert(path.isAbsolute(evidence??'')&&path.isAbsolute(binary??'')&&path.isAbsolute(sourceHtml??'')&&sourceHtml.endsWith('.html'),'Explicit evidence, binary and immutable source HTML required');assert(!fs.existsSync(evidence),'Preserve prior evidence');fs.mkdirSync(evidence,{recursive:true,mode:0o700});
 const privateDir=fs.mkdtempSync(path.join(os.tmpdir(),'hps-render-proof-')),workspace=path.join(privateDir,'work'),serviceDir=path.join(privateDir,'service');for(const p of[workspace,serviceDir])fs.mkdirSync(p);
@@ -26,6 +26,7 @@ try{
  const {runSdkCoach}=require(path.join(privateDir,'sdk.cjs')),{BrowserControl}=require(path.join(privateDir,'browser.cjs')),{toMcpToolResult}=require(path.join(privateDir,'mcp.cjs'));
  const chromiumData=path.join(privateDir,'chromium');fs.mkdirSync(chromiumData);chrome=spawn(chromium.executablePath(),['--headless=new','--remote-debugging-port=0','--remote-debugging-address=127.0.0.1','--user-data-dir='+chromiumData,'--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run','--dns-prefetch-disable','--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1','about:blank'],{env,stdio:'ignore'});
  const {port,wsPath}=await waitForHeadlessEndpoint(path.join(chromiumData,'DevToolsActivePort'),chrome);
+ await waitForHeadlessPageTarget({port},chrome);
  const tab={url:'about:blank',title:'',async startCDPSession(){const session=await rawHeadlessCdp('ws://127.0.0.1:'+port+wsPath);rawSessions.push(session);return session;}};globalThis.__hpsRenderVscode.window.browserTabs=[tab];globalThis.__hpsRenderVscode.window.activeBrowserTab=tab;
  control=new BrowserControl();control.setTargetTab(tab);const cdp=await control.cdp();report.browser_version=await cdp.send('Browser.getVersion');
  // Permit only this owned HTML resource; all other renderer requests are refused.

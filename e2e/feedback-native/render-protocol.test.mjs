@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {renderResponse} from './render-protocol.mjs';import {rawHeadlessCdp,waitForHeadlessEndpoint} from './headless-cdp.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {renderResponse} from './render-protocol.mjs';import {rawHeadlessCdp,waitForHeadlessEndpoint,waitForHeadlessPageTarget} from './headless-cdp.mjs';
 const request=results=>({model:'scripted',tools:[{name:'mcp__hypeproof__browser_screenshot'}],messages:[{role:'user',content:[{type:'text',text:'HPS_RENDER_PROOF:390:positive'},...results]}]});
 const config={origin:'http://127.0.0.1:1234'};
 test('explicit render protocol requests real MCP tools and only hashes supplied screenshot result bytes',()=>{
@@ -27,4 +27,26 @@ test('headless readiness waits for unlocked complete endpoint, and refuses exit,
   fs.writeFileSync(file,'70000\n/devtools/browser/1234-abcd');
   await assert.rejects(waitForHeadlessEndpoint(file,child,{timeoutMs:10,intervalMs:2}),/readiness timed out/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('page readiness observes initial page after empty/non-page targets without creating or attaching',async()=>{
+ const child={exitCode:null,signalCode:null},seen=[],signals=[];
+ const target=await waitForHeadlessPageTarget({port:12345},child,{intervalMs:1,fetchImpl:async(url,options)=>{
+  seen.push(url);signals.push(options.signal);assert.equal(options.redirect,'error');
+  return {ok:true,json:async()=>seen.length===1?[]:seen.length===2?[{type:'service_worker',id:'worker',url:'about:blank'},{type:'page',id:'other',url:'https://example.com'}]:[{type:'page',id:'owned-page',url:'about:blank'}]};
+ }});
+ assert.deepEqual(target,{targetId:'owned-page'});assert.deepEqual(seen,Array(3).fill('http://127.0.0.1:12345/json/list'));assert(signals.every(s=>s.aborted));
+});
+test('page readiness refuses errors and aborts pending discovery on deadline or owned child exit',async()=>{
+ const live=()=>({exitCode:null,signalCode:null});
+ let called=0;await assert.rejects(waitForHeadlessPageTarget({port:0},live(),{fetchImpl:()=>called++}),/port required/);assert.equal(called,0);
+ await assert.rejects(waitForHeadlessPageTarget({port:12345},{exitCode:1,signalCode:null},{fetchImpl:()=>called++}),/exited before page/);assert.equal(called,0);
+ for(const response of[{ok:false},{ok:true,json:async()=>({})}])await assert.rejects(waitForHeadlessPageTarget({port:12345},live(),{fetchImpl:async()=>response}),/discovery/);
+ let errorSignal;await assert.rejects(waitForHeadlessPageTarget({port:12345},live(),{fetchImpl:async(_url,{signal})=>{errorSignal=signal;throw Error('transport failure');}}),/transport failure/);assert(errorSignal.aborted);
+ await assert.rejects(waitForHeadlessPageTarget({port:12345},live(),{timeoutMs:10,intervalMs:1,fetchImpl:async()=>({ok:true,json:async()=>[]})}),/readiness timed out/);
+ for(const die of[false,true]){
+  const child=live();let aborted=false,death;
+  const pending=waitForHeadlessPageTarget({port:12345},child,{timeoutMs:30,intervalMs:1,fetchImpl:async(_url,{signal})=>new Promise((_resolve,reject)=>{signal.addEventListener('abort',()=>{aborted=true;reject(signal.reason);},{once:true});if(die)death=setTimeout(()=>{child.signalCode='SIGTERM';},2);})});
+  try{await assert.rejects(pending,die?/exited before page/:/readiness timed out/);assert(aborted);}finally{clearTimeout(death);}
+ }
 });
