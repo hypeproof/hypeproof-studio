@@ -883,8 +883,10 @@ installed-release, production, visual fidelity or human acceptance.
 
 FB-01/02 reuse [US-03/07–10/12/18](requirements/unified-studio-experience.md),
 [ADR 0008](adr/0008-activity-connection-boundaries.md) and the existing activity
-credential/history/draft stores. `initializeFilesLayout` exposes Explorer only
-for a genuinely new profile; subsequent layout choices are left to the shell.
+credential/history/draft stores. `initializeFilesLayout` closes the primary sidebar
+on every launch and workspace activation, before remote activity restoration.
+Explorer opens when the user explicitly chooses the existing file-view action;
+project changes and restarts start closed even if that workspace saved it open.
 Chat focus waits for initial activity restoration, reveals the existing editor
 chat and explicitly returns the caret to its existing composer. The focus request
 is bound to that activity and is cancelled when the composer unmounts or changes

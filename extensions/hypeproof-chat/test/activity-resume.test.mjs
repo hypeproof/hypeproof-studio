@@ -10,7 +10,7 @@ const bundle = await build({stdin:{contents:"export * from './src/studioNavigati
 const commands=[], mod={exports:{}};
 const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},workspace:{workspaceFolders:[]},Uri:{joinPath:()=>({}),file:fsPath=>({fsPath})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL});
-const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,INITIAL_LAYOUT_KEY,RESUME_MAX_AGE_MS,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
+const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-resume-'));
 const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link);
 const now=Date.now(),service='https://synthetic.invalid/v1';
@@ -82,14 +82,9 @@ try {
   await consumeActivityResume(ctx,record,service,a);assert.equal(ctx.workspaceState.map.size,0,'invalid marker imports no state');
  }
  console.log('PASS one-shot existing-store checkpoint: destination work wins, no foreign keys, no stale import, multiwindow isolation');
- const fresh={globalState:state(),workspaceState:state(),secrets:{keys:async()=>[]}},initial=[];
- await initializeFilesLayout(fresh,async c=>initial.push(c));await initializeFilesLayout(fresh,async c=>initial.push(c));
- assert.deepEqual(initial,['workbench.view.explorer']);assert.equal(fresh.globalState.get(INITIAL_LAYOUT_KEY),true);
- for(const established of ['state','credential']) {
-  const c={globalState:state(),workspaceState:state(),secrets:{keys:async()=>established==='credential'?['hps.activity.credential.saved']:[]}};
-  if(established==='state')await c.workspaceState.update(own,[]);
-  await initializeFilesLayout(c,async()=>assert.fail('existing layout must be preserved'));
- }
+ const initial=[];
+ await initializeFilesLayout(async c=>initial.push(c));await initializeFilesLayout(async c=>initial.push(c));
+ assert.deepEqual(initial,['workbench.action.closeSidebar','workbench.action.closeSidebar'],'first launch and subsequent folder activations close any restored Explorer');
  const focusEvents=[];
  const focusPanel={reveal(column){focusEvents.push(['reveal',column]);},webview:{postMessage(message){focusEvents.push(['message',message]);return Promise.resolve(true);}}};
  assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{},editorChat:focusPanel}),true);
@@ -101,8 +96,13 @@ try {
  const panel={reveal(){}};await ChatPanelProvider.prototype.openInEditor.call({editorChat:panel},panel);
  await StartPage.prototype.show.call({chat:{renderHtml:()=>'<html>'},context:{extensionUri:{},subscriptions:[]},refresh:async()=>{},resumePurchase:async()=>{}});
  assert.deepEqual(commands,[],'opening chat or start must preserve the Explorer and the user layout');
+ await StartPage.prototype.handle.call({},{type:'openStudioFiles'});
+ assert.deepEqual(commands,['workbench.view.explorer'],'the explicit file-view action still opens Explorer');
+ await initializeFilesLayout(async c=>commands.push(c));
+ assert.deepEqual(commands,['workbench.view.explorer','workbench.action.closeSidebar'],'a later activation closes an explicitly opened Explorer again');
+ commands.length=0;
  const issuer='eyJyb2xlIjogImlzc3VlciJ9.fakesig';
  assert.equal(resolveActivateBranch(undefined,false),'show');assert.equal(resolveActivateBranch(issuer,false),'skip');
  assert.equal(resolveActivateBranch(issuer,true),'resume');assert.equal(resolveActivateBranch(undefined,true),'resume');
- console.log('PASS first-run Explorer only once; existing layout and chat entry preserved; validated learner resume wins over issuer');
+ console.log('PASS Explorer closed on every activation, explicit file view opens it, chat entry preserves current layout; validated learner resume wins over issuer');
 } finally { fs.rmSync(tmp,{recursive:true,force:true}); }

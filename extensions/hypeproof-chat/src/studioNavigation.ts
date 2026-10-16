@@ -15,7 +15,6 @@ import { isSameLocation } from './workspaceRouting';
  * learner's window would reload forever mid-lecture.
  */
 export const WORKSPACE_SWITCH_ATTEMPT_KEY = 'hypeproofChat.workspaceSwitchAttempt';
-export const INITIAL_LAYOUT_KEY = 'hypeproofChat.initialFilesLayout';
 export const RESUME_MAX_AGE_MS = 10 * 60_000;
 export interface ActivityResume {
   version: 1; id: string; service: string; workspace: string; ref: string; at: number;
@@ -39,13 +38,9 @@ export function resumeDecision(marker: ActivityResume | undefined, record: Activ
   return now - marker.at >= RESUME_MAX_AGE_MS ? 'expired' : 'valid';
 }
 
-/** The shell persists later layout choices. Only a genuinely new profile gets our default. */
-export async function initializeFilesLayout(context: vscode.ExtensionContext, execute: (command: string) => Thenable<unknown>): Promise<void> {
-  if (context.globalState.get(INITIAL_LAYOUT_KEY)) return;
-  const established = context.globalState.keys().some(key => key !== INITIAL_LAYOUT_KEY) || context.workspaceState.keys().length > 0 ||
-    (await context.secrets.keys()).some(key => key === 'hypeproofChat.workshopToken' || key.startsWith('hps.activity.credential.'));
-  await context.globalState.update(INITIAL_LAYOUT_KEY, true);
-  if (!established) await execute('workbench.view.explorer');
+/** Start each launch/folder activation closed, including a restored workspace layout. */
+export async function initializeFilesLayout(execute: (command: string) => Thenable<unknown>): Promise<void> {
+  await execute('workbench.action.closeSidebar');
 }
 
 function continuityKeys(scope: string): string[] {
