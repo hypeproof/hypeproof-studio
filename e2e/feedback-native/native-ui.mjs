@@ -15,6 +15,12 @@ class Target{
 export class NativeUI{
  constructor(endpoint){this.endpoint=loopback(endpoint);this.targets=new Map();this.phases=[];this.modifier=process.platform==='darwin'?4:2;}
 
+ async restoredDraft(expected,timeout=60000){
+  // Observation only: startup may still be restoring/focusing its own webview.
+  // Issuing F1/Focus here can race that restoration and adds no credential proof.
+  const restored=await waitFor(async()=>{const chat=await this.frame('.hps-input textarea',1500);const value=await chat.evaluate("document.querySelector('.hps-input textarea')?.value");return value===expected?{value}:null;},'actual restored chat with persisted A draft, without focus command or code entry',timeout);
+  return restored.value;
+ }
  async activityCandidate(view,token,folder){
   await this.clickText(view,'다른 활동 선택');await this.clickText(view,'수업에 참여하기');
   await this.input(view,'#course-code',token);await this.clickText(view,'코드 확인하기');

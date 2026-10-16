@@ -186,3 +186,11 @@ restart, OS keychain persistence or actual activity navigation. These new native
 slices remain NOT RUN until the delivery owner executes the committed candidate
 on a dedicated hosted desktop. No local foreground execution, provider call or
 GitHub write is part of the implementation handoff.
+
+Restart observation deliberately sends **no Focus command or keyboard input** after
+relaunch. It waits for the actual visible restored chat textarea and its expected
+persisted A draft. The d84cec88 Mac run 38843826441 reached relaunch but failed its
+extra Focus/F1 wait while the screenshot already showed A's draft; that historical
+FAIL remains unchanged. The revised runner records normal child exit, prior CDP
+connection refusal and new PID incrementally before the final draft probe, so a
+later failure retains those observations without claiming full restart PASS.

@@ -54,16 +54,21 @@ export const foregroundAllowed=args=>args.includes('--allow-foreground')&&!args.
 
 // Orchestration guard only: callbacks must observe real process/UI transitions.
 // There is deliberately no force-kill, token-entry or fallback callback.
-export async function restartOwnedCandidate({config,child,quit,waitExit,waitCdpDown,launch,observeDraft,expectedDraft}){
+export async function restartOwnedCandidate({config,child,quit,waitExit,waitCdpDown,launch,observeDraft,expectedDraft,onProgress=()=>{}}){
  if(config.attach||config.secretStorage!=='os-keychain')throw Object.assign(Error('Full credential restart requires owned process and OS-backed SecretStorage'),{blocked:true});
  if(!child||!Number.isInteger(child.pid)||child.exitCode!==null||child.signalCode!==null)throw Error('Owned candidate must be alive before native quit');
  const oldPid=child.pid;
- await quit();await waitExit(child);await waitCdpDown();
+ await quit();onProgress({phase:'native_quit_requested',old_pid:oldPid});
+ await waitExit(child);
  if(child.exitCode!==0||child.signalCode!==null)throw Error('Native quit must produce normal owned child exit, not a signal kill');
+ onProgress({phase:'owned_child_normal_exit',old_pid:oldPid,exit_code:child.exitCode});
+ await waitCdpDown();onProgress({phase:'prior_cdp_connection_refused',old_pid:oldPid});
  const restarted=await launch();
  if(!restarted||!Number.isInteger(restarted.pid)||restarted.pid===oldPid||restarted.exitCode!==null||restarted.signalCode!==null)throw Error('Restart must create a different live owned process');
+ onProgress({phase:'new_owned_process_launched',old_pid:oldPid,new_pid:restarted.pid,same_profile:true});
  const observed=await observeDraft();
  if(observed!==expectedDraft)throw Error('Persisted A draft did not restore after full process restart without code entry');
+ onProgress({phase:'restored_chat_and_draft_observed',new_pid:restarted.pid,code_reentry:false});
  return {old_pid:oldPid,new_pid:restarted.pid,owned_child_exit:true,cdp_down:true,same_profile:true,os_secret_storage:true,code_reentry:false,actual_chat_restored:true,draft_preserved:true};
 }
 export function distinctActivities(a,b){

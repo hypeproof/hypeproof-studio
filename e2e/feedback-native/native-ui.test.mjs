@@ -211,3 +211,12 @@ test('second activity candidate uses actual StartPage choices, explicit token en
  assert.deepEqual(events,[['click','다른 활동 선택'],['click','수업에 참여하기'],['input','explicit-token-B'],['click','코드 확인하기'],['observe','authenticated-candidate'],['click','다른 작업 폴더 선택'],['folder',folder,'이 활동의 작업 폴더 선택'],['observe','selected-folder']]);
  assert(!JSON.stringify(ui.phases).includes(token),'private code is not phase evidence');
 });
+
+test('restart observes delayed restored draft without focus, palette or token admission input',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let restored=false,reads=0;
+ ui.frame=async selector=>{assert.equal(selector,'.hps-input textarea');return{evaluate:async expression=>{assert.equal(expression,"document.querySelector('.hps-input textarea')?.value");reads++;return restored?'persisted-A':'';}};};
+ for(const action of['palette','focusWorkbench','focusChatReady','input','key','press','activityCandidate'])ui[action]=()=>assert.fail('Restart must not perform '+action);
+ setTimeout(()=>{restored=true;},25);
+ assert.equal(await ui.restoredDraft('persisted-A',500),'persisted-A');assert(reads>=2);
+ ui.frame=async()=>({evaluate:async()=> 'wrong-B'});await assert.rejects(ui.restoredDraft('persisted-A',1),/actual restored chat/);
+});

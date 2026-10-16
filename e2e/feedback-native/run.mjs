@@ -60,12 +60,14 @@ try{
  if(c.scenarios.includes('restart')){
  await step('T05-owned-full-process-credential-draft-restart',async()=>{
   if(!report.tests.some(t=>t.id==='T03-same-activity-real-folder-continuity'&&t.status==='PASS'))throw blocked('Full restart requires observed T03 PASS and persisted A draft');
+  report.restart_observations=[];
   const evidence=await restartOwnedCandidate({config:c,child,expectedDraft:draft,
+   onProgress:observation=>{report.restart_observations.push({at:new Date().toISOString(),...observation});save();},
    quit:()=>ui.quitOwned(),
    waitExit:owned=>waitFor(()=>owned.exitCode!==null||owned.signalCode!==null,'owned child exits after native quit',30000),
    waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'owned CDP endpoint refuses connections after quit',30000);ui.close();},
    launch:()=>launchOwned(),
-   observeDraft:async()=>{await ui.workbench();await focusChat();return(await readDraft()).value;}});
+   observeDraft:()=>ui.restoredDraft(draft)});
   await ui.shot(path.join(c.evidence,'process-restart-restored.png'));return evidence;
  });
  report.process_restart_credentials=report.tests.at(-1).status;

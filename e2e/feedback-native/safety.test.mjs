@@ -66,3 +66,12 @@ test('attach or memory storage blocks before input; exit/endpoint/PID/draft nega
  for(const change of [f=>f.config.attach=true,f=>f.config.secretStorage='inmemory']){const f=restartFixture();change(f);await assert.rejects(restartOwnedCandidate(f),e=>e.blocked===true);assert.deepEqual(f.events,[]);}
  for(const change of [f=>f.child.exitCode=0,f=>f.waitExit=async()=>{},f=>f.waitExit=async old=>{old.exitCode=1;},f=>f.waitExit=async old=>{old.signalCode='SIGTERM';},f=>f.waitCdpDown=async()=>{throw Error('still listening');},f=>f.launch=async()=>({pid:10,exitCode:null,signalCode:null}),f=>f.observeDraft=async()=>'',f=>f.observeDraft=async()=> 'B-draft']){const f=restartFixture();change(f);await assert.rejects(restartOwnedCandidate(f));}
 });
+
+test('restart failure retains normal exit, refused CDP and new PID observations before draft failure',async()=>{
+ const {restartOwnedCandidate}=await import('./safety.mjs'),f=restartFixture(),observations=[];
+ f.onProgress=e=>observations.push(e);f.observeDraft=async()=>{throw Error('restored chat not ready');};
+ await assert.rejects(restartOwnedCandidate(f),/not ready/);
+ assert.deepEqual(observations.map(e=>e.phase),['native_quit_requested','owned_child_normal_exit','prior_cdp_connection_refused','new_owned_process_launched']);
+ assert.equal(observations[1].exit_code,0);assert.equal(observations[3].old_pid,10);assert.equal(observations[3].new_pid,11);
+ assert(!observations.some(e=>e.phase==='restored_chat_and_draft_observed'));
+});
