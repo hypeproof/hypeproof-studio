@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {startGuard,prepareRequest,REQUEST_LIMIT,fileOnlyProfile,completedGenerationRows} from './guard.mjs';
+import {startGuard,prepareRequest,REQUEST_LIMIT,fileOnlyProfile,completedGenerationRows,completionRequestProblem} from './guard.mjs';
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-live-guard-test-'));process.on('exit',()=>fs.rmSync(temp,{recursive:true,force:true}));let count=0;
 const keyFiles={keyFile:path.join(temp,'provider-key'),serviceCredentialFile:path.join(temp,'service-key'),controlKeyFile:path.join(temp,'control-key')},serviceKey='hps-guard-only-'+'a'.repeat(64),controlKey='hps-guard-control-'+'b'.repeat(64);for(const [name,value]of Object.entries({keyFile:'sk-ant-provider-secret',serviceCredentialFile:serviceKey,controlKeyFile:controlKey}))fs.writeFileSync(keyFiles[name],value,{mode:0o600});
 async function arm(g){const s=g.snapshot();const probe=await fetch(g.origin+'/v1/messages/count_tokens',{method:'POST',headers:{'x-api-key':serviceKey,'anthropic-beta':'hps-feedback-route-proof-'+s.route_nonce},body:JSON.stringify({model:'m',messages:[]})});assert.equal(probe.status,200);const response=await fetch(g.origin+'/__feedback/arm',{method:'POST',headers:{'x-hps-guard-control':controlKey},body:JSON.stringify({guard_id:s.guard_id,activity_sha256:s.activity_sha256,nonce:s.route_nonce})});assert.equal(response.status,200);}
@@ -39,4 +39,56 @@ test('screenshot reservation requires exact control auth/identity and survives r
   const client=screenshotReservationClient({guard:{origin:'http://127.0.0.1:'+proxy.address().port,id:claim.guard_id,controlKeyFile:keyFiles.controlKeyFile},activityId,repetitionId});let captured=false;await assert.rejects((async()=>{await client();captured=true;})());assert.equal(captured,false);assert.equal(proxyCalls,1);assert.equal(g.snapshot().render_screenshot_attempts,1);assert.equal(JSON.parse(fs.readFileSync(ledgerFile)).render_screenshot_attempts,1);assert.equal(g.snapshot().attempts,0);assert.deepEqual(g.snapshot().rows,[]);
   const restartedClient=screenshotReservationClient({guard:{origin:g.origin,id:claim.guard_id,controlKeyFile:keyFiles.controlKeyFile},activityId,repetitionId});assert.equal((await restartedClient()).attempt,2);const concurrent=await Promise.all(Array.from({length:5},()=>reserve()));assert.deepEqual(concurrent.map(r=>r.status).sort(),[200,200,200,200,429]);assert.equal(g.snapshot().render_screenshot_attempts,6);
  }finally{if(proxy){proxy.closeAllConnections();await new Promise(r=>proxy.close(r));}await g.close();}
+});
+
+const repetitionId='hps-render-20261016-r3-'+'d'.repeat(32);
+const completionGuard=async fetchImpl=>{const g=await startGuard({...keyFiles,activityId:'completion-controls',renderRepetitionId:repetitionId,renderCompletion:true,ledgerFile:path.join(temp,'completion-'+count+++'.json'),fetchImpl});await arm(g);return g;};
+const holdRequest=(g,body={},key=controlKey)=>fetch(g.origin+'/__feedback/hold',{method:'POST',headers:{'x-hps-guard-control':key},body:JSON.stringify({guard_id:g.snapshot().guard_id,activity_sha256:g.snapshot().activity_sha256,render_repetition_id:repetitionId,...body})});
+test('completion validates the FULL tool history, including errors beyond bounded diagnostic metadata',()=>{
+ const good={messages:[{role:'user',content:[{type:'tool_result',tool_use_id:'t',content:'ok'}]}]};assert.equal(completionRequestProblem(good),null);
+ for(const content of[null,{},[{type:'unknown'}],[{type:'tool_result',tool_use_id:'t',is_error:'false',content:'x'}],[{type:'tool_result',content:'x'}]])assert.equal(completionRequestProblem({messages:[{role:'user',content}]}),'malformed_tool_history');
+ const many=Array.from({length:1000},()=>({type:'text',text:'ok'}));many.push({type:'tool_result',tool_use_id:'last',is_error:true,content:'not exempt'});assert.equal(completionRequestProblem({messages:[{role:'user',content:many}]}),'tool_result_error');
+ assert.equal(completionRequestProblem({messages:[{role:'user',content:[{type:'tool_result',tool_use_id:'outer',content:[{type:'tool_result',tool_use_id:'inner',is_error:true,content:'x'}]}]}]}),'tool_result_error');
+});
+test('authenticated exact-activity hold is persisted, cannot rearm/refund/claim, and bad auth/identity cannot hold',async()=>{
+ let calls=0;const g=await completionGuard(async()=>{calls++;return new Response('ok');});try{
+  for(const key of['',serviceKey])assert.equal((await holdRequest(g,{},key)).status,401);
+  for(const bad of[{guard_id:'other'},{activity_sha256:'other'},{render_repetition_id:'other'},{extra:true}])assert.equal((await holdRequest(g,bad)).status,409);
+  assert.equal(g.snapshot().completion.held,false);await(await post(g)).text();assert.equal(calls,1);const rows=g.snapshot().rows;
+  assert.equal((await holdRequest(g)).status,200);assert.equal((await holdRequest(g)).status,200);
+  for(const endpoint of['/v1/messages','/v1/messages/count_tokens','/__feedback/arm','/__feedback/attempt','/__feedback/render-screenshot'])assert.equal((await post(g,endpoint)).status,423);
+  const s=g.snapshot();assert.equal(s.completion.held,true);assert.equal(s.completion.reason,'host_stopped');assert.equal(s.attempts,1);assert.equal(s.candidate_attempts,0);assert.equal(s.render_screenshot_attempts,0);assert.deepEqual(s.rows,rows);assert.equal(s.completion.blocked_requests,5);
+  const disk=fs.readdirSync(temp).filter(n=>n.startsWith('completion-')).map(n=>JSON.parse(fs.readFileSync(path.join(temp,n)))).find(x=>x.guard_id===s.guard_id);assert.deepEqual(disk,s);
+ }finally{await g.close();}
+});
+test('actual malformed/error histories and 429/transport errors hold before any additional upstream reservation',async()=>{
+ for(const kind of['malformed','tool-error','429','transport']){
+  let calls=0;const g=await completionGuard(async()=>{calls++;if(kind==='transport')throw Error('synthetic transport');return new Response('synthetic',{status:kind==='429'?429:200});});try{
+   const body=kind==='malformed'?{model:'m',max_tokens:10,messages:[{role:'user',content:[{type:'unknown'}]}]}:kind==='tool-error'?{model:'m',max_tokens:10,messages:[{role:'user',content:[{type:'tool_result',tool_use_id:'t',is_error:true,content:'allowed? no'}]}]}:undefined;
+   await(await post(g,undefined,body)).text();assert.equal(g.snapshot().completion.held,true);const before=g.snapshot().attempts;assert.equal((await post(g)).status,423);assert.equal(g.snapshot().attempts,before);assert.equal(calls,['429','transport'].includes(kind)?1:0);
+  }finally{await g.close();}
+ }
+});
+test('completion cancellation with normal upstream EOF latches hold without refunding admitted call',async()=>{
+ let finish,calls=0;const g=await completionGuard(async(_url,init)=>{calls++;return new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode('initial'));finish=()=>c.close();init.signal.addEventListener('abort',finish,{once:true});}}));});try{
+  const controller=new AbortController(),r=await post(g,undefined,undefined,controller.signal);await r.body.getReader().read();controller.abort();
+  for(let n=0;n<100&&!g.snapshot().completion.held;n++)await new Promise(r=>setTimeout(r,10));
+  assert.equal(g.snapshot().completion.held,true);assert.equal(g.snapshot().rows[0].phase,'cancelled');assert.equal(g.snapshot().attempts,1);assert.equal((await post(g)).status,423);assert.equal(calls,1);
+ }finally{await g.close();}
+});
+
+test('a held latch wins over requests already reading their body; unauthorized malformed requests cannot latch it',async()=>{
+ const {request}=await import('node:http');let calls=0;const g=await completionGuard(async()=>{calls++;return new Response('ok');});try{
+  const unauthorized=await fetch(g.origin+'/v1/messages',{method:'POST',headers:{'x-api-key':'wrong'},body:'{'});assert.equal(unauthorized.status,400);assert.equal(g.snapshot().completion.held,false);
+  const pending=[];
+  for(const endpoint of['/v1/messages','/__feedback/arm','/__feedback/attempt','/__feedback/render-screenshot']){
+   const body=endpoint==='/v1/messages'?{model:'m',max_tokens:10,messages:[{role:'user',content:'ok'}]}:{guard_id:g.snapshot().guard_id,activity_sha256:g.snapshot().activity_sha256,render_repetition_id:repetitionId,nonce:g.snapshot().route_nonce};
+   let req;const response=new Promise((resolve,reject)=>{req=request(g.origin+endpoint,{method:'POST',headers:{'x-api-key':serviceKey,'x-hps-guard-control':controlKey,'content-type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);});
+   const bytes=JSON.stringify(body);req.write(bytes.slice(0,1));pending.push({req,response,rest:bytes.slice(1)});
+  }
+  assert.equal((await holdRequest(g)).status,200);
+  for(const p of pending)p.req.end(p.rest);
+  assert.deepEqual(await Promise.all(pending.map(p=>p.response)),[423,423,423,423]);
+  assert.equal(calls,0);assert.equal(g.snapshot().attempts,0);assert.equal(g.snapshot().candidate_attempts,0);assert.equal(g.snapshot().render_screenshot_attempts,0);
+ }finally{await g.close();}
 });

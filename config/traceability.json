@@ -5344,6 +5344,21 @@
         },
         {
           "path": "e2e/feedback-live/render-host.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/completion-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
     },
@@ -5551,6 +5566,21 @@
         },
         {
           "path": "e2e/feedback-live/render-host.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/completion-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
     }

@@ -16,7 +16,13 @@ test('actual capture aborted before any next dispatch and failed capture both re
  const options={root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:client()};let host,second;
  try{
   host=await startRenderHost(options);const view=host.setCandidate(['keyboard.html']);await host.host.openBrowser(view.wrapperUrl);const read=await host.host.inspect('browser_read',{}),text=read.content.filter(b=>b.type==='text').map(b=>b.text).join('\n');assert(text.includes('모바일 390px')&&text.includes('데스크톱 1280px'));await host.host.inspect('browser_screenshot',{});assert.equal(host.state.captures[0].page.frameWidth,390);
-  const ref=text.split('\n').find(s=>s.includes('데스크톱 1280px')).match(/ref=(e\d+)/)?.[1];assert(ref);assert(!(await host.host.inspect('browser_click',{ref})).isError);await new Promise(r=>setTimeout(r,100));await host.host.inspect('browser_screenshot',{});assert.equal(host.state.captures[1].page.frameWidth,1280);
+  const ref=text.split('\n').find(s=>s.includes('데스크톱 1280px')).match(/ref=(e\d+)/)?.[1];assert(ref);
+  const click={toolName:'mcp__hypeproof__browser_click',input:{ref}};
+  assert.equal(await host.approveViewportClick(click),true);
+  for(const action of[{...click,input:{ref:'e999'}},{...click,input:{ref,extra:true}},{...click,toolName:'mcp__hypeproof__browser_type'}])assert.equal(await host.approveViewportClick(action),false);
+  assert(!(await host.host.inspect('browser_click',{ref})).isError);
+  assert.equal(await host.approveViewportClick(click),false,'Consumed/stale read ref requires a new actual read');await new Promise(r=>setTimeout(r,100));await host.host.inspect('browser_screenshot',{});assert.equal(host.state.captures[1].page.frameWidth,1280);
+  await host.host.openBrowser(host.origin+'/keyboard.html');assert.equal(await host.approveViewportClick(click),false,'Candidate page does not grant wrapper controls');
   await assert.rejects(host.host.openBrowser('http://example.com/'),/non-owned/);await host.close();assert.equal(host.state.cleanup.status,'PASS');assert.equal(host.state.cleanup.server_closed,true);assert.equal(host.state.cleanup.chromium_exited,true);
   // Simulate the runtime abort here: no subsequent model request exists.
   assert.equal(g.snapshot().rows.length,0);assert.equal(JSON.parse(fs.readFileSync(ledgerFile)).render_screenshot_attempts,2);assert.equal(priorScreenshotCalls(g.snapshot(),repetitionId),2);

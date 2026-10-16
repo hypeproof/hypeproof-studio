@@ -314,3 +314,72 @@ Guard reservation controls require the existing private control key plus exact
 guard/activity/repetition identities and a strict small JSON body. They do not
 arm the provider path. Setup/capture failures close owned CDP, Chromium and HTTP
 resources; cleanup receipts remain explicit, and failed cleanup fails the runner.
+
+### Opt-in missing-width completion (candidate evidence only)
+
+Completion is off by default. It additionally requires runner config
+`"renderCompletion":{"enabled":true,"mode":"missing-width-only"}`,
+`--allow-render-completion`, and a **new** render guard configured with
+`"renderCompletion":true`. The runner refuses nonzero initial dispatch,
+claim, or screenshot counters. This is not a way to reopen R1/R2 or reset a
+budget. Existing explicit render config/flag, current Service/PID/source
+binding, owner arm, and original activity authority still apply.
+
+After a successful SDK `end_turn`, the runner checks original inputs, declared
+outputs/brief, source-bound captures and actual upstream image delivery. Only
+missing 390/1280 evidence permits a factual continuation. It uses the UUID
+observed from the real SDK init event via `options.resume`, in the same isolated
+SDK directory, activity, browser host and original deadline. Candidate outputs
+are copied once to evidence and must remain byte-identical. Continuations
+remove write tools and do not resend an invented text history. At most two
+additional existing candidate claims are permitted; total limits stay 12
+upstream requests, 3 claims, 6 screenshot reservations and 4096 output tokens.
+Only current refs bound to the two actual outer wrapper width buttons receive
+click approval. Other click/type actions retain the normal denial boundary.
+
+Tool errors, policy denial, runtime/validation failure and cancellation stop
+completion. The SDK hook/abort/close alone is **not** an admission guarantee:
+our preserved provider-free Read-error control reached 12 requests despite a
+failure hook. The completion guard therefore inspects the full actual request
+history before reservation, latches on tool-result errors or malformed/unknown
+history, and accepts an authenticated exact-activity one-way hold from the
+host. HTTP/transport failures and cancellation also hold admission. Held guards
+cannot rearm, reserve, refund or resume; their local 423 rejections are counted
+separately from actual upstream forwards. Already admitted concurrent work is
+not retroactively described as undispatched. The guard does not interpret
+error text as an exemption or grant.
+
+Provider-free controls (no native UI or external provider):
+
+```sh
+node --test e2e/feedback-live/{guard,render-host,render-completion}.test.mjs
+HPS_SERVICE_SOURCE=/absolute/clean/service HPS_SERVICE_SHA=EXACT_SERVICE_SHA \
+  node e2e/feedback-native/render-completion-probe.mjs /new/evidence/directory /absolute/installed/claude
+```
+
+The probe uses the real installed SDK, actual Hono/SQLite Service, durable guard
+and actual BrowserControl/CDP against scripted loopback SSE. Its positive case
+forwards seven synthetic upstream requests over two SDK calls sharing one
+session, with actual prior image history and both widths. Error controls check
+that denied/error results produce no additional upstream forward; any local
+held-request attempts remain separately visible. This proves transport and
+bounded continuation behavior, not generated visual quality, native UI,
+production billing or permission to start another live activity. Real execution
+requires independent review of the exact new source/config binding first.
+
+The full CLI control additionally requires a clean committed Studio revision.
+It obtains a real synthetic activity, consumes the synthetic route env before
+Service startup, and passes the observed PID/env receipt to the unchanged CLI.
+The SDK writes both candidate files, then completes both viewport captures in
+the same session. It expects nine scripted forwards, two claims and two captures;
+no candidate output is preseeded. All existing admission and source checks apply.
+
+```sh
+node e2e/feedback-native/render-completion-cli-probe.mjs \
+  /new/cli-proof/evidence /absolute/installed/claude EXACT_STUDIO_SHA \
+  /absolute/clean/service EXACT_SERVICE_SHA --execute
+```
+
+Without `--execute` it writes preparation metadata only. This control uses fresh
+isolated processes and headless browsers; it does not use an existing live
+activity or prove generated visual quality.
