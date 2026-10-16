@@ -24,6 +24,7 @@ import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
 import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
 import { imagePathsFromNotes, selectReferencedImagePaths, readWorkspaceReferenceImages, referenceImageFailuresNote } from "./referenceImages";
+import { selectedExternalInstructions } from "./externalSkillCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -4745,6 +4746,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       if (effectiveImages?.length && profile?.input?.image_paste !== true) {
         throw new Error("이 활동은 이미지 분석을 허용하지 않아요.");
+      }
+      const instructionRoot = this.resolveCoachCwd();
+      if (instructionRoot) {
+        // The same user-turn content reaches SDK and proxy. Server-owned system
+        // prompts, tool grants and curriculum metadata remain authoritative.
+        const selected = await selectedExternalInstructions(this.context, instructionRoot);
+        if (selected.text) {
+          userTextForModel += `\n\n${selected.text}`;
+          this.postToolLog(streamId, { id: randomId(), icon: "📖", label: selected.provenance.map(s => `${s.name} · ${s.revision.slice(0, 12)}`).join(" · "), state: "done" });
+        }
       }
       // #282 Phase 1 — route to the Agent SDK coach behind the flag. Default
       // "proxy" keeps the exact existing single-turn behavior; "agent-sdk"
