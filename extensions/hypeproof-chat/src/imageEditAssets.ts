@@ -10,9 +10,21 @@ function workspaceFile(cwd:string,rel:string,allowMissing=false):string{
 }
 export async function prepareImageEditAsset(cwd:string,relativePath:string):Promise<ImageEditAsset>{
  const file=workspaceFile(cwd,relativePath);const st=fs.lstatSync(file);if(!st.isFile()||st.size===0||st.size>4*1024*1024)throw new Error('4MB 이하의 PNG 원본을 선택해 주세요.');
- const fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0));let bytes:Uint8Array;try{bytes=fs.readFileSync(fd);}finally{fs.closeSync(fd);}
- let info:PngInfo;try{info=await inspectEditPng(bytes);}catch{throw new Error('지원되는 PNG 원본을 읽지 못했어요. RGB/RGBA PNG 사본을 선택해 주세요.');}
- return {relativePath,bytes,info,sha256:await imageBytesHash(bytes),dataUrl:`data:image/png;base64,${Buffer.from(bytes).toString('base64')}`};
+ const fd=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW??0));
+ try{
+  // O_NOFOLLOW covers only the final component. Bind the opened handle to the
+  // pre-open identity, then recheck every component and its physical location.
+  const unchanged=()=>{
+   const opened=fs.fstatSync(fd),current=fs.lstatSync(file);
+   if(!opened.isFile()||opened.dev!==st.dev||opened.ino!==st.ino||opened.size!==st.size||opened.mtimeMs!==st.mtimeMs||opened.ctimeMs!==st.ctimeMs||current.dev!==opened.dev||current.ino!==opened.ino||current.isSymbolicLink()||workspaceFile(cwd,relativePath)!==file||fs.realpathSync(file)!==file)throw new Error('읽는 동안 이미지 위치·내용이 바뀌었어요. 다시 선택해 주세요.');
+  };
+  unchanged();
+  const bytes=fs.readFileSync(fd);unchanged();
+  if(bytes.length!==st.size||bytes.length>4*1024*1024)throw new Error('4MB 이하의 변경되지 않은 PNG 원본을 선택해 주세요.');
+  let info:PngInfo;try{info=await inspectEditPng(bytes);}catch{throw new Error('지원되는 PNG 원본을 읽지 못했어요. RGB/RGBA PNG 사본을 선택해 주세요.');}
+  const sha256=await imageBytesHash(bytes);unchanged();
+  return {relativePath,bytes,info,sha256,dataUrl:`data:image/png;base64,${Buffer.from(bytes).toString('base64')}`};
+ }finally{fs.closeSync(fd);}
 }
 /** A new exclusive file only. Saving never means adopting or visually accepting the edit. */
 export async function saveImageEditOutput(cwd:string,original:ImageEditAsset,job:ImageEditResult,bytes:Uint8Array):Promise<{relativePath:string;sha256:string;info:PngInfo}>{

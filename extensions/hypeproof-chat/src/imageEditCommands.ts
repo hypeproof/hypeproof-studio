@@ -49,10 +49,18 @@ async function localFile(root: string, relativePath: string, expected: string): 
   return file;
 }
 function costNotice(result: ImageEditResult): string {
-  const cost = (result.cost ?? {}) as unknown as { amount_micro?: number | string | null; currency?: string | null; price_revision?: string | null; unit?: string };
+  const cost = result.cost;
+  if (!cost || cost.recording_state !== 'recorded') return '이미지 편집 비용은 미확인입니다. 비용이 없다는 뜻은 아닙니다.';
   const amount = typeof cost.amount_micro === 'number' && Number.isSafeInteger(cost.amount_micro) && cost.amount_micro >= 0 ? String(cost.amount_micro) : typeof cost.amount_micro === 'string' && /^\d{1,30}$/.test(cost.amount_micro) ? cost.amount_micro : undefined;
-  if (amount !== undefined && cost.unit === 'micro_currency' && typeof cost.currency === 'string' && /^[A-Z]{3}$/.test(cost.currency))
-    return `기록된 이미지 비용: ${amount} micro_currency (${cost.currency}). 가격 revision: ${typeof cost.price_revision === 'string' && /^[A-Za-z0-9._-]{1,120}$/.test(cost.price_revision) ? cost.price_revision : '미확인'}. 실제 청구 대조는 별도입니다.`;
+  const revision = typeof cost.price_revision === 'string' && /^[A-Za-z0-9._-]{1,120}$/.test(cost.price_revision) ? cost.price_revision : undefined;
+  const issues = Array.isArray(cost.issues) ? cost.issues : [];
+  if (amount !== undefined && cost.unit === 'micro_currency' && typeof cost.currency === 'string' && /^[A-Z]{3}$/.test(cost.currency)) {
+    if (cost.pricing === 'partial' || cost.pricing === 'priced' && (issues.length > 0 || !revision)) {
+      const details = issues.filter(issue => typeof issue === 'string' && /^[A-Za-z0-9:._-]{1,120}$/.test(issue)).slice(0, 4).join(', ');
+      return `이미지 비용 부분 합계: ${amount} micro_currency (${cost.currency}). 누락·미산정 항목이 있어 전체 비용은 미확인입니다.${details ? ` 확인 항목: ${details}.` : ''} 가격 revision: ${revision ?? '미확인'}. 실제 청구 대조는 별도입니다.`;
+    }
+    if (cost.pricing === 'priced' && revision) return `기록된 이미지 비용: ${amount} micro_currency (${cost.currency}). 가격 revision: ${revision}. 실제 청구 대조는 별도입니다.`;
+  }
   return '이미지 편집 비용은 미확인입니다. 비용이 없다는 뜻은 아닙니다.';
 }
 /** No image is dispatched here. Only an explicitly referenced, explicitly selected local path becomes user-turn context. */
