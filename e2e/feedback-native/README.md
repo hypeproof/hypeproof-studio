@@ -321,7 +321,11 @@ profile. It pins each workbench and its webviews to the observed window target I
 ambiguous unscoped discovery refuses input. The original window follows the real
 saved-activity chooser A→B and public File Open Folder back to A. The other C
 window must keep its frame, independent draft, binding-file hash and workspace
-files throughout. A ten-second destination observation rejects repeated reloads.
+files throughout. A ten-second destination observation rejects repeated reloads. Existing binding selection accepts only the exact physical
+C root's two Windows drive-letter spellings and requires one regular file with
+its actual Service/activity identity and credential-reference shape. It never
+reads SecretStorage or folds other path casing; the selected raw hash must remain
+unchanged throughout observation.
 The currently focused owned window opens the public `Switch Window...` picker
 and selects the exact observed destination title; the destination must then report
 actual focus. Inactive C observation retains its already observed frame identity

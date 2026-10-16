@@ -35,3 +35,24 @@ test('diagnostics precede cleanup; cleanup and screenshot failure cannot mask fi
  await assert.rejects(finishOwnedWindows({proof:{},observe:async()=>{},cleanup:async()=>{throw Error('cleanup only');},persist:()=>{}}),/cleanup only/);
  let cleaned=false;await finishOwnedWindows({proof:{},observe:async()=>{},cleanup:async()=>{cleaned=true;},persist:()=>{}});assert.equal(cleaned,true);
 });
+test('existing binding selection permits only drive-letter spelling and verifies actual Service/activity identity',async()=>{
+ const {selectOwnedBinding}=await import('./native-windows.mjs');const {createHash}=await import('node:crypto');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'native-binding-')),activity='b'.repeat(64),service='http://127.0.0.1:9888/v1';
+ const hash=value=>createHash('sha256').update(value).digest('hex');
+ const record={version:1,id:hash(JSON.stringify([service,activity])),ref:'hps.activity.credential.existing-synthetic'};
+ const upper='D:\\owned\\C',lower='d:\\owned\\C',file=root=>path.join(dir,hash(root)+'.json');
+ const write=(root,value=record)=>fs.writeFileSync(file(root),JSON.stringify(value));
+ try{
+  write(lower);const bytes=fs.readFileSync(file(lower));
+  for(const root of [upper,lower,'D:/owned/C'])assert.deepEqual(selectOwnedBinding(dir,root,service+'/',activity,'win32'),{file:file(lower),sha256:hash(bytes)});
+  assert.deepEqual(fs.readFileSync(file(lower)),bytes,'read-only selection preserves original bytes');
+  for(const root of ['E:\\owned\\C','D:\\owned','D:\\owned\\C-child','D:\\owned\\c','C'])assert.throws(()=>selectOwnedBinding(dir,root,service,activity,'win32'));
+  for(const [wrongService,wrongActivity]of [[service,'a'.repeat(64)],['http://127.0.0.1:9889/v1',activity]])assert.throws(()=>selectOwnedBinding(dir,upper,wrongService,wrongActivity,'win32'),/Service and activity/);
+  for(const invalid of [{...record,version:0},{...record,ref:'not-a-credential'},{...record,ref:'hps.activity.credential.'},{...record,ref:'hps.activity.credential.bad ref'}]){write(lower,invalid);assert.throws(()=>selectOwnedBinding(dir,upper,service,activity,'win32'));}
+  write(lower);write(upper);assert.throws(()=>selectOwnedBinding(dir,upper,service,activity,'win32'),/Exactly one/);fs.rmSync(file(upper));
+  fs.rmSync(file(lower));const target=path.join(dir,'outside-record');fs.writeFileSync(target,JSON.stringify(record));fs.symlinkSync(target,file(lower));assert.throws(()=>selectOwnedBinding(dir,upper,service,activity,'win32'),/non-linked/);fs.rmSync(file(lower));
+  fs.mkdirSync(file(lower));assert.throws(()=>selectOwnedBinding(dir,upper,service,activity,'win32'),/non-linked/);fs.rmdirSync(file(lower));
+  const real=path.join(dir,'physical');fs.mkdirSync(real);const physical=fs.realpathSync(real);write(physical);assert.equal(selectOwnedBinding(dir,physical,service,activity).file,file(physical));
+  assert.throws(()=>selectOwnedBinding(dir,path.dirname(real),service,activity),/Exactly one/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {NativeUI,waitFor,sleep} from './native-ui.mjs';
+import {NativeUI,waitFor,sleep,sameDisplayedWorkspace} from './native-ui.mjs';
 import {sha256,within} from './safety.mjs';
 export function ownedWindowPrerequisite(c,env=process.env){
  if(env.GITHUB_ACTIONS!=='true'||!env.RUNNER_TEMP||c.attach)throw Object.assign(Error('Two-window input requires an owned hosted desktop'),{blocked:true});
@@ -47,13 +47,39 @@ export async function finishOwnedWindows({primary,observe,cleanup,proof,persist}
  if(primary)throw primary;
  if(cleanupError)throw cleanupError;
 }
-export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,workspaceFiles,saveProgress}){
+// The production binding file stores id/ref, not workspace. Resolve only the
+// exact physical root's known Windows drive spellings, never arbitrary files.
+export function selectOwnedBinding(directory,physicalRoot,service,activityId,platform=process.platform){
+ const paths=platform==='win32'?path.win32:path.posix;
+ assert(paths.isAbsolute(physicalRoot),'Binding workspace must be an absolute physical path');
+ assert(/^[a-f0-9]{64}$/.test(activityId??''),'Actual Service activity identity required');
+ const url=new URL(service);assert(!url.username&&!url.password&&!url.search&&!url.hash,'Credential-free Service identity required');
+ const expectedId=createHash('sha256').update(JSON.stringify([url.href.replace(/\/+$/,''),activityId])).digest('hex');
+ const physical=paths.normalize(physicalRoot),spellings=new Set([physical]);
+ if(platform==='win32'&&/^[a-z]:/i.test(physical)){
+  spellings.add(physical[0].toUpperCase()+physical.slice(1));spellings.add(physical[0].toLowerCase()+physical.slice(1));
+ }
+ const names=new Set([...spellings].map(value=>{
+  assert(sameDisplayedWorkspace(value,physical,platform),'Only exact workspace drive spelling may vary');
+  return createHash('sha256').update(value).digest('hex')+'.json';
+ }));
+ const dirStat=fs.lstatSync(directory);assert(dirStat.isDirectory()&&!dirStat.isSymbolicLink(),'Owned binding directory must be regular');
+ const matches=fs.readdirSync(directory).filter(name=>names.has(name));
+ assert.equal(matches.length,1,'Exactly one existing binding for the physical workspace required');
+ const file=path.join(directory,matches[0]),stat=fs.lstatSync(file);
+ assert(stat.isFile()&&!stat.isSymbolicLink(),'Binding must be a regular non-linked file');
+ const bytes=fs.readFileSync(file),record=JSON.parse(bytes);
+ assert.equal(record.version,1,'Binding version');assert.equal(record.id,expectedId,'Binding must match actual Service and activity');
+ assert(typeof record.ref==='string'&&/^hps\.activity\.credential\.[^\s]+$/.test(record.ref),'Valid existing credential reference required');
+ return {file,sha256:createHash('sha256').update(bytes).digest('hex')};
+}
+export async function runOwnedWindows({c,ui,draft,openOwnedWindow,commandTitle,workspaceFiles,saveProgress,activityId}){
  ownedWindowPrerequisite(c);assert.equal(typeof openOwnedWindow,'function');assert(commandTitle);
  const original=await ui.workbench(),before=(await ui.list()).filter(t=>t.type==='page'&&t.url.includes('workbench')).map(t=>t.id);
  assert.deepEqual(before,[original.info.id],'Start with exactly the owned original window');
  const bindings=path.join(c.userDataDir,'User/globalStorage/hypeproof.hypeproof-chat/activity-bindings');
- const bindingFile=path.join(bindings,createHash('sha256').update(fs.realpathSync(c.workspace.c)).digest('hex')+'.json');
- assert(!fs.lstatSync(bindingFile).isSymbolicLink());const bindingHash=sha256(bindingFile),filesC=workspaceFiles(c.workspace.c);
+ const selectedBinding=selectOwnedBinding(bindings,fs.realpathSync(c.workspace.c),c.service.origin+'/v1',activityId);
+ const bindingFile=selectedBinding.file,bindingHash=selectedBinding.sha256,filesC=workspaceFiles(c.workspace.c);
  const proof={scope:'actual simultaneous windows and destination noninterference',original_window:original.info.id,secondary_window:null,secondary_closed:false,pending_marker_consumption:'NOT_OBSERVED; internal transient marker is not inferred from UI',slow_native_activation:'NOT_RUN; deterministic61s/expiry controls reused',observations:0,phases:[],diagnostics:[]};
  let secondary,other,cli,primary;ui.workbenchId=original.info.id;
  const persist=()=>saveProgress(structuredClone(proof));
