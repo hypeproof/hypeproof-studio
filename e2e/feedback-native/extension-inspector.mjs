@@ -13,14 +13,24 @@ const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve
 // Diagnostics only: never used to admit a script, PID, breakpoint or workspace.
 export function inspectorScriptDiagnostic(url,target){
  const windows=/^[A-Za-z]:[\\/]/.test(target.file),paths=windows?path.win32:path.posix;
- let relative='unrecognized-script-url';
- try{const parsed=new URL(url);if(parsed.protocol==='file:'&&!parsed.host&&!parsed.search&&!parsed.hash){
+ let relative='unrecognized-script-url',comparison=null;
+ try{const parsed=new URL(url),expected=new URL(target.url);if(parsed.protocol==='file:'&&!parsed.host&&!parsed.search&&!parsed.hash){
   const file=fileURLToPath(parsed,{windows}),candidate=paths.relative(paths.dirname(target.file),file);
   relative=candidate&&!paths.isAbsolute(candidate)&&candidate!=='..'&&!candidate.startsWith('..'+paths.sep)?candidate:'outside-fixture';
+  // Booleans/indices distinguish URI spelling from path case without disclosing a path.
+  // In particular path.win32.relative is case-insensitive: basename equality is NOT admission.
+  const actual=paths.normalize(file),wanted=paths.normalize(target.file),drive=value=>windows?value.replace(/^[a-z]:/,v=>v.toUpperCase()):value;
+  const a=actual.split(paths.sep),b=wanted.split(paths.sep);
+  const casePositions=a.length===b.length?a.flatMap((value,index)=>value!==b[index]&&value.toLowerCase()===b[index].toLowerCase()?[index]:[]):[];
+  comparison={serialized_url_equal:parsed.href===expected.href,decoded_path_equal:actual===wanted,drive_only_equal:drive(actual)===drive(wanted),casefold_path_equal:actual.toLowerCase()===wanted.toLowerCase(),unicode_nfc_path_equal:actual.normalize('NFC')===wanted.normalize('NFC'),case_difference_positions:casePositions.slice(0,16),case_difference_count:casePositions.length,physical_path_equal:null};
+  // Only inspect an already-known candidate spelling, never search other files/roots.
+  if(relative===paths.basename(target.file)&&windows===(process.platform==='win32')){
+   try{comparison.physical_path_equal=fs.realpathSync(file)===target.file;}catch{}
+  }
  }}catch{}
  // Only disclose the known fixture filename; other paths remain hashes.
  if(relative!==paths.basename(target.file)&&relative!=='outside-fixture'&&relative!=='unrecognized-script-url')relative='other-file-within-fixture';
- return {relative_fixture:relative,url_sha256:digest(String(url)),matches_expected_pattern:new RegExp(target.urlPattern??breakpointUrlPattern(target.url)).test(url)};
+ return {relative_fixture:relative,url_sha256:digest(String(url)),matches_expected_pattern:new RegExp(target.urlPattern??breakpointUrlPattern(target.url)).test(url),comparison};
 }
 export function breakpointUrlPattern(url){
  const escaped=url.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');

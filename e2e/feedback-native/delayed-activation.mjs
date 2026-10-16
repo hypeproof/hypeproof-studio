@@ -25,6 +25,18 @@ export function stageObservation(stage,{draft,expectedDraft,notification,startVi
   assert.equal(startVisible,true,'Expired resume must show actual Start');assert.equal(chatVisible,false,'Expired resume cannot automatically resume chat');
  }else assert.equal(draft,expectedDraft,'Actual fresh destination must import production checkpoint draft');
 }
+/** Persist observed facts before either UI or zero-profile assertion can fail. */
+export function checkExpiredActivation(item,{notification,startVisible,chatVisible,uiTimes,callsAtPause,callsAfter,baselineAt,releasedAt,observedAt},persist){
+ const activationCalls=callsAfter.slice(callsAtPause.length);
+ item.expiry_notification=notification;item.start_visible=startVisible;item.no_automatic_chat=chatVisible===false;
+ if(uiTimes)item.ui_observed_at_ms={notification:uiTimes.notification,start:uiTimes.start,chat_probe_started:uiTimes.chat_probe_started,chat_probe_finished:uiTimes.chat_probe_finished};
+ item.request_boundary={baseline_sampled_at_ms:baselineAt,baseline_count:callsAtPause.length,baseline_last_seq:callsAtPause.at(-1)?.seq??0,released_at_ms:releasedAt,observed_at_ms:observedAt,snapshot_count:callsAfter.length,snapshot_last_seq:callsAfter.at(-1)?.seq??0};
+ item.activation_requests=activationCalls.map(({seq,method,path,subject,status,request_id})=>({seq,method,path,subject,status,request_id:request_id??null}));
+ item.no_automatic_profile_connection=activationCalls.filter(row=>row.path==='/v1/profile').length===0;
+ persist();
+ stageObservation(DELAYED_STAGES[2],{notification,startVisible,chatVisible});
+ assert.equal(activationCalls.filter(row=>row.path==='/v1/profile').length,0,'Expired resume must not automatically connect/revalidate a profile');
+}
 export async function runDelayedActivation({c,ui,app,launch,openFromStart,nativeOpenBoundFolder,readDraft,focusChat,workspaceFiles,activityId,bundleHash,draft,saveProgress,requestCandidate,onGate=()=>{}}){
  delayedPrerequisite(c);
  const resources=process.platform==='darwin'?path.join(c.candidate.app,'Contents/Resources/app'):path.join(c.candidate.app,'resources/app');
@@ -44,7 +56,7 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
    proof.inspector.push(item);
    if(item.phase==='pre-consumption-paused'&&activeStage&&item.label===activeStage.name){
     activeStage.files=workspaceFiles(activeStage.root);activeStage.binding=selectOwnedBinding(bindings,fs.realpathSync(activeStage.root),c.service.origin+'/v1',activityId);
-    const observedStage=activeStage;observedStage.callsAtPause=serviceCalls().then(calls=>{observedStage.callsBaselineAt=Date.now();return calls;});void observedStage.callsAtPause.catch(()=>{});
+    const observedStage=activeStage,stageItem=proof.stages.at(-1);observedStage.callsAtPause=serviceCalls().then(calls=>{observedStage.callsBaselineAt=Date.now();stageItem.request_baseline={sampled_at_ms:observedStage.callsBaselineAt,count:calls.length,last_seq:calls.at(-1)?.seq??0};persist();return calls;});void observedStage.callsAtPause.catch(()=>{});
     proof.stages.at(-1).preservation_baseline='observed while destination paused before consume';
    }
    persist();
@@ -72,13 +84,14 @@ export async function runDelayedActivation({c,ui,app,launch,openFromStart,native
    if(stage.name==='real-expiry'){
     let observedNotification;
     await waitFor(async()=>{observedNotification=(await ui.toasts()).find(text=>text.trim()===EXPIRY_MESSAGE);return observedNotification;},'actual expiry notification after real ten-minute hold',30000);
+    const notificationAt=Date.now();
     const view=await ui.frame('.studio-start'),visibleStart=await view.evaluate("!!document.querySelector('.studio-start')");
+    const startAt=Date.now(),chatProbeAt=Date.now();
     let autoChat=false;try{await ui.frame('.hps-input textarea',1200);autoChat=true;}catch{}
-    stageObservation(stage,{notification:observedNotification.trim(),startVisible:visibleStart,chatVisible:autoChat});
-    const activationCalls=(await serviceCalls()).slice(callsAtPause.length);
-    assert.equal(activationCalls.filter(row=>row.path==='/v1/profile').length,0,'Expired resume must not automatically connect/revalidate a profile');
-    item.no_automatic_profile_connection=true;item.activation_requests=activationCalls.map(({seq,method,path,status})=>({seq,method,path,status}));
-    await ui.shot(path.join(c.evidence,'delayed-expired-notification.png'));item.expiry_notification=EXPIRY_MESSAGE;item.no_automatic_chat=true;
+    const chatProbeFinishedAt=Date.now();
+    const callsAfter=await serviceCalls();
+    checkExpiredActivation(item,{notification:observedNotification.trim(),startVisible:visibleStart,chatVisible:autoChat,uiTimes:{notification:notificationAt,start:startAt,chat_probe_started:chatProbeAt,chat_probe_finished:chatProbeFinishedAt},callsAtPause,callsAfter,baselineAt:activeStage.callsBaselineAt,releasedAt:item.pause.released_at_ms,observedAt:Date.now()},persist);
+    await ui.shot(path.join(c.evidence,'delayed-expired-notification.png'));
     // Explicit public saved-activity recovery, no credential input or host command bridge.
     await ui.savedActivity(view,root);await waitFor(()=>view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'expired activity explicit saved selection');
     requestCandidate(true);await ui.press(view,'.studio-primary');await ui.frame('.hps-input textarea',60000);requestCandidate(false);

@@ -56,7 +56,7 @@ test('pause requires exact own breakpoint/source/statement/root; no arbitrary ex
 });
 test('script diagnostics preserve cross-platform URL spelling and redact unrelated paths without admitting them',()=>{
  const url='file:///D:/owned%20inspector-%ED%95%9C%EA%B8%80/extension.cjs',target={file:'D:\\owned inspector-한글\\extension.cjs',url,urlPattern:breakpointUrlPattern(url)};
- assert.deepEqual(inspectorScriptDiagnostic(url,target),{relative_fixture:'extension.cjs',url_sha256:hash(url),matches_expected_pattern:true});
+ const exact=inspectorScriptDiagnostic(url,target);assert.equal(exact.relative_fixture,'extension.cjs');assert.equal(exact.url_sha256,hash(url));assert(exact.matches_expected_pattern);assert(exact.comparison.decoded_path_equal);assert(exact.comparison.serialized_url_equal);
  assert(inspectorScriptDiagnostic(url.replace('/D:','/d:'),target).matches_expected_pattern);
  for(const changed of [url.replace('/D:','/E:'),url.replace('/owned','/Owned'),url.replace('%20',' '),url.replace('/extension.cjs','/other.cjs'),url+'?secret=not-to-be-logged']){
   const value=inspectorScriptDiagnostic(changed,target);assert(!value.matches_expected_pattern);assert(!JSON.stringify(value).includes('not-to-be-logged'));assert(!JSON.stringify(value).includes('owned inspector'));
@@ -66,6 +66,16 @@ test('script diagnostics preserve cross-platform URL spelling and redact unrelat
  assert.equal(inspectorScriptDiagnostic('file:///other/private.cjs',posix).relative_fixture,'outside-fixture');assert.equal(inspectorScriptDiagnostic('not a URL with secret',posix).relative_fixture,'unrecognized-script-url');
  let receipt;failureDiagnostic({diagnostic:value=>{receipt=value;}},{events:[{phase:'owned-startup-break',pid:123,message:'private application text'}],phase:{label:'initial-startup',deadline:0},protocolDiagnostics:{event_counts:{'Debugger.scriptParsed':2},candidate_scripts:[],last_pause:null,breakpoint_locations:[]}},target,[{snapshot:()=>({pid:123,exit_code:null})}]);
  const observed=JSON.parse(receipt);assert(observed.gate.owned_pid_verified);assert(observed.gate.deadline_expired);assert.equal(observed.gate.protocol.event_counts['Debugger.scriptParsed'],2);assert(!receipt.includes('private application text'));assert(!receipt.includes('D:\\owned'));assert(!receipt.includes('file:///'));
+});
+test('mismatch diagnostics distinguish directory case from URL spelling without accepting either',()=>{
+ const url='file:///C:/Users/Runner/owned%20inspector-%ED%95%9C%EA%B8%80/extension.cjs',target={file:'C:\\Users\\Runner\\owned inspector-한글\\extension.cjs',url,urlPattern:breakpointUrlPattern(url)};
+ const changedCase=inspectorScriptDiagnostic(url.replace('/Runner/','/runner/'),target);
+ assert.equal(changedCase.relative_fixture,'extension.cjs');assert(!changedCase.matches_expected_pattern);assert(!changedCase.comparison.decoded_path_equal);assert(!changedCase.comparison.drive_only_equal);assert(changedCase.comparison.casefold_path_equal);assert.deepEqual(changedCase.comparison.case_difference_positions,[2]);
+ const rawSpace=inspectorScriptDiagnostic(url.replace('%20',' '),target);assert(!rawSpace.matches_expected_pattern);assert(rawSpace.comparison.decoded_path_equal);assert(rawSpace.comparison.casefold_path_equal);assert.deepEqual(rawSpace.comparison.case_difference_positions,[]);
+ const drive=inspectorScriptDiagnostic(url.replace('/C:','/c:'),target);assert(drive.matches_expected_pattern);assert(drive.comparison.drive_only_equal);assert.deepEqual(drive.comparison.case_difference_positions,[0]);
+ const different=inspectorScriptDiagnostic(url.replace('/Runner/','/Unrelated/'),target);assert(!different.matches_expected_pattern);assert(!different.comparison.casefold_path_equal);
+ for(const value of [changedCase,rawSpace,drive,different]){const raw=JSON.stringify(value);for(const text of ['Runner','Unrelated','file:///','owned inspector','한글'])assert(!raw.includes(text));}
+ const query=inspectorScriptDiagnostic(url+'?token=never-log',target);assert.equal(query.comparison,null);assert(!JSON.stringify(query).includes('never-log'));
 });
 test('actual owned Node inspector completes startup then holds before statement, and replacement host has a new PID',async t=>{
  const dir=temporary(),target=fixture(dir),server=net.createServer();server.listen(0,'127.0.0.1');await once(server,'listening');const port=server.address().port;await new Promise(r=>server.close(r));
