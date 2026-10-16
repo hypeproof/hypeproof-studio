@@ -245,10 +245,20 @@
         "command": "hypeproof-chat.clearBrowserResultBytes",
         "title": "HypeProof: 저장된 실험 브라우저 화면 지우기",
         "enablement": "hypeproof-chat.crBrowserBytesStored"
+      },
+      {
+        "command": "hypeproof-chat.openStudioFiles",
+        "title": "HypeProof: 작업 파일 열기",
+        "icon": "$(files)"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "hypeproof-chat.openStudioFiles",
+          "when": "view == hypeproof-chat.panel",
+          "group": "navigation@0"
+        },
         {
           "command": "hypeproof-chat.openBrowser",
           "when": "view == hypeproof-chat.panel",
@@ -311,6 +321,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "hypeproof-chat.openStudioFiles",
+          "when": "activeWebviewPanelId == 'hypeproof.start'",
+          "group": "navigation@0"
+        },
         {
           "command": "hypeproof-chat.publishSite",
           "when": "activeWebviewPanelId == 'hypeproof.start' && hypeproof-chat.sitePublishEnabled",

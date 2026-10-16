@@ -2228,7 +2228,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       entry.webview.html = this.renderHtml(entry.webview, dist);
       entry.reveal(vscode.ViewColumn.One);
     }
-    await vscode.commands.executeCommand('workbench.action.closeSidebar');
   }
 
   focusEditor(): boolean {
