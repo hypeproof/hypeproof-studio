@@ -67,6 +67,15 @@ the captured SDK-event regression. Mac remains at the unpatched fd6f276e UI.
 Receipts: `/tmp/hps-email-mvp/ui-rate-limit-ca0d6bd9/{online,windows}-receipt.json`.
 No paid request or grant was needed to diagnose, install or test the correction.
 
+Native rollback follow-up (2026-10-16,09:50KST): the retained
+`rollback-before-fd6f276e.lnk` launched db049d62 with the saved recipient workspace
+and activity visible. Process-path readback confirmed the old build. Returning
+to fd6f276e restored its existing activity window; the ca0d6bd9 JavaScript hash
+and portable profile remained intact. This exercised the retained old install,
+not restoration over a shared roaming profile. A separate pre-existing unsaved
+window was preserved; no claim is made that all old processes stopped. No model,
+Google or mail call was made. Receipt: `/tmp/hps-email-mvp/windows-fd6-rollback-return.json`.
+
 Integration checkpoint11b82da2 includes main6ad5f9f8; implementation, installer8ba30b73 and
 documentation checkpoint36dc4401 pass all18 CI checks. The installer checkpoint needed one failed npm/esbuild
 ETXTBSY job rerun; no application test failed in that run. Windows
@@ -323,7 +332,7 @@ silently interpret the workshop grant as paid recurring subscription consent.
 | Source/main integration | Studio fd6f276e contains main6ad5f9f8 and passes18 CI checks. Servicefa7472b passes13 CI checks. Installer7f6868f3 pins fd6f276e and passes18 CI checks. | Draft PRs; human-only merge under DEC-022. |
 | Isolated deployment | Servicea245457b, gatewaye1c67786 and Ops62ab5b8 canonical0046/0047 support the test environment. Backups and integrity/readback receipts are retained. | No production database migration or general release is claimed. |
 | Mac | One Dev app runs fd6f276e. Native argument correction and withdrawn-intent recovery reach a fresh reviewed publication; three-principal readback confirms contents, owner/source and old-ID denial. | TJ Google callback expired; fresh third-principal execution remains open. Dev uses memory-only secrets. |
-| Windows | fd6f276e on official shell720be661/SDK0.3.299: authenticated update, source receipt, db049 portable-profile migration, saved activity restoration, reviewed Mac-fork import and fresh one-recipient Google preview6/6 pass. | Post-preview coach follow-up hit429; its specific cause is unconfirmed. Earlier db049 rollback remains historical; current rollback snapshot/shortcut exist but were not executed. Shared-roaming restoration and20-seat bandwidth remain unverified. |
+| Windows | fd6f276e on official shell720be661/SDK0.3.299: authenticated update, source receipt, db049 portable-profile migration, saved activity restoration, reviewed Mac-fork import and fresh one-recipient Google preview6/6 pass. The current retained shortcut also launches db049d62 and returns to fd6f276e with its UI patch and saved activity intact. | Post-preview coach follow-up hit429; its specific cause is unconfirmed. Shared-roaming restoration and20-seat bandwidth remain unverified. |
 | Store/identity | Three Studio principals, exact recipe ownership/provenance, import, versions, withdrawal and access controls have revision-bound evidence. Non-owner Windows runs the Mac-authored recipe using saved private settings. | Three underlying Google identities/different datasets, third-user useful execution and the remaining matching-candidate lifecycle gates remain open. |
 | Google isolation | Earlier live shared-runner tests passed own-Sheet reads, cross-Sheet denials and caller-isolated state without learner IAM. | Do not relabel the earlier isolation run as current three-account store acceptance. |
 | Instructor/admission | Synthetic20-seat admission, budget, expiry/revocation and concurrency controls pass. Current fd6 Windows emits6/6 completion; online Service then records blocked/provider_rate_limit after a follow-up429, with two other seats unknown. | Not20 real learners or production Chalk. Real roster, class window and live-class budget are missing. |

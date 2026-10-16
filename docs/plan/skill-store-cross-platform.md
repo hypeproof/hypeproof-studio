@@ -24,6 +24,12 @@ gatewaye1c67786 serves fd6f276e and the separately pinned UI hotfixca0d6bd9, ret
 routes;23 online access/manifest/HEAD/script checks pass for the three existing
 Studio principals. Native Windows update to fd6f276e completed: the source receipt,
 portable migration from db049d62 and rollback snapshot/shortcut were observed.
+The retained shortcut was subsequently executed: db049d62 displayed the saved
+recipient activity, then fd6f276e resumed with its ca0d6bd9 UI hash and portable
+profile intact. Process-path readback confirmed both builds. This is retained-
+installation recovery, not a shared-roaming snapshot restore or a new Google
+execution. A separate pre-existing unsaved window was preserved. Receipt:
+`/tmp/hps-email-mvp/windows-fd6-rollback-return.json`.
 The original recipient activity and existing funding reopened, and the newly
 republished Mac fork873e2439 was imported through its actual private review.
 The saved recipient Google/Sheet settings produced one fresh private preview
