@@ -342,3 +342,34 @@ cover destination-bound one-shot consumption, stale/expired markers, delayed
 restore, symlink/Korean paths and the 61-second acceptance boundary. Actual native
 slow activation and the expiry notification remain separate unobserved conditions;
 no ten-minute wait, seeded app state or product test backdoor is added.
+
+## Provider-free render-feedback transport proof
+
+`render-feedback-probe.mjs` takes a new absolute evidence directory, the verified
+SDK binary and an immutable source HTML path. `HPS_SERVICE_SOURCE`/`SHA` pin the
+actual Service source. It copies that HTML into an owned temporary workspace and
+serves exactly that resource on loopback. Owned headless Chromium is the only
+browser launched; no native Studio window or existing browser is attached.
+
+The structural BrowserTab/raw-CDP transport is the explicit host seam. Actual
+production `CdpSession`, `BrowserControl`, `toMcpToolResult`, browser MCP factory,
+real SDK and actual Service process the tool call/results. The host never inserts
+an image tool_result. The already-open owned page is a precondition; SDK
+`browser_open` uses the existing already-open policy, then `browser_screenshot`
+captures it. Screenshots are saved as real JPEGs, and their byte hashes must appear
+in actual upstream tool_result image blocks. This proves pixel transport, not
+semantic design quality, a full judge/fix loop, native integration or acceptance.
+
+The explicit `--scripted-render` Service mode runs only the bounded owned render
+protocol, never arbitrary upstream traffic. Four actual SDK queries share one
+12-attempt ledger:390/1280 positives and no-browser-grant/no-host negatives, three
+scripted dispatches each. Output4096/retry0 remains fixed; any auxiliary call or
+retry consumes the same ceiling and can fail the proof. Negatives must advertise
+no screenshot tool, invoke no host capture and return actual SDK error tool results
+without images. Existing profile permissions and canUseTool are not bypassed;
+the no-grant control only lowers the existing browser grant. Approval requests are
+denied and recorded. Renderer network interception allows only the owned HTML.
+
+```bash
+HPS_SERVICE_SOURCE=/absolute/clean-service HPS_SERVICE_SHA=FULL_SHA node e2e/feedback-native/render-feedback-probe.mjs /absolute/new-evidence /absolute/verified-claude /absolute/frozen-candidate.html
+```

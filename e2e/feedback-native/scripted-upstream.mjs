@@ -4,6 +4,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {createHash,randomUUID} from 'node:crypto';
 import {policyResponse} from './policy-protocol.mjs';
+import {renderResponse} from './render-protocol.mjs';
 export const SCRIPTED_LIMIT=12,OUTPUT_LIMIT=4096;
 const digest=value=>createHash('sha256').update(value).digest('hex');
 export const MARKERS=['A1','D2','STOP_HOLD','QUIT_HOLD','FILE_HOLD'];
@@ -25,7 +26,7 @@ export function requestMarkers(body){
  const text=texts.join('\n'),matches=[...text.matchAll(/HPS_NATIVE_(A1|D2|STOP_HOLD|QUIT_HOLD|FILE_HOLD)(?![A-Z_])/g)];
  return {selected:matches.at(-1)?.[1]??'AUX',present:Object.fromEntries(MARKERS.map(name=>[name,text.includes(markerText(name))]))};
 }
-export async function startScriptedUpstream({ledgerFile,controlSecret,policyRoot}){
+export async function startScriptedUpstream({ledgerFile,controlSecret,policyRoot,renderConfig}){
  if(fs.existsSync(ledgerFile))throw Error('Retain immutable previous scripted ledger');
  const state={schema:'hps-native-scripted-upstream/1',provider_called:false,request_limit:SCRIPTED_LIMIT,output_cap:OUTPUT_LIMIT,counts:{},rows:[],rejections:[]},pending=new Map();
  const persist=()=>fs.writeFileSync(ledgerFile,JSON.stringify(state,null,2),{mode:0o600});persist();
@@ -48,6 +49,8 @@ export async function startScriptedUpstream({ledgerFile,controlSecret,policyRoot
    const chunks=[];let bytes=0;for await(const b of req){bytes+=b.length;if(bytes>1024*1024)throw Error('oversized_body');chunks.push(b);}const raw=Buffer.concat(chunks);row.body_sha256=digest(raw);
    const body=validateScriptedRequest(JSON.parse(raw),url.pathname),markers=requestMarkers(body);Object.assign(row,{max_tokens:url.pathname==='/v1/messages'?body.max_tokens:null,markers:markers.present,marker:markers.selected,state:'accepted'});persist();
    if(url.pathname.endsWith('/count_tokens')){row.state='complete';persist();json(200,{input_tokens:11});return;}
+   const render=renderConfig?renderResponse(body,renderConfig):null;
+   if(render){row.render=render.metadata;row.state='complete';persist();res.writeHead(200,{'content-type':'text/event-stream'});res.end(render.stream);return;}
    const policy=policyRoot?policyResponse(body,policyRoot):null;
    if(policy){row.policy=policy.metadata;row.state='complete';persist();res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache','request-id':'req_scripted_'+state.rows.length});res.end(policy.stream);return;}
    const frame=scriptedEvents(markers.selected,body.model);res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache','request-id':'req_scripted_'+state.rows.length});res.flushHeaders();res.write(frame.prefix);row.state='streaming';persist();
