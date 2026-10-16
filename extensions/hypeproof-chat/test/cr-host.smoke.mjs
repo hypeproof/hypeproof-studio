@@ -92,7 +92,7 @@ await test("CR-09 negative: after a remove, the next turn carries no element tex
   // The provider's handlers are these calls, not copies of them.
   assert.match(providerSrc, /clearElementContext\(\): void \{\s*if \(this\.elementQueue\.clear\(\)\) this\.postElementPreview\(\);/);
   assert.match(providerSrc, /let userTextForModel = withElementText\(/);
-  assert.match(providerSrc, /const effectiveImages = turnImages\(images, pageImage, element\);/);
+  assert.match(providerSrc, /let effectiveImages = turnImages\(images, pageImage, element\);/);
   assert.match(providerSrc, /element: this\.elementQueue\.preview\(\)/);
 });
 
