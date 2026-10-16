@@ -1,10 +1,10 @@
 // A4 (ADR 0011; spec §2.3, §5.4, §13.2 A4, §15): the front-line orchestrator's switch.
 //
 // 1. Byte-identity: without a served roster this seat may use, runSdkCoach does exactly
-//    what it does on Studio main without A4. A matrix of profiles × served values × host
+//    what it does on the pre-A4 email branch. A matrix of profiles × served values × host
 //    arguments runs through the real runSdkCoach with a scripted CLI; what the CLI would
 //    receive (prompt, options, the MCP server, canUseTool's answers, the stream's
-//    callbacks) is hashed and compared with digests taken on main trees without A4 with
+//    callbacks) is hashed and compared with digests taken on the pre-A4 branch with
 //    this same matrix (BASE, section 1). Cases with the orchestrator on must differ
 //    (positive control), and a one-field change must be noticed (negative control).
 // 2. The switch-off inventory (ORCHESTRATOR_SURFACES): with the switch off there is no
@@ -13,7 +13,7 @@
 // 3. A full consult turn through runSdkCoach against a fake gateway.
 //
 // Run: node --experimental-strip-types test/orchestrator-switch.smoke.mjs
-// Record the base digests (only on a main tree without A4, with this file copied in):
+// Record on pre-A4 624b214f with the approved #1527 policy delta and this test copied in:
 //   HPS_A4_RECORD_BASE=1 node --experimental-strip-types test/orchestrator-switch.smoke.mjs
 
 import assert from "node:assert/strict";
@@ -171,7 +171,7 @@ function envDelta(env) {
  * One run of the real runSdkCoach with a scripted CLI. Returns everything observable: the
  * query input, canUseTool's answers to PROBES, the approvals asked, and the callbacks.
  */
-async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }) {
+async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST, emailAutomationHost }) {
   const seen = { approvals: [], deltas: [], activities: [], usage: [], events: [], fetches: [] };
   let decisions = [];
   const sdk = fakeSdk(async ({ options }) => {
@@ -209,6 +209,7 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
       return { approved: true, actor: "policy" };
     },
     ...(browserHost ? { browserHost } : {}),
+    ...(emailAutomationHost ? { emailAutomationHost } : {}),
     ...(host
       ? {
           orchestrator: {
@@ -221,6 +222,11 @@ async function observeTurn({ profile, served, host, browserHost = BROWSER_HOST }
           },
         }
       : {}),
+  }).catch(error => {
+    // The email branch fails closed on an unmanaged 429. A served orchestrator
+    // owns its bounded retry policy; recording the error keeps both contracts visible.
+    if (error.name !== "SdkApiError" || error.status !== 429) throw error;
+    return { failed: true, error: error.name, status: error.status };
   });
   const call = sdk.calls[0];
   const { env, ...rest } = call.options;
@@ -329,30 +335,30 @@ const ok = (name) => {
   console.log(`✓ ${name}`);
 };
 
-// ── 1. Byte-identity with Studio main ───────────────────────────────────────
-// Taken with HPS_A4_RECORD_BASE=1 on main trees without A4: all ten cases of a profile have
-// the same digest there, because nothing before A4 reads the served `orchestrator` value or
-// the host's `orchestrator` argument. The first eight were taken at 7b8a315 (A1+A2+A3
-// merged) and came out identical at d2a73755, d3ebcbd1 and 48cf6d86. The two publish
-// profiles were taken at 48cf6d86, where one-click publish (#1650) added publish_site.
+// ── 1. Byte-identity with the pre-A4 email branch ───────────────────────────────────────
+// Taken with HPS_A4_RECORD_BASE=1 on the independent pre-A4 email branch at
+// 624b214f. Its unmanaged 429 fails immediately, so the snapshot includes that
+// error; orchestrator seats still own the bounded busy retry and finish normally.
+// Independently applied #1527 to that pre-A4 source: browser/subagent profile
+// grants are age-independent; the email-specific gate stays on email tools only.
+// Only kidsPolluted and unknownTier changed; all adult digests are unchanged.
+// All ten cases per profile match there: no pre-A4 code reads the roster or host.
 const BASE = {
-  kidsChat: "e4650ad1dc31c51b",
-  // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
-  // carry their own browser flag's tools. Re-taken on the #1527 merge; the other eight are unchanged.
-  kidsPolluted: "b5acb3ff355601bf",
-  adultRW: "7ddfb7c2911645e8",
-  adultWide: "df0a1ba6e0920f98",
-  adultSubagents: "d07543df34fa6401",
-  adultCR: "6cda00d7ffa4fdd6",
-  minorFlagAdultTier: "99035f6bafb010d6",
-  unknownTier: "bfef4df1d7d9b589",
-  adultPublishOnly: "277052a7471ddaf3",
-  adultBrowserPublish: "39edc7360c618388",
+  kidsChat: "b4a9319497b84e59",
+  kidsPolluted: "90f33380959c3fa2",
+  adultRW: "dc75a1c8a5319846",
+  adultWide: "83e6259002a714f2",
+  adultSubagents: "f23a5e09897c354f",
+  adultCR: "c1d3a929179497ef",
+  minorFlagAdultTier: "a12db54f43846784",
+  unknownTier: "4db3527580d1e09c",
+  adultPublishOnly: "0cd0b3747f2ce46a",
+  adultBrowserPublish: "0faf1e3fdbdd8c94",
 };
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
   const offDrift = CASES.filter((c) => !c.on && digest(observed[c.name].snapshot) !== BASE[c.name.split("/")[0]]);
-  assert.deepEqual(offDrift.map((c) => c.name), [], "a turn without the orchestrator drifted from main");
+  assert.deepEqual(offDrift.map((c) => c.name), [], "a turn without the orchestrator drifted from pre-A4 624b214f");
   // Positive control: the cases that are on really differ, so the comparison can see A4.
   const onCases = CASES.filter((c) => c.on);
   assert.equal(onCases.length, 6, "six adult profiles with a roster and a host");
@@ -366,7 +372,7 @@ const BASE = {
   const tampered2 = structuredClone(observed["adultRW/roster/none"].snapshot);
   tampered2.env.set.CLAUDE_CODE_GATEWAY_HINT_HEADERS = "1";
   assert.notEqual(digest(tampered2), BASE.adultRW, "an added env pin changes the digest");
-  ok(`byte-identity: ${CASES.length - onCases.length} turns without the orchestrator equal main (no host, no roster, a disabled or malformed roster, minors and unknown tiers with a roster, publish seats); the ${onCases.length} on-cases differ; a planted hook or env pin is caught`);
+  ok(`byte-identity: ${CASES.length - onCases.length} turns without the orchestrator equal pre-A4 624b214f (no host, no roster, a disabled or malformed roster, minors and unknown tiers with a roster, publish seats); the ${onCases.length} on-cases differ; a planted hook or env pin is caught`);
 }
 
 // ── 2. The switch-off inventory ─────────────────────────────────────────────
@@ -397,6 +403,8 @@ function surfacesOf({ call, seen }) {
   const none = { mcpTools: [], hookEvents: [], cliHeaders: [], cliEnv: [], serviceRoutes: [], approvalKinds: [], events: [] };
   for (const c of CASES.filter((x) => !x.on)) {
     const o = observed[c.name];
+    assert.deepEqual(o.snapshot.end, { failed: true, error: "SdkApiError", status: 429 }, "unmanaged budget refusal fails immediately");
+    assert.deepEqual(o.seen.deltas, [], "no answer is consumed after an unmanaged refusal");
     assert.deepEqual(surfacesOf(o), none, `${c.name}: switch off, no orchestrator surface`);
     // canUseTool denies both tools as ungranted (never asks, never runs them).
     for (const name of SURF.mcpTools) {
@@ -459,6 +467,27 @@ function surfacesOf({ call, seen }) {
   assert.ok(!matrixLog.some((l) => /roster not used: (absent|served off)/.test(l)));
   assert.equal(fs.existsSync(path.join(WS, ".hypeproof")), false, "no turn above created the archive folder");
   ok(`inventory: ${CASES.filter((x) => !x.on).length} switch-off turns show no orchestrator tool, hook, header, env pin, request, approval kind or event, and deny both tools; the ${CASES.filter((x) => x.on).length} on-turns show every one; the legacy subagents go only with the roster`);
+}
+
+// Combined grant path: the email server stays separate, while an orchestrator
+// without a browser host still gets its own tools. Missing email hosts grant none.
+{
+  const profile = { ...PROFILES.adultRW, automations: { enabled: true, provider: "gmail", appsScript: true, maxRecipients: 20 } };
+  const emailAutomationHost = { isAllowed: () => true, isAppsScriptAllowed: () => true, isSharedRunner: () => true, runtime: {}, confirmSend: async () => false };
+  const { value: both } = await quietly(() => observeTurn({ profile, served: ROSTER, host: {}, browserHost: null, emailAutomationHost }));
+  const options = both.call.options;
+  assert.deepEqual(Object.keys(options.mcpServers).sort(), ["hypeproof", "hypeproof_email"]);
+  assert.deepEqual(options.mcpServers.hypeproof.tools.map(t => t.name), ["consult", "site_check"]);
+  assert.ok(options.mcpServers.hypeproof_email.tools.some(t => t.name === "apps_script_run"));
+  assert.match(options.systemPrompt, /Installed Studio execution contract: shared Google runner/);
+  assert.deepEqual(both.snapshot.end, { failed: false });
+  const signal = new AbortController().signal;
+  assert.equal((await options.canUseTool("mcp__hypeproof_email__apps_script_run", {}, { signal })).behavior, "allow");
+  assert.equal((await options.canUseTool("mcp__hypeproof__browser_read", {}, { signal })).behavior, "deny");
+  const { value: absent } = await quietly(() => observeTurn({ profile, served: ROSTER, host: {}, browserHost: null }));
+  assert.deepEqual(Object.keys(absent.call.options.mcpServers), ["hypeproof"]);
+  assert.equal((await absent.call.options.canUseTool("mcp__hypeproof_email__apps_script_run", {}, { signal })).behavior, "deny");
+  ok("combined email and orchestrator grants: separate servers, shared-runner guidance retained, no borrowed browser or missing-host email grants");
 }
 
 // ── 3. A full consult turn through runSdkCoach against a fake gateway ───────

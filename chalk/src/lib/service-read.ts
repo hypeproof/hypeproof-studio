@@ -33,8 +33,9 @@ export async function forwardServiceRead(
   const target = `${resolveServiceOrigin(c.env)}/admin/chalk/cohorts/${encodeURIComponent(cohortId)}/${suffix}${search}`;
   try {
     const upstream = await fetch(target, {
-      method: "GET", headers, signal: AbortSignal.timeout(8_000), redirect: "error",
+      method: "GET", headers, signal: AbortSignal.timeout(8_000), redirect: "manual",
     });
+    if (upstream.status >= 300 && upstream.status < 400) throw new Error('Service redirect refused');
     const out = new Headers({
       "content-type": upstream.headers.get("content-type") ?? "application/json; charset=utf-8",
       "cache-control": "no-store",

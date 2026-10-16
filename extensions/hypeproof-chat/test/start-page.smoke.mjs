@@ -271,3 +271,19 @@ console.log('PASS shouldHideSidebar: tabGroups × chatViewVisible four cases');
   assert.equal(starts,startsBefore+1,'panel 없는데 openChat()이 openInEditor를 불렀다');
   console.log('PASS openChat(): panel present calls openInEditor, absent is noop');
 }
+
+// Reclaim only the owned welcome panel; editors and a transferred chat stay open.
+{
+  let disposals = 0;
+  const beforeCommands = commands.length;
+  page.panel = { viewColumn: 1, dispose() { disposals++; } };
+  page.candidate = { token: 'synthetic-pending-candidate' };
+  assert.equal(page.closeForAutomationPreview(), 1);
+  assert.equal(disposals, 1);
+  assert.equal(page.panel, undefined);
+  assert.equal(page.candidate, undefined);
+  assert.equal(page.closeForAutomationPreview(), undefined);
+  assert.equal(disposals, 1, 'a transferred chat or user editor is never closed');
+  assert.equal(commands.length, beforeCommands, 'no global close-editor or layout commands');
+  console.log('PASS automation canvas reclaim: only owned welcome panel closes, column preserved');
+}

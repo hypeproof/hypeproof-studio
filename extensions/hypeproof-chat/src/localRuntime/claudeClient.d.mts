@@ -9,6 +9,7 @@ export function runClaude(args: {
   model?: string;
   messages: Array<{ role: string; content: string }>;
   signal: AbortSignal;
+  timeout?: number;
   onDelta: (text: string) => void;
   toolServer: { url: string; token: string };
 }): Promise<{ model: string; usage: unknown }>;

@@ -406,17 +406,30 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private accessScope:string|undefined;
   private accessCheckedAt=0;
   private accessLoad:Promise<void>|undefined;
+  private pendingFundingSelection?:{id:string;accessScope:string|undefined;activityScope:string|undefined;service:string};
+  private applyPendingFundingSelection():void {
+    const pending=this.pendingFundingSelection;
+    if(!pending)return;
+    const same=pending.accessScope===this.accessScope&&pending.activityScope===activityConnections(this.context)?.scope&&pending.service===vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
+    if(!same){this.pendingFundingSelection=undefined;if(this.accessState)this.accessState={...this.accessState,pendingSelection:undefined,notice:'연결이 바뀌었어요. 이번 작업의 이용권을 다시 선택해 주세요.'};return;}
+    if(this.hasActiveStream()||this.connectionChanging)return;
+    if(this.accessState?.status==='unknown'){this.accessState={...this.accessState,notice:'선택은 보관했어요. 사용량을 새로고침하면 이용권을 확인하고 적용합니다.'};return;}
+    this.pendingFundingSelection=undefined;
+    if(this.accessState?.view?.choices.some(c=>c.id===pending.id&&c.active)){this.accessState={...this.accessState,selected:pending.id,pendingSelection:undefined,notice:'선택한 이용권을 다음 작업부터 사용합니다.'};this.logChannel?.appendLine('[access] funding_selection applied');}
+    else if(this.accessState)this.accessState={...this.accessState,pendingSelection:undefined,notice:'이 이용권을 선택할 수 없어요. 사용량을 새로고침한 뒤 사용 가능한 이용권을 골라 주세요.'};
+  }
   private async loadAccess(force=false):Promise<void>{
+    const proxy=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
     const token=await this.context.secrets.get(TOKEN_KEY);
-    const scope=token?createHash('sha256').update(token).digest('hex'):undefined;
+    const scope=token?createHash('sha256').update(proxy+'\0'+token).digest('hex'):undefined;
     if(scope!==this.accessScope){this.accessScope=scope;this.accessState=undefined;this.accessCheckedAt=0;this.accessLoad=undefined;}
     if(!token)return;
     if(!force&&this.accessState&&Date.now()-this.accessCheckedAt<10000)return;
     if(this.accessLoad)return this.accessLoad;
-    const proxy=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
     const selected=this.accessState?.selected;
-    const pending=(async()=>{try{const view=await fetchAccessView(proxy,token);if(await this.context.secrets.get(TOKEN_KEY)===token)this.accessState={status:'ready',view,selected:this.accessState?.selected??selected};}
-      catch{if(await this.context.secrets.get(TOKEN_KEY)===token)this.accessState={status:'unknown',selected,notice:'사용량 미확인 · 새로고침해 주세요.'};}
+    const current=async()=>await this.context.secrets.get(TOKEN_KEY)===token&&proxy===vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')&&this.accessScope===scope;
+    const pending=(async()=>{try{const view=await fetchAccessView(proxy,token);if(await current())this.accessState={status:'ready',view,selected:this.accessState?.selected??selected,pendingSelection:this.accessState?.pendingSelection,notice:this.accessState?.status==='ready'?this.accessState.notice:undefined};}
+      catch{if(await current())this.accessState={status:'unknown',selected:this.accessState?.selected??selected,pendingSelection:this.accessState?.pendingSelection,notice:'사용량 미확인 · 새로고침해 주세요.'};}
       finally{if(this.accessScope===scope){this.accessCheckedAt=Date.now();this.accessLoad=undefined;}}})();
     this.accessLoad=pending;return pending;
   }
@@ -687,7 +700,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /** The output channel — where a diagnosis leaves its verdict. Same channel as the fallback notice (#476). */
-  voiceLogChannel(): vscode.OutputChannel {
+  coachLogChannel(): vscode.OutputChannel {
     this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
     return this.logChannel;
   }
@@ -718,7 +731,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       idle: () => !this.hasActiveStream(),
       postToChat: (text) => this.postAppReply(text),
       notice: (text) => this.postPageNotice(text),
-      log: (line) => this.voiceLogChannel().appendLine(line),
+      log: (line) => this.coachLogChannel().appendLine(line),
       stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
       store: this.context.globalState,
       endpoints: this.publishEndpoints ?? { refused: [] },
@@ -817,7 +830,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       await this.projectOpener(switched.folder);
     } catch (err) {
-      this.voiceLogChannel().appendLine(`[switch] open ${switched.folder}: ${err instanceof Error ? err.message : String(err)}`);
+      this.coachLogChannel().appendLine(`[switch] open ${switched.folder}: ${err instanceof Error ? err.message : String(err)}`);
       this.postPageNotice(err instanceof ActivityConnectionError ? err.message : `폴더를 열지 못했어요: ${switched.folder}`);
     }
   }
@@ -2237,6 +2250,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return true;
   }
 
+  /** Keep the automation canvas visible beside an editor-hosted conversation. */
+  automationPreviewColumn(): vscode.ViewColumn {
+    return this.editorChat ? vscode.ViewColumn.Two : vscode.ViewColumn.One;
+  }
+
   private connectionChanging = false;
   private draftWrites: Promise<void> = Promise.resolve();
   private draftSource?: vscode.Webview;
@@ -2361,9 +2379,47 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
   /** #751 — approval wait is reported as such, never as a failure or as "running". */
   opsRuntime(): { idleMs: number; status: "idle" | "running" | "waiting_approval" } {
-    const status = (this.pendingApprovals?.size ?? 0) > 0 ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
+    const status = ((this.pendingApprovals?.size ?? 0) > 0 || this.automationConversation?.isWaiting()) ? "waiting_approval" : this.hasActiveStream() ? "running" : "idle";
     return { idleMs: Date.now() - this.lastActivityAt, status };
   }
+  private emailAutomationHost?: () => Promise<import('./googleAutomationMcp').GoogleAutomationMcpHost | undefined>;
+  setEmailAutomationHost(getHost: () => Promise<import('./googleAutomationMcp').GoogleAutomationMcpHost | undefined>): void { this.emailAutomationHost = getHost; }
+
+  private automationConversation?: {
+    answer(answer: import('./automationProtocol').AutomationAnswer): Promise<void>;
+    cancel(): void;
+    isWaiting(): boolean;
+  };
+  setAutomationConversationHandlers(handlers: NonNullable<ChatPanelProvider['automationConversation']>): void { this.automationConversation = handlers; }
+  async showAutomationQuestion(question: import('./automationProtocol').AutomationQuestion | null): Promise<void> { await this.post({ type: 'automationQuestion', question }); }
+
+  /** Public intent answers belong to the conversation; private setup never does. */
+  recordAutomationAnswer(question: import('./automationProtocol').AutomationQuestion, answer: import('./automationProtocol').AutomationAnswer): void {
+    if (question.private || answer.cancelled) return;
+    const text = answer.text?.trim() || question.choices?.find(choice => choice.id === answer.choiceId)?.label;
+    const streamId = [...this.activeStreams.keys()].at(-1);
+    const timeline = streamId ? this.turnTimelines.get(streamId) : undefined;
+    if (!text || !streamId || !timeline) return;
+    const closed = timelineEnd(timeline, Date.now());
+    this.turnTimelines.set(streamId, { ...closed, baseId: timeline.baseId, seg: timeline.seg, items: [...closed.items,
+      { id: randomId(), role: 'assistant', content: question.title, createdAt: Date.now() },
+      { id: randomId(), role: 'user', content: text, createdAt: Date.now() },
+    ] });
+  }
+
+  /** Opening the workspace is free; the learner's first message starts onboarding. */
+  async beginAutomationConversation(): Promise<void> {
+    if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
+  }
+
+  /** Compatibility entry: continue the same conversation without producing a manual JSON file. */
+  async authorAutomationRecipe(_recipe: import('./automationProtocol').AutomationRecipe, goal: string): Promise<void> {
+    if (this.hasActiveStream()) throw new Error('진행 중인 AI 작업이 끝난 뒤 다시 시작해 주세요.');
+    if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|(?:sk-|ghp_|xox[baprs]-)[A-Za-z0-9_-]{12,}/i.test(goal)) throw new Error('실제 이메일 주소나 비밀값을 지운 뒤 AI에게 요청해 주세요.');
+    if (!this.focusEditor()) await vscode.commands.executeCommand('hypeproof-chat.focus');
+    await this.handleSend('다음 업무를 자동화하고 싶어요. 필요한 의도를 먼저 파악한 뒤 스킬을 저장하고, 연결과 실행은 하나씩 질문해 주세요. 실제 계정과 명단은 비공개 질문으로 받아 주세요.\n\n' + goal.slice(0, 2000), []);
+  }
+
   hasActiveStream(): boolean { return this.pendingSends > 0 || this.activeStreams.size > 0 || !!this.worldOpening || !!this.observationAssessment || (this.pendingApprovals?.size ?? 0) > 0; }
 
   refreshConfig(): Promise<void> {
@@ -3911,7 +3967,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
     const connections=activityConnections(this.context);
-    if (connections && msg.activityId && msg.activityId!==connections.scope) return;
+    if (connections && msg.activityId && msg.activityId!==connections.scope) {
+      if(msg.type==='selectFunding'){
+        this.logChannel?.appendLine('[access] funding_selection stale_activity');
+        if(this.accessState)this.accessState={...this.accessState,notice:'이전 활동 화면에서 선택했어요. 현재 활동의 이용권을 다시 선택해 주세요.'};
+        await this.postConfig();
+      }
+      return;
+    }
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
       if (source && !msg.nonce) this.draftSource=source;
@@ -3930,6 +3993,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     if (connections && (msg.type==='sendMessage'||msg.type==='retryMessage') && msg.activityId!==connections.scope) {
       await this.post({type:'streamError',streamId:'connection',error:'활동이 바뀌었습니다. 현재 활동에서 요청을 다시 확인해 주세요.'});return;
+    }
+    if (msg.type === 'automationAnswer') {
+      if (this.connectionChanging || !connections?.scope || msg.activityId !== connections.scope) { this.automationConversation?.cancel(); return; }
+      this.lastActivityAt = Date.now();
+      await this.automationConversation?.answer(msg);
+      return;
     }
     // Any message from the panel is evidence of a human. See `lastActivityAt`.
     this.lastActivityAt = Date.now();
@@ -4092,10 +4161,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case 'refreshAccess':
         await this.loadAccess(true);await this.postConfig();return;
-      case 'selectFunding':
+      case 'selectFunding': {
+        this.logChannel?.appendLine(`[access] funding_selection received pending_sends=${this.pendingSends} streams=${this.activeStreams.size} approvals=${this.pendingApprovals?.size??0} world=${!!this.worldOpening} observation=${!!this.observationAssessment}`);
+        const activityScope=activityConnections(this.context)?.scope;
+        const accessScope=this.accessScope;
+        const service=vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1');
         await this.loadAccess();
-        if(!this.hasActiveStream()&&this.accessState?.view?.choices.some(c=>c.id===msg.id&&c.active))this.accessState={...this.accessState,selected:msg.id,notice:'선택한 이용권을 다음 작업부터 사용합니다.'};
+        if(activityScope!==activityConnections(this.context)?.scope||accessScope!==this.accessScope||service!==vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1')||this.connectionChanging){this.logChannel?.appendLine('[access] funding_selection connection_changed');if(this.accessState)this.accessState={...this.accessState,notice:'연결이 바뀌었어요. 활동 전환이 끝난 뒤 이용권을 다시 선택해 주세요.'};}
+        else if(this.accessState?.view?.choices.some(c=>c.id===msg.id&&c.active)){
+          this.pendingFundingSelection={id:msg.id,accessScope:this.accessScope,activityScope,service};
+          this.accessState={...this.accessState,pendingSelection:msg.id,notice:'현재 작업이 끝나면 선택한 이용권을 적용합니다. 진행 중인 작업의 이용권은 바뀌지 않아요.'};
+          this.applyPendingFundingSelection();
+          if(this.pendingFundingSelection)this.logChannel?.appendLine('[access] funding_selection queued');
+        }else {this.logChannel?.appendLine('[access] funding_selection unavailable');if(this.accessState)this.accessState={...this.accessState,notice:'이 이용권을 선택할 수 없어요. 사용량을 새로고침한 뒤 사용 가능한 이용권을 골라 주세요.'};}
         await this.postConfig();return;
+      }
       case 'requestBudget':{
         const token=await this.context.secrets.get(TOKEN_KEY),selected=this.accessState?.selected;
         if(token&&selected){try{await sendBudgetRequest(vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token,selected,msg.note);await this.loadAccess(true);if(this.accessState)this.accessState.notice='강사에게 추가 사용 요청을 보냈습니다.';}catch(error){if(this.accessState)this.accessState.notice=error instanceof Error?error.message:'요청을 보내지 못했습니다.';}}
@@ -4176,6 +4256,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "cancelStream":
+        this.automationConversation?.cancel();
         this.activeStreams.get(msg.streamId)?.abort();
         // #497 — abort() alone tells the webview NOTHING. handleSend and
         // handleSendError both skip their posts on an aborted signal, each
@@ -4417,8 +4498,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       await this.post({type:"streamError",streamId:"activity",error:"제품 테스트가 끝난 뒤에 보내 주세요."});
       return;
     }
+    // The composer can submit again before streamStart (or from another view).
+    // Preserve that draft without ending the turn that already owns this folder.
+    if (this.pendingSends > 0) {
+      await this.post({type:'inputRejected',text,images,notice:'이미 요청을 처리하고 있어요. 추가 입력은 초안에 보관했어요.'});
+      return;
+    }
     this.pendingSends++;
     let releaseActivity: (()=>void) | undefined;
+    let completedStream: string | undefined;
     let preflightComplete=false;
     try {
     const connections=activityConnections(this.context);
@@ -4460,7 +4548,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const aid = randomId();
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
+        completedStream = uid;
         await this.appendHistory([
           { id: randomId(), role: "user", content: text, createdAt: Date.now() },
           {
@@ -4502,7 +4590,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const aid = randomId();
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
+        completedStream = uid;
         await this.appendHistory([
           { id: randomId(), role: "user", content: text, createdAt: Date.now() },
           {
@@ -4529,6 +4617,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.loadAccess();
     const fundingSource=this.accessState?.selected;
     const chosenAccess=this.accessState?.view?.choices.find(c=>c.id===fundingSource);
+    // A stale/remounted view can submit before its funding choice reaches the
+    // host. Stop before creating a stream: the SDK retries the Service's 409
+    // selection_required response and otherwise looks like a silent AI turn.
+    if (this.accessState?.view?.required && !localRuntimeConfig(vscode.env.appName, proxyUrl) && !chosenAccess?.active) {
+      const notice='이번 작업에 사용할 이용권을 선택한 뒤 다시 보내 주세요. 입력 내용은 초안에 보관했어요.';
+      this.accessState={...this.accessState,selected:undefined,notice};
+      await this.post({type:'inputRejected',text,images,notice});
+      await this.postConfig();
+      return;
+    }
     const profile=resolvedProfile?accessProfile(resolvedProfile,chosenAccess):null;
     // #751 U3 — captured ONCE for this turn: every request of the turn names the binding the turn started under.
     const bindingKey = profile?.lesson_binding?.enforced ? profile.lesson_binding.key : undefined;
@@ -4708,6 +4806,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
+    let historyCommitted = false;
     // #580 — this turn's spool recording state. spoolRuntime is the runtime that
     // **actually ran**, reflecting an SDK→proxy fallback — quantifying the cause of a
     // turn with no usage requires the recorded runtime to match reality (no silent
@@ -5144,7 +5243,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const cwd=this.resolveCoachCwd();
           if(!cwd) throw new Error('개발 작업 폴더를 먼저 여세요.');
           const chalkCtx = undefined; // student local path never has instructor chalkCtx
-          const result=await runLocalCoach({config:local,profile,cwd,
+          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          const result=await runLocalCoach({config:local,profile,cwd,emailAutomationHost,
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
             signal:ctrl.signal,onDelta,onActivity,chalkCtx,
             requestApproval:async action=>{
@@ -5164,7 +5264,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           throw new ProxyAuthError("missing", TOKEN_MISSING_FRIENDLY);
         }
         try {
+          const emailAutomationHost = profile.automations?.enabled ? await this.emailAutomationHost?.() : undefined;
+          const sdkStartedAt=Date.now();
           const sdkEnd = await runSdkCoach({
+            onDiagnostic: phase => this.coachLogChannel().appendLine(`[coach] phase=${phase} elapsed_ms=${Date.now()-sdkStartedAt}`),
+            emailAutomationHost,
             gatewayUrl: proxyUrl,
             effort,
             turnId: streamId,
@@ -5316,7 +5420,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // (parity with the proxy path, which throws on abort).
       if (!ctrl.signal.aborted) {
         clearPending();
-        void this.post({ type: "streamEnd", streamId });
+        completedStream = streamId;
         // #371 — persist the agent.md handoff fence, if the coach emitted one.
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
@@ -5332,11 +5436,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             effectiveCoachName,
           ),
         ]);
+        historyCommitted = true;
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
         tryReveal(assistantText);
       }
     } catch (err) {
+      completedStream = undefined;
       spoolStatus = "error";
       spoolErrorKind = classifyTurnError(err);
       { const e = err as { status?: unknown; kind?: unknown; requestId?: unknown }; opsFailure = { ...(typeof e?.status === "number" ? { status: e.status } : {}), ...(typeof e?.kind === "string" ? { code: e.kind } : {}), ...(typeof e?.requestId === "string" ? { requestId: e.requestId } : {}) }; }
@@ -5350,6 +5456,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
+      if (profile?.automations?.enabled && ctrl.signal.aborted && !historyCommitted) {
+        try { await this.preserveInterruptedAutomationTurn(streamId, messageId, text, assistantText, assistantCitations, effectiveCoachName); }
+        catch { void this.post({type:'activityDraftError',error:'중지한 대화를 저장하지 못했어요. 앱을 닫기 전에 필요한 내용을 복사해 주세요.'}).catch(()=>{}); }
+      }
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
       // the main loop does). A closed turn id is refused by the Service from then on; best effort, bounded by the Service.
       if (bindingKey && token) void closeTurn({ proxyUrl, token, turnId: streamId, outcome: ctrl.signal.aborted ? "aborted" : spoolStatus === "ok" ? "completed" : "failed" });
@@ -5404,12 +5514,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnTimelines.delete(streamId);
     }
     } catch (error) {
+      completedStream = undefined;
       if (preflightComplete) throw error;
       await this.post({type:"inputRejected",text,images});
       await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
     } finally {
-      try { releaseActivity?.(); } finally { this.pendingSends--; }
+      try { releaseActivity?.(); } finally {
+        this.pendingSends--;
+        // The webview flushes its parked next message on streamEnd. Release the
+        // writer before that edge, including awaited history/observation writes.
+        if(completedStream)void this.post({type:'streamEnd',streamId:completedStream});
+        if(this.pendingFundingSelection){this.applyPendingFundingSelection();void this.postConfig().catch(()=>{});}
+      }
     }
+  }
+
+  private async preserveInterruptedAutomationTurn(streamId: string, messageId: string, text: string, assistantText: string, citations: import('./protocol').Citation[], assistantName?: string): Promise<void> {
+    const items = this.finishTurnItems(streamId, messageId, assistantText, citations, assistantName)
+      .map(message => message.tool?.state === 'running'
+        ? { ...message, tool: { ...message.tool, state: 'error' as const, label: `${message.tool.label} · 중지됨 (결과 미확인)` } }
+        : message);
+    await this.appendHistory([
+      { id: randomId(), role: 'user', content: text, createdAt: Date.now() },
+      ...items,
+      { id: randomId(), role: 'assistant', assistantName, content: '이 작업은 중지됐어요. 위 내용은 중지 전까지의 대화이며, 실행 완료를 뜻하지 않아요. 저장한 스킬은 유지됩니다. 자동으로 다시 실행하지 않으니, 이어서 할 작업을 알려 주세요.', createdAt: Date.now() },
+    ]);
   }
 
   /**
@@ -5982,6 +6111,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const scope=activity?.id;
     await this.draftWrites;
     await this.loadAccess();
+    this.applyPendingFundingSelection();
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const token = await this.context.secrets.get(TOKEN_KEY);
     const profile = await this.ensureProfile();
@@ -6049,6 +6179,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
+        localSubscription:!!local,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,

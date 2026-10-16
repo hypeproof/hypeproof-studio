@@ -39,6 +39,8 @@ class DevLauncherTests(unittest.TestCase):
             root = Path(tmp); repo = root/'repo'; base = root/'installed'; state = root/'state'; state.mkdir()
             source = repo/'extensions/hypeproof-chat'; source.mkdir(parents=True)
             (source/'package.json').write_text('{"name":"hypeproof-chat"}', encoding='utf-8')
+            (source/'media').mkdir()
+            (source/'media/hypeproof-theme.json').write_text('{"colors":{"sash.hoverBorder":"#D5F279"}}', encoding='utf-8')
             payload = base/'resources/app'; shipped = payload/'extensions/hypeproof-chat'
             (shipped/'dist').mkdir(parents=True); (shipped/'webview-ui/dist').mkdir(parents=True)
             (payload/'product.json').write_text('{"nameShort":"HypeProof Studio"}', encoding='utf-8')
@@ -53,6 +55,7 @@ class DevLauncherTests(unittest.TestCase):
                 return {}
             with patch.object(dev, 'build', side_effect=build), patch.object(dev, 'app_running', return_value=False), patch.object(dev.subprocess, 'check_output', return_value='test'):
                 app = dev.prepare(repo, base, state, 'local')
+            self.assertEqual((app/'resources/app/extensions/hypeproof-chat/media/hypeproof-theme.json').read_text(), (source/'media/hypeproof-theme.json').read_text())
             receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
             self.assertEqual(receipt['extension_sha256'], dev.sha(app/'resources/app/extensions/hypeproof-chat/dist/extension.js'))
             self.assertEqual(dev.file_manifest(base), original)

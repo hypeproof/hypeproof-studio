@@ -196,18 +196,30 @@ def parse_repo(value: str) -> str:
 from issue_guard import positive_issue, validate_scoped_issue  # noqa: E402
 
 
+def github_repo(repo: str) -> str:
+    """Address GitHub by the organization path of a transferred repository.
+
+    The registry keeps the former ID until #287 migrates it. GitHub would redirect
+    that path, but then the former name is what lands in commands and output.
+    """
+    from preparation import organization_repo
+    full = parse_repo(repo)
+    return organization_repo(full) or full
+
+
 def fetch_scoped_issue(repo: str, number: int) -> dict[str, Any]:
-    path = f"repos/{repo}/issues/{number}"
+    target = github_repo(repo)
+    path = f"repos/{target}/issues/{number}"
     if os.environ.get("HYPE_PR_WORK_DIR"):
         from work_transport import exchange
         return exchange("read", {"path": path})
     response = run(["gh", "api", "--method", "GET", path])
     if response.returncode != 0:
-        raise ValueError(f"cannot read scoped issue {repo}#{number}: {response.stderr.strip() or 'GitHub API failed'}")
+        raise ValueError(f"cannot read scoped issue {target}#{number}: {response.stderr.strip() or 'GitHub API failed'}")
     try:
         return json.loads(response.stdout)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"scoped issue {repo}#{number} returned invalid JSON") from exc
+        raise ValueError(f"scoped issue {target}#{number} returned invalid JSON") from exc
 
 
 def active_members(policy: dict[str, Any]) -> list[str]:
@@ -228,7 +240,8 @@ def find_repo(policy: dict[str, Any], repo_ref: str) -> tuple[dict[str, Any], di
     wanted = parse_repo(repo_ref)
     for repo in policy["repos"].get("repositories", []):
         full = repo_full_name(repo)
-        if wanted in (full, repo.get("name")):
+        from preparation import policy_repo
+        if wanted in (full, repo.get("name")) or policy_repo(wanted) == policy_repo(full):
             return repo, policy["profiles"][repo["profile"]]
     raise ValueError(f"unknown repo in policy: {repo_ref}")
 
@@ -317,7 +330,7 @@ def fetch_pr(repo: str, pr: str) -> dict[str, Any]:
         "view",
         pr,
         "--repo",
-        parse_repo(repo),
+        github_repo(repo),
         "--json",
         "author,files,isDraft,labels,number,title,url",
     ])
@@ -380,7 +393,7 @@ def reviewer_commands(repo: str, pr_ref: str, reviewers: list[str]) -> list[list
             "edit",
             str(pr_ref),
             "--repo",
-            parse_repo(repo),
+            github_repo(repo),
             "--add-reviewer",
             reviewer,
         ]
@@ -396,7 +409,7 @@ def reviewer_cleanup_commands(repo: str, pr_ref: str, reviewers: list[str]) -> l
             "edit",
             str(pr_ref),
             "--repo",
-            parse_repo(repo),
+            github_repo(repo),
             "--remove-reviewer",
             reviewer,
         ]
@@ -521,13 +534,14 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     scoped_issue = None
     if args.apply:
         repo = parse_repo(args.repo)
-        scoped_issue = validate_scoped_issue(fetch_scoped_issue(repo, args.issue), repo, args.issue, body)
+        scoped_issue = validate_scoped_issue(fetch_scoped_issue(repo, args.issue), repo, args.issue, body,
+                                             canonical=preparation_module().policy_repo)
     cmd = [
         "gh",
         "pr",
         "create",
         "--repo",
-        parse_repo(args.repo),
+        github_repo(args.repo),
         "--base",
         args.base,
         "--head",
@@ -595,7 +609,7 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
             "merge",
             pr_ref,
             "--repo",
-            parse_repo(args.repo),
+            github_repo(args.repo),
             "--auto",
             f"--{AUTO_MERGE_METHOD}",
             "--delete-branch",
@@ -665,6 +679,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if hasattr(args, "repo") and args.repo:
+        from preparation import organization_repo, policy_repo
+        current = organization_repo(args.repo)
+        if current:
+            # A notice, not an error: automation may still pass registry IDs (#287).
+            print(f"hype-pr: {args.repo} was transferred; pass --repo {current}", file=sys.stderr)
+        args.repo = policy_repo(args.repo)
     try:
         policy = load_policy()
         findings = validate_policy(policy)

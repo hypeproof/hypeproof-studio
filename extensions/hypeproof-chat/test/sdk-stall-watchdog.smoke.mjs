@@ -290,12 +290,14 @@ console.log("✓ #403: sdk stall watchdog — silent/retry-storm turns abort wit
     assert.deepEqual(calls.deltas, ["응답", "0", "1", "2", "3"]);
   }
 
-  // Positive control for the gate — no policy: one 429 then silence is still the stall watchdog's exit.
+  // Without a busy policy, budget/concurrency rejection is actionable immediately.
   {
     const { h, calls } = handlers({ stallMs: 40 });
     const err = await consumeSdkStream(silentAfter([apiRetry(429)]), h).then(() => null, (e) => e);
-    assert.equal(err?.name, "CoachStallError", "without the policy nothing about a busy retry changes");
-    assert.equal(calls.stalls, 1);
+    assert.equal(err?.name, "SdkApiError", "a budget rejection does not wait for a silence timeout");
+    assert.equal(err?.status, 429);
+    assert.equal(calls.stalls, 0);
+    assert.equal(calls.aborted, 1);
   }
 
   // Deadline order (A1 note E5): busy (90 s) < Studio's stall (240 s) < the CLI's own idle floor (300 s, 2.1.299).

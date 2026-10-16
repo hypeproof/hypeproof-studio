@@ -39,6 +39,7 @@ import {
   MCP_CR_VERIFY_TOOLS,
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
+import { GOOGLE_AUTOMATION_MCP_TOOLS, APPS_SCRIPT_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS } from "./googleAutomationMcp.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
@@ -366,6 +367,10 @@ export function permittedMcpToolsFor(
   const orchestrator = orchestratorBindingFor(profile, roster);
   if (orchestrator?.consult) tools.push(MCP_CONSULT);
   if (orchestrator?.siteCheck) tools.push(MCP_SITE_CHECK);
+  if (!isMinorTier(profile) && profile.automations?.enabled === true && profile.automations.provider === "gmail") {
+    tools.push(...GOOGLE_AUTOMATION_MCP_TOOLS);
+    if (profile.automations.appsScript === true) tools.push(...APPS_SCRIPT_MCP_TOOLS);
+  }
   // One-click publish: its own grant, independent of `sdk_tools.browser` — the profile's
   // `publishing` block is the owner (the same gate the toolbar button uses), minors never.
   if (sitePublishAllowed(profile.publishing, isMinorProfile(profile)).ok) tools.push(MCP_PUBLISH_SITE);
@@ -1129,6 +1134,12 @@ export function buildSdkGatewayEnv(
   delete env.CLAUDE_CODE_OAUTH_TOKEN;
   env.ANTHROPIC_BASE_URL = anthropicBaseUrlFor(args.proxyUrl);
   env.ANTHROPIC_AUTH_TOKEN = args.token;
+  // Bundled CLI 0.3.207 starts an unawaited generate_session_title request
+  // beside the first SDK prompt unless this switch is set. That paid helper
+  // competes with the learner's turn for the native-trial single request lease
+  // (trial_busy/429). Studio owns its conversation title; never inherit an
+  // ambient opt-in to the CLI's separate model-generated terminal title.
+  env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
   // The env scrub above cannot reach credentials stored on DISK. The CLI reads
   // those from its config dir and prefers them over ANTHROPIC_AUTH_TOKEN, so the
   // coach must get a config dir of its own or the workshop token is ignored
@@ -1493,7 +1504,8 @@ export function profileToAgentOptions(
  * or 400 (request the gateway refuses outright) will fail all 10 retries
  * identically. 403 is NOT here — the worker uses it for session-window/roster
  * states that the SDK doesn't retry (they surface as a terminal error), and
- * 5xx/429/529 stay retryable (the SDK's backoff is the right behavior there).
+ * 5xx/529 stay retryable. Capacity 429 is handled separately without an auth
+ * error, because a budget refusal needs action rather than CLI backoff.
  */
 export const SDK_FATAL_AUTH_STATUSES: ReadonlySet<number> = new Set([400, 401]);
 
@@ -1511,6 +1523,22 @@ export function sdkFatalAuthStatus(msg: Record<string, unknown>): number | null 
 /** True for the SDK's retry tick (`{type:"system", subtype:"api_retry"}`). */
 export function isSdkRetryEvent(msg: Record<string, unknown>): boolean {
   return msg["type"] === "system" && msg["subtype"] === "api_retry";
+}
+
+/** SDK API failures are control messages, not assistant prose. Never display
+ * their raw body: a gateway error can contain private request details. A 429
+ * also covers a hard budget reservation refusal, so waiting through CLI retries
+ * cannot be assumed to help. Leave retry to an explicit learner action. */
+function sdkApiFailure(msg: Record<string, unknown>): Error | null {
+  const rateLimit = (isSdkRetryEvent(msg) && msg.error_status === 429)
+    || (msg.type === 'assistant' && msg.error === 'rate_limit');
+  const assistantFailure = msg.type === 'assistant' && (msg.isApiErrorMessage === true
+    || ['authentication_failed','oauth_org_not_allowed','billing_error','overloaded','invalid_request','model_not_found','server_error','unknown'].includes(String(msg.error ?? '')));
+  if (!rateLimit && !assistantFailure) return null;
+  return Object.assign(new Error(rateLimit
+    ? '요청이 제한됐어요. 이용권·사용량과 실행 중인 작업을 확인한 뒤 다시 보내 주세요. 잔액이 있어도 AI 서비스의 요청 제한이 적용될 수 있어요. (429)'
+    : 'AI 서비스가 요청을 처리하지 못했어요. 작업 파일은 보존돼 있습니다. 연결과 이용권을 확인한 뒤 다시 보내 주세요.'),
+    { name: 'SdkApiError', ...(rateLimit ? { status: 429 } : {}) });
 }
 
 // ── First-token / idle stall watchdog (#403) ────────────────────────────────
@@ -2229,6 +2257,19 @@ export async function consumeSdkStream(
         h.abortQuery();
         throw h.makeFatalAuthError(fatal);
       }
+      // A served orchestrator owns its bounded busy-retry episode. Keep its
+      // synthetic provider errors out of conversation while waiting; seats
+      // without that policy fail immediately on budget/concurrency refusal.
+      const managedBusyFailure = busy && (
+        (isSdkRetryEvent(msg) && SDK_BUSY_STATUSES.has(Number(msg.error_status)))
+        || (msg.type === 'assistant' && ['rate_limit', 'overloaded'].includes(String(msg.error)))
+      );
+      if (managedBusyFailure && msg.type === 'assistant') continue;
+      const apiFailure = managedBusyFailure ? null : sdkApiFailure(msg);
+      if (apiFailure) {
+        h.abortQuery();
+        throw apiFailure;
+      }
       // Retry ticks are the pathology, not progress — they must not renew the
       // watchdog budget.
       if (!isSdkRetryEvent(msg)) {
@@ -2405,6 +2446,7 @@ export function isClassifiedSdkToolName(toolName: string): boolean {
     (MCP_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_BROWSER_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_CR_VERIFY_TOOLS as readonly string[]).includes(toolName) ||
+    (ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName) ||
     (MCP_ORCHESTRATOR_TOOLS as readonly string[]).includes(toolName) ||
     toolName === MCP_PUBLISH_SITE
   );
@@ -2821,6 +2863,12 @@ export function evaluateSdkToolUse(args: {
     // subagent's own tool calls come back through this same function
     // (sdk.d.ts: CanUseTool options carry agentID for sub-agent context).
     return { decision: "ask" };
+  }
+
+  // The registered host rechecks capability and requires an exact-preview native
+  // confirmation for every send. This dispatch grant cannot approve delivery.
+  if ((ALL_AUTOMATION_MCP_TOOLS as readonly string[]).includes(toolName)) {
+    return { decision: "allow" };
   }
 
   // ── Orchestrator tools (A2; spec §3.2, §5.1, §6.1) ───────────────────────

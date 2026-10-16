@@ -13,6 +13,8 @@ import {
 } from "../../src/chatTimeline";
 import { onHostMessage, postToHost } from "./vscode";
 import { runVoiceCapabilityProbe } from "./voiceProbe";
+import { UserQuestionCard } from "./UserQuestionCard";
+import type { AutomationQuestion } from "../../src/automationProtocol";
 import { ChatPanel } from "./ChatPanel";
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
@@ -277,6 +279,9 @@ function reducer(state: State, action: Action): State {
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  // Private setup and previews never enter the message timeline or composer.
+  const [automationQuestion, setAutomationQuestion] = useState<AutomationQuestion | null>(null);
+  const automationEnabled = useRef(false);
   const scope = useRef<string | undefined>();
   const [shouldCrash, setShouldCrash] = useState(false);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
@@ -293,10 +298,13 @@ export function App() {
   useEffect(() => {
     const off = onHostMessage((msg: HostMessage) => {
       if (msg.type === "config") {
-        if (scope.current !== msg.config.activity?.id) setIncomingImage(null);
+        if (scope.current !== msg.config.activity?.id) { setIncomingImage(null); setAutomationQuestion(null); }
+        automationEnabled.current = msg.config.profile?.automations?.enabled === true;
+        if (!automationEnabled.current) setAutomationQuestion(null);
         scope.current = msg.config.activity?.id;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
       switch (msg.type) {
+        case "automationQuestion": if (automationEnabled.current || msg.question === null) setAutomationQuestion(msg.question); break;
         // #897 (VO-01) — 음성 capability 프로브. **원시 관측만** 돌려보내고 판정은
         // 호스트가 한다. 화면에 아무것도 바꾸지 않는다 — 이건 계측기다.
         case "probeVoiceCapability": {
@@ -352,7 +360,7 @@ export function App() {
     const trimmed = text.trim();
     const hasImages = !!images && images.length > 0;
     const hasAttachments = !!attachments && attachments.length > 0;
-    if ((!trimmed && !hasImages && !hasAttachments) || state.streamId) return;
+    if ((!trimmed && !hasImages && !hasAttachments) || state.streamId || automationQuestion) return;
     // D-028 — only the stage ids go to the host. The photos are not put on the bubble as
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
@@ -541,7 +549,9 @@ export function App() {
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
         verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
-        sendLocked={!!state.verify?.running}
+        questionId={automationQuestion?.id}
+        questionPanel={state.config?.profile?.automations?.enabled && automationQuestion ? <UserQuestionCard key={`${state.config.activity?.id ?? 'activity'}:${automationQuestion.id}`} question={automationQuestion} onAnswer={answer => postToHost({ ...answer, activityId: state.config?.activity?.id })} /> : null}
+        sendLocked={!!state.verify?.running || !!automationQuestion}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });

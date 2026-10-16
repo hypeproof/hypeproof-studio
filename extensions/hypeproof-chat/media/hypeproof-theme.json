@@ -5,6 +5,7 @@
   "colors": {
     "foreground": "#F2F4E8",
     "focusBorder": "#D5F279",
+    "sash.hoverBorder": "#D5F279",
     "selection.background": "#52603F",
     "widget.border": "#35483A",
     "editor.background": "#151D19",

@@ -116,6 +116,8 @@ export interface ChatConfig {
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
+  /** Display-only: host-confirmed local subscription AI route; never an execution grant. */
+  localSubscription?: boolean;
   effort?: { value: CourseEffort; allowed: CourseEffort[] };
   effortNotice?: string;
   effortResult?: { state: 'loading' | 'observed' | 'unknown'; requests: EffortRequestRecord[]; truncated?: boolean };
@@ -170,6 +172,8 @@ export interface CoachInfo {
 /** Kept in this file (not in lessonBinding.ts) because the webview build type-checks protocol.ts and must not follow Node-side imports. */
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
+  /** Service-owned opt-in, never inferred from a local setting. */
+  automations?: { enabled: boolean; provider: 'gmail'; appsScript?: boolean; maxRecipients?: number; oauthClientId?: string };
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
   lesson_binding?: LessonBindingView;
   /** #751 G2 — present when this code is an instructor's learner-condition rehearsal of `version`. Data only: grants nothing. */
@@ -414,6 +418,9 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | ({ type: 'automationAnswer' } & import('./automationProtocol').AutomationAnswer)
+  | { type: 'automationAction'; action: import('./automationProtocol').AutomationAction }
+  | { type: 'automationClose' }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
@@ -580,7 +587,9 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
-  | {type:'inputRejected';text:string;images?:string[]}
+  | { type: 'automationQuestion'; question: import('./automationProtocol').AutomationQuestion | null }
+  | { type: 'automationView'; view: import('./automationProtocol').AutomationView }
+  | {type:'inputRejected';text:string;images?:string[];notice?:string}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}
   /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */

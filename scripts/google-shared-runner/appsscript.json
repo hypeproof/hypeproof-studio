@@ -1,0 +1,19 @@
+{
+  "timeZone": "Asia/Seoul",
+  "runtimeVersion": "V8",
+  "exceptionLogging": "NONE",
+  "executionApi": {
+    "access": "ANYONE"
+  },
+  "oauthScopes": [
+    "openid",
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/script.external_request"
+  ],
+  "urlFetchWhitelist": [
+    "https://openidconnect.googleapis.com/",
+    "https://sheets.googleapis.com/",
+    "https://gmail.googleapis.com/"
+  ]
+}

@@ -33,6 +33,7 @@ import {
   type SdkMcpFactory,
   type ZodLike,
 } from "./browserMcp";
+import { buildGoogleAutomationMcpServer, GOOGLE_AUTOMATION_MCP_SERVER, GOOGLE_AUTOMATION_MCP_TOOLS, ALL_AUTOMATION_MCP_TOOLS, type GoogleAutomationMcpHost } from "./googleAutomationMcp";
 import {
   resolveOrchestrator,
   startOrchestratorTurn,
@@ -109,6 +110,7 @@ export class CoachStallError extends Error {
   }
 }
 
+export type SdkDiagnosticPhase = 'starting' | 'binary_ready' | 'sdk_ready' | 'tools_loading' | 'tools_ready' | 'config_ready' | 'query_options_ready' | 'query_created' | 'first_event' | 'stalled';
 /**
  * The Agent SDK exposes a rejected gateway request as status-only `api_retry`.
  * The host may use this marker to re-read `/profile`; the error itself stays
@@ -123,6 +125,8 @@ export class SdkGatewayAuthError extends ProxyAuthError {
 }
 
 export interface SdkCoachArgs {
+  /** Fixed phase names only: never emit prompts, credentials, paths or raw SDK diagnostics. */
+  onDiagnostic?: (phase: SdkDiagnosticPhase) => void;
   effort?: import('./protocol').CourseEffort;
   turnId?: string;
   fundingSource?: string;
@@ -187,6 +191,7 @@ export interface SdkCoachArgs {
    * browser-less. Implemented by chatPanelProvider (it has the vscode API).
    */
   browserHost?: BrowserMcpHost;
+  emailAutomationHost?: GoogleAutomationMcpHost;
   /**
    * A4 (ADR 0011) — the front-line orchestrator host. Read only when the served profile
    * carries a roster this seat may use (resolveOrchestrator: an adult seat and a
@@ -517,6 +522,8 @@ function abortError(): Error {
  * both runtimes and the fallback inside one guard.
  */
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
+  const diagnostic = (phase: SdkDiagnosticPhase) => { try { args.onDiagnostic?.(phase); } catch { /* Diagnostics cannot break a turn. */ } };
+  diagnostic('starting');
   // Bridge the caller's signal to an SDK AbortController UP FRONT — before any
   // await — so a stop during loadSdk() still cancels. (addEventListener added
   // after the signal already fired would never run.)
@@ -544,7 +551,9 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     console.info(`[coach] claude binary via ${binary.source}: ${binary.path}`);
   }
 
+  diagnostic('binary_ready');
   const sdk = args.sdk ?? (await loadSdk());
+  diagnostic('sdk_ready');
   // A4 — the front-line orchestrator (ADR 0011). On only with the host's arguments, an
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
@@ -611,48 +620,88 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
 
   let mcpServers: Options["mcpServers"];
   let grantedMcpTools: readonly string[] = [];
-  // A4 — since A2 the permitted list can hold consult/site_check without the browser
-  // grant, so each part registers from its own names: the server's own tools (browser,
-  // CR, publish_site) with their grants and a host, as before; the orchestrator tools
-  // only on an orchestrator turn. Without a roster the first part is the whole list and
-  // nothing else changes.
-  const orchestratorNames = MCP_ORCHESTRATOR_TOOLS as readonly string[];
-  const serverGrant = opts.permittedMcpTools.filter((t) => !orchestratorNames.includes(t));
-  const orchestratorGrant = opts.permittedMcpTools.filter((t) => orchestratorNames.includes(t));
-  const registerServer = serverGrant.length > 0 && !!args.browserHost;
-  if (registerServer || (orchestratorTurn && orchestratorGrant.length > 0)) {
-    const hasFactory =
-      typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
+  diagnostic('tools_loading');
+  // Each server registers only its own granted tools; absent hosts cannot borrow
+  // capabilities from the email, browser/publishing or orchestrator path.
+  const emailNames: readonly string[] = ALL_AUTOMATION_MCP_TOOLS;
+  const orchestratorNames: readonly string[] = MCP_ORCHESTRATOR_TOOLS;
+  const emailGrants = opts.permittedMcpTools.filter(name => emailNames.includes(name));
+  const browserGrants = opts.permittedMcpTools.filter(name => !emailNames.includes(name) && !orchestratorNames.includes(name));
+  const orchestratorGrants = opts.permittedMcpTools.filter(name => orchestratorNames.includes(name));
+  const registerBrowser = !!args.browserHost && browserGrants.length > 0;
+  const registerEmail = !!args.emailAutomationHost && GOOGLE_AUTOMATION_MCP_TOOLS.every(name => emailGrants.includes(name));
+  if (registerBrowser || registerEmail || (orchestratorTurn && orchestratorGrants.length > 0)) {
+    const hasFactory = typeof sdk.createSdkMcpServer === "function" && typeof sdk.tool === "function";
     const z = hasFactory ? args.zod ?? (await loadZod()) : null;
     if (hasFactory && z) {
       const factory: SdkMcpFactory = { createSdkMcpServer: sdk.createSdkMcpServer!, tool: sdk.tool! };
-      const extra = orchestratorTurn ? orchestratorTurn.mcpTools(factory, z, orchestratorGrant) : { tools: [], names: [] };
-      const server = registerServer
-        ? buildHypeproofMcpServer(
-            withServerTools(factory, extra.tools),
-            z,
-            args.browserHost!,
-            // CR-02 — register the Experiment Browser tools only where they were granted; the
-            // browser and publish_site parts likewise follow their own grants, so a cohort with
-            // only the publish grant gets a server carrying publish_site alone.
-            { ...crMcpRegistration(opts.permittedMcpTools), ...hypeproofMcpRegistration(opts.permittedMcpTools) },
-          )
-        : extra.tools.length > 0
-          ? buildHypeproofToolsOnlyServer(factory, extra.tools)
-          : null;
+      const servers: NonNullable<Options["mcpServers"]> = {};
+      const grants: string[] = [];
+      const extra = orchestratorTurn ? orchestratorTurn.mcpTools(factory, z, orchestratorGrants) : { tools: [], names: [] };
+      const server = registerBrowser
+        ? buildHypeproofMcpServer(withServerTools(factory, extra.tools), z, args.browserHost!,
+          { ...crMcpRegistration(browserGrants), ...hypeproofMcpRegistration(browserGrants) })
+        : extra.tools.length > 0 ? buildHypeproofToolsOnlyServer(factory, extra.tools) : null;
       if (server) {
-        mcpServers = {
-          [HYPEPROOF_MCP_SERVER_NAME]: server as NonNullable<Options["mcpServers"]>[string],
-        };
-        grantedMcpTools = [...(registerServer ? serverGrant : []), ...extra.names];
+        servers[HYPEPROOF_MCP_SERVER_NAME] = server as NonNullable<Options["mcpServers"]>[string];
+        grants.push(...(registerBrowser ? browserGrants : []), ...extra.names);
       }
+      if (args.emailAutomationHost && registerEmail) {
+        const host = args.emailAutomationHost;
+        const humanWait = async <T>(work: () => Promise<T>): Promise<T> => {
+          awaitingUser++;
+          const cancel = () => host.cancelPendingQuestion?.();
+          args.signal.addEventListener('abort', cancel, { once: true });
+          try {
+            if (args.signal.aborted) throw abortError();
+            return await work();
+          } finally { args.signal.removeEventListener('abort', cancel); awaitingUser--; }
+        };
+        const server = buildGoogleAutomationMcpServer(factory, z, {
+          ...host,
+          isAllowed: () => !args.signal.aborted && host.isAllowed(),
+          refreshAuthorization: host.refreshAuthorization ? () => host.refreshAuthorization!() : undefined,
+          isAppsScriptAllowed: () => !args.signal.aborted && host.isAppsScriptAllowed?.() === true && emailGrants.includes('mcp__hypeproof_email__apps_script_run'),
+          appsScriptUpload: host.appsScriptUpload ? () => humanWait(() => host.appsScriptUpload!()) : undefined,
+          appsScriptSetup: host.appsScriptSetup ? () => humanWait(() => host.appsScriptSetup!()) : undefined,
+          appsScriptDeploy: host.appsScriptDeploy ? () => humanWait(() => host.appsScriptDeploy!()) : undefined,
+          appsScriptRun: host.appsScriptRun ? mode => humanWait(() => host.appsScriptRun!(mode)) : undefined,
+          confirmSend: preview => humanWait(() => host.confirmSend(preview)),
+          askUser: host.askUser ? input => humanWait(() => host.askUser!(input)) : undefined,
+          connectGoogle: host.connectGoogle ? mode => humanWait(() => host.connectGoogle!(mode)) : undefined,
+          configureSheet: host.configureSheet ? mode => humanWait(() => host.configureSheet!(mode)) : undefined,
+          publishSkill: host.publishSkill ? parentId => humanWait(() => host.publishSkill!(parentId)) : undefined,
+          installSkill: host.installSkill ? id => humanWait(() => host.installSkill!(id)) : undefined,
+        });
+        if (server) {
+          servers[GOOGLE_AUTOMATION_MCP_SERVER] = server as NonNullable<Options["mcpServers"]>[string];
+          grants.push(...emailGrants.filter(name => (GOOGLE_AUTOMATION_MCP_TOOLS as readonly string[]).includes(name) || host.isAppsScriptAllowed?.() === true));
+        }
+      }
+      if (grants.length) mcpServers = servers;
+      grantedMcpTools = grants;
     } else {
-      console.warn(
-        "[coach] profile grants browser MCP tools but the SDK/zod factory is unavailable — running browser-less",
-      );
+      console.warn("[coach] managed MCP factory unavailable; capabilities remain disabled");
     }
   }
 
+  // Installed host capabilities take precedence over stale lesson text. Attach
+  // this guide only after the permitted shared tools were actually registered.
+  if (args.emailAutomationHost?.isSharedRunner?.() === true
+      && args.emailAutomationHost.isAppsScriptAllowed?.() === true
+      && grantedMcpTools.includes('mcp__hypeproof_email__apps_script_run')) {
+    opts.systemPrompt += '\n\n' + [
+      'Installed Studio execution contract: shared Google runner. This host contract supersedes earlier personal Apps Script upload/deployment instructions for this activity; it grants no additional tools or permissions.',
+      'Understand the learner’s work through one necessary question at a time using mcp__hypeproof_email__ask_user. Reuse known answers and saved skills. Never ask for JSON, account addresses or Sheet URLs in public conversation. Save the portable recipe with skill_save; use google_connect and sheet_configure mode:"reuse" for private setup. Then call apps_script_prepare followed by apps_script_run mode:"preview". All tool names use the mcp__hypeproof_email__ prefix.',
+      'A recipe edit is not persisted by describing it or repeating JSON. Call skill_save with the intended complete recipe and require its saved:true result before claiming a save or opening publication review. Change only requested fields; recipe title/description are distinct from the email subject/body. A cancelled:true tool result is not evidence of a connection failure or a card failing to open. Briefly report that the action was not completed and wait for a new request, without automatic retry or invented diagnosis. Explain outcomes in plain Korean without internal receipt fields or publication IDs.',
+      'The installed recipe store is restricted to this cohort. Describe visibility:cohort as 우리 반 공유, never public publication or an internet-wide store. Resolve a title through skill_list without id before selecting an ID returned by the store; never invent an ID or ask the learner for one. List responses contain metadata, not compared recipe bodies: contentsCompared:false cannot establish that two versions have the same content. Keep IDs in tool calls, not learner-facing tables or summaries.',
+      'Show the actual workflow in workflow_plan: goal → skill and goal → connect → sheet; prepare depends on skill and connect, preview on prepare and sheet. Send and publish are optional independent branches after preview. Omit upload and deploy nodes. The host alone advances steps from observed results; no planned, ready or compatibility response proves execution.',
+      'Studio manages the common Google execution code; each learner runs with their own Google identity and private data. Do not create personal scripts or ask learners to upload, deploy, change Cloud projects, grant IAM or enable Apps Script API access. apps_script_upload/deploy exist only for compatibility; ready:true with uploaded:false/deployed:false is not an upload or deployment. On recoveryRequired follow the safe host reason and nextTool, using apps_script_setup for private reconnect, retry or an operator blocker. Respect cancellation.',
+      'A successful preview is not send approval. On nextAction:wait_for_user, report the safe result briefly and end the turn. Neither reviewed:true nor dismissal allows sending or sharing. Call mode:"send" only after a new explicit learner request and let the host obtain exact recipient/content approval. Never retry uncertain sends. A changed skill or account requires a fresh preview. Sharing requires separate host approval and includes only the portable recipe, never private account data or execution credentials.',
+    ].join('\n');
+  }
+
+  diagnostic('tools_ready');
   // REQ-M13 — the coach's CLI gets a config dir of its own so stored Claude
   // Code / Claude Desktop credentials can't outrank the workshop token. The
   // path is derived purely (sdkConfigDirFor); creating it is the host's job.
@@ -664,6 +713,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   } catch (err) {
     console.warn(`[coach] could not create SDK config dir ${sdkConfigDir}:`, err);
   }
+  diagnostic('config_ready');
 
   // Pure option/env construction (allowedTools/settingSources pinned to [],
   // ANTHROPIC_BASE_URL derived from proxyUrl, ANTHROPIC_API_KEY scrubbed) is
@@ -807,10 +857,19 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     abortController,
   };
 
+  diagnostic('query_options_ready');
   const stream = sdk.query({ prompt, options });
+  diagnostic('query_created');
+  const diagnosedStream = (async function* () {
+    let first = true;
+    for await (const event of stream) {
+      if (first) { first = false; diagnostic('first_event'); }
+      yield event;
+    }
+  })();
   // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
   // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
-  const observed = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
+  const observed = orchestratorTurn ? orchestratorTurn.tap(diagnosedStream) : diagnosedStream;
   // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
   // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
   const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
@@ -828,8 +887,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   //   both statuses here: the workshop token is the only credential on this
   //   path, so a 400/401 means that token is unusable — replacing it is the
   //   recovery, retrying is not.
+  // - 429 or a synthetic assistant API failure → immediate safe error notice;
+  //   the learner can fix funding/concurrency before explicitly retrying.
   // - stall watchdog → CoachStallError (#403, REQ-M26): everything the 4xx
-  //   fast-fail does NOT cover (429/529/5xx/connection retries, or a first turn
+  //   fast-fail does NOT cover (529/5xx/connection retries, or a first turn
   //   that simply never produces a token) left the student on "생각하는 중… ✨"
   //   with no error and no way out. After stallTimeoutMs of no progress we
   //   abort the query and surface a retry-me message.
@@ -861,6 +922,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     ...(args.onUsage ? { onUsage: args.onUsage } : {}),
     stallMs,
     makeStallError: (status) => {
+      diagnostic('stalled');
       // Developer-side signal — the student only ever sees the Korean line.
       console.warn(
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +
@@ -873,7 +935,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // ~2 budgets total before the watchdog calls it wedged, a never-returning
     // one still ends in a message rather than a hang).
     // A4 — a running consult or site check is host work, not a stall.
-    isTurnBlocked: () => awaitingUser > 0 || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
+    isTurnBlocked: () => awaitingUser > 0 || args.emailAutomationHost?.isAwaitingUser?.() === true || (orchestratorTurn?.isWorking() ?? false) || Date.now() - lastToolCallAt < stallMs,
     ...(busy ? { busy } : {}),
   }).then(
     // A4 — the session keeps how the turn ended (F5 on the next turn); null when it threw.

@@ -1701,3 +1701,103 @@ html, body, #root {
 .hps-evidence-note textarea, .hps-evidence-note input, .hps-evidence-note select { width: 100%; box-sizing: border-box; }
 .hps-evidence-variants { border-collapse: collapse; }
 .hps-evidence-variants td, .hps-evidence-variants th { border: 1px solid var(--vscode-panel-border, #8884); padding: 2px 4px; text-align: left; }
+
+/* While answering, keep the current question above optional classroom controls. */
+.hps-question-anchor { flex-shrink: 0; }
+.hps-shell-question .hps-question-anchor .hps-user-question { margin-top: 0; }
+.hps-shell-question > .hp-help,
+.hps-shell-question > .hps-artifact-approval { display: none; }
+.hps-shell-question .hps-input-area .hps-model-selection,
+.hps-shell-question .hps-input-area .hps-effort { display: none; }
+.hps-shell-question .hps-input-area .hps-access[open] { max-height: 120px; overflow-y: auto; }
+.hps-shell-question > .hps-messages { min-height: 0; }
+
+/* EA-01/03: keep optional rails out of the automation workspace's height budget.
+   This also overrides legacy effort/mission rules that scroll the entire shell. */
+.hps-shell.hps-shell-automation { min-height: 0; overflow: hidden; }
+.hps-shell-automation > .hps-header { flex-shrink: 0; }
+.hps-conversation-support { flex: 0 0 auto; margin: 0; padding: 0 12px; border-bottom: 1px solid var(--hp-line); max-height: 25%; overflow-y: auto; }
+.hps-conversation-support > summary { cursor: pointer; padding: 10px 0; font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); }
+.hps-shell-automation > .hps-messages { flex: 1 1 0; min-height: 0; overscroll-behavior: contain; }
+.hps-shell-automation > .hps-messages > * { flex-shrink: 0; }
+.hps-shell-automation > .hps-input-area { flex: 0 0 auto; max-height: 45%; box-sizing: border-box; overflow-y: auto; }
+.hps-shell-automation .hps-access { margin: 0; padding: 6px 8px; }
+.hps-shell-automation .hps-access[open] { box-sizing: border-box; max-height: 14vh; }
+.hps-shell-automation .hps-access:not([open]) .hps-access-summary { display: none; }
+.hps-shell-automation.hps-shell-question .hps-input { display: none; }
+.hps-question-return { text-align: left; padding: 6px 0; border: 0; background: transparent; color: var(--vscode-textLink-foreground, #6aa6df); cursor: pointer; }
+.hps-conversation-support > summary:focus-visible,
+.hps-question-return:focus-visible { outline: 2px solid var(--vscode-focusBorder, #6aa6df); outline-offset: -2px; }
+.hps-conversation-settings { flex-shrink: 0; max-height: 16vh; overflow-y: auto; }
+.hps-conversation-settings > summary { cursor: pointer; padding: 4px 0; font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); }
+.hps-conversation-settings > summary:focus-visible { outline: 2px solid var(--vscode-focusBorder, #6aa6df); outline-offset: -2px; }
+
+/* EA-01/03: a focused conversation, one current question, and quiet utility controls. */
+.hps-shell-automation {
+  background: var(--hp-bg);
+  color: var(--hp-ink);
+  --vscode-descriptionForeground: var(--hp-muted);
+  --vscode-focusBorder: var(--hp-accent);
+  --vscode-button-background: var(--hp-accent);
+  --vscode-button-foreground: var(--hp-ink-on-accent);
+  --vscode-input-background: var(--hp-bg);
+  --vscode-input-foreground: var(--hp-ink);
+  --vscode-input-border: var(--hp-line);
+  --vscode-panel-border: var(--hp-line);
+  --vscode-editor-background: var(--hp-panel);
+}
+.hps-shell-automation > .hps-header { gap: 12px; padding: 10px 14px; align-items: flex-start; }
+.hps-shell-automation .hps-coach-name { margin: 0; padding: 7px 0; font-size: 14px; text-align: left; }
+.hps-conversation-actions { flex: 0 1 auto; min-width: 0; font-size: 12px; }
+.hps-conversation-actions > summary { cursor: pointer; padding: 7px 10px; color: var(--hp-muted); border: 1px solid var(--hp-line); border-radius: 6px; }
+.hps-conversation-actions > div { display: grid; gap: 4px; margin-top: 6px; }
+.hps-header .hps-conversation-actions button { margin: 0; padding: 8px 10px; text-align: left; font-size: 12px; white-space: normal; }
+.hps-shell-automation :is(button, summary, select, input, textarea):focus-visible { outline: 2px solid var(--hp-accent); outline-offset: 2px; }
+.hps-shell-automation > .hps-conversation-support { padding-inline: 14px; }
+.hps-shell-automation > .hps-conversation-support > summary { padding-block: 7px; }
+.hps-shell-automation > .hps-messages { padding: 20px 14px; gap: 20px; scroll-padding-block: 16px; }
+.hps-shell-automation .hps-msg-body { font-size: 13px; line-height: 1.75; min-width: 0; box-sizing: border-box; }
+.hps-shell-automation .hps-msg-assistant .hps-msg-body { background: transparent; border: 0; padding: 0; max-width: 100%; }
+.hps-shell-automation .hps-msg-user .hps-msg-body { background: var(--hp-panel); border: 1px solid var(--hp-line); color: var(--hp-ink); max-width: 94%; }
+.hps-shell-automation .hps-msg-role { opacity: 1; color: var(--hp-muted); }
+.hps-shell-automation .hps-msg-assistant .hps-msg-role > span::before { content: none; }
+.hps-shell-automation > .hps-input-area { padding: 10px 14px; gap: 8px; background: var(--hp-bg); }
+.hps-shell-automation .hps-conversation-settings { max-height: 16vh; overscroll-behavior: contain; }
+.hps-shell-automation .hps-conversation-settings > summary { padding: 6px 0; }
+.hps-shell-automation .hps-conversation-settings[open] { border-bottom: 1px solid var(--hp-line); padding-bottom: 8px; }
+/* Keep the conversation usable on short Windows screens with expanded settings,
+   including systems whose Korean fallback font has taller line metrics. */
+@media (max-height: 600px) {
+  .hps-shell-automation > .hps-input-area { max-height: 40%; }
+}
+.hps-shell-automation .hps-access-embedded { border: 0; padding: 8px 0; max-height: none; overflow: visible; }
+.hps-shell-automation .hps-access-heading { font-size: 12px; margin: 6px 0; }
+.hps-shell-automation .hps-access-embedded .hps-access-summary { display: block; color: var(--hp-muted); line-height: 1.6; }
+.hps-shell-automation .hps-access select { box-sizing: border-box; }
+.hps-shell-automation .hps-input { padding: 10px; border: 1px solid var(--hp-line); border-radius: 10px; background: var(--hp-panel); }
+.hps-shell-automation .hps-input:focus-within { border-color: var(--hp-accent); }
+.hps-shell-automation .hps-input textarea { background: transparent; border: 0; padding: 2px; line-height: 1.6; min-height: 44px; }
+.hps-shell-automation .hps-input textarea:focus { outline: none; }
+.hps-shell-automation .hps-input button { min-height: 34px; padding: 7px 16px; border-radius: 6px; }
+.hps-shell-automation .hps-user-question { background: var(--hp-panel); border: 1px solid var(--hp-line); border-top: 3px solid var(--hp-accent); border-radius: 10px; margin-bottom: 4px; }
+.hps-shell-automation .hps-user-question h3 { font-size: 18px; line-height: 1.5; letter-spacing: -.2px; }
+.hps-shell-automation .hps-question-label { color: var(--hp-muted); }
+.hps-shell-automation .hps-question-option { border-radius: 7px; }
+.hps-shell-automation .hps-question-option[data-selected=true] { background: var(--hp-bg); border-color: var(--hp-accent); }
+.hps-shell-automation .hps-question-actions button { min-height: 38px; border-radius: 6px; }
+.hps-shell-automation .hps-question-cancel { color: var(--hp-muted); }
+.hps-shell-automation .hps-question-return { margin: 0; padding: 7px 0; color: var(--hp-ink); font-size: 12px; }
+@media (max-width: 340px) {
+  .hps-shell-automation > .hps-header,
+  .hps-shell-automation > .hps-messages,
+  .hps-shell-automation > .hps-input-area { padding-inline: 10px; }
+  .hps-shell-automation .hps-user-question { padding: 14px 12px; }
+  .hps-shell-automation .hps-question-actions { flex-direction: column; align-items: stretch; }
+}
+
+/* Without a lesson mission, activity identity fits in one quiet row. */
+.hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) { position: static; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; }
+.hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) .hp-mission-activity,
+.hps-shell-automation > .hp-mission:not(:has(.hp-mission-sentence)) .hp-mission-foot { margin: 0; }
+
+.hps-conversation-actions .hps-layout-hint { max-width: 190px; margin: 4px 0 0; padding: 9px 10px 2px; border-top: 1px solid var(--hp-line); color: var(--hp-muted); font-size: 11px; line-height: 1.6; }

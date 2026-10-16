@@ -69,6 +69,7 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
       ANTHROPIC_BASE_URL: "https://api.anthropic.com",
       ANTHROPIC_AUTH_TOKEN: "stale-token",
       CLAUDE_CODE_OAUTH_TOKEN: "sk-ant-oat01-dev-machine-oauth",
+      CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "0",
     },
     { proxyUrl: "https://api.hypeproof-ai.xyz/v1", token: "hps-workshop-token" },
   );
@@ -76,6 +77,7 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
   // Gateway routing: the SDK-recognized vars point at the worker.
   assert.equal(env.ANTHROPIC_BASE_URL, "https://api.hypeproof-ai.xyz");
   assert.equal(env.ANTHROPIC_AUTH_TOKEN, "hps-workshop-token");
+  assert.equal(env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", "ambient settings cannot enable a competing paid SDK title request");
 
   // No-local-API-key invariant: the workshop token is the ONLY credential.
   assert.equal("ANTHROPIC_API_KEY" in env, false, "ambient ANTHROPIC_API_KEY must be scrubbed");
@@ -97,6 +99,7 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
   const clean = buildSdkGatewayEnv({ PATH: "/bin" }, { proxyUrl: "http://localhost:8787/v1", token: "t" });
   assert.equal(clean.ANTHROPIC_BASE_URL, "http://localhost:8787");
   assert.equal(clean.ANTHROPIC_AUTH_TOKEN, "t");
+  assert.equal(clean.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", "first-run classroom seats do not start an auxiliary model title request");
   assert.equal("ANTHROPIC_API_KEY" in clean, false, "no API key is ever required or invented");
 }
 
@@ -281,9 +284,9 @@ const { MCP_BROWSER_TOOLS } = await import("../src/browserMcp.ts");
 // Runtime and polluted-minor profiles with full and minimal arguments, plus
 // four env-only builds. The digests are of JSON.stringify(entry) — key order
 // included — computed with this same matrix at ea9ba109 (A1: SDK 0.3.299
-// pinned, before any A2 change). The one deliberate difference,
-// CLAUDE_CODE_AUTO_COMPACT_WINDOW, is asserted and removed before hashing (see
-// SDK_AUTO_COMPACT_WINDOW_TOKENS: it keeps 0.3.207's compaction point).
+// pinned, before any A2 change). The compaction and auxiliary-title env pins
+// are explicitly asserted and removed before hashing. All other fields remain
+// locked to A1; disabling paid title requests avoids the single-lease collision.
 // <matrix>
 const SNAPSHOT_PROFILES = {
   kidsChat: { game: { template_tier: "kids-basic" } },
@@ -365,18 +368,20 @@ function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAg
     "env.concurrency": "ebf07480b7a59f73",
   };
   const digest = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
-  const withoutCompactionPin = (name, value) => {
+  const withoutDeliberateEnvPins = (name, value) => {
     const env = name.startsWith("env.") ? value : value.env;
     if (env) {
-      assert.equal(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", `${name}: the compaction pin is the one deliberate env change`);
+      assert.equal(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", `${name}: the historical compaction point remains pinned`);
       delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+      assert.equal(env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE, "1", `${name}: auxiliary title requests stay disabled`);
+      delete env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE;
     }
     return value;
   };
 
   const entries = snapshotEntries(helpers);
   assert.deepEqual(Object.keys(entries), Object.keys(A1_TIP_DIGESTS), "the matrix covers the locked cases");
-  const drifted = Object.entries(entries).filter(([name, value]) => digest(withoutCompactionPin(name, value)) !== A1_TIP_DIGESTS[name]);
+  const drifted = Object.entries(entries).filter(([name, value]) => digest(withoutDeliberateEnvPins(name, value)) !== A1_TIP_DIGESTS[name]);
   assert.deepEqual(
     drifted.map(([name]) => name),
     [],
@@ -392,7 +397,7 @@ function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAg
     },
   });
   assert.notEqual(
-    digest(withoutCompactionPin("options.adultWide", tampered["options.adultWide"])),
+    digest(withoutDeliberateEnvPins("options.adultWide", tampered["options.adultWide"])),
     A1_TIP_DIGESTS["options.adultWide"],
     "a widened tool list must change the locked digest",
   );

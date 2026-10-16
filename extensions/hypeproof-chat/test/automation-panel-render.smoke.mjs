@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+const result = await build({stdin:{contents:`import React from 'react'; import {renderToStaticMarkup} from 'react-dom/server'; import {AutomationPanel} from './src/AutomationPanel'; import {defaultAutomationRecipe} from '../src/automationProtocol'; const view={recipe:defaultAutomationRecipe(),sheetUrl:'',range:'A1:D21',configured:true,connected:true,busy:false,notice:'',error:null,records:[{id:'row1',status:'unknown'}],items:[],selected:null,preview:{id:'p',createdAt:1,messages:[{id:'row1',to:'learner@example.test',subject:'Review <script> injection',body:'Exact body before sending'}]}}; export const html=renderToStaticMarkup(<AutomationPanel view={view} onAction={()=>{}} onClose={()=>{}}/>);`,loader:'tsx',resolveDir:fileURLToPath(new URL('../webview-ui/',import.meta.url))},bundle:true,platform:'node',format:'cjs',write:false,loader:{'.css':'empty'}});
+const context={exports:{},module:{exports:{}},TextEncoder,TextDecoder,console,process,require:createRequire(import.meta.url),setTimeout,clearTimeout,setImmediate,clearImmediate};context.exports=context.module.exports;
+vm.runInNewContext(result.outputFiles[0].text,context);
+const html=context.module.exports.html;
+assert.match(html,/learner@example.test/);assert.match(html,/Exact body before sending/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);assert.match(html,/전송 여부 확인 필요/);assert.match(html,/Gmail 보낸편지함/);assert.match(html,/<button[^>]*disabled=""[^>]*>1명에게 전송 요청/);
+console.log('PASS automation render: exact review text, escaped content, uncertain status and disabled resend');

@@ -13,6 +13,7 @@
 // Run: node --experimental-strip-types test/sdk-fastfail.smoke.mjs
 
 import assert from "node:assert/strict";
+import { errorBannerPresentation } from '../webview-ui/src/errorBannerPresentation.ts';
 
 const { sdkFatalAuthStatus, consumeSdkStream, extractSdkText, SDK_FATAL_AUTH_STATUSES } =
   await import("../src/sdkCoachHelpers.ts");
@@ -76,7 +77,7 @@ function handlers(overrides = {}) {
   assert.equal(sdkFatalAuthStatus(apiRetry(400, "invalid_request")), 400, "400 api_retry is fatal");
 
   // Retryable statuses stay with the SDK's backoff (correct behavior there).
-  assert.equal(sdkFatalAuthStatus(apiRetry(429, "rate_limit")), null, "429 keeps retrying");
+  assert.equal(sdkFatalAuthStatus(apiRetry(429, "rate_limit")), null, "429 is a capacity failure, never an auth failure");
   assert.equal(sdkFatalAuthStatus(apiRetry(529, "overloaded")), null, "529 keeps retrying");
   assert.equal(sdkFatalAuthStatus(apiRetry(500, "server_error")), null, "500 keeps retrying");
   assert.equal(sdkFatalAuthStatus(apiRetry(null)), null, "connection error (null status) keeps retrying");
@@ -141,6 +142,33 @@ function handlers(overrides = {}) {
   await consumeSdkStream(mockStream([apiRetry(529, "overloaded"), assistantMsg("복구됨")], []), h);
   assert.deepEqual(calls.deltas, ["복구됨"], "stream continues past a retryable event");
   assert.equal(calls.aborted, 0);
+}
+
+// A rate-limit refusal is terminal for this turn, including the real Windows
+// synthetic assistant envelope. Do not wait for another event, emit its raw
+// request details, or infer token expiry or a confirmed budget shortage.
+for (const failure of [apiRetry(429, 'rate_limit'), {
+  type:'assistant',error:'rate_limit',isApiErrorMessage:true,
+  message:{model:'<synthetic>',content:[{type:'text',text:'API Error: Request rejected (429) private synthetic request details'}]},
+}, {type:'assistant',error:'invalid_request',message:{model:'<synthetic>',content:[{type:'text',text:'private synthetic request details'}]}}]) {
+ const pulled=[],{h,calls}=handlers();
+ const err=await consumeSdkStream(mockStream([failure,assistantMsg('must not continue')],pulled),h).then(()=>null,e=>e);
+ assert.equal(err?.name,'SdkApiError');assert.equal(calls.aborted,1);assert.equal(pulled.length,1);
+ assert.deepEqual(calls.deltas,[]);assert.equal(err.message.includes('private'),false);
+ assert.equal(err.message.includes('만료'),false);
+ if(err.status===429){
+   assert.doesNotMatch(err.message,/예산.*때문/);assert.match(err.message,/AI 서비스의 요청 제한/);
+   assert.equal(errorBannerPresentation(err.message).title,'AI 요청이 제한됐어요',
+     'a real SDK status-only refusal must not render as a confirmed ended pass');
+ }
+ assert.notEqual(errorBannerPresentation(err.message).title,'이용권을 더 쓸 수 없어요');
+ if(failure.error==='rate_limit')assert.equal(err.status,429);
+}
+{
+ const {h,calls}=handlers();
+ await consumeSdkStream(mockStream([assistantMsg('429 오류의 뜻을 설명할게요'),{...assistantMsg('이어지는 일부 응답'),error:'max_output_tokens'}],[]),h);
+ assert.equal(calls.aborted,0,'ordinary prose and output truncation are not API rejection envelopes');
+ assert.equal(calls.deltas.length,2);
 }
 
 // ─── user stop still wins: AbortError before any processing (REQ-M8) ─────────
@@ -264,6 +292,7 @@ console.log("✓ #320: sdk fast-fail — 401/400 api_retry aborts within one eve
       apiRetry(429, "rate_limit"),
     ]);
     assert.ok(r.err instanceof SdkBusyAbortError, "a synthetic error message does not buy more retries");
+    assert.deepEqual(r.calls.deltas, [], "raw provider errors never enter the conversation");
   }
 
   // Not busy: other 5xx and first-byte-timeout retries (0.3.299 `no_response`, status null).
@@ -277,13 +306,18 @@ console.log("✓ #320: sdk fast-fail — 401/400 api_retry aborts within one eve
     assert.equal(mixed.pulled.length, 5, "aborted on the third busy retry, the fifth event");
   }
 
-  // Negative control for the gate — no policy, three 429s: today's silent retries.
+  // Without an explicit busy policy, a hard budget/concurrency refusal must
+  // stop immediately; the learner decides whether to retry after recovery.
   {
     const pulled = [];
     const { h, calls } = handlers();
-    await consumeSdkStream(mockStream([apiRetry(429), apiRetry(429), apiRetry(429), assistantMsg("결국 응답")], pulled), h);
-    assert.deepEqual(calls.deltas, ["결국 응답"], "without the policy the turn waits the retries out");
-    assert.equal(calls.aborted, 0);
+    await assert.rejects(
+      consumeSdkStream(mockStream([apiRetry(429), apiRetry(429), assistantMsg("결국 응답")], pulled), h),
+      error => error.name === 'SdkApiError' && error.status === 429,
+    );
+    assert.deepEqual(calls.deltas, []);
+    assert.equal(calls.aborted, 1);
+    assert.equal(pulled.length, 1);
   }
 
   // The 401 fast-fail still wins under the policy (#320 unchanged).

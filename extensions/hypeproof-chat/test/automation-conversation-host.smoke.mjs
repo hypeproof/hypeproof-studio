@@ -1,0 +1,225 @@
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { createRequire } from 'node:module';
+import vm from 'node:vm';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { automationNamespace, createAutomationLedger } from '../src/automationLedger.ts';
+import { buildGoogleAutomationMcpServer } from '../src/googleAutomationMcp.ts';
+const storage=await mkdtemp(join(tmpdir(),'hps-conversation-host-'));
+const recipe={schema:'hps-email-automation/1',category:'email',title:'자료 요청',description:'반복 자료 요청 메일',subjectTemplate:'{{name}}님 자료 요청',bodyTemplate:'{{document}}를 {{dueDate}}까지 부탁드립니다.',columns:{email:'이메일',name:'이름',document:'서류',dueDate:'기한'}};
+let token='synthetic-participant',grant=true,handlers,question=null,started=0,panelCount=0,connected=0,published=0,readInput,tick,googleReady=false,connectionChecks=0,previewedRecipe;
+const current={serverId:'a'.repeat(64),token,service:'https://service.example.test/v1'};
+const commands=new Map(),globals=new Map(),secrets=new Map(),questions=[],runtimeDeps=[];
+let oauthWait, cancelOAuth, oauthStarted=false, appsScriptEnabled=false;
+const questViews=[];
+let desktopClientId='synthetic-desktop-client',operatorInput='synthetic-desktop-secret',operatorOptions,devContext;
+const uri=fsPath=>({fsPath});
+const vscode={workspace:{isTrusted:true,getConfiguration:()=>({get:(key,fallback)=>key==='proxyUrl'?current.service:fallback}),fs:{}},Uri:{joinPath:(root,...parts)=>uri(join(root.fsPath,...parts)),parse:url=>({url})},ViewColumn:{One:1},env:{appName:'HypeProof Studio Dev',openExternal:async()=>true},commands:{executeCommand:async(name,key,value)=>{assert.equal(name,'setContext');assert.equal(key,'hypeproofChat.devGoogleOperator');devContext=value;},registerCommand:(name,fn)=>{commands.set(name,fn);return{dispose(){}};}},window:{showInputBox:async options=>{operatorOptions=options;return operatorInput;},showWarningMessage:async()=>undefined,createWebviewPanel:()=>{panelCount++;throw new Error('Form must not open');}}};
+const fixture={current,fetchProfileResult:async()=>({ok:true,profile:{activity_id:current.serverId,automations:{enabled:grant,provider:'gmail',maxRecipients:20,oauthClientId:desktopClientId,appsScript:appsScriptEnabled}}}),createGoogleAutomationRuntime:deps=>(runtimeDeps.push(deps),{status:async()=>({connected:false,configured:true}),ensureConnected:async()=>{connectionChecks++;return googleReady;},getConnectionIdentity:async()=>googleReady?'synthetic-connection':null,cancelConnect:()=>{if(cancelOAuth){cancelOAuth();return true;}return false;},connect:async()=>{if(oauthWait){oauthStarted=true;await oauthWait;}connected++;googleReady=true;},disconnect:async()=>{},previewLatestSheet:async({recipe})=>{previewedRecipe=structuredClone(recipe);return{id:'saved-preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:recipe.subjectTemplate,body:recipe.bodyTemplate}]};},readSheet:async input=>{readInput=input;return[['이메일','이름','서류','기한'],['synthetic@example.invalid','개인명','계약서','내일']];},send:async()=>{throw new Error('No real sending in host tests');}})};
+const bundled=await build({entryPoints:[fileURLToPath(new URL('../src/automationHost.ts',import.meta.url))],bundle:true,platform:'node',format:'cjs',write:false,external:['vscode'],plugins:[{name:'fixture',setup(b){b.onResolve({filter:/^\.\/(activityConnections|proxyClient|googleAutomation)$/},args=>({path:args.path,namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path.endsWith('activityConnections')?`export const ACTIVITY_TOKEN_KEY='token';export const activityConnections=()=>({current:globalThis.fixture.current});`:args.path.endsWith('proxyClient')?`export const fetchProfileResult=(...args)=>globalThis.fixture.fetchProfileResult(...args);`:`export const createGoogleAutomationRuntime=(...args)=>globalThis.fixture.createGoogleAutomationRuntime(...args);export const validateEmailRecipe=value=>{if(value?.schema!=='hps-email-automation/1')throw Error('Invalid recipe');return structuredClone(value);};`,loader:'js'}));}}]});
+let pauseDetail=false,releaseDetail,failPublish=false,unpublished=0,withdrawalMine=true,withdrawalStatus=200,withdrawnPublication=false;
+const versionPosts=[];
+const olderRecipe={...recipe,bodyTemplate:'Previous {{document}} by {{dueDate}}.'};
+const fetcher=async (url,init)=>{
+  if(url.endsWith('/version-root/versions'))return new Response(JSON.stringify({items:[{id:'version-next',title:recipe.title,version:2,mine:false},{id:'version-root',title:recipe.title,version:1,mine:true}]}));
+  if(url.endsWith('/version-root'))return new Response(JSON.stringify({item:{id:'version-root',title:recipe.title,version:1,mine:true},recipe:olderRecipe}));
+
+  if(url.endsWith('/withdrawal')) {
+    if(init.method==='DELETE') { if(withdrawalStatus!==200)return new Response('{}',{status:withdrawalStatus});unpublished++;return new Response(JSON.stringify({ok:true})); }
+    return new Response(JSON.stringify({item:{id:'withdrawal',title:recipe.title,version:1,mine:withdrawalMine},recipe}));
+  }
+  if(init.method==='POST' && failPublish) return new Response('{}',{status:503});
+  if(init.method==='POST' && withdrawnPublication) return new Response(JSON.stringify({error:{code:'publication_unpublished'}}),{status:409});
+  if(pauseDetail && url.endsWith('/chosen')) await new Promise(resolve=>{releaseDetail=resolve;});
+  if(init.method==='POST'){published++;const body=JSON.parse(init.body);versionPosts.push(body);assert.deepEqual(body.recipe,recipe);assert.match(body.requestId,/^skill-(?:[0-9a-f]{64}|[0-9a-f-]{36})$/);return new Response(JSON.stringify({item:{id:'published',title:recipe.title,sourceId:body.sourceId??null}}));}
+  return new Response(JSON.stringify({item:{id:'chosen',title:recipe.title},recipe,items:[{id:'chosen',title:recipe.title,description:recipe.description,mine:false}]}));
+};
+const module={exports:{}};const require=createRequire(import.meta.url);
+vm.runInNewContext(bundled.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?vscode:require(id),fixture,console,URL,Date,Buffer,TextDecoder,AbortSignal,structuredClone,fetch:fetcher,setInterval:fn=>{tick=fn;return 1;},clearInterval(){},process});
+const ctx={globalStorageUri:uri(storage),extensionUri:uri(storage),subscriptions:[],globalState:{get:key=>globals.get(key),update:async(key,value)=>globals.set(key,value)},secrets:{get:async key=>key==='token'?token:secrets.get(key),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)}};
+const host=module.exports.registerAutomationHost(ctx,{beginAutomationConversation:async()=>{started++;},setAutomationConversationHandlers:value=>{handlers=value;},showAutomationQuestion:async value=>{question=value;questions.push(value);}},{setLabels(){},show(){},showAutomation:async html=>questViews.push(html)});
+const waitQuestion=async()=>{for(let i=0;i<100;i++){if(question)return question;await new Promise(r=>setTimeout(r,2));}throw Error('No question shown');};
+try {
+  await commands.get('hypeproof-chat.emailAutomation')();assert.equal(started,1);assert.equal(panelCount,0);assert.equal(globals.size,0,'intent discovery must not save an assumed default skill');
+  const operator=commands.get('hypeproof-chat.configureGoogleDesktopClient');assert.equal(typeof operator,'function');assert.equal(devContext,true);
+  assert.equal((await operator()).configured,true);assert.equal(operatorOptions.password,true);assert.equal(operatorOptions.ignoreFocusOut,true);
+  assert.equal(secrets.size,1);assert.match([...secrets.keys()][0],/^hps\.google\.desktop-client\.[a-f0-9]{64}$/);
+  await host.getMcpHost();assert.equal(runtimeDeps.at(-1).clientSecret,'synthetic-desktop-secret');
+  assert.equal(JSON.stringify(questions).includes('synthetic-desktop-secret'),false);assert.equal(JSON.stringify([...globals.values()]).includes('synthetic-desktop-secret'),false);
+  operatorInput=undefined;assert.equal((await operator()).cancelled,true);assert.equal(secrets.size,1);
+  desktopClientId='another-synthetic-client';await host.getMcpHost();assert.equal(runtimeDeps.at(-1).clientSecret,undefined,'desktop secrets must not cross client IDs');
+  desktopClientId='synthetic-release.apps.googleusercontent.com';
+  await mkdir(join(storage,'oauth'),{mode:0o755});await writeFile(join(storage,'oauth','google-desktop-client.json'),JSON.stringify({schema:'hps-google-desktop/1',clientId:desktopClientId,clientSecret:'synthetic-packaged-identity'}),{mode:0o644});
+  assert.ok(await host.getMcpHost());assert.equal(runtimeDeps.at(-1).clientSecret,'synthetic-packaged-identity','ordinary installed resources provide app identity without a learner prompt');
+  const beforeDenied=runtimeDeps.length;grant=false;assert.equal(await host.getMcpHost(),undefined);assert.equal(runtimeDeps.length,beforeDenied);grant=true;
+  desktopClientId='mismatched.apps.googleusercontent.com';assert.equal(await host.getMcpHost(),undefined);assert.equal(await host.getMcpHost(),undefined,'failed preparation must not reuse the previous runtime');
+  await rm(join(storage,'oauth'),{recursive:true});
+  desktopClientId='synthetic-desktop-client';
+  let mcp=await host.getMcpHost();
+  let pending=mcp.askUser({question:'누구에게 어떤 안내를 반복하나요?',choices:[{id:'documents',label:'제출 자료 요청'}],allowFreeText:true});
+  let card=await waitQuestion();assert.equal(card.private,false);assert.equal(handlers.isWaiting(),true);
+  await handlers.answer({questionId:'stale',choiceId:'documents'});assert.equal(handlers.isWaiting(),true);
+  await handlers.answer({questionId:card.id,text:'actual@example.invalid'});assert.match(question.error,/비공개/);assert.equal(handlers.isWaiting(),true);
+  await handlers.answer({questionId:card.id,choiceId:'documents'});assert.deepEqual(JSON.parse(JSON.stringify(await pending)),{choiceId:'documents'});assert.equal(question,null);
+  await assert.rejects(mcp.previewSavedSkill(),/Invalid recipe|자동화 형식/);
+  await mcp.saveSkill(recipe);assert.deepEqual([...globals.values()][0],recipe);
+  const toolHandlers={};buildGoogleAutomationMcpServer({tool:(name,_description,_schema,handler)=>{toolHandlers[name]=handler;return{name};},createSdkMcpServer:value=>value},{string:()=>({})},mcp);
+  const previewResult=await toolHandlers.email_preview({recipe:JSON.stringify({...recipe,bodyTemplate:'An unsaved model rewrite must never execute.'})});
+  assert.equal(previewResult.isError,undefined);assert.deepEqual(previewedRecipe,recipe);
+  const edited={...recipe,bodyTemplate:'{{name}}님, {{document}}를 부탁드립니다.'};await mcp.saveSkill(edited);await mcp.previewSavedSkill();assert.deepEqual(previewedRecipe,edited);
+  await mcp.saveSkill(recipe);await mcp.previewSavedSkill();
+  await assert.rejects(mcp.saveSkill({...recipe,bodyTemplate:'actual@example.invalid'}),/실제 주소/);
+  pending=mcp.connectGoogle();card=await waitQuestion();assert.equal(card.kind,'connect');await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(connected,0);mcp=await host.getMcpHost();
+  // Stop after approving the connect card must cancel the callback wait and
+  // settle the graph, even though there is no pending question card anymore.
+  await mcp.workflowPlan({title:'Google 연결 시험',nodes:[{id:'connect',label:'Google 연결',dependsOn:[]}]});
+  oauthWait=new Promise((_,reject)=>{cancelOAuth=()=>reject(new Error('synthetic OAuth cancelled'));});
+  pending=mcp.connectGoogle();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});
+  while(!oauthStarted)await new Promise(resolve=>setTimeout(resolve,2));
+  assert.equal(question,null);assert.match(questViews.at(-1),/class="node running"/);
+  handlers.cancel();assert.equal((await pending).cancelled,true);assert.equal(connected,0);
+  assert.match(questViews.at(-1),/class="node blocked"/);assert.doesNotMatch(questViews.at(-1),/class="node running"/);
+  oauthWait=undefined;cancelOAuth=undefined;mcp=await host.getMcpHost();
+  googleReady=true;pending=mcp.configureSheet();card=await waitQuestion();assert.equal(card.private,true);
+  await handlers.answer({questionId:card.id,text:'wrong'});assert.match(question.error,/Sheets/);
+  await handlers.answer({questionId:card.id,text:'https://docs.google.com/spreadsheets/d/'+'s'.repeat(30)+'/edit'});
+  const summary=await pending;assert.equal(summary.rowCount,1);const questionCount=questions.length;assert.equal((await mcp.connectGoogle()).reused,true);assert.equal((await mcp.configureSheet()).reused,true);assert.equal(questions.length,questionCount,'existing Google and Sheet connection must not ask again');assert.equal((await mcp.readConfiguredSheet()).rowCount,1);assert.equal(readInput.range,'A1:D21');assert.equal(JSON.stringify(summary).includes('synthetic@example.invalid'),false);assert.equal(JSON.stringify(summary).includes('s'.repeat(30)),false);
+  // Another window's account mutation owns this same filesystem lock.
+  const otherWindowLedger=createAutomationLedger(storage,automationNamespace(current.service,current.serverId));
+  let acquired,releaseLock;const locked=new Promise(resolve=>{acquired=resolve;});
+  const held=otherWindowLedger.withLock(async()=>{acquired();await new Promise(resolve=>{releaseLock=resolve;});});await locked;
+  const checksBefore=connectionChecks;await assert.rejects(mcp.connectGoogle(),/다른 창/);
+  assert.equal(connectionChecks,checksBefore,'credential refresh must not run while another window holds the account lock');
+  releaseLock();await held;assert.equal((await mcp.connectGoogle()).reused,true);assert.equal(connectionChecks,checksBefore+1);
+  pending=mcp.publishSkill();card=await waitQuestion();assert.equal(card.kind,'publish');assert.deepEqual(card.recipe,recipe);assert.deepEqual(card.recipe,previewedRecipe,'published skill must match the saved skill used for execution');await handlers.answer({questionId:card.id,cancelled:true});const cancelledPublication=await pending;assert.equal(cancelledPublication.cancelled,true);assert.equal(cancelledPublication.approvalConfirmed,undefined);assert.equal(published,0);mcp=await host.getMcpHost();
+  pending=mcp.publishSkill();card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});const publicationReceipt=await pending;assert.equal(publicationReceipt.published,true);assert.equal(publicationReceipt.approvalConfirmed,true,'coach receives evidence of the completed private confirmation');assert.equal(publicationReceipt.visibility,'cohort','a successful publication must identify its actual restricted audience');assert.equal('recipe' in publicationReceipt,false,'receipt must not echo private card contents');assert.equal(published,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(published,1);
+  failPublish=true;pending=mcp.publishSkill();const rejectedPublication=assert.rejects(pending,/스토어 요청/);card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await rejectedPublication;assert.equal(published,1,'approval alone cannot report a successful publication');failPublish=false;mcp=await host.getMcpHost();
+  // Withdrawal is owner-bound and never erases installed skills, credentials or uncertain send outcomes.
+  const durableRecords={['d'.repeat(64)]:{id:'d'.repeat(64),status:'unknown'}};
+  await otherWindowLedger.save(durableRecords);
+  const beforeWithdrawalGlobals=JSON.stringify([...globals]);
+  const beforeWithdrawalSecrets=JSON.stringify([...secrets]);
+  withdrawalMine=false;
+  await assert.rejects(mcp.unpublishSkill('withdrawal'),/내가 공유한/);
+  assert.equal(question,null);assert.equal(unpublished,0);
+  withdrawalMine=true;
+  pending=mcp.unpublishSkill('withdrawal');card=await waitQuestion();
+  assert.equal(card.kind,'unpublish');assert.match(card.description,/이미 설치한 복사본/);
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);assert.equal(unpublished,0);
+  mcp=await host.getMcpHost();
+  pending=mcp.unpublishSkill('withdrawal');card=await waitQuestion();
+  await handlers.answer({questionId:card.id,approved:true});const withdrawal=await pending;
+  assert.equal(withdrawal.unpublished,true);assert.equal(withdrawal.approvalConfirmed,true);
+  assert.equal(withdrawal.installedCopiesRetained,true);assert.equal(withdrawal.googleConnectionsRetained,true);
+  assert.equal(unpublished,1);await handlers.answer({questionId:card.id,approved:true});assert.equal(unpublished,1);
+  assert.equal(JSON.stringify([...globals]),beforeWithdrawalGlobals);assert.equal(JSON.stringify([...secrets]),beforeWithdrawalSecrets);
+  assert.deepEqual(await otherWindowLedger.load(),durableRecords);
+  withdrawalStatus=503;
+  pending=mcp.unpublishSkill('withdrawal');const failedWithdrawal=assert.rejects(pending,/스토어 요청/);
+  card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await failedWithdrawal;assert.equal(unpublished,1);
+  withdrawalStatus=200;mcp=await host.getMcpHost();
+  pending=mcp.unpublishSkill('withdrawal');card=await waitQuestion();grant=false;
+  const revokedWithdrawal=pending.then(value=>({value}),error=>({error}));
+  await handlers.answer({questionId:card.id,approved:true});await revokedWithdrawal;assert.equal(unpublished,1);
+  grant=true;mcp=await host.getMcpHost();
+  for(const pauseAt of [1,2]) {
+    const removing=mcp.unpublishSkill('withdrawal');const removal=await waitQuestion();
+    const originalProfile=fixture.fetchProfileResult;let profileCalls=0,releaseGate;
+    fixture.fetchProfileResult=async()=>{if(++profileCalls===pauseAt)await new Promise(resolve=>{releaseGate=resolve;});return originalProfile();};
+    const answered=handlers.answer({questionId:removal.id,approved:true});
+    const outcome=removing.then(value=>({value}),error=>({error}));
+    for(let i=0;i<100&&!releaseGate;i++)await new Promise(resolve=>setTimeout(resolve,2));
+    assert.ok(releaseGate);mcp.cancelPendingQuestion();releaseGate();await answered;await outcome;
+    assert.equal(unpublished,1,'Stop before DELETE must prevent withdrawal');assert.equal(question,null);
+    fixture.fetchProfileResult=originalProfile;mcp=await host.getMcpHost();
+  }
+  // Stop must survive both answer authorization and the later store token check.
+  for(const pauseAt of [1,2]) {
+    const beforePublished=published;
+    const publishing=mcp.publishSkill();const publication=await waitQuestion();
+    const originalProfile=fixture.fetchProfileResult;let profileCalls=0,releaseGate;
+    fixture.fetchProfileResult=async()=>{if(++profileCalls===pauseAt)await new Promise(resolve=>{releaseGate=resolve;});return originalProfile();};
+    const answered=handlers.answer({questionId:publication.id,approved:true});
+    const outcome=publishing.then(value=>({value}),error=>({error}));
+    for(let i=0;i<100&&!releaseGate;i++)await new Promise(resolve=>setTimeout(resolve,2));
+    assert.ok(releaseGate);mcp.cancelPendingQuestion();releaseGate();await answered;await outcome;
+    assert.equal(published,beforePublished,'Stop before POST must prevent publication');assert.equal(question,null);
+    fixture.fetchProfileResult=originalProfile;mcp=await host.getMcpHost();
+  }
+  // A withdrawn content ID is terminal. Preparing a replacement cannot POST it
+  // without another private confirmation, even if the model retries immediately.
+  withdrawnPublication=true;const beforeRepublish=published;
+  pending=mcp.publishSkill();const withdrawnResult=assert.rejects(pending,/이전에 철회/);
+  card=await waitQuestion();await handlers.answer({questionId:card.id,approved:true});await withdrawnResult;
+  assert.equal(published,beforeRepublish);withdrawnPublication=false;mcp=await host.getMcpHost();
+  pending=mcp.publishSkill();card=await waitQuestion();assert.equal(published,beforeRepublish);
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);
+  mcp=await host.getMcpHost();pending=mcp.publishSkill();card=await waitQuestion();assert.equal(published,beforeRepublish);
+  await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).approvalConfirmed,true);
+  assert.equal(published,beforeRepublish+1);
+  // Version selection is a host review, never an automatic update or execution.
+  mcp=await host.getMcpHost();
+  const beforeVersionSetup=[...secrets];const beforeVersionConnections=connected;
+  const history=await mcp.listSkills('version-root');assert.deepEqual(history.items.map(i=>i.version),[2,1]);assert.equal(history.visibility,'cohort');assert.equal(history.contentsCompared,false,'version metadata must not claim the bodies were compared');const catalogue=await mcp.listSkills();assert.equal(catalogue.visibility,'cohort');assert.equal(catalogue.contentsCompared,false);
+  const savedBeforeVersion=JSON.stringify([...globals]);
+  pending=mcp.installSkill('version-root');card=await waitQuestion();assert.match(card.title,/버전 1/);
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);
+  assert.equal(JSON.stringify([...globals]),savedBeforeVersion,'declined rollback cannot replace saved work');
+  mcp=await host.getMcpHost();pending=mcp.installSkill('version-root');card=await waitQuestion();
+  await handlers.answer({questionId:card.id,approved:true});const rollback=await pending;
+  assert.equal(rollback.version,1);assert.equal(rollback.id,'version-root');assert.deepEqual(rollback.recipe,olderRecipe);
+  assert.equal(connected,beforeVersionConnections);assert.deepEqual([...secrets],beforeVersionSetup,'version installation cannot replace Google/Sheet credentials');
+  await mcp.saveSkill(recipe);
+  // A modified installed recipe retains the exact origin, even across reentry.
+  mcp=await host.getMcpHost();
+  pending=mcp.publishSkill();card=await waitQuestion();
+  assert.match(card.description,/출처: 자료 요청 버전 1/);assert.equal(card.description.includes('version-root'),false);
+  const beforeFork=versionPosts.length;
+  await handlers.answer({questionId:card.id,cancelled:true});assert.equal((await pending).cancelled,true);
+  assert.equal(versionPosts.length,beforeFork,'declining source review cannot publish');
+  mcp=await host.getMcpHost();pending=mcp.publishSkill();card=await waitQuestion();
+  await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).published,true);
+  assert.equal(versionPosts.at(-1).sourceId,'version-root');assert.equal(versionPosts.at(-1).parentId,undefined);
+  assert.deepEqual(versionPosts.at(-1).recipe,recipe,'origin metadata must stay outside the exported recipe');
+  pending=mcp.publishSkill('version-root');card=await waitQuestion();assert.match(card.title,/버전 2/);
+  const beforeVersionPosts=versionPosts.length;assert.equal(versionPosts.at(-1).parentId,undefined);
+  await handlers.answer({questionId:card.id,approved:true});assert.equal((await pending).published,true);
+  assert.equal(versionPosts.length,beforeVersionPosts+1);assert.equal(versionPosts.at(-1).parentId,'version-root');assert.equal(versionPosts.at(-1).sourceId,undefined,'owner updates inherit server lineage without overwriting origin');
+  const preview={id:'preview',createdAt:Date.now(),messages:[{id:'row',to:'synthetic@example.invalid',subject:'실제 제목',body:'최종 전체 본문'}]};
+  pending=mcp.confirmSend(preview);card=await waitQuestion();assert.equal(card.preview.messages[0].body,'최종 전체 본문');grant=false;await handlers.answer({questionId:card.id,approved:true});assert.equal(await pending,false,'revoked at answer must not authorize sending');grant=true;
+  pending=mcp.askUser({question:'어떤 표현이 좋을까요?',choices:[],allowFreeText:true});card=await waitQuestion();current.serverId='b'.repeat(64);current.token=token='different-participant';tick();assert.equal((await pending).cancelled,true);assert.equal(question,null);assert.equal(handlers.isWaiting(),false);
+  assert.ok([...globals.values()].every(value=>!('rows'in value)&&!('sheetUrl'in value)));
+  // A slow cohort download cannot display its old recipe in a new activity.
+  mcp=await host.getMcpHost();await mcp.saveSkill(recipe);
+  pending=mcp.publishSkill();card=await waitQuestion();assert.doesNotMatch(card.description,/출처:/);
+  await handlers.answer({questionId:card.id,approved:true});await pending;
+  assert.equal(versionPosts.at(-1).sourceId,undefined,'another activity cannot inherit an origin');
+  pauseDetail=true;
+  const installing=mcp.installSkill('chosen').then(value=>({value}),error=>({error}));
+  for(let i=0;i<100&&!releaseDetail;i++)await new Promise(resolve=>setTimeout(resolve,2));assert.ok(releaseDetail);
+  current.serverId='c'.repeat(64);current.token=token='third-participant';await host.getMcpHost();
+  releaseDetail();const installed=await installing;
+  assert.ok(installed.error,'stale download must be rejected');assert.equal(question,null,'old cohort recipe must never be shown in the new activity');
+  // A new host restores only locally evidenced intent+skill, never Google work.
+  appsScriptEnabled=true;
+  const missingRunner=module.exports.registerAutomationHost(ctx,{});
+  assert.equal(await missingRunner.getMcpHost(),undefined,'shared capability without packaged runner must expose no execution tools');
+  assert.equal(missingRunner.getRuntime(),undefined,'missing runner must not fall back to direct Gmail');
+  await assert.rejects(()=>missingRunner.refreshRuntime(),/공통 Google 실행기 설정/);
+  await mkdir(join(storage,'resources'),{mode:0o755});
+  await writeFile(join(storage,'resources','google-shared-runner.json'),JSON.stringify({scriptId:'synthetic-shared-script',deploymentId:'synthetic-shared-deployment',versionNumber:1,protocol:'hps-email-v1',releaseId:'synthetic-v1'}),{mode:0o644});
+  const savedRecipeKey='hps.automation.recipe.'+automationNamespace(current.service,current.serverId);
+  globals.set(savedRecipeKey,recipe);
+  const reopen=async()=>{const renders=[];const reopened=module.exports.registerAutomationHost(ctx,{}, {setLabels(){},show(){},showAutomation:async html=>renders.push(html)});assert.ok(await reopened.getMcpHost());return renders.at(-1);};
+  let restored=await reopen();assert.match(restored,/2 \/ 6 완료/);
+  assert.match(restored,/class="node succeeded" data-node-id="goal"/);assert.match(restored,/class="node succeeded" data-node-id="skill"/);
+  assert.doesNotMatch(restored,/class="node succeeded" data-node-id="(?:connect|sheet|prepare|upload|deploy|preview)"/);
+  globals.set(savedRecipeKey,{...recipe,bodyTemplate:'private@example.invalid'});
+  restored=await reopen();assert.match(restored,/0 \/ 6 완료/,'invalid/private recipe cannot hydrate progress');
+  globals.delete(savedRecipeKey);restored=await reopen();assert.match(restored,/0 \/ 6 완료/,'another or missing activity recipe remains uncompleted');
+  vscode.env.appName='HypeProof Studio';commands.delete('hypeproof-chat.configureGoogleDesktopClient');module.exports.registerAutomationHost(ctx,{});assert.equal(commands.has('hypeproof-chat.configureGoogleDesktopClient'),false);assert.equal(devContext,false);
+  console.log('PASS conversation host: intent-first entry, private answers, one-use approvals, auto-save, independent publish, locked refresh, Stop races, stale install privacy');
+} finally { await rm(storage,{recursive:true,force:true}); }

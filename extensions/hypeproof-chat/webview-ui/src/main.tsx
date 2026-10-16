@@ -2,6 +2,7 @@
 // is exactly the stylesheet order: tokens.css → localReview.css (LocalReview) →
 // start.css (StartPage) → styles.css (last, explicit import).
 import "./tokens.css";
+import { AutomationSurface } from "./AutomationSurface";
 import { LocalReview } from "./LocalReview";
 import { createRoot } from "react-dom/client";
 import { StartPage } from "./StartPage";
@@ -10,4 +11,4 @@ import "./styles.css";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing #root element");
-createRoot(container).render(document.documentElement.dataset.surface === "local-review" ? <LocalReview /> : document.documentElement.dataset.surface === "start" ? <StartPage /> : <App />);
+createRoot(container).render(document.documentElement.dataset.surface === "automation" ? <AutomationSurface /> : document.documentElement.dataset.surface === "local-review" ? <LocalReview /> : document.documentElement.dataset.surface === "start" ? <StartPage /> : <App />);

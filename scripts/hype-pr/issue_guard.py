@@ -23,16 +23,19 @@ def positive_issue(value: str) -> int:
     return number
 
 
-def closing_issue_targets(body: str, repo: str) -> list[tuple[str, int]]:
+def closing_issue_targets(body: str, repo: str, canonical: Callable[[str], str] = str) -> list[tuple[str, int]]:
+    """`canonical` maps an equivalent path, such as a transferred repository's
+    organization path, onto the ID the caller compares against."""
     targets = []
     for match in CLOSING_TARGET.finditer(body):
-        target_repo = match.group("url_repo") or match.group("short_repo") or repo
+        target_repo = canonical(match.group("url_repo") or match.group("short_repo") or repo)
         target_number = match.group("url_number") or match.group("short_number")
         targets.append((target_repo, int(target_number)))
     return targets
 
 
-def validate_scoped_issue(issue: dict[str, Any], repo: str, number: int, body: str) -> dict[str, Any]:
+def validate_scoped_issue(issue: dict[str, Any], repo: str, number: int, body: str,
+                          canonical: Callable[[str], str] = str) -> dict[str, Any]:
     """Validate objective issue properties; semantic fit remains an agent judgment."""
     if issue.get("number") != number:
         raise ValueError(f"scoped issue response does not match #{number}")
@@ -51,12 +54,14 @@ def validate_scoped_issue(issue: dict[str, Any], repo: str, number: int, body: s
         raise ValueError(f"scoped issue #{number} is an Epic; use a PR-sized child work issue")
     if not issue.get("created_at"):
         raise ValueError(f"scoped issue #{number} has no creation timestamp")
-    targets = closing_issue_targets(body, repo)
+    targets = closing_issue_targets(body, repo, canonical)
     if not targets:
         raise ValueError(f"PR body must close scoped issue #{number}")
-    expected = (repo, number)
+    expected = (canonical(repo), number)
     if any(target != expected for target in targets):
-        raise ValueError(f"PR body closing targets must contain only scoped issue {repo}#{number}")
+        # No repository path here: printing the registry ID invites the author to paste
+        # a transferred repository's former owner path into the body.
+        raise ValueError(f"PR body closing targets must contain only scoped issue #{number} of this repository")
     return {"repo": repo, "number": number, "url": issue.get("html_url"), "created_at": issue["created_at"]}
 
 

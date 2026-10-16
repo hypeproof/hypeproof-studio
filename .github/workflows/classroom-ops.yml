@@ -35,8 +35,9 @@ jobs:
         run: node scripts/bootstrap-service-packages.mjs
       - run: npm ci
         working-directory: chalk
-      # Webview typechecks shared App protocols, which consume Service packages.
-      - run: npm ci --ignore-scripts --omit=optional
+      # Webview protocols consume Service packages; browser fixtures also need
+      # esbuild's platform binary, which npm distributes as an optional dependency.
+      - run: npm ci --ignore-scripts
         working-directory: extensions/hypeproof-chat
       - run: npm ci
         working-directory: extensions/hypeproof-chat/webview-ui
@@ -47,6 +48,12 @@ jobs:
       - run: node --test e2e/classroom/mac-devhost.test.mjs
       - run: npx playwright install --with-deps chromium
         working-directory: e2e
+      - name: Conversational automation approval and layout
+        run: node --experimental-strip-types test/automation-conversation-ui.browser.mjs
+        working-directory: extensions/hypeproof-chat
+      - name: Automation quest graph rendering
+        run: node --experimental-strip-types test/automation-quest.browser.mjs
+        working-directory: extensions/hypeproof-chat
       - run: npm run test:classroom
         working-directory: e2e
       - run: npm run test:classroom-ops

@@ -91,10 +91,10 @@ export function jsonProcess(
       } else resolve(result);
     };
     const abort = () => end(new Error("개발 모델 요청을 중지했습니다."));
-    const timer = setTimeout(
+    const timer = timeout > 0 ? setTimeout(
       () => end(new Error("개발 모델 응답 시간이 초과되었습니다.")),
       timeout,
-    );
+    ) : undefined;
     signal?.addEventListener("abort", abort, { once: true });
     proc.stderr.on("data", () => {}); // CLI diagnostics can include account/config data.
     proc.stdin.on("error", () => {});

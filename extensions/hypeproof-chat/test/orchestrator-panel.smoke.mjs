@@ -843,7 +843,7 @@ if (!status.available) {
     modals.push(m);
     return undefined;
   };
-  const turn = async (profile) => {
+  const turn = async (profile, retryStatus = 429) => {
     approvalHost.cachedProfile = profile;
     const posted = [];
     const seen = {};
@@ -862,7 +862,7 @@ if (!status.available) {
             seen.result = await consultTool.handler(input, {});
           }
           yield { type: "system", subtype: "init", timestamp: 1 };
-          yield { type: "system", subtype: "api_retry", error_status: 429, attempt: 1, max_retries: 10, retry_delay_ms: 1, error: "rate_limit", timestamp: 2 };
+          yield { type: "system", subtype: "api_retry", error_status: retryStatus, attempt: 1, max_retries: 10, retry_delay_ms: 1, error: retryStatus === 429 ? "rate_limit" : "overloaded", timestamp: 2 };
           yield { type: "assistant", message: { id: "m1", model: "claude-sonnet-5-5", content: [{ type: "text", text: "검토 도우미가 대비 부족을 짚었어요." }], usage: { input_tokens: 1, output_tokens: 1 } }, timestamp: 3 };
           yield { type: "result", subtype: "success", stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, timestamp: 4 };
         })();
@@ -928,7 +928,10 @@ if (!status.available) {
     // change nothing: no label, no consult tool, no request, no line.
     for (const name of ["adultOld", "adultDisabled", "kidsRoster", "minorFlagRoster", "unknownTierRoster"]) {
       const before = agentRuns.length;
-      const off = await turn(SEATS[name]);
+      // A provider overload remains retryable without adding orchestrator UI.
+      // A 429 can instead be a hard budget refusal: non-orchestrator seats
+      // must end immediately and leave retry to the learner.
+      const off = await turn(SEATS[name], 529);
       assert.equal(off.headers.some((h) => /^x-hps-(agent|roster|orchestrator):/.test(h)), false, `${name}: no orchestrator header`);
       assert.equal((off.seen.toolNames ?? []).includes("consult"), false, `${name}: no consult tool`);
       assert.equal(agentRuns.length, before, `${name}: no agent run`);
@@ -936,6 +939,10 @@ if (!status.available) {
       // A roster served to a minor is a Service bug, and it leaves a trace (A4 D14); none for an old profile.
       const traced = off.seen.logged.some((l) => l.includes("served orchestrator roster not used"));
       assert.equal(traced, ["kidsRoster", "minorFlagRoster", "unknownTierRoster"].includes(name), `${name}: trace`);
+      await assert.rejects(() => turn(SEATS[name], 429),
+        (error) => error.name === "SdkApiError" && error.status === 429,
+        `${name}: budget refusal is not silently retried`);
+      assert.equal(agentRuns.length, before, `${name}: refused turn adds no agent run`);
     }
   } finally {
     bundleFetch = globalThis.fetch;

@@ -119,13 +119,13 @@ const ok = (n) => { passed++; console.log(`✓ ${n}`); };
   const LOCKS = {
     submit: /\|\| streaming \|\| unavailable \|\| props\.sendLocked\) return;/,
     parked: /if \(props\.sendLocked\) \{ restoreQueuedToDraft\(\); return; \}\s*const text = queued as string;/,
-    app: /sendLocked=\{!!state\.verify\?\.running\}/,
+    app: /sendLocked=\{!!state\.verify\?\.running(?: \|\| !!automationQuestion)?\}/,
   };
   const lockProblems = (chat, app) => Object.entries(LOCKS).filter(([k, re]) => !re.test(k === "app" ? app : chat)).map(([k]) => k);
   assert.deepEqual(lockProblems(chatSrc, appSrc), []);
   assert.ok(lockProblems(chatSrc.replace(" || props.sendLocked) return;", ") return;"), appSrc).includes("submit"));
   assert.ok(lockProblems(chatSrc.replace("if (props.sendLocked) { restoreQueuedToDraft(); return; }", ""), appSrc).includes("parked"));
-  assert.ok(lockProblems(chatSrc, appSrc.replace("sendLocked={!!state.verify?.running}", "")).includes("app"));
+  assert.ok(lockProblems(chatSrc, appSrc.replace("!!state.verify?.running", "false")).includes("app"));
   ok("composer lock: Send disabled while a test runs (rendered), the parked message returns to the draft, App wires the host's running");
 }
 console.log(`\n${passed} verify panel checks passed`);

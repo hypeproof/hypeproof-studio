@@ -4915,6 +4915,154 @@
       ]
     },
     {
+      "id": "ST-REQ-EMAIL-AUTOMATION",
+      "stage": "requirement",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/requirements/email-automation.md"
+        },
+        {
+          "path": "docs/plan/apps-script-quests.md"
+        },
+        {
+          "path": "docs/plan/automation-local-acceptance.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EMAIL-AUTOMATION",
+      "stage": "test",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/email-automation.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/google-automation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-store-client.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-render.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-panel-ledger.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-sdk.smoke.mjs"
+        },
+        {
+          "path": "scripts/tests/install-email-test-fixture.ps1"
+        },
+        {
+          "path": "scripts/tests/install-email-ui-update-fixture.ps1"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-conversation-ui.browser.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/appsScriptRuntime.test.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automationQuest.test.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-quest.browser.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-apps-script-host.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-quest-session.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-ops.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/automation-resume.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/preview-automation-layout.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EMAIL-AUTOMATION",
+      "stage": "implementation",
+      "owner": "TJ-kr",
+      "depends_on": [
+        "ST-REQ-EMAIL-AUTOMATION",
+        "ST-TEST-EMAIL-AUTOMATION"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/googleAutomation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/googleAutomationMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationPanel.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationProtocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationStoreClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationDraft.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationLedger.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AutomationPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AutomationSurface.tsx"
+        },
+        {
+          "path": "scripts/install-email-test.ps1"
+        },
+        {
+          "path": "scripts/install-email-ui-update.ps1"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptRuntime.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/appsScriptEmailProject.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationQuest.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/automationQuestSession.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-PUBLISH",
       "stage": "requirement",
       "owner": "JeHyeong2",

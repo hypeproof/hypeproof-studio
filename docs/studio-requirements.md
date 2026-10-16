@@ -278,7 +278,7 @@ Instructor-mode credential isolation (#1298): changing the saved issuer clears t
 | REQ-L9 | 학생·강사·운영자의 이용권과 예산 화면을 권한에 맞게 제공한다 (#856/#847) | 학생은 명시된 출처/기준 시각/자기 사용·예약·미확인을 보며 자동 전환하지 않는다. 강사는 담당 반과 별도 예산 위임의 교집합에서 배정·pause·요청 검토를 한다. 위임 취소와 동시 수정은 저장 transaction에서 확인한다. 운영자는 원가와 invoice 조정을 별도로 보고 복구 증거를 남긴다. | `budget-surfaces.test`, `budget-surfaces-d1.test`, Chalk `budgets.test`, `access-client.smoke`, `e2e/access-budgets` |
 | REQ-L10 | 공급자가 **실제로 보내는** usage 모양으로 원가를 매긴다 — 부재를 미지로 읽지 않는다 (#897 조사) | `openai-chat` 정규화가 세 입력 차원을 모두 `prompt_tokens_details.cache_write_tokens` 에서 유도했는데, **OpenAI 는 그 필드를 보내지 않는다**(레포 전체에서 하네스 fixture 와 그것을 읽는 두 줄 말고는 등장하지 않았다). 부재 시 `write` 가 null → `valid` 가 false → `tokens:input`·`cache_read`·`cache_write` 가 전부 null + `input_cache_split_unconfirmed`. 사유가 하나라도 있으면 상태가 `priced` 가 될 수 없으므로 **모든 openai-chat 턴이 입력 차원에서 영구히 정산되지 않았고 홀드만 남았다.** 2026-09-10 실측: 현실적인 모양 셋(details 없음 / `cached_tokens` 만 / reasoning 포함) 전부 입력 전멸, 가격이 나온 유일한 입력은 발명된 필드가 든 레포 자신의 fixture. 계약: ① 이 프로토콜에서 **부재는 미지가 아니라 알려진 0 이다** — `cached_tokens` 부재는 캐시 히트 0, cache-write 차원 부재는 0(OpenAI 는 캐시 쓰기를 과금하지 않는다); ② 그러나 **공급자가 값을 보내면 존중한다** — OpenAI 호환 표면을 쓰는 다른 공급자가 채울 수 있고 0 으로 덮으면 과소 계량이다; ③ 값이 **있는데** 숫자가 아니면 그건 진짜 미지이므로 null 로 두어 거절을 유도한다 (문자열·null·음수·비정수·합계 초과 여덟 모양을 음성 대조군으로 상시 검증); ④ 세 입력 차원의 합은 항상 `prompt_tokens` 와 같다 — 토큰이 사라지거나 중복되지 않는다; ⑤ 입력 경로를 살린 뒤에도 오디오·이미지 토큰은 **텍스트 단가를 타지 않는다**(REQ-R3 의 성질이며, 되살린 길로 회귀하기 쉬우므로 같은 파일에서 다시 검증한다); ⑥ 계측기 자신을 잠근다 — 하네스 fixture 가 여전히 발명된 필드를 들고 있다는 사실을 단언한다. 그 fixture 가 현실적으로 바뀌는 날 이 행의 근거를 다시 읽어야 한다. 이 해석은 이 레포가 이미 적어둔 경고와 일치한다 — `docs/design/usage-observation-audit.md` 는 "지원하는 새 모델의 캐시 쓰기 상세가 포함된다. Responses 예제를 Studio의 Chat Completions 추출기에 그대로 적용하지 않고 실제 응답 스키마를 대조해야 한다" 고 적었다. 즉 누군가 이 불일치를 이미 의심했고, 대조는 이뤄지지 않았다. 그래서 "부재는 0, 존재하면 존중" 이 **양쪽 답 모두에서 맞는** 유일한 모양이다. **이 행이 주장하지 않는 것**: 실제 OpenAI API 가 `cache_write_tokens` 를 보내지 않는다는 **확인** 아님 — 이 레포에 api.openai.com 의 200 기록이 없다(유일한 시도가 `429 credit_balance_exhausted`, #841). 두 답 모두에서 동작하도록 만들었을 뿐이다. 그리고 프로덕션 정산 검증 아님 — `HPS_ACCESS_CONTRACTS` 가 `wrangler.toml [vars]` 에 없다 | Service (`openai-usage-shape.test`, `usage-costs.test`) |
 | REQ-L11 | 운영자 표면은 **운영자 자격증명**을 요구한다 — 요청 헤더는 출처의 증거가 아니다 (#897 조사) | `/v1/health/deep` 이 `x-cron-trigger: true` 라는 **요청 헤더 하나로** 인증을 통과시켰다. 2026-09-10 프로덕션에서 자격증명 없이 실제로 열렸고(200, 공급자별 상태·지연·KV·D1·Anthropic 프록시 호스트명), 소스 주석은 그 헤더가 "set by the scheduled() entry point" 라고 단정하고 있었다. 두 번 틀렸다: 요청 헤더는 요청자가 정하므로 내부 출처의 증거가 될 수 없고, **그 헤더를 보내는 코드는 존재하지 않았다** (`scheduled()` 는 `runHeartbeat(env)` 를 평범한 함수로 부른다; 레포 전체 grep 결과가 우회 분기 자신의 두 줄뿐). 보호하는 호출자는 없고 노출만 있었다. **단정하는 주석이 이것을 살려뒀다** — 원인을 못박아서 아무도 그쪽을 보지 않았고, 이 레포에는 같은 실패 기록이 이미 있다("토큰 만료" 배너가 이틀을 태웠다). 공개보다 나쁜 것: 호출 한 번이 워커로 하여금 **네 공급자에 실제 probe** 를 보내게 한다 — 인증 없는 요청 하나가 유료 요청 넷으로 증폭됐다. 계약: ① 운영자 표면은 관리자 Basic 만 받는다. 세션 토큰도 받지 않는다; ② **핸들러는 `authorization` 외의 요청 헤더를 읽지 않는다** — 소스 단언으로 잠가, 다른 이름으로 같은 패턴이 되살아나는 것을 막는다; ③ 거절은 **업스트림 probe 를 하나도 보내지 않는다** — 401 을 주면서 probe 를 쏘면 증폭은 그대로 남으므로, 호출 수로 직접 확인한다; ④ 거절 본문은 아무것도 흘리지 않고 실패 **사유를 구분해 주지 않는다**(추측 공격에 단서를 주지 않는다); ⑤ 비밀번호 미설정 배포는 **열리지 않는다** — fail-open 이 가장 비싼 실수다; ⑥ 깨진 base64 는 500 이 아니라 401 이다(`atob` 는 던진다); ⑦ `scheduled()` 가 자기 자신에게 HTTP 요청을 하지 않는다는 사실을 시험이 지킨다 — 그게 우회를 지운 근거이므로, cron 이 HTTP 호출로 바뀌면 시험이 터지고 인증을 다시 설계해야 한다. **이 행이 주장하지 않는 것**: 다른 운영자 경로의 감사 아님 — `/admin/*` 은 이 변경 범위가 아니다 | Service (`deep-health-auth.test`) |
-| REQ-L12 | 이용권을 **앱 안에서** 카드로 산다 — 결제됐는지는 Service 만 판정한다 (Lab #1210 · Service #40) | 시작 화면의 구매 경로. 근거: [Product Intent](PRODUCT-INTENT.md)의 이용 권한 Intent(INT-ACCESS-01 실행 전에 포함 범위와 비용 부담을 이해한다 · INT-ACCESS-05 한도·만료 뒤에도 만든 결과를 유지하고 불필요한 업그레이드 압박을 하지 않는다). 계약: ① 시작 방법의 세 번째 선택지 `이용권으로 시작하기` 는 Service 가 상품을 줄 때만 그린다. 다른 두 선택지와 같은 급이고(SX-04), **사람이 눌러야만** 열린다 — 한도·만료·오류가 이 화면을 대신 열지 않는다; ② 결제 전 화면이 이용권을 **선택지 목록**으로 보여 준다 — 이름, 누구에게 맞는지 한 줄, 결제 금액, 포함된 AI 요청 횟수와 하루 환산. Service 가 추천으로 표시한 것이 먼저 선택돼 있고, Primary 는 목록 뒤 하나(`{금액} 결제하러 가기`)다. 화면은 `자동으로 다시 결제되지 않아요` 를 적는다. 구매 화면의 문구는 해요체다(2026-10-12 Jay) — 시작 화면의 다른 문구는 그대로 둔다; ③ 주문 비밀값은 **브라우저를 열기 전에** SecretStorage 에 저장한다 — 결제할 수 있게 된 사람은 창을 닫거나 앱을 다시 켜도 돌아올 수 있어야 한다. 비밀값과 발급된 코드는 webview 로 가지 않는다; ④ 브라우저는 설정된 사이트(`hypeproofChat.siteBase`)의 결제 페이지로만 연다. Service 응답이 다른 주소를 주면 열지 않고 아무것도 저장하지 않는다; ⑤ 앱은 결제를 판정하지 않는다 — Service 가 `paid` 라고 답하기 전에는 좌석을 받으러 가지 않는다. Service 를 못 읽은 것과 확인 중(`confirming`)인 것은 결제 실패가 아니므로 **주문을 버리지 않고 계속 기다린다**. 기한 뒤 여유 시간이 지나 끝내는 것은 Service 가 아직 `pending`(미결제)이라고 답한 주문뿐이다(2026-10-14 리허설: 오래 오프라인이었다가 돌아오면 결제한 주문을 지우는 경로가 있었다); ⑥ 받은 코드는 평범한 참여 코드로 **기존 입장 경로**(미리보기 → `이 활동 시작하기`)를 그대로 탄다. 구매가 별도 인증·별도 권한 경로를 만들지 않는다; ⑦ 주문 기록은 활동에 **실제로 들어간 뒤에** 지운다. 그 전에 연결이 실패하거나 앱이 꺼지면 `다시 연결` 이 코드를 **교체**받는다 — 다시 결제하게 하지 않는다. 교체는 자격증명을 바꾸므로 사람이 누를 때만 한다; ⑧ `그만두기` 는 기다림만 멈추고 **다른 시작 방법으로 돌아간다**. 결제됐을 수 있는 주문을 버리지 않고, 시작 방법 목록에 `결제 중인 이용권 이어서 보기` 로 다시 보여 준다. 시작 탭을 닫았다 다시 열면 기다림이 다시 시작된다. 기다리는 화면에는 `결제했는데 그대로예요` 가 있어 브라우저는 끝났는데 앱이 그대로일 때 Service 에 다시 묻는다; ⑨ 저장된 주문은 그것을 만든 Service 로만 보낸다 — 설정이 바뀌면 비밀값을 어디에도 보내지 않는다. ⑩ 산 이용권은 `체험` 이 아니라 **`이용권`** 으로 표시한다(시작 화면 미리보기·저장된 활동·채팅 머리말). 기준은 Service `/v1/profile` 의 `pass` 블록이다(Service #70; 종류는 호환을 위해 `trial` 그대로). 시작 화면은 연결할 때 읽은 남은 AI 요청 횟수와 끝나는 날을, 채팅 머리말은 끝나는 날만 보여 준다. 머리말은 턴마다 다시 읽지 않으므로 횟수를 적지 않는다; ⑪ 다 쓴 이용권으로 끝난 턴은 오류가 아니라 이용권 안내로 끝낸다 — 파일은 남고 `이용권으로 시작하기` 에서 새로 살 수 있다고 적는다. 환불·교체된 코드(401 `trial_revoked_or_reissued`)와 기간이 끝난 이용권(403 `trial_expired`)은 Service 가 보낸 문장을 그대로 보여 준다(Service #72 가 이용권용 문장을 보낸다). SDK 스트림이 본문 없는 401만 주면, 이미 산 이용권으로 확인된 프로필에 한해 같은 코드로 `/profile`을 다시 읽고 이 두 코드가 확인될 때만 이용권 종료 안내를 보인다. 일반 401은 원인을 단정하지 않는다. 이 안내의 제목은 `이용권을 더 쓸 수 없어요` 다; ⑫ 새로 산 이용권은 이용권의 기본 작업 폴더(프로필의 `workspace_root`)를 앞 활동에게서 **이어받는다**. Claude Code 가 시작한 폴더에서 이어서 일하는 방식을 따른다(2026-10-14 Jay). 파일은 그대로 남고 대화 기록은 새 활동으로 시작한다. 이어받을 기본 폴더는 입장 직전에 Service에서 다시 읽은 `workspace_root`로만 판정한다. 사용자가 고른 폴더나 저장된 활동의 폴더는 탐색 대상이며 이 값을 바꾸지 않는다. 기본 폴더라면 앞 활동이 수업이어도 이어받을 수 있고, 다른 폴더와 이용권이 아닌 새 활동에는 기존 충돌 차단을 유지한다. 폴더 준비는 기존 연결을 바꾸지 않으며, 준비·자격 저장·폴더 열기 실패 시 이전 연결·폴더 바인딩·파일을 보존한다. **이 행이 주장하지 않는 것**: 2026-10-14 로컬 리허설(개발 앱 · 로컬 Service · 토스 테스트 키, 카드와 토스페이 간편결제)에서 결제 → 코드 → 시작 → 실제 AI 작업 → 소진 → 환불(좌석 회수)까지 왕복했다. 운영 결제대행사·출시 앱 인수는 아니다. 월 구독·자동결제·해지 화면 아님. 채팅 중 남은 횟수 실시간 표시, 다 쓴 이용권 턴의 코치 말풍선에 남는 `API Error` 원문, 재구매 시 기간 연장 규칙은 아직이다. 설치된 앱에 닿으려면 App 릴리스가 필요하다 | Host (`test/pass-purchase.smoke.mjs`, `test/start-page-purchase.smoke.mjs`, `test/pass-takeover-transaction.smoke.mjs`, `test/sdk-paid-pass-ending.test.mjs`) · Webview (`webview-ui/src/activityLabel.ts`) |
+| REQ-L12 | 이용권을 **앱 안에서** 카드로 산다 — 결제됐는지는 Service 만 판정한다 (Lab #1210 · Service #40) | 시작 화면의 구매 경로. 근거: [Product Intent](PRODUCT-INTENT.md)의 이용 권한 Intent(INT-ACCESS-01 실행 전에 포함 범위와 비용 부담을 이해한다 · INT-ACCESS-05 한도·만료 뒤에도 만든 결과를 유지하고 불필요한 업그레이드 압박을 하지 않는다). 계약: ① 시작 방법의 세 번째 선택지 `이용권으로 시작하기` 는 Service 가 상품을 줄 때만 그린다. 다른 두 선택지와 같은 급이고(SX-04), **사람이 눌러야만** 열린다 — 한도·만료·오류가 이 화면을 대신 열지 않는다; ② 결제 전 화면이 이용권을 **선택지 목록**으로 보여 준다 — 이름, 누구에게 맞는지 한 줄, 결제 금액, 포함된 AI 요청 횟수와 하루 환산. Service 가 추천으로 표시한 것이 먼저 선택돼 있고, Primary 는 목록 뒤 하나(`{금액} 결제하러 가기`)다. 화면은 `자동으로 다시 결제되지 않아요` 를 적는다. 구매 화면의 문구는 해요체다(2026-10-12 Jay) — 시작 화면의 다른 문구는 그대로 둔다; ③ 주문 비밀값은 **브라우저를 열기 전에** SecretStorage 에 저장한다 — 결제할 수 있게 된 사람은 창을 닫거나 앱을 다시 켜도 돌아올 수 있어야 한다. 비밀값과 발급된 코드는 webview 로 가지 않는다; ④ 브라우저는 설정된 사이트(`hypeproofChat.siteBase`)의 결제 페이지로만 연다. Service 응답이 다른 주소를 주면 열지 않고 아무것도 저장하지 않는다; ⑤ 앱은 결제를 판정하지 않는다 — Service 가 `paid` 라고 답하기 전에는 좌석을 받으러 가지 않는다. Service 를 못 읽은 것과 확인 중(`confirming`)인 것은 결제 실패가 아니므로 **주문을 버리지 않고 계속 기다린다**. 기한 뒤 여유 시간이 지나 끝내는 것은 Service 가 아직 `pending`(미결제)이라고 답한 주문뿐이다(2026-10-14 리허설: 오래 오프라인이었다가 돌아오면 결제한 주문을 지우는 경로가 있었다); ⑥ 받은 코드는 평범한 참여 코드로 **기존 입장 경로**(미리보기 → `이 활동 시작하기`)를 그대로 탄다. 구매가 별도 인증·별도 권한 경로를 만들지 않는다; ⑦ 주문 기록은 활동에 **실제로 들어간 뒤에** 지운다. 그 전에 연결이 실패하거나 앱이 꺼지면 `다시 연결` 이 코드를 **교체**받는다 — 다시 결제하게 하지 않는다. 교체는 자격증명을 바꾸므로 사람이 누를 때만 한다; ⑧ `그만두기` 는 기다림만 멈추고 **다른 시작 방법으로 돌아간다**. 결제됐을 수 있는 주문을 버리지 않고, 시작 방법 목록에 `결제 중인 이용권 이어서 보기` 로 다시 보여 준다. 시작 탭을 닫았다 다시 열면 기다림이 다시 시작된다. 기다리는 화면에는 `결제했는데 그대로예요` 가 있어 브라우저는 끝났는데 앱이 그대로일 때 Service 에 다시 묻는다; ⑨ 저장된 주문은 그것을 만든 Service 로만 보낸다 — 설정이 바뀌면 비밀값을 어디에도 보내지 않는다. ⑩ 산 이용권은 `체험` 이 아니라 **`이용권`** 으로 표시한다(시작 화면 미리보기·저장된 활동·채팅 머리말). 기준은 Service `/v1/profile` 의 `pass` 블록이다(Service #70; 종류는 호환을 위해 `trial` 그대로). 시작 화면은 연결할 때 읽은 남은 AI 요청 횟수와 끝나는 날을, 채팅 머리말은 끝나는 날만 보여 준다. 머리말은 턴마다 다시 읽지 않으므로 횟수를 적지 않는다; ⑪ 다 쓴 이용권으로 끝난 턴은 오류가 아니라 이용권 안내로 끝낸다 — 파일은 남고 `이용권으로 시작하기` 에서 새로 살 수 있다고 적는다. 환불·교체된 코드(401 `trial_revoked_or_reissued`)와 기간이 끝난 이용권(403 `trial_expired`)은 Service 가 보낸 문장을 그대로 보여 준다(Service #72 가 이용권용 문장을 보낸다). SDK 스트림이 본문 없는 401만 주면, 이미 산 이용권으로 확인된 프로필에 한해 같은 코드로 `/profile`을 다시 읽고 이 두 코드가 확인될 때만 이용권 종료 안내를 보인다. 일반 401은 원인을 단정하지 않는다. 이 안내의 제목은 `이용권을 더 쓸 수 없어요` 다; 상태코드만 있는 429나 이용권 확인을 권하는 일반 오류는 종료 증거가 아니므로 이 제목을 쓰지 않는다. 429는 `AI 요청이 제한됐어요`로 표시하고, 강사 화면도 요청 제한의 원인을 제공자나 예산으로 단정하지 않는다; ⑫ 새로 산 이용권은 이용권의 기본 작업 폴더(프로필의 `workspace_root`)를 앞 활동에게서 **이어받는다**. Claude Code 가 시작한 폴더에서 이어서 일하는 방식을 따른다(2026-10-14 Jay). 파일은 그대로 남고 대화 기록은 새 활동으로 시작한다. 이어받을 기본 폴더는 입장 직전에 Service에서 다시 읽은 `workspace_root`로만 판정한다. 사용자가 고른 폴더나 저장된 활동의 폴더는 탐색 대상이며 이 값을 바꾸지 않는다. 기본 폴더라면 앞 활동이 수업이어도 이어받을 수 있고, 다른 폴더와 이용권이 아닌 새 활동에는 기존 충돌 차단을 유지한다. 폴더 준비는 기존 연결을 바꾸지 않으며, 준비·자격 저장·폴더 열기 실패 시 이전 연결·폴더 바인딩·파일을 보존한다. **이 행이 주장하지 않는 것**: 2026-10-14 로컬 리허설(개발 앱 · 로컬 Service · 토스 테스트 키, 카드와 토스페이 간편결제)에서 결제 → 코드 → 시작 → 실제 AI 작업 → 소진 → 환불(좌석 회수)까지 왕복했다. 운영 결제대행사·출시 앱 인수는 아니다. 월 구독·자동결제·해지 화면 아님. 채팅 중 남은 횟수 실시간 표시, 다 쓴 이용권 턴의 코치 말풍선에 남는 `API Error` 원문, 재구매 시 기간 연장 규칙은 아직이다. 설치된 앱에 닿으려면 App 릴리스가 필요하다 | Host (`test/pass-purchase.smoke.mjs`, `test/start-page-purchase.smoke.mjs`, `test/pass-takeover-transaction.smoke.mjs`, `test/sdk-paid-pass-ending.test.mjs`) · Webview (`webview-ui/src/activityLabel.ts`) |
 
 
 ## M. Agent SDK coach runtime (#282)
@@ -325,7 +325,7 @@ Service 집행이 없다는 뜻이다.
 | REQ-M3 | Minor 루프 bound | `maxTurnsFor`: 워크숍 tier(`search-webapp`·`website`) **60**, 그 외(미지정 포함 — `isMinorTier` 가 fail-closed 로 미성년 취급) **20** (v0.1.56 `sdkCoachHelpers.ts:97`, `:104-107`, `:382-389`; HEAD `bcfe8ebd` 같은 값 `:390-397`). 미성년 6→20 은 2026-08-19 실기(Read 1 + Edit 5 로 6 소진), 성인 20→60 은 2026-07-26 실측(멀티페이지 한 요청에 툴 54회)에서 왔고 60 은 잠정값이다. 폭주 방어는 턴 수가 아니라 Service `max_tokens` 상한(미성년 12000, Service main `399109c` `routes/messages.ts:505`)과 스톨 감시(REQ-M26)가 맡는다. **2026-10-14 정정**: 이 행은 '워크숍 20, 그 외 6' 으로 적혀 있어 v0.1.56 코드와 달랐다 | U (`test/sdk-coach-helpers` — v0.1.56 `:117-132`) |
 | REQ-M4 | SDK 도구 → 정확한 ActionRequest kind | `sdkToolToActionRequest`(v0.1.56 `sdkCoachHelpers.ts:1641-1728`): Bash → `executeShell`(파괴 명령이면 `destructive`), Write/Edit/MultiEdit → `writeFile`+실경로, Read/Grep/Glob → `readFile`, WebSearch/WebFetch → `webSearch`, `browser_open`/`browser_click`/`browser_type` → `openBrowser`/`browserClick`/`browserType`, Agent/Task → `delegateAgent`, 미지 도구 → fail-closed(`executeShell`). **셸은 hard-deny 가 아니다** (epic #431, 2026-07-27 결정 — 이 행은 'Tier-1 hard-deny' 로 적혀 있었다, 2026-10-14 정정): `sdk_tools.shell` 을 연 코호트에서 `evaluateSdkToolUse` 는 되돌리기 어려운 명령(`isDestructiveCommand`, `shellPolicy.ts:43-90`, `:126`)만 `ask`+`destructive`(강한 확인)로 보내고 **나머지는 모달 없이 자동 실행**한다(`sdkCoachHelpers.ts:1919-1942`, `sdkCoach.ts:639-642`; HEAD `bcfe8ebd` `sdkCoachHelpers.ts:2220-2243` 동일). 셸을 열지 않은 코호트의 Bash 는 deny. 파괴 목록은 Unix 동사와 `curl`/`wget … \| sh` 만 다룬다 — PowerShell(`Remove-Item`, `irm … \| iex` 등)은 목록에 없어 Windows 에서 자동 실행된다(코드에서 읽은 공백, 실기 미검증). Service main `399109c` 는 그 명령을 가르치던 `workshop-setup` 을 더 이상 원문대로 보내지 않는다 — 세미나(디렉터)는 instruction-only 변형을 받고(`profiles/dental-copyclone-2026-s1.ts:150`, `skills/workshop-setup-instruction-only.md`) 홈페이지 연습은 그 스킬을 빼고 설치 요청을 강사·스태프에게 돌린다(`profiles/homepage-practice-s1.ts:41`, `:63-67`). 디렉터·canary 계약의 '셸 실행·외부 명령 금지' 는 '스킬에 적힌 단계에만 셸을 쓰고, 실행 전에 무엇을 왜 하는지 말하고, 실행하지 않은 명령을 실행했다고 말하지 않는다' 로 바뀌었다(`lib/translate.ts:59-64`). 클라이언트 쪽 보완은 Studio main `4304c25f`(#1629, FO-11)가 PowerShell·cmd 파괴 동사와 `… \| iex` 패턴을 `isDestructiveCommand` 에 더해 다음 앱 빌드부터 적용된다(`shellPolicy.ts:132`, Windows 규칙 `:192` 이하) — 설치된 v0.1.56 좌석에는 아직 없다. 미분류 도구 이름은 이 매핑 전에 drift 로 거부된다(`:1892-1898`) | U (`test/sdk-coach-helpers` — v0.1.56 `:159-161`, `:237-243`) |
 | REQ-M5 | 매 tool use 는 canUseTool 게이트 | SDK `allowedTools` 는 빈 값 + `settingSources: []` — 모든 도구가 canUseTool 로 fall-through, cohort 미허용 도구는 deny | U + E |
-| REQ-M6 | 게이트웨이 라우팅 + env 보존 | `buildSdkGatewayEnv`: process.env 스프레드(PATH/HOME 보존) 위에 SDK 인식 변수만 설정 — `ANTHROPIC_BASE_URL` 은 `proxyUrl` 설정에서 **파생**(`/v1` 접미사 제거 — SDK 가 `/v1/messages` 를 스스로 붙임), `ANTHROPIC_AUTH_TOKEN` = workshop 토큰 (커스텀 이름 금지) | U (`test/sdk-gateway`) |
+| REQ-M6 | 게이트웨이 라우팅 + env 보존 | `buildSdkGatewayEnv`: process.env 스프레드(PATH/HOME 보존) 위에 SDK 인식 변수만 설정 — `ANTHROPIC_BASE_URL` 은 `proxyUrl` 설정에서 **파생**(`/v1` 접미사 제거 — SDK 가 `/v1/messages` 를 스스로 붙임), `ANTHROPIC_AUTH_TOKEN` = workshop 토큰 (커스텀 이름 금지). `CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`을 강제하여 SDK 첫 요청과 병렬로 실행되는 유료 제목 생성이 체험 실행 잠금을 차지하지 않게 한다. | U (`test/sdk-gateway`) |
 | REQ-M7 | SDK 미가용 시 proxy fallback | 패키지 로드 실패(패키징 빌드 등 node_modules 부재) → `SdkUnavailableError` → 해당 턴 proxy 로 폴백 (학생에게 raw 에러 미노출). **폴백 동작 자체는 이 행 그대로 유지**되고, 그것이 *보이게* 되는 계약은 REQ-M30 이 소유한다 — "콘솔 경고"였던 부분은 어디에도 남지 않는 로그였으므로 REQ-M30 이 대체했다(#476) | U + E |
 | REQ-M8 | Abort parity | agent-sdk 경로도 stop 시 AbortError throw → streamEnd·appendHistory 건너뜀 (잘린 턴 미커밋); abort listener 는 `loadSdk()` 이전 등록. **UI 상태 해제는 이 경로가 아니라 `cancelStream` 핸들러의 `streamStopped` 가 책임진다** (REQ-C6, #497) — `handleSend`/`handleSendError` 의 "웹뷰가 이미 스트림을 끝냈다"는 전제는 성립한 적이 없었다. 부분 출력은 화면에만 남고 영속 히스토리엔 들어가지 않는다(의도된 동작) | U + E |
 | REQ-M9 | `/v1/messages` 게이트 parity | worker `POST /v1/messages` (Anthropic-native 게이트웨이) 는 `/v1/chat/completions` 와 동일 게이트 공유 (`lib/chat-gate.ts`): 토큰 verify · issuer 거부 · revocation · session window · roster · cohort pause · signingSecretGuard | R (`worker/test/messages-integration.test.mjs`, `route-order.test.mjs`) |
@@ -851,6 +851,19 @@ reissue to the same handle still cannot reset one.
 |---|---|---|
 | REQ-STUDIO-SYNTHETIC-ACCEPTANCE | A cohort whose every profile declares `synthetic: true` refuses any roster write (replace, append, session open) or token mint naming a handle outside `synthetic-` with `400 synthetic_handle_required`, and `GET /admin/cohorts` reports `synthetic` for every cohort. `synthetic-release-acceptance` is served exactly what `studio-native-trial` is served and is hidden from the console. Each acceptance run mints a fresh handle's classroom code (session open) and trial code, and revokes the trial grant and closes the session in `finally`. The freeze ignores a live session only on a cohort reported exactly `synthetic: true` running one of its own profiles, names what it ignored, and still blocks a real class beside it; a missing or non-boolean flag, a foreign profile or an undecidable window blocks. The real workflow run with these credentials is NOT RUN. | `worker/src/lib/synthetic-cohort.ts`, `worker/src/profiles/synthetic-release-acceptance.ts`, `worker/src/routes/admin.ts`, `scripts/check-live-sessions.mjs`, `e2e/unified-release/public.mjs`; `worker/test/synthetic-cohort.test.mjs`, `worker/test/profile-serving-snapshot.test.mjs`, `scripts/test-check-live-sessions.mjs` |
 
+## Workplace automation learner journey — design extension
+
+DEC-024 (2026-10-15) expands the email baseline through
+[WAJ-01–13](requirements/workplace-automation-journey.md): problem definition,
+two-choice structure negotiation, one template outcome image, visual quests and
+iterative improvement. Four proposed template families cover the ten supplied
+curriculum cases. The destination is learner-owned Google assets, Apps Script
+web-app deployment and background data processing; exact customer-send approval
+remains required. The canonical document includes the runtime contracts,
+120-minute lab, instructor states, phased delivery and positive/negative acceptance
+criteria. This is design work; expanded runtime tests are NOT_RUN and existing
+EA evidence is not expanded-workflow acceptance.
+
 ## Team brain: learning wiki and deck generator (founder course first)
 
 Two App-side skills, generic and off by default, that keep a team's record across sessions and draft
@@ -868,3 +881,162 @@ How confirmed decisions later reach the server project memory (cr-memory, #1450)
 | REQ-STUDIO-LEARNING-WIKI | One ingest reads the current session's spool conversation and `<wiki>/notes/*.md`, sends one request, and keeps only proposals (problem, hypotheses, evidence with real / team test / simulated state, decisions with the AI suggestion and the student's choice, product changes, next action) that cite a turn or note of that session. Entries are numbered H-n / E-n / D-n and appended; uncited items are listed in `log.md`, never written as entries. A hypothesis is "지지" only after a real observation judged a match. The same conversation is not ingested twice; ingested notes move to `raw/`. On the first coach turn of a conversation the team's summary and the next session's question and deck focus are prepended to the model input (not the student's bubble). | `extensions/hypeproof-chat/src/learningWiki.ts`, `chatPanelProvider.wikiIngest`; `test/learning-wiki.smoke.mjs`; Studio Dev app run 2026-10-05 (week 1 → 2, deck 1/8 → 3/8) |
 | REQ-STUDIO-DECK-GENERATOR | Drafts only the requested template slides from the wiki: one claim headline, one visual (number, quote, the student's product page, steps, before/after, statement), at most two supporting lines, speaker notes. A slide is kept only when its references resolve in the wiki and every number on its face appears in the entries it cites; a refused or missing slide gets one repair request with the reasons. Citations, notes and unconfirmed items stay behind the "발표자 노트·근거" switch; the basis tag on the slide is computed from the cited evidence. A humanizer pass rewrites the slide text once; a rewrite that adds a number or balloons is refused, a quote is never rewritten, dashes are stripped. | `src/deckGenerator.ts`, `src/humanizer.ts`; `test/learning-wiki.smoke.mjs` |
 | REQ-STUDIO-TEAM-BRAIN-CALL | Students call the wiki by name in the chat: "팀 브레인에 정리해 줘" ingests (the next session unless the student names one; asks only when the latest session was already filed today), "팀 브레인으로 덱 만들어 줘" drafts the plan's focus slides, "팀 브레인 보여 줘" shows a summary without a model call. Messages without the name, longer than 40 characters, with two sentences, or asking about the feature do not trigger. The answer says what was added and the deck progress. The commands "HypeProof: 팀 브레인에 정리하기" / "HypeProof: 팀 브레인으로 덱 만들기" do the same, gated on `hypeproof-chat.learningWikiEnabled`. | `brainIntent` in `src/learningWiki.ts`; `chatPanelProvider`; `test/learning-wiki.smoke.mjs`, `test/cr-switch.smoke.mjs` (manifest gating) |
+
+Instructor status recovery (ADM-02/09, AT-18) must remove its own unavailable-board
+warning only after a successful status read, re-enable valid actions, and retain
+unsent questions and unrelated action results. Refresh must never send a draft.
+The actual browser regression in `e2e/classroom/ops.mjs` reproduces outage/recovery;
+[native classroom observations](plan/automation-local-acceptance.md) remain distinct
+from synthetic20-seat readiness and Windows acceptance.
+
+## Email automation workshop (2026-10-13)
+
+EA-01–EA-09 in [email-automation.md](requirements/email-automation.md) specify the approved Google Sheets/email/cohort-store slice (Epic #1603, execution #1604). Human-reviewed sending and data-free sharing extend useful-work and human-judgment intent. Release observations remain separate from local tests.
+
+EA-02 includes optional operator packaging of an external Google Desktop client into the installed extension, with default omission, resolved client-ID binding and no user tokens. EA-03 binds conversational preview and publication to the saved skill; explicit `skill_save` changes it. Synthetic coverage: `google-desktop-packaging.smoke.mjs` and `automation-conversation-host.smoke.mjs`. Real packaged Windows OAuth acceptance remains separate.
+
+EA-06 publication returns `approvalConfirmed: true` to the coach only after the
+current private publication card was approved and the store accepted the recipe.
+Cancellation, stale authorization and storage failure cannot return a successful
+publication receipt. The receipt excludes the card contents and grants no future
+publication or sending authority. This supports human judgment through an accurate
+acknowledgment of the learner's completed decision; it does not repeat the approval
+question or describe its result as unknown. Host regression covers approve, cancel,
+duplicate answer, store failure and Stop races. Native Mac `3f1a3f20` subsequently
+confirmed the reviewed online publication and correct coach acknowledgment;
+three-principal API readback matched the exact recipe. Recipient installation and
+Windows execution remain separate acceptance in [the store contract](plan/skill-store-cross-platform.md).
+
+EA-06/07 also provide conversational owner-only withdrawal via `skill_unpublish`.
+The host fetches the exact publication and checks ownership, presents a private
+confirmation card naming its title/version, and rechecks activity/grant authority
+before DELETE. Cancellation, Stop, revocation or a missing success receipt cannot
+claim completion. Withdrawal hides future discovery/download; it retains installed
+copies, Google connections and durable send outcomes. Only publication progress
+is invalidated after success; a late result cannot change a replacement activity.
+The same tool and human-wait behavior apply to SDK and local subscription paths.
+Coverage: conversation-host, store-client, quest-session, local-email-runtime and
+real App question-card browser tests. Native and Windows observations remain
+separate; this does not implement version update/rollback or personal GAS packages.
+
+EA-06/07 re-publication treats a withdrawn request as terminal. Only the exact
+Service withdrawal-conflict code may prepare a replacement intent; another private
+sharing confirmation is required before dispatch. Persist the replacement ID
+before any later POST so restart/unknown response cannot duplicate publication.
+Generic conflicts, corrupt journal state and changed authorization fail closed.
+SDK and local tools identify only this typed withdrawal conflict as requiring
+fresh sharing approval; they report no new publication and never automatically
+retry or describe it as a Google/classroom connection failure. Invalid optional
+store selectors fail before host dispatch with a safe argument correction result;
+empty selectors are not silently converted to an approved new publication.
+Never restore the old tombstone or alter Google settings/send history. This is a
+new publication, not version update/rollback. Local host, client, journal and
+actual Service-route evidence is recorded in the [store contract](plan/skill-store-cross-platform.md).
+
+EA-01/03 expose the exact bounded recipe contract in `skill_save` itself, so the
+Service-funded SDK path does not depend on a developer-only local prompt. Failed
+saves return a fixed stage-specific recovery result without private input/error
+details: repair the recipe or check activity authorization. Google setup and
+publication approval cannot repair a save failure. The malformed-input, denied
+capability and storage-failure controls retain prior work; a corrected recipe can
+then be saved without connecting Google or sending mail.
+
+EA-02 managed-runner disconnect invalidates local previews/login and revokes the Google grant once. Unconfirmed revocation keeps a private retry credential across restart, blocks execution and shows explicit retry; unknown/sent ledgers remain intact. Account switching alone does not revoke the previous grant. Fixture evidence lives in `appsScriptRuntime.test.ts`; actual Google revocation and OS-backed storage remain separate acceptance.
+
+EA-09 also requires a private website-copy / PowerShell-paste installation path
+for the Windows test build. Pinned authenticated downloads, a separate directory,
+SDK setup and receipt-bound rerun are covered by
+`scripts/tests/install-email-test-fixture.ps1`; real Windows installation and
+Google execution remain separate acceptance evidence.
+
+EA-01/03 keep automation conversations readable in a short sidebar: optional help and model/usage settings are folded, required funding selection stays accessible, message items do not shrink over one another, and an active question replaces the inactive composer with a return-to-question control. Browser transition coverage lives in `automation-conversation-ui.browser.mjs`; Windows user confirmation remains separate.
+
+EA-01/03 local acceptance is now defined in [the confirmed persona and Windows gate](plan/automation-local-acceptance.md) (TJ, 2026-10-14). Stable graph IDs retain host evidence across restatements; changed prerequisites invalidate dependent results. Automation opens in the existing preview area, releases only the Studio start page, and preserves other editor tabs. Repeated graph labels must not reset the ready handshake or freeze progress. Questions show one title and one privacy explanation; menus close after selection, outside click or Escape.
+
+EA-01/03 retain the learner-selected native conversation width across reopening and expose boundary-drag guidance. Opening an existing conversation does not send another onboarding request. Apps Script preview presents a read-only private card; acknowledge/close never grants sending or publication authority. The Mac isolated test uses in-memory SecretStorage, so it cannot establish OS-backed credential persistence.
+
+EA-03/10 Windows second-account observations exposed two tool-routing errors: a public question soliciting a private Sheet URL and a legacy preview used in an Apps Script activity. The MCP boundary now returns dedicated next-tool instructions without rendering/performing those operations. Successful private Sheet reads also establish connection evidence for the quest. Regression cases cover both SDK/local-runtime registration, revoked capabilities, legacy-only compatibility, and reused graph prerequisites.
+
+EA-04/05 Apps Script approval digests bind ordered message values, independent of API object-key serialization order. Reordered keys preserve approval; edited recipient/content and duplicate or unknown-outcome retries remain blocked. A local uncertain attempt can recover only when its durable original script identity matches and a read-only query of that script's user ledger proves no attempt; a fresh private approval is still required. Missing legacy provenance stays blocked until the operator explicitly supplies the original execution's script ID in a private setup question; it must match the existing project and remote absence must be verified before binding provenance. This recovery never rewrites the uncertain send ledger or sends mail. Unreadable records and remote uncertainty remain blocked. Generated-script regression coverage is in `appsScriptRuntime.test.ts` and host recovery coverage in `automation-apps-script-host.smoke.mjs`.
+
+
+EA-02/11 commercial-onboarding preparation distinguishes fixed-code Google recovery states: quota/outage retry, revoked/missing consent reconnect, and operator/client/Workspace-policy configuration. Private setup cards offer relevant actions and pause without clearing credentials or send ledgers. Unknown 403 remains setup-blocked; no Cloud IAM grant is requested and no raw provider response reaches the model. Root runtime/host regression coverage is in `appsScriptRuntime.test.ts` and `automation-apps-script-host.smoke.mjs`. The separate [commercial onboarding plan](plan/google-commercial-onboarding.md) records external launch gates; this improvement does not establish twenty-account production readiness.
+
+EA-02 recovery also distinguishes an unfinished Google login callback from an unconfirmed connection or operator setup failure. The shared SDK/local tool returns only a fixed stage, recovery category and next-user-action receipt; it never forwards provider error text or infers that the browser did not open, the user closed it, or an existing credential changed. An unsuccessful attempt does not authorize another login, Sheet read, preview or send. This supports observable VERIFY/OWNERSHIP through truthful recovery choices. Synthetic runtime-to-tool and local HTTP MCP coverage is in `local-email-runtime.smoke.mjs`; native coach wording and real Google reconnection remain separate acceptance.
+
+SDK integration (EA-01 / REQ-M26): a served orchestrator retains its bounded
+busy retry policy; other seats stop immediately on capacity/budget 429 and ask
+for explicit recovery. Provider error bodies never become conversation text.
+Auxiliary SDK title generation remains disabled to preserve the single active
+request lease. Gateway snapshots assert these deliberate environment pins while
+preserving the earlier option invariants.
+
+EA-11 follows DEC-023: the commercial default is an immutable shared Google runner
+using each learner's own identity and bounded saved recipe, with no company IAM or
+script-editor onboarding. Personal Apps Script export is deferred. A separate
+read-only probe tests identity-derived access and UserProperties isolation; its
+local fixture success is not real two-account acceptance. Existing owner-script
+Windows acceptance remains valid only for that prior implementation.
+
+
+### Store version lifecycle checkpoint (2026-10-16)
+
+EA-06/07/09 and DEC-025 now have local immutable-revision implementation:
+owner/current-parent publication, explicit recipient version selection, old-version
+restoration, parent-bound retry, downloaded digest/format checks and atomic D1
+metadata. Runtime permissions and private setup never travel with a recipe.
+[SS-08](plan/skill-store-cross-platform.md) remains PARTIAL until native Mac/Windows
+reuse, recipient-fork provenance and coordinated schema/release validation pass.
+
+EA-07/09 store discovery must resolve a learner's title through the actual
+catalogue, never request an internal ID or treat a title as one. A failed version
+lookup permits one catalogue recovery; failed catalogue retrieval stops without
+changing Google setup or installing/publishing/sending anything. Revoked capability
+and invalid arguments do not enter that recovery. Version metadata alone cannot
+establish equal recipe contents. This keeps the useful-work/human-judgment intent
+observable: learners choose named versions from real results, and the coach only
+claims comparisons supported by evidence. Coverage: `google-automation.smoke.mjs`;
+native dbff37ed recovery passes, but catalogue-first behavior and hiding internal
+IDs remain PARTIAL.
+
+
+### Recipient derivation and cost-limit clarity (2026-10-16)
+
+EA-06/07/09 and SS-08 preserve the exact installed source revision separately from
+owner update lineage. The activity-scoped recipe and origin are saved together;
+edits preserve origin, a reviewed new root publication displays it, and retry binds
+it. A fresh local-file import clears the previous source. Credentials, recipient
+rows and send outcomes remain outside shared data. Legacy recipes are not assigned
+guessed origins. Publication success requires the Service to echo the accepted
+source. This supports Product Intent's useful work and visible human judgment:
+learners can review how their adapted work relates to the original (OWNERSHIP and
+ADAPT observations, without learner-facing scores). Local and combined
+three-principal Studio/Service tests pass. Ops0047 is applied only to the backed-up
+isolated test D1; private Servicefa7472b and Mac11b82da2 pass native recipient-fork
+publication with exact source/content readback. Windows659de97d reviewed/imported
+that fork and completed a fresh one-recipient preview at6/6 with retained private
+configuration. Matching Mac/Windows11b82da2 fork reuse subsequently passed native
+review and a fresh preview at6/6 after credential-preserving Windows upgrade.
+Third-principal Google execution and the full lifecycle matrix remain pending.
+No new mail was sent.
+
+A generic HTTP429 must not assert a proven budget cause: the message distinguishes
+usage/concurrency checks from possible provider request limits. Increasing the
+funding ceiling does not promise that every provider rate limit disappears.
+
+EA-10 current online observation (2026-10-16): Windows11b82da2 consumed a native
+one-time classroom code and reported its completed6/6 quest to private
+Servicefa7472b. The real Chalk board, served locally against that online Service,
+shows A01 normal and the other two registered test principals unknown. Eight
+access-refusal checks and nine profile/store/installer readbacks pass. The bounded
+test transport grants no command, collection, report or delivery capability.
+This closes the current one-host online linkage gap; twenty real learners,
+production Chalk deployment and three distinct Google datasets remain unverified.
+
+Store reply correction: successful publication and listing receipts explicitly
+identify cohort-only visibility. Lists also report that recipe bodies were not
+compared. Shared tool guidance and the installed SDK contract explain these
+limits, resolve titles through actual catalogue results, and keep identifiers
+out of learner-facing summaries. This addresses observed public-store wording
+and an unsupported same-content claim. Host/SDK/local-runtime checks pass;
+natural-language behavior on the updated installed candidate remains NOT_RUN.

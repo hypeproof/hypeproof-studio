@@ -3,7 +3,7 @@ export interface AccessResource {meter:string;limit:number;remaining:number;shar
 export interface AccessChoiceView {id:string;label:string;mode:'included'|'byo';source_kind:string;active:boolean;available:boolean;state:string;ends_at:number;can_request:boolean;
   allowed:{models:string[];efforts:string[];features:string[];runtimes:string[]};resources:AccessResource[];pending_request?:{id:string;state:string;note:string;resolution?:string|null}|null}
 export interface AccessView {schema:'hps-access-view/1';configured:boolean;required?:boolean;as_of:string;choices:AccessChoiceView[];truncated?:boolean}
-export interface AccessState {status:'ready'|'unknown';view?:AccessView;selected?:string;notice?:string}
+export interface AccessState {status:'ready'|'unknown';view?:AccessView;selected?:string;pendingSelection?:string;notice?:string}
 export const validFundingSource=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/.test(v);
 export function parseAccessView(value:unknown):AccessView{
   const v=value as AccessView;

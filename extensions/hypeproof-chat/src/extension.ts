@@ -1,3 +1,4 @@
+import { registerAutomationHost } from "./automationHost";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -71,7 +72,10 @@ export async function activate(context: vscode.ExtensionContext) {
   // a more reliable fallback.
   const backdoors = await applyTestBackdoors(context);
 
-  const preview = new PreviewProvider(context);
+  const preview: PreviewProvider = new PreviewProvider(context, () => {
+    startPage.closeForAutomationPreview();
+    return provider.automationPreviewColumn();
+  });
   const liveServer = new LiveServer();
   registerPreviewViewport(context, liveServer);
   // SX-59 — the old capability status bar was built here and sat on screen for the
@@ -125,7 +129,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("hypeproof-chat.diagnoseVoiceCapability", async () => {
       const { diagnoseVoiceCapability } = await import("./voiceCapability");
-      await diagnoseVoiceCapability(context, provider, provider.voiceLogChannel());
+      await diagnoseVoiceCapability(context, provider, provider.coachLogChannel());
     }),
   );
 
@@ -185,6 +189,8 @@ export async function activate(context: vscode.ExtensionContext) {
   void provider.refreshCrBytesContext();
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
+  const automationHost = registerAutomationHost(context, provider, preview);
+  provider.setEmailAutomationHost(() => automationHost.getMcpHost());
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
@@ -225,6 +231,8 @@ export async function activate(context: vscode.ExtensionContext) {
     readCollection: (sinceMs, identity) => provider.opsReadCollection(sinceMs, identity),
     recoverPreview: () => provider.opsRecoverPreview(),
   }, (line) => console.log(line));
+  classroomOps.setAutomationSource(() => automationHost.observation());
+  automationHost.setProgressListener(() => { classroomOps.refreshAutomation(); });
   provider.opsObserver = classroomOps;
   provider.inboxSource = classroomOps;
   // #1298 — when the background refresh path sees a rejected issuer token, delete it and surface the student start page.
