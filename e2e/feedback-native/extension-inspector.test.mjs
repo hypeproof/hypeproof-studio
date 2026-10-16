@@ -86,7 +86,7 @@ test('actual owned Node inspector completes startup then holds before statement,
   gate=new OwnedExtensionGate({port,appPid:()=>process.pid,target,initialRoot:dir,observeListener:()=>child?.exitCode===null?child.pid:null}).start();
   const first=launch(dir,path.join(dir,'initial-consumed'));await gate.initial.promise;await wait(()=>fs.existsSync(path.join(dir,'initial-consumed')));const firstPid=first.pid;
   const destination=path.join(dir,'fresh-destination'),marker=path.join(dir,'delayed-consumed');fs.mkdirSync(destination);
-  const pending=await gate.prepareTransition(destination,2000,'short-propagation');first.kill();await once(first,'exit');
+  const pending=await gate.prepareTransition(destination,2000,'short-propagation');assert(gate.completedPids.has(firstPid),'Prior host must have completed this gate exact PID/source/root proof');await wait(()=>gate.events.some(e=>e.phase==='prior-host-retiring'&&e.pid===firstPid&&e.admitted===false));assert.equal(gate.peer,null);first.kill();await once(first,'exit');
   const next=launch(destination,marker);await wait(()=>gate.events.some(e=>e.phase==='pre-consumption-paused'&&e.label==='short-propagation'));assert(!fs.existsSync(marker),'Statement cannot execute during hold');
   const proof=await pending.finished;assert(proof.hold_monotonic_ms>=2000&&proof.hold_wall_ms>=2000);assert.equal(proof.previous_host_pid,firstPid);assert.notEqual(proof.pid,firstPid);assert.equal(proof.pid,next.pid);await wait(()=>fs.existsSync(marker));
   await gate.close();assert.equal(gate.events.at(-1).status,'PASS');assert(!gate.failure);assert(gate.protocolDiagnostics.event_counts['Debugger.scriptParsed']>0);assert(gate.protocolDiagnostics.candidate_scripts.some(s=>s.matches_expected_pattern));assert(gate.protocolDiagnostics.candidate_scripts.length<=8);
@@ -168,4 +168,31 @@ test('physical Windows identity permits only drive spelling after realpath, neve
  const expected='D:\\a\\_temp\\candidate\\extension.js';assert(samePhysicalScriptPath('d:\\a\\_temp\\candidate\\extension.js',expected));assert(samePhysicalScriptPath(expected,expected));
  for(const other of ['E:\\a\\_temp\\candidate\\extension.js','D:\\A\\_temp\\candidate\\extension.js','D:\\a\\_temp\\other\\extension.js','D:/a/_temp/candidate/extension.js','D:\\a\\_temp\\candidate\\..\\candidate\\extension.js','file:///D:/a/_temp/candidate/extension.js',null])assert(!samePhysicalScriptPath(other,expected));
  assert(!samePhysicalScriptPath('/owned/Extension.js','/owned/extension.js'));assert(samePhysicalScriptPath('/owned/extension.js','/owned/extension.js'));
+});
+
+
+test('exact prior host retirement is never new ownership; unknown, ambiguous and reused identities cannot attach',()=>{
+ const events=[];let calls=0;
+ const execute=command=>{calls++;return command==='lsof'?'p103\n':'101 1\n';};
+ assert.equal(ownedListener(9788,101,'darwin',execute,{pid:103,observe:pid=>events.push(pid)}),null);assert.deepEqual(events,[103]);assert.equal(calls,2,'No acceptance from a second ownership sample');
+ assert.throws(()=>ownedListener(9788,101,'darwin',execute),/not an owned/,'Unproven prior identity cannot bypass ownership');
+ const reused=command=>command==='lsof'?'p103\n':'103 999\n999 1\n';assert.throws(()=>ownedListener(9788,101,'darwin',reused,{pid:103}),/not an owned/,'Reused PID with foreign ancestry still fails immediately');
+ const foreign=command=>command==='lsof'?'p104\n':'104 999\n999 1\n';assert.throws(()=>ownedListener(9788,101,'darwin',foreign,{pid:103}),/not an owned/);
+ const ambiguous=command=>command==='lsof'?'p103\np104\n':'103 101\n104 101\n';assert.throws(()=>ownedListener(9788,101,'darwin',ambiguous,{pid:103}),/Ambiguous/);
+ const next=command=>command==='lsof'?'p104\n':'104 101\n101 1\n';assert.equal(ownedListener(9788,101,'darwin',next,{pid:103}),104,'New PID still requires strict current ancestry');
+});
+
+test('gate retirement needs its own completed proof and a declared transition; no ownership refusal is retried',async()=>{
+ let calls=0,retirementSeen;
+ const gate=new OwnedExtensionGate({port:9788,appPid:()=>101,target:{},initialRoot:'/owned',observeListener:(_port,_root,retirement)=>{calls++;retirementSeen=retirement;throw Error('unproven owner');}});gate.previousPid=103;gate.phase.previousPid=103;gate.start();await assert.rejects(gate.initial.promise,/unproven owner/);await gate.close();assert.equal(retirementSeen,undefined);assert.equal(calls,1);assert.equal(gate.completedPids.size,0);
+});
+
+test('retiring or reused prior PID consumes the unchanged transition deadline without fetch, attach or resume',async()=>{
+ const originalFetch=globalThis.fetch;let fetches=0,attaches=0,probes=0;
+ globalThis.fetch=async()=>{fetches++;throw Error('No endpoint query for retired PID');};
+ const gate=new OwnedExtensionGate({port:9788,appPid:()=>101,target:{},initialRoot:'/owned',observeListener:(_port,_root,retirement)=>{probes++;assert.equal(retirement.pid,103);return 103;}});
+ try{
+  gate.completedPids.add(103);gate.previousPid=103;gate.phase.previousPid=103;gate.phase.label='declared-next';const deadline=gate.phase.deadline=Date.now()+40;gate.attach=async()=>{attaches++;};gate.start();
+  await assert.rejects(gate.initial.promise,/startup deadline/);assert.equal(gate.phase.deadline,deadline);assert.equal(probes,1);assert.equal(fetches,0);assert.equal(attaches,0);assert.equal(gate.events.filter(e=>e.phase==='prior-host-retiring').length,1);assert(!gate.events.some(e=>e.phase==='activation-released'));await gate.close();
+ }finally{globalThis.fetch=originalFetch;await gate.close().catch(()=>{});}
 });
