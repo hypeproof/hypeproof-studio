@@ -52,7 +52,7 @@ export async function startScriptedUpstream({ledgerFile,controlSecret}){
     if(pending.has(markers.selected))throw Error('duplicate_held_turn');
     const finish=reason=>{clearTimeout(timer);pending.delete(markers.selected);row.fixture_finish=reason;if(!res.destroyed){res.end(frame.tail);row.state='complete';}persist();};
     const timer=setTimeout(()=>finish('timeout_cleanup_not_cancel_proof'),120000);pending.set(markers.selected,{finish});
-    res.on('close',()=>{row.client_closed=true;row.closed_at=new Date().toISOString();if(!res.writableEnded){row.state='upstream_socket_closed';clearTimeout(timer);pending.delete(markers.selected);}persist();});
+    res.on('close',()=>{row.socket_close_event=true;row.closed_at=new Date().toISOString();if(!res.writableEnded){row.client_closed=true;row.state='upstream_socket_closed';clearTimeout(timer);pending.delete(markers.selected);}persist();});
    }else{res.end(frame.tail);row.state='complete';persist();}
   }catch(error){state.rejections.push({kind:/^[a-z_]+$/.test(error.message)?error.message:'invalid_request'});persist();if(!res.headersSent)json(400,{error:{type:'invalid_request_error',message:'Scripted fixture refused'}});else res.destroy();}
  });

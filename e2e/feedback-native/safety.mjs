@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 export const sha256=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const sourceScopes=['extensions/hypeproof-chat','scripts/studio-dev.py','config/service-packages.json'];
@@ -23,6 +24,10 @@ export function validateConfig(c){
  if(c.workspace.c!==undefined){if(typeof c.workspace.c!=='string'||!path.isAbsolute(c.workspace.c))throw Error('C must be an explicit absolute path');for(const other of[c.candidate.app,c.workspace.a,c.workspace.b])if(within(c.workspace.c,other)||within(other,c.workspace.c))throw Error('C must be isolated from the app and both activity-A folders');}
  if(c.workspace.c&&fs.existsSync(c.workspace.c)){const real=fs.realpathSync(c.workspace.c);for(const other of[c.candidate.app,c.workspace.a,c.workspace.b])if(fs.existsSync(other)){const target=fs.realpathSync(other);if(within(real,target)||within(target,real))throw Error('Real C must remain isolated, including linked paths');}}
  if(c.scenarios?.includes('activity-isolation')&&(!c.workspace.c||!c.service.tokenBFile))throw Error('Activity isolation requires explicit token B and third owned folder C');
+ if(c.scenarios?.includes('history-streaming')){
+  if(c.attach||typeof c.workspace.d!=='string'||!path.isAbsolute(c.workspace.d))throw Error('History/streaming requires owned fresh D and process');
+  const real=fs.realpathSync(c.workspace.d);for(const other of[c.candidate.app,c.workspace.a,c.workspace.b,c.workspace.c])if(other&&fs.existsSync(other)){const target=fs.realpathSync(other);if(within(real,target)||within(target,real))throw Error('Fresh D must remain isolated, including linked paths');}
+ }
  if(path.resolve(c.workspace.a)===path.resolve(c.workspace.b))throw Error('A and B must be different real folders');
  if(within(c.userDataDir,c.candidate.app)||within(c.workspace.a,c.candidate.app)||within(c.workspace.b,c.candidate.app)||within(c.evidence,c.candidate.app))throw Error('User data, work and evidence must remain outside the application');
  if(c.secretStorage!=='os-keychain'&&c.secretStorage!=='inmemory')throw Error('Declare secretStorage os-keychain or inmemory; the latter cannot prove process restart credential persistence');
@@ -82,4 +87,13 @@ export function verifyRestartArtifacts({sidebarVisible,savedFile,workspace}){
  if(!savedFile||!path.isAbsolute(savedFile.path)||!within(savedFile.path,workspace)||!within(fs.realpathSync(savedFile.path),fs.realpathSync(workspace)))throw Error('Saved native file must remain in its actual workspace');
  if(fs.lstatSync(savedFile.path).isSymbolicLink()||sha256(savedFile.path)!==savedFile.sha256)throw Error('Actual native saved file bytes changed across full restart');
  return {hidden_sidebar_preserved:true,saved_file_preserved:true,saved_file_sha256:savedFile.sha256};
+}
+
+export function sdkProtocolProof(config,service,sdk){
+ const proof=config.sdkProtocolProof;
+ if(!proof||!path.isAbsolute(proof.file??'')||!fs.existsSync(proof.file)||sha256(proof.file)!==proof.sha256)throw Error('Actual background SDK protocol proof is missing or changed');
+ const value=JSON.parse(fs.readFileSync(proof.file,'utf8'));
+ if(value.status!=='PASS'||value.protocol_readiness!=='PASS_REAL_SDK_SCRIPTED_PROTOCOL'||value.cancellation_verdict!=='PASS_ALL_LAYERS'||value.provider_called!==false||value.studio_source_sha!==config.candidate.sourceSha||value.studio_dirty!==false||value.service?.sha!==service.source.sha||value.sdk_binary_sha256!==sdk.sha256||value.sdk_version!==sdk.version)throw Error('Scripted SDK proof does not match the actual source/Service/binary/cancellation boundary');
+ for(const file of ['service.mjs','scripted-upstream.mjs','scripted-sdk-probe.mjs','session-control.mjs'])if(value.fixture_hashes?.[file]!==sha256(fileURLToPath(new URL(file,import.meta.url))))throw Error('Scripted protocol fixture bytes changed');
+ return {sha256:proof.sha256,protocol:value.protocol_readiness,cancellation:value.cancellation_verdict,provider_called:false};
 }

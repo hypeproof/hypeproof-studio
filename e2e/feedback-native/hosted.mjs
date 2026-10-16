@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {appSdkVersion,checkSeededSdk} from '../unified-release/sdk-seed.mjs';
 import {sha256} from './safety.mjs';
 import {hostedCommands,OFFICIAL_SHELL_REPOSITORY} from './hosted-shell.mjs';
 const args=process.argv.slice(2);
@@ -26,10 +27,16 @@ fs.writeFileSync(path.join(evidence,'shell-download.json'),JSON.stringify({repos
 if(process.platform==='darwin')run('ditto',['-xk',path.join(assets,asset.name),extracted]);else run('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from("Expand-Archive -LiteralPath '"+path.join(assets,asset.name).replaceAll("'","''")+"' -DestinationPath '"+extracted.replaceAll("'","''")+"'",'utf16le').toString('base64')]);
 function findApp(dir,depth=0){if(depth>3)return[];const found=[];for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);if(entry.isDirectory()&&process.platform==='darwin'&&entry.name==='HypeProof Studio.app')found.push(file);else if(entry.isFile()&&process.platform==='win32'&&entry.name==='HypeProof Studio.exe')found.push(dir);else if(entry.isDirectory())found.push(...findApp(file,depth+1));}return found;}
 const apps=findApp(extracted);if(apps.length!==1)throw Error('Expected one extracted official app');
+const sdkVersion=appSdkVersion(apps[0]);
+if(process.platform==='darwin')run('bash',['scripts/seed-sdk-binary.sh','--version',sdkVersion]);
+else run('powershell.exe',['-NoProfile','-NonInteractive','-File','scripts/seed-sdk-binary.ps1','-Version',sdkVersion]);
+const sdk=checkSeededSdk(apps[0]);if(!sdk.ok)throw Error('Verified real SDK binary required: '+sdk.reason);
+fs.writeFileSync(path.join(evidence,'sdk-binary.json'),JSON.stringify({...sdk,sha256:sha256(sdk.binary)},null,2));
 const servicePin=JSON.parse(fs.readFileSync(path.join(repo,'config/service-deployment.json'),'utf8'));
 if(servicePin.repository!=='hypeproof/hypeproof-service'||process.env.HPS_SERVICE_SHA!==servicePin.sha)throw Error('Hosted Service SHA must match config/service-deployment.json; no arbitrary sibling checkout');
+run(process.execPath,['e2e/feedback-native/scripted-sdk-probe.mjs',path.join(evidence,'scripted-sdk-protocol'),sdk.binary]);
 let service;try{
- service=spawn(process.execPath,['--experimental-strip-types','--experimental-sqlite',path.join(repo,'e2e/feedback-native/service.mjs'),privateService],{cwd:repo,stdio:'inherit',env:commands.runtimeEnv});
+ service=spawn(process.execPath,['--experimental-strip-types','--experimental-sqlite',path.join(repo,'e2e/feedback-native/service.mjs'),privateService,'--scripted-upstream'],{cwd:repo,stdio:'inherit',env:commands.runtimeEnv});
  const manifest=path.join(privateService,'service.json');const end=Date.now()+60000;while(!fs.existsSync(manifest)){if(service.exitCode!==null)throw Error('Actual-source synthetic Service failed to start');if(Date.now()>end)throw Error('Timed out starting actual-source Service');await new Promise(r=>setTimeout(r,150));}
  run(process.platform==='win32'?'python':'python3',['scripts/studio-dev.py','prepare','--base-app',apps[0],'--state-dir',state,'--provider','service','--service','local']);
  // The disposable hosted desktop must exercise normal persisted credentials across reload.

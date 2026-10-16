@@ -86,3 +86,21 @@ test('restart artifacts require hidden user layout and unchanged native saved by
  const outside=path.join(dir,'outside.txt');fs.writeFileSync(outside,'original saved bytes');assert.throws(()=>verifyRestartArtifacts({sidebarVisible:false,savedFile:{path:outside,sha256:sha256(outside)},workspace}),/actual workspace/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('native scripted turns require immutable matching actual-SDK source/binary/Service/cancel proof before UI',async()=>{
+ const {sdkProtocolProof}=await import('./safety.mjs');const dir=fs.mkdtempSync(path.join(os.tmpdir(),'native-sdk-proof-'));
+ try{const file=path.join(dir,'probe.json'),c={candidate:{sourceSha:'a'.repeat(40)},sdkProtocolProof:{file}},service={source:{sha:'b'.repeat(40)}},sdk={version:'0.3.299',sha256:'c'.repeat(64)};
+ const valid={status:'PASS',protocol_readiness:'PASS_REAL_SDK_SCRIPTED_PROTOCOL',cancellation_verdict:'PASS_ALL_LAYERS',provider_called:false,studio_source_sha:c.candidate.sourceSha,studio_dirty:false,service:service.source,sdk_binary_sha256:sdk.sha256,sdk_version:sdk.version,fixture_hashes:Object.fromEntries(['service.mjs','scripted-upstream.mjs','scripted-sdk-probe.mjs','session-control.mjs'].map(name=>[name,sha256(new URL(name,import.meta.url))]))};
+ const write=value=>{fs.writeFileSync(file,JSON.stringify(value));c.sdkProtocolProof.sha256=sha256(file);};write(valid);assert.equal(sdkProtocolProof(c,service,sdk).provider_called,false);
+ for(const change of [{status:'FAIL'},{studio_dirty:true},{provider_called:true},{studio_source_sha:'d'.repeat(40)},{service:{sha:'d'.repeat(40)}},{sdk_binary_sha256:'d'.repeat(64)},{sdk_version:'0.0.0'},{cancellation_verdict:'FAIL_NOT_PROPAGATED'},{fixture_hashes:{}}]){write({...valid,...change});assert.throws(()=>sdkProtocolProof(c,service,sdk));}
+ write(valid);fs.appendFileSync(file,' ');assert.throws(()=>sdkProtocolProof(c,service,sdk),/missing or changed/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('scripted history requires owned isolated fresh D; attach, missing and linked destinations refuse',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'native-owned-D-'));try{
+ const c=config();c.scenarios=['history-streaming'];c.workspace={a:path.join(dir,'A'),b:path.join(dir,'B'),c:path.join(dir,'C'),d:path.join(dir,'D')};for(const p of Object.values(c.workspace))fs.mkdirSync(p);assert.equal(validateConfig(c),c);
+ assert.throws(()=>validateConfig({...c,attach:true}),/owned fresh D/);assert.throws(()=>validateConfig({...c,workspace:{...c.workspace,d:undefined}}),/owned fresh D/);
+ const linked=path.join(dir,'linked');fs.symlinkSync(c.workspace.a,linked,process.platform==='win32'?'junction':'dir');assert.throws(()=>validateConfig({...c,workspace:{...c.workspace,d:linked}}),/including linked/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

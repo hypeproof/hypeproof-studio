@@ -4,8 +4,9 @@ This runner operates the prepared desktop shell on macOS or Windows. It reuses t
 existing classroom harness's OOPIF/CDP discovery, but sends native CDP keyboard and
 mouse input instead of DOM events, a host command bridge, injected messages or
 seeded token/history files. Foreground input is disabled by default. `--allow-foreground` requires an explicit dedicated UI slot; prefer a hosted runner. It never activates another app or uses AppleScript/System Events. It can attach without process ownership, or launch
-and stop only its generated isolated profile. It never submits a chat turn or
-an image edit.
+and stop only its generated isolated profile. It never calls an external model provider or submits an image edit. The optional
+owned history/streaming mode enters actual chat turns through the real SDK and
+Service, with text responses supplied only by its owned scripted loopback.
 
 Use Node 24 (built-in WebSocket, TypeScript stripping, loader hooks and SQLite), a
 prepared app from `scripts/studio-dev.py`, an explicit Service manifest and private
@@ -71,7 +72,9 @@ matching preparation stage, injected bytes and receipt hash separately.
 
 This mode uses actual Service source/token/profile/activity/router code with its
 existing SQLite/KV harness adapters. Cohort/session/roster/users are **synthetic**,
-provider keys are removed and outbound provider network is rejected. It is not a
+real provider keys are removed and outbound provider network is rejected.
+With `--scripted-upstream`, a synthetic key and the existing proxy URL bind only
+the owned loopback response fixture; metadata-only mode keeps generation off. It is not a
 production profile, model or installed-app proof. Keep the Service directory
 outside the evidence upload, because it contains private token files.
 
@@ -111,7 +114,7 @@ configured `inmemory` SecretStorage does not prove process-restart persistence.
 | T05 | After T03 PASS: real Cmd+Q (Mac) / visible File → Exit (Windows), owned child exit 0, CDP connection refusal, same profile/binary/environment restart with different PID, visible chat and identical A draft; deliberately hidden sidebar and exact native-saved file hash survive | Owned OS-backed SecretStorage only; attach/in-memory is BLOCKED; no `ensureChat`, token entry, force-kill or reseeding may establish PASS |
 | T04 independent activity | Actual Start → different activity → enter B → select bound A → visible rejection → cancel; A draft/files unchanged. Empty owned C admits B without A draft; distinct B draft survives native File Open Folder A→C→A | Requires explicit second token with different Service activity identity and generated C ownership marker; no model history inferred |
 | T04 session negative | End-of-suite canonical DELETE ends only the owned synthetic fixture session; existing A profile then returns session_inactive and the actual saved-activity UI refuses admission while draft/files/bindings remain | Session ended, not JWT expiry or token revocation; never an attached/deployed Service |
-| T05/T06 remainder | Explicit `NOT_RUN` | Persisted model history, multiwindow and streaming still need additional native fixtures and actual conversation turns |
+| T03/T06 scripted followup | Actual native entry of completed A1/D2 turns, fresh owned D, exact history after folder reload, active Start refusal, Stop, normal quit/restart, direct File Open, revoked B admission refusal | New implementation; native execution NOT_RUN until dedicated hosted evidence. Scripted responses prove no real model behavior. Multiwindow/crash/live JWT expiry remain separate |
 | T07 | Runtime skill command, public pinned import, visible revision/license/capability preview before explicit select, stored preview, disable | Import uses public GitHub; selected instructions reaching a provider and offline transport isolation remain `NOT_RUN` |
 | T08/T09 | Source regressions elsewhere | Native update/revert/tamper tests not substituted by helper assertions |
 | T16 capability subset | Actual native command registration and disabled-profile notification | No image is selected, uploaded or charged; enabled profile reports `BLOCKED` instead of attempting a paid request |
@@ -256,6 +259,44 @@ HPS_SERVICE_SOURCE=/absolute/pinned-service HPS_SERVICE_SHA=FULL_SHA node --expe
 
 It starts and closes its own synthetic SQLite/KV fixture, reports no provider
 calls and makes no desktop interaction. Its result cannot stand in for native UI
-refusal, credential persistence or full T01–T06 acceptance. History and active
-streaming remain NOT_RUN; they require a separate scripted upstream through the
-actual SDK/Service and actual native turn entry, rather than seeded history.
+refusal, credential persistence or full T01–T06 acceptance. The separate scripted
+follow-up below enters actual SDK turns through the Service. Its native history
+and active-streaming assertions remain NOT_RUN until dedicated hosted evidence.
+
+## Scripted history / streaming follow-up (#1718)
+
+See [the fixture contract](SCRIPTED.md). The hosted entry point seeds/checks the
+actual SDK version vendored in the official shell, then executes the real-SDK
+background protocol probe against its own pinned actual Service fixture. Native
+configuration binds the immutable probe hash, source commit, Service SHA, actual
+SDK binary/version and fixture file hashes. Missing/stale/failed protocol or
+upstream-cancellation proof fails before UI input. It does not retry or rewrite
+requests. The same fixed output4096/retry0 env reaches the owned SDK child.
+
+The original twelve selected native checks remain. New history/streaming checks
+run before skill previews create unsaved documents, and before final A session
+shutdown. Fresh owned D has never been opened; existing B's own state is not
+misclassified as empty. Two real native SDK turns establish A1 and carried A1+D2
+history, then actual File Open Folder restores each exact set. Three further
+held turns test actual Start refusal/Stop, normal quit/restart and direct File
+Open while active. Each counts against one same-activity 12-attempt upstream
+ceiling including auxiliary/count_tokens/retries. Exhaustion remains explicit;
+no activity reissue/reset or model fallback is a successful substitute.
+
+Rendered user/assistant marker occurrences must be exact after actual reload;
+interrupted turns must not reappear as committed history. Native unsent drafts
+must survive, and ten-second restored-idle observation windows must show no new
+generation. The Service and scripted listener separately report client close,
+response-reader cancellation and upstream socket closure; cleanup is never PASS.
+SDK onDelta before a completed assistant block is not assumed or fabricated.
+Existing B is canonically revoked last, and actual opening C must refuse automatic
+admission without new generation or binding/file changes. A returns with its
+history/draft, then the original ended-session check still runs against A.
+
+Receipts retain request sequence, turn hash, request class, actual accounting
+registration/parent IDs verified in synthetic SQLite, and count_tokens separately.
+Raw response headers that omit an ID remain null. Title/auxiliary T18 is only
+OBSERVED if it naturally occurs; a quiet two-turn probe does not invent it.
+These are synthetic protocol/native proofs; real model quality, real provider
+billing/cancellation, crash recovery and active-stream token revocation are not
+claimed. No new native result is PASS until the hosted run actually executes.

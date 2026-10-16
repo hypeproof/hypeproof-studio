@@ -1,0 +1,3 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {historyMarkers,assertCompletedHistory} from './history-streaming.mjs';
+test('rendered history requires exact user+assistant occurrence and rejects duplicates, foreign turns or partial-only claims',()=>{const rows=[{role:'user',text:'HPS_NATIVE_A1'},{role:'assistant',text:'HPS_NATIVE_REPLY_A1'}];assertCompletedHistory(rows,['A1']);assert.throws(()=>assertCompletedHistory([...rows,...rows],['A1']));assert.throws(()=>assertCompletedHistory(rows.slice(0,1),['A1']));assert.throws(()=>assertCompletedHistory(rows,['A1','D2']));assert.equal(historyMarkers(rows).A1.assistant,1);assert.throws(()=>assertCompletedHistory([...rows,{role:'user',text:'HPS_NATIVE_STOP_HOLD'}],['A1']));});

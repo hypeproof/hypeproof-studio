@@ -45,12 +45,19 @@ globalThis.fetch=async(input,init)=>{
  if(scripted&&u.origin===scripted.origin&&u.pathname.startsWith('/v1/messages')){
   const row=context.getStore();if(!row)throw Error('Scripted upstream requires actual Service dispatch linkage');
   row.scripted_dispatches=(row.scripted_dispatches??0)+1;
+  if(row.ledger_registration_id&&harness.db?.prepare('SELECT request_id FROM usage_attempt_costs WHERE request_id=?').get(row.ledger_registration_id))row.ledger_request_id=row.ledger_registration_id;
   const headers=new Headers(init?.headers);headers.set('x-hps-native-subject',row.subject);headers.set('x-hps-native-service-seq',String(row.seq));
   return originalFetch(input,{...init,headers,redirect:'error'});
  }
  if(['127.0.0.1','localhost'].includes(u.hostname))return originalFetch(input,init);
  blockedOutbound++;throw Error('External provider/outbound network disabled in native fixture');
 };
+// Observe only the existing typed accounting registration; execute its SQL/bindings unchanged.
+const originalDb=env.HPS_DB;
+env.HPS_DB={...originalDb,prepare(sql){const statement=originalDb.prepare(sql),bind=statement.bind;statement.bind=function(...args){
+ if(/INSERT(?: OR IGNORE)? INTO usage_attempt_costs/i.test(sql)){const row=context.getStore();if(row)for(const value of args)if(typeof value==='string'&&value.startsWith('{')){try{const document=JSON.parse(value);if(typeof document.request_id==='string'&&document.observation?.parent_request_id){row.ledger_registration_id=document.request_id;row.parent_request_id=document.observation.parent_request_id;row.ledger_request_class=document.observation.request_class;}}catch{}}}
+ return bind.apply(statement,args);
+};return statement;}};
 const server=createServer(async(req,res)=>{
  let reader,row;
  try{
@@ -69,6 +76,7 @@ const server=createServer(async(req,res)=>{
   res.writeHead(response.status,Object.fromEntries(response.headers));
   if(response.body){reader=response.body.getReader();try{for(;;){const next=await reader.read();if(next.done||res.destroyed)break;if(!res.write(next.value))await new Promise(resolve=>{res.once('drain',resolve);res.once('close',resolve);});}}finally{reader.releaseLock();}}
   if(!res.destroyed)res.end();await ctx.settle();
+  if(row.ledger_request_id)row.ledger=harness.db?.prepare('SELECT request_id,evidence_version,execution_state,pricing_state,amount_micro,currency FROM usage_attempt_costs WHERE request_id=?').get(row.ledger_request_id)??null;
  }catch{if(row)row.bridge_error=true;if(!res.headersSent)res.writeHead(500);if(!res.destroyed)res.end();}
 });
 server.listen(0,'127.0.0.1');await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
