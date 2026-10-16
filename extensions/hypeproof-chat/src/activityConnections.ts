@@ -11,6 +11,7 @@ export class ActivityConnectionError extends Error {}
 export const ACTIVITY_TOKEN_KEY = 'hypeproofChat.workshopToken';
 const PREFIX = 'hps.activity.credential.';
 const ACTIVE = 'hps.activity.active';
+const DISCONNECTED_REF = 'hps.activity.disconnectedRef';
 export interface ActivityRecord extends ActivitySummary {
   version: 1; service: string; serverId: string;
   token: string; savedAt: number;
@@ -48,15 +49,27 @@ export class ActivityConnections {
   get matchesService(): boolean { try { return !!this.active && this.active.service === activityService(this.service()); } catch { return false; } }
   async initialize(): Promise<void> {
     const ref = this.raw.workspaceState.get<string | null>(ACTIVE);
-    if (ref === null) return;
-    let record = ref?.startsWith(PREFIX) ? await this.read(ref) : undefined;
     const root = this.root();
-    if (root && fs.existsSync(root) && record?.workspace !== canonical(root)) {
-      const file = this.bindingPath(root);
-      const bound = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8')).ref : undefined;
-      record = typeof bound === 'string' ? await this.read(bound) : undefined;
-    }
+    const disconnectedRef = this.raw.workspaceState.get<string>(DISCONNECTED_REF);
+    // A disconnect applies to that saved generation, not a later explicit re-entry from another folder.
+    if (ref === null && (!disconnectedRef || !root || (await this.forWorkspace(root))?.ref === disconnectedRef)) return;
+    let record: ActivityRecord | undefined;
+    if (root && fs.existsSync(root)) {
+      // The folder binding is authoritative, even if this workspace has a stale pointer.
+      record = await this.forWorkspace(root);
+    } else if (ref?.startsWith(PREFIX)) record = await this.read(ref);
     if (record) this.active = record; // pinned to this window, never follows another window's writes
+  }
+  async forWorkspace(root: string): Promise<ActivityRecord | undefined> {
+    const file = this.bindingPath(root);
+    if (!fs.existsSync(file)) return;
+    const bound = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const record = typeof bound.ref === 'string' ? await this.read(bound.ref) : undefined;
+    if (!record || bound.version !== 1 || bound.id !== record.id || record.workspace !== canonical(root))
+      throw new ActivityConnectionError('이 폴더의 활동 연결을 읽지 못했습니다. 저장된 활동을 선택해 다시 연결해 주세요.');
+    if (record.service !== activityService(this.service()))
+      throw new ActivityConnectionError('이 폴더는 다른 서버의 활동에 연결돼 있습니다. 연결 서버를 확인해 주세요.');
+    return record;
   }
   private async read(ref: string): Promise<ActivityRecord | undefined> {
     if (!ref.startsWith(PREFIX)) return;
@@ -158,7 +171,11 @@ export class ActivityConnections {
       } finally { unlock(); }
     };
   }
-  async disconnect(): Promise<void> { await this.raw.workspaceState.update(ACTIVE,null); this.active=undefined; }
+  async disconnect(): Promise<void> {
+    if (this.active) await this.raw.workspaceState.update(DISCONNECTED_REF, this.active.ref);
+    await this.raw.workspaceState.update(ACTIVE, null);
+    this.active = undefined;
+  }
   /** One active writer per physical folder across extension-host processes. */
   acquire(): () => void {
     const r = this.active, root = this.root();

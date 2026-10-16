@@ -47,6 +47,12 @@ ready, 다른 세션 작업, 리뷰 대기, 의존성, 사람/환경 대기, 재
   이슈의 의미상 범위 일치는 작성자와 조정 에이전트가 확인한다.
 - 브랜치는 `fix/`, `feat/`, `docs/`, `chore/` 중 하나로 시작한다.
 - PR 본문에는 `Closes #<issue-number>` 또는 동등한 자동 close 문구를 넣는다.
+- 저장소는 `hypeproof/<repo>`로 지칭한다. 2026-10-10에 `hypeproof-harness`, `hypeprooflab`,
+  `hypeproof-studio`, `sediment`와 릴리스 저장소 셋이 `jayleekr`에서 `hypeproof` 조직으로
+  이관됐다. 이슈·PR 생성과 참조, `gh`·`hype-pr` 인자, clone 주소에 이전 `jayleekr/<repo>`
+  주소를 쓰지 않는다. GitHub이 redirect하므로 틀린 이름도 성공한 것처럼 보인다. 도구가 조직
+  주소를 거부하면 이전 주소로 우회하지 말고 Harness의 alias나 registry를 고친다. 예외는
+  없다. `hype-merge`는 이전 주소로 읽은 PR을 `ready`로 보지 않는다 (#293).
 - Harness, Lab, Studio의 개발→PR 생성 요청은 `.claude/skills/hype-pr/SKILL.md`를 읽고 따른다.
   개발 시작에 기준 연결을 확인하고, 생성 전 `inspect` → Agent assessment → `prepare` →
   `create --issue <실행-이슈> --preparation ... --apply`를 사용한다. 직접 `gh pr create`로 누락 검토를 우회하지 않는다.

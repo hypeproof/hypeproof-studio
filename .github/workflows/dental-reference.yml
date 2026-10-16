@@ -5,6 +5,12 @@ on:
       - 'docs/curriculum/dental-ownership/**'
       - 'e2e/dental-reference/**'
       - 'e2e/preview-viewport/**'
+      - 'e2e/reference-design/**'
+      - 'e2e/image-edit/**'
+      - 'extensions/hypeproof-chat/src/referenceDesign.ts'
+      - 'extensions/hypeproof-chat/src/imageEditAssets.ts'
+      - 'extensions/hypeproof-chat/test/fixtures/reference-design/**'
+      - 'extensions/hypeproof-chat/test/fixtures/image-edit/**'
       - 'extensions/hypeproof-chat/src/liveServerHelpers.ts'
       - 'extensions/hypeproof-chat/src/nativeBrowser.ts'
       - 'e2e/chalk-authoring/**'
@@ -48,6 +54,10 @@ jobs:
         working-directory: e2e
       - run: npm run test:dental-reference
         working-directory: e2e
+      - run: npm run test:reference-design
+        working-directory: e2e
+      - run: npm run test:image-edit
+        working-directory: e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -56,4 +66,6 @@ jobs:
             e2e/test-results/dental-reference/
             e2e/test-results/chalk-authoring/
             e2e/test-results/classroom/
+            e2e/artifacts/reference-design/
+            e2e/artifacts/image-edit-comparison/
           retention-days: 14

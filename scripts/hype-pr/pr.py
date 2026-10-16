@@ -194,20 +194,33 @@ def parse_repo(value: str) -> str:
 
 
 from issue_guard import positive_issue, validate_scoped_issue  # noqa: E402
+import body_contract  # noqa: E402
+
+
+def github_repo(repo: str) -> str:
+    """Address GitHub by the organization path of a transferred repository.
+
+    The registry keeps the former ID until #287 migrates it. GitHub would redirect
+    that path, but then the former name is what lands in commands and output.
+    """
+    from preparation import organization_repo
+    full = parse_repo(repo)
+    return organization_repo(full) or full
 
 
 def fetch_scoped_issue(repo: str, number: int) -> dict[str, Any]:
-    path = f"repos/{repo}/issues/{number}"
+    target = github_repo(repo)
+    path = f"repos/{target}/issues/{number}"
     if os.environ.get("HYPE_PR_WORK_DIR"):
         from work_transport import exchange
         return exchange("read", {"path": path})
     response = run(["gh", "api", "--method", "GET", path])
     if response.returncode != 0:
-        raise ValueError(f"cannot read scoped issue {repo}#{number}: {response.stderr.strip() or 'GitHub API failed'}")
+        raise ValueError(f"cannot read scoped issue {target}#{number}: {response.stderr.strip() or 'GitHub API failed'}")
     try:
         return json.loads(response.stdout)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"scoped issue {repo}#{number} returned invalid JSON") from exc
+        raise ValueError(f"scoped issue {target}#{number} returned invalid JSON") from exc
 
 
 def active_members(policy: dict[str, Any]) -> list[str]:
@@ -228,7 +241,8 @@ def find_repo(policy: dict[str, Any], repo_ref: str) -> tuple[dict[str, Any], di
     wanted = parse_repo(repo_ref)
     for repo in policy["repos"].get("repositories", []):
         full = repo_full_name(repo)
-        if wanted in (full, repo.get("name")):
+        from preparation import policy_repo
+        if wanted in (full, repo.get("name")) or policy_repo(wanted) == policy_repo(full):
             return repo, policy["profiles"][repo["profile"]]
     raise ValueError(f"unknown repo in policy: {repo_ref}")
 
@@ -317,7 +331,7 @@ def fetch_pr(repo: str, pr: str) -> dict[str, Any]:
         "view",
         pr,
         "--repo",
-        parse_repo(repo),
+        github_repo(repo),
         "--json",
         "author,files,isDraft,labels,number,title,url",
     ])
@@ -380,7 +394,7 @@ def reviewer_commands(repo: str, pr_ref: str, reviewers: list[str]) -> list[list
             "edit",
             str(pr_ref),
             "--repo",
-            parse_repo(repo),
+            github_repo(repo),
             "--add-reviewer",
             reviewer,
         ]
@@ -396,7 +410,7 @@ def reviewer_cleanup_commands(repo: str, pr_ref: str, reviewers: list[str]) -> l
             "edit",
             str(pr_ref),
             "--repo",
-            parse_repo(repo),
+            github_repo(repo),
             "--remove-reviewer",
             reviewer,
         ]
@@ -495,13 +509,96 @@ def git_receipt_path(checkout):
     return Path(location)
 
 
+def release_lane(args, report):
+    """Decide the PR's lane (normal, hotfix or forward port), its contract and labels.
+
+    The hotfix lane is policy, so it is read from the default branch: a hotfix
+    branch is cut from an old tag that may predate the contract. A normal PR is
+    checked against the contract in the commit it proposes, so a repository opts
+    in through its own reviewed change.
+    """
+    checkout = getattr(args, "checkout", ".") or "."
+    read_head, head_exists = body_contract.git_reader(checkout, report["head"] if report else "HEAD")
+    read_main, main_exists = body_contract.git_reader(checkout, f"origin/{DEFAULT_BASE}")
+    main_contract = read_main()
+    lane = body_contract.hotfix_lane(main_contract)
+    labels = list(args.label or [])
+    forward_of = getattr(args, "forward_of", None)
+    if lane is None:
+        if forward_of:
+            raise ValueError(f"--forward-of needs a hotfix lane in {body_contract.CONTRACT_PATH} on {DEFAULT_BASE}")
+        return {"mode": "normal", "contract": read_head(), "path_exists": head_exists, "labels": labels}
+    hotfix_label, forward_label = lane["label"], lane["forward_label"]
+    if args.base.startswith(lane["base_prefix"]):
+        if forward_of:
+            raise ValueError(f"--forward-of opens the port to {DEFAULT_BASE}; this PR targets the hotfix branch {args.base}")
+        if forward_label in labels:
+            raise ValueError(f"`{forward_label}` is for the port to {DEFAULT_BASE}, not for a PR into {args.base}")
+        if args.auto_merge:
+            raise ValueError("a hotfix PR is merged by hand; drop --auto-merge")
+        if hotfix_label not in labels:
+            labels.append(hotfix_label)
+        return {"mode": "hotfix", "contract": main_contract, "labels": labels, "lane": lane,
+                "path_exists": lambda path: head_exists(path) or main_exists(path)}
+    if hotfix_label in labels:
+        raise ValueError(f"`{hotfix_label}` is only for PRs into {lane['base_prefix']}*; "
+                         f"bring a hotfix to {args.base} with --forward-of <hotfix PR>, which adds `{forward_label}`")
+    if forward_of:
+        if forward_label not in labels:
+            labels.append(forward_label)
+        mode = "forward"
+    elif forward_label in labels:
+        raise ValueError(f"`{forward_label}` needs --forward-of <hotfix PR>")
+    else:
+        mode = "normal"
+    return {"mode": mode, "contract": read_head(), "path_exists": head_exists, "labels": labels, "lane": lane}
+
+
+def check_release_check(args, lane, body, issue):
+    """Apply the repository's PR body contract for the PR's lane.
+
+    Without an enforced contract nothing about the body is checked, except that a
+    forward port names its hotfix PR. On --apply a failing body stops creation
+    before GitHub is asked; a dry run reports.
+    """
+    rule = body_contract.enforced_release_check(lane["contract"])
+    errors = []
+    if rule is not None:
+        errors = body_contract.check_release_check(
+            body, smoke_check_prefix=rule["smoke_check_prefix"], path_exists=lane["path_exists"],
+            issue_body=(issue or {}).get("body"), hotfix=lane["mode"] == "hotfix")
+        follow_up = body_contract.smoke_issue_reference(body)
+        if args.apply and follow_up is not None and not errors:
+            found = fetch_scoped_issue(parse_repo(args.repo), follow_up)
+            if found.get("pull_request") is not None or found.get("state") != "open":
+                errors.append(f"`Smoke check` #{follow_up} must be an open issue in this repository")
+    if lane["mode"] == "forward":
+        errors += body_contract.forward_port_errors(body, args.forward_of)
+        if args.apply and not errors:
+            pull = fetch_pull(parse_repo(args.repo), args.forward_of)
+            if not str((pull.get("base") or {}).get("ref", "")).startswith(lane["lane"]["base_prefix"]):
+                errors.append(f"#{args.forward_of} is not a PR into {lane['lane']['base_prefix']}*")
+    if errors and args.apply:
+        raise ValueError("PR body fails the Release check contract (" + body_contract.CONTRACT_PATH + "):\n- "
+                         + "\n- ".join(errors))
+    return {"enforced": rule is not None, "mode": lane["mode"], "errors": errors}
+
+
+def fetch_pull(repo: str, number: int) -> dict[str, Any]:
+    response = run(["gh", "api", "--method", "GET", f"repos/{github_repo(repo)}/pulls/{number}"])
+    if response.returncode != 0:
+        raise ValueError(f"cannot read PR {repo}#{number}: {response.stderr.strip() or 'GitHub API failed'}")
+    return json.loads(response.stdout)
+
+
 def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     work = bool(os.environ.get("HYPE_PR_WORK_DIR"))
     if work and args.auto_merge:
         raise ValueError("Work transport does not schedule auto-merge; follow existing review policy")
-    labels = args.label or []
     preparation_required = parse_repo(args.repo) in json.loads((ROOT / "policy/change-impact.json").read_text())["repositories"]
     report = prepared_report(args, policy) if args.apply and preparation_required else None
+    lane = release_lane(args, report)
+    labels = lane["labels"]
     paths = report["paths"] if report else (args.path or [])
     planned = plan(
         policy=policy,
@@ -519,15 +616,19 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
     if report:
         body += preparation_module().summary(report)
     scoped_issue = None
+    issue = None
     if args.apply:
         repo = parse_repo(args.repo)
-        scoped_issue = validate_scoped_issue(fetch_scoped_issue(repo, args.issue), repo, args.issue, body)
+        issue = fetch_scoped_issue(repo, args.issue)
+        scoped_issue = validate_scoped_issue(issue, repo, args.issue, body,
+                                             canonical=preparation_module().policy_repo)
+    release_check = check_release_check(args, lane, body, issue)
     cmd = [
         "gh",
         "pr",
         "create",
         "--repo",
-        parse_repo(args.repo),
+        github_repo(args.repo),
         "--base",
         args.base,
         "--head",
@@ -546,6 +647,7 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
         "plan": planned,
         "preparation": {"required_for_apply": preparation_required, "verified": report is not None},
         "scoped_issue": scoped_issue or {"repo": parse_repo(args.repo), "number": args.issue, "verified": False},
+        "release_check": release_check,
         "create_command": cmd,
         "reviewer_commands": reviewer_commands(args.repo, "<created-pr>", planned["reviewers"]),
         "reviewer_cleanup_commands": reviewer_cleanup_commands(
@@ -585,6 +687,13 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
         return created.returncode
 
     pr_ref = created.stdout.strip().splitlines()[-1]
+    if lane["mode"] == "hotfix":
+        # The hotfix PR cannot close its issue (only merges into the default branch
+        # do), so the issue stays open until the port to main lands. Say what is next.
+        number = pr_ref.rstrip("/").rsplit("/", 1)[-1]
+        result["next"] = (f"after the hotfix merges and is tagged, bring it to {DEFAULT_BASE}: "
+                          f"create --repo {args.repo} --base {DEFAULT_BASE} --head <port branch> "
+                          f"--issue {args.issue} --forward-of {number} (body: `Forward-port of #{number}`)")
     result["reviewer_results"] = apply_reviewer_requests(args.repo, pr_ref, planned["reviewers"])
     cleanup_reviewers = [] if args.request_reviewers else planned["review_request"]["eligible_reviewers"]
     result["reviewer_cleanup_results"] = apply_reviewer_cleanup(args.repo, pr_ref, cleanup_reviewers)
@@ -595,7 +704,7 @@ def command_create(args: argparse.Namespace, policy: dict[str, Any]) -> int:
             "merge",
             pr_ref,
             "--repo",
-            parse_repo(args.repo),
+            github_repo(args.repo),
             "--auto",
             f"--{AUTO_MERGE_METHOD}",
             "--delete-branch",
@@ -641,6 +750,8 @@ def build_parser() -> argparse.ArgumentParser:
     create_parser.add_argument("--issue", required=True, type=positive_issue, help="Open PR-sized work issue in the target repository")
     create_parser.add_argument("--path", action="append", default=[])
     create_parser.add_argument("--label", action="append", default=[])
+    create_parser.add_argument("--forward-of", type=positive_issue, default=None,
+                               help="Hotfix PR this change brings to the default branch")
     create_parser.add_argument("--draft", action="store_true")
     create_parser.add_argument("--auto-merge", action="store_true")
     create_parser.add_argument("--request-reviewers", action="store_true", help="Opt in to all active non-author reviewers.")
@@ -665,6 +776,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if hasattr(args, "repo") and args.repo:
+        from preparation import organization_repo, policy_repo
+        current = organization_repo(args.repo)
+        if current:
+            # A notice, not an error: automation may still pass registry IDs (#287).
+            print(f"hype-pr: {args.repo} was transferred; pass --repo {current}", file=sys.stderr)
+        args.repo = policy_repo(args.repo)
     try:
         policy = load_policy()
         findings = validate_policy(policy)

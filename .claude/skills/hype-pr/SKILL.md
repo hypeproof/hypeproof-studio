@@ -81,7 +81,35 @@ uncommitted text. Read working changes directly when developing.
    reports and reasoning out of tracked/public files. Another commit, base movement,
    dependency revision, or policy/tool change invalidates preparation.
 
-4. Push the prepared branch, then create through the guarded command:
+4. If the target repository commits `config/pr-body-contract.json` with
+   `release_check.enforced: true`, write a `## Release check` section. Read both the
+   linked issue body (the intent) and the code change, then write:
+
+   ```markdown
+   ## Release check
+   How to verify: <where> → <what to click or run> → <expected result>
+   Smoke: yes|no — <reason>
+   Smoke check: <file under the contract's smoke_check_prefix, or #follow-up-issue>
+   ```
+
+   `How to verify` is the first line because the release manager reads that line.
+   Answer `Smoke: yes` when the change adds a dependency on another repository or a
+   server. `Smoke check` is required only for `yes`. When the linked issue answered
+   "Smoke needed?" with yes and the PR says no, add
+   `Smoke differs from issue: <reason>`. `create --apply` refuses a body that is
+   missing any of these, keeps a placeholder, or has fewer than three verify parts.
+
+   If the contract on the default branch declares a `hotfix` lane, a PR whose
+   `--base` starts with its `base_prefix` (for example `hotfix/v2026.1013.0`, cut
+   from the last v tag) is a hotfix: `create` adds the `hotfix` label, refuses
+   `--auto-merge`, and asks only for the Smoke lines (the release manager's
+   checklist is skipped, smoke is not). Put several hotfixes from the same tag on
+   the same `hotfix/<tag>` branch. The hotfix PR cannot close its issue, so bring
+   the fix to the default branch in a second PR with `--forward-of <hotfix PR>`
+   and a `Forward-port of #N` line; that PR gets `hotfix-forward`, a normal
+   Release check, and closes the issue. `hotfix` on a PR into main is refused.
+
+5. Push the prepared branch, then create through the guarded command:
 
    ```bash
    python3 scripts/hype-pr/pr.py create --repo OWNER/REPO --head BRANCH \

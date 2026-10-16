@@ -1,3 +1,4 @@
+import { proxyUserContent } from "./visionInput.ts";
 import type { AssetScoreChunk, ChatMessage, Citation, ResolvedProfile } from "./protocol";
 
 import {
@@ -215,13 +216,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
   // turns); the only multimodal turn is the current one. When images are
   // attached, the user turn becomes OpenAI-style content blocks — a text
   // block (only if there's text) plus one image_url block per pasted image.
-  const userContent =
-    images && images.length > 0
-      ? [
-          ...(userText ? [{ type: "text", text: userText }] : []),
-          ...images.map((url) => ({ type: "image_url", image_url: { url } })),
-        ]
-      : userText;
+  const userContent = proxyUserContent(userText, images);
   const messages = [
     // #503 — 툴 줄(role:"tool")은 화면·히스토리 전용이다. 호출부(handleSend)에서
     // 이미 걸러 오지만, 이 함수는 모델로 나가는 마지막 문이라 여기서도 막는다.

@@ -1,3 +1,4 @@
+import { bindComposerFocus } from './composerFocus';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { activityLabel, passEnd } from "./activityLabel";
@@ -438,6 +439,7 @@ export function ChatPanel(props: Props) {
   const [worldPending, setWorldPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
   const prevStreamingRef = useRef(streaming);
 
