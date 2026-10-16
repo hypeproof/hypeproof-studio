@@ -351,7 +351,7 @@
     ]
   },
   "owner_runtime_recheck": {
-    "service_issue": 107,
+    "service_issue": 106,
     "merged_sha": "d2d48f24846cb533d943eca6b892ffedd4a32557",
     "actual_runtime_sha": "f12f727a55989c937ebb60e77fcc8573229ee797",
     "identical_git_tree": "2467e535f8f5219fbb0888b59506520e724420f1",
@@ -381,7 +381,8 @@
       "six costs unknown",
       "not invoice settlement or price publication",
       "no provider call"
-    ]
+    ],
+    "service_pr": 107
   },
   "owner_local_verdict": "PASS_ACTUAL_LOCAL_OWNER_API_UI_CSV_AFTER_FIX; historical pre-fix FAIL preserved"
 }

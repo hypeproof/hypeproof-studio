@@ -5461,6 +5461,12 @@
         },
         {
           "path": "e2e/feedback-native/hosted-shell.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/session-control.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/session-control.test.mjs"
         }
       ]
     }
