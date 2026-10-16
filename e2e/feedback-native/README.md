@@ -340,5 +340,54 @@ records `pending_marker_consumption: NOT_OBSERVED`: UI preservation does not
 expose the transient global memento. Existing actual-module controls separately
 cover destination-bound one-shot consumption, stale/expired markers, delayed
 restore, symlink/Korean paths and the 61-second acceptance boundary. Actual native
-slow activation and the expiry notification remain separate unobserved conditions;
-no ten-minute wait, seeded app state or product test backdoor is added.
+slow activation and the expiry notification remain separate unobserved conditions
+in that ordinary scenario. Its simultaneous-window path adds no ten-minute wait,
+seeded app state or product test backdoor.
+
+### Optional hosted delayed activation and real expiry (#1725)
+
+`HPS_NATIVE_DELAYED_RESUME=1` on the dedicated `hosted.mjs` execution step adds
+one scenario before final synthetic-session shutdown. It defaults off, refuses
+attach/local/in-memory credential modes, and adds no provider or SDK query.
+Keep the existing18 checks and the source-bound actual-Service fixture. Root's
+workflow must allow35 minutes; this mode adds roughly12–15 minutes per OS.
+Do not set the option on background-control steps or launch a local desktop.
+
+The scenario normally quits the owned candidate, observes its exit/CDP shutdown,
+and relaunches the same profile with public `--inspect-brk-extensions=9788`.
+An occupied/fallback/unowned inspector port refuses. Mac listener PID plus process
+ancestry comes from `lsof`/`ps`; Windows uses `Get-NetTCPConnection`/`Get-CimInstance`.
+The Node inspector must return the same PID. Initial startup is released promptly,
+not held through the shell's60s connection/initialization deadlines.
+
+The gate sets a pending breakpoint at the verified candidate bundle statement
+immediately before `consumeActivityResume`, after `activationRoot` exists. It
+requires one recognizable call, exact loaded source hash, exact script/location,
+new owned extension-host PID and the expected root scalar. The only inspector
+evaluations read `process.pid` and local `activationRoot`; arbitrary expressions,
+product-function calls, clocks, mementos and credential reads are not allowed.
+The post-initialization ordering is source evidence; IPC packets are not intercepted.
+
+Actual Start → folder picker → current-activity confirmation creates each marker
+and binding through production code. Three fresh owned destinations E/F/G test
+2s propagation,61s valid draft checkpoint import, then610s real expiry. Each phase
+must pass before the next starts. Wall and monotonic elapsed time are recorded;
+the hold is not shortened or replaced by a Service HTTP delay. A first failure
+retains partial evidence and stops further native input. Bindings/files are hashed
+while paused before consumption and compared afterward. The expiry case requires
+the exact existing Korean notification, actual Start, no automatically resumed
+chat or `/v1/profile` connection, then explicit saved-activity recovery without code
+entry. The discarded checkpoint draft must remain absent in the fresh destination.
+Each successful phase returns through public File Open Folder to A. Successful
+completion closes the debugger, normally restarts without inspector flags and
+restores the original draft for the ordinary final session check.
+
+Progress persists at most15s apart during holds, including script/PID/breakpoint,
+durations, notification screenshots, request-count metadata and preservation
+hashes. It never dumps debugger scopes/protocol bodies. Only verified gate pauses
+are resumed. Breakpoints and sockets close before public quit; cleanup failure
+cannot pass and does not replace the primary error. Forced owned termination is
+cleanup only. `extension-inspector.test.mjs` uses disposable Node children for
+protocol/PID/replacement/cleanup controls, not a native App or T05 acceptance pass.
+Actual hosted0.1.56 propagation and long-held behavior remain NOT RUN until root
+executes this exact candidate. The existing ordinary native proof stays separate.

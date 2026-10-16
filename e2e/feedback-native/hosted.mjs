@@ -8,7 +8,7 @@ import {appSdkVersion,checkSeededSdk} from '../unified-release/sdk-seed.mjs';
 import {sha256} from './safety.mjs';
 import {hostedCommands,OFFICIAL_SHELL_REPOSITORY} from './hosted-shell.mjs';
 const args=process.argv.slice(2);
-if(args.includes('--help')){console.log('GITHUB_ACTIONS=true HPS_SERVICE_SOURCE=PINNED_CHECKOUT node e2e/feedback-native/hosted.mjs [PUBLIC_APP_TAG]\nNo provider requests. Foreground native input is confined to the hosted desktop.');process.exit(0);}
+if(args.includes('--help')){console.log('GITHUB_ACTIONS=true HPS_SERVICE_SOURCE=PINNED_CHECKOUT node e2e/feedback-native/hosted.mjs [PUBLIC_APP_TAG]\nNo provider requests. Foreground native input is confined to the hosted desktop. Optional HPS_NATIVE_DELAYED_RESUME=1 adds real2s/61s/610s activation holds; workflow needs35min.');process.exit(0);}
 if(process.env.GITHUB_ACTIONS!=='true'||!process.env.RUNNER_TEMP)throw Error('Hosted native foreground suite requires a GitHub Actions dedicated desktop');
 if(!['darwin','win32'].includes(process.platform))throw Error('Only Mac/Windows prepared shells are supported');
 if(args[0]&&!/^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(args[0]))throw Error('Invalid official app tag');
