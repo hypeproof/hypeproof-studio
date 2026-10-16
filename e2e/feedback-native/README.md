@@ -374,7 +374,10 @@ and binding through production code. Three fresh owned destinations E/F/G test
 must pass before the next starts. Wall and monotonic elapsed time are recorded;
 the hold is not shortened or replaced by a Service HTTP delay. A first failure
 retains partial evidence and stops further native input. Bindings/files are hashed
-while paused before consumption and compared afterward. The expiry case requires
+while paused before consumption and compared before explicit saved-activity
+recovery. After that public entry transaction, the same physical root, binding
+path, Service/activity identity and files must remain; only a well-formed
+credential reference may rotate through the existing commit path. The expiry case requires
 the exact existing Korean notification, actual Start, no automatically resumed
 chat or `/v1/profile` connection, then explicit saved-activity recovery without code
 entry. The discarded checkpoint draft must remain absent in the fresh destination.
@@ -430,3 +433,40 @@ realpath can return lowercase `d:` for the same pinned uppercase `D:` path. The
 remaining returned physical path bytes, regular-file/non-symlink checks, loaded
 source SHA, owned listener PID and destination root remain exact. This addresses
 the observed 96c864 Windows physical-path refusal; actual hosted proof is pending.
+
+## Provider-free render-feedback transport proof
+
+`render-feedback-probe.mjs` takes a new absolute evidence directory, the verified
+SDK binary and an immutable source HTML path. `HPS_SERVICE_SOURCE`/`SHA` pin the
+actual Service source. It copies that HTML into an owned temporary workspace and
+serves exactly that resource on loopback. Owned headless Chromium is the only
+browser launched; no native Studio window or existing browser is attached.
+
+The structural BrowserTab/raw-CDP transport is the explicit host seam. Actual
+production `CdpSession`, `BrowserControl`, `toMcpToolResult`, browser MCP factory,
+real SDK and actual Service process the tool call/results. The host never inserts
+an image tool_result. The already-open owned page is a precondition; SDK
+`browser_open` uses the existing already-open policy, then `browser_screenshot`
+captures it. Screenshots are saved as real JPEGs, and their byte hashes must appear
+in actual upstream tool_result image blocks. This proves pixel transport, not
+semantic design quality, a full judge/fix loop, native integration or acceptance.
+
+The explicit `--scripted-render` Service mode runs only the bounded owned render
+protocol, never arbitrary upstream traffic. Four actual SDK queries share one
+12-attempt ledger:390/1280 positives and no-browser-grant/no-host negatives, three
+scripted dispatches each. Output4096/retry0 remains fixed; any auxiliary call or
+retry consumes the same ceiling and can fail the proof. Negatives must advertise
+no screenshot tool, invoke no host capture and return actual SDK error tool results
+without images. Existing profile permissions and canUseTool are not bypassed;
+the no-grant control only lowers the existing browser grant. Approval requests are
+denied and recorded. Renderer network interception allows only the owned HTML.
+
+```bash
+HPS_SERVICE_SOURCE=/absolute/clean-service HPS_SERVICE_SHA=FULL_SHA node e2e/feedback-native/render-feedback-probe.mjs /absolute/new-evidence /absolute/verified-claude /absolute/frozen-candidate.html
+```
+
+When the configured scripted history chain has not passed, delayed activation
+is BLOCKED before inspector or UI admission and preserves the earlier state.
+Focus-readiness diagnostics record only the first and terminal owned-target DOM
+sample; they never focus, retry or extend the original deadline. Error categories
+are allowlisted, and returned sampling failures omit original error text.

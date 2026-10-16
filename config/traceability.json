@@ -5338,6 +5338,39 @@
         },
         {
           "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/headless-cdp.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-feedback-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/completion-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
     },
@@ -5539,6 +5572,39 @@
         },
         {
           "path": "e2e/feedback-native/delayed-activation.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/headless-cdp.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-feedback-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/completion-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
     }

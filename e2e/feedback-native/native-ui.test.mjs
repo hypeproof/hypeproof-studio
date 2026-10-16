@@ -79,7 +79,7 @@ test('new file waits for a new resource bound to the focused editor before typin
 });
 test('quick input readiness observes actual hit target and does not expose values in failure metadata',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');const input={value:'>Exact',disabled:false,getBoundingClientRect:()=>({left:0,top:0,width:100,height:20})};let hit=input;
- const widget={querySelector:()=>input,getBoundingClientRect:()=>({width:100,height:40})};const document={querySelector:()=>widget,hasFocus:()=>true,activeElement:{tagName:'INPUT'},elementFromPoint:()=>hit};
+ const widget={querySelector:()=>input,getBoundingClientRect:()=>({width:100,height:40})};const document={querySelector:()=>widget,hasFocus:()=>true,activeElement:input,elementFromPoint:()=>hit};
  const target={evaluate:expression=>vm.runInNewContext(expression,{document,getComputedStyle:()=>({display:'block',visibility:'visible'})})};
  assert.equal((await ui.quickState(target)).ready,true);assert.equal((await ui.quickState(target)).mode,'command');hit={};assert.equal((await ui.quickState(target)).ready,false);
 });
@@ -353,4 +353,25 @@ test('focus diagnostics observe exact target and safe DOM state without repair o
 test('diagnostic sampling failure preserves refusal without a terminal resample or raw error message',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');let samples=0;ui.frame=async()=>({info:{id:'owned-chat'},evaluate:async()=>{samples++;throw Object.assign(Error('synthetic-private-error'),{name:'synthetic-private-custom-name'});}});
  await assert.rejects(ui.focusChatReady(1),error=>{assert.match(error.message,/actual webview and textarea focus/);assert.match(error.message,/Chat focus diagnostic sample unavailable/);assert(!String(error).includes('synthetic-private'),'Returned timeout must omit custom name and message');assert(!JSON.stringify({error:error.message,name:error.name}).includes('synthetic-private'),'Serialized step failure must omit private markers');return true;});assert.equal(samples,1,'No extra timeout resample or deadline reset');assert.deepEqual(ui.phases.map(x=>x.outcome),['start','timeout']);assert.equal(ui.phases[1].sample_error,'Error');assert.equal(ui.phases[1].state,null);assert(!JSON.stringify(ui.phases).includes('synthetic-private'),'Neither custom error name nor message may enter diagnostics');
+});
+
+test('actual headless quick input refuses visible wrong focus and waits for exact input focus',async()=>{
+ const {createRequire}=await import('node:module');const require=createRequire(new URL('../package.json',import.meta.url));const {chromium}=require('playwright');
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.setContent('<input id="other"><iframe></iframe><div class="quick-input-widget"><div class="quick-input-title">Synthetic command</div><input value=">Exact"></div>');
+  const ui=new NativeUI('http://127.0.0.1:9777'),target={evaluate:expression=>page.evaluate(expression)};
+  await page.locator('iframe').focus();let state=await ui.quickState(target);assert.equal(state.visible,true);assert.equal(state.hostFocused,true);assert.equal(state.activeTag,'IFRAME');assert.equal(state.inputFocused,false);assert.equal(state.ready,false);
+  await page.locator('#other').focus();state=await ui.quickState(target);assert.equal(state.activeTag,'INPUT');assert.equal(state.ready,false,'another input cannot authorize palette typing');
+  let observed,done=false;const wrongFocusObserved=new Promise(resolve=>{observed=resolve;});const original=ui.quickState.bind(ui);ui.quickState=async t=>{const value=await original(t);if(!value.inputFocused)observed();return value;};
+  const waiting=ui.waitQuick(target,s=>s.ready,'synthetic exact input focus',2000).then(value=>{done=true;return value;});await wrongFocusObserved;assert.equal(done,false);
+  // Fixture transition only: production quickState/waitQuick never focus or click.
+  await page.locator('.quick-input-widget input').focus();const ready=await waiting;assert.equal(ready.inputFocused,true);assert.equal(ready.ready,true);assert.equal(ui.phases[0].inputFocused,true);
+  await page.locator('iframe').focus();await assert.rejects(ui.waitQuick(target,s=>s.ready,'synthetic wrong focus refusal',1),/"inputFocused":false/);
+ }finally{await browser.close();}
+});
+
+test('quick input cannot be ready when its document lacks focus despite exact active element',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),input={value:'>Exact',getBoundingClientRect:()=>({left:0,top:0,width:100,height:20})};const widget={querySelector:()=>input,getBoundingClientRect:()=>({width:100,height:40})};
+ const document={querySelector:()=>widget,hasFocus:()=>false,activeElement:input,elementFromPoint:()=>input};const target={evaluate:expression=>vm.runInNewContext(expression,{document,getComputedStyle:()=>({display:'block',visibility:'visible'})})};const state=await ui.quickState(target);assert.equal(state.inputFocused,true);assert.equal(state.hostFocused,false);assert.equal(state.ready,false);
 });

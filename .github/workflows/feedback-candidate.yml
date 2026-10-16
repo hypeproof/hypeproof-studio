@@ -66,6 +66,11 @@ jobs:
           npm ci --prefix extensions/hypeproof-chat
           npm ci --prefix extensions/hypeproof-chat/webview-ui
           npm --prefix feedback-service run setup:packages -- worker
+      - name: Install headless browser for render-feedback controls
+        shell: bash
+        run: |
+          npm ci --prefix e2e
+          npm --prefix e2e exec -- playwright install chromium
       - name: Run background-safe harness regressions
         run: node --test e2e/feedback-native/*.test.mjs e2e/feedback-live/*.test.mjs
       - name: Probe actual Service before desktop preparation
