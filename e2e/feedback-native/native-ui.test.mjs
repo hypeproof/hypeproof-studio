@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {NativeUI} from './native-ui.mjs';
+import {NativeUI,sessionRefusalObserved} from './native-ui.mjs';
 function fixture(outerVisible){const ui=new NativeUI('http://127.0.0.1:9777');const iframe={name:'visible-webview',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};const control={getBoundingClientRect:()=>({width:700,height:60})};const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[iframe]},getComputedStyle:()=>({display:'inline',visibility:'visible'})})};const target={info:{id:'target'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'frame'}}}:{executionContextId:1},evaluate:expression=>vm.runInNewContext(expression,{document:{visibilityState:'hidden',querySelector:()=>control}})};ui.list=async()=>[{id:'target',type:'iframe',url:'vscode-webview://test/index.html?id=visible-webview&extensionId=hypeproof.hypeproof-chat'}];ui.workbench=async()=>host;ui.target=async()=>target;return {ui,target};}
 test('visible workbench iframe and control geometry work despite Electron Page Visibility false negative',async()=>{const {ui,target}=fixture(true);assert.equal(await ui.frame('textarea',500),target);});
 test('hidden outer webview cannot pass by retaining an inner control geometry',async()=>{const {ui}=fixture(false);await assert.rejects(ui.frame('textarea',1),/Timed out/);});
@@ -256,4 +256,19 @@ test('saved activity selects complete workspace identity, never another folder w
  await assert.rejects(ui.savedActivity({evaluate:async()=>[{index:0,workspace:'/different/A'}]},'/owned/A',1),/unique saved activity/);
  await assert.rejects(ui.savedActivity({evaluate:async()=>[{index:0,workspace:'/owned/A'},{index:1,workspace:'/owned/A'}]},'/owned/A',1),/unique saved activity/);
  assert.equal(pressed.length,1,'missing or ambiguous identity cannot click');
+});
+
+// Uses the real App mapping against the actual Service-shaped denial; no native acceptance implied.
+test('session refusal observes exact mapped App message, preservation and no candidate; raw/wrong/hidden states refuse',async()=>{
+ const {classifyProfileFailure}=await import('../../extensions/hypeproof-chat/src/proxyClientHelpers.ts');
+ const raw='수업이 아직 시작 전이에요. 강사가 곧 열어줄 거예요 — 잠시 후 다시 보내보세요.';
+ const expected=classifyProfileFailure(403,JSON.stringify({error:{type:'session_inactive',message:raw}})).friendly;
+ const actual={visible:true,candidate:false,message:expected,preservation:'기존 활동 연결은 유지됩니다.'};
+ assert.equal(sessionRefusalObserved(actual,expected),true);
+ for(const changed of [{message:raw},{message:classifyProfileFailure(401,JSON.stringify({error:{code:'expired'}})).friendly},{message:expected+' extra'},{visible:false},{candidate:true},{preservation:''},{preservation:'연결을 해제했습니다.'}])assert.equal(sessionRefusalObserved({...actual,...changed},expected),false,JSON.stringify(changed));
+ const ui=new NativeUI('http://127.0.0.1:9777');
+ const paragraph={textContent:actual.preservation},element={childNodes:[{nodeType:3,textContent:expected},{nodeType:1,textContent:actual.preservation}],getBoundingClientRect:()=>({width:400,height:90}),querySelector:()=>paragraph};
+ const view={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelector:selector=>selector==='#connection-error'?element:{textContent:'이어서 시작할까요?'}},getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'})})};
+ assert.equal((await ui.sessionRefusal(view,expected,500)).message,expected,'DOM paragraph must not contaminate exact mapped message');
+ const hidden={evaluate:async()=>({...actual,visible:false})};await assert.rejects(ui.sessionRefusal(hidden,expected,1),/visible canonical App profile refusal/);
 });

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
+import {classifyProfileFailure} from '../../extensions/hypeproof-chat/src/proxyClientHelpers.ts';
 import {loopback,sha256} from './safety.mjs';
 export const fixtureSha=()=>sha256(fileURLToPath(new URL('./service.mjs',import.meta.url)));
 export async function endSyntheticSession({manifestFile,origin,expectedSource,token,onSecret=()=>{},onProgress=()=>{},request=fetch}){
@@ -38,6 +39,8 @@ export async function endSyntheticSession({manifestFile,origin,expectedSource,to
  const receipt=await ended.json();assert.equal(receipt.ok,true);assert(receipt.ended?.session_id,'An actual existing session must have ended');
  const denied=await call('/v1/profile',{headers:auth});assert.equal(denied.status,403,'Existing A token must be denied after canonical session shutdown');
  const error=(await denied.json()).error;assert.equal(error?.type,'session_inactive');assert(typeof error.message==='string'&&error.message.length>0);
+ const uiFailure=classifyProfileFailure(denied.status,JSON.stringify({error}));
+ assert.equal(uiFailure.reason,'forbidden','Current App must classify the actual profile denial');
  onProgress({phase:'existing_a_profile_denied',status:403,error_type:error.type});
- return {session_ended:true,jwt_expiry:'NOT_RUN',canonical_delete_status:200,profile_after_status:403,error_type:error.type,friendly:error.message,source_sha:expectedSource.sha,fixture_sha256:control.fixture_sha256,provider_dispatch:false};
+ return {session_ended:true,jwt_expiry:'NOT_RUN',canonical_delete_status:200,profile_after_status:403,error_type:error.type,friendly:error.message,ui_friendly:uiFailure.friendly,ui_failure_reason:uiFailure.reason,source_sha:expectedSource.sha,fixture_sha256:control.fixture_sha256,provider_dispatch:false};
 }

@@ -14,6 +14,10 @@ export function sameDisplayedWorkspace(actual,expected,platform=process.platform
  return normalize(actual)===normalize(expected);
 }
 export function skillPreviewOutcome(messages){const text=String(messages);if(text.includes('출처·고정 revision·라이선스·요구 capability'))return 'preview';if(/공개 GitHub|지침 스킬을 처리하지 못했습니다|가져오지/.test(text))return 'failure';return null;}
+// Profile UI uses its canonical mapped copy; raw Service prose alone is not this proof.
+export function sessionRefusalObserved(state,expected){
+ return typeof expected==='string'&&expected.length>0&&state?.visible===true&&state.candidate===false&&state.message===expected&&state.preservation==='기존 활동 연결은 유지됩니다.';
+}
 export const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export async function waitFor(fn,label,timeout=30000){const end=Date.now()+timeout;let last;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch(error){last=error;}await sleep(150);}throw Error('Timed out: '+label+(last?' ('+last.message+')':''));}
 class Target{
@@ -31,6 +35,9 @@ export class NativeUI{
   // Issuing F1/Focus here can race that restoration and adds no credential proof.
   const restored=await waitFor(async()=>{const chat=await this.frame('.hps-input textarea',1500);const value=await chat.evaluate("document.querySelector('.hps-input textarea')?.value");return value===expected?{value}:null;},'actual restored chat with persisted A draft, without focus command or code entry',timeout);
   return restored.value;
+ }
+ async sessionRefusal(view,expected,timeout=30000){
+  return waitFor(async()=>{const state=await view.evaluate(`(()=>{const e=document.querySelector('#connection-error');if(!e)return null;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return {visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible'&&Number(s.opacity)>0,message:[...e.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(),preservation:e.querySelector('p')?.textContent?.trim(),candidate:document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'};})()`);return sessionRefusalObserved(state,expected)?state:null;},'visible canonical App profile refusal, existing connection preserved and no candidate admission',timeout);
  }
  async savedActivity(view,workspace,timeout=30000){
   const selector=await waitFor(async()=>{const rows=await view.evaluate("[...document.querySelectorAll('.studio-saved-activities button')].map((e,index)=>({index,workspace:e.querySelector('small')?.textContent}))");const matches=rows.filter(row=>sameDisplayedWorkspace(row.workspace,workspace));if(matches.length!==1)return null;return '.studio-saved-activities button:nth-of-type('+(matches[0].index+1)+')';},'unique saved activity for complete workspace path',timeout);

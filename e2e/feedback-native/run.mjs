@@ -143,14 +143,14 @@ try{
   const ended=await endSyntheticSession({manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,token:secrets[0],onSecret:secret=>secrets.push(secret),onProgress:observation=>{report.session_invalidation_observations.push({at:new Date().toISOString(),...observation});save();}});
   report.session_invalidation={...ended,ui_denial:'PENDING'};save();
   await ui.savedActivity(view,c.workspace.b);
-  await waitFor(()=>view.evaluate(`document.querySelector('#connection-error')?.textContent.includes(${JSON.stringify(ended.friendly)})`),'actual saved activity displays canonical session inactive refusal');
+  const refusal=await ui.sessionRefusal(view,ended.ui_friendly);
   assert.equal(await view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),false,'Invalid session must not create an admitted candidate');
   await ui.shot(path.join(c.evidence,'session-ended-denied.png'));
   await focusChat();assert.equal((await readDraft()).value,draft,'Session denial preserves actual A draft');
   assert.deepEqual(workspaceFiles(c.workspace.a),files,'Session denial preserves actual A files');
   assert.deepEqual(workspaceFiles(bindings),beforeBindings,'Session denial preserves all existing activity binding files');
   report.session_invalidation.ui_denial='PASS';
-  return {...ended,ui_denial:true,draft_preserved:true,files_preserved:true,bindings_preserved:true,token_reentry:false,no_chat_submission:true};
+  return {...ended,ui_denial:true,ui_copy_source:'App classifyProfileFailure',visible_refusal:refusal,draft_preserved:true,files_preserved:true,bindings_preserved:true,token_reentry:false,no_chat_submission:true};
  });
  else report.tests.push({id:'T04-canonical-synthetic-session-ended',status:'NOT_RUN',reason:'Explicit owned synthetic session control required; no external or attached Service mutation'});
  report.execution_status=report.tests.some(t=>t.status==='FAIL')?'FAIL':report.tests.some(t=>t.status==='BLOCKED')?'BLOCKED':'PASS_SELECTED_SLICE';

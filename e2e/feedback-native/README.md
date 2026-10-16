@@ -237,7 +237,9 @@ hash, preflight Service source receipt, private credential hash and live
 instance/PID attestation before any canonical mutation. It checks existing A is
 valid, sends exactly one `DELETE /admin/cohorts/synthetic-release-acceptance/session`,
 then requires A's actual profile 403 `session_inactive`. A public saved-activity
-selection must display that canonical refusal, preserve A's visible draft, actual
+selection must display the App's canonical `classifyProfileFailure` mapping for
+that response (not the raw Service message), plus its existing-connection
+preservation line and no admitted candidate. It must preserve A's visible draft, actual
 workspace files and persistent binding files, and create no candidate admission.
 There is no automatic retry, token reissue, session reopen or provider request.
 An absent control receipt leaves this slice NOT_RUN; attach cannot mutate it.
