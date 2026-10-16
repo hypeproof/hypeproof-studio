@@ -56,6 +56,9 @@ jobs:
       - name: Workshop element selection at desktop and mobile widths
         run: npm run test:workshop-element
         working-directory: e2e
+      - name: Photo-only Send and Enter with host staging gates
+        run: npm run test:photo-only-send
+        working-directory: e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -66,4 +69,5 @@ jobs:
             e2e/test-results/voice-popup/
             e2e/test-results/goal-browser/
             e2e/test-results/workshop-element-trial/
+            e2e/test-results/photo-only-send/
           retention-days: 14
