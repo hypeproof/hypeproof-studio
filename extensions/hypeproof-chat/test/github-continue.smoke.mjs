@@ -18,6 +18,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { createMockGitHub } from "./fixtures/mock-github.mjs";
 
@@ -292,7 +293,7 @@ function computer(gh, root) {
 {
   const require = createRequire(import.meta.url);
   const bundle = await build({
-    stdin: { contents: "export * from './src/startPage.ts';", resolveDir: new URL("..", import.meta.url).pathname, loader: "ts" },
+    stdin: { contents: "export * from './src/startPage.ts';", resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "ts" },
     bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false,
   });
   const served = {

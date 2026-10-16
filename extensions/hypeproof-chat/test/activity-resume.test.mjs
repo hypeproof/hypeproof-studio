@@ -2,17 +2,18 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
-const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {activate,resolveActivateBranch,ensureWorkspace} from './src/extension';export {openBrowser} from './src/nativeBrowser';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:new URL('..',import.meta.url).pathname,loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {activate,resolveActivateBranch,ensureWorkspace} from './src/extension';export {openBrowser} from './src/nativeBrowser';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:fileURLToPath(new URL('..',import.meta.url)),loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const commands=[], mod={exports:{}};
 const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},workspace:{workspaceFolders:[]},Uri:{joinPath:()=>({}),file:fsPath=>({fsPath})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL});
 const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,activate,openBrowser,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-resume-'));
-const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link);
+const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link,'junction');
 const now=Date.now(),service='https://synthetic.invalid/v1';
 const record={version:1,id:'b'.repeat(64),serverId:'a'.repeat(64),service,workspace:a,ref:'hps.activity.credential.synthetic'};
 const marker={version:1,id:record.serverId,ref:record.ref,service,workspace:a,at:now};
@@ -21,6 +22,10 @@ try {
  assert.equal(resumeDecision(undefined,record,service,a,now),'absent');
  assert.equal(resumeDecision({...marker,at:now-61_000},record,service,link,now),'valid','a slow activation and a symlink still resume');
  assert.equal(resumeKey(link),resumeKey(a));assert.notEqual(resumeKey(b),resumeKey(a));
+ // Windows: the switch writes the key from `C:\…` (os.homedir), the reloaded window reads it from
+ // `c:\…` (workspaceFolders). Both spellings of one folder must find the same marker.
+ if(/^[a-z]:/i.test(a)){const lower=a[0].toLowerCase()+a.slice(1),upper=a[0].toUpperCase()+a.slice(1);
+  assert.equal(resumeKey(lower),resumeKey(upper),'drive-letter case must not change the resume key');}
  assert.equal(resumeDecision({...marker,at:now-RESUME_MAX_AGE_MS},record,service,a,now),'expired');
  for(const invalid of [{id:'c'.repeat(64)},{ref:'stale-generation'},{service:'https://foreign.invalid/v1'},{workspace:b},{at:now+1},{at:NaN},{version:0}])
   assert.equal(resumeDecision({...marker,...invalid},record,service,a,now),'mismatch',JSON.stringify(invalid));
