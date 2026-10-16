@@ -8,7 +8,7 @@ import net from 'node:net';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {createHash} from 'node:crypto';
-import {activationBreakpoint,breakpointUrlPattern,canonicalScriptPath,assertPhysicalScript,inspectorScriptDiagnostic,descendant,listenerCommand,ownedListener,inspectorTarget,assertPause,InspectorPeer,OwnedExtensionGate} from './extension-inspector.mjs';
+import {activationBreakpoint,breakpointUrlPattern,canonicalScriptPath,assertPhysicalScript,samePhysicalScriptPath,inspectorScriptDiagnostic,descendant,listenerCommand,ownedListener,inspectorTarget,assertPause,InspectorPeer,OwnedExtensionGate} from './extension-inspector.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const wait=async fn=>{const end=Date.now()+15000;while(Date.now()<end){const value=await fn();if(value)return value;await new Promise(r=>setTimeout(r,30));}throw Error('Protocol control timeout');};
 const temporary=()=>fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'owned inspector-한글-')));
@@ -126,7 +126,46 @@ test('portable Windows equivalent URL spellings retain exact path; hostile URL f
 test('equivalent URL cannot substitute a different physical file or a symlink',()=>{
  const dir=temporary();try{
   const target=fixture(dir),raw=target.url.replace('%20',' ');assert.equal(assertPhysicalScript(raw,target),target.file);
+  const alternate=path.join(dir,'alternate.cjs');fs.copyFileSync(target.file,alternate);assert.throws(()=>assertPhysicalScript(target.url.replace('extension.cjs','alternate.cjs'),target),/Canonical script path mismatch/);
   const renamed=path.join(dir,'other.cjs');fs.renameSync(target.file,renamed);fs.symlinkSync(renamed,target.file);
   assert.throws(()=>assertPhysicalScript(raw,target),/Physical script/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('ownership refusal records disappearing listener and later owned sample but still refuses without retry',()=>{
+ const calls=[];let samples=0;
+ const execute=(command,args,options)=>{calls.push({command,timeout:options.timeout});if(command==='lsof')return ++samples===1?'p103\n':'p104\n';return samples===1?'101 1\n':'104 101\n101 1\n';};
+ let refusal;assert.throws(()=>ownedListener(9788,101,'darwin',execute),error=>{refusal=error;return /not an owned App descendant/.test(error.message);});
+ assert.equal(refusal.ownership_refusal.initial.chains[0].listener_pid,103);assert.equal(refusal.ownership_refusal.initial.chains[0].reason,'missing_parent_row');
+ assert.equal(refusal.ownership_refusal.resample.chains[0].reason,'owned_root_reached');assert.equal(refusal.ownership_refusal.resample_diagnostic_only,true);
+ assert.deepEqual(calls.map(c=>c.command),['lsof','ps','lsof','ps']);assert.deepEqual(calls.map(c=>c.timeout),[10000,10000,1500,1500]);
+ for(const sample of [refusal.ownership_refusal.initial,refusal.ownership_refusal.resample])for(const time of Object.values(sample.timing))assert(Number.isFinite(Date.parse(time)));
+});
+test('ambiguous, foreign and unavailable ownership resamples retain original rejection and bounded numeric facts',()=>{
+ for(const mode of ['ambiguous','foreign','unavailable']){
+  let samples=0;const execute=command=>{if(command==='lsof'){samples++;if(mode==='unavailable'&&samples===2)throw Error('private process arguments must not leak');return mode==='ambiguous'?'p103\np104\n':'p103\n';}return '103 999\n999 1\n101 1\n';};
+  let refusal;assert.throws(()=>ownedListener(9788,101,'darwin',execute),error=>{refusal=error;return mode==='ambiguous'?/Ambiguous/.test(error.message):/not an owned/.test(error.message);});
+  assert.equal(refusal.ownership_refusal.initial.listener_count,mode==='ambiguous'?2:1);if(mode==='unavailable')assert.equal(refusal.ownership_refusal.resample.status,'UNAVAILABLE');
+  assert(!JSON.stringify(refusal.ownership_refusal).includes('private process'));
+ }
+});
+test('gate persists ownership refusal with phase and previous host, and never attaches after diagnostic resample',async()=>{
+ const error=Error('Inspector listener is not an owned App descendant');error.ownership_refusal={initial:{listener_count:1},resample:{listener_count:0},resample_diagnostic_only:true};let probes=0,attached=0;
+ const gate=new OwnedExtensionGate({port:9788,appPid:()=>101,target:{},initialRoot:'/owned',observeListener:()=>{probes++;throw error;}});gate.previousPid=103;gate.attach=async()=>{attached++;};gate.start();
+ await assert.rejects(gate.initial.promise,/not an owned/);await gate.close();assert.equal(probes,1);assert.equal(attached,0);
+ const event=gate.events.find(e=>e.phase==='gate-failed');assert.equal(event.ownership_refusal.phase_label,'initial-startup');assert.equal(event.ownership_refusal.previous_host_pid,103);assert.equal(event.ownership_refusal.current_peer_pid,null);
+});
+test('actual owned Node listener refusal preserves foreign-root proof in both samples',{skip:process.platform!=='darwin'},async()=>{
+ const child=spawn(process.execPath,['-e',"require('net').createServer().listen(0,'127.0.0.1',function(){console.log(this.address().port)})"],{stdio:['ignore','pipe','ignore']}),foreign=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+ try{
+  const [output]=await once(child.stdout,'data'),port=Number(String(output).trim());assert.equal(ownedListener(port,process.pid),child.pid);
+  let refusal;assert.throws(()=>ownedListener(port,foreign.pid),error=>{refusal=error;return /not an owned/.test(error.message);});
+  for(const sample of [refusal.ownership_refusal.initial,refusal.ownership_refusal.resample]){assert.equal(sample.root_pid,foreign.pid);assert.equal(sample.chains[0].listener_pid,child.pid);assert(sample.chains[0].chain.some(row=>row.pid===process.pid));assert.notEqual(sample.chains[0].reason,'owned_root_reached');}
+ }finally{for(const owned of [child,foreign])if(owned.exitCode===null&&owned.signalCode===null){owned.kill();await once(owned,'exit');}}
+});
+
+test('physical Windows identity permits only drive spelling after realpath, never directory case or path substitution',()=>{
+ const expected='D:\\a\\_temp\\candidate\\extension.js';assert(samePhysicalScriptPath('d:\\a\\_temp\\candidate\\extension.js',expected));assert(samePhysicalScriptPath(expected,expected));
+ for(const other of ['E:\\a\\_temp\\candidate\\extension.js','D:\\A\\_temp\\candidate\\extension.js','D:\\a\\_temp\\other\\extension.js','D:/a/_temp/candidate/extension.js','D:\\a\\_temp\\candidate\\..\\candidate\\extension.js','file:///D:/a/_temp/candidate/extension.js',null])assert(!samePhysicalScriptPath(other,expected));
+ assert(!samePhysicalScriptPath('/owned/Extension.js','/owned/extension.js'));assert(samePhysicalScriptPath('/owned/extension.js','/owned/extension.js'));
 });

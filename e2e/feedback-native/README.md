@@ -415,3 +415,18 @@ Windows URL controls and actual owned Node controls on Mac are background proof;
 Windows inspector/native execution and the complete T05 holds still require the
 exact candidate's hosted run. The prior raw Windows URL spelling remains unknown;
 this change does not claim a specific encoding was observed.
+
+
+Ownership refusal diagnostics retain only bounded numeric listener/parent chains,
+sampling timestamps, the declared phase and previous verified host PID. One
+immediate read-only resample (at most 1.5s per platform command) is diagnostic only:
+even if it now shows a valid owned host or no listener, the original refusal
+still stops the gate. No retry, attach, resume, deadline or ownership rule changes.
+This distinguishes lifecycle sampling gaps from a stable foreign listener on a
+future run; it does not assign a cause to an earlier unrecorded rejecting PID.
+
+Windows physical-path comparison also permits drive-letter spelling only: Node
+realpath can return lowercase `d:` for the same pinned uppercase `D:` path. The
+remaining returned physical path bytes, regular-file/non-symlink checks, loaded
+source SHA, owned listener PID and destination root remain exact. This addresses
+the observed 96c864 Windows physical-path refusal; actual hosted proof is pending.

@@ -62,9 +62,15 @@ export function canonicalScriptPath(url,target,{windows=/^[A-Za-z]:[\\/]/.test(t
  assert.equal(drive(file),drive(target.file),'Canonical script path mismatch');
  return file;
 }
+// Windows realpath preserves caller drive spelling; no other path byte varies.
+export function samePhysicalScriptPath(actual,expected){
+ if(typeof actual!=='string'||typeof expected!=='string')return false;
+ const windows=/^[A-Za-z]:[\\/]/.test(expected),drive=value=>windows?value.replace(/^[a-z]:/,letter=>letter.toUpperCase()):value;
+ return drive(actual)===drive(expected);
+}
 export function assertPhysicalScript(url,target){
  const file=canonicalScriptPath(url,target);
- assert.equal(fs.realpathSync(file),target.file,'Physical script path mismatch');
+ assert(samePhysicalScriptPath(fs.realpathSync(file),target.file),'Physical script path mismatch');
  const stat=fs.lstatSync(file);assert(stat.isFile()&&!stat.isSymbolicLink(),'Regular candidate script required');
  return file;
 }
@@ -89,17 +95,42 @@ export function listenerCommand(port,platform=process.platform){
  if(platform==='win32')return ['powershell.exe',['-NoProfile','-NonInteractive','-Command',`$pids=@(Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique);$rows=@(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId);@{listeners=$pids;parents=$rows}|ConvertTo-Json -Compress -Depth 4`]];
  throw Error('Inspector listener ownership supports only hosted Mac/Windows');
 }
+// Numeric bounded diagnostics only. A later sample can never authorize admission.
+export function ownershipDiagnostic({pids,parents,timing},root){
+ const chains=pids.slice(0,8).map(listener=>{
+  const chain=[],seen=new Set();let pid=listener,reason='depth_limit';
+  for(let i=0;i<20;i++){
+   if(!Number.isSafeInteger(pid)||pid<=1){reason='no_owned_root';break;}
+   if(seen.has(pid)){reason='cycle';break;}seen.add(pid);
+   const parent=parents.get(pid);chain.push({pid,parent:Number.isSafeInteger(parent)?parent:null});
+   if(!Number.isSafeInteger(parent)){reason='missing_parent_row';break;}
+   if(parent===root){reason='owned_root_reached';break;}pid=parent;
+  }
+  return {listener_pid:Number.isSafeInteger(listener)?listener:null,listener_is_root:listener===root,chain,reason};
+ });
+ return {root_pid:root,listener_count:pids.length,chains,timing};
+}
 export function ownedListener(port,root,platform=process.platform,execute=execFileSync){
- const [command,args]=listenerCommand(port,platform);let output;
- try{output=execute(command,args,{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','ignore']});}catch(error){if(platform==='darwin'&&error.status===1)return null;throw Error('Cannot establish inspector listener ownership');}
- let pids,parents;
- if(platform==='darwin'){
-  pids=[...new Set(String(output).split('\n').filter(x=>/^p\d+$/.test(x)).map(x=>Number(x.slice(1))))];
-  const rows=execute('ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','ignore']});
-  parents=new Map(String(rows).trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number)));
- }else{const data=JSON.parse(output);pids=[...new Set(data.listeners??[])];parents=new Map((data.parents??[]).map(x=>[x.ProcessId,x.ParentProcessId]));}
- if(!pids.length)return null;
- assert.equal(pids.length,1,'Ambiguous inspector listener');assert(descendant(pids[0],root,parents),'Inspector listener is not an owned App descendant');
+ const [command,args]=listenerCommand(port,platform);
+ const read=(timeoutMs=10000)=>{
+  const timing={listener_started_at:new Date().toISOString()};let output;
+  try{output=execute(command,args,{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});}catch(error){if(platform==='darwin'&&error.status===1)return {pids:[],parents:new Map(),timing:{...timing,listener_finished_at:new Date().toISOString()}};throw Error('Cannot establish inspector listener ownership');}
+  timing.listener_finished_at=new Date().toISOString();let pids,parents;
+  if(platform==='darwin'){
+   pids=[...new Set(String(output).split('\n').filter(x=>/^p\d+$/.test(x)).map(x=>Number(x.slice(1))))];
+   timing.parents_started_at=new Date().toISOString();
+   const rows=execute('ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:timeoutMs,stdio:['ignore','pipe','ignore']});
+   timing.parents_finished_at=new Date().toISOString();parents=new Map(String(rows).trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number)));
+  }else{const data=JSON.parse(output);pids=[...new Set(data.listeners??[])];parents=new Map((data.parents??[]).map(x=>[x.ProcessId,x.ParentProcessId]));}
+  return {pids,parents,timing};
+ };
+ const sample=read(),{pids,parents}=sample;if(!pids.length)return null;
+ try{assert.equal(pids.length,1,'Ambiguous inspector listener');assert(descendant(pids[0],root,parents),'Inspector listener is not an owned App descendant');}
+ catch(error){
+  error.ownership_refusal={initial:ownershipDiagnostic(sample,root),resample_diagnostic_only:true};
+  try{error.ownership_refusal.resample=ownershipDiagnostic(read(1500),root);}catch{error.ownership_refusal.resample={status:'UNAVAILABLE'};}
+  throw error; // No retry, attach, resume or acceptance based on the resample.
+ }
  return pids[0];
 }
 export async function freeInspectorPort(port){
@@ -150,7 +181,7 @@ export class OwnedExtensionGate{
   this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];this.protocolDiagnostics={event_counts:{},candidate_scripts:[],last_pause:null,breakpoint_locations:[]};
  }
  progress(value){const item={at:new Date().toISOString(),...value};this.events.push(item);assert(this.events.length<=400,'Inspector progress limit');this.onProgress(item);}
- fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message});}}
+ fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message,...(error.ownership_refusal?{ownership_refusal:{...error.ownership_refusal,phase_label:this.phase?.label??null,previous_host_pid:this.previousPid??null,current_peer_pid:this.peer?.listenerPid??null}}:{})});}}
  start(){this.loop=this.watch();void this.loop.catch(error=>this.fail(error));return this;}
  async watch(){
   while(!this.stopped&&!this.failure){
@@ -201,7 +232,7 @@ export class OwnedExtensionGate{
     }).catch(error=>this.fail(error));
    }
   },()=>{if(!peer.intentionalClose&&!this.stopped)this.fail(Error('Owned inspector disconnected unexpectedly'));});
-  this.peer=peer;await peer.connect();await peer.send('Runtime.enable');await peer.send('Debugger.enable');
+  peer.listenerPid=pid;this.peer=peer;await peer.connect();await peer.send('Runtime.enable');await peer.send('Debugger.enable');
   const point=await peer.send('Debugger.setBreakpointByUrl',{urlRegex:this.target.urlPattern,lineNumber:this.target.lineNumber,columnNumber:this.target.columnNumber});assert.equal(typeof point.breakpointId,'string');peer.breakpoint=point.breakpointId;
   this.protocolDiagnostics.breakpoint_locations=(point.locations??[]).slice(0,8).map(location=>({lineNumber:location.lineNumber,columnNumber:location.columnNumber}));
   for(const location of point.locations??[])assert.equal(location.lineNumber,this.target.lineNumber,'Resolved breakpoint moved');
