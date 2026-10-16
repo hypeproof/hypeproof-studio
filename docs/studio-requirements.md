@@ -897,6 +897,10 @@ destination/activity/Service-bound resume marker once (ten-minute maximum age).
 A validated arrival retires only the matching folder-switch attempt, so a later
 explicit visit can reopen that folder. Invalid or expired arrival information
 must not clear the guard against repeatedly reopening a failed destination.
+Its Start surface lists locally saved activities without passively revalidating
+the previous profile on mount, reveal or inbox refresh. Explicit activity
+selection and entry retain Service validation; cancel or denied selection keeps
+the previous credentials and does not reactivate that profile.
 Only the current activity's known history/draft keys can fill an empty
 destination; a destination's existing saved work wins. Cancel, failed draft
 flush, failed navigation and invalid credentials preserve the original state.

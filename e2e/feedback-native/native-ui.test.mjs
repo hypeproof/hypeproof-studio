@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
-import {NativeUI,sessionRefusalObserved} from './native-ui.mjs';
+import {NativeUI,sessionRefusalObserved,assertOwnedPreviewClose} from './native-ui.mjs';
 function fixture(outerVisible){const ui=new NativeUI('http://127.0.0.1:9777');const iframe={name:'visible-webview',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};const control={getBoundingClientRect:()=>({width:700,height:60})};const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[iframe]},getComputedStyle:()=>({display:'inline',visibility:'visible'})})};const target={info:{id:'target'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'frame'}}}:{executionContextId:1},evaluate:expression=>vm.runInNewContext(expression,{document:{visibilityState:'hidden',querySelector:()=>control}})};ui.list=async()=>[{id:'target',type:'iframe',url:'vscode-webview://test/index.html?id=visible-webview&extensionId=hypeproof.hypeproof-chat'}];ui.workbench=async()=>host;ui.target=async()=>target;return {ui,target};}
 test('visible workbench iframe and control geometry work despite Electron Page Visibility false negative',async()=>{const {ui,target}=fixture(true);assert.equal(await ui.frame('textarea',500),target);});
 test('hidden outer webview cannot pass by retaining an inner control geometry',async()=>{const {ui}=fixture(false);await assert.rejects(ui.frame('textarea',1),/Timed out/);});
@@ -142,7 +142,7 @@ test('new preview refuses missing provenance in the actually focused editor',asy
 });
 test('chat focus readiness observes command-produced actual input focus without clicking or focusing it',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777');let focused=false;
- const target={evaluate:async expression=>{assert.equal(expression,"document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')");return focused;}};
+ const target={evaluate:async()=>({documentFocused:focused,inputFocused:focused})};
  ui.frame=async()=>target;for(const action of['press','key','input','focusWorkbench'])ui[action]=()=>assert.fail('focus readiness must not synthesize '+action);
  setTimeout(()=>{focused=true;},30);assert.equal(await ui.focusChatReady(500),target);
  focused=false;await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);
@@ -316,6 +316,43 @@ test('scoped webview discovery cannot connect to another window iframe even when
  const chat={info:{id:'chat-B'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'inner'}}}:{executionContextId:1},evaluate:()=>true};
  ui.list=async()=>[...pages,...frames];ui.target=async info=>{connected.push(info.id);if(info.id==='B')return host;if(info.id==='chat-B')return chat;assert.fail('Cross-window target '+info.id);};
  assert.equal(await ui.frame('textarea',500),chat);assert(!connected.includes('chat-A'));assert(!connected.includes('A'));
+});
+
+function previewCloseFixture(){
+ const before={resources:['saved.txt'],dirtyResources:[]};
+ const preview={resource:'Untitled-2',resources:['saved.txt','Untitled-2'],editorLabel:'Untitled-2',focused:true,text:'# 외부 지침 스킬 · fixture\nprovenance',dirtyResources:['Untitled-2']};
+ return {before,preview};
+}
+test('only a newly observed unchanged preview is reverted and closed via its public UI command',async()=>{
+ const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777'),calls=[];let state=preview;
+ ui.editorState=async()=>state;ui.palette=async title=>{calls.push(title);state=before;};
+ const proof=await ui.closeOwnedPreview({},before,preview);
+ assert.deepEqual(calls,['View: Revert and Close Editor']);assert(proof.other_editors_preserved);assert.equal(proof.resource,'Untitled-2');
+});
+test('foreign dirty, preexisting, changed, duplicate or unfocused editors cause zero discard actions',async()=>{
+ const {before,preview}=previewCloseFixture();
+ for(const current of [{...preview,dirtyResources:['Untitled-2','saved.txt']},{...preview,text:'user changed text'},{...preview,focused:false},{...preview,resource:'saved.txt'},{...preview,resources:['saved.txt','Untitled-2','Untitled-2']},{...preview,resources:['saved.txt','Untitled-2','foreign.txt']},{...preview,dirtyResources:undefined}]){
+  const ui=new NativeUI('http://127.0.0.1:9777');let calls=0;ui.editorState=async()=>current;ui.palette=async()=>calls++;
+  await assert.rejects(ui.closeOwnedPreview({},before,preview));assert.equal(calls,0);
+ }
+ assert.throws(()=>assertOwnedPreviewClose({...before,resources:['saved.txt','Untitled-2']},preview,preview),/newly observed/);
+ const ui=new NativeUI('http://127.0.0.1:9777');ui.editorState=async()=>({dirtyResources:['unknown.txt']});await assert.rejects(ui.assertNoDirtyEditors({}),/dirty editor/);
+});
+
+
+test('focus diagnostics observe exact target and safe DOM state without repair or private values',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777','owned-window'),input={value:'private-draft-never-log',tagName:'TEXTAREA',getBoundingClientRect:()=>({x:1,y:2,width:300,height:40})};let active={tagName:'BUTTON'},documentFocused=true;
+ const document={querySelector:selector=>{assert.equal(selector,'.hps-input textarea');return input;},hasFocus:()=>documentFocused,get activeElement(){return active;}};
+ const target={info:{id:'owned-chat'},ownedWorkbenchId:'owned-window',contextId:42,evaluate:expression=>vm.runInNewContext(expression,{document,getComputedStyle:()=>({display:'block',visibility:'visible'})})};
+ let frames=0;ui.frame=async()=>{frames++;return target;};for(const action of['press','key','input','focusWorkbench','palette'])ui[action]=()=>assert.fail('No focus repair '+action);
+ await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);assert.equal(frames,1);assert.deepEqual(ui.phases.map(x=>x.outcome),['start','timeout']);
+ const failure=ui.phases[1];assert.equal(failure.target_id,'owned-chat');assert.equal(failure.owned_workbench_id,'owned-window');assert.equal(failure.context_id,42);assert.equal(failure.state.activeTag,'BUTTON');assert.equal(failure.state.inputFocused,false);assert.equal(failure.state.visible,true);assert(failure.snapshot_age_ms>=0);assert(!JSON.stringify(ui.phases).includes('private-draft'));
+ ui.phases=[];active=input;documentFocused=false;await assert.rejects(ui.focusChatReady(1),/actual webview and textarea focus/);assert.equal(ui.phases[1].state.inputFocused,true);assert.equal(ui.phases[1].state.documentFocused,false);
+ ui.phases=[];documentFocused=true;assert.equal(await ui.focusChatReady(500),target);assert.deepEqual(ui.phases.map(x=>x.outcome),['start','observed']);assert.equal(ui.phases[1].state.inputFocused,true);
+});
+test('diagnostic sampling failure preserves refusal without a terminal resample or raw error message',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let samples=0;ui.frame=async()=>({info:{id:'owned-chat'},evaluate:async()=>{samples++;throw Object.assign(Error('synthetic-private-error'),{name:'synthetic-private-custom-name'});}});
+ await assert.rejects(ui.focusChatReady(1),error=>{assert.match(error.message,/actual webview and textarea focus/);assert.match(error.message,/Chat focus diagnostic sample unavailable/);assert(!String(error).includes('synthetic-private'),'Returned timeout must omit custom name and message');assert(!JSON.stringify({error:error.message,name:error.name}).includes('synthetic-private'),'Serialized step failure must omit private markers');return true;});assert.equal(samples,1,'No extra timeout resample or deadline reset');assert.deepEqual(ui.phases.map(x=>x.outcome),['start','timeout']);assert.equal(ui.phases[1].sample_error,'Error');assert.equal(ui.phases[1].state,null);assert(!JSON.stringify(ui.phases).includes('synthetic-private'),'Neither custom error name nor message may enter diagnostics');
 });
 
 test('actual headless quick input refuses visible wrong focus and waits for exact input focus',async()=>{

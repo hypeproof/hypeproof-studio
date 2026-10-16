@@ -29,7 +29,7 @@ jobs:
       matrix:
         os: [macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,6 +91,7 @@ jobs:
           HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
           HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
           PUBLIC_APP_TAG: ${{ inputs.public_app_tag }}
+          HPS_NATIVE_DELAYED_RESUME: '1'
         run: node e2e/feedback-native/hosted.mjs "$PUBLIC_APP_TAG"
       - name: Upload partial candidate evidence (no private token directory)
         if: always()

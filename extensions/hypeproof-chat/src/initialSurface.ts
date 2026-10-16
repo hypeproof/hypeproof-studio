@@ -16,7 +16,7 @@ export async function restoreInitialSurface(host: {
   connections(): { current: ActivityRecord | undefined; matchesService: boolean } | undefined;
   notifyExpired(message: string): unknown;
   notifyMismatch(message: string): unknown;
-  showStart(): PromiseLike<unknown>;
+  showStart(options?: { deferProfileUntilEntry: true }): PromiseLike<unknown>;
   ensureProfile(): PromiseLike<unknown>;
   openChat(): PromiseLike<unknown>;
 }): Promise<void> {
@@ -32,6 +32,6 @@ export async function restoreInitialSurface(host: {
     // Revalidate the saved credential before resuming. This never dispatches an AI turn.
     if (await host.ensureProfile()) await host.openChat();
   } else if (branch !== 'skip') {
-    await host.showStart();
+    await host.showStart(decision === 'expired' || decision === 'mismatch' ? { deferProfileUntilEntry: true } : undefined);
   }
 }

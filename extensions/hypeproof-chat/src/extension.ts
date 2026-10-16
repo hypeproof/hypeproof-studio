@@ -794,7 +794,7 @@ export async function activate(context: vscode.ExtensionContext) {
     connections: () => activityConnections(context),
     notifyExpired: message => vscode.window.showInformationMessage(message),
     notifyMismatch: message => vscode.window.showWarningMessage(message),
-    showStart: () => startPage.show(),
+    showStart: options => startPage.show(options),
     ensureProfile: () => provider.ensureProfile(true),
     openChat: () => startPage.openChat(),
   });

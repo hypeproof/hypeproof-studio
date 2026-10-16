@@ -60,6 +60,8 @@ export class StartPage {
   private choosingFolder = false;
   private error?: string;
   private started = false;
+  // Invalid arrival may list saved activities, but only explicit entry reactivates its profile.
+  private deferProfileUntilEntry = false;
   private candidate?: Candidate;
   // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
   private products?: PassProduct[] | null;
@@ -162,10 +164,12 @@ export class StartPage {
     await this.chat.openInEditor(entry);
     if (this.panel === entry) this.panel = undefined;
     this.started = true;
+    this.deferProfileUntilEntry = false;
     this.chat.refreshConfig();
   }
 
-  async show(): Promise<void> {
+  async show(options?: { deferProfileUntilEntry: true }): Promise<void> {
+    if (options?.deferProfileUntilEntry) this.deferProfileUntilEntry = true;
     if (this.panel) { this.panel.reveal(); void this.refresh(); return; }
     const existing = this.panel as vscode.WebviewPanel | undefined;
     if (existing) { existing.reveal(); return; }
@@ -318,7 +322,7 @@ export class StartPage {
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
-    const p = this.candidate?.profile ?? (profile === undefined ? await this.chat.ensureProfile() : profile);
+    const p = this.candidate?.profile ?? (profile === undefined ? (this.deferProfileUntilEntry ? null : await this.chat.ensureProfile()) : profile);
     let activities: StartState['activities'];
     try { activities=await activityConnections(this.context)?.list(); }
     catch { this.error ??= "저장된 활동 목록을 읽지 못했습니다. 참여 코드를 다시 입력해 주세요."; }
