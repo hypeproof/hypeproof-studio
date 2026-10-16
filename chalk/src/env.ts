@@ -4,6 +4,8 @@ export interface ChalkEnv {
   ENVIRONMENT: "production" | "dev";
   HPS_CHALK_VERSION?: string;
   HPS_SERVICE_ORIGIN?: string;
+  /** Local integration testing only; production token reads use the fixed Lab origin. */
+  HPS_LAB_ORIGIN?: string;
   // Server-to-server credential for attesting an Access operator to Service.
   // Never included in App/browser requests or instructor write forwarding.
   HPS_CHALK_SERVICE_SECRET?: string;
