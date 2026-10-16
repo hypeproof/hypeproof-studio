@@ -75,3 +75,11 @@ export function distinctActivities(a,b){
  if(!/^[a-f0-9]{64}$/.test(a?.activity_id??'')||!/^[a-f0-9]{64}$/.test(b?.activity_id??'')||a.activity_id===b.activity_id)throw Error('Token B must authenticate a different actual Service activity identity');
  return true;
 }
+
+// Observe the exact file created by native Save As; no replacement/repair fallback.
+export function verifyRestartArtifacts({sidebarVisible,savedFile,workspace}){
+ if(sidebarVisible!==false)throw Error('User hidden sidebar must remain hidden after full restart');
+ if(!savedFile||!path.isAbsolute(savedFile.path)||!within(savedFile.path,workspace)||!within(fs.realpathSync(savedFile.path),fs.realpathSync(workspace)))throw Error('Saved native file must remain in its actual workspace');
+ if(fs.lstatSync(savedFile.path).isSymbolicLink()||sha256(savedFile.path)!==savedFile.sha256)throw Error('Actual native saved file bytes changed across full restart');
+ return {hidden_sidebar_preserved:true,saved_file_preserved:true,saved_file_sha256:savedFile.sha256};
+}

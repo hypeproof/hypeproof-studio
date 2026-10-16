@@ -75,3 +75,14 @@ test('restart failure retains normal exit, refused CDP and new PID observations 
  assert.equal(observations[1].exit_code,0);assert.equal(observations[3].old_pid,10);assert.equal(observations[3].new_pid,11);
  assert(!observations.some(e=>e.phase==='restored_chat_and_draft_observed'));
 });
+
+test('restart artifacts require hidden user layout and unchanged native saved bytes within actual workspace',async()=>{
+ const {verifyRestartArtifacts}=await import('./safety.mjs');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'restart-artifacts-'));
+ try{const workspace=path.join(dir,'A');fs.mkdirSync(workspace);const file=path.join(workspace,'native.txt');fs.writeFileSync(file,'original saved bytes');const savedFile={path:file,sha256:sha256(file)};
+ assert.equal(verifyRestartArtifacts({sidebarVisible:false,savedFile,workspace}).saved_file_preserved,true);
+ assert.throws(()=>verifyRestartArtifacts({sidebarVisible:true,savedFile,workspace}),/hidden sidebar/);
+ fs.writeFileSync(file,'changed');assert.throws(()=>verifyRestartArtifacts({sidebarVisible:false,savedFile,workspace}),/bytes changed/);
+ const outside=path.join(dir,'outside.txt');fs.writeFileSync(outside,'original saved bytes');assert.throws(()=>verifyRestartArtifacts({sidebarVisible:false,savedFile:{path:outside,sha256:sha256(outside)},workspace}),/actual workspace/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

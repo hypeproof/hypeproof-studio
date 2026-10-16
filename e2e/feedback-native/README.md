@@ -107,10 +107,11 @@ configured `inmemory` SecretStorage does not prove process-restart persistence.
 | Slice | Native check | Scope limit |
 |---|---|---|
 | T01/T02 | Files command, native Explorer, user's hidden sidebar across chat/reload, native new-file save and Explorer row | Initial first-launch default is an owner observation; no overwrites |
-| T03/T04 | Native folder picker cancel, same activity B reload, no code reentry, draft carry, native File Open Folder back to A, A draft wins | No history is invented from an empty conversation |
-| T05 | After T03 PASS: real Cmd+Q (Mac) / visible File → Exit (Windows), owned child exit 0, CDP connection refusal, same profile/binary/environment restart with different PID, visible chat and identical A draft | Owned OS-backed SecretStorage only; attach/in-memory is BLOCKED; no `ensureChat`, token entry, force-kill or reseeding may establish PASS |
+| T03/T04 | Native folder picker cancel, same activity B reload, no code reentry, draft carry, native File Open Folder back to A, then saved activity → activity folder chooser → B → File Open Folder A; each destination draft wins | No history is invented from an empty conversation |
+| T05 | After T03 PASS: real Cmd+Q (Mac) / visible File → Exit (Windows), owned child exit 0, CDP connection refusal, same profile/binary/environment restart with different PID, visible chat and identical A draft; deliberately hidden sidebar and exact native-saved file hash survive | Owned OS-backed SecretStorage only; attach/in-memory is BLOCKED; no `ensureChat`, token entry, force-kill or reseeding may establish PASS |
 | T04 independent activity | Actual Start → different activity → enter B → select bound A → visible rejection → cancel; A draft/files unchanged. Empty owned C admits B without A draft; distinct B draft survives native File Open Folder A→C→A | Requires explicit second token with different Service activity identity and generated C ownership marker; no model history inferred |
-| T05/T06 remainder | Explicit `NOT_RUN` | Persisted model history, multiwindow and streaming still need additional real turns/credentials |
+| T04 session negative | End-of-suite canonical DELETE ends only the owned synthetic fixture session; existing A profile then returns session_inactive and the actual saved-activity UI refuses admission while draft/files/bindings remain | Session ended, not JWT expiry or token revocation; never an attached/deployed Service |
+| T05/T06 remainder | Explicit `NOT_RUN` | Persisted model history, multiwindow and streaming still need additional native fixtures and actual conversation turns |
 | T07 | Runtime skill command, public pinned import, visible revision/license/capability preview before explicit select, stored preview, disable | Import uses public GitHub; selected instructions reaching a provider and offline transport isolation remain `NOT_RUN` |
 | T08/T09 | Source regressions elsewhere | Native update/revert/tamper tests not substituted by helper assertions |
 | T16 capability subset | Actual native command registration and disabled-profile notification | No image is selected, uploaded or charged; enabled profile reports `BLOCKED` instead of attempting a paid request |
@@ -163,8 +164,8 @@ The full restart reuses the A draft already persisted during the actual A→B→
 folder test. It performs the platform quit action once, waits for normal exit of
 the exact spawned child and connection refusal from the prior CDP endpoint, then
 launches the same prepared executable, profile, launch args and scrubbed
-credentials-free environment. The new PID must differ. It only reveals/focuses
-the restored chat and observes its draft; it never calls the initial admission
+credentials-free environment. The new PID must differ. It only observes
+the directly restored chat and its draft; it never calls the initial admission
 helper or enters a code after restart. Process cleanup in `finally` is separately
 labelled and never contributes to restart PASS. A hung endpoint, signal kill,
 nonzero exit, reused PID or missing draft cannot satisfy the proof.
@@ -216,3 +217,43 @@ artifact does not establish whether the pending candidate or public download
 caused that failure. Canonical public-download warning outcomes are now captured
 as failures rather than missed until the preview timeout. No automatic import or
 network retry is added; the actual provenance preview is still required to pass.
+
+## Additional continuity and session-negative slices
+
+The third same-activity route selects the saved activity by its complete displayed
+workspace path (the list deduplicates an activity to its latest saved B folder),
+then uses its actual activity folder chooser. It does not enter a token or seed
+credentials. Existing B's distinct draft must survive; public File Open Folder A
+must restore A's original draft. A missing/ambiguous saved path cannot select a
+neighboring activity. Restart proof additionally requires the native-saved file
+and an explicitly hidden sidebar before quit, then unchanged bytes/layout after
+actual direct chat restoration.
+
+Only this metadata fixture opts generated owned configurations into
+`session-ended`, always after all other UI scenarios. The fixture writes its
+existing synthetic admin credential to `admin-control` beside its private token
+files, outside uploaded evidence. The runner verifies the exact fixture source
+hash, preflight Service source receipt, private credential hash and live
+instance/PID attestation before any canonical mutation. It checks existing A is
+valid, sends exactly one `DELETE /admin/cohorts/synthetic-release-acceptance/session`,
+then requires A's actual profile 403 `session_inactive`. A public saved-activity
+selection must display that canonical refusal, preserve A's visible draft, actual
+workspace files and persistent binding files, and create no candidate admission.
+There is no automatic retry, token reissue, session reopen or provider request.
+An absent control receipt leaves this slice NOT_RUN; attach cannot mutate it.
+
+This represents an **ended classroom session**, not a JWT expiry or revocation
+proof. The Service currently describes an absent session as “수업이 아직 시작 전이에요.”;
+the harness checks the actual canonical response and records the distinction.
+The native UI assertions remain NOT_RUN until an actual hosted execution.
+A standalone background probe tests only the canonical fixture path:
+
+```bash
+HPS_SERVICE_SOURCE=/absolute/pinned-service HPS_SERVICE_SHA=FULL_SHA node --experimental-strip-types --experimental-sqlite e2e/feedback-native/service.mjs /absolute/new-private-probe --probe-session-ended
+```
+
+It starts and closes its own synthetic SQLite/KV fixture, reports no provider
+calls and makes no desktop interaction. Its result cannot stand in for native UI
+refusal, credential persistence or full T01–T06 acceptance. History and active
+streaming remain NOT_RUN; they require a separate scripted upstream through the
+actual SDK/Service and actual native turn entry, rather than seeded history.

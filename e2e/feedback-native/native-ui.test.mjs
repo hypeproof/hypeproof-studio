@@ -247,3 +247,13 @@ test('public skill preview outcome distinguishes actual confirmation, canonical 
  for(const message of['공개 GitHub 다운로드 한도에 도달했습니다.','공개 GitHub 파일을 받지 못했습니다 (403).','지침 스킬을 처리하지 못했습니다. 기존 선택과 작업 결과는 보존됩니다.'])assert.equal(skillPreviewOutcome([message]),'failure');
  for(const message of['지침 스킬 검사 중','이 활동으로 시작할까요?','다른 알림','고정 revision text without actual confirmation'])assert.equal(skillPreviewOutcome([message]),null);
 });
+
+test('saved activity selects complete workspace identity, never another folder with matching basename',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),pressed=[];
+ const view={evaluate:async()=>[{index:0,workspace:'/different/A'},{index:1,workspace:'/owned/A'}]};
+ ui.press=async(_view,selector)=>pressed.push(selector);
+ await ui.savedActivity(view,'/owned/A');assert.deepEqual(pressed,['.studio-saved-activities button:nth-of-type(2)']);
+ await assert.rejects(ui.savedActivity({evaluate:async()=>[{index:0,workspace:'/different/A'}]},'/owned/A',1),/unique saved activity/);
+ await assert.rejects(ui.savedActivity({evaluate:async()=>[{index:0,workspace:'/owned/A'},{index:1,workspace:'/owned/A'}]},'/owned/A',1),/unique saved activity/);
+ assert.equal(pressed.length,1,'missing or ambiguous identity cannot click');
+});

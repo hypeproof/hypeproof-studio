@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
+import {endSyntheticSession} from './session-control.mjs';
 import {NativeUI,waitFor,sleep,skillPreviewOutcome} from './native-ui.mjs';
-import {validateConfig,candidateProof,assertNoBackdoors,loopback,sanitize,sha256,foregroundAllowed,restartOwnedCandidate,distinctActivities} from './safety.mjs';
+import {validateConfig,candidateProof,assertNoBackdoors,loopback,sanitize,sha256,foregroundAllowed,restartOwnedCandidate,distinctActivities,verifyRestartArtifacts} from './safety.mjs';
 const args=process.argv.slice(2);
 if(args.includes('--help')||!args[0]){console.log('Usage: node e2e/feedback-native/run.mjs CONFIG.json [--preflight | --allow-foreground]\nAttach leaves the app running. Owned launch requires a generated profile marker. No model requests are sent.');process.exit(args.includes('--help')?0:2);}
 const c=validateConfig(JSON.parse(fs.readFileSync(args[0],'utf8'))),secrets=[];
@@ -16,7 +17,7 @@ const ui=new NativeUI(c.cdp);let child,profile,profileB;
 const blocked=message=>Object.assign(Error(message),{blocked:true});
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{report.execution_status='INTERRUPTED';report.native_ui='NOT_RUN_REMAINDER';report.finished_at=new Date().toISOString();ui.close();if(child)child.kill();save();process.exit(130);});
 const save=()=>{report.ui_phases=ui.phases;return fs.writeFileSync(path.join(c.evidence,'result.json'),sanitize(JSON.stringify(report,null,2),secrets));};
-async function step(id,body){const start=Date.now();try{const evidence=await body();report.tests.push({id,status:'PASS',elapsed_ms:Date.now()-start,...evidence});console.log(id+' PASS');}catch(error){const status=error.blocked?'BLOCKED':'FAIL';report.tests.push({id,status,elapsed_ms:Date.now()-start,error:sanitize(error.message,secrets)});console.log(id+' '+status+': '+sanitize(error.message,secrets));try{await ui.shot(path.join(c.evidence,id+'-'+status.toLowerCase()+'.png'));}catch{} if(id==='T03-same-activity-real-folder-continuity'){try{report.tests.at(-1).owned_folder_dialog_canceled=await ui.cancelOwnedOpenFolder();}catch(cleanup){report.tests.at(-1).cleanup_error=sanitize(cleanup.message,secrets);}} if(id==='T04-different-activity-collision'&&!c.attach&&ownedActivityCandidate){try{const canceled=await ui.cancelActivityCandidate();report.tests.at(-1).owned_activity_candidate_canceled=canceled;if(canceled)ownedActivityCandidate=false;}catch(cleanup){report.tests.at(-1).candidate_cleanup_error=sanitize(cleanup.message,secrets);}} }save();}
+async function step(id,body){const start=Date.now();try{const evidence=await body();report.tests.push({id,status:'PASS',elapsed_ms:Date.now()-start,...evidence});console.log(id+' PASS');}catch(error){const status=error.blocked?'BLOCKED':'FAIL';report.tests.push({id,status,elapsed_ms:Date.now()-start,error:sanitize(error.message,secrets)});console.log(id+' '+status+': '+sanitize(error.message,secrets));try{await ui.shot(path.join(c.evidence,id+'-'+status.toLowerCase()+'.png'));}catch{} if(id==='T03-same-activity-real-folder-continuity'){try{report.tests.at(-1).owned_folder_dialog_canceled=await ui.cancelOwnedOpenFolder();}catch(cleanup){report.tests.at(-1).cleanup_error=sanitize(cleanup.message,secrets);}} if(['T04-different-activity-collision','T03-same-activity-activity-folder-chooser'].includes(id)&&!c.attach&&ownedActivityCandidate){try{const canceled=await ui.cancelActivityCandidate();report.tests.at(-1).owned_activity_candidate_canceled=canceled;if(canceled)ownedActivityCandidate=false;}catch(cleanup){report.tests.at(-1).candidate_cleanup_error=sanitize(cleanup.message,secrets);}} }save();}
 const command=id=>{const title=report.candidate.commandTitles[id];if(!title)throw blocked('Candidate manifest does not contain '+id+'; rebuild/reinject current implementation');return ui.palette(title);};
 const readDraft=async()=>{const chat=await ui.frame('.hps-input textarea');return {chat,value:await chat.evaluate("document.querySelector('.hps-input textarea').value")};};
 async function focusChat(){await command('hypeproof-chat.focus');return ui.focusChatReady();}
@@ -38,7 +39,7 @@ function workspaceFiles(root){
  function visit(directory){for(const item of fs.readdirSync(directory,{withFileTypes:true})){const file=path.join(directory,item.name);if(item.isSymbolicLink())throw blocked('Owned folder file preservation cannot follow symlinks');if(item.isDirectory())visit(file);else if(item.isFile())entries.push([path.relative(root,file),sha256(file)]);if(entries.length>5000)throw blocked('Owned fixture folder exceeds bounded file snapshot');}}
  visit(root);return entries.sort((a,b)=>a[0].localeCompare(b[0]));
 }
-let launchOwned,ownedActivityCandidate=false;
+let launchOwned,ownedActivityCandidate=false,savedFile;
 async function sidebar(){const w=await ui.workbench();return w.evaluate("(()=>{const e=document.querySelector('.part.sidebar');return !!e&&e.getBoundingClientRect().width>0&&getComputedStyle(e).display!=='none';})()");}
 function requireDialogs(){if(!report.dialogs_ready)throw blocked('Set isolated User/settings.json window.dialogStyle=custom and files.simpleDialog.enable=true, then reload candidate');}
 async function openFromStart(folder,confirm){const view=await start();await ui.clickText(view,'작업 폴더 열기');await ui.folder(folder,'작업 폴더 열기');const w=await ui.workbench();await waitFor(async()=>String(await ui.toasts()).includes('연결할까요'),'unbound folder confirmation');if(confirm)await ui.clickText(w,'현재 활동 연결');else await ui.key(w,'Escape');}
@@ -52,14 +53,33 @@ try{
  const draft='feedback-native-draft-'+Date.now().toString(36);
  if(c.scenarios.includes('files')){
  await step('T02-explorer-user-layout-reload',async()=>{await command('hypeproof-chat.openStudioFiles');await ui.explorerReady();await waitFor(sidebar,'Explorer visible');const w=await ui.workbench();assert(await w.evaluate("!!document.querySelector('.explorer-folders-view')"),'Native Explorer view must exist');await ui.palette(c.toggleSidebarTitle||'View: Toggle Primary Side Bar Visibility');await waitFor(async()=>!await sidebar(),'user hides sidebar');await focusChat();assert.equal(await sidebar(),false,'Opening chat respects user sidebar choice');await ui.palette(c.reloadTitle||'Developer: Reload Window',{expectReload:true});ui.close();await sleep(1200);await ui.workbench();await focusChat();assert.equal(await sidebar(),false,'Reload respects user sidebar choice');await command('hypeproof-chat.openStudioFiles');await ui.explorerReady();await waitFor(sidebar,'Explicit Files action restores Explorer');return {explicit_native_explorer:true,user_choice_preserved:true,reload_observed:true};});
- await step('T01-native-file-save',async()=>{requireDialogs();const file=path.join(c.workspace.a,'feedback-native-'+Date.now().toString(36)+'.txt'),body='Native Studio Explorer acceptance\n';assert(!fs.existsSync(file));const w=await ui.newTextFile(body);await ui.key(w,'s',ui.modifier);await ui.pathDialog(file,['Save','저장','OK','확인']);await waitFor(()=>fs.existsSync(file)&&fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n')===body,'native save finishes writing expected bytes');assert.equal(fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n'),body);await command('hypeproof-chat.openStudioFiles');await ui.explorerReady();await waitFor(()=>w.evaluate(`document.querySelector('.explorer-folders-view')?.textContent.includes(${JSON.stringify(path.basename(file))})`),'new file in native Explorer');return {relative_path:path.basename(file),sha256:sha256(file),originals_overwritten:false};});
+ await step('T01-native-file-save',async()=>{requireDialogs();const file=path.join(c.workspace.a,'feedback-native-'+Date.now().toString(36)+'.txt'),body='Native Studio Explorer acceptance\n';assert(!fs.existsSync(file));const w=await ui.newTextFile(body);await ui.key(w,'s',ui.modifier);await ui.pathDialog(file,['Save','저장','OK','확인']);await waitFor(()=>fs.existsSync(file)&&fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n')===body,'native save finishes writing expected bytes');assert.equal(fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n'),body);await command('hypeproof-chat.openStudioFiles');await ui.explorerReady();await waitFor(()=>w.evaluate(`document.querySelector('.explorer-folders-view')?.textContent.includes(${JSON.stringify(path.basename(file))})`),'new file in native Explorer');savedFile={path:file,sha256:sha256(file)};return {relative_path:path.basename(file),sha256:savedFile.sha256,originals_overwritten:false};});
  }
  if(c.scenarios.includes('folders')){
  await step('T04-folder-cancel-draft',async()=>{requireDialogs();const chat=await focusChat();await ui.input(chat,'.hps-input textarea',draft);await sleep(500);await openFromStart(c.workspace.b,false);await focusChat();assert.equal((await readDraft()).value,draft);return {native_picker_cancel:true,draft_preserved:true};});
  await step('T03-same-activity-real-folder-continuity',async()=>{requireDialogs();await focusChat();const initial=await readDraft();if(initial.value!==draft)throw blocked('Folder continuity requires the cancellation draft to exist in the actual chat; preceding draft setup did not complete');const before=initial.chat.info.id;await openFromStart(c.workspace.b,true);const moved=await ui.frame('.hps-input textarea',60000);assert.notEqual(moved.info.id,before,'A real folder reload must replace the visible extension target');await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.b)),'workbench title is B');assert.equal((await readDraft()).value,draft,'Same-activity draft copied once to new folder');const draftB=draft+'-B';await ui.input(moved,'.hps-input textarea',draftB);await sleep(500);await ui.palette('File: Open Folder...');await ui.ownedOpenFolder(c.workspace.a+path.sep);await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'native File Open Folder returns to A',60000);await ui.frame('.hps-input textarea',60000);assert.equal((await readDraft()).value,draft,'Bound A draft must win over B draft');return {real_reload:true,code_reentry:false,activity_bound_folder:true,destination_draft_wins:true,history:'NOT_RUN; no model turns'};});
+ await step('T03-same-activity-activity-folder-chooser',async()=>{
+  requireDialogs();
+  if(!report.tests.some(t=>t.id==='T03-same-activity-real-folder-continuity'&&t.status==='PASS'))throw blocked('Third navigation route requires observed same-activity A/B bindings and drafts');
+  assert.equal((await readDraft()).value,draft,'A draft before activity-folder chooser');
+  const before=(await readDraft()).chat.info.id,view=await start();ownedActivityCandidate=true;
+  await ui.savedActivity(view,c.workspace.b);
+  await waitFor(()=>view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'saved A activity candidate');
+  await ui.chooseCandidateFolder(view,c.workspace.b);await ui.press(view,'.studio-primary');
+  await waitFor(async()=>String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.b)),'activity chooser opens actual bound B',60000);
+  const moved=await readDraft();assert.notEqual(moved.chat.info.id,before,'Third route must replace visible extension target');ownedActivityCandidate=false;
+  assert.equal(moved.value,draft+'-B','Activity chooser preserves destination B own draft');
+  assert.equal((await nativeOpenBoundFolder(c.workspace.a)).value,draft,'Public File Open Folder restores original A after third route');
+  return {route:'Start saved activity → activity folder chooser → begin',same_activity:true,real_reload:true,destination_draft_wins:true,code_reentry:false,provider_dispatch:false,history:'NOT_RUN'};
+ });
  if(c.scenarios.includes('restart')){
  await step('T05-owned-full-process-credential-draft-restart',async()=>{
   if(!report.tests.some(t=>t.id==='T03-same-activity-real-folder-continuity'&&t.status==='PASS'))throw blocked('Full restart requires observed T03 PASS and persisted A draft');
+  if(!report.tests.some(t=>t.id==='T03-same-activity-activity-folder-chooser'&&t.status==='PASS'))throw blocked('Restart requires successful third-route return to A');
+  if(!savedFile)throw blocked('Restart artifact proof requires observed native file save');
+  if(await sidebar())await ui.palette(c.toggleSidebarTitle||'View: Toggle Primary Side Bar Visibility');
+  await waitFor(async()=>!await sidebar(),'explicit user hidden sidebar before normal quit');
+  verifyRestartArtifacts({sidebarVisible:await sidebar(),savedFile,workspace:c.workspace.a});
   report.restart_observations=[];
   const evidence=await restartOwnedCandidate({config:c,child,expectedDraft:draft,
    onProgress:observation=>{report.restart_observations.push({at:new Date().toISOString(),...observation});save();},
@@ -68,7 +88,9 @@ try{
    waitCdpDown:async()=>{await waitFor(()=>ui.cdpDown(),'owned CDP endpoint refuses connections after quit',30000);ui.close();},
    launch:()=>launchOwned(),
    observeDraft:()=>ui.restoredDraft(draft)});
-  await ui.shot(path.join(c.evidence,'process-restart-restored.png'));return evidence;
+  const artifacts=verifyRestartArtifacts({sidebarVisible:await sidebar(),savedFile,workspace:c.workspace.a});
+  report.restart_observations.push({at:new Date().toISOString(),phase:'hidden_layout_and_saved_file_restored',...artifacts});save();
+  await ui.shot(path.join(c.evidence,'process-restart-restored.png'));return {...evidence,...artifacts};
  });
  report.process_restart_credentials=report.tests.at(-1).status;
  if(!child||child.exitCode!==null||child.signalCode!==null)throw blocked('Owned restart did not leave a live candidate; no remaining native inputs');
@@ -108,6 +130,29 @@ try{
  await step('T07-native-skill-preview-select-disable',async()=>{if(!c.skill?.url)throw blocked('Explicit pinned public skill URL required');if(ownedActivityCandidate)throw blocked('Prior owned activity candidate remains pending; skill import must not start in stale entry UI');try{await ui.frame('.hps-input textarea',1500);}catch{await focusChat();}if(!String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)))throw blocked('Skill test requires original A workspace restored; prior folder scenario did not finish');await command('hypeproof-chat.externalSkills');await ui.quick('GitHub에서 가져오기');await ui.prompt('공개 GitHub 지침 스킬 가져오기',c.skill.url);const w=await ui.workbench();let outcomeText='';await waitFor(async()=>{outcomeText=String(await ui.toasts());return skillPreviewOutcome(outcomeText);}, 'skill preview confirmation or canonical public-download failure',90000);const text=outcomeText;if(skillPreviewOutcome(text)!=='preview')throw blocked('Public import unavailable: '+text);const preview=await w.evaluate("document.querySelector('.editor-instance')?.textContent||document.body.textContent");assert(preview.includes(c.skill.revision),'Visible preview includes immutable revision');assert(preview.includes('라이선스')&&preview.includes('capability'),'Visible preview includes license/capabilities');await ui.shot(path.join(c.evidence,'skill-preview.png'));await ui.clickText(w,'선택하여 사용');await waitFor(async()=>String(await ui.toasts()).includes('이 작업 폴더의 다음 요청부터 선택한 지침을 사용합니다.'),'selected skill saved completion notification');await command('hypeproof-chat.externalSkills');await ui.quick(c.skill.name);const beforePreview=await ui.editorState(w);await ui.quick('내용과 출처 보기');const storedPreview=await ui.newPreview(w,beforePreview,['외부 지침 스킬',c.skill.revision,'manifest SHA-256','라이선스','capability']);await ui.shot(path.join(c.evidence,'stored-skill-preview.png'));await command('hypeproof-chat.externalSkills');await ui.quick(c.skill.name);await ui.quick('사용 해제');await command('hypeproof-chat.externalSkills');await ui.waitQuick(w,s=>s.ready&&s.mode==='picker','stored skill list reopened after disable');await waitFor(()=>ui.choiceSelector(w,c.skill.name),'stored skill row after disable');const pick=await w.evaluate("document.querySelector('.quick-input-list')?.textContent");assert(pick.includes(c.skill.name)&&!pick.includes('✓ '+c.skill.name),'Skill remains stored but deselected');await ui.key(w,'Escape');return {native_command:true,preview_before_select:true,stored_snapshot_preview:true,stored_preview_resource:storedPreview.resource,disabled:true,offline_network_isolation:'NOT_RUN',instruction_dispatch:'NOT_RUN'};});
  }
  if(c.scenarios.includes('image-denied'))await step('T16-native-image-capability-denied',async()=>{if(profile.image_edit?.enabled===true)throw blocked('Profile enables images; denied-path test must not dispatch an image or invent disabled capability');await focusChat();await command('hypeproof-chat.editImage');await waitFor(async()=>String(await ui.toasts()).includes('이 활동은 이미지 편집을 허용하지 않아요.'),'profile capability denial');await ui.shot(path.join(c.evidence,'image-denied.png'));return {native_registration:true,profile_capability_denied:true,image_selected:false,provider_dispatch:'NOT_RUN'};});
+ if(c.scenarios.includes('session-ended'))await step('T04-canonical-synthetic-session-ended',async()=>{
+  if(c.attach)throw blocked('Session shutdown requires owned metadata fixture; attach cannot mutate a Service');
+  if(!report.tests.some(t=>t.id==='T03-same-activity-activity-folder-chooser'&&t.status==='PASS'))throw blocked('Session negative requires observed A continuity');
+  if(ownedActivityCandidate)throw blocked('Prior activity candidate remains pending');
+  assert(String(await(await ui.workbench()).evaluate('document.title')).includes(path.basename(c.workspace.a)),'Session negative must finish in A');
+  await focusChat();assert.equal((await readDraft()).value,draft,'A draft before session shutdown');
+  const files=workspaceFiles(c.workspace.a),bindings=path.join(c.userDataDir,'User/globalStorage/hypeproof.hypeproof-chat/activity-bindings');
+  if(!fs.existsSync(bindings))throw blocked('Actual persistent activity binding directory required before invalidation');
+  const beforeBindings=workspaceFiles(bindings),view=await start();
+  report.session_invalidation_observations=[];
+  const ended=await endSyntheticSession({manifestFile:c.service.manifest,origin:c.service.origin,expectedSource:report.service.source,token:secrets[0],onSecret:secret=>secrets.push(secret),onProgress:observation=>{report.session_invalidation_observations.push({at:new Date().toISOString(),...observation});save();}});
+  report.session_invalidation={...ended,ui_denial:'PENDING'};save();
+  await ui.savedActivity(view,c.workspace.b);
+  await waitFor(()=>view.evaluate(`document.querySelector('#connection-error')?.textContent.includes(${JSON.stringify(ended.friendly)})`),'actual saved activity displays canonical session inactive refusal');
+  assert.equal(await view.evaluate("document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),false,'Invalid session must not create an admitted candidate');
+  await ui.shot(path.join(c.evidence,'session-ended-denied.png'));
+  await focusChat();assert.equal((await readDraft()).value,draft,'Session denial preserves actual A draft');
+  assert.deepEqual(workspaceFiles(c.workspace.a),files,'Session denial preserves actual A files');
+  assert.deepEqual(workspaceFiles(bindings),beforeBindings,'Session denial preserves all existing activity binding files');
+  report.session_invalidation.ui_denial='PASS';
+  return {...ended,ui_denial:true,draft_preserved:true,files_preserved:true,bindings_preserved:true,token_reentry:false,no_chat_submission:true};
+ });
+ else report.tests.push({id:'T04-canonical-synthetic-session-ended',status:'NOT_RUN',reason:'Explicit owned synthetic session control required; no external or attached Service mutation'});
  report.execution_status=report.tests.some(t=>t.status==='FAIL')?'FAIL':report.tests.some(t=>t.status==='BLOCKED')?'BLOCKED':'PASS_SELECTED_SLICE';
 }catch(error){report.fatal=sanitize(error.message,secrets);report.execution_status=report.tests.some(t=>t.status==='FAIL')?'FAIL':error.blocked?'BLOCKED':'FAIL';console.error(report.fatal);}finally{report.finished_at=new Date().toISOString();ui.close();if(child){child.kill();report.owned_process_stopped=true;report.cleanup_stop_not_restart_evidence=true;}else report.attached_process_left_running=true;save();console.log('Result: '+path.join(c.evidence,'result.json'));}
 if(report.execution_status==='FAIL')process.exitCode=1;else if(report.execution_status==='BLOCKED')process.exitCode=2;
