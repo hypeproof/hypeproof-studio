@@ -138,7 +138,7 @@
     "status": "PASS",
     "scope": "manual-html-headless-local-file-offline",
     "evidence": "wp8/manual-refresh-final/result.json",
-    "evidence_sha256": "6c6c2cddef418abb720c1edacb9dc470eb644fdc6a4959426ed075914cb57bd8",
+    "evidence_sha256": "c616ae7fb4068d585e07c7ab8862cdea63e1ec8889c7f9090060c553eb90049f",
     "viewports": [
       390,
       1280
@@ -170,19 +170,20 @@
     "observed_at_kst": "2026-10-16 10:37:18",
     "login": "user completed existing SSO; read-only page reload observed",
     "stored_records": 342,
-    "users": 13,
     "cohorts": 4,
     "limitations": [
       "new cost collection code not yet deployed; counts were existing stored records",
       "no permission change",
       "revoked/nonmember denial verified separately, not by this session"
     ],
-    "evidence": "wp8/lab-deployed-owner-session.json"
+    "evidence": "wp8/lab-deployed-owner-session.json",
+    "user_ids": 13,
+    "count_semantics": "342 existing stored records and 13 aggregated user IDs shown at observation time; not a count of unique people."
   },
   "approved_price_snapshot": {
     "status": "approved_for_2026-10-16_utc_day; production_publication_pending",
     "price_digest": "c784f24ce54eb0534533f4292d526a6e981135c362cf1967797df25a9051aa8b",
-    "local_pre_r3": "37 attempts, USD 37.075316 known, 6 attempts unknown",
+    "local_pre_r3": "37 attempts, USD 0.075316 known, 6 attempts unknown (historical pre-r3 subtotal; not invoice or payment).",
     "invoice_or_payment": "NOT_VERIFIED",
     "local_evidence": "wp8/postfix-cost-reconciliation/reconciliation.json",
     "production_dry_run": "PASS 38844013812; actual publication still pending"
@@ -314,11 +315,26 @@
     }
   },
   "current_manual_file_sha256": {
-    "index.html": "18f33cdd2b031d63004bc2f74610c744d83c341d25c0870c7a94065d38a67030",
-    "learner.html": "991526fc270955a4b3cc3ff853efc30e12cb63aff3d6e504e0d9b66a01dcd5d8",
-    "owner.html": "4bbe1f026777dc82bd9437666198ed716bb83df58e9996089fc24e430cfcb150",
-    "operator.html": "055d500f15bd9e433c3bb59f1bf38efe6e661cc494c3523b8e15727844481289",
-    "developer.html": "e43600c200ddf4bac9b81873535af54491817bd149578b53a7a18a405d3aede9",
+    "index.html": "6b177a191f0cad2d475121047cd3e19075fb2b45a8d319be10f5dcbd7cc7f791",
+    "learner.html": "0f8829317e330f7f619f3f1cef753a662feb63c28fa9b05fe17fddd67744b44c",
+    "owner.html": "9e697c27b48da99e47ceaadd1db12d46d767538cd8c92af82a319975f43665a3",
+    "operator.html": "0cd251f8badaa81511580c6dba8650689a04323a9b01936af2ee8872b6be531c",
+    "developer.html": "a3185de8e84b1fa9e12e9d1b87443350e3b241b06708fdc6c00d00b744dd91b3",
     "native-entry.png": "7f679bade647e58b7f52142a77e59022dd856e5b3fae9a185d4d3a3fea8f40ea"
+  },
+  "final_cost_reconciliation": {
+    "status": "PASS_LOCAL_RECONCILIATION; production Owner publication pending",
+    "evidence": "wp8/final-cost-reconciliation/reconciliation.json",
+    "evidence_sha256": "b74327b52e2409c361f96cd9080fe859cd7e77f1a2d0f6c386370a5082ac5b70",
+    "observed_at_utc": "2026-10-16T03:25:10.788180+00:00",
+    "priced_attempts": 49,
+    "known_subtotal": "USD 0.106675",
+    "unknown_attempts": 6,
+    "invoice_or_payment": "NOT_VERIFIED",
+    "limitations": [
+      "six 429 rows have unknown execution, null meters and null cost",
+      "invoice reconciliation and external/direct-provider coverage remain unverified",
+      "no Owner API/UI check was performed for this final reconciliation"
+    ]
   }
 }
