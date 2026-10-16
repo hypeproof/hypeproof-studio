@@ -1485,6 +1485,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/workspaceRouting.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/initialSurface.ts"
         }
       ]
     },
@@ -1519,6 +1522,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/workspace-routing.smoke.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/initial-surface.smoke.mjs"
         }
       ]
     },
@@ -1603,6 +1615,9 @@
         },
         {
           "path": "scripts/studio-dev.py"
+        },
+        {
+          "path": "scripts/studio-dev-vendor.mjs"
         }
       ]
     },
@@ -1643,6 +1658,9 @@
         },
         {
           "path": "scripts/test-usage-schema.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/sdk-vendor.test.mjs"
         }
       ]
     },
@@ -5227,6 +5245,12 @@
         },
         {
           "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/external-policy-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/policy-protocol.mjs"
         }
       ]
     },
@@ -5467,6 +5491,30 @@
         },
         {
           "path": "e2e/feedback-native/session-control.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/SCRIPTED.md"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-sdk-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-upstream.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-windows.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-windows.test.mjs"
         }
       ]
     }

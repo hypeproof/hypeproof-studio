@@ -30,3 +30,14 @@ test('stale loopback listener and invalid existing A cannot receive canonical mu
 test('unknown mutation outcome is never retried and missing prior session cannot pass',async()=>{
  for(const mode of ['transport','empty-session','not-denied','wrong-denial']){const f=fixture();try{if(mode==='empty-session')f.responses[2]=new Response(JSON.stringify({ok:true,ended:null}));if(mode==='not-denied')f.responses[3]=new Response('{}');if(mode==='wrong-denial')f.responses[3]=new Response(JSON.stringify({error:{type:'auth',message:'wrong'}}),{status:403});const request=async(url,init)=>{f.calls.push({url,init});if(mode==='transport'&&init.method==='DELETE')throw Error('unknown transport outcome');return f.responses.shift();};await assert.rejects(f.invoke({request}));assert.equal(f.calls.filter(c=>c.init.method==='DELETE').length,1);}finally{f.close();}}
 });
+
+test('existing B canonical revoke requires owned fixture, valid B identity and precise actual 401 revoked',async()=>{
+ const {revokeSyntheticB}=await import('./session-control.mjs');
+ for(const invalid of [false,true]){const f=fixture();try{
+  f.manifest.token_b_file=path.join(f.dir,'token-b');const payload={u:invalid?'synthetic-feedback-A':'synthetic-feedback-B',c:'synthetic-release-acceptance',jti:'12345678-1234-4234-9234-123456789abc',exp:2000000000};fs.writeFileSync(f.manifest.token_b_file,Buffer.from(JSON.stringify(payload)).toString('base64url')+'.synthetic-signature');f.write();f.responses[2]=new Response(JSON.stringify({ok:true}));f.responses[3]=new Response(JSON.stringify({error:{code:'revoked'}}),{status:401});
+  const request=async(url,init)=>{f.calls.push({url,init});return f.responses.shift();};
+  const call=()=>revokeSyntheticB({manifestFile:path.join(f.dir,'service.json'),origin:f.manifest.origin,expectedSource:f.manifest.source,request});
+  if(invalid){await assert.rejects(call());assert(!f.calls.some(c=>c.init.method==='POST'));}
+  else{const result=await call();assert.equal(result.after,401);assert.equal(result.error_code,'revoked');assert.equal(f.calls[2].url,f.manifest.origin+'/admin/tokens/revoke');assert.equal(JSON.parse(f.calls[2].init.body).jti,payload.jti);}
+ }finally{f.close();}}
+});

@@ -27,8 +27,14 @@ class Target{
  async evaluate(expression){const r=await this.send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,...(this.contextId?{contextId:this.contextId}:{})});if(r.exceptionDetails)throw Error(r.exceptionDetails.text||'DOM observation failed');return r.result?.value;}
  close(){this.ws?.close();}
 }
+export function selectWorkbenchInfo(infos,id){
+ const pages=infos.filter(t=>t.type==='page'&&t.url.includes('workbench'));
+ const matches=id?pages.filter(t=>t.id===id):pages;
+ if(matches.length>1)throw Error('Ambiguous native workbench; explicit owned window ID required');
+ return matches[0];
+}
 export class NativeUI{
- constructor(endpoint){this.endpoint=loopback(endpoint);this.targets=new Map();this.phases=[];this.modifier=process.platform==='darwin'?4:2;}
+ constructor(endpoint,workbenchId){this.workbenchId=workbenchId;this.endpoint=loopback(endpoint);this.targets=new Map();this.phases=[];this.modifier=process.platform==='darwin'?4:2;}
 
  async restoredDraft(expected,timeout=60000){
   // Observation only: startup may still be restoring/focusing its own webview.
@@ -80,15 +86,38 @@ export class NativeUI{
 
  async list(){const r=await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}
  async target(info){let target=this.targets.get(info.id);if(!target||target.ws.readyState!==WebSocket.OPEN){target=await new Target(info).connect();this.targets.set(info.id,target);}return target;}
- async workbench(){return waitFor(async()=>{const info=(await this.list()).find(t=>t.type==='page'&&t.url.includes('workbench'));return info?this.target(info):null;},'native workbench',60000);}
+ async workbench(){return waitFor(async()=>{const info=selectWorkbenchInfo(await this.list(),this.workbenchId);return info?this.target(info):null;},'native workbench'+(this.workbenchId?' '+this.workbenchId:''),60000);}
+ async restoredFocus(timeout=30000){
+  // Observe startup focus only; no palette, click or Page.bringToFront may repair it.
+  const chat=await this.frame('.hps-input textarea');
+  const observed=await waitFor(()=>chat.evaluate("document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')"),'restored native input focus without activation',timeout);
+  return {input_focus_restored:observed===true,focus_repaired:false};
+ }
+ async closeOwnedWindow(){
+  if(!this.workbenchId)throw Error('Close requires an explicitly bound owned window');
+  const w=await this.workbench();
+  if(!await w.evaluate('document.hasFocus()'))throw Error('Owned secondary must be actually focused before Close Window');
+  try{await this.palette('Close Window',{expectReload:true});}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  await waitFor(async()=>!(await this.list()).some(t=>t.id===this.workbenchId),'owned secondary window closed',30000);
+ }
  // Activation is an input action, never part of read-only workbench discovery.
  async focusWorkbench(target){await target.send('Page.bringToFront');await waitFor(()=>target.evaluate('document.hasFocus()'),'native workbench window focused');}
  async frame(selector,timeout=30000){return waitFor(async()=>{const matches=[];for(const info of(await this.list()).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){const host=await this.workbench(),name=new URL(info.url).searchParams.get('id');const outerVisible=await host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`);if(!outerVisible)continue;const target=await this.target(info);const tree=await target.send('Page.getFrameTree');const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];for(const node of nodes){const isolated=await target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'});target.contextId=isolated.executionContextId;const visible=await target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);if(visible){matches.push(target);break;}}}if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];},'visible extension webview '+selector,timeout);}
+ // Re-read only a previously observed frame, including when its native window is inactive.
+ async retainedFrame(target){
+  if(!this.workbenchId)throw Error('Retained frame requires explicit owned window');
+  const info=(await this.list()).find(t=>t.id===target.info.id&&t.type==='iframe'&&t.url===target.info.url);
+  if(!info)throw Error('Previously observed frame identity disappeared');
+  const name=new URL(info.url).searchParams.get('id');if(!name)throw Error('Observed frame has no owner name');
+  const host=await this.workbench();
+  if(!await host.evaluate(`!![...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)})`))throw Error('Observed frame no longer belongs to its owned window');
+  return target;
+ }
  async press(target,selector,label=selector){const r=await target.evaluate(`(async()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,100));const b=e.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(e);return {x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===e||e.contains(hit)),enabled:!e.disabled};})()`);if(!r||!r.visible||!r.inView||!r.topmost||!r.enabled||r.width<=0||r.height<=0)throw Error('Not a usable visible native control: '+label);for(const type of['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:r.x,y:r.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});}
  async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
  async hasTextButton(target,text){return !!(await this.textSelector(target,text));}
  async clickText(target,text,css){const selector=await waitFor(()=>this.textSelector(target,text,css), 'control '+text);await this.press(target,selector,text);}
- async key(target,key,modifiers=0){const codes={Enter:['Enter',13],Escape:['Escape',27],F1:['F1',112],F4:['F4',115],q:['KeyQ',81],a:['KeyA',65],b:['KeyB',66],k:['KeyK',75],o:['KeyO',79],n:['KeyN',78],s:['KeyS',83],p:['KeyP',80]};const[code,number]=codes[key]??[key,0];for(const type of['keyDown','keyUp'])await target.send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode:number,nativeVirtualKeyCode:number,modifiers:type==='keyUp'?0:modifiers,...(type==='keyDown'&&key==='a'&&modifiers===4?{commands:['selectAll']}:{})});}
+ async key(target,key,modifiers=0){const codes={Enter:['Enter',13],Escape:['Escape',27],F1:['F1',112],F4:['F4',115],q:['KeyQ',81],a:['KeyA',65],b:['KeyB',66],k:['KeyK',75],o:['KeyO',79],n:['KeyN',78],s:['KeyS',83],p:['KeyP',80],w:['KeyW',87]};const[code,number]=codes[key]??[key,0];for(const type of['keyDown','keyUp'])await target.send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode:number,nativeVirtualKeyCode:number,modifiers:type==='keyUp'?0:modifiers,...(type==='keyDown'&&key==='a'&&modifiers===4?{commands:['selectAll']}:{})});}
  async input(target,selector,text){await this.press(target,selector);await this.key(target,'a',this.modifier);await waitFor(()=>target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e===document.activeElement&&e.selectionStart===0&&e.selectionEnd===e.value.length;})()`),'native input selection covers current value');await target.send('Input.insertText',{text});await waitFor(()=>target.evaluate(`document.querySelector(${JSON.stringify(selector)})?.value===${JSON.stringify(text)}`),'native input replacement observed');}
  // CDP input acknowledgment is not a workbench transition acknowledgment. Never reuse
  // the previous command/picker while its asynchronous hide/next-picker is pending.

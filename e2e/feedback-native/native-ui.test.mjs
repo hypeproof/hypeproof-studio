@@ -272,3 +272,48 @@ test('session refusal observes exact mapped App message, preservation and no can
  assert.equal((await ui.sessionRefusal(view,expected,500)).message,expected,'DOM paragraph must not contaminate exact mapped message');
  const hidden={evaluate:async()=>({...actual,visible:false})};await assert.rejects(ui.sessionRefusal(hidden,expected,1),/visible canonical App profile refusal/);
 });
+
+test('window discovery is explicit, read-only and never falls back to another live window',async()=>{
+ const {selectWorkbenchInfo}=await import('./native-ui.mjs');
+ const a={id:'A',type:'page',url:'vscode-file://workbench.html'},b={...a,id:'B'};
+ assert.equal(selectWorkbenchInfo([a]),a);assert.throws(()=>selectWorkbenchInfo([a,b]),/Ambiguous/);
+ assert.equal(selectWorkbenchInfo([a,b],'B'),b);assert.equal(selectWorkbenchInfo([a],'B'),undefined);
+ assert.equal(selectWorkbenchInfo([{...b,type:'iframe'}],'B'),undefined);
+ const ui=new NativeUI('http://127.0.0.1:9777','B'),calls=[];ui.list=async()=>[a,b];ui.target=async info=>{calls.push(info.id);return info;};
+ assert.equal(await ui.workbench(),b);assert.deepEqual(calls,['B']);
+});
+test('restart focus observation refuses visible unfocused input and never repairs focus',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');let focused=false;
+ ui.frame=async()=>({evaluate:async expression=>{assert.equal(expression,"document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')");return focused;}});
+ for(const method of ['press','key','input','palette','focusWorkbench'])ui[method]=()=>assert.fail('Read-only restart observation');
+ await assert.rejects(ui.restoredFocus(1),/restored native input focus/);focused=true;
+ assert.deepEqual(await ui.restoredFocus(500),{input_focus_restored:true,focus_repaired:false});
+});
+test('secondary close requires exact scope, actual focus and public Close Window selection',async()=>{
+ const unbound=new NativeUI('http://127.0.0.1:9777');await assert.rejects(unbound.closeOwnedWindow(),/explicitly bound/);
+ const ui=new NativeUI('http://127.0.0.1:9777','B'),events=[];let alive=true,focused=false;
+ const w={evaluate:async expression=>{assert.equal(expression,'document.hasFocus()');return focused;}};ui.workbench=async()=>w;
+ ui.palette=async(title,options)=>{assert.equal(title,'Close Window');assert.deepEqual(options,{expectReload:true});events.push(title);alive=false;};
+ ui.key=()=>assert.fail('No guessed shortcut');ui.list=async()=>[{id:'A'},...(alive?[{id:'B'}]:[])];
+ await assert.rejects(ui.closeOwnedWindow(),/actually focused/);assert.deepEqual(events,[]);
+ focused=true;await ui.closeOwnedWindow();assert.deepEqual(events,['Close Window']);
+});
+test('retained background frame keeps identity and owner without visibility or focus repair',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777','C');
+ const info={id:'chat-C',type:'iframe',url:'vscode-webview://test/index.html?id=outer-C&extensionId=hypeproof.hypeproof-chat'},chat={info};let infos=[info],belongs=true;
+ ui.list=async()=>infos;ui.workbench=async()=>({evaluate:async expression=>{assert(expression.includes('outer-C'));assert(!expression.includes('getBoundingClientRect'));return belongs;}});
+ for(const method of ['frame','target','focusWorkbench','press','key'])ui[method]=()=>assert.fail('Must retain observed target without discovery/input');
+ assert.equal(await ui.retainedFrame(chat),chat);belongs=false;await assert.rejects(ui.retainedFrame(chat),/belongs/);belongs=true;
+ infos=[{...info,id:'replacement'}];await assert.rejects(ui.retainedFrame(chat),/identity/);
+ infos=[{...info,url:info.url+'&changed=1'}];await assert.rejects(ui.retainedFrame(chat),/identity/);
+ ui.workbenchId=undefined;await assert.rejects(ui.retainedFrame(chat),/explicit/);
+});
+test('scoped webview discovery cannot connect to another window iframe even when its inner control is visible',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777','B'),connected=[];
+ const pages=['A','B'].map(id=>({id,type:'page',url:'vscode-file://workbench.html'}));
+ const frames=['A','B'].map(id=>({id:'chat-'+id,type:'iframe',url:'vscode-webview://test/index.html?id=outer-'+id+'&extensionId=hypeproof.hypeproof-chat'}));
+ const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[{name:'outer-B',getBoundingClientRect:()=>({width:800,height:600})}]},getComputedStyle:()=>({display:'block',visibility:'visible'})})};
+ const chat={info:{id:'chat-B'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'inner'}}}:{executionContextId:1},evaluate:()=>true};
+ ui.list=async()=>[...pages,...frames];ui.target=async info=>{connected.push(info.id);if(info.id==='B')return host;if(info.id==='chat-B')return chat;assert.fail('Cross-window target '+info.id);};
+ assert.equal(await ui.frame('textarea',500),chat);assert(!connected.includes('chat-A'));assert(!connected.includes('A'));
+});

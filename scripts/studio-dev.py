@@ -26,7 +26,7 @@ else:
 
 REPO = Path(__file__).resolve().parents[1]
 FORMAT = 'hps-studio-dev/1'
-SOURCE_SCOPES = ['extensions/hypeproof-chat', 'scripts/studio-dev.py', 'config/service-packages.json']
+SOURCE_SCOPES = ['extensions/hypeproof-chat', 'scripts/studio-dev.py', 'scripts/studio-dev-vendor.mjs', 'config/service-packages.json']
 
 
 def run(args, **kwargs):
@@ -240,11 +240,19 @@ def build(repo, stage):
     metadata = stage / 'bundle-inputs.json'
     run(['node', '-e', "const result=require('esbuild').buildSync({entryPoints:['src/extension.ts'],bundle:true,platform:'node',target:'node18',external:['vscode'],outfile:process.argv[1],metafile:true});require('fs').writeFileSync(process.argv[2],JSON.stringify(result.metafile))", stage / 'extension.js', metadata], cwd=ext)
     run(['node', vite, 'build', '--outDir', stage / 'webview', '--emptyOutDir'], cwd=ext / 'webview-ui')
-    return json.loads(metadata.read_text(encoding='utf-8'))
+    vendor = stage / 'vendor'
+    if vendor.exists():
+        shutil.rmtree(vendor)
+    run(['node', repo / 'scripts/studio-dev-vendor.mjs', ext, vendor, stage / 'vendor-receipt.json'])
+    result = json.loads(metadata.read_text(encoding='utf-8'))
+    result['hps_sdk_vendor'] = json.loads((stage / 'vendor-receipt.json').read_text(encoding='utf-8'))
+    return result
 
 
 def check_runtime_dependencies(source, shipped, metadata):
     for name, version in source.get('dependencies', {}).items():
+        if name in ('@anthropic-ai/claude-agent-sdk', 'zod') and name in metadata.get('hps_sdk_vendor', {}).get('packages', {}):
+            continue
         if shipped.get('dependencies', {}).get(name) == version:
             continue
         bundled = any(p.replace('\\', '/').startswith('node_modules/' + name + '/') for p in metadata.get('inputs', {}))
@@ -275,6 +283,11 @@ def prepare(repo, base, state, service):
     source_manifest = json.loads((ext / 'package.json').read_text(encoding='utf-8'))
     shipped_manifest = json.loads((target / 'package.json').read_text(encoding='utf-8'))
     check_runtime_dependencies(source_manifest, shipped_manifest, metadata)
+    if '@anthropic-ai/claude-agent-sdk' in {**source_manifest.get('devDependencies', {}), **source_manifest.get('dependencies', {})}:
+        if not metadata.get('hps_sdk_vendor') or not (stage / 'vendor').is_dir():
+            raise RuntimeError('Current SDK vendor stage is required; stale shell SDK cannot be retained.')
+        shutil.rmtree(target / 'dist/vendor', ignore_errors=True)
+        shutil.copytree(stage / 'vendor', target / 'dist/vendor')
     shutil.copy2(stage / 'extension.js', target / 'dist/extension.js')
     shutil.rmtree(target / 'webview-ui/dist')
     shutil.copytree(stage / 'webview', target / 'webview-ui/dist')
@@ -311,6 +324,7 @@ def prepare(repo, base, state, service):
                'source_dirty': source_before['dirty'], 'source_binding': source_before,
                'branch': branch, 'app': str(app), 'platform': platform.system(),
                'service': service, 'official_app_unchanged': True, 'extension_sha256': sha(app_resources(app) / 'extensions/hypeproof-chat/dist/extension.js'),
+               'sdk_vendor': metadata.get('hps_sdk_vendor'),
                'previous_app': str(backup) if backup else None, 'prepared_at': time.time()}
     (state / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     print(json.dumps(receipt, ensure_ascii=False, indent=2), flush=True)
