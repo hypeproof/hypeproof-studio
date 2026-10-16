@@ -184,39 +184,48 @@ export class NativeUI{
   if(!await host.evaluate(`!![...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)})`))throw Error('Observed frame no longer belongs to its owned window');
   return target;
  }
- // Retain one remote DOM object: a matching replacement must never inherit an action.
+ // Retain one DOM object. Reflow may move it after scrolling; never reselect or retry input.
  async press(target,selector,label=selector,timeout=30000){
   if(!Number.isFinite(timeout)||timeout<=0||timeout>30000)throw Error('Invalid native control readiness bound');
-  const deadline=Date.now()+timeout;let objectId,state,previous;
-  const bounded=async promise=>{const remaining=deadline-Date.now();if(remaining<=0)throw Error('Control readiness deadline');let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Control readiness deadline')),remaining);})]);}finally{clearTimeout(timer);}};
-  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'native control readiness',outcome,state:state??null});
+  const deadline=Date.now()+timeout;let objectId,state,previous,lastScrollLayout,scrolls=0,samples=0;const history=[],scrollHistory=[];
+  const check=()=>{if(Date.now()>=deadline)throw Error('Control readiness deadline');};
+  const bounded=async operation=>{check();let timer;try{const value=await Promise.race([Promise.resolve().then(()=>{check();return operation();}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Control readiness deadline')),Math.max(1,deadline-Date.now()));})]);check();return value;}finally{clearTimeout(timer);}};
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'native control readiness',outcome,state:state??null,samples,scrolls,history_truncated:samples>24,layout_history:[...history],scroll_history:[...scrollHistory]});
+  const rectKeys=['x','y','width','height','viewportWidth','viewportHeight','scrollX','scrollY','documentWidth','documentHeight'];
+  const stable=(a,b)=>a&&b&&rectKeys.every(key=>Number.isFinite(a[key])&&Number.isFinite(b[key])&&Math.abs(a[key]-b[key])<=0.25);
+  const layoutChanged=(a,b)=>!!a&&!!b&&(Math.abs(a.y+a.scrollY-b.y-b.scrollY)>0.25||Math.abs(a.x+a.scrollX-b.x-b.scrollX)>0.25||['width','height','viewportWidth','viewportHeight','documentWidth','documentHeight'].some(key=>Math.abs(a[key]-b[key])>0.25));
   try{
-   const selected=await bounded(target.send('Runtime.evaluate',{expression:'document.querySelector('+JSON.stringify(selector)+')',returnByValue:false,...(target.contextId?{contextId:target.contextId}:{})}));
+   const selected=await bounded(()=>target.send('Runtime.evaluate',{expression:'document.querySelector('+JSON.stringify(selector)+')',returnByValue:false,...(target.contextId?{contextId:target.contextId}:{})}));
    if(selected.exceptionDetails||!selected.result?.objectId)throw Error('Control absent');objectId=selected.result.objectId;
-   let scroll=true;
+   let scroll='initial';
    for(;;){
-    const sample=await bounded(target.send('Runtime.callFunctionOn',{objectId,returnByValue:true,arguments:[{value:selector},{value:scroll}],functionDeclaration:`function(selector,scroll){
+    const sample=await bounded(()=>target.send('Runtime.callFunctionOn',{objectId,returnByValue:true,arguments:[{value:selector},{value:scroll}],functionDeclaration:`function(selector,scroll){
      const same=this.isConnected&&document.querySelector(selector)===this;
      if(!same)return {same:false};
-     if(scroll)this.scrollIntoView({block:'center',inline:'nearest'});
-     const b=this.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(this);
-     return {same:true,x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===this||this.contains(hit)),enabled:!this.disabled};
-    }` }));scroll=false;
-    if(sample.exceptionDetails)throw Error('Control sample unavailable');state=sample.result?.value;
-    if(!state?.same){record('replaced');throw Error('Control identity changed');}
-    const finite=['x','y','width','height'].every(key=>Number.isFinite(state[key]));
+     const measure=()=>{const b=this.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(this),root=document.scrollingElement??document.documentElement;
+      return {same:true,x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===this||this.contains(hit)),enabled:!this.disabled,viewportWidth:innerWidth,viewportHeight:innerHeight,scrollX,scrollY,documentWidth:root.scrollWidth,documentHeight:root.scrollHeight};};
+     const before=measure();let scrolled=false;
+     if(scroll==='initial'||scroll==='reflow'&&before.visible&&before.enabled&&!before.inView){this.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});scrolled=true;}
+     return {state:measure(),scrolled,before:scrolled?before:null};
+    }` }));scroll=null;
+    if(sample.exceptionDetails)throw Error('Control sample unavailable');const value=sample.result?.value;state=value?.state??value;
+    if(!state?.same)throw Error('Control identity changed');
+    samples++;history.push({sample:samples,...state});if(history.length>24)history.splice(6,1);
+    if(value.scrolled){scrolls++;if(scrolls>3)throw Error('Control scroll budget exceeded');lastScrollLayout=state;scrollHistory.push({attempt:scrolls,before:value.before,after:state});previous=null;}
+    const finite=rectKeys.every(key=>Number.isFinite(state[key]));
     const usable=finite&&state.visible&&state.inView&&state.topmost&&state.enabled&&state.width>0&&state.height>0;
-    const stable=usable&&previous&&['x','y','width','height'].every(key=>Math.abs(previous[key]-state[key])<=0.25);
-    if(stable&&Date.now()<deadline){record('observed');break;}
-    previous=usable?state:null;
-    if(Date.now()>=deadline)throw Error('Control readiness deadline');
-    await sleep(Math.min(150,Math.max(1,deadline-Date.now())));
+    if(usable&&previous?.visible&&previous.inView&&previous.topmost&&previous.enabled&&previous.width>0&&previous.height>0&&stable(previous,state)){check();record('observed');break;}
+    // A second scroll is only for a measured, stable offscreen layout change.
+    // Occlusion, disability, unchanged offscreen layout or replacement do not qualify.
+    if(finite&&state.visible&&state.enabled&&!state.inView&&previous?.visible&&previous.enabled&&!previous.inView&&stable(previous,state)&&layoutChanged(lastScrollLayout,state)&&scrolls<3){scroll='reflow';previous=null;}
+    else previous=state;
+    check();await sleep(Math.min(150,Math.max(1,deadline-Date.now())));
    }
-   if(Date.now()>=deadline)throw Error('Control readiness deadline');
-   for(const type of ['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:state.x,y:state.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});
-  }catch{const primary=Error('Not a usable visible native control: '+label);record(state?.same===false?'identity-refused':Date.now()>=deadline?'timeout':'unavailable');throw primary;}
+   check();for(const type of ['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:state.x,y:state.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});
+  }catch{record(state?.same===false?'identity-refused':Date.now()>=deadline?'timeout':'unavailable');throw Error('Not a usable visible native control: '+label);}
   finally{if(objectId)try{await target.send('Runtime.releaseObject',{objectId});}catch{record('handle-release-unavailable');}}
  }
+
  async chatDocumentIdentity(timeout=30000,observation){
   const chat=await this.frame('.hps-input textarea',timeout,observation);observation?.check();
   const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};

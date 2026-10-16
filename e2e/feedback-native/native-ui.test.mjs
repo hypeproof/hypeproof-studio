@@ -389,7 +389,7 @@ test('actual CDP press scrolls once, observes stable usability and dispatches on
   });
   await t.test('a delayed disabled-to-enabled transition is observation, without reselecting or scrolling twice',async()=>{
    const f=await fixture('<button id="target" disabled>Synthetic</button>');
-   try{let disabledObserved;const observed=new Promise(resolve=>disabledObserved=resolve);const send=f.target.send;f.target.send=async(method,params)=>{const result=await send(method,params);if(method==='Runtime.callFunctionOn'&&result.result?.value?.enabled===false)disabledObserved();return result;};const pending=f.ui.press(f.target,'#target','synthetic enable',1500);await observed;assert.deepEqual(clicks(f),[]);await f.page.locator('#target').evaluate(e=>{e.disabled=false;});await pending;assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.deepEqual(clicks(f),['mouseMoved','mousePressed','mouseReleased']);}finally{await f.page.close();}
+   try{let disabledObserved;const observed=new Promise(resolve=>disabledObserved=resolve);const send=f.target.send;f.target.send=async(method,params)=>{const result=await send(method,params);if(method==='Runtime.callFunctionOn'&&(result.result?.value?.state??result.result?.value)?.enabled===false)disabledObserved();return result;};const pending=f.ui.press(f.target,'#target','synthetic enable',1500);await observed;assert.deepEqual(clicks(f),[]);await f.page.locator('#target').evaluate(e=>{e.disabled=false;});await pending;assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.deepEqual(clicks(f),['mouseMoved','mousePressed','mouseReleased']);}finally{await f.page.close();}
   });
   for(const kind of ['disabled','occluded','replacement'])await t.test(kind+' refuses rather than re-clicking or reacquiring',async()=>{
    const f=await fixture('<button id="target"'+(kind==='disabled'?' disabled':'')+'>Synthetic</button>'+(kind==='occluded'?'<div style="position:fixed;inset:0;background:white"></div>':''));
@@ -484,4 +484,26 @@ test('actual CDP observation abort removes pending requests without closing a pr
   const late=reloadDiscoveryFixture();late.ui.target=NativeUI.prototype.target.bind(late.ui);late.ui.list=async()=>[info];
   await assert.rejects(late.ui.reloadedChatReady(late.before,30),/fresh post-reload/);assert.equal(late.ui.targets.size,0);const pendingSocket=instances.at(-1);assert.equal(pendingSocket.readyState,FixtureSocket.CLOSED);pendingSocket.onopen?.();await new Promise(resolve=>setImmediate(resolve));assert.equal(late.ui.targets.size,0,'A late handshake cannot register a target');assert.equal(pendingSocket.closes,1);
  }finally{globalThis.WebSocket=OriginalWebSocket;for(const socket of instances)socket.close();}
+});
+
+test('actual CDP retained control rescrolls only measured stable offscreen reflow, caps scrolls and retains one input triplet',async t=>{
+ const {createRequire}=await import('node:module'),require=createRequire(new URL('../package.json',import.meta.url)),{chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{
+  async function fixture(mode){
+   const page=await browser.newPage({viewport:{width:600,height:400}});await page.setContent('<style>html{scroll-behavior:smooth;overflow-anchor:none}body{margin:0}#growth{height:500px}#target{height:40px;width:110px}</style><div id="growth"></div><button id="target">PRIVATE_FIXTURE_TEXT</button>');
+   await page.evaluate(mode=>{window.fixtureScrolls=0;window.fixtureClicks=0;const e=document.querySelector('#target'),original=e.scrollIntoView;e.scrollIntoView=function(options){window.fixtureScrolls++;window.fixtureBehavior=options.behavior;if(mode!=='permanent')return original.call(this,options);};e.addEventListener('click',()=>window.fixtureClicks++);},mode);
+   const cdp=await page.context().newCDPSession(page),calls=[],ui=new NativeUI('http://127.0.0.1:9777');let growths=0;
+   const target={send:async(method,params)=>{calls.push({method,params});const result=await cdp.send(method,params);
+    if(method==='Runtime.callFunctionOn'&&result.result?.value?.scrolled&&(mode==='endless'||growths===0&&['late','replacement','occluded'].includes(mode))){growths++;await page.evaluate(mode=>{if(mode==='replacement'){const e=document.querySelector('#target');e.replaceWith(e.cloneNode(true));}else if(mode==='occluded'){const overlay=document.createElement('div');overlay.style='position:fixed;inset:0;background:white';document.body.append(overlay);}else document.querySelector('#growth').style.height=(parseFloat(getComputedStyle(document.querySelector('#growth')).height)+900)+'px';},mode);}
+    return result;
+   }};return{ui,page,calls,target};
+  }
+  const inputs=f=>f.calls.filter(c=>c.method==='Input.dispatchMouseEvent');
+  await t.test('late retained content growth needs one additional instant scroll and one click',async()=>{
+   const f=await fixture('late');try{await f.ui.press(f.target,'#target','synthetic late reflow',2200);const phase=f.ui.phases.at(-1);assert.equal(phase.scrolls,2);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),2);assert.equal(await f.page.evaluate(()=>window.fixtureBehavior),'instant');assert.equal(await f.page.evaluate(()=>window.fixtureClicks),1);assert.deepEqual(inputs(f).map(c=>c.params.type),['mouseMoved','mousePressed','mouseReleased']);assert.equal(f.calls.filter(c=>c.method==='Runtime.evaluate').length,1);assert.equal(phase.scroll_history.length,2);assert(phase.scroll_history[1].before.y>phase.scroll_history[0].after.y);assert(phase.layout_history.filter(x=>!x.inView).length>=2);assert(!JSON.stringify(f.ui.phases).includes('PRIVATE'));}finally{await f.page.close();}
+  });
+  for(const mode of ['endless','replacement','occluded','permanent'])await t.test(mode+' refuses without click or reselect',async()=>{
+   const f=await fixture(mode);try{await assert.rejects(f.ui.press(f.target,'#target','synthetic refusal',mode==='endless'?1800:400),/Not a usable visible native control/);const phase=f.ui.phases.at(-1);assert.equal(inputs(f).length,0);assert.equal(f.calls.filter(c=>c.method==='Runtime.evaluate').length,1);assert.equal(phase.scrolls,mode==='endless'?3:1);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),mode==='endless'?3:1);assert(phase.layout_history.length<=24);assert(phase.scroll_history.length<=3);assert(!JSON.stringify(f.ui.phases).includes('PRIVATE'));if(mode==='occluded')assert.equal(phase.state.topmost,false);if(mode==='permanent')assert.equal(phase.state.inView,false);if(mode==='replacement')assert.equal(phase.state.same,false);}finally{await f.page.close();}
+  });
+ }finally{await browser.close();}
 });

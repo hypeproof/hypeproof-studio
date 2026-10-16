@@ -110,7 +110,7 @@ export function ownershipDiagnostic({pids,parents,timing},root){
  });
  return {root_pid:root,listener_count:pids.length,chains,timing};
 }
-export function ownedListener(port,root,platform=process.platform,execute=execFileSync){
+export function ownedListener(port,root,platform=process.platform,execute=execFileSync,retirement){
  const [command,args]=listenerCommand(port,platform);
  const read=(timeoutMs=10000)=>{
   const timing={listener_started_at:new Date().toISOString()};let output;
@@ -125,6 +125,11 @@ export function ownedListener(port,root,platform=process.platform,execute=execFi
   return {pids,parents,timing};
  };
  const sample=read(),{pids,parents}=sample;if(!pids.length)return null;
+ // Never admit the prior verified host again. A single old listener may disappear
+ // between lsof and ps during a declared transition. It is only retirement, not
+ // a new ownership success; a reused PID likewise gets no connection or resume.
+ if(pids.length===1&&Number.isSafeInteger(retirement?.pid)&&retirement.pid>1&&retirement.pid!==root&&pids[0]===retirement.pid&&(!parents.has(retirement.pid)||descendant(retirement.pid,root,parents))){retirement.observe?.(pids[0]);return null;}
+
  try{assert.equal(pids.length,1,'Ambiguous inspector listener');assert(descendant(pids[0],root,parents),'Inspector listener is not an owned App descendant');}
  catch(error){
   error.ownership_refusal={initial:ownershipDiagnostic(sample,root),resample_diagnostic_only:true};
@@ -177,8 +182,8 @@ export function assertPause({event,scripts,breakpoint,target,source,root,expecte
  assert(sameDisplayedWorkspace(root,expectedRoot),'Paused destination workspace mismatch');return frame;
 }
 export class OwnedExtensionGate{
- constructor({port,appPid,target,initialRoot,onProgress=()=>{},observeListener=ownedListener}){
-  this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];this.protocolDiagnostics={event_counts:{},candidate_scripts:[],last_pause:null,breakpoint_locations:[]};
+ constructor({port,appPid,target,initialRoot,onProgress=()=>{},observeListener=(port,root,retirement)=>ownedListener(port,root,process.platform,execFileSync,retirement)}){
+  this.port=port;this.appPid=appPid;this.target=target;this.onProgress=onProgress;this.observeListener=observeListener;this.seen=new Set();this.completedPids=new Set();this.abort=new AbortController();this.initial=deferred();this.phase={label:'initial-startup',root:initialRoot,holdMs:0,result:this.initial,deadline:Date.now()+45000};this.events=[];this.protocolDiagnostics={event_counts:{},candidate_scripts:[],last_pause:null,breakpoint_locations:[]};
  }
  progress(value){const item={at:new Date().toISOString(),...value};this.events.push(item);assert(this.events.length<=400,'Inspector progress limit');this.onProgress(item);}
  fail(error){if(!this.failure){this.failure=error;this.initial.reject(error);this.phase?.result.reject(error);this.progress({phase:'gate-failed',message:error.message,...(error.ownership_refusal?{ownership_refusal:{...error.ownership_refusal,phase_label:this.phase?.label??null,previous_host_pid:this.previousPid??null,current_peer_pid:this.peer?.listenerPid??null}}:{})});}}
@@ -187,10 +192,13 @@ export class OwnedExtensionGate{
   while(!this.stopped&&!this.failure){
    if(this.phase&&Date.now()>this.phase.deadline&&!this.phase.holding)throw Error('Destination inspector/activation missed startup deadline');
    if(!this.peer&&this.appPid()){
-    const pid=this.observeListener(this.port,this.appPid());
-    if(pid){
+    const phase=this.phase,prior=phase?.previousPid;
+    const retirement=prior===this.previousPid&&this.completedPids.has(prior)?{pid:prior,observe:pid=>{if(!phase.retirementObserved){phase.retirementObserved=true;this.progress({phase:'prior-host-retiring',label:phase.label,pid,admitted:false});}}}:undefined;
+    const pid=this.observeListener(this.port,this.appPid(),retirement);
+    if(this.phase&&Date.now()>this.phase.deadline&&!this.phase.holding)throw Error('Destination inspector/activation missed startup deadline');
+    if(pid===retirement?.pid){retirement.observe(pid);}else if(pid){
      let response;try{response=await fetch('http://127.0.0.1:'+this.port+'/json/list',{signal:AbortSignal.timeout(1500),redirect:'error'});}catch{}
-     if(response?.ok){const target=inspectorTarget(await response.json(),this.port);if(!this.seen.has(target.id)){assert(this.phase,'Unexpected new extension host outside a declared transition');await this.attach(target,pid);}}
+     if(response?.ok){const target=inspectorTarget(await response.json(),this.port);if(this.phase&&Date.now()>this.phase.deadline&&!this.phase.holding)throw Error('Destination inspector/activation missed startup deadline');if(!this.seen.has(target.id)){assert(this.phase,'Unexpected new extension host outside a declared transition');await this.attach(target,pid);}}
     }
    }
    await delay(100,undefined,{signal:this.abort.signal}).catch(error=>{if(!this.stopped)throw error;});
@@ -228,7 +236,7 @@ export class OwnedExtensionGate{
      while(Number(process.hrtime.bigint()-mono)/1e6<minimum){await delay(Math.min(15000,Math.max(1,minimum-Number(process.hrtime.bigint()-mono)/1e6)),undefined,{signal:this.abort.signal});this.progress({phase:'hold-progress',label:phase.label,pid,elapsed_ms:Number(process.hrtime.bigint()-mono)/1e6});}
      const elapsed=Number(process.hrtime.bigint()-mono)/1e6,wall=Date.now()-started;assert(elapsed>=phase.holdMs&&wall>=phase.holdMs,'Real elapsed hold did not reach criterion');
      await peer.send('Debugger.removeBreakpoint',{breakpointId:peer.breakpoint});peer.breakpoint=null;await peer.send('Debugger.resume');peer.paused=false;peer.ownedPause=false;
-     this.previousPid=pid;this.phase=null;const proof={label:phase.label,pid,target_id:info.id,previous_host_pid:phase.previousPid??null,bundle_sha256:this.target.sha256,break_line:this.target.lineNumber,consume_line:this.target.consumeLineNumber,startup_ms:startupMs,hold_monotonic_ms:elapsed,hold_wall_ms:wall,released_at_ms:Date.now(),debugger_only_resume:true};this.progress({phase:'activation-released',...proof});phase.result.resolve(proof);
+     this.completedPids.add(pid);this.previousPid=pid;this.phase=null;const proof={label:phase.label,pid,target_id:info.id,previous_host_pid:phase.previousPid??null,bundle_sha256:this.target.sha256,break_line:this.target.lineNumber,consume_line:this.target.consumeLineNumber,startup_ms:startupMs,hold_monotonic_ms:elapsed,hold_wall_ms:wall,released_at_ms:Date.now(),debugger_only_resume:true};this.progress({phase:'activation-released',...proof});phase.result.resolve(proof);
     }).catch(error=>this.fail(error));
    }
   },()=>{if(!peer.intentionalClose&&!this.stopped)this.fail(Error('Owned inspector disconnected unexpectedly'));});
