@@ -15,6 +15,10 @@ on:
         description: "Run scripts/verify-prod.sh after deploy"
         type: boolean
         default: true
+      publish_approved_usage_price:
+        description: "Publish the explicitly approved Haiku5.5 public-price calculation for UTC 2026-10-16 only"
+        type: boolean
+        default: false
       # dag.yaml task D / #676. Explicit, and never a default — the whole
       # point is that deploying over a live class has to be a decision
       # somebody made on purpose and left a record of.
@@ -124,6 +128,23 @@ jobs:
       - name: Require Owner SSO read credential before deployment
         if: ${{ !inputs.dry_run }}
         run: node -e "if ((process.env.HPS_OWNER_SERVICE_SECRET || '').length < 32) { console.error('Owner SSO read credential is not configured'); process.exit(1); }"
+
+      - name: Approved price publication controls
+        run: node --test scripts/test-publish-approved-usage-price.mjs
+
+      - name: Approved price canonical Service contract controls
+        env:
+          HPS_SERVICE_SOURCE: .service-source
+        run: node --experimental-strip-types scripts/test-approved-price-service.mjs
+
+      - name: Validate explicitly requested approved price
+        id: approved_price
+        if: inputs.publish_approved_usage_price
+        run: node scripts/publish-approved-usage-price.mjs --check
+
+      - name: Require existing admin credential for requested publication
+        if: ${{ !inputs.dry_run && inputs.publish_approved_usage_price }}
+        run: node -e "if (!(process.env.HPS_ADMIN_PASSWORD || '').length) { console.error('Existing admin credential is required for approved price publication'); process.exit(1); }"
 
       - name: Dry-run stop
         if: inputs.dry_run
@@ -280,6 +301,8 @@ jobs:
         working-directory: .service-source/worker
         env:
           WORKER_VERSION: ${{ steps.version.outputs.version }}
+          PUBLISH_APPROVED_USAGE_PRICE: ${{ inputs.publish_approved_usage_price }}
+          APPROVED_PRICE_DIGEST: ${{ steps.approved_price.outputs.digest }}
         run: |
           set -euo pipefail
           [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || { echo "::error::CLOUDFLARE_API_TOKEN is required"; exit 1; }
@@ -287,7 +310,18 @@ jobs:
           trap 'rm -f "$owner_secrets_file"' EXIT
           chmod 600 "$owner_secrets_file"
           OWNER_SECRETS_FILE="$owner_secrets_file" node -e "require('node:fs').writeFileSync(process.env.OWNER_SECRETS_FILE, JSON.stringify({ HPS_OWNER_SERVICE_SECRET: process.env.HPS_OWNER_SERVICE_SECRET }))"
-          npx wrangler deploy --var "HPS_WORKER_VERSION:${WORKER_VERSION}" --secrets-file "$owner_secrets_file"
+          price_args=()
+          if [[ "$PUBLISH_APPROVED_USAGE_PRICE" == "true" ]]; then
+            [[ "$APPROVED_PRICE_DIGEST" == "c784f24ce54eb0534533f4292d526a6e981135c362cf1967797df25a9051aa8b" ]] || { echo "::error::Approved price digest mismatch"; exit 1; }
+            # Serving production has no paid flag or existing price approval.
+            # Never import settings from the 0%-traffic isolated email versions.
+            price_args=(--var "HPS_USAGE_APPROVED_PRICE_DIGESTS:${APPROVED_PRICE_DIGEST}")
+          fi
+          npx wrangler deploy --var "HPS_WORKER_VERSION:${WORKER_VERSION}" "${price_args[@]}" --secrets-file "$owner_secrets_file"
+
+      - name: Publish explicitly approved public price through canonical admin route
+        if: ${{ !inputs.dry_run && inputs.publish_approved_usage_price }}
+        run: node scripts/publish-approved-usage-price.mjs --publish
 
       - name: Verify production
         if: ${{ !inputs.dry_run && inputs.verify_prod }}
