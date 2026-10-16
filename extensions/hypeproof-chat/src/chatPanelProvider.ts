@@ -2235,7 +2235,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   focusEditor(): boolean {
     if (!this.editorChat) return false;
-    this.editorChat.reveal(vscode.ViewColumn.One);
+    const editor = this.editorChat;
+    editor.reveal(vscode.ViewColumn.One);
+    // Revealing a retained webview focuses its document, not its composer.
+    // Only this explicit command sends the request; passive restore stays quiet.
+    void editor.webview.postMessage({type:'focusInput',activityId:activityConnections(this.context)?.scope} satisfies HostMessage);
     return true;
   }
 

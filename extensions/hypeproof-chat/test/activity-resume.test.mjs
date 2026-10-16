@@ -52,6 +52,14 @@ try {
   if(established==='state')await c.workspaceState.update(own,[]);
   await initializeFilesLayout(c,async()=>assert.fail('existing layout must be preserved'));
  }
+ const focusEvents=[];
+ const focusPanel={reveal(column){focusEvents.push(['reveal',column]);},webview:{postMessage(message){focusEvents.push(['message',message]);return Promise.resolve(true);}}};
+ assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{},editorChat:focusPanel}),true);
+ assert.equal(focusEvents[0][0],'reveal');assert.equal(focusEvents[1][0],'message');assert.equal(focusEvents[1][1].type,'focusInput');
+ assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{}}),false,'closed editor does not create a second chat or send focus');
+ const beforePassive=focusEvents.length;await ChatPanelProvider.prototype.openInEditor.call({editorChat:focusPanel},focusPanel);
+ assert.equal(focusEvents.length,beforePassive+1,'passive reveal sends no composer focus request');
+ assert.equal(focusEvents.at(-1)[0],'reveal');
  const panel={reveal(){}};await ChatPanelProvider.prototype.openInEditor.call({editorChat:panel},panel);
  await StartPage.prototype.show.call({chat:{renderHtml:()=>'<html>'},context:{extensionUri:{},subscriptions:[]},refresh:async()=>{},resumePurchase:async()=>{}});
  assert.deepEqual(commands,[],'opening chat or start must preserve the Explorer and the user layout');
