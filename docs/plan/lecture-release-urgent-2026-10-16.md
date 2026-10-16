@@ -212,7 +212,7 @@ flowchart LR
 | stable 내부 App SHA | Mac/Windows ZIP 직접 다운로드·내부 product.json 확인: `447f49b7bcec01d515a39b5e36bdc37f2a96fd40` |
 | bundled SDK | 양 OS vendor package.json 직접 확인: `0.3.299` |
 | 기존 RC 태그 | `v2026.1016.0-rc.1` → `6ad5f9f895d07af8ab8f6abf7c19e4fdecd53c0e`. stable과 동일 SHA가 아니다. |
-| 강의 프로필 | 배포 pin에 포함된 `boah-dental-2026-1017-s1`; 실제 강의 credential의 profile 관측/전체 흐름 NOT RUN |
+| 강의 프로필 | 배포 pin에 포함된 10/17 강의 프로필(정확한 ID는 private Service registry와 로컬 증거 참조); 실제 강의 credential의 profile 관측/전체 흐름 NOT RUN |
 | Mac ZIP SHA-256 | `3172100aae81b79fcecf0812abdfeda84fb06bf17940c7777516d269dfaba83c` |
 | Windows ZIP SHA-256 | `5a10f6aacccc66cbf3dc3679d85a671c4f0aa92d9335fca81986d24079b58bd2` |
 | SystemSetup SHA-256 | GitHub asset metadata: `da1b4608284aa0f9b897af94012cba3b08262f5acac68c5779a92e6ef4400f43` |
@@ -237,3 +237,11 @@ ZIP 해시는 다운로드 bytes와 GitHub digest를 직접 대조했다. source
 `/Users/jaylee/CodeWorkspace/artifacts/lecture-p0-20261016/`.
 `p0-evidence.json`, `release-assets-verification.json`, `revocation-schedule.json`,
 `admission-regression-ready.log`, `release-fix-controls.log`, `native-no-provider-results.json`을 구분해 읽는다.
+
+### 후속 실행 — 2026-10-16 19:53 KST
+
+- 수정 [PR #1732](https://github.com/hypeproof/hypeproof-studio/pull/1732), `fix/lecture-p0-evidence-20261016`, draft, main 병합 없음. 최초 PR head `d7b3f59fd0d64cbf6e41092fad0c8a8d094876f1`; 구현 SHA는 위 `ed3e6104`와 동일하다.
+- [Release dry-run 38888926866](https://github.com/hypeproof/hypeproof-studio/actions/runs/38888926866): 위 PR head를 candidate로 실행. workflow SUCCESS이나 **smoke NOT_RUN**. S1 Service, S2 Chalk, S4 실제 SDK canary PASS; S3 전용 issuer 없음, S5 당시 candidate check-run 없음. `accept_not_run=false`. 태그 생성·출하 없음.
+- S3 소스를 추가 확인하니 credential을 등록해도 아직 미구현이었다. 기존 #1704 범위는 별도 `fix/issue-1704-release-smoke` / `../.codex-worktrees/lecture-smoke-1704-20261016`에서 수정 진행한다. 운영 credential 등록/실행과 코드 구현을 분리한다.
+- 첫 [PR CI 38889542960](https://github.com/hypeproof/hypeproof-studio/actions/runs/38889542960)의 repo controls는 이 계획의 고객명 표기로 FAIL했다. 고객명은 일반 명칭으로 수정하고 정확한 ID는 비공개 로컬 증거에 유지했다. 검사를 우회하지 않았다. 수정 후 exact-head CI 결과는 후속 기록한다.
+- 기존 다른 세션 PR #1731은 `36d94200dd1941babe9ce586df6a7e5907e23dbf`로 진행 중이다. 해당 브랜치 변경·취소·중복 실행 없음.
