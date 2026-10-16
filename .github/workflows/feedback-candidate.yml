@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       public_app_tag:
-        description: Published public shell tag (empty uses latest stable)
+        description: Published official Studio shell tag (empty uses latest stable)
         required: false
         default: ''
       service_sha:
@@ -32,6 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24.4.1'
@@ -68,7 +69,7 @@ jobs:
       - name: Prepared candidate on dedicated hosted desktop
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
           HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
           PUBLIC_APP_TAG: ${{ inputs.public_app_tag }}
