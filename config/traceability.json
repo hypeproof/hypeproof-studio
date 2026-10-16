@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "repository": "jayleekr/hypeproof-studio",
+  "repository": "hypeproof/hypeproof-studio",
   "coverage": "Bootstrap scope only; unregistered product areas are not claimed covered.",
   "nodes": [
     {
@@ -381,6 +381,13 @@
           "path": "worker/test/owner-usage.test.mjs",
           "repository": "hypeproof/hypeproof-service",
           "commit": "40caf3921e97d7b02df895b877ba408f40835121"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Service and Lab ownership"
+        },
+        {
+          "path": "e2e/owner-console/run.mjs"
         }
       ]
     },
@@ -421,6 +428,10 @@
       "sources": [
         {
           "path": "docs/requirements/model-access-usage.md"
+        },
+        {
+          "path": "docs/dev/04-requirements.md",
+          "section": "## Feedback delivery contracts (2026-10-16)"
         }
       ]
     },
@@ -443,6 +454,10 @@
         },
         {
           "path": "e2e/tests/native-models.spec.ts"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Service and Lab ownership"
         }
       ]
     },
@@ -701,6 +716,10 @@
           "path": "worker/test/openai-usage-shape.test.mjs",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Service and Lab ownership"
         }
       ]
     },
@@ -953,7 +972,8 @@
       "stage": "test",
       "owner": "JinyongShin",
       "depends_on": [
-        "ST-REQ-COACH-RUNTIME"
+        "ST-REQ-COACH-RUNTIME",
+        "REQ-STUDIO-REFERENCE-IMAGES"
       ],
       "sources": [
         {
@@ -1075,6 +1095,10 @@
       "sources": [
         {
           "path": "docs/requirements/unified-studio-experience.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Feedback delivery contracts (2026-10-16)"
         }
       ]
     },
@@ -1110,6 +1134,10 @@
       "sources": [
         {
           "path": "docs/testing/unified-studio-experience.md"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Frozen acceptance matrix"
         }
       ]
     },
@@ -1283,6 +1311,9 @@
         {
           "path": "extensions/hypeproof-chat/test/activity-resume.test.mjs",
           "owner": "JinyongShin"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs"
         }
       ]
     },
@@ -1427,6 +1458,12 @@
           "path": "worker/src/lib/activity-identity.ts",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioNavigation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/workspaceRouting.ts"
         }
       ]
     },
@@ -1458,6 +1495,9 @@
         },
         {
           "path": "e2e/trial-ux/run.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/workspace-routing.smoke.mjs"
         }
       ]
     },
@@ -5050,6 +5090,275 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/attachedImages.ts"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-EXTERNAL-INSTRUCTIONS",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-EXTERNAL-INSTRUCTIONS"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-REFERENCE-IMAGES",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-REFERENCE-IMAGES"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-IMAGE-EDIT",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-STUDIO-SAFETY",
+        "ST-REQ-ACCESS-BUDGET",
+        "ST-REQ-MODEL-USAGE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-IMAGE-EDIT"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-FEEDBACK-EVIDENCE",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-UNIFIED",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-FEEDBACK-EVIDENCE"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EXTERNAL-INSTRUCTIONS",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-EXTERNAL-INSTRUCTIONS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/externalInstructionSkills.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/externalSkillCommands.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EXTERNAL-INSTRUCTIONS",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-EXTERNAL-INSTRUCTIONS",
+        "ST-IMP-EXTERNAL-INSTRUCTIONS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/external-instruction-skills.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/external-skill-commands.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-REFERENCE-IMAGES",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-REFERENCE-IMAGES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/visionInput.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/referenceImages.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/referenceDesign.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserControl.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/experimentBrowser.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/proxyClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-REFERENCE-IMAGES",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-REFERENCE-IMAGES",
+        "ST-IMP-REFERENCE-IMAGES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/reference-images.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reference-design.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reference-transport.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-mcp.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/experiment-browser.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": "e2e/reference-design/run.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-IMAGE-EDIT",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-IMAGE-EDIT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditAssets.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditPng.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditCommands.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-IMAGE-EDIT",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-IMAGE-EDIT",
+        "ST-IMP-IMAGE-EDIT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/image-edit.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/image-edit-commands.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": "e2e/image-edit/compare.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-FEEDBACK-EVIDENCE",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-FEEDBACK-EVIDENCE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/feedback-report.py"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/index.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/learner.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/owner.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/operator.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/developer.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/manual.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-FEEDBACK-EVIDENCE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-FEEDBACK-EVIDENCE",
+        "ST-IMP-FEEDBACK-EVIDENCE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/test-feedback-report.py"
+        },
+        {
+          "path": "e2e/feedback-report/run.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
         }
       ]
     }
