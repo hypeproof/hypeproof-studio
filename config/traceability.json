@@ -1630,6 +1630,15 @@
         },
         {
           "path": "scripts/studio-dev-vendor.mjs"
+        },
+        {
+          "path": "scripts/release/smoke/checks/s3-cohort-token.mjs"
+        },
+        {
+          "path": "scripts/release/smoke/checks/s5-candidate-ci.mjs"
+        },
+        {
+          "path": ".github/workflows/release-cut.yml"
         }
       ]
     },
@@ -1673,6 +1682,9 @@
         },
         {
           "path": "e2e/feedback-native/sdk-vendor.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/release-cut.test.mjs"
         }
       ]
     },
