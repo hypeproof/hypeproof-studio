@@ -108,6 +108,21 @@ test('transport errors never retry and cannot produce a valid bound receipt',asy
  await assert.rejects(guard.fetch('https://api.anthropic.com/v1/messages',{method:'POST',body:'{"max_tokens":64}'}),error=>/no automatic retry/.test(error.message)&&!error.message.includes('sensitive'));
  assert.equal(calls,1);assert.equal(guard.snapshot().transport_errors,1);assert.throws(()=>assertCompatibilityOutputBound(guard.snapshot(),{attempts:1,request_limit:12}));
 });
+test('transport diagnostics distinguish aborted and network requests without retaining sensitive error fields',async()=>{
+ const controller=new AbortController();controller.abort('private abort reason');
+ for(const [error,signal,expected]of [
+  [new DOMException('private abort message','AbortError'),controller.signal,{error_class:'AbortError',error_code:null,cause_code:null,signal_aborted:true}],
+  [new TypeError('private network URL',{cause:{code:'ECONNRESET',message:'private cause'}}),undefined,{error_class:'TypeError',error_code:null,cause_code:'ECONNRESET',signal_aborted:false}],
+  [{name:'private name',message:'private message',stack:'private stack',code:'private code',cause:{code:'private cause'}},undefined,{error_class:'unknown',error_code:null,cause_code:null,signal_aborted:false}],
+ ]){
+  let attempts=0;const guard=compatibilityOutputGuard(async()=>{attempts++;throw error;});
+  const request=new Request('https://api.anthropic.com/v1/messages',{method:'POST',body:'{"max_tokens":64}',...(signal?{signal}:{})});
+  await assert.rejects(guard.fetch(request),/no automatic retry/);
+  assert.equal(attempts,1);assert.deepEqual(guard.snapshot().calls[0].transport,expected);
+  assert(!JSON.stringify(guard.snapshot()).includes('private'));
+  assert.throws(()=>assertCompatibilityOutputBound(guard.snapshot(),{attempts:1,request_limit:12}));
+ }
+});
 test('metadata verifies normal, repeated-generation and count_tokens attempts against all-fetch counts and actual saved request caps',async()=>{
  const guard=compatibilityOutputGuard(async()=>new Response('ok')),api={request_limit:12,attempts:3,calls:[]};
  for(const [endpoint,body]of [['messages',{max_tokens:64}],['messages',{max_tokens:64}],['messages/count_tokens',{}]]){
