@@ -56,6 +56,9 @@ let spoolRef: SessionSpool | null = null;
 let uploadInFlight = false;
 
 export async function activate(context: vscode.ExtensionContext) {
+  // Reset a folder's restored sidebar before network-dependent activity restoration.
+  // The explicit file-view actions can open Explorer once the learner asks for it.
+  await initializeFilesLayout(command => vscode.commands.executeCommand(command));
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -66,7 +69,6 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   try { await connections.initialize(); }
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
-  await initializeFilesLayout(context, command => vscode.commands.executeCommand(command));
   context = connections.wrap();
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

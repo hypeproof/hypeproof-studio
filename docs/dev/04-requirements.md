@@ -239,8 +239,9 @@ gates remain separate.
 | REQ-STUDIO-FEEDBACK-EVIDENCE | DL-01/02: reviewable results and manual | A portable HTML report uses frozen criteria, implementation revisions and hashed evidence; absent, stale and blocked results cannot become PASS. The Korean manual states actual controls and recovery paths; a person's observed task is required for human acceptance. | candidate `scripts/feedback-report.py`, `scripts/test-feedback-report.py`, `e2e/feedback-report/run.mjs`; `docs/manual/studio-feedback-20261016/` |
 
 FB-01/02 refine `ST-REQ-UNIFIED` / US-03/07–10/12/18 and the existing activity
-binding design (ADR 0008): the first genuinely new profile exposes Explorer,
-later explicit layout choices persist, and controlled folder changes use the
+binding design (ADR 0008): each launch and workspace activation starts with
+Explorer closed; the explicit file-view action opens it for that session.
+Controlled folder changes use the
 existing destination-bound activity connection and one-shot resume checkpoint.
 `studioNavigation.ts`, `activityConnections.ts` and `workspaceRouting.ts` own
 these App behaviors; no replacement file tree, login or history store is added.
