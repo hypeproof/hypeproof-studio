@@ -17,7 +17,7 @@ test('one bounded HTTP read forwards only Bearer and preserves Service auth fail
   globalThis.fetch = async (url, init) => {
     calls++;
     assert.equal(url, 'https://service.test/admin/chalk/cohorts/cohort-one/state');
-    assert.equal(init.redirect, 'error');
+    assert.equal(init.redirect, 'manual');
     assert.ok(init.signal instanceof AbortSignal);
     assert.deepEqual([...init.headers.keys()].sort(), ['authorization', 'x-request-id']);
     assert.equal(init.headers.get('authorization'), 'Bearer fixture-token');
@@ -43,5 +43,15 @@ test('transport failure stays unavailable and does not invent empty state', asyn
     const body = await res.json();
     assert.equal(body.error.type, 'upstream');
     assert.ok(!('roster_size' in body));
+  } finally { globalThis.fetch = previous; }
+});
+
+test('an upstream redirect is refused, not followed', async () => {
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => new Response(null, { status: 302, headers: { location: 'https://elsewhere.test/' } });
+  try {
+    const res = await state.fetch(request(), env);
+    assert.equal(res.status, 502);
+    assert.equal((await res.json()).error.type, 'upstream');
   } finally { globalThis.fetch = previous; }
 });
