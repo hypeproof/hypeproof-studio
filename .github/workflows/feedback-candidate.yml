@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'e2e/feedback-native/**'
+      - 'e2e/feedback-live/**'
       - '.github/workflows/feedback-candidate.yml'
       - 'scripts/studio-dev.py'
   workflow_dispatch:
@@ -63,9 +64,20 @@ jobs:
         run: |
           npm ci --prefix extensions/hypeproof-chat
           npm ci --prefix extensions/hypeproof-chat/webview-ui
-          npm ci --prefix feedback-service/worker
+          npm --prefix feedback-service run setup:packages -- worker
       - name: Run background-safe harness regressions
-        run: node --test e2e/feedback-native/*.test.mjs
+        run: node --test e2e/feedback-native/*.test.mjs e2e/feedback-live/guard.test.mjs
+      - name: Probe actual Service before desktop preparation
+        shell: bash
+        env:
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
+          HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
+        run: |
+          node --input-type=module -e '
+            import path from "node:path";
+            import {hostedCommands} from "./e2e/feedback-native/hosted-shell.mjs";
+            hostedCommands(process.cwd()).run(process.execPath, ["--experimental-strip-types", "--experimental-sqlite", "e2e/feedback-native/service.mjs", path.join(process.env.RUNNER_TEMP, "feedback-native-private-probe"), "--probe"]);
+          '
       - name: Prepared candidate on dedicated hosted desktop
         shell: bash
         env:

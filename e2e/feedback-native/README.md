@@ -122,11 +122,17 @@ read-only preflight, even when a config requests native scenarios.
 
 ```bash
 node --test e2e/feedback-native/*.test.mjs
+npm --prefix /absolute/hypeproof-service run setup:packages -- worker
 HPS_SERVICE_SOURCE=/absolute/hypeproof-service HPS_SERVICE_SHA=FULL_SHA node --experimental-strip-types --experimental-sqlite e2e/feedback-native/service.mjs /absolute/new-probe-dir --probe
 ```
 
-The first command tests endpoint/path isolation, credential redaction, backdoor
-refusal, receipt/build/hash/source guards. The second executes actual Service
+The test command checks endpoint/path isolation, credential redaction, backdoor
+refusal, receipt/build/hash/source guards. Service setup builds its canonical
+measurement-core and service-contracts public exports before installing the Worker.
+Installing only the Worker leaves a fresh checkout without required `dist` exports;
+the hosted workflow uses the same `setup:packages -- worker` path and runs the
+probe with the scrubbed child environment before downloading or preparing a shell.
+The probe executes actual Service
 source auth/profile/activity reads for two synthetic users without any desktop or
 provider call. Neither is reported as a native UI pass.
 
