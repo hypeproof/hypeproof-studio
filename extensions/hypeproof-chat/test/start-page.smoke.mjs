@@ -260,7 +260,7 @@ console.log('PASS saved activity selection: record drives token/workspace, crede
 
 // A focus action arriving during slow restore must not open a second chat surface.
 {
- let release, restored=false, focused=0, shown=0;
+ let release, restored=false, focused=0, shown=0;const focusPhases=[];chat.focusDiagnostic=phase=>focusPhases.push(phase);
  const restore=new Promise(resolve=>{release=()=>{restored=true;resolve();};});
  chat.focusEditor=()=>{assert(restored,'focus must wait for restored activity');focused++;return true;};
  const originalShow=page.show;page.show=async()=>{shown++;};
@@ -269,6 +269,7 @@ console.log('PASS saved activity selection: record drives token/workspace, crede
  release();await pending;assert.equal(focused,1);assert.equal(shown,0);
  chat.focusEditor=()=>false;await page.focusAfterRestore(Promise.resolve());assert.equal(shown,1,'closed chat returns to entry');
  const before=shown;await assert.rejects(page.focusAfterRestore(Promise.reject(Error('restore failed'))),/restore failed/);assert.equal(shown,before,'failed restore cannot bypass into another chat');
+ assert.deepEqual(focusPhases,['command_enter','restore_ready','command_complete','command_enter','restore_ready','command_complete','command_enter','command_failed']);
  page.show=originalShow;
  console.log('PASS chat focus waits for restore and uses entry when closed; no sidebar fallback');
 }

@@ -56,7 +56,7 @@ try{
     }catch(e){error=e.name;}finally{clearTimeout(timer);await session.settle();}
     const after=await state(),captures=host.state.captures.map(c=>({...c,upstream_pixel_delivery:after.rows.some(r=>r.phase==='complete'&&r.status===200&&r.tool_result_image_sha256.includes(c.sha256))?'OBSERVED':'NOT_OBSERVED'}));
     row.actual_upstream_forward_calls=after.attempts;row.local_guard_held_rejections=after.completion?.blocked_requests??0;row.guard=after;row.observations=JSON.parse(fs.readFileSync(path.join(serviceDir,'completion-observations.json')));
-    const decision=completionDecision({session:session.snapshot(),guard:after,host:host.state,captures,sourceSha,wrapperUrl:view.wrapperUrl,deadline});row.segments.push({error,session:session.snapshot(),decision,guard_attempts:after.attempts,candidate_claims:after.candidate_attempts,captures});save();
+    const decision=completionDecision({session:session.snapshot(),guard:after,host:host.state,captures,sourceSha,wrapperUrl:view.wrapperUrl,verifyCapture:host.verifyCapture,deadline});row.segments.push({error,session:session.snapshot(),decision,guard_attempts:after.attempts,candidate_claims:after.candidate_attempts,captures});save();
     assert.equal(sha256(path.join(workspace,'keyboard.html')),sourceSha);
     if(mode!=='positive'){
      assert(error||controller.signal.aborted||session.snapshot().fatal);assert.equal(decision.status,'STOP_HOLD');assert.equal(after.attempts,mode==='browser-error'?2:1,'No provider request after the failed/denied tool');assert.equal(after.candidate_attempts,1);break;

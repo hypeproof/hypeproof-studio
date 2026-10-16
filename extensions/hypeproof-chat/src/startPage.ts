@@ -154,8 +154,13 @@ export class StartPage {
 
   /** A focus request during restore must not create a second sidebar chat. */
   async focusAfterRestore(restore: Promise<void>): Promise<void> {
-    await restore;
-    if (!this.chat.focusEditor()) await this.show();
+    this.chat.focusDiagnostic('command_enter');
+    try {
+      await restore;
+      this.chat.focusDiagnostic('restore_ready');
+      if (!this.chat.focusEditor()) await this.show();
+      this.chat.focusDiagnostic('command_complete');
+    } catch(error) { this.chat.focusDiagnostic('command_failed'); throw error; }
   }
 
   async openChat(): Promise<void> {
