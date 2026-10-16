@@ -1579,6 +1579,9 @@
         },
         {
           "path": "scripts/check-usage-schema.mjs"
+        },
+        {
+          "path": "scripts/studio-dev.py"
         }
       ]
     },
@@ -5348,6 +5351,9 @@
         },
         {
           "path": "docs/manual/studio-feedback-20261016/manual.json"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/native-entry.png"
         }
       ]
     },
