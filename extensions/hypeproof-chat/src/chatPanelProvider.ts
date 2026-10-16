@@ -722,6 +722,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       idle: () => !this.hasActiveStream(),
       postToChat: (text) => this.postAppReply(text),
       notice: (text) => this.postPageNotice(text),
+      clearNotice: (expected) => {
+        if (this.pendingPageNotice === expected) this.postPageNotice("");
+      },
       log: (line) => this.voiceLogChannel().appendLine(line),
       stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
       store: this.context.globalState,
