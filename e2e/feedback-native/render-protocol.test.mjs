@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import {renderResponse} from './render-protocol.mjs';import {rawHeadlessCdp} from './headless-cdp.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {renderResponse} from './render-protocol.mjs';import {rawHeadlessCdp,waitForHeadlessEndpoint} from './headless-cdp.mjs';
 const request=results=>({model:'scripted',tools:[{name:'mcp__hypeproof__browser_screenshot'}],messages:[{role:'user',content:[{type:'text',text:'HPS_RENDER_PROOF:390:positive'},...results]}]});
 const config={origin:'http://127.0.0.1:1234'};
 test('explicit render protocol requests real MCP tools and only hashes supplied screenshot result bytes',()=>{
@@ -11,4 +11,20 @@ test('explicit render protocol requests real MCP tools and only hashes supplied 
 test('render protocol refuses external/arbitrary origins and missing mode before issuing tools',async()=>{
  for(const origin of['https://example.com','http://localhost:1234','http://127.0.0.1:1234/other','http://user:pass@127.0.0.1:1234','http://127.0.0.1:1234?x=y'])assert.throws(()=>renderResponse(request([]),{origin}));
  assert.throws(()=>renderResponse({...request([]),messages:[]},config));await assert.rejects(rawHeadlessCdp('ws://example.com/browser'),/Owned loopback/);
+});
+test('headless readiness waits for unlocked complete endpoint, and refuses exit, permanent errors and timeout',async()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hps-headless-ready-')),file=path.join(dir,'DevToolsActivePort'),child={exitCode:null,signalCode:null};
+ try{
+  const pending=waitForHeadlessEndpoint(file,child,{timeoutMs:1000,intervalMs:5});
+  fs.writeFileSync(file,'12345\n');
+  const write=setTimeout(()=>fs.writeFileSync(file,'12345\r\n/devtools/browser/1234-abcd\r\n'),20);
+  try{assert.deepEqual(await pending,{port:12345,wsPath:'/devtools/browser/1234-abcd'});}finally{clearTimeout(write);}
+  let reads=0;
+  const unlocked=await waitForHeadlessEndpoint(file,child,{timeoutMs:1000,intervalMs:1,readFile(...args){if(++reads===1)throw Object.assign(Error('Windows writer owns file'),{code:'EBUSY'});return fs.readFileSync(...args);}});
+  assert.equal(unlocked.port,12345);assert.equal(reads,2);
+  await assert.rejects(waitForHeadlessEndpoint(file,{exitCode:1,signalCode:null}),/exited before readiness/);
+  await assert.rejects(waitForHeadlessEndpoint(file,child,{readFile(){throw Object.assign(Error('Denied'),{code:'EACCES'});}}),/Denied/);
+  fs.writeFileSync(file,'70000\n/devtools/browser/1234-abcd');
+  await assert.rejects(waitForHeadlessEndpoint(file,child,{timeoutMs:10,intervalMs:2}),/readiness timed out/);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
