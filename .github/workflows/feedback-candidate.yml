@@ -1,0 +1,75 @@
+name: Feedback native candidate (dedicated desktop)
+on:
+  workflow_dispatch:
+    inputs:
+      public_app_tag:
+        description: Published public shell tag (empty uses latest stable)
+        required: false
+        default: ''
+      service_sha:
+        description: Optional assertion of config/service-deployment.json SHA
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: feedback-native-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.4.1'
+      - name: Require frozen Service revision and read credential
+        id: pin
+        shell: bash
+        env:
+          SERVICE_SHA: ${{ inputs.service_sha }}
+          READ_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: |
+          pin="$(node -e 'const p=require("./config/service-deployment.json");if(p.repository!=="hypeproof/hypeproof-service"||!(/^[a-f0-9]{40}$/.test(p.sha)))process.exit(1);process.stdout.write(p.sha)')"
+          test -z "$SERVICE_SHA" || test "$SERVICE_SHA" = "$pin" || { echo 'BLOCKED: requested SHA differs from deployment pin'; exit 1; }
+          echo "sha=$pin" >> "$GITHUB_OUTPUT"
+          test -n "$READ_TOKEN" || { echo 'BLOCKED: HYPEPROOF_READ_TOKEN missing'; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.pin.outputs.sha }}
+          path: feedback-service
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          persist-credentials: false
+      - name: Bootstrap pinned private packages
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install extension, webview and actual Service dependencies
+        shell: bash
+        run: |
+          npm ci --prefix extensions/hypeproof-chat
+          npm ci --prefix extensions/hypeproof-chat/webview-ui
+          npm ci --prefix feedback-service/worker
+      - name: Run background-safe harness regressions
+        run: node --test e2e/feedback-native/safety.test.mjs
+      - name: Prepared candidate on dedicated hosted desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/feedback-service
+          HPS_SERVICE_SHA: ${{ steps.pin.outputs.sha }}
+          PUBLIC_APP_TAG: ${{ inputs.public_app_tag }}
+        run: node e2e/feedback-native/hosted.mjs "$PUBLIC_APP_TAG"
+      - name: Upload partial candidate evidence (no private token directory)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feedback-native-${{ runner.os }}-${{ github.sha }}
+          path: ${{ runner.temp }}/feedback-native/evidence
+          if-no-files-found: warn

@@ -1,0 +1,9 @@
+// Transport/predicate regressions only; these stubs never count as native acceptance.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {NativeUI} from './native-ui.mjs';
+function fixture(outerVisible){const ui=new NativeUI('http://127.0.0.1:9777');const iframe={name:'visible-webview',getBoundingClientRect:()=>({width:outerVisible?800:0,height:600})};const control={getBoundingClientRect:()=>({width:700,height:60})};const host={evaluate:expression=>vm.runInNewContext(expression,{document:{querySelectorAll:()=>[iframe]},getComputedStyle:()=>({display:'inline',visibility:'visible'})})};const target={info:{id:'target'},send:async method=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'frame'}}}:{executionContextId:1},evaluate:expression=>vm.runInNewContext(expression,{document:{visibilityState:'hidden',querySelector:()=>control}})};ui.list=async()=>[{id:'target',type:'iframe',url:'vscode-webview://test/index.html?id=visible-webview&extensionId=hypeproof.hypeproof-chat'}];ui.workbench=async()=>host;ui.target=async()=>target;return {ui,target};}
+test('visible workbench iframe and control geometry work despite Electron Page Visibility false negative',async()=>{const {ui,target}=fixture(true);assert.equal(await ui.frame('textarea',500),target);});
+test('hidden outer webview cannot pass by retaining an inner control geometry',async()=>{const {ui}=fixture(false);await assert.rejects(ui.frame('textarea',1),/Timed out/);});
+test('command input retains palette mode prefix instead of switching to file quick-open',async()=>{const ui=new NativeUI('http://127.0.0.1:9777'),typed=[];const target={evaluate:async()=>true};ui.workbench=async()=>target;ui.key=async()=>{};ui.input=async(_t,_selector,text)=>typed.push(text);await ui.palette('HypeProof: 작업 파일 열기');assert.deepEqual(typed,['>HypeProof: 작업 파일 열기']);});
