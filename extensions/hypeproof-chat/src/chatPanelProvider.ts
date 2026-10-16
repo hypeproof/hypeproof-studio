@@ -2900,6 +2900,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async stageAttachedImage(stageId: string, name: string, mime: string, base64: string): Promise<void> {
     const refusal = this.stageImageBytes(stageId, name, mime, Buffer.from(base64, "base64"));
     if (refusal) void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+    else void this.post({ type: "imageStagedByHost", stageId, name });
   }
 
   /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */

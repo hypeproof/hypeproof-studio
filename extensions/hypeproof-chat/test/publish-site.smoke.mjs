@@ -179,6 +179,24 @@ const tree = (gh, name) => {
   const secret = preflightSite(site({ "index.html": "x", "k.js": "\n\nconst t='ghp_" + "z".repeat(36) + "'" })).issues[0];
   assert.match(secret.message_ko, /k\.js 3번째 줄/);
   assert.doesNotMatch(secret.message_ko, /ghp_/);
+  const budget = 2 * 1024 * 1024;
+  assert.equal(preflightSite(site({ "index.html": "x", "plain.txt": "a".repeat(budget) })).blocked, false, "text at the scan limit is inspected");
+  const padded = "ghp_" + "Z".repeat(36) + "\n" + "a".repeat(budget);
+  const paddedReport = preflightSite(site({ "index.html": "x", "config.json": padded }));
+  assert.equal(paddedReport.blocked, true, "padding cannot turn a secret-bearing file into an allowed upload");
+  assert.ok(paddedReport.issues.some((i) => i.code === "text_unscanned" && i.severity === "block" && i.file === "config.json"));
+  assert.doesNotMatch(JSON.stringify(paddedReport.issues), /ghp_/);
+  assert.equal(preflightSite(site({ "index.html": "x", "photo.jpg": "a".repeat(budget + 1) })).blocked, false, "binary media retain their existing size limit");
+  if (process.platform !== "win32" && process.getuid?.() !== 0) {
+    const unreadable = site({ "index.html": "x", "locked.txt": "private" });
+    const file = path.join(unreadable, "locked.txt");
+    fs.chmodSync(file, 0);
+    try {
+      const denied = preflightSite(unreadable);
+      assert.equal(denied.blocked, true);
+      assert.ok(denied.issues.some((i) => i.code === "text_unscanned" && i.file === "locked.txt"));
+    } finally { fs.chmodSync(file, 0o600); }
+  }
   ok("preflight: blocks preview-works/Pages-breaks and leaks; warns otherwise; never echoes a secret");
 }
 
@@ -418,6 +436,9 @@ const tree = (gh, name) => {
   assert.equal(r.error.code, "preflight_blocked");
   assert.match(r.error.message_ko, /슬래시/);
   assert.equal(gh.state.log.length, 0, "nothing leaves the machine before preflight passes");
+  const padded = await runPublishSite({}, deps(gh, site({ "index.html": "x", "config.json": "ghp_" + "Z".repeat(36) + "\n" + "x".repeat(2 * 1024 * 1024) })));
+  assert.equal(padded.error?.code, "preflight_blocked");
+  assert.equal(gh.state.log.length, 0, "unscanned text blocks before any GitHub request");
   ok("failure: preflight blocks before any request");
 }
 {
