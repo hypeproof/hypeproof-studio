@@ -1576,6 +1576,9 @@
         },
         {
           "path": ".github/workflows/pr-ci.yml"
+        },
+        {
+          "path": "scripts/check-usage-schema.mjs"
         }
       ]
     },
@@ -1613,6 +1616,9 @@
         },
         {
           "path": "e2e/unified-release/candidate-service.test.mjs"
+        },
+        {
+          "path": "scripts/test-usage-schema.mjs"
         }
       ]
     },
