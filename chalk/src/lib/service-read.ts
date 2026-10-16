@@ -32,9 +32,12 @@ export async function forwardServiceRead(
   if (!cohortId) return c.json({ error: "invalid cohort id" }, 400);
   const target = `${resolveServiceOrigin(c.env)}/admin/chalk/cohorts/${encodeURIComponent(cohortId)}/${suffix}${search}`;
   try {
+    // workerd rejects redirect: "error" (it throws before sending), so take
+    // "manual" and refuse any 3xx ourselves.
     const upstream = await fetch(target, {
-      method: "GET", headers, signal: AbortSignal.timeout(8_000), redirect: "error",
+      method: "GET", headers, signal: AbortSignal.timeout(8_000), redirect: "manual",
     });
+    if (upstream.status >= 300 && upstream.status < 400) throw new Error(`upstream redirect ${upstream.status}`);
     const out = new Headers({
       "content-type": upstream.headers.get("content-type") ?? "application/json; charset=utf-8",
       "cache-control": "no-store",

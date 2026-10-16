@@ -29,7 +29,7 @@ test('board preserves query, upstream auth rejection and request correlation', a
     assert.equal(r.headers.get('x-hps-service-request-id'), 'service-read');
   }, async (url, init) => {
     assert.equal(url, origin + '/admin/chalk/cohorts/cohort-a/board?seat_prefix=A-');
-    assert.equal(init.redirect, 'error');
+    assert.equal(init.redirect, 'manual');
     assert.ok(init.signal instanceof AbortSignal);
     assert.deepEqual([...init.headers.keys()].sort(), ['authorization', 'x-request-id']);
     return Response.json({ error: 'issuer not scoped' }, { status: 403, headers: { 'x-request-id': 'service-read' } });

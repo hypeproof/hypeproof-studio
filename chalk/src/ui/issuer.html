@@ -249,7 +249,8 @@ $("mint").onclick = async () => {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const rawError = body.error || ("HTTP " + res.status);
+      const e = body.error;
+      const rawError = (typeof e === "string" ? e : e && e.message) || ("HTTP " + res.status);
       const friendly = mapServerError(rawError);
       result.innerHTML =
         '<div class="err">' + esc(friendly) +
