@@ -51,6 +51,8 @@ export interface SitePublisherHost {
   postToChat(text: string): Promise<void>;
   /** Inline notice in the chat panel (no toast — a toast pauses the integrated browser, #308). */
   notice(text: string): void;
+  /** Clear this notice only if it has not been replaced by another app notice. */
+  clearNotice(expected: string): void;
   log(line: string): void;
   stallMs(): number | undefined;
   endpoints: PublishEndpoints;
@@ -70,6 +72,8 @@ export class SitePublisher {
   private readonly host: SitePublisherHost;
   private readonly auth: GhCliAuthProvider;
   private running = false;
+  private buttonRunning = false;
+  private failureNotice: string | undefined;
   readonly registry: PublishRegistry;
   private readonly transport: (token: string) => GitHubTransport;
   /**
@@ -579,22 +583,38 @@ export class SitePublisher {
 
   /** Toolbar command entry. */
   async runFromButton(): Promise<void> {
+    if (this.buttonRunning) return;
+    if (this.failureNotice !== undefined) {
+      this.host.clearNotice(this.failureNotice);
+      this.failureNotice = undefined;
+    }
     if (!this.available()) {
-      this.host.notice(publishError("not_allowed").message_ko);
+      this.showFailureNotice(publishError("not_allowed").message_ko);
       return;
     }
     if (!this.host.idle()) {
-      this.host.notice("코치가 답하는 중이에요. 답이 끝난 뒤 다시 눌러 주세요.");
+      this.showFailureNotice("코치가 답하는 중이에요. 답이 끝난 뒤 다시 눌러 주세요.");
       return;
     }
     // No question here: sign-in comes first, then the pipeline's confirmPublish asks once per
     // <login>/<repo> (persisted) — a registered repository publishes with no modal at all.
-    const result = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "홈페이지 올리기", cancellable: false },
-      (progress) => this.run({}, "button", (line) => progress.report({ message: line })),
-    );
-    await this.host.postToChat(resultChatText(result)).catch(() => undefined);
+    let result: PublishSiteResult;
+    this.buttonRunning = true;
+    try {
+      result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "홈페이지 올리기", cancellable: false },
+        (progress) => this.run({}, "button", (line) => progress.report({ message: line })),
+      );
+      await this.host.postToChat(resultChatText(result)).catch(() => undefined);
+    } finally {
+      this.buttonRunning = false;
+    }
     await this.showResult(result);
+  }
+
+  private showFailureNotice(text: string): void {
+    this.failureNotice = text;
+    this.host.notice(text);
   }
 
   private async showDeviceCode(code: string, uri: string): Promise<void> {
@@ -621,13 +641,13 @@ export class SitePublisher {
       if (pick === COPY) await vscode.env.clipboard.writeText(r.url);
       return;
     }
-    const REPO = "저장소 열기";
     const text = r.error
       ? `${r.error.message_ko} ${r.error.next_action_ko}`
       : r.needs_user
         ? `GitHub 코드 ${r.needs_user.code} 입력이 끝나지 않았어요. 다시 눌러 주세요.`
         : "아직 주소가 열리는 것을 확인하지 못했어요. 1~2분 뒤 다시 눌러 확인해 주세요.";
-    const pick = await vscode.window.showWarningMessage(text, ...(r.repo_url ? [REPO] : []));
-    if (pick === REPO && r.repo_url) await vscode.env.openExternal(vscode.Uri.parse(r.repo_url));
+    // Keep the result (including its repository link) in the transcript, and own the
+    // transient notice so the next attempt can clear it without touching other alerts.
+    this.showFailureNotice(text);
   }
 }

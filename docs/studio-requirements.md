@@ -485,6 +485,13 @@ Anthropic 미성년자 가이드(#282 의 2026-07-13 라이선싱 코멘트) 구
 | REQ-P4 | GitHub에서 이어하기 — 폴더마다 자기 저장소 (hype-dental D-024, 2026-10-13 사용자 요구) | 참여 코드를 넣어 후보 카드가 뜨면, REQ-P3 ① 게이트가 열리고 프로필이 수업 폴더(`workspace_root`)를 정한 코호트에 한해 이 자리 GitHub 에 올린 수업 사이트가 있는지 **먼저** 본다(`/user/repos` — 버튼이 만든 저장소의 설명, 또는 Pages + 루트 `agent.md`). 참가자는 GitHub 에서 직접 고치지 않는다는 전제다. 계약: ① 있으면 "GitHub에서 이어하기"(여러 개면 고르기, 가장 최근 것을 미리 선택)와 "새로 하기"를 낸다 — Primary 는 하나(SX-04); ② 이어하기는 고른 저장소를 **새 폴더**(수업 폴더, 있으면 `-2`·`-3`…)로 내려받는다 — 공개 때 올리는 파일만, blob id 확인, 기존 폴더에는 쓰지 않고 실패하면 만든 폴더를 지운다. 내려받은 폴더는 그 저장소에 묶이고(등록 + 내려받은 커밋) 다음 누름은 질문 없이 그 커밋 위에 올린다. 이 자리가 다시 열 폴더가 GitHub 과 같으면 내려받지 않고 그 폴더를 연다; ③ 새로 하기는 새 폴더에서 시작한다. 이 컴퓨터에서 올린 적 없는 폴더의 첫 누름은 **새 저장소**(`<기본>`, `<기본>-2`…)를 만든다 — 다른 컴퓨터에서 만든 사이트에 쓰지 않는다. 명시한 `repo_name` 은 그대로; ④ gh 가 로그인돼 있지 않으면 볼 수 없으므로 조용한 "GitHub 로그인" 줄을 내고, 로그인 뒤 다시 본다. 확인 실패·15초 초과는 평소 시작으로 | U (`github-continue` smoke: 모의 GitHub, 두 컴퓨터, 시작 화면) + E (개발 중 앱 사본) |
 | REQ-P5 | 프로젝트 변경 — 수업 중 다른 GitHub 저장소로 수업 폴더 바꾸기 (2026-10-15 사용자 요구, #1691) | 채팅 머리줄의 **프로젝트 변경** 버튼("인터넷에 올리기" 옆, 같은 REQ-P3 ① 게이트) 또는 채팅 문장 `프로젝트 변경`(가까운 변형만 — 그 말을 언급만 하는 문장은 코치에게)이 참가자의 저장소 목록을 연다: 수업 사이트(REQ-P4 판별) 먼저, 그다음 자기 소유의 다른 저장소(포크·보관 제외). 계약: ① 떠나는 폴더가 GitHub 과 같으면 묻지 않는다. 다르면 "올리고 바꾸기 / 올리지 않고 바꾸기"를 묻고, 올리기는 버튼과 같은 공개(워크플로를 지키기 위해 저장 단계가 아니다). 올린 적 없는 폴더는 새 저장소로 올리거나 그대로 둔다; ② 고른 저장소의 폴더: 이 컴퓨터에 없으면 `<수업 폴더>-<저장소>` 로 내려받고(REQ-P4 ②의 내려받기), 있으면 GitHub 과 비교해 같으면 그대로 연다. 이 컴퓨터가 마지막으로 올리거나 받은 뒤 GitHub 이 그대로면 로컬 작업이 더 새것이라 그대로 연다. GitHub 이 움직였으면 받아온다(사이트 파일만 GitHub 것으로, 점(.) 항목은 그대로, 로컬이 달랐으면 `<폴더>.before-pull-<시각>` 사본). 떠나는 폴더는 대상 폴더로 쓰지 않는다; ③ 그 폴더를 그 저장소에 묶고(등록 + 커밋) 시작 화면과 같은 방식으로 활동 작업 폴더로 연다(창이 다시 열리고 대화는 그 폴더의 것); ④ 그 폴더의 첫 코치 턴에 모델 전용 메모: `agent.md` 가 있으면 다른 일보다 먼저 읽는다 — 한 번, 그 폴더에서만, 24시간 안에 | U (로컬 `project-switch` smoke: 모의 GitHub — 문장 판별·목록·비교·결정표·받아오기, PR 미포함) + E (개발 중 앱 사본, 2026-10-15) |
 
+REQ-P3 retry feedback: a failed or unverified button result appears as one managed inline
+notice and remains in the transcript, including any repository link. Pressing the button
+again clears that attempt's notice before asynchronous work starts; a newer unrelated
+notice is preserved. Repeated clicks during a button attempt start no additional progress
+or result. Device-code modals, public-publishing consent, and verified-success actions
+retain their behavior. This supports participant verification under ST-INT-NATIVE.
+
 ## Q. 세션 로그 로컬 스풀 (#580 수집 계층)
 
 토큰 비용과 유저 행동을 의사결정 데이터로 만드는 수집 계층이다. 설계 결정과
