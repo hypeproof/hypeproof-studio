@@ -1,0 +1,24 @@
+{
+  "schema": "hps-feedback-manual/1",
+  "status": "candidate_local_implementation_pending_root_integration",
+  "candidate_base_sha": "5d74ec45740d74f9b97821921b2ca89318f99ebf",
+  "manual_revision": "pending_root_integration",
+  "acceptance_revision": "ff25b53b1352e89ce243d780cfe5474af671a9da1229d432f1403b083380339d",
+  "release_status": "NOT_RUN",
+  "human_acceptance": "HUMAN_PENDING",
+  "screenshots": "NOT_RUN",
+  "browser_qa": "NOT_RUN",
+  "pages": [
+    "index.html",
+    "learner.html",
+    "owner.html",
+    "operator.html",
+    "developer.html"
+  ],
+  "notes": [
+    "No screenshot in this manual represents an observed UI.",
+    "Learner-facing image edit steps are conditional on the explicit image_edit capability and configured provider.",
+    "The owner console currently reads server-stored records; absent records do not prove zero use or cost.",
+    "Manual HTML uses inline CSS and relative links; no external fetch or CDN."
+  ]
+}
