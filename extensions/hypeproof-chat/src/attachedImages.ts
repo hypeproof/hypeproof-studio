@@ -198,23 +198,64 @@ export class ImageStaging {
         continue;
       }
       this.staged.delete(id);
+      let destination: string | undefined;
+      let destinationFd: number | undefined;
+      let saved = false;
       try {
         const workspace = fs.realpathSync(cwd);
+        const workspaceEntry = fs.statSync(workspace, { bigint: true });
         const dir = path.join(workspace, ATTACHED_IMAGE_DIR);
         fs.mkdirSync(dir, { recursive: true });
         const name = freeAttachedImageName(s.name, (n) => fs.existsSync(path.join(dir, n)));
-        // Check the actual destination immediately before copying. lstat also rejects
+        // Check the actual destination before exclusive creation. lstat also rejects
         // Windows directory junctions; a workspace opened through a link remains valid.
-        const entry = fs.lstatSync(dir);
+        const entry = fs.lstatSync(dir, { bigint: true });
         if (!entry.isDirectory() || entry.isSymbolicLink() || path.relative(workspace, fs.realpathSync(dir)) !== ATTACHED_IMAGE_DIR) {
           throw new Error("Photo destination is not a workspace directory");
         }
-        // copy + remove rather than rename: the temp folder may sit on another volume.
-        fs.copyFileSync(s.file, path.join(dir, name), fs.constants.COPYFILE_EXCL);
+        destination = path.join(dir, name);
+        // O_EXCL never replaces an existing file or final-component link. Opening
+        // creates an empty placeholder only: no photo bytes precede validation.
+        destinationFd = fs.openSync(destination, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0));
+        const opened = fs.fstatSync(destinationFd, { bigint: true });
+        // Node has no portable directory-relative open/unlink. These rechecks
+        // detect boundary substitutions, not atomic protection from all OS renames.
+        const validate = (size: number) => {
+          const rootNow = fs.statSync(workspace, { bigint: true });
+          const parentNow = fs.lstatSync(dir, { bigint: true });
+          const fileNow = fs.lstatSync(destination!, { bigint: true });
+          const handleNow = fs.fstatSync(destinationFd!, { bigint: true });
+          if (fs.realpathSync(cwd) !== workspace || rootNow.dev !== workspaceEntry.dev || rootNow.ino !== workspaceEntry.ino ||
+              !parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== entry.dev || parentNow.ino !== entry.ino || path.relative(workspace, fs.realpathSync(dir)) !== ATTACHED_IMAGE_DIR ||
+              !handleNow.isFile() || handleNow.nlink !== 1n || handleNow.size !== BigInt(size) || handleNow.dev !== opened.dev || handleNow.ino !== opened.ino ||
+              !fileNow.isFile() || fileNow.isSymbolicLink() || fileNow.dev !== opened.dev || fileNow.ino !== opened.ino || path.relative(destination!, fs.realpathSync(destination!)) !== "") {
+            throw new Error("Photo destination changed during commit");
+          }
+        };
+        validate(0);
+        const bytes = fs.readFileSync(s.file);
+        validate(0);
+        fs.writeFileSync(destinationFd, bytes);
+        validate(bytes.length);
+        saved = true;
         relPaths.push(`${ATTACHED_IMAGE_DIR}/${name}`);
       } catch {
         failed++;
       } finally {
+        if (destinationFd !== undefined) {
+          if (!saved) {
+            // Only this exclusive creation is ours. Clear its bytes even if a
+            // concurrent rename made its new name unknowable, then unlink only
+            // when the current path still names that same opened inode.
+            try { fs.ftruncateSync(destinationFd, 0); } catch { /* best effort */ }
+            try {
+              const own = fs.fstatSync(destinationFd, { bigint: true });
+              const current = fs.lstatSync(destination!, { bigint: true });
+              if (current.isFile() && !current.isSymbolicLink() && current.dev === own.dev && current.ino === own.ino) fs.unlinkSync(destination!);
+            } catch { /* a renamed path must never authorize deleting another file */ }
+          }
+          fs.closeSync(destinationFd);
+        }
         try {
           fs.rmSync(s.file, { force: true });
         } catch {
