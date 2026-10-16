@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
-import {renderConfig,renderProfile,startRenderHost,priorScreenshotCalls,screenshotReservationClient} from './render-host.mjs';import {toolResultImageHashes,screenshotCallHashes,digest,startGuard} from './guard.mjs';
+import {renderConfig,renderProfile,startRenderHost,ownedFetchInterception,priorScreenshotCalls,screenshotReservationClient} from './render-host.mjs';import {toolResultImageHashes,screenshotCallHashes,digest,startGuard} from './guard.mjs';
 const config={renderFeedback:{enabled:true,mode:'owned-headless',widths:[390,1280],maxScreenshots:6,repetitionId:'hps-render-20261016-r1-'+'a'.repeat(32),browserDependencyRoot:'/owned/e2e'},attempts:[{runtime:'sdk',scenario:'T10-T11',outputPaths:['candidate-1/keyboard.html']}]};
 test('default stays file-only; render double opt-in never invents browser grant or accepts flexible caps/IDs',()=>{
  assert.equal(renderConfig({}),null);assert.throws(()=>renderConfig({},['--allow-render-feedback']));assert.throws(()=>renderConfig(config));assert.deepEqual(renderConfig(config,['--allow-render-feedback']),config.renderFeedback);
@@ -36,4 +36,19 @@ test('actual capture aborted before any next dispatch and failed capture both re
 
 test('only durable guard counter retains consumed attempts; model message IDs are transport diagnostics',()=>{
  const id=config.renderFeedback.repetitionId,call={type:'tool_use',name:'mcp__hypeproof__browser_screenshot',id:'owned-shot-1'};assert.deepEqual(screenshotCallHashes({messages:[{role:'assistant',content:[call]}]}),[digest('owned-shot-1')]);const state={render_repetition_id:id,render_screenshot_limit:6,render_screenshot_attempts:2,rows:[]};assert.equal(priorScreenshotCalls(state,id),2);assert.throws(()=>priorScreenshotCalls(state,'another'));for(const value of[-1,7,undefined])assert.throws(()=>priorScreenshotCalls({...state,render_screenshot_attempts:value},id));assert.throws(()=>priorScreenshotCalls({render_repetition_id:id,rows:[{screenshot_call_sha256:['diagnostic']} ]},id));
+});
+
+test('interception shutdown unsubscribes then awaits pending command; refusal remains explicit failure',async()=>{
+ let listener,resolve,reject,disposed=false,fatal=0;const calls=[];
+ const cdp={onEvent(fn){listener=fn;return{dispose(){disposed=true;}};},send(method){calls.push(method);return new Promise((a,b)=>{resolve=a;reject=b;});}};
+ const owned=ownedFetchInterception({cdp,origin:'http://127.0.0.1:12345',onBlocked:async()=>{},onFailure:async()=>{fatal++;}});
+ listener({method:'Fetch.requestPaused',params:{requestId:'owned',request:{url:'http://127.0.0.1:12345/file'}}});let done=false;const close=owned.close().then(value=>{done=true;return value;});
+ await Promise.resolve();assert(disposed);assert.equal(done,false,'No transport close before pending interception settles');resolve({});const result=await close;assert.equal(result.status,'PASS');assert.equal(result.pending,0);assert.deepEqual(calls,['Fetch.continueRequest']);assert.equal(fatal,0);
+ const failed=ownedFetchInterception({cdp,origin:'http://127.0.0.1:12345',onBlocked:async()=>{},onFailure:async()=>{fatal++;}});
+ listener({method:'Fetch.requestPaused',params:{requestId:'failed',request:{url:'http://127.0.0.1:12345/file'}}});const ending=failed.close();reject(Error('seeded CDP rejection'));
+ const failure=await ending;assert.equal(failure.status,'FAIL');assert.equal(failure.pending,0);assert.equal(failed.failed,true);assert.equal(fatal,1);assert.equal(failure.failures[0].method,'Fetch.continueRequest');assert(!JSON.stringify(failure).includes('seeded'));
+});
+test('blocked request and rejecting fatal callback are both awaited and cannot yield cleanup PASS',async()=>{
+ let listener,blocked=0;const owned=ownedFetchInterception({cdp:{onEvent(fn){listener=fn;return{dispose(){}};},async send(method){assert.equal(method,'Fetch.failRequest');throw Error('seeded transport refusal');}},origin:'http://127.0.0.1:12345',onBlocked:async()=>{blocked++;},onFailure:async()=>{throw Error('seeded hold refusal');}});
+ listener({method:'Fetch.requestPaused',params:{requestId:'blocked',request:{url:'https://example.invalid/'}}});const result=await owned.close();assert.equal(blocked,1);assert.equal(result.status,'FAIL');assert.equal(result.pending,0);assert.deepEqual(result.failures.map(x=>x.method),['Fetch.failRequest','fatal_callback']);
 });
