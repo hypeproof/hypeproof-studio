@@ -66,7 +66,7 @@ jobs:
           npm ci --prefix extensions/hypeproof-chat/webview-ui
           npm --prefix feedback-service run setup:packages -- worker
       - name: Run background-safe harness regressions
-        run: node --test e2e/feedback-native/*.test.mjs e2e/feedback-live/guard.test.mjs
+        run: node --test e2e/feedback-native/*.test.mjs e2e/feedback-live/*.test.mjs
       - name: Probe actual Service before desktop preparation
         shell: bash
         env:

@@ -5439,6 +5439,15 @@
           "path": "e2e/feedback-live/guard.test.mjs"
         },
         {
+          "path": "e2e/feedback-live/trace.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/trace.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/prepare-config.test.mjs"
+        },
+        {
           "path": "e2e/feedback-live/run.mjs"
         },
         {
