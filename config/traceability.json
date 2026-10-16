@@ -685,6 +685,12 @@
           "path": "worker/migrations/0008-usage-costs.sql",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "scripts/publish-approved-usage-price.mjs"
+        },
+        {
+          "path": "config/usage-prices/haiku55-20261016.json"
         }
       ]
     },
@@ -720,6 +726,15 @@
         {
           "path": "docs/testing/studio-feedback-owner-console.md",
           "section": "## Service and Lab ownership"
+        },
+        {
+          "path": "scripts/test-publish-approved-usage-price.mjs"
+        },
+        {
+          "path": "scripts/test-approved-price-service.mjs"
+        },
+        {
+          "path": "docs/testing/approved-usage-price-deployment.md"
         }
       ]
     },
