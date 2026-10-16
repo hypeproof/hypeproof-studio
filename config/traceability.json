@@ -5203,6 +5203,9 @@
         },
         {
           "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": "e2e/feedback-live/run.mjs"
         }
       ]
     },
@@ -5275,6 +5278,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html"
+        },
+        {
+          "path": "e2e/feedback-live/run.mjs"
         }
       ]
     },
@@ -5407,6 +5413,24 @@
         },
         {
           "path": "e2e/feedback-native/service.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/README.md"
+        },
+        {
+          "path": "e2e/feedback-live/guard.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/guard.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/hosted-shell.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/hosted-shell.test.mjs"
         }
       ]
     }
