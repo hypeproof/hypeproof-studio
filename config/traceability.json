@@ -1630,6 +1630,9 @@
         },
         {
           "path": "scripts/studio-dev-vendor.mjs"
+        },
+        {
+          "path": "scripts/patches/windows-policy-locales.patch"
         }
       ]
     },
@@ -1673,6 +1676,9 @@
         },
         {
           "path": "e2e/feedback-native/sdk-vendor.test.mjs"
+        },
+        {
+          "path": "scripts/test/windows-policy-patch.test.mjs"
         }
       ]
     },

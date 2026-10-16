@@ -9,7 +9,6 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {appIdentity,treeHash,sha256,assertReceipt} from './artifact.mjs';
 import {checkSeededSdk} from './sdk-seed.mjs';
 import {candidateService,assertCandidateServiceUnchanged,redactEvidence,assertServiceActivity} from './candidate-service.mjs';
-import {serviceSourceManifest} from '../service-provenance.mjs';
 import {compatibilityEnvironment,assertCompatibilityOutputBound} from './output-bound.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const [appDirectory,assetDirectory,outputDirectory,sourceSha,version,publicAppSha]=process.argv.slice(2);
@@ -42,9 +41,11 @@ try{
  const assets=Object.fromEntries(fs.readdirSync(assetDirectory).filter(n=>/\.(zip|exe)$/.test(n)).map(n=>[n,sha256(path.join(assetDirectory,n))]));
  fs.mkdirSync(outputDirectory,{recursive:true});
  temporary=fs.mkdtempSync(path.join(os.tmpdir(),'hps-unified-acceptance-'));
- const servicePin=serviceOnly?JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8')):null;
- const candidate=serviceOnly?candidateService(process.env.HPS_SERVICE_SOURCE,servicePin):null;
- const activities=[],servicePackage=candidate?.manifest??serviceSourceManifest();
+ // App acceptance must exercise the same Service implementation as deployment,
+ // too. The published testkit predates native request admission serialization.
+ const servicePin=JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8'));
+ const candidate=candidateService(process.env.HPS_SERVICE_SOURCE,servicePin);
+ const activities=[],servicePackage=candidate.manifest;
  const outputPolicy=Object.fromEntries(['output-bound.mjs','output-bound-preload.mjs'].map(name=>[name,sha256(fileURLToPath(new URL('./'+name,import.meta.url)))]));
  fs.writeFileSync(path.join(outputDirectory,'service-source.json'),JSON.stringify(servicePackage,null,2));
  for(const kind of ['trial','classroom']){
@@ -54,8 +55,8 @@ try{
   const env={...compatibilityEnvironment(process.env),HPS_APP_PATH:path.resolve(appDirectory),HPS_E2E_TOKEN_FILE:token,HPS_E2E_PROXY_URL:`http://127.0.0.1:${port}/v1`,HPS_NATIVE_PORT:String(port),HPS_NATIVE_EVIDENCE_DIR:evidence,HPS_UNIFIED_SWITCH:serviceOnly?'0':'1',HPS_SERVICE_ACCEPTANCE:serviceOnly?'1':'0',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_LIVE:'1',HPS_NATIVE_MANAGED:kind==='trial'?'1':'0',HPS_TEST_REAL_WORKSPACE:'1',HPS_QUIET:'1',HPS_QUIET_NO_HIDE:'1'};
   activeEvidence=evidence;activeLog=path.join(temporary,kind+'-gateway.log');
   log=fs.openSync(activeLog,'w',0o600);
-  if(candidate)assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
-  gateway=spawn(process.execPath,['--experimental-strip-types','--import',candidate?pathToFileURL(candidate.loader).href:'@hypeproof/service-testkit/test/harness/loader.mjs','--import',new URL('./output-bound-preload.mjs',import.meta.url).href,candidate?.gateway??fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/test/native-trial-live-server.mjs'))],{cwd:path.join(root,'e2e'),env:{...env,HPS_CODEX_ADAPTER_MODULE:new URL('../../scripts/lib/codex-local-client.mjs',import.meta.url).href},stdio:['ignore',log,log]});
+  assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
+  gateway=spawn(process.execPath,['--experimental-strip-types','--import',pathToFileURL(candidate.loader).href,'--import',new URL('./output-bound-preload.mjs',import.meta.url).href,candidate.gateway],{cwd:path.join(root,'e2e'),env:{...env,HPS_CODEX_ADAPTER_MODULE:new URL('../../scripts/lib/codex-local-client.mjs',import.meta.url).href},stdio:['ignore',log,log]});
   let launchError;gateway.on('error',error=>{launchError=error;});
   let ready=false;
   for(let attempt=0;attempt<60;attempt++){
@@ -78,8 +79,8 @@ try{
   assertCompatibilityOutputBound(outputBound,serviceOnly?api:{...api,request_limit:outputBound.request_limit,attempts:outputBound.attempts});
   for(const [name,hash]of Object.entries(outputPolicy))if(sha256(fileURLToPath(new URL('./'+name,import.meta.url)))!==hash)throw Error('Compatibility output policy changed during activity');
   const boundReceipt={cap:outputBound.output_cap,forwarded:outputBound.forwarded,rejected:outputBound.rejected,requestLimit:outputBound.request_limit,attempts:outputBound.attempts,counterSource:'isolated-gateway-output-preload',sdk_env:env.CLAUDE_CODE_MAX_OUTPUT_TOKENS,sdk_max_retries:env.CLAUDE_CODE_MAX_RETRIES,guard_sha256:outputPolicy['output-bound-preload.mjs'],policy_sha256:outputPolicy['output-bound.mjs']};
+  assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
   if(serviceOnly){
-   assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
    const {calls}=api;
    assertServiceActivity(result,api);
    // serviceSha is the legacy release gate's acceptance-driver SHA; servicePackage.commit identifies the deployed Service implementation.
