@@ -7,7 +7,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {classifyProfileFailure} from '../../extensions/hypeproof-chat/src/proxyClientHelpers.ts';
 import {loopback,sha256} from './safety.mjs';
 export const fixtureSha=()=>sha256(fileURLToPath(new URL('./service.mjs',import.meta.url)));
-export async function endSyntheticSession({manifestFile,origin,expectedSource,token,onSecret=()=>{},onProgress=()=>{},request=fetch}){
+export async function openSyntheticControl({manifestFile,origin,expectedSource,onSecret=()=>{},onProgress=()=>{},request=fetch}){
  const manifest=JSON.parse(fs.readFileSync(manifestFile,'utf8')),control=manifest.session_control;
  assert.equal(loopback(origin),origin,'Explicit loopback origin only');
  assert.equal(manifest.origin,origin,'Manifest must identify this endpoint');
@@ -27,8 +27,13 @@ export async function endSyntheticSession({manifestFile,origin,expectedSource,to
  const secret=fs.readFileSync(secretFile,'utf8');assert(secret.length>0);onSecret(secret);
  const call=(route,options={})=>request(origin+route,{...options,redirect:'error',signal:AbortSignal.timeout(15000)});
  const identityResponse=await call('/__feedback-native/identity');assert.equal(identityResponse.status,200,'Owned fixture attestation unavailable');
- assert(isDeepStrictEqual(await identityResponse.json(),{schema:control.schema,instance:control.instance,pid:control.pid,fixture_sha256:control.fixture_sha256,source_sha:expectedSource.sha,cohort:control.cohort,provider_called:false}),'Do not mutate a stale or different listener');
+ assert(isDeepStrictEqual(await identityResponse.json(),{schema:control.schema,instance:control.instance,pid:control.pid,fixture_sha256:control.fixture_sha256,source_sha:expectedSource.sha,cohort:control.cohort,provider_called:false,...(manifest.scripted?{scripted_origin:manifest.scripted.origin,scripted_mode:manifest.scripted.mode,scripted_module_sha256:manifest.scripted.source_sha256}:{})}),'Do not mutate a stale or different listener');
  onProgress({phase:'owned_fixture_identity_verified',source_sha:expectedSource.sha,fixture_sha256:control.fixture_sha256});
+ return {manifest,control,secret,call};
+}
+export async function endSyntheticSession(options){
+ const {token,onProgress=()=>{},expectedSource}=options;
+ const {control,call,secret}=await openSyntheticControl(options);
  const auth={authorization:'Bearer '+token};
  assert.equal((await call('/v1/profile',{headers:auth})).status,200,'Existing A credential must be valid before session shutdown');
  onProgress({phase:'existing_a_profile_validated',status:200});
@@ -43,4 +48,27 @@ export async function endSyntheticSession({manifestFile,origin,expectedSource,to
  assert.equal(uiFailure.reason,'forbidden','Current App must classify the actual profile denial');
  onProgress({phase:'existing_a_profile_denied',status:403,error_type:error.type});
  return {session_ended:true,jwt_expiry:'NOT_RUN',canonical_delete_status:200,profile_after_status:403,error_type:error.type,friendly:error.message,ui_friendly:uiFailure.friendly,ui_failure_reason:uiFailure.reason,source_sha:expectedSource.sha,fixture_sha256:control.fixture_sha256,provider_dispatch:false};
+}
+
+export async function scriptedState(options){
+ const {manifest}=await openSyntheticControl(options);assert.equal(manifest.scripted?.schema,'hps-native-scripted-upstream/1');
+ const origin=loopback(manifest.scripted.origin);assert.equal(origin,manifest.scripted.origin);
+ return (await fetch(origin+'/__scripted/state',{redirect:'error',signal:AbortSignal.timeout(5000)})).json();
+}
+export async function releaseScriptedTurn(options,name){
+ assert(['STOP_HOLD','QUIT_HOLD','FILE_HOLD'].includes(name));
+ const {manifest,secret}=await openSyntheticControl(options);assert.equal(manifest.scripted?.schema,'hps-native-scripted-upstream/1');
+ const origin=loopback(manifest.scripted.origin);assert.equal(origin,manifest.scripted.origin);
+ const response=await fetch(origin+'/__scripted/release',{method:'POST',headers:{'x-hps-native-control':secret},body:JSON.stringify({name}),redirect:'error',signal:AbortSignal.timeout(5000)});
+ assert.equal(response.status,200,'Explicit owned fixture cleanup failed; not cancellation evidence');return {cleanup_only:true};
+}
+export async function revokeSyntheticB(options){
+ const {manifest,control,secret,call}=await openSyntheticControl(options),file=path.join(path.dirname(options.manifestFile),'token-b');
+ assert.equal(manifest.token_b_file,file);const token=fs.readFileSync(file,'utf8');options.onSecret?.(token);
+ const auth={authorization:'Bearer '+token};assert.equal((await call('/v1/profile',{headers:auth})).status,200);
+ const payload=JSON.parse(Buffer.from(token.split('.')[0],'base64url').toString('utf8'));
+ assert.equal(payload.c,control.cohort);assert.equal(payload.u,'synthetic-feedback-B');assert(/^[a-f0-9-]{36}$/.test(payload.jti));
+ const response=await call('/admin/tokens/revoke',{method:'POST',headers:{authorization:'Basic '+Buffer.from('admin:'+secret).toString('base64'),'content-type':'application/json'},body:JSON.stringify({jti:payload.jti,cohort:control.cohort,exp:payload.exp,reason:'synthetic native invalid-credential check'})});assert.equal(response.status,200);
+ const denied=await call('/v1/profile',{headers:auth});assert.equal(denied.status,401);const error=(await denied.json()).error;assert.equal(error.code,'revoked');
+ return {before:200,after:401,error_code:'revoked',ui_friendly:classifyProfileFailure(401,JSON.stringify({error})).friendly,provider_called:false};
 }
