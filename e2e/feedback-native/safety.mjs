@@ -103,3 +103,18 @@ export function sdkProtocolProof(config,service,sdk){
  for(const file of ['service.mjs','scripted-upstream.mjs','scripted-sdk-probe.mjs','session-control.mjs'])if(value.fixture_hashes?.[file]!==sha256(fileURLToPath(new URL(file,import.meta.url))))throw Error('Scripted protocol fixture bytes changed');
  return {sha256:proof.sha256,protocol:value.protocol_readiness,cancellation:value.cancellation_verdict,provider_called:false};
 }
+
+// Final cleanup is separate from normal-quit/restart acceptance. Never force-kill
+// or report a stopped process from a successful signal request alone.
+export async function stopOwnedCandidate({config,child,waitExit,waitCdpDown}){
+ if(config.attach||!child||!Number.isSafeInteger(child.pid)||child.pid<=1)throw Error('Cleanup requires the exact owned child');
+ const proof={pid:child.pid,stop_requested:false,child_exit_observed:false,cdp_down:false,status:'FAIL'};
+ try{
+  if(child.exitCode===null&&child.signalCode===null){proof.stop_requested=child.kill()===true;if(!proof.stop_requested)throw Error('Owned child stop request refused');}
+  await waitExit(child);
+  if(child.exitCode===null&&child.signalCode===null)throw Error('Owned child exit not observed');
+  proof.child_exit_observed=true;proof.exit_code=child.exitCode;proof.signal_code=child.signalCode;
+  await waitCdpDown();proof.cdp_down=true;proof.status='PASS';
+ }catch(error){proof.error=error.message;}
+ return proof;
+}

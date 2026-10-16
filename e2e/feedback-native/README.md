@@ -340,8 +340,99 @@ records `pending_marker_consumption: NOT_OBSERVED`: UI preservation does not
 expose the transient global memento. Existing actual-module controls separately
 cover destination-bound one-shot consumption, stale/expired markers, delayed
 restore, symlink/Korean paths and the 61-second acceptance boundary. Actual native
-slow activation and the expiry notification remain separate unobserved conditions;
-no ten-minute wait, seeded app state or product test backdoor is added.
+slow activation and the expiry notification remain separate unobserved conditions
+in that ordinary scenario. Its simultaneous-window path adds no ten-minute wait,
+seeded app state or product test backdoor.
+
+### Optional hosted delayed activation and real expiry (#1725)
+
+`HPS_NATIVE_DELAYED_RESUME=1` on the dedicated `hosted.mjs` execution step adds
+one scenario before final synthetic-session shutdown. It defaults off, refuses
+attach/local/in-memory credential modes, and adds no provider or SDK query.
+Keep the existing18 checks and the source-bound actual-Service fixture. Root's
+workflow must allow35 minutes; this mode adds roughly12–15 minutes per OS.
+Do not set the option on background-control steps or launch a local desktop.
+
+The scenario normally quits the owned candidate, observes its exit/CDP shutdown,
+and relaunches the same profile with public `--inspect-brk-extensions=9788`.
+An occupied/fallback/unowned inspector port refuses. Mac listener PID plus process
+ancestry comes from `lsof`/`ps`; Windows uses `Get-NetTCPConnection`/`Get-CimInstance`.
+The Node inspector must return the same PID. Initial startup is released promptly,
+not held through the shell's60s connection/initialization deadlines.
+
+The gate sets a pending breakpoint at the verified candidate bundle statement
+immediately before `consumeActivityResume`, after `activationRoot` exists. It
+requires one recognizable call, exact loaded source hash, exact script/location,
+new owned extension-host PID and the expected root scalar. The only inspector
+evaluations read `process.pid` and local `activationRoot`; arbitrary expressions,
+product-function calls, clocks, mementos and credential reads are not allowed.
+The post-initialization ordering is source evidence; IPC packets are not intercepted.
+
+Actual Start → folder picker → current-activity confirmation creates each marker
+and binding through production code. Three fresh owned destinations E/F/G test
+2s propagation,61s valid draft checkpoint import, then610s real expiry. Each phase
+must pass before the next starts. Wall and monotonic elapsed time are recorded;
+the hold is not shortened or replaced by a Service HTTP delay. A first failure
+retains partial evidence and stops further native input. Bindings/files are hashed
+while paused before consumption and compared before explicit saved-activity
+recovery. After that public entry transaction, the same physical root, binding
+path, Service/activity identity and files must remain; only a well-formed
+credential reference may rotate through the existing commit path. The expiry case requires
+the exact existing Korean notification, actual Start, no automatically resumed
+chat or `/v1/profile` connection, then explicit saved-activity recovery without code
+entry. The discarded checkpoint draft must remain absent in the fresh destination.
+Each successful phase returns through public File Open Folder to A. Successful
+completion closes the debugger, normally restarts without inspector flags and
+restores the original draft for the ordinary final session check.
+
+Progress persists at most15s apart during holds, including script/PID/breakpoint,
+durations, notification screenshots, request-count metadata and preservation
+hashes. It never dumps debugger scopes/protocol bodies. Only verified gate pauses
+are resumed. Breakpoints and sockets close before public quit; cleanup failure
+cannot pass and does not replace the primary error. A final owned-child stop request is cleanup only; it is never restart evidence.
+Final cleanup records child exit and CDP connection refusal separately, with a 10s
+exit wait and 5s endpoint wait (plus an in-flight bounded probe). A sent signal
+alone cannot set `owned_process_stopped`; timeout remains FAIL. No force-kill or
+unrelated handle/process sweep is used. `extension-inspector.test.mjs` uses disposable Node children for
+protocol/PID/replacement/cleanup controls, not a native App or T05 acceptance pass.
+Actual hosted0.1.56 propagation and long-held behavior remain NOT RUN until root
+executes this exact candidate. The existing ordinary native proof stays separate.
+
+
+T07 closes each of its newly created untouched Untitled skill-preview editors
+through the public **View: Revert and Close Editor** command. Before the command,
+the preview must be the exact newly observed focused resource with unchanged
+rendered content; all other editor resources must match the prior snapshot and
+no foreign dirty editor may exist. Cleanup refuses rather than answering a
+blanket save/discard dialog. T05 also refuses to begin with dirty editors. Saved
+user files, activity drafts, skill storage and history are not rewritten by this
+cleanup; native preservation checks remain required.
+
+Inspector breakpoint URLs admit only literal/percent-encoded spellings generated
+from the exact trusted file path, with existing drive-letter case equivalence.
+At pause, raw URL validation rejects authority, query/fragment, encoded path
+separators, dot segments and ambiguous second decoding. Decoded path equality,
+physical regular-file identity, loaded-source SHA, owned PID, exact statement and
+destination root are still mandatory. Directory case is not relaxed. Portable
+Windows URL controls and actual owned Node controls on Mac are background proof;
+Windows inspector/native execution and the complete T05 holds still require the
+exact candidate's hosted run. The prior raw Windows URL spelling remains unknown;
+this change does not claim a specific encoding was observed.
+
+
+Ownership refusal diagnostics retain only bounded numeric listener/parent chains,
+sampling timestamps, the declared phase and previous verified host PID. One
+immediate read-only resample (at most 1.5s per platform command) is diagnostic only:
+even if it now shows a valid owned host or no listener, the original refusal
+still stops the gate. No retry, attach, resume, deadline or ownership rule changes.
+This distinguishes lifecycle sampling gaps from a stable foreign listener on a
+future run; it does not assign a cause to an earlier unrecorded rejecting PID.
+
+Windows physical-path comparison also permits drive-letter spelling only: Node
+realpath can return lowercase `d:` for the same pinned uppercase `D:` path. The
+remaining returned physical path bytes, regular-file/non-symlink checks, loaded
+source SHA, owned listener PID and destination root remain exact. This addresses
+the observed 96c864 Windows physical-path refusal; actual hosted proof is pending.
 
 ## Provider-free render-feedback transport proof
 
@@ -373,3 +464,9 @@ denied and recorded. Renderer network interception allows only the owned HTML.
 ```bash
 HPS_SERVICE_SOURCE=/absolute/clean-service HPS_SERVICE_SHA=FULL_SHA node e2e/feedback-native/render-feedback-probe.mjs /absolute/new-evidence /absolute/verified-claude /absolute/frozen-candidate.html
 ```
+
+When the configured scripted history chain has not passed, delayed activation
+is BLOCKED before inspector or UI admission and preserves the earlier state.
+Focus-readiness diagnostics record only the first and terminal owned-target DOM
+sample; they never focus, retry or extend the original deadline. Error categories
+are allowlisted, and returned sampling failures omit original error text.

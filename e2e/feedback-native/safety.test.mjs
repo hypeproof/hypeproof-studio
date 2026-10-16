@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {loopback,validateConfig,assertNoBackdoors,sanitize,candidateProof,sha256,foregroundAllowed,sourceSnapshot} from './safety.mjs';
+import {loopback,validateConfig,assertNoBackdoors,sanitize,candidateProof,sha256,foregroundAllowed,sourceSnapshot,stopOwnedCandidate} from './safety.mjs';
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'feedback-native-safety-'));
 process.on('exit',()=>fs.rmSync(tmp,{recursive:true,force:true}));
 const config=()=>({schema:'hps-feedback-native/1',candidate:{app:path.join(tmp,'app'),receipt:path.join(tmp,'receipt.json')},service:{origin:'http://127.0.0.1:8787',manifest:path.join(tmp,'service.json'),tokenAFile:path.join(tmp,'token')},workspace:{a:path.join(tmp,'a'),b:path.join(tmp,'b')},userDataDir:path.join(tmp,'data'),evidence:path.join(tmp,'evidence'),secretStorage:'inmemory'});
@@ -103,4 +103,17 @@ test('scripted history requires owned isolated fresh D; attach, missing and link
  assert.throws(()=>validateConfig({...c,attach:true}),/owned fresh D/);assert.throws(()=>validateConfig({...c,workspace:{...c.workspace,d:undefined}}),/owned fresh D/);
  const linked=path.join(dir,'linked');fs.symlinkSync(c.workspace.a,linked,process.platform==='win32'?'junction':'dir');assert.throws(()=>validateConfig({...c,workspace:{...c.workspace,d:linked}}),/including linked/);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('final cleanup observes child exit and CDP refusal, never equates signal request with success',async()=>{
+ let stops=0;const child={pid:123,exitCode:null,signalCode:null,kill(){stops++;return true;}};
+ const proof=await stopOwnedCandidate({config:{attach:false},child,waitExit:async owned=>{owned.signalCode='SIGTERM';},waitCdpDown:async()=>{}});
+ assert.equal(stops,1);assert.equal(proof.status,'PASS');assert(proof.child_exit_observed&&proof.cdp_down);assert.equal(proof.signal_code,'SIGTERM');
+ for(const failAt of ['exit','cdp']){
+  const owned={pid:124,exitCode:null,signalCode:null,kill(){stops++;return true;}};
+  const value=await stopOwnedCandidate({config:{},child:owned,waitExit:async()=>{if(failAt==='exit')throw Error('bounded exit timeout');owned.signalCode='SIGTERM';},waitCdpDown:async()=>{throw Error('CDP still alive');}});
+  assert.equal(value.status,'FAIL');assert.equal(value.child_exit_observed,failAt==='cdp');assert.equal(value.cdp_down,false);
+ }
+ const previous=stops;await assert.rejects(stopOwnedCandidate({config:{attach:true},child}),/exact owned child/);assert.equal(stops,previous);
+ const unobserved=await stopOwnedCandidate({config:{},child:{pid:125,exitCode:null,signalCode:null,kill:()=>true},waitExit:async()=>{},waitCdpDown:async()=>{throw Error('must not probe');}});assert.match(unobserved.error,/exit not observed/);assert.equal(unobserved.child_exit_observed,false);
 });

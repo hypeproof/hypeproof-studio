@@ -1531,6 +1531,18 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/initial-surface.smoke.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.test.mjs"
         }
       ]
     },
@@ -5548,6 +5560,18 @@
         },
         {
           "path": "e2e/feedback-native/native-windows.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.test.mjs"
         },
         {
           "path": "e2e/feedback-native/headless-cdp.mjs"
