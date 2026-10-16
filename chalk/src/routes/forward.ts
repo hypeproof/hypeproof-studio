@@ -60,7 +60,10 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
 
   let upstream: Response;
   try {
-    upstream = await fetch(target, { method, headers, body, redirect: "error", signal: AbortSignal.timeout(8_000) });
+    // workerd rejects redirect: "error" (it throws before sending), so take
+    // "manual" and refuse any 3xx ourselves.
+    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(8_000) });
+    if (upstream.status >= 300 && upstream.status < 400) throw new Error(`upstream redirect ${upstream.status}`);
   } catch (err) {
     console.error(`[${rid}] forward to ${origin} failed:`, err);
     return c.json(

@@ -191,7 +191,9 @@ async function api(path, opts) {
     headers: { "Authorization": "Bearer " + issuer, "content-type": "application/json", ...(opts && opts.headers) },
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || ("HTTP " + res.status));
+  // Chalk's own upstream errors are objects ({type, message}); show the message, not [object Object].
+  const e = body.error;
+  if (!res.ok) throw new Error((typeof e === "string" ? e : e && e.message) || ("HTTP " + res.status));
   return body;
 }
 
