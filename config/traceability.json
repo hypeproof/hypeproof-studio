@@ -5368,6 +5368,36 @@
         },
         {
           "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": ".github/workflows/feedback-candidate.yml"
+        },
+        {
+          "path": "e2e/feedback-native/README.md"
+        },
+        {
+          "path": "e2e/feedback-native/hosted.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-ui.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-ui.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/prepare-config.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/safety.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/safety.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/service.mjs"
         }
       ]
     }

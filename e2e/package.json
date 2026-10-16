@@ -44,7 +44,8 @@
     "test:reference-design": "node --experimental-strip-types reference-design/run.mjs",
     "test:image-edit": "node --experimental-strip-types image-edit/compare.mjs",
     "test:owner-console": "node --experimental-strip-types --experimental-sqlite owner-console/run.mjs",
-    "test:feedback-report": "node feedback-report/run.mjs"
+    "test:feedback-report": "node feedback-report/run.mjs",
+    "test:feedback-native:guards": "node --test feedback-native/*.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

@@ -1,5 +1,10 @@
 name: Feedback native candidate (dedicated desktop)
 on:
+  pull_request:
+    paths:
+      - 'e2e/feedback-native/**'
+      - '.github/workflows/feedback-candidate.yml'
+      - 'scripts/studio-dev.py'
   workflow_dispatch:
     inputs:
       public_app_tag:
@@ -25,6 +30,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24.4.1'
@@ -57,7 +64,7 @@ jobs:
           npm ci --prefix extensions/hypeproof-chat/webview-ui
           npm ci --prefix feedback-service/worker
       - name: Run background-safe harness regressions
-        run: node --test e2e/feedback-native/safety.test.mjs
+        run: node --test e2e/feedback-native/*.test.mjs
       - name: Prepared candidate on dedicated hosted desktop
         shell: bash
         env:
