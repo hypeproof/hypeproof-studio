@@ -44,3 +44,32 @@ readiness is separate from cancellation verdict; missing upstream propagation
 fails the cancellation check. Service #111 addresses the observed d2d48f
 stream-cancel limitation. Existing r2 protocol PASS and r3/r4 limitations remain
 immutable; no local fixture result substitutes for native history persistence.
+
+## External instruction permission probe
+
+```bash
+HPS_SERVICE_SOURCE=/absolute/clean-pinned-service HPS_SERVICE_SHA=FULL_SHA node e2e/feedback-native/external-policy-probe.mjs /absolute/new-evidence /absolute/verified-sdk-binary
+```
+
+This background-only command uses the actual immutable instruction downloader
+and workspace store with owned synthetic GitHub responses. It previews an
+inactive snapshot, selects hostile text, and sends that selection through the
+actual sdkCoach, verified SDK binary and pinned Service. Its explicit
+`--scripted-policy` fixture mode emits seven tool calls. It keeps the same
+12-attempt and 4096-output limits; no arbitrary upstream URL is accepted.
+
+An in-workspace Read is the positive control. Private-fixture and other-workspace
+Reads, a symlink escape, and a new file Write outside the active workspace must
+fail. Destructive shell deletion of an owned canary must respect denied user
+approval. Agent delegation is absent from the actual profile and must fail;
+the report distinguishes SDK unavailable-tool refusal from Studio callbacks.
+The profile permits harmless shell commands, so echo is not a denial control.
+Actual tool results and before/after file hashes establish outcomes even when
+the SDK allows safe reads without calling Studio. All protected files must
+remain unchanged and the external selection must be removable.
+
+This is a real SDK permission-path check using deterministic upstream tool calls,
+not a claim about vendor-model resistance to malicious instructions. It never
+reads real SecretStorage or private user files. All negative targets are owned
+temporary fixtures; source, fixture, SDK and binary hashes accompany the receipt.
+Native UI and production are outside this command's evidence scope.

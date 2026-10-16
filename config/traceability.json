@@ -5227,6 +5227,12 @@
         },
         {
           "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/external-policy-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/policy-protocol.mjs"
         }
       ]
     },
