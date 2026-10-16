@@ -1,7 +1,7 @@
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
-import { initializeFilesLayout, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
+import { initializeFilesLayout, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -59,6 +59,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Reset a folder's restored sidebar before network-dependent activity restoration.
   // The explicit file-view actions can open Explorer once the learner asks for it.
   await initializeFilesLayout(command => vscode.commands.executeCommand(command));
+  await closeRestoredBrowserTabs(vscode.window.browserTabs ?? []);
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,

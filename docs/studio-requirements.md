@@ -887,6 +887,10 @@ credential/history/draft stores. `initializeFilesLayout` closes the primary side
 on every launch and workspace activation, before remote activity restoration.
 Explorer opens when the user explicitly chooses the existing file-view action;
 project changes and restarts start closed even if that workspace saved it open.
+Native integrated-browser preview tabs restored from the previous session are
+closed before activity restoration. Only that startup snapshot is closed; later
+preview requests remain open. Ordinary file/chat restoration and external
+browser applications are unaffected. A failed tab close does not block startup.
 Chat focus waits for initial activity restoration, reveals the existing editor
 chat and explicitly returns the caret to its existing composer. The focus request
 is bound to that activity and is cancelled when the composer unmounts or changes

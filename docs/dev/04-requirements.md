@@ -241,6 +241,8 @@ gates remain separate.
 FB-01/02 refine `ST-REQ-UNIFIED` / US-03/07–10/12/18 and the existing activity
 binding design (ADR 0008): each launch and workspace activation starts with
 Explorer closed; the explicit file-view action opens it for that session.
+Restored native browser previews also start closed; later preview requests remain
+available, and normal document/chat restoration is preserved.
 Controlled folder changes use the
 existing destination-bound activity connection and one-shot resume checkpoint.
 `studioNavigation.ts`, `activityConnections.ts` and `workspaceRouting.ts` own
