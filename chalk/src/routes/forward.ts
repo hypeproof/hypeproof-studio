@@ -17,7 +17,7 @@
 // the Service's admin middleware trusts, is NEVER forwarded.
 
 import type { Context } from "hono";
-import { resolveChalkVersion, resolveServiceOrigin, type ChalkEnv } from "../env.ts";
+import { resolveChalkVersion, resolveLabOrigin, resolveServiceOrigin, type ChalkEnv } from "../env.ts";
 import { isIssuerAllowedEndpoint } from "../shared.ts";
 
 type Ctx = Context<{ Bindings: ChalkEnv; Variables: { requestId: string } }>;
@@ -30,7 +30,10 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   // #1013 adds `response`: the learner's revise/keep/hold after a person's feedback (the Service answers 404 while it is off).
   const studentShare = (method === 'GET' && /^\/v1\/classroom\/shares(?:\/[^/]+\/audit)?$/.test(url.pathname)) || (method === 'POST' && /^\/v1\/classroom\/shares(?:\/[^/]+\/(?:confirm|response))?$/.test(url.pathname)) || (method === 'DELETE' && /^\/v1\/classroom\/shares\/[^/]+$/.test(url.pathname));
   const studentProfile = method === 'GET' && url.pathname === '/v1/profile';
-  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile) {
+  // Lab registers this batch in the participant distribution board; the Service
+  // still authorizes, rosters and signs every student token behind that adapter.
+  const distribution = method === 'POST' && url.pathname === '/workshop/boa-tokens';
+  if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
       404,
@@ -44,8 +47,8 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
     );
   }
 
-  const origin = resolveServiceOrigin(c.env);
-  const target = `${origin}${url.pathname}${url.search}`;
+  const origin = distribution ? resolveLabOrigin(c.env) : resolveServiceOrigin(c.env);
+  const target = distribution ? `${origin}/api/workshop/boa-tokens` : `${origin}${url.pathname}${url.search}`;
   const headers = new Headers({ authorization: auth.trim() });
   const ct = c.req.header("content-type");
   if (ct) headers.set("content-type", ct);
@@ -62,12 +65,14 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   try {
     // workerd rejects redirect: "error" (it throws before sending), so take
     // "manual" and refuse any 3xx ourselves.
-    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(8_000) });
+    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(distribution ? 60_000 : 8_000) });
     if (upstream.status >= 300 && upstream.status < 400) throw new Error(`upstream redirect ${upstream.status}`);
   } catch (err) {
-    console.error(`[${rid}] forward to ${origin} failed:`, err);
+    console.error(`[${rid}] forward to ${origin} failed:`, err instanceof Error ? err.name : 'upstream error');
     return c.json(
-      { error: { type: "upstream", message: "service unreachable — instructor write not applied", request_id: rid } },
+      { error: { type: "upstream", message: distribution
+        ? "배부 결과를 확인하지 못했습니다. 내 토큰 받기 보드를 먼저 확인하고, 표시되지 않으면 강사에게 문의하세요."
+        : "service unreachable — instructor write not applied", request_id: rid } },
       502,
     );
   }
