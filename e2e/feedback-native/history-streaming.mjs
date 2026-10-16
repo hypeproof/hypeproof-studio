@@ -12,6 +12,9 @@ export function historyMarkers(rows){
 export function assertCompletedHistory(rows,names){
  const counts=historyMarkers(rows);for(const name of ['STOP_HOLD','QUIT_HOLD','FILE_HOLD']){assert.equal(counts[name].user,0,'Interrupted turn user must not be replayed into persisted history '+name);assert.equal(counts[name].assistant,0,'Interrupted assistant must not be committed '+name);}for(const name of ['A1','D2']){const expected=names.includes(name)?1:0;assert.equal(counts[name].user,expected,'Exact persisted user occurrence '+name);assert.equal(counts[name].assistant,expected,'Exact persisted assistant occurrence '+name);}return counts;
 }
+export async function awaitUpstreamClosure(read,serviceSeq,timeout=10000){
+ return waitFor(async()=>{const state=await read();return state.rows.find(row=>row.service_seq===serviceSeq&&row.client_closed===true&&row.state==='upstream_socket_closed'&&!row.fixture_finish);},'exact upstream socket closure before fixture cleanup',timeout);
+}
 export async function runHistoryStreaming(ctx){
  const {c,ui,step,report,draft,start,focusChat,readDraft,nativeOpenBoundFolder,workspaceFiles,save,control,restart}=ctx;
  const passed=id=>report.tests.some(t=>t.id===id&&t.status==='PASS');
@@ -28,11 +31,19 @@ export async function runHistoryStreaming(ctx){
  const finishHeld=async(name)=>{
   const upstream=(await bound()).rows.find(r=>r.marker===name);assert(upstream,'Actual held upstream required');
   const linked=async()=>{const response=await fetch(c.service.origin+'/__feedback-native/requests',{redirect:'error',signal:AbortSignal.timeout(5000)});assert.equal(response.status,200);return response.json();};
-  const serviceRow=await waitFor(async()=>{const value=await linked();assert.equal(value.provider_called,false);assert.equal(value.blocked_outbound,0);return value.calls.find(r=>r.seq===upstream.service_seq&&r.client_closed&&r.service_body_cancelled);},'exact client disconnect and Service body cancellation',10000);
-  const observed=(await bound()).rows.find(r=>r.service_seq===upstream.service_seq);
-  const layers={marker:name,service_seq:upstream.service_seq,service_request_id:serviceRow.request_id,usage_request_id:serviceRow.usage_request_id,request_class:serviceRow.request_class,client_disconnected:true,service_body_cancelled:true,upstream_socket_closed:observed.client_closed===true,upstream_cancel:observed.client_closed?'OBSERVED':'NOT_PROPAGATED',cleanup_is_not_cancel_proof:true};
+  let serviceRow,observed,failure;
+  try{
+   serviceRow=await waitFor(async()=>{const value=await linked();assert.equal(value.provider_called,false);assert.equal(value.blocked_outbound,0);return value.calls.find(r=>r.seq===upstream.service_seq&&r.client_closed&&r.service_body_cancelled);},'exact client disconnect and Service body cancellation',10000);
+   observed=await awaitUpstreamClosure(bound,upstream.service_seq);
+  }catch(error){failure=error;observed=(await bound()).rows.find(r=>r.service_seq===upstream.service_seq);}
+  const layers={marker:name,service_seq:upstream.service_seq,service_request_id:serviceRow?.request_id??null,usage_request_id:serviceRow?.usage_request_id??null,request_class:serviceRow?.request_class??null,client_disconnected:serviceRow?.client_closed===true,service_body_cancelled:serviceRow?.service_body_cancelled===true,upstream_socket_closed:observed?.client_closed===true&&observed.state==='upstream_socket_closed'&&!observed.fixture_finish,upstream_cancel:failure?'NOT_PROPAGATED':'OBSERVED',cleanup_is_not_cancel_proof:true};
   (report.cancellation_layers??=[]).push(layers);save();
-  if(!observed.client_closed)await releaseScriptedTurn(control,name);
+  try{
+   if(failure)throw failure;
+   assert(layers.client_disconnected&&layers.service_body_cancelled&&layers.upstream_socket_closed,'All exact linked cancellation layers must be observed');
+  }finally{
+   if(!layers.upstream_socket_closed)try{await releaseScriptedTurn(control,name);}catch(error){layers.cleanup_error=error.message;save();}
+  }
   return layers;
  };
  await step('T03-native-scripted-history-persistence',async()=>{

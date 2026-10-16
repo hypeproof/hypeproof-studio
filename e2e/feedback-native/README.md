@@ -284,10 +284,14 @@ ceiling including auxiliary/count_tokens/retries. Exhaustion remains explicit;
 no activity reissue/reset or model fallback is a successful substitute.
 
 Rendered user/assistant marker occurrences must be exact after actual reload;
-interrupted turns must not reappear as committed history. Native unsent drafts
+interrupted turns must not reappear as committed history. This checks the existing
+`chatPanelProvider.ts` `!ctrl.signal.aborted` guard around `appendHistory` (and its
+explicit truncated-turn comment), not a requirement to hide arbitrary transcripts. Native unsent drafts
 must survive, and ten-second restored-idle observation windows must show no new
 generation. The Service and scripted listener separately report client close,
-response-reader cancellation and upstream socket closure; cleanup is never PASS.
+response-reader cancellation and exact linked upstream socket closure, with a
+bounded wait before cleanup. Missing propagation fails its native step; cleanup
+is never PASS.
 SDK onDelta before a completed assistant block is not assumed or fabricated.
 Existing B is canonically revoked last, and actual opening C must refuse automatic
 admission without new generation or binding/file changes. A returns with its
