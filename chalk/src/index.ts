@@ -76,6 +76,7 @@ app.get("/sharing", () => page(sharingHtml));
 app.get('/learn', () => page(learnHtml));
 app.get('/v1/profile', forwardInstructorWrite);
 app.post('/workshop/boa-tokens', forwardInstructorWrite);
+app.get('/workshop/boa-tokens', forwardInstructorWrite);
 app.all("/v1/classroom/*", forwardInstructorWrite);
 
 app.route("/admin", state);

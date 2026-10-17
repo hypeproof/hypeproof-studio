@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import '@hypeproof/service-testkit/test/harness/loader.mjs';
 const { default: chalk } = await import('../src/index.ts');
 
-const batch = { cohort: 'boah-dental-2026-1017', profile: 'boah-dental-2026-1017-s1', users: ['first', 'second'], hours: 12 };
+const batch = { cohort: 'workshop-a', profile: 'workshop-a-activity', users: ['first', 'second'], hours: 12 };
 const result = { results: [{ handle: 'first', token: 'student-only' }], board: { code: 'NAMED2', total: 1 } };
 const send = (headers = {}, env = {}) => chalk.fetch(new Request('https://chalk.test/workshop/boa-tokens', {
   method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(batch),
@@ -43,6 +43,24 @@ test('missing/Basic credentials never reach Lab; Lab scope rejection is preserve
     assert.equal(denied.status, 403);
     assert.deepEqual(await denied.json(), { error: 'not scoped' });
     assert.equal(calls, 1);
+  } finally { globalThis.fetch = previous; }
+});
+
+test('routing metadata passes through without sending issuer credentials to Lab', async () => {
+  const previous = globalThis.fetch;
+  const routing = { targets: [{ cohort: batch.cohort, profiles: [batch.profile] }] };
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, 'https://hypeproof-ai.xyz/api/workshop/boa-tokens');
+    assert.equal(init.method, 'GET');
+    assert.equal(init.headers.get('authorization'), null);
+    assert.equal(init.body, undefined);
+    return Response.json(routing);
+  };
+  try {
+    const r = await chalk.fetch(new Request('https://chalk.test/workshop/boa-tokens', {
+      headers: { authorization: 'Bearer private-issuer' },
+    }), { ENVIRONMENT: 'production' }, {});
+    assert.deepEqual(await r.json(), routing);
   } finally { globalThis.fetch = previous; }
 });
 

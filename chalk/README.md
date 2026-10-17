@@ -50,9 +50,11 @@ version before and after.
 
 ## BOA token distribution
 
-For the `boah-dental-2026-1017` workshop, console batch issuance must publish the
+For the workshop identified by Lab's public routing metadata, console issuance must publish the
 same student credentials on Lab's `/live/boa` participant board (BOA-DIST-01).
-Chalk forwards `POST /workshop/boa-tokens` server-side to the fixed Lab
+Chalk discovers eligible cohort/profile pairs with `GET /workshop/boa-tokens`,
+without forwarding issuer credentials on that public metadata read. It forwards
+`POST /workshop/boa-tokens` server-side to the fixed Lab
 `POST /api/workshop/boa-tokens` endpoint with the instructor Bearer. Lab owns
 temporary board registration; Service retains issuer authorization, roster and
 token signatures. Other cohorts keep the existing Service-only issuance path.

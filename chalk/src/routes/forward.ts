@@ -32,7 +32,7 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   const studentProfile = method === 'GET' && url.pathname === '/v1/profile';
   // Lab registers this batch in the participant distribution board; the Service
   // still authorizes, rosters and signs every student token behind that adapter.
-  const distribution = method === 'POST' && url.pathname === '/workshop/boa-tokens';
+  const distribution = (method === 'POST' || method === 'GET') && url.pathname === '/workshop/boa-tokens';
   if (!isIssuerAllowedEndpoint(url.pathname, method) && !studentShare && !studentProfile && !distribution) {
     return c.json(
       { error: { type: "not_found", message: "not an instructor endpoint", request_id: rid, path: url.pathname } },
@@ -49,7 +49,8 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
 
   const origin = distribution ? resolveLabOrigin(c.env) : resolveServiceOrigin(c.env);
   const target = distribution ? `${origin}/api/workshop/boa-tokens` : `${origin}${url.pathname}${url.search}`;
-  const headers = new Headers({ authorization: auth.trim() });
+  // Public routing metadata needs no instructor credential at the Lab origin.
+  const headers = new Headers(distribution && method === 'GET' ? {} : { authorization: auth.trim() });
   const ct = c.req.header("content-type");
   if (ct) headers.set("content-type", ct);
   headers.set("x-hps-forwarded-by", `chalk/${resolveChalkVersion(c.env)}`);
@@ -65,7 +66,7 @@ export async function forwardInstructorWrite(c: Ctx): Promise<Response> {
   try {
     // workerd rejects redirect: "error" (it throws before sending), so take
     // "manual" and refuse any 3xx ourselves.
-    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(distribution ? 60_000 : 8_000) });
+    upstream = await fetch(target, { method, headers, body, redirect: "manual", signal: AbortSignal.timeout(distribution && method === 'POST' ? 60_000 : 8_000) });
     if (upstream.status >= 300 && upstream.status < 400) throw new Error(`upstream redirect ${upstream.status}`);
   } catch (err) {
     console.error(`[${rid}] forward to ${origin} failed:`, err instanceof Error ? err.name : 'upstream error');

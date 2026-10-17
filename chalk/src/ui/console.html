@@ -183,6 +183,7 @@ $("forget").onclick = () => {
 };
 
 let countdownTimer = null;
+let distributionTargets = [];
 
 async function api(path, opts) {
   const issuer = sanitizeToken($("issuer").value);
@@ -227,6 +228,16 @@ async function load() {
     esc(payload.u || "강사") + ' · 토큰 유효: ' + esc(new Date(expMs).toLocaleDateString()) + '까지' +
     (daysLeft <= 7 ? ' — <b>만료 ' + daysLeft + '일 전!</b> 미리 Jay에게 재발급 요청해두세요.' : '') + '</div>';
 
+  distributionTargets = [];
+  try {
+    const routing = await api('/workshop/boa-tokens', { method: 'GET' });
+    if (!Array.isArray(routing.targets) || routing.targets.some((target) =>
+      !target || typeof target.cohort !== 'string' || !Array.isArray(target.profiles) ||
+      target.profiles.some((id) => typeof id !== 'string'))) throw new Error('배부 설정 형식이 올바르지 않습니다.');
+    distributionTargets = routing.targets;
+  } catch {
+    banner.innerHTML += '<div class="banner warn">공개 배부 보드 설정을 확인하지 못했습니다. 이번 발급 결과는 보드에 자동 게시되지 않으므로 학생에게 직접 전달하세요.</div>';
+  }
   for (const scope of payload.scopes || []) renderCohort(scope);
 }
 
@@ -351,7 +362,7 @@ function renderMinter(scope, state) {
     out.innerHTML = "";
     if (!users.length) return (out.innerHTML = '<div class="banner err">참가자 handle을 한 줄에 한 명씩 입력해주세요.</div>');
     btn.disabled = true;
-    const publishesToBoa = scope.cohort === "boah-dental-2026-1017";
+    const publishesToBoa = distributionTargets.some((target) => target.cohort === scope.cohort && target.profiles.includes(p));
     let results = [];
     let boardNotice = "";
     if (publishesToBoa) {
