@@ -64,8 +64,9 @@ Issuer credentials must never enter participant HTML, board responses or links
 initially empty input and no credential persistence/restoration. Chalk retains its
 existing tab-scoped instructor session. Failed or uncertain distribution must be
 reported without claiming successful publication or that no token was issued
-(BOA-DIST-03). A successful named batch replaces the public board only after its
-slots are stored; individual issuance failures and board errors stay visible.
+(BOA-DIST-03). Named batches join the track's existing board, preserving other
+students' seats and claims. Reissuing one handle replaces only that seat's token
+and clears that claim; individual issuance failures and board errors stay visible.
 
 Transport tests cover authorization, header filtering, fixed production origin,
 Service/Lab errors and redirects. Cross-product browser acceptance uses actual
