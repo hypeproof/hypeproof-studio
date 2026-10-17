@@ -5607,6 +5607,59 @@
           "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-BOA-DISTRIBUTION",
+      "stage": "requirement",
+      "label": "BOA console distribution and private issuer credentials",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CHALK-AUTHORING"
+      ],
+      "sources": [
+        {
+          "path": "chalk/README.md",
+          "section": "## BOA token distribution"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-BOA-DISTRIBUTION",
+      "stage": "implementation",
+      "label": "Chalk bounded Lab distribution transport and console issuance",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-BOA-DISTRIBUTION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/env.ts"
+        },
+        {
+          "path": "chalk/src/index.ts"
+        },
+        {
+          "path": "chalk/src/routes/forward.ts"
+        },
+        {
+          "path": "chalk/src/ui/console.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-BOA-DISTRIBUTION",
+      "stage": "test",
+      "label": "BOA distribution authorization and transport controls",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-BOA-DISTRIBUTION",
+        "ST-IMP-BOA-DISTRIBUTION"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/boa-distribution-forward.test.mjs"
+        }
+      ]
     }
   ]
 }

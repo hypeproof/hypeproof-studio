@@ -4,12 +4,20 @@ export interface ChalkEnv {
   ENVIRONMENT: "production" | "dev";
   HPS_CHALK_VERSION?: string;
   HPS_SERVICE_ORIGIN?: string;
+  /** Local integration tests only. Production distribution always uses Lab. */
+  HPS_LAB_ORIGIN?: string;
   // Server-to-server credential for attesting an Access operator to Service.
   // Never included in App/browser requests or instructor write forwarding.
   HPS_CHALK_SERVICE_SECRET?: string;
 }
 
 export const DEFAULT_SERVICE_ORIGIN = "https://api.hypeproof-ai.xyz";
+
+export function resolveLabOrigin(env: Pick<ChalkEnv, "ENVIRONMENT" | "HPS_LAB_ORIGIN">): string {
+  return env.ENVIRONMENT === "dev" && env.HPS_LAB_ORIGIN?.trim()
+    ? env.HPS_LAB_ORIGIN.trim().replace(/\/+$/, "")
+    : "https://hypeproof-ai.xyz";
+}
 
 export function resolveChalkVersion(env: Pick<ChalkEnv, "HPS_CHALK_VERSION">): string {
   const v = env.HPS_CHALK_VERSION;
