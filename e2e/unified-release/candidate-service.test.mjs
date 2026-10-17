@@ -16,6 +16,7 @@ test('candidate provenance rejects wrong or dirty implementation and hashes exac
     }
     git('add','.');git('commit','-qm','synthetic');
     const pin={repository:'hypeproof/hypeproof-service',sha:git('rev-parse','HEAD')};
+    assert.throws(()=>candidateService(undefined,pin),/Pinned Service checkout is required/);
     const result=candidateService(root,pin);
     assert.equal(result.manifest.commit,pin.sha);assert.match(result.manifest.source_sha256,/^[a-f0-9]{64}$/);
     assert.equal(result.gateway,path.join(root,'worker/test/native-trial-live-server.mjs'));
@@ -49,7 +50,7 @@ test('failure logs remove known provider keys, participant tokens and bearer hea
 test('compatibility and deployment consume one immutable Service pin and do not skip either OS',()=>{
   const root=new URL('../../',import.meta.url);
   const workflow=name=>fs.readFileSync(new URL('.github/workflows/'+name,root),'utf8');
-  for(const name of ['deploy-worker.yml','verify-service-activities.yml']){
+  for(const name of ['deploy-worker.yml','verify-service-activities.yml','verify-unified-release.yml']){
     assert.match(workflow(name),/config\/service-deployment\.json/);
     assert.match(workflow(name),/ref: \$\{\{ steps.service.outputs.sha \}\}/);
   }

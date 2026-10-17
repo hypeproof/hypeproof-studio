@@ -86,6 +86,19 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --prefix e2e
+      - name: Resolve pinned Service source
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+      - name: Install candidate Service dependencies
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
       - name: Download untouched candidate
         shell: bash
         env:
@@ -125,6 +138,7 @@ jobs:
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
         run: |
