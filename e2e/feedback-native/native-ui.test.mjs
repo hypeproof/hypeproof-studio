@@ -319,7 +319,7 @@ test('scoped webview discovery cannot connect to another window iframe even when
 });
 
 function previewCloseFixture(){
- const before={resources:['saved.txt'],dirtyResources:[]};
+ const before={resources:['saved.txt'],dirtyResources:[],resource:'saved.txt',editorLabel:'saved.txt',focused:true};
  const preview={resource:'Untitled-2',resources:['saved.txt','Untitled-2'],editorLabel:'Untitled-2',focused:true,text:'# 외부 지침 스킬 · fixture\nprovenance',dirtyResources:['Untitled-2']};
  return {before,preview};
 }
@@ -519,4 +519,33 @@ test('native shortcuts use portable CDP key identity without platform-mismatched
   assert.equal(events[0].modifiers,modifiers);assert.equal(events[1].modifiers,0);
   assert.deepEqual(events[0].commands,key==='a'&&modifiers===4?['selectAll']:undefined);
  }
+});
+
+ test('preview tab removal is not destination focus readiness and issues no second command',async()=>{
+  const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0,ready=false;
+  ui.editorState=async()=>state;ui.palette=async()=>{commands++;state={...before,focused:false};setTimeout(()=>{state=before;},60);};
+  const result=ui.closeOwnedPreview({},before,preview,500).then(()=>{ready=true;});await new Promise(r=>setTimeout(r,20));assert.equal(ready,false);await result;assert.equal(commands,1);
+ });
+ test('preview restoration refuses foreign editor and expires without more input',async()=>{
+  for(const change of [{focused:false},{resource:'foreign',editorLabel:'foreign'}]){
+   const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0;
+   ui.editorState=async()=>state;ui.palette=async()=>{commands++;state={...before,...change};};
+   await assert.rejects(ui.closeOwnedPreview({},before,preview,10),/Timed out/);assert.equal(commands,1);
+  }
+ });
+ test('chat destination requires the original frame loader and its actual composer focus',async()=>{
+  const ui=new NativeUI('http://127.0.0.1:9777'),identity={workbench:'w',target:'t',frame:'f',loader:'l'};let focused=false;
+  const chat={ownedWorkbenchId:'w',info:{id:'t'},ownedFrameId:'f',ownedLoaderId:'l',evaluate:async()=>focused};ui.frame=async()=>chat;
+  const before={returnTarget:{kind:'chat',identity}};assert.equal(await ui.previewDestinationReady({},before),false);focused=true;assert.equal(await ui.previewDestinationReady({},before),true);
+  chat.ownedLoaderId='replacement';await assert.rejects(ui.previewDestinationReady({},before),/identity changed/);
+ });
+test('preview destination sampling shares one deadline even when a DOM observation hangs',async()=>{
+ const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let closed=false,commands=0;
+ ui.editorState=async()=>closed?new Promise(()=>{}):preview;ui.palette=async()=>{closed=true;commands++;};
+ const start=Date.now();await assert.rejects(ui.closeOwnedPreview({},before,preview,20),/Timed out/);assert(Date.now()-start<300);assert.equal(commands,1);
+});
+test('changed preview destination identity fails immediately without reselect or repeated sampling',async()=>{
+ const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0,samples=0;
+ ui.editorState=async()=>state;ui.palette=async()=>{commands++;state=before;};ui.previewDestinationReady=async()=>{samples++;throw Object.assign(Error('Preview destination identity changed'),{identityChanged:true});};
+ await assert.rejects(ui.closeOwnedPreview({},before,preview),/identity changed/);assert.equal(commands,1);assert.equal(samples,1);
 });

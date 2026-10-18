@@ -277,12 +277,28 @@ export class NativeUI{
   catch(error){record('timeout');throw error;}
  }
  async assertNoDirtyEditors(target){const state=await this.editorState(target??await this.workbench());if(!Array.isArray(state.dirtyResources)||state.dirtyResources.length)throw Error('Unclosed dirty editor prevents owned folder transition');return state;}
- async closeOwnedPreview(target,before,preview){
+ async previewDestinationReady(target,before,observation){
+  if(before.returnTarget?.kind==='chat'){
+   const chat=await this.frame('.hps-input textarea',5000,observation);
+   const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
+   if(JSON.stringify(identity)!==JSON.stringify(before.returnTarget.identity))throw Object.assign(Error('Preview destination identity changed'),{identityChanged:true});
+   return chat.evaluate("document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')",observation);
+  }
+  const state=await this.editorState(target);
+  return !!before.resource&&state.resource===before.resource&&state.focused&&focusedResource(state);
+ }
+ async closeOwnedPreview(target,before,preview,timeout=5000){
   assertOwnedPreviewClose(before,preview,await this.editorState(target));
   // This registered command targets only the verified active editor; no blanket save dialog response.
   await this.palette('View: Revert and Close Editor');
-  await waitFor(async()=>{const state=await this.editorState(target);return !state.resources.includes(preview.resource)&&JSON.stringify([...state.resources].sort())===JSON.stringify([...before.resources].sort())&&Array.isArray(state.dirtyResources)&&state.dirtyResources.length===0;},'only the owned disposable preview closed',5000);
-  return {resource:preview.resource,public_ui_revert_and_close:true,other_editors_preserved:true};
+  const observation=readObservation(timeout,target.info?.id);
+  try{for(;;){
+   const state=await observation.run(()=>this.editorState(target));
+   const closed=!state.resources.includes(preview.resource)&&JSON.stringify([...state.resources].sort())===JSON.stringify([...before.resources].sort())&&Array.isArray(state.dirtyResources)&&state.dirtyResources.length===0;
+   if(closed&&await observation.run(()=>this.previewDestinationReady(target,before,observation)))break;
+   await observation.run(()=>sleep(50));
+  }}catch(error){if(error.identityChanged)throw error;throw Error('Timed out: owned preview closed and original destination focus restored');}finally{observation.close();}
+  return {resource:preview.resource,public_ui_revert_and_close:true,other_editors_preserved:true,destination_focus_restored:true};
  }
  async newPreview(target,before,required,timeout=30000){return waitFor(async()=>{const s=await this.editorState(target);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&required.every(text=>s.text?.includes(text))?s:null;},'new preview resource, focused model and rendered provenance',timeout);}
  async isOpenFolder(target){return target.evaluate("(()=>{const e=document.querySelector('.quick-input-widget');const title=e?.querySelector('.quick-input-title')?.textContent.trim();return e?.getBoundingClientRect().height>0&&['Open Folder','폴더 열기'].includes(title);})()");}
