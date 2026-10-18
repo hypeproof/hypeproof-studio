@@ -7,7 +7,18 @@ const BAD = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'st
 
 export function judge(all, runId) {
   const own = runId ? `/actions/runs/${runId}/` : null;
-  const runs = own ? all.filter(r => !r.url.includes(own)) : all;
+  const eligible = own ? all.filter(r => !r.url.includes(own)) : all;
+  const latest = new Map();
+  for (const run of eligible) {
+    // Only supersede with evidence of the same workflow and job. Names alone
+    // collide across workflows; unknown/external checks remain independent.
+    const key = run.workflowId ? `${run.workflowId}:${run.name}` : Symbol();
+    const previous = latest.get(key);
+    if (!previous || run.runNumber > previous.runNumber ||
+        (run.runNumber === previous.runNumber && run.runAttempt > previous.runAttempt) ||
+        (run.runNumber === previous.runNumber && run.runAttempt === previous.runAttempt && run.id > previous.id)) latest.set(key, run);
+  }
+  const runs = [...latest.values()];
   if (runs.length === 0) return {result: 'NOT_RUN', detail: 'no check-runs'};
   const failed = runs.filter(r => BAD.has(r.conclusion));
   const pending = runs.filter(r => r.status !== 'completed');
@@ -21,11 +32,22 @@ export default {
   id: 'S5',
   name: 'Candidate CI',
   async run({repo, sha, env = process.env}) {
-    const raw = execFileSync('gh', ['api', '--paginate', `repos/${repo}/commits/${sha}/check-runs?per_page=100`,
-      '--jq', '.check_runs[] | [.name, .status, (.conclusion // ""), (.details_url // "")] | @tsv'], {encoding: 'utf8'});
+    const raw = execFileSync('gh', ['api', '--paginate', `repos/${repo}/commits/${sha}/check-runs?per_page=100&filter=all`,
+      '--jq', '.check_runs[] | [.id, .name, .status, (.conclusion // ""), (.details_url // "")] | @tsv'], {encoding: 'utf8'});
+    const metadata = new Map();
     const runs = raw.trim().split('\n').filter(Boolean).map(line => {
-      const [name, status, conclusion, url] = line.split('\t');
-      return {name, status, conclusion, url};
+      const [id, name, status, conclusion, url] = line.split('\t');
+      const match = url.match(/\/actions\/runs\/(\d+)\//);
+      let info = {};
+      if (match && match[1] !== env.GITHUB_RUN_ID) {
+        if (!metadata.has(match[1])) {
+          const action = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/actions/runs/${match[1]}`], {encoding: 'utf8'}));
+          if (action.head_sha !== sha || !action.workflow_id || !action.run_number || !action.run_attempt) throw Error('Candidate CI run identity is incomplete or mismatched');
+          metadata.set(match[1], {workflowId: action.workflow_id, runNumber: action.run_number, runAttempt: action.run_attempt});
+        }
+        info = metadata.get(match[1]);
+      }
+      return {id: Number(id), name, status, conclusion, url, ...info};
     });
     return judge(runs, env.GITHUB_RUN_ID);
   },
