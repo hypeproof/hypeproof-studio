@@ -470,3 +470,9 @@ is BLOCKED before inspector or UI admission and preserves the earlier state.
 Focus-readiness diagnostics record only the first and terminal owned-target DOM
 sample; they never focus, retry or extend the original deadline. Error categories
 are allowlisted, and returned sampling failures omit original error text.
+
+### Explicit focus lifecycle diagnostics
+
+For the owned synthetic T05 inspector scenario, fixed phase/boolean records in the existing HypeProof Coach output channel distinguish command entry, restore completion, editor reveal, message send/delivery and command return. Host records are gated by `HPS_TEST_E2E=1` and capped per extension activation. The runner retains only that prefix from its owned log directory, never raw output or credentials.
+
+A temporary read-only observer on the actual chat frame records scope-match booleans for received focus/config messages and textarea/document focus/blur, capped at64 events and removed in finally. It does not call focus, click, postMessage, change an input, retry a command or alter its30second assertion. Missing logs/failed observer cleanup stay explicit diagnostic limits. This instrumentation changes the extension bundle: prepare a new clean candidate/source receipt and never reuse the historical190ac5 bundle proof. Native validation remains NOT_RUN until an actual hosted execution.
