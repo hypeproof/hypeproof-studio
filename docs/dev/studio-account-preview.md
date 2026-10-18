@@ -58,3 +58,10 @@ the original-window URI itself if the browser never returned; unknown, cancelled
 credentials. Ordinary background refresh never steals focus. A fresh start replaces
 the attempt. OS protocol registration and browser prompts remain native acceptance
 checks; unit tests alone do not prove foreground switching on a released app.
+
+`studio-dev.py --account-preview run` registers only its unique
+`hypeproof-studio-dev-<checkout hash>` URI scheme: macOS LaunchServices reads the
+candidate's matching bundle declaration, and Windows writes a per-user protocol
+handler pointing to the owned executable/user-data directory. Ordinary preview
+runs do not register any protocol; the official `hypeproof-studio` handler is never
+replaced. `prepare` writes the Mac declaration but does not register the app.
