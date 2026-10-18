@@ -85,3 +85,10 @@ fragments are rejected. `accountsPreview` and the development environment flag
 remain strictly loopback-only and cannot activate production accounts. Neither
 setting is changed on user machines by this PR. Coordinated Service/web activation,
 legal acceptance and real Google/native release checks still precede launch.
+
+On first return VS Code can ask whether HypeProof Chat may open the URI. The user
+must choose Open; the app does not disable this confirmation. Choosing its optional
+"Do not ask again for this extension" checkbox allows subsequent automatic return.
+The native acceptance grants that consent through the actual visible dialog in a
+fresh owned test profile, records the prompt separately, and only then measures
+automatic foreground switching without interacting with the originating window.
