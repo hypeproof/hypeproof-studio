@@ -1,0 +1,39 @@
+{
+  "schema": "hps-release-policy/1",
+  "revision": "daily-app-1",
+  "requiredArtifacts": [
+    {"id": "mac", "target": "darwin-arm64"},
+    {"id": "win-user", "target": "win32-x64"},
+    {"id": "win-system", "target": "win32-x64"}
+  ],
+  "requiredTests": [
+    {"id": "INSTALL-MAC", "artifactId": "mac", "requirementId": "REQ-I4", "expected": "Install the untouched candidate; launch its exact version and digest.", "environment": "installed-app", "reporterIds": ["mac-verifier"]},
+    {"id": "UPDATE-MAC", "artifactId": "mac", "requirementId": "REQ-I13", "expected": "Update N-1 to N, restart, preserve project and sign-in, and match the candidate digest.", "environment": "installed-app", "reporterIds": ["mac-verifier"]},
+    {"id": "INSTALL-WIN-USER", "artifactId": "win-user", "requirementId": "REQ-I9", "expected": "Install the untouched user installer; launch its exact version and digest.", "environment": "installed-app", "reporterIds": ["win-verifier"]},
+    {"id": "UPDATE-WIN-USER", "artifactId": "win-user", "requirementId": "REQ-I9", "expected": "Update N-1 to N with the user installer, restart, and preserve project and sign-in.", "environment": "installed-app", "reporterIds": ["win-verifier"]},
+    {"id": "INSTALL-WIN-SYSTEM", "artifactId": "win-system", "requirementId": "REQ-I9", "expected": "Install the untouched system installer; launch its exact version and digest.", "environment": "installed-app", "reporterIds": ["win-verifier"]},
+    {"id": "UPDATE-WIN-SYSTEM", "artifactId": "win-system", "requirementId": "REQ-I9", "expected": "Update N-1 to N with the system installer, restart, and preserve project and sign-in.", "environment": "installed-app", "reporterIds": ["win-verifier"]},
+    {"id": "PUBLIC-FLOW-MAC", "artifactId": "mac", "requirementId": "ST-REQ-UNIFIED", "expected": "On the installed candidate, trial and classroom chat/file flows pass against the pinned Service with tenant isolation and encrypted credentials.", "environment": "installed-app", "reporterIds": ["mac-verifier"]},
+    {"id": "PUBLIC-FLOW-WIN", "artifactId": "win-user", "requirementId": "ST-REQ-UNIFIED", "expected": "On the installed candidate, trial and classroom chat/file flows pass against the pinned Service with tenant isolation and encrypted credentials.", "environment": "installed-app", "reporterIds": ["win-verifier"]}
+  ],
+  "reporters": [
+    {"id": "mac-verifier", "publicKey": "REPLACE_WITH_VERIFIER_ED25519_PUBLIC_PEM"},
+    {"id": "win-verifier", "publicKey": "REPLACE_WITH_VERIFIER_ED25519_PUBLIC_PEM"}
+  ],
+  "quotaMaxAgeSeconds": 600,
+  "requiredWork": [
+    {"id": "build-mac", "resourceId": "existing-mac"},
+    {"id": "build-win", "resourceId": "verified-included-windows-runner"},
+    {"id": "verify-mac", "resourceId": "existing-mac"},
+    {"id": "verify-win", "resourceId": "verified-included-windows-runner"},
+    {"id": "model-acceptance", "resourceId": "verified-model-credits"},
+    {"id": "artifact-storage", "resourceId": "verified-storage-allowance"}
+  ],
+  "fixResourceId": "existing-development-subscription",
+  "maxAttemptsPerStage": 2,
+  "maxFixAttempts": 1,
+  "managerRoster": {
+    "revision": "rotation-1",
+    "terms": [{"actor": "jayleekr", "publicKey": "REPLACE_WITH_MANAGER_ED25519_PUBLIC_PEM", "startsAt": "REPLACE_WITH_UTC_START", "endsAt": "REPLACE_WITH_UTC_END"}]
+  }
+}

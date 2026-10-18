@@ -14,7 +14,8 @@ import type { ResolvedProfile } from "../protocol";
 import type { McpToolResult } from "../browserMcp";
 import { AuthToolMissingError, createGhCliAuthProvider, type GhCliAuthProvider } from "./githubAuth";
 import { createFetchTransport, createGhTransport, createGitHubApi, GitHubTransportError, type GitHubApi, type GitHubTransport } from "./githubApi";
-import { downloadRepo, findClassRepos, nextFreeFolder, remoteHead, type ClassRepo, type DownloadFailure } from "./githubContinue";
+import { downloadRepo, findClassRepos, remoteHead, type ClassRepo, type DownloadFailure } from "./githubContinue";
+import { cloneRepo, locateRepoFolder, syncClone, type CheckoutFailure, type Exec } from "./repoCheckout";
 import { classFolderCheck, pressAccess, publishError, resolveRepoName, sitePublishAllowed, type AccessCheck, type PublishSiteInput, type PublishSiteResult } from "./publishContract";
 import { BUTTON_BUDGET_MS, toolBudgetMs, type PublishEndpoints } from "./publishConfig";
 import { resultChatText, runPublishSite, stepLabel } from "./publishSite";
@@ -33,8 +34,9 @@ export type ClassReposOutcome =
   | { status: "unavailable"; detail: string };
 
 /** "GitHub에서 이어하기" could not bring the site down: the sentence the participant reads. */
-export function continueFailureMessage(code: DownloadFailure["code"] | "network" | "account"): string {
+export function continueFailureMessage(code: DownloadFailure["code"] | CheckoutFailure["code"] | "network" | "account"): string {
   if (code === "empty") return "이 저장소에는 아직 올린 홈페이지가 없어요. '새로 하기'를 눌러 주세요.";
+  if (code === "git_missing") return "이 컴퓨터에서 git을 찾지 못해 내려받지 않았어요. 강사에게 알려 주세요.";
   if (code === "too_large") return "홈페이지 파일이 너무 많거나 커서 내려받지 않았어요. 강사에게 알려 주세요.";
   if (code === "network") return "GitHub에 연결하지 못해 내려받지 않았어요. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.";
   if (code === "account") return "GitHub 계정을 다시 확인하지 못했어요. 시작 화면을 닫았다 다시 열어 주세요.";
@@ -51,6 +53,8 @@ export interface SitePublisherHost {
   postToChat(text: string): Promise<void>;
   /** Inline notice in the chat panel (no toast — a toast pauses the integrated browser, #308). */
   notice(text: string): void;
+  /** Clear this notice only if it has not been replaced by another app notice. */
+  clearNotice(expected: string): void;
   log(line: string): void;
   stallMs(): number | undefined;
   endpoints: PublishEndpoints;
@@ -70,6 +74,8 @@ export class SitePublisher {
   private readonly host: SitePublisherHost;
   private readonly auth: GhCliAuthProvider;
   private running = false;
+  private buttonRunning = false;
+  private failureNotice: string | undefined;
   readonly registry: PublishRegistry;
   private readonly transport: (token: string) => GitHubTransport;
   /**
@@ -339,36 +345,114 @@ export class SitePublisher {
   }
 
   /**
-   * The folder "GitHub에서 이어하기" opens for `repo`. The folder this seat would reopen anyway
-   * (`reuse`) when it is still exactly what GitHub holds: published from here, nothing newer from
-   * another computer. Otherwise a fresh folder beside the class folder, with the repository
-   * brought down into it and bound to it — registered, with the commit it came from, so the next
-   * press publishes on top of that commit with no question. Existing folders are never written.
+   * The folder "GitHub에서 이어하기" opens for `repo`: the same rule as "프로젝트 변경"
+   * (bringRepo) — the repository's own folder when this computer has one, brought up to GitHub,
+   * else a clone beside the class folder. Bound to it either way (registered, with the commit it
+   * came from), so the next press publishes on top of that commit with no question.
    */
-  async prepareContinue(args: { login: string; repo: ClassRepo; reuse?: string; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }> {
+  async prepareContinue(args: { login: string; repo: ClassRepo; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }> {
     const { login, repo } = args;
     try {
       const gh = await this.signedInApi();
       if (!gh || gh.login.toLowerCase() !== login.toLowerCase()) return { ok: false, message: continueFailureMessage("account") };
-      const reg = this.registry.get(login, repo.name);
-      if (args.reuse && reg?.workspace && reg.lastPushedSha && this.host.sameFolder(reg.workspace, args.reuse) && fs.existsSync(args.reuse)) {
-        if ((await remoteHead(gh.api, login, repo.name, repo.defaultBranch)) === reg.lastPushedSha) return { ok: true, folder: args.reuse, downloaded: false };
-      }
-      const dest = nextFreeFolder(args.classRoot);
-      const d = await downloadRepo(gh.api, login, repo.name, repo.defaultBranch, dest);
-      if (!d.ok) {
-        this.host.log(`[continue] ${login}/${repo.name} → ${dest}: ${d.code} ${d.detail}`);
-        return { ok: false, message: continueFailureMessage(d.code) };
-      }
-      await this.registry.register(login, repo.name, dest);
-      await this.registry.recordPush(login, repo.name, d.head, dest);
-      await this.registry.setLastLogin(login);
-      this.host.log(`[continue] ${login}/${repo.name}@${d.head.slice(0, 7)} → ${dest} (${d.files} files)`);
-      return { ok: true, folder: dest, downloaded: true };
+      const r = await this.bringRepo("continue", gh.api, login, repo, args.classRoot);
+      return r.ok ? { ok: true, folder: r.folder, downloaded: r.action !== "open" } : r;
     } catch (err) {
       this.host.log(`[continue] ${login}/${repo.name}: ${err instanceof Error ? err.message : String(err)}`);
       return { ok: false, message: continueFailureMessage(err instanceof GitHubTransportError ? "network" : "unexpected") };
     }
+  }
+
+  /**
+   * git/gh with an argument vector, and git never asks anyone anything: no terminal prompt, and
+   * no password window. Without the empty GIT_ASKPASS, Git for Windows opened its
+   * git-askpass.exe dialog on a failed login and the call waited on it until the timeout
+   * (measured 2026-10-17). An empty value is "set": git then skips core.askPass and SSH_ASKPASS.
+   */
+  private readonly exec: Exec = (file, args, opts) =>
+    new Promise((resolve) => {
+      try {
+        const env = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GCM_INTERACTIVE: "never" };
+        execFile(file, args, { timeout: opts.timeout, maxBuffer: 4 * 1024 * 1024, windowsHide: true, env }, (err, stdout, stderr) =>
+          resolve({ ok: !err, missing: !!err && (err as { code?: unknown }).code === "ENOENT", stdout: String(stdout ?? ""), stderr: String(stderr ?? "") }),
+        );
+      } catch {
+        resolve({ ok: false, missing: true, stdout: "", stderr: "" });
+      }
+    });
+
+  /**
+   * `<login>/<repo>` on this computer, bound to it so the button publishes there. Its folder is
+   * the one its registration names (never `leaving`, the folder a switch leaves: one folder keeps
+   * one repository), else `<class folder>-<repo>`. Absent → cloned; present → opened or pulled,
+   * as decideTarget says. Real runs go through gh/git (repoCheckout.ts); a loopback mock GitHub
+   * (publishConfig.ts) cannot be cloned, so it gets the API download instead.
+   */
+  private async bringRepo(
+    tag: "continue" | "switch",
+    api: GitHubApi,
+    login: string,
+    repo: { name: string; defaultBranch: string },
+    classRoot: string,
+    leaving?: string,
+  ): Promise<{ ok: true; folder: string; action: TargetAction; backup?: string } | { ok: false; message: string }> {
+    const reg = this.registry.get(login, repo.name);
+    const registered = reg?.workspace && !(leaving && this.host.sameFolder(reg.workspace, leaving)) ? reg.workspace : undefined;
+    const head = await remoteHead(api, login, repo.name, repo.defaultBranch);
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "");
+    const failed = (what: string, code: Parameters<typeof continueFailureMessage>[0], detail: string) => {
+      this.host.log(`[${tag}] ${what} ${login}/${repo.name}: ${code} ${detail}`);
+      return { ok: false as const, message: continueFailureMessage(code) };
+    };
+    let folder: string;
+    let present: boolean;
+    if (this.host.endpoints.apiBase) {
+      present = !!registered && fs.existsSync(registered);
+      folder = present ? registered! : cloneFolderFor(classRoot, repo.name);
+    } else {
+      ({ folder, present } = await locateRepoFolder({ exec: this.exec, login, repo: repo.name, classRoot, ...(registered ? { registered } : {}) }));
+    }
+    const matchesHead = present && head ? await folderMatches(api, login, repo.name, head, folder) : null;
+    const action = decideTarget({ hasFolder: present, head, ...(reg?.lastPushedSha ? { lastPushedSha: reg.lastPushedSha } : {}), matchesHead });
+    let backup: string | undefined;
+    if (action === "clone") {
+      if (!head) {
+        // The start page offers "새로 하기" beside this; the switch has no such button.
+        if (tag === "switch") return { ok: false, message: `${repo.name}에는 아직 올린 파일이 없어서 가져올 것이 없어요.` };
+        return failed("clone", "empty", "no commits");
+      }
+      if (this.host.endpoints.apiBase) {
+        const d = await downloadRepo(api, login, repo.name, repo.defaultBranch, folder);
+        if (!d.ok) return failed("clone", d.code, d.detail);
+      } else {
+        const c = await cloneRepo({ exec: this.exec, gh: await this.auth.bin(), login, repo: repo.name, branch: repo.defaultBranch, folder });
+        if (!c.ok) return failed("clone", c.code, c.detail);
+      }
+    } else if (head) {
+      // "pull" replaces the files; keep a copy unless they are exactly what this computer last
+      // published or pulled (then nothing of the participant's is lost).
+      const matchesLast = action === "pull" && reg?.lastPushedSha ? await folderMatches(api, login, repo.name, reg.lastPushedSha, folder) : null;
+      const keepBackup = action === "pull" && matchesLast !== true;
+      if (this.host.endpoints.apiBase) {
+        if (action === "pull") {
+          const p = await pullInto(api, login, repo.name, repo.defaultBranch, folder, { keepBackup, stamp });
+          if (!p.ok) return failed("pull", p.code, p.detail);
+          backup = p.backup;
+        }
+      } else {
+        const s = await syncClone({
+          exec: this.exec, gh: await this.auth.bin(), login, repo: repo.name, branch: repo.defaultBranch, folder,
+          replace: action === "pull", ...(keepBackup ? { backup: `${folder}.before-pull-${stamp}` } : {}),
+        });
+        if (!s.ok) return failed(action, s.code, s.detail);
+        backup = s.backup;
+      }
+    }
+    await this.registry.register(login, repo.name, folder);
+    if (head) await this.registry.recordPush(login, repo.name, head, folder);
+    await this.registry.setLastLogin(login);
+    this.host.log(`[${tag}] ${login}/${repo.name}${head ? `@${head.slice(0, 7)}` : ""} ${action} → ${folder}${backup ? ` (backup ${backup})` : ""}`);
+    return { ok: true, folder, action, ...(backup ? { backup } : {}) };
   }
 
   // ── "프로젝트 변경" (command, or the chat sentence) ───────────────────────────
@@ -532,39 +616,7 @@ export class SitePublisher {
     classRoot: string,
   ): Promise<{ ok: true; folder: string; action: TargetAction; backup?: string } | { ok: false; message: string }> {
     try {
-      const reg = this.registry.get(login, target.name);
-      const own = reg?.workspace && fs.existsSync(reg.workspace) && !this.host.sameFolder(reg.workspace, leaving) ? reg.workspace : undefined;
-      const head = await remoteHead(api, login, target.name, target.defaultBranch);
-      const matchesHead = own && head ? await folderMatches(api, login, target.name, head, own) : null;
-      const action = decideTarget({ hasFolder: !!own, head, ...(reg?.lastPushedSha ? { lastPushedSha: reg.lastPushedSha } : {}), matchesHead });
-      const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*$/, "");
-      let folder: string;
-      let backup: string | undefined;
-      if (action === "clone") {
-        if (!head) return { ok: false, message: `${target.name}에는 아직 올린 파일이 없어서 가져올 것이 없어요.` };
-        folder = cloneFolderFor(classRoot, target.name);
-        const d = await downloadRepo(api, login, target.name, target.defaultBranch, folder);
-        if (!d.ok) {
-          this.host.log(`[switch] clone ${login}/${target.name} → ${folder}: ${d.code} ${d.detail}`);
-          return { ok: false, message: continueFailureMessage(d.code) };
-        }
-      } else if (action === "pull") {
-        folder = own!;
-        const matchesLast = reg?.lastPushedSha ? await folderMatches(api, login, target.name, reg.lastPushedSha, folder) : null;
-        const p = await pullInto(api, login, target.name, target.defaultBranch, folder, { keepBackup: matchesLast !== true, stamp });
-        if (!p.ok) {
-          this.host.log(`[switch] pull ${login}/${target.name} → ${folder}: ${p.code} ${p.detail}`);
-          return { ok: false, message: continueFailureMessage(p.code) };
-        }
-        backup = p.backup;
-      } else {
-        folder = own!;
-      }
-      await this.registry.register(login, target.name, folder);
-      if (head) await this.registry.recordPush(login, target.name, head, folder);
-      await this.registry.setLastLogin(login);
-      this.host.log(`[switch] ${login}/${target.name}${head ? `@${head.slice(0, 7)}` : ""} ${action} → ${folder}${backup ? ` (backup ${backup})` : ""}`);
-      return { ok: true, folder, action, ...(backup ? { backup } : {}) };
+      return await this.bringRepo("switch", api, login, target, classRoot, leaving);
     } catch (err) {
       this.host.log(`[switch] ${login}/${target.name}: ${err instanceof Error ? err.message : String(err)}`);
       return { ok: false, message: continueFailureMessage(err instanceof GitHubTransportError ? "network" : "unexpected") };
@@ -579,22 +631,38 @@ export class SitePublisher {
 
   /** Toolbar command entry. */
   async runFromButton(): Promise<void> {
+    if (this.buttonRunning) return;
+    if (this.failureNotice !== undefined) {
+      this.host.clearNotice(this.failureNotice);
+      this.failureNotice = undefined;
+    }
     if (!this.available()) {
-      this.host.notice(publishError("not_allowed").message_ko);
+      this.showFailureNotice(publishError("not_allowed").message_ko);
       return;
     }
     if (!this.host.idle()) {
-      this.host.notice("코치가 답하는 중이에요. 답이 끝난 뒤 다시 눌러 주세요.");
+      this.showFailureNotice("코치가 답하는 중이에요. 답이 끝난 뒤 다시 눌러 주세요.");
       return;
     }
     // No question here: sign-in comes first, then the pipeline's confirmPublish asks once per
     // <login>/<repo> (persisted) — a registered repository publishes with no modal at all.
-    const result = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "홈페이지 올리기", cancellable: false },
-      (progress) => this.run({}, "button", (line) => progress.report({ message: line })),
-    );
-    await this.host.postToChat(resultChatText(result)).catch(() => undefined);
+    let result: PublishSiteResult;
+    this.buttonRunning = true;
+    try {
+      result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: "홈페이지 올리기", cancellable: false },
+        (progress) => this.run({}, "button", (line) => progress.report({ message: line })),
+      );
+      await this.host.postToChat(resultChatText(result)).catch(() => undefined);
+    } finally {
+      this.buttonRunning = false;
+    }
     await this.showResult(result);
+  }
+
+  private showFailureNotice(text: string): void {
+    this.failureNotice = text;
+    this.host.notice(text);
   }
 
   private async showDeviceCode(code: string, uri: string): Promise<void> {
@@ -621,13 +689,13 @@ export class SitePublisher {
       if (pick === COPY) await vscode.env.clipboard.writeText(r.url);
       return;
     }
-    const REPO = "저장소 열기";
     const text = r.error
       ? `${r.error.message_ko} ${r.error.next_action_ko}`
       : r.needs_user
         ? `GitHub 코드 ${r.needs_user.code} 입력이 끝나지 않았어요. 다시 눌러 주세요.`
         : "아직 주소가 열리는 것을 확인하지 못했어요. 1~2분 뒤 다시 눌러 확인해 주세요.";
-    const pick = await vscode.window.showWarningMessage(text, ...(r.repo_url ? [REPO] : []));
-    if (pick === REPO && r.repo_url) await vscode.env.openExternal(vscode.Uri.parse(r.repo_url));
+    // Keep the result (including its repository link) in the transcript, and own the
+    // transient notice so the next attempt can clear it without touching other alerts.
+    this.showFailureNotice(text);
   }
 }

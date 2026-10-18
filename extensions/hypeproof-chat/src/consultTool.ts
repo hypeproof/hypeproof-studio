@@ -36,6 +36,7 @@ import {
   ORCHESTRATOR_FORMAT,
 } from "./sdkCoachHelpers.ts";
 import { scrubSecrets } from "./shellPolicy.ts";
+import { canonicalizeExistingPath } from "./workspaceRouting.ts";
 import type { DiffGuardResult } from "./diffGuard.ts";
 import type { SiteCheckResult } from "./siteCheck.ts";
 import type { McpToolResult, SdkMcpFactory, ZodLike } from "./browserMcp.ts";
@@ -432,21 +433,7 @@ export interface FileExcerpt {
 }
 
 /** Canonicalize through the nearest existing ancestor (a file may not exist yet). */
-export function canonicalPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      const real = fs.realpathSync(base);
-      return tail.length === 0 ? real : path.join(real, ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+export const canonicalPath = canonicalizeExistingPath;
 
 /** A regular, non-binary file's UTF-8 text, at most `maxBytes`; null otherwise. */
 export function readWorkspaceText(absPath: string, maxBytes: number): string | null {

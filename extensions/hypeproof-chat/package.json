@@ -511,6 +511,7 @@
       }
     ],
     "configurationDefaults": {
+      "chat.disableAIFeatures": true,
       "workbench.colorTheme": "HypeProof Studio",
       "workbench.activityBar.location": "hidden",
       "window.commandCenter": false,
@@ -518,7 +519,17 @@
       "workbench.statusBar.visible": false,
       "workbench.editor.showIcons": false,
       "workbench.editor.editorActionsLocation": "hidden",
-      "workbench.tips.enabled": false
+      "workbench.tips.enabled": false,
+      "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        ".github": true,
+        ".nojekyll": true,
+        "hps-build.txt": true
+      }
     }
   },
   "scripts": {

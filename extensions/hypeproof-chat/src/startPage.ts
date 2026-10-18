@@ -20,7 +20,7 @@ export interface GithubContinueSource {
   allowed(profile: ResolvedProfile): boolean;
   find(): Promise<ClassReposOutcome>;
   signIn(): Promise<boolean>;
-  prepare(args: { login: string; repo: ClassRepo; reuse?: string; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }>;
+  prepare(args: { login: string; repo: ClassRepo; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }>;
   /** The folder "새로 하기" opens: the class folder, else the first free `<class folder>-N`. */
   newFolder(classRoot: string): string;
   classRoot(profile: ResolvedProfile): string | null;
@@ -136,7 +136,7 @@ export class StartPage {
       this.busy = true; this.error = undefined; gh.state = { ...gh.state, working: "download" };
       await this.refresh();
       let prepared: Awaited<ReturnType<GithubContinueSource["prepare"]>>;
-      try { prepared = await source.prepare({ login: gh.login, repo, classRoot: gh.classRoot, ...(candidate.workspace ? { reuse: candidate.workspace } : {}) }); }
+      try { prepared = await source.prepare({ login: gh.login, repo, classRoot: gh.classRoot }); }
       catch { prepared = { ok: false, message: "GitHub에서 홈페이지를 내려받지 못했어요. 잠시 뒤 다시 눌러 주세요." }; }
       finally { this.busy = false; gh.state = { ...gh.state, working: undefined }; }
       if (this.candidate !== candidate) return;

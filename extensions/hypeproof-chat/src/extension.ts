@@ -1,7 +1,7 @@
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
-import { initializeFilesLayout, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
+import { initializeFilesLayout, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -42,7 +42,7 @@ import {
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
-import { decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
+import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
 import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
@@ -56,6 +56,10 @@ let spoolRef: SessionSpool | null = null;
 let uploadInFlight = false;
 
 export async function activate(context: vscode.ExtensionContext) {
+  // Reset a folder's restored sidebar before network-dependent activity restoration.
+  // The explicit file-view actions can open Explorer once the learner asks for it.
+  await initializeFilesLayout(command => vscode.commands.executeCommand(command));
+  await closeRestoredBrowserTabs(vscode.window.browserTabs ?? []);
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -66,7 +70,6 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   try { await connections.initialize(); }
   catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
-  await initializeFilesLayout(context, command => vscode.commands.executeCommand(command));
   context = connections.wrap();
   registerExternalSkillCommands(context);
   const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -869,22 +872,7 @@ async function clearWorkspaceSwitchAttempt(context?: vscode.ExtensionContext): P
  * a redirected profile folder on Windows) must not read as a DIFFERENT root, or
  * we would switch away from the folder we are already in, forever.
  */
-function canonicalizeFsPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeFsPath = canonicalizeExistingPath;
 
 // Per-tone background for the throwaway starter index.html. The title/subtitle
 // come from the single source of truth (TONE_LABELS.aboutTitle/aboutSubtitle),

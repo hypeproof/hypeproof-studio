@@ -1,6 +1,7 @@
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { passSpentNotice } from "./passPurchase";
+import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
@@ -721,6 +722,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       idle: () => !this.hasActiveStream(),
       postToChat: (text) => this.postAppReply(text),
       notice: (text) => this.postPageNotice(text),
+      clearNotice: (expected) => {
+        if (this.pendingPageNotice === expected) this.postPageNotice("");
+      },
       log: (line) => this.voiceLogChannel().appendLine(line),
       stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
       store: this.context.globalState,
@@ -784,6 +788,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Opens a class folder as this activity's workspace (extension.ts: ensureWorkspace + activity commit). Reloads the window. */
   private projectOpener?: (folder: string) => Promise<void>;
+  /**
+   * The class folder as the Service served it. `cachedProfile.workspace_root` is rewritten to the
+   * activity's current folder (ensureProfile), so after one switch it names a project folder, and
+   * deriving `<class folder>-<repo>` from it chained names (`…-sandbox-dental-homepage-3-…`).
+   */
+  private servedWorkspaceRoot: string | null = null;
   setProjectOpener(open: (folder: string) => Promise<void>): void {
     this.projectOpener = open;
   }
@@ -805,7 +815,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** "프로젝트 변경" — the command and the chat sentence (isProjectSwitchRequest) both land here. */
   async switchProject(): Promise<void> {
     const profile = this.cachedProfile ?? (await this.ensureProfile());
-    const classRoot = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) ?? undefined : undefined;
+    const served = this.servedWorkspaceRoot ?? profile?.workspace_root;
+    const classRoot = served ? resolveWorkspaceRoot(served) ?? undefined : undefined;
     const switched = await this.sitePublisher().switchProject(classRoot);
     if (!switched) return;
     const how =
@@ -2467,6 +2478,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.nativeObservation=null;
     this.nativeLearningPath=null;
     this.cachedProfile = null;
+    this.servedWorkspaceRoot = null;
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
     this.activeCohortId = null;
@@ -2567,6 +2579,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.lastProfileFailure = r.ok ? null : r.failure;
         this.opsObserver?.profileResult(r.ok ? { ok: true } : { ok: false, status: r.failure.status, code: r.failure.reason === "expired" ? "expired" : undefined, requestId: r.failure.requestId, network: r.failure.reason === "network" }, token);
         let p = r.ok ? r.profile : null;
+        this.servedWorkspaceRoot = p?.workspace_root ?? null;
         if (connections?.current && p) {
           if (p.activity_id!==connections.current.serverId) p=null;
           else p={...p,workspace_root:connections.current.workspace};
@@ -6307,22 +6320,7 @@ function randomId(): string {
  * style symlinks so a canonicalized SDK path still matches the workspace root
  * (#384: without this every coach Write in a symlinked workspace auto-denied).
  */
-function canonicalizeForCompare(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p); // hit fs root — give up
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeForCompare = canonicalizeExistingPath;
 
 function isInsideWorkspace(targetPath: string): boolean {
   const folders = vscode.workspace.workspaceFolders;

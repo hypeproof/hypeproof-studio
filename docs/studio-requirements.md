@@ -482,8 +482,15 @@ Anthropic 미성년자 가이드(#282 의 2026-07-13 라이선싱 코멘트) 구
 | REQ-P1 | Pages 프로비저닝을 기다린 뒤 워크플로를 올린다 (#500) | `gh api -X PUT .../pages -f build_type=workflow` 의 **2xx 는 접수 확인이지 준비 완료가 아니다** — 백엔드 프로비저닝은 비동기라, 곧바로 워크플로 파일을 올리면 push 로 실행이 걸리고 `actions/configure-pages@v5` 가 활성 Pages 환경을 못 찾아 `HttpError: Not Found` 로 죽는다(2026-07-28 실측: 3연속 실패 중 2건). GitHub UI 의 "Static HTML ▸ Configure" 버튼이 되는 이유도 기능이 아니라 **순서**다 — 프로비저닝이 끝난 뒤에 워크플로를 쓴다. 계약: ① PUT 후 `repos/{owner}/{repo}/pages` 의 `build_type` 이 `workflow` 로 보일 때까지 **끝나는 루프**(12회×5s, bash/PowerShell 양쪽 제공)로 대기 — 스킬 자신의 규칙대로 `until` 금지(끝나지 않는 루프는 수업을 세운다); ② 준비 확인 전에는 **워크플로를 올리지 않는다** — 올려봐야 실패한 빨간 실행 기록만 남는다; ③ 실패 표에 `configure-pages ▸ Not Found` 행을 두고 재실행(`workflow_dispatch`) 경로를 준다 | R (`worker/test/smoke.mjs` §profile-snapshot — **순서 판정**: 대기 표식이 워크플로 업로드보다 앞선다. 양성/음성 대조군으로 계측기 검증) |
 | REQ-P2 | `pages.yml` 재작성은 최신 `sha` 와 함께, 한 번에 (#500) | 이미 있는 파일을 `sha` 없이 PUT 하면 409 고, 브라우저 편집과 API 덮어쓰기를 번갈아 하면 내용이 중복·병합돼 **YAML 파싱 자체가 실패**한다(`This workflow graph cannot be shown` — 워크플로가 실패한 게 아니라 읽히지도 않은 것). 계약: ① 재업로드는 `contents/... --jq .sha` 로 최신 sha 를 받아 `-f sha=` 로 넘긴다; ② 한 파일을 두 통로(브라우저 편집 / `gh api`)로 번갈아 건드리지 않는다; ③ 이미 깨졌으면 부분 수정하지 말고 **전체를 한 번에** 다시 쓴다 | R (`worker/test/smoke.mjs` — 재업로드 절차에 sha 가 살아 있다) |
 | REQ-P3 | 원클릭 배포 — 버튼과 코치 도구가 같은 결정적 모듈을 탄다 (hype-dental D1–D3, D-017) | `src/publish/` 하나가 배포를 수행하고 진입점 둘(명령 `hypeproof-chat.publishSite`, MCP 도구 `mcp__hypeproof__publish_site`)이 그것만 부른다. 계약: ① 게이트 — `publishing.enabled === true && strategy === "per_user_github_pages"` 이고 미성년이 아닐 때만 버튼·도구가 보인다(`sitePublishAllowed`, 갤러리 게이트와 같은 방향·fail closed), 도구 grant 는 `sdk_tools.browser` 와 독립; ② 사전 검사 — Text inspection is bounded to 2MiB per file; larger or unreadable text blocks publication with a named-file explanation rather than silently bypassing checks (binary media retain the existing limits). 미리보기에선 되고 Pages 에선 깨지거나 새는 것(대소문자 불일치·`/` 로 시작하는 경로·제외 파일 참조·비밀값·주민등록번호·50MB 초과)은 **차단**, 미리보기에서도 깨진 것은 경고, 점(.)으로 시작하는 항목·`node_modules`·키 파일은 올리지 않는다; ③ 순서 — REQ-P1 그대로(Pages `workflow` 설정 → 읽어서 확인 → 워크플로가 든 커밋), 스킬의 YAML 을 글자 그대로, `git` 없이 Git Data API 로 **한 번의 스냅샷 커밋**; ④ R0 — 이번 실행의 nonce(`hps-build.txt`)가 실제 주소에서 보이고 첫 화면이 200 일 때만 `verified: true` 와 `url` 을 낸다. 시간이 모자라면 `ok: true, verified: false`(아직 만드는 중)이고 `check_only` 로 다시 본다; ⑤ `stage: "save"` 는 파일만 올리고 워크플로·Pages 를 건드리지 않는다(404 를 보는 수업 단계); ⑥ 공개 동의는 저장소별·세션당 한 번(모달, `requireApprovalFor` 로 끌 수 없음), `check_only` 는 묻지 않는다; ⑦ GitHub REST 호출은 모두 `gh api` 프로세스로 보낸다 — 토큰을 확장이 요청에 싣지 않는다. 평문 HTTP 경로는 테스트·개발 실행 + 루프백 주소의 모의 GitHub 에서만(그 경로는 토큰을 직접 보낸다) | U (`publish-site`·`publish-host`·`publish-integration` smoke: 모의 GitHub, 가짜 `gh` 로 `gh api` 계약) + 실계정(옵트인, `gh` 경로로 공개·재공개·이어하기 확인) |
-| REQ-P4 | GitHub에서 이어하기 — 폴더마다 자기 저장소 (hype-dental D-024, 2026-10-13 사용자 요구) | 참여 코드를 넣어 후보 카드가 뜨면, REQ-P3 ① 게이트가 열리고 프로필이 수업 폴더(`workspace_root`)를 정한 코호트에 한해 이 자리 GitHub 에 올린 수업 사이트가 있는지 **먼저** 본다(`/user/repos` — 버튼이 만든 저장소의 설명, 또는 Pages + 루트 `agent.md`). 참가자는 GitHub 에서 직접 고치지 않는다는 전제다. 계약: ① 있으면 "GitHub에서 이어하기"(여러 개면 고르기, 가장 최근 것을 미리 선택)와 "새로 하기"를 낸다 — Primary 는 하나(SX-04); ② 이어하기는 고른 저장소를 **새 폴더**(수업 폴더, 있으면 `-2`·`-3`…)로 내려받는다 — 공개 때 올리는 파일만, blob id 확인, 기존 폴더에는 쓰지 않고 실패하면 만든 폴더를 지운다. 내려받은 폴더는 그 저장소에 묶이고(등록 + 내려받은 커밋) 다음 누름은 질문 없이 그 커밋 위에 올린다. 이 자리가 다시 열 폴더가 GitHub 과 같으면 내려받지 않고 그 폴더를 연다; ③ 새로 하기는 새 폴더에서 시작한다. 이 컴퓨터에서 올린 적 없는 폴더의 첫 누름은 **새 저장소**(`<기본>`, `<기본>-2`…)를 만든다 — 다른 컴퓨터에서 만든 사이트에 쓰지 않는다. 명시한 `repo_name` 은 그대로; ④ gh 가 로그인돼 있지 않으면 볼 수 없으므로 조용한 "GitHub 로그인" 줄을 내고, 로그인 뒤 다시 본다. 확인 실패·15초 초과는 평소 시작으로 | U (`github-continue` smoke: 모의 GitHub, 두 컴퓨터, 시작 화면) + E (개발 중 앱 사본) |
-| REQ-P5 | 프로젝트 변경 — 수업 중 다른 GitHub 저장소로 수업 폴더 바꾸기 (2026-10-15 사용자 요구, #1691) | 채팅 머리줄의 **프로젝트 변경** 버튼("인터넷에 올리기" 옆, 같은 REQ-P3 ① 게이트) 또는 채팅 문장 `프로젝트 변경`(가까운 변형만 — 그 말을 언급만 하는 문장은 코치에게)이 참가자의 저장소 목록을 연다: 수업 사이트(REQ-P4 판별) 먼저, 그다음 자기 소유의 다른 저장소(포크·보관 제외). 계약: ① 떠나는 폴더가 GitHub 과 같으면 묻지 않는다. 다르면 "올리고 바꾸기 / 올리지 않고 바꾸기"를 묻고, 올리기는 버튼과 같은 공개(워크플로를 지키기 위해 저장 단계가 아니다). 올린 적 없는 폴더는 새 저장소로 올리거나 그대로 둔다; ② 고른 저장소의 폴더: 이 컴퓨터에 없으면 `<수업 폴더>-<저장소>` 로 내려받고(REQ-P4 ②의 내려받기), 있으면 GitHub 과 비교해 같으면 그대로 연다. 이 컴퓨터가 마지막으로 올리거나 받은 뒤 GitHub 이 그대로면 로컬 작업이 더 새것이라 그대로 연다. GitHub 이 움직였으면 받아온다(사이트 파일만 GitHub 것으로, 점(.) 항목은 그대로, 로컬이 달랐으면 `<폴더>.before-pull-<시각>` 사본). 떠나는 폴더는 대상 폴더로 쓰지 않는다; ③ 그 폴더를 그 저장소에 묶고(등록 + 커밋) 시작 화면과 같은 방식으로 활동 작업 폴더로 연다(창이 다시 열리고 대화는 그 폴더의 것); ④ 그 폴더의 첫 코치 턴에 모델 전용 메모: `agent.md` 가 있으면 다른 일보다 먼저 읽는다 — 한 번, 그 폴더에서만, 24시간 안에 | U (로컬 `project-switch` smoke: 모의 GitHub — 문장 판별·목록·비교·결정표·받아오기, PR 미포함) + E (개발 중 앱 사본, 2026-10-15) |
+| REQ-P4 | GitHub에서 이어하기 — 폴더마다 자기 저장소 (hype-dental D-024, 2026-10-13 사용자 요구) | 참여 코드를 넣어 후보 카드가 뜨면, REQ-P3 ① 게이트가 열리고 프로필이 수업 폴더(`workspace_root`)를 정한 코호트에 한해 이 자리 GitHub 에 올린 수업 사이트가 있는지 **먼저** 본다(`/user/repos` — 버튼이 만든 저장소의 설명, 또는 Pages + 루트 `agent.md`). 참가자는 GitHub 에서 직접 고치지 않는다는 전제다. 계약: ① 있으면 "GitHub에서 이어하기"(여러 개면 고르기, 가장 최근 것을 미리 선택)와 "새로 하기"를 낸다 — Primary 는 하나(SX-04); ② 이어하기는 REQ-P5 ②와 **같은 규칙**으로 고른 저장소의 폴더를 연다 — 그 저장소에 등록된 폴더, 없으면 `<수업 폴더>-<저장소>`. 이 컴퓨터에 없으면 참가자의 `gh` 로그인으로 `gh repo clone`(`core.autocrlf=false` 로 GitHub 과 같은 바이트, 실패하면 만든 폴더를 지운다), 있으면 GitHub 과 비교해 그대로 열거나 받아온다. 그 폴더는 그 저장소에 묶이고(등록 + 커밋) 다음 누름은 질문 없이 그 커밋 위에 올린다. 같은 저장소를 다시 골라도 새 폴더를 만들지 않는다. 창이 다시 열리면 시작 화면이 아니라 코치 대화가 열린다 — 폴더가 같은지는 경로 표기(Windows 드라이브 문자 `c:`/`C:`)와 무관하고, 업데이트 전에 `c:` 로 저장된 활동 연결도 그대로 찾는다. git 은 묻지 않는다(로그인 실패 시 비밀번호 창 없이 실패). 공개가 만드는 파일(`.github`·`.nojekyll`·`hps-build.txt`)은 탐색기에 보이지 않는다 — 파일은 그대로 있고 공개에서도 계속 제외된다; ③ 새로 하기는 새 폴더에서 시작한다. 이 컴퓨터에서 올린 적 없는 폴더의 첫 누름은 **새 저장소**(`<기본>`, `<기본>-2`…)를 만든다 — 다른 컴퓨터에서 만든 사이트에 쓰지 않는다. 명시한 `repo_name` 은 그대로; ④ gh 가 로그인돼 있지 않으면 볼 수 없으므로 조용한 "GitHub 로그인" 줄을 내고, 로그인 뒤 다시 본다. 확인 실패·15초 초과는 평소 시작으로 | U (`github-continue` smoke: 모의 GitHub, 두 컴퓨터, 시작 화면; `repo-checkout` smoke: 실제 git·로컬 원격으로 폴더 찾기·clone·열기·받아오기·백업·실패, `c:`/`C:` 동일성; `activity-legacy-drive` smoke: `c:` 로 저장된 연결의 업데이트 호환) + E (개발 중 앱 사본, Windows, 2026-10-17: 이어하기·프로젝트 변경이 `gh repo clone`) |
+| REQ-P5 | 프로젝트 변경 — 수업 중 다른 GitHub 저장소로 수업 폴더 바꾸기 (2026-10-15 사용자 요구, #1691) | 채팅 머리줄의 **프로젝트 변경** 버튼("인터넷에 올리기" 옆, 같은 REQ-P3 ① 게이트) 또는 채팅 문장 `프로젝트 변경`(가까운 변형만 — 그 말을 언급만 하는 문장은 코치에게)이 참가자의 저장소 목록을 연다: 수업 사이트(REQ-P4 판별) 먼저, 그다음 자기 소유의 다른 저장소(포크·보관 제외). 계약: ① 떠나는 폴더가 GitHub 과 같으면 묻지 않는다. 다르면 "올리고 바꾸기 / 올리지 않고 바꾸기"를 묻고, 올리기는 버튼과 같은 공개(워크플로를 지키기 위해 저장 단계가 아니다). 올린 적 없는 폴더는 새 저장소로 올리거나 그대로 둔다; ② 고른 저장소의 폴더: 등록된 폴더, 없으면 `<수업 폴더>-<저장소>` — 수업 폴더는 서비스가 준 `workspace_root` 이지 지금 활동이 열린 폴더가 아니다(이름이 `<수업>-<a>-<b>` 로 이어 붙지 않는다). 같은 이름의 폴더가 다른 저장소의 clone 이면 건드리지 않고 다음 이름을 쓴다. 이 컴퓨터에 없으면 `gh repo clone`(REQ-P4 ②), 있으면 GitHub 과 비교해 같으면 그대로 연다. 이 컴퓨터가 마지막으로 올리거나 받은 뒤 GitHub 이 그대로면 로컬 작업이 더 새것이라 그대로 연다(git 기록만 GitHub 커밋으로 옮긴다). GitHub 이 움직였으면 받아온다 — 공개는 API 로 커밋하므로 `git pull` 이 아니라 fetch 후 브랜치를 GitHub 커밋으로 옮기고 파일을 GitHub 것으로(추적되지 않는 점(.) 항목은 그대로, 로컬이 달랐으면 `<폴더>.before-pull-<시각>` 사본 — `fs.cpSync` 는 한글 경로에서 Studio 런타임을 죽이므로 쓰지 않는다). clone 이 아닌 기존 폴더는 그 자리에서 clone 이 된다. 떠나는 폴더는 대상 폴더로 쓰지 않는다; ③ 그 폴더를 그 저장소에 묶고(등록 + 커밋) 시작 화면과 같은 방식으로 활동 작업 폴더로 연다(창이 다시 열리고 대화는 그 폴더의 것); ④ 그 폴더의 첫 코치 턴에 모델 전용 메모: `agent.md` 가 있으면 다른 일보다 먼저 읽는다 — 한 번, 그 폴더에서만, 24시간 안에 | U (로컬 `project-switch` smoke: 모의 GitHub — 문장 판별·목록·비교·결정표·받아오기, PR 미포함) + E (개발 중 앱 사본, 2026-10-15) |
+
+REQ-P3 retry feedback: a failed or unverified button result appears as one managed inline
+notice and remains in the transcript, including any repository link. Pressing the button
+again clears that attempt's notice before asynchronous work starts; a newer unrelated
+notice is preserved. Repeated clicks during a button attempt start no additional progress
+or result. Device-code modals, public-publishing consent, and verified-success actions
+retain their behavior. This supports participant verification under ST-INT-NATIVE.
 
 ## Q. 세션 로그 로컬 스풀 (#580 수집 계층)
 
@@ -883,8 +890,14 @@ installed-release, production, visual fidelity or human acceptance.
 
 FB-01/02 reuse [US-03/07–10/12/18](requirements/unified-studio-experience.md),
 [ADR 0008](adr/0008-activity-connection-boundaries.md) and the existing activity
-credential/history/draft stores. `initializeFilesLayout` exposes Explorer only
-for a genuinely new profile; subsequent layout choices are left to the shell.
+credential/history/draft stores. `initializeFilesLayout` closes the primary sidebar
+on every launch and workspace activation, before remote activity restoration.
+Explorer opens when the user explicitly chooses the existing file-view action;
+project changes and restarts start closed even if that workspace saved it open.
+Native integrated-browser preview tabs restored from the previous session are
+closed before activity restoration. Only that startup snapshot is closed; later
+preview requests remain open. Ordinary file/chat restoration and external
+browser applications are unaffected. A failed tab close does not block startup.
 Chat focus waits for initial activity restoration, reveals the existing editor
 chat and explicitly returns the caret to its existing composer. The focus request
 is bound to that activity and is cancelled when the composer unmounts or changes
@@ -1001,3 +1014,20 @@ Verification: candidate report generator/tests, local-file browser report/manual
 checks and T27 human observation. Operational token/cost totals are not learning
 outcomes. Missing invoice, externally direct personal-key traffic and unreported
 historical activity remain explicitly unverified.
+
+## Daily release coordinator (#1757)
+
+`REQ-STUDIO-RELEASE-ENGINE`: the [local coordinator](dev/release-engine.md) pins
+existing release-cut inputs, persists idempotent decisions and zero-incremental
+cost reservations, requires every policy-defined artifact/work stage/installed-App
+check, and binds a rotating manager's signed approval to exact manifest and
+evidence digests. Changed bytes, missing/failed checks, unknown budgets, expired or
+revoked approval and an older channel intent cannot authorize promotion. Failure
+ticket intents deduplicate across candidates and product fixes have one reserved
+attempt. A dead same-host writer is recoverable without evicting a live owner.
+
+Verification: `scripts/release/test/engine.test.mjs` exercises real local files,
+CLI restarts, two-process contention and SIGKILL with signed protocol fixtures.
+This is local engine evidence, not installed-App acceptance. Provider/billing,
+remote publish wiring, exact-byte customer delivery and seven-day operations
+remain NOT RUN. No workflow publication gate is bypassed or replaced.
