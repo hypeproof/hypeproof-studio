@@ -100,7 +100,13 @@ jobs:
           attempt=0
           while :; do
             attempt=$(( attempt + 1 ))
-            gh release view "$TAG" --repo "$SOURCE_REPO" --json tagName,name,body,assets,url,isPrerelease > source-release.json
+            gh release view "$TAG" --repo "$SOURCE_REPO" --json tagName,name,body,assets,url,isPrerelease,isDraft > source-release.json
+            # The app updates from the mirror. A draft has not passed the publish gate in
+            # verify-unified-release.yml, so a manual dispatch must not carry it out.
+            if jq -e '.isDraft' source-release.json >/dev/null; then
+              echo "::error::$TAG is still a draft in $SOURCE_REPO; publish it through verify-unified-release.yml first"
+              exit 1
+            fi
             names="$(jq -r '.assets[].name' source-release.json)"
             missing=()
             grep -qE '^HypeProof-Studio-darwin-arm64\.zip$'      <<<"$names" || missing+=("macOS zip")

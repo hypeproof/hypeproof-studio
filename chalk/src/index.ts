@@ -26,6 +26,7 @@ import { resolveChalkVersion, type ChalkEnv } from "./env.ts";
 import { makeErrorBody, requestId } from "./middleware.ts";
 import { state } from "./routes/state.ts";
 import { board } from "./routes/board.ts";
+import { labTokens } from './routes/lab-tokens.ts';
 import { logsAdmin } from "./routes/logs-admin.ts";
 import { forwardInstructorWrite } from "./routes/forward.ts";
 // @ts-ignore — bundled as text by wrangler rules.
@@ -81,6 +82,7 @@ app.all("/v1/classroom/*", forwardInstructorWrite);
 
 app.route("/admin", state);
 app.route("/admin", board);
+app.route('/admin', labTokens);
 // #680 — studio-logs read path. Mounted before the forwarder so these reads are
 // forwarded through the dedicated read contract before instructor writes.
 app.route("/admin", logsAdmin);

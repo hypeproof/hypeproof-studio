@@ -318,6 +318,7 @@ async function renderCohort(scope) {
 
   startCountdowns();
   renderMinter(scope, state);
+  renderLabTokens(scope);
 }
 
 function startCountdowns() {
@@ -428,6 +429,43 @@ function renderMinter(scope, state) {
       navigator.clipboard.writeText(results.filter((r) => r.token).map((r) => r.u + ": " + r.token).join("\n\n"));
       copyBtn.textContent = "복사됨 ✓";
     };
+  };
+}
+
+// Lab keeps the short-lived distribution credentials; Service authorizes the read.
+// This explicit lookup never reissues a token or persists student credentials in the browser.
+function renderLabTokens(scope) {
+  const wrap = document.createElement('fieldset');
+  wrap.dataset.labTokens = scope.cohort;
+  wrap.innerHTML = '<legend>④ Lab에서 발급한 학생 토큰 — ' + esc(scope.cohort) + '</legend>' +
+    '<div class="help">현재 Lab 배부 보드의 토큰을 조회합니다. 이미 가져간 학생의 토큰도 담당 강사 권한으로 확인할 수 있어요. 만료되어 사라진 보드의 과거 토큰은 표시하지 않습니다.</div>' +
+    '<button type="button" data-load-lab-tokens>Lab 학생 토큰 불러오기</button>' +
+    '<div data-lab-token-results aria-live="polite"></div>';
+  $('minter').appendChild(wrap);
+  const btn = wrap.querySelector('[data-load-lab-tokens]');
+  const out = wrap.querySelector('[data-lab-token-results]');
+  btn.onclick = async () => {
+    btn.disabled = true; out.textContent = '불러오는 중…';
+    try {
+      const body = await api('/admin/cohorts/' + encodeURIComponent(scope.cohort) + '/lab-tokens', { method: 'GET' });
+      if (!body.board) { out.textContent = '현재 Lab 배부 보드가 없습니다. 아직 발급하지 않았거나 보드가 만료됐습니다.'; return; }
+      const students = body.board.students;
+      if (!Array.isArray(students)) throw new Error('Lab 조회 응답을 확인하지 못했습니다.');
+      out.innerHTML = students.length ? students.map((student, i) =>
+        '<div class="tok-line"><div class="name">' + esc(student.handle) + '</div>' +
+        '<div class="help">' + (student.claimedBy ? '가져감 · ' + esc(student.claimedBy) : '아직 가져가지 않음') +
+        (student.expiresAt ? ' · 만료 ' + esc(new Date(student.expiresAt).toLocaleString()) : '') + '</div>' +
+        '<div class="token">' + esc(student.token) + '</div>' +
+        '<button type="button" data-copy-lab="' + i + '">이 토큰만 복사</button></div>').join('') : '발급된 학생 토큰이 없습니다.';
+      out.querySelectorAll('[data-copy-lab]').forEach(button => {
+        button.onclick = async () => {
+          try { await navigator.clipboard.writeText(students[Number(button.dataset.copyLab)].token); button.textContent = '복사됨 ✓'; }
+          catch { button.textContent = '직접 선택해 복사해주세요'; }
+        };
+      });
+    } catch (error) {
+      out.innerHTML = '<div class="banner err">' + esc(error.message || '조회하지 못했습니다.') + '</div>';
+    } finally { btn.disabled = false; }
   };
 }
 

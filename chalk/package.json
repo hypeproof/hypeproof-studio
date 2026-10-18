@@ -9,12 +9,13 @@
     "dev": "wrangler dev --port 8788",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "test": "node --experimental-strip-types test/instructor-console.test.mjs && node --experimental-strip-types test/instructor-auth-drift.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-contract.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-threshold.test.mjs && node --experimental-strip-types test/deploy-isolation.test.mjs && node --experimental-strip-types test/logs-read-path.test.mjs && node --experimental-strip-types test/authoring-forward.test.mjs && node --experimental-strip-types test/authoring-ui.test.mjs && node --experimental-strip-types test/feedback-loop-forward.test.mjs && npm run test:classroom && npm run test:classroom-ops && npm run test:budgets && node --experimental-strip-types --test test/state-forward.test.mjs && node --experimental-strip-types --test test/service-read-forward.test.mjs && node --experimental-strip-types --test test/boa-distribution-forward.test.mjs",
+    "test": "node --experimental-strip-types test/instructor-console.test.mjs && node --experimental-strip-types test/instructor-auth-drift.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-contract.test.mjs && node --experimental-strip-types --experimental-sqlite test/board-threshold.test.mjs && node --experimental-strip-types test/deploy-isolation.test.mjs && node --experimental-strip-types test/logs-read-path.test.mjs && node --experimental-strip-types test/authoring-forward.test.mjs && node --experimental-strip-types test/authoring-ui.test.mjs && node --experimental-strip-types test/feedback-loop-forward.test.mjs && npm run test:classroom && npm run test:classroom-ops && npm run test:budgets && node --experimental-strip-types --test test/state-forward.test.mjs && node --experimental-strip-types --test test/service-read-forward.test.mjs && node --experimental-strip-types --test test/boa-distribution-forward.test.mjs && npm run test:lab-tokens",
     "typecheck": "tsc --noEmit",
     "test:classroom": "node --experimental-strip-types --experimental-sqlite test/classroom.test.mjs",
     "test:classroom-ops": "node --experimental-strip-types --experimental-sqlite test/classroom-ops.test.mjs",
     "test:budgets": "node --experimental-strip-types --experimental-sqlite test/budgets.test.mjs",
-    "build": "wrangler deploy --dry-run --outdir dist"
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "test:lab-tokens": "node --experimental-strip-types --test test/lab-tokens.test.mjs"
   },
   "dependencies": {
     "hono": "^4.13.7",
