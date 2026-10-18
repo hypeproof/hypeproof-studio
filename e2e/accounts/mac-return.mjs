@@ -59,8 +59,14 @@ try{
   await first.screenshot({path:path.join(out,mode+'.png')});
   result.checks.push({mode,status:'PASS',originating_window:firstId,other_window:secondId,focused_window:await focused(),credentials_in_uri:false,uri_permission:mode==='explicit-uri-permission'?'explicit visible approval in owned test profile':'previously granted through visible UI'});save();
   // Background account refresh must not later steal focus from the other workbench.
-  if(mode!=='explicit-uri-permission'){await secondNative.evaluate(w=>w.focus());await new Promise(r=>setTimeout(r,16000));assert.equal(await focused(),secondId);
-  result.checks.push({mode:mode+'-no-repeat-focus',status:'PASS'});save();}
+  if(mode!=='explicit-uri-permission'){
+   await secondNative.evaluate(w=>{w.show();w.focus();});await driver.wait(async()=>await focused()===secondId,'other workbench reacquires focus');
+   await app.evaluate(({BrowserWindow},ids)=>{const original=BrowserWindow.fromId(ids.first);const events=[];const listener=()=>events.push(Date.now());original.on('focus',listener);globalThis.__accountReturnFocusWatch={original,events,listener,initial:BrowserWindow.getFocusedWindow()?.id??null};},{first:firstId});
+   await new Promise(r=>setTimeout(r,16000));
+   const watch=await app.evaluate(({BrowserWindow})=>{const w=globalThis.__accountReturnFocusWatch;w.original.removeListener('focus',w.listener);return {initial:w.initial,unexpected_original_focus:w.events.length,final:BrowserWindow.getFocusedWindow()?.id??null};});
+   assert.equal(watch.initial,secondId);assert.equal(watch.unexpected_original_focus,0,'background refresh must never focus original window');assert.notEqual(watch.final,firstId);
+   result.checks.push({mode:mode+'-no-repeat-focus',status:'PASS',...watch});save();
+  }
   await firstNative.evaluate(w=>w.focus());await driver.press(frame,'.studio-account .studio-course-actions button:last-child','Sign out');
   await driver.wait(()=>frame.evaluate("!!document.querySelector('.studio-account .studio-primary')"),'signed out');
  }
