@@ -285,7 +285,9 @@ export class NativeUI{
    const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
    if(JSON.stringify(identity)!==JSON.stringify(before.returnTarget.identity))throw Object.assign(Error('Preview destination identity changed'),{identityChanged:true});
    const state=await chat.evaluate("({documentFocused:document.hasFocus(),composerFocused:document.activeElement===document.querySelector('.hps-input textarea'),activeTag:document.activeElement?.tagName})",observation);
-   this.previewDestinationState={kind:'chat',identity,...state};return state.documentFocused&&state.composerFocused;
+   // Passive editor reveal restores the owned document, not its composer.
+   // Only the explicit Focus command promises textarea focus.
+   this.previewDestinationState={kind:'chat',identity,...state};return state.documentFocused;
   }
   const state=await this.editorState(target);
   this.previewDestinationState={kind:'editor',expected:before.resource,resource:state.resource,focused:state.focused};return !!before.resource&&state.resource===before.resource&&state.focused&&focusedResource(state);

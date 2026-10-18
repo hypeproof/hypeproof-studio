@@ -533,10 +533,12 @@ test('native shortcuts use portable CDP key identity without platform-mismatched
    await assert.rejects(ui.closeOwnedPreview({},before,preview,10),/Timed out/);assert.equal(commands,1);
   }
  });
- test('chat destination requires the original frame loader and its actual composer focus',async()=>{
+ test('chat destination requires original frame loader and document focus, not passive composer focus',async()=>{
   const ui=new NativeUI('http://127.0.0.1:9777'),identity={workbench:'w',target:'t',frame:'f',loader:'l'};let focused=false;
   const chat={ownedWorkbenchId:'w',info:{id:'t'},ownedFrameId:'f',ownedLoaderId:'l',evaluate:async()=>({documentFocused:focused,composerFocused:focused,activeTag:focused?'TEXTAREA':'BODY'})};ui.frame=async()=>chat;
   const before={returnTarget:{kind:'chat',identity}};assert.equal(await ui.previewDestinationReady({},before),false);focused=true;assert.equal(await ui.previewDestinationReady({},before),true);
+  chat.evaluate=async()=>({documentFocused:true,composerFocused:false,activeTag:'BODY'});assert.equal(await ui.previewDestinationReady({},before),true,'passive reveal may restore document body without stealing composer focus');
+  chat.evaluate=async()=>({documentFocused:false,composerFocused:true,activeTag:'TEXTAREA'});assert.equal(await ui.previewDestinationReady({},before),false,'inner active textarea is insufficient when document lacks actual focus');
   chat.ownedLoaderId='replacement';await assert.rejects(ui.previewDestinationReady({},before),/identity changed/);
  });
 test('preview destination sampling shares one deadline even when a DOM observation hangs',async()=>{
