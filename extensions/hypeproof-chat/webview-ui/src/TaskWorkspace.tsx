@@ -173,8 +173,9 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
       clearRequestTimer();
       updateRequest(null);
       // A late acknowledgment must not take focus back from another source or the composer.
-      if (sourceDisplay.current.open && sourceDisplay.current.url === pending.url) {
-        const ownsFocus = document.hasFocus() && !!sourcePanel.current?.contains(document.activeElement);
+      if (sourceDisplay.current.open && sourceDisplay.current.url === pending.url && sourceTrigger.current === pending.trigger) {
+        // Native editor reveal can temporarily clear window focus while retaining this request.
+        const ownsFocus = document.activeElement === document.body || !!sourcePanel.current?.contains(document.activeElement);
         closeSources(pending.trigger, ownsFocus);
       }
     }
@@ -210,7 +211,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     const target = focus === 'source-title' ? (sourcePanel.current?.querySelector<HTMLElement>('#task-source-title') ?? sourcePanel.current?.querySelector<HTMLElement>('.tw-source-close')) : focus;
     if (target?.isConnected) requestAnimationFrame(() => {
       // Hiding a focused panel may move focus to BODY; a deliberate new target wins.
-      const unchangedFocus = !origin || document.hasFocus() && (document.activeElement === origin || document.activeElement === document.body);
+      const unchangedFocus = !origin || document.activeElement === origin || document.activeElement === document.body;
       if (target.isConnected && current.current.scopeKey === scopeKey && sourceDisplay.current.open === sourcesOpen && unchangedFocus) target.focus({ preventScroll: true });
     });
   }, [sourcesOpen, preview, scopeKey, sourceRequest?.requestId]);
@@ -220,7 +221,8 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
-  useEffect(() => {
+  // Release inert before the queued focus restoration runs on the next animation frame.
+  useLayoutEffect(() => {
     const dialog = sourceDialog ? sourcePanel.current : railDialog ? rail.current : null;
     if (!dialog) return;
     const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;

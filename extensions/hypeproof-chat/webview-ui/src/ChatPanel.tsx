@@ -812,11 +812,13 @@ export function ChatPanel(props: Props) {
     postToHost({ type: "discardStagedImage", stageId: id });
     setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
     setImgNote(null);
+    if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
   const removePendingImage = (idx: number) => {
     setPendingImages((prev) => prev.filter((_, i) => i !== idx));
     setImgNote(null);
+    if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
   const handleChip = (chip: SuggestionChip) => {

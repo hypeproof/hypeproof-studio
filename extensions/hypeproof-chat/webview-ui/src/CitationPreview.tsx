@@ -85,7 +85,7 @@ export function CitationPreview({ citation, pinned, otherPinned, ephemeral, open
     <p className="cp-source-context">이 답변에 포함된 출처입니다.</p>
     <p className="cp-source-url" dir="ltr" aria-label="출처 주소">{citation.url}</p>
     <div className="cp-preview-actions">
-      <button type="button" className="tw-open-source" disabled={!address || blocked} aria-busy={opening || undefined} onClick={onOpen}><span>{opening ? '브라우저 여는 중…' : '브라우저에서 열기'}</span><SourceIcon kind="open" /></button>
+      <button type="button" className="tw-open-source" disabled={!address} aria-disabled={blocked || undefined} aria-busy={opening || undefined} onClick={() => { if (!blocked) onOpen(); }}><span>{opening ? '브라우저 여는 중…' : '브라우저에서 열기'}</span><SourceIcon kind="open" /></button>
       <button type="button" className="tw-quiet tw-pin" disabled={!address} aria-pressed={pinned} onClick={onPin}><SourceIcon kind="pin" /><span>{pinned ? '고정 해제' : '이 자료 고정'}</span></button>
       {opened && <button type="button" className="tw-quiet cp-return" aria-disabled={returning || undefined} aria-busy={returning || undefined} onClick={() => { if (!returning) onReturn(); }}><SourceIcon kind="back" /><span>{returning ? '대화로 돌아가는 중…' : '대화로 돌아가기'}</span></button>}
     </div>

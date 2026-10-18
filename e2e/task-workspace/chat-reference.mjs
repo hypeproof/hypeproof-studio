@@ -151,11 +151,13 @@ try {
   await shot('image-search-short-window');
   await page.getByRole('button', { name: '이미지 제거', exact: true }).click();
   await expect(page.locator('.hps-attachments img')).toHaveCount(0);
+  await expect(input).toBeFocused();
   await expect(input).toHaveValue('검색과 이미지가 함께 있는 다음 초안');
   checks.push('CG-01/02 granted image attachment and selected search coexist in short window without clipping Send; removal keeps draft');
   expect(errors).toEqual([]);
   await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', scope: 'built React + real disk/task host; synthetic model/browser seam, zero model calls; not native/live service acceptance', checks, measurements, sent: server.sent.map(({type,text,prompt,toolMode,userMessageId,sourceMessageId}) => ({type,text,prompt,toolMode,userMessageId,sourceMessageId})), errors }, null, 2));
   console.log(JSON.stringify({ status: 'PASS', checks: checks.length, output }));
 } catch (error) {
+  measurements.failureGeometry = await page.evaluate(() => Object.fromEntries(['.tw-main','.tw-heading','.tw-conversation','.hps-shell','.hps-header','.hps-messages','.hps-input-area','.hps-input','.hps-attachments','.hps-btn-send'].map(selector => { const n=document.querySelector(selector); return [selector,n ? { ...n.getBoundingClientRect().toJSON(), minHeight:getComputedStyle(n).minHeight, flex:getComputedStyle(n).flex } : null]; })));
   await shot('failure'); await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'FAIL', checks, measurements, errors, error: String(error) }, null, 2)); throw error;
 } finally { await context.close(); await browser.close(); await server.close(); await rm(server.root, { recursive: true, force: true }); }
