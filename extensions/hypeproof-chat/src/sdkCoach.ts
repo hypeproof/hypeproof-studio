@@ -14,6 +14,8 @@
 // surfacing a raw error to the student (REQ-M7).
 
 import { sdkPromptWithImages } from "./visionInput.ts";
+import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
+import { SdkWebCitations } from './sdkWebCitations';
 import { canonicalizeExistingPath } from "./workspaceRouting.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
@@ -152,6 +154,7 @@ export interface SdkCoachArgs {
   systemPrompt: string;
   history: { role: string; content: string }[];
   userText: string;
+  toolMode?: TurnToolMode;
   /** Actual current-turn pixels, including explicit workspace reference re-reads. */
   images?: string[];
   signal: AbortSignal;
@@ -506,6 +509,8 @@ function abortError(): Error {
  * both runtimes and the fallback inside one guard.
  */
 export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
+  const mode = turnToolMode(args.toolMode);
+  requireTurnTools(mode, turnToolsAvailability({ profile: args.profile, runtime: 'agent-sdk' }));
   // Bridge the caller's signal to an SDK AbortController UP FRONT — before any
   // await — so a stop during loadSdk() still cancels. (addEventListener added
   // after the signal already fired would never run.)
@@ -538,7 +543,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // adult seat and a well-formed served roster, and only when A2's binding takes it
   // (orchestratorBindingFor). Off, `orchestratorTurn` is null and every line below runs
   // exactly as it did before A4.
-  const orchestratorHost = args.orchestrator;
+  const orchestratorHost = mode === 'auto' ? args.orchestrator : undefined;
   const orchestrator = resolveOrchestrator(args.profile, orchestratorHost);
   const servedRoster = (args.profile as { orchestrator?: unknown }).orchestrator;
   if (
@@ -548,12 +553,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     // A roster was served and refused here: "configured but inert" must leave a trace.
     console.warn(`[coach] served orchestrator roster not used: ${orchestrator.reason}`);
   }
-  const opts = profileToAgentOptions(
+  const opts = toolsForTurn(profileToAgentOptions(
     args.profile,
     orchestrator.on
       ? { model: args.model, systemPrompt: args.systemPrompt, orchestrator: orchestrator.roster }
       : { model: args.model, systemPrompt: args.systemPrompt },
-  );
+  ), mode);
+  const webCitations = new SdkWebCitations(opts.permittedTools);
   const orchestratorTurn: OrchestratorTurn | null =
     orchestrator.on && orchestratorHost && opts.orchestrator
       ? startOrchestratorTurn({
@@ -580,7 +586,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // Compose the transcript into a single prompt string for now. A follow-up
   // switches to the SDK streaming-input session API to preserve real history.
   const transcript = args.history.map((m) => `${m.role}: ${m.content}`).join("\n");
-  const promptText = transcript ? `${transcript}\nuser: ${args.userText}` : args.userText;
+  const userText = userTextForTurn(args.userText, mode);
+  const promptText = transcript ? `${transcript}\nuser: ${userText}` : userText;
   const prompt = sdkPromptWithImages(promptText, args.images);
 
   // #282 P2 slice 2 — register the in-process "hypeproof" browser MCP server
@@ -699,6 +706,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
     ...(mcpServers ? { mcpServers } : {}),
     canUseTool: async (name, input, options) => {
       const decision = (allowed: boolean, actor: 'user'|'policy' = 'policy') => {
+        if (!allowed) webCitations.deny(options.toolUseID);
         args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,at:Date.now()});
       };
       lastToolCallAt = Date.now();
@@ -800,7 +808,14 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   const stream = sdk.query({ prompt, options });
   // A4 — on an orchestrator turn the stream is read for failure events (F3–F5, spec §7)
   // and passed through unchanged; return() and throw() reach the CLI's iterator as before.
-  const observed = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
+  const tapped = orchestratorTurn ? orchestratorTurn.tap(stream) : stream;
+  const observed = (async function* () {
+    for await (const event of tapped) {
+      const citations = args.signal.aborted ? [] : webCitations.observe(event);
+      if (citations.length) args.onCitations?.(citations);
+      yield event;
+    }
+  })();
   // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
   // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
   const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
@@ -823,8 +838,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   //   that simply never produces a token) left the student on "생각하는 중… ✨"
   //   with no error and no way out. After stallTimeoutMs of no progress we
   //   abort the query and surface a retry-me message.
-  // (onCitations / onAssetScore are wired for parity but the SDK stream
-  // mapping for those lands in a later phase.)
+  // Citations above come only from matched typed tool results; asset scores
+  // remain outside this runtime's stream mapping.
   const stallMs = args.stallTimeoutMs ?? SDK_STREAM_STALL_MS;
   return await consumeSdkStream(observed, {
     isAborted: () => args.signal.aborted,

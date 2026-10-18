@@ -9,17 +9,29 @@ const module={exports:{}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?vscode:require(id),console,Buffer,process,setTimeout,clearTimeout,AbortSignal,URL,TextEncoder,TextDecoder});
 const proto=module.exports.ChatPanelProvider.prototype;
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
-function host(){return {pendingSends:0,activeStreams:new Map(),hasActiveStream:proto.hasActiveStream,handleSend:proto.handleSend,post:async()=>{}};}
+function host(){
+ const posts=[];
+ // Exercise request snapshots and retry validation too; a partial method copy
+ // can fail before the deferred storage boundary this test is meant to cover.
+ return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
+}
 // Pause the actual send before profile/stream creation. Both submit routes must
 // own the connection immediately; an exception must release that ownership.
-for(const type of ['sendMessage','retryMessage']){
- const h=host(),auth=deferred();h.context={secrets:{get:()=>auth.promise}};
+for(const type of ['sendMessage','retryMessage']) for(const toolMode of ['auto','web-search']){
+ const h=host(),auth=deferred();let reads=0;h.context={secrets:{get:()=>{reads++;return auth.promise;}}};
  assert.equal(h.hasActiveStream(),false);
- const pending=proto.handleMessage.call(h,{type,text:'여행 계획을 정리해줘',prompt:'여행 계획을 정리해줘',history:[]});
+ const text='여행 계획을 정리해줘',images=['data:image/png;base64,c3ludGhldGlj'],userMessageId='pending-user';
+ const pending=proto.handleMessage.call(h,{type,text,prompt:text,history:[],images,toolMode,userMessageId});
+ assert.equal(reads,1,'the real credential read must be reached before injecting its failure');
  assert.equal(h.activeStreams.size,0);assert.equal(h.hasActiveStream(),true,'accepted send locks before credential read completes');
  auth.reject(new Error('synthetic storage failure'));
  await assert.rejects(pending,/synthetic storage failure/);
  assert.equal(h.hasActiveStream(),false,'early failure releases the connection');
+ assert.equal(h.turnRequests.get(userMessageId)?.message.toolMode,toolMode,'failed request retains its own retry mode');
+ const rejected=h.posts.findIndex(message=>message.type==='inputRejected');
+ const error=h.posts.findIndex(message=>message.type==='streamError');
+ assert.ok(rejected>=0&&error>rejected,'restore input before reporting the failed pending send');
+ assert.equal(h.posts[rejected].text,text);assert.deepEqual(h.posts[rejected].images,images);assert.equal(h.posts[rejected].toolMode,toolMode);
 }
 // A counter, not a boolean: one rejected pending send cannot unlock another.
 {
@@ -31,12 +43,19 @@ for(const type of ['sendMessage','retryMessage']){
  assert.equal(h.hasActiveStream(),false);
 }
 // Even a no-model response remains bound until its history write finishes.
-{
+// A failed write restores the request instead of leaving a false saved result.
+for(const fail of [false,true]){
  const h=host(),save=deferred();h.cachedProfile={worlds:[{id:'synthetic',emoji:'',guest:'테스트',chip:'테스트'}]};
  h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
  const pending=proto.handleSend.call(h,'다른 친구도 있어?',[]);
  assert.equal(h.activeStreams.size,0);assert.equal(h.hasActiveStream(),true,'history persistence still owns activity');
- save.resolve();await pending;assert.equal(h.hasActiveStream(),false);
+ if(fail){
+  save.reject(new Error('synthetic history failure'));await assert.rejects(pending,/synthetic history failure/);
+  assert.equal(h.posts.find(message=>message.type==='inputRejected')?.text,'다른 친구도 있어?');
+  assert.equal(h.posts.find(message=>message.type==='inputRejected')?.toolMode,'auto');
+  assert.ok(h.posts.some(message=>message.type==='streamError'),'a displayed reply must not hide a failed history write');
+ }else{save.resolve();await pending;assert.equal(h.posts.some(message=>message.type==='inputRejected'),false);}
+ assert.equal(h.hasActiveStream(),false);
 }
 // The inverse ordering: preparation already owns the connection, so no send
 // reaches secrets or history. No provider call is needed by these controls.
