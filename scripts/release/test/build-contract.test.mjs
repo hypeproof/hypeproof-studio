@@ -180,6 +180,21 @@ test('draft inventory requires every platform package, exact App version/SHA, an
   }
 });
 
+test('Windows inventory rejects overlapping installer roles and an unrecorded upload', t => {
+  const dir = tmp(t), dist = path.join(dir, 'dist'); fs.mkdirSync(dist);
+  const platform = 'win32-x64', {app} = appFixture(dir, platform);
+  const overlapping = 'HypeProof StudioUserSetup-x64-1.116.0-Setup-x64.exe';
+  for (const name of [names(platform)[0], overlapping, 'unrelated.exe']) fs.writeFileSync(path.join(dist, name), 'fixture package');
+  const contract = resolveBuildContract(request());
+  assert.throws(() => draftIdentity(contract, {dist, platform, app}), /package roles must cover distinct files/);
+  fs.unlinkSync(path.join(dist, overlapping));
+  fs.unlinkSync(path.join(dist, 'unrelated.exe'));
+  for (const name of names(platform).slice(1)) fs.writeFileSync(path.join(dist, name), 'fixture package');
+  const assets = draftIdentity(contract, {dist, platform, app}).assets;
+  assert.deepEqual(assets.map(asset => asset.id), ['win-portable', 'win-user', 'win-system']);
+  assert.deepEqual(new Set(assets.map(asset => asset.name)), new Set(fs.readdirSync(dist)));
+});
+
 test('upload boundary rejects changed bytes and a moved remote tag, including annotated tags', t => {
   const f = repoFixture(t), platform = 'darwin-arm64', dist = path.join(f.repo, 'dist'); fs.mkdirSync(dist);
   const {app} = appFixture(f.dir, platform, f.candidate);

@@ -105,13 +105,17 @@ export function packageAssets(dist, platform) {
   const files = fs.readdirSync(dist).filter(name => /\.(zip|exe)$/.test(name)).sort();
   if (files.length !== patterns.length) fail('missing or unexpected package assets');
   if (files.some(name => /[^\w .+-]/.test(name))) fail('unsafe package name');
-  return patterns.map(([id, pattern]) => {
+  const assets = patterns.map(([id, pattern]) => {
     const matches = files.filter(name => pattern.test(name));
     if (matches.length !== 1) fail(`missing or ambiguous ${id} asset`);
     const name = matches[0], file = path.join(dist, name), stat = fs.lstatSync(file);
     if (!stat.isFile() || !stat.size) fail(`invalid package ${name}`);
     return {id, name, size: stat.size, sha256: sha256(file)};
   });
+  // Each uploaded file must represent exactly one role. A crafted installer
+  // name can match both suffix patterns while another executable goes unlisted.
+  if (new Set(assets.map(asset => asset.name)).size !== files.length) fail('package roles must cover distinct files');
+  return assets;
 }
 
 export function draftIdentity(contract, {dist, platform, app}) {
