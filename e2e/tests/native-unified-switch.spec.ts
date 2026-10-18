@@ -61,9 +61,8 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   await begin();
   await expect.poll(async()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,oldViews)).toBe(0);
   await expect.poll(()=>ctx.win.title()).toContain('activity-b');
-  // A real window reload restores B's binding; no test token is preseeded.
-  const bStart=await startFrame(ctx.win);
-await bStart.getByRole('button',{name:'이어서 하기',exact:true}).click();
+  // The pending activity intent resumes B directly after the real folder
+  // reload. Do not wait for the transient start page after chat has opened.
   chat=await chatFrame(ctx.win);
   await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('');
   await expect(chat.locator('.hps-attachment')).toHaveCount(0);
@@ -93,7 +92,8 @@ await bStart.getByRole('button',{name:'이어서 하기',exact:true}).click();
   await expect(chat.locator('.hps-attachment')).toHaveCount(1);
   const userDataDir=ctx.userDataDir;await ctx.app.close();
   ctx=await launchApp({reuseUserDataDir:userDataDir,preseedToken:false,stayOnStart:true,persistentTestSecrets:true,simpleFileDialog:true});
-  const restart=await startFrame(ctx.win);await restart.getByRole('button',{name:'이어서 하기',exact:true}).click();
+  // A stored activity bound to this server also resumes after revalidation on
+  // cold start; the assertions below still require encrypted persisted state.
   chat=await chatFrame(ctx.win);
   await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('A에서 작성 중인 합성 초안');
   await expect(chat.locator('.hps-attachment')).toHaveCount(1);

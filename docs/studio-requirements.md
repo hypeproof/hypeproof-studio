@@ -1,5 +1,64 @@
 # Studio behavioral requirements
 
+## Personal task workspace (#1756)
+
+`REQ-STUDIO-TASK-WORKSPACE`: personal/trial activities can create, name, switch and
+reopen separate tasks. Each preserves its full local transcript, unsent draft and
+source selection independently of the bounded model context and telemetry
+retention. Pending work or failed input persistence blocks navigation; stale task
+and foreign activity messages cannot overwrite the active task. Storage errors
+preserve original bytes and remain visible. Existing available history is imported
+once without claiming older lost messages. Source opening uses the native browser,
+only for citations in this task, and preserves composer focus. A pinned source is
+not replaced by later citations. Classroom, account authority and shared Service
+memory remain governed by their existing contracts.
+
+[Design](design/task-workspace.md) and [TW/CP acceptance](testing/task-workspace.md)
+separate filesystem/host/built-UI evidence from native, Windows and customer proof.
+
+### Personal chat detail (CP-R1)
+
+`REQ-STUDIO-CHAT-DETAIL` (CP-R1): personal chat aligns prose and its expanding
+composer, makes live response/tool/source states legible and offers confirmed
+answer copying. Incoming output must not pull a reader away from older content;
+explicit latest/send resumes following. Motion is bounded, disabled under reduced
+motion, and tied to real state. Enter/Shift+Enter/Korean IME, queue/stop and draft
+recovery retain their existing meaning. Light/dark and 320px layouts must remain
+usable. Visual acceptance is independently reviewed against the implementation
+revision; functional test counts alone do not prove ChatGPT-level quality.
+
+### Chat reference interaction (CG-IMPL-R1)
+
+`REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop
+viewport, expands for wrapping text or selected context, and keeps the same editor,
+draft and caret. Every primary editing target is at least 44px. A tool menu exposes
+only supported actions; unavailable search remains visibly explained. Selecting
+web search is a request preference, never permission or proof that search ran.
+The host checks current activity, runtime and tool grant before execution, narrows
+the SDK tool set, preserves approval policy and refuses unsupported fallback.
+Actual tool events and successful structured tool results alone establish search
+activity and source links. Missing or failed search is stated plainly.
+
+Tool mode belongs to one request: save it with the draft, parked message, user
+turn and retry identity. A recovered message with a different mode remains a
+separate, durable paused item; neither current draft nor mode is overwritten and
+no error recovery silently starts a new run. Reject duplicate pending dispatches.
+
+A message-level citation opens one contextual preview with its real title,
+hostname and URL. It does not imply sentence-level attribution or fetched page
+content. Previewing another citation leaves an existing pin intact. Native browser
+opening and return acknowledge the current task, request and URL. Reuse only the
+owned source tab; never close or reuse a foreign tab. Failed/stale opening cannot
+produce a success state. Close, Escape and acknowledged return preserve draft and
+reading anchor and restore focus to the exact citation. Narrow drawers contain
+focus; reduced motion suppresses nonessential transitions.
+
+Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
+is revision-bound. Matched screenshots and independent interaction review are
+required; local synthetic success is separate from live SDK/account, signed
+release, Windows and physical IME acceptance. No whole-product parity claim is
+inferred from these selected flows.
+
 ## Curriculum runtime proposal — 2026-09-29
 
 `REQ-STUDIO-CURRICULUM-RUNTIME`: Studio executes the AI for Good v5 loop

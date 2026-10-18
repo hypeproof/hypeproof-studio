@@ -1,4 +1,8 @@
+import { CitationRack as PersonalCitationRack } from './CitationPreview';
+import type { TurnToolMode } from '../../src/turnTools';
+import { ComposerTools, SelectedTool } from './ComposerTools';
 import { bindComposerFocus } from './composerFocus';
+import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { activityLabel, passEnd } from "./activityLabel";
@@ -19,7 +23,7 @@ import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type Impor
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   ChatConfig,
   ChatMessage,
@@ -91,8 +95,9 @@ interface Props {
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   canRetryLast: boolean;
-  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[]) => void;
-  onRetry: (prompt: string) => void;
+  sendPending?: boolean;
+  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
+  onRetry: (prompt: string, source?: ChatMessage) => void;
   onRetryLast: () => void;
   onDismissError: () => void;
   onCancel: () => void;
@@ -248,18 +253,23 @@ const DEFAULT_UX: UxConfig = {
 };
 
 /** Find the user prompt that led to a given assistant message, walking backwards. */
-function userPromptBefore(messages: ChatMessage[], assistantId: string): string | null {
+function userPromptBefore(messages: ChatMessage[], assistantId: string): ChatMessage | null {
   const idx = messages.findIndex((m) => m.id === assistantId);
   if (idx < 0) return null;
   for (let i = idx - 1; i >= 0; i--) {
-    if (messages[i].role === "user") return messages[i].content;
+    if (messages[i].role === "user") return messages[i];
   }
   return null;
 }
 
 export function ChatPanel(props: Props) {
   const { config, messages, streaming, streamingId, error, incomingImage } = props;
-  const [draft, setDraft] = useState(() => draftAfterStop(config?.activityDraft?.text ?? "", config?.activityDraft?.queued ?? null));
+  const saved = config?.activityDraft;
+  const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
+  const [draft, setDraft] = useState(() => separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null));
+  const [toolMode, setToolMode] = useState<TurnToolMode>(saved?.toolMode ?? 'auto');
+  const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
+  const [queuedPaused, setQueuedPaused] = useState(separateQueue);
   const [composing, setComposing] = useState(false);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -271,7 +281,7 @@ export function ChatPanel(props: Props) {
   const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
   const discardedPhotos = useRef(new Set<string>());
   // #416 — the ONE message parked while a turn is running (null = none).
-  const [queued, setQueued] = useState<string | null>(null);
+  const [queued, setQueued] = useState<string | null>(separateQueue ? saved?.queued ?? null : null);
   const [frozen, setFrozen] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
@@ -353,30 +363,39 @@ export function ChatPanel(props: Props) {
   const [lastImport, setLastImport] = useState<LastImport | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   // A draft that never imported an instructor prompt is saved exactly as before U3: no `imports` key at all.
-  const draftPayload = () => ({text:draft,images:pendingImages,queued,...(imports.length?{imports}:{})});
+  const draftPayload = () => ({text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
   const activityId = config?.activity?.id;
+  const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   const initialDraft = useRef(true);
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
-    if (activityId) postToHost({type:"saveActivityDraft",activityId,draft:draftPayload()});
-  }, [activityId,draft,pendingImages,queued,imports]);
+    if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
+  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
       if (msg.type === "inputRejected") {
-        setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
+        const rejectedMode = msg.toolMode ?? 'auto';
+        const current = snapshot.current;
+        if (current.text.trim() && current.toolMode !== rejectedMode) {
+          setQueued(q => q === msg.text ? q : draftAfterStop(q ?? '', msg.text));
+          setQueuedToolMode(rejectedMode); setQueuedPaused(true);
+        } else {
+          setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
+          setToolMode(rejectedMode);
+        }
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
       }
       if (msg.type === "activityFreeze") {
         setFrozen(msg.frozen);
-        if (msg.nonce) postToHost({type:"saveActivityDraft",activityId,draft:snapshot.current,nonce:msg.nonce});
+        if (msg.nonce) postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce:msg.nonce});
       }
       if (msg.type === "activityDraftError") setDraftError(msg.error);
     });
     return off;
-  }, [activityId]);
+  }, [activityId,taskId]);
   // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
   // one itself (dropped from Finder, it opened as a tab): draw its chip.
   useEffect(() => onHostMessage((msg) => {
@@ -439,6 +458,7 @@ export function ChatPanel(props: Props) {
   const [worldPending, setWorldPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const imagePicker = useRef<HTMLInputElement>(null);
   useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
   const prevStreamingRef = useRef(streaming);
@@ -499,7 +519,10 @@ export function ChatPanel(props: Props) {
   const publishing = config?.profile?.publishing;
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
-  const classroomPanels = classroomPanelsShown(config?.profile);
+  const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
+  const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -547,28 +570,30 @@ export function ChatPanel(props: Props) {
     !config.coach?.configured;
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, streaming]);
+    if (!personalWorkspace) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages.length, streaming, personalWorkspace]);
 
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
 
-  const submit = (text?: string) => {
+  const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     const value = (text ?? draft).trim();
-    if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked) return;
-    if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return; }
+    if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
+    if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
+    if (personalWorkspace) viewport.toLatest();
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
-    props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined);
+    if (props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode) === false) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
     // The host now owns these files (it moves them into images/), so no discard here.
     setStagedPhotos([]);
     setImgNote(null);
     setRollExpand(null);
+    return true;
   };
 
   // #416 — the turn ended: send the message the participant parked during it.
@@ -578,15 +603,15 @@ export function ChatPanel(props: Props) {
     const prev = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
     // #751 U4 — a turn the instructor cut off hands the parked message back, exactly like the learner's own Stop. Never sent.
-    if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice)) { restoreQueuedToDraft(); return; }
-    if (unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice)) return;
+    if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice || !!error)) { restoreQueuedToDraft(); return; }
+    if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice || !!error)) return;
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
     setQueued(null);
-    submit(text);
+    submit(text, queuedToolMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streaming, queued]);
+  }, [streaming, queued, queuedPaused]);
 
   /**
    * #751 U3 — the learner pressed `초안에 가져오기`. One functional update of the draft: it merges into whatever the draft is
@@ -612,8 +637,15 @@ export function ChatPanel(props: Props) {
 
   /** Stop / cancel-reservation: the parked text goes back to the draft, never away. */
   const restoreQueuedToDraft = () => {
+    if (queued === null) return;
+    if (draft.trim() && toolMode !== queuedToolMode) {
+      setQueuedPaused(true);
+      setImgNote('도구가 다른 메시지는 따로 보관했습니다. 현재 입력을 보낸 뒤 가져오거나, 보관한 메시지를 먼저 보내세요.');
+      return;
+    }
     setDraft((d) => draftAfterStop(d, queued));
-    setQueued(null);
+    setToolMode(queuedToolMode);
+    setQueued(null); setQueuedPaused(false);
   };
 
   // Shared attach path for both clipboard paste (⌘V) and drag-and-drop.
@@ -780,11 +812,13 @@ export function ChatPanel(props: Props) {
     postToHost({ type: "discardStagedImage", stageId: id });
     setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
     setImgNote(null);
+    if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
   const removePendingImage = (idx: number) => {
     setPendingImages((prev) => prev.filter((_, i) => i !== idx));
     setImgNote(null);
+    if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
   const handleChip = (chip: SuggestionChip) => {
@@ -870,6 +904,7 @@ export function ChatPanel(props: Props) {
   return (
     <div
       className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
+      data-chat-detail={personalWorkspace ? 'personal' : undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -881,7 +916,7 @@ export function ChatPanel(props: Props) {
         {ux.coach.naming_mode === "fixed"
           ? <strong title={`이 수업의 AI 이름: ${coachName}`} className="hps-coach-name">{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
-        <div className="hps-actions">
+        <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
               own size makes the header row grow taller because of this one button.
@@ -929,12 +964,12 @@ export function ChatPanel(props: Props) {
             활동 변경
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
-          <button onClick={props.onSettings} title="설정" aria-label="설정">⚙</button>
-        </div>
+          <button onClick={props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
+        </HeaderActions>
       </header>
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
-      {!props.instructor && <MissionHeader
+      {!props.instructor && !personalWorkspace && <MissionHeader
         lesson={config?.profile?.lesson ?? null}
         // SX-01·SX-50 — the completion items are checked off from the host's own gate verdict.
         // Without `learningState` (a seat that records no learning events) there is no verdict,
@@ -1062,9 +1097,9 @@ export function ChatPanel(props: Props) {
           비활성" rather than deletion, because the trial's own TUX-OBS-07 is to read it. So it
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
       {showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
-      {config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
+      {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
-      <div className="hps-messages" ref={scrollRef}>
+      <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
           // and unobtrusive; sits at the top of the conversation so it reads
@@ -1107,6 +1142,7 @@ export function ChatPanel(props: Props) {
               hasActivity={turnHasActivity}
               onRunCode={props.onRunCode}
               onRetry={props.onRetry}
+              personal={personalWorkspace}
             />
           ),
         )}
@@ -1176,6 +1212,10 @@ export function ChatPanel(props: Props) {
         )}
       </div>
 
+      {personalWorkspace && viewport.away && <div className="hps-catchup">
+        <button type="button" onClick={viewport.toLatest}><ChatIcon kind="down" />최신 메시지</button>
+      </div>}
+
       {rollExpand !== null && (
         <RollExpandHint
           probe={ux.hints.roll_input_button.probe_md}
@@ -1244,14 +1284,24 @@ export function ChatPanel(props: Props) {
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".
           <div className="hps-queued" role="status" aria-live="polite">
-            <span className="hps-queued-label">다음에 보낼 메시지</span>
+            <span className="hps-queued-label">{queuedPaused ? '보관한 메시지' : '다음에 보낼 메시지'}{queuedToolMode === 'web-search' ? ' · 웹 검색' : ''}</span>
             <span className="hps-queued-text" title={queued}>{queued}</span>
+            {queuedPaused && !streaming && <button type="button" className="hps-queued-send" disabled={props.sendPending || unavailable || props.sendLocked} onClick={() => {
+              const editor = textareaRef.current;
+              const selection = editor && [editor.selectionStart, editor.selectionEnd, editor.selectionDirection] as const;
+              if (submit(queued, queuedToolMode)) {
+                setQueued(null); setQueuedPaused(false);
+                // This action disappears after sending; keep typing in the untouched next draft.
+                editor?.focus({ preventScroll: true });
+                if (editor && selection) editor.setSelectionRange(...selection);
+              }
+            }}>보내기</button>}
             <button
               type="button"
               className="hps-queued-cancel"
               onClick={restoreQueuedToDraft}
               title="예약 취소 — 입력창으로 되돌려요"
-              aria-label="예약 취소"
+              aria-label={queuedPaused ? "보관한 메시지 입력창으로 가져오기" : "예약 취소"}
             >
               ×
             </button>
@@ -1298,12 +1348,16 @@ export function ChatPanel(props: Props) {
         )}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
+          data-expanded={personalWorkspace ? composerExpanded : undefined}
         >
+          {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} />}
+          {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
             autoFocus
             readOnly={unavailable}
             aria-label={composerLabel(coachName)}
+            aria-describedby={personalWorkspace ? "personal-composer-hint" : undefined}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onPaste={handlePaste}
@@ -1334,6 +1388,8 @@ export function ChatPanel(props: Props) {
               });
               if (decision.action === "ignore") return;
               if (decision.action === "queue") {
+                if (queued !== null && (queuedPaused || queuedToolMode !== toolMode)) { setImgNote('보관한 메시지를 먼저 보내거나 입력창으로 가져와 주세요. 지금 입력한 내용은 그대로입니다.'); return; }
+                setQueuedToolMode(toolMode);
                 setQueued(decision.queued);
                 setDraft("");
                 return;
@@ -1341,7 +1397,7 @@ export function ChatPanel(props: Props) {
               submit();
             }}
             placeholder={
-              streaming
+              personalWorkspace ? (streaming ? '다음 메시지를 준비하세요' : '메시지를 입력하세요') : streaming
                 ? queued
                   ? "이어서 적으면 예약 메시지에 덧붙여요"
                   : "응답 중에도 적을 수 있어요 — Enter 로 예약하면 끝나고 바로 보내요"
@@ -1351,9 +1407,11 @@ export function ChatPanel(props: Props) {
                     ? platformizeKeys("메시지를 입력하고 Enter — 이미지는 ⌘V로 붙여넣기 (Shift+Enter 줄바꿈)")
                     : "메시지를 입력하고 Enter (Shift+Enter 줄바꿈)"
             }
-            rows={3}
+            rows={personalWorkspace ? 1 : 3}
           />
+          {personalWorkspace && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
           <div className="hps-input-buttons">
+            {personalWorkspace && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
             {!streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
               <button
                 onClick={handleRollClick}
@@ -1370,26 +1428,33 @@ export function ChatPanel(props: Props) {
                   // #416 — a parked message survives the stop as draft text.
                   restoreQueuedToDraft();
                   props.onCancel();
+                  if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
                 }}
                 className="hps-btn-stop"
+                aria-label={personalWorkspace ? '응답 멈추기' : undefined}
+                title={personalWorkspace ? '응답 멈추기' : undefined}
               >
-                Stop
+                {personalWorkspace ? <ChatIcon kind="stop" /> : 'Stop'}
               </button>
             ) : rollExpand ? (
               <button
                 onClick={handleRollSend}
                 disabled={!draft.trim()}
                 className="hps-btn-send"
+                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
+                title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                Send
+                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
               </button>
             ) : (
               <button
-                onClick={() => submit()}
-                disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || stagedPhotos.some((p) => !p.ready)}
+                onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
+                disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
+                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
+                title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                Send
+                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
               </button>
             )}
           </div>
@@ -1766,6 +1831,7 @@ function MessageItem({
   hasActivity,
   onRunCode,
   onRetry,
+  personal = false,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -1780,7 +1846,8 @@ function MessageItem({
   /** #414 — an activity log is on screen, so the spinner must not invent stages. */
   hasActivity: boolean;
   onRunCode: (html: string) => void;
-  onRetry: (prompt: string) => void;
+  onRetry: (prompt: string, source?: ChatMessage) => void;
+  personal?: boolean;
 }) {
   const renderable = useMemo(
     () => (message.role === "assistant" ? extractRenderableHtml(message.content) : null),
@@ -1794,14 +1861,14 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}`}>
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`}>
       <div className="hps-msg-role">
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from
           * before this change, a bubble still streaming) it falls back to the live name.
           * Re-resolving here would make the past change along the moment the name changes.
           */}
-        <span>{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
+        <span>{personal && message.role === 'assistant' && <span className="hps-assistant-mark" aria-hidden="true">h</span>}{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
         {renderable && (
           <button
             className="hps-msg-run"
@@ -1814,13 +1881,15 @@ function MessageItem({
         {retryPrompt && (
           <button
             className="hps-msg-retry"
-            onClick={() => onRetry(retryPrompt)}
+            onClick={() => onRetry(retryPrompt.content, retryPrompt)}
             title="다른 방식으로 한 번 더 만들기"
+            aria-label={personal ? "답변 다시 만들기" : undefined}
           >
-            🔄
+            {personal ? <ChatIcon kind="retry" /> : '🔄'}
           </button>
         )}
       </div>
+      {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       <div className="hps-msg-body">
         {message.role === "assistant" ? (
           <AssistantContent
@@ -1829,6 +1898,7 @@ function MessageItem({
             buildingLabel={buildingLabel}
             tone={tone}
             hasActivity={hasActivity}
+            personal={personal}
           />
         ) : (
           <>
@@ -1844,8 +1914,9 @@ function MessageItem({
         )}
       </div>
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
-        <CitationRack citations={message.citations} />
+        personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
+      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer content={message.content} />}
     </div>
   );
 }
@@ -1929,6 +2000,7 @@ function AssistantContent({
   buildingLabel,
   tone,
   hasActivity = false,
+  personal = false,
 }: {
   content: string;
   streaming: boolean;
@@ -1936,12 +2008,13 @@ function AssistantContent({
   tone: "game" | "search" | "site" | "quest";
   /** #414 — the tool/activity log below carries the real state of the turn. */
   hasActivity?: boolean;
+  personal?: boolean;
 }) {
   const segments = useMemo(() => splitFences(content), [content]);
   const hasOpenFence = segments.some((s) => s.type === "code-open");
 
   if (content.length === 0) {
-    return <span>{streaming ? "생각하는 중… ✨" : ""}</span>;
+    return personal && streaming ? <ResponsePending /> : <span>{streaming ? "생각하는 중… ✨" : ""}</span>;
   }
 
   return (
@@ -1952,6 +2025,7 @@ function AssistantContent({
         }
         if (seg.type === "code-open") {
           if (streaming) {
+            if (personal) return <ResponsePending key={i} hasContent />;
             const stage = buildStageText(buildingLabel, content, hasOpenFence, tone, hasActivity);
             return (
               <div key={i} className="hps-code-progress">
@@ -1971,7 +2045,8 @@ function AssistantContent({
         }
         return <CodePill key={i} code={seg.value} />;
       })}
-      {streaming && !hasOpenFence && content.length > 0 && (
+      {personal && streaming && !hasOpenFence && <ResponsePending hasContent />}
+      {!personal && streaming && !hasOpenFence && content.length > 0 && (
         <div className="hps-code-progress hps-code-progress-prelude">
           🛠️ {buildStageText(buildingLabel, content, false, tone, hasActivity)}… <span className="hps-dots">✨</span>
         </div>
@@ -2200,4 +2275,51 @@ function UpdateBanner({
       </div>
     </div>
   );
+}
+
+
+/** Personal secondary actions share a full-size target; classroom controls keep their existing layout. */
+export function HeaderActions({ personal, taskId, children }: { personal: boolean; taskId?: string; children: import('react').ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const firstFocus = useRef<'first' | 'last'>('first');
+  const menuId = useId();
+  const items = () => [...(panel.current?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? [])];
+  const close = (restore = false) => { setOpen(false); if (restore) toggle.current?.focus({ preventScroll: true }); };
+  useEffect(() => { setOpen(false); }, [personal, taskId]);
+  useEffect(() => {
+    if (!personal || !open) return;
+    const choices = items();
+    (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false); };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [personal, open]);
+  if (!personal) return <div className="hps-actions">{children}</div>;
+  return <div className="hps-actions tw-chat-menu" ref={root} onBlur={event => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+  }} onKeyDown={event => {
+    if (!open || event.defaultPrevented) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
+    else if (event.key === 'Tab') close(true);
+    else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      const choices = items();
+      if (!choices.length) return;
+      event.preventDefault();
+      const at = choices.indexOf(document.activeElement as HTMLButtonElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+      choices[next].focus({ preventScroll: true });
+    }
+  }}>
+    <button ref={toggle} type="button" className="tw-chat-menu-toggle" aria-label="대화 메뉴" title="대화 메뉴" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => { firstFocus.current = 'first'; setOpen(!open); }} onKeyDown={event => {
+      if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        event.preventDefault(); firstFocus.current = event.key === 'ArrowUp' ? 'last' : 'first'; setOpen(true);
+      }
+    }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg></button>
+    {open && <div ref={panel} id={menuId} className="tw-chat-menu-panel" role="menu" aria-label="대화 메뉴" onClick={event => {
+      if (event.target instanceof Element && event.target.closest('button[role="menuitem"]')) close(true);
+    }}>{Children.map(children, child => isValidElement<{ role?: string; tabIndex?: number }>(child) && child.type === 'button' ? cloneElement(child, { role: 'menuitem', tabIndex: -1 }) : child)}</div>}
+  </div>;
 }

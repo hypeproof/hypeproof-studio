@@ -73,6 +73,7 @@ jobs:
           node e2e/unified-release/gate.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
           node --test e2e/unified-release/candidate-service.test.mjs
+          node --test scripts/test/windows-policy-patch.test.mjs
           node --test scripts/release/test/engine.test.mjs
           node --test e2e/paid-pass-recovery/proxy.test.mjs e2e/paid-pass-recovery/contract.test.mjs e2e/paid-pass-recovery/lifecycle.test.mjs
           node scripts/test-unified-launcher.mjs
