@@ -1612,15 +1612,22 @@ export interface SdkBusyPolicy {
 }
 
 /**
- * The busy policy for this seat: only an orchestrator seat gets one (spec
- * §13.2 row A2). Undefined elsewhere, so consumeSdkStream behaves exactly as
- * before.
+ * The busy policy for this seat. Two kinds of seat get one:
+ * - an orchestrator seat (spec §13.2 row A2);
+ * - a native-trial seat (`activity_kind: "trial"`, which a bought pass also is;
+ *   REQ-STUDIO-TRIAL-BUSY). The Service holds one lease per trial grant and
+ *   refuses an overlapping request with `429 trial_busy` and no
+ *   `x-should-retry`, so the CLI retried it 11 times over 186 s and then showed
+ *   its raw "API Error: Request rejected (429)" line (observed 2026-10-18).
+ *   The trial profile serves `orchestrator.enabled: false`, so the A2 gate alone
+ *   never reached it.
+ * Undefined elsewhere, so consumeSdkStream behaves exactly as before.
  */
 export function sdkBusyPolicyFor(
-  agent: Pick<AgentCoachOptions, "orchestrator">,
+  agent: Pick<AgentCoachOptions, "orchestrator"> & { activityKind?: string | null },
   onNotice: (text: string) => void,
 ): SdkBusyPolicy | undefined {
-  return agent.orchestrator ? { onNotice } : undefined;
+  return agent.orchestrator || agent.activityKind === "trial" ? { onNotice } : undefined;
 }
 
 /**
