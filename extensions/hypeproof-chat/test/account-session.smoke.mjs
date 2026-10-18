@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { AccountSession, ACCOUNT_SECRET_KEY, accountPreviewEnabled, safeDeviceUrl } from '../src/accountSession.ts';
 const SERVICE='http://127.0.0.1:8793/v1', SITE='http://localhost:3193';
 const reply=(status, body)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
-function harness() {
+function harness(extra = {}) {
   const world={now:1_000_000,store:new Map(),calls:[],opened:[],invalidated:[],refresh:0,poll:'pending',release:undefined,revoke:false,offline:false,failStore:false};
   const secrets={get:async k=>world.store.get(k),store:async(k,v)=>{if(world.failStore)throw Error("secret storage unavailable");world.store.set(k,v)},delete:async k=>{world.store.delete(k)}};
   const bundle=n=>({access_token:`account-secret-${n}`,refresh_token:`refresh-secret-${n}`,session_id:'session-one',expires_in:3600});
@@ -27,7 +27,7 @@ function harness() {
     if(u.pathname.endsWith('/activate'))return reply(200,{access_token:`pass-secret-${world.refresh}`,expires_in:3600,pass:{}});
     throw new Error('Unexpected request '+u.pathname);
   };
-  const make=()=>new AccountSession({service:SERVICE,site:SITE,secrets,label:'Test Studio',fetch,now:()=>world.now,openBrowser:async u=>{world.opened.push(u);return true},invalidated:async id=>{world.invalidated.push(id)}});
+  const make=()=>new AccountSession({service:SERVICE,site:SITE,secrets,label:'Test Studio',fetch,now:()=>world.now,openBrowser:async u=>{world.opened.push(u);return true},invalidated:async id=>{world.invalidated.push(id)},...extra});
   return {world,client:make(),make};
 }
 assert.equal(accountPreviewEnabled(false,SERVICE,SITE),false);
@@ -81,4 +81,47 @@ assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),fals
   const {world,client}=harness();await client.start();world.poll='approved';await client.poll();world.now+=3_700_000;
   await client.signOut();assert.equal(world.refresh,1,'an expired access token must refresh under the lock before remote logout');assert.equal(world.store.size,0);assert.match(client.view().message,/로그아웃했어요/);assert.equal(world.calls.at(-1).authorization,'Bearer account-secret-1');
   client.dispose();console.log('PASS online logout after access expiry revokes the rotated session');
+}
+
+{
+  const returns=[];let state;
+  const {world,client}=harness({createReturnUri:async nonce=>{state=nonce;return `hypeproof-studio://hypeproof.hypeproof-chat/account-return?state=${nonce}&windowId=42`;},returned:async()=>{returns.push('original-window');}});
+  await client.start();assert.match(state,/^[a-f0-9]{64}$/);
+  assert.match(world.calls[0].body.return_uri,/windowId=42/);
+  assert.equal(await client.browserReturned('f'.repeat(64)),false,'foreign window nonce cannot trigger approval');
+  assert.equal(await client.browserReturned(state),false,'valid callback before browser approval grants nothing');
+  assert.equal(world.store.size,0);assert.equal(returns.length,0);
+  world.poll='delayed';const polling=client.poll();while(!world.release)await new Promise(r=>setImmediate(r));
+  const callback=client.browserReturned(state);world.release();await polling;assert.equal(await callback,true);
+  assert.deepEqual(returns,['original-window']);assert.equal(await client.browserReturned(state),false,'callback is consumed');
+  assert.equal(world.calls.filter(c=>c.path.endsWith('/device/poll')).length,2,'callback joins in-flight approval poll');
+  assert.equal(JSON.stringify(client.view()).includes(state),false,'routing nonce stays out of presentation state');
+  client.dispose();console.log('PASS original-window callback requires matching one-shot nonce and Service approval; concurrent polls coalesce');
+}
+{
+  let state;const {world,client}=harness({createReturnUri:async nonce=>{state=nonce;return `hypeproof-studio://hypeproof.hypeproof-chat/account-return?state=${nonce}&windowId=42`;}});
+  await client.start();const first=state;client.cancel();assert.equal(await client.browserReturned(first),false);
+  await client.start();assert.notEqual(first,state);world.now+=601000;assert.equal(await client.browserReturned(state),false);client.dispose();
+  console.log('PASS cancelled, superseded and expired return attempts cannot reuse the original window');
+}
+{
+  let attempts=0;const {client}=harness({openBrowser:async()=>{attempts++;return attempts>2;}});
+  await client.start();assert.match(client.view().message,/열지 못/);await client.reopen();assert.match(client.view().message,/열지 못/);
+  await client.reopen();assert.match(client.view().message,/승인/);client.dispose();console.log('PASS browser retry reports failed opening and recovers');
+}
+
+{
+  let state;let returned=0;
+  const {world,client}=harness({createReturnUri:async nonce=>{state=nonce;return `hypeproof-studio://hypeproof.hypeproof-chat/account-return?state=${nonce}&windowId=42`;},returned:async()=>{returned++;}});
+  await client.start();world.poll='slow';assert.equal(await client.browserReturned(state),false);assert.equal(returned,0);
+  world.poll='approved';await client.poll();assert.equal(returned,1,'pending browser return survives slow_down until approval');await client.poll();assert.equal(returned,1);client.dispose();
+  console.log('PASS delayed approval completes original-window return once after slow_down');
+}
+{
+  let returned=0;const {world,client}=harness({createReturnUri:async nonce=>`hypeproof-studio://hypeproof.hypeproof-chat/account-return?state=${nonce}&windowId=42`,returned:async()=>{returned++;throw Error('view unavailable');}});
+  await client.start();world.poll='approved';await client.poll();await new Promise(r=>setImmediate(r));
+  assert.equal(client.view().status,'signedIn');assert.equal(world.store.size,1);assert.equal(returned,1);
+  assert.equal(world.opened.filter(u=>u.startsWith('hypeproof-studio:')).length,1,'app requests original-window foreground when browser never returns');
+  await client.refreshView();assert.equal(returned,1,'background refresh never steals focus');client.dispose();
+  console.log('PASS successful poll requests foreground once, preserves credentials if reveal fails');
 }

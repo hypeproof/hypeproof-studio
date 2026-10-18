@@ -212,6 +212,8 @@ export async function activate(context: vscode.ExtensionContext) {
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
     openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
+    createReturnUri: async state => (await vscode.env.asExternalUri(vscode.Uri.parse(`${vscode.env.uriScheme}://hypeproof.hypeproof-chat/account-return?state=${state}`))).toString(),
+    returned: async () => { await startPage.show(); },
     changed: () => startPage.accountChanged(),
     lock: accountLock(context.globalStorageUri.fsPath),
     invalidated: async sessionId => {
@@ -224,6 +226,15 @@ export async function activate(context: vscode.ExtensionContext) {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource(), accounts);
   if (accounts) {
+    context.subscriptions.push(vscode.window.registerUriHandler({
+      handleUri: async uri => {
+        if (uri.scheme !== vscode.env.uriScheme || uri.authority !== 'hypeproof.hypeproof-chat' || uri.path !== '/account-return' || uri.fragment) return;
+        const query = new URLSearchParams(uri.query);
+        if ([...query.keys()].some(key => key !== 'state' && key !== 'windowId') || query.getAll('state').length !== 1) return;
+        const state = query.get('state') ?? '';
+        if (/^[a-f0-9]{64}$/.test(state)) await accounts.browserReturned(state);
+      },
+    }));
     const accountWatch = setInterval(() => { void accounts.refreshView(); }, 15_000);
     context.subscriptions.push({dispose: () => { clearInterval(accountWatch); accounts.dispose(); }});
   }

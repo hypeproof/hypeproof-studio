@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+
 /** Host-only personal account credentials. Presentation state deliberately has no credential fields. */
 export const ACCOUNT_SECRET_KEY = 'hypeproofChat.personalAccount.v1';
 export interface AccountIdentity { id: string; email: string; display_name: string }
@@ -16,6 +18,9 @@ interface SecretStore { get(key: string): PromiseLike<string | undefined>; store
 interface Options {
   service: string; site: string; secrets: SecretStore; label: string;
   openBrowser(url: string): PromiseLike<boolean>; changed?(): void;
+  /** Resolves the original desktop window through VS Code's URI router. No credentials. */
+  createReturnUri?(state: string): PromiseLike<string>;
+  returned?(): PromiseLike<void>;
   invalidated?(sessionId: string): Promise<void>;
   /** Serializes mutation across extension-host windows, not only concurrent requests in one host. */
   lock?<T>(work: () => Promise<T>): Promise<T>;
@@ -53,6 +58,8 @@ export class AccountSession {
   private generation = 0;
   private device?: { code: string; url: string; expiresAt: number; interval: number; generation: number };
   private timer?: ReturnType<typeof setTimeout>;
+  private browserReturn?: { state: string; uri: string; expiresAt: number; received: boolean };
+  private polling?: Promise<void>;
   private passTokens = new Map<string, { token: string; expiresAt: number; sessionId: string }>();
   private lastSession?: string;
   private state: AccountView = { status: 'signedOut' };
@@ -136,17 +143,22 @@ export class AccountSession {
       this.state = { status: 'signedIn', account: a, passes: passes.passes.filter((p: any) => record(p) && typeof p.id === 'string').map((p: any) => ({ id: p.id, product_name: String(p.product_name ?? '이용권'), status: String(p.status), requests_used: Number(p.requests_used), requests_limit: Number(p.requests_limit), requests_remaining: Number(p.requests_remaining), starts_at: p.starts_at ?? null, expires_at: p.expires_at ?? null, amount: Number(p.amount), duration_seconds: Number(p.duration_seconds) || 0, activation_deadline_at: p.activation_deadline_at ?? null })) };
     } catch (e) { this.state = { ...this.state, message: e instanceof AccountError ? e.message : friendly('unavailable') }; }
     this.emit();
+    await this.completeReturn();
   }
   async start(): Promise<void> {
     if (await this.read()) return;
     this.cancel(false); const generation = this.generation;
     this.state = { status: 'signedOut', busy: true }; this.emit();
     try {
-      const { body: d } = await this.call('/auth/device/start', { label: this.options.label });
+      const state = randomBytes(32).toString('hex');
+      const returnUri = await this.options.createReturnUri?.(state);
+      if (generation !== this.generation) return;
+      const { body: d } = await this.call('/auth/device/start', { label: this.options.label, ...(returnUri ? { return_uri: returnUri } : {}) });
       if (generation !== this.generation) return;
       const url = d.verification_uri_complete ?? d.verification_uri;
       if (!safeDeviceUrl(url, this.options.site) || typeof d.device_code !== 'string' || typeof d.user_code !== 'string' || !Number.isFinite(d.expires_in) || d.expires_in <= 0) throw new AccountError('invalid_response', friendly('invalid_response'));
       const expiresAt = this.now() + Math.min(d.expires_in, 600) * 1000;
+      this.browserReturn = returnUri ? { state, uri: returnUri, expiresAt, received: false } : undefined;
       this.device = { code: d.device_code, url, expiresAt, interval: Math.max(3, Number(d.interval) || 3) * 1000, generation };
       this.state = { status: 'waiting', userCode: d.user_code, expiresAt, message: '브라우저에서 Google 로그인 후 이 Studio 연결을 승인해 주세요.' }; this.emit();
       if (!await this.options.openBrowser(url)) { this.state.message = '브라우저를 열지 못했어요. 로그인 창 다시 열기를 눌러 주세요.'; this.emit(); }
@@ -154,8 +166,44 @@ export class AccountSession {
     } catch (e) { if (generation === this.generation) { this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit(); } }
   }
   private schedule(): void { if (this.timer) clearTimeout(this.timer); if (this.device) this.timer = setTimeout(() => { void this.poll(); }, this.device.interval); }
-  async reopen(): Promise<void> { if (this.device) await this.options.openBrowser(this.device.url); }
+  async reopen(): Promise<void> {
+    if (!this.device) return;
+    try {
+      const opened = await this.options.openBrowser(this.device.url);
+      this.state.message = opened ? '브라우저에서 연결 번호를 확인하고 승인해 주세요.' : '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.';
+    } catch { this.state.message = '브라우저를 열지 못했어요. 기본 브라우저 설정을 확인하고 다시 시도해 주세요.'; }
+    this.emit();
+  }
+  /** Callback is a wake-up signal only. The Service's explicit device approval grants credentials. */
+  async browserReturned(state: string): Promise<boolean> {
+    const pending = this.browserReturn;
+    if (!pending || state !== pending.state || this.now() >= pending.expiresAt) return false;
+    pending.received = true;
+    await this.poll();
+    return this.state.status === 'signedIn';
+  }
+  private async completeReturn(): Promise<void> {
+    const pending = this.browserReturn;
+    if (!pending || this.state.status !== 'signedIn' || this.now() >= pending.expiresAt) return;
+    this.browserReturn = undefined;
+    try { await this.options.returned?.(); }
+    catch { this.state.message = '로그인됐어요. Studio 시작 화면을 다시 열면 이용권을 확인할 수 있어요.'; this.emit(); }
+    if (!pending.received) {
+      // Do not await URI dispatch: its handler can join this very poll. VS Code's
+      // resolved URI carries the originating windowId and requests OS foreground.
+      void Promise.resolve().then(() => this.options.openBrowser(pending.uri)).then(opened => {
+        if (!opened && this.state.status === 'signedIn') { this.state.message = '로그인됐어요. Dock 또는 작업 표시줄에서 Studio를 선택해 주세요.'; this.emit(); }
+      }).catch(() => {
+        if (this.state.status === 'signedIn') { this.state.message = '로그인됐어요. Dock 또는 작업 표시줄에서 Studio를 선택해 주세요.'; this.emit(); }
+      });
+    }
+  }
   async poll(): Promise<void> {
+    if (this.polling) return this.polling;
+    this.polling = this.pollOnce();
+    try { await this.polling; } finally { this.polling = undefined; }
+  }
+  private async pollOnce(): Promise<void> {
     const d = this.device; if (!d) return;
     if (this.now() >= d.expiresAt) { this.cancel(false); this.state = { status: 'signedOut', message: friendly('device_expired') }; this.emit(); return; }
     try {
@@ -173,14 +221,18 @@ export class AccountSession {
         if (this.device !== d) { await this.call('/auth/logout', {}, bundle.accessToken).catch(() => undefined); await this.options.secrets.delete(ACCOUNT_SECRET_KEY); }
       });
       if (this.device !== d) return;
-      this.cancel(false); await this.refreshView();
+      // Retain only the short-lived return nonce until the browser routes the original window.
+      const browserReturn = this.browserReturn;
+      this.cancel(false); this.browserReturn = browserReturn;
+      await this.refreshView();
+      await this.completeReturn();
     } catch (e) {
       if (this.device !== d) return;
       if (e instanceof AccountError && (e.code === 'unavailable' || e.code === 'slow_down' || e.code === 'rate_limited' || /^http_5/.test(e.code))) { if (e.code === 'slow_down') d.interval = Math.min(d.interval + 1000, 15000); this.state.message = '연결을 다시 확인하고 있어요. 잠시만 기다려 주세요.'; this.emit(); this.schedule(); return; }
       this.cancel(false); this.state = { status: 'signedOut', message: e instanceof AccountError ? e.message : friendly('unavailable') }; this.emit();
     }
   }
-  cancel(notify = true): void { this.generation++; this.device = undefined; if (this.timer) clearTimeout(this.timer); this.timer = undefined; if (notify) { this.state = { status: 'signedOut', message: '로그인을 취소했어요.' }; this.emit(); } }
+  cancel(notify = true): void { this.browserReturn = undefined; this.generation++; this.device = undefined; if (this.timer) clearTimeout(this.timer); this.timer = undefined; if (notify) { this.state = { status: 'signedOut', message: '로그인을 취소했어요.' }; this.emit(); } }
   async activate(passId: string): Promise<{ token: string; binding: AccountPassBinding }> {
     if (!/^[A-Za-z0-9_-]{1,100}$/.test(passId)) throw new AccountError('invalid_pass', friendly('invalid_pass'));
     const before = await this.read(); if (!before) throw new AccountError('unauthorized', friendly('unauthorized'));
