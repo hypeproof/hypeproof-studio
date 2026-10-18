@@ -242,7 +242,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
-import { FunnelReporter, entryOutcome, funnelOs, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
+import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
   ArtifactChangeGate,
   startHeartbeat,
@@ -2943,14 +2943,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * studio-funnel-events — point the reporter at the Service route for this seat.
    * Not a trial grant → off. A trial grant → GET /v1/trial/events once per token; only a
    * `hps-trial-funnel/1` answer turns it on (404 while the Service flag is off). A network
-   * failure leaves it "unknown" so the next profile read probes again. Never throws.
+   * failure leaves it "unknown" so the next profile read probes again. A failed profile read keeps
+   * an already-probed token's target (see funnelProfileStep). Never throws.
    */
   private async refreshFunnelTarget(p: ResolvedProfile | null, token: string, proxyUrl: string): Promise<void> {
     try {
-      if (!p) { this.funnel.setTarget(undefined); return; }
       const payload = decodeTokenPayloadUnverified(token);
-      if (!isTrialGrantToken(payload)) { this.funnelProbedToken = null; this.funnel.setTarget(null); return; }
-      if (this.funnelProbedToken === token) return;
+      const step = funnelProfileStep({ profileOk: !!p, trialGrant: isTrialGrantToken(payload), token, probedToken: this.funnelProbedToken });
+      if (step === "keep") return;
+      if (step === "unknown") { this.funnelProbedToken = null; this.funnel.setTarget(undefined); return; }
+      if (step === "off") { this.funnelProbedToken = null; this.funnel.setTarget(null); return; }
+      if (!p) return;
       this.funnelProbedToken = token;
       const url = trialEventsUrl(proxyUrl);
       let probe: ReturnType<typeof parseTrialEventsProbe>;

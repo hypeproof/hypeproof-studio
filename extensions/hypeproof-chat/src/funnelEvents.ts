@@ -133,6 +133,23 @@ export function usesTraceRoute(funnelOn: boolean, tokenPayload: Record<string, u
   return !(funnelOn && isTrialGrantToken(tokenPayload));
 }
 
+/**
+ * What a profile read does to the funnel target. `probedToken` is the token whose probe already ran
+ * (or is in flight).
+ *   "keep"    — leave the target as it is: same token already probed. A failed profile read
+ *               (network blip, identity mismatch) for an already-probed token also keeps it;
+ *               clearing it there without forgetting the probe would strand the funnel until restart.
+ *   "unknown" — failed read for a token not probed yet: forget any probe, events wait in the queue.
+ *   "off"     — not a trial grant: forget any probe, route off.
+ *   "probe"   — a trial grant not probed yet: run GET /v1/trial/events.
+ */
+export type FunnelProfileStep = "keep" | "unknown" | "off" | "probe";
+export function funnelProfileStep(o: { profileOk: boolean; trialGrant: boolean; token: string; probedToken: string | null }): FunnelProfileStep {
+  if (!o.profileOk) return o.probedToken === o.token ? "keep" : "unknown";
+  if (!o.trialGrant) return "off";
+  return o.probedToken === o.token ? "keep" : "probe";
+}
+
 /** Events reported once per grant (entry, first view, first result per kind/outcome). */
 function dedupeKey(ev: FunnelEvent): string | null {
   if (ev.type === "trial_entry") return ev.type;

@@ -30,6 +30,7 @@ import {
   buildFunnelEvent,
   entryOutcome,
   funnelOs,
+  funnelProfileStep,
   funnelToolKind,
   isTrialGrantToken,
   parseTrialEventsProbe,
@@ -316,12 +317,53 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
   assert.equal(reporter.queued, 0);
 }
 
+{
+  // Profile-read sequence: active → failed read → recovered read must keep the route on.
+  // Before the fix a failed read cleared the target but kept the probe marker, so the recovered
+  // read skipped the probe and the funnel stayed off (events stuck in the queue, liveness back on
+  // /v1/trace/event) until restart. This replays the host's refreshFunnelTarget decisions.
+  const calls = [];
+  const reporter = new FunnelReporter({ send: async (url, token, body) => { calls.push({ url, token, body }); return 204; } });
+  let probedToken = null;
+  let probes = 0;
+  const read = (profileOk, token, trialGrant = true) => {
+    const step = funnelProfileStep({ profileOk, trialGrant, token, probedToken });
+    if (step === "unknown") { probedToken = null; reporter.setTarget(undefined); }
+    if (step === "off") { probedToken = null; reporter.setTarget(null); }
+    if (step === "probe") { probedToken = token; probes += 1; reporter.setTarget({ url: URL_ON, token, events: ALL_EVENTS }); }
+    return step;
+  };
+  assert.equal(read(true, "g1"), "probe");
+  assert.ok(reporter.active && usesTraceRoute(reporter.active && probedToken === "g1", { native_trial: true }) === false);
+  assert.equal(read(false, "g1"), "keep", "a failed read keeps an already-probed token's target");
+  assert.ok(reporter.active, "route stays on through the failed read");
+  assert.equal(usesTraceRoute(reporter.active && probedToken === "g1", { native_trial: true }), false, "no /v1/trace/event fallback");
+  reporter.emit({ type: "trial_tool_result", kind: "write", ok: true });
+  await flush();
+  assert.equal(calls.length, 1, "events after the failed read are sent, not queued");
+  assert.equal(reporter.queued, 0);
+  assert.equal(read(true, "g1"), "keep", "recovered read needs no second probe");
+  assert.ok(reporter.active);
+  assert.equal(probes, 1);
+  // A failed read for a token not probed yet is unknown and forgets the probe, so recovery probes.
+  assert.equal(read(false, "g2"), "unknown");
+  assert.equal(reporter.active, false);
+  assert.equal(probedToken, null);
+  assert.equal(read(true, "g2"), "probe", "recovered read for the new token probes again");
+  assert.ok(reporter.active);
+  // Not a trial grant → off.
+  assert.equal(read(true, "c1", false), "off");
+  assert.equal(reporter.active, false);
+}
+
 // ─── Host wiring (source locks) ──────────────────────────────────────────────────────────
 {
   const host = readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
   assert.match(host, /usesTraceRoute\(/, "liveness asks usesTraceRoute before posting to /trace/event");
   assert.match(host, /parseTrialEventsProbe\(/, "the reporter target follows the GET /v1/trial/events probe");
   assert.match(host, /isTrialGrantToken\(/, "only a native trial grant is probed");
+  assert.match(host, /funnelProfileStep\(/, "profile reads go through funnelProfileStep");
+  assert.ok(!/if \(!p\) \{ this\.funnel\.setTarget\(undefined\)/.test(host), "a failed read does not clear the target while keeping the probe marker");
   assert.match(host, /type: "trial_entry"/, "entry outcome is reported");
   assert.match(host, /type: "trial_tool_result"/, "SDK tool results are reported");
   assert.match(host, /funnelToolKind\(/);
