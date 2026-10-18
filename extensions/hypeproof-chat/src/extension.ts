@@ -39,6 +39,7 @@ import {
   runUpdate,
   dismissVersion,
   currentBundleVersion,
+  reportManualUpdateCheckFailure,
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
@@ -597,7 +598,8 @@ export async function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`현재 v${current} — 최신 버전입니다.`);
         }
       } catch (error) {
-        vscode.window.showWarningMessage(`업데이트를 확인하지 못했습니다. 잠시 후 다시 시도해주세요. ${(error as Error).message}`);
+        // REQ-I14: no release access → homepage download, not a retry promise.
+        void reportManualUpdateCheckFailure(error);
       }
     }),
 

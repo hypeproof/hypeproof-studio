@@ -10,6 +10,25 @@ const RELEASE_REPO = "hypeproof/hypeproof-studio-releases";
 export const RELEASES_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
 const ASSET_PATH = `/repos/${RELEASE_REPO}/releases/assets/`;
 
+const UPDATE_ACCESS_ERROR_CODE = "update_access_unavailable";
+
+/**
+ * The private release mirror cannot be read with this machine's credentials
+ * (REQ-I14). Retrying will not help; the UI points to the homepage download.
+ */
+export class UpdateAccessError extends Error {
+  readonly code = UPDATE_ACCESS_ERROR_CODE;
+  constructor(detail: string) {
+    super(detail);
+    this.name = "UpdateAccessError";
+  }
+}
+
+export function isUpdateAccessError(error: unknown): boolean {
+  return typeof error === "object" && error !== null &&
+    (error as { code?: unknown }).code === UPDATE_ACCESS_ERROR_CODE;
+}
+
 export function trustedUpdateUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -29,7 +48,9 @@ export async function releaseToken(): Promise<string> {
     });
     if (stdout.trim()) return stdout.trim();
   } catch { /* Do not surface command output: it can contain credentials. */ }
-  throw new Error("비공개 릴리스 접근 권한이 필요합니다. GitHub CLI에서 gh auth login을 실행하거나 HPS_RELEASE_TOKEN을 설정한 뒤 Studio를 다시 시작해 주세요.");
+  // Not a member (or not logged in): the private mirror is unreadable. The UI
+  // points to the homepage download instead of a developer instruction (REQ-I14).
+  throw new UpdateAccessError("No member GitHub credential for the private release mirror");
 }
 
 async function fetchAsset(url: string, signal: AbortSignal): Promise<Response> {
@@ -55,6 +76,11 @@ export async function fetchLatestRelease(): Promise<unknown> {
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
+  // A token without access to the private mirror gets 404 (hidden repo) or
+  // 401 (rejected token). Neither recovers by retrying (REQ-I14).
+  if (response.status === 401 || response.status === 404) {
+    throw new UpdateAccessError(`Release mirror not readable: HTTP ${response.status}`);
+  }
   if (!response.ok) throw new Error(`Update check failed: HTTP ${response.status}`);
   return response.json();
 }
