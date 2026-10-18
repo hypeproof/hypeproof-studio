@@ -17,7 +17,7 @@
 .cp-preview-actions { display: flex; flex-direction: column; gap: 8px; }
 .cp-preview-actions > button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; width: 100%; margin: 0; white-space: normal; line-height: 1.4; }
 .cp-preview-actions svg { flex: none; }
-.cp-preview .cp-source-error, .cp-source-open-error { color: var(--vscode-errorForeground, #f0a3a3); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.cp-preview .cp-source-error, .cp-source-open-error { color: var(--vscode-errorForeground, var(--vscode-foreground, #e1e1e1)); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .cp-preview .cp-source-status { font-size: 11px; margin-bottom: 0; }
 .cp-source-open-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 20px; }
 .cp-source-open-error > button { flex: none; }

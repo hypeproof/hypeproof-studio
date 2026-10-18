@@ -3,7 +3,8 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { serveTaskWorkspace } from './server.mjs';
 
-const server = await serveTaskWorkspace();
+const { resolvedProfile } = await import('../../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs');
+const server = await serveTaskWorkspace({ profile: resolvedProfile(3, { lesson: undefined, input: { image_paste: true }, welcome: { greeting_md: '개인 작업을 이어가세요.', example_prompts: [] } }) });
 const browser = await chromium.launch({ headless: true });
 const output = resolve(process.env.HPS_CHAT_REFERENCE_EVIDENCE ?? 'e2e/test-results/chat-reference');
 await mkdir(output, { recursive: true });
@@ -45,7 +46,8 @@ try {
   await page.reload(); await expect(input).toHaveValue('공식 자료로 확인해 줘');
   await expect(page.getByRole('button', { name: '웹 검색 선택 해제' })).toBeVisible();
   await shot('selected-tool');
-  await input.press('Enter'); await expect.poll(() => server.sent.length).toBe(1);
+  await page.getByRole('button', { name: '메시지 보내기', exact: true }).click();
+  await expect(input).toBeFocused(); await expect.poll(() => server.sent.length).toBe(1);
   expect(server.sent[0].toolMode).toBe('web-search'); expect(server.sent[0].userMessageId).toMatch(/^local-/);
   await expect(page.locator('.hps-user-tool').first()).toContainText('웹 검색 요청');
   checks.push('CG-02 unsupported selection cannot activate; selected mode persists and is sent with stable request ID; this is a request, not search proof');
@@ -57,10 +59,13 @@ try {
   await expect.poll(() => server.sent.length).toBe(2); expect(server.sent[1].toolMode).toBe('web-search'); expect(server.sent[1].text).toBe('예약한 웹 검색');
   await expect(input).toHaveValue('그 다음 초안');
   await page.getByRole('button', { name: '응답 멈추기' }).click();
+  await expect(input).toBeFocused();
   await expect(input).toHaveValue('그 다음 초안');
   checks.push('CG-04 queued mode is immutable and distinct from active request; flush preserves next draft; Stop does not send it');
 
-  await input.fill('실패할 검색 요청'); await input.press('Enter');
+  await input.fill('실패할 검색 요청');
+  await page.getByRole('button', { name: '메시지 보내기', exact: true }).focus(); await page.keyboard.press('Enter');
+  await expect(input).toBeFocused();
   await expect.poll(() => server.sent.length).toBe(3);
   await page.getByRole('button', { name: '웹 검색 선택 해제' }).click();
   await input.fill('도구가 다른 새 초안'); await fixture('reject');
@@ -90,6 +95,12 @@ try {
   await expect(page.getByRole('button', { name: '대화로 돌아가기', exact: true })).toBeVisible();
   expect(server.fixture.opened.length).toBe(1);
   await shot('source-preview-light-1280');
+  await fixture('fail-source-return');
+  await page.getByRole('button', { name: '대화로 돌아가기', exact: true }).click();
+  await expect(page.locator('.cp-source-error')).toContainText('돌아');
+  await expect(page.getByRole('button', { name: '대화로 돌아가기', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '대화로 돌아가기', exact: true })).toBeFocused();
+  await shot('source-return-failure');
   await page.getByRole('button', { name: '대화로 돌아가기', exact: true }).click();
   await expect(page.locator('#task-sources')).toBeHidden(); await expect(source).toBeFocused(); await expect(input).toHaveValue('자료를 보면서 유지할 입력');
   checks.push('CG-03 actual host acknowledgments bind task/request/URL; repeat open reuses owned tab; return restores exact citation and draft (browser API is fixture)');
@@ -130,6 +141,18 @@ try {
     await expect(input).toHaveValue('자료를 보면서 유지할 입력');
   }
   checks.push('CG-05 source panel at 320/390/1440: no page overflow, modal focus containment, Escape focus and draft preserved');
+  await page.setViewportSize({ width: 1024, height: 400 });
+  await tools.click(); await choose.click();
+  await fixture('image');
+  await expect(page.locator('.hps-attachments img')).toHaveCount(1);
+  await input.fill('검색과 이미지가 함께 있는 다음 초안');
+  await expect(page.getByRole('button', { name: '웹 검색 선택 해제' })).toBeVisible();
+  expect(await page.getByRole('button', { name: '메시지 보내기', exact: true }).evaluate(node => node.getBoundingClientRect().bottom <= innerHeight)).toBe(true);
+  await shot('image-search-short-window');
+  await page.getByRole('button', { name: '이미지 제거', exact: true }).click();
+  await expect(page.locator('.hps-attachments img')).toHaveCount(0);
+  await expect(input).toHaveValue('검색과 이미지가 함께 있는 다음 초안');
+  checks.push('CG-01/02 granted image attachment and selected search coexist in short window without clipping Send; removal keeps draft');
   expect(errors).toEqual([]);
   await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', scope: 'built React + real disk/task host; synthetic model/browser seam, zero model calls; not native/live service acceptance', checks, measurements, sent: server.sent.map(({type,text,prompt,toolMode,userMessageId,sourceMessageId}) => ({type,text,prompt,toolMode,userMessageId,sourceMessageId})), errors }, null, 2));
   console.log(JSON.stringify({ status: 'PASS', checks: checks.length, output }));

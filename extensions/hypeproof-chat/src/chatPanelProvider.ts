@@ -519,7 +519,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       await this.post({ type: 'taskWorkspaceState', view: store.getView() });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
+      let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
+      if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
+        // Browser/command failures may contain internal paths or tokens, including across realms.
+        const safeMessages = msg.type === 'taskOpenSource'
+          ? ['이 작업에서 확인한 출처를 선택해 주세요.', '출처 요청을 확인할 수 없습니다. 다시 선택해 주세요.', '이전 출처를 여는 중입니다. 잠시 뒤 다시 시도해 주세요.']
+          : ['이 작업에서 연 출처로 돌아가 주세요.', '대화 화면을 찾지 못했습니다. 현재 작업을 다시 열어 주세요.'];
+        if (!safeMessages.includes(message)) message = msg.type === 'taskOpenSource'
+          ? '브라우저에서 출처를 열지 못했습니다. 다시 시도해 주세요.'
+          : '대화로 돌아가지 못했습니다. 다시 시도해 주세요.';
+      }
       if ((msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') && msg.requestId) {
         await this.post({ type: 'sourceOpenResult', requestId: msg.requestId, url: msg.url, taskId: msg.taskId, opened: false, error: message });
       } else await this.post({ type: 'taskWorkspaceError', error: message });

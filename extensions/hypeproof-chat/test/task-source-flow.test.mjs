@@ -65,3 +65,47 @@ test('failed opening/focus and unsafe URLs never acknowledge success; a stale as
     assert.equal(f.browserState.tabs.some(t=>t.url===urls[1]),false);
   } finally {await f.cleanup();}
 });
+
+test('source failures expose safe operation-specific copy and retain the exact browser return retry', async () => {
+  const f = await setup();
+  try {
+    const openError = '브라우저에서 출처를 열지 못했습니다. 다시 시도해 주세요.';
+    const returnError = '대화로 돌아가지 못했습니다. 다시 시도해 주세요.';
+    const internal = 'private /Users/example/token=secret browser detail';
+    // Exercise the provider realm as well as errors/unknown thrown values from an API boundary.
+    const faults = [new Error(internal), { message: internal }, internal, f.h.handleTaskMessage.constructor('text', 'return new Error(text)')(internal)];
+    for (const [index, fault] of faults.entries()) {
+      f.browserState.beforeOpen = () => { throw fault; };
+      await f.handle(f.scoped({ type: 'taskOpenSource', url: urls[0], requestId: `open-failure-${index}` }));
+      const result = f.posts.at(-1);
+      assert.equal(result.opened, false);
+      assert.equal(result.error, openError);
+      assert.equal(result.requestId, `open-failure-${index}`);
+      assert.equal(result.url, urls[0]);
+      assert.equal(f.opened.length, 0);
+    }
+    f.browserState.beforeOpen = undefined;
+    await f.handle(f.scoped({ type: 'taskOpenSource', url: urls[0], requestId: 'retry-owned' }));
+    assert.equal(f.posts.findLast(p => p.type === 'sourceOpenResult').opened, true);
+    const reveal = f.h.editorChat.reveal;
+    for (const fault of faults) {
+      f.h.editorChat.reveal = () => { throw fault; };
+      await f.handle(f.scoped({ type: 'taskReturnFromSource', url: urls[0], requestId: 'retry-owned' }));
+      const result = f.posts.at(-1);
+      assert.equal(result.opened, false);
+      assert.equal(result.error, returnError);
+      assert.equal(result.requestId, 'retry-owned');
+      assert.equal(result.url, urls[0]);
+      assert.equal(f.posts.some(p => p.type === 'sourceReturn'), false);
+      assert.equal(f.browserState.commands.length, 0);
+    }
+    f.h.editorChat.reveal = reveal;
+    await f.handle(f.scoped({ type: 'taskReturnFromSource', url: urls[0], requestId: 'wrong-retry' }));
+    assert.equal(f.posts.at(-1).opened, false);
+    assert.equal(f.browserState.commands.length, 0, 'a failure does not authorize a different retry request');
+    await f.handle(f.scoped({ type: 'taskReturnFromSource', url: urls[0], requestId: 'retry-owned' }));
+    assert.equal(f.posts.findLast(p => p.type === 'sourceReturn').requestId, 'retry-owned');
+    assert.deepEqual(f.browserState.commands, ['editorChat.reveal']);
+    assert.equal(f.opened.length, 1, 'retry keeps the acknowledged tab instead of reopening it');
+  } finally { await f.cleanup(); }
+});

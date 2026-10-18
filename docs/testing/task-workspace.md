@@ -105,3 +105,10 @@ cannot cancel an unresolved defect.
 - Narrow task navigation and personal header actions have44px targets; header disclosure keeps classroom markup unchanged.
 - Native source rendering requires a nonempty document capture and the document composited within its actual browser-pane bounds. A loaded DOM or an empty PNG is not rendering evidence. The fixture's known white page is sampled only inside its measured pane, accounting for optional workbench sidebars.
 - A preflight credential failure must settle pending-send state and restore the rejected request with its original tool mode; no paid request is made.
+
+### Review-driven R3 controls
+
+- Personal menu hover and source errors remain readable in light/dark themes, including fallback colors; Settings has a visible text label.
+- Successful pointer/keyboard Send and explicit Stop leave the personal composer ready for immediate next typing. A refused submission does not move focus.
+- Failed source Return preserves the already-opened identity and direct retry. Pending Return remains focusable but cannot dispatch twice. Late or unsolicited acknowledgments cannot take focus from a different source or draft. Unknown host errors use operation-specific safe copy.
+- Image adjacency must use a profile granting image_paste and assert a visible image; a successful fixture control response alone is not evidence. Combine search selection, image removal, error/Stop and a400px-high window without losing the next draft.

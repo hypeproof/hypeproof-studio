@@ -962,7 +962,7 @@ export function ChatPanel(props: Props) {
             활동 변경
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
-          <button onClick={props.onSettings} title="설정" aria-label="설정">⚙</button>
+          <button onClick={props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
         </HeaderActions>
       </header>
 
@@ -1426,6 +1426,7 @@ export function ChatPanel(props: Props) {
                   // #416 — a parked message survives the stop as draft text.
                   restoreQueuedToDraft();
                   props.onCancel();
+                  if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
                 }}
                 className="hps-btn-stop"
                 aria-label={personalWorkspace ? '응답 멈추기' : undefined}
@@ -1445,7 +1446,7 @@ export function ChatPanel(props: Props) {
               </button>
             ) : (
               <button
-                onClick={() => submit()}
+                onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
                 disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}

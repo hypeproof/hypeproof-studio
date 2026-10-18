@@ -111,6 +111,25 @@ test('missing SDK never falls back for explicit search; legacy auto still falls 
   }
 });
 
+test('actual provider treats instructor Stop as a stop in both modes, while an ordinary failure stays visible', async t => {
+  for (const mode of ['auto', 'web-search']) for (const stopped of [false, true]) {
+    const f = fixture(t); f.h.pendingApprovals = new Map();
+    f.runtime.sdk = async args => {
+      f.calls.sdk.push(args);
+      if (stopped) f.h.opsRequestStop();
+      // A stopped SDK may throw an ordinary error rather than AbortError.
+      throw new Error('synthetic runtime failure');
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text: 'Question', history: [], toolMode: mode, userMessageId: 'stop-control' });
+    assert.equal(f.calls.sdk.length, 1);
+    assert.equal(f.posts.some(event => event.type === 'streamStopped' && event.by === 'instructor'), stopped);
+    assert.equal(f.posts.some(event => event.type === 'streamError'), !stopped);
+    assert.equal(f.posts.some(event => event.type === 'inputRejected'), !stopped && mode === 'web-search');
+    assert.equal(f.h.activeStreams.size, 0); assert.equal(f.h.pendingSends, 0);
+    assert.equal(f.calls.proxy.length + f.calls.network, 0);
+  }
+});
+
 test('real SDK request narrows tools and preserves approval; observed typed result reaches citations', async t => {
   const f = fixture(t), citations = [], approvals = [], captured = [];
   const events = [toolUse('web-1'), toolResult('web-1', searchOutput()), { type: 'result', subtype: 'success', is_error: false }];

@@ -28,6 +28,7 @@ interface SourceRequest {
   phase: 'opening' | 'opened' | 'returning' | 'failed';
   trigger: HTMLElement | null;
   error?: string;
+  returnRequested?: boolean;
 }
 // Correlate host replies; this identifier does not grant any source authority.
 function sourceRequestId(): string {
@@ -67,6 +68,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
   const requestTimer = useRef<ReturnType<typeof setTimeout>>();
   const readingPosition = useRef<ReadingPosition | null>(null);
   const pendingFocus = useRef<HTMLElement | 'source-title' | null>(null);
+  const closingFocus = useRef<Element | null>(null);
   const [viewport, setViewport] = useState(() => window.innerWidth);
   const sourceDialog = sourcesOpen && viewport <= 1050;
   const railDialog = railOpen && viewport <= 700;
@@ -89,6 +91,8 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
   const pinned = !!selected && pinnedSource?.url === selected.url;
   const request = sourceRequest?.scopeKey === scopeKey ? sourceRequest : null;
   const selectedRequest = request?.url === selected?.url ? request : null;
+  const sourceDisplay = useRef({ open: sourcesOpen, url: selected?.url });
+  sourceDisplay.current = { open: sourcesOpen, url: selected?.url };
   const blocked = busy || !!view.error;
   const visibleTasks = view.tasks.filter(task => task.title.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
   const date = useMemo(() => new Intl.DateTimeFormat('ko', { month: 'short', day: 'numeric' }), []);
@@ -110,9 +114,10 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
       ? preferred : [...scroller.querySelectorAll<HTMLElement>('.hps-msg')].find(element => element.getBoundingClientRect().bottom > top);
     readingPosition.current = { scroller, anchor, offset: anchor ? anchor.getBoundingClientRect().top - top : 0, scrollTop: scroller.scrollTop, scrollLeft: scroller.scrollLeft, scopeKey: current.current.scopeKey };
   }, []);
-  const closeSources = useCallback((returnTo?: HTMLElement | null) => {
+  const closeSources = useCallback((returnTo?: HTMLElement | null, restoreFocus = true) => {
     rememberReadingPosition(returnTo ?? sourceTrigger.current);
-    pendingFocus.current = returnTo ?? sourceTrigger.current ?? sourceToggle.current;
+    pendingFocus.current = restoreFocus ? returnTo ?? sourceTrigger.current ?? sourceToggle.current : null;
+    closingFocus.current = restoreFocus ? document.activeElement : null;
     setSourcesOpen(false);
     setPreview(null);
   }, [rememberReadingPosition]);
@@ -122,6 +127,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     rememberReadingPosition(trigger);
     sourceTrigger.current = trigger;
     pendingFocus.current = 'source-title';
+    closingFocus.current = null;
     setPreview({ url: citation.url, messageId, scopeKey });
     setRailOpen(false);
     setSourcesOpen(true);
@@ -147,7 +153,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
   const returnFromSource = () => {
     const opened = requestRef.current;
     if (!opened || opened.phase !== 'opened' || opened.scopeKey !== scopeKey || opened.url !== selected?.url) return;
-    updateRequest({ ...opened, phase: 'returning', error: undefined });
+    updateRequest({ ...opened, phase: 'returning', returnRequested: true, error: undefined });
     awaitSourceResult(opened.requestId);
     postToHost({ type: 'taskReturnFromSource', requestId: opened.requestId, url: opened.url, taskId: opened.taskId });
   };
@@ -157,13 +163,20 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     const pending = requestRef.current, workspace = current.current;
     if (!pending || pending.scopeKey !== workspace.scopeKey || pending.taskId !== workspace.taskId || message.taskId !== pending.taskId || message.requestId !== pending.requestId || message.url !== pending.url || !workspace.sources.some(source => source.url === pending.url)) return;
     if (message.type === 'sourceOpenResult') {
-      if (typeof message.opened !== 'boolean') return;
+      if (typeof message.opened !== 'boolean' || pending.returnRequested && message.opened) return;
       clearRequestTimer();
-      updateRequest({ ...pending, phase: message.opened ? 'opened' : 'failed', error: message.opened ? undefined : typeof message.error === 'string' && message.error.trim() ? message.error.slice(0, 500) : '출처를 열지 못했습니다. 다시 시도해 주세요.' });
-    } else if (pending.phase === 'returning' || pending.phase === 'opened') {
+      // A failed return does not undo the acknowledged browser tab or its retry binding.
+      const returning = !!pending.returnRequested;
+      const fallback = returning ? '대화로 돌아가지 못했습니다. 다시 시도해 주세요.' : '브라우저에서 출처를 열지 못했습니다. 다시 시도해 주세요.';
+      updateRequest({ ...pending, phase: message.opened || returning ? 'opened' : 'failed', error: message.opened ? undefined : typeof message.error === 'string' && message.error.trim() ? message.error.slice(0, 500) : fallback });
+    } else if (pending.returnRequested && (pending.phase === 'returning' || pending.phase === 'opened')) {
       clearRequestTimer();
       updateRequest(null);
-      closeSources(pending.trigger);
+      // A late acknowledgment must not take focus back from another source or the composer.
+      if (sourceDisplay.current.open && sourceDisplay.current.url === pending.url) {
+        const ownsFocus = document.hasFocus() && !!sourcePanel.current?.contains(document.activeElement);
+        closeSources(pending.trigger, ownsFocus);
+      }
     }
   }), [clearRequestTimer, updateRequest, closeSources]);
   useLayoutEffect(() => {
@@ -171,6 +184,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     updateRequest(null);
     sourceTrigger.current = null;
     pendingFocus.current = null;
+    closingFocus.current = null;
     readingPosition.current = null;
     setPreview(null);
     setSourcesOpen(false);
@@ -190,10 +204,15 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
       else reading.scroller.scrollTop = reading.scrollTop;
       reading.scroller.scrollLeft = reading.scrollLeft;
     }
-    const focus = pendingFocus.current;
+    const focus = pendingFocus.current, origin = closingFocus.current;
     pendingFocus.current = null;
+    closingFocus.current = null;
     const target = focus === 'source-title' ? (sourcePanel.current?.querySelector<HTMLElement>('#task-source-title') ?? sourcePanel.current?.querySelector<HTMLElement>('.tw-source-close')) : focus;
-    if (target?.isConnected) requestAnimationFrame(() => { if (target.isConnected && current.current.scopeKey === scopeKey) target.focus({ preventScroll: true }); });
+    if (target?.isConnected) requestAnimationFrame(() => {
+      // Hiding a focused panel may move focus to BODY; a deliberate new target wins.
+      const unchangedFocus = !origin || document.hasFocus() && (document.activeElement === origin || document.activeElement === document.body);
+      if (target.isConnected && current.current.scopeKey === scopeKey && sourceDisplay.current.open === sourcesOpen && unchangedFocus) target.focus({ preventScroll: true });
+    });
   }, [sourcesOpen, preview, scopeKey, sourceRequest?.requestId]);
   useEffect(() => { if (renaming) titleInput.current?.focus({ preventScroll: true }); }, [renaming]);
   useEffect(() => {
@@ -243,6 +262,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
       rememberReadingPosition();
       sourceTrigger.current = sourceToggle.current;
       pendingFocus.current = 'source-title';
+      closingFocus.current = null;
       setPreview(null);
       setSourcesOpen(true);
       setRailOpen(false);

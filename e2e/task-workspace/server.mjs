@@ -125,6 +125,7 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
 }
 
 if (process.argv.includes('--serve')) {
-  const result = await serveTaskWorkspace({ port: Number(process.env.PORT ?? 8789), directory: process.env.HPS_TASK_FIXTURE_DIR });
+  const { resolvedProfile } = await import('../../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs');
+  const result = await serveTaskWorkspace({ port: Number(process.env.PORT ?? 8789), directory: process.env.HPS_TASK_FIXTURE_DIR, profile: resolvedProfile(3, { lesson: undefined, input: { image_paste: true }, welcome: { greeting_md: '개인 작업을 이어가세요.', example_prompts: [] } }) });
   console.log(JSON.stringify({ url: result.url, directory: result.root, scope: 'built product React + actual host task handlers + real local store; synthetic Service and browser API' }));
 }
