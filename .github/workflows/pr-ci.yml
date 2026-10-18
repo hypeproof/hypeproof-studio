@@ -259,7 +259,10 @@ jobs:
   #   sdk-binary        both seed scripts against the manifest and lockfile,
   #                     and the seeded binary path per platform
   #   sdk-vendor        the vendored SDK entry a packaged build loads
-  # WP A4's consult-context containment smoke joins the list when it lands.
+  #   consult-tool      the orchestrator consult's context containment (WP A4):
+  #                     outside, absolute, drive-letter, backslash and traversal
+  #                     paths refused before any request (its symlink case
+  #                     skips itself without the privilege)
   extension-windows:
     name: extension / windows smokes
     runs-on: windows-latest
@@ -276,7 +279,7 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: |
           failed=0
-          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs; do
+          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs test/consult-tool.smoke.mjs; do
             echo "— $f"
             node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::smoke failed on Windows"; failed=1; }
           done
