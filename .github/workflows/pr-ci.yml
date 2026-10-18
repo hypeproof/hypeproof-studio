@@ -71,10 +71,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           node e2e/unified-release/gate.test.mjs
+          node --test scripts/release/test/build-contract.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
           node --test e2e/unified-release/candidate-service.test.mjs
+          node --test scripts/test/windows-policy-patch.test.mjs
+          node --test scripts/release/test/engine.test.mjs
           node --test e2e/paid-pass-recovery/proxy.test.mjs e2e/paid-pass-recovery/contract.test.mjs e2e/paid-pass-recovery/lifecycle.test.mjs
           node scripts/test-unified-launcher.mjs
+      - name: Release cut and publish gate controls
+        if: ${{ !cancelled() }}
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh
@@ -258,7 +264,10 @@ jobs:
   #   sdk-binary        both seed scripts against the manifest and lockfile,
   #                     and the seeded binary path per platform
   #   sdk-vendor        the vendored SDK entry a packaged build loads
-  # WP A4's consult-context containment smoke joins the list when it lands.
+  #   consult-tool      the orchestrator consult's context containment (WP A4):
+  #                     outside, absolute, drive-letter, backslash and traversal
+  #                     paths refused before any request (its symlink case
+  #                     skips itself without the privilege)
   extension-windows:
     name: extension / windows smokes
     runs-on: windows-latest
@@ -275,7 +284,7 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: |
           failed=0
-          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs; do
+          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs test/consult-tool.smoke.mjs; do
             echo "— $f"
             node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::smoke failed on Windows"; failed=1; }
           done

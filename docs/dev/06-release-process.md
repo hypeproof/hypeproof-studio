@@ -67,7 +67,7 @@ Not all parts of this process exist yet. This table shows the state on 2026-10-1
 | Hotfix rules in `hype-pr` and the hotfix issue form | In `main` | hypeproof-harness#326, #1686 |
 | Publish gate (rule 5) | Pull request open | #1683, #1684 |
 | Approval workflow: approval → `v` tag | Not started | — |
-| Smoke credentials for S3 and S4 | Not available | — |
+| Smoke credentials | S4 available; S3 missing as observed 2026-10-16 | #1704 |
 
 Until the approval workflow exists, a member pushes the `v` tag by hand after the approval.
 See [Approval](#approval).
@@ -157,7 +157,7 @@ result of the smoke.
 |---|---|---|
 | S1 | Service `/v1/health` is ok and has a version | — |
 | S2 | Chalk `/health` is ok and has a version | — |
-| S3 | A token reaches its cohort | `HPS_ACCEPTANCE_ISSUER`. Not implemented yet |
+| S3 | A token reaches its cohort | `HPS_ACCEPTANCE_ISSUER`, scoped only to `synthetic-release-acceptance` |
 | S4 | Chat API through `scripts/run-sdk-contract.sh` | `HPS_CANARY_ISSUER` |
 | S5 | CI check-runs on the candidate commit | — |
 
@@ -304,6 +304,68 @@ If one entry path is old or not tested, report the delivery as incomplete. Name 
 path and the action. See NAT-01/12 and the
 [native trial laptop checks](../testing/studio-native-trial-laptop.md).
 
+## Managed candidate drafts (#1758)
+
+This opt-in build handoff stops at draft assets. It does not activate the daily
+release engine, collect installed-App acceptance, approve a candidate or promote a
+channel. The ordinary release flow above remains the default. Its Mac dispatch
+now defaults to the workflow ref instead of silently checking out `main`.
+
+After checking the actual account's public standard-runner eligibility and remaining
+artifact/storage allowance, select `mode=create`, `managed_draft=true` in the existing
+`release-cut` workflow. Its `create.mjs --managed-draft` path reuses version planning,
+tags and release PRs. Both existing OS workflows receive the full candidate SHA as
+`ref` and `candidate_sha`. Before any remote mutation, the candidate must contain the
+exact reviewed `build-contract.mjs`, its artifact-identity helper and both builder
+workflows. An older candidate is refused because its workflow code could ignore the
+new inputs. No new provider, runner tier, service or model credential is introduced.
+
+The annotated `vX.Y.Z-rc.N` tag stores `hps-managed-draft/1` with the candidate SHA,
+that publication tag and final `vX.Y.Z` version. Both workflows check actual checkout,
+workflow SHA and peeled tag SHA before build preparation. The annotation is
+authoritative for managed mode: tag pushes and retries with missing or false inputs
+still stop before automatic acceptance. Partial/malformed markers fail closed.
+Conflicting version/ref inputs are rejected; inputs enter the shell through environment
+variables, never interpolated shell source. The final version reaches the existing
+pre-sign/pre-package stamping path; no post-sign version rewrite is added.
+
+The managed draft contains the original packages and `draft-build-<platform>.json`.
+That inventory binds source SHA, annotated tag object, final embedded App/extension
+version, package name, byte size and SHA256. Windows requires the portable ZIP and
+both User/System installers. Mac identity is read from the new ZIP's extracted App;
+Windows identity is read from the portable smoke's extracted App. Before uploading,
+the workflow compares the inventory again and checks the remote tag object and peeled
+commit. It refuses published releases and never uses upload `--clobber`.
+
+The inventory's `acceptance: NOT_RUN` and `promotion: NOT_AUTHORIZED` are deliberate.
+An extracted App identity plus package hashes does not prove installer payload equality,
+installed-App behavior, N-1→N update, signing/notarization, public Service behavior,
+model budget, release-manager approval or same-byte channel promotion. It is not a
+signed verifier receipt or a remote authorization boundary. Those require the release
+engine's later evidence and publisher adapters. Do not manually start the existing
+model-backed acceptance workflow for this draft: its current tag-version contract
+expects the RC suffix and this managed handoff does not reserve model spend.
+
+Use the release-cut workflow's `GITHUB_TOKEN` path for this handoff. Local/PAT tag pushes
+can start a push build in addition to an explicit dispatch; this change does not promise
+exactly-once builds, resumable dispatch or a measured zero-cost run. The durable tag
+marker keeps both paths draft-only, but build deduplication and account quota reservations
+belong to the subsequent engine adapter. Unknown quota or possible incremental spend
+means do not start an operational build. Rebuilding a stable tag is not same-byte
+promotion and remains outside this slice.
+
+Offline controls (no GitHub CLI/API, OS build or model call):
+
+```bash
+node --test scripts/release/test/build-contract.test.mjs scripts/release/test/create.test.mjs scripts/release/test/release-cut.test.mjs
+python3 scripts/check-workflow-shells.py
+python3 scripts/docs-harness/check.py --min-score 95
+```
+
+Actual Mac/Windows build, install/update, manager approval, quota observation and
+publication are **NOT_RUN** for this implementation. Standard-runner selection alone
+is not proof that an account has no incremental charge.
+
 ## Rollback
 
 If a public release is broken:
@@ -323,3 +385,20 @@ profile compatibility. If the App changed preview or storage behavior, the rollb
 keep the member's local `~/HypeProofGames` directory. Do not delete generated work.
 
 This rollback process is a recommendation. The team has not confirmed it yet.
+
+### S3 and S5 failure handling
+
+S3 requires an issuer scoped only to the synthetic acceptance cohort/profile, with
+`can_start_session`, `max_session_hours >= 1`, and `max_hours >= 1`. It opens a fresh
+synthetic classroom seat for one hour, checks its served profile and activity binding,
+and closes the session and confirms token revocation in `finally`. It sends no model
+requests. It refuses an existing live session (`force: false`); rerun after that session
+finishes. A cleanup failure is FAIL. There is no administrator-credential fallback.
+The check remains NOT_RUN until the scoped secret is provisioned and does not prove
+App installation or classroom rehearsal.
+
+S5 selects the latest run/attempt for each workflow ID and job name. A superseded
+failure in the same job is retained in GitHub history but does not fail the new result.
+Different workflows with the same job name, missing jobs in newer runs, and external
+checks remain independent. The selected pending run remains NOT_RUN; a selected
+failure remains FAIL. Only the current release-cut run itself is omitted.

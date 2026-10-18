@@ -19,7 +19,7 @@ The previous checklist for v0.1.0 is archived in
 1. Open the Actions tab of `hypeproof/hypeproof-studio`.
 2. Select the `release-cut` workflow.
 3. Click **Run workflow**. Set `mode` to `create`.
-4. If a smoke credential is not available, set `accept_not_run`. The release PR then shows
+4. Check scoped credentials before the cut. S3 requires `HPS_ACCEPTANCE_ISSUER` (missing as of 2026-10-16); S4 requires `HPS_CANARY_ISSUER`. Provision missing credentials and rerun. Only an explicitly approved exception may set `accept_not_run`. The release PR then shows
    the `NOT_RUN` checks.
 5. Wait for the run to finish. Read the job summary.
 

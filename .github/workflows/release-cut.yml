@@ -27,6 +27,10 @@ on:
         description: "create only: cut even when a smoke check is NOT_RUN (the PR shows it)"
         type: boolean
         default: false
+      managed_draft:
+        description: "create only: build final-version bytes into RC drafts; no automatic acceptance or publication"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,7 +65,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # Smoke credentials, scoped to non-production cohorts only (docs/dev/06-release-process.md#smoke).
-          # S4 opens a 1 h session on canary-internal; S3 reads its issuer when it is implemented.
+          # S4 opens a 1 h canary session; S3 opens/closes only an idle synthetic acceptance cohort.
           # Without a secret the check reports NOT_RUN. The admin password is never passed here.
           HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
@@ -123,6 +127,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ACCEPT_NOT_RUN: ${{ inputs.accept_not_run }}
+          MANAGED_DRAFT: ${{ inputs.managed_draft }}
         run: |
           set -euo pipefail
           plan="$RUNNER_TEMP/release-cut/plan.json"
@@ -132,4 +137,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           flags=()
           if [[ "$ACCEPT_NOT_RUN" == true ]]; then flags+=(--accept-not-run); fi
+          if [[ "$MANAGED_DRAFT" == true ]]; then flags+=(--managed-draft); fi
           node scripts/release/create.mjs --plan "$plan" "${flags[@]}"

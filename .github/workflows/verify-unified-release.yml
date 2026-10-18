@@ -11,6 +11,7 @@ on:
 permissions:
   contents: write
   actions: write
+  pull-requests: read
 concurrency:
   group: unified-release-${{ inputs.tag }}
   cancel-in-progress: false
@@ -86,6 +87,19 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --prefix e2e
+      - name: Resolve pinned Service source
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+      - name: Install candidate Service dependencies
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
       - name: Download untouched candidate
         shell: bash
         env:
@@ -125,6 +139,7 @@ jobs:
         shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
           TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
         run: |
@@ -167,6 +182,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
@@ -204,6 +221,14 @@ jobs:
           HPS_FREEZE_CONTEXT: Unified Studio accepted candidate publication
           TAG: ${{ inputs.tag }}
         run: bash scripts/release-freeze-gate.sh "refs/tags/$TAG"
+      # A tag can be pushed by anyone with write access (no tag protection on this plan).
+      # A stable tag is published only with an approved release PR or as a hotfix; otherwise
+      # the release stays a draft. Rerun this workflow after the approval to publish it.
+      - name: Publish gate — approved release PR or hotfix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: node scripts/release/publish-gate.mjs --tag "$TAG"
       - name: Publish and dispatch the public mirror
         env:
           GH_TOKEN: ${{ github.token }}

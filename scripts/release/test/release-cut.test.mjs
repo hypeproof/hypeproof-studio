@@ -142,3 +142,59 @@ test('S3 and S4 are NOT_RUN without their scoped credential, even with the admin
   assert.equal((await s3.run({env})).result, 'NOT_RUN');
   assert.equal((await s4.run({env, studioDir: '.', serviceUrl: 'http://127.0.0.1:1'})).result, 'NOT_RUN');
 });
+
+test('S5 supersedes only the same workflow/job, using run order, not completion order', () => {
+  const run = (workflowId, runNumber, conclusion, extra = {}) => ({id: runNumber, workflowId, runNumber,
+    runAttempt: 1, name: 'deploy', status: 'completed', conclusion, url: `https://github.com/o/r/actions/runs/${runNumber}/job/1`, ...extra});
+  const old = run(1, 10, 'failure'), current = run(1, 11, 'success');
+  assert.equal(judge([current, old]).result, 'PASS');
+  assert.equal(judge([old, current]).result, 'PASS');
+  assert.equal(judge([old, {...current, status: 'in_progress', conclusion: ''}]).result, 'NOT_RUN');
+  assert.equal(judge([old, current, run(2, 9, 'failure')]).result, 'FAIL');
+  assert.equal(judge([current, run(1, 9, 'failure', {name: 'macOS'})]).result, 'FAIL');
+  assert.equal(judge([current, run(undefined, 9, 'failure')]).result, 'FAIL');
+  assert.equal(judge([current, {...current, id: 12, runAttempt: 2, conclusion: 'failure'}]).result, 'FAIL');
+  assert.equal(judge([old, current], '11').result, 'FAIL');
+});
+
+test('S3 binds a fresh synthetic token and requires successful cleanup, without admin or force', async () => {
+  const {checkCohort} = await import('../smoke/checks/s3-cohort-token.mjs');
+  async function probe({wrongProfile = false, closeFailure = false, busy = false, delayed = false} = {}) {
+    const calls = []; let polls = 0;
+    const result = await checkCohort({env: {HPS_ACCEPTANCE_ISSUER: 'scoped-secret', HPS_ADMIN_PASSWORD: 'admin-secret'},
+      serviceUrl: 'https://example.invalid', sleep: async () => {}, fetchImpl: async (url, init) => {
+        const body = init.body ? JSON.parse(init.body) : null;
+        calls.push({url, body, auth: init.headers.authorization});
+        if (url.endsWith('/session/open')) {
+          assert.equal(body.force, false);
+          assert.equal(body.profile_id, 'synthetic-release-acceptance');
+          assert.match(body.user, /^synthetic-smoke-/);
+          return Response.json(busy ? {} : {token: 'student-secret', jti: 'test-jti', exp: 2000000000,
+            cohort: body.profile_id, profile: body.profile_id, user: body.user}, {status: busy ? 409 : 200});
+        }
+        if (url.endsWith('/v1/profile')) {
+          assert.equal(init.headers.authorization, 'Bearer student-secret');
+          if (delayed && ++polls === 1) return Response.json({}, {status: 403});
+          return Response.json({profile_id: wrongProfile ? 'wrong' : 'synthetic-release-acceptance', activity_kind: 'classroom', activity_id: 'activity'});
+        }
+        assert.ok(url.endsWith('/session/close'));
+        assert.equal(body.jti, 'test-jti');
+        return Response.json({ok: true, revoked: closeFailure ? null : body.jti});
+      }});
+    assert.doesNotMatch(JSON.stringify(result), /scoped-secret|student-secret|admin-secret/);
+    assert.ok(calls.every(c => c.auth !== 'Basic admin-secret'));
+    return {result, calls};
+  }
+  assert.equal((await probe({delayed: true})).result.result, 'PASS');
+  const wrong = await probe({wrongProfile: true});
+  assert.equal(wrong.result.result, 'FAIL');
+  assert.ok(wrong.calls.at(-1).url.endsWith('/session/close'));
+  assert.equal((await probe({closeFailure: true})).result.result, 'FAIL');
+  const busy = await probe({busy: true});
+  assert.equal(busy.result.result, 'FAIL');
+  assert.equal(busy.calls.length, 1); // An existing session is neither replaced nor closed.
+  const transport = await checkCohort({env: {HPS_ACCEPTANCE_ISSUER: 'secret'}, serviceUrl: 'https://example.invalid',
+    fetchImpl: async () => { throw Error('secret'); }});
+  assert.equal(transport.result, 'FAIL');
+  assert.doesNotMatch(transport.detail, /secret/);
+});
