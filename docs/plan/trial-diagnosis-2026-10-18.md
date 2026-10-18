@@ -1,7 +1,65 @@
 # Trial (체험판) diagnosis plan — 2026-10-18
 
-Status: plan only. No diagnosis has run yet. Baseline: `origin/main` `033f917e`,
-hypeproof-service `a08cf7a`.
+Baseline: Studio `origin/main` `033f917e`, hypeproof-service `a08cf7a`.
+
+## Status (2026-10-19)
+
+The diagnosis ran on 2026-10-18 (P0–P4, two critic rounds). Findings:
+[trial-diagnosis-report-2026-10-18.md](./trial-diagnosis-report-2026-10-18.md). P4 design:
+[open-trial-conversion.md](../design/open-trial-conversion.md). Open review gaps are in
+report §11; decisions for Jay are in report §10 and design §10. Epic:
+[#1782](https://github.com/hypeproof/hypeproof-studio/issues/1782).
+
+| Phase | State | Evidence | What is missing |
+|---|---|---|---|
+| P0 funnel baseline | partial | Report §2: real users at every stage = **0**; 17 grants are 14 internal probes + 3 paid passes; pass orders 27 → 1 retained | Lab page views were never collected; mailbox count (no approved source); release `download_count` (one `gh` call); raw-zip install on a clean macOS account; Toss console check of the retained ₩55,000 |
+| P1 walkthrough | partial | Report §0/§3: headless Playwright over 14 Lab pages, real Service + Agent SDK + built webview headless (15 screens), static kit walk (Mac, Windows) | No real person (T25 NOT_RUN), no real Electron run, no clean macOS account or Windows VM, no wall-clock UI timing |
+| P2 heuristic review | done | Report §3/§4: two blind raters (weighted κ 0.69), impeccable critique/audit/onboard (detector not run, marked DEGRADED), WCAG 2.2 checklist on 7 pages, accidental vs intended friction | Keyboard walk, screen reader, zoom and contrast themes not tested |
+| P3 synthesis | done | Report §1, §3, §5 (verdict), §8 fix list, Appendix A fix cards | — |
+| P4 access options | partial | Design §2A (A/B/C/C′ compared, A recommended), §5 cost and §5.4 unit economics, §7 conversion; report §6/§6a | Decisions D1–D4, D15, D17–D24 are Jay's (report §10) |
+| P5 hand-off | partial | Report and design committed on this branch; epic and the draft PRs below | US-04 P1 / NAT requirement rewrites; §8a items not yet started; all of §8b (open entry, cost ceiling, conversion) |
+
+Draft PRs for report §8a (independent fixes), none merged:
+
+| Fix | PR | Issue |
+|---|---|---|
+| ind-trial-end-notice | [#1765](https://github.com/hypeproof/hypeproof-studio/pull/1765) | #1764 |
+| ind-banner-expiry-state | [#1767](https://github.com/hypeproof/hypeproof-studio/pull/1767) | #1766 |
+| ind-sdk-error-text | [#1769](https://github.com/hypeproof/hypeproof-studio/pull/1769) | #1768 |
+| ind-missing-sdk-error | [#1771](https://github.com/hypeproof/hypeproof-studio/pull/1771) | #1770 |
+| ind-trial-busy-policy | [#1773](https://github.com/hypeproof/hypeproof-studio/pull/1773) | #1772 |
+| ind-trial-vocabulary | [#1775](https://github.com/hypeproof/hypeproof-studio/pull/1775) | #1774 |
+| ind-trial-card-disclosure | [#1777](https://github.com/hypeproof/hypeproof-studio/pull/1777) | #1776 |
+| ind-update-check-copy | [#1779](https://github.com/hypeproof/hypeproof-studio/pull/1779) | #1778 |
+| svc-profile-trial-status | [hypeproof-service#125](https://github.com/hypeproof/hypeproof-service/pull/125) | — |
+| ind-trial-status-ui | [#1781](https://github.com/hypeproof/hypeproof-studio/pull/1781) | #1780 |
+
+Merge-order notes from the PR bodies: #1765 and #1767 both edit `errorBannerPresentation.ts`;
+#1769, #1771 and #1775 all touch `coachDegradedNotice` / the 429 stall copy, and whichever
+lands later keeps a single solo-seat check.
+
+Blocked fixes: none.
+
+Open decisions for Jay:
+
+- D15 trust event: A (account sign-in) recommended; B only as a second provider; C′ counters
+  as secondary limits.
+- D17 ship C′ as an interim before accounts? Only if the drained-cap risk and in-App-only
+  conversion measurement are accepted.
+- D18 free entitlement under A: 1 per (provider, subject) ever; hash retained after deletion
+  (legal).
+- D19 public update channel for non-members.
+- D20 interim request mailbox and response time.
+- D21 visual identity across Lab → install → App → chat.
+- D22 trial/pass install contents: app + SDK seed only vs member toolchain, after a skills
+  audit (report only).
+- D23 raw binaries: buy Developer ID/Authenticode and notarize, or route all non-members
+  through the kit (report only).
+- D24 Lab funnel analytics provider and consent model (Jay + legal; report only).
+- D1/D2 ceilings, using the report §6a planning numbers (central ₩954–1,027 per trial;
+  break-even 4.0–5.4%); D3/D4 price and FX revisions.
+- One-minute checks: the Toss merchant console for the retained ₩55,000 (INFERRED live);
+  one `gh` call for release `download_count` when the GitHub budget is free.
 
 ## Why
 
