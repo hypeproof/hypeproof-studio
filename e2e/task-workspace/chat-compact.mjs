@@ -83,6 +83,11 @@ if (process.argv.includes('--serve')) {
     }
     checks.push('short and narrow windows retain visible composer without horizontal page overflow');
     await page.setViewportSize({width:1280,height:720}); await page.goto(server.url+'/?theme=light'); await expect(options).toBeVisible(); await shot('choices-light');
+    await server.fixture.h.appendHistory([{id:'chosen-user',role:'user',content:'2. 계획 세우기: 여행, 일정, 공부, 할 일',createdAt:3}]);
+    await server.fixture.h.postHistory();
+    await expect(page.locator('.tw-task-title')).toHaveText('계획 세우기: 여행, 일정, 공부, 할 일');
+    await expect(page.locator('.tw-title-button')).toContainText('계획 세우기');
+    checks.push('second selected reply updates recent task and header title through the actual host/store');
     await page.request.post(server.url+'/fixture/stream'); await expect(options).toHaveCount(0);
     await page.request.post(server.url+'/fixture/stop');
     await server.fixture.h.appendHistory([{id:'instruction',role:'assistant',content:'다음 순서로 진행하세요.\n\n1. 파일을 만듭니다.\n2. 실행합니다.',createdAt:3}]); await server.fixture.h.postHistory();

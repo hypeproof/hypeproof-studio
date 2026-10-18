@@ -179,6 +179,7 @@ import {
   type ToolEntry,
 } from "./chatTimeline";
 import { capturePageContext } from "./nativeBrowser";
+import { isGeneralBrowserOpenRequest } from "./browserIntent";
 import { validateAndRepairHtml, type HtmlStructureResult } from "./htmlStructure";
 import {
   PASTED_IMAGE_DIR,
@@ -3841,8 +3842,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.siteCheckPages;
   }
 
-  private buildBrowserMcpHost(): BrowserMcpHost {
+  private buildBrowserMcpHost(userText = ""): BrowserMcpHost {
     return {
+      generalBrowserRequest: isGeneralBrowserOpenRequest(userText),
       // A5 — the site check's page (spec §6.1). Asked only on an orchestrator turn whose roster
       // lists site_check; the live server is never started for it (livePreviewUrl below).
       viewportPage: (wrapperUrl: string) => this.siteCheckViewports().page(wrapperUrl),
@@ -5361,7 +5363,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const browserTools: BrowserToolsForLocal | undefined =
             INSTRUCTOR_TOOL_PROFILE.sdk_tools?.browser
               ? (() => {
-                  const host = this.buildBrowserMcpHost();
+                  const host = this.buildBrowserMcpHost(text);
                   return {
                     definitions: [...INSTRUCTOR_LOCAL_BROWSER_DEFS],
                     call: async (name: string, input: unknown) => {
@@ -5369,7 +5371,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                         name === "live_preview_start"
                           ? await runLivePreviewStart(host)
                           : name === "browser_open"
-                            ? await runBrowserOpen(host, typeof (input as Record<string, unknown>)?.url === "string" ? (input as Record<string, unknown>).url as string : "")
+                            ? await runBrowserOpen(host, input && typeof input === "object" ? (input as Record<string, unknown>).url : null)
                             : null;
                       if (!r) throw new Error(`알 수 없는 브라우저 도구: ${name}`);
                       // isError mirrors the workspace/chalk tool convention: throw so the
@@ -5505,7 +5507,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof
             // MCP tools. Always passed; runSdkCoach registers the server only
             // when the profile grants sdk_tools.browser (minors never do).
-            browserHost: this.buildBrowserMcpHost(),
+            browserHost: this.buildBrowserMcpHost(text),
             // A5 (ADR 0011) — the front-line orchestrator host. Always passed, like browserHost:
             // runSdkCoach turns the orchestrator on only for a seat the served roster is on for (an
             // adult with a well-formed roster, A2's binding); otherwise the turn is today's, byte for

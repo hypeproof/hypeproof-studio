@@ -70,5 +70,9 @@ try {
   await writeFile(join(output,'result.json'),JSON.stringify({status:'PASS',scope:'isolated Mac Dev app + real extension/browser UI, synthetic local Service and seeded messages; zero model inference, not signed RC or customer acceptance',checks,calls,extensionSha256:createHash('sha256').update(await readFile(extension)).digest('hex')},null,2));
   console.log(JSON.stringify({status:'PASS',checks,output}));
 } catch(error) {
-  await writeFile(join(output,'result.json'),JSON.stringify({status:'BLOCKED_OR_FAIL',error:String(error),checks,calls},null,2));throw error;
+  if(ctx) {
+    const encoded=await ctx.app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64')).catch(()=>null);
+    if(encoded)await writeFile(join(output,'failure.png'),Buffer.from(encoded,'base64'));
+  }
+  await writeFile(join(output,'result.json'),JSON.stringify({status:ctx?'FAIL':'BLOCKED',error:String(error),checks,calls},null,2));throw error;
 } finally { if(ctx)await closeApp(ctx);await new Promise(resolve=>server.close(resolve));await rm(temp,{recursive:true,force:true}); }

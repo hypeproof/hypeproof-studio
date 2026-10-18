@@ -5619,6 +5619,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Personal task workspace (#1756)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Compact personal conversation (CC-R1, #1762)"
         }
       ]
     },
@@ -5797,6 +5801,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Personal chat detail (CP-R1)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Compact personal conversation (CC-R1, #1762)"
         }
       ]
     },
@@ -5811,6 +5819,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Chat reference interaction (CG-IMPL-R1)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Compact personal conversation (CC-R1, #1762)"
         }
       ]
     }

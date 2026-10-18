@@ -10,7 +10,7 @@ const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from
 export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {} } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
   const browserState = { failOpen: false, failReturn: false, tabs: [], commands: [] };
-  const vscode = { ViewColumn: { One: 1, Beside: 2 },
+  const vscode = { ViewColumn: { One: 1, Two: 2, Beside: 2 },
     commands: { executeCommand: async name => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push(name); } },
     window: { browserTabs: browserState.tabs, openBrowserTab: async (url, options) => {
       if (browserState.beforeOpen) await browserState.beforeOpen();
