@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "repository": "jayleekr/hypeproof-studio",
+  "repository": "hypeproof/hypeproof-studio",
   "coverage": "Bootstrap scope only; unregistered product areas are not claimed covered.",
   "nodes": [
     {
@@ -381,6 +381,13 @@
           "path": "worker/test/owner-usage.test.mjs",
           "repository": "hypeproof/hypeproof-service",
           "commit": "40caf3921e97d7b02df895b877ba408f40835121"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Service and Lab ownership"
+        },
+        {
+          "path": "e2e/owner-console/run.mjs"
         }
       ]
     },
@@ -421,6 +428,10 @@
       "sources": [
         {
           "path": "docs/requirements/model-access-usage.md"
+        },
+        {
+          "path": "docs/dev/04-requirements.md",
+          "section": "## Feedback delivery contracts (2026-10-16)"
         }
       ]
     },
@@ -443,6 +454,10 @@
         },
         {
           "path": "e2e/tests/native-models.spec.ts"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Service and Lab ownership"
         }
       ]
     },
@@ -670,6 +685,12 @@
           "path": "worker/migrations/0008-usage-costs.sql",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "scripts/publish-approved-usage-price.mjs"
+        },
+        {
+          "path": "config/usage-prices/haiku55-20261016.json"
         }
       ]
     },
@@ -701,6 +722,19 @@
           "path": "worker/test/openai-usage-shape.test.mjs",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Service and Lab ownership"
+        },
+        {
+          "path": "scripts/test-publish-approved-usage-price.mjs"
+        },
+        {
+          "path": "scripts/test-approved-price-service.mjs"
+        },
+        {
+          "path": "docs/testing/approved-usage-price-deployment.md"
         }
       ]
     },
@@ -953,7 +987,8 @@
       "stage": "test",
       "owner": "JinyongShin",
       "depends_on": [
-        "ST-REQ-COACH-RUNTIME"
+        "ST-REQ-COACH-RUNTIME",
+        "REQ-STUDIO-REFERENCE-IMAGES"
       ],
       "sources": [
         {
@@ -1075,6 +1110,10 @@
       "sources": [
         {
           "path": "docs/requirements/unified-studio-experience.md"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Feedback delivery contracts (2026-10-16)"
         }
       ]
     },
@@ -1110,6 +1149,10 @@
       "sources": [
         {
           "path": "docs/testing/unified-studio-experience.md"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md",
+          "section": "## Frozen acceptance matrix"
         }
       ]
     },
@@ -1221,6 +1264,9 @@
           "path": "worker/src/routes/chat.ts",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/composerFocus.ts"
         }
       ]
     },
@@ -1283,6 +1329,12 @@
         {
           "path": "extensions/hypeproof-chat/test/activity-resume.test.mjs",
           "owner": "JinyongShin"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/studio-folder-navigation.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/composer-focus.smoke.mjs"
         }
       ]
     },
@@ -1427,6 +1479,15 @@
           "path": "worker/src/lib/activity-identity.ts",
           "repository": "hypeproof/hypeproof-service",
           "commit": "6a2a769b7002b19799accd59ab83b8274e91884d"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/studioNavigation.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/workspaceRouting.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/initialSurface.ts"
         }
       ]
     },
@@ -1458,6 +1519,30 @@
         },
         {
           "path": "e2e/trial-ux/run.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/workspace-routing.smoke.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/initial-surface.smoke.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.test.mjs"
         }
       ]
     },
@@ -1536,6 +1621,15 @@
         },
         {
           "path": ".github/workflows/pr-ci.yml"
+        },
+        {
+          "path": "scripts/check-usage-schema.mjs"
+        },
+        {
+          "path": "scripts/studio-dev.py"
+        },
+        {
+          "path": "scripts/studio-dev-vendor.mjs"
         }
       ]
     },
@@ -1573,6 +1667,12 @@
         },
         {
           "path": "e2e/unified-release/candidate-service.test.mjs"
+        },
+        {
+          "path": "scripts/test-usage-schema.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/sdk-vendor.test.mjs"
         }
       ]
     },
@@ -5030,6 +5130,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/attached-images.smoke.mjs"
+        },
+        {
+          "path": "e2e/photo-only-send.mjs"
         }
       ]
     },
@@ -5050,6 +5153,458 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/attachedImages.ts"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-EXTERNAL-INSTRUCTIONS",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-EXTERNAL-INSTRUCTIONS"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-REFERENCE-IMAGES",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-REFERENCE-IMAGES"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-IMAGE-EDIT",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-STUDIO-SAFETY",
+        "ST-REQ-ACCESS-BUDGET",
+        "ST-REQ-MODEL-USAGE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-IMAGE-EDIT"
+        }
+      ]
+    },
+    {
+      "id": "REQ-STUDIO-FEEDBACK-EVIDENCE",
+      "stage": "requirement",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-UNIFIED",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### REQ-STUDIO-FEEDBACK-EVIDENCE"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EXTERNAL-INSTRUCTIONS",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-EXTERNAL-INSTRUCTIONS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/externalInstructionSkills.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/externalSkillCommands.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EXTERNAL-INSTRUCTIONS",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-EXTERNAL-INSTRUCTIONS",
+        "ST-IMP-EXTERNAL-INSTRUCTIONS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/external-instruction-skills.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/external-skill-commands.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/external-policy-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/policy-protocol.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-REFERENCE-IMAGES",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-REFERENCE-IMAGES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/visionInput.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/referenceImages.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/referenceDesign.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserControl.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserMcp.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/experimentBrowser.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/proxyClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-REFERENCE-IMAGES",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-REFERENCE-IMAGES",
+        "ST-IMP-REFERENCE-IMAGES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/reference-images.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reference-design.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reference-transport.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-mcp.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/experiment-browser.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": "e2e/reference-design/run.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html"
+        },
+        {
+          "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/headless-cdp.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-feedback-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/completion-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-IMAGE-EDIT",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-IMAGE-EDIT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditAssets.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditPng.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/imageEditCommands.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-IMAGE-EDIT",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-IMAGE-EDIT",
+        "ST-IMP-IMAGE-EDIT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/image-edit.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/image-edit-commands.smoke.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": "e2e/image-edit/compare.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/image-edit-file-races.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-FEEDBACK-EVIDENCE",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-FEEDBACK-EVIDENCE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/feedback-report.py"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/index.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/learner.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/owner.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/operator.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/developer.html"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/manual.json"
+        },
+        {
+          "path": "docs/manual/studio-feedback-20261016/native-entry.png"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-FEEDBACK-EVIDENCE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "REQ-STUDIO-FEEDBACK-EVIDENCE",
+        "ST-IMP-FEEDBACK-EVIDENCE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/test-feedback-report.py"
+        },
+        {
+          "path": "e2e/feedback-report/run.mjs"
+        },
+        {
+          "path": "docs/testing/studio-feedback-owner-console.md"
+        },
+        {
+          "path": ".github/workflows/feedback-candidate.yml"
+        },
+        {
+          "path": "e2e/feedback-native/README.md"
+        },
+        {
+          "path": "e2e/feedback-native/hosted.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-ui.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-ui.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/prepare-config.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/safety.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/safety.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/service.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/README.md"
+        },
+        {
+          "path": "e2e/feedback-live/guard.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/guard.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/trace.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/trace.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/prepare-config.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/run.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/hosted-shell.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/hosted-shell.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/session-control.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/session-control.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/SCRIPTED.md"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-sdk-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/scripted-upstream.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/history-streaming.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-windows.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/native-windows.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/extension-inspector.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/delayed-activation.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/headless-cdp.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-feedback-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-protocol.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-host.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.mjs"
+        },
+        {
+          "path": "e2e/feedback-live/render-completion.test.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/completion-upstream.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-probe.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
     },

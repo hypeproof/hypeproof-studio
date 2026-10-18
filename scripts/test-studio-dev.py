@@ -14,6 +14,10 @@ dev = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(dev)
 
 class DevLauncherTests(unittest.TestCase):
+    def init_repo(self, repo):
+        for args in [('init', '-q'), ('config', 'user.name', 'Launcher Test'), ('config', 'user.email', 'launcher@example.invalid'), ('add', '.'), ('commit', '-qm', 'fixture')]:
+            subprocess.run(['git', *args], cwd=repo, check=True, capture_output=True)
+
     def test_local_setup_preserves_active_session_and_validates_before_saving(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)/'repo'; state = Path(tmp)/'state'; state.mkdir()
@@ -46,17 +50,77 @@ class DevLauncherTests(unittest.TestCase):
             (shipped/'dist/extension.js').write_text('official', encoding='utf-8')
             (base/'HypeProof Studio.exe').write_bytes(b'signed shell')
             original = dev.file_manifest(base)
+            self.init_repo(repo)
             def build(repo, stage):
-                (stage/'webview').mkdir(parents=True)
+                (stage/'webview').mkdir(parents=True, exist_ok=True)
                 (stage/'extension.js').write_text('current local source', encoding='utf-8')
                 (stage/'webview/index.html').write_text('current webview', encoding='utf-8')
                 return {}
-            with patch.object(dev, 'build', side_effect=build), patch.object(dev, 'app_running', return_value=False), patch.object(dev.subprocess, 'check_output', return_value='test'):
+            with patch.object(dev, 'build', side_effect=build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
                 app = dev.prepare(repo, base, state, 'local')
             receipt = json.loads((state/'receipt.json').read_text(encoding='utf-8'))
             self.assertEqual(receipt['extension_sha256'], dev.sha(app/'resources/app/extensions/hypeproof-chat/dist/extension.js'))
             self.assertEqual(dev.file_manifest(base), original)
             self.assertEqual(json.loads((app/'resources/app/product.json').read_text())['nameShort'], 'HypeProof Studio Dev')
+            self.assertFalse(receipt['source_dirty'])
+            self.assertEqual(receipt['source_binding'], dev.source_snapshot(repo))
+            self.assertEqual(receipt['source_sha'], receipt['source_binding']['sha'])
+            # Stable edits remain usable for development; they cannot masquerade as clean acceptance.
+            (source/'package.json').write_text('{"name":"hypeproof-chat","private":true}', encoding='utf-8')
+            with patch.object(dev, 'build', side_effect=build), patch.object(dev, 'app_running', return_value=False), patch('builtins.print'):
+                dev.prepare(repo, base, state, 'local')
+            dirty_receipt = json.loads((state/'receipt.json').read_text())
+            self.assertTrue(dirty_receipt['source_dirty'])
+            self.assertEqual(dirty_receipt['source_binding'], dev.source_snapshot(repo))
+            self.assertEqual(dev.file_manifest(base), original)
+            # A source change during packaging must leave the previous app and receipt in place.
+            previous_app = dev.file_manifest(app)
+            previous_receipt = (state/'receipt.json').read_bytes()
+            configure = dev.configure_copy
+            def mutate_during_copy(candidate, identifier):
+                configure(candidate, identifier)
+                (source/'package.json').write_text('{"name":"hypeproof-chat","private":false}', encoding='utf-8')
+            with patch.object(dev, 'build', side_effect=build), patch.object(dev, 'app_running', return_value=False), patch.object(dev, 'configure_copy', side_effect=mutate_during_copy), patch('builtins.print'):
+                with self.assertRaisesRegex(RuntimeError, 'Source changed during preparation'):
+                    dev.prepare(repo, base, state, 'local')
+            self.assertEqual(dev.file_manifest(app), previous_app)
+            self.assertEqual((state/'receipt.json').read_bytes(), previous_receipt)
+
+    def test_source_changes_during_build_abort_before_copy_or_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); repo = root/'repo'; source = repo/'extensions/hypeproof-chat/src/input.ts'
+            source.parent.mkdir(parents=True); source.write_text('initial')
+            self.init_repo(repo)
+            state = root/'state'; state.mkdir()
+            def mutate(_repo, _stage):
+                source.write_text('changed while building')
+                return {}
+            with patch.object(dev, 'app_running', return_value=False), patch.object(dev, 'build', side_effect=mutate), patch.object(dev.shutil, 'copytree') as copy:
+                with self.assertRaisesRegex(RuntimeError, 'Source changed during preparation'):
+                    dev.prepare(repo, root/'installed', state, 'local')
+            copy.assert_not_called()
+            self.assertFalse((state/'receipt.json').exists())
+            self.assertFalse((state/'HypeProof Studio Dev').exists())
+
+    def test_snapshot_tracks_dirty_bytes_untracked_source_and_git_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp); source = repo/'extensions/hypeproof-chat/src/한글.ts'
+            source.parent.mkdir(parents=True); source.write_text('initial', encoding='utf-8')
+            self.init_repo(repo)
+            clean = dev.source_snapshot(repo)
+            source.write_text('dirty one', encoding='utf-8'); first = dev.source_snapshot(repo)
+            source.write_text('dirty two', encoding='utf-8'); second = dev.source_snapshot(repo)
+            self.assertTrue(first['dirty']); self.assertTrue(second['dirty'])
+            self.assertEqual(first['status_sha256'], second['status_sha256'])
+            self.assertNotEqual(first['inputs_sha256'], second['inputs_sha256'])
+            (source.parent/'new.ts').write_text('new input')
+            self.assertEqual(dev.source_snapshot(repo)['file_count'], clean['file_count']+1)
+            with self.assertRaisesRegex(RuntimeError, 'Source changed'):
+                dev.require_same_source(repo, first)
+            subprocess.run(['git', 'add', '.'], cwd=repo, check=True, capture_output=True)
+            subprocess.run(['git', 'commit', '-qm', 'new source'], cwd=repo, check=True, capture_output=True)
+            with self.assertRaisesRegex(RuntimeError, 'Source changed'):
+                dev.require_same_source(repo, clean)
 
     def test_only_fully_bundled_new_dependencies_can_use_an_older_shell(self):
         source = {'dependencies': {'new-js': '1'}}
@@ -67,6 +131,32 @@ class DevLauncherTests(unittest.TestCase):
         meta['outputs']['extension.js']['imports'].append({'path': 'new-js/native', 'external': True})
         with self.assertRaisesRegex(RuntimeError, 'Unbundled runtime dependency'):
             dev.check_runtime_dependencies(source, {}, meta)
+
+    def test_prepared_sdk_replaces_stale_vendor_only_in_owned_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); repo = root/'repo'; base = root/'installed'; state = root/'state'; state.mkdir()
+            source = repo/'extensions/hypeproof-chat'; source.mkdir(parents=True)
+            (source/'package.json').write_text(json.dumps({'dependencies': {'@anthropic-ai/claude-agent-sdk':'1.2.3'}}))
+            payload = base/'resources/app'; shipped = payload/'extensions/hypeproof-chat'
+            (shipped/'dist/vendor').mkdir(parents=True); (shipped/'webview-ui/dist').mkdir(parents=True)
+            (shipped/'dist/vendor/stale.js').write_text('old SDK')
+            (shipped/'dist/extension.js').write_text('old extension')
+            (shipped/'package.json').write_text(json.dumps({'dependencies': {'@anthropic-ai/claude-agent-sdk':'0.0.1'}}))
+            (payload/'product.json').write_text('{}'); (base/'HypeProof Studio.exe').write_bytes(b'owned fixture shell')
+            self.init_repo(repo); before = dev.file_manifest(base)
+            staged = {'schema':'hps-dev-sdk-vendor/1','packages':{'@anthropic-ai/claude-agent-sdk':'1.2.3'},'sha256':'recorded-by-vendor-tool','file_count':1}
+            def build(_repo, stage):
+                (stage/'webview').mkdir(parents=True); (stage/'vendor').mkdir()
+                (stage/'extension.js').write_text('new extension'); (stage/'webview/index.html').write_text('new webview')
+                (stage/'vendor/current.js').write_text('new SDK')
+                return {'hps_sdk_vendor': staged}
+            with patch.object(dev,'build',side_effect=build), patch.object(dev,'app_running',return_value=False), patch('builtins.print'):
+                app = dev.prepare(repo,base,state,'local')
+            vendor = app/'resources/app/extensions/hypeproof-chat/dist/vendor'
+            self.assertFalse((vendor/'stale.js').exists())
+            self.assertEqual((vendor/'current.js').read_text(),'new SDK')
+            self.assertEqual(dev.file_manifest(base),before)
+            self.assertEqual(json.loads((state/'receipt.json').read_text())['sdk_vendor'],staged)
 
     def test_windows_identity_does_not_rename_shell_or_mutate_installed_app(self):
         with tempfile.TemporaryDirectory() as tmp:

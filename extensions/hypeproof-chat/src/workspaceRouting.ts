@@ -23,7 +23,32 @@
 //   2. 호출부가 전환 직전에 목적지를 globalState 에 기록하고, 리로드 후 목적지가
 //      안 열렸으면 **재시도하지 않는다**. 실패는 한 번으로 끝난다.
 
+import * as fs from "node:fs";
 import * as path from "node:path";
+
+/**
+ * One spelling of a path for comparing locations: realpath the nearest EXISTING ancestor (the
+ * target may not exist yet — new-file writes), re-append the tail, and uppercase a Windows drive
+ * letter. JS realpath keeps the drive letter as given, and Studio sees both: `c:\…` from
+ * `workspaceFolders`, `C:\…` from `os.homedir()`. Compared as strings, one folder then differed
+ * from itself and "프로젝트 변경" refused in the very folder it should work in. Shared by every
+ * caller (#384 for the symlink half) so the copies cannot drift again.
+ */
+export function canonicalizeExistingPath(p: string): string {
+  let base = path.resolve(p);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync(base);
+      return (tail.length === 0 ? real : path.join(real, ...tail.reverse())).replace(/^[a-z]:/, (d) => d.toUpperCase());
+    } catch {
+      const parent = path.dirname(base);
+      if (parent === base) return path.resolve(p).replace(/^[a-z]:/, (d) => d.toUpperCase());
+      tail.push(path.basename(base));
+      base = parent;
+    }
+  }
+}
 
 export type WorkspaceSwitchDecision =
   /** 지금 열린 폴더를 그대로 쓴다. */

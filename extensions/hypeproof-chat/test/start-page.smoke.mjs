@@ -242,20 +242,6 @@ console.log('PASS activity folder choice: no candidate opens no dialog, cancel k
 }
 console.log('PASS saved activity selection: record drives token/workspace, credential never reaches the UI, unknown ref and foreign Service refuse before forwarding');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ② shouldHideSidebar — tabGroups × chatViewVisible 네 경우
-// ③ openChat() — panel 있으면 openInEditor+started, 없으면 noop
-// ─────────────────────────────────────────────────────────────────────────────
-const {shouldHideSidebar}=module.exports;
-// (탭 없고 뷰 숨김) → 숨겨야 한다
-assert.equal(shouldHideSidebar([{tabs:[]}],false),true,'빈 탭 그룹+뷰 숨김인데 false');
-// (탭 있고 뷰 숨김) → 숨기지 않는다
-assert.equal(shouldHideSidebar([{tabs:[{}]}],false),false,'탭 있는데 true');
-// (탭 없고 뷰 보임) → 숨기지 않는다
-assert.equal(shouldHideSidebar([{tabs:[]}],true),false,'뷰 보이는데 true');
-// (그룹 없고 뷰 숨김) → 숨겨야 한다
-assert.equal(shouldHideSidebar([],false),true,'빈 그룹 배열+뷰 숨김인데 false');
-console.log('PASS shouldHideSidebar: tabGroups × chatViewVisible four cases');
 
 {
   const startsBefore=starts;
@@ -270,4 +256,19 @@ console.log('PASS shouldHideSidebar: tabGroups × chatViewVisible four cases');
   await page.openChat();
   assert.equal(starts,startsBefore+1,'panel 없는데 openChat()이 openInEditor를 불렀다');
   console.log('PASS openChat(): panel present calls openInEditor, absent is noop');
+}
+
+// A focus action arriving during slow restore must not open a second chat surface.
+{
+ let release, restored=false, focused=0, shown=0;
+ const restore=new Promise(resolve=>{release=()=>{restored=true;resolve();};});
+ chat.focusEditor=()=>{assert(restored,'focus must wait for restored activity');focused++;return true;};
+ const originalShow=page.show;page.show=async()=>{shown++;};
+ const pending=page.focusAfterRestore(restore);
+ await new Promise(resolve=>setTimeout(resolve,10));assert.equal(focused,0);assert.equal(shown,0);
+ release();await pending;assert.equal(focused,1);assert.equal(shown,0);
+ chat.focusEditor=()=>false;await page.focusAfterRestore(Promise.resolve());assert.equal(shown,1,'closed chat returns to entry');
+ const before=shown;await assert.rejects(page.focusAfterRestore(Promise.reject(Error('restore failed'))),/restore failed/);assert.equal(shown,before,'failed restore cannot bypass into another chat');
+ page.show=originalShow;
+ console.log('PASS chat focus waits for restore and uses entry when closed; no sidebar fallback');
 }

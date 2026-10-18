@@ -143,14 +143,14 @@ Adult instructor practice (`homepage-practice-s1`, #737) uses a separate `homepa
 | REQ-C8 | request_id 가 error banner 에 표시 (S-07 #49) | 스트림 실패 시 `x-request-id` 8글자가 webview ErrorBanner 에 노출 | E |
 | REQ-C9 | Show-intent 단축 | "게임 보여줘"/"실행해" 같은 짧은 비-create 입력 → LLM 호출 없이 마지막 게임 preview 재오픈 | U + E |
 | REQ-C10 | 이미지 붙여넣기 첨부 (website-copyclone) | **profile `input.image_paste=true` 일 때만**: 입력창에 이미지 클립보드 paste(⌘V) → data URL 썸네일이 입력 영역에 표시 + × 로 제거 가능. image-only(텍스트 없이)도 전송 가능. 텍스트 paste 는 항상 기존 동작 유지(preventDefault 안 함) | E |
-| REQ-C11 | 이미지 단발 주입 | 첨부 이미지는 **그 user 턴에만** 모델로 전송됨. `history` 는 text-only 로 매핑(`proxyClient` 가 `m.content` 만 사용) → 후속 턴 재전송·workspaceState 영속 저장 모두 안 함. show-intent 단축은 이미지 첨부 시 건너뜀. **(#421 경계)** 이 행이 금지하는 것은 *모델 컨텍스트로의 재전송*과 *대화 상태 영속화*다 — REQ-C18 이 파일로 남기는 것은 참가자 워크스페이스의 자산이며 히스토리에도 다음 턴 이미지 블록에도 들어가지 않는다 | U + E |
+| REQ-C11 | Current-turn image injection; explicit re-reference | History remains text-only: thumbnails/image blobs are neither replayed automatically nor persisted as conversation state. A current-turn image is sent as actual SDK/proxy image blocks. REQ-C18 may persist workspace assets and plain path notes. Under REQ-STUDIO-REFERENCE-IMAGES, an explicit request to inspect an earlier image creates a fresh current-turn read of the active activity's referenced workspace file under its current image-analysis permission; a changed/deleted/denied file never resurrects cached pixels. Ordinary follow-ups carry no prior image blocks. | U (`reference-images.smoke.mjs`, `reference-transport.test.mjs`) + E (candidate/installed execution required) |
 | REQ-C12 | 이미지 입력 sanitize + 캡 (worker) | `translate()` 가 OpenAI `image_url` → Anthropic image 블록(data URL→base64 source, http(s)→url source) 변환. `data:image/{png,jpe?g,gif,webp}` + http(s) 만 허용, `file:`/`javascript:` 등은 drop. 턴당 최대 4장·data URL 6.5M자 상한. 이미지 없는 array 는 string 으로 collapse(legacy shape 유지) | U |
 | REQ-C13 | 이미지 입력 profile 게이트 (default OFF) | `Profile.input.image_paste` 미설정/false 면 (1) 웹뷰 paste 핸들러가 텍스트 전용으로 동작 + (2) **워커가 `filterMessages` 에서 image 블록 server-side strip** (클라가 보내도 차단). 현 3개 cohort 전부 OFF — 미성년 cohort 가 이미지 흐름에 노출되지 않음. `/v1/profile` 이 resolved boolean 으로 노출 | U |
 | REQ-C14 | AI 상호작용 고지 (세션 시작) (#320) | Anthropic Usage Policy — consumer-facing chat 은 최소 세션 시작 시 "AI 와 대화 중" 고지. `AiDisclosureGate`(호스트측): 세션 첫 webview mount 에서 1회 + history clear 직후 재고지; 같은 세션 내 hide/show remount 에는 미재노출. 문구는 오답 가능성·확인 권고 문장 포함(ToS §D.3, verification_reflex). webview 는 메시지 리스트 상단에 `role=note` + `aria-live=polite` 배너로 렌더 | U (`test/ai-disclosure`) |
 | REQ-C15 | 요청-shaped 업스트림 4xx 분류 (#358) | worker `/v1/chat` 이 업스트림 4xx(400/413/422/429)를 502 로 뭉개지 않고 **실제 status + sanitized `type`** 으로 통과(raw prose 는 로그만; `routes/messages.ts` PASSTHROUGH_4XX 와 동형). 클라는 `friendlyTransportMessage(status)` 로 413→"이미지가 너무 커요" 친절 메시지, 그 외는 generic 카드. 5xx/네트워크는 여전히 502 | U (`test/proxy-transport-friendly`) |
 | REQ-C16 | 응답 중 입력 + 예약 전송 (#416) | 입력창은 스트리밍 중에도 **절대 `disabled` 가 아니다**. 프록시 턴 20~30 s 시절엔 티가 안 났지만 agent-sdk 턴은 실측 5~10분(실강의 9분 사례) — 그동안 참가자는 떠오른 것을 적어둘 수조차 없었다. **적어두지 못한 생각은 사라진다 (iteration_reflex 직접 방해).** 계약(pure `webview-ui/src/sendQueue.ts`): ① `decideEnter` — 유휴면 즉시 전송(기존 그대로, 이미지만 있어도 전송), 스트리밍 중 Enter 는 **예약**; ② 예약은 **정확히 1건** — 다시 Enter 하면 교체(먼저 친 문장 소실)도 무한 큐(다음에 뭐가 갈지 예측 불가)도 아닌 **줄바꿈 덧붙이기**로 한 건에 누적; ③ `shouldFlushQueue` — 자동 전송은 `streaming → idle` **엣지에서만** (스트림이 열린 채 flush 하면 `submit()` 자체 가드에 걸려 **에러 없이 증발**); ④ `draftAfterStop` — Stop·예약취소는 예약 문장을 입력창으로 되돌린다(예약 이후 더 친 문장은 그 아래에 순서대로). **강사가 원격으로 끊은 turn도 같다(#751 U4, `shouldRestoreQueue`)** — 끊긴 turn의 끝에서는 flush 하지 않는다: 강사가 멈춘 순간 학생이 아직 보내지 않은 문장으로 새 AI 실행이 시작되면 안 된다. 어떤 경로로도 사용자가 친 글자를 버리지 않는다; ⑤ 한글 IME 조합 중 Enter 는 여전히 전송/예약이 아님(`composing`·`isComposing`·keyCode 229 유지); ⑥ Send 버튼은 기존대로 스트리밍 중 Stop — 예약은 Enter 경로 전용. 화면엔 "다음에 보낼 메시지" 한 줄 + × (× 는 삭제가 아니라 되돌리기) | U (`test/send-queue`) |
 | REQ-C17 | 대화와 툴 실행은 하나의 타임라인 (#503) | 실행은 말풍선 → 툴 → 말풍선 순서로 일어나는데 화면은 [말풍선 전부] 아래 [툴 전부] 두 덩어리였다 — 참가자가 "코치가 무슨 말을 하고 나서 무슨 일을 했는지"를 읽을 수 없다(**verification_reflex** 정면 훼손: 확인하려면 말과 행동이 시간 순으로 붙어 있어야 한다). 원인은 리듀서가 `messages[]` 와 `toolLog[]` 두 배열로 갈라 담은 것(교점 없음)이고, 같은 뿌리에서 두 번째 결함이 나왔다 — `streamStart` 의 `toolLog: []` 때문에 **다음 턴이 시작되는 순간 직전 턴의 툴 기록이 통째로 증발**. 계약(pure `src/chatTimeline.ts`, 호스트·웹뷰가 **같은 리듀서**를 돌린다 — 규칙이 두 벌이면 창을 다시 열 때 순서가 달라진다): ① 툴 도착 시 열린 말풍선을 닫고 `role:"tool"` 아이템을 그 자리에 넣으며, 다음 델타가 **새 말풍선**을 연다 → `[말풍선]→[툴]→[말풍선]`; ② 같은 id 는 제자리 갱신(running → done/error) — 줄이 늘면 같은 툴을 두 번 실행한 것처럼 보인다; ③ **코드펜스가 열려 있는 동안 도착한 툴은 보류**했다가 펜스가 닫힐 때(또는 턴 종료 시) 흘려 넣는다 — 펜스가 두 말풍선에 걸리면 `extractRenderableHtml` 이 못 찾아 자동 프리뷰(REQ-D2)가 죽는다; ④ 툴 줄은 대화 기록의 일부라 턴이 넘어가도 남고 workspaceState 에 함께 저장된다(창을 다시 열어도 보인다). `Clear`/history 는 대화와 툴을 **함께** 비운다; ⑤ **모델에 나가는 히스토리에는 `role:"tool"` 이 절대 들어가지 않는다**(`modelHistory()` — 호스트 진입점 + `proxyClient` 이중 방어); ⑥ 순서의 출처는 단일 postMessage 채널의 도착순이다(별도 시퀀스 번호 없음) — 2026-07-28 벤더 SDK 0.3.207 실측에서 assistant 메시지 12/12 의 `message.content` 길이가 1이라 한 이벤트가 텍스트와 툴을 동시에 내지 않는다. 툴 줄의 `createdAt` 은 SDK 가 실어 보낸 `timestamp`; ⑦ DOM 클래스(`.hps-tool-log-line`/`.hps-tool-icon`/`.hps-tool-label`/`.hps-tool-<state>`)는 e2e·관측기 셀렉터 호환으로 **유지**, 컨테이너 `.hps-tool-log` 는 삭제; ⑧ 히스토리 상한(REQ-C3, 200)은 **말한 것(user/assistant) 기준**으로 센다(`clampTimeline`) — 전체 메시지 수로 세면 SDK 턴 한 번의 툴 수십 줄이 대화를 통째로 밀어낸다 | U (`test/chat-timeline` — 양성/음성 대조군) + E |
-| REQ-C18 | 붙여넣은 이미지를 워크스페이스 파일로 남긴다 (#421) | 붙여넣기는 모델로만 가고 **디스크에는 안 남았다** — 그래서 코치가 `<img src>` 로 걸 대상이 없어 참가자에게 "파일로 저장해 주시겠어요?" 라고 일을 떠넘겼다(2026-07-24 실강의 실측 발화). 워크숍에서 참가자가 원하는 건 대개 "이 사진을 우리 홈페이지에 넣어줘" 이고, 그러려면 파일이 어차피 필요하다. 계약(pure `src/pastedImages.ts` + 호스트 `savePastedImages`): ① 그 턴에 첨부된 이미지를 `<작업폴더>/assets/pasted-<YYYYMMDD-HHMMSS>-<n>.<ext>` 로 쓴다 — 작업 폴더는 `resolveCoachCwd()`(라이브 서버가 서빙하는 루트와 동일), 그래서 상대경로 `assets/…` 가 페이지에서 바로 뜬다; ② **mime 화이트리스트**(`image/{png,jpeg,webp,gif}`)를 통과한 base64 data URL 만 저장 — `image/svg+xml`·`text/html`·비-base64·비-data URL 은 전부 거절(값의 출처가 샌드박스 웹뷰다); ③ 파일명은 시각+순번+mime 확장자로만 조립 — **참가자·모델 문자열이 파일명에 닿는 경로가 없다**(경로 이탈 불가). 같은 초 충돌은 접미사를 올려 가며 피한다(덮어쓰면 참가자가 앞서 붙인 사진이 소리 없이 사라진다); ④ 저장한 경로를 `<pasted-images>` 블록으로 **그 턴의 모델 입력에만** 얹는다 — 프록시·SDK 두 런타임이 같은 문구를 본다. 문구는 존재를 사실로 알리고 "저장해 달라"는 되묻기를 명시적으로 막는다; ⑤ 화면에도 저장 사실을 남긴다(`toolLog` 한 줄) — 조용히 저장하면 참가자도 코치도 확인할 근거가 없다(REQ-C17 과 같은 이유); ⑥ 실패는 삼키지 않는다 — 저장 못 한 장수를 한 줄로 알리고 그 턴의 문구를 비운다(코치가 없는 파일을 있다고 믿는 것보다 낫다); ⑦ **저장 대상은 참가자가 붙인 이미지뿐**이다 — #278 의 페이지 캡처(`pendingPageImage`)는 참가자가 간직하겠다고 붙인 자료가 아니라 브라우저 캡처라 저장하지 않는다. **승인 게이트와의 관계**: 이건 모델발 쓰기가 아니라 참가자 자기 자료의 호스트측 보관이라 `resolveActionApproval` 모달을 태우지 않는다 — `saveGameToWorkspace`(index.html)·`saveAgentMdIfPresent`(agent.md) 와 같은 계열이고, 그 정책의 핵심인 "워크스페이스 밖 절대경로 금지"는 ③ 으로 구조적으로 성립한다 | U (`test/pasted-images` — 양성/음성 대조군) |
+| REQ-C18 | 붙여넣은 이미지를 워크스페이스 파일로 남긴다 (#421) | 붙여넣기는 모델로만 가고 **디스크에는 안 남았다** — 그래서 코치가 `<img src>` 로 걸 대상이 없어 참가자에게 "파일로 저장해 주시겠어요?" 라고 일을 떠넘겼다(2026-07-24 실강의 실측 발화). 워크숍에서 참가자가 원하는 건 대개 "이 사진을 우리 홈페이지에 넣어줘" 이고, 그러려면 파일이 어차피 필요하다. 계약(pure `src/pastedImages.ts` + 호스트 `savePastedImages`): ① 그 턴에 첨부된 이미지를 `<작업폴더>/assets/pasted-<YYYYMMDD-HHMMSS>-<n>.<ext>` 로 쓴다 — 작업 폴더는 `resolveCoachCwd()`(라이브 서버가 서빙하는 루트와 동일), 그래서 상대경로 `assets/…` 가 페이지에서 바로 뜬다; ② **mime 화이트리스트**(`image/{png,jpeg,webp,gif}`)를 통과한 base64 data URL 만 저장 — `image/svg+xml`·`text/html`·비-base64·비-data URL 은 전부 거절(값의 출처가 샌드박스 웹뷰다); ③ 파일명은 시각+순번+mime 확장자로만 조립 — **참가자·모델 문자열이 파일명에 닿는 경로가 없다**(경로 이탈 불가). 같은 초 충돌은 접미사를 올려 가며 피한다(덮어쓰면 참가자가 앞서 붙인 사진이 소리 없이 사라진다); ④ 저장한 경로를 `<pasted-images>` 블록으로 현재 턴의 모델 입력과 활동별 text history에 남긴다 — 프록시·SDK 두 런타임이 같은 문구를 본다. 이미지 바이트는 history에 저장하지 않으며, 명시적 후속 재참조는 REQ-C11/REQ-STUDIO-REFERENCE-IMAGES의 새 파일 읽기다. 문구는 존재를 사실로 알리고 "저장해 달라"는 되묻기를 명시적으로 막는다; ⑤ 화면에도 저장 사실을 남긴다(`toolLog` 한 줄) — 조용히 저장하면 참가자도 코치도 확인할 근거가 없다(REQ-C17 과 같은 이유); ⑥ 실패는 삼키지 않는다 — 저장 못 한 장수를 한 줄로 알리고 그 턴의 문구를 비운다(코치가 없는 파일을 있다고 믿는 것보다 낫다); ⑦ **저장 대상은 참가자가 붙인 이미지뿐**이다 — #278 의 페이지 캡처(`pendingPageImage`)는 참가자가 간직하겠다고 붙인 자료가 아니라 브라우저 캡처라 저장하지 않는다. **승인 게이트와의 관계**: 이건 모델발 쓰기가 아니라 참가자 자기 자료의 호스트측 보관이라 `resolveActionApproval` 모달을 태우지 않는다 — `saveGameToWorkspace`(index.html)·`saveAgentMdIfPresent`(agent.md) 와 같은 계열이고, 그 정책의 핵심인 "워크스페이스 밖 절대경로 금지"는 ③ 으로 구조적으로 성립한다 | U (`test/pasted-images` — 양성/음성 대조군) |
 
 ## D. Preview / Run
 
@@ -483,9 +483,16 @@ Anthropic 미성년자 가이드(#282 의 2026-07-13 라이선싱 코멘트) 구
 |---|---|---|---|
 | REQ-P1 | Pages 프로비저닝을 기다린 뒤 워크플로를 올린다 (#500) | `gh api -X PUT .../pages -f build_type=workflow` 의 **2xx 는 접수 확인이지 준비 완료가 아니다** — 백엔드 프로비저닝은 비동기라, 곧바로 워크플로 파일을 올리면 push 로 실행이 걸리고 `actions/configure-pages@v5` 가 활성 Pages 환경을 못 찾아 `HttpError: Not Found` 로 죽는다(2026-07-28 실측: 3연속 실패 중 2건). GitHub UI 의 "Static HTML ▸ Configure" 버튼이 되는 이유도 기능이 아니라 **순서**다 — 프로비저닝이 끝난 뒤에 워크플로를 쓴다. 계약: ① PUT 후 `repos/{owner}/{repo}/pages` 의 `build_type` 이 `workflow` 로 보일 때까지 **끝나는 루프**(12회×5s, bash/PowerShell 양쪽 제공)로 대기 — 스킬 자신의 규칙대로 `until` 금지(끝나지 않는 루프는 수업을 세운다); ② 준비 확인 전에는 **워크플로를 올리지 않는다** — 올려봐야 실패한 빨간 실행 기록만 남는다; ③ 실패 표에 `configure-pages ▸ Not Found` 행을 두고 재실행(`workflow_dispatch`) 경로를 준다 | R (`worker/test/smoke.mjs` §profile-snapshot — **순서 판정**: 대기 표식이 워크플로 업로드보다 앞선다. 양성/음성 대조군으로 계측기 검증) |
 | REQ-P2 | `pages.yml` 재작성은 최신 `sha` 와 함께, 한 번에 (#500) | 이미 있는 파일을 `sha` 없이 PUT 하면 409 고, 브라우저 편집과 API 덮어쓰기를 번갈아 하면 내용이 중복·병합돼 **YAML 파싱 자체가 실패**한다(`This workflow graph cannot be shown` — 워크플로가 실패한 게 아니라 읽히지도 않은 것). 계약: ① 재업로드는 `contents/... --jq .sha` 로 최신 sha 를 받아 `-f sha=` 로 넘긴다; ② 한 파일을 두 통로(브라우저 편집 / `gh api`)로 번갈아 건드리지 않는다; ③ 이미 깨졌으면 부분 수정하지 말고 **전체를 한 번에** 다시 쓴다 | R (`worker/test/smoke.mjs` — 재업로드 절차에 sha 가 살아 있다) |
-| REQ-P3 | 원클릭 배포 — 버튼과 코치 도구가 같은 결정적 모듈을 탄다 (hype-dental D1–D3, D-017) | `src/publish/` 하나가 배포를 수행하고 진입점 둘(명령 `hypeproof-chat.publishSite`, MCP 도구 `mcp__hypeproof__publish_site`)이 그것만 부른다. 계약: ① 게이트 — `publishing.enabled === true && strategy === "per_user_github_pages"` 이고 미성년이 아닐 때만 버튼·도구가 보인다(`sitePublishAllowed`, 갤러리 게이트와 같은 방향·fail closed), 도구 grant 는 `sdk_tools.browser` 와 독립; ② 사전 검사 — 미리보기에선 되고 Pages 에선 깨지거나 새는 것(대소문자 불일치·`/` 로 시작하는 경로·제외 파일 참조·비밀값·주민등록번호·50MB 초과)은 **차단**, 미리보기에서도 깨진 것은 경고, 점(.)으로 시작하는 항목·`node_modules`·키 파일은 올리지 않는다; ③ 순서 — REQ-P1 그대로(Pages `workflow` 설정 → 읽어서 확인 → 워크플로가 든 커밋), 스킬의 YAML 을 글자 그대로, `git` 없이 Git Data API 로 **한 번의 스냅샷 커밋**; ④ R0 — 이번 실행의 nonce(`hps-build.txt`)가 실제 주소에서 보이고 첫 화면이 200 일 때만 `verified: true` 와 `url` 을 낸다. 시간이 모자라면 `ok: true, verified: false`(아직 만드는 중)이고 `check_only` 로 다시 본다; ⑤ `stage: "save"` 는 파일만 올리고 워크플로·Pages 를 건드리지 않는다(404 를 보는 수업 단계); ⑥ 공개 동의는 저장소별·세션당 한 번(모달, `requireApprovalFor` 로 끌 수 없음), `check_only` 는 묻지 않는다; ⑦ GitHub REST 호출은 모두 `gh api` 프로세스로 보낸다 — 토큰을 확장이 요청에 싣지 않는다. 평문 HTTP 경로는 테스트·개발 실행 + 루프백 주소의 모의 GitHub 에서만(그 경로는 토큰을 직접 보낸다) | U (`publish-site`·`publish-host`·`publish-integration` smoke: 모의 GitHub, 가짜 `gh` 로 `gh api` 계약) + 실계정(옵트인, `gh` 경로로 공개·재공개·이어하기 확인) |
-| REQ-P4 | GitHub에서 이어하기 — 폴더마다 자기 저장소 (hype-dental D-024, 2026-10-13 사용자 요구) | 참여 코드를 넣어 후보 카드가 뜨면, REQ-P3 ① 게이트가 열리고 프로필이 수업 폴더(`workspace_root`)를 정한 코호트에 한해 이 자리 GitHub 에 올린 수업 사이트가 있는지 **먼저** 본다(`/user/repos` — 버튼이 만든 저장소의 설명, 또는 Pages + 루트 `agent.md`). 참가자는 GitHub 에서 직접 고치지 않는다는 전제다. 계약: ① 있으면 "GitHub에서 이어하기"(여러 개면 고르기, 가장 최근 것을 미리 선택)와 "새로 하기"를 낸다 — Primary 는 하나(SX-04); ② 이어하기는 고른 저장소를 **새 폴더**(수업 폴더, 있으면 `-2`·`-3`…)로 내려받는다 — 공개 때 올리는 파일만, blob id 확인, 기존 폴더에는 쓰지 않고 실패하면 만든 폴더를 지운다. 내려받은 폴더는 그 저장소에 묶이고(등록 + 내려받은 커밋) 다음 누름은 질문 없이 그 커밋 위에 올린다. 이 자리가 다시 열 폴더가 GitHub 과 같으면 내려받지 않고 그 폴더를 연다; ③ 새로 하기는 새 폴더에서 시작한다. 이 컴퓨터에서 올린 적 없는 폴더의 첫 누름은 **새 저장소**(`<기본>`, `<기본>-2`…)를 만든다 — 다른 컴퓨터에서 만든 사이트에 쓰지 않는다. 명시한 `repo_name` 은 그대로; ④ gh 가 로그인돼 있지 않으면 볼 수 없으므로 조용한 "GitHub 로그인" 줄을 내고, 로그인 뒤 다시 본다. 확인 실패·15초 초과는 평소 시작으로 | U (`github-continue` smoke: 모의 GitHub, 두 컴퓨터, 시작 화면) + E (개발 중 앱 사본) |
-| REQ-P5 | 프로젝트 변경 — 수업 중 다른 GitHub 저장소로 수업 폴더 바꾸기 (2026-10-15 사용자 요구, #1691) | 채팅 머리줄의 **프로젝트 변경** 버튼("인터넷에 올리기" 옆, 같은 REQ-P3 ① 게이트) 또는 채팅 문장 `프로젝트 변경`(가까운 변형만 — 그 말을 언급만 하는 문장은 코치에게)이 참가자의 저장소 목록을 연다: 수업 사이트(REQ-P4 판별) 먼저, 그다음 자기 소유의 다른 저장소(포크·보관 제외). 계약: ① 떠나는 폴더가 GitHub 과 같으면 묻지 않는다. 다르면 "올리고 바꾸기 / 올리지 않고 바꾸기"를 묻고, 올리기는 버튼과 같은 공개(워크플로를 지키기 위해 저장 단계가 아니다). 올린 적 없는 폴더는 새 저장소로 올리거나 그대로 둔다; ② 고른 저장소의 폴더: 이 컴퓨터에 없으면 `<수업 폴더>-<저장소>` 로 내려받고(REQ-P4 ②의 내려받기), 있으면 GitHub 과 비교해 같으면 그대로 연다. 이 컴퓨터가 마지막으로 올리거나 받은 뒤 GitHub 이 그대로면 로컬 작업이 더 새것이라 그대로 연다. GitHub 이 움직였으면 받아온다(사이트 파일만 GitHub 것으로, 점(.) 항목은 그대로, 로컬이 달랐으면 `<폴더>.before-pull-<시각>` 사본). 떠나는 폴더는 대상 폴더로 쓰지 않는다; ③ 그 폴더를 그 저장소에 묶고(등록 + 커밋) 시작 화면과 같은 방식으로 활동 작업 폴더로 연다(창이 다시 열리고 대화는 그 폴더의 것); ④ 그 폴더의 첫 코치 턴에 모델 전용 메모: `agent.md` 가 있으면 다른 일보다 먼저 읽는다 — 한 번, 그 폴더에서만, 24시간 안에 | U (로컬 `project-switch` smoke: 모의 GitHub — 문장 판별·목록·비교·결정표·받아오기, PR 미포함) + E (개발 중 앱 사본, 2026-10-15) |
+| REQ-P3 | 원클릭 배포 — 버튼과 코치 도구가 같은 결정적 모듈을 탄다 (hype-dental D1–D3, D-017) | `src/publish/` 하나가 배포를 수행하고 진입점 둘(명령 `hypeproof-chat.publishSite`, MCP 도구 `mcp__hypeproof__publish_site`)이 그것만 부른다. 계약: ① 게이트 — `publishing.enabled === true && strategy === "per_user_github_pages"` 이고 미성년이 아닐 때만 버튼·도구가 보인다(`sitePublishAllowed`, 갤러리 게이트와 같은 방향·fail closed), 도구 grant 는 `sdk_tools.browser` 와 독립; ② 사전 검사 — Text inspection is bounded to 2MiB per file; larger or unreadable text blocks publication with a named-file explanation rather than silently bypassing checks (binary media retain the existing limits). 미리보기에선 되고 Pages 에선 깨지거나 새는 것(대소문자 불일치·`/` 로 시작하는 경로·제외 파일 참조·비밀값·주민등록번호·50MB 초과)은 **차단**, 미리보기에서도 깨진 것은 경고, 점(.)으로 시작하는 항목·`node_modules`·키 파일은 올리지 않는다; ③ 순서 — REQ-P1 그대로(Pages `workflow` 설정 → 읽어서 확인 → 워크플로가 든 커밋), 스킬의 YAML 을 글자 그대로, `git` 없이 Git Data API 로 **한 번의 스냅샷 커밋**; ④ R0 — 이번 실행의 nonce(`hps-build.txt`)가 실제 주소에서 보이고 첫 화면이 200 일 때만 `verified: true` 와 `url` 을 낸다. 시간이 모자라면 `ok: true, verified: false`(아직 만드는 중)이고 `check_only` 로 다시 본다; ⑤ `stage: "save"` 는 파일만 올리고 워크플로·Pages 를 건드리지 않는다(404 를 보는 수업 단계); ⑥ 공개 동의는 저장소별·세션당 한 번(모달, `requireApprovalFor` 로 끌 수 없음), `check_only` 는 묻지 않는다; ⑦ GitHub REST 호출은 모두 `gh api` 프로세스로 보낸다 — 토큰을 확장이 요청에 싣지 않는다. 평문 HTTP 경로는 테스트·개발 실행 + 루프백 주소의 모의 GitHub 에서만(그 경로는 토큰을 직접 보낸다) | U (`publish-site`·`publish-host`·`publish-integration` smoke: 모의 GitHub, 가짜 `gh` 로 `gh api` 계약) + 실계정(옵트인, `gh` 경로로 공개·재공개·이어하기 확인) |
+| REQ-P4 | GitHub에서 이어하기 — 폴더마다 자기 저장소 (hype-dental D-024, 2026-10-13 사용자 요구) | 참여 코드를 넣어 후보 카드가 뜨면, REQ-P3 ① 게이트가 열리고 프로필이 수업 폴더(`workspace_root`)를 정한 코호트에 한해 이 자리 GitHub 에 올린 수업 사이트가 있는지 **먼저** 본다(`/user/repos` — 버튼이 만든 저장소의 설명, 또는 Pages + 루트 `agent.md`). 참가자는 GitHub 에서 직접 고치지 않는다는 전제다. 계약: ① 있으면 "GitHub에서 이어하기"(여러 개면 고르기, 가장 최근 것을 미리 선택)와 "새로 하기"를 낸다 — Primary 는 하나(SX-04); ② 이어하기는 REQ-P5 ②와 **같은 규칙**으로 고른 저장소의 폴더를 연다 — 그 저장소에 등록된 폴더, 없으면 `<수업 폴더>-<저장소>`. 이 컴퓨터에 없으면 참가자의 `gh` 로그인으로 `gh repo clone`(`core.autocrlf=false` 로 GitHub 과 같은 바이트, 실패하면 만든 폴더를 지운다), 있으면 GitHub 과 비교해 그대로 열거나 받아온다. 그 폴더는 그 저장소에 묶이고(등록 + 커밋) 다음 누름은 질문 없이 그 커밋 위에 올린다. 같은 저장소를 다시 골라도 새 폴더를 만들지 않는다. 창이 다시 열리면 시작 화면이 아니라 코치 대화가 열린다 — 폴더가 같은지는 경로 표기(Windows 드라이브 문자 `c:`/`C:`)와 무관하고, 업데이트 전에 `c:` 로 저장된 활동 연결도 그대로 찾는다. git 은 묻지 않는다(로그인 실패 시 비밀번호 창 없이 실패). 공개가 만드는 파일(`.github`·`.nojekyll`·`hps-build.txt`)은 탐색기에 보이지 않는다 — 파일은 그대로 있고 공개에서도 계속 제외된다; ③ 새로 하기는 새 폴더에서 시작한다. 이 컴퓨터에서 올린 적 없는 폴더의 첫 누름은 **새 저장소**(`<기본>`, `<기본>-2`…)를 만든다 — 다른 컴퓨터에서 만든 사이트에 쓰지 않는다. 명시한 `repo_name` 은 그대로; ④ gh 가 로그인돼 있지 않으면 볼 수 없으므로 조용한 "GitHub 로그인" 줄을 내고, 로그인 뒤 다시 본다. 확인 실패·15초 초과는 평소 시작으로 | U (`github-continue` smoke: 모의 GitHub, 두 컴퓨터, 시작 화면; `repo-checkout` smoke: 실제 git·로컬 원격으로 폴더 찾기·clone·열기·받아오기·백업·실패, `c:`/`C:` 동일성; `activity-legacy-drive` smoke: `c:` 로 저장된 연결의 업데이트 호환) + E (개발 중 앱 사본, Windows, 2026-10-17: 이어하기·프로젝트 변경이 `gh repo clone`) |
+| REQ-P5 | 프로젝트 변경 — 수업 중 다른 GitHub 저장소로 수업 폴더 바꾸기 (2026-10-15 사용자 요구, #1691) | 채팅 머리줄의 **프로젝트 변경** 버튼("인터넷에 올리기" 옆, 같은 REQ-P3 ① 게이트) 또는 채팅 문장 `프로젝트 변경`(가까운 변형만 — 그 말을 언급만 하는 문장은 코치에게)이 참가자의 저장소 목록을 연다: 수업 사이트(REQ-P4 판별) 먼저, 그다음 자기 소유의 다른 저장소(포크·보관 제외). 계약: ① 떠나는 폴더가 GitHub 과 같으면 묻지 않는다. 다르면 "올리고 바꾸기 / 올리지 않고 바꾸기"를 묻고, 올리기는 버튼과 같은 공개(워크플로를 지키기 위해 저장 단계가 아니다). 올린 적 없는 폴더는 새 저장소로 올리거나 그대로 둔다; ② 고른 저장소의 폴더: 등록된 폴더, 없으면 `<수업 폴더>-<저장소>` — 수업 폴더는 서비스가 준 `workspace_root` 이지 지금 활동이 열린 폴더가 아니다(이름이 `<수업>-<a>-<b>` 로 이어 붙지 않는다). 같은 이름의 폴더가 다른 저장소의 clone 이면 건드리지 않고 다음 이름을 쓴다. 이 컴퓨터에 없으면 `gh repo clone`(REQ-P4 ②), 있으면 GitHub 과 비교해 같으면 그대로 연다. 이 컴퓨터가 마지막으로 올리거나 받은 뒤 GitHub 이 그대로면 로컬 작업이 더 새것이라 그대로 연다(git 기록만 GitHub 커밋으로 옮긴다). GitHub 이 움직였으면 받아온다 — 공개는 API 로 커밋하므로 `git pull` 이 아니라 fetch 후 브랜치를 GitHub 커밋으로 옮기고 파일을 GitHub 것으로(추적되지 않는 점(.) 항목은 그대로, 로컬이 달랐으면 `<폴더>.before-pull-<시각>` 사본 — `fs.cpSync` 는 한글 경로에서 Studio 런타임을 죽이므로 쓰지 않는다). clone 이 아닌 기존 폴더는 그 자리에서 clone 이 된다. 떠나는 폴더는 대상 폴더로 쓰지 않는다; ③ 그 폴더를 그 저장소에 묶고(등록 + 커밋) 시작 화면과 같은 방식으로 활동 작업 폴더로 연다(창이 다시 열리고 대화는 그 폴더의 것); ④ 그 폴더의 첫 코치 턴에 모델 전용 메모: `agent.md` 가 있으면 다른 일보다 먼저 읽는다 — 한 번, 그 폴더에서만, 24시간 안에 | U (로컬 `project-switch` smoke: 모의 GitHub — 문장 판별·목록·비교·결정표·받아오기, PR 미포함) + E (개발 중 앱 사본, 2026-10-15) |
+
+REQ-P3 retry feedback: a failed or unverified button result appears as one managed inline
+notice and remains in the transcript, including any repository link. Pressing the button
+again clears that attempt's notice before asynchronous work starts; a newer unrelated
+notice is preserved. Repeated clicks during a button attempt start no additional progress
+or result. Device-code modals, public-publishing consent, and verified-success actions
+retain their behavior. This supports participant verification under ST-INT-NATIVE.
 
 ## Q. 세션 로그 로컬 스풀 (#580 수집 계층)
 
@@ -604,7 +611,7 @@ Three per-cohort switches the 2026-10-17 dental seminar turns on through `/v1/pr
 |---|---|---|
 | REQ-STUDIO-CLASSROOM-PANELS | The learner rail's two classroom-operation panels (#751: "강사에게 도움 요청", "수업 결과물 승인") follow the Service per cohort (`classroom_panels.help_request` / `artifact_approval` on `/v1/profile`, hype-dental D-025). Only an explicit `false` hides a panel; absent keeps both, so every cohort served before the field looks the same. Instructor mode never draws them. | U (`classroom-panels` smoke: absent → both drawn, off → neither) + E (app copy, during development) |
 | REQ-STUDIO-TOOL-ACTIVITY | How much of the SDK coach's tool work the timeline draws follows the Service per cohort (`tool_activity` on `/v1/profile`, hype-dental D-027). `"summary"`: one live Korean line per stretch of work (e.g. "홈페이지를 고치는 중…", "화면을 확인하는 중…"), changed in place and hidden when the stretch ends; no tool names or inputs, no thinking text, no line for a failed call the coach retries, and the preview line shows only while it opens. Absent or any other value keeps one line per call (#414). Observation and the spool record the same either way; whether a turn wrote anything is still told only by a successful write (R0). | U (mode, phrases for the rehearsal's own calls, the line's in-place/hidden/new-id behaviour, provider wiring) + E (class rehearsal, 1017). Unit: `tool-activity` smoke |
-| REQ-STUDIO-CHAT-PHOTO-FILES | Where the Service turns on `input.image_files` (hype-dental D-028), a photo dropped or pasted into the chat is kept as a file, not shown to the model. A photo dropped from Finder (VS Code opens it as a tab, #384) comes in the same way after one 붙이기 prompt and its tab closes; a photo already in the class folder being opened is not an attachment. The host holds the original bytes in a staging folder of its own until the message is sent, then moves them into the workspace's `images/` under the participant's file name (NFC, never overwriting: `외관-2.jpg`) and appends an `[첨부한 사진]` list of the paths to the model input, the saved history and the sent bubble. A photo removed before sending is deleted at once; photos never sent are deleted with the window, and a crashed window's folder on the next start (a live window's folder is left alone). Limits: 10 photos, 25 MB each, photo types only (HEIC by name). The coach opens a photo only when asked to copy its look (Service `_attached-images-contract.md`). Absent → drop and paste behave as before (`image_paste` or nothing). | U (names, dedupe, refusal, staging lifecycle incl. live-window guard) + E (studio-dev app, real model: chat drop, Finder/tab path, ×, close, insert without opening, copy-the-look opens) verified locally during development. Unit: `attached-images` smoke |
+| REQ-STUDIO-CHAT-PHOTO-FILES | Where the Service turns on `input.image_files` (hype-dental D-028), a photo dropped or pasted into the chat is kept as a file, not shown to the model. A photo dropped from Finder (VS Code opens it as a tab, #384) comes in the same way after one 붙이기 prompt and its tab closes; a photo already in the class folder being opened is not an attachment. The host holds the original bytes in a staging folder of its own until the message is sent, then moves them into the workspace's `images/` under the participant's file name (NFC, never overwriting: `외관-2.jpg`) and appends an `[첨부한 사진]` list of the paths to the model input, the saved history and the sent bubble. A photo removed before sending is deleted at once; photos never sent are deleted with the window, and a crashed window's folder on the next start (a live window's folder is left alone). Ready photos alone can be sent with Send or Enter after the host acknowledges staging; unavailable/locked/busy states still prevent sending. The canonical images directory must stay inside the workspace; directory links/junctions are rejected without writing outside it. Limits: 10 photos, 25 MB each, photo types only (HEIC by name). The coach opens a photo only when asked to copy its look (Service `_attached-images-contract.md`). Absent → drop and paste behave as before (`image_paste` or nothing). | U (names, dedupe, refusal, staging lifecycle incl. live-window guard) + E (studio-dev app, real model: chat drop, Finder/tab path, ×, close, insert without opening, copy-the-look opens) verified locally during development. Unit: `attached-images` smoke; browser: `npm --prefix e2e run test:photo-only-send` |
 
 ## Native Studio trial (#744)
 
@@ -870,3 +877,142 @@ How confirmed decisions later reach the server project memory (cr-memory, #1450)
 | REQ-STUDIO-LEARNING-WIKI | One ingest reads the current session's spool conversation and `<wiki>/notes/*.md`, sends one request, and keeps only proposals (problem, hypotheses, evidence with real / team test / simulated state, decisions with the AI suggestion and the student's choice, product changes, next action) that cite a turn or note of that session. Entries are numbered H-n / E-n / D-n and appended; uncited items are listed in `log.md`, never written as entries. A hypothesis is "지지" only after a real observation judged a match. The same conversation is not ingested twice; ingested notes move to `raw/`. On the first coach turn of a conversation the team's summary and the next session's question and deck focus are prepended to the model input (not the student's bubble). | `extensions/hypeproof-chat/src/learningWiki.ts`, `chatPanelProvider.wikiIngest`; `test/learning-wiki.smoke.mjs`; Studio Dev app run 2026-10-05 (week 1 → 2, deck 1/8 → 3/8) |
 | REQ-STUDIO-DECK-GENERATOR | Drafts only the requested template slides from the wiki: one claim headline, one visual (number, quote, the student's product page, steps, before/after, statement), at most two supporting lines, speaker notes. A slide is kept only when its references resolve in the wiki and every number on its face appears in the entries it cites; a refused or missing slide gets one repair request with the reasons. Citations, notes and unconfirmed items stay behind the "발표자 노트·근거" switch; the basis tag on the slide is computed from the cited evidence. A humanizer pass rewrites the slide text once; a rewrite that adds a number or balloons is refused, a quote is never rewritten, dashes are stripped. | `src/deckGenerator.ts`, `src/humanizer.ts`; `test/learning-wiki.smoke.mjs` |
 | REQ-STUDIO-TEAM-BRAIN-CALL | Students call the wiki by name in the chat: "팀 브레인에 정리해 줘" ingests (the next session unless the student names one; asks only when the latest session was already filed today), "팀 브레인으로 덱 만들어 줘" drafts the plan's focus slides, "팀 브레인 보여 줘" shows a summary without a model call. Messages without the name, longer than 40 characters, with two sentences, or asking about the feature do not trigger. The answer says what was added and the deck progress. The commands "HypeProof: 팀 브레인에 정리하기" / "HypeProof: 팀 브레인으로 덱 만들기" do the same, gated on `hypeproof-chat.learningWikiEnabled`. | `brainIntent` in `src/learningWiki.ts`; `chatPanelProvider`; `test/learning-wiki.smoke.mjs`, `test/cr-switch.smoke.mjs` (manifest gating) |
+
+
+## Feedback delivery contracts (2026-10-16)
+
+These contracts derive from Useful work first, Human judgment stays visible,
+Minimum necessary intervention and Evidence over claims in
+[Product Intent](PRODUCT-INTENT.md). They expose choices, delegation boundaries
+and verification; they do not assert measured learning gains. The FB/OC/DL
+labels and frozen T01–T30 acceptance are mapped in
+[the test contract](testing/studio-feedback-owner-console.md).
+Implementation and local/synthetic checks do not establish candidate-app,
+installed-release, production, visual fidelity or human acceptance.
+
+FB-01/02 reuse [US-03/07–10/12/18](requirements/unified-studio-experience.md),
+[ADR 0008](adr/0008-activity-connection-boundaries.md) and the existing activity
+credential/history/draft stores. `initializeFilesLayout` closes the primary sidebar
+on every launch and workspace activation, before remote activity restoration.
+Explorer opens when the user explicitly chooses the existing file-view action;
+project changes and restarts start closed even if that workspace saved it open.
+Native integrated-browser preview tabs restored from the previous session are
+closed before activity restoration. Only that startup snapshot is closed; later
+preview requests remain open. Ordinary file/chat restoration and external
+browser applications are unaffected. A failed tab close does not block startup.
+Chat focus waits for initial activity restoration, reveals the existing editor
+chat and explicitly returns the caret to its existing composer. The focus request
+is bound to that activity and is cancelled when the composer unmounts or changes
+activity; passive restoration does not steal focus. If no editor chat exists, it
+opens the entry surface; it must not create a second sidebar chat or reopen a
+sidebar the user hid.
+Controlled StartPage/activity folder navigation prepares and validates the
+existing binding before open, blocks while a send is active, and consumes a
+destination/activity/Service-bound resume marker once (ten-minute maximum age).
+A validated arrival retires only the matching folder-switch attempt, so a later
+explicit visit can reopen that folder. Invalid or expired arrival information
+must not clear the guard against repeatedly reopening a failed destination.
+Its Start surface lists locally saved activities without passively revalidating
+the previous profile on mount, reveal or inbox refresh. Explicit activity
+selection and entry retain Service validation; cancel or denied selection keeps
+the previous credentials and does not reactivate that profile.
+Only the current activity's known history/draft keys can fill an empty
+destination; a destination's existing saved work wins. Cancel, failed draft
+flush, failed navigation and invalid credentials preserve the original state.
+Native File → Open Folder, real reload/restart and multi-window acceptance still
+require the actual app path; the E2E routing bypass is not sufficient evidence.
+
+### REQ-STUDIO-EXTERNAL-INSTRUCTIONS
+
+Public GitHub Markdown instructions and static text references are resolved to
+an immutable commit and integrity-checked manifest. Preview source, revision,
+license, declared capabilities and contents before saving or selecting; saving
+alone is inactive. Selection is scoped to the canonical trusted workspace and
+is appended to the current user-turn context for both runtimes. Update, exact
+prior-revision restore, deselection and removal preserve learner output files.
+The transport sends no user credentials and refuses redirects, unbounded input,
+traversal, symlinks/submodules and executable bundles. External text remains
+untrusted context: it cannot alter the Service system prompt, lesson/profile
+tool grants, user approval policy or curriculum-skill registry. There is no
+promise to detect every malicious natural-language instruction; the runtime
+permission boundary remains authoritative.
+
+Verification: `external-instruction-skills.smoke.mjs` and
+`external-skill-commands.smoke.mjs` exercise import/store/selection and host
+controls; actual model use and installed-app acceptance require separate evidence.
+
+### REQ-STUDIO-REFERENCE-IMAGES
+
+SDK and proxy receive actual current-turn image blocks, not a path/thumbnail
+claim. A file-only attachment is analysed only when the active profile grants
+`input.image_paste`; `input.image_files` alone grants file attachment, not image
+analysis. An explicit reference to a prior attached/pasted image re-reads only
+eligible notes from the current activity's history and files inside its current
+workspace. Reject outside paths and symlinks; inspect bytes for supported MIME,
+size and SHA-256, and make absent/denied/unsupported files visible. Do not replay
+old blobs on an ordinary follow-up. Keep the current four-image transport cap.
+
+Reference captures bind pixels to URL/document, time, MIME/hash, viewport/state
+and observed readiness where available; unsupported metadata stays null. Discard
+captures mixed across redirects. A reference brief distinguishes `observed`,
+`user_requested`, `inferred`, `unknown`; observed fields cite a capture hash and
+region/state. The Service's reference-design instructions guide artifact creation
+and bounded comparison; the App's pure brief validator alone is not proof that a
+model created a brief. Preserve identifiable subjects and their arrangement,
+angle, occlusion and shadow. A keyboard replaced by a generic illustration fails
+the requested meaning. One screenshot does not prove motion or visual fidelity.
+
+Verification: `reference-images.smoke.mjs`, `reference-transport.test.mjs`,
+`reference-design.smoke.mjs`, existing browser checks and
+`e2e/reference-design/run.mjs`. Scripted SDK/fetch/CDP seams and the synthetic
+keyboard fixture do not establish live upstream receipt or human visual judgment.
+
+### REQ-STUDIO-IMAGE-EDIT
+
+Only an explicit `image_edit.enabled` profile grant and configured Service can
+start an image edit. The App sends original pixels/hash, requested change,
+preserved subject and transparency intent; it never substitutes a generation
+endpoint or a lookalike fallback. Current support is bounded RGB/RGBA,
+non-interlaced PNG input and a new PNG output. Preserve original bytes, validate
+actual format/dimensions/hash/alpha, reject opaque removal results and an entirely
+transparent deleted subject, and save exclusively to a new file. Format/alpha
+checks do not certify subject identity, key rows or edge/halo quality.
+
+The candidate command persists stable job identity for same-job status lookup,
+checks workspace/activity/Service/credential identity before selection, compares
+original/result over checker/light/dark backgrounds and allows explicit edited
+or original-path selection. A selection does not rewrite the original file.
+Changed originals, wrong job hashes, cancellation and late completion prevent
+automatic save/application. Timeouts and unconfirmed cancellation remain unknown;
+reopening a job must not dispatch another edit.
+
+Service owns the authenticated edit adapter, durable single dispatch, output
+retention and the existing attempt/evidence cost ledger. It is disabled by
+default; no production profile is enabled by this contract. Unsupported paid-media
+budgets and frozen lessons are explicit refusals. Supported free-trial requests
+use the existing allowance. An approved matching price and actual response
+model/tier/region are needed to price modality meters; otherwise cost is unknown,
+not zero. Actual billing and semantic preservation require provider and human
+checks in T15/16/20/30.
+
+Verification: `image-edit.smoke.mjs`, candidate `image-edit-commands.smoke.mjs`,
+`e2e/image-edit/compare.mjs` and the Service image-edit tests named in the test map.
+The command module's presence is not proof of installed command registration.
+
+### REQ-STUDIO-FEEDBACK-EVIDENCE
+
+The report/manual bundle binds frozen acceptance revision, implementation SHAs,
+runtime/fixture scope, actual commands, observations and hashed evidence.
+Missing execution is NOT_RUN; changed source/evidence is stale or rejected;
+missing original assets/provider access are BLOCKED for the affected scenario.
+Local/synthetic, candidate-app, installed-app, production and human gates remain
+separate. The report must escape untrusted text, reject escaped/missing/modified
+artifact references and forged PASS, and work offline with its static data.
+The Korean manual identifies controls, prerequisites, recovery and the confirmed
+collection boundary. A human task record names the person, artifact and assistance;
+a model report or screenshot cannot mark human acceptance complete.
+
+Verification: candidate report generator/tests, local-file browser report/manual
+checks and T27 human observation. Operational token/cost totals are not learning
+outcomes. Missing invoice, externally direct personal-key traffic and unreported
+historical activity remain explicitly unverified.

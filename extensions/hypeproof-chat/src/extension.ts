@@ -1,3 +1,7 @@
+import { restoreInitialSurface } from "./initialSurface";
+export { resolveActivateBranch } from "./initialSurface";
+import { registerExternalSkillCommands } from './externalSkillCommands';
+import { initializeFilesLayout, closeRestoredBrowserTabs, resumeKey, consumeActivityResume, activityCheckpoint, type ActivityResume, WORKSPACE_SWITCH_ATTEMPT_KEY } from "./studioNavigation";
 import { registerLocalReview } from "./localReviewPanel";
 import { ActivityConnectionError, ActivityConnections, activityConnections } from './activityConnections';
 import { callChalkTool, chalkToolsEnabled } from "./chalk/tools";
@@ -40,7 +44,7 @@ import {
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
-import { decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
+import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
 import { SessionSpool, resolveSpoolSessionsRoot, spoolIdentityFromToken } from "./sessionSpool";
 import { uploadAllPending, scanUploadableSessions } from "./spoolUploader";
 import type { ResolvedProfile } from "./protocol";
@@ -54,6 +58,10 @@ let spoolRef: SessionSpool | null = null;
 let uploadInFlight = false;
 
 export async function activate(context: vscode.ExtensionContext) {
+  // Reset a folder's restored sidebar before network-dependent activity restoration.
+  // The explicit file-view actions can open Explorer once the learner asks for it.
+  await initializeFilesLayout(command => vscode.commands.executeCommand(command));
+  await closeRestoredBrowserTabs(vscode.window.browserTabs ?? []);
   const connections = new ActivityConnections(context,
     () => vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),
     () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -63,8 +71,15 @@ export async function activate(context: vscode.ExtensionContext) {
       return result.profile;
     });
   try { await connections.initialize(); }
-  catch { void vscode.window.showWarningMessage('저장된 활동을 읽지 못했습니다. 작업 파일은 보존됩니다. 참여 코드를 다시 입력해 주세요.'); }
+  catch (error) { void vscode.window.showWarningMessage(error instanceof ActivityConnectionError ? error.message : '저장된 활동 연결을 확인하지 못했습니다. 파일은 보존됩니다. 저장된 활동과 연결 서버를 확인해 주세요.'); }
   context = connections.wrap();
+  registerExternalSkillCommands(context);
+  const activationRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const activationService = vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
+  const resumeStatus = await consumeActivityResume(context, connections.current, activationService, activationRoot).catch(() => {
+    void vscode.window.showWarningMessage('저장된 입력과 대화 복원을 완료하지 못했습니다. 원래 폴더의 기록은 보존됩니다. 앱을 다시 열어 복구를 시도해 주세요.');
+    return 'mismatch' as const;
+  });
   // Respect the existing workspace-trust setting. Changing it on activation
   // forced a restart dialog over the first-run page.
 
@@ -173,6 +188,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   const provider = new ChatPanelProvider(context, preview, liveServer, spool);
   providerRef = provider;
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.editImage", () => provider.editImage()));
   // One-click publish endpoints, decided once: GitHub itself, unless this is a test/dev run
   // pointing at a loopback mock (resolvePublishEndpoints explains why only then).
   provider.initSitePublish(
@@ -211,6 +227,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const accountWatch = setInterval(() => { void accounts.refreshView(); }, 15_000);
     context.subscriptions.push({dispose: () => { clearInterval(accountWatch); accounts.dispose(); }});
   }
+  let initialSurfaceReady: Promise<void> = Promise.resolve();
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
   // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
   // the start page enters a folder (activity commit, then ensureWorkspace switches and reloads).
@@ -274,10 +291,9 @@ export async function activate(context: vscode.ExtensionContext) {
     // Preview is no longer a sidebar view — it's an editor-area WebviewPanel
     // created on demand by PreviewProvider.show().
 
-    vscode.commands.registerCommand("hypeproof-chat.focus", () => {
-      if (!provider.focusEditor()) vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-    }),
+    vscode.commands.registerCommand("hypeproof-chat.focus", () => startPage.focusAfterRestore(initialSurfaceReady)),
 
+    vscode.commands.registerCommand('hypeproof-chat.openStudioFiles', () => vscode.commands.executeCommand('workbench.view.explorer')),
     // #751 — remote classroom operations: learner-initiated, status-only, droppable.
     vscode.commands.registerCommand("hypeproof-chat.classroomConnect", () => classroomOps.connectInteractively()),
     vscode.commands.registerCommand("hypeproof-chat.classroomDisconnect", () => classroomOps.disconnectInteractively()),
@@ -797,23 +813,16 @@ export async function activate(context: vscode.ExtensionContext) {
   // #1298 — if an issuer-shaped token is already stored, the user is likely an instructor; skip the
   // student start page automatically. If whoami later returns rejected the token is deleted and the
   // start page is shown once (handled in postConfig/refresh via instructorMode.handleAutoReadResult).
-  void (async () => {
-    const storedIssuer = await context.secrets.get(ISSUER_TOKEN_KEY);
-    const resume = context.globalState.get<{ id: string; at: number }>(PENDING_ACTIVITY_RESUME_KEY);
-    // Always clear the flag, regardless of which branch is taken below.
-    if (resume !== undefined) await context.globalState.update(PENDING_ACTIVITY_RESUME_KEY, undefined);
-    const branch = resolveActivateBranch(storedIssuer, resume, activityConnections(context)?.current?.serverId);
-    if (branch === "resume") {
-      // Student wins over issuer early-return (#1298 principle: active student slot wins).
-      await startPage.show();
-      await startPage.openChat();
-    } else if (branch === "skip") {
-      // Issuer stored and no pending resume — skip student start page (#1298).
-      return;
-    } else {
-      startPage.show();
-    }
-  })();
+  initialSurfaceReady = restoreInitialSurface({
+    getStoredIssuer: () => context.secrets.get(ISSUER_TOKEN_KEY),
+    decision: resumeStatus,
+    connections: () => activityConnections(context),
+    notifyExpired: message => vscode.window.showInformationMessage(message),
+    notifyMismatch: message => vscode.window.showWarningMessage(message),
+    showStart: options => startPage.show(options),
+    ensureProfile: () => provider.ensureProfile(true),
+    openChat: () => startPage.openChat(),
+  });
 
   // E2E backdoor for REQ-E1/E2 manual-approve modal. Fires a synthetic
   // actionRequest after the panel mounts and writes the approve/deny result
@@ -872,44 +881,6 @@ async function maybeSynthesizeTestAction(
 // for kids, etc. os.homedir() makes the fallback path always absolute.
 const LEGACY_WORKSPACE_DIRNAME = "HypeProofGames";
 
-/**
- * globalState key holding the root we last tried to switch TO. Written before
- * the reload, cleared once we land (or once we decide not to switch). Its only
- * job is to make a failed `vscode.openFolder` fail ONCE: without it, a root that
- * cannot be opened would be retried on every post-reload activation and the
- * learner's window would reload forever mid-lecture.
- */
-const WORKSPACE_SWITCH_ATTEMPT_KEY = "hypeproofChat.workspaceSwitchAttempt";
-const PENDING_ACTIVITY_RESUME_KEY = "hypeproofChat.pendingActivityResume";
-
-export function shouldResumeActivity(
-  resume: { id: string; at: number } | undefined,
-  serverId: string | undefined,
-): boolean {
-  if (!resume) return false;
-  if (Date.now() - resume.at >= 60_000) return false;
-  return !!resume.id && resume.id === serverId;
-}
-
-/**
- * Pure function: given the stored secrets/state at activation time, decide
- * which branch the activate() start-surface logic should take.
- *
- * Returns:
- *   "resume"   — pending activity resume wins; open chat directly
- *   "skip"     — issuer stored, no pending resume; skip student start page
- *   "show"     — neither condition; show the start page normally
- */
-export function resolveActivateBranch(
-  storedIssuer: string | undefined,
-  resume: { id: string; at: number } | undefined,
-  serverId: string | undefined,
-): "resume" | "skip" | "show" {
-  if (shouldResumeActivity(resume, serverId)) return "resume";
-  if (storedIssuer && looksLikeIssuerTokenUnverified(storedIssuer)) return "skip";
-  return "show";
-}
-
 async function clearWorkspaceSwitchAttempt(context?: vscode.ExtensionContext): Promise<void> {
   if (!context) return;
   if (context.globalState.get<string>(WORKSPACE_SWITCH_ATTEMPT_KEY) === undefined) return;
@@ -923,22 +894,7 @@ async function clearWorkspaceSwitchAttempt(context?: vscode.ExtensionContext): P
  * a redirected profile folder on Windows) must not read as a DIFFERENT root, or
  * we would switch away from the folder we are already in, forever.
  */
-function canonicalizeFsPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeFsPath = canonicalizeExistingPath;
 
 // Per-tone background for the throwaway starter index.html. The title/subtitle
 // come from the single source of truth (TONE_LABELS.aboutTitle/aboutSubtitle),
@@ -1111,13 +1067,25 @@ async function openWorkspaceFolder(
     if(error instanceof ActivityConnectionError)throw error;
     throw new Error('Activity workspace preparation failed');
   }
+  const previousRecord = context && activityConnections(context)?.current;
+  const checkpoint = context && previousRecord && previousRecord.serverId === profile?.activity_id && activityConnections(context)?.matchesService
+    ? activityCheckpoint(context, previousRecord) : undefined;
   await commit(dir);
 
-  // Single-root open (clean Explorer). Reloads the window.
-  await context?.globalState.update(PENDING_ACTIVITY_RESUME_KEY, { id: profile?.activity_id ?? '', at: Date.now() });
-  await vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(dir), {
-    forceReuseWindow: true,
-  });
+  // Binding is committed first; the marker grants no authority and contains no credential.
+  const record = context && activityConnections(context)?.current;
+  const key = context && record ? resumeKey(dir) : undefined;
+  if (context && key && record) {
+    await context.globalState.update(key, {
+      version: 1, id: record.serverId, service: record.service, workspace: fs.realpathSync(dir), ref: record.ref, at: Date.now(), ...(checkpoint ? { state: checkpoint } : {}),
+    } satisfies ActivityResume);
+  }
+  try {
+    await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dir), { forceReuseWindow: true });
+  } catch (error) {
+    if (context && key) await context.globalState.update(key, undefined);
+    throw error;
+  }
   return true;
 }
 

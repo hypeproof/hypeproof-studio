@@ -27,6 +27,7 @@ export interface PreflightIssue {
     | "site_too_large"
     | "too_many_files"
     | "secret"
+    | "text_unscanned"
     | "rrn"
     | "non_ascii_name"
     | "symlink"
@@ -73,7 +74,7 @@ export const MAX_SITE_BYTES = 1024 * 1024 * 1024;
  * means a stray folder (an export, a photo library) and is worth stopping for.
  */
 export const MAX_FILES = 1000;
-/** Files above this are not scanned for secrets (images/videos are skipped by extension anyway). */
+/** Bound text inspection; uninspected text blocks publishing. Binary media use other limits. */
 const MAX_SCAN_BYTES = 2 * 1024 * 1024;
 
 /** Paths the pipeline writes itself; a workspace copy of these is replaced, not merged. */
@@ -235,12 +236,27 @@ export function preflightSite(root: string): PreflightReport {
   const markers: MarkerCount[] = [];
   for (const f of files) {
     const ext = path.extname(f.path).toLowerCase();
-    if (!TEXT_EXT.has(ext) || f.size > MAX_SCAN_BYTES) continue;
+    if (!TEXT_EXT.has(ext)) continue;
+    const unscanned = () => issues.push({ severity: "block" as const, code: "text_unscanned" as const, file: f.path, message_ko: `파일의 공개 전 검사를 끝내지 못했어요: ${f.path}. 텍스트 파일은 2MB 이하로 줄이고 읽을 수 있는지 확인한 뒤 다시 올려 주세요.` });
+    if (f.size > MAX_SCAN_BYTES) { unscanned(); continue; }
     let text: string;
+    let fd: number | undefined;
     try {
-      text = fs.readFileSync(f.abs, "utf8");
+      fd = fs.openSync(f.abs, "r");
+      const bytes = Buffer.alloc(MAX_SCAN_BYTES + 1);
+      let count = 0;
+      while (count < bytes.length) {
+        const n = fs.readSync(fd, bytes, count, bytes.length - count, null);
+        if (n === 0) break;
+        count += n;
+      }
+      if (count > MAX_SCAN_BYTES) { unscanned(); continue; }
+      text = bytes.subarray(0, count).toString("utf8");
     } catch {
+      unscanned();
       continue;
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
     }
     scanSecrets(f.path, text, issues);
     if (HTML_EXT.has(ext)) {

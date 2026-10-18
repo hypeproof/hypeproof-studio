@@ -277,6 +277,8 @@ export interface ResolvedProfile {
   // this folder on onboarding. Absent → the legacy default folder is used.
   workspace_root?: string | null;
   workspace_start?: 'empty' | 'html';
+  /** Service-owned image editing capability; absent means unavailable. */
+  image_edit?: { enabled: true };
   /** Optional input capabilities (default off). #278 / website-copyclone. */
   input?: {
     page_context?: boolean;
@@ -580,6 +582,8 @@ export type WebviewMessage = (
 
 // Host → Webview
 export type HostMessage = (
+  /** Explicit Focus command targets the existing editor composer, not background restore. */
+  | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[]}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}

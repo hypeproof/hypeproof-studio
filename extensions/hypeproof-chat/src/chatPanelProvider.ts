@@ -1,6 +1,7 @@
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { passSpentNotice } from "./passPurchase";
+import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
 import { chalkToolsEnabled } from './chalk/tools';
@@ -23,6 +24,9 @@ import * as path from "path";
 import * as os from "node:os";
 // hype-dental D-028 — photos attached as files: staged until sent, then moved into images/.
 import { ImageStaging, stagingRootFor, attachedImageRefusal, attachedImageExt, safeAttachedImageName, attachedImagesNote, attachedImagesSavedLabel, attachedImagesFailedLabel } from "./attachedImages";
+import { imagePathsFromNotes, selectReferencedImagePaths, readWorkspaceReferenceImages, referenceImageFailuresNote } from "./referenceImages";
+import { selectedExternalInstructions } from "./externalSkillCommands";
+import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
@@ -718,6 +722,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       idle: () => !this.hasActiveStream(),
       postToChat: (text) => this.postAppReply(text),
       notice: (text) => this.postPageNotice(text),
+      clearNotice: (expected) => {
+        if (this.pendingPageNotice === expected) this.postPageNotice("");
+      },
       log: (line) => this.voiceLogChannel().appendLine(line),
       stallMs: () => vscode.workspace.getConfiguration("hypeproofChat").get<number>("sdkStallTimeoutMs"),
       store: this.context.globalState,
@@ -781,6 +788,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** Opens a class folder as this activity's workspace (extension.ts: ensureWorkspace + activity commit). Reloads the window. */
   private projectOpener?: (folder: string) => Promise<void>;
+  /**
+   * The class folder as the Service served it. `cachedProfile.workspace_root` is rewritten to the
+   * activity's current folder (ensureProfile), so after one switch it names a project folder, and
+   * deriving `<class folder>-<repo>` from it chained names (`…-sandbox-dental-homepage-3-…`).
+   */
+  private servedWorkspaceRoot: string | null = null;
   setProjectOpener(open: (folder: string) => Promise<void>): void {
     this.projectOpener = open;
   }
@@ -802,7 +815,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** "프로젝트 변경" — the command and the chat sentence (isProjectSwitchRequest) both land here. */
   async switchProject(): Promise<void> {
     const profile = this.cachedProfile ?? (await this.ensureProfile());
-    const classRoot = profile?.workspace_root ? resolveWorkspaceRoot(profile.workspace_root) ?? undefined : undefined;
+    const served = this.servedWorkspaceRoot ?? profile?.workspace_root;
+    const classRoot = served ? resolveWorkspaceRoot(served) ?? undefined : undefined;
     const switched = await this.sitePublisher().switchProject(classRoot);
     if (!switched) return;
     const how =
@@ -2228,12 +2242,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       entry.webview.html = this.renderHtml(entry.webview, dist);
       entry.reveal(vscode.ViewColumn.One);
     }
-    await vscode.commands.executeCommand('workbench.action.closeSidebar');
   }
 
   focusEditor(): boolean {
     if (!this.editorChat) return false;
-    this.editorChat.reveal(vscode.ViewColumn.One);
+    const editor = this.editorChat;
+    editor.reveal(vscode.ViewColumn.One);
+    // Revealing a retained webview focuses its document, not its composer.
+    // Only this explicit command sends the request; passive restore stays quiet.
+    void editor.webview.postMessage({type:'focusInput',activityId:activityConnections(this.context)?.scope} satisfies HostMessage);
     return true;
   }
 
@@ -2461,6 +2478,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.nativeObservation=null;
     this.nativeLearningPath=null;
     this.cachedProfile = null;
+    this.servedWorkspaceRoot = null;
     this.profileFetchPromise = null;
     this.lastProfileFailure = null;
     this.activeCohortId = null;
@@ -2561,6 +2579,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.lastProfileFailure = r.ok ? null : r.failure;
         this.opsObserver?.profileResult(r.ok ? { ok: true } : { ok: false, status: r.failure.status, code: r.failure.reason === "expired" ? "expired" : undefined, requestId: r.failure.requestId, network: r.failure.reason === "network" }, token);
         let p = r.ok ? r.profile : null;
+        this.servedWorkspaceRoot = p?.workspace_root ?? null;
         if (connections?.current && p) {
           if (p.activity_id!==connections.current.serverId) p=null;
           else p={...p,workspace_root:connections.current.workspace};
@@ -2900,6 +2919,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async stageAttachedImage(stageId: string, name: string, mime: string, base64: string): Promise<void> {
     const refusal = this.stageImageBytes(stageId, name, mime, Buffer.from(base64, "base64"));
     if (refusal) void this.post({ type: "imageStageRefused", stageId, reason: refusal });
+    else void this.post({ type: "imageStagedByHost", stageId, name });
   }
 
   /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */
@@ -3898,6 +3918,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return undefined;
   }
 
+  async editImage(): Promise<void> {
+    if (this.hasActiveStream()) {
+      void vscode.window.showWarningMessage("진행 중인 작업을 마친 뒤 이미지를 편집해 주세요.");
+      return;
+    }
+    this.pendingSends++;
+    let releaseActivity: (() => void) | undefined;
+    try {
+      const connections = activityConnections(this.context);
+      if (connections) {
+        releaseActivity = connections.acquire();
+        const token = await connections.token();
+        if (!token || !connections.current) throw new Error("활동 연결을 먼저 확인해 주세요.");
+        await verifyActivity({ token, proxyUrl: connections.current.service }, connections.current.serverId);
+      }
+      const profile = await this.ensureProfile(true);
+      const token = await this.context.secrets.get(TOKEN_KEY);
+      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!profile || !token || !cwd) {
+        void vscode.window.showWarningMessage("활동에 연결하고 작업 폴더를 연 뒤 이미지를 편집해 주세요.");
+        return;
+      }
+      await runImageEdit(this.context, { profile, token, cwd, proxyUrl: this.proxyUrl(),
+        onSelected: async (relativePath) => {
+          await this.postAppReply(`선택한 이미지: ${relativePath}. 다음 요청에 ‘선택한 이미지’라고 적으면 이 파일을 참고합니다. 원본은 그대로 보존됩니다.`);
+        },
+      });
+    } catch {
+      void vscode.window.showWarningMessage("활동 연결을 확인하지 못해 이미지 편집을 시작하지 않았어요. 원본은 보존됩니다.");
+    } finally {
+      try { releaseActivity?.(); } finally { this.pendingSends--; }
+    }
+  }
+
   /** Persist coach info chosen via the in-panel naming card. */
   private async saveCoachFromWebview(name: string, personality: string): Promise<void> {
     const profile = await this.ensureProfile();
@@ -4627,7 +4681,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // CR-09 — a picked element's crop joins the queued page screenshot; neither replaces the other.
     const pageImage = this.pendingPageImage;
     this.pendingPageImage = null;
-    const effectiveImages = turnImages(images, pageImage, element);
+    let effectiveImages = turnImages(images, pageImage, element);
 
     // #580 — streamId becomes the spool's turn_id, and the later spool-then-forward
     // has to be able to resend it to the worker's trace. The worker validates turn_id
@@ -4679,7 +4733,27 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // paths. The same lines go into the saved history, so later turns can still name them.
     const attachedNote = this.commitAttachedImages(attachments, streamId);
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
-    const historyText = attachedNote ? `${text}\n\n${attachedNote}` : text;
+    const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
+    // File attachments carry bytes on their first turn. A later explicit reference
+    // re-reads this activity's files, so edits/deletions never resurrect old pixels.
+    const currentPaths = imagePathsFromNotes(attachedNote);
+    const priorReference = currentPaths.length || images?.length
+      ? { requested: false, paths: [] as string[] }
+      : selectReferencedImagePaths(text, history);
+    const referencePaths = [...currentPaths, ...priorReference.paths];
+    const referenceRoot = this.resolveCoachCwd();
+    const referenceRead = referenceRoot
+      ? readWorkspaceReferenceImages({ cwd: referenceRoot, paths: referencePaths, allowed: profile?.input?.image_paste === true })
+      : { images: [], assets: [], failures: referencePaths.map(p => ({ path: p, reason: "작업 폴더를 먼저 열어 주세요." })) };
+    if (referenceRead.images.length) effectiveImages = [...(effectiveImages ?? []), ...referenceRead.images];
+    if (referenceRead.assets.length) {
+      userTextForModel += `\n\n[이번 요청에서 실제 읽은 참고 이미지]\n${referenceRead.assets.map(a => `${a.path} · ${a.mime} · sha256:${a.sha256}`).join("\n")}`;
+    }
+    const referenceFailure = referenceImageFailuresNote(referenceRead.failures, priorReference.requested && !priorReference.paths.length);
+    if (referenceFailure) {
+      userTextForModel += `\n\n${referenceFailure}`;
+      this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: referenceFailure, state: "error" });
+    }
 
     let assistantText = "";
     // REQ-D2: auto-reveal as soon as a renderable HTML block completes in
@@ -4723,6 +4797,20 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       current: { usage: Record<string, unknown>; totalCostUsd: number | null } | null;
     } = { current: null };
     try {
+      if (effectiveImages?.length && profile?.input?.image_paste !== true) {
+        throw new Error("이 활동은 이미지 분석을 허용하지 않아요.");
+      }
+      const instructionRoot = this.resolveCoachCwd();
+      if (instructionRoot) {
+        // The same user-turn content reaches SDK and proxy. Server-owned system
+        // prompts, tool grants and curriculum metadata remain authoritative.
+        const selected = await selectedExternalInstructions(this.context, instructionRoot);
+        userTextForModel += await selectedImageEditContext(this.context, instructionRoot, text);
+        if (selected.text) {
+          userTextForModel += `\n\n${selected.text}`;
+          this.postToolLog(streamId, { id: randomId(), icon: "📖", label: selected.provenance.map(s => `${s.name} · ${s.revision.slice(0, 12)}`).join(" · "), state: "done" });
+        }
+      }
       // #282 Phase 1 — route to the Agent SDK coach behind the flag. Default
       // "proxy" keeps the exact existing single-turn behavior; "agent-sdk"
       // runs runSdkCoach with the SAME callbacks so nothing downstream changes.
@@ -5186,6 +5274,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             systemPrompt: "",
             history: history.map((m) => ({ role: m.role, content: m.content })),
             userText: userTextForModel,
+            images: effectiveImages,
             signal: ctrl.signal,
             // #457 — with no folder open, workspaceFolders is empty and cwd goes
             // through as undefined. withWorkspaceContext then returns the prompt
@@ -6231,22 +6320,7 @@ function randomId(): string {
  * style symlinks so a canonicalized SDK path still matches the workspace root
  * (#384: without this every coach Write in a symlinked workspace auto-denied).
  */
-function canonicalizeForCompare(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p); // hit fs root — give up
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeForCompare = canonicalizeExistingPath;
 
 function isInsideWorkspace(targetPath: string): boolean {
   const folders = vscode.workspace.workspaceFolders;

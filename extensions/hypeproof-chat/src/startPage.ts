@@ -21,7 +21,7 @@ export interface GithubContinueSource {
   allowed(profile: ResolvedProfile): boolean;
   find(): Promise<ClassReposOutcome>;
   signIn(): Promise<boolean>;
-  prepare(args: { login: string; repo: ClassRepo; reuse?: string; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }>;
+  prepare(args: { login: string; repo: ClassRepo; classRoot: string }): Promise<{ ok: true; folder: string; downloaded: boolean } | { ok: false; message: string }>;
   /** The folder "새로 하기" opens: the class folder, else the first free `<class folder>-N`. */
   newFolder(classRoot: string): string;
   classRoot(profile: ResolvedProfile): string | null;
@@ -50,11 +50,6 @@ const DEFAULT_SITE_BASE = "https://hypeproof-ai.xyz";
 const isLegacyHistoryKey = (key: string): boolean =>
   key === 'hypeproofChat.history' || (key.startsWith('hypeproofChat.history:') && !/:[a-f0-9]{64}$/.test(key));
 
-/** True when all tab groups are empty AND the chat view is not visible — both conditions must hold. */
-export function shouldHideSidebar(allTabGroups: readonly { tabs: readonly unknown[] }[], chatViewVisible: boolean): boolean {
-  return allTabGroups.every(g => g.tabs.length === 0) && !chatViewVisible;
-}
-
 type Candidate = { token: string; profile: ResolvedProfile; proxyUrl: string; previousConnected: boolean; workspace?: string; accountPass?: AccountPassBinding };
 /** What a candidate's GitHub holds. Bound to one candidate: another code or a cancel retires it. */
 type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<StartState["github"]>; login?: string; repos?: ClassRepo[] };
@@ -63,8 +58,11 @@ type GithubLook = { candidate: Candidate; classRoot: string; state: NonNullable<
 export class StartPage {
   private panel?: vscode.WebviewPanel;
   private busy = false;
+  private choosingFolder = false;
   private error?: string;
   private started = false;
+  // Invalid arrival may list saved activities, but only explicit entry reactivates its profile.
+  private deferProfileUntilEntry = false;
   private candidate?: Candidate;
   // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
   private products?: PassProduct[] | null;
@@ -145,7 +143,7 @@ export class StartPage {
       this.busy = true; this.error = undefined; gh.state = { ...gh.state, working: "download" };
       await this.refresh();
       let prepared: Awaited<ReturnType<GithubContinueSource["prepare"]>>;
-      try { prepared = await source.prepare({ login: gh.login, repo, classRoot: gh.classRoot, ...(candidate.workspace ? { reuse: candidate.workspace } : {}) }); }
+      try { prepared = await source.prepare({ login: gh.login, repo, classRoot: gh.classRoot }); }
       catch { prepared = { ok: false, message: "GitHub에서 홈페이지를 내려받지 못했어요. 잠시 뒤 다시 눌러 주세요." }; }
       finally { this.busy = false; gh.state = { ...gh.state, working: undefined }; }
       if (this.candidate !== candidate) return;
@@ -161,26 +159,25 @@ export class StartPage {
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
   inboxChanged(): void { if (this.panel) void this.refresh(); }
 
+  /** A focus request during restore must not create a second sidebar chat. */
+  async focusAfterRestore(restore: Promise<void>): Promise<void> {
+    await restore;
+    if (!this.chat.focusEditor()) await this.show();
+  }
+
   async openChat(): Promise<void> {
     const entry = this.panel;
     if (!entry) return;
     await this.chat.openInEditor(entry);
     if (this.panel === entry) this.panel = undefined;
     this.started = true;
+    this.deferProfileUntilEntry = false;
     this.chat.refreshConfig();
   }
 
-  async show(): Promise<void> {
+  async show(options?: { deferProfileUntilEntry: true }): Promise<void> {
+    if (options?.deferProfileUntilEntry) this.deferProfileUntilEntry = true;
     if (this.panel) { this.panel.reveal(); void this.refresh(); return; }
-    // Empty first-run windows need one useful canvas, not empty editor groups.
-    // Existing editors and layouts are left alone.
-    if (vscode.window.tabGroups.all.every(group => group.tabs.length === 0)) {
-      await vscode.commands.executeCommand("workbench.action.editorLayoutSingle");
-      if (!this.chat.isViewVisible()) {
-        await vscode.commands.executeCommand("workbench.action.closeSidebar");
-        await vscode.commands.executeCommand("workbench.action.closeAuxiliaryBar");
-      }
-    }
     const existing = this.panel as vscode.WebviewPanel | undefined;
     if (existing) { existing.reveal(); return; }
     const panel = vscode.window.createWebviewPanel("hypeproof.start", "HypeProof Studio", vscode.ViewColumn.One,
@@ -357,7 +354,7 @@ export class StartPage {
   }
 
   private async refresh(profile?: ResolvedProfile | null): Promise<void> {
-    const p = this.candidate?.profile ?? (profile === undefined ? await this.chat.ensureProfile() : profile);
+    const p = this.candidate?.profile ?? (profile === undefined ? (this.deferProfileUntilEntry ? null : await this.chat.ensureProfile()) : profile);
     let activities: StartState['activities'];
     try { activities=await activityConnections(this.context)?.list(); }
     catch { this.error ??= "저장된 활동 목록을 읽지 못했습니다. 참여 코드를 다시 입력해 주세요."; }
@@ -385,6 +382,14 @@ export class StartPage {
         series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
     await this.panel?.webview.postMessage({ type: "startState", state });
+  }
+
+  private async openUnboundFolder(folder: vscode.Uri): Promise<void> {
+    try {
+      if (this.chat.hasActiveStream()) throw new ActivityConnectionError('진행 중인 작업을 마치거나 중지한 후 폴더를 변경하세요.');
+      await this.chat.setConnectionChanging(true);
+      await vscode.commands.executeCommand('vscode.openFolder', folder, { forceReuseWindow: true });
+    } finally { await this.chat.setConnectionChanging(false); }
   }
 
   private async handle(msg: StartRequest): Promise<void> {
@@ -431,8 +436,30 @@ export class StartPage {
     const connections = activityConnections(this.context);
     if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
     if (msg.type === "openLocalFolder") {
-      const folders = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, openLabel: "작업 폴더 열기" });
-      if (folders?.[0]) await vscode.commands.executeCommand("vscode.openFolder", folders[0]);
+      if (this.choosingFolder) return;
+      this.choosingFolder = true;
+      try {
+        const folders = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, openLabel: "작업 폴더 열기" });
+        const folder = folders?.[0];
+        if (!folder) return;
+        try {
+          const bound = await connections?.forWorkspace(folder.fsPath);
+          if (bound) {
+            // Reuse saved-activity validation, preparation and rollback; no second auth path.
+            await this.handle({ type: 'selectActivity', ref: bound.ref });
+            if (!this.error && this.candidate?.token === bound.token) await this.handle({ type: 'beginCourse' });
+          } else if (connections?.matchesService && connections.current) {
+            const choice = await vscode.window.showInformationMessage(
+              '이 폴더에는 연결된 활동이 없습니다. 현재 활동의 작업 폴더로 연결할까요?',
+              { modal: true }, '현재 활동 연결', '폴더만 열기');
+            if (choice === '현재 활동 연결') {
+              const current = connections.current;
+              await this.handle({ type: 'selectActivity', ref: current.ref });
+              if (!this.error && this.candidate?.token === current.token) { this.candidate.workspace = folder.fsPath; await this.handle({ type: 'beginCourse' }); }
+            } else if (choice === '폴더만 열기') await this.openUnboundFolder(folder);
+          } else await this.openUnboundFolder(folder);
+        } catch (error) { this.error = entryError(error); await this.refresh(); }
+      } finally { this.choosingFolder = false; }
       return;
     }
     if (msg.type === 'selectActivity') {
@@ -522,7 +549,8 @@ export class StartPage {
           if (!this.panel || this.candidate !== candidate) throw new Error("Activity entry was cancelled");
           this.candidate = undefined;
         };
-        if (await this.begin(profile, commit, candidate?.workspace)) return; // workspace switch reloads the window
+        const selectedWorkspace = candidate?.workspace ?? (connections?.matchesService && connections.current?.serverId === profile.activity_id ? connections.current?.workspace : undefined);
+        if (await this.begin(profile, commit, selectedWorkspace)) return; // workspace switch reloads the window
         await commit();
         if (!this.panel) throw new Error('Entry page was closed');
         await this.openChat();

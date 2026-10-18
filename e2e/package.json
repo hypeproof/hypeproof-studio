@@ -40,7 +40,13 @@
     "test:classroom-authoring-g2": "node --experimental-strip-types --experimental-sqlite classroom/authoring-g2.mjs",
     "test:classroom-authoring-mission": "node --experimental-strip-types --experimental-sqlite classroom/authoring-mission.mjs",
     "test:classroom-feedback-loop": "node --experimental-strip-types --experimental-sqlite classroom/feedback-loop.mjs",
-    "test:workshop-element": "node --experimental-strip-types curriculum-runtime/workshop-element-trial.mjs"
+    "test:workshop-element": "node --experimental-strip-types curriculum-runtime/workshop-element-trial.mjs",
+    "test:reference-design": "node --experimental-strip-types reference-design/run.mjs",
+    "test:image-edit": "node --experimental-strip-types image-edit/compare.mjs",
+    "test:owner-console": "node --experimental-strip-types --experimental-sqlite owner-console/run.mjs",
+    "test:feedback-report": "node feedback-report/run.mjs",
+    "test:feedback-native:guards": "node --test feedback-native/*.test.mjs",
+    "test:photo-only-send": "node --experimental-strip-types photo-only-send.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",

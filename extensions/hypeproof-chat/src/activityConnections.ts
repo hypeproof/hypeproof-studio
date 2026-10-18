@@ -12,6 +12,7 @@ export class ActivityConnectionError extends Error {}
 export const ACTIVITY_TOKEN_KEY = 'hypeproofChat.workshopToken';
 const PREFIX = 'hps.activity.credential.';
 const ACTIVE = 'hps.activity.active';
+const DISCONNECTED_REF = 'hps.activity.disconnectedRef';
 export interface ActivityRecord extends ActivitySummary {
   version: 1; service: string; serverId: string;
   token: string; savedAt: number; accountPass?: AccountPassBinding;
@@ -22,7 +23,15 @@ export function activityService(url: string): string {
   if (u.username || u.password || u.search || u.hash) throw new ActivityConnectionError('Service 주소를 확인해 주세요.');
   return u.href.replace(/\/+$/, '');
 }
-const canonical = (root: string) => fs.realpathSync(root);
+/**
+ * The one spelling of a folder used for stored identities (binding file names, resume keys,
+ * `record.workspace`). JS `realpathSync` keeps the drive letter as given, and Windows paths reach
+ * us both ways: `C:\…` from `os.homedir()`, `c:\…` from `workspaceFolders`. Hashing both made the
+ * folder opened by a reload miss its own binding, so entry fell back to the start page.
+ */
+const upperDrive = (p: string) => p.replace(/^[a-z]:/, (d) => d.toUpperCase());
+export const canonicalRoot = (root: string) => upperDrive(fs.realpathSync(root));
+const canonical = canonicalRoot;
 /**
  * REQ-L12 — a bought pass continues in its home folder, the way Claude Code continues in the folder
  * it is started in (Jay, 2026-10-14). Only the profile's own `workspace_root` can be taken over, and
@@ -50,15 +59,35 @@ export class ActivityConnections {
   get matchesService(): boolean { try { return !!this.active && this.active.service === activityService(this.service()); } catch { return false; } }
   async initialize(): Promise<void> {
     const ref = this.raw.workspaceState.get<string | null>(ACTIVE);
-    if (ref === null) return;
-    let record = ref?.startsWith(PREFIX) ? await this.read(ref) : undefined;
     const root = this.root();
-    if (root && fs.existsSync(root) && record?.workspace !== canonical(root)) {
-      const file = this.bindingPath(root);
-      const bound = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file,'utf8')).ref : undefined;
-      record = typeof bound === 'string' ? await this.read(bound) : undefined;
-    }
+    const disconnectedRef = this.raw.workspaceState.get<string>(DISCONNECTED_REF);
+    // A disconnect applies to that saved generation, not a later explicit re-entry from another folder.
+    if (ref === null && (!disconnectedRef || !root || (await this.forWorkspace(root))?.ref === disconnectedRef)) return;
+    let record: ActivityRecord | undefined;
+    if (root && fs.existsSync(root)) {
+      // The folder binding is authoritative, even if this workspace has a stale pointer.
+      record = await this.forWorkspace(root);
+    } else if (ref?.startsWith(PREFIX)) record = await this.read(ref);
     if (record) this.active = record; // pinned to this window, never follows another window's writes
+  }
+  async forWorkspace(root: string): Promise<ActivityRecord | undefined> {
+    const file = [this.bindingPath(root), this.legacyBindingPath(root)].find((f): f is string => !!f && fs.existsSync(f));
+    if (!file) return;
+    const bound = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const record = typeof bound.ref === 'string' ? await this.read(bound.ref) : undefined;
+    if (!record || bound.version !== 1 || bound.id !== record.id || record.workspace !== canonical(root))
+      throw new ActivityConnectionError('이 폴더의 활동 연결을 읽지 못했습니다. 저장된 활동을 선택해 다시 연결해 주세요.');
+    if (record.service !== activityService(this.service()))
+      throw new ActivityConnectionError('이 폴더는 다른 서버의 활동에 연결돼 있습니다. 연결 서버를 확인해 주세요.');
+    // Found under the old spelling: carry it to the new name once. Otherwise the next claim()
+    // (acquire, on send) writes a ref-less binding there, and the reload after that finds it
+    // first and can no longer read the folder's activity.
+    const current = this.bindingPath(root);
+    if (file !== current) {
+      try { fs.writeFileSync(current, fs.readFileSync(file), { flag: 'wx', mode: 0o600 }); }
+      catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+    }
+    return record;
   }
   private async read(ref: string): Promise<ActivityRecord | undefined> {
     if (!ref.startsWith(PREFIX)) return;
@@ -68,6 +97,8 @@ export class ActivityConnections {
     try { r=JSON.parse(value); } catch { throw new ActivityConnectionError('저장된 활동 연결을 읽지 못했습니다. 코드를 다시 입력해 주세요.'); }
     if (r.version !== 1 || r.ref !== ref || typeof r.token !== 'string' || typeof r.name !== 'string' || !Number.isFinite(r.savedAt) || !/^[a-f0-9]{64}$/.test(r.serverId) ||
       r.id !== digest(JSON.stringify([r.service, r.serverId])) || !path.isAbsolute(r.workspace)) throw new ActivityConnectionError('저장된 활동 연결을 읽지 못했습니다. 코드를 다시 입력해 주세요.');
+    // Saved before canonicalRoot: the drive letter may be VS Code's `c:`. Compare in one spelling.
+    r.workspace = upperDrive(r.workspace);
     return r;
   }
   async hasLegacyConnection():Promise<boolean> { return (await this.raw.secrets.keys()).includes(ACTIVITY_TOKEN_KEY); }
@@ -103,6 +134,15 @@ export class ActivityConnections {
     return wasActive;
   }
   private bindingPath(root: string): string { return path.join(this.dir, digest(canonical(root)) + '.json'); }
+  /**
+   * The same folder's binding as written before canonicalRoot, when the window's root was
+   * VS Code's `c:\…`. Read only, so an update keeps every folder's activity; new writes use
+   * bindingPath. Undefined where there is no drive letter (macOS, Linux).
+   */
+  private legacyBindingPath(root: string): string | undefined {
+    const c = canonical(root), lower = c.replace(/^[A-Z]:/, (d) => d.toLowerCase());
+    return lower === c ? undefined : path.join(this.dir, digest(lower) + '.json');
+  }
   private claim(root: string, id: string, takeover = false): void {
     fs.mkdirSync(this.dir, {recursive:true,mode:0o700});
     const file = this.bindingPath(root);
@@ -120,8 +160,9 @@ export class ActivityConnections {
     const release=this.lock(root);
     try {
       // Preparation must not replace the binding that commit snapshots for rollback.
-      const file=this.bindingPath(root), id=digest(JSON.stringify([activityService(this.service()),p.activity_id]));
-      if (fs.existsSync(file) && JSON.parse(fs.readFileSync(file,'utf8')).id !== id && !passTakesOver(p,root)) {
+      const id=digest(JSON.stringify([activityService(this.service()),p.activity_id]));
+      const taken=[this.bindingPath(root),this.legacyBindingPath(root)].some(f=>!!f && fs.existsSync(f) && JSON.parse(fs.readFileSync(f,'utf8')).id !== id);
+      if (taken && !passTakesOver(p,root)) {
         throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
       }
       prepare();
@@ -175,7 +216,11 @@ export class ActivityConnections {
       } finally { unlock(); }
     };
   }
-  async disconnect(): Promise<void> { await this.raw.workspaceState.update(ACTIVE,null); this.active=undefined; }
+  async disconnect(): Promise<void> {
+    if (this.active) await this.raw.workspaceState.update(DISCONNECTED_REF, this.active.ref);
+    await this.raw.workspaceState.update(ACTIVE, null);
+    this.active = undefined;
+  }
   /** One active writer per physical folder across extension-host processes. */
   acquire(): () => void {
     const r = this.active, root = this.root();

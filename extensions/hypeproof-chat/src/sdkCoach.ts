@@ -13,6 +13,8 @@
 // SdkUnavailableError so the caller falls back to the proxy path instead of
 // surfacing a raw error to the student (REQ-M7).
 
+import { sdkPromptWithImages } from "./visionInput.ts";
+import { canonicalizeExistingPath } from "./workspaceRouting.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -150,6 +152,8 @@ export interface SdkCoachArgs {
   systemPrompt: string;
   history: { role: string; content: string }[];
   userText: string;
+  /** Actual current-turn pixels, including explicit workspace reference re-reads. */
+  images?: string[];
   signal: AbortSignal;
   /**
    * #747 — the AI's display name for this seat, so student-facing failure copy
@@ -315,22 +319,7 @@ function coachVisibleWorkspaceFiles(
  * EXISTING ancestor (target may not exist yet — new-file writes) and re-append
  * the tail. Twin of chatPanelProvider.canonicalizeForCompare.
  */
-function canonicalizeFsPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeFsPath = canonicalizeExistingPath;
 
 async function loadSdk(): Promise<AgentSdkModule> {
   // #282 W4b — prefer the vendored SDK JS under <dist>/vendor (packaged
@@ -591,7 +580,8 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
   // Compose the transcript into a single prompt string for now. A follow-up
   // switches to the SDK streaming-input session API to preserve real history.
   const transcript = args.history.map((m) => `${m.role}: ${m.content}`).join("\n");
-  const prompt = transcript ? `${transcript}\nuser: ${args.userText}` : args.userText;
+  const promptText = transcript ? `${transcript}\nuser: ${args.userText}` : args.userText;
+  const prompt = sdkPromptWithImages(promptText, args.images);
 
   // #282 P2 slice 2 — register the in-process "hypeproof" browser MCP server
   // ONLY when (a) the worker profile grants it (permittedMcpTools non-empty —

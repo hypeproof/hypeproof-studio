@@ -1,3 +1,4 @@
+import { bindComposerFocus } from './composerFocus';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { activityLabel, passEnd } from "./activityLabel";
@@ -268,6 +269,7 @@ export function ChatPanel(props: Props) {
   // D-028 — photos staged in the host until this message is sent. Not part of the saved draft:
   // the host deletes staged files when the window closes.
   const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
+  const discardedPhotos = useRef(new Set<string>());
   // #416 — the ONE message parked while a turn is running (null = none).
   const [queued, setQueued] = useState<string | null>(null);
   const [frozen, setFrozen] = useState(false);
@@ -385,8 +387,9 @@ export function ChatPanel(props: Props) {
     }
     if (msg.type !== "imageStagedByHost") return;
     const { stageId, name, dataUrl } = msg;
+    if (discardedPhotos.current.has(stageId)) return;
     setImgNote(null);
-    setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev : [...prev, { id: stageId, name, thumb: null, ready: true }]));
+    setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev.map((p) => p.id === stageId ? { ...p, ready: true } : p) : [...prev, { id: stageId, name, thumb: null, ready: true }]));
     if (dataUrl) void photoThumb(dataUrl).then((thumb) => setStagedPhotos((prev) => prev.map((p) => (p.id === stageId ? { ...p, thumb } : p))));
   }), []);
   // SX-14·15·17 — take the learning state the host sent as-is. Why it is not filtered
@@ -436,6 +439,7 @@ export function ChatPanel(props: Props) {
   const [worldPending, setWorldPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
   const prevStreamingRef = useRef(streaming);
 
@@ -647,9 +651,10 @@ export function ChatPanel(props: Props) {
       setStagedPhotos((prev) => [...prev, { id, name: f.name, thumb: null, ready: false }]);
       readAsDataUrl(f)
         .then(async (url) => {
+          if (discardedPhotos.current.has(id)) return;
           postToHost({ type: "stageImage", stageId: id, name: f.name, mime: f.type, base64: url.slice(url.indexOf(",") + 1) });
           const thumb = await photoThumb(url);
-          setStagedPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, thumb, ready: true } : p)));
+          setStagedPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, thumb } : p)));
         })
         .catch(() => {
           setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
@@ -771,6 +776,7 @@ export function ChatPanel(props: Props) {
 
   /** D-028 — the × on a staged photo: it was never sent, so the host deletes the file. */
   const removeStagedPhoto = (id: string) => {
+    discardedPhotos.current.add(id);
     postToHost({ type: "discardStagedImage", stageId: id });
     setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
     setImgNote(null);
@@ -1324,7 +1330,7 @@ export function ChatPanel(props: Props) {
                 draft,
                 streaming,
                 queued,
-                hasImages: pendingImages.length > 0,
+                hasImages: pendingImages.length > 0 || stagedPhotos.length > 0,
               });
               if (decision.action === "ignore") return;
               if (decision.action === "queue") {
@@ -1380,7 +1386,7 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => submit()}
-                disabled={(!draft.trim() && pendingImages.length === 0) || props.sendLocked}
+                disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
               >
                 Send

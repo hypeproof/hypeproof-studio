@@ -1,0 +1,170 @@
+// Cross-platform form of the existing classroom/mac-window.mjs OOPIF/input contract.
+// Reads DOM state only. Every action uses native CDP keyboard/mouse input, never DOM click(), input setters or postMessage().
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {loopback} from './safety.mjs';
+export function focusedResource(state){const title=state.editorLabel?.split(',')[0].trim();return !!state.resource&&(title===state.resource||title?.endsWith(' • '+state.resource));}
+// Compare complete absolute identities; only Windows drive spelling and separators
+// are canonicalized. Never accept a matching suffix, another drive or URI text.
+export function sameDisplayedWorkspace(actual,expected,platform=process.platform){
+ if(typeof actual!=='string'||typeof expected!=='string')return false;
+ if(platform!=='win32')return actual===expected;
+ if(!path.win32.isAbsolute(actual)||!path.win32.isAbsolute(expected))return false;
+ const normalize=value=>path.win32.normalize(value).replace(/^[a-z]:/,drive=>drive.toUpperCase());
+ return normalize(actual)===normalize(expected);
+}
+// Only an untouched preview newly observed by this scenario may be discarded.
+export function assertOwnedPreviewClose(before,preview,current){
+ if(!/^Untitled-[0-9]+$/.test(preview?.resource??'')||before.resources.includes(preview.resource)||!preview.focused||!focusedResource(preview)||!preview.text)throw Error('Preview was not a newly observed disposable editor');
+ if(!Array.isArray(current.dirtyResources)||current.dirtyResources.some(resource=>resource!==preview.resource))throw Error('Foreign dirty editor prevents preview cleanup');
+ if(current.resources.filter(resource=>resource===preview.resource).length!==1||current.resource!==preview.resource||!current.focused||!focusedResource(current)||current.text!==preview.text)throw Error('Owned preview identity/content changed before cleanup');
+ const remaining=current.resources.filter(resource=>resource!==preview.resource).sort();
+ if(JSON.stringify(remaining)!==JSON.stringify([...before.resources].sort()))throw Error('Unexpected editor change before preview cleanup');
+}
+export function skillPreviewOutcome(messages){const text=String(messages);if(text.includes('출처·고정 revision·라이선스·요구 capability'))return 'preview';if(/공개 GitHub|지침 스킬을 처리하지 못했습니다|가져오지/.test(text))return 'failure';return null;}
+// Profile UI uses its canonical mapped copy; raw Service prose alone is not this proof.
+export function sessionRefusalObserved(state,expected){
+ return typeof expected==='string'&&expected.length>0&&state?.visible===true&&state.candidate===false&&state.message===expected&&state.preservation==='기존 활동 연결은 유지됩니다.';
+}
+export const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+export async function waitFor(fn,label,timeout=30000){const end=Date.now()+timeout;let last;while(Date.now()<end){try{const value=await fn();if(value)return value;}catch(error){last=error;}await sleep(150);}throw Error('Timed out: '+label+(last?' ('+last.message+')':''));}
+class Target{
+ constructor(info){this.info=info;this.sequence=0;this.pending=new Map();}
+ async connect(){this.ws=new WebSocket(this.info.webSocketDebuggerUrl);await new Promise((resolve,reject)=>{this.ws.onopen=resolve;this.ws.onerror=()=>reject(Error('CDP target connection failed'));});this.ws.onmessage=event=>{const m=JSON.parse(event.data);const pending=this.pending.get(m.id);if(pending){this.pending.delete(m.id);m.error?pending.reject(Error(m.error.message)):pending.resolve(m.result);}};this.ws.onclose=()=>{for(const p of this.pending.values())p.reject(Error('CDP target closed'));this.pending.clear();};await this.send('Page.enable');return this;}
+ send(method,params={}){return new Promise((resolve,reject)=>{const id=++this.sequence;const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('CDP request timed out: '+method));},10000);this.pending.set(id,{resolve:value=>{clearTimeout(timer);resolve(value);},reject:error=>{clearTimeout(timer);reject(error);}});this.ws.send(JSON.stringify({id,method,params}));});}
+ async evaluate(expression){const r=await this.send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,...(this.contextId?{contextId:this.contextId}:{})});if(r.exceptionDetails)throw Error(r.exceptionDetails.text||'DOM observation failed');return r.result?.value;}
+ close(){this.ws?.close();}
+}
+export function selectWorkbenchInfo(infos,id){
+ const pages=infos.filter(t=>t.type==='page'&&t.url.includes('workbench'));
+ const matches=id?pages.filter(t=>t.id===id):pages;
+ if(matches.length>1)throw Error('Ambiguous native workbench; explicit owned window ID required');
+ return matches[0];
+}
+export class NativeUI{
+ constructor(endpoint,workbenchId){this.workbenchId=workbenchId;this.endpoint=loopback(endpoint);this.targets=new Map();this.phases=[];this.modifier=process.platform==='darwin'?4:2;}
+
+ async restoredDraft(expected,timeout=60000){
+  // Observation only: startup may still be restoring/focusing its own webview.
+  // Issuing F1/Focus here can race that restoration and adds no credential proof.
+  const restored=await waitFor(async()=>{const chat=await this.frame('.hps-input textarea',1500);const value=await chat.evaluate("document.querySelector('.hps-input textarea')?.value");return value===expected?{value}:null;},'actual restored chat with persisted A draft, without focus command or code entry',timeout);
+  return restored.value;
+ }
+ async sessionRefusal(view,expected,timeout=30000){
+  return waitFor(async()=>{const state=await view.evaluate(`(()=>{const e=document.querySelector('#connection-error');if(!e)return null;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return {visible:r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible'&&Number(s.opacity)>0,message:[...e.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim(),preservation:e.querySelector('p')?.textContent?.trim(),candidate:document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'};})()`);return sessionRefusalObserved(state,expected)?state:null;},'visible canonical App profile refusal, existing connection preserved and no candidate admission',timeout);
+ }
+ async savedActivity(view,workspace,timeout=30000){
+  const selector=await waitFor(async()=>{const rows=await view.evaluate("[...document.querySelectorAll('.studio-saved-activities button')].map((e,index)=>({index,workspace:e.querySelector('small')?.textContent}))");const matches=rows.filter(row=>sameDisplayedWorkspace(row.workspace,workspace));if(matches.length!==1)return null;return '.studio-saved-activities button:nth-of-type('+(matches[0].index+1)+')';},'unique saved activity for complete workspace path',timeout);
+  await this.press(view,selector,'saved activity workspace');
+ }
+ async chooseCandidateFolder(view,folder){
+  await this.clickText(view,'다른 작업 폴더 선택');await this.folder(folder,'이 활동의 작업 폴더 선택');
+  await waitFor(async()=>sameDisplayedWorkspace(await view.evaluate("document.querySelector('.studio-course dl>div:last-child dd')?.textContent"),folder),'candidate explicitly selected folder');
+ }
+ async activityCandidate(view,token,folder){
+  await this.clickText(view,'다른 활동 선택');await this.clickText(view,'수업에 참여하기');
+  await this.input(view,'#course-code',token);await this.clickText(view,'코드 확인하기');
+  await waitFor(()=>view.evaluate("!!document.querySelector('.studio-course')&&!document.querySelector('#course-code')&&document.querySelector('#connect-title')?.textContent==='이 활동으로 시작할까요?'"),'token B authenticated candidate card');
+  await this.chooseCandidateFolder(view,folder);
+  return view;
+ }
+ async cancelActivityCandidate(){
+  let view;try{view=await this.frame('.studio-start',1500);}catch{return false;}
+  if(!await this.hasTextButton(view,'선택 취소'))return false;
+  await this.clickText(view,'선택 취소');
+  await waitFor(async()=>!await this.hasTextButton(view,'선택 취소'),'explicit activity candidate cancellation completed');
+  return true;
+ }
+ async cdpDown(){try{await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});return false;}catch(error){return error.cause?.code==='ECONNREFUSED'||(Array.isArray(error.cause?.errors)&&error.cause.errors.length>0&&error.cause.errors.every(e=>e.code==='ECONNREFUSED'));}}
+ async quitOwned(platform=process.platform){
+  if(!['darwin','win32'].includes(platform))throw Error('Native quit supports hosted macOS/Windows only');
+  const w=await this.workbench();await this.focusWorkbench(w);
+  if(platform==='win32'){
+   // Upstream MenubarFileMenu exposes workbench.action.quit as E&&xit.
+   // CDP Alt+F4 need not reach the OS window manager; click the actual menu.
+   await this.clickText(w,'File','.menubar-menu-button');
+   try{await this.clickText(w,'Exit','.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+   return;
+  }
+  try{await w.send('Input.dispatchKeyEvent',{type:'keyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,nativeVirtualKeyCode:81,modifiers:4});}
+  catch(error){if(w.ws?.readyState===WebSocket.CLOSED)return;throw error;}
+  try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,nativeVirtualKeyCode:81,modifiers:0});}
+  catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+ }
+
+ async list(){const r=await fetch(this.endpoint+'/json/list',{signal:AbortSignal.timeout(1500)});if(!r.ok)throw Error('CDP target list unavailable');return r.json();}
+ async target(info){let target=this.targets.get(info.id);if(!target||target.ws.readyState!==WebSocket.OPEN){target=await new Target(info).connect();this.targets.set(info.id,target);}return target;}
+ async workbench(){return waitFor(async()=>{const info=selectWorkbenchInfo(await this.list(),this.workbenchId);return info?this.target(info):null;},'native workbench'+(this.workbenchId?' '+this.workbenchId:''),60000);}
+ async restoredFocus(timeout=30000){
+  // Observe startup focus only; no palette, click or Page.bringToFront may repair it.
+  const chat=await this.frame('.hps-input textarea');
+  const observed=await waitFor(()=>chat.evaluate("document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')"),'restored native input focus without activation',timeout);
+  return {input_focus_restored:observed===true,focus_repaired:false};
+ }
+ async closeOwnedWindow(){
+  if(!this.workbenchId)throw Error('Close requires an explicitly bound owned window');
+  const w=await this.workbench();
+  if(!await w.evaluate('document.hasFocus()'))throw Error('Owned secondary must be actually focused before Close Window');
+  try{await this.palette('Close Window',{expectReload:true});}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
+  await waitFor(async()=>!(await this.list()).some(t=>t.id===this.workbenchId),'owned secondary window closed',30000);
+ }
+ // Activation is an input action, never part of read-only workbench discovery.
+ async focusWorkbench(target){await target.send('Page.bringToFront');await waitFor(()=>target.evaluate('document.hasFocus()'),'native workbench window focused');}
+ async frame(selector,timeout=30000){return waitFor(async()=>{const matches=[];for(const info of(await this.list()).filter(t=>t.type==='iframe'&&t.url.includes('hypeproof-chat'))){const host=await this.workbench(),name=new URL(info.url).searchParams.get('id');const outerVisible=await host.evaluate(`(()=>{const e=[...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)});if(!e)return false;const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility==='visible'&&s.display!=='none';})()`);if(!outerVisible)continue;const target=await this.target(info);const tree=await target.send('Page.getFrameTree');const nodes=[tree.frameTree,...(tree.frameTree.childFrames||[])];for(const node of nodes){const isolated=await target.send('Page.createIsolatedWorld',{frameId:node.frame.id,worldName:'feedback-native-read'});target.contextId=isolated.executionContextId;const visible=await target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()`);if(visible){target.ownedWorkbenchId=host.info?.id;matches.push(target);break;}}}if(matches.length>1)throw Error('Ambiguous visible webview '+selector);return matches[0];},'visible extension webview '+selector,timeout);}
+ // Re-read only a previously observed frame, including when its native window is inactive.
+ async retainedFrame(target){
+  if(!this.workbenchId)throw Error('Retained frame requires explicit owned window');
+  const info=(await this.list()).find(t=>t.id===target.info.id&&t.type==='iframe'&&t.url===target.info.url);
+  if(!info)throw Error('Previously observed frame identity disappeared');
+  const name=new URL(info.url).searchParams.get('id');if(!name)throw Error('Observed frame has no owner name');
+  const host=await this.workbench();
+  if(!await host.evaluate(`!![...document.querySelectorAll('iframe')].find(e=>e.name===${JSON.stringify(name)})`))throw Error('Observed frame no longer belongs to its owned window');
+  return target;
+ }
+ async press(target,selector,label=selector){const r=await target.evaluate(`(async()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'center'});await new Promise(r=>setTimeout(r,100));const b=e.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(e);return {x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===e||e.contains(hit)),enabled:!e.disabled};})()`);if(!r||!r.visible||!r.inView||!r.topmost||!r.enabled||r.width<=0||r.height<=0)throw Error('Not a usable visible native control: '+label);for(const type of['mouseMoved','mousePressed','mouseReleased'])await target.send('Input.dispatchMouseEvent',{type,x:r.x,y:r.y,button:'left',buttons:type==='mouseReleased'?0:1,clickCount:1});}
+ async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
+ async hasTextButton(target,text){return !!(await this.textSelector(target,text));}
+ async clickText(target,text,css){const selector=await waitFor(()=>this.textSelector(target,text,css), 'control '+text);await this.press(target,selector,text);}
+ async key(target,key,modifiers=0){const codes={Enter:['Enter',13],Escape:['Escape',27],F1:['F1',112],F4:['F4',115],q:['KeyQ',81],a:['KeyA',65],b:['KeyB',66],k:['KeyK',75],o:['KeyO',79],n:['KeyN',78],s:['KeyS',83],p:['KeyP',80],w:['KeyW',87]};const[code,number]=codes[key]??[key,0];for(const type of['keyDown','keyUp'])await target.send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode:number,nativeVirtualKeyCode:number,modifiers:type==='keyUp'?0:modifiers,...(type==='keyDown'&&key==='a'&&modifiers===4?{commands:['selectAll']}:{})});}
+ async input(target,selector,text){await this.press(target,selector);await this.key(target,'a',this.modifier);await waitFor(()=>target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e===document.activeElement&&e.selectionStart===0&&e.selectionEnd===e.value.length;})()`),'native input selection covers current value');await target.send('Input.insertText',{text});await waitFor(()=>target.evaluate(`document.querySelector(${JSON.stringify(selector)})?.value===${JSON.stringify(text)}`),'native input replacement observed');}
+ // CDP input acknowledgment is not a workbench transition acknowledgment. Never reuse
+ // the previous command/picker while its asynchronous hide/next-picker is pending.
+ async quickState(target){return target.evaluate(`(()=>{const e=document.querySelector('.quick-input-widget'),input=e?.querySelector('input');const focus={hostFocused:document.hasFocus(),inputFocused:!!input&&document.activeElement===input,activeTag:document.activeElement?.tagName,activePart:document.activeElement?.closest?.('.part')?.id,title:e?.querySelector('.quick-input-title')?.textContent};if(!e||!input)return {visible:false,ready:false,mode:'closed',...focus};const r=e.getBoundingClientRect(),b=input.getBoundingClientRect(),style=getComputedStyle(e),hit=document.elementFromPoint(b.left+b.width/2,b.top+b.height/2);const visible=r.width>0&&r.height>0&&style.display!=='none'&&style.visibility==='visible';return {...focus,visible,ready:visible&&focus.hostFocused&&focus.inputFocused&&b.width>0&&b.height>0&&!input.disabled&&hit===input,mode:input.value.startsWith('>')?'command':'picker',value:input.value};})()`);}
+ async waitQuick(target,predicate,phase,timeout=30000,expectReload=false){let state;const record=outcome=>{const safe={at:new Date().toISOString(),phase,outcome,visible:state?.visible,ready:state?.ready,mode:state?.mode,hostFocused:state?.hostFocused,inputFocused:state?.inputFocused,activeTag:state?.activeTag,activePart:state?.activePart,title:state?.title,command:this.commandTitle};this.phases.push(safe);return safe;};try{const found=await waitFor(async()=>{state=expectReload&&target.ws?.readyState===WebSocket.CLOSED?{visible:false,ready:false,mode:'reloading-target-closed'}:await this.quickState(target);return predicate(state)?state:null;},phase,timeout);record('observed');return found;}catch(error){throw Error(error.message+'; quick-input state='+JSON.stringify(record('timeout')));}}
+ async selectedQuick(target,previous,phase,expectReload=false){return this.waitQuick(target,s=>!s.visible||(s.ready&&s.mode==='picker'&&s.value!==previous),phase,30000,expectReload);}
+ async choiceSelector(target,label,command=false){return target.evaluate(`(()=>{const a=[...document.querySelectorAll('.quick-input-list .monaco-list-row')].filter(e=>{const text=e.querySelector('.label-name')?.textContent.trim();return (${command}?text:text?.replace(/^✓\\s*/,''))===${JSON.stringify(label)}&&e.getBoundingClientRect().height>0;});if(a.length!==1)return null;const e=a[0];return '.quick-input-list .monaco-list-row:nth-child('+([...e.parentElement.children].indexOf(e)+1)+')';})()`);}
+ async palette(title,{expectReload=false}={}){this.commandTitle=title;this.phases.push({at:new Date().toISOString(),action:'palette',command:title});const w=await this.workbench();await this.focusWorkbench(w);await this.waitQuick(w,s=>!s.visible,'previous quick input closed before command');await this.key(w,'F1');await this.waitQuick(w,s=>s.ready&&s.mode==='command','command palette opened');const typed='>'+title;await this.input(w,'.quick-input-widget input',typed);await this.waitQuick(w,s=>s.ready&&s.value===typed,'command query entered');const selector=await waitFor(()=>this.choiceSelector(w,title,true),'registered exact command '+title);await this.press(w,selector,title);await this.selectedQuick(w,typed,'command selected and palette dismissed',expectReload);return w;}
+ async quick(label){const w=await this.workbench();await this.waitQuick(w,s=>s.ready&&s.mode==='picker','next quick picker opened');await waitFor(()=>this.choiceSelector(w,label),'declared quick choice '+label);await this.input(w,'.quick-input-widget input',label);await this.waitQuick(w,s=>s.ready&&s.value===label,'quick choice query entered');const selector=await waitFor(()=>this.choiceSelector(w,label),'filtered exact quick choice '+label);await this.press(w,selector,label);await this.selectedQuick(w,label,'quick choice accepted and previous picker dismissed');}
+ async prompt(title,value){const w=await this.workbench();await waitFor(()=>w.evaluate(`document.querySelector('.quick-input-widget')?.textContent.includes(${JSON.stringify(title)})`),'input prompt '+title);await this.waitQuick(w,s=>s.ready&&s.mode==='picker','input prompt ready');await this.input(w,'.quick-input-widget input',value);await this.key(w,'Enter');await this.selectedQuick(w,value,'input prompt accepted');}
+ async editorState(target){return target.evaluate(`(()=>{const e=document.activeElement,editor=e?.closest('.monaco-editor.focused'),group=editor?.closest('.editor-group-container'),tab=group?.querySelector('.tabs-container .tab.active');return {resources:[...document.querySelectorAll('.tabs-container .tab')].map(t=>t.getAttribute('data-resource-name')).filter(Boolean),dirtyResources:[...document.querySelectorAll('.tabs-container .tab.dirty')].map(t=>t.getAttribute('data-resource-name')),resource:tab?.getAttribute('data-resource-name'),editorLabel:editor?.parentElement?.getAttribute('aria-label'),focused:!!editor&&(e.matches('textarea.inputarea,.native-edit-context')||e.getAttribute('role')==='textbox'),text:editor?.querySelector('.view-lines')?.textContent.replace(/\\u00a0/g,' ')};})()`);}
+ async explorerReady(timeout=30000){const w=await this.workbench();await waitFor(()=>w.evaluate("(()=>{const e=document.querySelector('.explorer-folders-view');return !!e&&e.getBoundingClientRect().width>0&&e.contains(document.activeElement);})()"),'Files command completed with actual Explorer focus',timeout);}
+ async focusChatReady(timeout=30000){
+  const chat=await this.frame('.hps-input textarea');let state,observedAt,started=false,sampleError;
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'chat input focus readiness',outcome,target_id:chat.info?.id??null,owned_workbench_id:chat.ownedWorkbenchId??this.workbenchId??null,context_id:chat.contextId??null,sampled_at_ms:observedAt??null,snapshot_age_ms:observedAt===undefined?null:Date.now()-observedAt,state:state??null,sample_error:sampleError??null});
+  try{await waitFor(async()=>{
+   try{state=await chat.evaluate("(()=>{const e=document.querySelector('.hps-input textarea'),r=e?.getBoundingClientRect(),s=e?getComputedStyle(e):null,tag=document.activeElement?.tagName;return {documentFocused:document.hasFocus(),inputFocused:!!e&&document.activeElement===e,inputPresent:!!e,activeTag:typeof tag==='string'&&/^[A-Z][A-Z0-9-]{0,31}$/.test(tag)?tag:null,geometry:r?{x:r.x,y:r.y,width:r.width,height:r.height}:null,visible:!!r&&r.width>0&&r.height>0&&s.display!=='none'&&s.visibility==='visible'};})()");observedAt=Date.now();sampleError=undefined;}
+   catch(error){sampleError=['Error','TypeError','RangeError','ReferenceError','SyntaxError','AssertionError'].includes(error?.name)?error.name:'Error';throw Error('Chat focus diagnostic sample unavailable');}
+   finally{if(!started){started=true;record('start');}}
+   return state.documentFocused&&state.inputFocused;
+  },'chat reveal completed with actual webview and textarea focus',timeout);record('observed');return chat;}
+  catch(error){record('timeout');throw error;}
+ }
+ async assertNoDirtyEditors(target){const state=await this.editorState(target??await this.workbench());if(!Array.isArray(state.dirtyResources)||state.dirtyResources.length)throw Error('Unclosed dirty editor prevents owned folder transition');return state;}
+ async closeOwnedPreview(target,before,preview){
+  assertOwnedPreviewClose(before,preview,await this.editorState(target));
+  // This registered command targets only the verified active editor; no blanket save dialog response.
+  await this.palette('View: Revert and Close Editor');
+  await waitFor(async()=>{const state=await this.editorState(target);return !state.resources.includes(preview.resource)&&JSON.stringify([...state.resources].sort())===JSON.stringify([...before.resources].sort())&&Array.isArray(state.dirtyResources)&&state.dirtyResources.length===0;},'only the owned disposable preview closed',5000);
+  return {resource:preview.resource,public_ui_revert_and_close:true,other_editors_preserved:true};
+ }
+ async newPreview(target,before,required,timeout=30000){return waitFor(async()=>{const s=await this.editorState(target);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&required.every(text=>s.text?.includes(text))?s:null;},'new preview resource, focused model and rendered provenance',timeout);}
+ async isOpenFolder(target){return target.evaluate("(()=>{const e=document.querySelector('.quick-input-widget');const title=e?.querySelector('.quick-input-title')?.textContent.trim();return e?.getBoundingClientRect().height>0&&['Open Folder','폴더 열기'].includes(title);})()");}
+ async ownedOpenFolder(directory,timeout=30000){const w=await this.workbench();await waitFor(()=>this.isOpenFolder(w),'declared Open Folder dialog title',timeout);await this.pathDialog(directory,['Open','열기','OK','확인']);}
+ async cancelOwnedOpenFolder(){const w=await this.workbench();if(!await this.isOpenFolder(w))return false;await this.key(w,'Escape');await this.waitQuick(w,s=>!s.visible,'failed owned Open Folder dialog canceled');return true;}
+ async newTextFile(text){const w=await this.workbench();await this.focusWorkbench(w);const before=await this.editorState(w);await this.key(w,'n',this.modifier);const created=await waitFor(async()=>{const s=await this.editorState(w);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&s.text?.trim()===''?s:null;},'new empty Untitled resource and focused editor identity');await w.send('Input.insertText',{text});await waitFor(async()=>{const s=await this.editorState(w);return s.focused&&s.resource===created.resource&&s.text?.includes(text.trim());},'inserted text rendered in the new Untitled editor');return w;}
+ async folder(directory,label){const w=await this.workbench();await waitFor(()=>w.evaluate("!!document.querySelector('.quick-input-widget input.input')&&document.querySelector('.quick-input-widget').getBoundingClientRect().height>0"),'simple native folder dialog');await this.input(w,'.quick-input-widget input.input',directory+(directory.endsWith('/')||directory.endsWith('\\')?'':process.platform==='win32'?'\\':'/'));await this.clickText(w,label,'button,.monaco-button');}
+ async pathDialog(file,labels){const w=await this.workbench();await waitFor(()=>w.evaluate("!!document.querySelector('.quick-input-widget input.input')&&document.querySelector('.quick-input-widget').getBoundingClientRect().height>0"),'simple native path dialog');await this.input(w,'.quick-input-widget input.input',file);for(const label of labels)if(await this.hasTextButton(w,label)){await this.clickText(w,label);return;}throw Error('No declared native dialog action: '+labels.join('/'));}
+ async toasts(){const w=await this.workbench();return w.evaluate("[...document.querySelectorAll('.notification-list-item-message,#monaco-dialog-message-text,#monaco-dialog-message-detail')].map(e=>e.textContent)");}
+ async shot(file){const w=await this.workbench();const result=await w.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await fs.writeFile(file,Buffer.from(result.data,'base64'));}
+ close(){for(const target of this.targets.values())target.close();this.targets.clear();}
+}
