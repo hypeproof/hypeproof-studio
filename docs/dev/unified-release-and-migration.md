@@ -27,12 +27,18 @@ flowchart TD
 
 검사는 아래를 구분한다.
 
-- `e2e/unified-release/run.mjs`: 수정하지 않은 후보 App과 같은 SHA의 로컬 합성 Service.
+- `e2e/unified-release/run.mjs`: 수정하지 않은 후보 App과 후보 Studio 커밋의
+  `config/service-deployment.json`에 고정된 Service 소스. `HPS_SERVICE_SOURCE`는
+  그 SHA의 깨끗한 checkout이어야 하며, 없거나 다르면 실패한다. 과거 testkit의
+  Worker 구현으로 대체하지 않는다. App SHA와 Service SHA는 별도 기록한다.
   각 OS에서 체험·수업 각각 A/B 전환, 초안/첨부, 실제 모델 파일 생성, 요청 자료 분리,
   실제 암호화 저장과 프로세스 재시작을 검사한다. Service 바인딩은 합성이며 Cloudflare
   배포 인수는 아니다. 활동별 upstream 요청 최대 8회, 동시 테스트 1개, 실패 시 중단한다.
 - `install-windows.mjs`: 폐기 가능한 Windows CI에서 User/System 설치기를 실제로
   별도 위치에 설치하고 모든 portable payload 파일을 대조한다. 로컬 Mac에서는 실행 불가다.
+  Windows 빌드는 `scripts/patches/windows-policy-locales.patch`를 fork의 patch
+  디렉터리에 복사한 뒤 준비한다. 정책 파일의 언어별 하위 폴더도 설치본에 포함한다.
+  patch 적용 검사는 설치본 검증을 대신하지 않는다.
 - `public.mjs`: checks the same candidate App against the current public Service with
   synthetic trial and classroom codes minted for this run, and creates two files in each
   activity. Existing policy and request limits apply and a failed activity is not retried

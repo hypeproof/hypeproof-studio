@@ -1632,6 +1632,9 @@
           "path": "scripts/studio-dev-vendor.mjs"
         },
         {
+          "path": "scripts/patches/windows-policy-locales.patch"
+        },
+        {
           "path": "scripts/release/smoke/checks/s3-cohort-token.mjs"
         },
         {
@@ -1682,6 +1685,9 @@
         },
         {
           "path": "e2e/feedback-native/sdk-vendor.test.mjs"
+        },
+        {
+          "path": "scripts/test/windows-policy-patch.test.mjs"
         },
         {
           "path": "scripts/release/test/release-cut.test.mjs"
