@@ -42,6 +42,7 @@ import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
 import { runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+import { isSoloSeat, SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -2913,6 +2914,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Developer record of an SdkUnavailableError, verbatim (REQ-M30 ③; REQ-M44 keeps it when no fallback runs). */
+  private logSdkUnavailable(reason: string): void {
+    this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
+    this.logChannel.appendLine(sdkFallbackLogLine(reason, new Date()));
+  }
+
   /**
    * #476 — records the agent-sdk → proxy fallback for **three audiences**.
    *
@@ -2935,8 +2942,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the worker, so it lands with a deploy and needs no app release.
    */
   private noteSdkFallback(reason: string, streamId: string): void {
-    this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
-    this.logChannel.appendLine(sdkFallbackLogLine(reason, new Date()));
+    this.logSdkUnavailable(reason);
 
     // Once per session. The fallback keeps happening on that machine (without the
     // seed the next turn is the same), so attaching it every turn means nobody reads
@@ -2946,7 +2952,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postToolLog(streamId, {
       id: randomId(),
       icon: "⚠️",
-      label: coachDegradedNotice(this.coachDisplayName()),
+      label: coachDegradedNotice(this.coachDisplayName(), { solo: isSoloSeat(this.cachedProfile) }),
       state: "error",
     });
   }
@@ -5525,9 +5531,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const ended = sdkTurnEndFailure(sdkEnd);
           if (ended) { spoolStatus = "error"; spoolErrorKind = ended.errorKind; opsFailure = ended.failure; }
         } catch (err) {
-          if (mode === 'web-search' && err instanceof SdkUnavailableError) throw new TurnToolModeError('웹 검색 실행 환경을 사용할 수 없습니다. SDK 연결을 확인하거나 웹 검색 선택을 해제해 주세요.');
-          if (!(err instanceof SdkUnavailableError)||fundingSource) throw err;
-          if (selection && (selection.source === 'lesson' || (profile && savedModel?.scope === modelSelectionScope(profile)))) throw new Error('선택한 모델의 실행 환경을 사용할 수 없습니다. Studio의 Agent SDK 설치를 확인하거나 강사에게 알려주세요. 대화와 작업은 보존됩니다.');
+          if (!(err instanceof SdkUnavailableError)) throw err;
+          // REQ-M44 — an SDK-only seat (native trial, pass) or a picked pass is refused on the proxy
+          // route by the Service, so it never falls back: every branch shows the same install notice
+          // and the raw English reason goes to the developer log only. Classroom seats keep the
+          // existing web-search / picked-model copy and the REQ-M7 fallback below.
+          const outcome = sdkUnavailableOutcome({
+            profile,
+            fundingSource,
+            webSearch: mode === 'web-search',
+            modelPicked: !!selection && (selection.source === 'lesson' || (!!profile && savedModel?.scope === modelSelectionScope(profile))),
+          });
+          if (outcome.kind === 'fail') {
+            if (outcome.requiredSdk) this.logSdkUnavailable(err.message);
+            throw mode === 'web-search' && !outcome.requiredSdk ? new TurnToolModeError(outcome.error.message) : outcome.error;
+          }
           // Pre-Phase-1: the SDK package isn't installed. Keep the classroom
           // working — fall back to the proxy runtime for this turn instead of
           // showing the student a technical error.
@@ -5969,6 +5987,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await new Promise((r) => setTimeout(r, 600));
         await vscode.commands.executeCommand("hypeproof-chat.setToken");
       }
+      return;
+    }
+    // REQ-M44 — the install notice: shown as is, with its request ID, and without "다시 보내기".
+    if (err instanceof SdkRequiredError) {
+      if (err.requestId) this.lastRequestId = err.requestId;
+      void this.post({ type: "streamError", streamId, error: err.message, ...(err.requestId ? { requestId: err.requestId } : {}), retry: false });
       return;
     }
     const reason = err instanceof Error ? err.message : "문제가 발생했습니다. 운영 담당자에게 문의해 주세요.";

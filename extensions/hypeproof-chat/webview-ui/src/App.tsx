@@ -43,6 +43,7 @@ interface State {
   error: string | null;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
+  errorRetry: boolean;             // REQ-M44 — false when resending cannot help (missing SDK binary)
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;
@@ -101,7 +102,7 @@ type Action =
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string }
+  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retry?: false }
   | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
@@ -119,6 +120,7 @@ const initialState: State = {
   error: null,
   errorRequestId: null,
   errorRunbookUrl: null,
+  errorRetry: true,
   pageNotice: null,
   elementPreview: null,
   verify: null,
@@ -244,6 +246,7 @@ function reducer(state: State, action: Action): State {
         error: action.error,
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
+        errorRetry: action.retry !== false,
       };
     case "attachmentsSaved": {
       const items = [...state.timeline.items];
@@ -278,6 +281,9 @@ function reducer(state: State, action: Action): State {
       };
   }
 }
+
+/** Exported for the reducer contract tests (test/sdk-required.test.mjs); not a runtime API. */
+export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -345,7 +351,7 @@ export function App() {
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
         case "streamEnd":   dispatch({ type: "streamEnd" }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry }); break;
         case "actionResult": /* not yet routed to UI */ break;
         case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
@@ -543,7 +549,7 @@ export function App() {
           error={state.error}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
-          canRetryLast={hasLastUserPrompt && !state.streamId}
+          canRetryLast={hasLastUserPrompt && !state.streamId && state.errorRetry}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
@@ -594,7 +600,7 @@ export function App() {
         error={state.error}
         errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
-        canRetryLast={hasLastUserPrompt && !state.streamId}
+        canRetryLast={hasLastUserPrompt && !state.streamId && state.errorRetry}
         onSend={send}
         sendPending={sendPending}
         onRetry={retry}

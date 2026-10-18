@@ -15,6 +15,7 @@ import {
   type ProxyStreamUsage,
 } from "./proxyClientHelpers.ts";
 import { ORCHESTRATOR_FORMAT } from "./sdkCoachHelpers.ts";
+import { SdkRequiredError, trialRequiresSdkMessage } from "./sdkRequiredHelpers.ts";
 
 /**
  * A5 (orchestrator spec §2.2 condition 4, §2.3, §4.1) — this build's capability declaration on
@@ -253,6 +254,10 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
       authErr.requestId = rid;
       throw authErr;
     }
+    // REQ-M44 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
+    // Service sentence, add the cause and the install remedy, and offer no retry.
+    const sdkRequired = trialRequiresSdkMessage(res.status, text);
+    if (sdkRequired) throw new SdkRequiredError(sdkRequired, rid);
     // #358 — a few non-auth statuses have a specific, friendlier message than
     // the generic card (today: 413 = oversized pasted image). Fall back to the
     // generic copy otherwise. Never dump raw JSON at a 9-10 year old; the
