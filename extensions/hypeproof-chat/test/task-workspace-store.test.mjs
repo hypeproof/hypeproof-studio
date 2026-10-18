@@ -20,6 +20,14 @@ const temporary = t => {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 };
+
+test('failed first import is an explicit error, never an empty ready workspace', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'failed-import');
+  await assert.rejects(store.initialize([{ id: 'broken' }]), hasCode('invalid'));
+  assert.equal(store.getView().error.code, 'invalid');
+  assert.equal(store.getView().activeTaskId, null);
+  assert.equal(fs.existsSync(store.filePath), false);
+});
 const childCode = mode => `
   import fs from 'node:fs';
   import { syncBuiltinESMExports } from 'node:module';

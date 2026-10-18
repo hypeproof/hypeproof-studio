@@ -53,12 +53,45 @@ try {
     await page.screenshot({ path: resolve(output, `workspace-${width}.png`) });
   }
   checks.push('1440 / 1024 / 390 / 320 no horizontal overflow');
+  await expect(page.getByRole('dialog', { name: '작업 자료' })).toBeVisible();
+  for (let tab = 0; tab < 10; tab++) {
+    await page.keyboard.press(tab % 2 ? 'Shift+Tab' : 'Tab');
+    await expect.poll(() => page.locator('#task-sources').evaluate(node => node.contains(document.activeElement))).toBe(true);
+  }
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: /^자료/ })).toBeFocused();
+  checks.push('source dialog contains keyboard focus and Escape restores opener');
   await expect(page.getByRole('button', { name: '작업 목록 열기' })).toBeVisible();
+  await page.getByRole('button', { name: '작업 목록 열기' }).click();
+  await expect(page.getByRole('dialog', { name: '내 작업' })).toBeVisible();
+  await page.keyboard.press('Shift+Tab');
+  await expect.poll(() => page.locator('.tw-rail').evaluate(node => node.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: '작업 목록 열기' })).toBeFocused();
   await page.getByRole('button', { name: '작업 목록 열기' }).click();
   await expect(page.locator('.tw-task').first()).toBeVisible();
   await page.locator('.tw-task').filter({ hasText: '새 작업' }).click();
   await expect(input).toHaveValue('');
   checks.push('narrow layout can reach and change tasks');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await input.fill('저장 실패 후에도 남아야 하는 입력');
+  await expect.poll(() => server.fixture.store.getDraft().text).toBe('저장 실패 후에도 남아야 하는 입력');
+  // The real host serializes the flush and blocks task selection if its write fails.
+  await page.request.post(server.url + '/fixture/fail-draft');
+  await page.locator('.tw-task').filter({ hasText: '매일 릴리즈' }).click();
+  await expect(page.locator('.tw-error')).toHaveCount(1);
+  await expect(page.locator('[role="alert"]')).toHaveCount(1);
+  await expect(input).toHaveValue('저장 실패 후에도 남아야 하는 입력');
+  await expect(page.locator('.tw-error')).toContainText('작업');
+  await page.locator('.tw-task').filter({ hasText: '매일 릴리즈' }).click();
+  await expect(input).toHaveValue('다음에 이어 쓸 입력');
+  await expect(page.locator('.tw-error')).toHaveCount(0);
+  await expect(page.locator('.hp-mission')).toHaveCount(0);
+  checks.push('failed flush preserves task/draft, reports once, then clears on successful retry');
+  await page.goto(server.url + '/?theme=light');
+  await expect(input).toHaveValue('다음에 이어 쓸 입력');
+  await expect(page.locator('.hp-mission')).toHaveCount(0);
+  await page.screenshot({ path: resolve(output, 'workspace-light.png') });
   expect(errors).toEqual([]);
   await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', scope: 'built React + actual task host methods + disk store; controlled OS/Service boundary, no real model', checks, errors }, null, 2));
   console.log(JSON.stringify({ status: 'PASS', checks: checks.length, output }));

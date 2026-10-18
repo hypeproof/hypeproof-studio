@@ -589,7 +589,7 @@ export type WebviewMessage = (
 // Host → Webview
 export type HostMessage = (
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
-  | { type: 'taskWorkspaceError'; error: string }
+  | { type: 'taskWorkspaceError'; error: string | null }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[]}

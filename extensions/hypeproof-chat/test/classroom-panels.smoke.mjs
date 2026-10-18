@@ -21,10 +21,12 @@ assert.deepEqual(classroomPanelsShown({ classroom_panels: { help_request: false,
 assert.deepEqual(classroomPanelsShown({ classroom_panels: { help_request: false } }), { help: false, approval: true }, "each panel is its own switch");
 assert.deepEqual(classroomPanelsShown({ classroom_panels: { artifact_approval: false } }), { help: true, approval: false });
 console.log("✓ panels: only an explicit false hides, per panel; absent keeps the old screen");
+assert.deepEqual(classroomPanelsShown({}, true), { help: false, approval: false }, "personal work without a lesson does not inherit classroom controls");
+assert.deepEqual(classroomPanelsShown({ classroom_panels: { help_request: true } }, true), { help: true, approval: false }, "an explicit Service choice still applies in personal work");
 
 // The chat view draws each panel only when its own answer says so (and never in instructor mode).
 const panel = readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
-assert.match(panel, /const classroomPanels = classroomPanelsShown\(config\?\.profile\);/);
+assert.match(panel, /const classroomPanels = classroomPanelsShown\(config\?\.profile, personalWorkspace\);/);
 assert.match(panel, /\{!props\.instructor && classroomPanels\.help && <HelpRequest /, "help panel gated on its switch");
 assert.match(panel, /\{!props\.instructor && help && classroomPanels\.approval && <details [^>]*data-artifact-approval=""/, "approval panel gated on its switch");
 console.log("✓ ChatPanel gates both renders on the Service's answer");

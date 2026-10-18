@@ -499,7 +499,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId} error={workspaceError}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId} error={workspaceError} onDismissError={() => setWorkspaceError(null)}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel

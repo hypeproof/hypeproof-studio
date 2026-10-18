@@ -46,7 +46,12 @@ Existing theme tokens supply canvas, foreground, divider, muted text and focus
 accent (dark fallbacks #202226, #e1e1e1, #34383e, #a4aab3, #799ed7). The host system
 font preserves Korean text quality with no font download. The conversation carries
 the visual weight; no marketing cards, decorative motion or invented metrics.
-At narrow widths, navigation and sources open on explicit action.
+At narrow widths, navigation and sources open on explicit action. These drawers
+contain keyboard focus, make background controls inert, close on Escape and return
+focus to the opener. Personal tasks without a lesson omit the mission banner and
+default classroom operations; explicit Service panel choices still apply. Failed
+draft writes keep the current task and input, show one dismissible error and clear
+the error after a successful save.
 
 This is the approved VS-02/03 foundation. Standalone Electron, branches, durable
 in-flight tool journals, curated memory, full-text search, OAuth popup ownership

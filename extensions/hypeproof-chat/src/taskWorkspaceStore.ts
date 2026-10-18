@@ -193,6 +193,11 @@ export class TaskWorkspaceStore {
       task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length;
       if (task.importedLegacy) task.title = '이전 대화';
       return { version: 1, scope: this.scope, revision: 0, activeTaskId: task.id, tasks: [task] };
+    }).catch(error => {
+      // Failed first import must not look like an empty, ready workspace.
+      if (!this.data) this.loadError = error instanceof TaskWorkspaceStoreError ? error :
+        new TaskWorkspaceStoreError('io', '작업 기록을 준비하지 못했습니다. 원본을 보존했습니다. 앱을 다시 열어 주세요.');
+      throw error;
     });
   }
 

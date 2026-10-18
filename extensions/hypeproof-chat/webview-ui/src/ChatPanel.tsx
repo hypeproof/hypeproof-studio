@@ -500,7 +500,8 @@ export function ChatPanel(props: Props) {
   const publishing = config?.profile?.publishing;
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
-  const classroomPanels = classroomPanelsShown(config?.profile);
+  const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -935,7 +936,7 @@ export function ChatPanel(props: Props) {
       </header>
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
-      {!props.instructor && <MissionHeader
+      {!props.instructor && !personalWorkspace && <MissionHeader
         lesson={config?.profile?.lesson ?? null}
         // SX-01·SX-50 — the completion items are checked off from the host's own gate verdict.
         // Without `learningState` (a seat that records no learning events) there is no verdict,
@@ -1063,7 +1064,7 @@ export function ChatPanel(props: Props) {
           비활성" rather than deletion, because the trial's own TUX-OBS-07 is to read it. So it
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
       {showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
-      {config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
+      {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
       <div className="hps-messages" ref={scrollRef}>
         {props.aiNotice && (

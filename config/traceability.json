@@ -5669,6 +5669,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/vscode.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/classroomPanels.ts"
         }
       ]
     },
@@ -5698,6 +5701,15 @@
         },
         {
           "path": "e2e/task-workspace/server.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/native.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/classroom-panels.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/verify-panel.smoke.mjs"
         }
       ]
     }

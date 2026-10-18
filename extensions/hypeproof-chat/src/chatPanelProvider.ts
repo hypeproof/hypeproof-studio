@@ -4057,11 +4057,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.draftWrites=save.catch(()=>{});
       try {
         await save;
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: null });
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce && this.draftFlush.source===source) this.draftFlush.resolve();
       } catch {
-        const error=new Error('입력을 저장하지 못했습니다. 기존 활동을 유지합니다.');
+        const error=new Error(taskStore ? '입력을 저장하지 못했습니다. 현재 작업과 입력은 그대로입니다. 다시 선택해 주세요.' : '입력을 저장하지 못했습니다. 기존 활동을 유지합니다.');
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce) this.draftFlush.reject(error);
-        await this.post({type:'activityDraftError',error:'입력을 저장하지 못했습니다. 활동을 바꾸기 전에 내용을 복사해 두세요.'});
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: error.message });
+        else await this.post({type:'activityDraftError',error:'입력을 저장하지 못했습니다. 활동을 바꾸기 전에 내용을 복사해 두세요.'});
       }
       return;
     }
@@ -6210,7 +6212,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         : local?.provider === "codex" ? "내 Codex 구독"
         : "서버")
       : undefined;
-    await this.prepareTaskWorkspace(isInstructor);
+    await this.prepareTaskWorkspace?.(isInstructor);
     if (scope !== activityConnections(this.context)?.scope) return;
     const taskStore = this.currentTaskStore?.();
     const taskView = taskStore?.getView();
