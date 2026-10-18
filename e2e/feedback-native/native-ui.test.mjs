@@ -535,7 +535,7 @@ test('native shortcuts use portable CDP key identity without platform-mismatched
  });
  test('chat destination requires the original frame loader and its actual composer focus',async()=>{
   const ui=new NativeUI('http://127.0.0.1:9777'),identity={workbench:'w',target:'t',frame:'f',loader:'l'};let focused=false;
-  const chat={ownedWorkbenchId:'w',info:{id:'t'},ownedFrameId:'f',ownedLoaderId:'l',evaluate:async()=>focused};ui.frame=async()=>chat;
+  const chat={ownedWorkbenchId:'w',info:{id:'t'},ownedFrameId:'f',ownedLoaderId:'l',evaluate:async()=>({documentFocused:focused,composerFocused:focused,activeTag:focused?'TEXTAREA':'BODY'})};ui.frame=async()=>chat;
   const before={returnTarget:{kind:'chat',identity}};assert.equal(await ui.previewDestinationReady({},before),false);focused=true;assert.equal(await ui.previewDestinationReady({},before),true);
   chat.ownedLoaderId='replacement';await assert.rejects(ui.previewDestinationReady({},before),/identity changed/);
  });
@@ -548,4 +548,11 @@ test('changed preview destination identity fails immediately without reselect or
  const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0,samples=0;
  ui.editorState=async()=>state;ui.palette=async()=>{commands++;state=before;};ui.previewDestinationReady=async()=>{samples++;throw Object.assign(Error('Preview destination identity changed'),{identityChanged:true});};
  await assert.rejects(ui.closeOwnedPreview({},before,preview),/identity changed/);assert.equal(commands,1);assert.equal(samples,1);
+});
+test('actual recycled quick-list row refuses changed semantic command without clicking or reselection',async()=>{
+ const {createRequire}=await import('node:module'),require=createRequire(new URL('../package.json',import.meta.url)),{chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{const page=await browser.newPage();await page.setContent('<div class="quick-input-list"><div class="monaco-list-row"><span class="label-name">Expected command</span></div></div>');const cdp=await page.context().newCDPSession(page),ui=new NativeUI('http://127.0.0.1:9777'),calls=[];let sampled=false;
+ const target={send:async(method,params)=>{calls.push(method);const result=await cdp.send(method,params);if(method==='Runtime.callFunctionOn'&&!sampled){sampled=true;await page.locator('.label-name').evaluate(e=>{e.textContent='Other private command';});}return result;}};
+ await assert.rejects(ui.press(target,'.quick-input-list .monaco-list-row:nth-child(1)','Expected command',1000),/Not a usable/);assert.equal(calls.filter(x=>x==='Runtime.evaluate').length,1);assert.equal(calls.filter(x=>x==='Input.dispatchMouseEvent').length,0);assert.equal(ui.phases.at(-1).state.semantic_match,false);assert(!JSON.stringify(ui.phases).includes('Other private command'));
+ }finally{await browser.close();}
 });

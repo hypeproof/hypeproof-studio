@@ -185,12 +185,12 @@ export class NativeUI{
   return target;
  }
  // Retain one DOM object. Reflow may move it after scrolling; never reselect or retry input.
- async press(target,selector,label=selector,timeout=30000){
+ async press(target,selector,label=selector,timeout=30000,stripCheckmark=false){
   if(!Number.isFinite(timeout)||timeout<=0||timeout>30000)throw Error('Invalid native control readiness bound');
   const deadline=Date.now()+timeout;let objectId,state,previous,lastScrollLayout,scrolls=0,samples=0;const history=[],scrollHistory=[];
   const check=()=>{if(Date.now()>=deadline)throw Error('Control readiness deadline');};
   const bounded=async operation=>{check();let timer;try{const value=await Promise.race([Promise.resolve().then(()=>{check();return operation();}),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Control readiness deadline')),Math.max(1,deadline-Date.now()));})]);check();return value;}finally{clearTimeout(timer);}};
-  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'native control readiness',outcome,state:state??null,samples,scrolls,history_truncated:samples>24,layout_history:[...history],scroll_history:[...scrollHistory]});
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'native control readiness',control_label:label,selector,outcome,state:state??null,samples,scrolls,history_truncated:samples>24,layout_history:[...history],scroll_history:[...scrollHistory]});
   const rectKeys=['x','y','width','height','viewportWidth','viewportHeight','scrollX','scrollY','documentWidth','documentHeight'];
   const stable=(a,b)=>a&&b&&rectKeys.every(key=>Number.isFinite(a[key])&&Number.isFinite(b[key])&&Math.abs(a[key]-b[key])<=0.25);
   const layoutChanged=(a,b)=>!!a&&!!b&&(Math.abs(a.y+a.scrollY-b.y-b.scrollY)>0.25||Math.abs(a.x+a.scrollX-b.x-b.scrollX)>0.25||['width','height','viewportWidth','viewportHeight','documentWidth','documentHeight'].some(key=>Math.abs(a[key]-b[key])>0.25));
@@ -199,11 +199,13 @@ export class NativeUI{
    if(selected.exceptionDetails||!selected.result?.objectId)throw Error('Control absent');objectId=selected.result.objectId;
    let scroll='initial';
    for(;;){
-    const sample=await bounded(()=>target.send('Runtime.callFunctionOn',{objectId,returnByValue:true,arguments:[{value:selector},{value:scroll}],functionDeclaration:`function(selector,scroll){
-     const same=this.isConnected&&document.querySelector(selector)===this;
-     if(!same)return {same:false};
+    const sample=await bounded(()=>target.send('Runtime.callFunctionOn',{objectId,returnByValue:true,arguments:[{value:selector},{value:scroll},{value:selector.startsWith('.quick-input-list .monaco-list-row')?label:null},{value:stripCheckmark}],functionDeclaration:`function(selector,scroll,expectedLabel,stripCheckmark){
+     const rowLabel=this.querySelector('.label-name')?.textContent.trim();
+     const semanticLabel=expectedLabel===null?null:stripCheckmark?rowLabel?.replace(/^✓\\s*/,''):rowLabel;
+     const same=this.isConnected&&document.querySelector(selector)===this&&(expectedLabel===null||semanticLabel===expectedLabel);
+     if(!same)return {same:false,semantic_match:expectedLabel===null||semanticLabel===expectedLabel};
      const measure=()=>{const b=this.getBoundingClientRect(),x=b.left+b.width/2,y=b.top+b.height/2,hit=document.elementFromPoint(x,y),s=getComputedStyle(this),root=document.scrollingElement??document.documentElement;
-      return {same:true,x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===this||this.contains(hit)),enabled:!this.disabled,viewportWidth:innerWidth,viewportHeight:innerHeight,scrollX,scrollY,documentWidth:root.scrollWidth,documentHeight:root.scrollHeight};};
+      return {same:true,semantic_match:expectedLabel===null||semanticLabel===expectedLabel,x,y,width:b.width,height:b.height,visible:s.visibility==='visible'&&s.display!=='none'&&Number(s.opacity)>0,inView:b.top>=0&&b.bottom<=innerHeight&&b.left>=0&&b.right<=innerWidth,topmost:!!hit&&(hit===this||this.contains(hit)),enabled:!this.disabled,viewportWidth:innerWidth,viewportHeight:innerHeight,scrollX,scrollY,documentWidth:root.scrollWidth,documentHeight:root.scrollHeight};};
      const before=measure();let scrolled=false;
      if(scroll==='initial'||scroll==='reflow'&&before.visible&&before.enabled&&!before.inView){this.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});scrolled=true;}
      return {state:measure(),scrolled,before:scrolled?before:null};
@@ -261,7 +263,7 @@ export class NativeUI{
  async selectedQuick(target,previous,phase,expectReload=false){return this.waitQuick(target,s=>!s.visible||(s.ready&&s.mode==='picker'&&s.value!==previous),phase,30000,expectReload);}
  async choiceSelector(target,label,command=false){return target.evaluate(`(()=>{const a=[...document.querySelectorAll('.quick-input-list .monaco-list-row')].filter(e=>{const text=e.querySelector('.label-name')?.textContent.trim();return (${command}?text:text?.replace(/^✓\\s*/,''))===${JSON.stringify(label)}&&e.getBoundingClientRect().height>0;});if(a.length!==1)return null;const e=a[0];return '.quick-input-list .monaco-list-row:nth-child('+([...e.parentElement.children].indexOf(e)+1)+')';})()`);}
  async palette(title,{expectReload=false}={}){this.commandTitle=title;this.phases.push({at:new Date().toISOString(),action:'palette',command:title});const w=await this.workbench();await this.focusWorkbench(w);await this.waitQuick(w,s=>!s.visible,'previous quick input closed before command');await this.key(w,'F1');await this.waitQuick(w,s=>s.ready&&s.mode==='command','command palette opened');const typed='>'+title;await this.input(w,'.quick-input-widget input',typed);await this.waitQuick(w,s=>s.ready&&s.value===typed,'command query entered');const selector=await waitFor(()=>this.choiceSelector(w,title,true),'registered exact command '+title);await this.press(w,selector,title);await this.selectedQuick(w,typed,'command selected and palette dismissed',expectReload);return w;}
- async quick(label){const w=await this.workbench();await this.waitQuick(w,s=>s.ready&&s.mode==='picker','next quick picker opened');await waitFor(()=>this.choiceSelector(w,label),'declared quick choice '+label);await this.input(w,'.quick-input-widget input',label);await this.waitQuick(w,s=>s.ready&&s.value===label,'quick choice query entered');const selector=await waitFor(()=>this.choiceSelector(w,label),'filtered exact quick choice '+label);await this.press(w,selector,label);await this.selectedQuick(w,label,'quick choice accepted and previous picker dismissed');}
+ async quick(label){const w=await this.workbench();await this.waitQuick(w,s=>s.ready&&s.mode==='picker','next quick picker opened');await waitFor(()=>this.choiceSelector(w,label),'declared quick choice '+label);await this.input(w,'.quick-input-widget input',label);await this.waitQuick(w,s=>s.ready&&s.value===label,'quick choice query entered');const selector=await waitFor(()=>this.choiceSelector(w,label),'filtered exact quick choice '+label);await this.press(w,selector,label,30000,true);await this.selectedQuick(w,label,'quick choice accepted and previous picker dismissed');}
  async prompt(title,value){const w=await this.workbench();await waitFor(()=>w.evaluate(`document.querySelector('.quick-input-widget')?.textContent.includes(${JSON.stringify(title)})`),'input prompt '+title);await this.waitQuick(w,s=>s.ready&&s.mode==='picker','input prompt ready');await this.input(w,'.quick-input-widget input',value);await this.key(w,'Enter');await this.selectedQuick(w,value,'input prompt accepted');}
  async editorState(target){return target.evaluate(`(()=>{const e=document.activeElement,editor=e?.closest('.monaco-editor.focused'),group=editor?.closest('.editor-group-container'),tab=group?.querySelector('.tabs-container .tab.active');return {resources:[...document.querySelectorAll('.tabs-container .tab')].map(t=>t.getAttribute('data-resource-name')).filter(Boolean),dirtyResources:[...document.querySelectorAll('.tabs-container .tab.dirty')].map(t=>t.getAttribute('data-resource-name')),resource:tab?.getAttribute('data-resource-name'),editorLabel:editor?.parentElement?.getAttribute('aria-label'),focused:!!editor&&(e.matches('textarea.inputarea,.native-edit-context')||e.getAttribute('role')==='textbox'),text:editor?.querySelector('.view-lines')?.textContent.replace(/\\u00a0/g,' ')};})()`);}
  async explorerReady(timeout=30000){const w=await this.workbench();await waitFor(()=>w.evaluate("(()=>{const e=document.querySelector('.explorer-folders-view');return !!e&&e.getBoundingClientRect().width>0&&e.contains(document.activeElement);})()"),'Files command completed with actual Explorer focus',timeout);}
@@ -282,22 +284,24 @@ export class NativeUI{
    const chat=await this.frame('.hps-input textarea',5000,observation);
    const identity={workbench:chat.ownedWorkbenchId,target:chat.info?.id,frame:chat.ownedFrameId,loader:chat.ownedLoaderId};
    if(JSON.stringify(identity)!==JSON.stringify(before.returnTarget.identity))throw Object.assign(Error('Preview destination identity changed'),{identityChanged:true});
-   return chat.evaluate("document.hasFocus()&&document.activeElement===document.querySelector('.hps-input textarea')",observation);
+   const state=await chat.evaluate("({documentFocused:document.hasFocus(),composerFocused:document.activeElement===document.querySelector('.hps-input textarea'),activeTag:document.activeElement?.tagName})",observation);
+   this.previewDestinationState={kind:'chat',identity,...state};return state.documentFocused&&state.composerFocused;
   }
   const state=await this.editorState(target);
-  return !!before.resource&&state.resource===before.resource&&state.focused&&focusedResource(state);
+  this.previewDestinationState={kind:'editor',expected:before.resource,resource:state.resource,focused:state.focused};return !!before.resource&&state.resource===before.resource&&state.focused&&focusedResource(state);
  }
  async closeOwnedPreview(target,before,preview,timeout=5000){
   assertOwnedPreviewClose(before,preview,await this.editorState(target));
   // This registered command targets only the verified active editor; no blanket save dialog response.
   await this.palette('View: Revert and Close Editor');
-  const observation=readObservation(timeout,target.info?.id);
+  const observation=readObservation(timeout,target.info?.id);this.previewDestinationState=undefined;
+  const record=outcome=>this.phases.push({at:new Date().toISOString(),phase:'preview destination restoration',outcome,state:this.previewDestinationState??null});
   try{for(;;){
    const state=await observation.run(()=>this.editorState(target));
    const closed=!state.resources.includes(preview.resource)&&JSON.stringify([...state.resources].sort())===JSON.stringify([...before.resources].sort())&&Array.isArray(state.dirtyResources)&&state.dirtyResources.length===0;
-   if(closed&&await observation.run(()=>this.previewDestinationReady(target,before,observation)))break;
+   if(closed&&await observation.run(()=>this.previewDestinationReady(target,before,observation))){record('observed');break;}
    await observation.run(()=>sleep(50));
-  }}catch(error){if(error.identityChanged)throw error;throw Error('Timed out: owned preview closed and original destination focus restored');}finally{observation.close();}
+  }}catch(error){record(error.identityChanged?'identity-refused':'timeout');if(error.identityChanged)throw error;throw Error('Timed out: owned preview closed and original destination focus restored');}finally{observation.close();}
   return {resource:preview.resource,public_ui_revert_and_close:true,other_editors_preserved:true,destination_focus_restored:true};
  }
  async newPreview(target,before,required,timeout=30000){return waitFor(async()=>{const s=await this.editorState(target);return s.focused&&/^Untitled-[0-9]+$/.test(s.resource??'')&&!before.resources.includes(s.resource)&&focusedResource(s)&&required.every(text=>s.text?.includes(text))?s:null;},'new preview resource, focused model and rendered provenance',timeout);}
