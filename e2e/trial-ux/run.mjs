@@ -40,6 +40,21 @@ const containsRequest = (messages, expected) => emitted(messages, expected.type)
 assert.equal(containsRequest([{ type: 'sendMessage', text: 'known' }], { type: 'sendMessage', text: 'known' }), true);
 assert.equal(containsRequest([{ type: 'sendMessage', text: 'wrong' }], { type: 'sendMessage', text: 'known' }), false);
 assert.equal(containsRequest([], { type: 'sendMessage' }), false);
+// Draft snapshots carry their next-turn mode, including the default. Keep the
+// whole snapshot comparison strict so a lost or changed mode cannot pass.
+const draftControl = { type: 'saveActivityDraft', activityId: 'control-activity', nonce: 'control-flush', draft: { text: 'preserved', images: [], queued: null, toolMode: 'auto' } };
+assert.equal(containsRequest([draftControl], draftControl), true, 'exact draft snapshot must match');
+const draftWithoutMode = { ...draftControl.draft }; delete draftWithoutMode.toolMode;
+for (const [name, draft] of [
+  ['missing tool mode', draftWithoutMode],
+  ['wrong tool mode', { ...draftControl.draft, toolMode: 'web-search' }],
+  ['changed text', { ...draftControl.draft, text: 'lost' }],
+  ['changed images', { ...draftControl.draft, images: ['unexpected'] }],
+  ['changed queue', { ...draftControl.draft, queued: 'unexpected' }],
+]) assert.equal(containsRequest([{ ...draftControl, draft }], draftControl), false, `${name} must not match the saved draft`);
+for (const [key, value] of [['activityId', 'wrong-activity'], ['nonce', 'wrong-flush']]) {
+  assert.equal(containsRequest([{ ...draftControl, [key]: value }], draftControl), false, `wrong ${key} must not match the draft acknowledgement`);
+}
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://local');
@@ -324,7 +339,7 @@ try {
     await draft(p).fill('저장할 합성 초안');
     await host(p,{type:'activityFreeze',activityId:'activity-a',frozen:true,nonce:'flush-control'});
     await expect(draft(p)).toHaveAttribute('readonly','');
-    await request(p,{type:'saveActivityDraft',activityId:'activity-a',nonce:'flush-control',draft:{text:'저장할 합성 초안',images:[],queued:null}});
+    await request(p,{type:'saveActivityDraft',activityId:'activity-a',nonce:'flush-control',draft:{text:'저장할 합성 초안',images:[],queued:null,toolMode:'auto'}});
     await host(p,{type:'activityFreeze',activityId:'activity-a',frozen:false});
     await expect(draft(p)).not.toHaveAttribute('readonly','');
     await draft(p).fill('');
@@ -349,7 +364,7 @@ try {
   await browser.close(); await new Promise(resolve => server.close(resolve));
   const assets = (await fs.readdir(path.join(dist, 'assets'))).filter(f => f.endsWith('.js'));
   const hashes = Object.fromEntries(await Promise.all(assets.map(async f => [f, createHash('sha256').update(await fs.readFile(path.join(dist, 'assets', f))).digest('hex')])));
-  const report = { schema: 'hps-trial-ux/1', executedAt: new Date().toISOString(), codeSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDirty: !!execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), browser: 'Chromium', platform: process.platform, arch: process.arch, bundleSha256: hashes, profileSource: '@hypeproof/service-testkit/src/profiles/studio-native-trial.ts (actual public package registry profile)', servicePackage: serviceSourceManifest(), scope: 'Built React. Host messages, findings, artifacts and API outcomes are controlled synthetic fixtures. No real authentication, provider, native dialog, URL open, update, disk restore or deployment is claimed.', evaluatorControls: { positive: 'PASS', negativeMismatch: 'PASS', negativeMissing: 'PASS' }, counts: { pass: results.filter(r => r.status === 'PASS').length, fail: results.filter(r => r.status === 'FAIL').length }, results };
+  const report = { schema: 'hps-trial-ux/1', executedAt: new Date().toISOString(), codeSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDirty: !!execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim(), browser: 'Chromium', platform: process.platform, arch: process.arch, bundleSha256: hashes, profileSource: '@hypeproof/service-testkit/src/profiles/studio-native-trial.ts (actual public package registry profile)', servicePackage: serviceSourceManifest(), scope: 'Built React. Host messages, findings, artifacts and API outcomes are controlled synthetic fixtures. No real authentication, provider, native dialog, URL open, update, disk restore or deployment is claimed.', evaluatorControls: { positive: 'PASS', negativeMismatch: 'PASS', negativeMissing: 'PASS', draftExact: 'PASS', draftMissingToolMode: 'PASS', draftWrongToolMode: 'PASS', draftContentMismatch: 'PASS', draftScopeMismatch: 'PASS' }, counts: { pass: results.filter(r => r.status === 'PASS').length, fail: results.filter(r => r.status === 'FAIL').length }, results };
   await fs.writeFile(path.join(out, 'report.json'), JSON.stringify(report, null, 2));
   console.log(`Report: ${path.join(out, 'report.json')}`);
   if (report.counts.fail) process.exitCode = 1;
