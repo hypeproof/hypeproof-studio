@@ -169,11 +169,11 @@
 .hps-shell[data-chat-detail="personal"] .hps-empty { padding: 16px 0 0; }
 .hps-shell[data-chat-detail="personal"] .hps-empty-greeting { font-size: 17px; line-height: 1.65; max-width: 640px; }
 .hps-shell[data-chat-detail="personal"] .hps-chips-rack { margin: 0; padding: 0; gap: 10px; }
-.hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: 11px; color: var(--tw-muted); }
+.hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: 11px; color: var(--tw-muted); opacity: 1; }
 .hps-shell[data-chat-detail="personal"] .hps-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 8px; }
 .hps-shell[data-chat-detail="personal"] .hps-chip { padding: 12px; border: 1px solid var(--tw-line); border-radius: 10px; text-align: left; background: transparent; min-height: 44px; }
 .hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: 13px; line-height: 1.5; }
-.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: 11px; line-height: 1.5; font-style: normal; color: var(--tw-muted); margin-top: 5px; }
+.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: 11px; line-height: 1.5; font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: 5px; }
 .hps-shell[data-chat-detail="personal"] .hps-assistant-mark { box-sizing: border-box; width: 18px; height: 18px; font-size: 12px; border-radius: 5px; }
 .hps-shell[data-chat-detail="personal"] .hps-msg-role { font-size: 11px; min-height: 20px; }
 .hps-shell[data-chat-detail="personal"] .hps-msg-role > span { gap: 6px; }
