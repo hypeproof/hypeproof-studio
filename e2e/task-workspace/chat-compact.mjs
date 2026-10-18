@@ -16,8 +16,17 @@ export const profile = resolvedProfile(3, {
 });
 export const configExtras = { model: 'fixture-sonnet', effort: { value: 'medium', allowed: ['low','medium','high'] }, access: { status: 'ready', view: { configured: false, required: false, choices: [], as_of: '2026-10-18T00:00:00Z' } } };
 export const question = '네, 객관식으로 골라 보세요. 번호만 답하셔도 됩니다.\n\n**최근 AI가 해주면 좋겠다고 생각한 일은 어느 쪽에 가까웠나요?**\n\n1. 글쓰기나 정리: 메일, 보고서, 메모, 자료 요약\n2. 계획 세우기: 여행, 일정, 공부, 할 일\n3. 알아보고 비교하기: 제품, 장소, 정보 조사\n4. 아이디어 내기: 기획, 이름 짓기, 콘텐츠 소재\n5. 위에 없음. 직접 말할게요';
-const server = await serveTaskWorkspace({ profile, configExtras, seedHistory: false, port: Number(process.env.PORT ?? 0) });
+const addMessage = content => async f => { await f.h.appendHistory([{id:'review-'+Date.now(),role:'assistant',content,createdAt:Date.now()}]); await f.h.postHistory(); };
+const fixtureActions = {
+  'compact-question': {label:'객관식 질문 추가',run:addMessage(question)},
+  'compact-instructions': {label:'일반 번호 목록 추가',run:addMessage('다음 순서로 진행하세요.\n\n1. 파일을 만듭니다.\n2. 실행합니다.')},
+  'compact-partial': {label:'미완성 질문 추가',run:addMessage('객관식으로 골라 보세요.\n\n1. 글쓰기')},
+  'compact-access-unknown': {label:'이용권 확인 실패',run:async f=>{configExtras.access={status:'unknown'};await f.h.postConfig();}},
+  'compact-access-ready': {label:'이용권 복구',run:async f=>{configExtras.access={status:'ready',view:{configured:false,required:false,choices:[],as_of:'2026-10-18T00:00:00Z'}};await f.h.postConfig();}},
+};
+const server = await serveTaskWorkspace({ profile, configExtras, fixtureActions, seedHistory: false, port: Number(process.env.PORT ?? 0) });
 if (process.argv.includes('--serve')) {
+  await server.fixture.h.appendHistory([{id:'q-user',role:'user',content:'객관식으로 질문해 줘',createdAt:1},{id:'q-answer',role:'assistant',content:question,createdAt:2}]);
   console.log(JSON.stringify({url:server.url,scope:'synthetic full personal profile + product theme + built UI + real host/store'}));
 } else {
   const output=resolve(process.env.HPS_CHAT_COMPACT_EVIDENCE ?? 'e2e/test-results/chat-compact');
@@ -57,6 +66,11 @@ if (process.argv.includes('--serve')) {
     await options.getByRole('button',{name:/글쓰기나 정리/}).click();
     await expect(input).toHaveValue('설정을 열어도 유지할 초안\n1. 글쓰기나 정리: 메일, 보고서, 메모, 자료 요약');
     await expect(input).toBeFocused(); expect(server.sent).toHaveLength(0);
+    await options.getByRole('button',{name:/아이디어 내기/}).click();
+    await expect(input).toHaveValue('설정을 열어도 유지할 초안\n4. 아이디어 내기: 기획, 이름 짓기, 콘텐츠 소재');
+    await input.fill('직접 고친 답변');
+    await options.getByRole('button',{name:/알아보고 비교하기/}).click();
+    await expect(input).toHaveValue('직접 고친 답변\n3. 알아보고 비교하기: 제품, 장소, 정보 조사');
     await input.fill(''); await options.getByRole('button',{name:/계획 세우기/}).focus(); await page.keyboard.press('Enter');
     await expect(input).toHaveValue('2. 계획 세우기: 여행, 일정, 공부, 할 일');
     await expect(input).toBeFocused(); expect(server.sent).toHaveLength(0);

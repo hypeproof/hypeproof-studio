@@ -59,6 +59,33 @@ required; local synthetic success is separate from live SDK/account, signed
 release, Windows and physical IME acceptance. No whole-product parity claim is
 inferred from these selected flows.
 
+### Compact personal conversation (CC-R1, #1762)
+
+`REQ-STUDIO-TASK-WORKSPACE` also names new default tasks from meaningful content within the first two
+user turns locally, without extra inference. An explicitly renamed title is never
+overwritten. Legacy snapshots with unknown title provenance remain readable and
+protected. Numeric early replies may use the preceding numbered option as context.
+
+`REQ-STUDIO-CHAT-DETAIL` keeps model/effort, routine usage and opted-in observation
+behind an accessible settings dialog in personal mode. Current model, funding and
+profile authority do not change. Unknown/required/unavailable access has a visible
+recovery entry. Small assistant branding and borderless answer actions use quiet
+16–18px artwork while retaining 44px targets. Classroom controls stay unchanged.
+
+Explicit, flat numbered answer invitations in the latest completed assistant turn
+can be clicked or activated by keyboard. Picking prepares an editable reply and
+preserves other draft text; only the normal Send action submits it. Instructions,
+code, ambiguous lists, old turns and streaming fragments do not become choices.
+
+`REQ-STUDIO-CHAT-REFERENCE` distinguishes opening a general browser from previewing
+authored local files. A plain browser-open request without an address opens a blank
+browser through the existing gated browser tool, never starts a local website or
+invents a destination. Website preview remains an explicit, separate intent.
+
+Acceptance CC-01–CC-05 in [the verification contract](testing/task-workspace.md)
+uses the actual shipped theme tokens and full personal control profile. Synthetic
+model/tool tests do not establish live inference or installed release behavior.
+
 ## Curriculum runtime proposal — 2026-09-29
 
 `REQ-STUDIO-CURRICULUM-RUNTIME`: Studio executes the AI for Good v5 loop
