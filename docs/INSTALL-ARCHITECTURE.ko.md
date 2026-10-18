@@ -238,8 +238,8 @@ flowchart TD
 PATH를 반영하고 재실행", "설치기 재실행(idempotent)", "`gh auth login`")을 출력하고
 non-zero로 종료한다. 성공하면 `doctor: ALL CHECKS PASSED`.
 
-> **경계선.** doctor는 gh **인증 상태**나 SDK 자가치유(Studio 첫 실행 시 self-heal)
-> 같은 항목은 warn으로만 둔다. 하드 fail은 "이게 없으면 harness 스크립트가 못
+> **경계선.** doctor는 gh **인증 상태** 같은 항목은 warn으로만 둔다. SDK seed 누락은
+> macOS(`install.sh`)와 Windows(`install.ps1`) 설치기에서 하드 fail이다 — Studio에는 SDK를 스스로 받는 기능이 없다(2026-10-18, I7). Linux는 Studio 앱을 설치하지 않으므로 warn으로 남는다. 하드 fail은 "이게 없으면 harness 스크립트가 못
 > 돈다"는 항목에 한정한다.
 
 ---

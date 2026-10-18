@@ -780,10 +780,11 @@
         "PRA-05",
         "PRA-06",
         "PRA-07",
-        "PRA-08"
+        "PRA-08",
+        "PRA-11"
       ],
       "inline_prefixes": [],
-      "sha256": "20204f24829ec89d30058fa9f020e7c2b5c63baa73fba95bae90781e89b66e9f",
+      "sha256": "a1b124a51f6c083c5f46f8ea985fe4626c24d117e3a3b278f143c1e25baa6ba0",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3870,6 +3871,36 @@
       "verification_inputs": [
         "scripts/test-installer-kit.sh",
         "scripts/tests/install-kit-fixture.ps1"
+      ]
+    },
+    {
+      "id": "installer-sdk-seed-fail-closed",
+      "title": "macOS installer fails closed on a missing SDK seed",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-11"
+          ]
+        }
+      ],
+      "depends_on": [
+        "non-member-class-kit-install"
+      ],
+      "next_action": "Merge the install.sh change; run one member and one kit install on a clean Mac with registry.npmjs.org blocked and confirm the doctor stops with the stage and recovery command.",
+      "design_delta": "seed_sdk records the stage it stopped at; the doctor fails on a missing claude.verified.json with a Korean stop message naming that stage and the recovery command, matching install.ps1; the self-heal warning is removed.",
+      "positive_control": "A seeder that writes the verified marker passes the doctor with exit 0, as a member and as a kit; on Linux a failed seed leaves the doctor at exit 0 without a stop message or a claim that the install will stop (scripts/test-installer-sdk-seed.sh).",
+      "negative_control": "A seeder that fails, cannot be obtained, or exits 0 without a marker makes the doctor exit non-zero with the stage and recovery command, for a member and a kit; no installer text claims Studio repairs the SDK.",
+      "evidence_required": "Studio commit and the script test output. A real clean-Mac install with the seed blocked is required before completion; a stubbed seeder is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "docs/INSTALL-CLASS-KIT.ko.md"
+      ],
+      "verification_inputs": [
+        "scripts/test-installer-sdk-seed.sh"
       ]
     },
     {

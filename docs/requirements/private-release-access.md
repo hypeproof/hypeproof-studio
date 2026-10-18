@@ -17,6 +17,7 @@ People outside the organization install from a class kit (PRA-08, #1617).
 | PRA-06 | The requirement workflow supplies a Contents-read credential to the private Harness checkout without widening its normal workflow token. |
 | PRA-07 | Service development packages and deployment source remain private. Authenticate immutable release acquisition with existing Contents-read access, verify SHA-256 before installing, and stage artifacts only in ignored local/CI cache. No Service package tarball or source snapshot is committed to Studio or copied into Studio releases. Bundled packages preserve canonical implementation bytes and existing authorization behavior. |
 | PRA-08 | A person outside the organization installs from a class kit: the release's archive, `install.sh` or `install.ps1` and SDK seeder in one folder with `kit-info.txt` and `SHA256SUMS` (`install.sh --kit`, `install.ps1 -KitDir`). Every kit file is checked against `SHA256SUMS` before use; kit mode makes no GitHub call and asks for no login; dependency installs, app copy, SDK seed and doctor are the member steps. A kit comes from `scripts/make-class-kit.sh` (instructor hand-off) or from the Lab site's participation-code install, which checks the code with the Service and assembles the kit from release assets. `mirror-release` attaches the tag's installers and seeders to every release for that purpose. `SHA256SUMS` detects damage; it does not authenticate who handed the folder over. |
+| PRA-11 | The macOS installer (`install.sh` on darwin) fails closed on a missing SDK seed, as `install.ps1` does: when the seeder cannot be obtained, exits non-zero, or leaves no `claude.verified.json`, the doctor exits non-zero with a Korean stop message naming the stage (fetch, run with exit code, or marker) and the recovery command (the kit's own `install.sh --kit` in kit mode, the member one-liner otherwise). Members and class kits behave the same. On Linux, where `install.sh` installs no Studio app and the doctor has no SDK check, a missing seed stays a warning and no installer text says the install will stop. No installer text promises that Studio repairs the SDK on first launch while the app has no in-app fetch. |
 
 ## Validation
 
@@ -36,6 +37,12 @@ measurement checks, and Chalk instructor authorization checks. The bootstrap
 uses `config/service-packages.json` and the existing `HYPEPROOF_READ_TOKEN`;
 missing access or changed bytes block acquisition. A successful staged local
 install is separate from authenticated remote CI access and runtime publication.
+
+PRA-11 controls: `scripts/test-installer-sdk-seed.sh` (no network: on macOS a seeder
+stubbed to fail, to be unavailable and to succeed without a marker, each for a member
+and/or a kit, must stop the doctor with the stage and recovery command; a seeder that
+writes the marker must pass with exit 0. On Linux a failed or marker-less seed must
+leave the doctor at exit 0 with no stop message and no "the install will stop" warning).
 
 PRA-08 controls: `scripts/test-installer-kit.sh` (macOS: kit built and installed
 without GitHub, damaged kits refused) and `scripts/tests/install-kit-fixture.ps1`

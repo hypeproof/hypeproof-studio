@@ -61,6 +61,13 @@ SEED_SCRIPT_NAME="seed-sdk-binary.sh"
 # this repo, not the releases repo (which carries the Studio binaries only).
 # Override with HPS_RAW_BASE once a mirror is published.
 RAW_BASE="${HPS_RAW_BASE:-https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts}"
+# Where seed_sdk stopped, for the doctor's stop message: "" (not run or succeeded),
+# "unavailable" (no seeder could be obtained) or "failed" (seeder exited non-zero,
+# code in SDK_SEED_RC). On macOS a missing seed is a doctor failure, never a warning:
+# the app bundle deliberately excludes the native binary and nothing in Studio
+# fetches it. Linux installs no Studio app, so there it stays a warning.
+SDK_SEED_STAGE=""
+SDK_SEED_RC=""
 
 HPS_HOME="${HOME}/.hypeproof"
 RECEIPT="${HPS_HOME}/receipt.json"
@@ -678,7 +685,8 @@ seed_sdk() {
   # because a die inside the command substitution below would only be a warning.
   [ -z "$KIT_DIR" ] || kit_verify "$SEED_SCRIPT_NAME"
   _seed="$(resolve_seed_script)" || {
-    warn "Could not obtain ${SEED_SCRIPT_NAME} (local or ${RAW_BASE}) — Studio will self-heal on first run"
+    SDK_SEED_STAGE="unavailable"
+    warn "${SEED_SCRIPT_NAME} 를 받지 못했습니다 (로컬 또는 ${RAW_BASE}). $(sdk_seed_consequence)"
     return 0
   }
   # Seed the SDK version the installed app loads, not the seeder's own pin: the
@@ -700,7 +708,42 @@ seed_sdk() {
     fi
     ok "SDK seeded (canonical seeder)"
   else
-    warn "${SEED_SCRIPT_NAME} did not complete — Studio will self-heal on first launch"
+    SDK_SEED_RC=$?
+    SDK_SEED_STAGE="failed"
+    warn "${SEED_SCRIPT_NAME} 실행이 실패했습니다 (종료 코드 ${SDK_SEED_RC}). $(sdk_seed_consequence)"
+  fi
+}
+
+# sdk_seed_consequence — what a missing seed means for this install. Only the
+# macOS doctor checks the seed (it is the only platform that installs the Studio
+# app), so only there may the warning say the install will stop. Linux keeps a
+# warning with a re-run hint and must not promise a stop the doctor never makes.
+sdk_seed_consequence() {
+  if [ "$OS" = "darwin" ]; then
+    printf '%s\n' '마지막 점검에서 설치가 멈춥니다.'
+  else
+    printf '%s\n' '이 컴퓨터에는 Studio 앱을 설치하지 않으므로 설치는 계속됩니다. SDK가 필요하면 인터넷(registry.npmjs.org) 연결을 확인한 뒤 설치를 다시 실행하세요.'
+  fi
+}
+
+# sdk_seed_stage_label — the stage a missing seed stopped at, in the learner's
+# language. Reads SDK_SEED_STAGE / SDK_SEED_RC set by seed_sdk.
+sdk_seed_stage_label() {
+  case "$SDK_SEED_STAGE" in
+    unavailable) printf '시드 스크립트 받기 (%s)\n' "$SEED_SCRIPT_NAME" ;;
+    failed)      printf '시드 스크립트 실행 (%s, 종료 코드 %s)\n' "$SEED_SCRIPT_NAME" "${SDK_SEED_RC:-?}" ;;
+    *)           printf '검증 표시 확인 (claude.verified.json 없음)\n' ;;
+  esac
+}
+
+# sdk_seed_recovery_cmd — the command that re-runs the installer the same way it
+# was started. A class kit re-runs its own verified copy (no GitHub); a member
+# re-runs the one-liner from this file's header. The installer is idempotent.
+sdk_seed_recovery_cmd() {
+  if [ -n "$KIT_DIR" ]; then
+    printf 'bash "%s/install.sh" --kit "%s"\n' "$KIT_DIR" "$KIT_DIR"
+  else
+    printf '%s\n' 'gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > /tmp/hps-bootstrap.sh && bash /tmp/hps-bootstrap.sh'
   fi
 }
 
@@ -755,7 +798,14 @@ doctor() {
        || ls "${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk"/*/claude.verified.json >/dev/null 2>&1; then
       ok "SDK: seeded + verified"
     else
-      warn "SDK: not seeded (Studio self-heals on first launch)"
+      # Fail closed, like install.ps1's doctor. Studio has no in-app fetch for the
+      # native binary, so the old warning that promised a repair on first launch
+      # let the install report success and left the coach without its tools.
+      warn "SDK: 설치되지 않았습니다 — 멈춘 단계: $(sdk_seed_stage_label)"
+      warn "  이대로는 Studio 코치가 작업 도구를 쓸 수 없습니다. Studio는 이 파일을 스스로 받지 않습니다."
+      warn "  복구: 인터넷(registry.npmjs.org) 연결을 확인한 뒤 설치를 다시 실행하세요:"
+      warn "    $(sdk_seed_recovery_cmd)"
+      _fail=1
     fi
   fi
 
