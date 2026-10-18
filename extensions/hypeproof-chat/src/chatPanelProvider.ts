@@ -2,6 +2,7 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { passSpentNotice } from "./passPurchase";
+import { catalogueWithin, endCardAdvertised, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
@@ -4432,6 +4433,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // command so the QuickInput cascade lives in one place.
         void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
         return;
+      case "trialEndCardPasses":
+        // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
+        // purchase view (REQ-L12 ②); no order is created until they choose there.
+        void vscode.commands.executeCommand("hypeproof-chat.showPasses");
+        return;
       case "installUpdate":
         // #72. User clicked "Install Now" on the update banner.
         void vscode.commands.executeCommand("hypeproof-chat.installUpdate");
@@ -5921,6 +5927,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
     if (isAbortError(err) || current?.signal?.aborted) return;
+    // TUX-COND-07 — a free trial that ran out ends in one inline card, only where the Service
+    // advertises it (`pass_offer.end_card`, default off). The card carries the Service's own pass
+    // facts; it never opens the purchase view, and any other turn ending falls through unchanged.
+    if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
+      const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl) });
+      if (current.signal?.aborted) return;
+      if (card) { void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card }); return; }
+    }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }

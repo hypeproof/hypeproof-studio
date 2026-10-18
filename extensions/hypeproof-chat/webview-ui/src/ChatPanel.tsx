@@ -7,6 +7,7 @@ import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { activityLabel, passEnd } from "./activityLabel";
 import { errorBannerPresentation } from "./errorBannerPresentation";
+import { TrialEndCard } from "./TrialEndCard";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -94,6 +95,10 @@ interface Props {
   error: string | null;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
+  /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
+  trialEndCard?: import("../../src/protocol").TrialEndCardView | null;
+  /** TUX-COND-07 — the card's Primary. The host opens the start page's pass list; nothing else does. */
+  onTrialEndCardPasses?: () => void;
   canRetryLast: boolean;
   sendPending?: boolean;
   onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
@@ -1199,7 +1204,9 @@ export function ChatPanel(props: Props) {
           />
         )}
 
-        {error && (
+        {error && props.trialEndCard && props.onTrialEndCardPasses ? (
+          <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} />
+        ) : error && (
           <ErrorBanner
             message={error}
             requestId={props.errorRequestId}

@@ -173,6 +173,23 @@ export interface CoachInfo {
  * sides updated together.
  */
 /** Kept in this file (not in lessonBinding.ts) because the webview build type-checks protocol.ts and must not follow Node-side imports. */
+/**
+ * TUX-COND-07 — what the inline end-of-trial card shows. Built by the host (`trialEndCard.ts`)
+ * from the Service catalogue; the webview only renders it. No price or count is ever made up here.
+ */
+export interface TrialEndCardView {
+  ending: "exhausted" | "expired";
+  title: string;
+  facts: string[];
+  /** The one Primary. Pressing it is the only way the purchase view opens (REQ-L12 ①). */
+  primary: string;
+  /** The escape: closes the card, nothing else. */
+  escape: string;
+  /** The catalogue pass whose facts are shown. */
+  productId: string;
+  /** Title and facts as one line, for the banner fallback and screen readers. */
+  text: string;
+}
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
@@ -185,6 +202,13 @@ export interface ResolvedProfile {
   activity_kind?: "trial" | "personal" | "classroom";
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
+  /**
+   * TUX-COND-07 — the Service advertises the inline end-of-trial card for this trial seat
+   * (`HPS_TRIAL_END_CARD === "enabled"` on the Service). Absent: today's behaviour. `product_id`
+   * optionally names the catalogue pass whose facts the card shows. Presentation only; parsed
+   * defensively by `trialEndCard.parsePassOffer`.
+   */
+  pass_offer?: { end_card?: boolean; product_id?: string };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -512,6 +536,8 @@ export type WebviewMessage = (
   | { type: "openSettings" }
   | { type: "setToken" }
   | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
+  /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
+  | { type: "trialEndCardPasses" }
   | { type: "installUpdate" }              // #72: user clicked "Install Now" on update banner
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
   | { type: "clearHistory" }
@@ -711,7 +737,7 @@ export type HostMessage = (
       /** When error — the Korean sentence the server produced. */
       message?: string;
     }
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string }
+  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; trialEndCard?: TrialEndCardView }
   | { type: "actionResult"; requestId: string; approved: boolean }
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the
