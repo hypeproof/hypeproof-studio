@@ -386,6 +386,8 @@ export class StartPage {
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
         series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
+    // studio-funnel-events — the pass offer is on screen: the choice list shows it while no activity card is.
+    if (this.panel && state.purchase?.available && !state.profile) this.chat.funnelEmit?.({ type: "offer_viewed", surface: "start_page" });
     await this.panel?.webview.postMessage({ type: "startState", state });
   }
 
@@ -418,6 +420,9 @@ export class StartPage {
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") {
       void this.accounts?.refreshView(); await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
+    // studio-funnel-events — the start-page pass offer (Service type offer_*, surface start_page).
+    if (msg.type === "purchaseOpen") this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" });
+    if ((msg.type === "purchaseHide" || msg.type === "purchaseCancel") && !this.order) this.chat.funnelEmit?.({ type: "offer_dismissed", surface: "start_page" });
     if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }

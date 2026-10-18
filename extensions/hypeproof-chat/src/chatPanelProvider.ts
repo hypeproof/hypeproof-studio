@@ -215,6 +215,7 @@ import {
   coachRitualDoneKeyForCohort,
   stateBucketId,
   extractCohortIdUnverified,
+  decodeTokenPayloadUnverified,
   browserToolLogLine,
   AiDisclosureGate,
   sdkFallbackLogLine,
@@ -241,6 +242,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import { FunnelReporter, entryOutcome, funnelOs, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
   ArtifactChangeGate,
   startHeartbeat,
@@ -1858,6 +1860,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private lastActivityAt = Date.now();
   private heartbeat: HeartbeatPinger | null = null;
+  /**
+   * studio-funnel-events — App funnel events on the Service's grant-scoped POST /v1/trial/events.
+   * Off until a GET probe of that route answers (Service flag HPS_OPEN_TRIAL); never /v1/trace/event.
+   */
+  private readonly funnel = new FunnelReporter({
+    send: async (url, token, body) => {
+      const version = this.context.extension?.packageJSON?.version;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          ...(typeof version === "string" && version ? { "x-hps-client-version": version } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      });
+      return res.status;
+    },
+    log: (line) => this.logChannel?.appendLine(line),
+  });
+  /** The seat token found at the first profile read of this process (entry outcome `reused` vs `granted`). */
+  private funnelStartupToken: string | null | undefined = undefined;
+  /** The token whose /v1/trial/events probe has run (or is running); null = none. */
+  private funnelProbedToken: string | null = null;
   private readonly artifactGate = new ArtifactChangeGate();
 
   constructor(
@@ -2716,8 +2743,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     const token = await this.context.secrets.get(TOKEN_KEY);
+    if (this.funnelStartupToken === undefined) this.funnelStartupToken = token ?? null;
     if (!token) {
       this.lastProfileFailure = null;
+      // No seat yet (open entry before a grant): funnel events wait in memory.
+      this.funnel.setTarget(undefined);
       return null;
     }
 
@@ -2759,7 +2789,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.nativeHistoryScope=(p?.access_identity?.kind==='account')?p.access_identity.scope:(p?.observation||this.activeCohortId==='studio-native-trial')?'native-'+(p?.observation?.scope??createHash('sha256').update(token).digest('hex')):null;
         // Task E — a resolved profile means we have a usable token; start the
         // chat-independent ping. Failures back off inside the pinger.
-        if(p?.access_identity?.kind!=='account')this.startLiveness();else this.stopLiveness();
+        // studio-funnel-events — a trial grant whose funnel route is on never posts to the
+        // session-only /v1/trace/event; everything else keeps its liveness exactly as before.
+        if(p?.access_identity?.kind!=='account' && usesTraceRoute(this.funnel.active && this.funnelProbedToken===token, decodeTokenPayloadUnverified(token)))this.startLiveness();else this.stopLiveness();
+        void this.refreshFunnelTarget(p, token, proxyUrl);
         await this.migrateLegacyStateForActiveCohort();
         // Apply tone-appropriate labels to the preview panel (#159).
         const labels = labelsForProfile(p);
@@ -2865,6 +2898,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // rejection — status 0 makes the pinger back off and retry rather than
     // stopping for good.
     if (!token) return { ok: false, status: 0 };
+    // studio-funnel-events — the trace route refuses a trial grant (403 session_inactive); do not send.
+    if (!usesTraceRoute(this.funnel.active && this.funnelProbedToken === token, decodeTokenPayloadUnverified(token))) return { ok: false, status: 0 };
     const version = this.context.extension?.packageJSON?.version;
     try {
       const res = await fetch(`${proxyUrl.replace(/\/$/, "")}/trace/event`, {
@@ -2897,6 +2932,49 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       },
     });
     this.context.subscriptions.push({ dispose: () => this.stopLiveness() });
+  }
+
+  /** studio-funnel-events — one App funnel event; validated, whitelisted and fire-and-forget. */
+  funnelEmit(event: unknown): void {
+    this.funnel.emit(event);
+  }
+
+  /**
+   * studio-funnel-events — point the reporter at the Service route for this seat.
+   * Not a trial grant → off. A trial grant → GET /v1/trial/events once per token; only a
+   * `hps-trial-funnel/1` answer turns it on (404 while the Service flag is off). A network
+   * failure leaves it "unknown" so the next profile read probes again. Never throws.
+   */
+  private async refreshFunnelTarget(p: ResolvedProfile | null, token: string, proxyUrl: string): Promise<void> {
+    try {
+      if (!p) { this.funnel.setTarget(undefined); return; }
+      const payload = decodeTokenPayloadUnverified(token);
+      if (!isTrialGrantToken(payload)) { this.funnelProbedToken = null; this.funnel.setTarget(null); return; }
+      if (this.funnelProbedToken === token) return;
+      this.funnelProbedToken = token;
+      const url = trialEventsUrl(proxyUrl);
+      let probe: ReturnType<typeof parseTrialEventsProbe>;
+      try {
+        const res = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
+        probe = parseTrialEventsProbe(res.status, res.status === 200 ? await res.json().catch(() => null) : null);
+      } catch {
+        this.funnelProbedToken = null;
+        return;
+      }
+      if (await this.context.secrets.get(TOKEN_KEY) !== token) return;
+      if (!probe) { this.funnel.setTarget(null); return; }
+      this.funnel.setTarget({ url, token, events: probe.events });
+      if (p.access_identity?.kind !== 'account') this.stopLiveness();
+      const version = this.context.extension?.packageJSON?.version;
+      this.funnel.emit({
+        type: "trial_entry",
+        outcome: entryOutcome({ account: p.access_identity?.kind === 'account' || typeof payload?.personal_account === "string", token, startupToken: this.funnelStartupToken }),
+        app_version: typeof version === "string" ? version : undefined,
+        os: funnelOs(process.platform),
+      });
+    } catch (err) {
+      this.logChannel?.appendLine(`[funnel] target not set: ${err instanceof Error ? err.message : "unknown"}`);
+    }
   }
 
   stopLiveness(): void {
@@ -5064,6 +5142,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const toolLabels = new Map<string, string>();
       // .html paths Written/Edited during an SDK turn (tool_use id → absolute path) — previewed when the tool_result succeeds.
       const htmlWrites = new Map<string, string>();
+      const funnelTools = new Map<string, ToolResultKind>();
       // The "building the next action" notice line (the silent stretch between a tool
       // result and the next call).
       let pendingShown = false;
@@ -5111,6 +5190,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.mcpBrowser?.crNewTurn();
       const onActivity = (a: import("./sdkCoachHelpers").SdkActivity) => {
         webActivity.observe(a);
+        // studio-funnel-events — first write/edit/preview/publish result (kind + ok only).
+        if (a.kind==='tool_use') { const k = funnelToolKind(a.name); if (k) funnelTools.set(a.id, k); }
+        if (a.kind==='tool_result' && funnelTools.has(a.id)) { this.funnel.emit({ type: "trial_tool_result", kind: funnelTools.get(a.id), ok: !a.isError }); funnelTools.delete(a.id); }
         if (a.kind==='tool_use') this.crSdkResults.onToolUse(a.id, a.name, this.isCurriculumRuntimeEnabled());
         if (observation && (a.kind==='tool_use' || a.kind==='approval')) {
           try { observation.toolRequest(streamId,a.id,`${a.name}(${summarizeToolInput(a.name,a.input,300,this.resolveCoachCwd())})`); this.persistObservation(observation); }
