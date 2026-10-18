@@ -55,11 +55,12 @@ export type ExecFileFn = (
 ) => Pick<ChildProcess, "stdout" | "stderr" | "stdin" | "kill">;
 
 /**
- * `! First copy your one-time code: ABCD-1234`. Anchored on the label, as the github-repo
- * skill learned the hard way: grabbing any 8-character token from the log can read out a
- * different string and send the participant to type the wrong code.
+ * gh prints either `! First copy your one-time code: ABCD-1234` or, when it copies the
+ * code itself, `! One-time code (ABCD-1234) copied to clipboard`. Match the surrounding
+ * label rather than an arbitrary code-shaped string elsewhere in the output.
  */
 export const DEVICE_CODE_PATTERN = /one-time code:\s*([A-Z0-9]{4}-[A-Z0-9]{4})/;
+const COPIED_DEVICE_CODE_PATTERN = /One-time code \(([A-Z0-9]{4}-[A-Z0-9]{4})\) copied to clipboard\b/;
 const DEVICE_URI_PATTERN = /(https:\/\/github\.com\/login\/device)/;
 export const DEFAULT_VERIFICATION_URI = "https://github.com/login/device";
 
@@ -199,7 +200,7 @@ export function createGhCliAuthProvider(opts: GhCliOptions): GhCliAuthProvider {
         const onData = (chunk: unknown) => {
           output += String(chunk);
           if (delivered) return;
-          const m = DEVICE_CODE_PATTERN.exec(output);
+          const m = DEVICE_CODE_PATTERN.exec(output) ?? COPIED_DEVICE_CODE_PATTERN.exec(output);
           if (!m) return;
           delivered = true;
           clearTimeout(codeTimer);

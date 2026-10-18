@@ -14,6 +14,7 @@
 // surfacing a raw error to the student (REQ-M7).
 
 import { sdkPromptWithImages } from "./visionInput.ts";
+import { canonicalizeExistingPath } from "./workspaceRouting.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -318,22 +319,7 @@ function coachVisibleWorkspaceFiles(
  * EXISTING ancestor (target may not exist yet — new-file writes) and re-append
  * the tail. Twin of chatPanelProvider.canonicalizeForCompare.
  */
-function canonicalizeFsPath(p: string): string {
-  let base = path.resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? fs.realpathSync(base)
-        : path.join(fs.realpathSync(base), ...tail.reverse());
-    } catch {
-      const parent = path.dirname(base);
-      if (parent === base) return path.resolve(p);
-      tail.push(path.basename(base));
-      base = parent;
-    }
-  }
-}
+const canonicalizeFsPath = canonicalizeExistingPath;
 
 async function loadSdk(): Promise<AgentSdkModule> {
   // #282 W4b — prefer the vendored SDK JS under <dist>/vendor (packaged

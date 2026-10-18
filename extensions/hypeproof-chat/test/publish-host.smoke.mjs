@@ -239,4 +239,80 @@ ok("budget: below the stall watchdog");
   ok("button: chat header only, profile gate only, token re-checked per press");
 }
 
+// Exercise the actual button and chat-provider adapter, replacing only the publishing
+// pipeline so a retry can be held at the point where stale feedback must be gone.
+{
+  const { build } = await import("esbuild");
+  const { createRequire } = await import("node:module");
+  const vm = await import("node:vm");
+  const require = createRequire(import.meta.url);
+  const bundle = await build({
+    entryPoints: [new URL("../src/chatPanelProvider.ts", import.meta.url).pathname],
+    bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false,
+  });
+  let progressCount = 0;
+  let informationPick;
+  const dialogs = [], copied = [], opened = [];
+  const vscode = {
+    ProgressLocation: { Notification: 15 },
+    window: {
+      withProgress: async (_options, task) => { progressCount++; return task({ report() {} }); },
+      showWarningMessage: async () => { assert.fail("Publish failures must not leave an unmanaged warning toast"); },
+      showInformationMessage: async (...args) => { dialogs.push(args); return informationPick; },
+    },
+    env: { clipboard: { writeText: async text => copied.push(text) }, openExternal: async uri => opened.push(uri) },
+    Uri: { parse: value => value },
+  };
+  const mod = { exports: {} };
+  vm.runInNewContext(bundle.outputFiles[0].text, {
+    module: mod, exports: mod.exports, require: id => id === "vscode" ? vscode : require(id),
+    console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder,
+  });
+  const panel = Object.create(mod.exports.ChatPanelProvider.prototype);
+  const messages = [], transcript = [];
+  Object.assign(panel, {
+    cachedProfile: profile("website", { publishing: ON }),
+    context: { globalState: { get: (_key, fallback) => fallback, update: async () => {} } },
+    hasActiveStream: () => false,
+    post: async message => messages.push(message),
+    postAppReply: async text => transcript.push(text),
+  });
+  const publisher = panel.sitePublisher();
+  const failure = { ok: false, verified: false, steps: [], error: { code: "auth", message_ko: "GitHub에 로그인되어 있지 않아요.", next_action_ko: "화면의 여덟 글자 코드로 GitHub 로그인을 마쳐 주세요." } };
+  publisher.run = async () => failure;
+  await publisher.runFromButton();
+  assert.match(panel.pendingPageNotice, /GitHub에 로그인되어 있지 않아요/);
+  assert.match(transcript[0], /GitHub에 로그인되어 있지 않아요/);
+  assert.equal(dialogs.length, 0, "failure does not become a modal or an unmanaged toast");
+
+  let finish;
+  publisher.run = () => new Promise(resolve => { finish = resolve; });
+  const retry = publisher.runFromButton();
+  assert.equal(panel.pendingPageNotice, "", "retry clears its old failure before the pending operation completes");
+  assert.equal(messages.at(-1).label, "", "the mounted webview receives the clear, too");
+  const beforeDuplicate = progressCount;
+  await publisher.runFromButton();
+  assert.equal(progressCount, beforeDuplicate, "an active attempt receives no second progress or busy failure");
+  finish({ ok: true, verified: false, steps: [], repo_url: "https://github.com/example/dental-demo" });
+  await retry;
+  assert.match(panel.pendingPageNotice, /아직 주소가 열리는 것을 확인하지 못했어요/);
+  assert.match(transcript.at(-1), /https:\/\/github.com\/example\/dental-demo/, "repository remains accessible in the transcript");
+
+  panel.postPageNotice("다른 페이지를 첨부했어요.");
+  const next = publisher.runFromButton();
+  assert.equal(panel.pendingPageNotice, "다른 페이지를 첨부했어요.", "retry preserves a newer unrelated notice");
+  finish({ ok: true, verified: true, steps: [], url: "https://example.github.io/dental-demo/" });
+  informationPick = "주소 복사";
+  await next;
+  assert.equal(copied.at(-1), "https://example.github.io/dental-demo/");
+
+  informationPick = "코드 복사하고 GitHub 열기";
+  await publisher.showDeviceCode("ABCD-1234", "https://github.com/login/device");
+  assert.equal(dialogs.at(-1)[0], "GitHub 코드: ABCD-1234");
+  assert.equal(dialogs.at(-1)[1].modal, true);
+  assert.equal(copied.at(-1), "ABCD-1234");
+  assert.equal(opened.at(-1), "https://github.com/login/device");
+  ok("button retry: clears owned feedback immediately, keeps newer notices and transcript links, ignores duplicates; code modal and success actions retained");
+}
+
 console.log("\n✓ publish-host smoke 통과");

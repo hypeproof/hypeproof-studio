@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import type { ActivityRecord } from './activityConnections';
-import { activityService } from './activityConnections';
+import { activityService, canonicalRoot } from './activityConnections';
 import { historyKeyForCohort } from './chatPanelHelpers';
 import { isSameLocation } from './workspaceRouting';
 
@@ -15,13 +15,12 @@ import { isSameLocation } from './workspaceRouting';
  * learner's window would reload forever mid-lecture.
  */
 export const WORKSPACE_SWITCH_ATTEMPT_KEY = 'hypeproofChat.workspaceSwitchAttempt';
-export const INITIAL_LAYOUT_KEY = 'hypeproofChat.initialFilesLayout';
 export const RESUME_MAX_AGE_MS = 10 * 60_000;
 export interface ActivityResume {
   version: 1; id: string; service: string; workspace: string; ref: string; at: number;
   state?: Record<string, unknown>;
 }
-const canonical = (root: string) => fs.realpathSync(root);
+const canonical = canonicalRoot;
 export function resumeKey(root: string): string {
   let physical: string;
   try { physical = canonical(root); } catch { physical = path.resolve(root); }
@@ -39,13 +38,16 @@ export function resumeDecision(marker: ActivityResume | undefined, record: Activ
   return now - marker.at >= RESUME_MAX_AGE_MS ? 'expired' : 'valid';
 }
 
-/** The shell persists later layout choices. Only a genuinely new profile gets our default. */
-export async function initializeFilesLayout(context: vscode.ExtensionContext, execute: (command: string) => Thenable<unknown>): Promise<void> {
-  if (context.globalState.get(INITIAL_LAYOUT_KEY)) return;
-  const established = context.globalState.keys().some(key => key !== INITIAL_LAYOUT_KEY) || context.workspaceState.keys().length > 0 ||
-    (await context.secrets.keys()).some(key => key === 'hypeproofChat.workshopToken' || key.startsWith('hps.activity.credential.'));
-  await context.globalState.update(INITIAL_LAYOUT_KEY, true);
-  if (!established) await execute('workbench.view.explorer');
+/** Start each launch/folder activation closed, including a restored workspace layout. */
+export async function initializeFilesLayout(execute: (command: string) => Thenable<unknown>): Promise<void> {
+  await execute('workbench.action.closeSidebar');
+}
+
+/** Browser previews belong to one session; leave later preview requests alone. */
+export async function closeRestoredBrowserTabs(tabs: readonly Pick<vscode.BrowserTab, 'close'>[]): Promise<void> {
+  const results = await Promise.allSettled([...tabs].map(async tab => { await tab.close(); }));
+  if (results.some(result => result.status === 'rejected'))
+    console.warn('HypeProof: could not close a restored browser preview tab.');
 }
 
 function continuityKeys(scope: string): string[] {
