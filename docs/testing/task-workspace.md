@@ -67,3 +67,34 @@ fixture's `/fixture-controls` page supplies deterministic busy, new-source and
 one-shot failed-write controls for independent review; `/?theme=light` supplies a
 light theme. Drawer focus, error recovery and personal/classroom separation are
 required regression controls, not aesthetic scores inferred from test counts.
+
+
+## Chat reference acceptance CG-IMPL-R1
+
+| ID | Required positive and negative controls | Evidence boundary |
+| --- | --- | --- |
+| CG-01 | Compact 52–64px at desktop; wrapped/restored content expands on the same textarea; Send/Stop and transcript remain visible in a 400px-high window. | Built React geometry and independent pixels |
+| CG-02 | Supported selection changes host request/tool set; unsupported/grant-revoked/invalid mode cannot execute or fall back; stable retry identity and paused mixed-mode draft survive restart. | Host/SDK event seams; real account separately |
+| CG-03 | Citation preview, pin, acknowledged open, repeat-open reuse and exact-trigger return; reject forged request/URL/task, unsafe URL, stale open and failed focus. | Actual task handler + mocked browser, native pixels separately |
+| CG-04 | Enter/Shift+Enter/composition, queue, Stop, errors and repeated dispatch preserve text and mode without an unintended request. | UI events and actual storage |
+| CG-05 | Light/dark at 320/390/1280/1440px, source modal focus loop, 44px targets, quiet real-state feedback, reduced motion, scroll/caret continuity. | Independent rendered and interactive review |
+| CG-06 | Existing shell reused, changed layers compile, artifact digests and exact source revision bind native run; remote PR checks and policy gates separate. | Build/dev app/CI, not customer approval |
+
+Additional reproducible checks:
+
+```bash
+node --experimental-strip-types e2e/task-workspace/chat-reference.mjs
+```
+
+This scenario records screenshots, a browser video and a result ledger. It uses
+synthetic tool availability and a controlled model seam to inspect the exact
+request sent by the real UI. It does not prove that a model performed a search.
+Host tests must independently exercise current grant/runtime checks. SDK citation
+extraction accepts matched successful typed tool outputs and rejects model prose,
+failed or denied tool results and untrusted URL shapes. Physical OS Korean IME,
+Windows, live account search and signed updater remain separately named rows.
+
+The independent reviewer records any material gap as a concrete scenario with
+expected/observed behavior. A new code/acceptance revision addresses it and reruns
+only affected checks before final review. Test counts or average aesthetic scores
+cannot cancel an unresolved defect.

@@ -1,3 +1,4 @@
+import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
 import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage } from "../../src/protocol";
 import {
@@ -101,7 +102,7 @@ type Action =
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
   | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string }
-  | { type: "userSent"; text: string; images?: string[] }
+  | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
 
@@ -265,9 +266,10 @@ function reducer(state: State, action: Action): State {
           items: [
             ...state.timeline.items,
             {
-              id: `local-${Date.now()}`,
+              id: action.id ?? `local-${Date.now()}`,
               role: "user",
               content: action.text,
+              ...(action.toolMode ? { toolMode: action.toolMode } : {}),
               createdAt: Date.now(),
               ...(action.images && action.images.length > 0 ? { images: action.images } : {}),
             },
@@ -361,16 +363,29 @@ export function App() {
   // 전에 role:"tool" 이 걸러진다(chatTimeline.modelHistory).
   const messages = state.timeline.items;
 
-  const send = (text: string, images?: string[], imports?: Array<{ object_id: string; revision: number; hash16: string }>, attachments?: Array<{ id: string }>) => {
+  const pendingSend = useRef(false);
+  const [sendPending, setSendPending] = useState(false);
+  useEffect(() => onHostMessage(msg => {
+    if (['streamStart', 'inputRejected', 'streamError', 'streamEnd', 'streamStopped'].includes(msg.type)) {
+      pendingSend.current = false; setSendPending(false);
+    }
+  }), []);
+  useEffect(() => { pendingSend.current = false; setSendPending(false); }, [state.config?.activity?.id, state.config?.taskWorkspace?.activeTaskId]);
+  const beginRequest = () => {
+    if (pendingSend.current || state.streamId) return false;
+    pendingSend.current = true; setSendPending(true); return true;
+  };
+  const send = (text: string, images?: string[], imports?: Array<{ object_id: string; revision: number; hash16: string }>, attachments?: Array<{ id: string }>, toolMode: TurnToolMode = 'auto') => {
     const trimmed = text.trim();
     const hasImages = !!images && images.length > 0;
     const hasAttachments = !!attachments && attachments.length > 0;
-    if ((!trimmed && !hasImages && !hasAttachments) || state.streamId) return;
+    if ((!trimmed && !hasImages && !hasAttachments) || !beginRequest()) return false;
     // D-028 — only the stage ids go to the host. The photos are not put on the bubble as
     // images (a retry would send those to the model); the host answers with the saved paths,
     // which are appended to this message (attachedImagesSaved).
-    dispatch({ type: "userSent", text: trimmed, images });
-    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
+    const userMessageId = `local-${crypto.randomUUID()}`;
+    dispatch({ type: "userSent", text: trimmed, images, toolMode, id: userMessageId });
+    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images, ...(imports?.length ? { imports } : {}), ...(hasAttachments ? { attachments: attachments!.map((a) => a.id) } : {}) });
   };
 
   // cr-verify — the host recorded the start or fix request; the student's own sentence goes
@@ -464,18 +479,19 @@ export function App() {
     />
   ) : null;
 
-  const retry = (prompt: string) => {
-    if (state.streamId) return;
-    // Re-send the same user prompt to get a fresh assistant variant.
-    dispatch({ type: "userSent", text: prompt });
-    postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages });
+  const retry = (prompt: string, source?: ChatMessage) => {
+    if (!beginRequest()) return;
+    const toolMode = source?.toolMode ?? 'auto';
+    const userMessageId = `local-${crypto.randomUUID()}`;
+    dispatch({ type: "userSent", text: prompt, toolMode, id: userMessageId, images: source?.images });
+    postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages, toolMode, sourceMessageId: source?.id, userMessageId, images: source?.images });
   };
 
   // S-04 (#48): "다시 보내기" on a stream error reuses the LAST user prompt
   // that's already in history. The worker idempotently writes turn rows so
   // a retry doesn't double-count.
   const retryLast = () => {
-    if (state.streamId) return;
+    if (state.streamId || pendingSend.current) return;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
       if (m && m.role === "user") {
@@ -485,7 +501,8 @@ export function App() {
         // the in-memory message (single-shot, REQ-C11), which is exactly what a
         // same-session retry needs.
         const images = m.images && m.images.length > 0 ? m.images : undefined;
-        postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, images });
+        if (!beginRequest()) return;
+        postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt: m.content, history: messages, images, toolMode: m.toolMode ?? 'auto', sourceMessageId: m.id, userMessageId: m.id });
         return;
       }
     }
@@ -579,6 +596,7 @@ export function App() {
         errorRunbookUrl={state.errorRunbookUrl}
         canRetryLast={hasLastUserPrompt && !state.streamId}
         onSend={send}
+        sendPending={sendPending}
         onRetry={retry}
         onRetryLast={retryLast}
         onDismissError={dismissError}

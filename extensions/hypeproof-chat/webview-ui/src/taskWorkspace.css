@@ -89,3 +89,16 @@
   .tw-conversation .hps-messages { padding: 15px; }
   .tw-skip { left: 10px; }
 }
+
+/* Source inspection keeps one panel and leaves the conversation tree mounted. */
+.tw-source-backdrop { position: absolute; inset: 0; z-index: 2; background: rgb(0 0 0 / 38%); }
+.tw-source-close { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.tw-sources > header { padding-block: 7px; }
+.tw-source-list button { min-height: 44px; }
+.tw-source-empty > span > svg { width: 28px; height: 28px; }
+.tw-sources .tw-source-policy { line-height: 1.7; }
+.tw-workspace .tw-sources-toggle, .tw-workspace .tw-rail-toggle, .tw-workspace .tw-title-button, .tw-workspace .tw-new, .tw-workspace .tw-quiet { min-height: 44px; }
+.tw-sources .tw-source-detail { padding-top: 20px; }
+@media (prefers-reduced-motion: reduce) {
+  .tw-workspace *, .tw-workspace *::before, .tw-workspace *::after { scroll-behavior: auto !important; }
+}

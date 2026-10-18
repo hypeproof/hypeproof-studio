@@ -7,9 +7,18 @@ import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 
-export async function createTaskHarness(root, onMessage = () => {}, { profile = null } = {}) {
+export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
-  const vscode = { ViewColumn: { Beside: 2 }, window: { openBrowserTab: async (url, options) => opened.push({ url, options }) }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) } };
+  const browserState = { failOpen: false, failReturn: false, tabs: [], commands: [] };
+  const vscode = { ViewColumn: { One: 1, Beside: 2 },
+    commands: { executeCommand: async name => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push(name); } },
+    window: { browserTabs: browserState.tabs, openBrowserTab: async (url, options) => {
+      if (browserState.beforeOpen) await browserState.beforeOpen();
+      if (browserState.failOpen) throw Error('Synthetic browser open failure');
+      opened.push({ url, options });
+      const tab = { url, title: new URL(url).hostname, close: async () => { const at = browserState.tabs.indexOf(tab); if (at >= 0) browserState.tabs.splice(at, 1); } };
+      browserState.tabs.push(tab); return tab;
+    } }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) } };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder, crypto: webcrypto });
   const { ChatPanelProvider, ActivityConnections, TaskWorkspaceStore } = module.exports;
   const activity = { id: 'synthetic-personal-a', workspace: root, kind: 'personal', name: '내 작업' };
@@ -22,13 +31,13 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   const h = Object.create(ChatPanelProvider.prototype);
   Object.assign(h, { context, taskWorkspace: { activityId: activity.id, store }, taskChanging: false, connectionChanging: false, draftWrites: Promise.resolve(), activeStreams: new Map(), pendingSends: 0, elementQueue: { queued: null }, aiDisclosure: { noticeForReady: () => null }, postInbox: async () => {}, postLearningState: async () => {} });
   const source = { postMessage: async message => { const copy = JSON.parse(JSON.stringify(message)); posts.push(copy); onMessage(copy); return true; } };
-  h.editorChat = { webview: source };
+  h.editorChat = { webview: source, reveal: () => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push('editorChat.reveal'); } };
   h.postConfig = async () => h.post({ type: 'config', config: {
     proxyUrl: 'http://127.0.0.1/v1', model: 'fixture-no-model', hasToken: true,
     activity: { ...activity, verified: true }, activityDraft: store.getDraft(), taskWorkspace: store.getView(),
-    coach: { name: 'HypeProof', personality: '', configured: true }, profile,
+    coach: { name: 'HypeProof', personality: '', configured: true }, profile, turnTools,
   } });
-  return { h, store, source, opened, posts, connections, activity,
+  return { h, store, source, opened, posts, connections, activity, browserState,
     handle: message => h.handleMessage(message, source),
     scoped: message => ({ ...message, activityId: activity.id, taskId: store.getView().activeTaskId }),
   };

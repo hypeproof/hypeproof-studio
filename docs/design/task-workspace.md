@@ -88,3 +88,35 @@ older content preserves the viewport; an explicit latest-message control or a
 new send resumes following. Copy confirmation requires a successful clipboard
 write; rejection remains visible. Controls work with keyboard and touch, without
 hover-only actions. Existing Korean IME, queued-message and stop behavior remain.
+
+
+## Reference interaction revision CG-IMPL-R1
+
+Reuse the existing React webview, host task store and Electron browser. A single
+textarea changes grid placement between compact and expanded states; it never
+remounts when a mode is selected. The tools menu lives above the composer with
+keyboard navigation, Escape and explicit unavailable reasons. Request preferences
+and actual execution logs have different labels. Source previews are metadata
+only; they share the task source panel through React context.
+
+The host owns tool validation and immutable request identity. The UI carries
+`toolMode`, `queuedToolMode` and `queuedPaused`; Stop/error merges only compatible
+modes and otherwise retains both texts separately. Retry points to the original
+user message and cannot borrow the current draft selection. Explicit search is
+supported only on an eligible SDK route; local subscription/proxy routes remain
+unavailable until their existing capability contracts support it. No funding or
+Service permission is widened by this UI.
+
+The source panel keeps an ephemeral preview separate from persisted pin state.
+A source request has a task ID, URL and random request ID. Native acknowledgment
+must match all three. Browser opening is not page-load proof; native acceptance
+must inspect actual document pixels separately. Return targets the initiating
+chat surface, then the exact citation control. A saved reading anchor compensates
+for the wide layout changing width; narrow layouts are modal and inert the main
+conversation while open. Only a browser tab created by this source flow may be
+reused or replaced, and a user-navigated tab is relinquished.
+
+The new layer introduces no UI framework or full-shell build. Compile only the
+extension and webview, prepare an isolated installed-shell development copy, then
+verify its exact file digests. Record incremental cloud/model spend separately
+from local wall time; synthetic checks incur no model call.

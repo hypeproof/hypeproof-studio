@@ -5628,7 +5628,8 @@
       "owner": "ico1036",
       "depends_on": [
         "ST-REQ-TASK-WORKSPACE",
-        "ST-REQ-CHAT-DETAIL"
+        "ST-REQ-CHAT-DETAIL",
+        "ST-REQ-CHAT-REFERENCE"
       ],
       "sources": [
         {
@@ -5682,6 +5683,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/turnTools.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkWebCitations.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ComposerTools.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CitationPreview.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
         }
       ]
     },
@@ -5692,7 +5708,8 @@
       "depends_on": [
         "ST-REQ-TASK-WORKSPACE",
         "ST-IMP-TASK-WORKSPACE",
-        "ST-REQ-CHAT-DETAIL"
+        "ST-REQ-CHAT-DETAIL",
+        "ST-REQ-CHAT-REFERENCE"
       ],
       "sources": [
         {
@@ -5724,6 +5741,15 @@
         },
         {
           "path": "e2e/task-workspace/chat-details.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/chat-reference.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-source-flow.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
         }
       ]
     },
@@ -5738,6 +5764,20 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Personal chat detail (CP-R1)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHAT-REFERENCE",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Chat reference interaction (CG-IMPL-R1)"
         }
       ]
     }

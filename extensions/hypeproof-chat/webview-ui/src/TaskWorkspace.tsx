@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { ChatMessage } from '../../src/protocol';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
-import { postToHost } from './vscode';
+import { onHostMessage, postToHost } from './vscode';
+import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
+export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 
 interface Props {
@@ -17,11 +19,41 @@ export function TaskWorkspaceFrame(props: Omit<Props, 'view'> & { view?: TaskWor
   return props.view ? <TaskWorkspace {...props} view={props.view} /> : <>{props.children}</>;
 }
 
+interface PreviewSelection { url: string; messageId?: string; scopeKey: string }
+interface SourceRequest {
+  requestId: string;
+  url: string;
+  taskId: string;
+  scopeKey: string;
+  phase: 'opening' | 'opened' | 'returning' | 'failed';
+  trigger: HTMLElement | null;
+  error?: string;
+}
+// Correlate host replies; this identifier does not grant any source authority.
+function sourceRequestId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+interface ReadingPosition {
+  scroller: HTMLElement;
+  anchor?: HTMLElement;
+  offset: number;
+  scrollTop: number;
+  scrollLeft: number;
+  scopeKey: string;
+}
+
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
 export function TaskWorkspace({ view, messages, busy, error, onDismissError, children }: Props) {
   const [filter, setFilter] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [preview, setPreview] = useState<PreviewSelection | null>(null);
+  const [sourceRequest, setSourceRequest] = useState<SourceRequest | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState('');
   const renameButton = useRef<HTMLButtonElement>(null);
@@ -30,24 +62,140 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
   const rail = useRef<HTMLElement>(null);
   const sourcePanel = useRef<HTMLElement>(null);
   const sourceToggle = useRef<HTMLButtonElement>(null);
+  const sourceTrigger = useRef<HTMLElement | null>(null);
+  const requestRef = useRef<SourceRequest | null>(null);
+  const requestTimer = useRef<ReturnType<typeof setTimeout>>();
+  const readingPosition = useRef<ReadingPosition | null>(null);
+  const pendingFocus = useRef<HTMLElement | 'source-title' | null>(null);
   const [viewport, setViewport] = useState(() => window.innerWidth);
   const sourceDialog = sourcesOpen && viewport <= 1050;
   const railDialog = railOpen && viewport <= 700;
+  const scopeKey = JSON.stringify([view.scope, view.activeTaskId]);
   const active = view.tasks.find(task => task.id === view.activeTaskId);
   const sources = useMemo(() => {
-    const byUrl = new Map<string, NonNullable<ChatMessage['citations']>[number]>();
+    const byUrl = new Map<string, Citation>();
     for (const message of messages) for (const source of message.citations ?? []) {
-      if (/^https?:\/\//i.test(source.url)) byUrl.set(source.url, source);
+      if (citationAddress(source.url)) { byUrl.delete(source.url); byUrl.set(source.url, source); }
     }
     return [...byUrl.values()].reverse();
   }, [messages]);
-  const selected = (view.sourceSelection?.pinned && sources.find(s => s.url === view.sourceSelection?.url)) || sources[0];
+  const current = useRef({ scopeKey, taskId: view.activeTaskId, sources });
+  current.current = { scopeKey, taskId: view.activeTaskId, sources };
+  const previewSourceValue = preview?.scopeKey === scopeKey
+    ? (preview.messageId ? messages.find(message => message.id === preview.messageId)?.citations : sources)?.find(source => source.url === preview.url && citationAddress(source.url))
+    : undefined;
+  const pinnedSource = view.sourceSelection?.pinned ? sources.find(source => source.url === view.sourceSelection?.url) : undefined;
+  const selected = previewSourceValue || pinnedSource || sources[0];
+  const pinned = !!selected && pinnedSource?.url === selected.url;
+  const request = sourceRequest?.scopeKey === scopeKey ? sourceRequest : null;
+  const selectedRequest = request?.url === selected?.url ? request : null;
   const blocked = busy || !!view.error;
   const visibleTasks = view.tasks.filter(task => task.title.toLocaleLowerCase().includes(filter.toLocaleLowerCase()));
   const date = useMemo(() => new Intl.DateTimeFormat('ko', { month: 'short', day: 'numeric' }), []);
 
-  useEffect(() => { setRenaming(false); setRailOpen(false); }, [view.activeTaskId]);
-  useEffect(() => { if (renaming) titleInput.current?.focus(); }, [renaming]);
+  const updateRequest = useCallback((next: SourceRequest | null) => {
+    requestRef.current = next;
+    setSourceRequest(next);
+  }, []);
+  const clearRequestTimer = useCallback(() => {
+    if (requestTimer.current) clearTimeout(requestTimer.current);
+    requestTimer.current = undefined;
+  }, []);
+  const rememberReadingPosition = useCallback((preferred?: HTMLElement | null) => {
+    const scroller = main.current?.querySelector<HTMLElement>('.hps-messages');
+    if (!scroller) return;
+    const bounds = scroller.getBoundingClientRect(), top = bounds.top;
+    const preferredBounds = preferred?.getBoundingClientRect();
+    const anchor = preferred && scroller.contains(preferred) && preferredBounds && preferredBounds.bottom > top && preferredBounds.top < bounds.bottom
+      ? preferred : [...scroller.querySelectorAll<HTMLElement>('.hps-msg')].find(element => element.getBoundingClientRect().bottom > top);
+    readingPosition.current = { scroller, anchor, offset: anchor ? anchor.getBoundingClientRect().top - top : 0, scrollTop: scroller.scrollTop, scrollLeft: scroller.scrollLeft, scopeKey: current.current.scopeKey };
+  }, []);
+  const closeSources = useCallback((returnTo?: HTMLElement | null) => {
+    rememberReadingPosition(returnTo ?? sourceTrigger.current);
+    pendingFocus.current = returnTo ?? sourceTrigger.current ?? sourceToggle.current;
+    setSourcesOpen(false);
+    setPreview(null);
+  }, [rememberReadingPosition]);
+  const previewSource = useCallback((citation: Citation, trigger: HTMLElement, messageId?: string) => {
+    const known = (messageId ? messages.find(message => message.id === messageId)?.citations : sources)?.some(source => source.url === citation.url && citationAddress(source.url));
+    if (!known || view.error || !view.activeTaskId) return;
+    rememberReadingPosition(trigger);
+    sourceTrigger.current = trigger;
+    pendingFocus.current = 'source-title';
+    setPreview({ url: citation.url, messageId, scopeKey });
+    setRailOpen(false);
+    setSourcesOpen(true);
+  }, [messages, sources, view.error, view.activeTaskId, scopeKey, rememberReadingPosition]);
+  const awaitSourceResult = useCallback((requestId: string) => {
+    clearRequestTimer();
+    requestTimer.current = setTimeout(() => {
+      const waiting = requestRef.current;
+      if (!waiting || waiting.requestId !== requestId || waiting.scopeKey !== current.current.scopeKey) return;
+      updateRequest({ ...waiting, phase: waiting.phase === 'returning' ? 'opened' : 'failed', error: '처리 결과를 확인하지 못했습니다. 다시 시도해 주세요.' });
+    }, 15000);
+  }, [clearRequestTimer, updateRequest]);
+  const openSource = useCallback((url: string) => {
+    const workspace = current.current;
+    if (!workspace.taskId || view.error || !workspace.sources.some(source => source.url === url) || !citationAddress(url)) return;
+    const waiting = requestRef.current;
+    if (waiting && ['opening', 'returning'].includes(waiting.phase)) return;
+    const next: SourceRequest = { requestId: sourceRequestId(), url, taskId: workspace.taskId, scopeKey: workspace.scopeKey, phase: 'opening', trigger: sourceTrigger.current ?? sourceToggle.current };
+    updateRequest(next);
+    awaitSourceResult(next.requestId);
+    postToHost({ type: 'taskOpenSource', url, requestId: next.requestId, taskId: next.taskId });
+  }, [view.error, updateRequest, awaitSourceResult]);
+  const returnFromSource = () => {
+    const opened = requestRef.current;
+    if (!opened || opened.phase !== 'opened' || opened.scopeKey !== scopeKey || opened.url !== selected?.url) return;
+    updateRequest({ ...opened, phase: 'returning', error: undefined });
+    awaitSourceResult(opened.requestId);
+    postToHost({ type: 'taskReturnFromSource', requestId: opened.requestId, url: opened.url, taskId: opened.taskId });
+  };
+
+  useEffect(() => onHostMessage(message => {
+    if (message.type !== 'sourceOpenResult' && message.type !== 'sourceReturn') return;
+    const pending = requestRef.current, workspace = current.current;
+    if (!pending || pending.scopeKey !== workspace.scopeKey || pending.taskId !== workspace.taskId || message.taskId !== pending.taskId || message.requestId !== pending.requestId || message.url !== pending.url || !workspace.sources.some(source => source.url === pending.url)) return;
+    if (message.type === 'sourceOpenResult') {
+      if (typeof message.opened !== 'boolean') return;
+      clearRequestTimer();
+      updateRequest({ ...pending, phase: message.opened ? 'opened' : 'failed', error: message.opened ? undefined : typeof message.error === 'string' && message.error.trim() ? message.error.slice(0, 500) : '출처를 열지 못했습니다. 다시 시도해 주세요.' });
+    } else if (pending.phase === 'returning' || pending.phase === 'opened') {
+      clearRequestTimer();
+      updateRequest(null);
+      closeSources(pending.trigger);
+    }
+  }), [clearRequestTimer, updateRequest, closeSources]);
+  useLayoutEffect(() => {
+    clearRequestTimer();
+    updateRequest(null);
+    sourceTrigger.current = null;
+    pendingFocus.current = null;
+    readingPosition.current = null;
+    setPreview(null);
+    setSourcesOpen(false);
+    setRenaming(false);
+    setRailOpen(false);
+  }, [scopeKey, clearRequestTimer, updateRequest]);
+  useEffect(() => clearRequestTimer, [clearRequestTimer]);
+  useEffect(() => {
+    if (preview && !previewSourceValue) setPreview(null);
+    if (request && !sources.some(source => source.url === request.url)) { clearRequestTimer(); updateRequest(null); }
+  }, [preview, previewSourceValue, request, sources, clearRequestTimer, updateRequest]);
+  useLayoutEffect(() => {
+    const reading = readingPosition.current;
+    readingPosition.current = null;
+    if (reading?.scopeKey === scopeKey && reading.scroller.isConnected) {
+      if (reading.anchor?.isConnected) reading.scroller.scrollTop += reading.anchor.getBoundingClientRect().top - reading.scroller.getBoundingClientRect().top - reading.offset;
+      else reading.scroller.scrollTop = reading.scrollTop;
+      reading.scroller.scrollLeft = reading.scrollLeft;
+    }
+    const focus = pendingFocus.current;
+    pendingFocus.current = null;
+    const target = focus === 'source-title' ? (sourcePanel.current?.querySelector<HTMLElement>('#task-source-title') ?? sourcePanel.current?.querySelector<HTMLElement>('.tw-source-close')) : focus;
+    if (target?.isConnected) requestAnimationFrame(() => { if (target.isConnected && current.current.scopeKey === scopeKey) target.focus({ preventScroll: true }); });
+  }, [sourcesOpen, preview, scopeKey, sourceRequest?.requestId]);
+  useEffect(() => { if (renaming) titleInput.current?.focus({ preventScroll: true }); }, [renaming]);
   useEffect(() => {
     const resize = () => setViewport(window.innerWidth);
     window.addEventListener('resize', resize);
@@ -57,37 +205,60 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     const dialog = sourceDialog ? sourcePanel.current : railDialog ? rail.current : null;
     if (!dialog) return;
     const restore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const mainWasInert = main.current?.inert ?? false;
+    const railWasInert = rail.current?.inert ?? false;
     if (main.current) main.current.inert = true;
     if (rail.current && sourceDialog) rail.current.inert = true;
     const focusable = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]')].filter(element => element.getClientRects().length > 0);
-    (focusable()[0] ?? dialog).focus();
+    (focusable()[0] ?? dialog).focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (sourceDialog) setSourcesOpen(false); else setRailOpen(false);
+        event.stopPropagation();
+        if (sourceDialog) closeSources(); else setRailOpen(false);
       } else if (event.key === 'Tab') {
         const items = focusable(), first = items[0], last = items.at(-1);
-        if (!first || !last) { event.preventDefault(); dialog.focus(); return; }
-        if (!dialog.contains(document.activeElement) || event.shiftKey && document.activeElement === first || !event.shiftKey && document.activeElement === last) {
-          event.preventDefault(); (event.shiftKey ? last : first).focus();
+        if (!first || !last) { event.preventDefault(); dialog.focus({ preventScroll: true }); return; }
+        const position = items.indexOf(document.activeElement as HTMLElement);
+        if (position === -1 || event.shiftKey && document.activeElement === first || !event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); (event.shiftKey ? last : first).focus({ preventScroll: true });
         }
       }
     };
     dialog.addEventListener('keydown', key);
     return () => {
       dialog.removeEventListener('keydown', key);
-      if (main.current) main.current.inert = false;
-      if (rail.current) rail.current.inert = false;
-      if (restore?.isConnected) restore.focus();
+      if (main.current) main.current.inert = mainWasInert;
+      if (rail.current) rail.current.inert = railWasInert;
+      if (!sourceDialog && restore?.isConnected) restore.focus({ preventScroll: true });
     };
-  }, [sourceDialog, railDialog]);
+  }, [sourceDialog, railDialog, closeSources]);
   const finishRename = () => {
     setRenaming(false);
-    requestAnimationFrame(() => renameButton.current?.focus());
+    requestAnimationFrame(() => renameButton.current?.focus({ preventScroll: true }));
   };
-  const closeSources = () => { setSourcesOpen(false); requestAnimationFrame(() => sourceToggle.current?.focus()); };
+  const toggleSources = () => {
+    if (sourcesOpen) closeSources();
+    else {
+      rememberReadingPosition();
+      sourceTrigger.current = sourceToggle.current;
+      pendingFocus.current = 'source-title';
+      setPreview(null);
+      setSourcesOpen(true);
+      setRailOpen(false);
+    }
+  };
+  const revealRequestError = () => {
+    if (!request) return;
+    const citation = sources.find(source => source.url === request.url);
+    const trigger = request.trigger?.isConnected ? request.trigger : sourceToggle.current;
+    if (citation && trigger) previewSource(citation, trigger);
+  };
 
-  return <div className="tw-workspace" data-sources-open={sourcesOpen} data-rail-open={railOpen}>
+  return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div className="tw-workspace" data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
+    // Escape must work even in the frame before focus reaches the newly opened panel.
+    if (sourcesOpen && event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); closeSources(); }
+  }}>
     <a className="tw-skip" href="#task-conversation">대화로 바로 가기</a>
     <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
@@ -113,25 +284,26 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
           <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') finishRename(); }} />
           <button className="tw-quiet" disabled={!title.trim() || blocked}>저장</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
-        <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={() => { setSourcesOpen(!sourcesOpen); setRailOpen(false); }}>자료{sources.length ? ` ${sources.length}` : ''}</button>
+        <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>
       {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>}</div>}
+      {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
       {busy && <p className="tw-run-note" role="status">작업 중입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</p>}
       <div id="task-conversation" className="tw-conversation" tabIndex={-1}>{children}</div>
     </section>
+    {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}
     <aside ref={sourcePanel} id="task-sources" className="tw-sources" aria-label="작업 자료" role={sourceDialog ? 'dialog' : undefined} aria-modal={sourceDialog || undefined} tabIndex={-1} hidden={!sourcesOpen} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeSources(); } }}>
-      <header><h2>작업 자료</h2><button className="tw-quiet" aria-label="자료 닫기" onClick={closeSources}>×</button></header>
+      <header><h2>작업 자료</h2><button type="button" className="tw-quiet tw-source-close" aria-label="자료 닫기" onClick={() => closeSources()}><SourceIcon kind="close" /></button></header>
+      {request?.error && request.url !== selected?.url && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
+      {request?.phase === 'opening' && request.url !== selected?.url && <p className="cp-other-source-status" role="status">출처 여는 중: {citationAddress(request.url)?.hostname}</p>}
       {selected ? <>
-        <div className="tw-source-detail">
-          <div className="tw-source-domain">{selected.domain}</div><h3>{selected.title || selected.domain}</h3>
-          <p>대화에 인용된 출처입니다. 열면 오른쪽 브라우저에서 확인할 수 있습니다.</p>
-          <button className="tw-open-source" onClick={() => postToHost({ type: 'taskOpenSource', url: selected.url })}>브라우저에서 열기</button>
-          <button className="tw-quiet tw-pin" aria-pressed={!!view.sourceSelection?.pinned} onClick={() => postToHost({ type: 'taskSourceSelection', selection: { url: selected.url, pinned: !view.sourceSelection?.pinned } })}>{view.sourceSelection?.pinned ? '고정 해제' : '이 자료 고정'}</button>
-          <p className="tw-source-policy">{view.sourceSelection?.pinned ? '새 출처가 와도 이 자료를 유지합니다.' : '최근 출처를 따라갑니다.'}</p>
-        </div>
+        <CitationPreview citation={selected} pinned={pinned} otherPinned={!!pinnedSource && !pinned} ephemeral={!!previewSourceValue}
+          opening={selectedRequest?.phase === 'opening'} blocked={request?.phase === 'opening' || request?.phase === 'returning'} opened={selectedRequest?.phase === 'opened' || selectedRequest?.phase === 'returning'} returning={selectedRequest?.phase === 'returning'} error={selectedRequest?.error}
+          onOpen={() => openSource(selected.url)} onReturn={returnFromSource}
+          onPin={() => postToHost({ type: 'taskSourceSelection', selection: { url: selected.url, pinned: !pinned } })} />
         <h3 className="tw-source-list-title">이 작업의 출처</h3>
-        <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button aria-pressed={selected.url === source.url} onClick={() => postToHost({ type: 'taskSourceSelection', selection: { url: source.url, pinned: true } })}><span>{source.title || source.domain}</span><small>{source.domain}</small></button></li>)}</ul>
-      </> : <div className="tw-source-empty"><span aria-hidden="true">↗</span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
+        <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button type="button" aria-pressed={selected.url === source.url} onClick={() => { setPreview({ url: source.url, scopeKey }); pendingFocus.current = 'source-title'; }}><span>{source.title || citationAddress(source.url)?.hostname}</span><small>{citationAddress(source.url)?.hostname}{pinnedSource?.url === source.url ? ' · 고정됨' : ''}</small></button></li>)}</ul>
+      </> : <div className="tw-source-empty"><span aria-hidden="true"><SourceIcon kind="source" /></span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
     </aside>
-  </div>;
+  </div></CitationPreviewContext.Provider>;
 }

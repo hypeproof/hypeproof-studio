@@ -54,12 +54,34 @@ try {
   await chat.locator('.tw-task').filter({ hasText: '이전 대화' }).click();
   await expect(chat.locator('.hps-input textarea')).toHaveValue('앱을 닫아도 남아 있어야 하는 입력');
   checks.push('installed shell create/switch restores draft and migrated transcript');
-  await chat.getByRole('button', { name: /^자료/ }).click();
+  const citation = chat.getByRole('button', { name: /작업 자료 검증.*출처 미리보기/ });
+  await citation.click();
+  await expect(chat.locator('#task-source-title')).toBeFocused();
   await chat.getByRole('button', { name: '이 자료 고정', exact: true }).click();
   await chat.getByRole('button', { name: '브라우저에서 열기', exact: true }).click();
-  await expect.poll(() => ctx.app.evaluate(({ webContents }) => webContents.getAllWebContents().some(contents => contents.getURL().endsWith('/native-source'))), { timeout: 20000 }).toBe(true);
+  await expect(chat.getByRole('button', { name: '대화로 돌아가기', exact: true })).toBeVisible();
+  await expect.poll(() => ctx.app.evaluate(async ({ webContents }) => {
+    const source = webContents.getAllWebContents().find(contents => contents.getURL().endsWith('/native-source'));
+    return source ? source.executeJavaScript('document.body.innerText') : '';
+  }), { timeout: 20000 }).toContain('내장 브라우저에 열린 로컬 출처입니다.');
+  const captureSource = async () => {
+    const encoded = await ctx.app.evaluate(async ({ webContents }) => {
+      const source = webContents.getAllWebContents().find(contents => contents.getURL().endsWith('/native-source'));
+      return (await source.capturePage()).toPNG().toString('base64');
+    });
+    await writeFile(join(output, 'native-source-document.png'), Buffer.from(encoded, 'base64'));
+  };
+  await captureSource();
   await snapshot('native-browser');
-  checks.push('real native BrowserTab opens the task citation');
+  await chat.getByRole('button', { name: '브라우저에서 열기', exact: true }).click();
+  await expect(chat.getByRole('button', { name: '대화로 돌아가기', exact: true })).toBeVisible();
+  expect(await ctx.app.evaluate(({ webContents }) => webContents.getAllWebContents().filter(contents => contents.getURL().endsWith('/native-source')).length)).toBe(1);
+  await chat.getByRole('button', { name: '대화로 돌아가기', exact: true }).click();
+  await expect(chat.locator('#task-sources')).toBeHidden();
+  await expect(citation).toBeFocused();
+  await expect(chat.locator('.hps-input textarea')).toHaveValue('앱을 닫아도 남아 있어야 하는 입력');
+  await snapshot('native-source-return');
+  checks.push('real native browser document rendered, repeated open reuses it, acknowledged return restores exact citation and draft');
   const userDataDir = ctx.userDataDir;
   await ctx.app.close();
   ctx = await launchApp({ reuseUserDataDir: userDataDir, proxyUrl: origin + '/v1', preseedToken: true, stayOnStart: true, preseedCoach: { name: 'HypeProof' } });

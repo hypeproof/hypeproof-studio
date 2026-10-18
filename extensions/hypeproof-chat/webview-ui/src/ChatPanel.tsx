@@ -1,3 +1,6 @@
+import { CitationRack as PersonalCitationRack } from './CitationPreview';
+import type { TurnToolMode } from '../../src/turnTools';
+import { ComposerTools, SelectedTool } from './ComposerTools';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { AccessControl } from './AccessControl';
@@ -92,8 +95,9 @@ interface Props {
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
   canRetryLast: boolean;
-  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[]) => void;
-  onRetry: (prompt: string) => void;
+  sendPending?: boolean;
+  onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
+  onRetry: (prompt: string, source?: ChatMessage) => void;
   onRetryLast: () => void;
   onDismissError: () => void;
   onCancel: () => void;
@@ -249,18 +253,23 @@ const DEFAULT_UX: UxConfig = {
 };
 
 /** Find the user prompt that led to a given assistant message, walking backwards. */
-function userPromptBefore(messages: ChatMessage[], assistantId: string): string | null {
+function userPromptBefore(messages: ChatMessage[], assistantId: string): ChatMessage | null {
   const idx = messages.findIndex((m) => m.id === assistantId);
   if (idx < 0) return null;
   for (let i = idx - 1; i >= 0; i--) {
-    if (messages[i].role === "user") return messages[i].content;
+    if (messages[i].role === "user") return messages[i];
   }
   return null;
 }
 
 export function ChatPanel(props: Props) {
   const { config, messages, streaming, streamingId, error, incomingImage } = props;
-  const [draft, setDraft] = useState(() => draftAfterStop(config?.activityDraft?.text ?? "", config?.activityDraft?.queued ?? null));
+  const saved = config?.activityDraft;
+  const separateQueue = !!saved?.queued && (saved.queuedPaused === true || (saved.queuedToolMode ?? 'auto') !== (saved.toolMode ?? 'auto'));
+  const [draft, setDraft] = useState(() => separateQueue ? saved?.text ?? '' : draftAfterStop(saved?.text ?? '', saved?.queued ?? null));
+  const [toolMode, setToolMode] = useState<TurnToolMode>(saved?.toolMode ?? 'auto');
+  const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
+  const [queuedPaused, setQueuedPaused] = useState(separateQueue);
   const [composing, setComposing] = useState(false);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -272,7 +281,7 @@ export function ChatPanel(props: Props) {
   const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
   const discardedPhotos = useRef(new Set<string>());
   // #416 — the ONE message parked while a turn is running (null = none).
-  const [queued, setQueued] = useState<string | null>(null);
+  const [queued, setQueued] = useState<string | null>(separateQueue ? saved?.queued ?? null : null);
   const [frozen, setFrozen] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   // SX-01/SX-02 — the step currently being viewed. A **view state**. Not a completion judgment.
@@ -354,7 +363,7 @@ export function ChatPanel(props: Props) {
   const [lastImport, setLastImport] = useState<LastImport | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   // A draft that never imported an instructor prompt is saved exactly as before U3: no `imports` key at all.
-  const draftPayload = () => ({text:draft,images:pendingImages,queued,...(imports.length?{imports}:{})});
+  const draftPayload = () => ({text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
   const activityId = config?.activity?.id;
@@ -363,12 +372,20 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
     if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
-  }, [activityId,taskId,draft,pendingImages,queued,imports]);
+  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
       if (msg.type === "inputRejected") {
-        setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
+        const rejectedMode = msg.toolMode ?? 'auto';
+        const current = snapshot.current;
+        if (current.text.trim() && current.toolMode !== rejectedMode) {
+          setQueued(q => q === msg.text ? q : draftAfterStop(q ?? '', msg.text));
+          setQueuedToolMode(rejectedMode); setQueuedPaused(true);
+        } else {
+          setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
+          setToolMode(rejectedMode);
+        }
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
       }
       if (msg.type === "activityFreeze") {
@@ -441,6 +458,7 @@ export function ChatPanel(props: Props) {
   const [worldPending, setWorldPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const imagePicker = useRef<HTMLInputElement>(null);
   useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
   const prevStreamingRef = useRef(streaming);
@@ -503,7 +521,7 @@ export function ChatPanel(props: Props) {
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
-  useGrowingComposer(textareaRef, personalWorkspace, draft);
+  const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
@@ -558,23 +576,24 @@ export function ChatPanel(props: Props) {
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
 
-  const submit = (text?: string) => {
+  const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     const value = (text ?? draft).trim();
-    if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked) return;
-    if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return; }
+    if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
+    if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
     if (personalWorkspace) viewport.toLatest();
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
-    props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined);
+    if (props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode) === false) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
     // The host now owns these files (it moves them into images/), so no discard here.
     setStagedPhotos([]);
     setImgNote(null);
     setRollExpand(null);
+    return true;
   };
 
   // #416 — the turn ended: send the message the participant parked during it.
@@ -584,15 +603,15 @@ export function ChatPanel(props: Props) {
     const prev = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
     // #751 U4 — a turn the instructor cut off hands the parked message back, exactly like the learner's own Stop. Never sent.
-    if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice)) { restoreQueuedToDraft(); return; }
-    if (unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice)) return;
+    if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice || !!error)) { restoreQueuedToDraft(); return; }
+    if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice || !!error)) return;
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
     setQueued(null);
-    submit(text);
+    submit(text, queuedToolMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streaming, queued]);
+  }, [streaming, queued, queuedPaused]);
 
   /**
    * #751 U3 — the learner pressed `초안에 가져오기`. One functional update of the draft: it merges into whatever the draft is
@@ -618,8 +637,15 @@ export function ChatPanel(props: Props) {
 
   /** Stop / cancel-reservation: the parked text goes back to the draft, never away. */
   const restoreQueuedToDraft = () => {
+    if (queued === null) return;
+    if (draft.trim() && toolMode !== queuedToolMode) {
+      setQueuedPaused(true);
+      setImgNote('도구가 다른 메시지는 따로 보관했습니다. 현재 입력을 보낸 뒤 가져오거나, 보관한 메시지를 먼저 보내세요.');
+      return;
+    }
     setDraft((d) => draftAfterStop(d, queued));
-    setQueued(null);
+    setToolMode(queuedToolMode);
+    setQueued(null); setQueuedPaused(false);
   };
 
   // Shared attach path for both clipboard paste (⌘V) and drag-and-drop.
@@ -1256,14 +1282,15 @@ export function ChatPanel(props: Props) {
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".
           <div className="hps-queued" role="status" aria-live="polite">
-            <span className="hps-queued-label">다음에 보낼 메시지</span>
+            <span className="hps-queued-label">{queuedPaused ? '보관한 메시지' : '다음에 보낼 메시지'}{queuedToolMode === 'web-search' ? ' · 웹 검색' : ''}</span>
             <span className="hps-queued-text" title={queued}>{queued}</span>
+            {queuedPaused && !streaming && <button type="button" className="hps-queued-send" disabled={props.sendPending || unavailable || props.sendLocked} onClick={() => { if (submit(queued, queuedToolMode)) { setQueued(null); setQueuedPaused(false); } }}>보내기</button>}
             <button
               type="button"
               className="hps-queued-cancel"
               onClick={restoreQueuedToDraft}
               title="예약 취소 — 입력창으로 되돌려요"
-              aria-label="예약 취소"
+              aria-label={queuedPaused ? "보관한 메시지 입력창으로 가져오기" : "예약 취소"}
             >
               ×
             </button>
@@ -1310,12 +1337,16 @@ export function ChatPanel(props: Props) {
         )}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
+          data-expanded={personalWorkspace && composerExpanded}
         >
+          {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} />}
+          {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
           <textarea
             ref={textareaRef}
             autoFocus
             readOnly={unavailable}
             aria-label={composerLabel(coachName)}
+            aria-describedby={personalWorkspace ? "personal-composer-hint" : undefined}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onPaste={handlePaste}
@@ -1346,6 +1377,8 @@ export function ChatPanel(props: Props) {
               });
               if (decision.action === "ignore") return;
               if (decision.action === "queue") {
+                if (queued !== null && (queuedPaused || queuedToolMode !== toolMode)) { setImgNote('보관한 메시지를 먼저 보내거나 입력창으로 가져와 주세요. 지금 입력한 내용은 그대로입니다.'); return; }
+                setQueuedToolMode(toolMode);
                 setQueued(decision.queued);
                 setDraft("");
                 return;
@@ -1365,8 +1398,9 @@ export function ChatPanel(props: Props) {
             }
             rows={personalWorkspace ? 1 : 3}
           />
+          {personalWorkspace && toolMode === 'web-search' && <SelectedTool locked={queued !== null || !!props.sendPending} onClear={() => { setToolMode('auto'); textareaRef.current?.focus({ preventScroll: true }); }} />}
           <div className="hps-input-buttons">
-            {personalWorkspace && <span className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
+            {personalWorkspace && <span id="personal-composer-hint" className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
             {!streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
               <button
                 onClick={handleRollClick}
@@ -1403,7 +1437,7 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => submit()}
-                disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || stagedPhotos.some((p) => !p.ready)}
+                disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
@@ -1800,7 +1834,7 @@ function MessageItem({
   /** #414 — an activity log is on screen, so the spinner must not invent stages. */
   hasActivity: boolean;
   onRunCode: (html: string) => void;
-  onRetry: (prompt: string) => void;
+  onRetry: (prompt: string, source?: ChatMessage) => void;
   personal?: boolean;
 }) {
   const renderable = useMemo(
@@ -1835,13 +1869,15 @@ function MessageItem({
         {retryPrompt && (
           <button
             className="hps-msg-retry"
-            onClick={() => onRetry(retryPrompt)}
+            onClick={() => onRetry(retryPrompt.content, retryPrompt)}
             title="다른 방식으로 한 번 더 만들기"
+            aria-label="답변 다시 만들기"
           >
-            🔄
+            {personal ? <ChatIcon kind="retry" /> : '🔄'}
           </button>
         )}
       </div>
+      {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       <div className="hps-msg-body">
         {message.role === "assistant" ? (
           <AssistantContent
@@ -1866,7 +1902,7 @@ function MessageItem({
         )}
       </div>
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
-        <CitationRack citations={message.citations} />
+        personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
       {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer content={message.content} />}
     </div>
