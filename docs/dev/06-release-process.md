@@ -67,7 +67,7 @@ Not all parts of this process exist yet. This table shows the state on 2026-10-1
 | Hotfix rules in `hype-pr` and the hotfix issue form | In `main` | hypeproof-harness#326, #1686 |
 | Publish gate (rule 5) | Pull request open | #1683, #1684 |
 | Approval workflow: approval → `v` tag | Not started | — |
-| Smoke credentials for S3 and S4 | Not available | — |
+| Smoke credentials | S4 available; S3 missing as observed 2026-10-16 | #1704 |
 
 Until the approval workflow exists, a member pushes the `v` tag by hand after the approval.
 See [Approval](#approval).
@@ -157,7 +157,7 @@ result of the smoke.
 |---|---|---|
 | S1 | Service `/v1/health` is ok and has a version | — |
 | S2 | Chalk `/health` is ok and has a version | — |
-| S3 | A token reaches its cohort | `HPS_ACCEPTANCE_ISSUER`. Not implemented yet |
+| S3 | A token reaches its cohort | `HPS_ACCEPTANCE_ISSUER`, scoped only to `synthetic-release-acceptance` |
 | S4 | Chat API through `scripts/run-sdk-contract.sh` | `HPS_CANARY_ISSUER` |
 | S5 | CI check-runs on the candidate commit | — |
 
@@ -385,3 +385,20 @@ profile compatibility. If the App changed preview or storage behavior, the rollb
 keep the member's local `~/HypeProofGames` directory. Do not delete generated work.
 
 This rollback process is a recommendation. The team has not confirmed it yet.
+
+### S3 and S5 failure handling
+
+S3 requires an issuer scoped only to the synthetic acceptance cohort/profile, with
+`can_start_session`, `max_session_hours >= 1`, and `max_hours >= 1`. It opens a fresh
+synthetic classroom seat for one hour, checks its served profile and activity binding,
+and closes the session and confirms token revocation in `finally`. It sends no model
+requests. It refuses an existing live session (`force: false`); rerun after that session
+finishes. A cleanup failure is FAIL. There is no administrator-credential fallback.
+The check remains NOT_RUN until the scoped secret is provisioned and does not prove
+App installation or classroom rehearsal.
+
+S5 selects the latest run/attempt for each workflow ID and job name. A superseded
+failure in the same job is retained in GitHub history but does not fail the new result.
+Different workflows with the same job name, missing jobs in newer runs, and external
+checks remain independent. The selected pending run remains NOT_RUN; a selected
+failure remains FAIL. Only the current release-cut run itself is omitted.

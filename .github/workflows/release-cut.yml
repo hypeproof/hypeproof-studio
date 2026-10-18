@@ -65,7 +65,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # Smoke credentials, scoped to non-production cohorts only (docs/dev/06-release-process.md#smoke).
-          # S4 opens a 1 h session on canary-internal; S3 reads its issuer when it is implemented.
+          # S4 opens a 1 h canary session; S3 opens/closes only an idle synthetic acceptance cohort.
           # Without a secret the check reports NOT_RUN. The admin password is never passed here.
           HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
