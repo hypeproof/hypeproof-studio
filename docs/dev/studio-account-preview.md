@@ -65,3 +65,13 @@ candidate's matching bundle declaration, and Windows writes a per-user protocol
 handler pointing to the owned executable/user-data directory. Ordinary preview
 runs do not register any protocol; the official `hypeproof-studio` handler is never
 replaced. `prepare` writes the Mac declaration but does not register the app.
+
+For actual macOS original-window return acceptance, prepare the account app from a
+clean committed source and run `e2e/accounts/mac-return.mjs` with explicit
+`HPS_ACCOUNT_DEV_STATE`, a new `HPS_ACCOUNT_EVIDENCE` directory, and
+`HPS_ACCOUNT_CONFIG` pointing to the private local runtime config. It registers only
+the prepared unique protocol, opens two real Studio workbenches, performs synthetic
+local Service approval, and checks real foreground window IDs for both app-driven
+return and OS URI dispatch. It also verifies background refresh leaves the other
+window focused, then closes its own app and deletes its synthetic account. Google
+OAuth, Windows protocol execution and released builds remain independent checks.

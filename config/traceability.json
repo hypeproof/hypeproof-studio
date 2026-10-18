@@ -5735,6 +5735,9 @@
         },
         {
           "path": "e2e/accounts/mac-preview.mjs"
+        },
+        {
+          "path": "e2e/accounts/mac-return.mjs"
         }
       ]
     },
