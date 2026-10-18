@@ -288,6 +288,25 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
   assert.equal(calls.length, 0, "turning it on later does not resurrect dropped events");
 }
 {
+  // Repeated start-page views before a grant must not crowd out the click (the step this
+  // fix card exists to measure). Positive control: N views + click → view once, click delivered.
+  const { reporter, calls } = recorder();
+  for (let i = 0; i < 40; i += 1) reporter.emit({ type: "offer_viewed", surface: "start_page" });
+  reporter.emit({ type: "offer_viewed", surface: "end_card" });
+  reporter.emit({ type: "offer_clicked", surface: "start_page" });
+  reporter.emit({ type: "trial_tool_result", kind: "write", ok: true });
+  reporter.emit({ type: "trial_tool_result", kind: "write", ok: true });
+  assert.equal(reporter.queued, 4, "once-per-grant events are deduplicated in the queue");
+  reporter.setTarget({ url: URL_ON, token: "t", events: ALL_EVENTS });
+  await flush();
+  assert.deepEqual(calls.map((c) => c.body), [
+    { type: "offer_viewed", fields: { surface: "start_page" } },
+    { type: "offer_viewed", fields: { surface: "end_card" } },
+    { type: "offer_clicked", fields: { surface: "start_page" } },
+    { type: "trial_tool_result", fields: { kind: "write", ok: true } },
+  ], "views do not push the click out of the pre-grant queue");
+}
+{
   // The queue is bounded, and a failing send never throws into the caller.
   const reporter = new FunnelReporter({ send: async () => { throw new Error("offline"); }, maxQueue: 3 });
   for (let i = 0; i < 10; i += 1) reporter.emit({ type: "offer_clicked", surface: "start_page" });

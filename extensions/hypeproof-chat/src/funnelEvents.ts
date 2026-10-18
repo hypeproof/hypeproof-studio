@@ -191,6 +191,11 @@ export class FunnelReporter {
     const ev = buildFunnelEvent(input);
     if (!ev || this.target === null) return;
     if (this.target) { this.deliver(this.target, ev); return; }
+    // Once-per-grant events are deduplicated here too: the start page re-emits offer_viewed on
+    // every refresh, and undeduplicated copies would fill the bounded queue and push out the
+    // offer_clicked this queue exists to keep.
+    const d = dedupeKey(ev);
+    if (d && this.queue.some((q) => dedupeKey(q) === d)) return;
     if (this.queue.length < this.maxQueue) this.queue.push(ev);
   }
 
