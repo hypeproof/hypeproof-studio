@@ -7,7 +7,7 @@ import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 
-export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools } = {}) {
+export async function createTaskHarness(root, onMessage = () => {}, { profile = null, turnTools, configExtras = {} } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
   const browserState = { failOpen: false, failReturn: false, tabs: [], commands: [] };
   const vscode = { ViewColumn: { One: 1, Beside: 2 },
@@ -33,7 +33,7 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   const source = { postMessage: async message => { const copy = JSON.parse(JSON.stringify(message)); posts.push(copy); onMessage(copy); return true; } };
   h.editorChat = { webview: source, reveal: () => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push('editorChat.reveal'); } };
   h.postConfig = async () => h.post({ type: 'config', config: {
-    proxyUrl: 'http://127.0.0.1/v1', model: 'fixture-no-model', hasToken: true,
+    proxyUrl: 'http://127.0.0.1/v1', model: 'fixture-no-model', hasToken: true, ...configExtras,
     activity: { ...activity, verified: true }, activityDraft: store.getDraft(), taskWorkspace: store.getView(),
     coach: { name: 'HypeProof', personality: '', configured: true }, profile, turnTools,
   } });
