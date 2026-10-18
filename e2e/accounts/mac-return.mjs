@@ -18,14 +18,14 @@ const config=JSON.parse(readFileSync(configPath,'utf8')),bridge={'x-hps-account-
 const result={schema:'studio-account-native-return/1',status:'RUNNING',candidate:receipt,os:process.platform,checks:[],scope:'Real isolated Mac app, URI dispatch and focus; synthetic local Service approval; no real Google, billing or release acceptance'};
 const save=()=>writeFileSync(path.join(out,'result.json'),JSON.stringify(result,null,2));save();
 const call=async(endpoint,body)=>{const response=await fetch('http://127.0.0.1:8793/v1'+endpoint,{method:'POST',headers:{...bridge,'content-type':'application/json','cf-connecting-ip':'198.51.100.42'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});assert.equal(response.status,200,endpoint+' succeeds');return response.json();};
-let app,identity;
+let app,identity,first,frame;
 try{
  const uid=randomUUID();identity=await call('/internal/accounts/upsert',{provider:'google',subject:'synthetic-native-return-'+uid,email:'native-'+uid+'@example.invalid',email_verified:true,display_name:'기기 복귀 검수',age_band:'14+',consents:['terms','privacy','overseas_transfer'].map(kind=>({kind,version:'2026-10-15',granted:true})),session_label:'Native return acceptance'});
  execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',['-f',receipt.app]);
  app=await electron.launch({executablePath:path.join(receipt.app,'Contents/MacOS/HypeProof Studio'),args:['--user-data-dir='+path.join(state,'user-data'),'--extensions-dir='+path.join(state,'extensions'),'--use-inmemory-secretstorage','--skip-welcome','--skip-release-notes','--disable-workspace-trust','--disable-background-timer-throttling','--remote-debugging-port=9394','--folder-uri',pathToFileURL(path.join(state,'workspace')).href],env:{...process.env,VSCODE_CLI:'1',HPS_TEST_E2E:'1'},timeout:45000});
  await app.evaluate(({shell})=>{globalThis.__accountReturnLinks=[];const original=shell.openExternal.bind(shell);shell.openExternal=async(url,...rest)=>{if(url.startsWith('http://localhost:3193/studio/connect')){globalThis.__accountReturnLinks.push(url);return;}return original(url,...rest);};});
- const driver=macWindow({debugPort:9394,realFetch:fetch,out}),first=await driver.attach();
- await first.keyboard.press('Escape');const frame=await driver.frame('.studio-account');
+ const driver=macWindow({debugPort:9394,realFetch:fetch,out});first=await driver.attach();
+ await first.keyboard.press('Escape');frame=await driver.frame('.studio-account');
  const firstNative=await app.evaluateHandle(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('workbench'))),firstId=await firstNative.evaluate(w=>w.id);
  assert.equal(await frame.evaluate("!!document.querySelector('.studio-account .studio-primary svg')"),true,'Google entry has visible brand mark');
  await first.screenshot({path:path.join(out,'01-google-entry.png')});
@@ -56,7 +56,10 @@ try{
   await driver.wait(()=>frame.evaluate("!!document.querySelector('.studio-account .studio-primary')"),'signed out');
  }
  result.status='PASS';
-}catch(error){result.status='FAIL';result.error=String(error?.message??error);process.exitCode=1;}
+}catch(error){
+ result.status='FAIL';result.error=String(error?.message??error);process.exitCode=1;
+ try{result.visible_account=await Promise.race([frame?.evaluate("document.querySelector('.studio-account')?.innerText"),new Promise(resolve=>setTimeout(()=>resolve('unavailable'),5000))]);await first?.screenshot({path:path.join(out,'failure.png'),timeout:5000});}catch{}
+}
 finally{
  if(app)await app.close();
  if(identity?.access_token)await fetch('http://127.0.0.1:8793/v1/me',{method:'DELETE',headers:{authorization:'Bearer '+identity.access_token,'content-type':'application/json'},body:JSON.stringify({confirmation:'DELETE'})}).catch(()=>{});

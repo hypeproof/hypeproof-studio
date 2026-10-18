@@ -212,7 +212,7 @@ export async function activate(context: vscode.ExtensionContext) {
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
     openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
-    createReturnUri: async state => (await vscode.env.asExternalUri(vscode.Uri.parse(`${vscode.env.uriScheme}://hypeproof.hypeproof-chat/account-return?state=${state}`))).toString(),
+    createReturnUri: async state => (await vscode.env.asExternalUri(vscode.Uri.parse(`${vscode.env.uriScheme}://hypeproof.hypeproof-chat/account-return?state=${state}`))).toString(true),
     returned: async () => { await startPage.show(); },
     changed: () => startPage.accountChanged(),
     lock: accountLock(context.globalStorageUri.fsPath),
