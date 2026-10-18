@@ -704,6 +704,18 @@ REQ-M27의 활동 원문 보존은 유지하되 기본 표시를 조정한다. �
 완료된 합성 대기 줄은 화면에서 숨기며 저장된 타임라인을 지우지 않는다. 별도 인증이나
 관찰 경로를 만들지 않는다. 검증은 TUX-SP-03, TUX-CHAT-15/16과 실제 Mac 실행 기록이다.
 
+## Candidate draft build contract (#1758)
+
+| ID | Requirement | Verification |
+|---|---|---|
+| REQ-STUDIO-CANDIDATE-DRAFT | Both release-cut builders receive the exact candidate SHA and refuse checkout, workflow-ref or publication-tag drift. Managed candidates require the same reviewed contract sources before any remote mutation. | `scripts/release/test/build-contract.test.mjs`: advancing-main and unsupported-candidate controls |
+| REQ-STUDIO-CANDIDATE-DRAFT-VERSION | A managed RC tag permanently binds its source, publication identity and final embedded App/extension version. Missing or false dispatch inputs cannot turn that managed tag into legacy automatic acceptance; malformed/partial markers fail closed. Ordinary branch builds retain extension-version fallback and ordinary release tags retain tag-version behavior. | Managed push/retry, legacy branch/tag, malformed marker and environment-injection controls |
+| REQ-STUDIO-CANDIDATE-DRAFT-STOP | Managed builds stop at immutable draft upload with a per-platform inventory of exact package names, sizes and SHA256 digests, including Windows portable and both installers. Changed package bytes, moved tag objects, published releases and overwrite attempts are refused. The inventory is not installed-App or black-box PASS, manager approval or publication authority. | Package inventory, moved-tag and executed upload-script fixtures; actual OS builds/install/update and model-budget validation remain NOT_RUN |
+
+Design, invocation and evidence boundaries: [managed candidate drafts](dev/06-release-process.md#managed-candidate-drafts-1758).
+This delivery contract supports the existing Product Intent's visible human judgment and
+evidence boundaries; it does not claim a measured learner capability outcome.
+
 ## Personal trial interaction coverage (#758)
 
 | ID | Requirement | Verification |

@@ -304,6 +304,68 @@ If one entry path is old or not tested, report the delivery as incomplete. Name 
 path and the action. See NAT-01/12 and the
 [native trial laptop checks](../testing/studio-native-trial-laptop.md).
 
+## Managed candidate drafts (#1758)
+
+This opt-in build handoff stops at draft assets. It does not activate the daily
+release engine, collect installed-App acceptance, approve a candidate or promote a
+channel. The ordinary release flow above remains the default. Its Mac dispatch
+now defaults to the workflow ref instead of silently checking out `main`.
+
+After checking the actual account's public standard-runner eligibility and remaining
+artifact/storage allowance, select `mode=create`, `managed_draft=true` in the existing
+`release-cut` workflow. Its `create.mjs --managed-draft` path reuses version planning,
+tags and release PRs. Both existing OS workflows receive the full candidate SHA as
+`ref` and `candidate_sha`. Before any remote mutation, the candidate must contain the
+exact reviewed `build-contract.mjs`, its artifact-identity helper and both builder
+workflows. An older candidate is refused because its workflow code could ignore the
+new inputs. No new provider, runner tier, service or model credential is introduced.
+
+The annotated `vX.Y.Z-rc.N` tag stores `hps-managed-draft/1` with the candidate SHA,
+that publication tag and final `vX.Y.Z` version. Both workflows check actual checkout,
+workflow SHA and peeled tag SHA before build preparation. The annotation is
+authoritative for managed mode: tag pushes and retries with missing or false inputs
+still stop before automatic acceptance. Partial/malformed markers fail closed.
+Conflicting version/ref inputs are rejected; inputs enter the shell through environment
+variables, never interpolated shell source. The final version reaches the existing
+pre-sign/pre-package stamping path; no post-sign version rewrite is added.
+
+The managed draft contains the original packages and `draft-build-<platform>.json`.
+That inventory binds source SHA, annotated tag object, final embedded App/extension
+version, package name, byte size and SHA256. Windows requires the portable ZIP and
+both User/System installers. Mac identity is read from the new ZIP's extracted App;
+Windows identity is read from the portable smoke's extracted App. Before uploading,
+the workflow compares the inventory again and checks the remote tag object and peeled
+commit. It refuses published releases and never uses upload `--clobber`.
+
+The inventory's `acceptance: NOT_RUN` and `promotion: NOT_AUTHORIZED` are deliberate.
+An extracted App identity plus package hashes does not prove installer payload equality,
+installed-App behavior, N-1→N update, signing/notarization, public Service behavior,
+model budget, release-manager approval or same-byte channel promotion. It is not a
+signed verifier receipt or a remote authorization boundary. Those require the release
+engine's later evidence and publisher adapters. Do not manually start the existing
+model-backed acceptance workflow for this draft: its current tag-version contract
+expects the RC suffix and this managed handoff does not reserve model spend.
+
+Use the release-cut workflow's `GITHUB_TOKEN` path for this handoff. Local/PAT tag pushes
+can start a push build in addition to an explicit dispatch; this change does not promise
+exactly-once builds, resumable dispatch or a measured zero-cost run. The durable tag
+marker keeps both paths draft-only, but build deduplication and account quota reservations
+belong to the subsequent engine adapter. Unknown quota or possible incremental spend
+means do not start an operational build. Rebuilding a stable tag is not same-byte
+promotion and remains outside this slice.
+
+Offline controls (no GitHub CLI/API, OS build or model call):
+
+```bash
+node --test scripts/release/test/build-contract.test.mjs scripts/release/test/create.test.mjs scripts/release/test/release-cut.test.mjs
+python3 scripts/check-workflow-shells.py
+python3 scripts/docs-harness/check.py --min-score 95
+```
+
+Actual Mac/Windows build, install/update, manager approval, quota observation and
+publication are **NOT_RUN** for this implementation. Standard-runner selection alone
+is not proof that an account has no incremental charge.
+
 ## Rollback
 
 If a public release is broken:

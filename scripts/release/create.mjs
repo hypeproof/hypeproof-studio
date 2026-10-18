@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Creates what release-cut planned (#1608 follow-up). Run by release-cut.yml with mode=create.
 //
-//   node scripts/release/create.mjs --plan DIR/plan.json [--accept-not-run]
+//   node scripts/release/create.mjs --plan DIR/plan.json [--accept-not-run] [--managed-draft]
 //
 // smoke FAIL    → the smoke-failure issue. No tag, no PR.
 // smoke NOT_RUN → stop, unless --accept-not-run (the release PR then says NOT_RUN in its smoke section).
@@ -12,6 +12,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {parseArgs} from 'node:util';
+import {assertManagedCandidateSupport, buildDispatches, buildTagMessage} from './build-contract.mjs';
 
 export function actions(plan, {acceptNotRun = false} = {}) {
   if (plan.schema !== 'hps-release-plan/0') return {stop: `unknown plan schema ${plan.schema}`};
@@ -24,8 +26,9 @@ export function actions(plan, {acceptNotRun = false} = {}) {
 }
 
 function main() {
-  const args = process.argv.slice(2);
-  const planPath = path.resolve(args[args.indexOf('--plan') + 1] ?? '');
+  const {values} = parseArgs({options: {plan: {type: 'string'}, 'accept-not-run': {type: 'boolean'}, 'managed-draft': {type: 'boolean'}}});
+  if (!values.plan) throw new Error('--plan is required');
+  const planPath = path.resolve(values.plan);
   const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'));
   const dir = path.dirname(planPath);
   const repo = process.env.GITHUB_REPOSITORY ?? 'hypeproof/hypeproof-studio';
@@ -33,11 +36,22 @@ function main() {
   const summary = [];
   const say = line => { console.log(line); summary.push(line); };
 
-  const decision = actions(plan, {acceptNotRun: args.includes('--accept-not-run')});
+  const decision = actions(plan, {acceptNotRun: values['accept-not-run']});
   if (decision.stop) {
     say(`Nothing created: ${decision.stop}.`);
     finish(summary);
     process.exit(1);
+  }
+
+  // Reject invalid identities before creating a tag or making any GitHub writes.
+  const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
+  if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
+  let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
+  if (dispatches.length && values['managed-draft']) {
+    const original = fs.readFileSync(prBodyFile, 'utf8');
+    prBodyFile = path.join(dir, 'managed-draft-pr.md');
+    fs.writeFileSync(prBodyFile, `> **Managed draft only.** ${plan.rcTag} fixes source ${plan.candidate} and embeds final version ${plan.version}. ` +
+      `The builders stop after immutable draft upload. Black-box acceptance, manager approval and channel promotion remain NOT_RUN; this PR is not publication authority.\n\n${original}`);
   }
 
   for (const step of decision.steps) {
@@ -48,20 +62,25 @@ function main() {
     }
     if (step === 'tag') {
       if (run('git', 'ls-remote', '--tags', 'origin', `refs/tags/${plan.rcTag}`)) throw new Error(`${plan.rcTag} already exists`);
-      run('git', 'tag', '-a', plan.rcTag, plan.candidate, '-m', `${plan.version} candidate (release-cut)`);
+      run('git', 'tag', '-a', plan.rcTag, plan.candidate, '-m', buildTagMessage(plan, {managedDraft: values['managed-draft'] ?? false}));
       run('git', 'push', 'origin', `refs/tags/${plan.rcTag}`);
       say(`Tagged ${plan.rcTag} on ${plan.candidate.slice(0, 8)}.`);
     }
     if (step === 'builds') {
       // A tag pushed with the workflow token starts no workflow; a dispatch does.
-      for (const wf of ['build-mac.yml', 'build-windows.yml']) run('gh', 'workflow', 'run', wf, '--repo', repo, '--ref', plan.rcTag);
-      say(`Started build-mac and build-windows on ${plan.rcTag}; they run the automatic E2E and publish a prerelease.`);
+      for (const dispatch of dispatches) {
+        const inputs = Object.entries(dispatch.inputs).flatMap(([name, value]) => ['-f', `${name}=${value}`]);
+        run('gh', 'workflow', 'run', dispatch.workflow, '--repo', repo, '--ref', dispatch.ref, ...inputs);
+      }
+      say(values['managed-draft']
+        ? `Started managed builds of ${plan.candidate} for ${plan.rcTag}, embedding ${plan.version}; draft upload only. Acceptance and promotion remain NOT_RUN.`
+        : `Started build-mac and build-windows on ${plan.rcTag}; they run the automatic E2E and publish a prerelease.`);
     }
     if (step === 'branch') {
       run('git', 'checkout', '-q', '-B', plan.branch, plan.candidate);
       const record = path.join('releases', `${plan.version}.md`);
       fs.mkdirSync('releases', {recursive: true});
-      fs.copyFileSync(path.join(dir, plan.prBody), record);
+      fs.copyFileSync(prBodyFile, record);
       run('git', 'add', record);
       run('git', 'commit', '-q', '-m', `release: record ${plan.rcTag}`);
       // A later rc of the same version moves the branch to its own candidate.
@@ -71,7 +90,7 @@ function main() {
     if (step === 'pr') {
       try { run('gh', 'label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Weekly release PR (release-cut)'); } catch { /* exists */ }
       const open = JSON.parse(run('gh', 'pr', 'list', '--repo', repo, '--head', plan.branch, '--state', 'open', '--json', 'number,url'));
-      const body = path.join(dir, plan.prBody);
+      const body = prBodyFile;
       if (open.length) {
         run('gh', 'pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body);
         run('gh', 'pr', 'comment', String(open[0].number), '--repo', repo, '--body',
