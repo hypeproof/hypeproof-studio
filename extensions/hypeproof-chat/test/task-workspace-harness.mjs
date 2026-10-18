@@ -7,7 +7,7 @@ import { webcrypto } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {ActivityConnections} from './src/activityConnections'; export {TaskWorkspaceStore} from './src/taskWorkspaceStore';", resolveDir: fileURLToPath(new URL('..', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false });
 
-export async function createTaskHarness(root, onMessage = () => {}) {
+export async function createTaskHarness(root, onMessage = () => {}, { profile = null } = {}) {
   const opened = [], posts = [], state = new Map(), module = { exports: {} };
   const vscode = { ViewColumn: { Beside: 2 }, window: { openBrowserTab: async (url, options) => opened.push({ url, options }) }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) } };
   vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: id => id === 'vscode' ? vscode : require(id), console, Buffer, process, setTimeout, clearTimeout, AbortSignal, URL, TextEncoder, TextDecoder, crypto: webcrypto });
@@ -26,7 +26,7 @@ export async function createTaskHarness(root, onMessage = () => {}) {
   h.postConfig = async () => h.post({ type: 'config', config: {
     proxyUrl: 'http://127.0.0.1/v1', model: 'fixture-no-model', hasToken: true,
     activity: { ...activity, verified: true }, activityDraft: store.getDraft(), taskWorkspace: store.getView(),
-    coach: { name: 'HypeProof', personality: '', configured: true }, profile: null,
+    coach: { name: 'HypeProof', personality: '', configured: true }, profile,
   } });
   return { h, store, source, opened, posts, connections, activity,
     handle: message => h.handleMessage(message, source),

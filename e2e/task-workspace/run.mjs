@@ -2,8 +2,9 @@ import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { serveTaskWorkspace } from './server.mjs';
+import { resolvedProfile } from '../../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs';
 
-const server = await serveTaskWorkspace();
+const server = await serveTaskWorkspace({ profile: resolvedProfile(3, { lesson: undefined, input: { image_paste: true }, welcome: { greeting_md: '개인 작업을 이어가세요.', example_prompts: [] } }) });
 const browser = await chromium.launch({ headless: true });
 const output = resolve(process.env.HPS_TASK_EVIDENCE ?? 'e2e/test-results/task-workspace');
 await mkdir(output, { recursive: true });
@@ -88,6 +89,35 @@ try {
   await expect(page.locator('.tw-error')).toHaveCount(0);
   await expect(page.locator('.hp-mission')).toHaveCount(0);
   checks.push('failed flush preserves task/draft, reports once, then clears on successful retry');
+  await page.setViewportSize({ width: 320, height: 900 });
+  for (const action of ['select', 'create']) {
+    const active = server.fixture.store.getView().activeTaskId;
+    await page.request.post(server.url + '/fixture/fail-draft');
+    await page.getByRole('button', { name: '작업 목록 열기' }).click();
+    if (action === 'create') await page.getByRole('button', { name: '새 작업', exact: true }).click();
+    else await page.locator('.tw-task').filter({ hasText: '새 작업' }).click();
+    await expect(page.getByRole('dialog', { name: '내 작업' })).toHaveCount(0);
+    await expect(page.getByRole('alert')).toContainText('입력을 저장하지 못했습니다');
+    expect(server.fixture.store.getView().activeTaskId).toBe(active);
+    await expect(input).toHaveValue('다음에 이어 쓸 입력');
+    await page.getByRole('button', { name: '알림 닫기' }).click();
+  }
+  checks.push('narrow failed create/select closes the drawer and exposes the retained-task error');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const imageOwner = server.fixture.store.getView().activeTaskId;
+  await page.request.post(server.url + '/fixture/image');
+  await expect(page.locator('.hps-attachment')).toHaveCount(1);
+  await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(1);
+  await page.getByRole('button', { name: '새 작업', exact: true }).click();
+  await expect(input).toHaveValue('');
+  expect(server.fixture.store.getView().activeTaskId).not.toBe(imageOwner);
+  await expect(page.locator('.hps-attachment')).toHaveCount(0);
+  expect(server.fixture.store.getDraft().images).toEqual([]);
+  await page.locator('.tw-task').filter({ hasText: '매일 릴리즈' }).click();
+  await expect(input).toHaveValue('다음에 이어 쓸 입력');
+  await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(1);
+  await expect(page.locator('.hps-attachment')).toHaveCount(1);
+  checks.push('host image stays in its task draft without replay or duplication on remount');
   await page.goto(server.url + '/?theme=light');
   await expect(input).toHaveValue('다음에 이어 쓸 입력');
   await expect(page.locator('.hp-mission')).toHaveCount(0);

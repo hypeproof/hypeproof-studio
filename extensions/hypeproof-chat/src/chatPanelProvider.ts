@@ -446,7 +446,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!knownSource(msg.selection.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
         await store.saveSurface(msg.taskId, msg.selection);
       } else {
-        if (this.hasActiveStream() || this.connectionChanging || this.clearingHistory) throw new Error('진행 중인 작업을 멈춘 뒤 다시 시도해 주세요.');
+        if (this.hasActiveStream() || this.verifySession?.running || this.connectionChanging || this.clearingHistory) throw new Error('진행 중인 작업을 멈춘 뒤 다시 시도해 주세요.');
         this.taskChanging = true;
         try {
           if (source) this.draftSource = source;

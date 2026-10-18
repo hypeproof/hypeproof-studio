@@ -92,12 +92,12 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
     <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
       {railDialog && <button className="tw-quiet tw-rail-close" onClick={() => setRailOpen(false)}>작업 목록 닫기</button>}
       <div className="tw-brand"><span aria-hidden="true" className="tw-mark">h</span><span>HypeProof</span></div>
-      <button className="tw-new" disabled={blocked} onClick={() => postToHost({ type: 'taskCreate' })}><span aria-hidden="true">＋</span> 새 작업</button>
+      <button className="tw-new" disabled={blocked} onClick={() => { setRailOpen(false); postToHost({ type: 'taskCreate' }); }}><span aria-hidden="true">＋</span> 새 작업</button>
       <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="작업 이름으로 찾기…" /></label>
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
       <ul className="tw-task-list">
         {visibleTasks.map(task => <li key={task.id}>
-          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} disabled={blocked} onClick={() => { if (task.id !== view.activeTaskId) postToHost({ type: 'taskSelect', id: task.id }); else setRailOpen(false); }}>
+          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
             <span className="tw-task-meta"><span>{task.messageCount ? `대화 ${task.messageCount}` : '시작 전'}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>

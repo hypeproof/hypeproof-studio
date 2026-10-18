@@ -36,6 +36,11 @@ test('actual host refuses active navigation and foreign or unsafe sources', asyn
     assert.equal(f.store.getView().activeTaskId, first);
     assert.match(f.posts.at(-1).error, /멈춘/);
     f.h.pendingSends = 0;
+    f.h.verifySession = { running: true };
+    await f.handle(f.scoped({ type: 'taskCreate' }));
+    assert.equal(f.store.getView().activeTaskId, first, 'a product verification run also owns its task until completion');
+    assert.match(f.posts.at(-1).error, /멈춘/);
+    f.h.verifySession.running = false;
     await f.store.append(first, [{ id: 'citation', role: 'assistant', content: '출처', createdAt: 1, citations: [{ title: 'Source', url: 'https://example.org/source', domain: 'example.org', tier: 3 }, { title: 'Unsafe', url: 'javascript:alert(1)', domain: '', tier: 4 }] }]);
     for (const url of ['https://foreign.example', 'javascript:alert(1)', 'file:///etc/passwd', 'https://user:secret@example.org/source']) await f.handle(f.scoped({ type: 'taskOpenSource', url }));
     assert.equal(f.opened.length, 0);

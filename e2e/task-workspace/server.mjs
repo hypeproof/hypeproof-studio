@@ -5,10 +5,10 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTaskHarness } from '../../extensions/hypeproof-chat/test/task-workspace-harness.mjs';
 
-export async function serveTaskWorkspace({ port = 0, directory } = {}) {
+export async function serveTaskWorkspace({ port = 0, directory, profile = null } = {}) {
   const root = directory ?? await mkdtemp(join(tmpdir(), 'hps-vessel-browser-'));
   const clients = new Set();
-  const f = await createTaskHarness(root, message => { for (const client of clients) client.write(`data: ${JSON.stringify(message)}\n\n`); });
+  const f = await createTaskHarness(root, message => { for (const client of clients) client.write(`data: ${JSON.stringify(message)}\n\n`); }, { profile });
   let failNextDraft = false;
   const saveDraft = f.store.saveDraft.bind(f.store);
   f.store.saveDraft = (...args) => {
@@ -41,6 +41,9 @@ export async function serveTaskWorkspace({ port = 0, directory } = {}) {
         response.end(`<!doctype html><html lang="ko"><title>독립 검증용 제어</title><body><h1>독립 검증용 제어</h1><p>실제 제품 UI 밖의 합성 이벤트입니다. 다른 탭의 작업 화면에 적용합니다.</p><button data-action="source">새 출처 추가</button> <button data-action="stream">실행 시작</button> <button data-action="stop">실행 종료</button> <button data-action="fail-draft">다음 입력 저장 실패</button><p id="status" role="status"></p><p><a href="/?theme=light" target="_blank">밝은 화면 열기</a> <a href="/" target="_blank">어두운 화면 열기</a></p><script>document.querySelectorAll('button').forEach(button=>button.onclick=async()=>{const response=await fetch('/fixture/'+button.dataset.action,{method:'POST'});document.querySelector('#status').textContent=response.ok?button.textContent+' 적용됨':'실패';});</script></body></html>`); return;
       }
       if (url.pathname === '/fixture/fail-draft' && request.method === 'POST') { failNextDraft = true; response.end('{}'); return; }
+      if (url.pathname === '/fixture/image' && request.method === 'POST') {
+        await f.h.post({ type: 'attachImage', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=' }); response.end('{}'); return;
+      }
       if (url.pathname === '/events') {
         response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' }); response.write(': connected\n\n'); clients.add(response); request.on('close', () => clients.delete(response)); return;
       }
