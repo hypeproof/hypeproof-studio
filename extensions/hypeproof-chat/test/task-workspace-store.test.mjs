@@ -21,6 +21,98 @@ const temporary = t => {
   return root;
 };
 
+test('new task titles follow the first request and selected option, survive restart, and stop after two user turns', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'automatic-title');
+  await store.initialize();
+  const id = store.getView().activeTaskId;
+  await store.append(id, [message('request', '치과 웹사이트를 만들고 싶어요')]);
+  assert.equal(store.getActiveTask().title, '치과 웹사이트를 만들고 싶어요');
+  await store.append(id, [message('options', '어떤 페이지부터 만들까요?\n1. 진료 안내\n2. 온라인 예약 페이지', 'assistant')]);
+  await store.saveDraft(id, draft('보존할 초안'));
+  await store.append(id, [message('choice', '2번')]);
+  const reopened = new TaskWorkspaceStore(root, 'automatic-title');
+  assert.equal(reopened.getActiveTask().title, '온라인 예약 페이지');
+  assert.equal(reopened.getActiveTask().titleOrigin, 'automatic');
+  assert.equal(reopened.getView().tasks[0].title, '온라인 예약 페이지');
+  assert.equal(reopened.getDraft().text, '보존할 초안');
+  await reopened.append(id, [message('later', '이번에는 투자 보고서를 작성해주세요')]);
+  assert.equal(reopened.getActiveTask().title, '온라인 예약 페이지', 'later conversation cannot keep renaming the task');
+  assert.deepEqual(reopened.getHistory().map(row => row.id), ['request', 'options', 'choice', 'later']);
+});
+
+test('both numeric and full clickable replies persist the specific title instead of a general request', async t => {
+  const root = temporary(t), label = '글쓰기나 정리: 메일, 보고서, 메모, 자료 요약';
+  for (const reply of ['1', `1. ${label}`]) {
+    const store = new TaskWorkspaceStore(root, `clicked-title:${reply}`);
+    await store.initialize();
+    const id = store.getView().activeTaskId;
+    await store.append(id, [message('question', '객관식으로 질문해 줘')]);
+    assert.equal(store.getActiveTask().title, '객관식으로 질문해 줘');
+    await store.append(id, [message('menu', `1. **글쓰기나 정리**: 메일, 보고서, 메모, 자료 요약\n2. 웹사이트 만들기`, 'assistant')]);
+    await store.append(id, [message('reply', reply)]);
+    assert.equal(store.getView().tasks[0].title, label);
+    assert.equal(new TaskWorkspaceStore(root, `clicked-title:${reply}`).getActiveTask().title, label);
+  }
+});
+
+test('manual rename protects even the literal default name across restart and does not disable other tasks', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'manual-title');
+  await store.initialize();
+  const firstId = store.getView().activeTaskId;
+  await store.rename(firstId, '새 작업');
+  const reopened = new TaskWorkspaceStore(root, 'manual-title');
+  await reopened.append(firstId, [message('first', '학생 출석부 만들기')]);
+  assert.equal(reopened.getActiveTask().title, '새 작업');
+  assert.equal(reopened.getActiveTask().titleOrigin, 'manual');
+  await reopened.create('새 작업', expected(reopened));
+  const secondId = reopened.getView().activeTaskId;
+  await reopened.append(secondId, [message('second', '수업 일정 정리')]);
+  assert.equal(reopened.getActiveTask().title, '수업 일정 정리');
+  await reopened.rename(secondId, '내가 정한 이름');
+  await reopened.append(secondId, [message('second-more', '다른 제목 후보')]);
+  assert.equal(new TaskWorkspaceStore(root, 'manual-title').getActiveTask().title, '내가 정한 이름');
+  assert.equal(reopened.getTask(firstId).title, '새 작업');
+});
+
+test('old snapshots keep names of unknown origin while newly created tasks still get automatic titles', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'old-title');
+  await store.initialize();
+  const firstId = store.getView().activeTaskId;
+  await store.saveDraft(firstId, draft('기존 초안'));
+  const envelope = JSON.parse(fs.readFileSync(store.filePath, 'utf8'));
+  delete envelope.data.tasks[0].titleOrigin;
+  envelope.checksum = createHash('sha256').update(JSON.stringify(envelope.data)).digest('hex');
+  fs.writeFileSync(store.filePath, JSON.stringify(envelope));
+  const reopened = new TaskWorkspaceStore(root, 'old-title');
+  await reopened.initialize();
+  await reopened.append(firstId, [message('old', '사용자가 붙인 옛 이름은 알 수 없음')]);
+  assert.equal(reopened.getActiveTask().title, '새 작업', 'legacy default text may have been an explicit manual rename');
+  assert.equal(reopened.getDraft().text, '기존 초안');
+  assert.equal(new TaskWorkspaceStore(root, 'old-title').getActiveTask().title, '새 작업');
+  await reopened.create('새 작업', expected(reopened));
+  await reopened.append(reopened.getView().activeTaskId, [message('new', '새 수업 안내문')]);
+  assert.equal(reopened.getActiveTask().title, '새 수업 안내문');
+  assert.equal(reopened.getTask(firstId).title, '새 작업');
+});
+
+test('a rejected manual-name write cannot silently change title ownership in memory or on disk', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'title-atomicity');
+  await store.initialize();
+  const id = store.getView().activeTaskId, committed = fs.readFileSync(store.filePath, 'utf8');
+  const originalRename = fs.promises.rename;
+  fs.promises.rename = async (...args) => {
+    if (args[1] === store.filePath) throw Object.assign(new Error('synthetic title-write failure'), { code: 'EIO' });
+    return originalRename(...args);
+  };
+  syncBuiltinESMExports();
+  try { await assert.rejects(store.rename(id, '새 작업'), hasCode('io')); }
+  finally { fs.promises.rename = originalRename; syncBuiltinESMExports(); }
+  assert.equal(fs.readFileSync(store.filePath, 'utf8'), committed);
+  assert.equal(store.getActiveTask().titleOrigin, 'default');
+  await store.append(id, [message('after-failure', '자동 제목 저장 재시도')]);
+  assert.equal(new TaskWorkspaceStore(root, 'title-atomicity').getActiveTask().title, '자동 제목 저장 재시도');
+});
+
 test('failed first import is an explicit error, never an empty ready workspace', async t => {
   const root = temporary(t), store = new TaskWorkspaceStore(root, 'failed-import');
   await assert.rejects(store.initialize([{ id: 'broken' }]), hasCode('invalid'));
@@ -134,7 +226,10 @@ test('malformed, tampered and wrong-schema records remain explicit errors and ar
   const wrongSchema = JSON.parse(good);
   wrongSchema.data.version = 2;
   wrongSchema.checksum = createHash('sha256').update(JSON.stringify(wrongSchema.data)).digest('hex');
-  for (const bad of ['{broken', JSON.stringify(modified), JSON.stringify(wrongSchema)]) {
+  const wrongTitleOrigin = JSON.parse(good);
+  wrongTitleOrigin.data.tasks[0].titleOrigin = 'unrecognized';
+  wrongTitleOrigin.checksum = createHash('sha256').update(JSON.stringify(wrongTitleOrigin.data)).digest('hex');
+  for (const bad of ['{broken', JSON.stringify(modified), JSON.stringify(wrongSchema), JSON.stringify(wrongTitleOrigin)]) {
     fs.writeFileSync(store.filePath, bad);
     const reopened = new TaskWorkspaceStore(root, 'scope');
     assert.equal(reopened.getView().error.code, 'corrupt');

@@ -4,6 +4,7 @@ import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, unlink } fr
 import { basename, join } from 'node:path';
 import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
+import { suggestTaskTitle } from './taskTitle.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -90,8 +91,9 @@ function validSurface(value: unknown): value is TaskSurfaceSelection | null {
 }
 
 function validTask(value: unknown): value is TaskDocument {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'title', 'createdAt', 'updatedAt', 'messageCount', 'messages', 'draft', 'sourceSelection', 'importedLegacy'])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'title', 'titleOrigin', 'createdAt', 'updatedAt', 'messageCount', 'messages', 'draft', 'sourceSelection', 'importedLegacy'])) return false;
   return nonempty(value.id, 256) && nonempty(value.title, 160) && timestamp(value.createdAt) && timestamp(value.updatedAt) &&
+    (value.titleOrigin === undefined || ['default', 'automatic', 'manual'].includes(value.titleOrigin as string)) &&
     value.updatedAt >= value.createdAt && Array.isArray(value.messages) && value.messages.every(validMessage) &&
     new Set(value.messages.map(message => message.id)).size === value.messages.length && value.messageCount === value.messages.length &&
     validDraft(value.draft) && validSurface(value.sourceSelection) && typeof value.importedLegacy === 'boolean';
@@ -192,7 +194,7 @@ export class TaskWorkspaceStore {
       task.messageCount = task.messages.length;
       task.draft = clone(legacyDraft);
       task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length;
-      if (task.importedLegacy) task.title = '이전 대화';
+      if (task.importedLegacy) { task.title = '이전 대화'; task.titleOrigin = 'manual'; }
       return { version: 1, scope: this.scope, revision: 0, activeTaskId: task.id, tasks: [task] };
     }).catch(error => {
       // Failed first import must not look like an empty, ready workspace.
@@ -224,13 +226,17 @@ export class TaskWorkspaceStore {
   }
 
   rename(taskId: string, title: string): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, task => { task.title = normalizedTitle(title); });
+    return this.updateTask(taskId, task => { task.title = normalizedTitle(title); task.titleOrigin = 'manual'; });
   }
   append(taskId: string, messages: ChatMessage[]): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
       if (!Array.isArray(messages) || !messages.every(validMessage)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
       task.messages = this.mergeMessages(task.messages, messages);
       task.messageCount = task.messages.length;
+      if (task.titleOrigin === 'default' || task.titleOrigin === 'automatic') {
+        const title = suggestTaskTitle(task.messages);
+        if (title) { task.title = title; task.titleOrigin = 'automatic'; }
+      }
     });
   }
   saveDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
@@ -250,7 +256,7 @@ export class TaskWorkspaceStore {
   }
 
   private newTask(title: string, now: number): TaskDocument {
-    return { id: randomUUID(), title, createdAt: now, updatedAt: now, messageCount: 0,
+    return { id: randomUUID(), title, titleOrigin: title === '새 작업' ? 'default' : 'manual', createdAt: now, updatedAt: now, messageCount: 0,
       messages: [], draft: emptyActivityDraft(), sourceSelection: null, importedLegacy: false };
   }
   private mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
