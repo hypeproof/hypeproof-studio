@@ -48,10 +48,11 @@ const CODE_LINE = '지금은 발급받은 체험 코드가 있어야 시작할 �
   assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 1.5, requestLimit: 1200 }), { code: CODE_LINE, allowance: '체험 1시간 30분 · AI 요청 1,200번' });
   assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 0.5, requestLimit: 10 }), { code: CODE_LINE, allowance: '체험 30분 · AI 요청 10번' });
   assert.deepEqual(trialEntryNote({ entry: 'code', durationHours: 48, requestLimit: 10 }), { code: CODE_LINE, allowance: '체험 2일 · AI 요청 10번' });
-  // Open entry: the code line is gone (negative control). The allowance alone may stay.
-  assert.deepEqual(trialEntryNote({ entry: 'open', durationHours: 1, requestLimit: 40 }), { allowance: '체험 1시간 · AI 요청 40번' });
-  assert.deepEqual(trialEntryNote({ entry: 'open' }), {});
-  console.log('PASS note: code line until open entry; allowance only from the Service');
+  // Open entry advertised: this build has only the code path, so the code line stays. Dropping it
+  // would make the card contradict the code screen the choice leads to.
+  assert.deepEqual(trialEntryNote({ entry: 'open', durationHours: 1, requestLimit: 40 }), { code: CODE_LINE, allowance: '체험 1시간 · AI 요청 40번' });
+  assert.deepEqual(trialEntryNote({ entry: 'open' }), { code: CODE_LINE });
+  console.log('PASS note: code line always (code-only client); allowance only from the Service');
 }
 
 // ── fetch: one unauthenticated GET, no credential, failures are "not advertised" ──────────

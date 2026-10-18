@@ -702,12 +702,13 @@ allowance the Service advertises. The allowance is never hard-coded: Studio read
 `GET /v1/trial/offer` (`{ entry: "code" | "open", duration_hours?, request_limit? }`) once per
 window without a credential, so the read cannot start a trial clock. No answer (the Service
 does not serve the route yet, offline, malformed) → the code sentence only, no numbers.
-`entry: "open"` → the code sentence disappears. Addresses trial diagnosis A6/H-02 and U3.
+This build implements only code entry, so it keeps the code sentence even for `entry: "open"`: hiding it would
+contradict the code screen the choice leads to. The change that ships the open-entry path removes it in the same build. Addresses trial diagnosis A6/H-02 and U3.
 The Service route is a separate change; until it ships the card shows the code sentence only.
 Product Intent: "the user understands, before running, what is included and who pays"
 ([PRODUCT-INTENT.md](PRODUCT-INTENT.md) §후보 모델과 이용 권한에 대한 Intent); assets: none trained, it is an access disclosure.
 Verification: `test/trial-offer.smoke.mjs` (parse, note, fetch, host) and `e2e/start-page/run.mjs`
-(offer off positive, allowance from state, offer open negative).
+(offer off positive, allowance from state, offer open keeps the code line and the next screen agrees).
 
 ## Conversation presentation (#758)
 

@@ -6,9 +6,11 @@
  *   { entry: "code" | "open", duration_hours?: number, request_limit?: number }
  * The read carries no credential, so it can never start a trial clock or spend an attempt.
  *
- * Until the Service answers, Studio states only what is true for every Service today: a code
- * is needed. It never prints an allowance it did not read. When the Service advertises
- * `entry: "open"`, the code line goes away by itself.
+ * This build implements only code entry: after "AI 체험하기" the screen asks for a code. So the
+ * code line is shown whatever `entry` says, including `"open"`. Hiding it here would make the
+ * card promise no code while the next screen still demands one, and every installed copy of
+ * this build would keep doing that once the Service flips. The PR that ships the open-entry
+ * path removes the code line in the same build. Studio never prints an allowance it did not read.
  */
 
 export interface TrialOffer {
@@ -17,7 +19,7 @@ export interface TrialOffer {
   requestLimit?: number;
 }
 
-/** The note under the "AI 체험하기" choice. Each line is present only when it is true. */
+/** The note under the "AI 체험하기" choice. The allowance is present only when the Service advertised it. */
 export interface TrialEntryNote {
   code?: string;
   allowance?: string;
@@ -48,8 +50,8 @@ function durationText(hours: number): string {
 }
 
 export function trialEntryNote(offer: TrialOffer | null | undefined): TrialEntryNote {
-  const note: TrialEntryNote = {};
-  if (offer?.entry !== "open") note.code = TRIAL_CODE_LINE;
+  // Always: this client has only the code path, so `entry: "open"` does not change the card (see header).
+  const note: TrialEntryNote = { code: TRIAL_CODE_LINE };
   if (offer?.durationHours && offer.requestLimit) note.allowance = `체험 ${durationText(offer.durationHours)} · AI 요청 ${offer.requestLimit.toLocaleString("ko-KR")}번`;
   return note;
 }
