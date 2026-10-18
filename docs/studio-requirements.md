@@ -80,7 +80,10 @@ code, ambiguous lists, old turns and streaming fragments do not become choices.
 `REQ-STUDIO-CHAT-REFERENCE` distinguishes opening a general browser from previewing
 authored local files. A plain browser-open request without an address opens a blank
 browser through the existing gated browser tool, never starts a local website or
-invents a destination. Website preview remains an explicit, separate intent.
+invents a destination. Unrequested model HTML/agent.md output is never saved or
+automatically previewed on that turn. SDK tool admission and proxy browser actions
+remain limited to the blank-browser request, under existing profile grants and
+approval. Website preview remains an explicit, separate intent.
 
 Acceptance CC-01–CC-05 in [the verification contract](testing/task-workspace.md)
 uses the actual shipped theme tokens and full personal control profile. Synthetic

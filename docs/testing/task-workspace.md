@@ -128,3 +128,5 @@ Fixtures emulate Service/model seams without a provider request. Record source S
 UI package hashes, theme, viewport and environment with results. Green fixture pixels
 are not an installed-app check; live account/tool routing and physical-device behavior
 must be observed separately or marked NOT RUN/BLOCKED.
+
+CC-05 negative controls also feed complete HTML fences, a successful HTML write notification and proxy-loop HTML into the actual provider. Existing index.html and agent.md must survive browser-only turns; an explicit authoring request is the positive control. SDK Write/Bash/delegation and invented destinations are denied before actions, while blank browser opening still needs its existing grant and approval.
