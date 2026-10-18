@@ -57,3 +57,32 @@ This is the approved VS-02/03 foundation. Standalone Electron, branches, durable
 in-flight tool journals, curated memory, full-text search, OAuth popup ownership
 and cross-device continuation need separate acceptance. Pinning governs the shelf,
 not every autonomous browser tool. See [acceptance](../testing/task-workspace.md).
+
+## Personal chat detail (CP-R1, 2026-10-18)
+
+The user's follow-up asks for the conversation's visual finish as well as the
+surrounding workspace. Keep the theme-native six-color palette: canvas #202226,
+panel #17191d, text #e1e1e1, divider #34383e, muted #a4aab3, focus #799ed7 (host
+light/high-contrast theme values override these fallbacks). System sans serves
+Korean prose and controls; the existing editor monospace remains for code. This
+is scoped to personal tasks, not a replacement of the learning-surface tokens.
+
+Use one 740px maximum reading column for messages and composer. Assistant text
+has a quiet identity mark and open paragraph rhythm; user text has a compact
+rounded surface. Tool outcomes, citations and answer actions stay subordinate
+to the answer. The composer is one rounded surface with its primary send/stop
+action inside. It grows with the draft up to 192px, including restored drafts
+and width changes, and then scrolls internally. Keyboard hints remain visible.
+
+Motion signals an actual change: a live response enters once in 180ms, pending
+dots move for at most 3.8 seconds, copy confirmation enters in 160ms, send/stop
+react to hover/press in 140ms. No artificial typing delay, progress percentage,
+token-by-token replay, font/network request or animation dependency is added.
+Reduced-motion disables these effects, including scroll animation. Pending text
+continues statically until the real stream ends; a guessed work stage is not used.
+
+The transcript follows growth only while the reader is near its bottom. Reading
+older content preserves the viewport; an explicit latest-message control or a
+new send resumes following. Copy confirmation requires a successful clipboard
+write; rejection remains visible. Controls work with keyboard and touch, without
+hover-only actions. Existing Korean IME, queued-message and stop behavior remain.

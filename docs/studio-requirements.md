@@ -13,8 +13,19 @@ only for citations in this task, and preserves composer focus. A pinned source i
 not replaced by later citations. Classroom, account authority and shared Service
 memory remain governed by their existing contracts.
 
-[Design](design/task-workspace.md) and [TW-01–07 acceptance](testing/task-workspace.md)
+[Design](design/task-workspace.md) and [TW/CP acceptance](testing/task-workspace.md)
 separate filesystem/host/built-UI evidence from native, Windows and customer proof.
+
+### Personal chat detail (CP-R1)
+
+`REQ-STUDIO-CHAT-DETAIL` (CP-R1): personal chat aligns prose and its expanding
+composer, makes live response/tool/source states legible and offers confirmed
+answer copying. Incoming output must not pull a reader away from older content;
+explicit latest/send resumes following. Motion is bounded, disabled under reduced
+motion, and tied to real state. Enter/Shift+Enter/Korean IME, queue/stop and draft
+recovery retain their existing meaning. Light/dark and 320px layouts must remain
+usable. Visual acceptance is independently reviewed against the implementation
+revision; functional test counts alone do not prove ChatGPT-level quality.
 
 ## Curriculum runtime proposal — 2026-09-29
 

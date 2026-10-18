@@ -28,6 +28,12 @@ quality_gates:
 | TW-06 | New citations preserve pin/focus; reject foreign/unsafe URLs. | Built UI and actual host API arguments |
 | TW-07 | Keyboard, empty/error state and 320–1440 px remain usable. | Built UI and independent design review |
 | TW-08 | Native process restart retains task/draft/pin; citation opens in the actual browser panel. | Mac development app with loopback Service |
+| CP-01 | Prose/composer align; readable Markdown, citations and controls in dark/light at 320/390/1440px. | Independent rendered review |
+| CP-02 | Composer grows with multiline/restored text, caps and shrinks without losing Send/Stop. | Built UI |
+| CP-03 | Clipboard success alone produces confirmation; failure is visible. | Built UI controlled clipboard plus native separately |
+| CP-04 | Growing output follows at bottom; reading position and draft/caret survive new output; explicit latest resumes. | Built UI with actual scrolling |
+| CP-05 | Reduced motion disables nonessential effects; history does not animate per token. | Browser media emulation and code review |
+| CP-06 | Enter sends, Shift+Enter adds a line, composition does not send, queue/Stop retains draft. | Built UI synthetic events; physical OS IME separately |
 
 From the repository root after pinned dependency installation:
 
@@ -35,6 +41,7 @@ From the repository root after pinned dependency installation:
 npm --prefix extensions/hypeproof-chat run test:task-workspace
 npm --prefix extensions/hypeproof-chat/webview-ui run build
 node --experimental-strip-types e2e/task-workspace/run.mjs
+node --experimental-strip-types e2e/task-workspace/chat-details.mjs
 ```
 
 The browser test executes the shipped React bundle, actual task host methods and

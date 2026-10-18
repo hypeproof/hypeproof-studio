@@ -5627,7 +5627,8 @@
       "stage": "design",
       "owner": "ico1036",
       "depends_on": [
-        "ST-REQ-TASK-WORKSPACE"
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-REQ-CHAT-DETAIL"
       ],
       "sources": [
         {
@@ -5672,6 +5673,15 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/classroomPanels.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
         }
       ]
     },
@@ -5681,7 +5691,8 @@
       "owner": "JinyongShin",
       "depends_on": [
         "ST-REQ-TASK-WORKSPACE",
-        "ST-IMP-TASK-WORKSPACE"
+        "ST-IMP-TASK-WORKSPACE",
+        "ST-REQ-CHAT-DETAIL"
       ],
       "sources": [
         {
@@ -5710,6 +5721,23 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/verify-panel.smoke.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/chat-details.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHAT-DETAIL",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Personal chat detail (CP-R1)"
         }
       ]
     }

@@ -1,4 +1,5 @@
 import { bindComposerFocus } from './composerFocus';
+import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { activityLabel, passEnd } from "./activityLabel";
@@ -501,6 +502,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
+  useGrowingComposer(textareaRef, personalWorkspace, draft);
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
@@ -549,8 +552,8 @@ export function ChatPanel(props: Props) {
     !config.coach?.configured;
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length, streaming]);
+    if (!personalWorkspace) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages.length, streaming, personalWorkspace]);
 
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
@@ -559,6 +562,7 @@ export function ChatPanel(props: Props) {
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked) return;
     if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return; }
+    if (personalWorkspace) viewport.toLatest();
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
@@ -872,6 +876,7 @@ export function ChatPanel(props: Props) {
   return (
     <div
       className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
+      data-chat-detail={personalWorkspace ? 'personal' : undefined}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1066,7 +1071,7 @@ export function ChatPanel(props: Props) {
       {showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
-      <div className="hps-messages" ref={scrollRef}>
+      <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
           // and unobtrusive; sits at the top of the conversation so it reads
@@ -1109,6 +1114,7 @@ export function ChatPanel(props: Props) {
               hasActivity={turnHasActivity}
               onRunCode={props.onRunCode}
               onRetry={props.onRetry}
+              personal={personalWorkspace}
             />
           ),
         )}
@@ -1177,6 +1183,10 @@ export function ChatPanel(props: Props) {
           />
         )}
       </div>
+
+      {personalWorkspace && viewport.away && <div className="hps-catchup">
+        <button type="button" onClick={viewport.toLatest}><ChatIcon kind="down" />최신 메시지</button>
+      </div>}
 
       {rollExpand !== null && (
         <RollExpandHint
@@ -1343,7 +1353,7 @@ export function ChatPanel(props: Props) {
               submit();
             }}
             placeholder={
-              streaming
+              personalWorkspace ? (streaming ? '다음 메시지를 준비하세요' : '메시지를 입력하세요') : streaming
                 ? queued
                   ? "이어서 적으면 예약 메시지에 덧붙여요"
                   : "응답 중에도 적을 수 있어요 — Enter 로 예약하면 끝나고 바로 보내요"
@@ -1353,9 +1363,10 @@ export function ChatPanel(props: Props) {
                     ? platformizeKeys("메시지를 입력하고 Enter — 이미지는 ⌘V로 붙여넣기 (Shift+Enter 줄바꿈)")
                     : "메시지를 입력하고 Enter (Shift+Enter 줄바꿈)"
             }
-            rows={3}
+            rows={personalWorkspace ? 1 : 3}
           />
           <div className="hps-input-buttons">
+            {personalWorkspace && <span className="hps-composer-hint">{streaming ? 'Enter 예약 · Shift+Enter 줄바꿈' : 'Enter 보내기 · Shift+Enter 줄바꿈'}</span>}
             {!streaming && ux.hints.roll_input_button.enabled && !rollExpand && (
               <button
                 onClick={handleRollClick}
@@ -1374,24 +1385,30 @@ export function ChatPanel(props: Props) {
                   props.onCancel();
                 }}
                 className="hps-btn-stop"
+                aria-label={personalWorkspace ? '응답 멈추기' : undefined}
+                title={personalWorkspace ? '응답 멈추기' : undefined}
               >
-                Stop
+                {personalWorkspace ? <ChatIcon kind="stop" /> : 'Stop'}
               </button>
             ) : rollExpand ? (
               <button
                 onClick={handleRollSend}
                 disabled={!draft.trim()}
                 className="hps-btn-send"
+                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
+                title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                Send
+                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
               </button>
             ) : (
               <button
                 onClick={() => submit()}
                 disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
+                aria-label={personalWorkspace ? '메시지 보내기' : undefined}
+                title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                Send
+                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
               </button>
             )}
           </div>
@@ -1768,6 +1785,7 @@ function MessageItem({
   hasActivity,
   onRunCode,
   onRetry,
+  personal = false,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -1783,6 +1801,7 @@ function MessageItem({
   hasActivity: boolean;
   onRunCode: (html: string) => void;
   onRetry: (prompt: string) => void;
+  personal?: boolean;
 }) {
   const renderable = useMemo(
     () => (message.role === "assistant" ? extractRenderableHtml(message.content) : null),
@@ -1796,14 +1815,14 @@ function MessageItem({
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
-    <div className={`hps-msg hps-msg-${message.role}`}>
+    <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`}>
       <div className="hps-msg-role">
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from
           * before this change, a bubble still streaming) it falls back to the live name.
           * Re-resolving here would make the past change along the moment the name changes.
           */}
-        <span>{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
+        <span>{personal && message.role === 'assistant' && <span className="hps-assistant-mark" aria-hidden="true">h</span>}{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
         {renderable && (
           <button
             className="hps-msg-run"
@@ -1831,6 +1850,7 @@ function MessageItem({
             buildingLabel={buildingLabel}
             tone={tone}
             hasActivity={hasActivity}
+            personal={personal}
           />
         ) : (
           <>
@@ -1848,6 +1868,7 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         <CitationRack citations={message.citations} />
       )}
+      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer content={message.content} />}
     </div>
   );
 }
@@ -1931,6 +1952,7 @@ function AssistantContent({
   buildingLabel,
   tone,
   hasActivity = false,
+  personal = false,
 }: {
   content: string;
   streaming: boolean;
@@ -1938,12 +1960,13 @@ function AssistantContent({
   tone: "game" | "search" | "site" | "quest";
   /** #414 — the tool/activity log below carries the real state of the turn. */
   hasActivity?: boolean;
+  personal?: boolean;
 }) {
   const segments = useMemo(() => splitFences(content), [content]);
   const hasOpenFence = segments.some((s) => s.type === "code-open");
 
   if (content.length === 0) {
-    return <span>{streaming ? "생각하는 중… ✨" : ""}</span>;
+    return personal && streaming ? <ResponsePending /> : <span>{streaming ? "생각하는 중… ✨" : ""}</span>;
   }
 
   return (
@@ -1954,6 +1977,7 @@ function AssistantContent({
         }
         if (seg.type === "code-open") {
           if (streaming) {
+            if (personal) return <ResponsePending key={i} hasContent />;
             const stage = buildStageText(buildingLabel, content, hasOpenFence, tone, hasActivity);
             return (
               <div key={i} className="hps-code-progress">
@@ -1973,7 +1997,8 @@ function AssistantContent({
         }
         return <CodePill key={i} code={seg.value} />;
       })}
-      {streaming && !hasOpenFence && content.length > 0 && (
+      {personal && streaming && !hasOpenFence && <ResponsePending hasContent />}
+      {!personal && streaming && !hasOpenFence && content.length > 0 && (
         <div className="hps-code-progress hps-code-progress-prelude">
           🛠️ {buildStageText(buildingLabel, content, false, tone, hasActivity)}… <span className="hps-dots">✨</span>
         </div>

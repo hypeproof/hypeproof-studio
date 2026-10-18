@@ -1,0 +1,142 @@
+import { chromium, expect } from '@playwright/test';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { serveTaskWorkspace } from './server.mjs';
+
+const server = await serveTaskWorkspace();
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, permissions: ['clipboard-read', 'clipboard-write'] });
+const page = await context.newPage();
+const output = resolve(process.env.HPS_CHAT_EVIDENCE ?? 'e2e/test-results/chat-details');
+await mkdir(output, { recursive: true });
+const checks = [], errors = [];
+page.on('pageerror', error => errors.push(error.message));
+const input = page.locator('.hps-input textarea');
+const transcript = page.locator('.hps-messages');
+const bottomGap = () => transcript.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight);
+const fixture = action => page.request.post(`${server.url}/fixture/${action}`).then(response => expect(response.ok()).toBe(true));
+try {
+  await page.goto(server.url);
+  await expect(input).toBeVisible();
+  await expect(transcript).toContainText('검증이 끝난 같은 파일');
+  await page.screenshot({ path: resolve(output, 'conversation-1440.png') });
+  const shortHeight = await input.evaluate(node => node.clientHeight);
+  await input.fill(Array.from({ length: 6 }, (_, i) => `여섯 줄 입력 ${i + 1}`).join('\n'));
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeGreaterThan(shortHeight);
+  await input.fill('긴 초안입니다.\n'.repeat(40));
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
+  expect(await input.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
+  await expect(page.getByRole('button', { name: '메시지 보내기' })).toBeVisible();
+  await page.screenshot({ path: resolve(output, 'composer-expanded.png') });
+  await page.reload();
+  await expect(input).toHaveValue('긴 초안입니다.\n'.repeat(40));
+  expect(await input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
+  await input.fill('');
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(shortHeight);
+  checks.push('CP-02: multiline/restored draft grows, caps with internal scrolling, then shrinks');
+
+  await page.getByRole('button', { name: '답변 복사', exact: true }).click();
+  await expect(page.locator('.hps-copy-status')).toHaveText('답변을 복사했습니다');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(server.fixture.store.getHistory().find(m => m.id === 'fixture-answer').content);
+  await page.goto(server.url + '/?clipboard=denied');
+  await page.getByRole('button', { name: '답변 복사', exact: true }).click();
+  await expect(page.locator('.hps-copy-status')).toContainText('복사하지 못했습니다');
+  await expect(page.getByText('복사됨', { exact: true })).toHaveCount(0);
+  checks.push('CP-03: real browser clipboard success verified; browser Permissions-Policy denial never reports success');
+  await page.goto(server.url);
+
+  await input.fill('첫 문장');
+  await input.press('Shift+Enter');
+  await input.press('x');
+  await expect(input).toHaveValue('첫 문장\nx');
+  expect(server.sent).toHaveLength(0);
+  await input.dispatchEvent('compositionstart');
+  await input.press('Enter');
+  expect(server.sent).toHaveLength(0);
+  await input.dispatchEvent('compositionend');
+  await input.fill('보낼 문장');
+  await input.press('Enter');
+  await expect.poll(() => server.sent.length).toBe(1);
+  expect(server.sent[0].text).toBe('보낼 문장');
+  await expect(page.getByRole('button', { name: '응답 멈추기' })).toBeVisible();
+  await expect(page.getByText('응답을 준비하고 있어요', { exact: true })).toBeVisible();
+  await input.fill('중지 후 남겨 둘 예약 문장');
+  await input.press('Enter');
+  await expect(page.locator('.hps-queued')).toContainText('중지 후 남겨 둘 예약 문장');
+  expect(server.sent).toHaveLength(1);
+  await page.getByRole('button', { name: '응답 멈추기' }).click();
+  await expect(input).toHaveValue('중지 후 남겨 둘 예약 문장');
+  await expect.poll(() => server.canceled.length).toBe(1);
+  expect(server.sent).toHaveLength(1);
+  checks.push('CP-06: Shift+Enter/composition preserve draft; Enter sends once; Stop restores parked text without dispatch');
+
+  await fixture('history');
+  await fixture('stream');
+  await fixture('delta');
+  await expect.poll(bottomGap).toBeLessThanOrEqual(48);
+  await expect(page.getByText('답변 작성 중', { exact: true })).toBeVisible();
+  const heightBefore = await transcript.evaluate(node => node.scrollHeight);
+  await fixture('delta');
+  await expect.poll(() => transcript.evaluate(node => node.scrollHeight)).toBeGreaterThan(heightBefore);
+  await expect.poll(bottomGap).toBeLessThanOrEqual(48);
+  await transcript.hover();
+  await page.mouse.wheel(0, -700);
+  await expect(page.getByRole('button', { name: '최신 메시지' })).toBeVisible();
+  await input.fill('읽으면서 쓰는 초안');
+  await input.press('ArrowLeft');
+  const caret = await input.evaluate(node => node.selectionStart);
+  const readingTop = await transcript.evaluate(node => node.scrollTop);
+  await fixture('delta');
+  await fixture('delta');
+  await expect.poll(() => transcript.evaluate(node => node.scrollTop)).toBe(readingTop);
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue('읽으면서 쓰는 초안');
+  expect(await input.evaluate(node => node.selectionStart)).toBe(caret);
+  await fixture('stop');
+  await expect.poll(() => transcript.evaluate(node => node.scrollTop)).toBe(readingTop);
+  await page.getByRole('button', { name: '최신 메시지' }).click();
+  await expect.poll(bottomGap).toBeLessThanOrEqual(48);
+  await fixture('stream');
+  await fixture('delta');
+  await expect.poll(bottomGap).toBeLessThanOrEqual(48);
+  await fixture('stop');
+  checks.push('CP-04: real wheel reading position/draft/caret survive deltas and completion; latest resumes follow');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await fixture('stream');
+  expect(await page.locator('.hps-response-dots i').first().evaluate(node => getComputedStyle(node).animationName)).toBe('none');
+  expect(await page.locator('.hps-msg-live').evaluate(node => getComputedStyle(node).animationName)).toBe('none');
+  expect(await page.locator('.hps-btn-stop').evaluate(node => getComputedStyle(node).transitionDuration)).toBe('0s');
+  await fixture('stop');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  checks.push('CP-05: browser reduced-motion suppresses pending/entry/control effects; scroll follows instantly');
+
+  const oldTask = server.fixture.store.getView().activeTaskId;
+  await page.getByRole('button', { name: '새 작업', exact: true }).click();
+  await expect.poll(() => server.fixture.store.getView().activeTaskId).not.toBe(oldTask);
+  await expect(transcript.locator('.hps-msg')).toHaveCount(0);
+  await fixture('rich');
+  await expect(transcript.getByRole('heading', { name: '오늘 확인할 것' })).toBeVisible();
+  await expect(transcript.getByRole('table')).toBeVisible();
+  await input.fill('설치 실패 사례도 함께 확인해줘');
+  for (const theme of ['dark', 'light']) {
+    if (theme === 'light') await page.goto(server.url + '/?theme=light');
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await transcript.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      await expect(transcript.getByRole('table')).toHaveCount(1);
+      await expect(transcript).toContainText('release-candidate-sha256-0123456789abcdef');
+      await expect(page.getByRole('button', { name: '메시지 보내기' })).toBeVisible();
+      await page.screenshot({ path: resolve(output, `${theme}-${width}.png`) });
+    }
+  }
+  checks.push('CP-01: rich Markdown/table/code/long identifier and composer have no pane overflow in dark/light 320/390/1440');
+  expect(errors).toEqual([]);
+  await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', checks, scope: 'built React + actual task host/store; synthetic stream/model seam; browser clipboard policy; not OS IME or signed app acceptance', errors }, null, 2));
+  console.log(JSON.stringify({ status: 'PASS', checks: checks.length, output }));
+} catch (error) {
+  await page.screenshot({ path: resolve(output, 'failure.png') });
+  await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'FAIL', checks, errors, error: String(error) }, null, 2));
+  throw error;
+} finally { await browser.close(); await server.close(); await rm(server.root, { recursive: true, force: true }); }
