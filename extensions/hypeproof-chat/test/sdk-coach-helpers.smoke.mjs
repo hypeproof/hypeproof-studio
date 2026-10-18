@@ -398,7 +398,7 @@ const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : 
     const v = evalTool(MCP_BROWSER_OPEN, { url }, adultBrowser);
     assert.equal(v.decision, "deny", `browser_open URL ${JSON.stringify(url)} must be denied by policy`);
   }
-  assert.equal(evalTool(MCP_BROWSER_OPEN, {}, adultBrowser).decision, "deny", "missing url → deny");
+  assert.equal(evalTool(MCP_BROWSER_OPEN, {}, adultBrowser).decision, "ask", "omitted url opens a blank browser through the existing approval gate");
 
   // Screenshot + live preview auto-allow once the browser capability is
   // granted — reading the student's own tab / serving their own workspace.
@@ -424,6 +424,10 @@ const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : 
   assert.equal(req.kind, "openBrowser", "browser_open → openBrowser (modal-gated by default)");
   assert.ok(req.description.includes("https://example.com"), "modal shows the target URL");
   assert.deepEqual(req.payload, { url: "https://example.com" });
+  const blank = sdkToolToActionRequest({ toolName: MCP_BROWSER_OPEN, input: {} });
+  assert.equal(blank.kind, "openBrowser");
+  assert.deepEqual(blank.payload, { url: "about:blank" });
+  assert.ok(blank.description.includes("빈 브라우저"), "approval names the requested blank browser");
 
   // The other hypeproof MCP tools never reach the approval path (auto-allow),
   // but if one ever did, the unknown-tool fallback must fail closed to the
