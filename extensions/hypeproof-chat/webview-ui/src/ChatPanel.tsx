@@ -619,8 +619,14 @@ export function ChatPanel(props: Props) {
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
-    setQueued(null);
-    submit(text, queuedToolMode);
+    // A staging/pending-send guard can refuse this edge. Keep the message and
+    // its mode until acceptance; a paused item gives it an explicit retry path
+    // instead of silently losing it or sending later on an unrelated render.
+    if (submit(text, queuedToolMode)) setQueued(null);
+    else {
+      setQueuedPaused(true);
+      setImgNote(note => note ?? '메시지를 보내지 못해 보관했습니다. 준비가 끝나면 보관한 메시지의 보내기를 눌러 주세요.');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming, queued, queuedPaused]);
 

@@ -44,6 +44,16 @@ turn and retry identity. A recovered message with a different mode remains a
 separate, durable paused item; neither current draft nor mode is overwritten and
 no error recovery silently starts a new run. Reject duplicate pending dispatches.
 
+`REQ-C16` queue recovery (UX-QUEUE-01): completing a response removes its parked
+message only after the composer accepts that send. An unready photo or refused
+dispatch leaves the original text and tool mode in a durable paused item with an
+explicit Send action, preserving the next draft and staged photo. A later photo
+acknowledgement or unrelated render must not send it automatically. Stop still
+restores the text without dispatch. This supports Product Intent principle 2,
+Human judgment stays visible, and exposes OWNERSHIP through explicit recovery; it is not a measured learning
+outcome. `e2e/queued-photo-send.mjs` verifies the React component boundary;
+native, full host persistence and live-model acceptance remain separate.
+
 A message-level citation opens one contextual preview with its real title,
 hostname and URL. It does not imply sentence-level attribution or fetched page
 content. Previewing another citation leaves an existing pin intact. Native browser
