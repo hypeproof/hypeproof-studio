@@ -176,8 +176,8 @@ try {
     await expect(p.getByRole('button', { name: '코치 이름 바꾸기' })).toHaveCount(0);
   });
   await test('TUX-CHAT-02', 'Send rejects empty/space and sends trimmed text once', async p => {
-    await expect(btn(p, 'Send')).toBeDisabled(); await draft(p).fill('  '); await expect(btn(p, 'Send')).toBeDisabled();
-    await draft(p).fill('  실제 요청  '); await btn(p, 'Send').click(); await request(p, { type: 'sendMessage', text: '실제 요청' }); await expect(draft(p)).toHaveValue(''); await expect(btn(p, 'Send')).toBeDisabled();
+    await expect(btn(p, '보내기')).toBeDisabled(); await draft(p).fill('  '); await expect(btn(p, '보내기')).toBeDisabled();
+    await draft(p).fill('  실제 요청  '); await btn(p, '보내기').click(); await request(p, { type: 'sendMessage', text: '실제 요청' }); await expect(draft(p)).toHaveValue(''); await expect(btn(p, '보내기')).toBeDisabled();
   });
   await test('TUX-CHAT-03', 'Enter sends, Shift+Enter preserves newline, IME Enter does not send', async p => {
     await draft(p).fill('첫 줄'); await draft(p).press('Shift+Enter'); await draft(p).press('a'); await expect(draft(p)).toHaveValue('첫 줄\na');
@@ -199,9 +199,9 @@ try {
   });
   await test('TUX-CHAT-06', 'Host image attachment enables image-only send and removal disables it', async p => {
     const dataUrl = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 10; return c.toDataURL('image/png'); });
-    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await expect(btn(p, 'Send')).toBeEnabled();
-    await btn(p, '이미지 제거').click(); await expect(btn(p, 'Send')).toBeDisabled();
-    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await btn(p, 'Send').click();
+    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await expect(btn(p, '보내기')).toBeEnabled();
+    await btn(p, '이미지 제거').click(); await expect(btn(p, '보내기')).toBeDisabled();
+    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await btn(p, '보내기').click();
     await request(p, { type: 'sendMessage', text: '' }); assert.equal(emitted(await requests(p), 'sendMessage')[0].images.length, 1); await expect(btn(p, '이미지 제거')).toHaveCount(0);
   });
   for (const [id, label, type] of [['07', '활동 변경', 'setToken'], ['08', '대화 지우기', 'clearHistory'], ['09', '설정', 'openSettings']]) {

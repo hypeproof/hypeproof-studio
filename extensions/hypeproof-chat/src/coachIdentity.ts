@@ -17,6 +17,8 @@
 // for "별똥별" (받침) as well as "제작 파트너". With the default name "코치" every
 // helper reproduces today's literal strings byte for byte.
 
+import { degradedRemedy, type SeatAudience } from "./seatVocabulary.ts";
+
 export interface CoachIdentityState {
   name: string;
   personality: string;
@@ -116,10 +118,13 @@ export const approvalFallbackTitle = (name: string): string => `${asSubject(name
 export const shellApprovalTitle = (name: string): string => `${asSubject(name)} 명령을 실행하려고 해요:`;
 export const browserApprovalTitle = (name: string): string => `${asSubject(name)} 브라우저를 열려고 해요:`;
 
-/** #476 in-panel notice when the SDK runtime fell back to the proxy. */
-export const coachDegradedNotice = (name: string): string =>
+/**
+ * #476 in-panel notice when the SDK runtime fell back to the proxy. The remedy follows
+ * the seat (trial diagnosis D3): a solo seat has no staff to call.
+ */
+export const coachDegradedNotice = (name: string, audience: SeatAudience = "classroom"): string =>
   `지금 ${asTopic(name)} 파일 저장·명령 실행 도구 없이 돌고 있어요 — 만들기와 미리보기는 그대로 되지만, ` +
-  "저장소·배포는 이 상태에서 안 돼요. 스태프를 불러주세요.";
+  `저장소·배포는 이 상태에서 안 돼요. ${degradedRemedy(audience)}`;
 
 /** #308 page-attach inline notice. */
 export const pageAttachedNotice = (name: string, withShot: boolean, label: string): string =>

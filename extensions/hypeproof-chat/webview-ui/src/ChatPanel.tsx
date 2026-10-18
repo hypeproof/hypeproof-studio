@@ -37,6 +37,7 @@ import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
+import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import {
@@ -520,6 +521,8 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
+  const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
@@ -1208,6 +1211,7 @@ export function ChatPanel(props: Props) {
             onRetry={props.onRetryLast}
             onDismiss={props.onDismissError}
             onReport={props.onReportProblem}
+            audience={audience}
           />
         )}
       </div>
@@ -1444,7 +1448,7 @@ export function ChatPanel(props: Props) {
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
+                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             ) : (
               <button
@@ -1454,7 +1458,7 @@ export function ChatPanel(props: Props) {
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
+                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
           </div>
@@ -2111,6 +2115,7 @@ function ErrorBanner({
   onRetry,
   onDismiss,
   onReport,
+  audience = "classroom",
 }: {
   message: string;
   requestId: string | null;
@@ -2119,6 +2124,7 @@ function ErrorBanner({
   onRetry: () => void;
   onDismiss: () => void;
   onReport: () => void;
+  audience?: SeatAudience;
 }) {
   // Spot common transport-layer signals so the framing is honest about the
   // recovery path. We don't try to classify perfectly — just enough to pick
@@ -2139,7 +2145,7 @@ function ErrorBanner({
           </div>
         )}
         {requestId && (
-          <div className="hps-error-banner-rid" title="강사에게 이 ID를 알려주세요 — Jay가 바로 추적할 수 있어요">
+          <div className="hps-error-banner-rid" title={errorIdTitle(audience)}>
             ID: <code>{requestId}</code>
           </div>
         )}
@@ -2153,7 +2159,7 @@ function ErrorBanner({
         <button
           className="hps-error-banner-report"
           onClick={onReport}
-          title="이 문제를 Jay에게 신고합니다 (request_id 등 메타데이터 자동 첨부) — #64"
+          title={reportButtonTitle(audience)}
         >
           🚨 신고하기
         </button>

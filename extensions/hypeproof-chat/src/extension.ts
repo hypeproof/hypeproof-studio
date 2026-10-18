@@ -473,6 +473,7 @@ export async function activate(context: vscode.ExtensionContext) {
         getLastRequestId: () => provider.getLastRequestId(),
         getProfileId: () => provider.getProfileId(),
         getRecentTurns: () => provider.getHistorySnapshot(),
+        getAudience: () => provider.getSeatAudience(),
       });
     }),
 
