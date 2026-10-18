@@ -1014,3 +1014,20 @@ Verification: candidate report generator/tests, local-file browser report/manual
 checks and T27 human observation. Operational token/cost totals are not learning
 outcomes. Missing invoice, externally direct personal-key traffic and unreported
 historical activity remain explicitly unverified.
+
+## Daily release coordinator (#1757)
+
+`REQ-STUDIO-RELEASE-ENGINE`: the [local coordinator](dev/release-engine.md) pins
+existing release-cut inputs, persists idempotent decisions and zero-incremental
+cost reservations, requires every policy-defined artifact/work stage/installed-App
+check, and binds a rotating manager's signed approval to exact manifest and
+evidence digests. Changed bytes, missing/failed checks, unknown budgets, expired or
+revoked approval and an older channel intent cannot authorize promotion. Failure
+ticket intents deduplicate across candidates and product fixes have one reserved
+attempt. A dead same-host writer is recoverable without evicting a live owner.
+
+Verification: `scripts/release/test/engine.test.mjs` exercises real local files,
+CLI restarts, two-process contention and SIGKILL with signed protocol fixtures.
+This is local engine evidence, not installed-App acceptance. Provider/billing,
+remote publish wiring, exact-byte customer delivery and seven-day operations
+remain NOT RUN. No workflow publication gate is bypassed or replaced.
