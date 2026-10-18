@@ -2914,7 +2914,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  /** Developer record of an SdkUnavailableError, verbatim (REQ-M30 ③; REQ-M44 keeps it when no fallback runs). */
+  /** Developer record of an SdkUnavailableError, verbatim (REQ-M30 ③; REQ-M45 keeps it when no fallback runs). */
   private logSdkUnavailable(reason: string): void {
     this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
     this.logChannel.appendLine(sdkFallbackLogLine(reason, new Date()));
@@ -5532,7 +5532,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           if (ended) { spoolStatus = "error"; spoolErrorKind = ended.errorKind; opsFailure = ended.failure; }
         } catch (err) {
           if (!(err instanceof SdkUnavailableError)) throw err;
-          // REQ-M44 — an SDK-only seat (native trial, pass) or a picked pass is refused on the proxy
+          // REQ-M45 — an SDK-only seat (native trial, pass) or a picked pass is refused on the proxy
           // route by the Service, so it never falls back: every branch shows the same install notice
           // and the raw English reason goes to the developer log only. Classroom seats keep the
           // existing web-search / picked-model copy and the REQ-M7 fallback below.
@@ -5989,7 +5989,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       return;
     }
-    // REQ-M44 — the install notice: shown as is, with its request ID, and without "다시 보내기".
+    // REQ-M45 — the install notice: shown as is, with its request ID, and without "다시 보내기".
     if (err instanceof SdkRequiredError) {
       if (err.requestId) this.lastRequestId = err.requestId;
       void this.post({ type: "streamError", streamId, error: err.message, ...(err.requestId ? { requestId: err.requestId } : {}), retry: false });

@@ -118,7 +118,7 @@ export const browserApprovalTitle = (name: string): string => `${asSubject(name)
 
 /**
  * #476 in-panel notice when the SDK runtime fell back to the proxy.
- * REQ-M44 — a solo seat (trial, personal, pass) has no staff to call, so its next
+ * REQ-M45 — a solo seat (trial, personal, pass) has no staff to call, so its next
  * step is the installer that seeds the SDK binary. The classroom wording is unchanged.
  */
 export const coachDegradedNotice = (name: string, opts: { solo?: boolean } = {}): string =>

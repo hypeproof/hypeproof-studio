@@ -1,4 +1,4 @@
-// REQ-M44 — a seat that can only run on the Agent SDK must not fall back to the
+// REQ-M45 — a seat that can only run on the Agent SDK must not fall back to the
 // proxy when the native `claude` binary does not resolve, and must say why and
 // what to do in one Korean sentence the learner can act on alone.
 //

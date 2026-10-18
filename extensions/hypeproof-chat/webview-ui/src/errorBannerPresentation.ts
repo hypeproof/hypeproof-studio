@@ -9,7 +9,7 @@ export function errorBannerPresentation(message: string): ErrorBannerPresentatio
   const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort/i.test(message);
   // REQ-L12 — a spent, refunded or ended pass is an account state, not a fault.
   const isPass = /이용권|환불/.test(message);
-  // REQ-M44 — the app lacks the Agent SDK binary: an install step, not a lock or a fault.
+  // REQ-M45 — the app lacks the Agent SDK binary: an install step, not a lock or a fault.
   const isInstall = /설치 도구/.test(message);
   return {
     icon: isPass ? "🎟️" : isInstall ? "🧰" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️",

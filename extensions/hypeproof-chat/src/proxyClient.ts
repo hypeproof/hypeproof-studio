@@ -254,7 +254,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
       authErr.requestId = rid;
       throw authErr;
     }
-    // REQ-M44 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
+    // REQ-M45 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
     // Service sentence, add the cause and the install remedy, and offer no retry.
     const sdkRequired = trialRequiresSdkMessage(res.status, text);
     if (sdkRequired) throw new SdkRequiredError(sdkRequired, rid);

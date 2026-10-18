@@ -43,7 +43,7 @@ interface State {
   error: string | null;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
-  errorRetry: boolean;             // REQ-M44 — false when resending cannot help (missing SDK binary)
+  errorRetry: boolean;             // REQ-M45 — false when resending cannot help (missing SDK binary)
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;

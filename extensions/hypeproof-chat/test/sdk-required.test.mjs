@@ -1,4 +1,4 @@
-// REQ-M44 — an SDK-only seat (native trial, paid pass) with no resolvable `claude`
+// REQ-M45 — an SDK-only seat (native trial, paid pass) with no resolvable `claude`
 // binary. Actual provider and proxy-client code with scripted runtime boundaries;
 // no network, CLI, paid call or VS Code window.
 //
