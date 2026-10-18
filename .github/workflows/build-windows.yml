@@ -4,7 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Branch or tag to build"
+        description: "Ref to build (default: workflow ref; release-cut passes the full candidate SHA)"
+        required: false
+        default: ""
+      candidate_sha:
+        description: "Expected full candidate SHA; must equal ref, checkout and publication tag"
+        required: false
+        default: ""
+      managed_draft:
+        description: "Build final-version bytes into an RC draft; stop before acceptance and publication"
+        type: boolean
+        default: false
+      release_version:
+        description: "Managed draft only: final vX.Y.Z matching the workflow's vX.Y.Z-rc.N tag"
         required: false
         default: ""
       # dag.yaml task D / #676 — mirror of build-mac.yml. Only meaningful
@@ -56,7 +68,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref_name }}
+          ref: ${{ inputs.candidate_sha || inputs.ref || github.ref }}
           submodules: recursive
           fetch-depth: 0
 
@@ -75,6 +87,16 @@ jobs:
           # not the floating "22.x", so Windows builds are reproducible against
           # the same toolchain as Mac.
           node-version: "22.22.1"
+
+      - name: Verify candidate and resolve build identity
+        id: contract
+        shell: bash
+        env:
+          HPS_BUILD_REF: ${{ inputs.ref }}
+          HPS_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          HPS_MANAGED_DRAFT: ${{ inputs.managed_draft }}
+          HPS_RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node scripts/release/build-contract.mjs preflight "$RUNNER_TEMP/hps-build-contract.json"
 
       # dag.yaml task D (#676) — live-class release freeze, fail-fast half.
       # Same contract as build-mac.yml: a stable `v*` tag publishes a
@@ -147,25 +169,6 @@ jobs:
             echo "VSCODE_QUALITY=$VSCODE_QUALITY"
             echo "CI_BUILD=$CI_BUILD"
           } >> "$GITHUB_ENV"
-
-      - name: Resolve release version
-        shell: bash
-        # On a tag build, the tag (v0.1.10) is the version source of truth and
-        # must reach product.json + the bundled extension's package.json (#206).
-        # Untagged builds fall back to the extension package.json version inside
-        # resolve-version.sh.
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "HPS_VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
-            echo "Tag build → HPS_VERSION=${GITHUB_REF#refs/tags/v}"
-          else
-            echo "Untagged build → HPS_VERSION unset, falling back to extension package.json"
-          fi
-          # Real commit for product.json.commit. This Windows job sources
-          # version.sh directly (not run-build.sh), so without this it would hash
-          # an empty RELEASE_VERSION to the adc83b19… placeholder (#206).
-          echo "BUILD_SOURCEVERSION=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          echo "BUILD_SOURCEVERSION set to $(git rev-parse HEAD)"
 
       - name: Install brand assets
         shell: bash
@@ -277,13 +280,20 @@ jobs:
         id: artifacts
         shell: bash
         working-directory: vscodium-base
+        env:
+          HPS_MANAGED_DRAFT: ${{ steps.contract.outputs.managed_draft }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           mkdir -p ../dist
+          search_root=.
+          search_depth=4
+          # prepare_assets.sh writes the three distributable packages here.
+          # A whole-tree search also sees unpacked App/helper executables.
+          if [[ "$HPS_MANAGED_DRAFT" == true ]]; then search_root=assets; search_depth=1; fi
           while IFS= read -r -d '' f; do
             cp -v "$f" ../dist/
-          done < <(find . -maxdepth 4 -type f \( -name '*.exe' -o -name '*.zip' \) -print0)
+          done < <(find "$search_root" -maxdepth "$search_depth" -type f \( -name '*.exe' -o -name '*.zip' \) -print0)
           ls -la ../dist || true
           if ! find ../dist -type f \( -name '*.exe' -o -name '*.zip' \) | grep -q .; then
             echo "::error::Windows build produced no .exe or .zip artifacts"
@@ -454,6 +464,13 @@ jobs:
 
           Write-Host "HypeProof Studio.exe exited cleanly during launch smoke."
 
+      - name: Record managed draft artifact identity
+        if: steps.contract.outputs.managed_draft == 'true'
+        shell: bash
+        run: |
+          node scripts/release/build-contract.mjs record "$RUNNER_TEMP/hps-build-contract.json" \
+            win32-x64 dist "$RUNNER_TEMP/hps-smoke"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -482,8 +499,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HPS_MANAGED_DRAFT: ${{ steps.contract.outputs.managed_draft }}
         run: |
           set -euo pipefail
+          if [[ "$HPS_MANAGED_DRAFT" == true ]]; then
+            node scripts/release/build-contract.mjs check-upload "$RUNNER_TEMP/hps-build-contract.json" \
+              win32-x64 dist "$RUNNER_TEMP/hps-smoke"
+          fi
           TAG="${GITHUB_REF#refs/tags/}"
           PRERELEASE_FLAG="$(bash scripts/tag-is-prerelease.sh "$TAG")"
           gh release create "$TAG" --draft --title "HypeProof Studio $TAG" \
@@ -493,12 +515,13 @@ jobs:
           shopt -s nullglob
           assets=(dist/*.zip dist/*.exe)
           (( ${#assets[@]} > 0 )) || exit 1
+          if [[ "$HPS_MANAGED_DRAFT" == true ]]; then assets+=(dist/draft-build-win32-x64.json); fi
           gh release upload "$TAG" "${assets[@]}"
 
       # workflow_dispatch is explicit because GITHUB_TOKEN release events do
       # not trigger another workflow. Both builders dispatch; concurrency serializes.
       - name: Trigger both-activity release acceptance
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.contract.outputs.auto_acceptance == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
