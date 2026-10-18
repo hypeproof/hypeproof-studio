@@ -55,6 +55,8 @@ import {
   buildSdkQueryOptions,
   consumeSdkStream,
   evaluateSdkToolUse,
+  SDK_RATE_LIMIT_FRIENDLY,
+  sdkProviderErrorFriendly,
   SDK_STALL_FRIENDLY,
   SDK_STREAM_STALL_MS,
   absolutizeToolPaths,
@@ -871,7 +873,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +
           `Likely a gateway retry storm (429/529/5xx) or a first turn that never produced a token.`,
       );
-      return new CoachStallError(status===429?'요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)':status&&status>=500?'AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. ('+status+')':stallNotice(args.coachName), status);
+      return new CoachStallError(status===429?SDK_RATE_LIMIT_FRIENDLY:status&&status>=500?sdkProviderErrorFriendly(status):stallNotice(args.coachName), status);
     },
     // Silence that is NOT a stall: an open modal, or a tool the SDK is still
     // running (one budget of slack after the decision — a long subagent gets
