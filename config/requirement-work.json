@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "repository": "jayleekr/hypeproof-studio",
+  "repository": "hypeproof/hypeproof-studio",
   "scope": "Current member feature catalog requirement families plus independent course intent #1006. Baseline docs/studio-requirements.md remains an upstream behavioral contract, not a claim of whole-product fulfillment.",
   "requirement_globs": [
     "docs/requirements/*.md"

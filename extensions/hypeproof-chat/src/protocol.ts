@@ -17,6 +17,8 @@ export interface ChatMessage {
   role: ChatRole;
   content: string;
   createdAt: number;
+  /** The user's requested mode for this turn, not proof that a tool ran. */
+  toolMode?: import('./turnTools').TurnToolMode;
   /**
    * #503 — filled in only when `role: "tool"`. The display content of a single tool
    * line (`🔧 Write(index.html) ✓`). `id` is the SDK's tool_use id, so the
@@ -62,7 +64,8 @@ export interface ChatMessage {
 
 /**
  * #173 — Source attached to an assistant message. `tier` (1–4) is computed
- * server-side from the URL so the chip palette is consistent across clients.
+ * server-side on the proxy route. SDK typed tool outputs carry no classification,
+ * so their sources use tier 4 (unclassified), never inferred domain authority.
  * 1 academic society·edu·gov, 2 paper·DOI, 3 official manufacturer, 4 blog·YouTube·other.
  */
 export interface Citation {
@@ -111,6 +114,8 @@ export interface EffortRequestRecord {
   request_class?: string;
 }
 export interface ChatConfig {
+  turnTools?: import('./turnTools').TurnToolsAvailability;
+  taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
@@ -416,6 +421,12 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | { type: 'taskCreate' }
+  | { type: 'taskSelect'; id: string }
+  | { type: 'taskRename'; title: string }
+  | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
+  | { type: 'taskOpenSource'; url: string; requestId?: string }
+  | { type: 'taskReturnFromSource'; requestId: string; url: string }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
@@ -490,12 +501,12 @@ export type WebviewMessage = (
   | { type: "refreshEffort" }
   | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }>;
       /** D-028 — stage ids of photos attached as files; the host moves them into images/ on send. */
-      attachments?: string[] }
+      attachments?: string[]; toolMode?: import('./turnTools').TurnToolMode; userMessageId?: string }
   /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
   | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
   /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
   | { type: "discardStagedImage"; stageId: string }
-  | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[] }
+  | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
@@ -578,13 +589,17 @@ export type WebviewMessage = (
       message: string;
       stack: string;
       componentStack: string;
-    }) & {activityId?:string};
+    }) & {activityId?:string; taskId?:string};
 
 // Host → Webview
 export type HostMessage = (
+  | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
+  | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
+  | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
+  | { type: 'taskWorkspaceError'; error: string | null }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
-  | {type:'inputRejected';text:string;images?:string[]}
+  | {type:'inputRejected';text:string;images?:string[];toolMode?:import('./turnTools').TurnToolMode}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}
   /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */
@@ -702,7 +717,7 @@ export type HostMessage = (
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the
   // host-side __test_crashWebview command which is itself env-gated.
-  | { type: "webviewTestCrash" }) & {activityId?:string};
+  | { type: "webviewTestCrash" }) & {activityId?:string; taskId?:string};
 
 export interface ActionRequest {
   requestId: string;

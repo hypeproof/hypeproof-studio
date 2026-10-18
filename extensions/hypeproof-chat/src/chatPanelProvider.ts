@@ -13,6 +13,7 @@ import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwi
 const PROJECT_SWITCH_BRIEF_KEY = "hps.projectSwitch.brief.v1";
 const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
+import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
 import { availableModelSelection, selectedModel, modelSelectionScope, type SavedModelChoice, selectedEffort, observedEffortResult, type SavedEffortChoice } from './modelSelection';
@@ -29,6 +30,7 @@ import { selectedExternalInstructions } from "./externalSkillCommands";
 import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
+import { TaskWorkspaceStore } from './taskWorkspaceStore';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
@@ -406,6 +408,132 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private nativeObservation: NativeObservationRecorder | null = null;
   private nativeHistoryScope: string | null = null;
+  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
+  /** Failed turns are not in durable history yet; keep only bounded, task-bound retry metadata. */
+  private turnRequests = new Map<string, { scope: string; message: ChatMessage }>();
+  private turnRequestScope(): string {
+    return JSON.stringify([activityConnections(this.context)?.scope ?? this.nativeHistoryScope ?? '', this.currentTaskStore?.()?.getView().activeTaskId ?? null]);
+  }
+  private retryMessages(): ChatMessage[] {
+    const scope = this.turnRequestScope();
+    return [...this.getHistory(), ...[...(this.turnRequests ?? new Map()).values()].filter(value => value.scope === scope).map(value => value.message)];
+  }
+  private rememberTurnRequest(text: string, mode: TurnToolMode, id?: string, retrySourceId?: string): string {
+    if (id !== undefined && (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) throw new TurnToolModeError('요청 식별자를 확인할 수 없습니다. 입력은 그대로 보관됩니다.');
+    const userId = id ?? randomId();
+    const previous = this.retryMessages().find(message => message.id === userId);
+    if (previous && (retrySourceId !== userId || previous.content !== text || turnToolMode(previous.toolMode) !== mode)) throw new TurnToolModeError('이미 보낸 요청입니다. 원래 요청의 다시 보내기를 사용해 주세요.');
+    this.turnRequests ??= new Map();
+    this.turnRequests.set(userId, { scope: this.turnRequestScope(), message: { id: userId, role: 'user', content: text, createdAt: Date.now(), toolMode: mode } });
+    while (this.turnRequests.size > 64) this.turnRequests.delete(this.turnRequests.keys().next().value!);
+    return userId;
+  }
+  private taskChanging = false;
+  private sourceOpening?: string;
+  /** Only this flow's tab can be reused/replaced; user-navigated or foreign tabs are left alone. */
+  private taskSourceBrowser?: { tab: vscode.BrowserTab; taskId: string; activityId: string; url: string; requestId?: string; source?: vscode.Webview };
+
+
+  private currentTaskStore(): TaskWorkspaceStore | undefined {
+    return this.taskWorkspace?.activityId === activityConnections(this.context)?.scope ? this.taskWorkspace?.store : undefined;
+  }
+
+  private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
+    const activity = activityConnections(this.context)?.current;
+    if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
+    if (this.taskWorkspace?.activityId === activity.id) return;
+    const store = new TaskWorkspaceStore(path.join(this.context.globalStorageUri.fsPath, 'task-workspaces'), JSON.stringify([activity.id, activity.workspace]));
+    this.taskWorkspace = { activityId: activity.id, store };
+    try {
+      await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
+    } catch {
+      // The error view is shown, and sends are blocked. Never replace unreadable history.
+    }
+  }
+
+  private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
+    const store = this.currentTaskStore?.();
+    if (!store) return;
+    const before = store.getView();
+    if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) return;
+    const knownSource = (value: string) => {
+      try {
+        const url = new URL(value);
+        return typeof value === 'string' && value.length <= 8192 && value === value.trim() && !/[\u0000-\u0020\u007f]/.test(value) && ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password && store.getHistory().some(message => message.citations?.some(citation => citation.url === value));
+      } catch { return false; }
+    };
+    try {
+      if (msg.type === 'taskOpenSource') {
+        if (!knownSource(msg.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
+        if (msg.requestId !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(msg.requestId)) throw new Error('출처 요청을 확인할 수 없습니다. 다시 선택해 주세요.');
+        if (this.sourceOpening) throw new Error('이전 출처를 여는 중입니다. 잠시 뒤 다시 시도해 주세요.');
+        const opening = msg.requestId ?? randomId();
+        this.sourceOpening = opening;
+        const activityId = activityConnections(this.context)?.scope ?? '';
+        const stillCurrent = () => this.currentTaskStore?.() === store && store.getView().activeTaskId === msg.taskId && activityConnections(this.context)?.scope === activityId && !this.taskChanging;
+        try {
+          const previous = this.taskSourceBrowser;
+          const owned = previous && previous.taskId === msg.taskId && previous.activityId === activityId && previous.tab.url === previous.url && (vscode.window.browserTabs ?? []).includes(previous.tab) ? previous : undefined;
+          let tab: vscode.BrowserTab;
+          if (owned?.url === msg.url) { tab = owned.tab; await this.revealBrowserTab(tab); }
+          else tab = await vscode.window.openBrowserTab(msg.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+          if (!stillCurrent()) {
+            if (tab !== owned?.tab && tab.url === msg.url) await Promise.resolve(tab.close()).catch(() => {});
+            return;
+          }
+          this.taskSourceBrowser = { tab, taskId: msg.taskId, activityId, url: msg.url, requestId: msg.requestId, source };
+          if (owned && owned.tab !== tab && owned.tab.url === owned.url) await Promise.resolve(owned.tab.close()).catch(() => {});
+          if (msg.requestId) await this.post({ type: 'sourceOpenResult', requestId: msg.requestId, taskId: msg.taskId, activityId, url: msg.url, opened: true });
+        } finally { if (this.sourceOpening === opening) this.sourceOpening = undefined; }
+      } else if (msg.type === 'taskReturnFromSource') {
+        const opened = this.taskSourceBrowser;
+        if (!knownSource(msg.url) || !opened || opened.requestId !== msg.requestId || opened.url !== msg.url || opened.taskId !== msg.taskId || opened.activityId !== activityConnections(this.context)?.scope || opened.source !== source) throw new Error('이 작업에서 연 출처로 돌아가 주세요.');
+        // Reveal the initiating chat surface, then let its exact citation restore focus.
+        // Do not use focusEditor(): its focusInput message would steal the citation focus.
+        if (source && source === this.editorChat?.webview) this.editorChat.reveal(vscode.ViewColumn.One);
+        else if (source && source === this.view?.webview) await vscode.commands.executeCommand('hypeproof-chat.panel.focus');
+        else throw new Error('대화 화면을 찾지 못했습니다. 현재 작업을 다시 열어 주세요.');
+        if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) return;
+        await this.post({ type: 'sourceReturn', requestId: msg.requestId, url: msg.url, taskId: msg.taskId, activityId: opened.activityId });
+      } else if (msg.type === 'taskSourceSelection') {
+        if (!knownSource(msg.selection.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
+        await store.saveSurface(msg.taskId, msg.selection);
+      } else {
+        if (this.hasActiveStream() || this.verifySession?.running || this.connectionChanging || this.clearingHistory) throw new Error('진행 중인 작업을 멈춘 뒤 다시 시도해 주세요.');
+        this.taskChanging = true;
+        try {
+          if (source) this.draftSource = source;
+          await this.setConnectionChanging(true);
+          if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
+          const expected = { taskId: msg.taskId, revision: store.getView().revision };
+          if (msg.type === 'taskCreate') await store.create('새 작업', expected);
+          else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
+          else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
+          this.orchestratorState = undefined;
+          await this.postConfig();
+          await this.postHistory();
+        } finally {
+          this.taskChanging = false;
+          await this.setConnectionChanging(false);
+        }
+      }
+      await this.post({ type: 'taskWorkspaceState', view: store.getView() });
+    } catch (error) {
+      let message = error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.';
+      if (msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') {
+        // Browser/command failures may contain internal paths or tokens, including across realms.
+        const safeMessages = msg.type === 'taskOpenSource'
+          ? ['이 작업에서 확인한 출처를 선택해 주세요.', '출처 요청을 확인할 수 없습니다. 다시 선택해 주세요.', '이전 출처를 여는 중입니다. 잠시 뒤 다시 시도해 주세요.']
+          : ['이 작업에서 연 출처로 돌아가 주세요.', '대화 화면을 찾지 못했습니다. 현재 작업을 다시 열어 주세요.'];
+        if (!safeMessages.includes(message)) message = msg.type === 'taskOpenSource'
+          ? '브라우저에서 출처를 열지 못했습니다. 다시 시도해 주세요.'
+          : '대화로 돌아가지 못했습니다. 다시 시도해 주세요.';
+      }
+      if ((msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') && msg.requestId) {
+        await this.post({ type: 'sourceOpenResult', requestId: msg.requestId, url: msg.url, taskId: msg.taskId, opened: false, error: message });
+      } else await this.post({ type: 'taskWorkspaceError', error: message });
+    }
+  }
   private accessState:AccessState|undefined;
   private accessScope:string|undefined;
   private accessCheckedAt=0;
@@ -2410,6 +2538,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         "대화 지우기",
       );
       if (choice !== "대화 지우기" || this.hasActiveStream() || key !== this.historyKey()) return;
+      const taskStore = this.currentTaskStore?.();
+      const taskId = taskStore?.getView().activeTaskId;
+      if (taskStore && taskId) {
+        await taskStore.clearHistory(taskId);
+        await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
+      }
       await this.context.workspaceState.update(key, []);
       // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
@@ -2462,10 +2596,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.postConfig();
   }
   /** A turn refused under the lesson-binding contract. The Service's record decides how it ends; nothing is re-sent automatically. */
-  private async endRefusedTurn(o: { code: string; streamId: string; proxyUrl: string; token: string | undefined; text: string; images?: string[] }): Promise<void> {
+  private async endRefusedTurn(o: { code: string; streamId: string; proxyUrl: string; token: string | undefined; text: string; images?: string[]; toolMode?: TurnToolMode }): Promise<void> {
     const ending = refusedTurnEnding(o.token ? await fetchTurnState({ proxyUrl: o.proxyUrl, token: o.token, turnId: o.streamId }) : null);
     console.warn(`[lesson-binding] turn ${o.streamId} refused: ${o.code} → ${ending}`);
-    if (ending === "restore_input") await this.post({ type: "inputRejected", text: o.text, images: o.images });
+    if (ending === "restore_input") await this.post({ type: "inputRejected", text: o.text, images: o.images, toolMode: o.toolMode });
     await this.post({ type: "streamError", streamId: o.streamId, error: REFUSAL_COPY[ending] });
     // The next turn must start from what the Service runs now; a profile that cannot be verified stays as it is.
     if (o.token) { const candidate = await this.fetchCandidateProfile(o.token); if (candidate?.lesson_binding && candidate.lesson_binding.key !== this.cachedProfile?.lesson_binding?.key) await this.adoptProfile(candidate, o.token); }
@@ -3966,24 +4100,51 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async handleMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
     const connections=activityConnections(this.context);
     if (connections && msg.activityId && msg.activityId!==connections.scope) return;
+    const taskStore = this.currentTaskStore?.();
+    if (taskStore && msg.type !== 'ready') {
+      const task = taskStore.getView();
+      if (task.error || !msg.taskId || msg.taskId !== task.activeTaskId) {
+        await this.post({ type: 'taskWorkspaceError', error: task.error?.message ?? '작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.' });
+        return;
+      }
+    }
+    if (['taskCreate', 'taskSelect', 'taskRename', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+      await this.handleTaskMessage(msg, source); return;
+    }
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
       if (source && !msg.nonce) this.draftSource=source;
       const key='hps.activity.draft.'+msg.activityId;
-      const save=this.draftWrites.then(()=>this.context.workspaceState.update(key,msg.draft));
+      const save=this.draftWrites.then(async () => {
+        if (taskStore && msg.taskId) await taskStore.saveDraft(msg.taskId, msg.draft);
+        else await this.context.workspaceState.update(key,msg.draft);
+      });
       this.draftWrites=save.catch(()=>{});
       try {
         await save;
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: null });
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce && this.draftFlush.source===source) this.draftFlush.resolve();
       } catch {
-        const error=new Error('입력을 저장하지 못했습니다. 기존 활동을 유지합니다.');
+        const error=new Error(taskStore ? '입력을 저장하지 못했습니다. 현재 작업과 입력은 그대로입니다. 다시 선택해 주세요.' : '입력을 저장하지 못했습니다. 기존 활동을 유지합니다.');
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce) this.draftFlush.reject(error);
-        await this.post({type:'activityDraftError',error:'입력을 저장하지 못했습니다. 활동을 바꾸기 전에 내용을 복사해 두세요.'});
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: error.message });
+        else await this.post({type:'activityDraftError',error:'입력을 저장하지 못했습니다. 활동을 바꾸기 전에 내용을 복사해 두세요.'});
       }
       return;
     }
     if (connections && (msg.type==='sendMessage'||msg.type==='retryMessage') && msg.activityId!==connections.scope) {
       await this.post({type:'streamError',streamId:'connection',error:'활동이 바뀌었습니다. 현재 활동에서 요청을 다시 확인해 주세요.'});return;
+    }
+    let requestedMode: TurnToolMode = 'auto';
+    if (msg.type === 'sendMessage' || msg.type === 'retryMessage') {
+      try {
+        requestedMode = msg.type === 'retryMessage' ? retryTurnToolMode(this.retryMessages(), msg) : turnToolMode(msg.toolMode);
+      } catch (error) {
+        await this.post({ type: 'inputRejected', text: msg.type === 'sendMessage' ? msg.text : msg.prompt, images: msg.images,
+          ...(validTurnToolMode(msg.toolMode) ? { toolMode: msg.toolMode } : {}) });
+        await this.post({ type: 'streamError', streamId: 'tools', error: error instanceof Error ? error.message : '도구 선택을 확인하지 못했습니다.' });
+        return;
+      }
     }
     // Any message from the panel is evidence of a human. See `lastActivityAt`.
     this.lastActivityAt = Date.now();
@@ -3994,12 +4155,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     if (this.opsHold && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
       // #751 — only a NEW AI run is held; the typed text goes back into the box, nothing is lost.
-      await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images});
+      await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images,toolMode:requestedMode});
       void this.post({ type: "streamError", streamId: "connection", error: this.opsHold === "paused" ? "강사가 새 AI 실행을 잠시 멈췄습니다. 입력은 그대로 남겨 두었고, 파일 편집·저장·내보내기는 계속 할 수 있습니다." : "이전 AI 실행이 끝났는지 확인하지 못해 새 실행을 잠시 막았습니다. 입력은 그대로 남겨 두었습니다. 강사에게 알려 주세요." });
       return;
     }
     if (this.connectionChanging && (msg.type === "sendMessage" || msg.type === "retryMessage")) {
-      await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images});
+      await this.post({type:"inputRejected",text:msg.type==="sendMessage"?msg.text:msg.prompt,images:msg.images,toolMode:requestedMode});
       void this.post({ type: "streamError", streamId: "connection", error: "활동 전환이 끝난 뒤 다시 보내세요. 입력은 초안에 남겨 두었습니다." });
       return;
     }
@@ -4205,7 +4366,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments);
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId);
         return;
       case "stageImage":
         await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
@@ -4217,7 +4378,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #358 — carry the failed turn's image(s) through the retry so the
         // coach actually re-receives the screenshot (was text-only → "스크린샷을
         // 아직 못 받았어요").
-        await this.handleSend(msg.prompt, msg.history, msg.images);
+        await this.handleSend(msg.prompt, msg.history, msg.images, undefined, undefined, requestedMode, msg.userMessageId, msg.sourceMessageId);
         return;
       case "voiceCapabilityProbeResult": {
         // #897 — hand the raw observation to whoever is waiting for it. No verdict
@@ -4464,10 +4625,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     images?: string[],
     instructorPromptRefs?: Array<{ object_id: string; revision: number }>,
     attachments?: string[],
+    requestedMode?: TurnToolMode,
+    userMessageId?: string,
+    retrySourceId?: string,
   ): Promise<void> {
+    const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
     if (this.verifySession?.running) {
-      await this.post({type:"inputRejected",text,images});
+      await this.post({type:"inputRejected",text,images,toolMode:mode});
       await this.post({type:"streamError",streamId:"activity",error:"제품 테스트가 끝난 뒤에 보내 주세요."});
       return;
     }
@@ -4475,6 +4640,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let releaseActivity: (()=>void) | undefined;
     let preflightComplete=false;
     try {
+    const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId);
     const connections=activityConnections(this.context);
     // Instructor mode has no student activity connection — skip the acquire/verify gate.
     if (connections && !this._instructorMode.isInstructor) {
@@ -4490,13 +4656,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #503 — the webview's history now has tool lines (role:"tool") mixed in. This is
     // the only path out to the model, so they are filtered once right at the entrance.
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
-    const history = modelHistory(activityConnections(this.context) ? this.getHistory() : rawHistory);
+    const history = modelHistory(clampTimeline(activityConnections(this.context) ? this.getHistory() : rawHistory, HISTORY_MAX));
     // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
     // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
     // always a real turn. Reads the profile already held (no await before the turn's first one).
     const wikiSwitch = this.cachedProfile?.learning_wiki;
-    const brainCall = wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
+    const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
       await this.answerBrainCall(text, brainCall);
       return;
@@ -4505,7 +4671,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // language and a game already exists, just open it. Don't make them hunt
     // for the ▶ Run button or burn an AI round-trip on a deflection. Skipped
     // when an image is attached — a pasted screenshot is always a real turn.
-    if (isShowIntent(text) && (!images || images.length === 0)) {
+    if (mode === 'auto' && isShowIntent(text) && (!images || images.length === 0)) {
       const lastGame = this.extractLastRenderableCode();
       if (lastGame) {
         const labels = labelsForProfile(this.cachedProfile);
@@ -4516,7 +4682,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
         void this.post({ type: "streamEnd", streamId: uid });
         await this.appendHistory([
-          { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+          { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
           {
             id: aid,
             role: "assistant",
@@ -4536,8 +4702,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
-    if (isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
-      await this.appendHistory([{ id: randomId(), role: "user", content: text, createdAt: Date.now() }]);
+    if (mode === 'auto' && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
+      await this.appendHistory([{ id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode }]);
       await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.");
       // After this send settles: switchProject refuses while a send is pending (idle()).
       setTimeout(() => void this.switchProject(), 0);
@@ -4547,7 +4713,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // 2026-08-19 — "다른 친구도 있어?" is answered instantly from the profile's
     // worlds. This used to spend one LLM turn (10–40 s) — the app already holds the
     // list.
-    if (isGuestListRequest(text) && (!images || images.length === 0)) {
+    if (mode === 'auto' && isGuestListRequest(text) && (!images || images.length === 0)) {
       const ws = this.cachedProfile?.worlds;
       if (ws?.length) {
         const shown = (this.cachedProfile?.ux?.suggestions?.initial ?? []).map((c) => c.text);
@@ -4558,7 +4724,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
         void this.post({ type: "streamEnd", streamId: uid });
         await this.appendHistory([
-          { id: randomId(), role: "user", content: text, createdAt: Date.now() },
+          { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
           {
             id: aid,
             role: "assistant",
@@ -4589,6 +4755,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #751 G2 — the step and help choice for THIS turn, from the focus at turn start against the turn's own lesson.
     const turnFocus = turnLesson(profile?.lesson, this.lessonFocus);
     const selection = availableModelSelection(profile, cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'));
+    const runtime: 'proxy' | 'agent-sdk' = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
+      settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: profile?.coach_runtime, minorCohort: profile?.minor_cohort,
+    });
+    requireTurnTools(mode, turnToolsAvailability({ profile, runtime, local: !!localRuntimeConfig(vscode.env.appName, proxyUrl), instructor: this._instructorMode.isInstructor === true }));
     const savedModel = this.context.workspaceState.get<SavedModelChoice>('hps.modelChoice');
     if (profile && selection) model = selectedModel(profile, selection, savedModel, model);
     const effort = profile && selection ? selectedEffort(profile,selection,model,this.context.workspaceState.get<SavedEffortChoice>('hps.effortChoice'))?.value : undefined;
@@ -4734,6 +4904,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const attachedNote = this.commitAttachedImages(attachments, streamId);
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
+    const requestSnapshot = this.turnRequests.get(userId);
+    if (requestSnapshot) requestSnapshot.message.content = historyText;
     // File attachments carry bytes on their first turn. A later explicit reference
     // re-reads this activity's files, so edits/deletions never resurrect old pixels.
     const currentPaths = imagePathsFromNotes(attachedNote);
@@ -4782,6 +4954,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
+    const webActivity = new WebSearchActivity();
     // #580 — this turn's spool recording state. spoolRuntime is the runtime that
     // **actually ran**, reflecting an SDK→proxy fallback — quantifying the cause of a
     // turn with no usage requires the recorded runtime to match reality (no silent
@@ -4824,12 +4997,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // pulled out as a pure function while fixing the asymmetry where the minor check
       // was missing from the setting path alone. Unit test, with controls:
       // test/coach-runtime.smoke.mjs
-      const settingRuntime = cfg.get<"proxy" | "agent-sdk">("coachRuntime", "proxy");
-      const runtime: "proxy" | "agent-sdk" = selection?.source === "lesson" ? selection.runtime : resolveCoachRuntime({
-        settingRuntime,
-        profileRuntime: profile?.coach_runtime,
-        minorCohort: profile?.minor_cohort,
-      });
       // #580 — record the raw question plus the runtime this turn is headed for into
       // the spool. The identity comes from the token payload (u·c·p); with no token it
       // is recorded without an identity (the call below fails anyway and lands as
@@ -4926,6 +5093,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.crSdkResults.reset(turnBlobSink);
       this.mcpBrowser?.crNewTurn();
       const onActivity = (a: import("./sdkCoachHelpers").SdkActivity) => {
+        webActivity.observe(a);
         if (a.kind==='tool_use') this.crSdkResults.onToolUse(a.id, a.name, this.isCurriculumRuntimeEnabled());
         if (observation && (a.kind==='tool_use' || a.kind==='approval')) {
           try { observation.toolRequest(streamId,a.id,`${a.name}(${summarizeToolInput(a.name,a.input,300,this.resolveCoachCwd())})`); this.persistObservation(observation); }
@@ -5253,6 +5421,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         try {
           const sdkEnd = await runSdkCoach({
+            toolMode: mode,
             gatewayUrl: proxyUrl,
             effort,
             turnId: streamId,
@@ -5356,6 +5525,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const ended = sdkTurnEndFailure(sdkEnd);
           if (ended) { spoolStatus = "error"; spoolErrorKind = ended.errorKind; opsFailure = ended.failure; }
         } catch (err) {
+          if (mode === 'web-search' && err instanceof SdkUnavailableError) throw new TurnToolModeError('웹 검색 실행 환경을 사용할 수 없습니다. SDK 연결을 확인하거나 웹 검색 선택을 해제해 주세요.');
           if (!(err instanceof SdkUnavailableError)||fundingSource) throw err;
           if (selection && (selection.source === 'lesson' || (profile && savedModel?.scope === modelSelectionScope(profile)))) throw new Error('선택한 모델의 실행 환경을 사용할 수 없습니다. Studio의 Agent SDK 설치를 확인하거나 강사에게 알려주세요. 대화와 작업은 보존됩니다.');
           // Pre-Phase-1: the SDK package isn't installed. Keep the classroom
@@ -5405,6 +5575,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // (parity with the proxy path, which throws on abort).
       if (!ctrl.signal.aborted) {
         clearPending();
+        if (mode === 'web-search') {
+          const completion = webActivity.completion(assistantCitations.length);
+          if (completion) this.postToolLog(streamId, { id: `web-search-result-${streamId}`, icon: '🔎', ...completion });
+        }
         void this.post({ type: "streamEnd", streamId });
         // #371 — persist the agent.md handoff fence, if the coach emitted one.
         // #503 — await it **before** the history is frozen. The toolLog line this
@@ -5412,7 +5586,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // window is reopened.
         await this.saveAgentMdIfPresent(assistantText, streamId);
         await this.appendHistory([
-          { id: randomId(), role: "user", content: historyText, createdAt: Date.now() },
+          { id: userId, role: "user", content: historyText, createdAt: Date.now(), toolMode: mode },
           ...this.finishTurnItems(
             streamId,
             messageId,
@@ -5434,8 +5608,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // read a deliberate stop as "연결이 끊겼어요". The stop notice was already posted by whoever stopped it.
       // #751 U3 — a turn the Service refused under the lesson-binding contract is closed from the Service's record of it.
       const refused = bindingKey ? bindingRefusalCode(err) : null;
-      if (refused && !ctrl.signal.aborted) await this.endRefusedTurn({ code: refused, streamId, proxyUrl, token, text, images });
-      else if (!ctrl.signal.aborted) await this.handleSendError(err, streamId, { profile, proxyUrl, token, signal: ctrl.signal });
+      if (refused && !ctrl.signal.aborted) await this.endRefusedTurn({ code: refused, streamId, proxyUrl, token, text, images, toolMode: mode });
+      else if (!ctrl.signal.aborted) {
+        if (mode === 'web-search') await this.post({ type: 'inputRejected', text, images, toolMode: mode });
+        await this.handleSendError(err, streamId, { profile, proxyUrl, token, signal: ctrl.signal });
+      }
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
@@ -5493,9 +5670,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnTimelines.delete(streamId);
     }
     } catch (error) {
-      if (preflightComplete) throw error;
-      await this.post({type:"inputRejected",text,images});
-      await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
+      // A pre-stream storage/profile failure still owns a pending UI request.
+      // Restore its captured input before propagating an unexpected host error.
+      await this.post({type:"inputRejected",text,images,toolMode:mode});
+      await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
+      if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
       try { releaseActivity?.(); } finally { this.pendingSends--; }
     }
@@ -6127,14 +6306,24 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         : local?.provider === "codex" ? "내 Codex 구독"
         : "서버")
       : undefined;
+    await this.prepareTaskWorkspace?.(isInstructor);
+    if (scope !== activityConnections(this.context)?.scope) return;
+    const taskStore = this.currentTaskStore?.();
+    const taskView = taskStore?.getView();
+    const toolProfile = profile ? accessProfile(profile, this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected)) : null;
+    const toolRuntime = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
+      settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: toolProfile?.coach_runtime, minorCohort: toolProfile?.minor_cohort,
+    });
     await this.post({
       type: "config",
       config: {
+        turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
+        ...(taskView ? { taskWorkspace: taskView } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
-          activityDraft:this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
+          activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
@@ -6189,11 +6378,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async postHistory(): Promise<void> {
+    const error = this.currentTaskStore?.()?.getView().error;
+    if (error) { await this.post({ type: 'taskWorkspaceError', error: error.message }); return; }
     const messages = this.getHistory();
     await this.post({ type: "history", messages });
   }
 
   private async appendHistory(msgs: ChatMessage[]): Promise<void> {
+    const taskStore = this.currentTaskStore?.();
+    if (taskStore) {
+      const taskId = taskStore.getView().activeTaskId;
+      if (!taskId) throw new Error('작업 기록을 열지 못했습니다. 저장소 오류를 확인해 주세요.');
+      await taskStore.append(taskId, msgs);
+      await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
+      return;
+    }
     const current = this.getHistory();
     // #503 — the cap is counted on 'what was said'. Counting tool lines inside the
     // same 200 lets a single SDK turn (dozens of lines) push the entire conversation
@@ -6215,6 +6414,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private getHistory(): ChatMessage[] {
+    const taskStore = this.currentTaskStore?.();
+    if (taskStore) return taskStore.getHistory();
     return this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []);
   }
 
@@ -6266,7 +6467,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
-    msg={...msg,activityId:msg.activityId ?? activityConnections(this.context)?.scope};
+    msg={...msg,activityId:msg.activityId ?? activityConnections(this.context)?.scope, taskId: msg.taskId ?? this.currentTaskStore?.()?.getView().activeTaskId ?? undefined} as HostMessage;
     const targets = [this.editorChat?.webview, this.view?.webview].filter((view): view is vscode.Webview => !!view);
     if (!targets.length) return;
     const results = await Promise.all(targets.map(view => view.postMessage(msg)));

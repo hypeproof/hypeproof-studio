@@ -1632,6 +1632,9 @@
           "path": "scripts/studio-dev-vendor.mjs"
         },
         {
+          "path": "scripts/patches/windows-policy-locales.patch"
+        },
+        {
           "path": "scripts/release/smoke/checks/s3-cohort-token.mjs"
         },
         {
@@ -1682,6 +1685,9 @@
         },
         {
           "path": "e2e/feedback-native/sdk-vendor.test.mjs"
+        },
+        {
+          "path": "scripts/test/windows-policy-patch.test.mjs"
         },
         {
           "path": "scripts/release/test/release-cut.test.mjs"
@@ -5747,6 +5753,179 @@
         {
           "path": "docs/dev/release-engine.md",
           "section": "## Verification"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-TASK-WORKSPACE",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Personal task workspace (#1756)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-TASK-WORKSPACE",
+      "stage": "design",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-REQ-CHAT-DETAIL",
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "docs/design/task-workspace.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-WORKSPACE",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-DES-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/vscode.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/classroomPanels.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/chatDetails.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/main.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/turnTools.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkWebCitations.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ComposerTools.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CitationPreview.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-WORKSPACE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-TASK-WORKSPACE",
+        "ST-REQ-CHAT-DETAIL",
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/task-workspace.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-store.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-harness.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/run.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/server.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/native.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/classroom-panels.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/verify-panel.smoke.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/chat-details.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/chat-reference.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-source-flow.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHAT-DETAIL",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Personal chat detail (CP-R1)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CHAT-REFERENCE",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Chat reference interaction (CG-IMPL-R1)"
         }
       ]
     }

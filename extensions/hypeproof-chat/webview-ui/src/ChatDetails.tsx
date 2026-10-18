@@ -1,0 +1,119 @@
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+
+export function ChatIcon({ kind }: { kind: 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' }) {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {kind === 'plus' && <path d="M12 5v14M5 12h14" />}
+    {kind === 'globe' && <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></>}
+    {kind === 'image' && <><rect x="3" y="3" width="18" height="18" rx="4" /><circle cx="8" cy="8" r="1" /><path d="m3 17 5-5 4 4 4-6 5 7" /></>}
+    {kind === 'retry' && <><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5" /></>}
+    {kind === 'send' && <path d="M12 19V5m-6 6 6-6 6 6" />}
+    {kind === 'stop' && <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />}
+    {kind === 'copy' && <><rect x="8" y="8" width="11" height="12" rx="2" /><path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" /></>}
+    {kind === 'check' && <path d="m5 12 4 4L19 6" />}
+    {kind === 'down' && <path d="M12 5v14m-6-6 6 6 6-6" />}
+  </svg>;
+}
+
+export function CopyAnswer({ content }: { content: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    if (state === 'idle') return;
+    const timer = setTimeout(() => setState('idle'), 2400);
+    return () => clearTimeout(timer);
+  }, [state]);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(content); if (mounted.current) setState('copied'); }
+    catch { if (mounted.current) setState('failed'); }
+  };
+  return <div className="hps-answer-actions">
+    <button type="button" className="hps-copy-answer" onClick={copy} aria-label="답변 복사" title="답변 복사">
+      <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
+    </button>
+    <span role="status" className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
+  </div>;
+}
+
+export function ResponsePending({ hasContent = false }: { hasContent?: boolean }) {
+  return <div className="hps-response-pending" role="status">
+    <span className="hps-response-dots" aria-hidden="true"><i /><i /><i /></span>
+    <span>{hasContent ? '답변 작성 중' : '응답을 준비하고 있어요'}</span>
+  </div>;
+}
+
+/** Keep live output in view only while the reader chooses to follow the bottom. */
+export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean, revision: unknown) {
+  const follow = useRef(true);
+  const [away, setAway] = useState(false);
+  const toLatest = () => {
+    follow.current = true;
+    setAway(false);
+    // Instant positioning avoids a stream of competing smooth-scroll animations.
+    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  };
+  const onScroll = () => {
+    if (!enabled || !ref.current) return;
+    const node = ref.current;
+    follow.current = node.scrollHeight - node.scrollTop - node.clientHeight <= 48;
+    setAway(!follow.current);
+  };
+  useLayoutEffect(() => {
+    if (enabled && follow.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
+  }, [enabled, revision, ref]);
+  useEffect(() => {
+    if (!enabled || !ref.current) return;
+    const node = ref.current;
+    const resize = new ResizeObserver(() => {
+      if (follow.current) node.scrollTop = node.scrollHeight;
+    });
+    resize.observe(node);
+    for (const child of node.children) resize.observe(child);
+    return () => resize.disconnect();
+  }, [enabled, revision, ref]);
+  return { away, onScroll, toLatest };
+}
+
+/** Keep one editor node while compact and expanded layouts share draft ownership. */
+export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
+  const [expanded, setExpanded] = useState(false);
+  useLayoutEffect(() => {
+    if (!enabled || !ref.current) return;
+    const node = ref.current;
+    const shell = node.closest<HTMLElement>('.hps-shell');
+    const footer = node.closest<HTMLElement>('.hps-input-area');
+    const card = node.closest<HTMLElement>('.hps-input');
+    let previous = '';
+    const geometry = () => [card?.clientWidth, shell?.clientHeight, footer?.offsetHeight,
+      ...Array.from(shell?.children ?? []).filter(child => child !== footer && !child.classList.contains('hps-messages')).map(child => (child as HTMLElement).offsetHeight)].join(':');
+    const fit = () => {
+      const cardStyle = card && getComputedStyle(card);
+      const inset = cardStyle ? parseFloat(cardStyle.paddingLeft) + parseFloat(cardStyle.paddingRight) : 16;
+      const tools = card?.querySelector<HTMLElement>('.hps-composer-tools');
+      const controls = card?.querySelector<HTMLElement>('.hps-input-buttons');
+      const compactWidth = Math.max(40, (card?.clientWidth ?? node.clientWidth) - inset - (tools?.offsetWidth ?? 0) - (controls?.offsetWidth ?? 44) - 12);
+      const line = parseFloat(getComputedStyle(node).lineHeight) || 24;
+      // Measure at the compact width so a wrapped paragraph cannot oscillate between layouts.
+      node.style.width = `${compactWidth}px`;
+      node.style.height = '0px';
+      const needsRoom = hasContext || node.scrollHeight > line + 1;
+      node.style.width = '';
+      setExpanded(needsRoom);
+      const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
+        height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
+      const fixedFooter = (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight;
+      const cap = Math.max(24, Math.min(192, (shell?.clientHeight ?? 600) - fixedFooter - chrome - 96));
+      node.style.maxHeight = `${cap}px`;
+      node.style.height = '0px';
+      node.style.height = `${Math.min(cap, Math.max(24, node.scrollHeight))}px`;
+      previous = geometry();
+    };
+    fit();
+    const resize = new ResizeObserver(() => { if (geometry() !== previous) fit(); });
+    if (card) resize.observe(card);
+    if (shell) resize.observe(shell);
+    if (footer) resize.observe(footer);
+    return () => resize.disconnect();
+  }, [enabled, draft, ref, hasContext, expanded]);
+  return expanded;
+}
