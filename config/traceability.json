@@ -5627,6 +5627,157 @@
       ]
     },
     {
+      "id": "ST-REQ-CANDIDATE-DRAFT",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Candidate draft build contract (#1758)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-CANDIDATE-DRAFT",
+      "stage": "design",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/06-release-process.md",
+          "section": "## Managed candidate drafts (#1758)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CANDIDATE-DRAFT",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CANDIDATE-DRAFT",
+        "ST-DES-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/build-contract.mjs"
+        },
+        {
+          "path": "scripts/release/create.mjs"
+        },
+        {
+          "path": ".github/workflows/build-mac.yml"
+        },
+        {
+          "path": ".github/workflows/build-windows.yml"
+        },
+        {
+          "path": ".github/workflows/release-cut.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CANDIDATE-DRAFT",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CANDIDATE-DRAFT",
+        "ST-IMP-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/test/build-contract.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/create.test.mjs"
+        },
+        {
+          "path": ".github/workflows/pr-ci.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-RELEASE-ENGINE",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-INT-UNIFIED",
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/release-engine.md",
+          "section": "## Requirements"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Daily release coordinator (#1757)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-RELEASE-ENGINE",
+      "stage": "design",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RELEASE-ENGINE"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/release-engine.md",
+          "section": "## Design"
+        },
+        {
+          "path": "scripts/release/engine/policy.example.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-RELEASE-ENGINE",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RELEASE-ENGINE",
+        "ST-DES-RELEASE-ENGINE",
+        "ST-TEST-RELEASE-ENGINE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/engine/core.mjs"
+        },
+        {
+          "path": "scripts/release/engine/store.mjs"
+        },
+        {
+          "path": "scripts/release/engine/cli.mjs"
+        },
+        {
+          "path": ".github/workflows/pr-ci.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-RELEASE-ENGINE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RELEASE-ENGINE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/test/engine.test.mjs"
+        },
+        {
+          "path": "docs/dev/release-engine.md",
+          "section": "## Verification"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-TASK-WORKSPACE",
       "stage": "requirement",
       "owner": "ico1036",
@@ -5796,83 +5947,6 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Chat reference interaction (CG-IMPL-R1)"
-        }
-      ]
-    },
-    {
-      "id": "ST-REQ-RELEASE-ENGINE",
-      "stage": "requirement",
-      "owner": "ico1036",
-      "depends_on": [
-        "ST-INT-UNIFIED",
-        "ST-REQ-UNIFIED"
-      ],
-      "sources": [
-        {
-          "path": "docs/dev/release-engine.md",
-          "section": "## Requirements"
-        },
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "## Daily release coordinator (#1757)"
-        }
-      ]
-    },
-    {
-      "id": "ST-DES-RELEASE-ENGINE",
-      "stage": "design",
-      "owner": "JinyongShin",
-      "depends_on": [
-        "ST-REQ-RELEASE-ENGINE"
-      ],
-      "sources": [
-        {
-          "path": "docs/dev/release-engine.md",
-          "section": "## Design"
-        },
-        {
-          "path": "scripts/release/engine/policy.example.json"
-        }
-      ]
-    },
-    {
-      "id": "ST-IMP-RELEASE-ENGINE",
-      "stage": "implementation",
-      "owner": "JinyongShin",
-      "depends_on": [
-        "ST-REQ-RELEASE-ENGINE",
-        "ST-DES-RELEASE-ENGINE",
-        "ST-TEST-RELEASE-ENGINE"
-      ],
-      "sources": [
-        {
-          "path": "scripts/release/engine/core.mjs"
-        },
-        {
-          "path": "scripts/release/engine/store.mjs"
-        },
-        {
-          "path": "scripts/release/engine/cli.mjs"
-        },
-        {
-          "path": ".github/workflows/pr-ci.yml"
-        }
-      ]
-    },
-    {
-      "id": "ST-TEST-RELEASE-ENGINE",
-      "stage": "test",
-      "owner": "JinyongShin",
-      "depends_on": [
-        "ST-REQ-RELEASE-ENGINE"
-      ],
-      "sources": [
-        {
-          "path": "scripts/release/test/engine.test.mjs"
-        },
-        {
-          "path": "docs/dev/release-engine.md",
-          "section": "## Verification"
         }
       ]
     },
