@@ -1,5 +1,6 @@
 import { OBSERVATION_FORMAT_V2, CAPABILITY_MODEL_HEADER } from "./nativeObservationContract.ts";
 import type { PassStatus } from "./protocol.ts";
+import { TRIAL_EXPIRED_FRIENDLY } from "./passPurchase.ts";
 // Pure helpers for proxyClient.ts. Kept vscode-free + fetch-free so they can
 // be unit-tested under plain Node — mirrors mintStudentTokenHelpers.ts.
 
@@ -151,7 +152,9 @@ export function classifyProfileFailure(status: number, bodyText: string): Profil
     return { ...base, reason: "rejected", friendly: PROFILE_REJECTED_FRIENDLY };
   }
   if (status === 403) {
-    if (code === "trial_expired") return { ...base, reason: "expired", friendly: serviceLine && /이용권/.test(serviceLine) ? serviceLine : "개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다. 다시 체험하려면 코드 발급 담당자에게 새 체험을 요청해 주세요." };
+    // A free trial's end no longer points to a code issuer (REQ-L12 (13)); the start page adds the
+    // '이용권으로 시작하기' pointer itself, and only while passes are sold.
+    if (code === "trial_expired") return { ...base, reason: "expired", friendly: serviceLine && /이용권/.test(serviceLine) ? serviceLine : TRIAL_EXPIRED_FRIENDLY };
     return { ...base, reason: "forbidden", friendly: "이 수업에 참여할 권한이나 진행 중인 세션이 없습니다. 강사에게 참여 등록과 수업 상태를 확인해주세요." };
   }
   if (status === 400) {

@@ -17,6 +17,9 @@ const out = path.resolve(process.env.HPS_TRIAL_UX_OUT || path.join(repo, 'e2e/te
 await fs.mkdir(out, { recursive: true });
 const bundled = await build({ entryPoints: [fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/src/profiles/studio-native-trial.ts'))], bundle: true, write: false, platform: 'node', format: 'esm', loader: { '.md': 'text' } });
 const { profile: sourceProfile } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
+// The host's own trial-ending copy (REQ-L12 (13)), so TUX-SP-05 renders what the host sends, not a paraphrase.
+const passCopy = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/passPurchase.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
+const { TRIAL_EXPIRED_FRIENDLY, withTrialPassPointer } = await import(`data:text/javascript;base64,${Buffer.from(passCopy.outputFiles[0].text).toString('base64')}`);
 const native = {
   ...sourceProfile, profile_id: sourceProfile.id,
   // `assess: true` because this suite OWNS TUX-OBS-01..10, and after ADR 0010 the
@@ -158,6 +161,23 @@ try {
     await startState(p, { profile: course, error: '인증에 실패했습니다.' }); await expect(p.getByRole('alert')).toContainText('기존 활동 연결은 유지됩니다.');
     await btn(p, '기존 활동으로 돌아가기').click(); await expect(btn(p, '이어서 하기')).toBeEnabled();
     await startState(p, { error: '개인 체험 시간이 끝났습니다.' }); await expect(btn(p, '이어서 하기')).toHaveCount(0); await expect(p.locator('#course-code')).toBeEnabled();
+    // REQ-L12 (13): after a trial expired the host names the pass entry while passes are sold. It is drawn, and
+    // only the person opens it: the error itself sends no purchase request.
+    const passes = { available: true, products: [{ id: 'pass-basic', label: '기본', recommended: true, amount: 55000, durationDays: 30, requestLimit: 350 }] };
+    const before = emitted(await requests(p), 'purchaseOpen').length;
+    await startState(p, { error: withTrialPassPointer(TRIAL_EXPIRED_FRIENDLY, true), purchase: passes });
+    await expect(p.getByRole('alert')).toContainText('만든 파일과 대화는 그대로 있어요');
+    await expect(p.getByRole('alert')).toContainText("'이용권으로 시작하기'");
+    await expect(p.getByRole('alert')).not.toContainText('코드 발급 담당자');
+    // The code form is still open from the retry above; going back to the start choices shows the named entry.
+    await btn(p, '시작 방법 다시 선택').click();
+    await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+    await expect(p.getByRole('alert')).toContainText("'이용권으로 시작하기'");
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, before, 'the trial ending never opens the purchase screen');
+    // Without a catalogue the same ending names no entry that is not drawn.
+    await startState(p, { error: withTrialPassPointer(TRIAL_EXPIRED_FRIENDLY, false) });
+    await expect(p.getByRole('alert')).not.toContainText('이용권');
+    await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
   }, { surface: 'start' });
   await test('TUX-SP-06', 'Disconnect delegates host request and disconnected host state replaces course', async p => {
     await startState(p, { profile: course }); await btn(p, '연결 해제').click(); await request(p, { type: 'disconnectCourse' });
