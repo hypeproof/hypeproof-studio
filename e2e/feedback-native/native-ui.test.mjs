@@ -188,7 +188,7 @@ test('owned quit uses Mac CmdQ and actual Windows File Exit after observed focus
   ui.workbench=async()=>target;ui.focusWorkbench=async t=>{assert.equal(t,target);events.push(['focused']);};
   ui.clickText=async(t,label,css)=>{assert.equal(t,target);events.push(['native-click',label,css]);};
   await ui.quitOwned(platform);assert.equal(events[0][0],'focused');
-  if(platform==='darwin'){assert.equal(events[1][0],'Input.dispatchKeyEvent');assert.equal(events[1][1].key,'q');assert.equal(events[1][1].modifiers,4);assert.equal(events[1][1].type,'keyDown');assert.equal(events[2][1].type,'keyUp');}
+  if(platform==='darwin'){assert.equal(events[1][0],'Input.dispatchKeyEvent');assert.equal(events[1][1].key,'q');assert.equal(events[1][1].modifiers,4);assert.equal(events[1][1].type,'rawKeyDown');assert.equal('nativeVirtualKeyCode' in events[1][1],false);assert.equal(events[2][1].type,'keyUp');}
   else assert.deepEqual(events,[['focused'],['native-click','File','.menubar-menu-button'],['native-click','Exit','.monaco-menu .action-label']]);
  }
 });
@@ -506,4 +506,17 @@ test('actual CDP retained control rescrolls only measured stable offscreen reflo
    const f=await fixture(mode);try{await assert.rejects(f.ui.press(f.target,'#target','synthetic refusal',mode==='endless'?1800:400),/Not a usable visible native control/);const phase=f.ui.phases.at(-1);assert.equal(inputs(f).length,0);assert.equal(f.calls.filter(c=>c.method==='Runtime.evaluate').length,1);assert.equal(phase.scrolls,mode==='endless'?3:1);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),mode==='endless'?3:1);assert(phase.layout_history.length<=24);assert(phase.scroll_history.length<=3);assert(!JSON.stringify(f.ui.phases).includes('PRIVATE'));if(mode==='occluded')assert.equal(phase.state.topmost,false);if(mode==='permanent')assert.equal(phase.state.inView,false);if(mode==='replacement')assert.equal(phase.state.same,false);}finally{await f.page.close();}
   });
  }finally{await browser.close();}
+});
+
+// A Windows VK must never be interpreted as an Apple hardware scan code.
+test('native shortcuts use portable CDP key identity without platform-mismatched scan codes',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');
+ for(const [key,code,vk,modifiers] of [['a','KeyA',65,4],['a','KeyA',65,2],['F1','F1',112,0],['s','KeyS',83,4],['s','KeyS',83,2],['Enter','Enter',13,0],['Escape','Escape',27,0]]){
+  const events=[];await ui.key({send:async(method,args)=>events.push({method,...args})},key,modifiers);
+  assert.equal(events.length,2);
+  assert.deepEqual(events.map(e=>e.type),['rawKeyDown','keyUp']);
+  for(const e of events){assert.equal(e.method,'Input.dispatchKeyEvent');assert.equal(e.key,key);assert.equal(e.code,code);assert.equal(e.windowsVirtualKeyCode,vk);assert.equal('nativeVirtualKeyCode' in e,false);assert.equal('text' in e,false);}
+  assert.equal(events[0].modifiers,modifiers);assert.equal(events[1].modifiers,0);
+  assert.deepEqual(events[0].commands,key==='a'&&modifiers===4?['selectAll']:undefined);
+ }
 });

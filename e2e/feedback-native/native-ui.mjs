@@ -114,9 +114,9 @@ export class NativeUI{
    try{await this.clickText(w,'Exit','.monaco-menu .action-label');}catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
    return;
   }
-  try{await w.send('Input.dispatchKeyEvent',{type:'keyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,nativeVirtualKeyCode:81,modifiers:4});}
+  try{await w.send('Input.dispatchKeyEvent',{type:'rawKeyDown',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:4});}
   catch(error){if(w.ws?.readyState===WebSocket.CLOSED)return;throw error;}
-  try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,nativeVirtualKeyCode:81,modifiers:0});}
+  try{await w.send('Input.dispatchKeyEvent',{type:'keyUp',key:'q',code:'KeyQ',windowsVirtualKeyCode:81,modifiers:0});}
   catch(error){if(w.ws?.readyState!==WebSocket.CLOSED)throw error;}
  }
 
@@ -249,7 +249,10 @@ export class NativeUI{
  async textSelector(target,text,css='button,.monaco-button'){return target.evaluate(`(()=>{const wanted=${JSON.stringify(text)},nodes=[...document.querySelectorAll(${JSON.stringify(css)})].filter(e=>e.textContent.replace(/[↗→]/g,'').trim()===wanted&&e.getBoundingClientRect().width>0);if(nodes.length!==1)return null;let e=nodes[0],parts=[];while(e&&e!==document.documentElement){parts.unshift(e.tagName.toLowerCase()+':nth-child('+([...e.parentElement.children].indexOf(e)+1)+')');e=e.parentElement;}return 'html>'+parts.join('>');})()`);}
  async hasTextButton(target,text){return !!(await this.textSelector(target,text));}
  async clickText(target,text,css){const selector=await waitFor(()=>this.textSelector(target,text,css), 'control '+text);await this.press(target,selector,text);}
- async key(target,key,modifiers=0){const codes={Enter:['Enter',13],Escape:['Escape',27],F1:['F1',112],F4:['F4',115],q:['KeyQ',81],a:['KeyA',65],b:['KeyB',66],k:['KeyK',75],o:['KeyO',79],n:['KeyN',78],s:['KeyS',83],p:['KeyP',80],w:['KeyW',87]};const[code,number]=codes[key]??[key,0];for(const type of['keyDown','keyUp'])await target.send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode:number,nativeVirtualKeyCode:number,modifiers:type==='keyUp'?0:modifiers,...(type==='keyDown'&&key==='a'&&modifiers===4?{commands:['selectAll']}:{})});}
+ // These are Chromium Windows virtual keys, not OS scan codes. Let Chromium derive
+ // the native key from code; passing 65 for Mac A denotes keypad decimal instead.
+ // Text arrives via insertText, so shortcuts use rawKeyDown (the CDP/Playwright contract).
+ async key(target,key,modifiers=0){const codes={Enter:['Enter',13],Escape:['Escape',27],F1:['F1',112],F4:['F4',115],q:['KeyQ',81],a:['KeyA',65],b:['KeyB',66],k:['KeyK',75],o:['KeyO',79],n:['KeyN',78],s:['KeyS',83],p:['KeyP',80],w:['KeyW',87]};const[code,number]=codes[key]??[key,0];for(const type of['rawKeyDown','keyUp'])await target.send('Input.dispatchKeyEvent',{type,key,code,windowsVirtualKeyCode:number,modifiers:type==='keyUp'?0:modifiers,...(type==='rawKeyDown'&&key==='a'&&modifiers===4?{commands:['selectAll']}:{})});}
  async input(target,selector,text){await this.press(target,selector);await this.key(target,'a',this.modifier);await waitFor(()=>target.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});return e===document.activeElement&&e.selectionStart===0&&e.selectionEnd===e.value.length;})()`),'native input selection covers current value');await target.send('Input.insertText',{text});await waitFor(()=>target.evaluate(`document.querySelector(${JSON.stringify(selector)})?.value===${JSON.stringify(text)}`),'native input replacement observed');}
  // CDP input acknowledgment is not a workbench transition acknowledgment. Never reuse
  // the previous command/picker while its asynchronous hide/next-picker is pending.
