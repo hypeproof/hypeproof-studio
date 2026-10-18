@@ -3,14 +3,32 @@ export interface ErrorBannerPresentation {
   title: string;
 }
 
+/**
+ * An ended or spent personal trial: the Service's `trial_expired` / `trial_exhausted`
+ * sentences and the host's expiry copy. Only sentences that state the ending count;
+ * "busy or exhausted" copy cannot prove the trial ended and is left alone.
+ */
+const TRIAL_END = /체험[^.]*?(시간이 끝났|기간이 끝났|한도에 도달|횟수를 모두 썼|요청을 모두 썼)/;
+
 /** Keep account-state notices distinct from generic authentication failures. */
 export function errorBannerPresentation(message: string): ErrorBannerPresentation {
   const isAuth = /참여 코드|토큰|세션|강사|만료|등록|인가/.test(message);
-  const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort/i.test(message);
+  const isConn = /연결|네트워크|시간|타임아웃|중단|stream|interrupt|abort|timed? ?out/i.test(message);
   // REQ-L12 — a spent, refunded or ended pass is an account state, not a fault.
   const isPass = /이용권|환불/.test(message);
+  // An ended trial is also account state. Checked before the connection frame because
+  // "체험 시간이 끝났습니다" contains "시간" and used to read as a lost connection.
+  const isTrialEnd = !isPass && TRIAL_END.test(message);
   return {
-    icon: isPass ? "🎟️" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️",
-    title: isPass ? "이용권을 더 쓸 수 없어요" : isAuth ? "잠시 멈춰요" : isConn ? "연결이 끊겼어요" : "문제가 생겼어요",
+    icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️",
+    title: isPass
+      ? "이용권을 더 쓸 수 없어요"
+      : isTrialEnd
+        ? "체험이 끝났어요"
+        : isAuth
+          ? "잠시 멈춰요"
+          : isConn
+            ? "연결이 끊겼어요"
+            : "문제가 생겼어요",
   };
 }
