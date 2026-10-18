@@ -2327,6 +2327,21 @@
       ]
     },
     {
+      "id": "ST-DES-OPEN-TRIAL",
+      "stage": "design",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-UNIFIED",
+        "ST-REQ-ACCESS-BUDGET",
+        "ST-REQ-TRIAL-CONVERSATION"
+      ],
+      "sources": [
+        {
+          "path": "docs/design/open-trial-conversion.md"
+        }
+      ]
+    },
+    {
       "id": "ST-TEST-ACCESS-BUDGET-SETTLEMENT",
       "stage": "test",
       "owner": "jayleekr",
