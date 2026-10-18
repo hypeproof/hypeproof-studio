@@ -5,7 +5,7 @@ import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
-import { activityLabel, passEnd } from "./activityLabel";
+import { activityDetail, activityLabel, trialHeaderLine } from "./activityLabel";
 import { errorBannerPresentation } from "./errorBannerPresentation";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
@@ -523,6 +523,9 @@ export function ChatPanel(props: Props) {
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
+  // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
+  // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
+  const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial) : null;
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -771,7 +774,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{passEnd(config.activity.pass) && <> · {passEnd(config.activity.pass)}</>}
+        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{activityDetail(config.activity) && <> · {activityDetail(config.activity)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -916,6 +919,7 @@ export function ChatPanel(props: Props) {
         {ux.coach.naming_mode === "fixed"
           ? <strong title={`이 수업의 AI 이름: ${coachName}`} className="hps-coach-name">{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
+        {trialLine && <span className="hps-trial-left" title={trialLine}>{trialLine}</span>}
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
@@ -999,7 +1003,8 @@ export function ChatPanel(props: Props) {
         busy={streaming || awaitingRecord}
         activity={config?.activity ? {
           label: activityLabel(config.activity.kind, config.activity.pass),
-          ...(passEnd(config.activity.pass) ? { detail: passEnd(config.activity.pass)! } : {}),
+          // TUX-SP-13 — a pass's end date, or a trial's passive remaining line (text only, no button).
+          ...(activityDetail(config.activity) ? { detail: activityDetail(config.activity)! } : {}),
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}

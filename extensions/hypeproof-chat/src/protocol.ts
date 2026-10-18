@@ -1,5 +1,10 @@
 /** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
 export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
+/**
+ * TUX-SP-13 / CU-13 — what the Service confirms about a one-hour trial grant (`trial` on /v1/profile).
+ * `ends_at` is null until the grant has started. Never sent for a pass, which keeps `pass`.
+ */
+export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -116,7 +121,7 @@ export interface EffortRequestRecord {
 export interface ChatConfig {
   turnTools?: import('./turnTools').TurnToolsAvailability;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
@@ -185,6 +190,8 @@ export interface ResolvedProfile {
   activity_kind?: "trial" | "personal" | "classroom";
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
+  /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */
+  trial?: TrialStatus;
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;

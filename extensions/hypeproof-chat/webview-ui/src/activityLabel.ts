@@ -1,4 +1,4 @@
-import type { PassStatus } from "../../src/protocol";
+import type { PassStatus, TrialStatus } from "../../src/protocol";
 
 type Kind = "trial" | "personal" | "classroom" | undefined;
 
@@ -26,4 +26,76 @@ export function passEnd(pass: PassStatus | undefined): string | null {
   if (!pass?.expires_at) return null;
   const end = new Date(pass.expires_at);
   return `${end.getMonth() + 1}월 ${end.getDate()}일까지`;
+}
+
+// ── TUX-SP-13 — a one-hour trial seat (CU-13, trial diagnosis C2/U3) ─────────────────────────────
+// Only values the Service confirmed in its `trial` block are shown. A malformed block shows
+// nothing: never 0, never unlimited, never a guessed end time.
+
+type Trial = { limit: number; used: number; end: Date | null; state: TrialStatus["state"] };
+
+function readTrial(trial: unknown): Trial | null {
+  if (!trial || typeof trial !== "object") return null;
+  const t = trial as Partial<TrialStatus>;
+  const limit = t.request_limit, used = t.requests_used;
+  if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) return null;
+  if (typeof used !== "number" || !Number.isFinite(used) || used < 0) return null;
+  const end = typeof t.ends_at === "string" ? new Date(t.ends_at) : null;
+  return { limit, used, end: end && !Number.isNaN(end.getTime()) ? end : null, state: t.state ?? "active" };
+}
+
+/** "오후 3시 20분", with the date in front when it is not today. The learner's own clock. */
+function clock(at: Date, now: number): string {
+  const h = at.getHours(), m = at.getMinutes();
+  const time = `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}시${m ? ` ${m}분` : ""}`;
+  return new Date(now).toDateString() === at.toDateString() ? time : `${at.getMonth() + 1}월 ${at.getDate()}일 ${time}`;
+}
+
+/** Expiry first, with the chat gate's boundary (`ends_at <= now`); then the count. */
+export function trialEnded(trial: TrialStatus | undefined | unknown, now = Date.now()): "exhausted" | "expired" | null {
+  const t = readTrial(trial);
+  if (!t) return null;
+  if (t.state === "expired" || (t.end && t.end.getTime() <= now)) return "expired";
+  if (t.state === "exhausted" || t.used >= t.limit) return "exhausted";
+  return null;
+}
+
+/** The candidate card's allowance, before "이 활동 시작하기". */
+export function trialAllowance(trial: TrialStatus | undefined | unknown, now = Date.now()): string | null {
+  const t = readTrial(trial);
+  if (!t) return null;
+  return `AI 요청 ${t.limit.toLocaleString("ko-KR")}번` + (t.end ? ` · ${clock(t.end, now)}까지` : "");
+}
+
+/** What is left, as of the last profile read. Null once ended: the ended card says that. */
+export function trialSummary(trial: TrialStatus | undefined | unknown, now = Date.now()): string | null {
+  const t = readTrial(trial);
+  if (!t || trialEnded(trial, now)) return null;
+  return `AI 요청 ${(t.limit - t.used).toLocaleString("ko-KR")}번 남음` + (t.end ? ` · ${clock(t.end, now)}까지` : "");
+}
+
+/** The passive line in the chat header. Text only; it never carries a button (CU-13, no upgrade pressure). */
+export function trialHeaderLine(trial: TrialStatus | undefined | unknown, now = Date.now()): string | null {
+  const ended = trialEnded(trial, now);
+  if (ended === "expired") return "체험 시간 끝남";
+  if (ended === "exhausted") return "체험 요청을 모두 사용함";
+  return trialSummary(trial, now);
+}
+
+/** The ended card that replaces "이어서 하기" on the start page. 합니다체, the start page's register. */
+export function trialEndedFacts(trial: TrialStatus | undefined | unknown, now = Date.now()): { reason: "exhausted" | "expired"; title: string; description: string; row: string } | null {
+  const reason = trialEnded(trial, now);
+  const t = readTrial(trial);
+  if (!reason || !t) return null;
+  const kept = "만든 파일은 작업 폴더에 그대로 있습니다.";
+  return reason === "exhausted"
+    ? { reason, title: "체험이 끝났습니다", description: `AI 요청을 모두 사용했습니다. ${kept}`, row: `AI 요청 ${t.limit.toLocaleString("ko-KR")}번 모두 사용` }
+    : { reason, title: "체험이 끝났습니다", description: `체험 시간이 끝났습니다. ${kept}`, row: t.end ? `${clock(t.end, now)}에 끝남` : "체험 시간 끝남" };
+}
+
+/** The chat header's detail after the activity name: a pass's end date, or a trial's remaining line. A pass always wins. */
+export function activityDetail(activity: { pass?: PassStatus; trial?: TrialStatus } | undefined, now = Date.now()): string | null {
+  if (!activity) return null;
+  if (activity.pass) return passEnd(activity.pass);
+  return trialHeaderLine(activity.trial, now);
 }

@@ -2589,6 +2589,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (connections?.current) return r.profile.activity_id !== connections.current.serverId ? null : { ...r.profile, workspace_root: connections.current.workspace };
     return r.profile;
   }
+  /**
+   * TUX-SP-13 — re-read only the trial block after a trial turn so the header's passive line follows the Service (CU-13).
+   * The profile read spends no attempt. Any failure keeps the last confirmed value; the turn's own error says what ended.
+   */
+  private async refreshTrialStatus(proxyUrl: string, token: string): Promise<void> {
+    const r = await fetchProfileResult({ proxyUrl, token }).catch(() => null);
+    const current = this.cachedProfile;
+    if (!r?.ok || !r.profile.trial || r.profile.pass || !current?.trial || current.activity_id !== r.profile.activity_id) return;
+    if (await this.context.secrets.get(TOKEN_KEY) !== token || this.cachedProfile !== current) return;
+    this.cachedProfile = { ...current, trial: r.profile.trial };
+    await this.postConfig();
+  }
   /** Same token, same activity: only what the lesson version decides changes (steps, AI name, model list, tool policy). */
   private async adoptProfile(p: ResolvedProfile, token: string): Promise<void> {
     if (await this.context.secrets.get(TOKEN_KEY) !== token) return;
@@ -5619,6 +5631,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
       // the main loop does). A closed turn id is refused by the Service from then on; best effort, bounded by the Service.
       if (bindingKey && token) void closeTurn({ proxyUrl, token, turnId: streamId, outcome: ctrl.signal.aborted ? "aborted" : spoolStatus === "ok" ? "completed" : "failed" });
+      // TUX-SP-13 — the header's remaining line is as of the last profile read; a trial turn spends attempts, so re-read it.
+      if (profile?.trial && !profile.pass && token) void this.refreshTrialStatus(proxyUrl, token);
       // #580 — always record the end of the turn. A user abort also arrives through
       // catch, so the signal is checked first. When there is an SDK turn total it is
       // carried along — the control against the sum of the per-request usage records.
@@ -6322,7 +6336,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         model:local?.model??model,
         hasToken: !!token,
         ...(taskView ? { taskWorkspace: taskView } : {}),
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),

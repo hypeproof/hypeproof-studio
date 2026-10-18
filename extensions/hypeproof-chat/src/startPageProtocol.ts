@@ -17,7 +17,7 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
-  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; id: string; name: string; coach: string; series: string; workspace: string };
+  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; trial?: import("./protocol").TrialStatus; id: string; name: string; coach: string; series: string; workspace: string };
   /** #747 — resolved AI display name for the connected seat; absent → "코치". */
   coachName?: string;
   workspace?: string;
