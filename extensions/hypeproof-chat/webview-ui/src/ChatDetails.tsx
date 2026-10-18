@@ -75,13 +75,30 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
   useLayoutEffect(() => {
     if (!enabled || !ref.current) return;
     const node = ref.current;
-    const fit = () => { node.style.height = '0px'; node.style.height = `${Math.min(192, Math.max(44, node.scrollHeight))}px`; };
+    const shell = node.closest<HTMLElement>('.hps-shell');
+    const footer = node.closest<HTMLElement>('.hps-input-area');
+    const geometry = () => {
+      const chrome = shell ? Array.from(shell.children).reduce((height, child) =>
+        height + (child === footer || child.classList.contains('hps-messages') ? 0 : (child as HTMLElement).offsetHeight), 0) : 0;
+      return [node.clientWidth, shell?.clientHeight ?? 600, (footer?.offsetHeight ?? node.offsetHeight) - node.offsetHeight, chrome];
+    };
+    let previous = '';
+    const fit = () => {
+      const dimensions = geometry();
+      previous = dimensions.join(':');
+      // Keep room for the transcript and fixed controls even in a short split pane.
+      const cap = Math.max(44, Math.min(192, dimensions[1] - dimensions[2] - dimensions[3] - 96));
+      node.style.maxHeight = `${cap}px`;
+      node.style.height = '0px';
+      node.style.height = `${Math.min(cap, Math.max(44, node.scrollHeight))}px`;
+    };
     fit();
-    let width = node.clientWidth;
     const resize = new ResizeObserver(() => {
-      if (node.clientWidth !== width) { width = node.clientWidth; fit(); }
+      if (geometry().join(':') !== previous) fit();
     });
     resize.observe(node);
+    if (shell) resize.observe(shell);
+    if (footer) resize.observe(footer);
     return () => resize.disconnect();
   }, [enabled, draft, ref]);
 }

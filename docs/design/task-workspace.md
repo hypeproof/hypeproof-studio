@@ -72,7 +72,9 @@ has a quiet identity mark and open paragraph rhythm; user text has a compact
 rounded surface. Tool outcomes, citations and answer actions stay subordinate
 to the answer. The composer is one rounded surface with its primary send/stop
 action inside. It grows with the draft up to 192px, including restored drafts
-and width changes, and then scrolls internally. Keyboard hints remain visible.
+and width changes, and then scrolls internally. A shorter pane reduces this cap
+using the actual header/footer height, reserving 96px for the transcript. Height
+and footer-context changes recalculate the cap. Keyboard hints remain visible.
 
 Motion signals an actual change: a live response enters once in 180ms, pending
 dots move for at most 3.8 seconds, copy confirmation enters in 160ms, send/stop

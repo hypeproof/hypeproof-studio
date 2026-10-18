@@ -27,13 +27,24 @@ try {
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
   expect(await input.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await expect(page.getByRole('button', { name: '메시지 보내기' })).toBeVisible();
+  await page.setViewportSize({ width: 1024, height: 400 });
+  const controlFits = name => page.getByRole('button', { name }).evaluate(node => node.getBoundingClientRect().bottom <= innerHeight);
+  await expect.poll(() => controlFits('메시지 보내기')).toBe(true);
+  await expect.poll(() => transcript.evaluate(node => node.clientHeight)).toBeGreaterThanOrEqual(90);
+  expect(await input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await fixture('stream');
+  await expect.poll(() => controlFits('응답 멈추기')).toBe(true);
+  await page.screenshot({ path: resolve(output, 'short-window-stop.png') });
+  await fixture('stop');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
   await page.screenshot({ path: resolve(output, 'composer-expanded.png') });
   await page.reload();
   await expect(input).toHaveValue('긴 초안입니다.\n'.repeat(40));
   expect(await input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
   await input.fill('');
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(shortHeight);
-  checks.push('CP-02: multiline/restored draft grows, caps with internal scrolling, then shrinks');
+  checks.push('CP-02: multiline/restored draft grows, caps and shrinks; 400px window keeps Send/Stop and transcript inside viewport');
 
   await page.getByRole('button', { name: '답변 복사', exact: true }).click();
   await expect(page.locator('.hps-copy-status')).toHaveText('답변을 복사했습니다');
@@ -121,6 +132,15 @@ try {
   await input.fill('설치 실패 사례도 함께 확인해줘');
   for (const theme of ['dark', 'light']) {
     if (theme === 'light') await page.goto(server.url + '/?theme=light');
+    await page.locator('.hps-codepill-toggle').click();
+    await expect(page.locator('.hps-codepill-body')).toBeVisible();
+    const contrast = await page.locator('.hps-codepill-body').evaluate(node => {
+      const style = getComputedStyle(node);
+      const luminance = rgb => rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map(n => n / 255).map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4).reduce((sum, n, i) => sum + n * [.2126, .7152, .0722][i], 0);
+      const foreground = luminance(style.color), background = luminance(style.backgroundColor);
+      return (Math.max(foreground, background) + .05) / (Math.min(foreground, background) + .05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
     for (const width of [1440, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -131,7 +151,7 @@ try {
       await page.screenshot({ path: resolve(output, `${theme}-${width}.png`) });
     }
   }
-  checks.push('CP-01: rich Markdown/table/code/long identifier and composer have no pane overflow in dark/light 320/390/1440');
+  checks.push('CP-01: rich Markdown/table/expanded code/long identifier fit dark/light 320/390/1440; code text contrast exceeds 4.5:1');
   expect(errors).toEqual([]);
   await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', checks, scope: 'built React + actual task host/store; synthetic stream/model seam; browser clipboard policy; not OS IME or signed app acceptance', errors }, null, 2));
   console.log(JSON.stringify({ status: 'PASS', checks: checks.length, output }));
