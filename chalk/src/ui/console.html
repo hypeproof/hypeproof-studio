@@ -183,6 +183,7 @@ $("forget").onclick = () => {
 };
 
 let countdownTimer = null;
+let distributionTargets = [];
 
 async function api(path, opts) {
   const issuer = sanitizeToken($("issuer").value);
@@ -227,6 +228,16 @@ async function load() {
     esc(payload.u || "강사") + ' · 토큰 유효: ' + esc(new Date(expMs).toLocaleDateString()) + '까지' +
     (daysLeft <= 7 ? ' — <b>만료 ' + daysLeft + '일 전!</b> 미리 Jay에게 재발급 요청해두세요.' : '') + '</div>';
 
+  distributionTargets = [];
+  try {
+    const routing = await api('/workshop/boa-tokens', { method: 'GET' });
+    if (!Array.isArray(routing.targets) || routing.targets.some((target) =>
+      !target || typeof target.cohort !== 'string' || !Array.isArray(target.profiles) ||
+      target.profiles.some((id) => typeof id !== 'string'))) throw new Error('배부 설정 형식이 올바르지 않습니다.');
+    distributionTargets = routing.targets;
+  } catch {
+    banner.innerHTML += '<div class="banner warn">공개 배부 보드 설정을 확인하지 못했습니다. 이번 발급 결과는 보드에 자동 게시되지 않으므로 학생에게 직접 전달하세요.</div>';
+  }
   for (const scope of payload.scopes || []) renderCohort(scope);
 }
 
@@ -352,28 +363,42 @@ function renderMinter(scope, state) {
     out.innerHTML = "";
     if (!users.length) return (out.innerHTML = '<div class="banner err">참가자 handle을 한 줄에 한 명씩 입력해주세요.</div>');
     btn.disabled = true;
-    // #367 — roster BEFORE minting: the chat gate blocks any handle not in
-    // the cohort roster (not_in_roster), so a minted-but-unrostered token is
-    // a lecture-day trap. Registering first makes "token issued" imply
-    // "student can actually chat". Server-side merge, so re-runs are safe.
-    try {
-      btn.textContent = "명단 등록 중…";
-      await api("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
-        method: "POST",
-        body: JSON.stringify({ users }),
-      });
-    } catch (err) {
-      btn.disabled = false; btn.textContent = "일괄 발급 →";
-      return (out.innerHTML = '<div class="banner err">참가자 명단 등록 실패 — 발급을 중단했어요. ' + esc(mapServerError(err.message)) + '</div>');
-    }
-    const results = [];
-    for (const u of users) {
-      btn.textContent = "발급 중… (" + (results.length + 1) + "/" + users.length + ")";
+    const publishesToBoa = distributionTargets.some((target) => target.cohort === scope.cohort && target.profiles.includes(p));
+    let results = [];
+    let boardNotice = "";
+    if (publishesToBoa) {
       try {
-        const body = await api("/admin/tokens/issue", { method: "POST", body: JSON.stringify({ u, c: scope.cohort, p, hours }) });
-        results.push({ u, token: body.token });
+        btn.textContent = "발급·배부 보드 등록 중…";
+        const body = await api("/workshop/boa-tokens", {
+          method: "POST", body: JSON.stringify({ cohort: scope.cohort, profile: p, users, hours }),
+        });
+        results = body.results.map((r) => ({ u: r.handle, token: r.token, error: r.error }));
+        boardNotice = body.board
+          ? '<div class="banner ok">학생 토큰을 <a href="https://hypeproof-ai.xyz/live/boa#token" target="_blank" rel="noopener noreferrer">내 토큰 받기</a>에 올렸습니다.</div>'
+          : body.boardError ? '<div class="banner err">' + esc(body.boardError) + '</div>' : "";
       } catch (err) {
-        results.push({ u, error: err.message });
+        btn.disabled = false; btn.textContent = "일괄 발급 →";
+        return (out.innerHTML = '<div class="banner err">' + esc(mapServerError(err.message)) + '</div>');
+      }
+    } else {
+      // Other cohorts retain their existing Service-only issuance path.
+      try {
+        btn.textContent = "명단 등록 중…";
+        await api("/admin/cohorts/" + encodeURIComponent(scope.cohort) + "/roster/append", {
+          method: "POST", body: JSON.stringify({ users }),
+        });
+      } catch (err) {
+        btn.disabled = false; btn.textContent = "일괄 발급 →";
+        return (out.innerHTML = '<div class="banner err">참가자 명단 등록 실패 — 발급을 중단했어요. ' + esc(mapServerError(err.message)) + '</div>');
+      }
+      for (const u of users) {
+        btn.textContent = "발급 중… (" + (results.length + 1) + "/" + users.length + ")";
+        try {
+          const body = await api("/admin/tokens/issue", { method: "POST", body: JSON.stringify({ u, c: scope.cohort, p, hours }) });
+          results.push({ u, token: body.token });
+        } catch (err) {
+          results.push({ u, error: err.message });
+        }
       }
     }
     btn.disabled = false; btn.textContent = "일괄 발급 →";
@@ -383,7 +408,7 @@ function renderMinter(scope, state) {
     // copies "이름: 토큰" pairs (goes into KakaoTalk so each student can find
     // their own line). Pasting the bulk format into the app yields a 401 —
     // hence the explicit warning on the bulk label.
-    out.innerHTML =
+    out.innerHTML = boardNotice +
       results.map((r, i) => '<div class="tok-line"><div class="name">' + esc(r.u) + (r.error ? ' — <span style="color:var(--warn)">' + esc(mapServerError(r.error)) + '</span>' : "") + '</div>' +
         (r.token
           ? '<div class="token">' + esc(r.token) + '</div>' +
