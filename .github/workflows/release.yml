@@ -41,6 +41,11 @@ jobs:
           node e2e/unified-release/gate.test.mjs
           grep -q 'check-unified-release.mjs' .github/workflows/mirror-release.yml
           grep -q 'Candidate App against the current public Service' .github/workflows/verify-unified-release.yml
+          # studio-public-sdk-seed: the public release carries the native SDK seed.
+          grep -q 'Attach the public native SDK seed' .github/workflows/verify-unified-release.yml
+          grep -q 'sdk-seed-assets.mjs list' .github/workflows/verify-unified-release.yml
+          grep -q 'sdk-seed-assets.mjs check' .github/workflows/mirror-release.yml
+          node --test scripts/release/test/sdk-seed-assets.test.mjs
 
       - name: Summary
         run: |
@@ -49,4 +54,5 @@ jobs:
             echo "- build-mac.yml has v* tag trigger and GitHub Release upload"
             echo "- build-windows.yml has v* tag trigger and GitHub Release upload"
             echo "- mirror-release.yml remains explicit dispatch with PAT-gated writes"
+            echo "- verify-unified-release.yml attaches the native SDK seed + sha256 before publishing"
           } >> "$GITHUB_STEP_SUMMARY"

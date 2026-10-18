@@ -291,3 +291,25 @@ Deferred to a later W4 slice:
     extension's `@anthropic-ai/claude-agent-sdk` dependency, or forced with
     `REQUIRE_SDK_VENDOR=1` (see `.claude/rules/build-pipeline.md`). Still TODO:
     an actual SDK-turn smoke on the packaged app.
+
+## 9. Public native seed on the release (studio-public-sdk-seed, 2026-10-19)
+
+The public zips vendor the SDK JS but no native binary, and a public-zip user
+has no installer to seed one. Each release therefore carries, beside the zips:
+
+- `claude-agent-sdk-<platform>-<version>.tgz` for every App platform
+  (`darwin-arm64`, `win32-x64`) — the unmodified npm tarball, so
+  `seed-sdk-binary.sh --tarball` still verifies it against the pinned sha512;
+- `<that name>.sha256` in `sha256sum` format;
+- `sdk-seed.json` (`hps-sdk-seed/1`: version, per-platform name, size, sha256,
+  npm SRI) for a future in-app or Lab fetcher.
+
+`verify-unified-release.yml` reads the SDK version both shipped zips vendor,
+requires it to equal the tag's `SDK_BINARY_VERSION`, stages the tarballs with
+`seed-sdk-binary.sh --download-only`, writes and checks the manifest
+(`scripts/release/sdk-seed-assets.mjs`), uploads them while the release is still a
+draft and asserts the release asset list before publishing. `mirror-release.yml`
+re-checks the bytes when a release carries `sdk-seed.json`. `verify-branding.sh`
+still fails a bundle that carries a native package, and now also one that carries
+a seed tarball. Fetching the seed in the App is a separate, default-off change
+(studio-sdk-seed-on-demand).
