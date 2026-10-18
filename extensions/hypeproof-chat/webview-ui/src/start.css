@@ -461,3 +461,9 @@
 .studio-account-identity span, .studio-account-pass > span { font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); overflow-wrap: anywhere; }
 .studio-account-pass { display: flex; flex-direction: column; gap: 7px; padding: 14px 0; }
 .studio-account-pass .studio-choice { margin-top: 4px; }
+
+/* Google's light button treatment keeps the multicolor mark on white. */
+.studio-account .studio-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; border-radius: 4px; min-height: 40px; padding: 10px 12px; justify-content: center; gap: 12px; font-family: Roboto, Arial, sans-serif; font-size: 14px!important; font-weight: 500!important; }
+.studio-account .studio-google:hover:not(:disabled) { background: #f8faff; }
+.studio-account .studio-google:focus-visible { outline: 2px solid #4285f4; outline-offset: 2px; }
+.studio-account .studio-google svg { flex: 0 0 20px; margin: 0!important; }

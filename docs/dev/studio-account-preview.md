@@ -3,7 +3,7 @@
 Parent outcome: [hypeproof/hypeprooflab#1254](https://github.com/hypeproof/hypeprooflab/issues/1254), account-system plan P4 dated 2026-10-15.
 Intent parent: INT-ACCESS-01/05, ST-REQ-ACCESS-BUDGET. The existing access domain owner is Jay (`jayleekr`); this implementation does not appoint a new owner or approve launch policy.
 
-This opt-in candidate connects the real Studio extension and webview to local Service and Lab. Accounts remain off by default and cannot be enabled against a non-loopback URL. Existing classroom, trial, and anonymous purchase paths retain their default behavior. No real Google consent, payment, production deployment, release, legal approval, or Windows acceptance is implied.
+This opt-in candidate connects the real Studio extension and webview to local Service and Lab. Accounts remain off by default. The local preview switch accepts only loopback URLs; a separate production switch accepts only the exact canonical HTTPS endpoints. Existing classroom, trial, and anonymous purchase paths retain their default behavior. No real Google consent, payment, production deployment, release, legal approval, or Windows acceptance is implied.
 
 ## Run an isolated customer test
 
@@ -75,3 +75,13 @@ local Service approval, and checks real foreground window IDs for both app-drive
 return and OS URI dispatch. It also verifies background refresh leaves the other
 window focused, then closes its own app and deletes its synthetic account. Google
 OAuth, Windows protocol execution and released builds remain independent checks.
+
+## Production enablement path (off by default)
+
+Machine-only `hypeproofChat.accountsEnabled` activates the same account client only
+when `proxyUrl` is exactly `https://api.hypeproof-ai.xyz/v1` and `siteBase` is exactly
+`https://hypeproof-ai.xyz`. Alternate hosts, credentials, ports, paths, queries and
+fragments are rejected. `accountsPreview` and the development environment flag
+remain strictly loopback-only and cannot activate production accounts. Neither
+setting is changed on user machines by this PR. Coordinated Service/web activation,
+legal acceptance and real Google/native release checks still precede launch.

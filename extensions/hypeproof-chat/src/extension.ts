@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StartPage } from "./startPage";
-import { AccountSession, accountPreviewEnabled } from "./accountSession";
+import { AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import {
@@ -207,7 +207,8 @@ export async function activate(context: vscode.ExtensionContext) {
   const accountConfig = vscode.workspace.getConfiguration('hypeproofChat');
   const accountService = accountConfig.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
   const accountSite = accountConfig.get<string>('siteBase', 'https://hypeproof-ai.xyz');
-  const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite);
+  const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
+    || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', false), accountService, accountSite);
   const accounts = accountEnabled ? new AccountSession({
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,

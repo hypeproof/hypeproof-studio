@@ -15,7 +15,8 @@ const receipt=JSON.parse(readFileSync(path.join(state,'receipt.json'),'utf8'));
 assert(receipt.official_app_unchanged&&!receipt.app.startsWith('/Applications/'),'Only prepared isolated app allowed');
 assert.equal(receipt.source_dirty,false,'Acceptance requires committed source');
 const config=JSON.parse(readFileSync(configPath,'utf8')),bridge={'x-hps-account-key':config.bridge};
-const result={schema:'studio-account-native-return/1',status:'RUNNING',candidate:receipt,os:process.platform,checks:[],scope:'Real isolated Mac app, URI dispatch and focus; synthetic local Service approval; no real Google, billing or release acceptance'};
+const service=JSON.parse(readFileSync(path.join(path.dirname(configPath),'service-ready.json'),'utf8'));
+const result={service,schema:'studio-account-native-return/1',status:'RUNNING',candidate:receipt,os:process.platform,checks:[],scope:'Real isolated Mac app, URI dispatch and focus; synthetic local Service approval; no real Google, billing or release acceptance'};
 const save=()=>writeFileSync(path.join(out,'result.json'),JSON.stringify(result,null,2));save();
 const call=async(endpoint,body)=>{const response=await fetch('http://127.0.0.1:8793/v1'+endpoint,{method:'POST',headers:{...bridge,'content-type':'application/json','cf-connecting-ip':'198.51.100.42'},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});assert.equal(response.status,200,endpoint+' succeeds');return response.json();};
 let app,identity,first,frame;
@@ -28,6 +29,7 @@ try{
  await first.keyboard.press('Escape');frame=await driver.frame('.studio-account');
  const firstNative=await app.evaluateHandle(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().includes('workbench'))),firstId=await firstNative.evaluate(w=>w.id);
  assert.equal(await frame.evaluate("!!document.querySelector('.studio-account .studio-primary svg')"),true,'Google entry has visible brand mark');
+ const googleStyle=await frame.evaluate("(()=>{const s=getComputedStyle(document.querySelector('.studio-google'));return {background:s.backgroundColor,weight:s.fontWeight}})()");assert.deepEqual(googleStyle,{background:'rgb(255, 255, 255)',weight:'500'});
  await first.screenshot({path:path.join(out,'01-google-entry.png')});
  // A second genuine Studio workbench makes last-window activation an observable failure.
  await first.keyboard.press('Meta+Shift+N');

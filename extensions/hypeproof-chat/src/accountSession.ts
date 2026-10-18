@@ -34,6 +34,10 @@ export function accountPreviewEnabled(enabled: boolean, service: string, site: s
   try { return [service, site].every(value => { const u = new URL(value); return u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname) && !u.username && !u.password && !u.search && !u.hash; }); }
   catch { return false; }
 }
+/** Production enrollment is separate from local preview and never accepts arbitrary origins. */
+export function accountProductionEnabled(enabled: boolean, service: string, site: string): boolean {
+  return enabled && service === 'https://api.hypeproof-ai.xyz/v1' && site === 'https://hypeproof-ai.xyz';
+}
 export function safeDeviceUrl(value: unknown, site: string): value is string {
   if (typeof value !== 'string') return false;
   try { const u = new URL(value), configured = new URL(site); return u.origin === configured.origin && u.pathname === '/studio/connect' && !u.username && !u.password && !u.hash && [...u.searchParams.keys()].every(k => k === 'code'); }

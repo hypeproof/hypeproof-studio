@@ -1,6 +1,6 @@
 // REQ-L13: exercise the real host client, credential store and device/refresh state machine.
 import assert from 'node:assert/strict';
-import { AccountSession, ACCOUNT_SECRET_KEY, accountPreviewEnabled, safeDeviceUrl } from '../src/accountSession.ts';
+import { AccountSession, ACCOUNT_SECRET_KEY, accountPreviewEnabled, accountProductionEnabled, safeDeviceUrl } from '../src/accountSession.ts';
 const SERVICE='http://127.0.0.1:8793/v1', SITE='http://localhost:3193';
 const reply=(status, body)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
 function harness(extra = {}) {
@@ -33,6 +33,10 @@ function harness(extra = {}) {
 assert.equal(accountPreviewEnabled(false,SERVICE,SITE),false);
 assert.equal(accountPreviewEnabled(true,SERVICE,SITE),true);
 assert.equal(accountPreviewEnabled(true,'https://api.hypeproof-ai.xyz/v1',SITE),false);
+assert.equal(accountProductionEnabled(false,'https://api.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'),false);
+assert.equal(accountProductionEnabled(true,'https://api.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'),true);
+for(const bad of ['http://api.hypeproof-ai.xyz/v1','https://api.hypeproof-ai.xyz.evil.test/v1','https://api.hypeproof-ai.xyz:443/v1','https://api.hypeproof-ai.xyz/v1?x=1','https://api.hypeproof-ai.xyz/v1#x','https://api.hypeproof-ai.xyz/v2','https://user@api.hypeproof-ai.xyz/v1',SERVICE])assert.equal(accountProductionEnabled(true,bad,'https://hypeproof-ai.xyz'),false);
+for(const bad of ['http://hypeproof-ai.xyz','https://hypeproof-ai.xyz.evil.test','https://hypeproof-ai.xyz:443','https://hypeproof-ai.xyz/?x=1','https://hypeproof-ai.xyz/account','https://user@hypeproof-ai.xyz',SITE])assert.equal(accountProductionEnabled(true,'https://api.hypeproof-ai.xyz/v1',bad),false);
 assert.equal(safeDeviceUrl(SITE+'/studio/connect?access_token=leak',SITE),false);
 assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),false);
 {
