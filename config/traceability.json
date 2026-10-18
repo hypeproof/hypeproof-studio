@@ -5607,6 +5607,83 @@
           "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-RELEASE-ENGINE",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-INT-UNIFIED",
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/release-engine.md",
+          "section": "## Requirements"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Daily release coordinator (#1757)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-RELEASE-ENGINE",
+      "stage": "design",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RELEASE-ENGINE"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/release-engine.md",
+          "section": "## Design"
+        },
+        {
+          "path": "scripts/release/engine/policy.example.json"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-RELEASE-ENGINE",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RELEASE-ENGINE",
+        "ST-DES-RELEASE-ENGINE",
+        "ST-TEST-RELEASE-ENGINE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/engine/core.mjs"
+        },
+        {
+          "path": "scripts/release/engine/store.mjs"
+        },
+        {
+          "path": "scripts/release/engine/cli.mjs"
+        },
+        {
+          "path": ".github/workflows/pr-ci.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-RELEASE-ENGINE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-RELEASE-ENGINE"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/test/engine.test.mjs"
+        },
+        {
+          "path": "docs/dev/release-engine.md",
+          "section": "## Verification"
+        }
+      ]
     }
   ]
 }
