@@ -5627,76 +5627,55 @@
       ]
     },
     {
-      "id": "ST-REQ-CANDIDATE-DRAFT",
+      "id": "ST-REQ-BOA-DISTRIBUTION",
       "stage": "requirement",
-      "owner": "ico1036",
-      "depends_on": [
-        "ST-REQ-UNIFIED"
-      ],
-      "sources": [
-        {
-          "path": "docs/studio-requirements.md",
-          "section": "## Candidate draft build contract (#1758)"
-        }
-      ]
-    },
-    {
-      "id": "ST-DES-CANDIDATE-DRAFT",
-      "stage": "design",
+      "label": "BOA console distribution and private issuer credentials",
       "owner": "JinyongShin",
       "depends_on": [
-        "ST-REQ-CANDIDATE-DRAFT"
+        "ST-REQ-CHALK-AUTHORING"
       ],
       "sources": [
         {
-          "path": "docs/dev/06-release-process.md",
-          "section": "## Managed candidate drafts (#1758)"
+          "path": "chalk/README.md",
+          "section": "## BOA token distribution"
         }
       ]
     },
     {
-      "id": "ST-IMP-CANDIDATE-DRAFT",
+      "id": "ST-IMP-BOA-DISTRIBUTION",
       "stage": "implementation",
+      "label": "Chalk bounded Lab distribution transport and console issuance",
       "owner": "JinyongShin",
       "depends_on": [
-        "ST-REQ-CANDIDATE-DRAFT",
-        "ST-DES-CANDIDATE-DRAFT"
+        "ST-REQ-BOA-DISTRIBUTION"
       ],
       "sources": [
         {
-          "path": "scripts/release/build-contract.mjs"
+          "path": "chalk/src/env.ts"
         },
         {
-          "path": "scripts/release/create.mjs"
+          "path": "chalk/src/index.ts"
         },
         {
-          "path": ".github/workflows/build-mac.yml"
+          "path": "chalk/src/routes/forward.ts"
         },
         {
-          "path": ".github/workflows/build-windows.yml"
-        },
-        {
-          "path": ".github/workflows/release-cut.yml"
+          "path": "chalk/src/ui/console.html"
         }
       ]
     },
     {
-      "id": "ST-TEST-CANDIDATE-DRAFT",
+      "id": "ST-TEST-BOA-DISTRIBUTION",
       "stage": "test",
+      "label": "BOA distribution authorization and transport controls",
       "owner": "JinyongShin",
       "depends_on": [
-        "ST-REQ-CANDIDATE-DRAFT",
-        "ST-IMP-CANDIDATE-DRAFT"
+        "ST-REQ-BOA-DISTRIBUTION",
+        "ST-IMP-BOA-DISTRIBUTION"
       ],
       "sources": [
         {
-          "path": "scripts/release/test/build-contract.test.mjs"
-        },
-        {
-          "path": "scripts/release/test/create.test.mjs"
-        },
-        {
-          "path": ".github/workflows/pr-ci.yml"
+          "path": "chalk/test/boa-distribution-forward.test.mjs"
         }
       ]
     },
@@ -5947,6 +5926,80 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Chat reference interaction (CG-IMPL-R1)"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-CANDIDATE-DRAFT",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-UNIFIED"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Candidate draft build contract (#1758)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-CANDIDATE-DRAFT",
+      "stage": "design",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/06-release-process.md",
+          "section": "## Managed candidate drafts (#1758)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CANDIDATE-DRAFT",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CANDIDATE-DRAFT",
+        "ST-DES-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/build-contract.mjs"
+        },
+        {
+          "path": "scripts/release/create.mjs"
+        },
+        {
+          "path": ".github/workflows/build-mac.yml"
+        },
+        {
+          "path": ".github/workflows/build-windows.yml"
+        },
+        {
+          "path": ".github/workflows/release-cut.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CANDIDATE-DRAFT",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-CANDIDATE-DRAFT",
+        "ST-IMP-CANDIDATE-DRAFT"
+      ],
+      "sources": [
+        {
+          "path": "scripts/release/test/build-contract.test.mjs"
+        },
+        {
+          "path": "scripts/release/test/create.test.mjs"
+        },
+        {
+          "path": ".github/workflows/pr-ci.yml"
         }
       ]
     }
