@@ -406,6 +406,10 @@
   transition:background .15s}
 .studio-choice:hover:enabled { background: var(--studio-bg); }
 .studio-choice:disabled { opacity:.55; cursor:default; }
+/* TUX-SP-12 — what the trial choice needs and gives, read before choosing. Quiet text, not a second button. */
+.studio-choice-group { display:grid; gap:6px; }
+.studio-choice-note { margin:0 2px; font-size:11px; line-height:1.5; color:var(--studio-muted); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-choice-note span { display:block; }
 
 /* REQ-L12 — passes are a list of peer choices (SX-04): the selected one gets a border, never a second Primary. */
 .studio-plans { display:grid; gap:8px; margin-bottom:14px; }

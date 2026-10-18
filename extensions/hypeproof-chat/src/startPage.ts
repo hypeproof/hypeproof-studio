@@ -9,6 +9,7 @@ import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
 import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import type { ClassReposOutcome } from "./publish/publishHost";
+import { fetchTrialOffer, type TrialOffer } from "./trialOffer";
 import type { ClassRepo } from "./publish/githubContinue";
 
 /**
@@ -66,6 +67,8 @@ export class StartPage {
   private candidate?: Candidate;
   // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
   private products?: PassProduct[] | null;
+  // TUX-SP-12 — what the Service advertises about the trial before entry. `null`: not advertised (or unreadable).
+  private trialOffer?: TrialOffer | null;
   private order?: PendingOrder;
   private purchaseStage?: PurchaseView["stage"];
   private purchaseMessage?: string;
@@ -213,6 +216,11 @@ export class StartPage {
       ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
       ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
     };
+  }
+  /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
+  private async loadTrialOffer(): Promise<void> {
+    if (this.trialOffer !== undefined) return;
+    this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl);
   }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {
@@ -378,6 +386,7 @@ export class StartPage {
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
+      ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
@@ -417,7 +426,7 @@ export class StartPage {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") {
-      void this.accounts?.refreshView(); await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
+      void this.accounts?.refreshView(); await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
     if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
