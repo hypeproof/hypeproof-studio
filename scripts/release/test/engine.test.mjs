@@ -6,7 +6,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {generateKeyPairSync, sign} from 'node:crypto';
 import {spawn, spawnSync} from 'node:child_process';
-import {canonical, digest, readiness, approvalRequest, manifestFor, validateIntent} from '../engine/core.mjs';
+import {canonical, digest, signedPayloadDigest, readiness, approvalRequest, manifestFor, validateIntent} from '../engine/core.mjs';
 import {inspectFile, checkFile, ingest, readState} from '../engine/store.mjs';
 
 const cli = fileURLToPath(new URL('../engine/cli.mjs', import.meta.url));
@@ -193,7 +193,7 @@ test('manager rotation, revocation, expiry and a newer channel intent invalidate
   const rotated = structuredClone(f.policy); rotated.managerRoster.revision = 'rotation-2';
   assert.throws(() => validateIntent(readState(f.directory), promoted.intent, rotated, f.now(), checkFile), /manager changed/);
   const revocation = envelope({schema: 'hps-release-revocation/1', candidateId: id, actor: 'jayleekr', roleRevision: f.policy.managerRoster.revision,
-    approvalDigest: digest(approval), revokedAt: new Date(f.now()).toISOString()}, f.manager.privateKey);
+    approvalDigest: signedPayloadDigest(approval), revokedAt: new Date(f.now()).toISOString()}, f.manager.privateKey);
   f.emit('approval.revoked', {candidateId: id, envelope: revocation});
   assert.equal(f.emit('promotion.requested', {candidateId: id}, 'intent-before-revoke').status, 'BLOCKED', 'duplicate event cannot revive revoked authority');
   assert.equal(f.emit('approval.recorded', {candidateId: id, envelope: approval}, `approval-${digest(approval)}`).status, 'BLOCKED');
@@ -262,4 +262,76 @@ test('SIGKILL preserves the ledger and the next start recovers only a dead same-
   fs.unlinkSync(livePath);
   fs.writeFileSync(path.join(f.directory, 'ledger.json'), '{truncated');
   assert.throws(() => f.reserve(id, 1, 'test'), SyntaxError);
+});
+
+test('revocation binds the signed body: unsigned wrappers and equivalent base64 padding cannot revive it', t => {
+  const f = setup(t);
+  const id = f.create(); f.prepare(id);
+  const approval = f.approve(id);
+  const promoted = f.emit('promotion.requested', {candidateId: id});
+  assert.equal(promoted.status, 'PROMOTION_INTENT');
+  const revoke = targetDigest => envelope({schema: 'hps-release-revocation/1', candidateId: id, actor: 'jayleekr', roleRevision: f.policy.managerRoster.revision,
+    approvalDigest: targetDigest, revokedAt: new Date(f.now()).toISOString()}, f.manager.privateKey);
+  assert.equal(f.emit('approval.revoked', {candidateId: id, envelope: revoke(signedPayloadDigest(approval))}).status, 'APPROVAL_REVOKED');
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const position = approval.signature.length - 3;
+  const alternateSignature = approval.signature.slice(0, position) + chars[chars.indexOf(approval.signature[position]) + 1] + approval.signature.slice(position + 1);
+  assert(Buffer.from(alternateSignature, 'base64').equals(Buffer.from(approval.signature, 'base64')), 'attack must preserve signature bytes');
+  const variants = [{...approval, transportMetadata: 'unsigned'}, {body: approval.body, signature: alternateSignature}];
+  for (const variant of variants) {
+    assert.equal(signedPayloadDigest(variant), signedPayloadDigest(approval), 'transport spelling does not create new authority');
+    assert.equal(f.emit('approval.recorded', {candidateId: id, envelope: variant}).status, 'BLOCKED');
+    assert.equal(f.emit('promotion.requested', {candidateId: id}).status, 'BLOCKED');
+    assert.throws(() => validateIntent(readState(f.directory), {...promoted.intent, approval: variant}, f.policy, f.now(), checkFile), /revoked/);
+  }
+  assert.equal(readState(f.directory).candidates[id].approval.signature, approval.signature, 'failed replay must not change stored approval');
+
+  // Older local clients/ledgers used canonical-envelope digests. Their explicit
+  // revocations must remain effective after upgrading to signed-payload identity.
+  f.advance(1);
+  const fresh = f.approve(id);
+  assert.equal(f.emit('approval.revoked', {candidateId: id, envelope: revoke(digest(fresh))}).status, 'APPROVAL_REVOKED');
+  assert(readState(f.directory).candidates[id].revokedApprovalDigests.includes(signedPayloadDigest(fresh)));
+  assert.equal(f.emit('approval.recorded', {candidateId: id, envelope: fresh}).status, 'BLOCKED');
+  f.advance(1);
+  const replacement = f.approve(id);
+  const legacy = readState(f.directory);
+  legacy.candidates[id].revokedApprovalDigests.push(digest(replacement));
+  fs.writeFileSync(path.join(f.directory, 'ledger.json'), JSON.stringify(legacy));
+  assert.equal(f.emit('promotion.requested', {candidateId: id}).status, 'BLOCKED', 'pre-upgrade stored revocations remain enforced');
+});
+
+test('fresh provider allowance subtracts pending commitments and protected units before any new reservation', t => {
+  const f = setup(t);
+  const a = f.create(); const b = f.create('e'.repeat(40), 2); const c = f.create('f'.repeat(40), 3);
+  f.quota(100);
+  assert.equal(f.reserve(a, 60).status, 'WORK_RESERVED');
+  const refresh = (remainingUnits, protectedUnits = 0) => {
+    f.advance(1);
+    const previous = readState(f.directory).quotas['local-builder'];
+    return f.emit('quota.observed', {...previous, remainingUnits, protectedUnits, observedAt: new Date(f.now()).toISOString()});
+  };
+  const sufficient = refresh(90, 10);
+  assert.equal(sufficient.availableUnits, 20, '90 remaining minus 10 protected minus 60 pending');
+  assert.equal(f.reserve(b, 20).status, 'WORK_RESERVED', 'only the uncommitted balance may be reserved');
+  assert.equal(refresh(90, 10).availableUnits, 0, 'refresh must not release earlier reservations');
+  assert.equal(f.reserve(c, 1).status, 'BLOCKED');
+  const shortage = refresh(50);
+  const state = readState(f.directory);
+  assert.equal(shortage.availableUnits, 0);
+  assert.equal(state.quotas['local-builder'].underfunded, true);
+  assert.equal(state.quotas['local-builder'].pendingUnitsAtObservation, 80);
+  assert.equal(f.reserve(c, 40).status, 'BLOCKED');
+  assert.equal(Object.values(state.reservations).filter(r => r.status === 'reserved').reduce((total, r) => total + r.units, 0), 80, 'refresh cannot erase pending consumption');
+
+  const exact = setup(t);
+  const x = exact.create(); const y = exact.create('e'.repeat(40), 2);
+  exact.quota(100); const pending = exact.reserve(x, 60);
+  exact.advance(1);
+  const previous = readState(exact.directory).quotas['local-builder'];
+  const dropped = exact.emit('quota.observed', {...previous, remainingUnits: 50, observedAt: new Date(exact.now()).toISOString()});
+  assert.equal(dropped.availableUnits, 0, 'independent review counterexample: 100 → reserve 60 → fresh 50');
+  assert.equal(exact.reserve(y, 40).status, 'BLOCKED');
+  exact.settle(x, pending.reservationId, {actualUnits: 20});
+  assert.equal(exact.reserve(y, 1).status, 'BLOCKED', 'uncertain provider reconciliation never refunds capacity implicitly');
 });

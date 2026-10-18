@@ -93,6 +93,11 @@ node scripts/release/engine/cli.mjs status \
 the manager to review and sign; it cannot sign or approve. A signed envelope is
 `{body, signature}`, where `signature` is base64 Ed25519 over UTF-8
 `canonical(body)` exported by `core.mjs`. Evidence uses the same encoding.
+Only `body` and `signature` are accepted in an envelope, with canonical base64.
+Approval/revocation identity is `signedPayloadDigest(envelope)` (the canonical
+signed body), never unsigned metadata or signature text. Evidence digests likewise
+bind the ordered signed bodies. Existing local envelope-digest revocations remain
+enforced; old approvals bound to the previous evidence digest require fresh review.
 `--out` saves a result to a previously absent file. BLOCKED exits with code 2.
 
 ## Event adapter contract
@@ -124,7 +129,11 @@ still decide readiness. Never relabel a product failure to avoid the gate.
 
 Capacity accounting is deliberately conservative: reservations are not refunded
 within a period, even when actual usage is lower. New observations can lower,
-never inflate remaining capacity. A new non-overlapping billing period requires
+never inflate remaining capacity. Each refreshed allowance subtracts both the
+protected pool and all pending same-period commitments before admitting any new
+work. A snapshot below pending commitments marks the resource underfunded; the
+engine preserves the commitments and refuses further work/approval until fresh
+reconciliation resolves that state. A new non-overlapping billing period requires
 all previous work settled. This may stop early; it cannot establish the provider's
 actual invoice without a trustworthy adapter and reconciliation. Unreported work
 outside this ledger remains an external risk and is not claimed accounted for.
@@ -158,11 +167,12 @@ state is never `PUBLISHED` and does not prove customer update delivery.
 
 ## Verification
 
-`node --test scripts/release/test/engine.test.mjs` runs six integrated local
+`node --test scripts/release/test/engine.test.mjs` runs eight integrated local
 scenarios: CLI restart through intent; required-evidence/byte tamper controls;
 two-process quota contention; manager rotation/revocation/expiry/stale intent;
 failure dedupe and bounded fixes; SIGKILL recovery, live-lock protection and
-event-payload conflict. Tests use generated throwaway keys and fixture evidence,
+event-payload conflict; revoked-approval transport malleability; and provider quota
+refresh with pending commitments. Tests use generated throwaway keys and fixture evidence,
 no network, account credentials or models. Existing release-cut/create tests also
 remain required. PR CI runs the engine test in its existing job.
 

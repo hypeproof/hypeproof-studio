@@ -20,6 +20,12 @@ export function canonical(value) {
 }
 
 export const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
+// Signatures authorize the body. Transport wrappers and base64 spelling must not
+// create a second approval identity or change the evidence an approval binds.
+export const signedPayloadDigest = envelope => {
+  require(envelope?.body && typeof envelope.body === 'object' && !Array.isArray(envelope.body), 'signed body required');
+  return digest(envelope.body);
+};
 export const initialState = () => ({schema: 'hps-release-ledger/1', revision: 0, candidates: {}, quotas: {}, reservations: {}, failures: {}, events: {}, promotions: {}});
 
 function uniqueIds(items, name) {
@@ -68,8 +74,11 @@ export function policyDigest(policy) {
 
 function signed(envelope, key) {
   require(envelope?.body && typeof envelope.signature === 'string', 'signed envelope required');
+  require(Object.keys(envelope).length === 2 && Object.hasOwn(envelope, 'body') && Object.hasOwn(envelope, 'signature'), 'unsigned envelope fields are not allowed');
   require(/^[A-Za-z0-9+/]{86}==$/.test(envelope.signature), 'invalid Ed25519 signature encoding');
-  require(verify(null, Buffer.from(canonical(envelope.body)), publicKey(key), Buffer.from(envelope.signature, 'base64')), 'signature verification failed');
+  const signature = Buffer.from(envelope.signature, 'base64');
+  require(signature.toString('base64') === envelope.signature, 'noncanonical Ed25519 signature encoding');
+  require(verify(null, Buffer.from(canonical(envelope.body)), publicKey(key), signature), 'signature verification failed');
 }
 
 function manager(policy, now) {
@@ -114,7 +123,7 @@ function budgetGate(state, item, policy, now) {
   require(reservations.every(r => r.status === 'settled' && r.incrementalCost === 0 && r.actualUnits <= r.units), 'QUOTA_BLOCKED: unsettled or over-budget work');
   for (const reservation of reservations) {
     const quota = own(state.quotas, reservation.resourceId);
-    require(quota && quota.periodId === reservation.periodId && quota.status === 'confirmed' && !quota.overrun &&
+    require(quota && quota.periodId === reservation.periodId && quota.status === 'confirmed' && !quota.overrun && !quota.underfunded &&
       time(quota.observedAt) <= now && now - time(quota.observedAt) <= policy.quotaMaxAgeSeconds * 1000 && now < time(quota.endsAt),
     'QUOTA_BLOCKED: missing, stale, expired or unconfirmed quota');
   }
@@ -130,7 +139,7 @@ export function readiness(state, candidateId, policy, now = Date.now(), checkFil
     const evidence = evidenceFor(item, policy, manifest);
     for (const report of evidence) checkFile(report.body.file);
     budgetGate(state, item, policy, now);
-    return {status: 'AWAITING_APPROVAL', manifest, manifestDigest: digest(manifest), evidenceDigest: digest(evidence)};
+    return {status: 'AWAITING_APPROVAL', manifest, manifestDigest: digest(manifest), evidenceDigest: digest(evidence.map(envelope => envelope.body))};
   } catch (error) {
     return {status: 'BLOCKED', reason: error.message};
   }
@@ -151,9 +160,12 @@ function approvalGate(state, item, policy, now, checkFile) {
   require(ready.status === 'AWAITING_APPROVAL', ready.reason);
   const term = manager(policy, now);
   const approval = item.approval;
-  require(approval && !item.revokedApprovalDigests.includes(digest(approval)), 'approval missing or revoked');
+  require(approval, 'approval missing or revoked');
   require(term && approval.body.actor === term.actor && approval.body.roleRevision === policy.managerRoster.revision, 'release manager changed');
   signed(approval, term.publicKey);
+  // Keep pre-fix local revocations effective too. Canonical envelope validation
+  // above prevents rewrapping or alternate padding from changing this legacy ID.
+  require(!item.revokedApprovalDigests.includes(signedPayloadDigest(approval)) && !item.revokedApprovalDigests.includes(digest(approval)), 'approval missing or revoked');
   require(approval.body.schema === 'hps-release-approval/1' && approval.body.candidateId === item.id &&
     approval.body.manifestDigest === ready.manifestDigest && approval.body.evidenceDigest === ready.evidenceDigest, 'approval does not bind current candidate/evidence');
   require(validTime(approval.body.approvedAt) && time(approval.body.approvedAt) <= now && validTime(approval.body.expiresAt) &&
@@ -188,12 +200,19 @@ function transition(state, event, policy, now, checkFile) {
     const previous = own(state.quotas, data.resourceId);
     require(!previous || time(data.observedAt) >= time(previous.observedAt), 'quota observation moved backwards');
     require(!previous || previous.periodId !== data.periodId || (previous.startsAt === data.startsAt && previous.endsAt === data.endsAt), 'quota period bounds changed');
-    const available = Math.max(0, data.remainingUnits - data.protectedUnits);
+    const pendingUnits = Object.values(state.reservations)
+      .filter(r => r.resourceId === data.resourceId && r.periodId === data.periodId && r.status === 'reserved')
+      .reduce((total, r) => total + r.units, 0);
+    // A provider snapshot does not prove that uncompleted local work has been
+    // charged already. Keep its full commitment in addition to the protected pool.
+    const freeUnits = Math.max(0, data.remainingUnits - data.protectedUnits);
+    const available = Math.max(0, freeUnits - pendingUnits);
     if (previous && previous.periodId !== data.periodId) {
       require(time(previous.endsAt) <= time(data.startsAt), 'quota periods overlap');
       require(!Object.values(state.reservations).some(r => r.resourceId === data.resourceId && r.status === 'reserved'), 'unsettled prior-period work');
     }
-    state.quotas[data.resourceId] = {...data, availableUnits: previous?.periodId === data.periodId ? Math.min(previous.availableUnits, available) : available,
+    state.quotas[data.resourceId] = {...data, pendingUnitsAtObservation: pendingUnits, underfunded: pendingUnits > freeUnits,
+      availableUnits: previous?.periodId === data.periodId ? Math.min(previous.availableUnits, available) : available,
       overrun: previous?.periodId === data.periodId && previous.overrun === true};
     return {status: 'QUOTA_RECORDED', availableUnits: state.quotas[data.resourceId].availableUnits};
   }
@@ -245,7 +264,7 @@ function transition(state, event, policy, now, checkFile) {
     const prior = Object.values(state.reservations).filter(r => r.candidateId === item.id && r.stage === data.stage);
     require(data.attempt === prior.length + 1 && prior.every(r => r.status === 'settled'), 'previous attempt must be settled before retry');
     const quota = own(state.quotas, data.resourceId);
-    require(quota?.status === 'confirmed' && !quota.overrun && time(quota.observedAt) <= now && now < time(quota.endsAt) && now - time(quota.observedAt) <= policy.quotaMaxAgeSeconds * 1000 && quota.availableUnits >= data.units,
+    require(quota?.status === 'confirmed' && !quota.overrun && !quota.underfunded && time(quota.observedAt) <= now && now < time(quota.endsAt) && now - time(quota.observedAt) <= policy.quotaMaxAgeSeconds * 1000 && quota.availableUnits >= data.units,
       'QUOTA_BLOCKED: insufficient, stale or unknown free allowance');
     quota.availableUnits -= data.units;
     state.reservations[reservationId] = {...data, reservationId, periodId: quota.periodId, status: 'reserved', reservedAt: new Date(now).toISOString()};
@@ -268,7 +287,7 @@ function transition(state, event, policy, now, checkFile) {
   if (event.type === 'approval.recorded') {
     item.approval = data.envelope;
     approvalGate(state, item, policy, now, checkFile);
-    return {status: 'APPROVED', approvalDigest: digest(item.approval)};
+    return {status: 'APPROVED', approvalDigest: signedPayloadDigest(item.approval)};
   }
   if (event.type === 'approval.revoked') {
     const term = manager(policy, now);
@@ -277,7 +296,10 @@ function transition(state, event, policy, now, checkFile) {
     const body = data.envelope.body;
     require(body.schema === 'hps-release-revocation/1' && body.candidateId === item.id && body.roleRevision === policy.managerRoster.revision && HASH.test(body.approvalDigest), 'invalid revocation');
     require(validTime(body.revokedAt) && time(body.revokedAt) <= now && time(body.revokedAt) >= time(term.startsAt), 'invalid revocation time');
-    if (!item.revokedApprovalDigests.includes(body.approvalDigest)) item.revokedApprovalDigests.push(body.approvalDigest);
+    // Normalize a pre-fix request referencing the current canonical envelope.
+    const revokedDigest = item.approval && body.approvalDigest === digest(item.approval)
+      ? signedPayloadDigest(item.approval) : body.approvalDigest;
+    if (!item.revokedApprovalDigests.includes(revokedDigest)) item.revokedApprovalDigests.push(revokedDigest);
     return {status: 'APPROVAL_REVOKED'};
   }
   if (event.type === 'failure.observed') {
@@ -327,7 +349,7 @@ export function applyEvent(state, event, policy, {now = Date.now(), checkFile} =
     if (event.type === 'approval.recorded' && previous.result.status === 'APPROVED') {
       try {
         const item = candidate(state, event.data.candidateId);
-        require(digest(item.approval) === digest(event.data.envelope), 'approval has been superseded');
+        require(signedPayloadDigest(item.approval) === signedPayloadDigest(event.data.envelope), 'approval has been superseded');
         approvalGate(state, item, policy, now, checkFile);
       } catch (error) { return {state, result: {status: 'BLOCKED', reason: error.message}}; }
     }
@@ -349,7 +371,8 @@ export function validateIntent(state, intent, policy, now = Date.now(), checkFil
   validatePolicy(policy);
   const item = candidate(state, intent.candidateId);
   const ready = approvalGate(state, item, policy, now, checkFile);
-  require(digest(intent.approval) === digest(item.approval), 'intent approval has been superseded');
+  signed(intent.approval, manager(policy, now).publicKey);
+  require(signedPayloadDigest(intent.approval) === signedPayloadDigest(item.approval), 'intent approval has been superseded');
   require(digest(intent.manifest) === ready.manifestDigest && intent.manifestDigest === ready.manifestDigest && intent.evidenceDigest === ready.evidenceDigest, 'intent is stale');
   require(intent.candidate === item.input.candidate && intent.version === item.input.version && intent.rcTag === item.input.rcTag && intent.sequence === item.input.sequence, 'intent source/version mismatch');
   const latest = own(state.promotions, item.input.channel);
