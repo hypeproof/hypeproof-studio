@@ -23,7 +23,7 @@ import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type Impor
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   ChatConfig,
   ChatMessage,
@@ -914,7 +914,7 @@ export function ChatPanel(props: Props) {
         {ux.coach.naming_mode === "fixed"
           ? <strong title={`이 수업의 AI 이름: ${coachName}`} className="hps-coach-name">{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
-        <div className="hps-actions">
+        <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
               own size makes the header row grow taller because of this one button.
@@ -963,7 +963,7 @@ export function ChatPanel(props: Props) {
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
           <button onClick={props.onSettings} title="설정" aria-label="설정">⚙</button>
-        </div>
+        </HeaderActions>
       </header>
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
@@ -1284,7 +1284,16 @@ export function ChatPanel(props: Props) {
           <div className="hps-queued" role="status" aria-live="polite">
             <span className="hps-queued-label">{queuedPaused ? '보관한 메시지' : '다음에 보낼 메시지'}{queuedToolMode === 'web-search' ? ' · 웹 검색' : ''}</span>
             <span className="hps-queued-text" title={queued}>{queued}</span>
-            {queuedPaused && !streaming && <button type="button" className="hps-queued-send" disabled={props.sendPending || unavailable || props.sendLocked} onClick={() => { if (submit(queued, queuedToolMode)) { setQueued(null); setQueuedPaused(false); } }}>보내기</button>}
+            {queuedPaused && !streaming && <button type="button" className="hps-queued-send" disabled={props.sendPending || unavailable || props.sendLocked} onClick={() => {
+              const editor = textareaRef.current;
+              const selection = editor && [editor.selectionStart, editor.selectionEnd, editor.selectionDirection] as const;
+              if (submit(queued, queuedToolMode)) {
+                setQueued(null); setQueuedPaused(false);
+                // This action disappears after sending; keep typing in the untouched next draft.
+                editor?.focus({ preventScroll: true });
+                if (editor && selection) editor.setSelectionRange(...selection);
+              }
+            }}>보내기</button>}
             <button
               type="button"
               className="hps-queued-cancel"
@@ -1337,7 +1346,7 @@ export function ChatPanel(props: Props) {
         )}
         <div
           className={`hps-input${dragActive ? " hps-input-drag" : ""}`}
-          data-expanded={personalWorkspace && composerExpanded}
+          data-expanded={personalWorkspace ? composerExpanded : undefined}
         >
           {personalWorkspace && <ComposerTools mode={toolMode} onMode={setToolMode} webSearch={config?.turnTools?.webSearch} locked={queued !== null || !!props.sendPending} onAttach={imagePasteEnabled || imageFilesEnabled ? () => imagePicker.current?.click() : undefined} />}
           {personalWorkspace && <input ref={imagePicker} type="file" accept="image/*" multiple hidden aria-label="첨부할 이미지 선택" onChange={event => { const files = [...(event.target.files ?? [])]; if (imageFilesEnabled) stagePhotoFiles(files); else if (imagePasteEnabled) attachImageFiles(files); event.target.value = ''; }} />}
@@ -1871,7 +1880,7 @@ function MessageItem({
             className="hps-msg-retry"
             onClick={() => onRetry(retryPrompt.content, retryPrompt)}
             title="다른 방식으로 한 번 더 만들기"
-            aria-label="답변 다시 만들기"
+            aria-label={personal ? "답변 다시 만들기" : undefined}
           >
             {personal ? <ChatIcon kind="retry" /> : '🔄'}
           </button>
@@ -2263,4 +2272,51 @@ function UpdateBanner({
       </div>
     </div>
   );
+}
+
+
+/** Personal secondary actions share a full-size target; classroom controls keep their existing layout. */
+export function HeaderActions({ personal, taskId, children }: { personal: boolean; taskId?: string; children: import('react').ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const firstFocus = useRef<'first' | 'last'>('first');
+  const menuId = useId();
+  const items = () => [...(panel.current?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? [])];
+  const close = (restore = false) => { setOpen(false); if (restore) toggle.current?.focus({ preventScroll: true }); };
+  useEffect(() => { setOpen(false); }, [personal, taskId]);
+  useEffect(() => {
+    if (!personal || !open) return;
+    const choices = items();
+    (firstFocus.current === 'last' ? choices.at(-1) : choices[0])?.focus({ preventScroll: true });
+    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false); };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [personal, open]);
+  if (!personal) return <div className="hps-actions">{children}</div>;
+  return <div className="hps-actions tw-chat-menu" ref={root} onBlur={event => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+  }} onKeyDown={event => {
+    if (!open || event.defaultPrevented) return;
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
+    else if (event.key === 'Tab') close(true);
+    else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      const choices = items();
+      if (!choices.length) return;
+      event.preventDefault();
+      const at = choices.indexOf(document.activeElement as HTMLButtonElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length;
+      choices[next].focus({ preventScroll: true });
+    }
+  }}>
+    <button ref={toggle} type="button" className="tw-chat-menu-toggle" aria-label="대화 메뉴" title="대화 메뉴" aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} onClick={() => { firstFocus.current = 'first'; setOpen(!open); }} onKeyDown={event => {
+      if (!open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+        event.preventDefault(); firstFocus.current = event.key === 'ArrowUp' ? 'last' : 'first'; setOpen(true);
+      }
+    }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" /></svg></button>
+    {open && <div ref={panel} id={menuId} className="tw-chat-menu-panel" role="menu" aria-label="대화 메뉴" onClick={event => {
+      if (event.target instanceof Element && event.target.closest('button[role="menuitem"]')) close(true);
+    }}>{Children.map(children, child => isValidElement<{ role?: string; tabIndex?: number }>(child) && child.type === 'button' ? cloneElement(child, { role: 'menuitem', tabIndex: -1 }) : child)}</div>}
+  </div>;
 }

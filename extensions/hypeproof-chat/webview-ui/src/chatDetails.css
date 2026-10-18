@@ -146,3 +146,6 @@
 .hps-shell[data-chat-detail="personal"] .hps-copy-answer,
 .hps-shell[data-chat-detail="personal"] .hps-msg-retry,
 .hps-shell[data-chat-detail="personal"] .hps-queued-cancel { min-width: 44px; min-height: 44px; }
+
+/* Keep the optional code disclosure as reachable as the adjacent answer actions. */
+.hps-shell[data-chat-detail="personal"] .hps-codepill-toggle { min-height: 44px; }

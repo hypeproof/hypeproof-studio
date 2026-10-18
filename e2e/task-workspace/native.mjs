@@ -64,15 +64,46 @@ try {
     const source = webContents.getAllWebContents().find(contents => contents.getURL().endsWith('/native-source'));
     return source ? source.executeJavaScript('document.body.innerText') : '';
   }), { timeout: 20000 }).toContain('내장 브라우저에 열린 로컬 출처입니다.');
-  const captureSource = async () => {
-    const encoded = await ctx.app.evaluate(async ({ webContents }) => {
+  // A loaded DOM can precede WebContentsView attachment. Require actual pixels,
+  // not an empty PNG, before recording a rendered native browser as passed.
+  const paintStarted = Date.now();
+  let sourcePaint;
+  await expect.poll(async () => {
+    sourcePaint = await ctx.app.evaluate(async ({ webContents }) => {
       const source = webContents.getAllWebContents().find(contents => contents.getURL().endsWith('/native-source'));
-      return (await source.capturePage()).toPNG().toString('base64');
+      if (!source) return null;
+      const capture = await source.capturePage();
+      const size = capture.getSize();
+      return { size, empty: capture.isEmpty(), png: capture.toPNG().toString('base64') };
     });
-    await writeFile(join(output, 'native-source-document.png'), Buffer.from(encoded, 'base64'));
-  };
-  await captureSource();
-  await snapshot('native-browser');
+    return !!sourcePaint && !sourcePaint.empty && sourcePaint.size.width >= 200 && sourcePaint.size.height >= 100 && sourcePaint.png.length > 1000;
+  }, { timeout: 20000, intervals: [100, 250, 500] }).toBe(true);
+  await writeFile(join(output, 'native-source-document.png'), Buffer.from(sourcePaint.png, 'base64'));
+  await writeFile(join(output, 'native-paint.json'), JSON.stringify({ width: sourcePaint.size.width, height: sourcePaint.size.height, waitMs: Date.now() - paintStarted }, null, 2));
+  // Verify the child view is composited into the actual app window as well.
+  // This fixture page is white; an unattached view leaves the dark shell blank.
+  let composed;
+  await expect.poll(async () => {
+    const area = await ctx.win.locator('.browser-container').last().boundingBox();
+    const viewport = await ctx.win.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    if (!area || area.width < 200 || area.height < 100) return 0;
+    composed = await ctx.app.evaluate(async ({ BrowserWindow }, { area, viewport }) => {
+      const capture = await BrowserWindow.getAllWindows()[0].webContents.capturePage();
+      const { width, height } = capture.getSize(); const bitmap = capture.toBitmap();
+      let white = 0, sampled = 0;
+      const sx = width / viewport.width, sy = height / viewport.height;
+      for (let y = Math.floor((area.y + area.height * 0.25) * sy); y < (area.y + area.height * 0.9) * sy; y += 8) {
+        for (let x = Math.floor((area.x + area.width * 0.1) * sx); x < (area.x + area.width * 0.9) * sx; x += 8) {
+          const i = (y * width + x) * 4; sampled++;
+          if (bitmap[i] > 245 && bitmap[i + 1] > 245 && bitmap[i + 2] > 245) white++;
+        }
+      }
+      return { whiteFraction: white / sampled, png: capture.toPNG().toString('base64'), area };
+    }, { area, viewport });
+    return composed.whiteFraction;
+  }, { timeout: 20000, intervals: [100, 250, 500] }).toBeGreaterThan(0.8);
+  await writeFile(join(output, 'native-browser.png'), Buffer.from(composed.png, 'base64'));
+  await writeFile(join(output, 'native-composite.json'), JSON.stringify({ whiteFraction: composed.whiteFraction, area: composed.area, waitMs: Date.now() - paintStarted }, null, 2));
   await chat.getByRole('button', { name: '브라우저에서 열기', exact: true }).click();
   await expect(chat.getByRole('button', { name: '대화로 돌아가기', exact: true })).toBeVisible();
   expect(await ctx.app.evaluate(({ webContents }) => webContents.getAllWebContents().filter(contents => contents.getURL().endsWith('/native-source')).length)).toBe(1);

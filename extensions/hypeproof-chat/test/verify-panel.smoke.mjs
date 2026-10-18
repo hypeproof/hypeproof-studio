@@ -114,16 +114,19 @@ const ok = (n) => { passed++; console.log(`✓ ${n}`); };
   const free = await renderComponent("ChatPanel", withDraft({}));
   assert.ok(sendButton(free), "control: the Send button is drawn");
   assert.doesNotMatch(sendButton(free), /disabled/, "control: with the same draft and no test, Send is enabled");
+  const pending = await renderComponent("ChatPanel", withDraft({ sendPending: true }));
+  assert.match(sendButton(pending), /disabled/, "Send stays disabled until the host accepts or rejects a pending request");
   const chatSrc = readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
   const appSrc = readFileSync(new URL("../webview-ui/src/App.tsx", import.meta.url), "utf8");
   const LOCKS = {
-    submit: /\|\| streaming \|\| unavailable \|\| props\.sendLocked\) return;/,
+    submit: /\|\| streaming \|\| unavailable \|\| props\.sendLocked \|\| props\.sendPending\) return false;/,
     parked: /if \(props\.sendLocked\) \{ restoreQueuedToDraft\(\); return; \}\s*const text = queued as string;/,
     app: /sendLocked=\{!!state\.verify\?\.running \|\| !!workspace\?\.error\}/,
   };
   const lockProblems = (chat, app) => Object.entries(LOCKS).filter(([k, re]) => !re.test(k === "app" ? app : chat)).map(([k]) => k);
   assert.deepEqual(lockProblems(chatSrc, appSrc), []);
-  assert.ok(lockProblems(chatSrc.replace(" || props.sendLocked) return;", ") return;"), appSrc).includes("submit"));
+  assert.ok(lockProblems(chatSrc.replace(" || props.sendLocked || props.sendPending) return false;", " || props.sendPending) return false;"), appSrc).includes("submit"));
+  assert.ok(lockProblems(chatSrc.replace(" || props.sendPending) return false;", ") return false;"), appSrc).includes("submit"));
   assert.ok(lockProblems(chatSrc.replace("if (props.sendLocked) { restoreQueuedToDraft(); return; }", ""), appSrc).includes("parked"));
   assert.ok(lockProblems(chatSrc, appSrc.replace("sendLocked={!!state.verify?.running || !!workspace?.error}", "")).includes("app"));
   ok("composer lock: Send disabled while a test runs (rendered), the parked message returns to the draft, App wires the host's running");

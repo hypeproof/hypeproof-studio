@@ -98,3 +98,10 @@ The independent reviewer records any material gap as a concrete scenario with
 expected/observed behavior. A new code/acceptance revision addresses it and reruns
 only affected checks before final review. Test counts or average aesthetic scores
 cannot cancel an unresolved defect.
+
+### Review-driven R2 controls
+
+- Paused message Send must restore the next draft's textarea focus and selection after the Send control unmounts, for both keyboard and pointer activation.
+- Narrow task navigation and personal header actions have44px targets; header disclosure keeps classroom markup unchanged.
+- Native source rendering requires a nonempty document capture and the document composited within its actual browser-pane bounds. A loaded DOM or an empty PNG is not rendering evidence. The fixture's known white page is sampled only inside its measured pane, accounting for optional workbench sidebars.
+- A preflight credential failure must settle pending-send state and restore the rejected request with its original tool mode; no paid request is made.

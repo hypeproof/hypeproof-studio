@@ -10,6 +10,21 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
   const clients = new Set();
   const f = await createTaskHarness(root, message => { for (const client of clients) client.write(`data: ${JSON.stringify(message)}\n\n`); }, { profile, turnTools });
   let failNextDraft = false;
+  let failNextSourceOpen = false;
+  let failNextSourceReturn = false;
+  const beforeSourceOpen = () => {
+    if (failNextSourceOpen) { failNextSourceOpen = false; throw new Error('합성 출처 열기 실패. 다시 시도해 주세요.'); }
+  };
+  // Throw at the browser seams so the real provider emits its own failure result.
+  // Reopening an owned tab takes revealBrowserTab instead of openBrowserTab.
+  f.browserState.beforeOpen = beforeSourceOpen;
+  const revealSource = f.h.revealBrowserTab.bind(f.h);
+  f.h.revealBrowserTab = async (...args) => { beforeSourceOpen(); return revealSource(...args); };
+  const revealChat = f.h.editorChat.reveal.bind(f.h.editorChat);
+  f.h.editorChat.reveal = (...args) => {
+    if (failNextSourceReturn) { failNextSourceReturn = false; throw new Error('합성 대화 복귀 실패. 다시 시도해 주세요.'); }
+    return revealChat(...args);
+  };
   const sent = [], canceled = [];
   let streamSerial = 0;
   const startStream = async () => {
@@ -44,7 +59,7 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
       const url = new URL(request.url, 'http://127.0.0.1');
       if (url.pathname === '/fixture-controls') {
         response.setHeader('content-type', 'text/html; charset=utf-8');
-        response.end(`<!doctype html><html lang="ko"><title>독립 검증용 제어</title><body><h1>독립 검증용 제어</h1><p>실제 제품 UI 밖의 합성 이벤트입니다. 다른 탭의 작업 화면에 적용합니다.</p><button data-action="rich">표·코드·긴 문장 추가</button> <button data-action="history">이전 대화 20개 추가</button> <button data-action="source">새 출처 추가</button> <button data-action="stream">실행 시작</button> <button data-action="delta">응답 이어 쓰기</button> <button data-action="stop">실행 종료</button> <button data-action="fail-draft">다음 입력 저장 실패</button> <button data-action="tools-available">합성 웹 검색 사용 가능</button> <button data-action="tools-unavailable">합성 웹 검색 사용 불가</button> <button data-action="reject">합성 요청 실패</button><p id="status" role="status"></p><p><a href="/?theme=light" target="_blank">밝은 화면 열기</a> <a href="/" target="_blank">어두운 화면 열기</a></p><script>document.querySelectorAll('button').forEach(button=>button.onclick=async()=>{const response=await fetch('/fixture/'+button.dataset.action,{method:'POST'});document.querySelector('#status').textContent=response.ok?button.textContent+' 적용됨':'실패';});</script></body></html>`); return;
+        response.end(`<!doctype html><html lang="ko"><title>독립 검증용 제어</title><body><h1>독립 검증용 제어</h1><p>실제 제품 UI 밖의 합성 이벤트입니다. 다른 탭의 작업 화면에 적용합니다.</p><button data-action="rich">표·코드·긴 문장 추가</button> <button data-action="history">이전 대화 20개 추가</button> <button data-action="source">새 출처 추가</button> <button data-action="stream">실행 시작</button> <button data-action="delta">응답 이어 쓰기</button> <button data-action="stop">실행 종료</button> <button data-action="fail-draft">다음 입력 저장 실패</button> <button data-action="fail-source-open">다음 출처 열기 실패</button> <button data-action="fail-source-return">다음 대화 복귀 실패</button> <button data-action="image">합성 이미지 첨부</button> <button data-action="tools-available">합성 웹 검색 사용 가능</button> <button data-action="tools-unavailable">합성 웹 검색 사용 불가</button> <button data-action="reject">합성 요청 실패</button><p id="status" role="status"></p><p><a href="/?theme=light" target="_blank">밝은 화면 열기</a> <a href="/" target="_blank">어두운 화면 열기</a></p><script>document.querySelectorAll('button').forEach(button=>button.onclick=async()=>{const response=await fetch('/fixture/'+button.dataset.action,{method:'POST'});document.querySelector('#status').textContent=response.ok?button.textContent+' 적용됨':'실패';});</script></body></html>`); return;
       }
       if (url.pathname === '/fixture/tools-available' && request.method === 'POST') { turnTools.webSearch = { available: true }; await f.h.postConfig(); response.end('{}'); return; }
       if (url.pathname === '/fixture/tools-unavailable' && request.method === 'POST') { turnTools.webSearch = { available: false, reason: '현재 연결에서는 웹 검색을 사용할 수 없습니다.' }; await f.h.postConfig(); response.end('{}'); return; }
@@ -53,6 +68,8 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
         if (last) await f.h.post({ type: 'inputRejected', text: last.text ?? last.prompt, toolMode: last.toolMode, images: last.images });
         await f.h.post({ type: 'streamError', streamId: 'fixture-run', error: '합성 연결 오류: 입력이 보존되었습니다.' }); response.end('{}'); return;
       }
+      if (url.pathname === '/fixture/fail-source-open' && request.method === 'POST') { failNextSourceOpen = true; response.end('{}'); return; }
+      if (url.pathname === '/fixture/fail-source-return' && request.method === 'POST') { failNextSourceReturn = true; response.end('{}'); return; }
       if (url.pathname === '/fixture/fail-draft'  && request.method === 'POST') { failNextDraft = true; response.end('{}'); return; }
       if (url.pathname === '/fixture/rich' && request.method === 'POST') {
         await f.h.appendHistory([

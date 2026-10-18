@@ -70,7 +70,10 @@ try {
   await page.reload(); await expect(input).toHaveValue('도구가 다른 새 초안');
   await expect(page.locator('.hps-queued')).toContainText('실패할 검색 요청');
   expect(server.sent.length).toBe(3);
-  await page.locator('.hps-queued-send').click(); await expect.poll(() => server.sent.length).toBe(4); expect(server.sent[3].toolMode).toBe('web-search');
+  await input.focus(); await input.evaluate(editor => editor.setSelectionRange(3, 3));
+  await page.locator('.hps-queued-send').focus(); await page.keyboard.press('Enter');
+  await expect.poll(() => server.sent.length).toBe(4); expect(server.sent[3].toolMode).toBe('web-search');
+  await expect(input).toBeFocused(); expect(await input.evaluate(editor => editor.selectionStart)).toBe(3);
   await expect(input).toHaveValue('도구가 다른 새 초안'); await fixture('stop');
   checks.push('CG-02 rejected search keeps original mode separately from a different new draft across restart and requires explicit resending');
 

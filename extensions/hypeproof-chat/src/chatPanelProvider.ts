@@ -5661,9 +5661,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnTimelines.delete(streamId);
     }
     } catch (error) {
-      if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
+      // A pre-stream storage/profile failure still owns a pending UI request.
+      // Restore its captured input before propagating an unexpected host error.
       await this.post({type:"inputRejected",text,images,toolMode:mode});
       await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
+      if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
       try { releaseActivity?.(); } finally { this.pendingSends--; }
     }

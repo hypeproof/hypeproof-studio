@@ -140,6 +140,7 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
       role: "user",
       content: typed,
       createdAt: 1,
+      toolMode: "web-search",
       // 오늘 존재하는 유일한 첨부 경로. 여기에 audio 가 끼어드는 날 §2 가 터진다.
       images: ["data:image/png;base64,AAAA"],
     },
@@ -166,6 +167,7 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
   assert.equal(persisted.length, 4, `저장 줄 수가 4가 아니다: ${JSON.stringify(persisted.map((m) => m.role))}`);
   assert.deepEqual(persisted.map((m) => m.role), ["user", "assistant", "tool", "assistant"]);
   assert.equal(persisted[0].content, typed, "입력한 문자열이 바이트 동일하게 저장된다");
+  assert.equal(persisted[0].toolMode, "web-search", "The selected text-turn tool mode survives the timeline");
   assert.equal(persisted[1].content, "좋아, 먼저 버튼부터.");
   assert.equal(persisted[3].content, "다 만들었어.");
 
@@ -195,16 +197,18 @@ const voiceHits = (text) => (text.match(VOICE_SYMBOL) ?? []).length;
   assert.ok(declared.length >= 6, `필드 추출이 실패했다: ${JSON.stringify(declared)}`);
   assert.deepEqual(
     declared,
-    ["id", "role", "content", "createdAt", "tool", "citations", "images", "assistantName"],
+    ["id", "role", "content", "createdAt", "toolMode", "tool", "citations", "images", "assistantName"],
     "ChatMessage 필드가 늘었다/줄었다 — 음성이 기록 모양을 바꾸려 한다면 여기서 멈춰라",
   );
+  // Search selection is optional text-turn metadata, not an audio payload.
+  assert.match(block, /toolMode\?: import\('\.\/turnTools'\)\.TurnToolMode;/);
   assert.equal(voiceHits(block), 0, "ChatMessage 가 오디오 필드를 들고 다닌다");
 
   // (b) 저장 경로가 **실제로 내놓는** 키가 선언 밖으로 새지 않는다.
   const stray = (items) => [...new Set(items.flatMap((m) => Object.keys(m)))].filter((k) => !declared.includes(k));
   const seen = new Set(persisted.flatMap((m) => Object.keys(m)));
   assert.ok(seen.size >= 5, `키를 못 모았다: ${JSON.stringify([...seen])}`);
-  for (const k of ["id", "role", "content", "createdAt", "tool", "images"]) {
+  for (const k of ["id", "role", "content", "createdAt", "toolMode", "tool", "images"]) {
     assert.ok(seen.has(k), `${k} 가 저장 모양에 없다 — 게이트가 빈 배열을 보고 있다`);
   }
   assert.deepEqual(stray(persisted), [], "저장 경로가 선언에 없는 필드를 내놓는다");
