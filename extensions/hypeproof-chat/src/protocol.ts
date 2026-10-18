@@ -111,6 +111,7 @@ export interface EffortRequestRecord {
   request_class?: string;
 }
 export interface ChatConfig {
+  taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
@@ -416,6 +417,11 @@ export interface SuggestionChip {
 
 // Webview → Host
 export type WebviewMessage = (
+  | { type: 'taskCreate' }
+  | { type: 'taskSelect'; id: string }
+  | { type: 'taskRename'; title: string }
+  | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
+  | { type: 'taskOpenSource'; url: string }
   | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
@@ -578,10 +584,12 @@ export type WebviewMessage = (
       message: string;
       stack: string;
       componentStack: string;
-    }) & {activityId?:string};
+    }) & {activityId?:string; taskId?:string};
 
 // Host → Webview
 export type HostMessage = (
+  | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
+  | { type: 'taskWorkspaceError'; error: string }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[]}
@@ -702,7 +710,7 @@ export type HostMessage = (
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the
   // host-side __test_crashWebview command which is itself env-gated.
-  | { type: "webviewTestCrash" }) & {activityId?:string};
+  | { type: "webviewTestCrash" }) & {activityId?:string; taskId?:string};
 
 export interface ActionRequest {
   requestId: string;

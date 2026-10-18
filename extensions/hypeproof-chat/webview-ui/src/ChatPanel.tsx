@@ -357,11 +357,12 @@ export function ChatPanel(props: Props) {
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
   const activityId = config?.activity?.id;
+  const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   const initialDraft = useRef(true);
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
-    if (activityId) postToHost({type:"saveActivityDraft",activityId,draft:draftPayload()});
-  }, [activityId,draft,pendingImages,queued,imports]);
+    if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
+  }, [activityId,taskId,draft,pendingImages,queued,imports]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
@@ -371,12 +372,12 @@ export function ChatPanel(props: Props) {
       }
       if (msg.type === "activityFreeze") {
         setFrozen(msg.frozen);
-        if (msg.nonce) postToHost({type:"saveActivityDraft",activityId,draft:snapshot.current,nonce:msg.nonce});
+        if (msg.nonce) postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce:msg.nonce});
       }
       if (msg.type === "activityDraftError") setDraftError(msg.error);
     });
     return off;
-  }, [activityId]);
+  }, [activityId,taskId]);
   // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
   // one itself (dropped from Finder, it opened as a tab): draw its chip.
   useEffect(() => onHostMessage((msg) => {

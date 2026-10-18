@@ -5607,6 +5607,99 @@
           "path": "e2e/feedback-native/render-completion-cli-probe.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TASK-WORKSPACE",
+      "stage": "requirement",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Personal task workspace (#1756)"
+        }
+      ]
+    },
+    {
+      "id": "ST-DES-TASK-WORKSPACE",
+      "stage": "design",
+      "owner": "ico1036",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/design/task-workspace.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TASK-WORKSPACE",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-DES-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceStore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskWorkspaceContract.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/protocol.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/taskWorkspace.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/App.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/vscode.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-WORKSPACE",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/testing/task-workspace.md"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-store.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-host.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-workspace-harness.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/run.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/server.mjs"
+        }
+      ]
     }
   ]
 }

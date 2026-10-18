@@ -14,6 +14,8 @@ import {
 import { onHostMessage, postToHost } from "./vscode";
 import { runVoiceCapabilityProbe } from "./voiceProbe";
 import { ChatPanel } from "./ChatPanel";
+import { TaskWorkspaceFrame } from './TaskWorkspace';
+import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { VerifyPanel } from "./VerifyPanel";
@@ -135,7 +137,7 @@ const initialState: State = {
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "config":
-      return { ...(state.config?.activity?.id === action.config.activity?.id ? state : initialState), config: action.config };
+      return { ...(state.config?.activity?.id === action.config.activity?.id && state.config?.taskWorkspace?.activeTaskId === action.config.taskWorkspace?.activeTaskId ? state : initialState), config: action.config };
     case "history":
       // 대화·툴·에러가 한 번에 갈린다. Clear 를 눌러도 직전 턴의 툴 호출 목록이
       // 화면에 남아 있었다(2026-07-27 실사용) — 이제 툴이 타임라인의 일부라
@@ -279,6 +281,8 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const scope = useRef<string | undefined>();
   const [shouldCrash, setShouldCrash] = useState(false);
+  const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -293,10 +297,14 @@ export function App() {
   useEffect(() => {
     const off = onHostMessage((msg: HostMessage) => {
       if (msg.type === "config") {
+        setWorkspace(msg.config.taskWorkspace);
+        setWorkspaceError(null);
         if (scope.current !== msg.config.activity?.id) setIncomingImage(null);
         scope.current = msg.config.activity?.id;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
       switch (msg.type) {
+        case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'taskWorkspaceError': setWorkspaceError(msg.error); return;
         // #897 (VO-01) — 음성 capability 프로브. **원시 관측만** 돌려보내고 판정은
         // 호스트가 한다. 화면에 아무것도 바꾸지 않는다 — 이건 계측기다.
         case "probeVoiceCapability": {
@@ -491,6 +499,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId} error={workspaceError}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel
@@ -534,14 +543,14 @@ export function App() {
         />
       ) : (
       <ChatPanel
-        key={state.config?.activity?.id ?? "disconnected"}
+        key={`${state.config?.activity?.id ?? 'disconnected'}:${state.config?.taskWorkspace?.activeTaskId ?? ''}`}
         incomingImage={incomingImage}
         config={state.config}
         messages={messages}
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
         verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
-        sendLocked={!!state.verify?.running}
+        sendLocked={!!state.verify?.running || !!workspace?.error}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });
           postToHost({ type: "removeElementContext" });
@@ -582,6 +591,7 @@ export function App() {
         onDismissUpdate={(version) => postToHost({ type: "dismissUpdate", version })}
       />
       )}
+      </TaskWorkspaceFrame>
     </ChatErrorBoundary>
   );
 }

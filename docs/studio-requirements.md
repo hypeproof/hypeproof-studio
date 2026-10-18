@@ -1,5 +1,21 @@
 # Studio behavioral requirements
 
+## Personal task workspace (#1756)
+
+`REQ-STUDIO-TASK-WORKSPACE`: personal/trial activities can create, name, switch and
+reopen separate tasks. Each preserves its full local transcript, unsent draft and
+source selection independently of the bounded model context and telemetry
+retention. Pending work or failed input persistence blocks navigation; stale task
+and foreign activity messages cannot overwrite the active task. Storage errors
+preserve original bytes and remain visible. Existing available history is imported
+once without claiming older lost messages. Source opening uses the native browser,
+only for citations in this task, and preserves composer focus. A pinned source is
+not replaced by later citations. Classroom, account authority and shared Service
+memory remain governed by their existing contracts.
+
+[Design](design/task-workspace.md) and [TW-01–07 acceptance](testing/task-workspace.md)
+separate filesystem/host/built-UI evidence from native, Windows and customer proof.
+
 ## Curriculum runtime proposal — 2026-09-29
 
 `REQ-STUDIO-CURRICULUM-RUNTIME`: Studio executes the AI for Good v5 loop

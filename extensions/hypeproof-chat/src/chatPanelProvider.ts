@@ -29,6 +29,7 @@ import { selectedExternalInstructions } from "./externalSkillCommands";
 import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
+import { TaskWorkspaceStore } from './taskWorkspaceStore';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
@@ -406,6 +407,68 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private nativeObservation: NativeObservationRecorder | null = null;
   private nativeHistoryScope: string | null = null;
+  private taskWorkspace?: { activityId: string; store: TaskWorkspaceStore };
+  private taskChanging = false;
+
+  private currentTaskStore(): TaskWorkspaceStore | undefined {
+    return this.taskWorkspace?.activityId === activityConnections(this.context)?.scope ? this.taskWorkspace?.store : undefined;
+  }
+
+  private async prepareTaskWorkspace(isInstructor: boolean): Promise<void> {
+    const activity = activityConnections(this.context)?.current;
+    if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
+    if (this.taskWorkspace?.activityId === activity.id) return;
+    const store = new TaskWorkspaceStore(path.join(this.context.globalStorageUri.fsPath, 'task-workspaces'), JSON.stringify([activity.id, activity.workspace]));
+    this.taskWorkspace = { activityId: activity.id, store };
+    try {
+      await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
+    } catch {
+      // The error view is shown, and sends are blocked. Never replace unreadable history.
+    }
+  }
+
+  private async handleTaskMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
+    const store = this.currentTaskStore?.();
+    if (!store) return;
+    const before = store.getView();
+    if (!msg.taskId || msg.taskId !== before.activeTaskId || this.taskChanging) return;
+    const knownSource = (value: string) => {
+      try {
+        const url = new URL(value);
+        return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password && store.getHistory().some(message => message.citations?.some(citation => citation.url === value));
+      } catch { return false; }
+    };
+    try {
+      if (msg.type === 'taskOpenSource') {
+        if (!knownSource(msg.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
+        await vscode.window.openBrowserTab(msg.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+      } else if (msg.type === 'taskSourceSelection') {
+        if (!knownSource(msg.selection.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
+        await store.saveSurface(msg.taskId, msg.selection);
+      } else {
+        if (this.hasActiveStream() || this.connectionChanging || this.clearingHistory) throw new Error('진행 중인 작업을 멈춘 뒤 다시 시도해 주세요.');
+        this.taskChanging = true;
+        try {
+          if (source) this.draftSource = source;
+          await this.setConnectionChanging(true);
+          if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
+          const expected = { taskId: msg.taskId, revision: store.getView().revision };
+          if (msg.type === 'taskCreate') await store.create('새 작업', expected);
+          else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
+          else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
+          this.orchestratorState = undefined;
+          await this.postConfig();
+          await this.postHistory();
+        } finally {
+          this.taskChanging = false;
+          await this.setConnectionChanging(false);
+        }
+      }
+      await this.post({ type: 'taskWorkspaceState', view: store.getView() });
+    } catch (error) {
+      await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '작업 기록을 저장하지 못했습니다. 다시 시도해 주세요.' });
+    }
+  }
   private accessState:AccessState|undefined;
   private accessScope:string|undefined;
   private accessCheckedAt=0;
@@ -2410,6 +2473,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         "대화 지우기",
       );
       if (choice !== "대화 지우기" || this.hasActiveStream() || key !== this.historyKey()) return;
+      const taskStore = this.currentTaskStore?.();
+      const taskId = taskStore?.getView().activeTaskId;
+      if (taskStore && taskId) {
+        await taskStore.clearHistory(taskId);
+        await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
+      }
       await this.context.workspaceState.update(key, []);
       // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
@@ -3966,11 +4035,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async handleMessage(msg: WebviewMessage, source?: vscode.Webview): Promise<void> {
     const connections=activityConnections(this.context);
     if (connections && msg.activityId && msg.activityId!==connections.scope) return;
+    const taskStore = this.currentTaskStore?.();
+    if (taskStore && msg.type !== 'ready') {
+      const task = taskStore.getView();
+      if (task.error || !msg.taskId || msg.taskId !== task.activeTaskId) {
+        await this.post({ type: 'taskWorkspaceError', error: task.error?.message ?? '작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.' });
+        return;
+      }
+    }
+    if (['taskCreate', 'taskSelect', 'taskRename', 'taskSourceSelection', 'taskOpenSource'].includes(msg.type)) {
+      await this.handleTaskMessage(msg, source); return;
+    }
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
       if (source && !msg.nonce) this.draftSource=source;
       const key='hps.activity.draft.'+msg.activityId;
-      const save=this.draftWrites.then(()=>this.context.workspaceState.update(key,msg.draft));
+      const save=this.draftWrites.then(async () => {
+        if (taskStore && msg.taskId) await taskStore.saveDraft(msg.taskId, msg.draft);
+        else await this.context.workspaceState.update(key,msg.draft);
+      });
       this.draftWrites=save.catch(()=>{});
       try {
         await save;
@@ -4490,7 +4573,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #503 — the webview's history now has tool lines (role:"tool") mixed in. This is
     // the only path out to the model, so they are filtered once right at the entrance.
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
-    const history = modelHistory(activityConnections(this.context) ? this.getHistory() : rawHistory);
+    const history = modelHistory(clampTimeline(activityConnections(this.context) ? this.getHistory() : rawHistory, HISTORY_MAX));
     // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
     // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
@@ -6127,14 +6210,19 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         : local?.provider === "codex" ? "내 Codex 구독"
         : "서버")
       : undefined;
+    await this.prepareTaskWorkspace(isInstructor);
+    if (scope !== activityConnections(this.context)?.scope) return;
+    const taskStore = this.currentTaskStore?.();
+    const taskView = taskStore?.getView();
     await this.post({
       type: "config",
       config: {
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
+        ...(taskView ? { taskWorkspace: taskView } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
-          activityDraft:this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
+          activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
@@ -6189,11 +6277,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async postHistory(): Promise<void> {
+    const error = this.currentTaskStore?.()?.getView().error;
+    if (error) { await this.post({ type: 'taskWorkspaceError', error: error.message }); return; }
     const messages = this.getHistory();
     await this.post({ type: "history", messages });
   }
 
   private async appendHistory(msgs: ChatMessage[]): Promise<void> {
+    const taskStore = this.currentTaskStore?.();
+    if (taskStore) {
+      const taskId = taskStore.getView().activeTaskId;
+      if (!taskId) throw new Error('작업 기록을 열지 못했습니다. 저장소 오류를 확인해 주세요.');
+      await taskStore.append(taskId, msgs);
+      await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
+      return;
+    }
     const current = this.getHistory();
     // #503 — the cap is counted on 'what was said'. Counting tool lines inside the
     // same 200 lets a single SDK turn (dozens of lines) push the entire conversation
@@ -6215,6 +6313,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private getHistory(): ChatMessage[] {
+    const taskStore = this.currentTaskStore?.();
+    if (taskStore) return taskStore.getHistory();
     return this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []);
   }
 
@@ -6266,7 +6366,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private async post(msg: HostMessage): Promise<boolean | void> {
-    msg={...msg,activityId:msg.activityId ?? activityConnections(this.context)?.scope};
+    msg={...msg,activityId:msg.activityId ?? activityConnections(this.context)?.scope, taskId: msg.taskId ?? this.currentTaskStore?.()?.getView().activeTaskId ?? undefined};
     const targets = [this.editorChat?.webview, this.view?.webview].filter((view): view is vscode.Webview => !!view);
     if (!targets.length) return;
     const results = await Promise.all(targets.map(view => view.postMessage(msg)));
