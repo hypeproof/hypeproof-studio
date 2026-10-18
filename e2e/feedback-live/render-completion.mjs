@@ -54,7 +54,7 @@ export function createCompletionSession({hold=async()=>{}}={}){
  return{wrap,fail,snapshot,settle:()=>holding??Promise.resolve()};
 }
 
-export function completionDecision({session,guard,host,captures,sourceSha,wrapperUrl,deadline,now=Date.now()}){
+export function completionDecision({session,guard,host,captures,sourceSha,wrapperUrl,verifyCapture,deadline,now=Date.now()}){
  const stop=reason=>({status:'STOP_HOLD',reason});
  if(!Number.isFinite(deadline)||!Number.isFinite(now)||now>=deadline)return stop('deadline_expired_or_unknown');
  if(session.fatal)return stop(session.fatal);
@@ -66,8 +66,10 @@ export function completionDecision({session,guard,host,captures,sourceSha,wrappe
  if(!Array.isArray(guard.rows)||guard.rows.length!==guard.attempts||guard.rows.some((r,index)=>!r||r.attempt!==index+1))return stop('guard_ledger_inconsistent');
  if(guard.rows.some(r=>r.phase!=='complete'||!Number.isInteger(r.status)||r.status<200||r.status>=300))return stop('upstream_failed');
  if(!Array.isArray(captures)||!Array.isArray(host.captures)||!Number.isSafeInteger(host.screenshot_attempts)||host.screenshot_attempts!==guard.render_screenshot_attempts||captures.length!==host.captures.length||captures.length!==guard.render_screenshot_attempts)return stop('capture_counters_inconsistent');
- if(captures.some(x=>x.source_sha256!==sourceSha||x.page.url!==wrapperUrl||![390,1280].includes(x.page.frameWidth)||x.upstream_pixel_delivery!=='OBSERVED'))return stop('capture_binding_or_delivery_failed');
- const missing=[390,1280].filter(width=>!captures.some(x=>x.page.frameWidth===width));
+ try{if(typeof verifyCapture!=='function'||captures.some((capture,index)=>{const {upstream_pixel_delivery,...record}=capture;assert.deepEqual(record,host.captures[index]);return verifyCapture(capture)!==true;}))return stop('capture_revision_unverified');}catch{return stop('capture_revision_unverified');}
+ if(captures.some(x=>x.page.url!==wrapperUrl||![390,1280].includes(x.page.frameWidth)||x.upstream_pixel_delivery!=='OBSERVED'))return stop('capture_binding_or_delivery_failed');
+ const finalCaptures=captures.filter(x=>x.source_sha256===sourceSha);
+ const missing=[390,1280].filter(width=>!finalCaptures.some(x=>x.page.frameWidth===width));
  if(!missing.length)return{status:'COMPLETE',missing:[]};
  if(now>=deadline||session.queries>=3||guard.candidate_attempts>=3||12-guard.attempts<missing.length+1||6-guard.render_screenshot_attempts<missing.length)return{status:'INCOMPLETE_BUDGET',missing};
  return{status:'INCOMPLETE_EVIDENCE',missing};

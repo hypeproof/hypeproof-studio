@@ -337,6 +337,26 @@ upstream requests, 3 claims, 6 screenshot reservations and 4096 output tokens.
 Only current refs bound to the two actual outer wrapper width buttons receive
 click approval. Other click/type actions retain the normal denial boundary.
 
+Captures retain their own source revision. The owned host records exact candidate
+HTML bytes and the exact HTTP response after production live-reload injection as
+separate hashes and immutable files under `private/render-revisions/`. It checks
+the production injection mapping and binds the response's load ID and hashes to
+the current direct iframe's observed CDP frame/loader identity. Unknown, cached,
+changed or mismatched response provenance stops the run. A navigation alone never
+writes a snapshot: at most six charged captures retain at most twelve snapshot
+files. The owner evidence directory and private subdirectories must be regular
+and private; snapshots are created exclusively, never overwritten, and all image
+and snapshot bytes are reverified with link/tamper rejection before completion.
+
+Every historical capture remains recorded, delivered and charged. Only captures
+whose verified candidate-source hash equals the frozen final HTML hash satisfy
+390/1280 completeness. A valid historical revision is neither discarded nor
+counted as final evidence; unknown/missing/tampered historical snapshots still
+stop the run. The frozen output check also remains enforced on every same-session
+evidence-only continuation. Exclude the entire `private/` subtree from sanitized
+artifact/GitHub exports; hash metadata is not permission to publish HTML contents.
+
+
 Tool errors, policy denial, runtime/validation failure and cancellation stop
 completion. The SDK hook/abort/close alone is **not** an admission guarantee:
 our preserved provider-free Read-error control reached 12 requests despite a
@@ -383,3 +403,16 @@ node e2e/feedback-native/render-completion-cli-probe.mjs \
 Without `--execute` it writes preparation metadata only. This control uses fresh
 isolated processes and headless browsers; it does not use an existing live
 activity or prove generated visual quality.
+
+
+The same full CLI fixture has two explicit revision controls (prepare by default;
+execute only after exact-source review/commit): append
+`--revision-case=edit-complete` or `--revision-case=edit-missing` to the invocation
+above. Both require actual SDK Write of a first candidate, a historical390 capture,
+an SDK edit, reload and final390/1280 captures. The complete case expects11 scripted
+forwards, one claim and three captures. The missing-final1280 case expects12
+forwards, two claims and three captures; its continuation observes the same SDK
+UUID and has no Write tool. No historical capture is refunded. These fixtures do
+not authorize any live provider run or resume a historical failed activity.
+
+Captured source version counts and SHA IDs are reported separately from SDK candidate claims. Claims count SDK queries/continuations, not individual Write/Edit calls. The host flags more than three distinct captured versions for approval review without changing guard admission; uncaptured versions remain `UNKNOWN`. This report grants no paid budget or approval. A candidate response binding mismatch immediately invokes the fatal abort/hold callback, rejects further owned host operations, and remains a cleanup failure if that callback fails.

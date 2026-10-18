@@ -5523,6 +5523,12 @@
           "path": "e2e/feedback-native/service.mjs"
         },
         {
+          "path": "e2e/feedback-native/service-accounting.mjs"
+        },
+        {
+          "path": "e2e/feedback-native/service-accounting.test.mjs"
+        },
+        {
           "path": "e2e/feedback-live/README.md"
         },
         {
@@ -6000,6 +6006,70 @@
         },
         {
           "path": ".github/workflows/pr-ci.yml"
+        }
+      ]
+    },
+    {
+      "id": "ST-REQ-PERSONAL-ACCOUNT",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-ACCESS-BUDGET",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## L. Safety / observability"
+        },
+        {
+          "path": "docs/dev/studio-account-preview.md"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PERSONAL-ACCOUNT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-ACCOUNT",
+        "ST-TEST-PASS-PURCHASE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/account-session.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/account-runtime.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/account-lock.smoke.mjs"
+        },
+        {
+          "path": "e2e/accounts/mac-preview.mjs"
+        },
+        {
+          "path": "e2e/accounts/mac-return.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-PERSONAL-ACCOUNT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-ACCOUNT",
+        "ST-TEST-PERSONAL-ACCOUNT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountLock.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
         }
       ]
     }
