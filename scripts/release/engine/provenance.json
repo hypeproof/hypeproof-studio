@@ -1,0 +1,10 @@
+{
+  "schema": "hps-release-core-provenance/1",
+  "package": "@hypeproof/release-engine-core",
+  "version": "0.1.0",
+  "repository": "hypeproof/hypeproof-studio",
+  "sourcePath": "scripts/release/engine/core.mjs",
+  "baseRevision": "862f757baea74b78aa9c0570d7ed334bd0a1671a",
+  "sourceSha256": "5175b28ed1c562ea14e7aca57361e88723864ecb67e8ab4bca3159d2ecb09ed1",
+  "contract": "hps-release-core/1"
+}
