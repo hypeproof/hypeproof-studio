@@ -6162,6 +6162,48 @@
           "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-NATIVE-BROWSER",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-STUDIO-SAFETY"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## N. Native browser + agentic control (#278)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-EXTERNAL-LINK",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/browserSafetyHelpers.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EXTERNAL-LINK",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-EXTERNAL-LINK"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/external-link-route.smoke.mjs"
+        }
+      ]
     }
   ]
 }
