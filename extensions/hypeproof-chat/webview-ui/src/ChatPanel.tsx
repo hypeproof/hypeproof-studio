@@ -304,7 +304,10 @@ export function ChatPanel(props: Props) {
   const deferredDraftFlush = useRef<string | null>(null);
   const [preparingImages, setPreparingImages] = useState(0);
   const beginImagePreparation = () => {
-    if (!preparingImagesRef.current) imagePreparationFailed.current = false;
+    if (!preparingImagesRef.current) {
+      imagePreparationFailed.current = false;
+      setImgNote(null);
+    }
     preparingImagesRef.current++;
     setPreparingImages(preparingImagesRef.current);
     const finish = () => {
@@ -315,7 +318,6 @@ export function ChatPanel(props: Props) {
   };
   const imagePreparationBlocksSend = () => {
     if (!preparingImagesRef.current) return false;
-    setImgNote("이미지를 준비하는 중이에요. 준비가 끝나면 보내 주세요.");
     return true;
   };
   const [imgNote, setImgNote] = useState<string | null>(null);
@@ -1472,7 +1474,7 @@ export function ChatPanel(props: Props) {
           </div>
         )}
         {preparingImages > 0 && (
-          <div className="hps-img-note" role="status">이미지 {preparingImages}장을 준비하고 있어요. 준비가 끝나면 보낼 수 있어요.</div>
+          <div className="hps-image-preparing" role="status">이미지 {preparingImages}장을 준비하고 있어요. 준비가 끝나면 보낼 수 있어요.</div>
         )}
         {pendingImages.length > 0 && (
           <div className="hps-attachments" aria-label="첨부한 이미지">

@@ -36,6 +36,8 @@ try {
   await expect.poll(() => page.evaluate(() => window.pendingReads.length)).toBe(2);
   await expect(send).toBeDisabled();
   await input.press('Enter');
+  await expect(page.getByRole('status').filter({ hasText: '이미지 2장을 준비' })).toHaveCount(1);
+  await expect(page.locator('.hps-img-note')).toHaveCount(0);
   expect(server.sent).toHaveLength(0);
   await expect(input).toHaveValue('두 이미지와 이 초안을 함께 보내 주세요');
   await page.evaluate(() => window.pendingReads.shift()(false));
@@ -48,6 +50,8 @@ try {
   await paste();
   await expect.poll(() => page.evaluate(() => window.pendingReads.length)).toBe(1);
   await expect(send).toBeDisabled();
+  await expect(page.getByText('이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.')).toHaveCount(0);
+  await expect(page.locator('.hps-image-preparing')).toHaveCount(1);
   await page.evaluate(() => window.pendingReads.shift()(false));
   await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(2);
   await expect(send).toBeEnabled();
