@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {fetchConfiguredCustomerRelease,authorizeCustomerReleaseAsset} from '../src/customerReleaseResolver.ts';
 const now=Date.parse('2026-10-19T00:00:00Z');
-const env={HPS_RELEASE_ENGINE_URL:'https://release.hypeproof-ai.xyz',HPS_RELEASE_ENGINE_CHANNEL:'stable'};
+const env={HPS_RELEASE_ENGINE_URL:'https://release.hypeproof-ai.xyz',HPS_RELEASE_ENGINE_CHANNEL:'stable',HPS_RELEASE_ENGINE_REPOSITORY:'hypeproof/hypeproof-studio-releases'};
 const receipt={status:'AVAILABLE',channel:'stable',repository:'hypeproof/hypeproof-studio-releases',artifactId:'mac',releaseId:99,assetId:177,sequence:2,version:'v2026.1019.0',manifestDigest:'a'.repeat(64),sha256:'b'.repeat(64),size:3,name:'HypeProofStudio-darwin-arm64.zip',url:'https://github.com/hypeproof/hypeproof-studio-releases/releases/download/v2026.1019.0/HypeProofStudio-darwin-arm64.zip',observedAt:new Date(now).toISOString()};
 const options={platform:'darwin',arch:'arm64',clock:()=>now};
 assert.equal(await fetchConfiguredCustomerRelease({},options),undefined);
@@ -19,4 +19,8 @@ for (const patch of [{sequence:1},{assetId:188}]) await assert.rejects(fetchConf
 const canaryEnv={...env,HPS_RELEASE_ENGINE_CHANNEL:'canary'};
 const canary=await fetchConfiguredCustomerRelease(canaryEnv,{...options,fetchImpl:async()=>Response.json({...receipt,channel:'canary',url:receipt.url.replace('v2026.1019.0/','v2026.1019.0-rc.1/')})});
 assert.equal(canary.engineChannel,'canary');assert.equal(canary.prerelease,true);assert.equal(canary.tag_name,'v2026.1019.0-rc.1');
+const sourceEnv={...env,HPS_RELEASE_ENGINE_REPOSITORY:undefined};
+const source=await fetchConfiguredCustomerRelease(sourceEnv,{...options,fetchImpl:async()=>Response.json({...receipt,repository:'hypeproof/hypeproof-studio',assetId:199,url:receipt.url.replace('hypeproof-studio-releases','hypeproof-studio')})});
+assert.match(source.assets[0].url,/hypeproof-studio\/releases\/assets\/199$/);
+await assert.rejects(fetchConfiguredCustomerRelease(sourceEnv,{...options,fetchImpl:async()=>Response.json(receipt)}),/identity mismatch/);
 console.log('Customer resolver selection, canonical origin/IDs/bytes, channel separation, stale/mixed receipt rejection PASS (protocol fixtures only).');
