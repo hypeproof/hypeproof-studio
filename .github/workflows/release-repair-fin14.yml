@@ -1,0 +1,80 @@
+name: release-repair-fin14
+run-name: hps-repair-${{ inputs.operation_id }}-${{ inputs.packet_digest }}
+on:
+  workflow_dispatch:
+    inputs:
+      operation_id:
+        required: true
+        type: string
+      packet_digest:
+        required: true
+        type: string
+      packet:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-repair-${{ inputs.operation_id }}
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: github.repository == 'hypeproof/hypeproof-studio' && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: release-repair
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify server packet and workflow pin
+        env:
+          REPAIR_PACKET: ${{ inputs.packet }}
+          REPAIR_DIGEST: ${{ inputs.packet_digest }}
+          REPAIR_OPERATION: ${{ inputs.operation_id }}
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {validatePacket} from './scripts/release/repair/runner.mjs';
+          const packet=validatePacket(JSON.parse(process.env.REPAIR_PACKET),process.env.REPAIR_DIGEST);
+          if(packet.operationId!==process.env.REPAIR_OPERATION||packet.workflow.sha!==process.env.GITHUB_SHA||process.env.GITHUB_REF!=='refs/tags/'+packet.workflow.ref)throw Error('Workflow/packet mismatch');
+          fs.writeFileSync('.repair-packet.json',JSON.stringify(packet),{mode:0o600});
+          JS
+      - name: Request bounded model repair and run isolated fixed tests
+        env:
+          HPS_REPAIR_MODEL_ORIGIN: https://release.hypeproof-ai.xyz
+          PACKET_DIGEST: ${{ inputs.packet_digest }}
+        run: |
+          token=$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=hypeproof-release-repair" | jq -r .value)
+          echo "::add-mask::$token"
+          export HPS_REPAIR_MODEL_TOKEN="$token"
+          node scripts/release/repair/runner.mjs .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output"
+      - uses: actions/checkout@v4
+        if: success() && fromJSON(inputs.packet).createDraftPr == true
+        with:
+          repository: hypeproof/hypeproof-harness
+          ref: ${{ fromJSON(inputs.packet).harnessSha }}
+          path: .repair-harness
+          persist-credentials: false
+      - name: Prepare and submit authorized draft through existing hype-pr
+        if: success() && fromJSON(inputs.packet).createDraftPr == true
+        env:
+          REPAIR_PACKET: ${{ inputs.packet }}
+          PACKET_DIGEST: ${{ inputs.packet_digest }}
+          HPS_REPAIR_DRAFT_PR_AUTHORIZED: ${{ vars.RELEASE_REPAIR_DRAFT_PR_AUTHORIZED }}
+          GH_TOKEN: ${{ secrets.RELEASE_REPAIR_BOT_TOKEN }}
+          HPS_REPAIR_MODEL_ORIGIN: https://release.hypeproof-ai.xyz
+        run: |
+          node -e 'require("node:fs").writeFileSync(".repair-packet.json",process.env.REPAIR_PACKET,{mode:0o600})'
+          token=$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=hypeproof-release-repair" | jq -r .value)
+          echo "::add-mask::$token"
+          export HPS_REPAIR_MODEL_TOKEN="$token"
+          node scripts/release/repair/draft-pr.mjs .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output" "$GITHUB_WORKSPACE/.repair-harness"
+      # No upload-artifact: durable patch retention needs the engine storage allowance.

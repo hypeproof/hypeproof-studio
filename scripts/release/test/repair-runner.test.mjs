@@ -1,0 +1,27 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {digest} from '../engine/core.mjs';
+import {validatePacket,validatePatch,cleanEnvironment,repair} from '../repair/runner.mjs';
+import {prepareDraft} from '../repair/draft-pr.mjs';
+const file='src/product.mjs';
+const patch='diff --git a/src/product.mjs b/src/product.mjs\n--- a/src/product.mjs\n+++ b/src/product.mjs\n@@ -1 +1 @@\n-export const correct = false;\n+export const correct = true;\n';
+function packet(){return {schema:'hps-release-repair/1',operationId:'work-'+'a'.repeat(64),repository:'hypeproof/hypeproof-studio',repositoryId:1239447574,candidateId:'candidate-fixture',sourceSha:'b'.repeat(40),policyDigest:'c'.repeat(64),failureId:'failure-'+'d'.repeat(64),issueUrl:'https://github.com/hypeproof/hypeproof-studio/issues/42',observations:[1,2,3].map(id=>`https://github.com/hypeproof/hypeproof-studio/actions/runs/${id}/attempts/1`),workflow:{sha:'e'.repeat(40),path:'.github/workflows/release-repair-fin14.yml',ref:'repair-v1'},allowedPaths:[file],tests:[['node','--test','test/product.test.mjs']],testContainerImage:'node@sha256:'+'f'.repeat(64),model:{name:'gpt-6.1-sol',effort:'medium',paidFallback:false,maxCalls:1,maxInputBytes:20000,maxOutputTokens:2000},modelBudget:{revision:'synthetic-protocol-only'},createDraftPr:false};}
+async function fixture(t){const root=await fs.mkdtemp(path.join(os.tmpdir(),'repair-runner-test-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));const scratch=path.join(root,'source'),output=path.join(root,'output'),home=path.join(root,'home');await fs.mkdir(path.join(scratch,'src'),{recursive:true});await fs.mkdir(path.join(scratch,'test'));await fs.mkdir(home);await fs.writeFile(path.join(scratch,file),'export const correct = false;\n');await fs.writeFile(path.join(scratch,'test/product.test.mjs'),"import assert from 'node:assert/strict'; import {correct} from '../src/product.mjs'; assert.equal(correct,true);\n");const env=cleanEnvironment(home);for(const args of [['init','--quiet'],['config','user.name','Fixture'],['config','user.email','fixture@example.test'],['add','.'],['commit','--quiet','-m','fixture']])assert.equal(spawnSync('git',args,{cwd:scratch,env}).status,0);return {root,scratch,output,home,env};}
+test('a real red product regression becomes green using one bounded fixture model result; no host credentials or publication',async t=>{
+ const f=await fixture(t),p=packet();assert.equal(spawnSync('node',['--test','test/product.test.mjs'],{cwd:f.scratch,env:f.env}).status,1);const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});let calls=0;
+ globalThis.fetch=async(url,options)=>{calls++;assert.equal(url,'https://release.hypeproof-ai.xyz/v1/repair/model');const input=JSON.parse(options.body);assert.equal(input.call,1);assert.equal(input.packetDigest,digest(p));assert.equal(input.model,undefined);return Response.json({status:'completed',model:p.model.name,output:[{content:[{type:'output_text',text:JSON.stringify({diff:patch})}]}],usage:{input_tokens:100,output_tokens:100}});};
+ const result=await repair(p,{expectedDigest:digest(p),output:f.output,env:{GITHUB_RUN_ATTEMPT:'1',HPS_REPAIR_MODEL_ORIGIN:'https://release.hypeproof-ai.xyz',HPS_REPAIR_MODEL_TOKEN:'synthetic-not-a-real-oidc-token'},checkout:async()=>f,testExecutor:async(command,work)=>{assert.equal(work.env.GITHUB_TOKEN,undefined);assert.equal(work.env.HPS_REPAIR_MODEL_TOKEN,undefined);const run=spawnSync(command[0],command.slice(1),{cwd:work.scratch,env:work.env,encoding:'utf8'});assert.equal(run.status,0,run.stdout+run.stderr);return run.stdout;}});
+ assert.equal(result.status,'PATCH_TESTED',result.reason);assert.equal(result.modelCalls,1);assert.equal(calls,1);assert.equal(result.tests[0].status,'PASS');assert.equal(result.draftPr.status,'NOT_AUTHORIZED');assert.equal((await fs.readFile(path.join(f.output,'repair.patch'),'utf8')),patch);
+ const prepared=await prepareDraft(p,{expectedDigest:digest(p),output:f.output,env:{}});assert.equal(prepared.status,'BLOCKED');assert.equal(prepared.reason,'EXPLICIT_BOT_PR_AUTHORIZATION_OR_CREDENTIALS_MISSING');assert.equal(calls,1);
+});
+test('protected paths, test weakening, operation mismatch and rerun cannot begin a model repair',async t=>{
+ const p=packet();for(const file of ['test/product.test.mjs','scripts/release/engine/core.mjs','.github/workflows/release.yml','src/approvalPolicy.ts','src/auth.ts'])assert.throws(()=>validatePatch(patch.replaceAll('src/product.mjs',file),p.allowedPaths),/PATH_DENIED/);
+ assert.throws(()=>validatePatch(patch+'new mode 100755\n',p.allowedPaths),/FILE_OPERATION/);assert.throws(()=>validatePacket({...p,tests:[['node','--test','--test-skip-pattern=all']]},digest({...p,tests:[['node','--test','--test-skip-pattern=all']]})),/UNWEAKENED/);
+ assert.throws(()=>validatePacket(p,'0'.repeat(64)),/PACKET/);
+ const f=await fixture(t);await assert.rejects(repair(p,{expectedDigest:digest(p),output:f.output,env:{GITHUB_RUN_ATTEMPT:'2',HPS_REPAIR_MODEL_ORIGIN:'https://release.hypeproof-ai.xyz'}}),/ONE_RUN_ATTEMPT/);
+ await assert.rejects(repair(p,{expectedDigest:digest(p),output:f.output,env:{GITHUB_RUN_ATTEMPT:'1',HPS_REPAIR_MODEL_ORIGIN:'https://unconfigured.example.test'}}),/ORIGIN/);
+});
