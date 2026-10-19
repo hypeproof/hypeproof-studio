@@ -239,3 +239,6 @@
   .hps-shell[data-chat-detail="personal"] .hps-empty { padding-top: 0; }
   .hps-shell[data-chat-detail="personal"] .hps-messages { gap: 16px; }
 }
+
+/* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
+.hps-shell[data-chat-detail="personal"] .hps-msg-body { word-break: keep-all; }

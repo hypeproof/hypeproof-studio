@@ -6231,6 +6231,33 @@
           "path": "extensions/hypeproof-chat/test/response-announcer.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-IME-GUARD",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/imeGuard.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-KOREAN-INPUT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-IME-GUARD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/korean-input.smoke.mjs"
+        }
+      ]
     }
   ]
 }

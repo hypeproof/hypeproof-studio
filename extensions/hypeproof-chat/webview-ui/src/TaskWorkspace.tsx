@@ -6,6 +6,7 @@ import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } 
 import { HeadingSlotContext } from './headingSlot';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
+import { imeComposing } from './imeGuard';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -237,6 +238,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     const focusable = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]')].filter(element => element.getClientRects().length > 0);
     (focusable()[0] ?? dialog).focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
+      // CGP-DS-R-027: a native listener sees composer keys too; composition keys belong to the IME.
+      if (event.isComposing || event.keyCode === 229) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -283,7 +286,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
 
   return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div className="tw-workspace" data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
     // Escape must work even in the frame before focus reaches the newly opened panel.
-    if (sourcesOpen && event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); closeSources(); }
+    if (sourcesOpen && event.key === 'Escape' && !event.defaultPrevented && !imeComposing(event)) { event.preventDefault(); event.stopPropagation(); closeSources(); }
   }}>
     <a className="tw-skip" href="#task-conversation">대화로 바로 가기</a>
     <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
@@ -307,7 +310,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <header className="tw-heading">
         <button className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}>☰</button>
         {renaming ? <form className="tw-rename" onSubmit={event => { event.preventDefault(); if (title.trim()) { postToHost({ type: 'taskRename', title: title.trim() }); finishRename(); } }}>
-          <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') finishRename(); }} />
+          <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && !imeComposing(event)) finishRename(); }} />
           <button className="tw-quiet" disabled={!title.trim() || blocked}>저장</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />
@@ -325,7 +328,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <div id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
     </section>
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}
-    <aside ref={sourcePanel} id="task-sources" className="tw-sources" aria-label="작업 자료" role={sourceDialog ? 'dialog' : undefined} aria-modal={sourceDialog || undefined} tabIndex={-1} hidden={!sourcesOpen} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); closeSources(); } }}>
+    <aside ref={sourcePanel} id="task-sources" className="tw-sources" aria-label="작업 자료" role={sourceDialog ? 'dialog' : undefined} aria-modal={sourceDialog || undefined} tabIndex={-1} hidden={!sourcesOpen} onKeyDown={event => { if (event.key === 'Escape' && !imeComposing(event)) { event.preventDefault(); closeSources(); } }}>
       <header><h2>작업 자료</h2><button type="button" className="tw-quiet tw-source-close" aria-label="자료 닫기" onClick={() => closeSources()}><SourceIcon kind="close" /></button></header>
       {request?.error && request.url !== selected?.url && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
       {request?.phase === 'opening' && request.url !== selected?.url && <p className="cp-other-source-status" role="status">출처 여는 중: {citationAddress(request.url)?.hostname}</p>}

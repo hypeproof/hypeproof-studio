@@ -6,6 +6,7 @@ import { ComposerTools, SelectedTool } from './ComposerTools';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { useResponseAnnouncement } from './responseAnnouncer';
+import { imeComposing } from './imeGuard';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -1439,7 +1440,7 @@ export function ChatPanel(props: Props) {
             <span className="hps-queued-text" title={request.text}>{request.text}</span>
             <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || unavailable || props.sendLocked} onClick={() => retryRecovered(request)}>다시 보내기</button>
             <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || props.sendLocked} onClick={() => editRecovered(request)}>수정하기</button>
-            {discardRequest === request ? <span className="hps-recovery-confirm" role="group" aria-label="메시지 삭제 확인" onKeyDown={event => {if(event.key === 'Escape'){event.preventDefault();setDiscardRequest(null);textareaRef.current?.focus({preventScroll:true});}}}>
+            {discardRequest === request ? <span className="hps-recovery-confirm" role="group" aria-label="메시지 삭제 확인" onKeyDown={event => {if(event.key === 'Escape' && !imeComposing(event)){event.preventDefault();setDiscardRequest(null);textareaRef.current?.focus({preventScroll:true});}}}>
               <span>이 메시지와 사진을 삭제할까요?</span>
               <button type="button" className="hps-queued-send" autoFocus onClick={() => {setDiscardRequest(null);requestAnimationFrame(() => textareaRef.current?.focus({preventScroll:true}));}}>취소</button>
               <button type="button" className="hps-queued-send" onClick={() => {setRecovered(items => items.filter(item => item !== request));setDiscardRequest(null);setImgNote(null);textareaRef.current?.focus({preventScroll:true});}}>삭제 확인</button>
@@ -1537,11 +1538,10 @@ export function ChatPanel(props: Props) {
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
             onKeyDown={(e) => {
-              const isComposing =
-                composing ||
-                e.nativeEvent.isComposing ||
-                // keyCode 229 is the legacy Safari signal for IME composition.
-                e.nativeEvent.keyCode === 229;
+              const isComposing = imeComposing(e, composing);
+              // CGP-DS-R-027: composition keys stay with the IME and never reach the panel,
+              // workspace or menu handlers above (Escape would close the sources panel).
+              if (isComposing) { e.stopPropagation(); return; }
               // Composing Hangul: Enter commits the syllable, it must never
               // send. Unchanged from before — typing mid-turn does not make the
               // IME any less load-bearing.
@@ -1857,7 +1857,7 @@ function NamingCard({
               placeholder={`예: 별이, 루카, 포포 (안 정하면 '${fallbackName}')`}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) goNext();
+                if (e.key === "Enter" && !imeComposing(e)) goNext();
               }}
             />
             <button className="hps-naming-btn" onClick={goNext}>
@@ -1878,7 +1878,7 @@ function NamingCard({
               placeholder="예: 친절하고 엉뚱한 친구 (건너뛰어도 돼요)"
               onChange={(e) => setPersonality(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) finish();
+                if (e.key === "Enter" && !imeComposing(e)) finish();
               }}
             />
             <div className="hps-naming-row">
@@ -2522,7 +2522,7 @@ export function HeaderActions({ personal, taskId, children }: { personal: boolea
   return <div className="hps-actions tw-chat-menu" ref={root} onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }} onKeyDown={event => {
-    if (!open || event.defaultPrevented) return;
+    if (!open || event.defaultPrevented || imeComposing(event)) return;
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); }
     else if (event.key === 'Tab') close(true);
     else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
