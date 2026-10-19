@@ -1,7 +1,7 @@
 // CGP-DS-R-027 / CGP-DS-R-028 — Korean input and reading comfort in the chat webview.
 //   node --experimental-strip-types test/korean-input.smoke.mjs
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const { imeComposing } = await import("../webview-ui/src/imeGuard.ts");
 const ev = (nativeEvent) => ({ nativeEvent });
@@ -16,12 +16,16 @@ assert.equal(imeComposing(ev({ keyCode: 27 })), false);
 
 // Every Enter/Escape handler in the chat webview's composer, menus, dialogs and panels checks
 // composition first. A handler without the guard would send, close or dismiss mid-syllable.
-const files = ["ChatPanel.tsx", "TaskWorkspace.tsx"];
+// Scan every webview component, not a hand-picked list: a missed file is how a gap slips in.
+// Handlers on controls with no text entry (menu buttons, voice controls) cannot see composition.
+const NO_TEXT_ENTRY = { "ComposerTools.tsx": "tool menu buttons only", "VoicePanel.tsx": "voice controls only" };
+const files = readdirSync(new URL("../webview-ui/src/", import.meta.url)).filter((f) => f.endsWith(".tsx") && !(f in NO_TEXT_ENTRY));
+assert.ok(files.includes("InstructorChatPanel.tsx") && files.includes("ChatPanel.tsx"), "scan covers the chat panels");
 for (const f of files) {
   const src = readFileSync(new URL(`../webview-ui/src/${f}`, import.meta.url), "utf8");
   const lines = src.split("\n");
   lines.forEach((line, i) => {
-    if (!/key === ['"](Escape|Enter)['"]/.test(line)) return;
+    if (!/key [!=]== ['"](Escape|Enter)['"]/.test(line)) return;
     const window = lines.slice(Math.max(0, i - 12), i + 1).join("\n");
     assert.match(window, /imeComposing\(|isComposing\b/, `${f}:${i + 1} handles ${line.trim().slice(0, 60)} without an IME guard`);
   });

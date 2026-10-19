@@ -7,6 +7,7 @@ import { useState, useRef } from "react";
 import type { ChatConfig, ChatMessage } from "../../src/protocol";
 import { postToHost } from "./vscode";
 import { ChatPanel } from "./ChatPanel";
+import { imeComposing } from "./imeGuard";
 
 interface Props {
   config: ChatConfig | null;
@@ -73,6 +74,8 @@ export function InstructorChatPanel(props: Props) {
   }
 
   function handleDirectKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // CGP-DS-R-027: a half-composed model ID is never submitted or cleared.
+    if (imeComposing(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       handleDirectSubmit();
