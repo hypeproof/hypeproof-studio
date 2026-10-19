@@ -441,7 +441,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (!pending || pending.scope !== this.turnRequestScope()) return;
     try { await this.appendHistory(pending.messages); }
     catch { throw new Error(this.interruptedHistoryError()!); }
-    if (this.interruptedHistory === pending) this.interruptedHistory = undefined;
+    if (this.interruptedHistory === pending) {
+      this.interruptedHistory = undefined;
+      await this.post({ type: 'taskWorkspaceError', error: null, historySaveFailed: true });
+    }
   }
   private taskChanging = false;
   private sourceOpening?: string;
@@ -2602,7 +2605,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
       }
       await this.context.workspaceState.update(key, []);
-      if (this.interruptedHistory && this.interruptedHistory.scope === this.turnRequestScope()) this.interruptedHistory = undefined;
+      if (this.interruptedHistory && this.interruptedHistory.scope === this.turnRequestScope()) {
+        this.interruptedHistory = undefined;
+        await this.post({ type: 'taskWorkspaceError', error: null, historySaveFailed: true });
+      }
       // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
@@ -4187,7 +4193,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.draftWrites=save.catch(()=>{});
       try {
         await save;
-        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError() });
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: !!this.interruptedHistoryError() });
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce && this.draftFlush.source===source) this.draftFlush.resolve();
       } catch (failure) {
         const conflict = failure instanceof TaskWorkspaceStoreError && failure.code === 'stale';
@@ -5724,7 +5730,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         } catch (error) {
           interruptedSaveFailed = true;
           interruptedSaveError = error;
-          await this.post({ type: 'taskWorkspaceError', error: '중단한 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.' });
+          await this.post({ type: 'taskWorkspaceError', error: '중단한 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.', historySaveFailed: true });
         }
       }
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
@@ -6510,8 +6516,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async postHistory(): Promise<void> {
     const error = this.currentTaskStore?.()?.getView().error;
     if (error) { await this.post({ type: 'taskWorkspaceError', error: error.message }); return; }
-    const messages = this.getHistory();
+    const saved = this.getHistory();
+    const pending = this.interruptedHistory && this.interruptedHistory.scope === this.turnRequestScope() ? this.interruptedHistory : undefined;
+    const ids = new Set(saved.map(message => message.id));
+    const messages = pending ? [...saved, ...pending.messages.filter(message => !ids.has(message.id))] : saved;
     await this.post({ type: "history", messages });
+    if (pending) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: true });
   }
 
   private async appendHistory(msgs: ChatMessage[]): Promise<void> {

@@ -156,6 +156,10 @@ test('interrupted history survives failed storage and recovers in the same task'
     assert.equal(f.store.getView().activeTaskId, id, 'failed persistence blocks leaving the transcript');
     assert.equal(f.h.connectionChanging, false);
     assert.equal(f.store.getHistory().length, 0);
+    await f.h.postHistory();
+    assert.deepEqual(Array.from(f.posts.findLast(row => row.type === 'history').messages, row => row.content), ['계획해줘', '부분 답변'], 'reopened view retains unsaved conversation');
+    assert.equal(f.posts.at(-1).historySaveFailed, true);
+    assert.equal(f.store.getHistory().length, 0, 'showing pending content does not claim durable storage');
     await assert.rejects(f.h.setConnectionChanging(true), /중단한 대화를 저장하지 못했습니다/, 'activity transition must not leave pending history behind');
     await f.h.setConnectionChanging(false);
     assert.equal(f.h.connectionChanging, false);
