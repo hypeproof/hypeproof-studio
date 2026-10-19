@@ -118,6 +118,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${fs.realpathSync(pro
   if (!tag) { console.error('usage: publish-gate.mjs --tag <tag>'); process.exit(2); }
   let verdict;
   try {
+    if (process.env.HPS_RELEASE_ENGINE_ENABLED === 'true') throw Error('engine-controlled publication requires the Service publisher; legacy CLI cannot authorize it');
+    if (process.env.HPS_RELEASE_ENGINE_ENABLED && !['true','false'].includes(process.env.HPS_RELEASE_ENGINE_ENABLED)) throw Error('invalid engine mode');
     if (tag.includes('-')) {
       verdict = decide({tag});
     } else {
@@ -133,4 +135,22 @@ if (process.argv[1] && import.meta.url === new URL(`file://${fs.realpathSync(pro
   console.log(text);
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, text);
   process.exit(verdict.allow ? 0 : 1);
+}
+
+import {digest} from './engine/core.mjs';
+const require=(ok,message)=>{if(!ok)throw Error('Release publication gate: '+message);};
+export const publicationPaths=Object.freeze(['build-mac:release-create-upload','build-windows:release-create-upload','verify-unified:publish','verify-unified:mirror-dispatch','mirror:release-create-edit-upload','mirror:install-bundle-upload','release-cut:tag-create','manual:tag-push','hotfix:tag-push']);
+// Call at each write site after the existing legacy PR/tag/hotfix guard.
+// Missing engine configuration cannot silently select legacy when enabled.
+export async function assertPublicationGate({enabled,managed,path,identity,client,legacyGuard}) {
+ require(publicationPaths.includes(path),'unregistered publication path');
+ require(typeof legacyGuard==='function','legacy guard required');await legacyGuard();
+ require(typeof enabled==='boolean'&&typeof managed==='boolean','explicit engine mode required');
+ if(!enabled&&!managed)return {status:'LEGACY_GUARD_PASSED'};
+ require(enabled&&managed,'engine controls all writes when enabled; unmanaged write blocked');
+ require(client?.authorize,'engine authority unavailable');
+ require(identity?.repository==='hypeproof/hypeproof-studio'&&identity.repositoryId===1239447574&&/^[a-f0-9]{40}$/.test(identity.sourceSha)&&/^[a-f0-9]{64}$/.test(identity.intentDigest)&&Number.isSafeInteger(identity.releaseId)&&identity.releaseId>0&&['stable','canary'].includes(identity.channel),'exact engine publication identity required');
+ const frozen=structuredClone(identity),response=await client.authorize({path,identity:frozen});
+ require(response?.status==='AUTHORIZED'&&response.identityDigest===digest(frozen)&&response.path===path&&Number.isSafeInteger(response.fence)&&response.fence>0,'current engine authorization required');
+ return response;
 }
