@@ -114,10 +114,12 @@ jobs:
               echo "::error::$TAG is still a draft in $SOURCE_REPO; publish it through verify-unified-release.yml first"
               exit 1
             fi
+            # A helper failure must stop the job, never read as "nothing missing".
+            labels="$(jq -r '.assets[].name' source-release.json | node scripts/release/platforms.mjs missing "$TAG")"
             missing=()
             while IFS= read -r label; do
               [[ -n "$label" ]] && missing+=("$label")
-            done < <(jq -r '.assets[].name' source-release.json | node scripts/release/platforms.mjs missing "$TAG" || true)
+            done <<<"$labels"
 
             if [[ ${#missing[@]} -eq 0 ]]; then
               echo "모든 플랫폼 자산 확인 (시도 ${attempt}회)"

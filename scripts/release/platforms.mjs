@@ -11,7 +11,8 @@
 //   platforms.mjs list REV        JSON array of platforms
 //   platforms.mjs matrix REV      JSON {include:[{os,platform}]} for a job matrix
 //   platforms.mjs missing REV     asset names on stdin; prints each missing package
-//                                 label on its own line, exits 1 when any is missing
+//                                 label on its own line (nothing = complete). Exits 0
+//                                 either way; a nonzero exit is an error, never "complete".
 import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -70,7 +71,7 @@ function main() {
   else {
     const names = fs.readFileSync(0, 'utf8').split('\n').map(s => s.trim()).filter(Boolean);
     const missing = missingAssets(platforms, names);
-    if (missing.length) { console.log(missing.join('\n')); process.exit(1); }
+    if (missing.length) console.log(missing.join('\n'));
   }
 }
 

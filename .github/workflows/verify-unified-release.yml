@@ -51,7 +51,9 @@ jobs:
               echo 'published=true' >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            if jq -r '.assets[].name' "$RUNNER_TEMP/candidate.json" | node scripts/release/platforms.mjs missing "$sha" > "$RUNNER_TEMP/missing.txt"; then exit 0; fi
+            # set -e + pipefail: a helper failure stops the job; empty output = complete.
+            jq -r '.assets[].name' "$RUNNER_TEMP/candidate.json" | node scripts/release/platforms.mjs missing "$sha" > "$RUNNER_TEMP/missing.txt"
+            if [[ ! -s "$RUNNER_TEMP/missing.txt" ]]; then exit 0; fi
             sleep 60
           done
           echo "Configured OS packages did not arrive (missing: $(paste -sd, "$RUNNER_TEMP/missing.txt")); candidate remains draft." >&2
