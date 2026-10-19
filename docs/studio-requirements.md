@@ -44,6 +44,16 @@ turn and retry identity. A recovered message with a different mode remains a
 separate, durable paused item; neither current draft nor mode is overwritten and
 no error recovery silently starts a new run. Reject duplicate pending dispatches.
 
+`REQ-C6` / UX10 turn isolation: a stopped turn's late chunks, citations,
+tool rows or terminal events must not change a later turn's answer, Stop button,
+error state, pending-send lock or current draft. Repeated starts must not erase
+already displayed text. Existing host preflight refusals (`tools`, `connection`,
+`activity`) remain visible when no turn is active. Stop preserves the partial
+answer and unsent draft without submitting it; the next send is explicit.
+If storage fails after an app-written or model response starts, the host reports
+that response's identity and releases its activity; it must not strand the UI in
+an active state or label a running-turn failure as an uncorrelated preflight error.
+
 `REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
 while another message is queued or being drafted remains a separate durable
 recovery item with its original tool mode and images. It never retags or appends

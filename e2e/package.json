@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:stop-stream": "node --experimental-strip-types stop-stream.mjs",
     "test:queued-photo-send": "node --experimental-strip-types queued-photo-send.mjs",
     "test": "playwright test",
     "test:headed": "playwright test --headed",

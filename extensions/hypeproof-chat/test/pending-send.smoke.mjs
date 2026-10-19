@@ -13,7 +13,7 @@ function host(){
  const posts=[];
  // Exercise request snapshots and retry validation too; a partial method copy
  // can fail before the deferred storage boundary this test is meant to cover.
- return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
+ return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(),turnTimelines:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
 }
 // Pause the actual send before profile/stream creation. Both submit routes must
 // own the connection immediately; an exception must release that ownership.
@@ -56,6 +56,7 @@ for(const fail of [false,true]){
   assert.equal(h.posts.find(message=>message.type==='inputRejected')?.text,'다른 친구도 있어?');
   assert.equal(h.posts.find(message=>message.type==='inputRejected')?.toolMode,'auto');
   assert.ok(h.posts.some(message=>message.type==='streamError'),'a displayed reply must not hide a failed history write');
+  assert.equal(h.posts.find(message=>message.type==='streamError').streamId,h.posts.find(message=>message.type==='streamStart').streamId,'a post-start storage failure belongs to that displayed turn, not a preflight code');
   assert.equal(h.posts.some(message=>message.type==='streamEnd'),false,'failed storage cannot signal successful completion');
  }else{save.resolve();await pending;assert.equal(h.posts.some(message=>message.type==='inputRejected'),false);}
  assert.equal(h.hasActiveStream(),false);

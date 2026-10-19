@@ -283,6 +283,11 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const scope = useRef<string | undefined>();
   const taskScope = useRef<string | undefined>();
+  // The bridge can deliver an old turn after Stop. Update this synchronously,
+  // before React renders, so a late terminal event cannot end the next turn.
+  const activeStream = useRef<string | null>(null);
+  const pendingSend = useRef(false);
+  const [sendPending, setSendPending] = useState(false);
   const [shouldCrash, setShouldCrash] = useState(false);
   const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -305,10 +310,28 @@ export function App() {
         if (scope.current !== msg.config.activity?.id || taskScope.current !== (msg.config.taskWorkspace?.activeTaskId ?? undefined)) {
           setIncomingImage(null);
           verifyRequests.current.clear();
+          activeStream.current = null;
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
+      if ("streamId" in msg) {
+        if (msg.type === "streamStart") {
+          // One turn owns this view; a repeated start must not clear its text.
+          if (activeStream.current !== null) return;
+          activeStream.current = msg.streamId;
+        } else if (msg.streamId !== activeStream.current) {
+          // These host refusal codes are emitted before streamStart. They still
+          // need to explain an idle preflight failure, never terminate a live turn.
+          const preflight = msg.type === "streamError" && activeStream.current === null
+            && ["tools", "connection", "activity"].includes(msg.streamId);
+          if (!preflight) return;
+        }
+        if (["streamEnd", "streamStopped", "streamError"].includes(msg.type)) activeStream.current = null;
+      }
+      if (["streamStart", "inputRejected", "streamError", "streamEnd", "streamStopped"].includes(msg.type)) {
+        pendingSend.current = false; setSendPending(false);
+      }
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'taskWorkspaceError': setWorkspaceError(msg.error); return;
@@ -363,13 +386,6 @@ export function App() {
   // 전에 role:"tool" 이 걸러진다(chatTimeline.modelHistory).
   const messages = state.timeline.items;
 
-  const pendingSend = useRef(false);
-  const [sendPending, setSendPending] = useState(false);
-  useEffect(() => onHostMessage(msg => {
-    if (['streamStart', 'inputRejected', 'streamError', 'streamEnd', 'streamStopped'].includes(msg.type)) {
-      pendingSend.current = false; setSendPending(false);
-    }
-  }), []);
   useEffect(() => { pendingSend.current = false; setSendPending(false); }, [state.config?.activity?.id, state.config?.taskWorkspace?.activeTaskId]);
   const beginRequest = () => {
     if (pendingSend.current || state.streamId) return false;
