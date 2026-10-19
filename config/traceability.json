@@ -6375,6 +6375,33 @@
           "path": "extensions/hypeproof-chat/test/text-size.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-AI-CAPABILITIES",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/aiCapabilities.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-AI-CAN-DO",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-IMP-AI-CAPABILITIES"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/ai-can-do.test.tsx"
+        }
+      ]
     }
   ]
 }

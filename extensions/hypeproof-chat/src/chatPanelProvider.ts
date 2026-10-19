@@ -178,6 +178,7 @@ import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./b
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
+import { aiCapabilities } from "./aiCapabilities";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
@@ -6832,6 +6833,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       type: "config",
       config: {
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
+        ...(toolProfile && !local && !isInstructor ? { aiCapabilities: aiCapabilities(toolProfile, toolRuntime) } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,
