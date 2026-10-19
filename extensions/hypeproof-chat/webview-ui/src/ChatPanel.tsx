@@ -2182,10 +2182,17 @@ function ErrorBanner({
   // Spot common transport-layer signals so the framing is honest about the
   // recovery path. We don't try to classify perfectly — just enough to pick
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
-  const { icon, title } = errorBannerPresentation(message);
+  const { icon, title, tone } = errorBannerPresentation(message);
+  // Free start D4 — a scheduled state (the drained daily cap) is announced politely and offers
+  // only 닫기: there is nothing to report, retry or trace.
+  const notice = tone === "notice";
 
   return (
-    <div className="hps-error-banner" role="alert">
+    <div
+      className={notice ? "hps-error-banner hps-error-banner--notice" : "hps-error-banner"}
+      role={notice ? "status" : "alert"}
+      aria-live={notice ? "polite" : undefined}
+    >
       <div className="hps-error-banner-icon">{icon}</div>
       <div className="hps-error-banner-body">
         <div className="hps-error-banner-title">{title}</div>
@@ -2197,25 +2204,27 @@ function ErrorBanner({
             </a>
           </div>
         )}
-        {requestId && (
+        {requestId && !notice && (
           <div className="hps-error-banner-rid" title={errorIdTitle(audience)}>
             ID: <code>{requestId}</code>
           </div>
         )}
       </div>
       <div className="hps-error-banner-actions">
-        {canRetry && (
+        {canRetry && !notice && (
           <button className="hps-error-banner-retry" onClick={onRetry}>
             다시 보내기
           </button>
         )}
-        <button
-          className="hps-error-banner-report"
-          onClick={onReport}
-          title={reportButtonTitle(audience)}
-        >
-          🚨 신고하기
-        </button>
+        {!notice && (
+          <button
+            className="hps-error-banner-report"
+            onClick={onReport}
+            title={reportButtonTitle(audience)}
+          >
+            🚨 신고하기
+          </button>
+        )}
         <button
           className="hps-error-banner-dismiss"
           onClick={onDismiss}
