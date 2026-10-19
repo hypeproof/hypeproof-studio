@@ -17,8 +17,15 @@ const t = (label: string, fn: () => void) => {
 const ok = (v: unknown, m: string) => { if (!v) throw new Error(m); };
 
 t("a classroom seat holds the install", () => ok(classUpdateHold({ activity_kind: "classroom" }) === true, "classroom"));
-t("negative control: personal, trial and no profile do not hold", () => {
-  for (const p of [{ activity_kind: "personal" }, { activity_kind: "trial" }, {}, null, undefined]) ok(classUpdateHold(p) === false, JSON.stringify(p));
+t("negative control: personal, trial, a bought pass and no seat at all do not hold", () => {
+  for (const p of [{ activity_kind: "personal" }, { activity_kind: "trial" }, { activity_kind: "classroom", pass: { ends_at: 1 } }]) ok(classUpdateHold(p) === false, JSON.stringify(p));
+  ok(classUpdateHold(null, null) === false, "no seat");
+});
+t("fails closed: an older profile without a kind holds", () => ok(classUpdateHold({}) === true, "missing kind"));
+t("fails closed: no profile, saved class activity holds; saved personal does not", () => {
+  ok(classUpdateHold(null, { kind: "classroom" }) === true, "class activity");
+  ok(classUpdateHold(undefined, { kind: undefined }) === true, "kindless activity");
+  ok(classUpdateHold(null, { kind: "personal" }) === false, "personal activity");
 });
 
 const noop = () => {};

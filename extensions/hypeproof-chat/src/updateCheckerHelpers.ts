@@ -2,6 +2,8 @@
 // from plain Node. The orchestration that touches the VS Code API + file
 // system + child processes lives in updateChecker.ts.
 
+import { profileAudience, seatAudience } from "./seatVocabulary.ts";
+
 /**
  * Compare two HypeProof Studio versions. Returns:
  *   > 0  if a > b
@@ -455,8 +457,16 @@ export function pickInflight<T>(
  * longer the active one; the banner only says when it can be installed. The client does not yet
  * receive the class window's end time (DEC-25), so the whole class seat counts as the window.
  */
-export function classUpdateHold(profile: { activity_kind?: string } | null | undefined): boolean {
-  return profile?.activity_kind === "classroom";
+export function classUpdateHold(
+  profile: { activity_kind?: string | null; pass?: unknown } | null | undefined,
+  activity?: { kind?: string | null; pass?: unknown } | null,
+): boolean {
+  // Fail closed with the seat-vocabulary rule: a missing kind is a class (older Service). With no
+  // profile (fetch failed, other Service) the saved activity decides; with no seat at all nothing
+  // is held.
+  if (profile) return profileAudience(profile) === "classroom";
+  if (activity) return seatAudience(activity) === "classroom";
+  return false;
 }
 export const CLASS_UPDATE_HOLD_COPY = "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요.";
 

@@ -6826,7 +6826,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
-        update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile) },
+        update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -6871,7 +6871,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /** CGP-SHELL-R-001 — the active seat is a class, so no update installs now. */
   isClassUpdateHeld(): boolean {
-    return classUpdateHold(this.cachedProfile);
+    return classUpdateHold(this.cachedProfile, activityConnections(this.context)?.current);
   }
 
   getAvailableUpdate(): import("./protocol").UpdateOffer | null {
