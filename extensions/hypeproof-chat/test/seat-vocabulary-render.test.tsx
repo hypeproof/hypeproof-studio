@@ -86,6 +86,27 @@ t("no seat renders an English Send label", () => {
   for (const c of [config("trial"), config("classroom")]) if (/>Send</.test(render(c))) throw new Error("English Send label present");
 });
 
+// Free start D4 (SPEC iteration 4 §2.4, TUX-SP-16) — a drained daily cap is an expected, scheduled
+// state: a calm notice (status, not alert), no 🚨 신고하기, no retry, no request id; 닫기 stays.
+// The generic-failure banner above is the positive control that the report action still renders.
+const DAILY_CAP = "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
+const renderError = (error: string, canRetryLast = true) =>
+  renderToStaticMarkup(<ChatPanel {...PROPS} error={error} canRetryLast={canRetryLast} config={config("trial")} instructor={false} />);
+t("daily cap: calm notice without the problem-report action", () => {
+  const html = renderError(DAILY_CAP);
+  if (!html.includes("오늘 무료 사용량이 모두 소진됐어요") || !html.includes("🌙")) throw new Error("cap notice missing — the absence checks would be vacuous");
+  if (!html.includes("hps-error-banner--notice")) throw new Error("cap notice is not in the notice style");
+  if (!/class="hps-error-banner hps-error-banner--notice" role="status"/.test(html)) throw new Error("cap notice is announced as an alert");
+  for (const bad of ["신고하기", "🚨", "다시 보내기", "rid-123"]) if (html.includes(bad)) throw new Error(`cap notice shows ${bad}`);
+  if (!html.includes(">닫기</button>")) throw new Error("cap notice lost its dismiss button");
+});
+t("generic failure: alert banner keeps 신고하기, retry and the id (positive control)", () => {
+  const html = renderError("문제가 발생했습니다.");
+  if (html.includes("hps-error-banner--notice")) throw new Error("a real failure took the notice style");
+  if (!html.includes('role="alert"')) throw new Error("a real failure is not an alert");
+  for (const want of ["🚨 신고하기", "다시 보내기", "rid-123"]) if (!html.includes(want)) throw new Error(`a real failure lost ${want}`);
+});
+
 t("start page: Korean eyebrow and motto, no English chrome", () => {
   const html = renderToStaticMarkup(<StartPage />);
   if (!html.includes("studio-step") || !html.includes("studio-build")) throw new Error("chrome elements missing — the absence check would be vacuous");

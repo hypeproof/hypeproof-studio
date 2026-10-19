@@ -933,6 +933,16 @@ html, body, #root {
   background: transparent; color: var(--vscode-foreground, #aaa); border: 1px solid rgba(255,255,255,0.15);
 }
 .hps-error-banner-dismiss:hover { background: rgba(255,255,255,0.06); }
+/* Free start D4 (TUX-SP-16) — a scheduled state, not a fault: the calm stop-notice palette
+   (neutral rail, widget background, foreground text) instead of the red alert chrome. */
+.hps-error-banner--notice {
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  border-left: 2px solid var(--vscode-descriptionForeground, #888);
+  color: var(--vscode-foreground, #ddd);
+}
+.hps-error-banner--notice .hps-error-banner-icon { font-size: 16px; }
+.hps-error-banner--notice .hps-error-banner-msg { color: var(--vscode-descriptionForeground, #aaa); line-height: 1.5; }
 
 .hps-fatal {
   padding: 32px 24px; text-align: center; max-width: 480px; margin: 40px auto;
