@@ -301,6 +301,22 @@ jobs:
           cp ../scripts/patches/windows-policy-locales.patch patches/windows/99-hps-policy-locales.patch
           bash prepare_vscode.sh
 
+      - name: Persist optional compiled-engine upstream pin
+        if: inputs.engine_assembly_mode != '' && inputs.engine_assembly_mode != 'full'
+        shell: bash
+        working-directory: vscodium-base
+        run: |
+          # HPS_UPSTREAM_PIN_BEGIN: do not infer a moving tag/default upstream.
+          set -euo pipefail
+          resolved_upstream="$(git -C vscode rev-parse --verify 'HEAD^{commit}')"
+          [[ "$resolved_upstream" =~ ^[a-f0-9]{40}$ ]] || { echo 'ASSEMBLY_BLOCKED: immutable prepared upstream missing' >&2; exit 1; }
+          if [[ -n "${MS_COMMIT:-}" && "$MS_COMMIT" != "$resolved_upstream" ]]; then
+            echo 'ASSEMBLY_BLOCKED: prepared upstream differs from supplied immutable pin' >&2
+            exit 1
+          fi
+          printf 'MS_COMMIT=%s\n' "$resolved_upstream" >> "$GITHUB_ENV"
+          # HPS_UPSTREAM_PIN_END
+
       - name: Apply product.json overrides
         shell: bash
         working-directory: vscodium-base
