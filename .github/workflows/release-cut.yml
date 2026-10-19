@@ -123,9 +123,20 @@ jobs:
           name: release-cut
           path: ${{ runner.temp }}/release-cut
 
+      # The release PR is opened with the org bot App, not the workflow token: the org keeps
+      # "Allow GitHub Actions to create and approve pull requests" off, because that switch
+      # also lets workflows approve PRs. An App-opened PR also starts its pull_request checks.
+      - name: Bot token (hypeproof-org-lab-bot)
+        id: bot
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HYPEPROOF_BOT_APP_ID }}
+          private-key: ${{ secrets.HYPEPROOF_BOT_PRIVATE_KEY }}
+
       - name: Create from the plan
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_PR_TOKEN: ${{ steps.bot.outputs.token }}
           ACCEPT_NOT_RUN: ${{ inputs.accept_not_run }}
           MANAGED_DRAFT: ${{ inputs.managed_draft }}
         run: |

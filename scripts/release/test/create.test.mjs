@@ -2,7 +2,7 @@
 //   node --test scripts/release/test/create.test.mjs
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {actions} from '../create.mjs';
+import {actions, prToken} from '../create.mjs';
 import {nextRcTag, versionFor} from '../version.mjs';
 
 test('versionFor: v<year>.<month*100+day>.<n>, no leading zero, next n after a release that day', () => {
@@ -44,4 +44,14 @@ test('actions: create only from a non-trial create plan, by smoke verdict', () =
   assert.ok(actions({...plan, trial: true, smoke: 'PASS'}).stop);
   assert.ok(actions({...plan, mode: 'dry-run', smoke: 'PASS'}).stop);
   assert.ok(actions({...plan, schema: 'x', smoke: 'PASS'}).stop);
+});
+
+test('prToken: the PR step needs its own token, checked before any write', () => {
+  const steps = ['tag', 'builds', 'branch', 'pr'];
+  assert.equal(prToken(steps, {RELEASE_PR_TOKEN: 'app'}), 'app');
+  // the workflow token alone is not enough: Actions may not open PRs in this org
+  assert.throws(() => prToken(steps, {GH_TOKEN: 'workflow'}), /RELEASE_PR_TOKEN is required/);
+  assert.throws(() => prToken(steps, {RELEASE_PR_TOKEN: ''}), /RELEASE_PR_TOKEN is required/);
+  // a smoke-failure issue opens no PR and needs no PR token
+  assert.equal(prToken(['issue'], {}), null);
 });
