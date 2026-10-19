@@ -70,6 +70,13 @@ if (process.argv.includes('--serve')) {
     await expect(input).toBeFocused(); expect(server.sent).toHaveLength(0);
     await options.getByRole('button',{name:/아이디어 내기/}).click();
     await expect(input).toHaveValue('설정을 열어도 유지할 초안\n4. 아이디어 내기: 기획, 이름 짓기, 콘텐츠 소재');
+    // Clearing and manually rewriting a matching suffix must not revive choice ownership.
+    await input.fill('');
+    const rewritten = '내가 직접 작성한 원문: 4. 아이디어 내기: 기획, 이름 짓기, 콘텐츠 소재';
+    await input.pressSequentially(rewritten);
+    await options.getByRole('button',{name:/계획 세우기/}).click();
+    await expect(input).toHaveValue(rewritten+'\n2. 계획 세우기: 여행, 일정, 공부, 할 일');
+    expect(server.sent).toHaveLength(0);
     await input.fill('직접 고친 답변');
     await options.getByRole('button',{name:/알아보고 비교하기/}).click();
     await expect(input).toHaveValue('직접 고친 답변\n3. 알아보고 비교하기: 제품, 장소, 정보 조사');

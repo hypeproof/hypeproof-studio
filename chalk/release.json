@@ -3,6 +3,6 @@
   "product": "chalk",
   "provides": {},
   "requires": {
-    "chalk-admin": { "package": "@hypeproof/service-contracts", "manifest": "chalk/package.json" }
+    "chalk-admin": { "package": "@hypeproof/service-contracts", "manifest": "chalk/package.json", "surface": "chalk-admin" }
   }
 }
