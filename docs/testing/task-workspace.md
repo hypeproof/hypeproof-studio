@@ -190,3 +190,13 @@ more-than-seven-day delays use generic wait guidance without raw header text.
 Keep 413 and non-rate-limit controls. In the UI/host/store fixture, verify no
 automatic retry, one explicit retry on the same endpoint/model, and draft/history
 preservation through reload. Native and real-provider acceptance are separate.
+
+### Expired-code reconnection (#1897)
+
+After a typed401 expiration disconnects the activity and unmounts the composer,
+StartPage code preview and admission must not request a draft acknowledgement
+from that unmounted view. Still await queued writes and retain interrupted-history
+recovery. Re-enter the same activity/workspace and verify saved draft/history and
+reload. Connected activity transitions must still acknowledge the current draft;
+persistence failure must still block them. Synthetic admission evidence does not
+establish native or live authentication acceptance.

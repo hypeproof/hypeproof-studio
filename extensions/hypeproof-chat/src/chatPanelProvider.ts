@@ -2510,12 +2510,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.post({type:'activityFreeze',frozen:value});
     if (!value) return;
     const source=this.draftSource;
-    if (source) {
+    const activityId=activityConnections(this.context)?.scope;
+    // Expired credentials unmount the composer; it cannot acknowledge a scoped flush.
+    if (source && activityId) {
       const nonce=crypto.randomUUID();
       await new Promise<void>((resolve,reject)=>{
         const timer=setTimeout(()=>{this.draftFlush=undefined;reject(new Error('입력 저장을 확인하지 못했습니다. 활동을 유지하고 다시 시도해 주세요.'));},8000);
         this.draftFlush={nonce,source,capture,resolve:()=>{clearTimeout(timer);this.draftFlush=undefined;resolve();},reject:e=>{clearTimeout(timer);this.draftFlush=undefined;reject(e);}};
-        void source.postMessage({type:'activityFreeze',frozen:true,nonce,activityId:activityConnections(this.context)?.scope});
+        void source.postMessage({type:'activityFreeze',frozen:true,nonce,activityId});
       });
     }
     await this.draftWrites;
