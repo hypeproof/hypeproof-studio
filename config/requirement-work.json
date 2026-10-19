@@ -64,7 +64,7 @@
       "inline_prefixes": [
         "NAT"
       ],
-      "sha256": "d8e3d7ff928993744c29c40cc94f6829033f70bf0eaf27deb92bb3a9fb77e093",
+      "sha256": "8ae569e681a4231083d132f2ee0fb2abc1ec3bc7f0248f0df5fa5340a3f7d6fa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/studio-native-trial.md",
