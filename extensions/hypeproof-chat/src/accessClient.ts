@@ -23,9 +23,27 @@ export async function sendBudgetRequest(proxyUrl:string,token:string,source:stri
   const r=await fetch(proxyUrl.replace(/\/$/,'')+'/access/requests',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({source_id:source,note}),signal:AbortSignal.timeout(15000)});
   if(!r.ok)throw Error('추가 사용 요청을 보내지 못했습니다.');
 }
+/**
+ * REQ-STUDIO-DENIAL-SOURCE — the feature keys (REQ-M38: read, write, shell, subagents,
+ * browser, web_search) the selected access choice removed from a profile that granted them.
+ * Kept under an enumerable symbol: object spread carries it along with the profile, JSON
+ * and postMessage never see it.
+ */
+export const ACCESS_REMOVED_FEATURES:unique symbol=Symbol('hps.accessRemovedFeatures');
+type AccessNarrowed=ResolvedProfile&{[ACCESS_REMOVED_FEATURES]?:readonly string[]};
+/** What the access choice removed (empty for an un-narrowed profile): those denials are 이용권 선택, not 수업 설정. */
+export function accessRemovedFeatures(profile:ResolvedProfile|null|undefined):ReadonlySet<string>{
+  return new Set((profile as AccessNarrowed|null|undefined)?.[ACCESS_REMOVED_FEATURES]??[]);
+}
 /** UI/runtime narrowing only; the Service still authenticates every execution. */
 export function accessProfile(profile:ResolvedProfile,choice:AccessChoiceView|undefined):ResolvedProfile{
   if(!choice)return profile;const allowed=new Set(choice.allowed.features);
-  return{...profile,sdk_tools:profile.sdk_tools?{...profile.sdk_tools,read:!!profile.sdk_tools.read&&allowed.has('read'),write:!!profile.sdk_tools.write&&allowed.has('write'),shell:!!profile.sdk_tools.shell&&allowed.has('shell'),subagents:!!profile.sdk_tools.subagents&&allowed.has('subagents'),browser:!!profile.sdk_tools.browser&&allowed.has('browser')}:undefined,
+  const t=profile.sdk_tools,removed:string[]=[];
+  for(const k of ['read','write','shell','subagents'] as const)if(t?.[k]&&!allowed.has(k))removed.push(k);
+  if((t?.browser||profile.browser_control?.enabled)&&!allowed.has('browser'))removed.push('browser');
+  if(profile.tools?.web_search===true)removed.push('web_search');
+  const narrowed:AccessNarrowed={...profile,sdk_tools:profile.sdk_tools?{...profile.sdk_tools,read:!!profile.sdk_tools.read&&allowed.has('read'),write:!!profile.sdk_tools.write&&allowed.has('write'),shell:!!profile.sdk_tools.shell&&allowed.has('shell'),subagents:!!profile.sdk_tools.subagents&&allowed.has('subagents'),browser:!!profile.sdk_tools.browser&&allowed.has('browser')}:undefined,
     tools:{...profile.tools,web_search:false},browser_control:profile.browser_control?{...profile.browser_control,enabled:profile.browser_control.enabled&&allowed.has('browser')}:undefined};
+  narrowed[ACCESS_REMOVED_FEATURES]=removed;
+  return narrowed;
 }

@@ -1,4 +1,5 @@
-import { denialCopy, lessonFeatureOff } from './denialSource.ts';
+import { classifyDenial, denialCopy, lessonFeatureOff, type DenialAudience } from './denialSource.ts';
+import { accessRemovedFeatures } from './accessClient.ts';
 import { profileAudience } from './seatVocabulary.ts';
 import type { ChatMessage, ResolvedProfile } from './protocol';
 
@@ -20,15 +21,19 @@ export function turnToolsAvailability(args: {
   instructor?: boolean;
 }): TurnToolsAvailability {
   // REQ-STUDIO-DENIAL-SOURCE — each reason names who decided: this connection/runtime
-  // (앱 버전/환경), the served profile (수업 설정), or no profile yet (확인 안 됨).
+  // (앱 버전/환경), the selected 이용권 (accessProfile removed it), the served profile itself
+  // (수업 설정), or no profile yet (확인 안 됨).
   const audience = profileAudience(args.profile);
   const feature = '웹 검색';
   const reason = args.local || args.instructor
-    ? denialCopy({ source: 'runtime', feature, reason: '이 로컬 구독 연결은 웹 검색 선택을 아직 지원하지 않아요' }, audience)
+    // No teacher sentence: the reader may be the instructor, or a local developer.
+    ? denialCopy({ source: 'runtime', feature, reason: '이 로컬 구독 연결은 웹 검색 선택을 아직 지원하지 않아요', next: '웹 검색 없이 이어서 해 주세요' }, audience)
     : !args.profile
-      ? denialCopy({ source: 'unknown', feature, reason: '수업 정보를 아직 받지 못했어요' }, audience)
+      ? denialCopy({ source: 'unknown', feature, reason: '수업 정보를 아직 받지 못했어요' }, 'neutral')
       : args.profile.tools?.web_search !== true
-        ? lessonFeatureOff(feature, audience)
+        ? accessRemovedFeatures(args.profile).has('web_search')
+          ? denialCopy({ source: classifyDenial('access_choice_narrowed'), feature }, audience)
+          : lessonFeatureOff(feature, audience)
         : args.runtime !== 'agent-sdk'
           ? denialCopy({ source: 'runtime', feature, reason: '지금 실행 환경은 웹 검색 선택을 지원하지 않아요' }, audience)
           : undefined;
@@ -37,7 +42,7 @@ export function turnToolsAvailability(args: {
 
 export function requireTurnTools(mode: TurnToolMode, availability: TurnToolsAvailability): void {
   if (mode === 'web-search' && !availability.webSearch.available) {
-    throw new TurnToolModeError(availability.webSearch.reason ?? denialCopy({ source: 'unknown', feature: '웹 검색' }));
+    throw new TurnToolModeError(availability.webSearch.reason ?? denialCopy({ source: 'unknown', feature: '웹 검색' }, 'neutral'));
   }
 }
 
@@ -55,11 +60,12 @@ export function retryTurnToolMode(messages: readonly ChatMessage[], request: {
 }
 
 /** Narrow both advertised tools and canUseTool's allowlist. No alternate MCP or agent route. */
-export function toolsForTurn<T extends { permittedTools: string[]; permittedMcpTools: string[]; permittedAgentTools: string[]; orchestrator?: unknown }>(agent: T, mode: TurnToolMode): T {
+export function toolsForTurn<T extends { permittedTools: string[]; permittedMcpTools: string[]; permittedAgentTools: string[]; orchestrator?: unknown }>(agent: T, mode: TurnToolMode, audience: DenialAudience = 'neutral'): T {
   if (mode === 'auto') return agent;
   const web = ['WebSearch', 'WebFetch'];
-  // The permitted set is the served profile's grant: a lesson setting.
-  if (!web.every(name => agent.permittedTools.includes(name))) throw new TurnToolModeError(lessonFeatureOff('웹 검색'));
+  // Backstop behind requireTurnTools, which already named the cause: reaching here, the
+  // permitted set lacks web search for a reason this function cannot see (lesson or 이용권).
+  if (!web.every(name => agent.permittedTools.includes(name))) throw new TurnToolModeError(denialCopy({ source: 'unknown', feature: '웹 검색' }, audience));
   return { ...agent, permittedTools: web, permittedMcpTools: [], permittedAgentTools: [], orchestrator: undefined };
 }
 

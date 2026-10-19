@@ -2760,9 +2760,24 @@ export const MINOR_CLOSED_REASON = "어린이 학생에게는 열지 않는 도�
  */
 const MINOR_CLOSED_MCP_TOOLS: ReadonlySet<string> = new Set([MCP_PUBLISH_SITE, MCP_CONSULT, MCP_SITE_CHECK]);
 
+/**
+ * The REQ-M38 feature key whose grant carries this tool (the keys accessProfile narrows), or
+ * undefined for tools no such key grants.
+ */
+export function toolFeatureKey(toolName: string): string | undefined {
+  const n = toolName.toLowerCase();
+  if ((SDK_READ_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "read";
+  if ((SDK_WRITE_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "write";
+  if (n === "bash" || n === "powershell") return "shell";
+  if ((SDK_AGENT_TOOL_NAMES as readonly string[]).some((t) => t.toLowerCase() === n)) return "subagents";
+  if (n === "websearch" || n === "webfetch") return "web_search";
+  if (([...MCP_BROWSER_TOOLS, ...MCP_CR_BROWSER_TOOLS, ...MCP_CR_VERIFY_TOOLS] as readonly string[]).includes(toolName)) return "browser";
+  return undefined;
+}
+
 /** One deny verdict: the classifier picks the source from the observed cause. */
 function denyVerdict(
-  cause: DenialCause | "malformed_call",
+  cause: DenialCause | "malformed_call" | "orchestrator_unbound",
   reason: string,
   toolName: string,
   audience: SeatAudience | undefined,
@@ -2899,6 +2914,11 @@ export function evaluateSdkToolUse(args: {
    * lesson setting. It never changes the verdict itself.
    */
   minor?: boolean;
+  /**
+   * REQ-M38 feature keys the selected access choice (이용권) removed (accessRemovedFeatures).
+   * Only names the source of a Gate 1 deny; never changes the verdict.
+   */
+  accessRemoved?: ReadonlySet<string>;
 }): SdkToolVerdict {
   const { toolName, input, permittedTools, workspaceRoot, audience } = args;
   const canon = args.canonicalize ?? ((p: string) => p);
@@ -2924,6 +2944,15 @@ export function evaluateSdkToolUse(args: {
     }
     if (args.minor === true && MINOR_CLOSED_MCP_TOOLS.has(toolName)) {
       return denyVerdict("minor_protection", `tool "${toolName}" is closed to minor seats`, toolName, audience, MINOR_CLOSED_REASON);
+    }
+    const feature = toolFeatureKey(toolName);
+    if (feature && args.accessRemoved?.has(feature)) {
+      return denyVerdict("access_choice_narrowed", `tool "${toolName}" (${feature}) was removed by the selected access choice`, toolName, audience);
+    }
+    // consult/site_check follow the served roster, the host binding and the Service: the
+    // gate cannot tell which withheld them (consultTool treats the same state as unknowable).
+    if (toolName === MCP_CONSULT || toolName === MCP_SITE_CHECK) {
+      return denyVerdict("orchestrator_unbound", `tool "${toolName}" is not bound for this turn`, toolName, audience, "도우미 구성을 확인하지 못했어요");
     }
     return denyVerdict("profile_tool_not_granted", `tool "${toolName}" is not granted by the cohort profile`, toolName, audience);
   }

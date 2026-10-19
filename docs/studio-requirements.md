@@ -749,26 +749,34 @@ Service 집행이 없다는 뜻이다.
 `REQ-STUDIO-DENIAL-SOURCE` (extends [AE-12](requirements/learning-agent-experience.md) and REQ-M17;
 CGP-AGENT-R-007 / REQ-CGP-AGENT-08, 2026-10-20): every denied tool call or disabled feature names
 who decided it, in the learner's words, with one next step. One pure module,
-`extensions/hypeproof-chat/src/denialSource.ts`, holds the four sources, the copy builder and the
+`extensions/hypeproof-chat/src/denialSource.ts`, holds the five sources, the copy builder and the
 classifier (`classifyDenial`: a fixed cause table; any other value is unknown). Copy:
 수업 설정 "이 수업에서는 {기능}을 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." (solo seats,
 `profileAudience`: "지금 활동에서는 … 다른 방법으로 이어서 해 볼 수 있어요." with no teacher word);
-안전 규칙 "안전을 위해 Studio가 막았어요 — {이유}. 다른 방법으로 해 볼 수 있어요.";
+안전 규칙 "안전을 위해 Studio가 막았어요 — {이유}. 궁금하면 선생님께 물어봐 주세요." (solo: "‘문제 신고하기’로 알려
+주세요"; the next step never invites a workaround, and the coach-facing text replaces it with "안전 규칙이라
+우회하는 방법을 찾지 말고, 막힌 이유를 학생에게 그대로 알려 주세요.");
+이용권 선택 "지금 고른 이용권에서는 {기능}을 쓸 수 없어요. 다른 이용권을 고르거나 이 기능 없이 이어서 해 주세요." when the
+selected access choice removed it (`accessProfile` now records the REQ-M38 keys it removed under a symbol,
+read by `accessRemovedFeatures`; a key the profile itself had off stays 수업 설정);
 앱 버전/환경 "이 기능은 지금 앱에서 쓸 수 없어요 — {이유}. 앱을 업데이트하거나 선생님께 알려 주세요." (solo:
 "‘문제 신고하기’로 알려 주세요"); and 확인 안 됨 "지금은 {기능}을 쓸 수 없어요 — {이유}. 계속되면 …" for a site that
-cannot tell, so no site guesses a category. Coach-facing tool results carry the same Korean label as a
+cannot tell, so no site guesses a category. A backstop that does not know the seat uses `neutral`
+wording (no teacher word). Coach-facing tool results carry the same Korean label as a
 tag ("[수업 설정] …"), and the SDK shows that text in the learner's tool log line. Built, by site:
 the tool gate `evaluateSdkToolUse` (every deny branch now returns `source`: profile not granted →
 수업 설정; never-for-learners built-ins, path outside the workspace, browser_open URL policy, subagent
-outside the catalog, and publish_site/consult/site_check on a minor seat (`isMinorProfile`) → 안전 규칙;
+outside the catalog, and publish_site/consult/site_check on a minor seat (`isMinorProfile`) → 안전 규칙; a tool whose feature
+key the selected 이용권 removed → 이용권 선택; consult/site_check not bound on an adult seat → 확인 안 됨;
 unclassified tool drift → 앱 버전/환경; an empty shell command → 확인 안 됨), with the seat's wording passed
 from `sdkCoach` canUseTool; the local runtime file tools (ungranted → 수업 설정, missing path → 확인 안 됨);
 the served lesson switches in `skillSession`, `reviewSession`, `memorySession`, `evidenceSession`,
 `publishSession`, `verifySession` (including its coach tool results), `browserControl.pickElement` and
 the chat panel's commands and panels for 제품 테스트, 사용자 테스트 공개, 실험 증거, 프로젝트 기억, the
 learning wiki, 덱 초안, 커리큘럼 스킬, 주간 리뷰 and 요소 고르기; web-search availability in `turnTools`
-(local subscription and non-SDK runtime → 앱 버전/환경, profile without `web_search` or a narrowed turn →
-수업 설정, no profile yet → 확인 안 됨) and the composer's fallback; the approval tier's path check,
+(local subscription or instructor connection and non-SDK runtime → 앱 버전/환경 with no teacher sentence,
+removed by the selected 이용권 → 이용권 선택, profile without `web_search` → 수업 설정, no profile yet →
+확인 안 됨; the `toolsForTurn` backstop → 확인 안 됨) and the composer's fallback; the approval tier's path check,
 image-edit asset paths, `runBrowserOpen`, `browserControl` and `experimentBrowser` navigate URL
 refusals (안전 규칙); `browserMcp` tools the host did not wire (앱 버전/환경); and 확인 안 됨 for a
 Service 404 on the weekly review or gallery publish, element pick before the profile arrives, the
@@ -782,7 +790,8 @@ Service moderation text (not classified client-side); the learner's own modal "D
 denial); and the DES-CGP-AGENT-08 inline timeline row with its one action button and `aria-live`
 (denials still show as the tool-log failure line or a page notice). Tests:
 `test/denial-source.smoke.mjs` (the cause table and unknown for anything else, each source's copy in
-classroom and solo wording, one next step, no English identifier in learner copy, the tag, every gate
+classroom, solo and neutral wording, web search removed by the 이용권 vs off in the profile with negative
+controls, the safety coach rule, one next step, no English identifier in learner copy, the tag, every gate
 branch's source, and a source scan proving none of the 27 replaced sentences remains in `src/` or
 `webview-ui/src/`, with negative and positive controls); updated to the new copy: `cr-verify`,
 `cr-switch`, `cr-review`, `cr-memory`, `cr-skills`, `publish-panel`, `local-runtime`, and

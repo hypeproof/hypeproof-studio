@@ -142,9 +142,9 @@ export class BrowserControl {
     // REQ-STUDIO-DENIAL-SOURCE — no CR options means this control was built without the
     // Experiment Browser hooks (source unknown); options present but no executor means the
     // served switch is off (a lesson setting). The host checks the switch first with the
-    // seat's wording; this is the backstop.
-    if (!this.crOptions) throw new Error(denialCopy({ source: "unknown", feature: "요소 고르기" }));
-    if (!cr) throw new Error(lessonFeatureOff("요소 고르기"));
+    // seat's wording; this backstop does not know the seat, so it uses the neutral wording.
+    if (!this.crOptions) throw new Error(denialCopy({ source: "unknown", feature: "요소 고르기" }, "neutral"));
+    if (!cr) throw new Error(lessonFeatureOff("요소 고르기", "neutral"));
     const url = this.currentTab()?.url;
     if (!url) throw new Error("열린 미리보기 탭이 없어요. 먼저 미리보기를 여세요.");
     const scope = checkAgentOrigin(url, this.crOptions.allowedOrigins());

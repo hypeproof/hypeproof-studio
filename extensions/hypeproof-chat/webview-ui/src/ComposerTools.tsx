@@ -23,7 +23,7 @@ export function ComposerTools({ mode, onMode, webSearch, locked, onAttach }: {
     document.addEventListener('pointerdown', outside);
     return () => document.removeEventListener('pointerdown', outside);
   }, [open]);
-  const reason = locked ? '예약한 메시지를 보내거나 입력창으로 가져온 뒤 변경할 수 있습니다.' : webSearch?.reason || denialCopy({ source: 'unknown', feature: '웹 검색' });
+  const reason = locked ? '예약한 메시지를 보내거나 입력창으로 가져온 뒤 변경할 수 있습니다.' : webSearch?.reason || denialCopy({ source: 'unknown', feature: '웹 검색' }, 'neutral');
   return <div ref={root} className="hps-composer-tools">
     <button ref={trigger} type="button" className="hps-tool-trigger" aria-label="도구 열기" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}><ChatIcon kind="plus" /></button>
     {open && <div ref={menu} className="hps-tools-menu" role="menu" aria-label="메시지 도구" onKeyDown={event => {

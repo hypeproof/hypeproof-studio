@@ -47,7 +47,7 @@ const NO_PROJECT = "아직 프로젝트가 없어요. 먼저 사용자 테스트
 const NO_DIRECTOR = "강사 토큰을 넣어야 디렉터 화면을 볼 수 있어요.";
 const DECIDING = "결정을 기록하고 있어요.";
 // A Service 404 cannot tell "off for this lesson" from "not there": source unknown, never a guess.
-const NOT_FOUND = denialCopy({ source: "unknown", feature: "주간 리뷰", reason: "서비스에서 찾지 못했어요" });
+const NOT_FOUND = denialCopy({ source: "unknown", feature: "주간 리뷰", reason: "서비스에서 찾지 못했어요" }, "neutral");
 const msg = (r: { code: string; message: string; status?: number }) => REVIEW_MESSAGES[r.code] ?? (r.code === "not_found" ? NOT_FOUND : r.message.startsWith("공개하지 못했어요") ? `주간 리뷰를 읽지 못했어요 (${r.status ?? "?"})` : r.message);
 
 type Client = { base: string; token: string; fetchImpl?: typeof fetch };

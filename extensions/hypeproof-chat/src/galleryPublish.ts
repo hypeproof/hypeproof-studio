@@ -191,7 +191,7 @@ export type CurriculumResult<T> =
 const CURRICULUM_MESSAGES: Record<string, string> = {
   // REQ-STUDIO-DENIAL-SOURCE — a 404 cannot tell a missing project from the switch being
   // off: the source is unknown, never a guessed lesson setting.
-  not_found: denialCopy({ source: "unknown", feature: "사용자 테스트 공개", reason: "이 프로젝트를 찾지 못했거나 이 수업에서 꺼져 있는지 확인하지 못했어요" }),
+  not_found: denialCopy({ source: "unknown", feature: "사용자 테스트 공개", reason: "이 프로젝트를 찾지 못했거나 이 수업에서 꺼져 있는지 확인하지 못했어요" }, "neutral"),
   expiry_required: "링크를 언제까지 열어 둘지 골라 주세요.",
   invalid_expiry: "링크 기간은 지금부터 90일 안에서 골라 주세요.",
   invalid_channel: "채널 이름은 40자까지 쓸 수 있어요.",

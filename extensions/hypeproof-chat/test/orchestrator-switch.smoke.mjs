@@ -339,23 +339,24 @@ const ok = (name) => {
 // schema. Restoring those three fields reproduced every prior off-case digest;
 // tool grants, policy decisions, approvals and all other turn surfaces are unchanged.
 // REQ-STUDIO-DENIAL-SOURCE (2026-10-20) changes only the text of each deny decision: it now
-// names its source ("[수업 설정] …", "[안전 규칙] …"). Re-taken on that branch. Control:
+// names its source ("[수업 설정] …", "[안전 규칙] …", "[확인 안 됨] …"). Re-taken on that branch
+// (twice: again after the safety coach rule and the consult/site_check source changed). Control:
 // mapping every tagged deny message back to the old sentence (TOOL_DENIED / PATH_ESCAPE /
 // URL_POLICY) reproduced all ten previous digests (e4650ad1dc31c51b … 449ef9ac1a1a11e5), so
 // grants, verdicts, approvals and every other surface are unchanged.
 const BASE = {
-  kidsChat: "a33f11884e9ffb72",
+  kidsChat: "a39253f30e7fad83",
   // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
   // carry their own browser flag's tools.
-  kidsPolluted: "4d3de99224f06bcb",
-  adultRW: "409cfc485f7f8617",
-  adultWide: "ed6a6eb01bc09c3f",
-  adultSubagents: "a226b969977c4da5",
-  adultCR: "ddb5d5a8ae0c3fde",
-  minorFlagAdultTier: "5abc03afeece28b2",
-  unknownTier: "376890ffd888f8d8",
-  adultPublishOnly: "bb7c3b781c24923b",
-  adultBrowserPublish: "87d6827e37c5111f",
+  kidsPolluted: "4e330031a80ad7e3",
+  adultRW: "d2ec92e2f7b94fb3",
+  adultWide: "e23e96370361a71a",
+  adultSubagents: "58f4f04db2157957",
+  adultCR: "100cd77dd58511e9",
+  minorFlagAdultTier: "04a39b2fcca94462",
+  unknownTier: "ef1eaa82003c6321",
+  adultPublishOnly: "d46553b45bc6206c",
+  adultBrowserPublish: "d0ccabd474a89baa",
 };
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
@@ -410,16 +411,17 @@ function surfacesOf({ call, seen }) {
     assert.deepEqual(surfacesOf(o), none, `${c.name}: switch off, no orchestrator surface`);
     // canUseTool denies both tools as ungranted (never asks, never runs them). The deny names
     // its source (REQ-STUDIO-DENIAL-SOURCE): the minor posture closes them whatever the lesson
-    // says (안전 규칙); for an adult seat the served switch is off (수업 설정).
+    // says (안전 규칙); for an adult seat the gate cannot tell the roster, the host and the
+    // Service apart (확인 안 됨, as consultTool says for the same state).
     const minor = H2.isMinorProfile(c.profile);
     for (const name of SURF.mcpTools) {
       const d = o.snapshot.decisions.find(([n]) => n === name)[1];
       const expected = DS.denialToolText(
-        { source: minor ? "safety" : "lesson", feature: DS.toolFeatureName(name), ...(minor ? { reason: H2.MINOR_CLOSED_REASON } : {}) },
+        { source: minor ? "safety" : "unknown", feature: DS.toolFeatureName(name), reason: minor ? H2.MINOR_CLOSED_REASON : "도우미 구성을 확인하지 못했어요" },
         profileAudience(c.profile),
       );
       assert.deepEqual(d, { behavior: "deny", message: expected }, `${c.name}: ${name} denied`);
-      assert.ok(d.message.startsWith(minor ? "[안전 규칙] " : "[수업 설정] "), `${c.name}: ${name} names its source`);
+      assert.ok(d.message.startsWith(minor ? "[안전 규칙] " : "[확인 안 됨] "), `${c.name}: ${name} names its source`);
     }
   }
   // The legacy subagents stay exactly where they were with the switch off (REQ-M22)…
