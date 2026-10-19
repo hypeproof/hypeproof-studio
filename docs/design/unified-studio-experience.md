@@ -1,13 +1,13 @@
 # 하나의 Studio에서 체험과 수업 이어가기
 
-2026-09-10 · [Intent/Epic #915](https://github.com/jayleekr/hypeproof-studio/issues/915)
+2026-09-10 · [Intent/Epic #915](https://github.com/hypeproof/hypeproof-studio/issues/915)
 상태: Intent·설계 원본. 공통 진입·활동 저장·배포 게이트 구현과 부분 검증이 진행됐으며, 전체 수용/공개 전달은 [실행 기록](../testing/unified-completion-917-919-evidence.md)으로 구분한다.
 제품 책임: Jay (`jayleekr`). 기존 `products.yaml`의 App/Service owner `jay`에 연결한다.
 문서 작성자에게 새 권한을 부여하거나 기존 미지정 traceability owner를 일괄 변경하지 않는다.
 
 상위: [Product Intent](../PRODUCT-INTENT.md), [NAT](../requirements/studio-native-trial.md),
 [AE](../requirements/learning-agent-experience.md), [이용 권한 AB](../requirements/access-budget-settlement.md).
-제품 전략의 부모는 Lab [제품 라인업](https://github.com/jayleekr/hypeprooflab/blob/a4fe9be03dcb8890b42e1020dc4d357687f82acc/products/PRODUCT-LINEUP.md)의 Studio 사용자 제품 역할이다.
+제품 전략의 부모는 Lab [제품 라인업](https://github.com/hypeproof/hypeprooflab/blob/a4fe9be03dcb8890b42e1020dc4d357687f82acc/products/PRODUCT-LINEUP.md)의 Studio 사용자 제품 역할이다.
 새 체험 제품이나 별도 강사 제품을 만드는 Intent가 아니다.
 철학과 후보 역량 정의는 상위 문서가 참조하는 Lab 원본을 따른다. 여기의 Product Intent는
 Human Asset `INTENT`를 평가하는 검사나 강제 질문 절차가 아니다.
@@ -15,9 +15,9 @@ Human Asset `INTENT`를 평가하는 검사나 강제 질문 절차가 아니다
 ## 문제와 확인한 기반
 
 체험과 수업은 같은 App을 사용하지만, 로컬 리허설을 위해 만든 앱 사본·바로가기·개발 서버가
-사용자용 체험처럼 남았다. [#911](https://github.com/jayleekr/hypeproof-studio/issues/911)에서
+사용자용 체험처럼 남았다. [#911](https://github.com/hypeproof/hypeproof-studio/issues/911)에서
 일반 설치·실행 중 체험·바로가기 대상의 버전이 달랐음을 확인했다.
-[#912](https://github.com/jayleekr/hypeproof-studio/pull/912)는 같은 설치본 사용과 전달 확인을
+[#912](https://github.com/hypeproof/hypeproof-studio/pull/912)는 같은 설치본 사용과 전달 확인을
 문서화했다. 그 문서와 다운로드 완료는 실제 업데이트·공개 서버 전환의 완료 증거가 아니다.
 
 조사 기준: main `928b7dd`.

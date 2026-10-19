@@ -631,7 +631,7 @@ install_studio_mac() {
     # broken release rather than an unsupported machine. Mirrors the early
     # guard install-mac.sh already carries (#362). Turn this back into the
     # x64 glob once a matching asset ships.
-    darwin-x64)   die "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: jayleekr/hypeproof-studio#331)" ;;
+    darwin-x64)   die "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: hypeproof/hypeproof-studio#331)" ;;
   esac
   if [ -d "$STUDIO_APP" ]; then
     # Idempotent upgrade: only replace if version differs.

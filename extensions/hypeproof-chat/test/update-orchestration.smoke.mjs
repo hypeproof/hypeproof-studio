@@ -22,8 +22,8 @@ process.env.HPS_RELEASE_TOKEN = "test-private-release-token";
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 const originalArch = Object.getOwnPropertyDescriptor(process, 'arch');
 const release = {
-  tag_name: 'v0.1.51', html_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/tag/v0.1.51',
-  assets: [{ url: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', name: 'HypeProof-Studio-darwin-arm64.zip', size: 100, digest: 'sha256:' + 'a'.repeat(64), browser_download_url: 'https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.51/HypeProof-Studio-darwin-arm64.zip' }],
+  tag_name: 'v0.1.51', html_url: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.51',
+  assets: [{ url: 'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123', name: 'HypeProof-Studio-darwin-arm64.zip', size: 100, digest: 'sha256:' + 'a'.repeat(64), browser_download_url: 'https://github.com/hypeproof/hypeproof-studio-releases/releases/download/v0.1.51/HypeProof-Studio-darwin-arm64.zip' }],
 };
 try {
   Object.defineProperty(process, 'platform', { value: 'darwin' });

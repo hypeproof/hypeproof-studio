@@ -4,7 +4,7 @@
 #
 # Usage:
 #   bash scripts/check-ci-quota.sh
-#   REPO=jayleekr/hypeproof-studio LIMIT=30 bash scripts/check-ci-quota.sh
+#   REPO=hypeproof/hypeproof-studio LIMIT=30 bash scripts/check-ci-quota.sh
 #
 # Exit codes:
 #   0 no allocation failures found in inspected failed runs
@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-REPO="${REPO:-jayleekr/hypeproof-studio}"
+REPO="${REPO:-hypeproof/hypeproof-studio}"
 LIMIT="${LIMIT:-25}"
 
 note() { printf '\033[36m▸ %s\033[0m\n' "$*"; }

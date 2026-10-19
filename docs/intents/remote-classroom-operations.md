@@ -1,9 +1,9 @@
 # 원격 수업 운영 — Product Intent
 
 상태: **제안 · owner 승인 전**. 2026-09-19. 구현·실수업 검증의 증거가 아니다.
-Owner: jayleekr (기존 classroom-admin 도메인). 작성: TJ-kr. [Epic #751](https://github.com/jayleekr/hypeproof-studio/issues/751).
+Owner: jayleekr (기존 classroom-admin 도메인). 작성: TJ-kr. [Epic #751](https://github.com/hypeproof/hypeproof-studio/issues/751).
 
-작성 경위: 파생 계약(요구·설계·시험, [#1119](https://github.com/jayleekr/hypeproof-studio/pull/1119))과 합성 계정 구현(#1120~#1127·#1129)이 이 문서보다 먼저 작성됐다. 이 문서는 그 작업이 전제한 의도를 Intent 층에 뒤늦게 명시해 owner가 **파생 계약보다 먼저** 승인·수정할 수 있게 한다. owner가 아래 의도를 바꾸면 파생 계약과 구현을 그에 맞춰 고친다. 반대 방향으로 맞추지 않는다.
+작성 경위: 파생 계약(요구·설계·시험, [#1119](https://github.com/hypeproof/hypeproof-studio/pull/1119))과 합성 계정 구현(#1120~#1127·#1129)이 이 문서보다 먼저 작성됐다. 이 문서는 그 작업이 전제한 의도를 Intent 층에 뒤늦게 명시해 owner가 **파생 계약보다 먼저** 승인·수정할 수 있게 한다. owner가 아래 의도를 바꾸면 파생 계약과 구현을 그에 맞춰 고친다. 반대 방향으로 맞추지 않는다.
 
 ## Product Intent
 

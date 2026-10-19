@@ -1,6 +1,6 @@
 # Curriculum Runtime — delivery plan
 
-Status: active plan; the `cr-recon` output is [curriculum-runtime-recon.md](curriculum-runtime-recon.md). 2026-09-29. Owner: jayleekr. Epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388).
+Status: active plan; the `cr-recon` output is [curriculum-runtime-recon.md](curriculum-runtime-recon.md). 2026-09-29. Owner: jayleekr. Epic [#1388](https://github.com/hypeproof/hypeproof-studio/issues/1388).
 Intent: [INT-CR-00–09](../intents/curriculum-runtime.md) · requirements: [CR-01–84](../requirements/curriculum-runtime.md) · verification: [CR-T01–T80](../testing/curriculum-runtime.md) · recon: [map, gap matrix, decisions](curriculum-runtime-recon.md) · source: [PRD v1.0, preserved](../design/curriculum-runtime-prd-v1.0-2026-09-28.md) · ledger: [`config/requirement-work.json`](../../config/requirement-work.json) (work items `cr-*`) · execution index: [requirements-activation](requirements-activation.md#curriculum-runtime).
 
 This document owns the order of the Curriculum Runtime work and what "done" means for each step. The ledger's `depends_on` is the machine-readable copy of the DAG below; if they disagree, the ledger wins and this page is fixed. Work availability (ready / claimed / in review / dependency) comes from `python3 scripts/next-work.py`, never from this page.
@@ -11,17 +11,17 @@ PRD §13 phases, in PRD §16 priority order, one work item and one execution iss
 
 | PRD phase | Work item | Issue | Kind | Requirements | Depends on | Week key |
 |---|---|---|---|---|---|---|
-| Phase 0 — reconnaissance | `cr-recon` | [#1390](https://github.com/jayleekr/hypeproof-studio/issues/1390) | design | CR-01 | — | W1 |
-| Phase 1 — Experiment Browser | `cr-browser` | [#1391](https://github.com/jayleekr/hypeproof-studio/issues/1391) | implementation | CR-02–11, CR-68 | `cr-recon` | W1 |
-| Phase 1 — AI Verify | `cr-verify` | [#1392](https://github.com/jayleekr/hypeproof-studio/issues/1392) | implementation | CR-02, CR-03, CR-11, CR-12–16, CR-61, CR-68, CR-81 | `cr-browser` | W2 |
-| Phase 2 — Publish | `cr-publish` | [#1393](https://github.com/jayleekr/hypeproof-studio/issues/1393) | implementation | CR-02, CR-11, CR-17–22, CR-39, CR-64–66, CR-73 | `cr-verify` | W1 |
-| Phase 2 — Evidence | `cr-evidence` | [#1394](https://github.com/jayleekr/hypeproof-studio/issues/1394) | implementation | CR-02, CR-23–28, CR-65, CR-67, CR-69, CR-70, CR-72, CR-74 | `cr-publish` | W1 |
-| Phase 3 — Venture Memory | `cr-memory` | [#1395](https://github.com/jayleekr/hypeproof-studio/issues/1395) | implementation | CR-02, CR-35–42, CR-75–79, CR-82 | `cr-evidence` | W1 |
-| Phase 3 — Curriculum Skills | `cr-skills` | [#1396](https://github.com/jayleekr/hypeproof-studio/issues/1396) | implementation | CR-02, CR-43–47 | `cr-memory` | W1 |
-| Phase 4 — AI Gateway | `cr-gateway` | [#1397](https://github.com/jayleekr/hypeproof-studio/issues/1397) | implementation | CR-02, CR-29–34, CR-70, CR-80, CR-83, CR-84 | `cr-skills` | W2 |
-| Phase 5 — Weekly Review + Director | `cr-review` | [#1398](https://github.com/jayleekr/hypeproof-studio/issues/1398) | implementation | CR-02, CR-48–53, CR-62 | `cr-skills` | W2 |
-| Phase 6 — Deck lifecycle | `cr-deck` | [#1399](https://github.com/jayleekr/hypeproof-studio/issues/1399) | implementation | CR-02, CR-54–58, CR-63 | `cr-review` | W2 |
-| §14 — end-to-end loop | `cr-e2e` | [#1400](https://github.com/jayleekr/hypeproof-studio/issues/1400) | validation | CR-71, CR-02, CR-59, CR-60 | `cr-deck`, `cr-gateway` | W1 |
+| Phase 0 — reconnaissance | `cr-recon` | [#1390](https://github.com/hypeproof/hypeproof-studio/issues/1390) | design | CR-01 | — | W1 |
+| Phase 1 — Experiment Browser | `cr-browser` | [#1391](https://github.com/hypeproof/hypeproof-studio/issues/1391) | implementation | CR-02–11, CR-68 | `cr-recon` | W1 |
+| Phase 1 — AI Verify | `cr-verify` | [#1392](https://github.com/hypeproof/hypeproof-studio/issues/1392) | implementation | CR-02, CR-03, CR-11, CR-12–16, CR-61, CR-68, CR-81 | `cr-browser` | W2 |
+| Phase 2 — Publish | `cr-publish` | [#1393](https://github.com/hypeproof/hypeproof-studio/issues/1393) | implementation | CR-02, CR-11, CR-17–22, CR-39, CR-64–66, CR-73 | `cr-verify` | W1 |
+| Phase 2 — Evidence | `cr-evidence` | [#1394](https://github.com/hypeproof/hypeproof-studio/issues/1394) | implementation | CR-02, CR-23–28, CR-65, CR-67, CR-69, CR-70, CR-72, CR-74 | `cr-publish` | W1 |
+| Phase 3 — Venture Memory | `cr-memory` | [#1395](https://github.com/hypeproof/hypeproof-studio/issues/1395) | implementation | CR-02, CR-35–42, CR-75–79, CR-82 | `cr-evidence` | W1 |
+| Phase 3 — Curriculum Skills | `cr-skills` | [#1396](https://github.com/hypeproof/hypeproof-studio/issues/1396) | implementation | CR-02, CR-43–47 | `cr-memory` | W1 |
+| Phase 4 — AI Gateway | `cr-gateway` | [#1397](https://github.com/hypeproof/hypeproof-studio/issues/1397) | implementation | CR-02, CR-29–34, CR-70, CR-80, CR-83, CR-84 | `cr-skills` | W2 |
+| Phase 5 — Weekly Review + Director | `cr-review` | [#1398](https://github.com/hypeproof/hypeproof-studio/issues/1398) | implementation | CR-02, CR-48–53, CR-62 | `cr-skills` | W2 |
+| Phase 6 — Deck lifecycle | `cr-deck` | [#1399](https://github.com/hypeproof/hypeproof-studio/issues/1399) | implementation | CR-02, CR-54–58, CR-63 | `cr-review` | W2 |
+| §14 — end-to-end loop | `cr-e2e` | [#1400](https://github.com/hypeproof/hypeproof-studio/issues/1400) | validation | CR-71, CR-02, CR-59, CR-60 | `cr-deck`, `cr-gateway` | W1 |
 
 CR-02, the switch, is in every implementation item and in `cr-e2e`: `cr-browser` builds it, each later item puts its own commands, panels, tools and worker routes behind it and adds them to the CR-T02 switch-off inventory, and `cr-e2e` re-runs the whole inventory. §11 targets and §12 rows sit in the item whose code they constrain; there is no separate performance or safety slice. The week key is each item's `curriculum_week` in the ledger, set by the ranking rule below.
 
@@ -254,22 +254,22 @@ CR rows reference these requirements instead of restating them. Their work items
 
 | Reused requirement | Owning work item | CR items that build on it |
 |---|---|---|
-| AE-05, AE-18, AE-37, WEB-06 | `review-validity` [#557](https://github.com/jayleekr/hypeproof-studio/issues/557) | `cr-browser`, `cr-verify` |
-| AE-19 | `review-validity` [#557](https://github.com/jayleekr/hypeproof-studio/issues/557) | `cr-browser`, `cr-verify`, `cr-publish` |
-| AE-02 | `context` [#555](https://github.com/jayleekr/hypeproof-studio/issues/555) | `cr-browser` |
-| AE-23 | `computer-use` [#752](https://github.com/jayleekr/hypeproof-studio/issues/752) | `cr-browser`, `cr-verify`, `cr-publish` |
-| WEB-04 | `acceptance-chalk-authoring` [#732](https://github.com/jayleekr/hypeproof-studio/issues/732) | `cr-browser`, `cr-publish` |
-| WEB-07, WEB-08 | `publish-recovery` [#1018](https://github.com/jayleekr/hypeproof-studio/issues/1018) | `cr-publish` |
-| SX-14, SX-15, SX-16, SX-17, SX-19–22, SX-24, SX-44–48 | `sx-p1-evidence-capture` [#1172](https://github.com/jayleekr/hypeproof-studio/issues/1172) | `cr-browser`, `cr-verify`, `cr-publish`, `cr-evidence`, `cr-memory`, `cr-skills`, `cr-review`, `cr-deck` |
-| SX-32, SX-33 | `sx-p3-change-record` [#1174](https://github.com/jayleekr/hypeproof-studio/issues/1174) | `cr-evidence` |
-| SX-38 | `sx-p4-instructor-evidence` [#1175](https://github.com/jayleekr/hypeproof-studio/issues/1175) | `cr-memory`, `cr-review` |
-| SX-56, SX-58 | `sx-p0-curriculum-first` [#1171](https://github.com/jayleekr/hypeproof-studio/issues/1171) | `cr-publish`, `cr-skills`, `cr-deck` |
-| HC-04 | `candidate-contract` [#852](https://github.com/jayleekr/hypeproof-studio/issues/852) | `cr-verify` |
-| MC-09, MC-14, MC-15, MC-22, MC-31 | `measurement-core-dogfood` [#1020](https://github.com/jayleekr/hypeproof-studio/issues/1020) | `cr-browser`, `cr-verify`, `cr-evidence`, `cr-memory` |
-| AE-25, AE-28, AE-30, AE-33 | `model-routing` [#1009](https://github.com/jayleekr/hypeproof-studio/issues/1009) | `cr-gateway` |
-| MU-01, MU-02, MU-03, MU-05, MU-08 | `acceptance-model-access-usage` [#830](https://github.com/jayleekr/hypeproof-studio/issues/830) | `cr-gateway` |
-| AB-03–08, AB-15 | `acceptance-access-budget-settlement` [#857](https://github.com/jayleekr/hypeproof-studio/issues/857) | `cr-gateway`, `cr-skills`, `cr-evidence` |
-| VO-37 | `voice-898` [#898](https://github.com/jayleekr/hypeproof-studio/issues/898) | `cr-publish` |
+| AE-05, AE-18, AE-37, WEB-06 | `review-validity` [#557](https://github.com/hypeproof/hypeproof-studio/issues/557) | `cr-browser`, `cr-verify` |
+| AE-19 | `review-validity` [#557](https://github.com/hypeproof/hypeproof-studio/issues/557) | `cr-browser`, `cr-verify`, `cr-publish` |
+| AE-02 | `context` [#555](https://github.com/hypeproof/hypeproof-studio/issues/555) | `cr-browser` |
+| AE-23 | `computer-use` [#752](https://github.com/hypeproof/hypeproof-studio/issues/752) | `cr-browser`, `cr-verify`, `cr-publish` |
+| WEB-04 | `acceptance-chalk-authoring` [#732](https://github.com/hypeproof/hypeproof-studio/issues/732) | `cr-browser`, `cr-publish` |
+| WEB-07, WEB-08 | `publish-recovery` [#1018](https://github.com/hypeproof/hypeproof-studio/issues/1018) | `cr-publish` |
+| SX-14, SX-15, SX-16, SX-17, SX-19–22, SX-24, SX-44–48 | `sx-p1-evidence-capture` [#1172](https://github.com/hypeproof/hypeproof-studio/issues/1172) | `cr-browser`, `cr-verify`, `cr-publish`, `cr-evidence`, `cr-memory`, `cr-skills`, `cr-review`, `cr-deck` |
+| SX-32, SX-33 | `sx-p3-change-record` [#1174](https://github.com/hypeproof/hypeproof-studio/issues/1174) | `cr-evidence` |
+| SX-38 | `sx-p4-instructor-evidence` [#1175](https://github.com/hypeproof/hypeproof-studio/issues/1175) | `cr-memory`, `cr-review` |
+| SX-56, SX-58 | `sx-p0-curriculum-first` [#1171](https://github.com/hypeproof/hypeproof-studio/issues/1171) | `cr-publish`, `cr-skills`, `cr-deck` |
+| HC-04 | `candidate-contract` [#852](https://github.com/hypeproof/hypeproof-studio/issues/852) | `cr-verify` |
+| MC-09, MC-14, MC-15, MC-22, MC-31 | `measurement-core-dogfood` [#1020](https://github.com/hypeproof/hypeproof-studio/issues/1020) | `cr-browser`, `cr-verify`, `cr-evidence`, `cr-memory` |
+| AE-25, AE-28, AE-30, AE-33 | `model-routing` [#1009](https://github.com/hypeproof/hypeproof-studio/issues/1009) | `cr-gateway` |
+| MU-01, MU-02, MU-03, MU-05, MU-08 | `acceptance-model-access-usage` [#830](https://github.com/hypeproof/hypeproof-studio/issues/830) | `cr-gateway` |
+| AB-03–08, AB-15 | `acceptance-access-budget-settlement` [#857](https://github.com/hypeproof/hypeproof-studio/issues/857) | `cr-gateway`, `cr-skills`, `cr-evidence` |
+| VO-37 | `voice-898` [#898](https://github.com/hypeproof/hypeproof-studio/issues/898) | `cr-publish` |
 
 ## Member catalog feature IDs (planned)
 

@@ -62,7 +62,7 @@ fi
 FETCH_REF=""      # what to git fetch (branch name or "main" for merged commit)
 CHECKOUT_REF=""   # what to checkout (origin/<branch> or bare commit sha)
 if [[ "$INPUT" =~ ^[0-9]+$ ]]; then
-  PR_JSON="$(gh pr view "$INPUT" --repo jayleekr/hypeproof-studio --json state,headRefName,mergeCommit)"
+  PR_JSON="$(gh pr view "$INPUT" --repo hypeproof/hypeproof-studio --json state,headRefName,mergeCommit)"
   PR_STATE="$(python3 -c "import sys,json; print(json.loads(sys.stdin.read())['state'])" <<< "$PR_JSON")"
   if [[ "$PR_STATE" == "MERGED" ]]; then
     BRANCH="$(python3 -c "import sys,json; print(json.loads(sys.stdin.read())['mergeCommit']['oid'])" <<< "$PR_JSON")"

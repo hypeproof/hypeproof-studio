@@ -82,8 +82,8 @@ jq \
    | .win32TunnelServiceMutex = ($applicationName + "-tunnelservice")
    | .win32TunnelMutex     = ($applicationName + "-tunnel")
    | .linuxIconName        = $applicationName
-   | .licenseUrl           = "https://github.com/jayleekr/hypeproof-studio/blob/main/LICENSE"
-   | .reportIssueUrl       = "https://github.com/jayleekr/hypeproof-studio/issues/new"
+   | .licenseUrl           = "https://github.com/hypeproof/hypeproof-studio/blob/main/LICENSE"
+   | .reportIssueUrl       = "https://github.com/hypeproof/hypeproof-studio/issues/new"
    | .serverApplicationName = ($applicationName + "-server")
    | .serverDataFolderName  = ($dataFolderName + "-server")
    | .extensionEnabledApiProposals = ((.extensionEnabledApiProposals // {}) + {"hypeproof.hypeproof-chat": ["browser"]})

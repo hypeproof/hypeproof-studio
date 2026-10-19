@@ -15,11 +15,11 @@
 #761은 #759에 직접 연결한다. 통합 중 바뀐 이름 툴팁을 찾지 못한 TUX-CHAT-01 검사는
 실제 `strong.hps-coach-name`의 이름·전체 툴팁·수정 불가를 검사하도록 갱신했다.
 
-- 상위 [#746](https://github.com/jayleekr/hypeproof-studio/issues/746)의 두 세션 분담을 따른다.
-- 구현: [PR #759](https://github.com/jayleekr/hypeproof-studio/pull/759), 제출 `f7afd4a76171e3774ecf2410438ab5057772b036`, base `fe6f7b5`.
+- 상위 [#746](https://github.com/hypeproof/hypeproof-studio/issues/746)의 두 세션 분담을 따른다.
+- 구현: [PR #759](https://github.com/hypeproof/hypeproof-studio/pull/759), 제출 `f7afd4a76171e3774ecf2410438ab5057772b036`, base `fe6f7b5`.
 - 검수 코드: `db615dee97e0d402eaf3b1b9e2d892ca471827fc`. 최초 baseline은 `6684bd1` (제품 base `7f41c104`).
 - 입력창 수정: `bb6efac52d53a2aec1e16aae9930ff21b608dccf`; 재검수 코드 `939dab82e6fc7472d24fd9f1e94ce2fc64d1c7f1`.
-- 설계: [293d4b5](https://github.com/jayleekr/hypeproof-studio/commit/293d4b5), PR #753. Lab 철학 `6845cdb4`를 포함하며 기존 P0 30개를 유지한다.
+- 설계: [293d4b5](https://github.com/hypeproof/hypeproof-studio/commit/293d4b5), PR #753. Lab 철학 `6845cdb4`를 포함하며 기존 P0 30개를 유지한다.
 - Codex: 이 인수 문서, `e2e/lesson-studio/**`, 실제 화면·통합 판정. 브랜치 `chore/epic-746-review-a` (구현 #759를 base로 하는 검수 전용 PR).
 - Claude: Chalk/Service/extension 구현·기존 단위/계약 테스트·필요한 schema ADR. 구현 파일 담당은 이동하지 않았다.
 

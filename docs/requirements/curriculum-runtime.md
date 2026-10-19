@@ -1,6 +1,6 @@
 # Curriculum Runtime requirements
 
-Status: proposed contract, not implemented. 2026-09-29. Owner: jayleekr. Epic [#1388](https://github.com/jayleekr/hypeproof-studio/issues/1388).
+Status: proposed contract, not implemented. 2026-09-29. Owner: jayleekr. Epic [#1388](https://github.com/hypeproof/hypeproof-studio/issues/1388).
 Parent: [INT-CR-00–09](../intents/curriculum-runtime.md). Source: *HypeProof Studio Curriculum Runtime PRD v1.0* (2026-09-28), preserved verbatim at [docs/design/curriculum-runtime-prd-v1.0-2026-09-28.md](../design/curriculum-runtime-prd-v1.0-2026-09-28.md); §-numbers refer to it.
 Derived: [plan, DAG and gap matrix](../plan/curriculum-runtime.md) · [verification CR-T](../testing/curriculum-runtime.md).
 

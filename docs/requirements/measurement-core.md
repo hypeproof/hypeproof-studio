@@ -1,7 +1,7 @@
 # 공통 측정 코어 요구사항
 
 상태: 구현 전 계약 제안. 2026-09-13. Owner: jayleekr.
-상위: [INT-MC-01–03](../intents/measurement-core.md). 추적: [#1020](https://github.com/jayleekr/hypeproof-studio/issues/1020), [#1021](https://github.com/jayleekr/hypeproof-studio/issues/1021).
+상위: [INT-MC-01–03](../intents/measurement-core.md). 추적: [#1020](https://github.com/hypeproof/hypeproof-studio/issues/1020), [#1021](https://github.com/hypeproof/hypeproof-studio/issues/1021).
 
 각 행은 의도·출시 단계·관찰 가능한 수용 기준을 가진다. **P0도 현재 구현 완료를 뜻하지 않는다.** 테스트 ID의 상세와 실행 상태는 [검증 문서](../testing/measurement-core.md)가 소유한다. 설계상 잠정값은 실제 호스트 측정 후 근거와 함께 수정한다.
 
@@ -97,18 +97,18 @@
 
 ## 정책 경계와 변경 규칙
 
-P0의 로컬 보관 정책은 Jay의 새 도구에만 적용한다. 원격 수집은 P1 계약 및 별도 운영 준비가 있어야 한다. 전 멤버 설치는 아래 [2026-10-01 결정](#멤버-설치-의무--2026-10-01-결정)에 따라 필수다. 기존 Studio 학습자 수집·권한·삭제 정책은 유지한다. MC-17의 6개 모델 기본 채택은 Jay의 2026-09-13 결정으로 이번 범위에 포함한다. [HC 계약](capability-model-contract.md)과 [#852](https://github.com/jayleekr/hypeproof-studio/issues/852)는 호환성·해석 버전·근거 검증을 구현하는 연결 작업이며 채택 결정을 다시 기다리는 게이트가 아니다. 검증된 수치 평가나 사람의 향상 주장은 별도 증거가 필요하다.
+P0의 로컬 보관 정책은 Jay의 새 도구에만 적용한다. 원격 수집은 P1 계약 및 별도 운영 준비가 있어야 한다. 전 멤버 설치는 아래 [2026-10-01 결정](#멤버-설치-의무--2026-10-01-결정)에 따라 필수다. 기존 Studio 학습자 수집·권한·삭제 정책은 유지한다. MC-17의 6개 모델 기본 채택은 Jay의 2026-09-13 결정으로 이번 범위에 포함한다. [HC 계약](capability-model-contract.md)과 [#852](https://github.com/hypeproof/hypeproof-studio/issues/852)는 호환성·해석 버전·근거 검증을 구현하는 연결 작업이며 채택 결정을 다시 기다리는 게이트가 아니다. 검증된 수치 평가나 사람의 향상 주장은 별도 증거가 필요하다.
 
 구현 PR은 다루는 MC ID, 실제 경로, 실행 증거, 남은 NOT RUN을 명시한다. 호스트 기능이나 포맷을 확인할 수 없으면 지원 제한을 기록하고 계약을 수정하며 조용한 추정·우회로 통과시키지 않는다. 요구사항 번호는 재사용하지 않는다.
 
 ### 멤버 설치 의무 — 2026-10-01 결정
 
-2026-10-01 주간회의에서 Jay가 측정 플러그인 설치를 **전 멤버 필수**로 정했다("강제로 해", [#1377](https://github.com/jayleekr/hypeproof-studio/issues/1377)). #1377은 자발 참여로 제안됐으나 이 결정이 그 제안을 대체한다. MC-40이 요구하는 공개 운영 규칙과 MC-41의 열람 주체는 아래 표가 정한다. MC-39–41의 구현·검증(MC-T23) 상태는 이 결정으로 바뀌지 않는다.
+2026-10-01 주간회의에서 Jay가 측정 플러그인 설치를 **전 멤버 필수**로 정했다("강제로 해", [#1377](https://github.com/hypeproof/hypeproof-studio/issues/1377)). #1377은 자발 참여로 제안됐으나 이 결정이 그 제안을 대체한다. MC-40이 요구하는 공개 운영 규칙과 MC-41의 열람 주체는 아래 표가 정한다. MC-39–41의 구현·검증(MC-T23) 상태는 이 결정으로 바뀌지 않는다.
 
 | 항목 | 규칙 |
 |---|---|
 | 설치 | 모든 멤버가 `packages/measurement`를 설치·연결하고 상주 감시(`install-service` 또는 `watch`)를 켠다. 절차와 함정은 [패키지 README](../../packages/measurement/README.md)가 소유한다. |
 | 등록 범위 | HypeProof 작업 저장소(studio · lab · harness) 중 **최소 1개**를 등록한다. 그 이상은 각자 자발적으로 정한다. |
 | 사용 목적 | 수집 데이터는 계측기 점검에만 쓴다. 평가·보수·KPI에 쓰지 않는다. |
-| 점수 | [#1249](https://github.com/jayleekr/hypeproof-studio/issues/1249) P2(근거량 노출)·P3(빈도 축)가 출시되기 전에는 프로필 점수를 보여주거나 사람끼리 비교하지 않는다. |
+| 점수 | [#1249](https://github.com/hypeproof/hypeproof-studio/issues/1249) P2(근거량 노출)·P3(빈도 축)가 출시되기 전에는 프로필 점수를 보여주거나 사람끼리 비교하지 않는다. |
 | 열람 | 원시 기록은 운영자(Jay)와 연구 담당(조민한 · 태봉호)이 열람할 수 있다. |

@@ -12,7 +12,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OWNER = "jayleekr"
+DEFAULT_OWNER = "hypeproof"
 DEFAULT_MEMBERS = ["jayleekr", "JeHyeong2", "ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr"]
 REVIEWED_STATES = {"APPROVED", "CHANGES_REQUESTED", "COMMENTED"}
 

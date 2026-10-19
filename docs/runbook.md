@@ -136,7 +136,7 @@ curl -fsS -u ":$HPS_ADMIN_PASSWORD" \
 
 There is no one-shot cascade endpoint by design — a bulk revoke on a stale
 `minted_by` match is high blast-radius, so the operator reviews the list before
-killing each token. See [#313](https://github.com/jayleekr/hypeproof-studio/issues/313).
+killing each token. See [#313](https://github.com/hypeproof/hypeproof-studio/issues/313).
 
 ---
 
@@ -147,9 +147,9 @@ killing each token. See [#313](https://github.com/jayleekr/hypeproof-studio/issu
   arguments).
 - Admin password: rotate via `wrangler secret put HPS_ADMIN_PASSWORD` —
   requires `wrangler login` against the Cloudflare account.
-- Both gone simultaneously: see [#164](https://github.com/jayleekr/hypeproof-studio/issues/164)
+- Both gone simultaneously: see [#164](https://github.com/hypeproof/hypeproof-studio/issues/164)
   recovery path. The long-term answer is CF Access policy on `/admin/*`.
 
 ---
 
-Related: [#165](https://github.com/jayleekr/hypeproof-studio/issues/165) (UX context for why this doc exists), [#167](https://github.com/jayleekr/hypeproof-studio/issues/167) (issuer session control).
+Related: [#165](https://github.com/hypeproof/hypeproof-studio/issues/165) (UX context for why this doc exists), [#167](https://github.com/hypeproof/hypeproof-studio/issues/167) (issuer session control).

@@ -1,6 +1,6 @@
 # 체험 대화와 GitHub 연결 경험
 
-상태: 설계·요구사항 계획. [에픽 #844](https://github.com/jayleekr/hypeproof-studio/issues/844).
+상태: 설계·요구사항 계획. [에픽 #844](https://github.com/hypeproof/hypeproof-studio/issues/844).
 2026-09-08 · 제품 담당: Jay. 아래 CU/GHX 전체 구현 완료를 뜻하지 않는다.
 상위 기준은 [Product Intent](../PRODUCT-INTENT.md), 자산 정의는 [참조 인덱스](../seven-assets.md),
 기존 범위는 [Agent 경험 요구사항](../requirements/learning-agent-experience.md)이다.
@@ -15,7 +15,7 @@
 
 사용자가 제공한 HP 화면에서는 업데이트, 작업 돌아보기, 도구 행이 답변 위에서 큰 공간을
 차지하고 대화가 창 전체 폭으로 펼쳐진다. `Read(index.html)`은 읽기 증거이며 수정 증거가 아니다.
-시작용 HTML이 과제보다 먼저 주어지는 문제는 [#842](https://github.com/jayleekr/hypeproof-studio/issues/842)에서 수정한다.
+시작용 HTML이 과제보다 먼저 주어지는 문제는 [#842](https://github.com/hypeproof/hypeproof-studio/issues/842)에서 수정한다.
 
 ## 경쟁 제품의 관측과 해석
 
@@ -89,7 +89,7 @@ CU는 NAT/TUX/AE의 세부 수용 기준이다. 별도 세션·학습 점수·�
 
 ## GitHub 연결 요구사항
 
-작업: [#849](https://github.com/jayleekr/hypeproof-studio/issues/849).
+작업: [#849](https://github.com/hypeproof/hypeproof-studio/issues/849).
 현재 소스의 release 다운로드·지원 요청 초안은 학습자 GitHub 연결 기능이 아니다.
 개발 전 기존 publishing/Device Flow 구현을 다시 조사하고, 선택한 인증 방식과 필요한 권한을
 ADR로 고정한다. App은 안내/복귀/파일 차이를, Service는 해당 방식의 권한 검증을,

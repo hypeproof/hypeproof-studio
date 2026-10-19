@@ -1,6 +1,6 @@
 # 체험·수업 통합 요구사항
 
-2026-09-10 · [Intent/Epic #915](https://github.com/jayleekr/hypeproof-studio/issues/915)
+2026-09-10 · [Intent/Epic #915](https://github.com/hypeproof/hypeproof-studio/issues/915)
 상태: 구현 목표 발행안. 제품 책임 Jay (`jayleekr`). 모든 US 행은 신규 전체 수용 기준이며
 현재 구현/배포 PASS를 의미하지 않는다. 기존 동작은 [조사 표](../design/unified-studio-experience.md#문제와-확인한-기반)로 구분한다.
 

@@ -32,7 +32,7 @@ Claude Code에서는 스킬을 먼저 쓴다.
 /hype-review
 
 # 특정 PR을 내 기본 lens로 리뷰하기
-/hype-review https://github.com/jayleekr/sediment/pull/87
+/hype-review https://github.com/hypeproof/sediment/pull/87
 ```
 
 스킬은 현재 GitHub 사용자와 repo/PR을 추론한 뒤 내부적으로
@@ -48,14 +48,14 @@ python3 scripts/hype-review/review.py --mine
 
 # 특정 PR을 역할 관점으로 리뷰하기
 python3 scripts/hype-review/review.py \
-  --repo jayleekr/sediment \
+  --repo hypeproof/sediment \
   --pr 87 \
   --reviewer TJ-kr
 
 # GitHub 없이 워크시트 형식만 확인하기
 python3 scripts/hype-review/review.py \
   --offline \
-  --repo jayleekr/hypeproof-harness \
+  --repo hypeproof/hypeproof-harness \
   --pr 24 \
   --title "Codify deploy governance and all-member review requests" \
   --reviewer JeHyeong2 \
@@ -70,7 +70,7 @@ python3 scripts/hype-review/review.py \
 python3 scripts/hype-review/request_reviewers.py
 
 # 특정 repo만 보기
-python3 scripts/hype-review/request_reviewers.py --repo jayleekr/sediment
+python3 scripts/hype-review/request_reviewers.py --repo hypeproof/sediment
 
 # 누락된 요청 실제 전송
 python3 scripts/hype-review/request_reviewers.py --apply

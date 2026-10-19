@@ -15,12 +15,12 @@ Before reading, mutating, reviewing, or merging anything, resolve the repo scope
 
 Allowed HypeProof scope:
 
-- `jayleekr/hypeproof-harness`
-- `jayleekr/hypeproof-studio`
-- `jayleekr/hypeprooflab`
-- `jayleekr/sediment`
-- `jayleekr/hypeproof-studio-releases`
-- `jayleekr/sediment-cli-releases`
+- `hypeproof/hypeproof-harness`
+- `hypeproof/hypeproof-studio`
+- `hypeproof/hypeprooflab`
+- `hypeproof/sediment`
+- `hypeproof/hypeproof-studio-releases`
+- `hypeproof/sediment-cli-releases`
 - Any future repo already listed in `hypeproof-harness/policy/repos.yaml` whose `products` or `lifecycle` clearly belong to HypeProof product, governance, or release operations.
 
 Excluded by default:
@@ -33,7 +33,7 @@ If the user says "all repos", interpret it as "all allowed HypeProof scope", not
 
 ## Control Plane
 
-Use `jayleekr/hypeproof-harness` as the source of truth.
+Use `hypeproof/hypeproof-harness` as the source of truth.
 
 - Repository list and desired settings: `policy/repos.yaml`
 - Members and permissions: `policy/members.yaml`

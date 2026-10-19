@@ -57,14 +57,14 @@ const REAL_RELEASE = {
   tag_name: "v0.1.2",
   name: "v0.1.2",
   body: "release notes here",
-  html_url: "https://github.com/jayleekr/hypeproof-studio-releases/releases/tag/v0.1.2",
+  html_url: "https://github.com/hypeproof/hypeproof-studio-releases/releases/tag/v0.1.2",
   prerelease: false,
   draft: false,
   assets: [
     {
       name: "HypeProof-Studio-darwin-arm64.zip",
       url: "https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/123",
-      browser_download_url: "https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.2/HypeProof-Studio-darwin-arm64.zip",
+      browser_download_url: "https://github.com/hypeproof/hypeproof-studio-releases/releases/download/v0.1.2/HypeProof-Studio-darwin-arm64.zip",
       size: 228 * 1024 * 1024,
     },
   ],
@@ -116,7 +116,7 @@ check("parseLatestRelease: null input → not available", () => {
 // --- Windows asset selection (#447) -------------------------------------
 // Real win32 releases carry FOUR assets; the name suffix is the VS Code engine
 // version (1.116.04919), not the HPS release version — so selection is by shape.
-const WIN_DL = "https://github.com/jayleekr/hypeproof-studio-releases/releases/download/v0.1.2";
+const WIN_DL = "https://github.com/hypeproof/hypeproof-studio-releases/releases/download/v0.1.2";
 const WIN_ASSETS = [
   { name: "HypeProof-Studio-darwin-arm64.zip", browser_download_url: `${WIN_DL}/HypeProof-Studio-darwin-arm64.zip`, size: 170 * 1024 * 1024 },
   { name: "HypeProof.Studio-win32-x64-1.116.04919.zip", browser_download_url: `${WIN_DL}/HypeProof.Studio-win32-x64-1.116.04919.zip`, size: 178 * 1024 * 1024 },

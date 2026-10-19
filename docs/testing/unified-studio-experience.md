@@ -1,6 +1,6 @@
 # 체험·수업 통합 수용 테스트
 
-2026-09-10 · [Intent/Epic #915](https://github.com/jayleekr/hypeproof-studio/issues/915)
+2026-09-10 · [Intent/Epic #915](https://github.com/hypeproof/hypeproof-studio/issues/915)
 상태: 전체 수용은 미완료. 아래 US-T01~21의 전체 판정과 부분 실행은 구분한다. 문서 검사·기존 단위 테스트의
 통과를 이 시나리오의 PASS로 옮기지 않는다. 제품 책임 Jay (`jayleekr`).
 

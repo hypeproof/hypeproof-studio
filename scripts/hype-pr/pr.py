@@ -142,7 +142,7 @@ from audit import load_policy, repo_full_name, validate_policy  # noqa: E402
 sys.path.insert(0, str(ROOT / "scripts" / "hype-pr"))
 
 
-DEFAULT_OWNER = "jayleekr"
+DEFAULT_OWNER = "hypeproof"
 DEFAULT_BASE = "main"
 AUTO_MERGE_METHOD = "squash"
 

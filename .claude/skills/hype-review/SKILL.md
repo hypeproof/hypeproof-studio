@@ -155,11 +155,11 @@ python3 scripts/hype-review/review.py --mine
 Review a specific PR using the reviewer's default lenses:
 
 ```bash
-python3 scripts/hype-review/review.py --repo jayleekr/hypeproof-harness --pr 28 --reviewer TJ-kr
+python3 scripts/hype-review/review.py --repo hypeproof/hypeproof-harness --pr 28 --reviewer TJ-kr
 ```
 
 Add an extra one-off lens:
 
 ```bash
-python3 scripts/hype-review/review.py --repo jayleekr/sediment --pr 87 --reviewer TJ-kr --role security
+python3 scripts/hype-review/review.py --repo hypeproof/sediment --pr 87 --reviewer TJ-kr --role security
 ```

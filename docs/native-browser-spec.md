@@ -1,6 +1,6 @@
 # 교육용 네이티브 브라우저 — 설계 스펙
 
-상태: **구현 완료 (Phase 0–3, 2026-07) — 실기계 e2e 검증 대기** · 추적: [#278](https://github.com/jayleekr/hypeproof-studio/issues/278) · 결정: [adr/0002-native-browser-via-webcontentsview.md](adr/0002-native-browser-via-webcontentsview.md) · 현재 진실: §0.5
+상태: **구현 완료 (Phase 0–3, 2026-07) — 실기계 e2e 검증 대기** · 추적: [#278](https://github.com/hypeproof/hypeproof-studio/issues/278) · 결정: [adr/0002-native-browser-via-webcontentsview.md](adr/0002-native-browser-via-webcontentsview.md) · 현재 진실: §0.5
 
 ## 0. 구현 방향 갱신 (2026-06-24) — 중요
 
@@ -97,7 +97,7 @@ dev-host(로컬 worker + homepage 토큰). 단위 로직(핸드셰이크·실행
 
 ---
 
-상태(원본): Draft (설계) · 추적: [#278](https://github.com/jayleekr/hypeproof-studio/issues/278) · 결정: [adr/0002-native-browser-via-webcontentsview.md](adr/0002-native-browser-via-webcontentsview.md)
+상태(원본): Draft (설계) · 추적: [#278](https://github.com/hypeproof/hypeproof-studio/issues/278) · 결정: [adr/0002-native-browser-via-webcontentsview.md](adr/0002-native-browser-via-webcontentsview.md)
 
 > 이 문서는 "왜/무엇"(ADR 0002, 이슈 #278)을 받아 "어떻게"를 정의하는 엔지니어링 설계
 > 스펙이다. 구현 PR은 이 문서를 갱신해야 한다. 코어 내부 동작에 대한 단언 중 vscode 소스를
@@ -322,7 +322,7 @@ VS Code 소스/풀빌드 없이 standalone Electron PoC로 핵심 API를 실증�
 ## 12. 참고
 
 - ADR: [adr/0002-native-browser-via-webcontentsview.md](adr/0002-native-browser-via-webcontentsview.md)
-- 이슈: [#278](https://github.com/jayleekr/hypeproof-studio/issues/278)
+- 이슈: [#278](https://github.com/hypeproof/hypeproof-studio/issues/278)
 - 현 뷰어: `extensions/hypeproof-chat/src/previewProvider.ts`, `cspBuilder.ts`
 - 재사용 파이프라인: `extensions/hypeproof-chat/webview-ui/src/ChatPanel.js`, `worker/src/lib/translate.ts`
 - 스키마: `worker/src/profiles/types.ts` (`preview.type`)

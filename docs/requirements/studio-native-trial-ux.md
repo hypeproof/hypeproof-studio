@@ -1,6 +1,6 @@
 # 개인 체험 화면 조작 요구사항
 
-추적 이슈: [#758](https://github.com/jayleekr/hypeproof-studio/issues/758). 상위 요구사항은 [NAT-01~12](studio-native-trial.md), 자산 정의는 [7 AI Native Assets](../seven-assets.md)를 따른다. 이 문서는 버튼을 눌렀을 때 사용자가 확인해야 할 결과를 정의한다. 실행 여부는 [테스트 문서](../testing/studio-native-trial-ux.md)와 실행 보고서에 기록한다.
+추적 이슈: [#758](https://github.com/hypeproof/hypeproof-studio/issues/758). 상위 요구사항은 [NAT-01~12](studio-native-trial.md), 자산 정의는 [7 AI Native Assets](../seven-assets.md)를 따른다. 이 문서는 버튼을 눌렀을 때 사용자가 확인해야 할 결과를 정의한다. 실행 여부는 [테스트 문서](../testing/studio-native-trial-ux.md)와 실행 보고서에 기록한다.
 
 기준은 `studio-native-trial` 프로필과 실제 React/호스트 소스다. 최초 인벤토리는 main `fe6f7b5`에서 확인했다. 체험은 성인용 고정 이름 ‘코치’, 시작 예시 3개, 이미지 첨부, 응답 재시도, 작업 관찰을 제공한다. 아동 캐릭터·갤러리·네이밍·입력 다듬기·후속 예시는 이 프로필에서 노출되지 않는다. 학습 자료의 버튼과 앱 버튼을 혼동하지 않는다.
 

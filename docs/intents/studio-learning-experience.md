@@ -2,7 +2,7 @@
 
 상태: 개발 기준 제안, 구현·실사용 검증 전. 2026-09-18.
 Owner: jayleekr. 원문: [UI/UX 설계 철학](../design/ui-philosophy-2026-09-18.md) · 분류: [브레이크다운](../design/ux-principles-breakdown-2026-09-18.md).
-상위: [Product Intent](../PRODUCT-INTENT.md)의 Useful work first, Human judgment stays visible, Learning is embedded, Minimum necessary intervention, Evidence over claims, Adapt do not script, Capability models are hypotheses. Lab [PHILOSOPHY.md](https://github.com/jayleekr/hypeprooflab/blob/main/PHILOSOPHY.md) §5.3·§7과 [MISSION.md](https://github.com/jayleekr/hypeprooflab/blob/main/MISSION.md) §4가지 학습 경험의 소유권은 옮기지 않는다. 형제 Intent: [공통 측정 코어 INT-MC-01~03](measurement-core.md).
+상위: [Product Intent](../PRODUCT-INTENT.md)의 Useful work first, Human judgment stays visible, Learning is embedded, Minimum necessary intervention, Evidence over claims, Adapt do not script, Capability models are hypotheses. Lab [PHILOSOPHY.md](https://github.com/hypeproof/hypeprooflab/blob/main/PHILOSOPHY.md) §5.3·§7과 [MISSION.md](https://github.com/hypeproof/hypeprooflab/blob/main/MISSION.md) §4가지 학습 경험의 소유권은 옮기지 않는다. 형제 Intent: [공통 측정 코어 INT-MC-01~03](measurement-core.md).
 
 ## Product Intent
 

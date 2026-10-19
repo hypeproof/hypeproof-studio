@@ -125,7 +125,7 @@ jobs:
           Expand-Archive -LiteralPath $asset[0].FullName -DestinationPath "$env:RUNNER_TEMP/candidate-app"
           node e2e/unified-release/install-windows.mjs "$env:RUNNER_TEMP/candidate-assets" "$env:RUNNER_TEMP/candidate-app"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      # jayleekr/hypeprooflab#997: same per-machine SDK binary precondition as
+      # hypeproof/hypeprooflab#997: same per-machine SDK binary precondition as
       # verify-service-activities.yml; run.mjs refuses to start without it.
       - name: Seed the Agent SDK binary the candidate expects
         if: runner.os == 'macOS'
