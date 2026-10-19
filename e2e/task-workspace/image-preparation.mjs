@@ -27,6 +27,9 @@ try {
   await page.goto(server.url + '/?theme=' + theme);
   const input = page.locator('.hps-input textarea');
   const send = page.getByRole('button', { name: '메시지 보내기', exact: true });
+  const announcement = page.getByTestId('attachment-announcer');
+  await expect(announcement).toHaveText('');
+  const liveRegion = await announcement.elementHandle();
   const paste = () => input.evaluate(el => {
     const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), x => x.charCodeAt(0));
     const transfer = new DataTransfer();
@@ -47,7 +50,12 @@ try {
   await expect(send).toBeDisabled();
   await page.evaluate(() => window.pendingReads.shift()(true));
   await expect(send).toBeEnabled();
-  await expect(page.getByText('이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.')).toBeVisible();
+  await expect(page.locator('.hps-img-note').filter({ hasText: '이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.' })).toBeVisible();
+  const failureText = '이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.';
+  await expect(announcement).toHaveText(failureText);
+  expect(await liveRegion.evaluate(node => node.isConnected)).toBe(true);
+  await expect(input).toBeFocused();
+  expect(await input.evaluate(node => node.getAttribute('aria-describedby').split(/\s+/).map(id => document.getElementById(id)?.textContent).join(' '))).toContain(failureText);
   const contrast = await page.locator('.hps-img-note').evaluate(node => {
     const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
     const foreground = rgb(getComputedStyle(node).color);
@@ -70,6 +78,8 @@ try {
   await expect(send).toBeDisabled();
   await expect(page.getByText('이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.')).toHaveCount(0);
   await expect(page.locator('.hps-image-preparing')).toHaveCount(1);
+  await expect(announcement).toHaveText('');
+  expect(await input.evaluate(node => node.getAttribute('aria-describedby'))).toBe('personal-composer-hint');
   await page.evaluate(() => window.pendingReads.shift()(false));
   await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(2);
   await expect(send).toBeEnabled();

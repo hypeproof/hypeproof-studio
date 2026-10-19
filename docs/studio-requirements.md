@@ -40,6 +40,9 @@ revision; functional test counts alone do not prove ChatGPT-level quality.
 Attachment failure guidance must remain readable on its editor surface in both
 light and dark themes, with normal-size text contrast of at least 4.5:1. Retrying
 an attachment clears stale guidance without losing the draft or sending it.
+Asynchronous attachment failures are announced politely and associated with the
+composer description without moving focus. Retrying removes stale error text
+from both the live region and the composer description.
 
 UX13: a response completing while the learner reads earlier content must keep the
 visible paragraph within 2 CSSpx, not merely preserve the scroll offset. Busy

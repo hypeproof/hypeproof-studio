@@ -216,11 +216,13 @@ const OLD_SCREENS = {
  * region `<div class="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer"></div>`
  * (diffed with HPS_A5_DUMP_DIR against origin/main).
  */
+// Attachment guidance: only the persistent empty attachment-announcer is added;
+// stripping that exact element reproduces all nine prior digests.
 const BASE = {
-  "ChatPanel/adult-plain": "41b6f8557011d74049193cb7f39ba08176321ddd77caa3f79a77190e624883c0",
-  "ChatPanel/adult-effort-observed": "d22fe382c98a007fe2772fef242d127b851910634933bfac4e78be59fe6cc24f",
-  "ChatPanel/adult-timeline": "c9c4bdf5ea4455c3ea354b34c20388ae1f3b2261119ca0956ee223f9e1330189",
-  "ChatPanel/kids": "d270c0f4cd98256951920209269748686c8f6ce2e3b280b8ce7554fa2b7d689d",
+  "ChatPanel/adult-plain": "1b432cef21b78698d76e284167581834f3d37b06e59c76e49a5821c9798010ff",
+  "ChatPanel/adult-effort-observed": "d726134dde6fe8342e4b2258b5762a414429bcc01f01535913c95e4fa5db7747",
+  "ChatPanel/adult-timeline": "6912f0204fb1a88483522bb496bb658bd255bd3370f52162ede3e3799ba132e4",
+  "ChatPanel/kids": "fa914b1785cbb3a4fe84468ddfb93da76940cadf5a1c6cd61b81ebb31264aafc",
   "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
   "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",

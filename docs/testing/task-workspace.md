@@ -159,4 +159,7 @@ CC-05 negative controls also feed complete HTML fences, a successful HTML write 
   on both fixture themes, including applied opacity. `image-preparation.mjs`
   checks the actual failed-read note alongside preserved draft/images, repaste
   recovery and one explicit send. Synthetic themes do not prove native theme
-  or operating-system clipboard acceptance.
+  or operating-system clipboard acceptance. The persistent attachment live region
+  starts empty, receives async failure text while composer focus stays put, and
+  clears on retry; the textarea description follows the same failure lifecycle.
+  DOM semantics are not a claim of native screen-reader speech.
