@@ -267,14 +267,16 @@ jobs:
           EOF
           sed -i '/^          /s/^          //' mirror-release-notes.md
           name="$(jq -r '.name // empty' source-release.json)"
+          prerelease_args=()
+          if [[ -n "${PRERELEASE_FLAG:-}" ]]; then prerelease_args+=("$PRERELEASE_FLAG"); fi
           # ${PRERELEASE_FLAG} 는 "Resolve prerelease flag" 스텝이 정한다.
           # stable 이면 빈 문자열 → 아래 두 줄은 이전과 완전히 같은 명령이다.
           # create 는 릴리즈가 이미 있으면 no-op 이므로 edit 에도 같이 건다 —
           # 그래야 어느 경로로 만들어졌든 프리릴리즈 표시가 확정된다.
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:release-create-edit-upload release-create
-          gh release create "$TAG" --repo "$TARGET_REPO" --title "${name:-HypeProof Studio $TAG}" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-} 2>/dev/null || true
+          gh release create "$TAG" --repo "$TARGET_REPO" --title "${name:-HypeProof Studio $TAG}" --notes-file mirror-release-notes.md "${prerelease_args[@]}" 2>/dev/null || true
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:release-create-edit-upload release-edit
-          gh release edit "$TAG" --repo "$TARGET_REPO" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-}
+          gh release edit "$TAG" --repo "$TARGET_REPO" --notes-file mirror-release-notes.md "${prerelease_args[@]}"
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:release-create-edit-upload release-upload
           gh release upload "$TAG" --repo "$TARGET_REPO" dist/* --clobber
           # Installer bundle (#1617): this tag's two installers and two SDK seeders
