@@ -27,7 +27,38 @@ try {
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
   expect(await input.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await expect(page.getByRole('button', { name: '메시지 보내기' })).toBeVisible();
+  // The focused editing end must survive a smaller composer viewport.
+  await input.press('ControlOrMeta+End');
+  await input.press('ArrowRight');
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
+  const resizeDraft = await input.inputValue();
+  // Embedded webviews can shrink without resizing the top-level browser viewport.
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = '400px'; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: resolve(output, 'composer-embedded-small.png') });
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
   await page.setViewportSize({ width: 1024, height: 400 });
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
+  expect(await input.evaluate(node => node.selectionStart)).toBe(resizeDraft.length);
+  await expect(input).toHaveValue(resizeDraft);
+  await page.screenshot({ path: resolve(output, 'composer-end-small.png') });
+  // Scrolling up to read is intentional, even if the caret remains at the end.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await input.hover();
+  await page.mouse.wheel(0, -240);
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeGreaterThan(100);
+  const draftReadingTop = await input.evaluate(node => node.scrollTop);
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = '400px'; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await expect.poll(() => input.evaluate(node => node.scrollTop)).toBe(draftReadingTop);
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
+  await page.setViewportSize({ width: 1024, height: 400 });
+  await expect.poll(() => input.evaluate(node => node.scrollTop)).toBe(draftReadingTop);
+  await expect(input).toHaveValue(resizeDraft);
+  expect(server.sent).toHaveLength(0);
   const controlFits = name => page.getByRole('button', { name }).evaluate(node => node.getBoundingClientRect().bottom <= innerHeight);
   await expect.poll(() => controlFits('메시지 보내기')).toBe(true);
   await expect.poll(() => transcript.evaluate(node => node.clientHeight)).toBeGreaterThanOrEqual(90);
@@ -42,6 +73,23 @@ try {
   await page.reload();
   await expect(input).toHaveValue('긴 초안입니다.\n'.repeat(40));
   expect(await input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
+  // A visible caret in the middle of a draft must also survive height loss.
+  await input.fill(Array.from({ length: 40 }, (_, i) => `초안 ${i + 1} 편집 문장`).join('\n'));
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
+  await input.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home');
+  for (let i = 0; i < 20; i++) await input.press('ArrowDown');
+  const middleSelection = await input.evaluate(node => node.selectionEnd);
+  expect(await input.evaluate(node => node.value.slice(0, node.selectionEnd).split('\n').length - 1)).toBe(20);
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = '400px'; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await expect.poll(() => input.evaluate(node => {
+    const line = parseFloat(getComputedStyle(node).lineHeight);
+    const row = node.value.slice(0, node.selectionEnd).split('\n').length - 1;
+    return (row + 1) * line - node.scrollTop <= node.clientHeight && row * line >= node.scrollTop;
+  })).toBe(true);
+  expect(await input.evaluate(node => node.selectionEnd)).toBe(middleSelection);
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
   await input.fill('');
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(shortHeight);
   checks.push('CP-02: multiline/restored draft grows, caps and shrinks; 400px window keeps Send/Stop and transcript inside viewport');
