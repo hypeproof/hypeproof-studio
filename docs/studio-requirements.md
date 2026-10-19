@@ -29,6 +29,18 @@ separate filesystem/host/built-UI evidence from native, Windows and customer pro
 
 ### Personal chat detail (CP-R1)
 
+Proxy stream completion evidence (#1965; REQ-C1, REQ-C5):
+
+A transport EOF without `[DONE]`, a non-empty finish reason, or the existing
+legacy usage completion chunk is an interrupted response, not a successful
+answer. Preserve received partial text through the existing error/history path
+and expose explicit retry; do not automatically resend or discard the next draft.
+Completion with `[DONE]`, a finish reason, or the documented usage-only EOF stays
+compatible. `test/proxy-chat-usage.smoke.mjs` covers adapter completion controls;
+headless host/webview evidence covers partial history and recovery separately.
+This supports the Product Intent of visible, inspectable AI outcomes (VERIFY),
+without treating a transport close as evidence of a completed answer.
+
 Proxy request-limit failures explain the temporary restriction and show a valid
 server-provided retry delay. Missing, malformed, expired, or implausible delay
 headers use safe generic wait guidance. This presentation must not automatically
@@ -1549,15 +1561,3 @@ When conversation settings is open above the desktop sources panel, Escape dismi
 ### Reading continuity during text-size changes
 
 Changing conversation text size while reading older output keeps a visible passage in view across reflow, rather than preserving only raw scroll offset or the entire answer's top. Readers following the latest output keep bottom-follow. A newer scroll or explicit Latest action supersedes a pending reading anchor; removed content must not restore a stale position. Preserve the composer draft and focus.
-
-### Proxy stream completion evidence (#1965; REQ-C1, REQ-C5)
-
-A transport EOF without `[DONE]`, a non-empty finish reason, or the existing
-legacy usage completion chunk is an interrupted response, not a successful
-answer. Preserve received partial text through the existing error/history path
-and expose explicit retry; do not automatically resend or discard the next draft.
-Completion with `[DONE]`, a finish reason, or the documented usage-only EOF stays
-compatible. `test/proxy-chat-usage.smoke.mjs` covers adapter completion controls;
-headless host/webview evidence covers partial history and recovery separately.
-This supports the Product Intent of visible, inspectable AI outcomes (VERIFY),
-without treating a transport close as evidence of a completed answer.
