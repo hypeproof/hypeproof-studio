@@ -69,7 +69,11 @@ export class PublicSkillTransport {
     try {
       const response = await this.fetchImpl(u.href, { method: 'GET', redirect: 'error', credentials: 'omit', signal: controller.signal,
         headers: { accept: u.hostname === 'api.github.com' ? 'application/vnd.github+json' : 'text/plain', 'x-github-api-version': '2022-11-28' } });
-      if (response.status === 403 || response.status === 429) fail('공개 GitHub 다운로드 한도에 도달했습니다. 잠시 뒤 다시 시도하거나 저장된 고정본을 사용해 주세요.');
+      if (response.status === 403 || response.status === 429) {
+        const reset = Number(response.headers.get('x-ratelimit-reset'));
+        const wait = reset > Date.now() / 1000 ? ` 약 ${Math.ceil((reset - Date.now() / 1000) / 60)}분 뒤 다시 시도해 주세요.` : ' 잠시 뒤 다시 시도해 주세요.';
+        fail(`공개 GitHub 다운로드가 제한됐습니다 (HTTP ${response.status}, ${u.hostname}).${wait} 저장된 고정본은 계속 사용할 수 있습니다.`);
+      }
       if (!response.ok) fail(`공개 GitHub 파일을 받지 못했습니다 (${response.status}). 비공개 저장소는 지원하지 않습니다.`);
       if (response.redirected || response.status >= 300 && response.status < 400 || response.url && response.url !== u.href) fail('다운로드 주소 변경은 허용하지 않습니다.');
       const declared = Number(response.headers.get('content-length'));
@@ -137,19 +141,37 @@ export async function downloadExternalSkill(source: ExternalSkillSource, transpo
   // Revalidate even when a caller constructs the source directly.
   source = externalSkillSource(`https://github.com/${source.owner}/${source.repo}`, source.ref, source.directory);
   const api = `https://api.github.com/repos/${source.owner}/${source.repo}`;
-  const commit = await transport.json(`${api}/commits/${encodeURIComponent(source.ref)}`);
-  const revision = commit.sha, treeSha = commit.commit?.tree?.sha;
-  if (!sha.test(revision ?? '') || !sha.test(treeSha ?? '') || sha.test(source.ref) && revision !== source.ref) fail('GitHub commit을 고정하지 못했습니다.');
-  let current = treeSha;
-  for (const part of source.directory ? source.directory.split('/') : []) {
-    const tree = await transport.json(`${api}/git/trees/${current}`);
+  let revision: string;
+  let tree: any;
+  if (sha.test(source.ref)) {
+    // GitHub accepts a full commit ID here. One immutable tree request avoids spending
+    // anonymous quota separately on commit lookup and every directory ancestor.
+    revision = source.ref;
+    const root = await transport.json(`${api}/git/trees/${revision}?recursive=1`);
+    if (!sha.test(root.sha ?? '') || root.truncated || !Array.isArray(root.tree)) fail('스킬 폴더 목록이 완전하지 않습니다.');
+    let ancestor = '';
+    for (const part of source.directory ? source.directory.split('/') : []) {
+      ancestor = ancestor ? `${ancestor}/${part}` : part;
+      const nodes = root.tree.filter((entry: any) => entry.path === ancestor);
+      if (nodes.length !== 1 || nodes[0].type !== 'tree' || nodes[0].mode !== '040000' || !sha.test(nodes[0].sha)) fail('일반 GitHub 폴더만 지원합니다. symlink·submodule은 허용하지 않습니다.');
+    }
+    const prefix = source.directory ? source.directory + '/' : '';
+    tree = { tree: root.tree.filter((entry: any) => typeof entry.path === 'string' && entry.path.startsWith(prefix)).map((entry: any) => ({ ...entry, path: entry.path.slice(prefix.length) })) };
+  } else {
+    const commit = await transport.json(`${api}/commits/${encodeURIComponent(source.ref)}`);
+    revision = commit.sha;
+    let current = commit.commit?.tree?.sha;
+    if (!sha.test(revision ?? '') || !sha.test(current ?? '')) fail('GitHub commit을 고정하지 못했습니다.');
+    for (const part of source.directory ? source.directory.split('/') : []) {
+      const parent = await transport.json(`${api}/git/trees/${current}`);
+      if (parent.truncated || !Array.isArray(parent.tree)) fail('스킬 폴더 목록이 완전하지 않습니다.');
+      const node = parent.tree.find((entry: any) => entry.path === part);
+      if (!node || node.type !== 'tree' || node.mode !== '040000' || !sha.test(node.sha)) fail('일반 GitHub 폴더만 지원합니다. symlink·submodule은 허용하지 않습니다.');
+      current = node.sha;
+    }
+    tree = await transport.json(`${api}/git/trees/${current}?recursive=1`);
     if (tree.truncated || !Array.isArray(tree.tree)) fail('스킬 폴더 목록이 완전하지 않습니다.');
-    const node = tree.tree.find((entry: any) => entry.path === part);
-    if (!node || node.type !== 'tree' || node.mode !== '040000' || !sha.test(node.sha)) fail('일반 GitHub 폴더만 지원합니다. symlink·submodule은 허용하지 않습니다.');
-    current = node.sha;
   }
-  const tree = await transport.json(`${api}/git/trees/${current}?recursive=1`);
-  if (tree.truncated || !Array.isArray(tree.tree)) fail('스킬 폴더 목록이 완전하지 않습니다.');
   const entries: Array<{ path: string; sha: string; size: number }> = [];
   let total = 0;
   for (const entry of tree.tree) {

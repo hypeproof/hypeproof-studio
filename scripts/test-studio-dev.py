@@ -77,8 +77,8 @@ class DevLauncherTests(unittest.TestCase):
             previous_app = dev.file_manifest(app)
             previous_receipt = (state/'receipt.json').read_bytes()
             configure = dev.configure_copy
-            def mutate_during_copy(candidate, identifier):
-                configure(candidate, identifier)
+            def mutate_during_copy(candidate, identifier, **kwargs):
+                configure(candidate, identifier, **kwargs)
                 (source/'package.json').write_text('{"name":"hypeproof-chat","private":false}', encoding='utf-8')
             with patch.object(dev, 'build', side_effect=build), patch.object(dev, 'app_running', return_value=False), patch.object(dev, 'configure_copy', side_effect=mutate_during_copy), patch('builtins.print'):
                 with self.assertRaisesRegex(RuntimeError, 'Source changed during preparation'):
@@ -239,8 +239,38 @@ class DevLauncherTests(unittest.TestCase):
             self.assertEqual(actual['CFBundleExecutable'],'HypeProof Studio')
             self.assertNotEqual(actual['CFBundleIdentifier'],'ai.hypeproof.studio')
             self.assertNotIn('CFBundleURLTypes',actual)
+            dev.configure_copy(app,'abcdef123456',account_preview=True)
+            preview = plistlib.loads(info.read_bytes())
+            self.assertEqual(preview['CFBundleURLTypes'][0]['CFBundleURLSchemes'], ['hypeproof-studio-dev-abcdef123456'])
+            state = Path(tmp)/'state'; settings = state/'user-data/User/settings.json';settings.parent.mkdir(parents=True)
+            settings.write_text(json.dumps({'hypeproofChat.accountsPreview': True}))
+            with patch.object(dev, 'run') as invoked:
+                dev.register_account_protocol(app, state)
+                self.assertEqual(invoked.call_args.args[0][-1], app)
+            settings.write_text(json.dumps({'hypeproofChat.accountsPreview': False}))
+            with patch.object(dev, 'run') as invoked:
+                dev.register_account_protocol(app, state)
+                invoked.assert_not_called()
+
             self.assertEqual(json.loads((root/'package.json').read_text())['name'],'HypeProof Studio')
             self.assertNotIn('updateUrl',json.loads((root/'product.json').read_text()))
+
+    def test_windows_account_protocol_is_unique_and_keeps_owned_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app=Path(tmp)/'Windows Dev';resources=app/'resources/app';resources.mkdir(parents=True)
+            (resources/'product.json').write_text(json.dumps({'urlProtocol':'hypeproof-studio-dev-abcdef123456'}))
+            state=Path(tmp)/'owned state';settings=state/'user-data/User/settings.json';settings.parent.mkdir(parents=True)
+            settings.write_text(json.dumps({'hypeproofChat.accountsPreview':True}))
+            with patch.object(dev.os,'name','nt'),patch.object(dev,'run') as invoked:
+                dev.register_account_protocol(app,state)
+                calls=[c.args[0] for c in invoked.call_args_list]
+                self.assertEqual(len(calls),3)
+                self.assertTrue(all('hypeproof-studio-dev-abcdef123456' in c[2] for c in calls))
+                self.assertIn('--user-data-dir=',calls[-1][-2])
+                self.assertTrue(calls[-1][-2].endswith('"%1"'))
+            (resources/'product.json').write_text(json.dumps({'urlProtocol':'hypeproof-studio'}))
+            with self.assertRaisesRegex(RuntimeError,'isolated'):
+                dev.register_account_protocol(app,state)
 
     def test_process_inspection_fails_closed(self):
         for code,expected in [(0,True),(1,False)]:
@@ -257,6 +287,15 @@ class DevLauncherTests(unittest.TestCase):
         self.assertEqual(result['hypeproofChat.proxyUrl'],'http://127.0.0.1:8787/v1')
         self.assertEqual(result['update.mode'],'none')
         self.assertNotIn('window.title',source)
+
+    def test_account_preview_is_local_and_explicit(self):
+        preview = dev.settings_for({}, 'local', 'account', True)
+        self.assertTrue(preview['hypeproofChat.accountsPreview'])
+        self.assertEqual(preview['hypeproofChat.proxyUrl'], 'http://127.0.0.1:8793/v1')
+        self.assertEqual(preview['hypeproofChat.siteBase'], 'http://localhost:3193')
+        self.assertFalse(dev.settings_for(preview, 'local', 'account')['hypeproofChat.accountsPreview'])
+        with self.assertRaises(ValueError):
+            dev.settings_for({}, 'live', 'account', True)
 
     def test_file_manifest_detects_payload_change(self):
         with tempfile.TemporaryDirectory() as tmp:

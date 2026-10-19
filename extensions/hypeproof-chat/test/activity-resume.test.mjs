@@ -7,11 +7,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 const require = createRequire(import.meta.url);
-const bundle = await build({stdin:{contents:"export * from './src/studioNavigation';export {activate,resolveActivateBranch,ensureWorkspace} from './src/extension';export {openBrowser} from './src/nativeBrowser';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:fileURLToPath(new URL('..',import.meta.url)),loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const bundle = await build({stdin:{contents:"export * from './src/focusDiagnostics';export * from './src/studioNavigation';export {activate,resolveActivateBranch,ensureWorkspace} from './src/extension';export {openBrowser} from './src/nativeBrowser';export {ChatPanelProvider} from './src/chatPanelProvider';export {StartPage} from './src/startPage';",resolveDir:fileURLToPath(new URL('..',import.meta.url)),loader:'ts'},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
 const commands=[], mod={exports:{}};
 const vscode={ViewColumn:{One:1},commands:{executeCommand:async c=>commands.push(c)},workspace:{workspaceFolders:[]},Uri:{joinPath:()=>({}),file:fsPath=>({fsPath})},window:{createWebviewPanel:()=>({webview:{onDidReceiveMessage(){},html:''},onDidChangeViewState(){},onDidDispose(){}})}};
 vm.runInNewContext(bundle.outputFiles[0].text,{module:mod,exports:mod.exports,require:id=>id==='vscode'?vscode:require(id),process,console,Buffer,URL});
-const {resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,activate,openBrowser,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
+const {focusDiagnosticLine,resumeDecision,resumeKey,consumeActivityResume,initializeFilesLayout,RESUME_MAX_AGE_MS,activate,openBrowser,resolveActivateBranch,ensureWorkspace,ChatPanelProvider,StartPage}=mod.exports;
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-resume-'));
 const a=path.join(tmp,'작업 A'),b=path.join(tmp,'작업 B'),link=path.join(tmp,'alias');fs.mkdirSync(a);fs.mkdirSync(b);fs.symlinkSync(a,link,'junction');
 const now=Date.now(),service='https://synthetic.invalid/v1';
@@ -92,9 +92,9 @@ try {
  assert.deepEqual(initial,['workbench.action.closeSidebar','workbench.action.closeSidebar'],'first launch and subsequent folder activations close any restored Explorer');
  const focusEvents=[];
  const focusPanel={reveal(column){focusEvents.push(['reveal',column]);},webview:{postMessage(message){focusEvents.push(['message',message]);return Promise.resolve(true);}}};
- assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{},editorChat:focusPanel}),true);
+ assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{},editorChat:focusPanel,focusDiagnostic:()=>{}}),true);
  assert.equal(focusEvents[0][0],'reveal');assert.equal(focusEvents[1][0],'message');assert.equal(focusEvents[1][1].type,'focusInput');
- assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{}}),false,'closed editor does not create a second chat or send focus');
+ assert.equal(ChatPanelProvider.prototype.focusEditor.call({context:{},focusDiagnostic:()=>{}}),false,'closed editor does not create a second chat or send focus');
  const beforePassive=focusEvents.length;await ChatPanelProvider.prototype.openInEditor.call({editorChat:focusPanel},focusPanel);
  assert.equal(focusEvents.length,beforePassive+1,'passive reveal sends no composer focus request');
  assert.equal(focusEvents.at(-1)[0],'reveal');
@@ -136,4 +136,22 @@ try {
  assert.deepEqual(commands,['workbench.action.closeSidebar'],'an empty browser list needs no editor-wide close command');
  console.log('PASS actual activation closes restored browser previews before activity storage; ordinary editors, new previews and startup after close failure remain available');
 
+ const previousTestEnv=process.env.HPS_TEST_E2E,diagnosticLines=[];
+ const diagnosticHost={focusDiagnosticCount:0,voiceLogChannel:()=>({appendLine:line=>diagnosticLines.push(line)})};
+ try{
+  delete process.env.HPS_TEST_E2E;ChatPanelProvider.prototype.focusDiagnostic.call(diagnosticHost,'command_enter');assert.equal(diagnosticLines.length,0,'ordinary app never creates focus diagnostic output');
+  process.env.HPS_TEST_E2E='1';
+  const delivery=[];const host={context:{},editorChat:{reveal(){},webview:{postMessage:()=>Promise.resolve(false)}},focusDiagnostic:(phase,flags)=>delivery.push({phase,...flags})};
+  assert.equal(ChatPanelProvider.prototype.focusEditor.call(host),true);await new Promise(resolve=>setImmediate(resolve));assert.equal(delivery.at(-1).phase,'message_delivery');assert.equal(delivery.at(-1).delivered,false);
+  host.editorChat.webview.postMessage=()=>Promise.reject(Error('private rejected delivery'));ChatPanelProvider.prototype.focusEditor.call(host);await new Promise(resolve=>setImmediate(resolve));assert.equal(delivery.at(-1).phase,'message_rejected');
+  const thrown=Error('private synchronous refusal');host.editorChat.webview.postMessage=()=>{throw thrown;};assert.throws(()=>ChatPanelProvider.prototype.focusEditor.call(host),error=>error===thrown);assert.equal(delivery.at(-1).phase,'message_threw');assert(!JSON.stringify(delivery).includes('private'));
+
+  assert.equal(focusDiagnosticLine('private unknown phase',{delivered:true}),undefined);
+  const line=focusDiagnosticLine('message_send',{scope_present:true,delivered:'private-error',token:'private-token'});assert.equal(line,'[hps-native-focus]{"phase":"message_send","scope_present":true}');
+  for(let i=0;i<80;i++)ChatPanelProvider.prototype.focusDiagnostic.call(diagnosticHost,'message_delivery',{delivered:false});
+  assert.equal(diagnosticLines.length,64,'bounded per-activation observations');assert(!JSON.stringify(diagnosticLines).includes('private'));
+  ChatPanelProvider.prototype.focusDiagnostic.call({focusDiagnosticCount:0,voiceLogChannel(){throw Error('private error');}},'command_enter');
+ }finally{if(previousTestEnv===undefined)delete process.env.HPS_TEST_E2E;else process.env.HPS_TEST_E2E=previousTestEnv;}
+ console.log('PASS gated focus diagnostics: fixed booleans only, no content, bounded output, logger failure cannot change command');
+ console.log('PASS first-run Explorer only once; existing layout and chat entry preserved; validated learner resume wins over issuer');
 } finally { fs.rmSync(tmp,{recursive:true,force:true}); }
