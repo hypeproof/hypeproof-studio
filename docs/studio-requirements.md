@@ -116,27 +116,42 @@ no turn runs or is being sent, no queued, parked (`보관한 메시지`) or reco
 message waits, the composer is not locked, and never in instructor mode (the instructor panel gets
 no handler and the host refuses an edit from instructor mode). Editing opens the text in place,
 not in the composer, so the composer's saved draft, queue and tool mode are untouched and Cancel
-(or Escape outside IME composition) restores the original exactly. The original's in-memory images
+(or Escape outside IME composition) restores the original exactly. While the editor is open the
+composer does not send (send, friend button, idea expansion): it says `고치던 메시지가 열려 있어요. 먼저
+보내거나 취소해 주세요. 입력한 내용은 그대로입니다.` and keeps both texts. The original's in-memory images
 are shown and can be removed one by one. `보내기` sends a new request with a new id that carries
 the original's tool mode (REQ-STUDIO-CHAT-REFERENCE) and the kept images; the saved user line
 records `editOf` = the root id of its prompt group. The host accepts it only for the latest prompt
 group (the saved transcript plus a newer failed request) and refuses anything else back into the
 composer. The model receives the history before the group being edited; for later turns it
-receives only the latest version of each prompt (`editResend.ts` `historyForEdit` /
-`currentVersions`, applied at the single host entry to the model). The original prompt and its
+receives only the latest version of each prompt (`editResend.ts` `modelConversation`, applied at the
+single host entry to the model, for both runtimes). The error retry (`다시 보내기`) of a failed edit
+arrives without `editOf`; it inherits the group from the remembered request and gets the same
+history as the edit, so neither the earlier version nor the retried prompt reaches the model twice.
+The trial carry-over transcript and summary also use the latest versions only. The original prompt and its
 answer stay in the transcript as version 1: the user line shows `‹ 1/2 ›`, which switches the drawn
 prompt-and-answer pair without any request, says `이 버전은 보기만 해요` on an older version, and its
-title says the conversation continues from the last version. Versions persist in the task
-transcript; a line without `editOf` is its own version group, so older transcripts load without a
-migration. Files changed by the original run are not reverted: when the turn-restore bar
+title says the conversation continues from the last version. Versions persist with the task, split
+so that an older build is not locked out: the task file holds only the visible conversation, in the
+exact message shape earlier builds validate (no `editOf`), and the superseded turns plus the group
+membership live in a sidecar `<scope>.versions.json` that earlier builds never open. The sidecar is
+written first under the same lock, so an interrupted write leaves the earlier version visible; an
+unreadable sidecar costs only the earlier versions (it is set aside, never overwritten) and the
+conversation still loads. An older build therefore shows the latest version as a plain chat, and
+turns it adds are kept when this build reopens the task. A line without `editOf` is its own version
+group, so transcripts written before this change load without a migration. Files changed by the original run are not reverted: when the turn-restore bar
 (AE-15, `TurnReviewBar`) is on screen the editor says `이전 답변이 바꾼 파일은 그대로예요. 되돌리려면 그
 답변의 되돌리기를 쓰세요.` DEC-08: the host records an `edit_resend` workflow event in the session
 spool with ids, version number, lengths, image count and tool mode, never text; the original attempt
 keeps its own turn record. Not built: editing any prompt but the latest, branching into a new chat,
 remembering the pager choice across reopen (it always opens on the latest version), re-attaching
-D-028 photo files (their saved paths are part of the text and can be edited like it), and a
-transcript written by this build is rejected by an older build that does not know `editOf`. Tests:
-`test/edit-resend.smoke.mjs` (versions model, history, gates, store round trip, legacy transcript),
+D-028 photo files (their saved paths are part of the text and can be edited like it), carrying
+versions into a task forked by draft recovery (the fork gets the visible conversation), and showing
+versions to an older build (it sees the latest version only). Tests:
+`test/edit-resend.smoke.mjs` (versions model, model history incl. retry after a failed and a
+successful edit, gates, store round trip, legacy transcript, sidecar split, a task file written here
+read by the pre-change validator `test/fixtures/task-store-validator-before-edit-resend.mjs` with a
+negative control, carry-over, composer refusal),
 `test/edit-resend.test.tsx` (where `수정` and the pager render).
 
 ### Chat reference interaction (CG-IMPL-R1)

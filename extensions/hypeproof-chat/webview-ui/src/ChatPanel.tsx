@@ -7,7 +7,7 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
-import { editableUserId, visibleVersions, type VersionPager as Pager } from '../../src/editResend';
+import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions, type VersionPager as Pager } from '../../src/editResend';
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { imeComposing } from './imeGuard';
 import { scrollBehavior } from './motion';
@@ -691,6 +691,8 @@ export function ChatPanel(props: Props) {
     return false;
   };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
+    // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
     if (imagePreparationBlocksSend()) return false;
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
@@ -998,6 +1000,7 @@ export function ChatPanel(props: Props) {
    */
   const handleWorldPick = (chip: string) => {
     if (busy) return;
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
     if (!reserveRecovery(chip, [], 'auto')) return;
     setWorldPending(true);
     props.onSend(chip);
@@ -1012,6 +1015,7 @@ export function ChatPanel(props: Props) {
   };
 
   const handleRollSend = () => {
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
     if (imagePreparationBlocksSend()) return;
     const extra = draft.trim();
     if (!extra || !rollExpand) return;

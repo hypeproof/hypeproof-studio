@@ -139,9 +139,128 @@ try {
 
 // Host wiring, read from the source (the host itself needs vscode).
 const host = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
-t("host: model history goes through historyForEdit / currentVersions", () => assert.match(host, /modelHistory\(clampTimeline\(editOf \? historyForEdit\(conversation, editOf\) : currentVersions\(conversation\), HISTORY_MAX\)\)/));
 t("host: an edit target is checked before the send is accepted", () => assert.match(host, /msg\.type === 'sendMessage' && msg\.editOf !== undefined\) this\.requireEditTarget\(msg\.editOf\)/));
 t("host: edit_resend is recorded through the spool with the pure payload", () => assert.match(host, /recordWorkflow\(\{ event: "edit_resend", payload: editResendPayload\(/));
 t("host: every saved user line of a turn goes through userLine (keeps editOf)", () => assert.equal((host.match(/userLine\((text|historyText)\)/g) ?? []).length, 5));
+
+// ── Verifier round 1 ──────────────────────────────────────────────────────────────────────────
+const { modelConversation, splitVersions, joinVersions, composerBlockedByEdit } = await import("../src/editResend.ts");
+const { readableTranscript, carryoverSummary } = await import("../src/trialCarryoverHelpers.ts");
+const { decodeBeforeEditResend, seal } = await import("./fixtures/task-store-validator-before-edit-resend.mjs");
+const hiddenIds = ["u2", "a2", "t2"];
+const leaks = (history) => history.filter((m) => hiddenIds.includes(m.id)).map((m) => m.id);
+
+t("retry of a FAILED edit (arrives without editOf, same id): versionOf drops v1 prompt and answer", () => {
+  // Saved: v1 only. The failed v2 is not saved; the webview's copy also carries its bubble.
+  for (const conversation of [legacy, [...legacy, u("u2b", "강아지 그려 줘", { editOf: "u2" })]]) {
+    const history = modelHistory(modelConversation(conversation, "u2"));
+    assert.deepEqual(leaks(history), [], shape(history));
+    assert.ok(!history.some((m) => m.id === "u2b"), "the retried prompt itself must not be in its own history");
+    assert.equal(shape(history), "user:u1 assistant:a1");
+  }
+});
+t("negative control: the round-0 host (edit-aware only when editOf is set) leaks v1 on that retry", () => {
+  const roundZero = (conversation, editOf) => editOf ? historyForEdit(conversation, editOf) : conversation;
+  assert.deepEqual(leaks(modelHistory(roundZero(legacy, undefined))), ["u2", "a2"]);
+});
+t("retry after a SUCCESSFUL edit (다시 받기: new id, no versionOf): only the latest version goes along", () => {
+  const history = modelHistory(modelConversation(edited));
+  assert.deepEqual(leaks(history), []);
+  assert.equal(shape(history), "user:u1 assistant:a1 user:u2b assistant:a2b");
+});
+t("a hidden version never reaches model history, whatever is on screen (sweep over every scenario)", () => {
+  const three = [...edited, u("u2c", "토끼", { editOf: "u2" }), a("a2c", "토끼 답")];
+  for (const [conversation, versionOf] of [[edited, undefined], [edited, "u2"], [three, undefined], [three, "u2"], [legacy, "u2"]]) {
+    const history = modelHistory(modelConversation(conversation, versionOf));
+    assert.deepEqual(leaks(history), [], `${versionOf} ${shape(history)}`);
+    assert.ok(!history.some((m) => m.id === "u2b" && conversation === three), "v2 leaked once v3 exists");
+  }
+  // Positive control: the sweep can see a leak (v1 IS in the raw conversation).
+  assert.deepEqual(leaks(modelHistory(edited)), ["u2", "a2"]);
+});
+t("host: model history is modelConversation(conversation, versionOf), and versionOf inherits on a same-id retry", () => {
+  assert.match(host, /modelHistory\(clampTimeline\(modelConversation\(conversation, versionOf\), HISTORY_MAX\)\)/);
+  assert.match(host, /const versionOf = editOf \?\? \(retrySourceId !== undefined && retrySourceId === userMessageId \? this\.retryMessages\(\)\.find\(message => message\.id === retrySourceId\)\?\.editOf : undefined\);/);
+});
+
+t("storage split: the visible part has no editOf and join restores the flat conversation exactly", () => {
+  const three = [...edited, u("u2c", "토끼", { editOf: "u2" }), a("a2c", "토끼 답"), u("u3", "고마워"), a("a3", "천만에")];
+  for (const flat of [legacy, edited, three]) {
+    const { visible, versions } = splitVersions(flat);
+    assert.ok(visible.every((m) => !("editOf" in m)), "editOf in the visible part");
+    assert.equal(shape(visible), shape(currentVersions(flat)));
+    assert.deepEqual(joinVersions(visible, versions), flat);
+  }
+});
+t("an interrupted write (sidecar has v1 hidden, task file still shows v1) reads as one version", () => {
+  const { versions } = splitVersions(edited);
+  assert.equal(shape(joinVersions(legacy, versions)), shape(legacy));
+});
+
+const root2 = fs.mkdtempSync(path.join(os.tmpdir(), "hps-edit-resend-downgrade-"));
+try {
+  const store = new TaskWorkspaceStore(root2, "edit-resend-downgrade");
+  await store.initialize();
+  const taskId = store.getView().activeTaskId;
+  await store.append(taskId, legacy);
+  await store.append(taskId, edited.slice(legacy.length));
+  const text = fs.readFileSync(store.filePath, "utf8");
+  t("downgrade: the task file this build wrote loads with the older build's validator (positive control)", () => {
+    const old = decodeBeforeEditResend(text, store.scope);
+    const messages = old.tasks.find((task) => task.id === taskId).messages;
+    assert.equal(shape(messages), "user:u1 assistant:a1 user:u2b assistant:a2b", "the older build shows the latest version as a plain chat");
+    assert.ok(!text.includes('"editOf"'), "editOf in the task file");
+  });
+  t("downgrade negative control: a task file WITH editOf in a message is corrupt to the older build", () => {
+    const data = JSON.parse(text).data;
+    data.tasks.find((task) => task.id === taskId).messages.find((m) => m.id === "u2b").editOf = "u2";
+    assert.throws(() => decodeBeforeEditResend(seal(data), store.scope), (error) => error.code === "corrupt");
+  });
+  t("the versions live in the sidecar, which reopening joins back", () => {
+    assert.ok(fs.existsSync(store.versionsPath) && fs.readFileSync(store.versionsPath, "utf8").includes('"groups":{"u2b":"u2"}'));
+    assert.deepEqual(new TaskWorkspaceStore(root2, "edit-resend-downgrade").getHistory(taskId), edited);
+  });
+  // An older build writes the task file only: simulate it appending a turn, then reopen here.
+  const oldData = decodeBeforeEditResend(fs.readFileSync(store.filePath, "utf8"), store.scope);
+  const oldTask = oldData.tasks.find((task) => task.id === taskId);
+  oldTask.messages.push(u("u4", "구버전에서 보낸 말"), a("a4", "구버전 답"));
+  oldTask.messageCount = oldTask.messages.length; oldData.revision += 1;
+  fs.writeFileSync(store.filePath, seal(oldData));
+  t("after an older build added turns, this build keeps them and still shows both versions", () => {
+    const history = new TaskWorkspaceStore(root2, "edit-resend-downgrade").getHistory(taskId);
+    assert.equal(shape(history), shape([...edited, u("u4", ""), a("a4", "")]));
+    assert.deepEqual(visibleVersions(history).pagers, { u2b: { key: "u2", index: 1, count: 2 } });
+  });
+  fs.writeFileSync(store.versionsPath, "{not json");
+  const damaged = new TaskWorkspaceStore(root2, "edit-resend-downgrade");
+  t("an unreadable sidecar costs only the earlier versions; the conversation loads", () => assert.equal(shape(damaged.getHistory(taskId)), "user:u1 assistant:a1 user:u2b assistant:a2b user:u4 assistant:a4"));
+  await damaged.clearHistory(taskId);
+  t("clearing a task drops its versions too, and the unreadable sidecar was set aside, not overwritten", () => {
+    assert.deepEqual(new TaskWorkspaceStore(root2, "edit-resend-downgrade").getHistory(taskId), []);
+    assert.ok(fs.readdirSync(path.dirname(store.versionsPath)).some((name) => name.startsWith(path.basename(store.versionsPath) + ".unreadable-")));
+  });
+} finally {
+  fs.rmSync(root2, { recursive: true, force: true });
+}
+
+t("carry-over: the readable trial transcript and its summary skip the earlier version", () => {
+  const said = readableTranscript(edited).map((m) => m.content);
+  assert.deepEqual(said, ["첫 질문", "첫 답", "강아지 그려 줘", "강아지 답"]);
+  const summary = carryoverSummary(edited);
+  assert.ok(summary.includes("강아지 그려 줘") && !summary.includes("고양이"), summary);
+  // Negative control: a transcript without versions is carried whole.
+  assert.equal(readableTranscript(legacy).length, 4);
+});
+
+t("composer send is refused while the edit box is open, and only then", () => {
+  assert.equal(composerBlockedByEdit("u2b", "u2b"), true);
+  for (const [editing, editable] of [[null, "u2b"], ["u2b", null], ["u2", "u2b"], [null, null]]) assert.equal(composerBlockedByEdit(editing, editable), false, `${editing}/${editable}`);
+  const panel = fs.readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
+  for (const fn of ["const submit = (text?: string, mode: TurnToolMode = toolMode) => {", "const handleWorldPick = (chip: string) => {", "const handleRollSend = () => {"]) {
+    const at = panel.indexOf(fn);
+    assert.ok(at > 0, fn);
+    assert.match(panel.slice(at, at + 260), /if \(composerBlockedByEdit\(editingId, editableId\)\) \{ setImgNote\(EDIT_OPEN_NOTE\); return/, fn);
+  }
+});
 
 console.log(`edit-resend smoke OK (${n})`);

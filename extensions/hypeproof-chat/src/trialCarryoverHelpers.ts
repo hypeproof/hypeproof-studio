@@ -9,7 +9,11 @@
 //   - the coach gets a summary that is itself a visible message in the pass conversation;
 //   - nothing from the trial seat's runtime (SDK session, credentials) is reused.
 
-export interface CarryoverMessage { id?: string; role: string; content: string; createdAt?: number }
+import { currentVersions } from './editResend.ts';
+import type { ChatMessage } from './protocol';
+
+/** `editOf` (CGP-CHAT-R-002): an edited resend; only the latest version of a prompt is carried. */
+export interface CarryoverMessage { id?: string; role: string; content: string; createdAt?: number; editOf?: string }
 /** The trial that held the folder: its record id, name and canonical home folder (its task-store key). */
 export interface CarryoverSource { id: string; name: string; workspace: string; free?: boolean }
 export interface CarryoverOffer {
@@ -59,7 +63,8 @@ export function validOffer(value: unknown, passId: string): CarryoverOffer | nul
 
 /** Only what was said: tool lines and app-internal roles are not part of the transcript shown. */
 export function readableTranscript(messages: readonly CarryoverMessage[]): Array<{ role: "user" | "assistant"; content: string }> {
-  return messages
+  // Earlier versions of an edited prompt are not part of what was finally said (CGP-CHAT-R-002).
+  return (currentVersions(messages as readonly ChatMessage[]) as CarryoverMessage[])
     .filter((m): m is CarryoverMessage & { role: "user" | "assistant" } => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim() !== "")
     .map(({ role, content }) => ({ role, content }));
 }

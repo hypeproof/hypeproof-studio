@@ -5,7 +5,7 @@ import { basename, join } from 'node:path';
 import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
 import { suggestTaskTitle } from './taskTitle.ts';
-import { validEditOf } from './editResend.ts';
+import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -19,6 +19,9 @@ interface WorkspaceData {
   activeTaskId: string;
   tasks: TaskDocument[];
 }
+
+/** CGP-CHAT-R-002 — the versions sidecar, `<scope>.versions.json`. Earlier builds never read it. */
+interface VersionsData { version: 1; scope: string; tasks: Record<string, StoredVersions> }
 
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
@@ -62,8 +65,13 @@ function demonstrablyDead(pid: number): boolean {
 const sameLock = (a: LockRecord | undefined, b: LockRecord) => !!a &&
   a.dev === b.dev && a.ino === b.ino && a.owner.nonce === b.owner.nonce;
 
-function validMessage(value: unknown): value is ChatMessage {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', 'editOf'])) return false;
+/**
+ * The task file's message shape is exactly the one earlier builds accept (CGP-CHAT-R-002 keeps it:
+ * an older build reading a file this build wrote must not call it corrupt). `editOf` is allowed only
+ * on lines handed to the store and on the versions sidecar, never in the task file.
+ */
+function validMessage(value: unknown, allowEditOf = false): value is ChatMessage {
+  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', ...(allowEditOf ? ['editOf'] : [])])) return false;
   if (!nonempty(value.id, 256) || typeof value.role !== 'string' || !['user', 'assistant', 'system', 'tool'].includes(value.role) ||
       typeof value.content !== 'string' || !timestamp(value.createdAt)) return false;
   if (value.assistantName !== undefined && typeof value.assistantName !== 'string') return false;
@@ -78,6 +86,24 @@ function validMessage(value: unknown): value is ChatMessage {
     typeof citation.url === 'string' && typeof citation.title === 'string' && typeof citation.domain === 'string' &&
     typeof citation.tier === 'number' && [1, 2, 3, 4].includes(citation.tier)))) return false;
   return true;
+}
+
+const validIncoming = (value: unknown): value is ChatMessage => validMessage(value, true);
+
+function validVersions(value: unknown): value is StoredVersions {
+  return isRecord(value) && exactKeys(value, ['hidden', 'groups']) && Array.isArray(value.hidden) && value.hidden.every(validIncoming) &&
+    isRecord(value.groups) && Object.entries(value.groups).every(([id, root]) => validEditOf(id) && validEditOf(root));
+}
+
+function decodeVersions(text: string, scope: string): VersionsData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '버전 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '버전 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.values(data.tasks).every(validVersions)) return fail('corrupt', '버전 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as VersionsData;
 }
 
 function validDraft(value: unknown): value is ActivityDraft {
@@ -97,7 +123,7 @@ function validTask(value: unknown): value is TaskDocument {
   if (!isRecord(value) || !exactKeys(value, ['id', 'title', 'titleOrigin', 'createdAt', 'updatedAt', 'messageCount', 'messages', 'draft', 'sourceSelection', 'importedLegacy'])) return false;
   return nonempty(value.id, 256) && nonempty(value.title, 160) && timestamp(value.createdAt) && timestamp(value.updatedAt) &&
     (value.titleOrigin === undefined || ['default', 'automatic', 'manual'].includes(value.titleOrigin as string)) &&
-    value.updatedAt >= value.createdAt && Array.isArray(value.messages) && value.messages.every(validMessage) &&
+    value.updatedAt >= value.createdAt && Array.isArray(value.messages) && value.messages.every(message => validMessage(message)) &&
     new Set(value.messages.map(message => message.id)).size === value.messages.length && value.messageCount === value.messages.length &&
     validDraft(value.draft) && validSurface(value.sourceSelection) && typeof value.importedLegacy === 'boolean';
 }
@@ -135,9 +161,12 @@ function normalizedTitle(value: string): string {
 export class TaskWorkspaceStore {
   readonly scope: string;
   readonly filePath: string;
+  readonly versionsPath: string;
   private readonly directory: string;
   private readonly rootPath: string;
   private data?: WorkspaceData;
+  /** Versions sidecar as last read or written. A missing or unreadable sidecar reads as no versions. */
+  private versions: VersionsData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
 
@@ -147,6 +176,8 @@ export class TaskWorkspaceStore {
     this.rootPath = rootPath;
     this.directory = join(rootPath, 'task-workspaces');
     this.filePath = join(this.directory, `${this.scope}.json`);
+    this.versionsPath = join(this.directory, `${this.scope}.versions.json`);
+    this.versions = { version: 1, scope: this.scope, tasks: {} };
     this.load();
   }
 
@@ -159,11 +190,21 @@ export class TaskWorkspaceStore {
       const stat = lstatSync(this.filePath);
       if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
       this.data = decode(readFileSync(this.filePath, 'utf8'), this.scope);
+      this.versions = this.readVersionsSync();
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return;
       this.loadError = error instanceof TaskWorkspaceStoreError ? error :
         new TaskWorkspaceStoreError('io', '작업 기록을 읽지 못했습니다. 원본을 보존했습니다.');
     }
+  }
+
+  /** A lost sidecar costs only the earlier versions; the conversation itself never depends on it. */
+  private readVersionsSync(): VersionsData {
+    try {
+      const stat = lstatSync(this.versionsPath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeVersions(readFileSync(this.versionsPath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: no versions */ }
+    return { version: 1, scope: this.scope, tasks: {} };
   }
 
   getView(): TaskWorkspaceView {
@@ -184,16 +225,22 @@ export class TaskWorkspaceStore {
     const task = this.data?.tasks.find(value => value.id === taskId);
     return task ? clone(task) : undefined;
   }
-  getHistory(taskId = this.data?.activeTaskId): ChatMessage[] { return this.getTask(taskId)?.messages ?? []; }
+  /** The full conversation, earlier versions included (joinVersions); the task file holds only the visible one. */
+  getHistory(taskId = this.data?.activeTaskId): ChatMessage[] {
+    const task = this.getTask(taskId);
+    return task ? joinVersions(task.messages, taskId ? this.versions.tasks[taskId] : undefined) : [];
+  }
   getDraft(taskId = this.data?.activeTaskId): ActivityDraft { return this.getTask(taskId)?.draft ?? emptyActivityDraft(); }
 
   initialize(legacyMessages: ChatMessage[] = [], legacyDraft: ActivityDraft = emptyActivityDraft()): Promise<TaskWorkspaceView> {
-    return this.mutate(data => {
+    return this.mutate((data, versions) => {
       if (data) return data;
-      if (!Array.isArray(legacyMessages) || !legacyMessages.every(validMessage) || !validDraft(legacyDraft)) fail('invalid', '이전 작업 기록의 형식을 확인해야 합니다.');
+      if (!Array.isArray(legacyMessages) || !legacyMessages.every(validIncoming) || !validDraft(legacyDraft)) fail('invalid', '이전 작업 기록의 형식을 확인해야 합니다.');
       const now = Date.now();
       const task = this.newTask('새 작업', now);
-      task.messages = this.mergeMessages([], legacyMessages);
+      const split = splitVersions(this.mergeMessages([], legacyMessages));
+      task.messages = split.visible;
+      if (split.versions.hidden.length || Object.keys(split.versions.groups).length) versions.tasks[task.id] = split.versions;
       task.messageCount = task.messages.length;
       task.draft = clone(legacyDraft);
       task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length || !!task.draft.recovered?.length;
@@ -232,9 +279,14 @@ export class TaskWorkspaceStore {
     return this.updateTask(taskId, task => { task.title = normalizedTitle(title); task.titleOrigin = 'manual'; });
   }
   append(taskId: string, messages: ChatMessage[]): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, task => {
-      if (!Array.isArray(messages) || !messages.every(validMessage)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
-      task.messages = this.mergeMessages(task.messages, messages);
+    return this.updateTask(taskId, (task, versions) => {
+      if (!Array.isArray(messages) || !messages.every(validIncoming)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
+      // CGP-CHAT-R-002 — merge into the full conversation, then store the visible part in the task
+      // file and the superseded turns in the sidecar.
+      const split = splitVersions(this.mergeMessages(joinVersions(task.messages, versions.tasks[taskId]), messages));
+      task.messages = split.visible;
+      if (split.versions.hidden.length || Object.keys(split.versions.groups).length) versions.tasks[taskId] = split.versions;
+      else delete versions.tasks[taskId];
       task.messageCount = task.messages.length;
       if (task.titleOrigin === 'default' || task.titleOrigin === 'automatic') {
         const title = suggestTaskTitle(task.messages);
@@ -267,7 +319,7 @@ export class TaskWorkspaceStore {
     }, true);
   }
   clearHistory(taskId: string): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, task => { task.messages = []; task.messageCount = 0; });
+    return this.updateTask(taskId, (task, versions) => { task.messages = []; task.messageCount = 0; delete versions.tasks[taskId]; });
   }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
@@ -299,12 +351,12 @@ export class TaskWorkspaceStore {
   private checkExpected(data: WorkspaceData, expected: TaskWorkspaceExpected): void {
     if (!expected || data.activeTaskId !== expected.taskId || data.revision !== expected.revision) fail('stale', '작업이 변경되었습니다. 최신 화면에서 다시 선택해 주세요.');
   }
-  private updateTask(taskId: string, update: (task: TaskDocument) => void): Promise<TaskWorkspaceView> {
-    return this.mutate(data => {
+  private updateTask(taskId: string, update: (task: TaskDocument, versions: VersionsData) => void): Promise<TaskWorkspaceView> {
+    return this.mutate((data, versions) => {
       const current = this.requireData(data);
       if (taskId !== current.activeTaskId) fail('stale', '다른 작업의 저장 요청입니다. 현재 작업에서 다시 시도해 주세요.');
       const task = this.requireTask(current, taskId);
-      update(task);
+      update(task, versions);
       task.updatedAt = Math.max(Date.now(), task.updatedAt);
       return current;
     });
@@ -357,6 +409,7 @@ export class TaskWorkspaceStore {
       await unlink(lockPath);
       removed = true;
       await unlink(`${this.filePath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
+      await unlink(`${this.versionsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
     } finally {
       if (removed) await unlink(claimPath);
       else await rename(claimPath, lease.path);
@@ -396,7 +449,33 @@ export class TaskWorkspaceStore {
     await unlink(lease.path);
   }
 
-  private mutate(change: (data: WorkspaceData | undefined) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
+  /** Atomic write of one file under the held lock: temporary file, fsync, rename. */
+  private async writeAtomic(target: string, content: string, nonce: string): Promise<void> {
+    const temporaryPath = `${target}.tmp-${nonce}`;
+    try {
+      const temporary = await open(temporaryPath, 'wx', 0o600);
+      try { await temporary.writeFile(content, 'utf8'); await temporary.sync(); }
+      finally { await temporary.close(); }
+      await rename(temporaryPath, target);
+    } finally {
+      await unlink(temporaryPath).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
+    }
+  }
+
+  /** The sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readVersionsLocked(nonce: string): Promise<VersionsData> {
+    const empty: VersionsData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.versionsPath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '버전 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.versionsPath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeVersions(text, this.scope); }
+    catch { await rename(this.versionsPath, `${this.versionsPath}.unreadable-${nonce}`); return empty; }
+  }
+
+  private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -417,21 +496,25 @@ export class TaskWorkspaceStore {
           } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
           if (!recoverFromDisk && ((disk?.revision ?? 0) !== (this.data?.revision ?? 0) || JSON.stringify(disk) !== JSON.stringify(this.data))) fail('stale', '다른 창에서 기록이 변경되었습니다. 작업을 다시 열어 주세요.');
           const base = recoverFromDisk ? disk : this.data;
-          const next = change(base ? clone(base) : undefined);
+          const diskVersions = await this.readVersionsLocked(lock.owner.nonce);
+          const versions = clone(diskVersions);
+          const next = change(base ? clone(base) : undefined, versions);
+          const versionsChanged = JSON.stringify(versions) !== JSON.stringify(diskVersions);
+          if (this.data && JSON.stringify(next) === JSON.stringify(this.data) && !versionsChanged) { this.versions = diskVersions; return this.getView(); }
+          // The sidecar is written first: a crash between the two writes leaves the earlier version
+          // visible in the task file and a duplicate in the sidecar, which joinVersions ignores.
+          if (versionsChanged) {
+            const sidecar = JSON.stringify({ checksum: hash(JSON.stringify(versions)), data: versions });
+            decodeVersions(sidecar, this.scope);
+            await this.writeAtomic(this.versionsPath, sidecar, lock.owner.nonce);
+          }
+          this.versions = versions;
           if (this.data && JSON.stringify(next) === JSON.stringify(this.data)) return this.getView();
           next.revision = (base?.revision ?? 0) + 1;
           const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
           decode(content, this.scope);
-          const temporaryPath = `${this.filePath}.tmp-${lock.owner.nonce}`;
-          try {
-            const temporary = await open(temporaryPath, 'wx', 0o600);
-            try { await temporary.writeFile(content, 'utf8'); await temporary.sync(); }
-            finally { await temporary.close(); }
-            await rename(temporaryPath, this.filePath);
-            this.data = next;
-          } finally {
-            await unlink(temporaryPath).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
-          }
+          await this.writeAtomic(this.filePath, content, lock.owner.nonce);
+          this.data = next;
           return this.getView();
         } finally {
           await this.releaseLock(lock);

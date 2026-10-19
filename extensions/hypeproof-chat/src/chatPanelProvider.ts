@@ -195,7 +195,7 @@ import {
   type TimelineState,
   type ToolEntry,
 } from "./chatTimeline";
-import { currentVersions, editResendPayload, historyForEdit, latestUserTurn, validEditTarget, versionCount } from "./editResend";
+import { editResendPayload, latestUserTurn, modelConversation, validEditTarget, versionCount } from "./editResend";
 import { capturePageContext } from "./nativeBrowser";
 import { isGeneralBrowserOpenRequest } from "./browserIntent";
 import { validateAndRepairHtml, type HtmlStructureResult } from "./htmlStructure";
@@ -5236,9 +5236,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #503 — the webview's history now has tool lines (role:"tool") mixed in. This is
     // the only path out to the model, so they are filtered once right at the entrance.
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
-    // CGP-CHAT-R-002 — only the latest version of each prompt goes to the model; an edit drops its whole group.
+    // CGP-CHAT-R-002 — only the latest version of each prompt goes to the model. A turn that belongs to a
+    // version group (an edit, or the error retry of one, which arrives without editOf) drops its whole group.
     const conversation = activityConnections(this.context) ? this.getHistory() : rawHistory;
-    const history = modelHistory(clampTimeline(editOf ? historyForEdit(conversation, editOf) : currentVersions(conversation), HISTORY_MAX));
+    const history = modelHistory(clampTimeline(modelConversation(conversation, versionOf), HISTORY_MAX));
     // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
     // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is

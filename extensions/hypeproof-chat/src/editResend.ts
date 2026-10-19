@@ -133,3 +133,67 @@ export function editResendPayload(p: {
 export function versionCount(items: readonly ChatMessage[], key: string): number {
   return versionRuns(items).filter((run) => run.key === key).reduce((n, run) => n + run.turns.length, 0);
 }
+
+/**
+ * Storage split (downgrade-safe). The task file keeps only the visible conversation in the shape
+ * every earlier build accepts (no `editOf`, so an older validator reads it as a plain chat); the
+ * superseded turns and the group membership live in a sidecar an older build never opens.
+ */
+export interface StoredVersions {
+  /** Superseded turns, in order. Their user lines keep `editOf` (a group root has none). */
+  hidden: ChatMessage[];
+  /** Visible user-line id → its group root, for every visible line that is an edited resend. */
+  groups: Record<string, string>;
+}
+export const emptyVersions = (): StoredVersions => ({ hidden: [], groups: {} });
+
+export function splitVersions(flat: readonly ChatMessage[]): { visible: ChatMessage[]; versions: StoredVersions } {
+  const current = currentVersions(flat);
+  const shown = new Set(current.map((m) => m.id));
+  const groups: Record<string, string> = {};
+  const visible = current.map((m) => {
+    if (m.role !== "user" || m.editOf === undefined) return m;
+    const { editOf, ...plain } = m;
+    groups[m.id] = editOf;
+    return plain;
+  });
+  return { visible, versions: { hidden: flat.filter((m) => !shown.has(m.id)), groups } };
+}
+
+/** Inverse of splitVersions. Hidden lines that are also visible (an interrupted write) are ignored. */
+export function joinVersions(visible: readonly ChatMessage[], versions: StoredVersions = emptyVersions()): ChatMessage[] {
+  const shown = new Set(visible.map((m) => m.id));
+  const byRoot = new Map<string, ChatMessage[]>();
+  let root: string | null = null;
+  for (const m of versions.hidden) {
+    if (shown.has(m.id)) { if (m.role === "user") root = null; continue; }
+    if (m.role === "user") root = m.editOf ?? m.id;
+    if (root === null) continue;
+    byRoot.set(root, [...(byRoot.get(root) ?? []), m]);
+  }
+  const out: ChatMessage[] = [];
+  for (const m of visible) {
+    const group = m.role === "user" ? versions.groups[m.id] : undefined;
+    if (group === undefined || group === m.id) { out.push(m); continue; }
+    out.push(...(byRoot.get(group) ?? []));
+    byRoot.delete(group);
+    out.push({ ...m, editOf: group });
+  }
+  return out;
+}
+
+/**
+ * A composer send while the editor is open would start a turn and close the editor, losing the
+ * edited text without a word. The composer refuses instead and keeps both texts.
+ */
+export const EDIT_OPEN_NOTE = "고치던 메시지가 열려 있어요. 먼저 보내거나 취소해 주세요. 입력한 내용은 그대로입니다.";
+export const composerBlockedByEdit = (editingId: string | null, editableId: string | null): boolean =>
+  editingId !== null && editingId === editableId;
+
+/**
+ * The conversation handed to the model for one turn. `versionOf` is the turn's group root when the
+ * turn is an edit or the error retry of one (which arrives without `editOf`): the whole group is
+ * dropped. Otherwise only the latest version of every prompt is kept. Never the drawn version.
+ */
+export const modelConversation = (conversation: readonly ChatMessage[], versionOf?: string): ChatMessage[] =>
+  versionOf ? historyForEdit(conversation, versionOf) : currentVersions(conversation);
