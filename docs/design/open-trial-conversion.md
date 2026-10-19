@@ -1,6 +1,7 @@
 # Open free trial → subscription (P4 design)
 
-Status: design proposal, 2026-10-18. Not implemented, not reviewed by legal, no
+Status: design proposal, 2026-10-18; **§0 records Jay's decision of 2026-10-19 and overrides
+the sections below where they disagree.** Not implemented, not reviewed by legal, no
 requirement row changed yet. Baselines: Studio `origin/main` `033f917e`, hypeproof-service
 `a08cf7a`. §2A also reads hypeproof-service `origin/main` `2cf66dc` (2026-10-18 22:56 KST),
 cited as `svc-main:`, because the account system merged there after the baseline. Plan:
@@ -20,6 +21,111 @@ today, **[DOC]** a document's claim not re-derived, **[INFERRED]** follows from 
 observed, **[SKILL]** method taken from a third-party skill (`onboarding`, `signup`,
 `paywalls`, `pricing`, `onboarding-design`, `a-b-test-design`, read 2026-10-18), filtered
 through `docs/PRODUCT-INTENT.md`.
+
+---
+
+## 0. Decision 2026-10-19: free start without a trial
+
+Status: decided by Jay on 2026-10-19. This section **overrides** the rest of the document
+wherever they disagree. The sections below are kept as the analysis the decision was made
+from; they are not rewritten. The implementation contract that builders share is the
+iteration-4 SPEC (Service `POST /v1/free/claim`, Studio first-open flow, Lab pages), not
+this section.
+
+### 0.1 What Jay decided
+
+1. **No "trial" and no "class" framing for newcomers.** Install the app, open it, and it is
+   usable right away. Student-facing copy for the free allowance does not say 체험, and the
+   start page does not push a newcomer into a class.
+2. **No login on first open.** Login (Google account through Service #99/#124, default-off,
+   and Studio #1702) is asked **only at purchase** (pass checkout). Conversion is measured at
+   checkout by linking the free grant to the order or account.
+3. **Free allowance:** 10 user turns; window 24 h from the **first message**; Sonnet 5.5 and
+   Haiku 5.5 only (no Opus, no `web_search`); $1.50 provider-cost ceiling per user; global
+   daily cap ₩100,000 on the free tier (the daily-cap flag already exists, AB-20).
+4. **Abuse bounds for anonymous start (C′):** one free allowance per `install_id`
+   (idempotent claim); at most 5 new claims per IPv4 /24 (IPv6 /48) per 24 h; the global
+   daily cap with cohort pause; an `app_version` floor. When the daily cap is drained, a
+   newcomer gets a calm Korean message to come back after 00:00 KST.
+5. **Age:** one minimal question before first use, "만 14세 이상인가요?". Under 14 is blocked
+   with a guardian message. Under 19 may use the free allowance but may pay only through
+   guardian checkout.
+6. **Install and updates:** the newcomer install contains the **same toolchain as the class
+   kit** (D22, no slimmed install). Non-members are sent to the **code-free install kit**,
+   never to raw unsigned binaries (D23). Non-member in-app update checks read the **public
+   release the Lab download already serves**; members keep the private mirror (D19).
+7. **The instructor code path stays**, demoted to a small secondary link
+   ("참여 코드가 있어요").
+8. **Visual feedback on the current Dev app:** "아이콘이 너무 크다" and "다시 시작하는 것이
+   안 어울린다". The exact elements are to be found by rendering the real screens and fixed
+   with the installed design skills.
+
+All new behaviour sits behind default-off flags (Service `HPS_FREE_START`, a matching Studio
+signal, a Lab page flag), so production behaviour is unchanged with the flags off.
+
+### 0.2 What this supersedes
+
+| Earlier item | Was | Now |
+|---|---|---|
+| **D15** trust event | A, account sign-in **before** first value | **Superseded.** Anonymous start (C′ checks of §3.2) is the launch path, not an interim. The account is asked at purchase only |
+| **D17** C′ only as an interim | Ship C′ only with explicit acceptance of the drained-cap risk and in-App-only conversion; sunset when A launches | **Superseded.** C′ is the product, accepted with the risks §2A.3 names: a script can drain the daily cap (bounded by the ₩100,000 cap and 00:00 KST resume), and a reinstall on another device or network is not prevented (bounded by the $1.50 per-user ceiling). Conversion is measured at checkout through the grant↔order link (0.3) |
+| §1 "Entry" bullet, §2A.4 recommendation, §3.1 primary path | Account sign-in first | Read as history. The C′ path of §3.1 applies, with the changes in 0.3 |
+| §3.1 US-04 note "If A ships first, this amendment is not needed" | Conditional | The **US-04 amendment for C′ is required** (install + network + global checks, hashed issuance records, reinstall not prevented, idempotent claim) |
+| §7.2 copy "무료 체험 요청 {n}번 남음", end card "무료 체험을 모두 사용했습니다" | Uses 체험 | Replaced (0.4) |
+| §6.1 "Start page 'AI 체험하기' → age question" | Age asked after choosing the trial | Age is asked on first open, before anything else (0.3) |
+| §3.4 "only the 1 h window is safe" until `svc-grant-purpose-timestamps` | Blocked | Unblocked: grant purpose is recorded at mint (Service migration 0049). The free grant is `purpose 'trial'` with owner `open-trial` (see the SPEC for why not a new `free` value), so `isPassGrant` is false for its 24 h window |
+
+### 0.3 What changes in §3 (entry flow)
+
+```
+First open of Studio (no saved activity, HPS free start advertised by the Service)
+  → one question: "만 14세 이상인가요?"
+      under 14 → guardian block (no Service call)
+  → App: POST /v1/free/claim {install_id, app_version, age_ok:true}
+  → Service: app_version floor → daily-cap state → existing grant for H(install_id)?
+      yes → rotate the credential, same seat and same usage (idempotent)
+      no  → per-network counter → mint (roster-free grant, open profile, FREE limits)
+  → App stores the credential in SecretStorage (never shown, never sent to the webview)
+  → straight into the working chat screen in ~/HypeProofTrial (no preview card, no
+    "이 활동 시작하기", no 체험/수업 choice)
+```
+
+- The start page no longer offers "AI 체험하기" / "수업에 참여하기" as peer choices for a
+  newcomer. The class and pass paths remain reachable: "참여 코드가 있어요" (small secondary
+  link that opens today's code field) and the pass list when the Service sells passes.
+- The 24 h clock starts at the first admitted `/v1/messages` reservation
+  (`HPS_TRIAL_CLOCK_AT_MESSAGE`), not at the claim.
+- Identity is lazy: no name, email or phone at entry. Google sign-in happens at checkout,
+  where the order carries the free grant's key (`purchase_orders.free_key`) so a paid order
+  is attributable to a free start without an account at entry.
+
+### 0.4 What changes in copy
+
+- No student-facing string for the free allowance contains 체험. The words used are
+  "무료" and "무료 사용량" (합니다체 on the start page and chat, 해요체 kept on the purchase
+  screen per REQ-L12 ②). The exact strings are fixed in the SPEC; summary:
+  - remaining line: "무료 AI 요청 {n}번 남음 · {시각}까지"
+  - end card: "무료 사용량을 모두 썼습니다" / "무료 사용 시간이 끝났습니다", with the
+    existing facts, Primary "이용권 살펴보기" and escape "오늘은 여기까지"
+  - daily cap drained: "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간)
+    이후에 다시 시작할 수 있습니다."
+  - under 14: "만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. …"
+- Code-issued trial seats (`studio-native-trial`) and their sentences are not renamed in this
+  round; a reader of the Service messages must still match the old sentences.
+- Lab: `/studio`, `/studio/trial` and pricing stop saying 체험 for the free allowance under
+  the Lab flag; the download leads to the code-free install kit; sign-in is described as
+  happening at checkout.
+
+### 0.5 Still open after this decision
+
+- **Currency of the two ceilings.** The per-user ceiling ($1.50) and the daily cap
+  (₩100,000) are enforced against approved price revisions in **one** currency. A cap whose
+  currency differs from the price revision charges every attempt the fixed
+  `unpriced_micro`, which turns ₩100,000 into roughly 150 attempts a day. D3 (FX revision)
+  decides which currency both are written in.
+- D8 (moderation for everyone; outbound streaming), D10 (under-14 consent method),
+  D13 venue bypass, D16, D18 (account entitlement hash) and D20/D21 are unchanged.
+- The visual items of 0.1 point 8 are not identified here; they are identified by rendering.
 
 ---
 
@@ -283,6 +389,10 @@ Still open (not rewritten yet):
 ---
 
 ## 3. Entry: account sign-in (A), zero-gate claim as interim (C′)
+
+> **2026-10-19:** D15 and D17 are superseded. The anonymous C′ path is the launch path and
+> the account is asked at purchase only. §0.3 gives the changed flow; this section is kept as
+> the analysis behind it.
 
 ### 3.1 Flow
 
@@ -895,29 +1005,31 @@ no currency bound (§5.2).
 
 | # | Decision | Proposal | Owner |
 |---|---|---|---|
-| D1 | Per-trial ceiling | $1.50 provider cost (≈ ₩2,100) | Jay |
-| D2 | Global daily free-tier ceiling | Pick from ₩100k / ₩300k / ₩1M | Jay |
+| D1 | Per-trial ceiling | $1.50 provider cost (≈ ₩2,100). **Decided 2026-10-19: $1.50 per user** (currency of enforcement: see §0.5) | Jay |
+| D2 | Global daily free-tier ceiling | Pick from ₩100k / ₩300k / ₩1M. **Decided 2026-10-19: ₩100,000 per KST day**, cohort pause, resume at 00:00 KST, calm message to newcomers (§0.4) | Jay |
 | D3 | FX revision for enforcement | Owner-published `fx` revision | Jay (Service price approval) |
 | D4 | Sonnet 5.5 cache-read price ($0.10 vs $0.20) | Verify on the pricing page, then approve | Service owner |
-| D5 | Free allowance and window | 10 turns, 24 h from first message (E1/E2 to refine). The 24 h window waits for `svc-grant-purpose-timestamps`; without it `isPassGrant` (`duration_ms > 1 h`) makes the grant a pass (§3.4). Until then 1 h | Jay |
-| D6 | Free model list | Sonnet 5.5 + Haiku 5.5; no Opus; no web_search | Jay |
+| D5 | Free allowance and window | 10 turns, 24 h from first message (E1/E2 to refine). The 24 h window waits for `svc-grant-purpose-timestamps`; without it `isPassGrant` (`duration_ms > 1 h`) makes the grant a pass (§3.4). Until then 1 h  **Decided 2026-10-19: 10 user turns, 24 h from the first message.** The purpose blocker is cleared: purpose is recorded at mint (Service migration 0049) | Jay |
+| D6 | Free model list | Sonnet 5.5 + Haiku 5.5; no Opus; no web_search. **Decided 2026-10-19: as proposed** | Jay |
 | D7 | Roster bypass for server-trusted grants | Grant row as allowlist | Service owner (security review) |
 | D8 | Moderation for everyone on the open profile; outbound streaming gap | `moderation: 'always'`; streaming decision open | Jay + legal |
-| D9 | Under-14 at launch | Blocked with guardian message until D10 | Jay + legal |
+| D9 | Under-14 at launch | Blocked with guardian message until D10. **Decided 2026-10-19: one question "만 14세 이상인가요?" before first use; under 14 blocked with a guardian message** | Jay + legal |
 | D10 | Under-14 guardian consent method | Legal to specify | Legal |
-| D11 | Payment by minors | Under 19 → guardian checkout only | Jay + legal |
+| D11 | Payment by minors | Under 19 → guardian checkout only. **Decided 2026-10-19: as proposed** (asked at checkout, not at first use) | Jay + legal |
 | D12 | Subscription timing | Phase 4, after accounts (#1701); passes stay | Jay |
 | D13 | Network claim limit default and venue bypass | ≤ 5 per 24 h per /24; operator bypass | Jay |
 | D14 | Activation definition v0 | §7.1, validate on a mature cohort | Jay (product), Codex acceptance |
-| D15 | Trust event for the open trial (was "trust event vs US-04") | A (account sign-in); B only as a second provider; C′ counters as secondary limits (§2A.4) | Jay |
+| D15 | Trust event for the open trial (was "trust event vs US-04") | A (account sign-in); B only as a second provider; C′ counters as secondary limits (§2A.4)  **Superseded 2026-10-19 (§0.2):** anonymous start with the C′ checks; account sign-in only at purchase | Jay |
 | D16 | REQ-O6 / moderation for paid passes before Phase 2 | Treat the pass gap (§6.4) as current, not future | Jay + legal |
-| D17 | Ship C′ as an interim before accounts launch? | Only with explicit acceptance of the drained-cap risk and in-App-only conversion measurement; sunset when A launches; US-04 amendment (§3.1) only on this path | Jay |
+| D17 | Ship C′ as an interim before accounts launch? | Only with explicit acceptance of the drained-cap risk and in-App-only conversion measurement; sunset when A launches; US-04 amendment (§3.1) only on this path. **Superseded 2026-10-19 (§0.2):** C′ is the launch path, not an interim; the US-04 amendment is required; conversion is measured at checkout through the grant↔order link | Jay |
 | D18 | Free-entitlement rule under A | 1 per `(provider, subject)` ever; hash kept after account deletion | Jay + legal (retention of the hash) |
-| D19 | Public update channel for non-members | Read the public release the Lab download already serves, or a Service/Lab proxy; the private mirror stays for members | Jay |
+| D19 | Public update channel for non-members | Read the public release the Lab download already serves, or a Service/Lab proxy; the private mirror stays for members. **Decided 2026-10-19: non-members read the public release the Lab download already serves; members keep the private mirror** | Jay |
 | D20 | Interim request path (plan decision 2) | Name the mailbox and a response time; confirm receipt | Jay |
 | D21 | Visual identity across Lab → install → App → chat (report §3 problem D10, impeccable Q2) | Bring the start page's identity into the end-state cards first; full chat theming later | Jay |
+| D22 | What a free/pass install must contain (report I4) | Report proposal: app + SDK seed only; class toolchain stays for class kits. **Decided 2026-10-19: the newcomer install contains the same toolchain as the class kit; no slimmed install** | Jay |
+| D23 | Raw binaries for non-members (report I8) | Buy signing certificates and notarize, or route every non-member through the code-free kit. **Decided 2026-10-19: route non-members to the code-free install kit; no raw unsigned binary links on non-member pages** | Jay (cost) |
 
-D15–D21 match the report's §10 rows. This table is the single decision table; the report's
+D15–D21 match the report's §10 rows; D22–D23 were added here on 2026-10-19 with their answers. This table is the single decision table; the report's
 §10 lists only what is new or changed in its revision.
 
 ---
