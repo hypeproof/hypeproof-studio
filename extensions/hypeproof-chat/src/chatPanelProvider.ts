@@ -4478,12 +4478,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (review.view.state !== "open") return;
     const counts = { added: review.view.added.length, changed: review.view.changed.length, deleted: review.view.deleted.length, not_covered: review.view.notCovered.length };
     if (msg.type === "turnKeep") {
+      // Accept the decision before awaiting evidence; a second click cannot undo it.
+      this.turnReview = null;
+      this.postTurnReview();
       let afterDigest: string | undefined;
       try { afterDigest = (await scanFolder(review.root)).digest; } catch { /* recorded without it */ }
       // REQ-Q1 — local evidence: digests and counts only, never paths or contents.
       this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_keep", payload: { restore_point: review.point.id, before_digest: review.point.digest, ...(afterDigest ? { after_digest: afterDigest } : {}), ...counts } });
-      this.turnReview = null;
-      this.postTurnReview();
       return;
     }
     if (this.hasActiveStream() || this.pendingSends > 0 || this.turnRestoreBusy || this.taskChanging || this.verifySession?.running) {

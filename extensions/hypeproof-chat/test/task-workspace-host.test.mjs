@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createTaskHarness } from './task-workspace-harness.mjs';
@@ -261,4 +261,51 @@ test('mounted review requests recover only the owning task and never resurrect d
     await f.handle(f.scoped({ type: 'turnReviewClose', turnId: view.turnId }));
     assert.equal(await request(), null, 'a later remount must not resurrect a closed result');
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('a delayed keep clears its own review but preserves a newer measured review', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-review-keep-'));
+  const work = join(root, 'work');
+  let release, pending;
+  try {
+    await mkdir(work);
+    let pause, scanRoot;
+    const f = await createTaskHarness(root, () => {}, { beforeReadDir: async path => {
+      if (pause && String(path) === scanRoot) { const hold = pause; pause = null; await hold(); }
+    } });
+    f.h.resolveCoachCwd = () => work;
+    const review = async (id, before, after) => {
+      await writeFile(join(work, 'note.txt'), before);
+      const point = await f.h.beginTurnRestore(id);
+      assert.ok(point);
+      await writeFile(join(work, 'note.txt'), after);
+      await f.h.endTurnRestore(point, id);
+      assert.equal(f.h.turnReview.view.turnId, id);
+    };
+    await review('ordinary', 'before', 'ordinary');
+    await f.handle(f.scoped({ type: 'turnKeep', turnId: 'ordinary' }));
+    assert.equal(f.h.turnReview, null);
+    await review('older', 'ordinary', 'older');
+    scanRoot = f.h.turnReview.root;
+    let entered;
+    const reached = new Promise(resolve => { entered = resolve; });
+    const held = new Promise(resolve => { release = resolve; });
+    pause = async () => { entered(); await held; };
+    pending = f.handle(f.scoped({ type: 'turnKeep', turnId: 'older' }));
+    await reached;
+    assert.equal(f.h.turnReview, null, 'keep is accepted before the evidence scan finishes');
+    await f.handle(f.scoped({ type: 'turnRevert', turnId: 'older' }));
+    await f.handle(f.scoped({ type: 'turnKeep', turnId: 'older' }));
+    assert.equal(await readFile(join(work, 'note.txt'), 'utf8'), 'older', 'a competing decision cannot restore kept files');
+    await review('newer', 'older', 'newer');
+    release(); await pending;
+    assert.equal(f.h.turnReview?.view.turnId, 'newer', 'old completion must not dismiss new measured changes');
+    assert.equal(await readFile(join(work, 'note.txt'), 'utf8'), 'newer');
+    await f.handle(f.scoped({ type: 'turnReviewRequest' }));
+    assert.equal(f.posts.findLast(message => message.type === 'turnReviewState').view.turnId, 'newer');
+  } finally {
+    release?.(); await pending;
+    await rm(root, { recursive: true, force: true });
+  }
 });
