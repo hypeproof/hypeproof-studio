@@ -26,6 +26,7 @@ const {
   SDK_RESULT_ERROR_FALLBACK,
   SDK_RESULT_ERROR_FRIENDLY,
   SDK_TRUNCATED_FRIENDLY,
+  SDK_REFUSED_FRIENDLY,
   consumeSdkStream,
   sdkResultNotice,
 } = await import("../src/sdkCoachHelpers.ts");
@@ -211,6 +212,29 @@ if (declared) {
   // 다음 행동은 다르다 — proxy 쪽은 HTML 문서를, SDK 쪽은 파일을 만든다. 그
   // 차이는 의도한 것이므로 여기서 같기를 요구하지 않는다.
   assert.ok(!SDK_TRUNCATED_FRIENDLY.includes("</html>"), "SDK 경로 안내는 런타임에 맞는 행동을 준다");
+
+  // CGP-AGENT-R-008: the refusal fact sentence is copied from the Worker's REFUSAL_NOTICE
+  // (Service worker/src/lib/sse.ts). The pinned testkit 0.1.2 predates that constant, so
+  // the source comparison is added when the pin moves past it; until then pin the text here.
+  assert.ok(SDK_REFUSED_FRIENDLY.includes("AI가 안전 기준에 따라 이 요청에는 답하지 않았습니다."));
+}
+
+// ─── 8. Model refusal (CGP-AGENT-R-008) ─────────────────────────────────────
+// `/v1/messages` passes a 5.5 refusal through as a success result with
+// stop_reason "refusal" and usually no text. Without a notice the learner sees an
+// empty turn.
+{
+  const refused = { type: "result", subtype: "success", stop_reason: "refusal" };
+  assert.equal(sdkResultNotice(refused), SDK_REFUSED_FRIENDLY, "a refusal on a success result is announced");
+  assert.equal(await runResult(refused), SDK_REFUSED_FRIENDLY, "the stream emits the refusal notice");
+  assert.match(SDK_REFUSED_FRIENDLY, /작업 파일을 확인해 주세요/, "tools may have run earlier in the run");
+  assert.doesNotMatch(SDK_REFUSED_FRIENDLY, /[A-Za-z]{6,}/, "no English identifiers on the learner screen");
+  // Truncation still wins: an incomplete document is the more urgent fact.
+  assert.equal(sdkResultNotice({ type: "result", subtype: "success", stop_reason: "max_tokens" }), SDK_TRUNCATED_FRIENDLY);
+  // Negative control: other stop reasons never get the refusal notice.
+  for (const stop of ["end_turn", "tool_use", "pause_turn", null]) {
+    assert.notEqual(sdkResultNotice({ type: "result", subtype: "success", stop_reason: stop }), SDK_REFUSED_FRIENDLY, String(stop));
+  }
 }
 
 console.log("sdk-result-drift smoke OK");
