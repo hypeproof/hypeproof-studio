@@ -29,6 +29,29 @@ try {
  const last=await p.evaluate(()=>window.sends.at(-1));assert.equal(last[0],'');assert.equal(last[1],undefined);assert.equal(last[3][0].id,second.stageId,'file paths travel as attachments, not vision images');
  const refused=await drop();await ack(refused,'imageStageRefused');await expect(p.locator('.hps-attachment-file')).toHaveCount(0);await expect(send).toBeDisabled();
  const removed=await drop();await p.getByRole('button',{name:'sample.png 빼기',exact:true}).click();await ack(removed);await expect(p.locator('.hps-attachment-file')).toHaveCount(0);
+ // A sibling staging acknowledgement is not recovery from another photo's failure.
+ for (const failureFirst of [true,false]) {
+   await input.fill('사진 보관 실패 후에도 남길 초안');
+   const bad=await drop(), good=await drop();
+   if (failureFirst) {
+     await ack(bad,'imageStageRefused');
+     await expect(p.getByTestId('attachment-announcer')).toHaveText('test refusal');
+     await ack(good);
+   } else { await ack(good); await ack(bad,'imageStageRefused'); }
+   await expect(p.getByTestId('attachment-announcer')).toHaveText('test refusal');
+   await expect(p.locator('.hps-img-note').filter({hasText:'test refusal'})).toBeVisible();
+   await expect(input).toHaveValue('사진 보관 실패 후에도 남길 초안');
+   await expect(p.locator('.hps-attachment-file')).toHaveCount(1);
+   assert.equal(await p.evaluate(()=>window.sends.length),2,'mixed staging does not send');
+   const retry=await drop();
+   await expect(p.getByTestId('attachment-announcer')).toHaveText('');
+   await ack(retry);
+   await expect(p.locator('.hps-attachment-file')).toHaveCount(2);
+   await expect(input).toHaveValue('사진 보관 실패 후에도 남길 초안');
+   assert.equal(await p.evaluate(()=>window.sends.length),2,'retry does not send');
+   while(await p.getByRole('button',{name:'sample.png 빼기',exact:true}).count()) await p.getByRole('button',{name:'sample.png 빼기',exact:true}).first().click();
+ }
+ await input.fill('');
  const locked=await drop();await ack(locked);await p.evaluate(()=>window.render({sendLocked:true}));await expect(send).toBeDisabled();await input.press('Enter');assert.equal(await p.evaluate(()=>window.sends.length),2,'instructor lock retained');
  await p.evaluate(()=>window.render({config:{...window.baseConfig,activity:{id:'unverified',verified:false}}}));await expect(send).toBeDisabled();await input.press('Enter');assert.equal(await p.evaluate(()=>window.sends.length),2,'unverified activity cannot send');
  await p.evaluate(()=>window.render({streaming:true}));await p.getByRole('button',{name:'Stop',exact:true}).waitFor();await input.press('Enter');assert.equal(await p.evaluate(()=>window.sends.length),2,'no second photo-only turn while streaming');
