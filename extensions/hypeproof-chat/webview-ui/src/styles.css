@@ -1308,7 +1308,7 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button {
-  color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-line);
+  color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-control-line);
 }
 /* ...and the student's own chat bubble, which takes the same theme colour as its background: Lime
    on a second element of the viewport is SX-04's failure (SX-49 negative), and a bubble is none of
@@ -1321,7 +1321,7 @@ html, body, #root {
 .hp-cta-quiet {
   min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer;
   color: var(--hp-ink); background: transparent;
-  border: 1px solid var(--hp-line); border-radius: 6px;
+  border: 1px solid var(--hp-control-line); border-radius: 6px;
 }
 .hp-mission-acceptance { margin: 0 0 8px; font-size: 13px; color: var(--hp-ink); overflow-wrap: anywhere; }
 .hp-mission-completion { margin: 0 0 8px; padding: 0; list-style: none; font-size: 13px; }
@@ -1413,7 +1413,7 @@ html, body, #root {
   margin:8px 8px 0 0; white-space:normal;
   min-height: 44px; padding: 10px 14px; font: inherit; cursor: pointer;
   color: var(--hp-ink); background: transparent;
-  border: 1px solid var(--hp-line); border-radius: 6px;
+  border: 1px solid var(--hp-control-line); border-radius: 6px;
 }
 .hps-access button:hover:not(:disabled) { border-color: var(--hp-muted); }
 .hps-access button:disabled { opacity: .55; cursor: default; }
@@ -1522,7 +1522,7 @@ html, body, #root {
 .hp-evidence-form label { font-size: 13px; color: var(--hp-ink); }
 .hp-evidence-form textarea { min-height: 64px; resize: vertical; }
 .hp-evidence-form textarea, .hp-evidence-form input, .hp-evidence-form select {
-  background: var(--hp-bg); color: var(--hp-ink); border: 1px solid var(--hp-line);
+  background: var(--hp-bg); color: var(--hp-ink); border: 1px solid var(--hp-control-line);
   border-radius: 6px; padding: 8px; font: inherit;
 }
 /* These two buttons ("기대 조건 남기기", "들은 말 남기기") had NO colour rule and no
@@ -1540,7 +1540,7 @@ html, body, #root {
   align-self: flex-start; min-height: 44px;
   padding: 10px 14px; font: inherit; cursor: pointer;
   color: var(--hp-ink); background: transparent;
-  border: 1px solid var(--hp-line); border-radius: 6px;
+  border: 1px solid var(--hp-control-line); border-radius: 6px;
 }
 .hp-evidence-form button:hover:not(:disabled) { border-color: var(--hp-muted); }
 /* Disabled still has to be READ — it is how the student learns what is missing.
@@ -1604,7 +1604,7 @@ html, body, #root {
 /* #751 native help — the learner's help request in the coach rail (same quiet card language as the inbox). */
 .hp-help-form, .hp-help-preview { display: grid; gap: 8px; margin: 8px 4px; min-width: 0; }
 .hp-help-label { display: grid; gap: 4px; font-size: 13px; min-width: 0; }
-.hp-help-label textarea, .hp-help-label select { font: inherit; min-height: 36px; color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-line); border-radius: 6px; padding: 6px 8px; min-width: 0; max-width: 100%; }
+.hp-help-label textarea, .hp-help-label select { font: inherit; min-height: 36px; color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-control-line); border-radius: 6px; padding: 6px 8px; min-width: 0; max-width: 100%; }
 .hp-help-consent { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
 .hp-help-consent input { width: 18px; height: 18px; margin-top: 2px; }
 .hp-help-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
@@ -1621,7 +1621,7 @@ html, body, #root {
 /* The criterion/decision fields sat on the dark rail as the platform's default white boxes: same tokens as the evidence form. */
 .hp-surface textarea, .hp-surface input {
   font: inherit; width: 100%; box-sizing: border-box; min-height: 36px; padding: 6px 8px;
-  background: var(--hp-bg); color: var(--hp-ink); border: 1px solid var(--hp-line); border-radius: 6px;
+  background: var(--hp-bg); color: var(--hp-ink); border: 1px solid var(--hp-control-line); border-radius: 6px;
 }
 .hp-surface textarea { resize: vertical; }
 .hp-surface textarea::placeholder, .hp-surface input::placeholder { color: var(--hp-muted); }
@@ -1675,7 +1675,7 @@ html, body, #root {
   font: inherit; font-size: 12px;
   background: var(--hp-bg, var(--vscode-input-background));
   color: var(--hp-ink, var(--vscode-input-foreground));
-  border: 1px solid var(--hp-line, var(--vscode-input-border, #444));
+  border: 1px solid var(--hp-control-line, var(--vscode-input-border, #6b6b6b));
   border-radius: 4px;
   padding: 2px 6px;
   min-width: 0; flex: 1;

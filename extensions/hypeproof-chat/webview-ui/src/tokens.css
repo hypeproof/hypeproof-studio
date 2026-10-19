@@ -25,7 +25,8 @@
   --hp-paper: #F4F6F0;    /* Paper · retrospective, growth record, reports */
   --hp-ink-on-paper: #151D19;
   --hp-ink-on-accent: #18231C;   /* the value start.css .studio-primary already uses */
-  --hp-line: #35483A;            /* start.css --studio-line */
+  --hp-line: #35483A;            /* start.css --studio-line · decorative dividers only (1.75:1) */
+  --hp-control-line: #748F79;    /* required control boundary (buttons, fields) · DES-11 3:1: 4.9:1 on bg, 4.1:1 on panel */
   --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI explanation, secondary copy */
 }
 
@@ -38,4 +39,5 @@
   --hp-ink: var(--hp-ink-on-paper);
   --hp-muted: #4B5A4F;
   --hp-line: #D7DDD2;
+  --hp-control-line: #76837A;    /* 3.6:1 on Paper, 4.0:1 on white */
 }
