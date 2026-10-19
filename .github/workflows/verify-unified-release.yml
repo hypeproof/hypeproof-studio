@@ -27,6 +27,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      # Check both gates before the long asset wait so a missing approval or a
+      # live class is caught in seconds, not after 165 min + acceptance.
+      # Both checks run again in the publish job (state can change during the wait).
+      - name: Live-session freeze — early check before acceptance wait
+        env:
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          HPS_FREEZE_OVERRIDE: ${{ inputs.override_live_session }}
+          HPS_FREEZE_CONTEXT: Unified Studio candidate (pre-acceptance check)
+          TAG: ${{ inputs.tag }}
+        run: bash scripts/release-freeze-gate.sh "refs/tags/$TAG"
+      - name: Publish gate — early check before acceptance wait
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: node scripts/release/publish-gate.mjs --tag "$TAG"
       # Which OS packages to wait for, test and require comes from the tag's own
       # config/release-platforms.json (scripts/release/platforms.mjs). Mac only
       # since 2026-10-19; a tag without that file requires both.
