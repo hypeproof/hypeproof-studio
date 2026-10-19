@@ -14,8 +14,8 @@ const usage = `Release coordinator (local, no network effects)
   ingest           --event-file FILE (quota, signed evidence, settlement, approval, failure)
   manifest         --candidate ID
   status           --candidate ID
-  approval-request --candidate ID --expires ISO_TIME
-  promote-intent   --candidate ID --event ID
+  approval-request --candidate ID --expires ISO_TIME [--channel canary|stable]
+  promote-intent   --candidate ID --event ID [--channel canary|stable]
   check-intent     --intent FILE --tag VERSION --sha CANDIDATE_SHA
 
 Use --out FILE to save the result (exclusive managed output path).
@@ -50,7 +50,7 @@ export function main(args = process.argv.slice(2)) {
   } else if (command === 'ingest') {
     result = ingest(directory, json(flag('event-file')), policy, {now});
   } else if (command === 'promote-intent') {
-    result = ingest(directory, {id: flag('event'), type: 'promotion.requested', data: {candidateId: flag('candidate')}}, policy, {now});
+    result = ingest(directory, {id: flag('event'), type: 'promotion.requested', data: {candidateId: flag('candidate'), ...(flag('channel', true) ? {channel: flag('channel')} : {})}}, policy, {now});
   } else if (command === 'check-intent') {
     const value = json(flag('intent'));
     const intent = value.intent ?? value;
@@ -62,7 +62,7 @@ export function main(args = process.argv.slice(2)) {
       const candidateId = flag('candidate');
       let output;
       if (command === 'status') output = readiness(state, candidateId, policy, now, checkFile);
-      if (command === 'approval-request') output = approvalRequest(state, candidateId, policy, flag('expires'), now, checkFile);
+      if (command === 'approval-request') output = approvalRequest(state, candidateId, policy, flag('expires'), now, checkFile, {channel: flag('channel', true)});
       if (command === 'manifest') {
         const item = Object.hasOwn(state.candidates, candidateId) && state.candidates[candidateId];
         if (!item) throw new Error('unknown candidate');

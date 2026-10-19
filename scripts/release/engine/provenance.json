@@ -1,10 +1,10 @@
 {
   "schema": "hps-release-core-provenance/1",
   "package": "@hypeproof/release-engine-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "repository": "hypeproof/hypeproof-studio",
   "sourcePath": "scripts/release/engine/core.mjs",
-  "baseRevision": "862f757baea74b78aa9c0570d7ed334bd0a1671a",
-  "sourceSha256": "5175b28ed1c562ea14e7aca57361e88723864ecb67e8ab4bca3159d2ecb09ed1",
+  "baseRevision": "0b0a0c3183cc750bce331316a098b6cb6605ef16",
+  "sourceSha256": "1d998961b721fec6ea5f6e8c058d3830825eef0fe939e2d314a380b26724b9b5",
   "contract": "hps-release-core/1"
 }

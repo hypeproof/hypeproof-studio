@@ -5,6 +5,9 @@ const SHA = /^[a-f0-9]{40}$/;
 const HASH = /^[a-f0-9]{64}$/;
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 const VERDICTS = new Set(['PASS', 'FAIL', 'BLOCKED', 'NOT_RUN']);
+const CHANNELS = new Set(['canary', 'stable']);
+const channelFor = (item, channel = item.input.channel) => { require(CHANNELS.has(channel), 'unknown release channel'); return channel; };
+const approvalFor = (item, channel) => own(item.approvals ?? {}, channel) ?? (item.approval?.body.channel === channel ? item.approval : undefined);
 const FAILURE_KINDS = new Set(['product', 'test-contract', 'environment', 'quota', 'infrastructure']);
 const own = (table, key) => Object.hasOwn(table, key) ? table[key] : undefined;
 const require = (condition, message) => { if (!condition) throw new Error(message); };
@@ -158,28 +161,30 @@ export function readiness(state, candidateId, policy, now = Date.now(), checkFil
   }
 }
 
-export function approvalRequest(state, candidateId, policy, expiresAt, now, checkFile) {
+export function approvalRequest(state, candidateId, policy, expiresAt, now, checkFile, {channel} = {}) {
+  channel = channelFor(candidate(state, candidateId), channel);
   const ready = readiness(state, candidateId, policy, now, checkFile);
   require(ready.status === 'AWAITING_APPROVAL', ready.reason);
   const term = manager(policy, now);
   require(term, 'no release manager on duty');
   require(validTime(expiresAt) && time(expiresAt) > now && time(expiresAt) <= time(term.endsAt), 'approval must expire within the manager term');
-  return {schema: 'hps-release-approval/1', candidateId, manifestDigest: ready.manifestDigest, evidenceDigest: ready.evidenceDigest,
+  return {schema: 'hps-release-approval/1', candidateId, channel, manifestDigest: ready.manifestDigest, evidenceDigest: ready.evidenceDigest,
     actor: term.actor, roleRevision: policy.managerRoster.revision, approvedAt: new Date(now).toISOString(), expiresAt};
 }
 
-function approvalGate(state, item, policy, now, checkFile) {
+function approvalGate(state, item, policy, now, checkFile, channel = item.input.channel) {
+  channelFor(item, channel);
   const ready = readiness(state, item.id, policy, now, checkFile);
   require(ready.status === 'AWAITING_APPROVAL', ready.reason);
   const term = manager(policy, now);
-  const approval = item.approval;
+  const approval = approvalFor(item, channel);
   require(approval, 'approval missing or revoked');
   require(term && approval.body.actor === term.actor && approval.body.roleRevision === policy.managerRoster.revision, 'release manager changed');
   signed(approval, term.publicKey);
   // Keep pre-fix local revocations effective too. Canonical envelope validation
   // above prevents rewrapping or alternate padding from changing this legacy ID.
   require(!item.revokedApprovalDigests.includes(signedPayloadDigest(approval)) && !item.revokedApprovalDigests.includes(digest(approval)), 'approval missing or revoked');
-  require(approval.body.schema === 'hps-release-approval/1' && approval.body.candidateId === item.id &&
+  require(approval.body.schema === 'hps-release-approval/1' && approval.body.channel === channel && approval.body.candidateId === item.id &&
     approval.body.manifestDigest === ready.manifestDigest && approval.body.evidenceDigest === ready.evidenceDigest, 'approval does not bind current candidate/evidence');
   require(validTime(approval.body.approvedAt) && time(approval.body.approvedAt) <= now && validTime(approval.body.expiresAt) &&
     now < time(approval.body.expiresAt) && time(approval.body.expiresAt) <= time(term.endsAt) && time(approval.body.approvedAt) >= time(term.startsAt), 'approval expired or outside manager term');
@@ -196,10 +201,12 @@ function transition(state, event, policy, now, checkFile) {
     require(inputs && SHA.test(inputs.serviceSha) && SHA.test(inputs.testRevision) && SHA.test(inputs.rubricRevision), 'pinned dependency/test/rubric revisions required');
     require(typeof inputs.sequence === 'number' && Number.isSafeInteger(inputs.sequence) && inputs.sequence > 0, 'monotonic channel sequence required');
     const input = {repository: 'hypeproof/hypeproof-studio', candidate: plan.candidate, version: plan.version, rcTag: plan.rcTag,
-      channel: 'stable', serviceSha: inputs.serviceSha, testRevision: inputs.testRevision, rubricRevision: inputs.rubricRevision, sequence: inputs.sequence};
+      channel: channelFor({input: {channel: 'stable'}}, inputs.channel), serviceSha: inputs.serviceSha, testRevision: inputs.testRevision, rubricRevision: inputs.rubricRevision, sequence: inputs.sequence};
     // A new delivery/run id cannot reset the attempt allowance for the same inputs.
     const {version: _version, rcTag: _tag, sequence: _sequence, ...identity} = input;
-    const id = `candidate-${digest({identity, policyDigest: policyDigest(policy)})}`;
+    // Channel promotion cannot create a second candidate or reset build attempts.
+    // Normalize to the historical stable identity so existing stable IDs survive.
+    const id = `candidate-${digest({identity: {...identity, channel: 'stable'}, policyDigest: policyDigest(policy)})}`;
     const existing = own(state.candidates, id);
     require(!existing || digest(existing.input) === digest(input), 'candidate inputs already pinned; do not reset version/sequence/attempts');
     if (!existing) state.candidates[id] = {id, input, policyDigest: policyDigest(policy), artifacts: {}, evidence: {}, approval: null, revokedApprovalDigests: [], createdAt: new Date(now).toISOString()};
@@ -298,8 +305,12 @@ function transition(state, event, policy, now, checkFile) {
     return {status: exceeded ? 'QUOTA_BLOCKED' : 'WORK_SETTLED', reservationId: reservation.reservationId};
   }
   if (event.type === 'approval.recorded') {
+    const channel = channelFor(item, data.envelope?.body.channel);
+    require(data.envelope?.body.channel === channel, 'signed approval channel required');
+    item.approvals ??= {};
+    item.approvals[channel] = data.envelope;
     item.approval = data.envelope;
-    approvalGate(state, item, policy, now, checkFile);
+    approvalGate(state, item, policy, now, checkFile, channel);
     return {status: 'APPROVED', approvalDigest: signedPayloadDigest(item.approval)};
   }
   if (event.type === 'approval.revoked') {
@@ -333,14 +344,17 @@ function transition(state, event, policy, now, checkFile) {
     return {status: 'FIX_INTENT', failureId: failure.id, attempt: failure.fixAttempts, reservationId: reservation.reservationId};
   }
   if (event.type === 'promotion.requested') {
-    const ready = approvalGate(state, item, policy, now, checkFile);
-    const previous = own(state.promotions, item.input.channel);
+    const channel = channelFor(item, data.channel);
+    const ready = approvalGate(state, item, policy, now, checkFile, channel);
+    const stable = own(state.promotions, 'stable');
+    require(channel !== 'canary' || !stable || stable.sequence < item.input.sequence, 'stable channel already reached this or a newer sequence');
+    const previous = own(state.promotions, channel);
     require(!previous || previous.sequence <= item.input.sequence, 'newer channel intent already exists');
     require(!previous || previous.sequence !== item.input.sequence || previous.manifestDigest === ready.manifestDigest, 'channel sequence already belongs to another manifest');
-    const intent = {schema: 'hps-promotion-intent/1', status: 'READY_FOR_PUBLISHER', ...item.input, candidateId: item.id,
+    const intent = {schema: 'hps-promotion-intent/1', status: 'READY_FOR_PUBLISHER', ...item.input, channel, candidateId: item.id,
       manifestDigest: ready.manifestDigest, evidenceDigest: ready.evidenceDigest, manifest: ready.manifest,
-      approval: item.approval, createdAt: new Date(now).toISOString()};
-    state.promotions[item.input.channel] = intent;
+      approval: approvalFor(item, channel), createdAt: new Date(now).toISOString()};
+    state.promotions[channel] = intent;
     return {status: 'PROMOTION_INTENT', intent};
   }
   throw new Error(`unknown event type ${event.type}`);
@@ -362,8 +376,9 @@ export function applyEvent(state, event, policy, {now = Date.now(), checkFile} =
     if (event.type === 'approval.recorded' && previous.result.status === 'APPROVED') {
       try {
         const item = candidate(state, event.data.candidateId);
-        require(signedPayloadDigest(item.approval) === signedPayloadDigest(event.data.envelope), 'approval has been superseded');
-        approvalGate(state, item, policy, now, checkFile);
+        const channel = channelFor(item, event.data.envelope?.body.channel);
+        require(signedPayloadDigest(approvalFor(item, channel)) === signedPayloadDigest(event.data.envelope), 'approval has been superseded');
+        approvalGate(state, item, policy, now, checkFile, channel);
       } catch (error) { return {state, result: {status: 'BLOCKED', reason: error.message}}; }
     }
     return {state, result: {...previous.result, duplicate: true}};
@@ -383,12 +398,16 @@ export function validateIntent(state, intent, policy, now = Date.now(), checkFil
   require(intent?.schema === 'hps-promotion-intent/1', 'promotion intent required');
   validatePolicy(policy);
   const item = candidate(state, intent.candidateId);
-  const ready = approvalGate(state, item, policy, now, checkFile);
+  require(CHANNELS.has(intent.channel), 'intent channel required');
+  const channel = channelFor(item, intent.channel);
+  const stable = own(state.promotions, 'stable');
+  require(channel !== 'canary' || !stable || stable.sequence < item.input.sequence, 'stable channel already reached this or a newer sequence');
+  const ready = approvalGate(state, item, policy, now, checkFile, channel);
   signed(intent.approval, manager(policy, now).publicKey);
-  require(signedPayloadDigest(intent.approval) === signedPayloadDigest(item.approval), 'intent approval has been superseded');
+  require(signedPayloadDigest(intent.approval) === signedPayloadDigest(approvalFor(item, channel)), 'intent approval has been superseded');
   require(digest(intent.manifest) === ready.manifestDigest && intent.manifestDigest === ready.manifestDigest && intent.evidenceDigest === ready.evidenceDigest, 'intent is stale');
   require(intent.candidate === item.input.candidate && intent.version === item.input.version && intent.rcTag === item.input.rcTag && intent.sequence === item.input.sequence, 'intent source/version mismatch');
-  const latest = own(state.promotions, item.input.channel);
+  const latest = own(state.promotions, channel);
   require(latest && digest(latest) === digest(intent), 'intent is no longer the latest channel intent');
   return {status: 'READY_FOR_PUBLISHER', candidate: item.input.candidate, tag: item.input.version, manifestDigest: ready.manifestDigest};
 }

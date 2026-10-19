@@ -36,7 +36,7 @@ function fixture(filePath = 'fixture:bytes') {
   };
   const id = emit('candidate.requested', {
     plan: {schema: 'hps-release-plan/0', trial: false, candidate: 'a'.repeat(40), version: 'v2026.1019.0', rcTag: 'v2026.1019.0-rc.1'},
-    inputs: {serviceSha: 'b'.repeat(40), testRevision: 'c'.repeat(40), rubricRevision: 'd'.repeat(40), sequence: 1},
+    inputs: {serviceSha: 'b'.repeat(40), testRevision: 'c'.repeat(40), rubricRevision: 'd'.repeat(40), sequence: 1, channel: 'canary'},
   }).candidateId;
   const file = {path: filePath, sha256: hash(bytes), size: Buffer.byteLength(bytes)};
   emit('artifact.recorded', {candidateId: id, artifact: {id: 'mac', target: 'darwin-arm64', ...file}});
@@ -53,7 +53,10 @@ function fixture(filePath = 'fixture:bytes') {
   emit('evidence.recorded', {candidateId: id, envelope: evidence});
   const approval = signed(local.approvalRequest(state, id, policy, '2026-10-19T00:05:00Z', now, () => {}));
   emit('approval.recorded', {candidateId: id, envelope: approval});
-  emit('promotion.requested', {candidateId: id});
+  emit('promotion.requested', {candidateId: id, channel: 'canary'});
+  const stableApproval = signed(local.approvalRequest(state, id, policy, '2026-10-19T00:05:00Z', now, () => {}, {channel: 'stable'}));
+  emit('approval.recorded', {candidateId: id, envelope: stableApproval});
+  emit('promotion.requested', {candidateId: id, channel: 'stable'});
   return {policy, events, candidateId: id, now, bytes, evidence, wrongKey: signed(body, other.privateKey)};
 }
 
@@ -74,6 +77,9 @@ function replay(core, f) {
   const item = state.candidates[f.candidateId];
   const intent = state.promotions.stable;
   const status = core.validateIntent(state, intent, f.policy, f.now, checkFile);
+  const canary = state.promotions.canary;
+  const channelProof = {sameManifest: canary.manifestDigest === intent.manifestDigest, sameEvidence: canary.evidenceDigest === intent.evidenceDigest, candidateCount: Object.keys(state.candidates).length, buildCount: Object.keys(state.reservations).length, target: intent.approval.body.channel, buildChannel: intent.manifest.channel};
+  const wrongChannel = core.applyEvent(state, {id:'wrong-channel',type:'promotion.requested',data:{candidateId:f.candidateId,channel:'canary'}},f.policy,{now:f.now,checkFile}).result;
   const attack = envelope => core.applyEvent(state, {id: 'attack', type: 'evidence.recorded', data: {candidateId: f.candidateId, envelope}}, f.policy, {now: f.now, checkFile}).result;
   const tampered = attack({...f.evidence, body: {...f.evidence.body, observed: 'unsigned mutation'}});
   const wrongKey = attack(f.wrongKey);
@@ -89,10 +95,12 @@ function replay(core, f) {
     const outcome = core.applyEvent(artifactBase, f.events[1], f.policy, {now: f.now, checkFile: verifier});
     return {result: outcome.result, artifactCount: Object.keys(outcome.state.candidates[f.candidateId].artifacts).length};
   });
-  return {results, refusedArtifact, stateDigest: core.digest(state), canonical: core.canonical({z: [3, 2], a: '한글'}), status, tampered, wrongKey, changedBytes, missingVerifier, asyncVerifier, asyncRejectVerifier, promiseRejectVerifier, falseVerifier, thenableVerifier};
+  return {results, channelProof, wrongChannel, refusedArtifact, stateDigest: core.digest(state), canonical: core.canonical({z: [3, 2], a: '한글'}), status, tampered, wrongKey, changedBytes, missingVerifier, asyncVerifier, asyncRejectVerifier, promiseRejectVerifier, falseVerifier, thenableVerifier};
 }
 function assertReplay(result) {
   assert.equal(result.status.status, 'READY_FOR_PUBLISHER');
+  assert.deepEqual(result.channelProof, {sameManifest:true,sameEvidence:true,candidateCount:1,buildCount:1,target:'stable',buildChannel:'canary'});
+  assert.equal(result.wrongChannel.status, 'BLOCKED');
   assert.equal(result.results.at(-1).status, 'PROMOTION_INTENT');
   for (const refused of result.refusedArtifact) { assert.equal(refused.result.status, 'BLOCKED'); assert.equal(refused.artifactCount, 0); }
   for (const name of ['tampered', 'wrongKey', 'changedBytes', 'missingVerifier', 'asyncVerifier', 'asyncRejectVerifier', 'promiseRejectVerifier', 'falseVerifier', 'thenableVerifier']) assert.equal(result[name].status, 'BLOCKED', name);
@@ -113,7 +121,7 @@ function packed(t) {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({name: 'isolated-release-core-consumer', private: true, type: 'module'}));
   run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact', path.join(root, info.filename)]);
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json')));
-  assert.equal(lock.packages['node_modules/@hypeproof/release-engine-core'].version, '0.1.0');
+  assert.equal(lock.packages['node_modules/@hypeproof/release-engine-core'].version, '0.2.0');
   assert.equal(lock.packages['node_modules/@hypeproof/release-engine-core'].integrity, info.integrity);
   const packageRoot = path.join(root, 'node_modules/@hypeproof/release-engine-core');
   assert.equal(fs.lstatSync(packageRoot).isSymbolicLink(), false);

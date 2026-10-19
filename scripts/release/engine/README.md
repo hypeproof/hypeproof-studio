@@ -1,6 +1,6 @@
 # @hypeproof/release-engine-core
 
-Version 0.1.0 packages Studio's existing `core.mjs` without a second engine.
+Version 0.2.0 packages Studio's existing `core.mjs` without a second engine.
 Only `@hypeproof/release-engine-core` and `@hypeproof/release-engine-core/core`
 are public entry points. Local filesystem storage and the CLI are not included.
 No install scripts or runtime dependencies are required. Packaging is local;
@@ -32,3 +32,17 @@ responsibilities. A local path or stored digest alone is not byte verification.
 
 Package/runtime fixture tests do not establish installed-App acceptance, live
 Service deployment, manager approval, billing allowance or release publication.
+
+Candidates may start in `canary` or `stable` (legacy default). The candidate's
+input and signed manifest stay immutable. To promote a canary's exact files and
+evidence to stable, call `approvalRequest(..., {channel: 'stable'})` as the final
+optional argument after the byte verifier, obtain a new manager signature, then
+submit `promotion.requested` with `data.channel: 'stable'`. Signed approvals bind
+the target channel explicitly; `item.approvals[channel]` stores independent
+approvals. `item.approval` remains a compatibility view of the latest approval.
+Unknown channels and unsigned target changes are refused. Sequence ordering is
+checked per channel; stable prevents a later canary intent at the same or an
+older sequence. Publishers verify the target `intent.channel`, while
+`intent.manifest.channel` continues to describe the original candidate. A stable
+publisher must separately prove the exact canary publication completed before
+reusing its public prerelease; an intent alone does not prove publication.

@@ -40,8 +40,8 @@ function setup(t) {
   const emit = (type, data, id = `event-${++serial}`) => ingest(directory, {id, type, data}, policy, {now});
   const plan = sha => ({schema: 'hps-release-plan/0', mode: 'dry-run', trial: false, candidate: sha, version: 'v2026.1018.0', rcTag: 'v2026.1018.0-rc.1', smoke: 'PASS'});
   const inputs = sequence => ({serviceSha: 'b'.repeat(40), testRevision: 'c'.repeat(40), rubricRevision: 'd'.repeat(40), sequence});
-  const create = (sha = 'a'.repeat(40), sequence = 1) => {
-    const result = emit('candidate.requested', {plan: plan(sha), inputs: inputs(sequence)});
+  const create = (sha = 'a'.repeat(40), sequence = 1, channel) => {
+    const result = emit('candidate.requested', {plan: plan(sha), inputs: {...inputs(sequence), ...(channel ? {channel} : {})}});
     assert.equal(result.status, 'CANDIDATE_PINNED', result.reason);
     return result.candidateId;
   };
@@ -82,8 +82,8 @@ function setup(t) {
     assert.equal(settle(candidateId, reservation.reservationId).status, 'WORK_SETTLED');
     for (const check of policy.requiredTests) assert.equal(emit('evidence.recorded', {candidateId, envelope: report(candidateId, check.id)}).status, 'EVIDENCE_RECORDED');
   };
-  const approve = candidateId => {
-    const body = approvalRequest(readState(directory), candidateId, policy, new Date(now + 300000).toISOString(), now, checkFile);
+  const approve = (candidateId, channel) => {
+    const body = approvalRequest(readState(directory), candidateId, policy, new Date(now + 300000).toISOString(), now, checkFile, {channel});
     const approval = envelope(body, manager.privateKey);
     assert.equal(emit('approval.recorded', {candidateId, envelope: approval}, `approval-${digest(approval)}`).status, 'APPROVED');
     return approval;
@@ -334,4 +334,41 @@ test('fresh provider allowance subtracts pending commitments and protected units
   assert.equal(exact.reserve(y, 40).status, 'BLOCKED');
   exact.settle(x, pending.reservationId, {actualUnits: 20});
   assert.equal(exact.reserve(y, 1).status, 'BLOCKED', 'uncertain provider reconciliation never refunds capacity implicitly');
+});
+
+
+test('same-byte canary → stable promotion reuses one candidate/build and separately signed channel approvals', t => {
+  const f = setup(t), id = f.create('a'.repeat(40), 1, 'canary');
+  f.prepare(id);
+  assert.equal(f.emit('candidate.requested', {plan: f.plan('a'.repeat(40)), inputs: {...f.inputs(1), channel: 'stable'}}).status, 'BLOCKED', 'changing channel cannot reset the candidate/build identity');
+  const canaryApproval = f.approve(id, 'canary');
+  const before = readState(f.directory), original = before.candidates[id];
+  const canary = f.emit('promotion.requested', {candidateId: id, channel: 'canary'});
+  assert.equal(canary.status, 'PROMOTION_INTENT');
+  assert.equal(f.emit('promotion.requested', {candidateId: id, channel: 'stable'}).status, 'BLOCKED');
+  const forgedStable = {...canaryApproval, body: {...canaryApproval.body, channel: 'stable'}};
+  assert.equal(f.emit('approval.recorded', {candidateId: id, envelope: forgedStable}).status, 'BLOCKED');
+  const stableApproval = f.approve(id, 'stable');
+  assert.notEqual(stableApproval.signature, canaryApproval.signature);
+  const stable = f.emit('promotion.requested', {candidateId: id, channel: 'stable'});
+  assert.equal(stable.status, 'PROMOTION_INTENT');
+  assert.equal(stable.intent.channel, 'stable');
+  assert.equal(stable.intent.manifest.channel, 'canary', 'build manifest is immutable');
+  assert.equal(stable.intent.manifestDigest, canary.intent.manifestDigest);
+  assert.equal(stable.intent.evidenceDigest, canary.intent.evidenceDigest);
+  const after = readState(f.directory);
+  assert.equal(Object.keys(after.candidates).length, 1);
+  assert.deepEqual(after.candidates[id].input, original.input);
+  assert.deepEqual(after.candidates[id].artifacts, original.artifacts);
+  assert.deepEqual(after.candidates[id].evidence, original.evidence);
+  assert.deepEqual(after.reservations, before.reservations, 'promotion does not rebuild or reset budgets');
+  assert.equal(validateIntent(after, stable.intent, f.policy, f.now(), checkFile).status, 'READY_FOR_PUBLISHER');
+  assert.throws(() => validateIntent(after, {...stable.intent, channel: 'canary'}, f.policy, f.now(), checkFile), /superseded|latest|stable channel/);
+  assert.equal(f.emit('promotion.requested', {candidateId: id, channel: 'canary'}).status, 'BLOCKED', 'cannot roll stable backwards');
+  assert.equal(f.emit('promotion.requested', {candidateId: id, channel: 'unknown'}).status, 'BLOCKED');
+  assert.equal(f.emit('candidate.requested', {plan: f.plan('f'.repeat(40)), inputs: {...f.inputs(2), channel: 'unknown'}}).status, 'BLOCKED');
+  const other = f.create('e'.repeat(40), 2, 'canary');
+  f.prepare(other);
+  assert.equal(f.emit('approval.recorded', {candidateId: other, envelope: stableApproval}).status, 'BLOCKED', 'approval cannot migrate to another candidate');
+  assert.equal(f.emit('promotion.requested', {candidateId: other, channel: 'stable'}).status, 'BLOCKED');
 });
