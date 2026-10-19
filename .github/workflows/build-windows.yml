@@ -702,6 +702,7 @@ jobs:
         if: steps.assembly.outputs.mode == 'compile-base'
         shell: bash
         env:
+          RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES: ${{ vars.RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES }}
           HPS_ENGINE_ARTIFACT_NAME: compiled-engine-win32-x64
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-win:compiled-engine-store artifact-store
       - name: Store immutable compiled engine input only
@@ -709,6 +710,8 @@ jobs:
         if: steps.artifact-budget-3.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
+          compression-level: 0
+          overwrite: false
           include-hidden-files: true
           name: compiled-engine-win32-x64
           path: ${{ runner.temp }}/hps-compiled-engine
@@ -718,6 +721,7 @@ jobs:
         if: steps.compiled-store.outcome == 'success'
         shell: bash
         env:
+          RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES: ${{ vars.RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES }}
           HPS_ENGINE_ARTIFACT_NAME: compiled-engine-win32-x64
           HPS_ENGINE_ARTIFACT_ID: ${{ steps.compiled-store.outputs.artifact-id }}
         run: node scripts/release/cloud-executor/workflow-gate.mjs complete build-win:compiled-engine-store artifact-store

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {compiledStorageEnvelope} from './assembly.mjs';
 import {digest} from '../engine/core.mjs';
 const require=(ok,message)=>{if(!ok)throw Error('BLOCKED release engine: '+message);};
 export function engineEnabled(env=process.env) {
@@ -42,6 +43,11 @@ export async function guardedEffect({body,command,args=[],managed=false,perform=
  require(Date.parse(authorization.expiresAt)>clock(),'execution lease expired');return run(command,args,{stdio:'inherit',env});
 }
 export function executionBody({path:effectPath,identity,effect},env=process.env) {return {path:effectPath,identity,caller:workflowCaller(env),effect};}
+export function artifactStoreEnvelope(effectPath,env=process.env){
+ if(!['build-mac:compiled-engine-store','build-win:compiled-engine-store'].includes(effectPath))return {};
+ require(/^[1-9][0-9]*$/.test(env.RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES??''),'compiled artifact storage maximum unconfigured');require(env.RUNNER_TEMP,'compiled artifact temporary path required');
+ const measured=compiledStorageEnvelope(path.join(env.RUNNER_TEMP,'hps-compiled-engine'),Number(env.RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES));return {maxBytes:measured.maxBytes,retentionDays:measured.retentionDays};
+}
 function git(...args){return execFileSync('git',args,{encoding:'utf8'}).trim();}
 export function workflowIdentity(env=process.env) {
  const tag=env.TAG||env.GITHUB_REF_NAME;require(/^v\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(tag??''),'candidate tag required');
@@ -63,7 +69,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===fs.realpathSync(process.arg
   const stored=process.env.HPS_ENGINE_IDENTITY_FILE?JSON.parse(fs.readFileSync(process.env.HPS_ENGINE_IDENTITY_FILE,'utf8')):null;
   const baseIdentity=stored?(stored.identity??stored):workflowIdentity();
   const identity={...baseIdentity,...(process.env.TARGET?{target:process.env.TARGET}:{})};
-  const effect={kind,...(process.env.HPS_ENGINE_ARTIFACT_NAME?{artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{}),...(stored?.releaseId?{releaseId:stored.releaseId}:{}),...(process.env.HPS_ENGINE_ASSET_DIR?{assets:fileInventory(process.env.HPS_ENGINE_ASSET_DIR),artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{})};
+  const effect={kind,...(kind==='artifact-store'?artifactStoreEnvelope(effectPath):{}),...(process.env.HPS_ENGINE_ARTIFACT_NAME?{artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{}),...(stored?.releaseId?{releaseId:stored.releaseId}:{}),...(process.env.HPS_ENGINE_ASSET_DIR?{assets:fileInventory(process.env.HPS_ENGINE_ASSET_DIR),artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{})};
   const body=executionBody({path:effectPath,identity,effect});
   if(mode==='authorize')await authorizeExecution(body);
   else if(mode==='complete'){const artifactId=Number(process.env.HPS_ENGINE_ARTIFACT_ID);require(Number.isSafeInteger(artifactId)&&artifactId>0,'immutable artifact ID required');const result=await engineRequest('/v1/execution/complete',{...body,receipt:{artifactId}});require(result.status==='SUCCEEDED'&&result.requestDigest===digest(body),'artifact storage completion UNKNOWN');}
