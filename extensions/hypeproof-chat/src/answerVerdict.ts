@@ -49,7 +49,7 @@ export interface VerdictState { verdict: AnswerVerdict; reason?: VerdictReason; 
 export type VerdictMap = Record<string, VerdictState>;
 
 /** What the webview may ask for. Everything else is filled in by the host. */
-export interface VerdictRequest { messageId: string; verdict: AnswerVerdict | null; reason?: VerdictReason; note?: string }
+export interface VerdictRequest { requestId?: string; messageId: string; verdict: AnswerVerdict | null; reason?: VerdictReason; note?: string }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const onlyKeys = (value: Record<string, unknown>, keys: string[]) => Object.keys(value).every((key) => keys.includes(key));
@@ -73,9 +73,11 @@ function consistent(verdict: AnswerVerdict | null, reason: unknown, note: unknow
 /** Validates a webview request. Returns null for anything malformed (the host then ignores it). */
 export function parseVerdictRequest(value: unknown): VerdictRequest | null {
   if (!isRecord(value) || !validMessageId(value.messageId) || !validVerdict(value.verdict)) return null;
+  if (value.requestId !== undefined && !validMessageId(value.requestId)) return null;
   const note = typeof value.note === "string" ? value.note.trim() || undefined : value.note;
   if (!consistent(value.verdict, value.reason, note)) return null;
   return {
+    ...(value.requestId !== undefined ? { requestId: value.requestId as string } : {}),
     messageId: value.messageId,
     verdict: value.verdict,
     ...(value.reason !== undefined ? { reason: value.reason as VerdictReason } : {}),

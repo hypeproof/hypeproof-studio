@@ -590,7 +590,7 @@ export type WebviewMessage = (
    * CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT) — the learner's verdict on one finished answer in a
    * personal task; `verdict: null` removes it. Stored locally and recorded in the spool (DEC-09).
    */
-  | { type: "answerVerdict"; messageId: string; verdict: import('./answerVerdict').AnswerVerdict | null; reason?: import('./answerVerdict').VerdictReason; note?: string }
+  | { type: "answerVerdict"; requestId?: string; messageId: string; verdict: import('./answerVerdict').AnswerVerdict | null; reason?: import('./answerVerdict').VerdictReason; note?: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
@@ -692,7 +692,7 @@ export type HostMessage = (
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
   | { type: 'taskRenameResult'; requestId: string; saved: boolean }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
-  | { type: 'taskWorkspaceError'; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
+  | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[];toolMode?:import('./turnTools').TurnToolMode}
@@ -734,7 +734,7 @@ export type HostMessage = (
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
   /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
-  | { type: "answerVerdicts"; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
+  | { type: "answerVerdicts"; requestId?: string; messageId?: string; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
   | { type: "streamStart"; streamId: string; messageId: string }
   | { type: "streamChunk"; streamId: string; delta: string }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173
