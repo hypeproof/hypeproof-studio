@@ -39,8 +39,10 @@ test('the full clicked option refines a general request only when its number and
   assert.equal(suggestTaskTitle([user('1. 결제 실패 원인을 조사해 주세요')]), '1. 결제 실패 원인을 조사해 주세요', 'an ordinary numbered request is not an offered choice');
 });
 
-test('titles settle within the first two user turns and cannot drift with later topics or tools', () => {
+test('titles settle from the first useful request and cannot drift with later topics or tools', () => {
   assert.equal(suggestTaskTitle([user('출석부 정리'), { role: 'tool', content: '투자 보고서 작성' }, user('열을 추가해줘'), user('새로운 투자 보고서')]), '출석부 정리');
-  assert.equal(suggestTaskTitle([user('안녕'), user('네'), user('세 번째 요청의 새 주제')]), null);
+  assert.equal(suggestTaskTitle([user('안녕'), user('네'), user('세 번째 요청의 새 주제')]), '세 번째 요청의 새 주제');
+  assert.equal(suggestTaskTitle([user('안녕'), user('네'), user('여행 계획'), assistant('1. 제주 여행\n2. 서울 여행'), user('1'), assistant('1. 다른 주제\n2. 또 다른 주제'), user('2')]), '제주 여행');
+  assert.equal(suggestTaskTitle([user('원래 주제'), user('네'), assistant('1. 다른 주제\n2. 또 다른 주제'), user('2')]), '원래 주제');
   assert.equal(suggestTaskTitle([user('원래 주제'), assistant('1. 첫 선택\n2. 두 번째 선택'), user('3')]), '원래 주제');
 });
