@@ -163,3 +163,7 @@ CC-05 negative controls also feed complete HTML fences, a successful HTML write 
   starts empty, receives async failure text while composer focus stays put, and
   clears on retry; the textarea description follows the same failure lifecycle.
   DOM semantics are not a claim of native screen-reader speech.
+
+- Wide-table reading: scroll horizontally, edit the next draft and append another answer;
+  preserve the table offset and draft, with no unintended send. Existing
+  `e2e/task-workspace/readable-tables.mjs` covers desktop and narrow panes.
