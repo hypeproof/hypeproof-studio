@@ -294,6 +294,10 @@ test('a delayed keep clears its own review but preserves a newer measured review
     pause = async () => { entered(); await held; };
     pending = f.handle(f.scoped({ type: 'turnKeep', turnId: 'older' }));
     await reached;
+    assert.equal(f.h.turnReview, null, 'keep is accepted before the evidence scan finishes');
+    await f.handle(f.scoped({ type: 'turnRevert', turnId: 'older' }));
+    await f.handle(f.scoped({ type: 'turnKeep', turnId: 'older' }));
+    assert.equal(await readFile(join(work, 'note.txt'), 'utf8'), 'older', 'a competing decision cannot restore kept files');
     await review('newer', 'older', 'newer');
     release(); await pending;
     assert.equal(f.h.turnReview?.view.turnId, 'newer', 'old completion must not dismiss new measured changes');
