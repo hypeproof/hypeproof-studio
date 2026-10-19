@@ -220,15 +220,19 @@ export function passSpentNotice(err: unknown): string | null {
  * "API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다." and
  * "Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. …". A bare
  * `trial_exhausted` code (proxy path) counts only for a turn that did not run on a bought pass,
- * because the Service uses the same code for both.
+ * because the Service uses the same code for both. The cost-ceiling refusal (429
+ * `trial_cost_exhausted`, observed 2026-10-19 against the local Worker) reads
+ * "체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다. …" and is a spent trial too.
  */
 export type TrialEnding = "exhausted" | "expired";
 export function trialEnding(err: unknown, onPass = false): TrialEnding | null {
   const m = (err as { message?: unknown } | null)?.message;
   if (typeof m !== "string") return null;
   if (/개인 체험의 총 요청 한도에 도달했습니다/.test(m)) return "exhausted";
+  // The trial's AI cost ceiling (Service `trial_cost_exhausted`, 429): the SDK surfaces only the sentence.
+  if (/체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다/.test(m)) return "exhausted";
   if (/개인 체험 시간이 끝났습니다/.test(m)) return "expired";
-  if (!onPass && /\btrial_exhausted\b/.test(m)) return "exhausted";
+  if (!onPass && /\btrial_(?:cost_)?exhausted\b/.test(m)) return "exhausted";
   return null;
 }
 
