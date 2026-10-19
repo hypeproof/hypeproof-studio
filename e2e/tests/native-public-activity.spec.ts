@@ -2,6 +2,7 @@
 // a credential into SecretStorage or changes cohorts/sessions/admin settings.
 import {test,expect} from '@playwright/test';
 import {launchApp,closeApp,startFrame,chatFrame} from '../fixtures/app';
+import {chooseChatModel} from '../fixtures/chat-actions';
 import {readFileSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 test('public Service activity creates and revises a synthetic file',async()=>{
@@ -18,7 +19,7 @@ test('public Service activity creates and revises a synthetic file',async()=>{
   const chat=await chatFrame(ctx.win);
   await expect(chat.getByLabel('현재 활동')).toContainText(trial?'AI 체험':'수업');
   expect(existsSync(join(ctx.wsDir,'index.html'))).toBe(false);
-  await chat.getByRole('combobox',{name:'대화 모델'}).selectOption('hypeproof-fast');
+  await chooseChatModel(chat,'hypeproof-fast');
   const turns=[];
   for(const [file,content] of [['public-first.md','SYNTHETIC_FIRST'],['public-revised.md','SYNTHETIC_REVISED']]){
    const prompt=`합성 앱 인수 검사입니다. ${file} 파일에 ${content} 한 줄만 저장해 주세요. 다른 파일은 읽거나 바꾸지 마세요. 셸·네트워크·브라우저는 사용하지 마세요.`;

@@ -132,10 +132,17 @@
 /* The task title keeps its place; the remaining line gives way (ellipsis, full text in its title). */
 .tw-heading h1 { flex: 1 1 0; min-width: min(120px, 30%); }
 .tw-heading .hps-trial-left { flex: 0 1 auto; min-width: 0; }
+/* US-05 current activity: muted, and it yields before the remaining count does. */
+.tw-heading .hps-activity-now { flex: 0 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--tw-muted); }
 /* Narrow header (sidebar, 390-560px): the remaining count stays whole; only "· …까지" gives way. */
 @media (max-width: 640px) {
   .tw-heading h1 { min-width: min(72px, 22%); }
   .tw-heading .hps-trial-until { display: none; }
+  /* The name is still read by screen readers and kept in the title. The kind stays on screen unless a
+     trial's remaining line needs the room: that line already says the seat is a trial, and its count
+     must stay whole (TUX-SP-13B). */
+  .tw-heading .hps-activity-name,
+  .tw-heading:has(.hps-trial-left) .hps-activity-now { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }

@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {launchApp,closeApp,startFrame,chatFrame} from '../fixtures/app';
+import {chatMenuAction,chooseChatModel} from '../fixtures/chat-actions';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -28,8 +29,9 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   await expect(start.getByRole('button',{name:'이 활동 시작하기',exact:true})).toBeVisible();
  };
  const begin=async()=>{const start=await startFrame(ctx.win);await start.getByRole('button',{name:'이 활동 시작하기',exact:true}).click();};
- const turn=async(chat:Awaited<ReturnType<typeof chatFrame>>,root:string,marker:string)=>{
-  await chat.getByRole('combobox',{name:'대화 모델'}).selectOption('hypeproof-fast');
+ type Chat=Awaited<ReturnType<typeof chatFrame>>;
+ const turn=async(chat:Chat,root:string,marker:string)=>{
+  await chooseChatModel(chat,'hypeproof-fast');
   const prompt=`합성 릴리스 검사입니다. 이 폴더에 acceptance.md 파일을 만들고 내용은 ${marker} 한 줄만 넣어 주세요. 다른 파일을 읽거나 바꾸지 말고, 셸·브라우저·네트워크 도구도 사용하지 마세요.`;
   const input=chat.getByRole('textbox',{name:/보낼 메시지/});await input.fill(prompt);await input.press('Enter');
   await expect(chat.locator('.hps-btn-stop')).toBeVisible();await expect(chat.locator('.hps-btn-stop')).toHaveCount(0,{timeout:100000});
@@ -52,7 +54,7 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
     input.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
   });
   await expect(chat.locator('.hps-attachment')).toHaveCount(1);
-  await chat.getByRole('button',{name:'활동 변경',exact:true}).click();
+  await chatMenuAction(chat,'활동 변경');
   await connect(alternate);await pick(ctx.wsDir);await begin();
   const blocked=await startFrame(ctx.win);await expect(blocked.getByRole('alert')).toContainText('다른 활동');
   await ctx.win.screenshot({path:join(out,'shared-root-blocked.png')});
@@ -69,7 +71,7 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   if(live)await turn(chat,second,'SYNTHETIC_ACTIVITY_B_ONLY');
   await chat.getByRole('textbox',{name:/보낼 메시지/}).fill('B에서 작성 중인 합성 초안');
   await ctx.win.screenshot({path:join(out,'activity-b.png')});
-  await chat.getByRole('button',{name:'활동 변경',exact:true}).click();
+  await chatMenuAction(chat,'활동 변경');
   const list=await startFrame(ctx.win);const saved=list.getByRole('navigation',{name:'저장된 활동'}).getByRole('button');
   await expect(saved).toHaveCount(2);await saved.filter({hasText:ctx.wsDir}).click();
   const bViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));await begin();

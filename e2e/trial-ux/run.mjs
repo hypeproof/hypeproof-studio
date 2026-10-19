@@ -252,6 +252,45 @@ try {
     await expect(p.locator('.hps-trial-left')).toHaveCount(0);
     assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'the header never opens the purchase');
   }, { cfg: { taskWorkspace, activity: trialActivity(nearLimit) } });
+  // US-05 (P0) — personal chat has no mission header (#1760), so the task heading row itself names the
+  // current activity and its kind under the `현재 활동` label. The packaged-app acceptance
+  // (native-unified-switch.spec.ts) reads the same label; it went missing from the real app.
+  await test('US-05-PERSONAL', 'Personal chat header names the current activity and its kind', async p => {
+    const heading = p.locator('.tw-heading');
+    const now = heading.getByLabel('현재 활동');
+    await expect(now).toHaveText('AI 체험 · 합성 체험');
+    await expect(now.locator('button, a')).toHaveCount(0);
+    // 390px with a trial line: the activity stays in the accessibility tree but gives its room to the
+    // remaining count, which stays whole (the trial line already says "AI 요청 … 남음").
+    const clipped = l => l.evaluate(el => el.scrollWidth > el.clientWidth + 1);
+    const shown = l => l.evaluate(el => el.getBoundingClientRect().width > 1);
+    assert.equal(await shown(now), false, 'a trial seat hides the activity line at 390px');
+    assert.deepEqual(await heading.locator('.hps-trial-left').evaluate(el => ({ text: el.innerText, clipped: el.scrollWidth > el.clientWidth + 1 })), { text: 'AI 요청 3번 남음', clipped: false }, 'the remaining count is whole at 390px');
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'fits 390px');
+    await p.screenshot({ path: path.join(out, 'US-05-personal-390.png') });
+    await p.setViewportSize({ width: 1280, height: 900 });
+    assert.equal(await now.evaluate(el => el.innerText), 'AI 체험 · 합성 체험', 'a wide header shows the name too');
+    assert.equal(await clipped(now), false, 'the activity line is whole at 1280px');
+    const tops = await Promise.all([heading.locator('h1'), now, heading.locator('.hps-trial-left')].map(async l => { const b = await l.boundingBox(); return Math.round(b.y + b.height / 2); }));
+    assert.ok(Math.max(...tops) - Math.min(...tops) <= 4, `one header row: ${tops}`);
+    await p.screenshot({ path: path.join(out, 'US-05-personal-1280.png') });
+    await p.setViewportSize({ width: 390, height: 900 });
+    // A class seat in personal chat says 수업.
+    await host(p, { type: 'config', config: config(native, { taskWorkspace, activity: { id: 'activity-class', name: '합성 수업', kind: 'classroom', workspace: '/synthetic/class', verified: true } }) });
+    await expect(now).toHaveText('수업 · 합성 수업');
+    // No trial line: at 390px the kind is on screen and whole; the name yields.
+    assert.equal(await shown(now.locator('.hps-activity-kind')), true, 'the kind is visible at 390px');
+    assert.equal(await clipped(now), false, 'the kind is not clipped at 390px');
+    assert.equal(await shown(now.locator('.hps-activity-name')), false, 'the name yields at 390px');
+    await p.screenshot({ path: path.join(out, 'US-05-class-390.png') });
+    // A free seat says 무료 사용 and never a count (TUX-SP-13G).
+    await host(p, { type: 'config', config: config(native, { taskWorkspace, activity: { ...trialActivity(nearLimit), free: true } }) });
+    await expect(now).toHaveText('무료 사용 · 합성 체험');
+    await expect(now).not.toContainText('번 남음');
+    // Negative control: no activity, no label.
+    await host(p, { type: 'config', config: config(native, { taskWorkspace }) });
+    await expect(p.getByLabel('현재 활동')).toHaveCount(0);
+  }, { cfg: { taskWorkspace, activity: trialActivity(nearLimit) } });
   await test('TUX-SP-13C', 'Exhausted trial: ended card instead of "이어서 하기"; pass only on press', async p => {
     await startState(p, { profile: trialSeat(exhausted) });
     await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');

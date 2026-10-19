@@ -1,6 +1,8 @@
 /* Personal task conversation: theme-native, quiet, and aligned to one reading column. */
 .hps-shell[data-chat-detail="personal"] { min-height: 0; --chat-column: 740px; }
 .hps-shell[data-chat-detail="personal"] .hps-header { color: var(--tw-muted); padding-block: 12px; }
+/* US-05 — the current activity (kind · name) in the personal header; it yields before the remaining line. */
+.hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: 8px 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */
 .hps-trial-left { flex: 0 1 auto; min-width: 0; margin-inline: 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hps-shell[data-chat-detail="personal"] .hps-messages {
