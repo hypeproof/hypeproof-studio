@@ -39,7 +39,7 @@ if (process.argv.includes('--serve')) {
   try {
     await page.goto(server.url+'/?theme=green'); await expect(input).toBeVisible();
     await expect(page.getByRole('combobox',{name:'대화 모델',exact:true})).toBeHidden();
-    await expect(page.getByRole('combobox',{name:'Effort',exact:true})).toBeHidden();
+    await expect(page.getByRole('combobox',{name:'생각 깊이',exact:true})).toBeHidden();
     await expect(page.locator('.hps-native-observation')).toBeHidden();
     await expect(page.locator('.hps-access')).toBeHidden();
     await expect(page.locator('.hps-shell')).toHaveCSS('background-color','rgb(21, 29, 25)');
@@ -51,7 +51,8 @@ if (process.argv.includes('--serve')) {
     await expect(page.getByRole('button',{name:'대화 설정 닫기'})).toBeFocused();
     await page.getByText('응답 고급 설정',{exact:true}).click();
     await expect(page.getByRole('combobox',{name:'대화 모델',exact:true})).toHaveValue('fixture-sonnet');
-    await expect(page.getByRole('combobox',{name:'Effort',exact:true})).toHaveValue('medium');
+    // Personal effort reads 생각 깊이 in the dialog (REQ-STUDIO-CHAT-POLISH ⑤); classroom keeps Effort.
+    await expect(page.getByRole('combobox',{name:'생각 깊이',exact:true})).toHaveValue('medium');
     await shot('settings-green'); await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden(); await expect(page.getByRole('button',{name:'대화 메뉴',exact:true})).toBeFocused();
     await expect(input).toHaveValue('설정을 열어도 유지할 초안'); checks.push('settings closed by default, existing values available, Escape focus return and draft retention');
@@ -59,9 +60,10 @@ if (process.argv.includes('--serve')) {
     await server.fixture.h.postHistory();
     const options=page.getByRole('group',{name:'답변 선택'}); await expect(options).toBeVisible();
     await expect(options.getByRole('button')).toHaveCount(5);
-    const mark=page.locator('.hps-assistant-mark').last(); expect((await mark.boundingBox()).width).toBe(18);
+    // REQ-STUDIO-CHAT-POLISH ②①: no drawn assistant mark; retry sits in the answer-actions row.
+    await expect(page.locator('.hps-assistant-mark')).toHaveCount(0);
     await expect(page.locator('.hps-msg-role .hps-msg-retry')).toHaveCount(0);
-    await expect(page.locator('.hps-message-actions .hps-msg-retry')).toBeVisible();
+    await expect(page.locator('.hps-answer-actions .hps-msg-retry')).toBeVisible();
     await shot('choices-green-1440');
     await options.getByRole('button',{name:/글쓰기나 정리/}).click();
     await expect(input).toHaveValue('설정을 열어도 유지할 초안\n1. 글쓰기나 정리: 메일, 보고서, 메모, 자료 요약');

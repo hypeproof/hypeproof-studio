@@ -10,6 +10,7 @@ const page = await context.newPage();
 const output = resolve(process.env.HPS_CHAT_EVIDENCE ?? 'e2e/test-results/chat-details');
 await mkdir(output, { recursive: true });
 const checks = [], errors = [], measurements = [];
+const EMBEDDED_SHELL = '352px';
 page.on('pageerror', error => errors.push(error.message));
 const input = page.locator('.hps-input textarea');
 const transcript = page.locator('.hps-messages');
@@ -32,8 +33,11 @@ try {
   await input.press('ArrowRight');
   await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
   const resizeDraft = await input.inputValue();
-  // Embedded webviews can shrink without resizing the top-level browser viewport.
-  await page.locator('.hps-shell').evaluate(node => { node.style.height = '400px'; });
+  // Embedded webviews can shrink without resizing the top-level browser viewport. The personal chat
+  // header is drawn into the task heading (REQ-STUDIO-CHAT-POLISH ⑥), so the shell carries no header
+  // and must shrink below 400px before the composer cap (shell - footer chrome - 96px transcript)
+  // drops under 192px.
+  await page.locator('.hps-shell').evaluate((node, height) => { node.style.height = height; }, EMBEDDED_SHELL);
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
   await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: resolve(output, 'composer-embedded-small.png') });
@@ -50,7 +54,7 @@ try {
   await page.mouse.wheel(0, -240);
   await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeGreaterThan(100);
   const draftReadingTop = await input.evaluate(node => node.scrollTop);
-  await page.locator('.hps-shell').evaluate(node => { node.style.height = '400px'; });
+  await page.locator('.hps-shell').evaluate((node, height) => { node.style.height = height; }, EMBEDDED_SHELL);
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
   await expect.poll(() => input.evaluate(node => node.scrollTop)).toBe(draftReadingTop);
   await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
@@ -80,7 +84,7 @@ try {
   for (let i = 0; i < 20; i++) await input.press('ArrowDown');
   const middleSelection = await input.evaluate(node => node.selectionEnd);
   expect(await input.evaluate(node => node.value.slice(0, node.selectionEnd).split('\n').length - 1)).toBe(20);
-  await page.locator('.hps-shell').evaluate(node => { node.style.height = '400px'; });
+  await page.locator('.hps-shell').evaluate((node, height) => { node.style.height = height; }, EMBEDDED_SHELL);
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
   await expect.poll(() => input.evaluate(node => {
     const line = parseFloat(getComputedStyle(node).lineHeight);

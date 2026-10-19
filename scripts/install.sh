@@ -61,6 +61,13 @@ SEED_SCRIPT_NAME="seed-sdk-binary.sh"
 # this repo, not the releases repo (which carries the Studio binaries only).
 # Override with HPS_RAW_BASE once a mirror is published.
 RAW_BASE="${HPS_RAW_BASE:-https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts}"
+# Where seed_sdk stopped, for the doctor's stop message: "" (not run or succeeded),
+# "unavailable" (no seeder could be obtained) or "failed" (seeder exited non-zero,
+# code in SDK_SEED_RC). On macOS a missing seed is a doctor failure, never a warning:
+# the app bundle deliberately excludes the native binary and nothing in Studio
+# fetches it. Linux installs no Studio app, so there it stays a warning.
+SDK_SEED_STAGE=""
+SDK_SEED_RC=""
 
 HPS_HOME="${HOME}/.hypeproof"
 RECEIPT="${HPS_HOME}/receipt.json"
@@ -172,9 +179,42 @@ fi
 
 confirm() {  # confirm "question" -> 0 yes / 1 no; auto-yes when noninteractive
   [ "$NONINTERACTIVE" = "1" ] && return 0
-  printf '%s [Y/n] ' "$1"
-  read -r _ans </dev/tty 2>/dev/null || return 0
-  case "$_ans" in n|N|no|NO) return 1 ;; *) return 0 ;; esac
+  _tries=0
+  while :; do
+    printf '%s (Y/n, 그냥 Enter = 예) ' "$1"
+    read -r _ans </dev/tty 2>/dev/null || return 0
+    case "$(confirm_answer "$_ans")" in
+      yes|empty) return 0 ;;
+      no) return 1 ;;
+    esac
+    # Not understood: ask again, and after three tries take the safe answer (no),
+    # because "yes" here installs software and may ask for a password.
+    _tries=$((_tries + 1))
+    if [ "$_tries" -ge 3 ]; then
+      printf '%s\n' "답을 알아듣지 못해서 '아니요'로 처리합니다."
+      return 1
+    fi
+    printf '%s\n' "'예' 또는 '아니요'로 답해 주세요. (Enter만 누르면 '예')"
+  done
+}
+
+# confirm_answer <reply> -> prints yes / no / empty / unknown.
+# The prompt is Korean, so learners answer in Korean, and a learner with the
+# Korean IME on who presses y or n types the jamo on that key (y -> ㅛ, n -> ㅜ).
+# Only the explicit no-set means no; only the explicit yes-set (or Enter) means
+# yes; anything else is unknown and is asked again. Kept in sync with
+# Get-ConfirmAnswer in install.ps1; scripts/test-installer-answers.sh tests both.
+confirm_answer() {
+  # POSIX sh (dash on Linux): no ${x//...}. UTF-8 continuation bytes are never
+  # ASCII whitespace, so tr removes only spaces and tabs.
+  _a="$(printf '%s' "$1" | tr -d '[:space:]')"
+  _a="${_a%[.!?~]}"
+  case "$_a" in
+    "") echo empty ;;
+    [yY]|[yY][eE][sS]|ㅛ|ㅛㄷㄴ|네|넵|넹|예|응|ㅇ|ㅇㅇ) echo yes ;;
+    [nN]|[nN][oO]|ㅜ|ㅜㅐ|아니*|ㄴ|ㄴㄴ|싫어*) echo no ;;
+    *) echo unknown ;;
+  esac
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -212,7 +252,7 @@ kit_asset_name() {
 # Verify the whole kit before anything is installed, then pin the Studio version
 # it holds. A damaged kit should stop here, not after ten minutes of Homebrew.
 kit_preflight() {
-  step "Checking the class kit"
+  step "수업 키트 확인"
   [ -f "${KIT_DIR}/${KIT_SUMS_NAME}" ] \
     || die "class kit: ${KIT_SUMS_NAME} not found in ${KIT_DIR} — this folder is not a class kit"
   _kit_names="$(awk '{ sub(/\r$/, "") } NF == 0 { next }
@@ -235,7 +275,7 @@ kit_preflight() {
 # ----------------------------------------------------------------------------- #
 # 3. Detect OS / arch / shell
 # ----------------------------------------------------------------------------- #
-step "Detecting platform"
+step "이 컴퓨터 확인"
 UNAME_S="$(uname -s)"; UNAME_M="$(uname -m)"
 case "$UNAME_S" in
   Darwin) OS="darwin" ;;
@@ -334,10 +374,10 @@ brew_sudo_end() {
 }
 
 ensure_brew() {
-  step "Ensuring package manager (Homebrew)"
+  step "설치 도구 준비 (Homebrew)"
   if resolve_brew; then ok "brew present: $BREW"; return 0; fi
   if [ "$OS" = "darwin" ]; then
-    if confirm "Homebrew not found. Install it now (also triggers Xcode CLT)?"; then
+    if confirm "이 Mac에 Homebrew가 없습니다. 지금 설치할까요? (Xcode 명령줄 도구도 함께 설치됩니다)"; then
       NONINTERACTIVE_BREW=""
       [ "$NONINTERACTIVE" = "1" ] && NONINTERACTIVE_BREW="NONINTERACTIVE=1"
       [ "$NONINTERACTIVE" = "1" ] || brew_sudo_begin
@@ -347,13 +387,13 @@ ensure_brew() {
       env $NONINTERACTIVE_BREW /bin/bash -c \
         "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
         </dev/null \
-        || { brew_sudo_end; die "Homebrew install failed. See https://brew.sh"; }
+        || { brew_sudo_end; die "Homebrew를 설치하지 못했습니다. 설치를 다시 실행하거나 https://brew.sh 를 확인하세요."; }
       brew_sudo_end
-      resolve_brew || die "Homebrew installed but 'brew' not on PATH; open a new shell and re-run."
+      resolve_brew || die "Homebrew는 설치됐지만 'brew'를 아직 찾지 못했습니다. 새 터미널을 열고 설치를 다시 실행하세요."
       ensure_path_entry "$(dirname "$BREW")"
       ok "Homebrew installed: $BREW"
     else
-      warn "Skipping Homebrew; will fall back to direct downloads where possible."
+      warn "Homebrew 없이 계속합니다. 가능한 도구는 직접 내려받습니다."
     fi
   else
     # Linux: prefer an already-present native manager; brew optional.
@@ -530,7 +570,7 @@ install_one_dep() {  # install_one_dep <id>
   # Last-resort per-tool fallbacks.
   case "$_id" in
     node)
-      if confirm "Install Node 22 via the official nvm fallback?"; then
+      if confirm "Node 22를 공식 nvm 방식으로 설치할까요?"; then
         curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash || true
         # shellcheck disable=SC1090
         export NVM_DIR="${HOME}/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
@@ -539,11 +579,11 @@ install_one_dep() {  # install_one_dep <id>
       fi ;;
   esac
 
-  die "${_id}: could not install (no brew / native pkg / fallback succeeded). Install it manually and re-run."
+  die "${_id}: 설치하지 못했습니다 (brew, 기본 패키지 관리자, 대체 경로 모두 실패). 직접 설치한 뒤 설치를 다시 실행하세요."
 }
 
 check_deps() {
-  step "Checking + installing runtime dependencies (manifest schema ${MANIFEST_SCHEMA})"
+  step "필요한 도구 확인과 설치"
   for _id in $DEP_IDS; do
     install_one_dep "$_id"
   done
@@ -673,12 +713,13 @@ seed_sdk() {
   # package, pinned version 0.3.207, sha512 table, seeded location, and the
   # runtime-trusted marker). An earlier inline copy here drifted (wrong package/
   # version, a marker schema + linux path the Studio runtime would not trust).
-  step "Seeding native SDK binary (canonical ${SEED_SCRIPT_NAME})"
+  step "코치 도구(SDK) 준비"
   # Class kit: a damaged seeder stops the install here. Verified in this shell,
   # because a die inside the command substitution below would only be a warning.
   [ -z "$KIT_DIR" ] || kit_verify "$SEED_SCRIPT_NAME"
   _seed="$(resolve_seed_script)" || {
-    warn "Could not obtain ${SEED_SCRIPT_NAME} (local or ${RAW_BASE}) — Studio will self-heal on first run"
+    SDK_SEED_STAGE="unavailable"
+    warn "${SEED_SCRIPT_NAME} 를 받지 못했습니다 (로컬 또는 ${RAW_BASE}). $(sdk_seed_consequence)"
     return 0
   }
   # Seed the SDK version the installed app loads, not the seeder's own pin: the
@@ -700,14 +741,49 @@ seed_sdk() {
     fi
     ok "SDK seeded (canonical seeder)"
   else
-    warn "${SEED_SCRIPT_NAME} did not complete — Studio will self-heal on first launch"
+    SDK_SEED_RC=$?
+    SDK_SEED_STAGE="failed"
+    warn "${SEED_SCRIPT_NAME} 실행이 실패했습니다 (종료 코드 ${SDK_SEED_RC}). $(sdk_seed_consequence)"
+  fi
+}
+
+# sdk_seed_consequence — what a missing seed means for this install. Only the
+# macOS doctor checks the seed (it is the only platform that installs the Studio
+# app), so only there may the warning say the install will stop. Linux keeps a
+# warning with a re-run hint and must not promise a stop the doctor never makes.
+sdk_seed_consequence() {
+  if [ "$OS" = "darwin" ]; then
+    printf '%s\n' '마지막 점검에서 설치가 멈춥니다.'
+  else
+    printf '%s\n' '이 컴퓨터에는 Studio 앱을 설치하지 않으므로 설치는 계속됩니다. SDK가 필요하면 인터넷(registry.npmjs.org) 연결을 확인한 뒤 설치를 다시 실행하세요.'
+  fi
+}
+
+# sdk_seed_stage_label — the stage a missing seed stopped at, in the learner's
+# language. Reads SDK_SEED_STAGE / SDK_SEED_RC set by seed_sdk.
+sdk_seed_stage_label() {
+  case "$SDK_SEED_STAGE" in
+    unavailable) printf '시드 스크립트 받기 (%s)\n' "$SEED_SCRIPT_NAME" ;;
+    failed)      printf '시드 스크립트 실행 (%s, 종료 코드 %s)\n' "$SEED_SCRIPT_NAME" "${SDK_SEED_RC:-?}" ;;
+    *)           printf '검증 표시 확인 (claude.verified.json 없음)\n' ;;
+  esac
+}
+
+# sdk_seed_recovery_cmd — the command that re-runs the installer the same way it
+# was started. A class kit re-runs its own verified copy (no GitHub); a member
+# re-runs the one-liner from this file's header. The installer is idempotent.
+sdk_seed_recovery_cmd() {
+  if [ -n "$KIT_DIR" ]; then
+    printf 'bash "%s/install.sh" --kit "%s"\n' "$KIT_DIR" "$KIT_DIR"
+  else
+    printf '%s\n' 'gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > /tmp/hps-bootstrap.sh && bash /tmp/hps-bootstrap.sh'
   fi
 }
 
 install_studio() {
   [ "${HPS_SKIP_STUDIO:-0}" = "1" ] && { warn "HPS_SKIP_STUDIO=1 — skipping Studio app + SDK seed"; return 0; }
   resolve_studio_version
-  step "Installing HypeProof Studio ${STUDIO_VERSION}"
+  step "HypeProof Studio ${STUDIO_VERSION} 설치"
   if [ "$OS" = "darwin" ]; then
     install_studio_mac
     seed_sdk
@@ -722,7 +798,7 @@ install_studio() {
 # 8. `hps doctor` — fail-closed re-verify of the SAME manifest
 # ----------------------------------------------------------------------------- #
 doctor() {
-  step "Verify pass: hps doctor (fail-closed)"
+  step "마지막 점검 (doctor)"
   _fail=0
   for _id in $DEP_IDS; do
     _bin="$(dep_binary "$_id")"
@@ -736,7 +812,7 @@ doctor() {
         _fail=1
       fi
     else
-      warn "${_id}: MISSING — remediation: re-run installer, or install '$(dep_brew_pkg "$_id")' via brew"
+      warn "${_id}: 없습니다 — 설치를 다시 실행하거나 'brew install $(dep_brew_pkg "$_id")' 를 실행하세요"
       _fail=1
     fi
   done
@@ -748,21 +824,28 @@ doctor() {
   fi
 
   if [ "${HPS_SKIP_STUDIO:-0}" != "1" ] && [ "$OS" = "darwin" ]; then
-    if [ -d "$STUDIO_APP" ]; then ok "Studio: installed"; else warn "Studio: not found — remediation: re-run installer"; _fail=1; fi
+    if [ -d "$STUDIO_APP" ]; then ok "Studio: installed"; else warn "Studio: 찾지 못했습니다 — 설치를 다시 실행하세요"; _fail=1; fi
     # Canonical marker written by seed-sdk-binary.sh is <version>/claude.verified.json
     # (darwin under Application Support, linux under XDG_CONFIG_HOME).
     if ls "${STUDIO_SUPPORT}/sdk"/*/claude.verified.json >/dev/null 2>&1 \
        || ls "${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk"/*/claude.verified.json >/dev/null 2>&1; then
       ok "SDK: seeded + verified"
     else
-      warn "SDK: not seeded (Studio self-heals on first launch)"
+      # Fail closed, like install.ps1's doctor. Studio has no in-app fetch for the
+      # native binary, so the old warning that promised a repair on first launch
+      # let the install report success and left the coach without its tools.
+      warn "SDK: 설치되지 않았습니다 — 멈춘 단계: $(sdk_seed_stage_label)"
+      warn "  이대로는 Studio 코치가 작업 도구를 쓸 수 없습니다. Studio는 이 파일을 스스로 받지 않습니다."
+      warn "  복구: 인터넷(registry.npmjs.org) 연결을 확인한 뒤 설치를 다시 실행하세요:"
+      warn "    $(sdk_seed_recovery_cmd)"
+      _fail=1
     fi
   fi
 
   if [ "$_fail" -ne 0 ]; then
-    die "doctor found unmet manifest requirements (see above). Exiting non-zero."
+    die "점검(doctor): 해결되지 않은 항목이 있습니다. 위 내용을 확인하세요. 설치를 멈춥니다."
   fi
-  ok "doctor: all manifest checks passed"
+  ok "점검(doctor): 모든 항목 통과"
 }
 
 # ----------------------------------------------------------------------------- #
@@ -784,8 +867,8 @@ check_deps
 install_studio
 doctor
 
-step "Done"
-ok "HypeProof is ready. Open a new terminal (or 'source ${RC_FILE}') so PATH edits take effect."
+step "완료"
+ok "HypeProof 준비가 끝났습니다. 새 터미널을 열어야(또는 'source ${RC_FILE}') 바뀐 PATH가 적용됩니다."
 [ "$OS" = "darwin" ] && [ -d "$STUDIO_APP" ] && \
-  info "Launch: open '${STUDIO_APP}'"
+  info "실행: open '${STUDIO_APP}'"
 exit 0

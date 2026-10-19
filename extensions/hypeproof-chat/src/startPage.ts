@@ -1,14 +1,21 @@
 import * as vscode from "vscode";
 import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
-import { ActivityConnectionError, activityConnections } from "./activityConnections";
+import { ActivityConnectionError, activityConnections, passTakesOver } from "./activityConnections";
+import { carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, newOffer, validOffer } from "./trialCarryoverHelpers";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
 import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
-import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import type { ClassReposOutcome } from "./publish/publishHost";
+import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import type { FreeStartView } from "./startPageProtocol";
+import { isFreeSeat } from "./seatVocabulary";
+import { qrDataUrl } from "./testQr";
+import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 
 /**
@@ -66,13 +73,31 @@ export class StartPage {
   private candidate?: Candidate;
   // REQ-L12 — purchase state. `products === null` means the Service does not sell passes (or could not be read).
   private products?: PassProduct[] | null;
+  // TUX-SP-12 — what the Service advertises about the trial before entry. `null`: not advertised (or unreadable).
+  private trialOffer?: TrialOffer | null;
   private order?: PendingOrder;
   private purchaseStage?: PurchaseView["stage"];
   private purchaseMessage?: string;
+  /** TUX-COND-07 — one press of the chat card's "이용권 살펴보기"; cleared with the tab. */
+  private purchaseFocus?: number;
   private purchaseTimer?: ReturnType<typeof setTimeout>;
   /** The code issued for the saved order, while its activity is previewed but not yet entered. */
   private purchaseToken?: string;
   private github?: GithubLook;
+  /** Free start (TUX-SP-14) — a claim, or the entry it leads into, is running. */
+  private freeClaiming = false;
+  /** The last claim refusal, shown until the next attempt. */
+  private freeRefusal?: FreeClaimRefusal;
+  /** The current seat is the free allowance (read in refresh; steers the purchase payer question). */
+  private freeSeatNow = false;
+  /** No activity at all while the Service advertises free start: a newcomer buying before any use. */
+  private freeNewcomer = false;
+  /** This window's Service refused an order with `account_required` (login at purchase). */
+  private accountRequired = false;
+  /** SPEC §2.5 — a guardian pays: the checkout link and QR shown instead of opening a browser here. */
+  private guardianCheckout?: { url: string; qr: string };
+  /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
+  private offerWaited = false;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -83,6 +108,8 @@ export class StartPage {
 
   accountChanged(): void {
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
+    // Signed in after a login-at-purchase prompt: the prompt has been answered.
+    if (this.accounts?.view().status === "signedIn" && this.purchaseMessage === PURCHASE_COPY.signInFirst) this.purchaseMessage = undefined;
     if (this.panel) void this.refresh();
   }
 
@@ -195,7 +222,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -204,15 +231,146 @@ export class StartPage {
     const config = vscode.workspace.getConfiguration("hypeproofChat");
     return { proxyUrl: config.get<string>("proxyUrl", DEFAULT_PROXY_URL), siteBase: config.get<string>("siteBase", DEFAULT_SITE_BASE) };
   }
+  /** The current seat's participant token (free-credential header only). */
+  private async currentToken(): Promise<string | undefined> {
+    try { return (await activityConnections(this.context)?.token()) ?? await this.context.secrets.get(TOKEN_KEY); }
+    catch { return undefined; }
+  }
   private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
+  /**
+   * Login at purchase (Jay 2026-10-19, "결제할때 구글로그인 필수로 하자"). A free seat, a newcomer
+   * under free start, and any purchase after the Service answered `account_required` need a Google
+   * account. The Service's free-start readiness requires HPS_PURCHASE_ACCOUNT_REQUIRED, so an
+   * advertised free start means anonymous orders are refused anyway. Code-issued and class seats
+   * keep today's path until the Service says otherwise. Never asked before purchase: the first
+   * screen has no login.
+   */
+  private loginAtPurchase(): boolean { return this.freeSeatNow || this.freeNewcomer || this.accountRequired; }
+  /** What blocks checkout for want of an account; undefined when checkout may go ahead. */
+  private loginGate(): PurchaseView["login"] {
+    if (!this.loginAtPurchase()) return undefined;
+    if (!this.accounts) return "unavailable";
+    return this.accounts.view().status === "signedIn" ? undefined : "signIn";
+  }
   private purchaseView(): PurchaseView {
+    const payerAdult = this.context.globalState?.get<unknown>(PAYER_ADULT_KEY);
+    const login = this.order ? undefined : this.loginGate();
     return {
+      ...(login ? { login } : {}),
+      ...(this.freeSeatNow ? { freeSeat: true, ...(typeof payerAdult === "boolean" ? { payerAdult } : {}) } : {}),
+      ...(this.guardianCheckout && this.order ? { guardian: this.guardianCheckout } : {}),
       available: !!this.products?.length || !!this.order,
       ...(this.products?.length ? { products: this.products } : {}),
       ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
       ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
       ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
+      ...(this.purchaseFocus ? { focus: this.purchaseFocus } : {}),
     };
+  }
+  /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
+  private async loadTrialOffer(): Promise<void> {
+    if (this.trialOffer !== undefined) return;
+    this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl);
+  }
+
+  // ── Free start (SPEC iteration 4 §2; TUX-SP-14/15/16) ────────────────────────────────────────
+  /** Advertised by the Service and not switched off on this machine. */
+  private freeStartOn(): boolean {
+    const setting = vscode.workspace.getConfiguration("hypeproofChat").get<string>("freeStart", "service");
+    return setting !== "off" && freeStartAdvertised(this.trialOffer);
+  }
+  /**
+   * D19/REQ-I15 — the free-start signal the update checker reads (`registerPublicUpdateSignal`).
+   * True only once this window has read an offer that advertises free start and the local kill
+   * switch is not "off"; before any offer is read it is false, so members are never rerouted.
+   */
+  freeStartSignal(): boolean {
+    return this.freeStartOn();
+  }
+  private ageAnswer(): AgeAnswer | undefined {
+    const v = this.context.globalState?.get<unknown>(AGE_KEY);
+    return isAgeAnswer(v) ? v : undefined;
+  }
+  private appVersion(): string { return String(this.context.extension.packageJSON.version ?? ""); }
+  private freeStartView(running?: ResolvedProfile | null): FreeStartView | undefined {
+    if (!this.freeStartOn()) return undefined;
+    const offer = this.trialOffer!;
+    // e2e D2 — a saved free seat whose window is over: never offer a fresh start beside its end.
+    const ended = !running && !this.candidate ? freeSeatEnding(this.chat.profileFailure()) : undefined;
+    const age = this.ageAnswer();
+    // Jay 2026-10-19: no allowance before use — a free seat just starts, the way other products
+    // do, and the end card asks for a pass when the allowance is spent.
+    const tooOld = belowFloor(this.appVersion(), offer.minAppVersion) || this.freeRefusal?.code === "app_too_old";
+    return {
+      ...(age ? { age } : {}),
+      ...(this.freeClaiming ? { claiming: true } : {}),
+      ...(this.freeRefusal ? { refusal: this.freeRefusal } : {}),
+      ...(offer.available === false ? { unavailable: offer.reason ?? "paused" } : {}),
+      ...(tooOld ? { tooOld: true } : {}),
+      ...(ended ? { ended } : {}),
+    };
+  }
+  /**
+   * The per-install id (UUID v4), created at the first claim. SecretStorage first; if it cannot be
+   * used, globalState (not synced). It never reaches a webview, a log line or a funnel event.
+   */
+  private async installId(): Promise<string> {
+    try { const v = await this.context.secrets.get(INSTALL_ID_KEY); if (isInstallId(v)) return v; } catch { /* fall back below */ }
+    const kept = this.context.globalState?.get<unknown>(INSTALL_ID_KEY);
+    if (isInstallId(kept)) return kept;
+    const id = randomUUID();
+    try { await this.context.secrets.store(INSTALL_ID_KEY, id); }
+    catch { await this.context.globalState?.update(INSTALL_ID_KEY, id); }
+    return id;
+  }
+  private async freeStartAge(answer: AgeAnswer): Promise<void> {
+    if (!this.freeStartOn() || this.freeClaiming) return;
+    await this.context.globalState?.update(AGE_KEY, answer);
+    this.freeRefusal = undefined; this.error = undefined;
+    await this.refresh();
+    if (answer === "14+") { await this.freeStartClaim(); return; }
+    // Under 14: the block is shown whatever the Service answers (also offline). The claim is sent
+    // with age_ok:false only so the Service counts the refusal; nothing is issued.
+    try { await claimFreeStart({ proxyUrl: this.settings().proxyUrl, installId: await this.installId(), appVersion: this.appVersion(), ageOk: false }); }
+    catch { /* counted or not, the block stands */ }
+  }
+  private async freeStartClaim(): Promise<void> {
+    if (!this.freeStartOn() || this.busy || this.freeClaiming || this.ageAnswer() !== "14+") return;
+    if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
+    if (belowFloor(this.appVersion(), this.trialOffer?.minAppVersion)) {
+      this.freeRefusal = { code: "app_too_old", message: FREE_CLAIM_REFUSALS.app_too_old! }; await this.refresh(); return;
+    }
+    this.freeClaiming = true; this.freeRefusal = undefined; this.error = undefined;
+    await this.refresh();
+    try {
+      const proxyUrl = this.settings().proxyUrl;
+      const installId = await this.installId();
+      const claim = (): Promise<FreeClaimResult> => claimFreeStart({ proxyUrl, installId, appVersion: this.appVersion(), ageOk: true });
+      let result = await claim();
+      // A request in flight holds the seat's lease: one automatic retry, then the busy sentence.
+      if (!result.ok && result.code === "claim_busy") { await new Promise(r => setTimeout(r, 3000)); result = await claim(); }
+      if (!result.ok) { this.freeRefusal = { code: result.code, message: result.message, ...(result.resumesAt ? { resumesAt: result.resumesAt } : {}) }; return; }
+      this.chat.noteFreeClaim?.(result.code, result.outcome);
+      // From here the issued token takes the ordinary entry path, without a preview or a folder choice:
+      // the served profile names the workspace (~/HypeProofTrial), created if missing.
+      await this.handle({ type: "connectCourse", token: result.code });
+      if (this.candidate?.token === result.code && !this.error) await this.handle({ type: "beginCourse" });
+    } catch {
+      this.freeRefusal = { code: "network", message: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요." };
+    } finally {
+      this.freeClaiming = false;
+      await this.refresh();
+    }
+  }
+  /**
+   * TUX-COND-07 — "이용권 살펴보기" on the chat's end-of-trial card. The person pressed it, so
+   * the start page opens on the pass list (REQ-L12 ②). No order is created until they choose.
+   */
+  async showPurchase(): Promise<void> {
+    await this.show();
+    await this.handlePurchase({ type: "purchaseOpen" });
+    this.purchaseFocus = Date.now();
+    await this.refresh();
   }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {
@@ -245,7 +403,7 @@ export class StartPage {
   private async endPurchase(message: string): Promise<void> {
     this.stopPurchaseWait();
     await this.context.secrets.delete(PENDING_PURCHASE_KEY);
-    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message;
+    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message; this.guardianCheckout = undefined;
     await this.refresh();
   }
   private async purchaseTick(): Promise<void> {
@@ -304,14 +462,14 @@ export class StartPage {
     }
     if (msg.type === "purchaseCancel") {
       // Cancelling stops the wait only. A saved paid order is never thrown away from here.
-      this.stopPurchaseWait();
+      this.stopPurchaseWait(); this.purchaseFocus = undefined;
       if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
       await this.refresh(); return;
     }
     if (msg.type === "purchaseHide") {
       // Back to the other ways to start. The order stays saved and the choice list offers it again.
-      this.stopPurchaseWait();
+      this.stopPurchaseWait(); this.purchaseFocus = undefined;
       if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
       await this.refresh(); return;
     }
@@ -327,24 +485,63 @@ export class StartPage {
       this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
       await this.refresh(); this.schedulePurchasePoll(0); return;
     }
+    if (msg.type === "purchasePayer") {
+      if (typeof msg.adult === "boolean") await this.context.globalState?.update(PAYER_ADULT_KEY, msg.adult);
+      await this.refresh(); return;
+    }
     if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
     if (!this.products?.some(p => p.id === msg.productId)) return;
+    // Login at purchase without an account runtime: no anonymous fallback. The view offers no pay
+    // button in this state; this guards a stale view.
+    if (this.loginGate() === "unavailable") { this.purchaseStage = "choosing"; this.purchaseMessage = undefined; await this.refresh(); return; }
     const { proxyUrl, siteBase } = this.settings();
     this.busy = true; await this.refresh();
     try {
       if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
       const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
-      if (this.accounts && !accountToken) throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
-      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken);
+      if (this.accounts && !accountToken) {
+        if (this.loginAtPurchase()) { this.purchaseStage = "choosing"; this.purchaseMessage = PURCHASE_COPY.signInFirst; return; }
+        throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
+      }
+      // SPEC iteration 4 §2.5 — an order made from a free seat carries its credential so the Service
+      // can link the purchase to the free start. Header only; never shown or sent to the checkout page.
+      const freeCredential = this.freeSeatNow ? await this.currentToken() : undefined;
+      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken, freeCredential);
+      if (result === "account_required") {
+        // The Service requires a Google account for this order. Back to the list with the sign-in
+        // as the Primary (or the calm notice without an account runtime); nothing was ordered.
+        this.accountRequired = true; this.purchaseStage = "choosing";
+        this.purchaseMessage = this.accounts ? PURCHASE_COPY.signInFirst : undefined;
+        if (this.accounts && accountToken) await this.accounts.refreshView();
+        return;
+      }
       const order = result && result !== "bad_checkout" ? { ...result, ...(accountToken ? {accountOwned:true} : {}) } : result;
       if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
       // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
       await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
       this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
-      await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl));
+      // Under 19 on a free seat: the guardian pays on their own phone, so the page is shown here as a link and QR.
+      if (msg.guardian && this.freeSeatNow) this.guardianCheckout = { url: order.checkoutUrl, qr: qrDataUrl(order.checkoutUrl) };
+      else { this.guardianCheckout = undefined; await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl)); }
       this.schedulePurchasePoll();
     } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.orderFailed; }
     finally { this.busy = false; await this.refresh(); }
+  }
+
+  /**
+   * REQ-L12 ⑫ exception — a pass that takes over a trial's home folder may offer to continue the
+   * trial conversation. Only an offer is written here (once per pass); nothing is copied or mixed
+   * until the learner confirms it in the chat. Off unless the Service advertises it.
+   */
+  private async recordCarryoverOffer(profile: ResolvedProfile, root: string, previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean } | undefined): Promise<void> {
+    const pass = activityConnections(this.context)?.current;
+    if (!pass || !carryoverAdvertised(profile) || !passTakesOver(profile, root)) return;
+    const from = carryoverSourceOf(previous, pass.id);
+    if (!from) return;
+    const key = carryoverOfferKey(pass.id);
+    if (validOffer(this.context.globalState.get(key), pass.id)) return;
+    try { await this.context.globalState.update(key, newOffer(pass.id, from)); }
+    catch { /* An offer that could not be saved is simply not shown; entry must not fail for it. */ }
   }
 
   private async activateAccountPass(passId: string): Promise<void> {
@@ -364,6 +561,11 @@ export class StartPage {
     try { activities=await activityConnections(this.context)?.list(); }
     catch { this.error ??= "저장된 활동 목록을 읽지 못했습니다. 참여 코드를 다시 입력해 주세요."; }
     const legacyHistory=this.context.workspaceState?.keys?.().some(isLegacyHistoryKey);
+    // SPEC §2.5 — the running seat (not a candidate being previewed) decides the payer question and the header.
+    const running = this.candidate ? null : p;
+    this.freeSeatNow = isFreeSeat(running);
+    this.freeNewcomer = !p && this.freeStartOn();
+    const freeStart = this.freeStartView(running);
     const state: StartState = {
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),
       legacyHistory,
@@ -372,20 +574,26 @@ export class StartPage {
       started: !this.candidate && this.started && !!p,
       candidate: !!this.candidate,
       previousConnected: this.candidate ? this.candidate.previousConnected : !!p,
-      error: this.error ?? (!p ? this.chat.profileFailure()?.friendly : undefined),
+      // REQ-L12 (13) — after a free trial ended, name the pass entry while it is drawn. Never open it.
+      // The free card states a free seat's end itself (freeStart.ended), so its failure sentence is not repeated.
+      error: withTrialPassPointer(this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),
       purchase: this.purchaseView(),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
+      ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
+      ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
-      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
+      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), ...(isFreeSeat(p) ? { free: true } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.
         coach: this.chat.coachNameIsChosen(p) ? this.chat.coachDisplayName(p) : "직접 이름 짓는 코치",
         series: p.lesson?.version ?? `${p.series_index} / ${p.series_total}`, workspace: this.candidate?.workspace ?? p.workspace_root ?? "현재 작업 폴더" } } : {}),
     };
+    // studio-funnel-events — the pass offer is on screen: the choice list shows it while no activity card is.
+    if (this.panel && state.purchase?.available && !state.profile) this.chat.funnelEmit?.({ type: "offer_viewed", surface: "start_page" });
     await this.panel?.webview.postMessage({ type: "startState", state });
   }
 
@@ -417,8 +625,24 @@ export class StartPage {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") {
-      void this.accounts?.refreshView(); await this.refresh(); void this.loadProducts().then(() => this.refresh()); return; }
-    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
+      void this.accounts?.refreshView();
+      // Free start — a newcomer should land on the free card, not see the code choices flash first.
+      // The first paint waits for the offer at most 1.5 s; a slow or absent Service paints as today.
+      if (!this.offerWaited) {
+        this.offerWaited = true;
+        // (A host without timers — the vm test harness — simply does not wait.)
+        const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
+        await Promise.race([this.loadTrialOffer(), bound]);
+      }
+      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+    if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
+    if (msg.type === "freeStartClaim") { await this.freeStartClaim(); return; }
+    if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }
+    if (msg.type === "freeStartUpdate") { await vscode.commands.executeCommand("hypeproof-chat.checkForUpdates"); return; }
+    // studio-funnel-events — the start-page pass offer (Service type offer_*, surface start_page).
+    if (msg.type === "purchaseOpen") this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" });
+    if ((msg.type === "purchaseHide" || msg.type === "purchaseCancel") && !this.order) this.chat.funnelEmit?.({ type: "offer_dismissed", surface: "start_page" });
+    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {
@@ -543,7 +767,10 @@ export class StartPage {
           if (connections) {
             const root = directory ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             if (!root) throw new Error('작업 폴더를 선택해 주세요.');
+            // REQ-L12 ⑫ — read who held this folder before the pass takes it over (carry-over offer).
+            const previousHolder = carryoverAdvertised(profile) ? await connections.forWorkspace(root).catch(() => undefined) : undefined;
             rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass);
+            await this.recordCarryoverOffer(profile!, root, previousHolder);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
           // REQ-L12 — the purchased activity is entered; the order record has done its job.

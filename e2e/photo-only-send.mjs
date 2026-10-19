@@ -20,7 +20,7 @@ const browser=await chromium.launch();
 try {
  const p=await browser.newPage();await p.setContent('<body style="background:green">owned fixture</body>');const photo=await p.screenshot();
  await p.addInitScript(()=>{window.sends=[];window.hostEvents=[];window.acquireVsCodeApi=()=>({postMessage:m=>window.hostEvents.push(m),getState:()=>undefined,setState:()=>{}})});
- await p.goto('http://127.0.0.1:'+server.address().port);const send=p.getByRole('button',{name:'Send',exact:true});const input=p.locator('.hps-input textarea');
+ await p.goto('http://127.0.0.1:'+server.address().port);const send=p.getByRole('button',{name:'보내기',exact:true});const input=p.locator('.hps-input textarea');
  const ack=async(stage,type='imageStagedByHost')=>p.evaluate(({stage,type})=>window.dispatchEvent(new MessageEvent('message',{data:{type,stageId:stage.stageId,name:stage.name,reason:'test refusal'}})),{stage,type});
  async function drop(){const n=await p.evaluate(()=>window.hostEvents.filter(x=>x.type==='stageImage').length);const dt=await p.evaluateHandle(b64=>{const d=new DataTransfer();d.items.add(new File([Uint8Array.from(atob(b64),c=>c.charCodeAt(0))],'sample.png',{type:'image/png'}));return d},photo.toString('base64'));await p.locator('.hps-shell').dispatchEvent('drop',{dataTransfer:dt});await p.waitForFunction(n=>window.hostEvents.filter(x=>x.type==='stageImage').length>n,n);return p.evaluate(()=>window.hostEvents.filter(x=>x.type==='stageImage').at(-1));}
  const first=await drop();await p.locator('.hps-attachment-file img').waitFor();await expect(send).toBeDisabled();await input.press('Enter');assert.equal(await p.evaluate(()=>window.sends.length),0,'no send before host staging acknowledgement');

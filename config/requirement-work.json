@@ -36,10 +36,11 @@
         "US-15",
         "US-16",
         "US-17",
-        "US-18"
+        "US-18",
+        "US-19"
       ],
       "inline_prefixes": [],
-      "sha256": "03baf5f1a85362f685254326bd093dc3d18f0f0ce4e3812e37ff40145d5e08d3",
+      "sha256": "456cf25a5dc2868a37c66b6be8979d95bfadcad7163479cb945fd67a0b536e58",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/unified-studio-experience.md",
@@ -64,7 +65,7 @@
       "inline_prefixes": [
         "NAT"
       ],
-      "sha256": "d8e3d7ff928993744c29c40cc94f6829033f70bf0eaf27deb92bb3a9fb77e093",
+      "sha256": "8ae569e681a4231083d132f2ee0fb2abc1ec3bc7f0248f0df5fa5340a3f7d6fa",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/studio-native-trial.md",
@@ -418,6 +419,8 @@
         "TUX-COND-04",
         "TUX-COND-05",
         "TUX-COND-06",
+        "TUX-COND-07",
+        "TUX-COND-08",
         "TUX-COPY-01",
         "TUX-HOST-01",
         "TUX-HOST-02",
@@ -446,12 +449,18 @@
         "TUX-SP-07",
         "TUX-SP-08",
         "TUX-SP-09",
-        "TUX-SP-10"
+        "TUX-SP-10",
+        "TUX-SP-12",
+        "TUX-SP-13",
+        "TUX-SP-14",
+        "TUX-SP-15",
+        "TUX-SP-16",
+        "TUX-SP-17"
       ],
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "6c6226c5046db764db6fffd2b8e8464d0148ee2a3004242aee5aeb81579d2289",
+      "sha256": "eb0786073c19566e391e46b592166e5cafed50bf2bb47fbdc92bb33a35830144",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -780,10 +789,13 @@
         "PRA-05",
         "PRA-06",
         "PRA-07",
-        "PRA-08"
+        "PRA-08",
+        "PRA-11",
+        "PRA-12",
+        "PRA-13"
       ],
       "inline_prefixes": [],
-      "sha256": "20204f24829ec89d30058fa9f020e7c2b5c63baa73fba95bae90781e89b66e9f",
+      "sha256": "b888df988602aaca16083316b262e7ab075667ae2ff1ca4abed88c0087788d10",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -1878,7 +1890,8 @@
             "US-15",
             "US-16",
             "US-17",
-            "US-18"
+            "US-18",
+            "US-19"
           ]
         }
       ],
@@ -1981,6 +1994,8 @@
             "TUX-COND-04",
             "TUX-COND-05",
             "TUX-COND-06",
+            "TUX-COND-07",
+            "TUX-COND-08",
             "TUX-COPY-01",
             "TUX-HOST-01",
             "TUX-HOST-02",
@@ -2009,7 +2024,13 @@
             "TUX-SP-07",
             "TUX-SP-08",
             "TUX-SP-09",
-            "TUX-SP-10"
+            "TUX-SP-10",
+            "TUX-SP-12",
+            "TUX-SP-13",
+            "TUX-SP-14",
+            "TUX-SP-15",
+            "TUX-SP-16",
+            "TUX-SP-17"
           ]
         }
       ],
@@ -3870,6 +3891,99 @@
       "verification_inputs": [
         "scripts/test-installer-kit.sh",
         "scripts/tests/install-kit-fixture.ps1"
+      ]
+    },
+    {
+      "id": "installer-sdk-seed-fail-closed",
+      "title": "macOS installer fails closed on a missing SDK seed",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-11"
+          ]
+        }
+      ],
+      "depends_on": [
+        "non-member-class-kit-install"
+      ],
+      "next_action": "Merge the install.sh change; run one member and one kit install on a clean Mac with registry.npmjs.org blocked and confirm the doctor stops with the stage and recovery command.",
+      "design_delta": "seed_sdk records the stage it stopped at; the doctor fails on a missing claude.verified.json with a Korean stop message naming that stage and the recovery command, matching install.ps1; the self-heal warning is removed.",
+      "positive_control": "A seeder that writes the verified marker passes the doctor with exit 0, as a member and as a kit; on Linux a failed seed leaves the doctor at exit 0 without a stop message or a claim that the install will stop (scripts/test-installer-sdk-seed.sh).",
+      "negative_control": "A seeder that fails, cannot be obtained, or exits 0 without a marker makes the doctor exit non-zero with the stage and recovery command, for a member and a kit; no installer text claims Studio repairs the SDK.",
+      "evidence_required": "Studio commit and the script test output. A real clean-Mac install with the seed blocked is required before completion; a stubbed seeder is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "docs/INSTALL-CLASS-KIT.ko.md"
+      ],
+      "verification_inputs": [
+        "scripts/test-installer-sdk-seed.sh"
+      ]
+    },
+    {
+      "id": "installer-korean-copy",
+      "title": "Learner-facing installer prompts, headers and doctor verdict in Korean",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-13"
+          ]
+        }
+      ],
+      "depends_on": [
+        "installer-sdk-seed-fail-closed"
+      ],
+      "next_action": "Merge after the SDK seed fail-closed change; run one Mac install without Homebrew and one Windows install without Git Bash and confirm the consent prompts, step headers and doctor verdict read in Korean.",
+      "design_delta": "install.sh and install.ps1 ask the Homebrew, nvm and WSL questions, print step headers, the doctor verdict and the final line in Korean, with Korean answer hints; tool output and diagnostic log lines stay as they are. Both installers read Korean and Korean-IME answers (아니요, ㄴ, ㅜ / 네, ㅇ, ㅛ) the way the learner meant; a not-understood answer is asked again and, after three tries, taken as no.",
+      "positive_control": "Korean prompts and headers that keep tool names pass, and both shipped installers pass with at least their known number of prompts and headers (scripts/test-check-installer-korean.py). Every yes answer, Korean, IME jamo or English, and Enter on a default-yes question is read as yes by both shipped parsers (scripts/test-installer-answers.sh).",
+      "negative_control": "English confirm/Confirm-Or/Read-Host prompts, step headers, [Y/n] answer hints and doctor verdicts are rejected (scripts/test-check-installer-korean.py). Every no answer, including 아니요 (which the old install.sh read as yes and so installed Homebrew), is read as no, and a not-understood answer is never read as yes (scripts/test-installer-answers.sh).",
+      "evidence_required": "Studio commit and the static check output. A real install on each platform is required before completion; a static check is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "scripts/install.ps1",
+        "scripts/check-installer-korean.py"
+      ],
+      "verification_inputs": [
+        "scripts/test-check-installer-korean.py",
+        "scripts/test-installer-answers.sh",
+        "scripts/test-installer-kit.sh"
+      ]
+    },
+    {
+      "id": "installer-windows-posix-shell-detect",
+      "title": "Windows installer finds user-scope Git Bash and rejects the bare WSL stub",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-12"
+          ]
+        }
+      ],
+      "depends_on": [
+        "non-member-class-kit-install"
+      ],
+      "next_action": "Merge the install.ps1 change; run the manual winget-git-user-scope job once and install on a real Windows PC with only user-scope Git to confirm the doctor passes without the WSL offer.",
+      "design_delta": "Find-GitBash checks Program Files, %LOCALAPPDATA%\\Programs\\Git and the Git root of git.exe on PATH, never System32 bash.exe; WSL counts only when wsl -l -q exits 0 and lists a distribution.",
+      "positive_control": "Machine-scope Git, user-scope Git, a custom Git root from PATH and a WSL distro each pass the doctor (scripts/tests/install-posix-shell.Tests.ps1, mocked paths).",
+      "negative_control": "No Git with only the wsl.exe stub fails the doctor and still reaches the WSL offer; System32 bash.exe is not accepted as Git Bash; against the previous implementation the user-scope and stub cases fail.",
+      "evidence_required": "Studio commit, the Pester output, and the winget-git-user-scope job log. A real Windows install with user-scope Git is required before completion; mocked paths are not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.ps1",
+        ".github/workflows/private-installers.yml"
+      ],
+      "verification_inputs": [
+        "scripts/tests/install-posix-shell.Tests.ps1"
       ]
     },
     {

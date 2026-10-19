@@ -119,15 +119,14 @@
   justify-content:space-between;
   align-items:center;
   margin-bottom:30px}
+/* Letter-spaced Hangul reads as broken syllables ("시 작 하 기"), and the hollow dot beside it read
+   as an unchecked radio that does nothing (design re-critique iter4). Quiet 11px label, no dot. */
 .studio-step {
-  font-size:10px;
-  letter-spacing:2px;
+  font-size:11px;
+  letter-spacing:0;
   color:var(--studio-muted)}
 .studio-dot {
-  width:8px;
-  height:8px;
-  border:1px solid #9ba88c;
-  border-radius:50%}
+  display:none}
 .studio-connect h2 {
   font-size:24px;
   line-height:1.35;
@@ -406,6 +405,10 @@
   transition:background .15s}
 .studio-choice:hover:enabled { background: var(--studio-bg); }
 .studio-choice:disabled { opacity:.55; cursor:default; }
+/* TUX-SP-12 — what the trial choice needs and gives, read before choosing. Quiet text, not a second button. */
+.studio-choice-group { display:grid; gap:6px; }
+.studio-choice-note { margin:0 2px; font-size:11px; line-height:1.5; color:var(--studio-muted); word-break:keep-all; overflow-wrap:anywhere; }
+.studio-choice-note span { display:block; }
 
 /* REQ-L12 — passes are a list of peer choices (SX-04): the selected one gets a border, never a second Primary. */
 .studio-plans { display:grid; gap:8px; margin-bottom:14px; }
@@ -467,3 +470,17 @@
 .studio-account .studio-google:hover:not(:disabled) { background: #f8faff; }
 .studio-account .studio-google:focus-visible { outline: 2px solid #4285f4; outline-offset: 2px; }
 .studio-account .studio-google svg { flex: 0 0 20px; margin: 0!important; }
+/* TUX-SP-14/15/16 — free start card. Same tokens as the rest of the card; one Primary, quiet links. */
+.studio-free { display:grid; gap:12px; }
+.studio-question { margin:0 0 2px; font-size:15px; line-height:1.5; font-weight:550; color:var(--studio-text); word-break:keep-all; }
+.studio-free-links { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:4px 18px; margin:4px 0 0 -4px; }
+/* The free allowance is the offer itself: read before the question, in body text, not as a footnote. */
+.studio-free-allowance { margin:-4px 0 6px; font-size:13px; line-height:1.5; color:var(--studio-text); word-break:keep-all; }
+.studio-free-links .studio-text-button { margin:0; }
+.studio-free-guardian { color:var(--studio-text); text-decoration:underline; text-underline-offset:3px; margin:0 0 0 -4px; }
+/* A calm notice, not an error: today's free budget is gone or paused. No red, no countdown. */
+.studio-notice { margin:0; font-size:12px; line-height:1.6; color:var(--studio-text); background:var(--studio-panel); border:1px solid var(--studio-line); border-radius:7px; padding:12px; word-break:keep-all; }
+.studio-guardian-pay { display:grid; justify-items:center; gap:8px; margin:0 0 12px; }
+.studio-guardian-pay img { background:#fff; border-radius:6px; padding:6px; }
+.studio-guardian-pay .studio-help { margin:0; text-align:center; }
+.studio-guardian-pay .studio-text-button { margin:0; }

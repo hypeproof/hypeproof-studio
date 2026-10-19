@@ -6,7 +6,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const dist=path.join(repo,'extensions/hypeproof-chat/webview-ui/dist');
-const out=path.join(repo,'e2e/test-results/start-page');await fs.mkdir(out,{recursive:true});
+const out=path.resolve(process.env.HPS_START_PAGE_OUT||path.join(repo,'e2e/test-results/start-page'));await fs.mkdir(out,{recursive:true});
 const server=http.createServer(async(req,res)=>{try {const url=new URL(req.url,'http://local');const name=url.pathname==='/'?'index.html':url.pathname.slice(1);if(name.includes('..'))throw Error();let body=await fs.readFile(path.join(dist,name));if(name==='index.html')body=Buffer.from(body.toString().replace('<html','<html data-surface="start"'));res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(body);}catch{res.writeHead(404).end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});
 try {
@@ -15,10 +15,30 @@ try {
  await p.goto(`http://127.0.0.1:${server.address().port}`);await p.getByRole('heading',{name:'어떻게 시작할까요?'}).waitFor();
  await p.getByRole('button',{name:'파일',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioFiles');
  await p.getByRole('button',{name:'설정',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioSettings');
- await p.getByRole('button',{name:'AI 체험하기',exact:true}).click();
+ // TUX-SP-12 — before "AI 체험하기" is chosen, the choice says a code is needed today and the
+ // allowance the Service advertises. Offer off (positive), offer with numbers, offer open: this build
+ // has only the code path, so the card keeps the code line and agrees with the screen it leads to.
+ const codeLine='지금은 발급받은 체험 코드가 있어야 시작할 수 있습니다.';
+ const offerState=async trialOffer=>p.evaluate(o=>window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{version:'test',checking:false,...(o?{trialOffer:o}:{})}}})),trialOffer);
+ const trialChoice=p.getByRole('button',{name:'AI 체험하기',exact:true});
+ await p.getByText(codeLine,{exact:true}).waitFor();
+ assert.equal(await p.getByText(/AI 요청 \d/).count(),0,'no invented allowance when the Service does not advertise one');
+ assert.match(await trialChoice.getAttribute('aria-describedby'),/trial-entry-note/);
+ await offerState({entry:'code',durationHours:1.5,requestLimit:77});
+ await p.getByText('체험 1시간 30분 · AI 요청 77번',{exact:true}).waitFor();assert.equal(await p.getByText(codeLine,{exact:true}).count(),1);
+ await p.setViewportSize({width:390,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,'trial-note-390.png'),fullPage:true});await p.setViewportSize({width:1280,height:900});
+ await offerState({entry:'open',durationHours:1,requestLimit:40});
+ await p.getByText('체험 1시간 · AI 요청 40번',{exact:true}).waitFor();
+ assert.equal(await p.getByText(codeLine,{exact:true}).count(),1,'a code-only build keeps the code line even when the Service advertises open entry');
+ // The note never runs into the choice's accessible name.
+ assert.equal(await trialChoice.count(),1);
+ await trialChoice.click();
  assert.deepEqual(await p.evaluate(()=>window.sent.map(m=>m.type)),['startReady','openStudioFiles','openStudioSettings']);
+ // The card and the screen it leads to agree: that screen asks for a code.
  await p.getByRole('heading',{name:'내 삶에 AI 더하기'}).waitFor();
+ await p.getByText(/지금은 발급받은 체험 코드가 필요합니다/).waitFor();
  await p.getByRole('button',{name:'시작 방법 다시 선택'}).click();
+ await offerState(undefined);await p.getByText(codeLine,{exact:true}).waitFor();
  await p.getByRole('button',{name:'수업에 참여하기',exact:true}).click();
  assert.equal(await p.getByText('나비',{exact:true}).count(),0);assert.equal(await p.locator('#course-code').getAttribute('type'),'password');
  const submit=p.getByRole('button',{name:'코드 확인하기'});assert.equal(await submit.isDisabled(),true);
@@ -41,6 +61,16 @@ try {
  await state({error:'개인 체험 시간이 끝났습니다.'});await p.getByRole('alert').waitFor();assert.equal(await p.getByRole('button',{name:'이어서 하기'}).count(),0);
  await state({profile:{...profile,id:'kids-test',name:'어린이 만들기 수업',coach:'직접 이름 짓는 코치'}});await p.getByText('어린이 만들기 수업',{exact:true}).waitFor();
  await p.getByRole('button',{name:'연결 해제',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'disconnectCourse');
+ // TUX-SP-14 — a full free-start advertisement replaces the three peer choices with the age card
+ // (deeper cases live in e2e/trial-ux). Control: the code-only 'open' offer above kept the choices.
+ await state({trialOffer:{entry:'open',durationHours:24,requestLimit:10,claim:'/v1/free/claim',available:true},freeStart:{}});
+ // The person had opened the code form earlier in this run; with free start it offers "돌아가기".
+ await p.getByRole('heading',{name:'참여 코드로 시작하기'}).waitFor();await p.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await p.getByRole('heading',{name:'바로 시작할 수 있습니다'}).waitFor();await p.getByText('만 14세 이상인가요?',{exact:true}).waitFor();
+ assert.equal(await p.getByRole('button',{name:'AI 체험하기',exact:true}).count(),0);assert.equal(await p.getByRole('button',{name:'수업에 참여하기',exact:true}).count(),0);
+ assert.doesNotMatch(await p.locator('.studio-connect').innerText(),/체험/);
+ for(const width of [390,1280]){await p.setViewportSize({width,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,`free-start-${width}.png`),fullPage:true});}
+ await p.setViewportSize({width:1280,height:900});
  await state({});
  for(const width of [390,768,1280]){await p.setViewportSize({width,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,`start-${width}.png`),fullPage:true});}
  const storage=await p.evaluate(()=>({local:localStorage.length,session:sessionStorage.length}));assert.deepEqual(storage,{local:0,session:0});assert.deepEqual(errors,[]);

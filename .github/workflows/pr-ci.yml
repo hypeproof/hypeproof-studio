@@ -58,6 +58,14 @@ jobs:
         run: |
           python3 scripts/test-check-customer-names.py
           python3 scripts/check-customer-names.py
+      # A learner answers the installer's questions and follows its step
+      # headers; an English prompt mid-install stopped people (PRA-13, I9).
+      - name: Installer prompts, headers and answers are Korean
+        if: ${{ !cancelled() }}
+        run: |
+          python3 scripts/test-check-installer-korean.py
+          python3 scripts/check-installer-korean.py
+          bash scripts/test-installer-answers.sh
       - name: Workflow shells declare bash on Windows runners
         if: ${{ !cancelled() }}
         run: python3 scripts/check-workflow-shells.py
@@ -72,6 +80,7 @@ jobs:
         run: |
           node e2e/unified-release/gate.test.mjs
           node --test scripts/release/test/build-contract.test.mjs
+          node --test scripts/release/test/sdk-seed-assets.test.mjs
           node e2e/unified-release/sdk-seed.test.mjs
           node --test e2e/unified-release/candidate-service.test.mjs
           node --test scripts/test/windows-policy-patch.test.mjs

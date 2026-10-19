@@ -15,7 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StartPage } from "./startPage";
-import { AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
+import { ACCOUNTS_ENABLED_DEFAULT, AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import {
@@ -41,6 +41,9 @@ import {
   runUpdate,
   dismissVersion,
   currentBundleVersion,
+  reportManualUpdateCheckFailure,
+  reportInstallUpdateFailure,
+  registerPublicUpdateSignal,
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
@@ -208,7 +211,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const accountService = accountConfig.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
   const accountSite = accountConfig.get<string>('siteBase', 'https://hypeproof-ai.xyz');
   const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
-    || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', false), accountService, accountSite);
+    || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', ACCOUNTS_ENABLED_DEFAULT), accountService, accountSite);
   const accounts = accountEnabled ? new AccountSession({
     service: accountService, site: accountSite, secrets: context.secrets,
     label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
@@ -226,6 +229,10 @@ export async function activate(context: vscode.ExtensionContext) {
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource(), accounts);
+  // D19/REQ-I15: the Service's free-start offer turns on the public-release update path for a
+  // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.
+  registerPublicUpdateSignal(() => startPage.freeStartSignal());
+  context.subscriptions.push({ dispose: () => registerPublicUpdateSignal(null) });
   if (accounts) {
     context.subscriptions.push(vscode.window.registerUriHandler({
       handleUri: async uri => {
@@ -241,6 +248,8 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   let initialSurfaceReady: Promise<void> = Promise.resolve();
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
+  // TUX-COND-07 — only the end-of-trial card's Primary calls this; the person pressed it.
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.showPasses", () => startPage.showPurchase()));
   // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
   // the start page enters a folder (activity commit, then ensureWorkspace switches and reloads).
   provider.setProjectOpener(async (folder) => {
@@ -473,6 +482,7 @@ export async function activate(context: vscode.ExtensionContext) {
         getLastRequestId: () => provider.getLastRequestId(),
         getProfileId: () => provider.getProfileId(),
         getRecentTurns: () => provider.getHistorySnapshot(),
+        getAudience: () => provider.getSeatAudience(),
       });
     }),
 
@@ -631,7 +641,8 @@ export async function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`현재 v${current} — 최신 버전입니다.`);
         }
       } catch (error) {
-        vscode.window.showWarningMessage(`업데이트를 확인하지 못했습니다. 잠시 후 다시 시도해주세요. ${(error as Error).message}`);
+        // REQ-I14: no release access → homepage download, not a retry promise.
+        void reportManualUpdateCheckFailure(error);
       }
     }),
 
@@ -650,7 +661,8 @@ export async function activate(context: vscode.ExtensionContext) {
           onUpdateScheduled: () => provider.setAvailableUpdate(null),
         });
       } catch (error) {
-        vscode.window.showErrorMessage(`업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. ${(error as Error).message}`);
+        // D19/REQ-I14: no access or a rate-limited re-check gets the manual-check copy.
+        void reportInstallUpdateFailure(error);
       }
     }),
 

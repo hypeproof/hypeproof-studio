@@ -933,6 +933,16 @@ html, body, #root {
   background: transparent; color: var(--vscode-foreground, #aaa); border: 1px solid rgba(255,255,255,0.15);
 }
 .hps-error-banner-dismiss:hover { background: rgba(255,255,255,0.06); }
+/* Free start D4 (TUX-SP-16) — a scheduled state, not a fault: the calm stop-notice palette
+   (neutral rail, widget background, foreground text) instead of the red alert chrome. */
+.hps-error-banner--notice {
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  border-left: 2px solid var(--vscode-descriptionForeground, #888);
+  color: var(--vscode-foreground, #ddd);
+}
+.hps-error-banner--notice .hps-error-banner-icon { font-size: 16px; }
+.hps-error-banner--notice .hps-error-banner-msg { color: var(--vscode-descriptionForeground, #aaa); line-height: 1.5; }
 
 .hps-fatal {
   padding: 32px 24px; text-align: center; max-width: 480px; margin: 40px auto;
@@ -1291,6 +1301,7 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-run,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button {
   color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-line);
 }
@@ -1701,6 +1712,73 @@ html, body, #root {
 .hps-evidence-note textarea, .hps-evidence-note input, .hps-evidence-note select { width: 100%; box-sizing: border-box; }
 .hps-evidence-variants { border-collapse: collapse; }
 .hps-evidence-variants td, .hps-evidence-variants th { border: 1px solid var(--vscode-panel-border, #8884); padding: 2px 4px; text-align: left; }
+
+/* TUX-COND-07 — the inline end-of-trial card. Not an error: neutral surface, no alarm colour,
+   facts first, one Primary and a plain-text escape. Wraps at narrow widths. Its Primary takes the
+   theme's button colour only on a seat without a lesson; beside region A's Primary it steps down
+   with Send and the error banner's retry (SX-04, the step-down list above). */
+.hps-trial-end-card {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  color: var(--vscode-foreground, inherit);
+}
+.hps-trial-end-card-title { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.hps-trial-end-card-fact { margin: 0 0 4px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.hps-trial-end-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.hps-trial-end-card-primary {
+  border: 0; cursor: pointer; padding: 6px 14px; border-radius: 4px; font-size: 13px; font-weight: 600;
+  background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff);
+}
+.hps-trial-end-card-primary:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+.hps-trial-end-card-escape {
+  border: 0; cursor: pointer; padding: 6px 8px; background: transparent; font-size: 13px;
+  color: var(--vscode-textLink-foreground, #3794ff);
+}
+.hps-trial-end-card-escape:hover { text-decoration: underline; }
+/* TUX-COND-08 — optional email section: secondary, below the pass offer, smaller and quieter
+   than the Primary (CU-13). A plain secondary button, never the theme's primary colour. */
+.hps-notify-optin {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  font-size: 12px; color: var(--vscode-descriptionForeground, inherit);
+}
+.hps-notify-optin-prompt, .hps-notify-optin-done { margin: 0 0 6px; line-height: 1.5; }
+.hps-notify-optin-row { display: flex; gap: 6px; min-width: 0; }
+.hps-notify-optin-input {
+  flex: 1 1 auto; min-width: 0; padding: 4px 6px; font-size: 12px;
+  color: var(--vscode-input-foreground, inherit); background: var(--vscode-input-background, transparent);
+  border: 1px solid var(--vscode-input-border, rgba(127, 127, 127, 0.4)); border-radius: 3px;
+}
+.hps-notify-optin-submit {
+  flex: 0 0 auto; cursor: pointer; padding: 4px 10px; font-size: 12px; border-radius: 3px;
+  border: 1px solid var(--vscode-button-border, rgba(127, 127, 127, 0.4));
+  background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, inherit);
+}
+.hps-notify-optin-submit:disabled { cursor: default; opacity: 0.6; }
+.hps-notify-optin-consent { margin: 6px 0 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.hps-notify-optin-withdraw {
+  border: 0; padding: 0; cursor: pointer; background: transparent; font-size: 12px;
+  color: var(--vscode-textLink-foreground, #3794ff);
+}
+.hps-notify-optin-withdraw:hover { text-decoration: underline; }
+.hps-notify-optin-error { margin: 6px 0 0; color: var(--vscode-errorForeground, #f48771); }
+
+/* REQ-L12 ⑫ — trial conversation carry-over offer and read-only trial transcript. */
+.hps-carryover {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--vscode-focusBorder, #888);
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+}
+.hps-carryover-title, .hps-carryover-body { margin: 0 0 6px; }
+.hps-carryover-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hps-carryover-list { margin: 6px 0 0; padding-left: 0; list-style: none; max-height: 240px; overflow-y: auto; }
+.hps-carryover-list li { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hps-carryover-who { font-weight: 600; margin-right: 6px; color: var(--vscode-descriptionForeground, #888); }
 
 /* Recovered requests use the existing parked-message hierarchy, with a bounded
    list so failure recovery never pushes the composer off a short window. */

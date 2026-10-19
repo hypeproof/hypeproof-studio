@@ -6,6 +6,7 @@ import type * as vscode from 'vscode';
 import type { AccountPassBinding } from './accountSession';
 import type { ResolvedProfile } from './protocol';
 import type { ActivitySummary } from './startPageProtocol';
+import { isFreeSeat } from './seatVocabulary';
 export type { ActivitySummary } from './startPageProtocol';
 
 export class ActivityConnectionError extends Error {}
@@ -38,9 +39,21 @@ const canonical = canonicalRoot;
  * only by a pass. A local folder choice must not change the Service profile's home.
  */
 export function passTakesOver(p: Pick<ResolvedProfile, 'pass' | 'workspace_root'>, root: string): boolean {
-  if (!p.pass || !p.workspace_root) return false;
+  return !!p.pass && isHome(p, root);
+}
+function isHome(p: Pick<ResolvedProfile, 'workspace_root'>, root: string): boolean {
+  if (!p.workspace_root) return false;
   const home = p.workspace_root.startsWith('~/') ? path.join(os.homedir(), p.workspace_root.slice(2)) : p.workspace_root;
   try { return canonical(home) === canonical(root); } catch { return false; }
+}
+/**
+ * A new free seat on this machine may take over its home folder from an earlier free seat only:
+ * the free credential lives in SecretStorage, and when that is lost (a reinstall, a cleared
+ * keychain) the next claim is a new seat that would otherwise be locked out of its own folder.
+ * A folder held by a pass or a class stays held.
+ */
+export function freeTakesOver(p: Parameters<typeof isFreeSeat>[0] & Pick<ResolvedProfile, 'workspace_root'>, root: string, bound: { free?: unknown } | undefined): boolean {
+  return isFreeSeat(p) && bound?.free === true && isHome(p, root);
 }
 const contexts = new WeakMap<vscode.ExtensionContext, ActivityConnections>();
 export function activityConnections(context: vscode.ExtensionContext): ActivityConnections | undefined { return contexts.get(context); }
@@ -110,7 +123,7 @@ export class ActivityConnections {
       if (r?.service !== activityService(this.service())) continue;
       if (!found.has(r.id) || found.get(r.id)!.savedAt < r.savedAt) found.set(r.id, r);
     }
-    return [...found.values()].map(({ref,id,name,kind,pass,workspace}) => ({ref,id,name,kind,...(pass?{pass:true}:{}),workspace}));
+    return [...found.values()].map(({ref,id,name,kind,pass,free,workspace}) => ({ref,id,name,kind,...(pass?{pass:true}:{}),...(free&&!pass?{free:true}:{}),workspace}));
   }
   async candidate(ref: string): Promise<ActivityRecord> {
     const r = await this.read(ref);
@@ -143,14 +156,16 @@ export class ActivityConnections {
     const c = canonical(root), lower = c.replace(/^[A-Z]:/, (d) => d.toLowerCase());
     return lower === c ? undefined : path.join(this.dir, digest(lower) + '.json');
   }
-  private claim(root: string, id: string, takeover = false): void {
+  private claim(root: string, id: string, takeover: boolean | ((bound: { free?: unknown }) => boolean) = false, free = false): void {
     fs.mkdirSync(this.dir, {recursive:true,mode:0o700});
     const file = this.bindingPath(root);
-    try { fs.writeFileSync(file, JSON.stringify({version:1,id}), {flag:'wx',mode:0o600}); }
+    const fresh = JSON.stringify({version:1,id,...(free?{free:true}:{})});
+    try { fs.writeFileSync(file, fresh, {flag:'wx',mode:0o600}); }
     catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
-    if (JSON.parse(fs.readFileSync(file,'utf8')).id === id) return;
+    const bound = JSON.parse(fs.readFileSync(file,'utf8'));
+    if (bound.id === id) return;
     // The earlier activity keeps its saved record; selecting it later reports this folder as taken.
-    if (takeover) { fs.writeFileSync(file, JSON.stringify({version:1,id}), {mode:0o600}); return; }
+    if (typeof takeover === 'function' ? takeover(bound) : takeover) { fs.writeFileSync(file, fresh, {mode:0o600}); return; }
     throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
   }
   prepare(root:string,p:ResolvedProfile,prepare:()=>void):void {
@@ -161,7 +176,11 @@ export class ActivityConnections {
     try {
       // Preparation must not replace the binding that commit snapshots for rollback.
       const id=digest(JSON.stringify([activityService(this.service()),p.activity_id]));
-      const taken=[this.bindingPath(root),this.legacyBindingPath(root)].some(f=>!!f && fs.existsSync(f) && JSON.parse(fs.readFileSync(f,'utf8')).id !== id);
+      const taken=[this.bindingPath(root),this.legacyBindingPath(root)].some(f=>{
+        if (!f || !fs.existsSync(f)) return false;
+        const bound=JSON.parse(fs.readFileSync(f,'utf8'));
+        return bound.id !== id && !freeTakesOver(p,root,bound);
+      });
       if (taken && !passTakesOver(p,root)) {
         throw new ActivityConnectionError('이 폴더는 다른 활동에 연결돼 있습니다. 다른 작업 폴더를 선택해 주세요.');
       }
@@ -181,7 +200,7 @@ export class ActivityConnections {
     const sameWindowRoot = !!this.root() && canonical(this.root()!) === workspace;
     const ref = PREFIX + crypto.randomUUID();
     const next: ActivityRecord = {version:1,ref,id,service,serverId:p.activity_id!,workspace,token,...(accountPass ? {accountPass} : {}),
-      name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),savedAt:Date.now()};
+      name:p.lesson?.content.title ?? p.display_name,kind:p.activity_kind,...(p.pass?{pass:true}:{}),...(isFreeSeat(p)?{free:true}:{}),savedAt:Date.now()};
     const restore = () => {
       if (!fs.existsSync(bindingFile)) return;
       const bound=JSON.parse(fs.readFileSync(bindingFile,'utf8'));
@@ -192,9 +211,10 @@ export class ActivityConnections {
     };
     const tmp = bindingFile + '.' + crypto.randomUUID();
     try {
-      this.claim(workspace,id,passTakesOver(p,workspace));
+      const free = isFreeSeat(p);
+      this.claim(workspace,id,(bound)=>passTakesOver(p,workspace) || freeTakesOver(p,workspace,bound),free);
       await this.raw.secrets.store(ref,JSON.stringify(next));
-      fs.writeFileSync(tmp,JSON.stringify({version:1,id,ref}),{flag:'wx',mode:0o600});
+      fs.writeFileSync(tmp,JSON.stringify({version:1,id,ref,...(free?{free:true}:{})}),{flag:'wx',mode:0o600});
       fs.renameSync(tmp,bindingFile);
       if (sameWindowRoot) await this.raw.workspaceState.update(ACTIVE,ref);
       this.active = next;

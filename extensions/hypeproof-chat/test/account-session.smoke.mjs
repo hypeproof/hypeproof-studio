@@ -1,6 +1,7 @@
 // REQ-L13: exercise the real host client, credential store and device/refresh state machine.
 import assert from 'node:assert/strict';
-import { AccountSession, ACCOUNT_SECRET_KEY, accountPreviewEnabled, accountProductionEnabled, safeDeviceUrl } from '../src/accountSession.ts';
+import { AccountSession, ACCOUNT_SECRET_KEY, ACCOUNTS_ENABLED_DEFAULT, accountPreviewEnabled, accountProductionEnabled, safeDeviceUrl } from '../src/accountSession.ts';
+import { readFileSync } from 'node:fs';
 const SERVICE='http://127.0.0.1:8793/v1', SITE='http://localhost:3193';
 const reply=(status, body)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
 function harness(extra = {}) {
@@ -37,6 +38,16 @@ assert.equal(accountProductionEnabled(false,'https://api.hypeproof-ai.xyz/v1','h
 assert.equal(accountProductionEnabled(true,'https://api.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'),true);
 for(const bad of ['http://api.hypeproof-ai.xyz/v1','https://api.hypeproof-ai.xyz.evil.test/v1','https://api.hypeproof-ai.xyz:443/v1','https://api.hypeproof-ai.xyz/v1?x=1','https://api.hypeproof-ai.xyz/v1#x','https://api.hypeproof-ai.xyz/v2','https://user@api.hypeproof-ai.xyz/v1',SERVICE])assert.equal(accountProductionEnabled(true,bad,'https://hypeproof-ai.xyz'),false);
 for(const bad of ['http://hypeproof-ai.xyz','https://hypeproof-ai.xyz.evil.test','https://hypeproof-ai.xyz:443','https://hypeproof-ai.xyz/?x=1','https://hypeproof-ai.xyz/account','https://user@hypeproof-ai.xyz',SITE])assert.equal(accountProductionEnabled(true,'https://api.hypeproof-ai.xyz/v1',bad),false);
+// Decision B3: accounts default on. The manifest default and the code fallback agree.
+const manifest=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+assert.equal(manifest.contributes.configuration.properties['hypeproofChat.accountsEnabled'].default,true);
+assert.equal(ACCOUNTS_ENABLED_DEFAULT,true);
+// Positive control: the default on the canonical HTTPS Service and Lab enables accounts.
+assert.equal(accountProductionEnabled(ACCOUNTS_ENABLED_DEFAULT,'https://api.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'),true);
+// Negative controls: the default true never enables accounts on any other Service or site
+// (a local or staging Service, plain http, a look-alike host), and an explicit false still wins.
+for(const [svc,site] of [[SERVICE,SITE],[SERVICE,'https://hypeproof-ai.xyz'],['https://api.hypeproof-ai.xyz/v1',SITE],['http://api.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'],['https://staging.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'],['https://api.hypeproof-ai.xyz.evil.test/v1','https://hypeproof-ai.xyz']])assert.equal(accountProductionEnabled(ACCOUNTS_ENABLED_DEFAULT,svc,site),false,`${svc} ${site}`);
+assert.equal(accountProductionEnabled(false,'https://api.hypeproof-ai.xyz/v1','https://hypeproof-ai.xyz'),false);
 assert.equal(safeDeviceUrl(SITE+'/studio/connect?access_token=leak',SITE),false);
 assert.equal(safeDeviceUrl('https://other.test/studio/connect?code=x',SITE),false);
 {

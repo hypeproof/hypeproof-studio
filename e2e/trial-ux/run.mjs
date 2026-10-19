@@ -17,6 +17,9 @@ const out = path.resolve(process.env.HPS_TRIAL_UX_OUT || path.join(repo, 'e2e/te
 await fs.mkdir(out, { recursive: true });
 const bundled = await build({ entryPoints: [fileURLToPath(import.meta.resolve('@hypeproof/service-testkit/src/profiles/studio-native-trial.ts'))], bundle: true, write: false, platform: 'node', format: 'esm', loader: { '.md': 'text' } });
 const { profile: sourceProfile } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString('base64')}`);
+// The host's own trial-ending copy (REQ-L12 (13)), so TUX-SP-05 renders what the host sends, not a paraphrase.
+const passCopy = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/passPurchase.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
+const { TRIAL_EXPIRED_FRIENDLY, withTrialPassPointer } = await import(`data:text/javascript;base64,${Buffer.from(passCopy.outputFiles[0].text).toString('base64')}`);
 const native = {
   ...sourceProfile, profile_id: sourceProfile.id,
   // `assess: true` because this suite OWNS TUX-OBS-01..10, and after ADR 0010 the
@@ -55,6 +58,30 @@ for (const [name, draft] of [
 for (const [key, value] of [['activityId', 'wrong-activity'], ['nonce', 'wrong-flush']]) {
   assert.equal(containsRequest([{ ...draftControl, [key]: value }], draftControl), false, `wrong ${key} must not match the draft acknowledgement`);
 }
+// TUX-COND-07 — the end-of-trial card is built by the host's own pure helper, so the browser
+// renders what the host sends, not a paraphrase. Fixtures: an open-trial seat (studio-open-trial) and a Service that
+// sells two passes; the turn ended with the observed exhausted sentence.
+const endCardSrc = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/trialEndCard.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
+const { trialEndCardView } = await import(`data:text/javascript;base64,${Buffer.from(endCardSrc.outputFiles[0].text).toString('base64')}`);
+const endCardPasses = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }, { id: 'pass-basic', label: '기본', amount: 55000, durationDays: 30, requestLimit: 350 }];
+const endCardExhausted = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
+const endCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: endCardExhausted, products: endCardPasses });
+// Controls for the judgment the browser case relies on: open-trial seat → card; code-issued trial or mid-work → none.
+assert.ok(endCard, 'positive control: an open-trial ending yields a card');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial' }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: code-issued trial (flag off)');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: mid-work failure');
+// TUX-COND-08 — the optional email section rides on the same card, only when the Service advertises it.
+const notifyOffer = { available: true, consent_version: 'free-notify-2026-10-19' };
+const notifyCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses });
+assert.equal(notifyCard?.notify?.consentVersion, notifyOffer.consent_version, 'positive control: an advertised free seat gets the section');
+assert.equal(endCard.notify, undefined, 'negative control: not advertised');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: { ...notifyOffer, available: false } }, err: endCardExhausted, products: endCardPasses }).notify, undefined, 'negative control: available false');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: code-issued trial');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer, pass: { request_limit: 1, requests_used: 1 } }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: pass seat');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: before the end');
+const notifySubmittedCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses, notifySubmitted: true });
+assert.equal(notifySubmittedCard.notify.submitted, true);
+const trialActivity = { activity: { id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true } };
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://local');
@@ -158,6 +185,23 @@ try {
     await startState(p, { profile: course, error: '인증에 실패했습니다.' }); await expect(p.getByRole('alert')).toContainText('기존 활동 연결은 유지됩니다.');
     await btn(p, '기존 활동으로 돌아가기').click(); await expect(btn(p, '이어서 하기')).toBeEnabled();
     await startState(p, { error: '개인 체험 시간이 끝났습니다.' }); await expect(btn(p, '이어서 하기')).toHaveCount(0); await expect(p.locator('#course-code')).toBeEnabled();
+    // REQ-L12 (13): after a trial expired the host names the pass entry while passes are sold. It is drawn, and
+    // only the person opens it: the error itself sends no purchase request.
+    const passes = { available: true, products: [{ id: 'pass-basic', label: '기본', recommended: true, amount: 55000, durationDays: 30, requestLimit: 350 }] };
+    const before = emitted(await requests(p), 'purchaseOpen').length;
+    await startState(p, { error: withTrialPassPointer(TRIAL_EXPIRED_FRIENDLY, true), purchase: passes });
+    await expect(p.getByRole('alert')).toContainText('만든 파일과 대화는 그대로 있어요');
+    await expect(p.getByRole('alert')).toContainText("'이용권으로 시작하기'");
+    await expect(p.getByRole('alert')).not.toContainText('코드 발급 담당자');
+    // The code form is still open from the retry above; going back to the start choices shows the named entry.
+    await btn(p, '시작 방법 다시 선택').click();
+    await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+    await expect(p.getByRole('alert')).toContainText("'이용권으로 시작하기'");
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, before, 'the trial ending never opens the purchase screen');
+    // Without a catalogue the same ending names no entry that is not drawn.
+    await startState(p, { error: withTrialPassPointer(TRIAL_EXPIRED_FRIENDLY, false) });
+    await expect(p.getByRole('alert')).not.toContainText('이용권');
+    await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
   }, { surface: 'start' });
   await test('TUX-SP-06', 'Disconnect delegates host request and disconnected host state replaces course', async p => {
     await startState(p, { profile: course }); await btn(p, '연결 해제').click(); await request(p, { type: 'disconnectCourse' });
@@ -167,6 +211,83 @@ try {
     await test(`TUX-SP-${id}`, `${label}: keyboard action emits correct host request`, async p => { await btn(p, label).focus(); await expect(btn(p, label)).toBeFocused(); await btn(p, label).press('Enter'); await request(p, { type }); }, { surface: 'start' });
   }
   await test('TUX-SP-10', 'Disconnected coach has start-page CTA', async p => { await btn(p, '시작 화면 열기').click(); await request(p, { type: 'setToken' }); await expect(draft(p)).toHaveCount(0); }, { profile: null });
+  // TUX-SP-13 — the trial allowance (CU-13): candidate card, passive header line, ended card. The
+  // Service's `trial` block is the only source; a pass keeps passSummary (negative).
+  const trialEnds = new Date(Date.now() + 50 * 60_000).toISOString();
+  const trialSeat = (trial, extra = {}) => ({ ...course, kind: 'trial', trial, ...extra });
+  const fresh = { state: 'active', ends_at: trialEnds, request_limit: 40, requests_used: 0 };
+  const nearLimit = { ...fresh, requests_used: 37 };
+  const exhausted = { ...fresh, state: 'exhausted', requests_used: 40 };
+  const expiredTrial = { ...fresh, state: 'expired', ends_at: new Date(Date.now() - 60_000).toISOString(), requests_used: 12 };
+  const courseRow = (p, dt) => p.locator('.studio-course dl > div').filter({ has: p.locator('dt', { hasText: new RegExp(`^${dt}$`) }) }).locator('dd');
+  const taskWorkspace = { scope: 'synthetic-scope', revision: 1, activeTaskId: 't1', tasks: [{ id: 't1', title: '합성 작업', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
+  const trialActivity = trial => ({ id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true, trial });
+  await test('TUX-SP-13A', 'Fresh trial: candidate card states the allowance; connected card shows what is left', async p => {
+    await startState(p, { profile: trialSeat(fresh), candidate: true });
+    await expect(courseRow(p, '체험 한도')).toHaveText(/^AI 요청 40번 · (\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?까지$/); // the date appears when the end is not today
+    await expect(btn(p, '이 활동 시작하기')).toBeEnabled();
+    await startState(p, { profile: trialSeat(fresh) });
+    await expect(courseRow(p, '남은 체험')).toHaveText(/^AI 요청 40번 남음 · /);
+    await btn(p, '이어서 하기').click(); await request(p, { type: 'beginCourse' });
+    await expect(p.getByText('체험이 끝났습니다')).toHaveCount(0);
+  }, { surface: 'start' });
+  await test('TUX-SP-13B', 'Near-limit trial: passive remaining line in the chat header, no button', async p => {
+    const line = p.locator('.hps-header .hps-trial-left');
+    await expect(line).toHaveText(/^AI 요청 3번 남음 · /);
+    await expect(line.locator('button, a')).toHaveCount(0);
+    assert.equal(await line.evaluate(el => el.tagName), 'SPAN');
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the line fits the 390px header');
+    await p.screenshot({ path: path.join(out, 'TUX-SP-13B-personal-header.png') });
+    // POLISH iter4 — at 390px the count is whole (never "AI 요청 3…"); only the end time gives way.
+    const fit = () => line.evaluate(el => ({ text: el.innerText, clipped: el.scrollWidth > el.clientWidth + 1 }));
+    assert.deepEqual(await fit(), { text: 'AI 요청 3번 남음', clipped: false }, 'the remaining count is whole at 390px');
+    await p.setViewportSize({ width: 1280, height: 900 });
+    assert.match((await fit()).text, /^AI 요청 3번 남음 · .+까지$/, 'positive control: a wide header shows the end time too');
+    await p.setViewportSize({ width: 390, height: 900 });
+    await host(p, { type: 'config', config: config(native, { taskWorkspace, activity: trialActivity(fresh) }) });
+    await expect(line).toHaveText(/^AI 요청 40번 남음 · /);
+    // The mission header (a trial without a personal workspace) carries the same line as its detail.
+    await host(p, { type: 'config', config: config(native, { activity: trialActivity(nearLimit) }) });
+    await expect(p.getByLabel('현재 활동')).toContainText('AI 요청 3번 남음');
+    await expect(p.locator('.hps-trial-left')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'the header never opens the purchase');
+  }, { cfg: { taskWorkspace, activity: trialActivity(nearLimit) } });
+  await test('TUX-SP-13C', 'Exhausted trial: ended card instead of "이어서 하기"; pass only on press', async p => {
+    await startState(p, { profile: trialSeat(exhausted) });
+    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.getByText('AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
+    await expect(courseRow(p, '체험')).toHaveText('AI 요청 40번 모두 사용');
+    await expect(btn(p, '이어서 하기')).toHaveCount(0);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '이어서 하려면 이용권으로 시작하기')).toHaveCount(0);
+    await startState(p, { profile: trialSeat(exhausted), purchase: { available: true } });
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'an ended trial never opens the purchase by itself');
+    await btn(p, '이어서 하려면 이용권으로 시작하기').click(); await request(p, { type: 'purchaseOpen' });
+    await startState(p, { profile: trialSeat(exhausted) });
+    await btn(p, '지난 대화 보기').click(); await request(p, { type: 'beginCourse' });
+    await expect(btn(p, '다른 활동 선택')).toBeVisible();
+    await startState(p, { profile: trialSeat(exhausted), candidate: true });
+    await expect(btn(p, '이 활동 시작하기')).toHaveCount(0); await expect(btn(p, '지난 대화 보기')).toHaveCount(0); await expect(btn(p, '선택 취소')).toBeEnabled();
+  }, { surface: 'start' });
+  await test('TUX-SP-13D', 'Expired trial: ended card, no "이어서 하기" and no stale begin', async p => {
+    await startState(p, { profile: trialSeat(expiredTrial) });
+    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.getByText('체험 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
+    await expect(courseRow(p, '체험')).toHaveText(/^(\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?에 끝남$/);
+    await expect(btn(p, '이어서 하기')).toHaveCount(0); await expect(btn(p, '지난 대화 보기')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'beginCourse').length, 0);
+  }, { surface: 'start' });
+  await test('TUX-SP-13N', 'Negative: a pass seat keeps passSummary and is never drawn as an ended trial', async p => {
+    const pass = { request_limit: 200, requests_used: 20, expires_at: Date.now() + 20 * 86_400_000 };
+    await startState(p, { profile: trialSeat(exhausted, { pass }) });
+    await expect(courseRow(p, '남은 이용')).toHaveText(/^AI 요청 180번 남음 · \d+월 \d+일까지$/);
+    await expect(btn(p, '이어서 하기')).toBeEnabled();
+    await expect(p.getByText('체험이 끝났습니다')).toHaveCount(0);
+    await expect(courseRow(p, '체험')).toHaveCount(0); await expect(courseRow(p, '남은 체험')).toHaveCount(0);
+    // A classroom seat (no trial block) is unchanged too.
+    await startState(p, { profile: course });
+    await expect(btn(p, '이어서 하기')).toBeEnabled(); await expect(courseRow(p, '남은 체험')).toHaveCount(0);
+  }, { surface: 'start' });
   await test('TUX-CHAT-01', 'All three real profile suggestions fill and focus draft without sending', async p => {
     for (const chip of native.ux.suggestions.initial) { const button = p.getByRole('button', { name: new RegExp(chip.text) }); await button.click(); await expect(draft(p)).toHaveValue(chip.text); await expect(draft(p)).toBeFocused(); }
     assert.equal(emitted(await requests(p), 'sendMessage').length, 0);
@@ -176,8 +297,8 @@ try {
     await expect(p.getByRole('button', { name: '코치 이름 바꾸기' })).toHaveCount(0);
   });
   await test('TUX-CHAT-02', 'Send rejects empty/space and sends trimmed text once', async p => {
-    await expect(btn(p, 'Send')).toBeDisabled(); await draft(p).fill('  '); await expect(btn(p, 'Send')).toBeDisabled();
-    await draft(p).fill('  실제 요청  '); await btn(p, 'Send').click(); await request(p, { type: 'sendMessage', text: '실제 요청' }); await expect(draft(p)).toHaveValue(''); await expect(btn(p, 'Send')).toBeDisabled();
+    await expect(btn(p, '보내기')).toBeDisabled(); await draft(p).fill('  '); await expect(btn(p, '보내기')).toBeDisabled();
+    await draft(p).fill('  실제 요청  '); await btn(p, '보내기').click(); await request(p, { type: 'sendMessage', text: '실제 요청' }); await expect(draft(p)).toHaveValue(''); await expect(btn(p, '보내기')).toBeDisabled();
   });
   await test('TUX-CHAT-03', 'Enter sends, Shift+Enter preserves newline, IME Enter does not send', async p => {
     await draft(p).fill('첫 줄'); await draft(p).press('Shift+Enter'); await draft(p).press('a'); await expect(draft(p)).toHaveValue('첫 줄\na');
@@ -199,9 +320,9 @@ try {
   });
   await test('TUX-CHAT-06', 'Host image attachment enables image-only send and removal disables it', async p => {
     const dataUrl = await p.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 10; return c.toDataURL('image/png'); });
-    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await expect(btn(p, 'Send')).toBeEnabled();
-    await btn(p, '이미지 제거').click(); await expect(btn(p, 'Send')).toBeDisabled();
-    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await btn(p, 'Send').click();
+    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await expect(btn(p, '보내기')).toBeEnabled();
+    await btn(p, '이미지 제거').click(); await expect(btn(p, '보내기')).toBeDisabled();
+    await host(p, { type: 'attachImage', dataUrl }); await expect(btn(p, '이미지 제거')).toBeVisible(); await btn(p, '보내기').click();
     await request(p, { type: 'sendMessage', text: '' }); assert.equal(emitted(await requests(p), 'sendMessage')[0].images.length, 1); await expect(btn(p, '이미지 제거')).toHaveCount(0);
   });
   for (const [id, label, type] of [['07', '활동 변경', 'setToken'], ['08', '대화 지우기', 'clearHistory'], ['09', '설정', 'openSettings']]) {
@@ -214,6 +335,84 @@ try {
     assert.equal(native.ux.retry_button.enabled, true); await host(p, { type: 'history', messages: history }); await p.locator('.hps-msg-retry').click(); await request(p, { type: 'retryMessage', prompt: history[0].content });
     await host(p, { type: 'streamStart', streamId: 's1', messageId: 'a2' }); await expect(p.locator('.hps-msg-retry')).toHaveCount(0);
   });
+  // REQ-STUDIO-CHAT-POLISH ① — personal chat: retry sits in the answer-actions row of the LATEST
+  // coach answer only, and a free seat gets none (a retry is a new turn and spends a free turn).
+  // Positive control: a personal non-free seat shows exactly one, under the last answer.
+  // Negative controls: the free seat shows none; the old boxed control beside the label is gone.
+  const twoAnswers = [...history, { id: 'u2', role: 'user', content: '제목을 더 크게 해 주세요.', createdAt: 3 }, { id: 'a2', role: 'assistant', content: '제목을 키웠어요.', createdAt: 4 }];
+  await test('TUX-CHAT-10P', 'Personal chat: retry under the latest answer only, never on a free seat', async p => {
+    assert.equal(native.ux.retry_button.enabled, true);
+    await host(p, { type: 'history', messages: twoAnswers });
+    const retry = p.locator('.hps-msg-retry');
+    await expect(retry).toHaveCount(1);
+    await expect(retry).toHaveAccessibleName('답변 다시 받기');
+    await expect(retry).toHaveText('다시 받기');
+    await expect(p.locator('.hps-msg-assistant').last().locator('.hps-answer-actions .hps-msg-retry')).toHaveCount(1);
+    await expect(p.locator('.hps-msg-role .hps-msg-retry, .hps-msg-role .hps-msg-run')).toHaveCount(0);
+    const [copyBox, retryBox] = [await p.locator('.hps-msg-assistant').last().locator('.hps-copy-answer').boundingBox(), await retry.boundingBox()];
+    assert.equal(Math.round(copyBox.height), Math.round(retryBox.height), 'copy and retry are one size');
+    assert.equal(await retry.evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'retry has no visible box');
+    await retry.click(); await request(p, { type: 'retryMessage', prompt: '제목을 더 크게 해 주세요.' });
+    // Free seat (studio-open-trial, `activity.free`): the same history offers no retry at all.
+    await host(p, { type: 'config', config: config({ ...native, profile_id: 'studio-open-trial' }, { taskWorkspace, activity: { ...trialActivity(fresh), free: true } }) });
+    await host(p, { type: 'history', messages: twoAnswers });
+    await expect(p.locator('.hps-copy-answer')).toHaveCount(2);
+    await expect(p.locator('.hps-msg-retry')).toHaveCount(0);
+    await p.screenshot({ path: path.join(out, 'TUX-CHAT-10P-free-seat.png') });
+  }, { cfg: { taskWorkspace, activity: trialActivity(fresh) } });
+  // REQ-STUDIO-CHAT-POLISH ⑤⑥ (merged with #1763 REQ-STUDIO-CHAT-DETAIL) — one header row (task
+  // title, remaining line, 자료, menu); model, 생각 깊이 and usage only in the 대화 설정 dialog; the
+  // menu's 이용권 · 사용량 opens it on usage. Control: the classroom chat (no task workspace) keeps
+  // its own header and its separate Effort/usage rows, and has no dialog.
+  await test('TUX-CHAT-17', 'Personal chat: one header row, settings in the dialog, usage from the menu', async p => {
+    await host(p, { type: 'history', messages: history });
+    const heading = p.locator('.tw-heading');
+    await expect(heading.locator('.hps-header .hps-trial-left')).toHaveText(/^AI 요청 40번 남음 · /);
+    await expect(heading.getByRole('button', { name: '대화 메뉴' })).toBeVisible();
+    await expect(p.locator('.hps-shell > .hps-header')).toHaveCount(0);
+    const tops = await Promise.all([heading.locator('h1'), heading.locator('.hps-trial-left'), heading.getByRole('button', { name: '자료' }), heading.getByRole('button', { name: '대화 메뉴' })].map(async l => Math.round((await l.boundingBox()).y + (await l.boundingBox()).height / 2)));
+    assert.ok(Math.max(...tops) - Math.min(...tops) <= 4, `header controls share one row: ${tops}`);
+    // Work surface: no model, effort or usage controls.
+    await expect(p.getByRole('combobox', { name: '대화 모델' })).toHaveCount(0);
+    await expect(p.getByRole('combobox', { name: '생각 깊이' })).toHaveCount(0);
+    await expect(p.getByRole('combobox', { name: 'Effort', exact: true })).toHaveCount(0);
+    await expect(p.locator('.hps-access')).toBeHidden();
+    const dialog = p.getByRole('dialog', { name: '대화 설정', exact: true });
+    // 설정 → the dialog, focus on its close button; model and 생각 깊이 under 응답 고급 설정.
+    await p.getByRole('button', { name: '대화 메뉴' }).click();
+    await p.getByRole('menuitem', { name: '설정', exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(p.getByRole('button', { name: '대화 설정 닫기' })).toBeFocused();
+    await dialog.getByText('응답 고급 설정', { exact: true }).click();
+    await expect(dialog.getByRole('combobox', { name: '대화 모델' })).toHaveCount(native.model_selection ? 1 : 0);
+    await expect(dialog.getByRole('combobox', { name: '생각 깊이' })).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Effort', exact: true })).toHaveCount(0);
+    await expect(dialog.locator('.hps-access')).not.toHaveAttribute('open', '');
+    await p.keyboard.press('Escape'); await expect(dialog).toBeHidden();
+    // 이용권 · 사용량 → the same dialog, usage open and focused.
+    await p.getByRole('button', { name: '대화 메뉴' }).click();
+    await p.getByRole('menuitem', { name: '이용권 · 사용량' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('.hps-access')).toHaveAttribute('open', '');
+    await expect(dialog.locator('.hps-access > summary')).toBeFocused();
+    await expect(dialog.locator('.hps-access')).toContainText('수업·체험의 기본 이용 정책'); // code-issued seat: unchanged copy (control)
+    await p.keyboard.press('Escape'); await expect(dialog).toBeHidden();
+    // A free seat's usage panel never says 체험 (SPEC iteration 4 ground rule).
+    await host(p, { type: 'config', config: config({ ...native, profile_id: 'studio-open-trial' }, { taskWorkspace, activity: { ...trialActivity(fresh), free: true }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } }) });
+    await p.getByRole('button', { name: '대화 메뉴' }).click();
+    await p.getByRole('menuitem', { name: '이용권 · 사용량' }).click();
+    await expect(dialog.locator('.hps-access')).toContainText('무료 사용의 기본 이용 정책');
+    await expect(dialog.locator('.hps-access')).not.toContainText('체험');
+    await p.keyboard.press('Escape'); await expect(dialog).toBeHidden();
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'fits 390px');
+    await p.screenshot({ path: path.join(out, 'TUX-CHAT-17-personal.png') });
+    // Control: classroom chat keeps the in-shell header and the separate Effort control.
+    await host(p, { type: 'config', config: config(native, { effort: { value: 'medium', allowed: ['low', 'medium'] }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } }) });
+    await expect(p.locator('.hps-shell > .hps-header')).toHaveCount(1);
+    await expect(p.getByRole('combobox', { name: 'Effort', exact: true })).toBeVisible();
+    await expect(p.locator('.hps-access')).toHaveCount(1);
+    await expect(p.locator('dialog.hps-preferences')).toHaveCount(0);
+  }, { cfg: { taskWorkspace, activity: trialActivity(fresh), effort: { value: 'medium', allowed: ['low', 'medium'] }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } } });
   await test('TUX-CHAT-11', 'Run emits exact HTML; plain response has no Run', async p => {
     await host(p, { type: 'history', messages: [{ ...history[1], content: '텍스트만 있습니다.' }] }); await expect(p.locator('.hps-msg-run')).toHaveCount(0);
     await host(p, { type: 'history', messages: history }); await p.locator('.hps-msg-run').click(); await request(p, { type: 'runCode', html: '<!doctype html><html><body><h1>합성 초안</h1></body></html>' });
@@ -321,6 +520,317 @@ try {
     await host(p, { type: 'history', messages: history }); await expect(p.locator('.hps-chips')).toHaveCount(0);
     await host(p, { type: 'config', config: config({ ...native, observation: undefined }) }); await expect(p.getByText('현재 연결은 작업 관찰을 지원하지 않습니다.', { exact: false })).toBeVisible(); await expect(p.locator('.hps-native-observation')).toHaveCount(0);
   });
+  await test('TUX-COND-07', 'Trial limit ends in an inline card: facts, one Primary, an escape; nothing opens by itself', async p => {
+    await draft(p).fill('마지막 요청');
+    await draft(p).press('Enter');
+    await request(p, { type: 'sendMessage' });
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
+    const card = p.locator('.hps-trial-end-card');
+    await expect(card).toHaveCount(1);
+    await expect(card.getByRole('heading')).toHaveText('무료 사용량을 모두 썼습니다');
+    await expect(card).toContainText('만든 파일은 작업 폴더에 그대로 있습니다');
+    // The Service's numbers for the suggested pass, never a hardcoded price.
+    await expect(card).toContainText('라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
+    await expect(card).toContainText('자동으로 다시 결제되지 않습니다');
+    // Exactly one Primary and one escape; the error banner (and its report button) is not drawn.
+    await expect(card.getByRole('button')).toHaveCount(2);
+    await expect(card.locator('.hps-trial-end-card-primary')).toHaveText('이용권 살펴보기');
+    await expect(card.locator('.hps-trial-end-card-escape')).toHaveText('오늘은 여기까지');
+    await expect(p.locator('.hps-error-banner')).toHaveCount(0);
+    await expect(p.getByRole('dialog')).toHaveCount(0);
+    await p.screenshot({ path: path.join(out, 'TUX-COND-07-card.png'), fullPage: true });
+    // No countdown or pressure copy.
+    assert.doesNotMatch(await card.innerText(), /남았|남음|남은|곧|마감|지금 바로|놓치|할인|한정|\d+\s*(초|분)\b/);
+    // Never opens by itself: no purchase request before the person presses the Primary.
+    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+    await btn(p, '이용권 살펴보기').click();
+    await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
+    // The escape closes the card and asks for nothing.
+    const before = (await requests(p)).length;
+    await btn(p, '오늘은 여기까지').click();
+    await expect(card).toHaveCount(0);
+    assert.equal((await requests(p)).length, before, 'the escape sends nothing to the host');
+    await expect(draft(p)).toBeVisible();
+  }, { cfg: trialActivity });
+  await test('TUX-COND-07N', 'Card absent mid-work and for ordinary errors (negative control)', async p => {
+    await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
+    await host(p, { type: 'streamChunk', streamId: 'work', delta: '페이지를 만들고 있어요' });
+    await expect(p.getByText('페이지를 만들고 있어요')).toBeVisible();
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    await host(p, { type: 'streamEnd', streamId: 'work' });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    // An ordinary failure keeps today's banner and never draws the card.
+    await host(p, { type: 'streamStart', streamId: 'fail', messageId: 'a-fail' });
+    await host(p, { type: 'streamError', streamId: 'fail', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
+    await expect(p.locator('.hps-error-banner')).toHaveCount(1);
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    await expect(btn(p, '이용권 살펴보기')).toHaveCount(0);
+    // A card from an earlier ending does not survive into a later ordinary error.
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(1);
+    await host(p, { type: 'streamStart', streamId: 'fail2', messageId: 'a-fail2' });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    await host(p, { type: 'streamError', streamId: 'fail2', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+  }, { cfg: trialActivity });
+  // TUX-COND-08 — optional "이메일로 소식 받기" below the pass offer (Jay 2026-10-19). The webview's
+  // setState throws in this harness, so a persisted address would fail the case; localStorage is
+  // checked empty after every case too.
+  const SYNTHETIC_EMAIL = 'learner.synthetic@example.com';
+  await test('TUX-COND-08', 'Free end card: optional email section, explicit opt-in, address only to the host, withdraw', async p => {
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: notifyCard.text, trialEndCard: notifyCard });
+    const card = p.locator('.hps-trial-end-card');
+    const section = card.getByTestId('notify-optin');
+    await expect(section).toHaveCount(1);
+    await expect(section).toContainText('새 기능과 할인 소식을 이메일로 받아 볼래요? (선택)');
+    await expect(section).toContainText('[수집 항목: 이메일 · 목적: 서비스·할인 소식 안내 · 보관: 수신 거부 또는 1년 뒤 삭제]');
+    // The pass offer stays the one Primary, first in the card; the section comes after it.
+    await expect(card.locator('.hps-trial-end-card-primary')).toHaveCount(1);
+    assert.equal(await card.evaluate(el => {
+      const primary = el.querySelector('.hps-trial-end-card-primary'), s = el.querySelector('[data-testid="notify-optin"]');
+      return !!(primary.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }), true, 'the section is below the pass offer');
+    // Explicit opt-in (정보통신망법 §50): no checkbox, nothing pre-checked or pre-filled; 받기 needs an address.
+    await expect(card.locator('input[type="checkbox"], input[type="radio"]')).toHaveCount(0);
+    const input = section.getByRole('textbox', { name: '이메일' });
+    await expect(input).toHaveValue('');
+    await expect(btn(p, '받기')).toBeDisabled();
+    // Nothing is sent by drawing the card.
+    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length, 0);
+    await p.screenshot({ path: path.join(out, 'TUX-COND-08-form.png'), fullPage: true });
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'no overflow at 390px');
+    await input.fill(SYNTHETIC_EMAIL);
+    await btn(p, '받기').click();
+    await request(p, { type: 'notifyOptinSubmit', email: SYNTHETIC_EMAIL });
+    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length, 1);
+    await expect(btn(p, '받기')).toBeDisabled();
+    // A Service refusal shows its sentence and keeps the form.
+    await host(p, { type: 'notifyOptinResult', state: 'error', message: '이메일 주소를 다시 확인해 주세요.' });
+    await expect(section.getByRole('alert')).toHaveText('이메일 주소를 다시 확인해 주세요.');
+    await btn(p, '받기').click();
+    await host(p, { type: 'notifyOptinResult', state: 'subscribed' });
+    await expect(section).toContainText('소식을 보내 드릴게요.');
+    await expect(section.getByRole('textbox')).toHaveCount(0);
+    assert.ok(!(await p.content()).includes(SYNTHETIC_EMAIL), 'the address is gone from the page after success');
+    await p.screenshot({ path: path.join(out, 'TUX-COND-08-done.png'), fullPage: true });
+    // Withdraw is a small link-style button; it asks the host, which calls the delete route.
+    await btn(p, '그만 받기').click();
+    await request(p, { type: 'notifyOptinWithdraw' });
+    await host(p, { type: 'notifyOptinResult', state: 'withdrawn' });
+    await expect(section).toContainText('이제 소식을 보내지 않을게요.');
+    // The pass Primary still works and the section never opened the purchase view by itself.
+    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+    await btn(p, '이용권 살펴보기').click();
+    await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
+  }, { cfg: trialActivity });
+  await test('TUX-COND-08N', 'Email section absent when not advertised; an earlier submission shows the done line (controls)', async p => {
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(1);
+    await expect(p.getByTestId('notify-optin')).toHaveCount(0);
+    await expect(p.getByText('이메일로 받아 볼래요', { exact: false })).toHaveCount(0);
+    // Mid-work: no card, no section.
+    await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
+    await expect(p.getByTestId('notify-optin')).toHaveCount(0);
+    await host(p, { type: 'streamEnd', streamId: 'work' });
+    // A seat that already submitted: done line and withdraw, no empty form.
+    await host(p, { type: 'streamStart', streamId: 'limit2', messageId: 'a-limit2' });
+    await host(p, { type: 'streamError', streamId: 'limit2', error: notifySubmittedCard.text, trialEndCard: notifySubmittedCard });
+    await expect(p.getByTestId('notify-optin')).toContainText('소식을 보내 드릴게요.');
+    await expect(p.getByTestId('notify-optin').getByRole('textbox')).toHaveCount(0);
+    await expect(btn(p, '그만 받기')).toBeVisible();
+    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length + emitted(await requests(p), 'notifyOptinWithdraw').length, 0);
+  }, { cfg: trialActivity });
+  // ── Free start (SPEC iteration 4 §2.3/§2.4; TUX-SP-14/15/16) ─────────────────────────────
+  // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
+  // start page (free start not advertised) does contain 체험, so the checker can fail.
+  const FREE_OFFER = { entry: 'open', durationHours: 24, requestLimit: 10, unit: 'turn', claim: '/v1/free/claim', available: true };
+  // Jay 2026-10-19: the host sends no allowance line for a free start; the end card speaks at the end.
+  const freeStart = (extra = {}) => ({ trialOffer: FREE_OFFER, freeStart: { ...extra } });
+  const cardText = p => p.locator('.studio-connect').innerText();
+  await test('TUX-SP-14A', 'Free start: one age question, no 체험/수업 choice, code is a small link', async p => {
+    await startState(p, {});
+    assert.match(await cardText(p), /체험/, 'control: today\'s start page says 체험, so the checker below can fail');
+    await expect(p.locator('.studio-free-allowance')).toHaveCount(0); // negative control: no free offer line without the advertisement
+    await startState(p, freeStart());
+    // POLISH iter4 — the card leads with what the person can do (start now, no login); the age check follows.
+    await expect(p.locator('#connect-title')).toHaveText('바로 시작할 수 있습니다');
+    await expect(p.locator('.studio-card-description')).toHaveText('로그인 없이 바로 시작합니다.');
+    await expect(p.getByText('만 14세 이상인가요?', { exact: true })).toBeVisible();
+    await expect(btn(p, 'AI 체험하기')).toHaveCount(0);
+    await expect(btn(p, '수업에 참여하기')).toHaveCount(0);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveText(/^네, 만 14세 이상입니다/);
+    await expect(p.locator('.studio-free-allowance')).toHaveCount(0);
+    assert.doesNotMatch(await cardText(p), /AI 요청 \d+번/, 'no allowance count before use (Jay 2026-10-19)');
+    assert.doesNotMatch(await cardText(p), /체험/, 'no 체험 on the free card');
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-14A-age-390.png'), fullPage: true });
+    await btn(p, '네, 만 14세 이상입니다').click();
+    await request(p, { type: 'freeStartAge', answer: '14+' });
+    // Claiming: the free card stays; the candidate preview never shows, even when the host already has one.
+    await startState(p, { ...freeStart({ age: '14+', claiming: true }), checking: true, candidate: true, profile: { ...course, id: 'studio-open-trial', kind: 'trial', free: true } });
+    await expect(p.getByText('작업 공간을 준비하고 있습니다.', { exact: true })).toBeVisible();
+    await expect(p.getByText('이 활동으로 시작할까요?')).toHaveCount(0);
+    await expect(btn(p, '이 활동 시작하기')).toHaveCount(0);
+    await expect(btn(p, '다른 작업 폴더 선택')).toHaveCount(0);
+    // Saved age: a single Primary, no question again.
+    await startState(p, freeStart({ age: '14+' }));
+    await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
+    await btn(p, '바로 시작하기').click();
+    await request(p, { type: 'freeStartClaim' });
+    // The code path: one label, no trial/class split.
+    await btn(p, '참여 코드가 있어요').click();
+    await expect(p.locator('label[for="course-code"]')).toHaveText('참여 코드');
+    await expect(p.getByText('강사나 운영자에게 받은 코드를 붙여 넣으세요.', { exact: true })).toBeVisible();
+    assert.doesNotMatch(await cardText(p), /체험/);
+    await btn(p, '돌아가기').click();
+    await expect(btn(p, '바로 시작하기')).toBeVisible();
+    // The secondary links sit on the card's left axis with everything else (not centred under the Primary).
+    const [linkX, primaryX] = await Promise.all([btn(p, '참여 코드가 있어요'), p.locator('.studio-connect .studio-primary')].map(async l => Math.round((await l.boundingBox()).x)));
+    assert.ok(Math.abs(linkX + 4 - primaryX) <= 2, `secondary links align left with the Primary: ${linkX} vs ${primaryX}`);
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'nothing opens the purchase for the person');
+  }, { surface: 'start' });
+  await test('TUX-SP-14B', 'Free start refusals: Service sentence shown as given; app too old offers the update', async p => {
+    const limit = '이 네트워크에서 오늘 시작할 수 있는 횟수를 모두 사용했습니다. 내일 다시 시도하거나, 참여 코드나 이용권으로 시작해 주세요.';
+    await startState(p, freeStart({ age: '14+', refusal: { code: 'network_limit', message: limit } }));
+    await expect(p.getByRole('alert')).toHaveText(limit);
+    await expect(btn(p, '바로 시작하기')).toBeEnabled();
+    await startState(p, freeStart({ age: '14+', refusal: { code: 'network', message: '연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.' } }));
+    await expect(btn(p, '바로 시작하기')).toBeEnabled();
+    await startState(p, freeStart({ age: '14+', tooOld: true, refusal: { code: 'app_too_old', message: '이 Studio는 바로 시작하기를 지원하지 않는 버전입니다. 최신 Studio로 업데이트한 뒤 다시 열어 주세요.' } }));
+    await expect(btn(p, '바로 시작하기')).toHaveCount(0);
+    await btn(p, '업데이트 확인').click();
+    await request(p, { type: 'freeStartUpdate' });
+  }, { surface: 'start' });
+  await test('TUX-SP-15', 'Under 14: guardian block, no claim button, the code link stays', async p => {
+    await startState(p, { ...freeStart({ age: 'under14' }), purchase: { available: true } });
+    await expect(p.locator('#connect-title')).toHaveText('보호자와 함께 시작해 주세요');
+    await expect(p.getByText('만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. 지금은 앱에서 보호자 동의를 받을 수 없어 여기서 시작할 수 없습니다.', { exact: true })).toBeVisible();
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
+    await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
+    await btn(p, '보호자 안내 보기 ↗').click();
+    await request(p, { type: 'freeStartGuardian' });
+    assert.equal(emitted(await requests(p), 'freeStartClaim').length, 0);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-15-under14-390.png'), fullPage: true });
+  }, { surface: 'start' });
+  await test('TUX-SP-16', 'Daily cap drained: calm notice with 00:00 KST, no Primary, no purchase opened', async p => {
+    await startState(p, { ...freeStart({ age: '14+' }), trialOffer: { ...FREE_OFFER, available: false, reason: 'daily_cap' }, freeStart: { age: '14+', unavailable: 'daily_cap' }, purchase: { available: true } });
+    await expect(p.locator('#connect-title')).toHaveText('밤 12시 이후에 시작할 수 있습니다');
+    const notice = p.locator('.studio-notice');
+    await expect(notice).toHaveText('오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 시작할 수 있습니다.');
+    await expect(notice).toHaveAttribute('role', 'status');
+    await expect(p.getByRole('alert')).toHaveCount(0);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
+    await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-16-drained-390.png'), fullPage: true });
+    // A newcomer who has not answered the age question sees the same calm state, not the question.
+    await startState(p, { trialOffer: { ...FREE_OFFER, available: false, reason: 'daily_cap' }, freeStart: { unavailable: 'daily_cap' } });
+    await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
+    await expect(p.locator('.studio-notice')).toBeVisible();
+  }, { surface: 'start' });
+  await test('TUX-SP-13F', 'Free seat labels: 무료 사용 on the start card and in the chat header, never 체험', async p => {
+    await startState(p, { profile: trialSeat(nearLimit, { id: 'studio-open-trial', free: true }) });
+    await expect(p.locator('.studio-verified')).toHaveText('무료 사용');
+    // POLISH iter4 — a free seat has no code, so its footer never speaks of one.
+    await expect(p.locator('.studio-card-footer')).toHaveText('만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.');
+    await expect(p.locator('.studio-course dt', { hasText: '남은 무료 사용' })).toHaveCount(0); // no count while in use (Jay 2026-10-19)
+    assert.doesNotMatch(await cardText(p), /번 남음/);
+    assert.doesNotMatch(await cardText(p), /체험/);
+    await startState(p, { profile: trialSeat(exhausted, { id: 'studio-open-trial', free: true }) });
+    await expect(p.locator('#connect-title')).toHaveText('무료 사용이 끝났습니다');
+    await expect(courseRow(p, '무료 사용')).toHaveText('무료 AI 요청 40번 모두 사용');
+    assert.doesNotMatch(await cardText(p), /체험/);
+    // Negative control: the same seat without the free mark keeps today's wording.
+    await startState(p, { profile: trialSeat(exhausted) });
+    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.locator('.studio-card-footer')).toHaveText('참여 코드에 연결된 활동과 이용 조건이 적용됩니다.');
+  }, { surface: 'start' });
+  await test('TUX-SP-13G', 'Free seat chat header: 무료 사용 label, no remaining count while in use', async p => {
+    await expect(p.getByLabel('현재 활동')).toContainText('무료 사용 · 합성 체험');
+    await expect(p.getByLabel('현재 활동')).not.toContainText('번 남음'); // Jay 2026-10-19
+  }, { cfg: { activity: { ...trialActivity(nearLimit), free: true } } });
+  await test('TUX-SP-13H', 'Control: a code-issued trial still shows its remaining count in the header', async p => {
+    await expect(p.getByLabel('현재 활동')).toContainText('AI 요청 3번 남음');
+  }, { cfg: { activity: trialActivity(nearLimit) } });
+  await test('REQ-L12-14', 'Free seat purchase: payer question, then the guardian checkout as link and QR', async p => {
+    const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true }, ...freeStart({ age: '14+' }) });
+    await btn(p, '이용권으로 시작하기').click();
+    await request(p, { type: 'purchaseOpen' });
+    await expect(p.getByText('결제하는 분이 만 19세 이상인가요?', { exact: true })).toBeVisible();
+    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    // POLISH iter4 — leaving the pass list goes back; it is not a "start over" (Jay: 다시 시작 안 어울림).
+    await expect(btn(p, '돌아가기')).toBeVisible();
+    await expect(btn(p, '시작 방법 다시 선택')).toHaveCount(0);
+    await btn(p, '아니요').click();
+    await request(p, { type: 'purchasePayer', adult: false });
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: false }, ...freeStart({ age: '14+' }) });
+    await btn(p, '보호자에게 결제 요청하기').click();
+    await request(p, { type: 'purchaseStart', productId: 'pass-lite', guardian: true });
+    await startState(p, { purchase: { available: true, stage: 'waiting', order: { label: '라이트', amount: 30000 }, message: '브라우저에서 결제를 마치면 자동으로 이어져요.', freeSeat: true, payerAdult: false, guardian: { url: 'https://site.test/studio/checkout?order=x', qr: 'data:image/svg+xml;base64,PHN2Zy8+' } }, ...freeStart({ age: '14+' }) });
+    await expect(p.getByRole('img', { name: '보호자 결제 페이지 QR 코드' })).toBeVisible();
+    await expect(p.getByText('결제는 보호자가 해 주세요. 보호자 휴대폰으로 이 QR을 열면 결제 페이지가 열립니다.', { exact: true })).toBeVisible();
+    // Negative control: an adult payer on the same seat goes to today's checkout button.
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
+    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
+  }, { surface: 'start' });
+  await test('TUX-SP-17', 'Login at purchase: Google sign-in is the Primary before checkout; never on the first screen; no anonymous fallback', async p => {
+    // Selectors follow StartPage.tsx: AccountEntry's signed-out button is `.studio-google` (studio-primary).
+    const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
+    const signedOut = { status: 'signedOut' };
+    const signedIn = { status: 'signedIn', account: { id: 'acc_1', email: 'learner@example.test', display_name: '학습자' }, passes: [] };
+    const google = p.locator('.studio-google');
+    // Control: today's choice list (no free start) draws the account entry, so the checker below can fail.
+    await startState(p, { account: signedOut, purchase: { available: true } });
+    await expect(google).toHaveCount(1);
+    // The first screen of free start has no login, even with the account runtime present.
+    await startState(p, { account: signedOut, purchase: { available: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
+    await expect(p.locator('#connect-title')).toHaveText('바로 시작할 수 있습니다');
+    await expect(google).toHaveCount(0);
+    // The pass list on a free seat while signed out: the Google button is the one Primary, no pay button, no payer question.
+    await btn(p, '이용권으로 시작하기').click();
+    await request(p, { type: 'purchaseOpen' });
+    await startState(p, { account: signedOut, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
+    await expect(p.getByText('이용권을 사려면 Google로 로그인해 주세요.', { exact: true })).toBeVisible();
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
+    await expect(google).toHaveCount(1);
+    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    await expect(btn(p, '보호자에게 결제 요청하기')).toHaveCount(0);
+    await expect(p.getByText('결제하는 분이 만 19세 이상인가요?')).toHaveCount(0);
+    await expect(p.getByRole('radiogroup', { name: '이용권 고르기' })).toBeVisible(); // the passes stay visible to choose from
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-17-sign-in-390.png'), fullPage: true });
+    await btn(p, 'Google로 시작하기').click();
+    await request(p, { type: 'accountSignIn' });
+    assert.equal(emitted(await requests(p), 'purchaseStart').length, 0, 'no checkout before sign-in');
+    // Signed in: the gate is gone and checkout follows (payer question first on a free seat).
+    await startState(p, { account: signedIn, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
+    await expect(google).toHaveCount(0);
+    await expect(p.getByText('이용권을 사려면 Google로 로그인해 주세요.')).toHaveCount(0);
+    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
+    // No account sign-in on this build or Service: a calm notice, no Primary, no checkout, no red alert.
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, login: 'unavailable' }, ...freeStart({ age: '14+' }) });
+    const notice = p.locator('.studio-purchase .studio-notice');
+    await expect(notice).toHaveText('결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.');
+    await expect(notice).toHaveAttribute('role', 'status');
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    await expect(p.getByRole('alert')).toHaveCount(0);
+    await expect(btn(p, '돌아가기')).toBeVisible();
+    await p.screenshot({ path: path.join(out, 'TUX-SP-17-unavailable-390.png'), fullPage: true });
+    // Negative control: a code-issued seat with no gate keeps today's pay button (still on the pass list).
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing' } });
+    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
+    await expect(google).toHaveCount(0);
+  }, { surface: 'start' });
   await test('TUX-A11Y-01', 'Visible controls have names and keyboard focus including citation and settings', async p => {
     await expect(p.getByRole('textbox',{name:'코치에게 보낼 메시지'})).toBeVisible();
     await expect(btn(p,'설정')).toBeVisible();

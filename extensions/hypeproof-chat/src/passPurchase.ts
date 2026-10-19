@@ -45,6 +45,27 @@ export interface PurchaseView {
   stage?: "choosing" | "waiting" | "connecting" | "stopped";
   order?: { label: string; amount: number };
   message?: string;
+  /**
+   * TUX-COND-07 — set only when the person pressed "이용권 살펴보기" on the chat's end-of-trial
+   * card. The start page switches to the purchase list once per value; it is cleared when the
+   * start tab closes, so a later visit never opens the purchase view by itself (REQ-L12 ①).
+   */
+  focus?: number;
+  /**
+   * SPEC iteration 4 §2.5 — the current seat is the free allowance. The payer question is asked
+   * once before checkout; `payerAdult` is the saved answer (absent → not asked yet).
+   */
+  freeSeat?: boolean;
+  payerAdult?: boolean;
+  /** A guardian pays: the checkout page as a link and a QR (data URL), instead of opening a browser here. */
+  guardian?: { url: string; qr: string };
+  /**
+   * Login at purchase (Jay 2026-10-19). Set while this purchase needs a Google account and none is
+   * signed in: `signIn` — the account entry is the Primary and no pay button is offered;
+   * `unavailable` — this build or Service has no account sign-in, so nothing can be bought here
+   * (a calm notice, never an anonymous checkout). Absent: checkout as before.
+   */
+  login?: "signIn" | "unavailable";
 }
 
 /** Studio keeps waiting this long after the order's payment deadline, for a confirm that was already in flight. */
@@ -68,6 +89,10 @@ export const PURCHASE_COPY = {
   claimFailed: "결제는 확인했는데 이용권을 넣지 못했어요. 다시 연결을 눌러 주세요. 결제 내역은 그대로 있어요.",
   cancelled: "구매를 멈췄어요. 이미 결제했다면 다시 연결을 눌러 주세요.",
   unfinished: "결제한 이용권을 아직 넣지 못했어요. 다시 연결을 눌러 주세요.",
+  /** Login at purchase: the lead above the Google button, and the Service's `account_required`. */
+  signInFirst: "이용권을 사려면 Google로 로그인해 주세요.",
+  /** Login at purchase, but no account sign-in on this build or Service: calm, no checkout. */
+  loginUnavailable: "결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.",
 } as const;
 
 const ORDER_ID = /^ord_[0-9a-f]{32}$/;
@@ -121,17 +146,25 @@ export function restorePendingOrder(raw: string | undefined, service: string, si
   } catch { return null; }
 }
 
-export async function fetchProducts(proxyUrl: string): Promise<PassProduct[] | null> {
+export async function fetchProducts(proxyUrl: string, signal?: AbortSignal): Promise<PassProduct[] | null> {
   try {
-    const r = await fetch(`${base(proxyUrl)}/purchase/products`, { headers: { accept: "application/json" } });
+    const r = await fetch(`${base(proxyUrl)}/purchase/products`, { headers: { accept: "application/json" }, ...(signal ? { signal } : {}) });
     return r.ok ? parseProducts(await r.json()) : null;
   } catch { return null; }
 }
 
-export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string): Promise<PendingOrder | "bad_checkout" | null> {
+/**
+ * `freeCredential` (SPEC iteration 4 §1.6/§2.5): the free seat's participant token, sent only as
+ * `x-hps-free-credential` so the Service can link this order to the free start it came from. The
+ * Service ignores a bad value; the token never reaches a webview or the checkout page.
+ */
+export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string, freeCredential?: string): Promise<PendingOrder | "bad_checkout" | "account_required" | null> {
   try {
-    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
-    return r.status === 201 ? parseOrder(await r.json(), productId, proxyUrl, siteBase) : null;
+    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}), ...(freeCredential ? { "x-hps-free-credential": freeCredential } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
+    if (r.status === 201) return parseOrder(await r.json(), productId, proxyUrl, siteBase);
+    // Login at purchase (Service HPS_PURCHASE_ACCOUNT_REQUIRED): the order needs a Google account.
+    if (r.status === 401) { const body: unknown = await r.json().catch(() => null); if (isRecord(body) && body.error === "account_required") return "account_required"; }
+    return null;
   } catch { return null; }
 }
 
@@ -182,6 +215,14 @@ export function waitDecision(state: OrderState | null, order: PendingOrder, now:
 }
 
 export const formatWon = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
+/**
+ * TUX-COND-07 — one pass's catalogue facts as a sentence (합니다체, the chat register). Every
+ * number comes from the Service catalogue; nothing here is a default price or count.
+ */
+export function passFacts(product: PassProduct): string {
+  const name = /이용권$/.test(product.label) ? product.label : `${product.label} 이용권`;
+  return `${name}은 ${product.durationDays}일 동안 AI 요청 ${product.requestLimit.toLocaleString("ko-KR")}번이고 ${formatWon(product.amount)}입니다.`;
+}
 /** Requests per day if the count is spread evenly over the period. */
 /** The pass a buyer sees selected first: the one the Service suggests, else the first. */
 export const defaultProduct = (products: PassProduct[]) => products.find(p => p.recommended) ?? products[0];
@@ -198,4 +239,85 @@ export const PASS_SPENT_FRIENDLY =
 export function passSpentNotice(err: unknown): string | null {
   const m = (err as { message?: unknown } | null)?.message;
   return typeof m === "string" && /trial_exhausted|이용권의 AI 요청 횟수를 모두 썼습니다/.test(m) ? PASS_SPENT_FRIENDLY : null;
+}
+
+/**
+ * REQ-L12 (13) — a free trial that ran out. The SDK host sees only text, and the Service's
+ * trial sentences carry no code: the real runs (2026-10-18, SDK 0.3.299) read
+ * "API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다." and
+ * "Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. …". A bare
+ * `trial_exhausted` code (proxy path) counts only for a turn that did not run on a bought pass,
+ * because the Service uses the same code for both. The cost-ceiling refusal (429
+ * `trial_cost_exhausted`, observed 2026-10-19 against the local Worker) reads
+ * "체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다. …" and is a spent trial too.
+ */
+export type TrialEnding = "exhausted" | "expired";
+export function trialEnding(err: unknown, onPass = false): TrialEnding | null {
+  const m = (err as { message?: unknown } | null)?.message;
+  if (typeof m !== "string") return null;
+  if (/개인 체험의 총 요청 한도에 도달했습니다/.test(m)) return "exhausted";
+  // The trial's AI cost ceiling (Service `trial_cost_exhausted`, 429): the SDK surfaces only the sentence.
+  if (/체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다/.test(m)) return "exhausted";
+  if (/개인 체험 시간이 끝났습니다/.test(m)) return "expired";
+  // Free start (SPEC iteration 4 §1.3) — the Service's free-grant sentences, one per ending.
+  if (FREE_EXHAUSTED_SERVICE.test(m)) return "exhausted";
+  if (FREE_EXPIRED_SERVICE.test(m)) return "expired";
+  if (!onPass && /\btrial_(?:cost_)?exhausted\b/.test(m)) return "exhausted";
+  return null;
+}
+
+/**
+ * The Service's sentences for a free grant (SPEC iteration 4 §1.3). Matched as whole phrases,
+ * never a bare 무료 (a one-token Korean match also hits unrelated sentences).
+ */
+export const FREE_EXHAUSTED_SERVICE = /무료로 쓸 수 있는 AI 요청을 모두 썼습니다/;
+export const FREE_EXPIRED_SERVICE = /무료 사용 시간이 끝났습니다/;
+/** Global daily cap drained (`cohort_paused`, reason `open_trial_daily_cap:<day>`). */
+export const FREE_DAILY_CAP_SERVICE = /오늘 준비한 무료 사용량이 모두 소진되었습니다/;
+
+/** Free-seat endings in 해요체. No 체험: the free allowance is not a trial to the person using it. */
+export const FREE_EXHAUSTED_FRIENDLY = "무료로 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
+export const FREE_EXPIRED_FRIENDLY = "무료 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
+/** The calm chat notice when today's free budget is gone. No retry button, no purchase opened. */
+export const FREE_DAILY_CAP_NOTICE = "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
+
+/** Whether this turn stopped because today's free budget is drained (free seats only). */
+export function freeDailyCapReached(err: unknown): boolean {
+  const m = (err as { message?: unknown } | null)?.message;
+  return typeof m === "string" && (FREE_DAILY_CAP_SERVICE.test(m) || /open_trial_daily_cap:/.test(m));
+}
+
+/** Trial endings in 해요체, like the purchase copy. The files stay (CU-14); nothing is charged or opened. */
+export const TRIAL_EXHAUSTED_FRIENDLY = "체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
+export const TRIAL_EXPIRED_FRIENDLY = "체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
+/** The way on, named only when the Service sells passes. The person chooses it; it is never opened for them. */
+export const TRIAL_PASS_POINTER_CHAT = "계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
+export const TRIAL_PASS_POINTER_START = "계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
+
+export function trialEndNotice(ending: TrialEnding, passesSold: boolean, free = false): string {
+  const said = free
+    ? (ending === "exhausted" ? FREE_EXHAUSTED_FRIENDLY : FREE_EXPIRED_FRIENDLY)
+    : (ending === "exhausted" ? TRIAL_EXHAUSTED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY);
+  return passesSold ? `${said} ${TRIAL_PASS_POINTER_CHAT}` : said;
+}
+
+/** The start page's error line after a trial expired: the pointer is added only while passes are sold. */
+export function withTrialPassPointer(error: string | undefined, passesSold: boolean): string | undefined {
+  return (error === TRIAL_EXPIRED_FRIENDLY || error === FREE_EXPIRED_FRIENDLY) && passesSold ? `${error} ${TRIAL_PASS_POINTER_START}` : error;
+}
+
+/**
+ * Whether the Service sells passes right now: one unauthenticated catalogue read, bounded so a
+ * slow Service never holds back the notice. Unknown counts as not sold, so no dead pointer is shown.
+ */
+export async function passesOnSale(proxyUrl: string, timeoutMs = 3000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const products = await Promise.race([
+      fetchProducts(proxyUrl, ctrl.signal),
+      new Promise<null>((resolve) => ctrl.signal.addEventListener("abort", () => resolve(null), { once: true })),
+    ]);
+    return !!products?.length;
+  } finally { clearTimeout(timer); }
 }

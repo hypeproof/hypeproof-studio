@@ -75,6 +75,8 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
     prepareObservation: async () => { calls.observation++; return null; }, crBlobSinkFor: () => undefined, savePastedImages: async () => ({ note: '' }), commitAttachedImages: () => '',
     resolveCoachCwd: () => undefined, crSdkResults: { reset() {}, onToolUse() {}, onToolResult() {} }, liveServer: { currentUrl: () => undefined },
     buildBrowserMcpHost: () => ({}), saveAgentMdIfPresent: async () => {}, observationWrites: Promise.resolve(), sitePublisher: () => ({ available: () => false }),
+    // Object.create skips class fields; the funnel reporter (studio-funnel-events) is one of them.
+    funnel: { emit() {}, setTarget() {}, active: false },
   });
   return { h, posts, history, runtime, calls, runSdkCoach, SdkUnavailableError, BrowserControl, root, vscode };
 }

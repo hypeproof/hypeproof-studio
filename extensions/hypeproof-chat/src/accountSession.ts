@@ -34,6 +34,13 @@ export function accountPreviewEnabled(enabled: boolean, service: string, site: s
   try { return [service, site].every(value => { const u = new URL(value); return u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname) && !u.username && !u.password && !u.search && !u.hash; }); }
   catch { return false; }
 }
+/**
+ * Decision B3 (free-start rollout, 2026-10-19): accounts are on by default, so a released free-start
+ * user can sign in to buy. The default only arms the setting; accountProductionEnabled still requires
+ * the exact canonical HTTPS Service and Lab, so any other proxyUrl/siteBase has no accounts.
+ * Must equal `hypeproofChat.accountsEnabled`'s default in package.json (tested).
+ */
+export const ACCOUNTS_ENABLED_DEFAULT = true;
 /** Production enrollment is separate from local preview and never accepts arbitrary origins. */
 export function accountProductionEnabled(enabled: boolean, service: string, site: string): boolean {
   return enabled && service === 'https://api.hypeproof-ai.xyz/v1' && site === 'https://hypeproof-ai.xyz';

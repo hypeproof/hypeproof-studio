@@ -1705,6 +1705,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkRequiredHelpers.ts"
         }
       ]
     },
@@ -1722,6 +1725,39 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/sdk-activity.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/sdk-required.test.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SDK-SEED-ON-DEMAND",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/sdk-seed-fetch.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SDK-SEED-ON-DEMAND",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-TEST-SDK-SEED-ON-DEMAND"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/sdkSeedHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkSeedFetch.ts"
         }
       ]
     },

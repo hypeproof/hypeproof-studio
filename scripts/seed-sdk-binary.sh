@@ -21,6 +21,16 @@
 #   bash scripts/seed-sdk-binary.sh --tarball /Volumes/USB/claude-agent-sdk-darwin-arm64-0.3.299.tgz
 #   bash scripts/seed-sdk-binary.sh --force            # re-seed over an existing install
 #   bash scripts/seed-sdk-binary.sh --version 0.3.299  # explicit version (non-pinned → registry integrity)
+#   bash scripts/seed-sdk-binary.sh --platform win32-x64 --download-only DIR
+#       release mode: verify the tarball and stage it in DIR as
+#       claude-agent-sdk-<platform>-<version>.tgz plus a `.sha256` file
+#       (sha256sum format) without installing anything. Any platform works
+#       here, win32 included. The release workflow publishes these as the
+#       public native seed (verify-unified-release.yml).
+#
+# HPS_NPM_REGISTRY overrides the registry base URL (default
+# https://registry.npmjs.org); tests point it at a local fixture server. A
+# pinned version is still checked against the pinned sha512 table.
 #
 # Idempotent: an already-seeded binary with a valid marker exits 0 untouched.
 # Written to be zsh-compatible (no bash-only idioms beyond the bash shebang).
@@ -53,13 +63,15 @@ VERSION=""
 TARBALL=""
 PLATFORM=""
 FORCE="no"
+DOWNLOAD_ONLY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)  VERSION="${2:?--version needs a value}"; shift 2 ;;
     --tarball)  TARBALL="${2:?--tarball needs a path}"; shift 2 ;;
     --platform) PLATFORM="${2:?--platform needs a value (e.g. darwin-arm64)}"; shift 2 ;;
     --force)    FORCE="yes"; shift ;;
-    -h|--help)  sed -n '2,30p' "$0"; exit 0 ;;
+    --download-only) DOWNLOAD_ONLY="${2:?--download-only needs a directory}"; shift 2 ;;
+    -h|--help)  sed -n '2,40p' "$0"; exit 0 ;;
     *) err "Unknown argument: $1 (see --help)" ;;
   esac
 done
@@ -75,8 +87,12 @@ if [ -z "$PLATFORM" ]; then
   esac
 fi
 case "$PLATFORM" in
-  win32-*) err "win32 seeding lives in the PowerShell companion — run scripts/seed-sdk-binary.ps1 (#426)" ;;
+  darwin-*|linux-*|win32-*) ;;
+  *) err "Unsupported --platform $PLATFORM (expected darwin-*, linux-* or win32-*)" ;;
 esac
+if [ -z "$DOWNLOAD_ONLY" ]; then case "$PLATFORM" in
+  win32-*) err "win32 seeding lives in the PowerShell companion — run scripts/seed-sdk-binary.ps1 (#426)" ;;
+esac; fi
 
 # ── Version resolution: pinned by default, cross-checked against the repo ───
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -97,18 +113,22 @@ fi
 
 # ── Expected integrity ───────────────────────────────────────────────────────
 PKG="@anthropic-ai/claude-agent-sdk-$PLATFORM"
-TGZ_URL="https://registry.npmjs.org/$PKG/-/claude-agent-sdk-$PLATFORM-$VERSION.tgz"
+REGISTRY="${HPS_NPM_REGISTRY:-https://registry.npmjs.org}"
+REGISTRY="${REGISTRY%/}"
+SEED_NAME="claude-agent-sdk-$PLATFORM-$VERSION.tgz"
+TGZ_URL="$REGISTRY/$PKG/-/claude-agent-sdk-$PLATFORM-$VERSION.tgz"
 if [ "$VERSION" = "$PINNED_VERSION" ]; then
   EXPECTED_SHA="$(pinned_sha512 "$PLATFORM")"
   [ -n "$EXPECTED_SHA" ] || err "No pinned sha512 for platform $PLATFORM"
 else
   say "Non-pinned version $VERSION — fetching dist.integrity from the npm registry"
-  EXPECTED_SHA="$(curl -fsSL "https://registry.npmjs.org/$PKG/$VERSION" \
+  EXPECTED_SHA="$(curl -fsSL "$REGISTRY/$PKG/$VERSION" \
     | sed -n 's|.*"integrity":"\(sha512-[^"]*\)".*|\1|p' | head -n1)"
   [ -n "$EXPECTED_SHA" ] || err "Could not read dist.integrity for $PKG@$VERSION from the registry"
 fi
 
 # ── Destination (keep in lockstep with seededSdkBinaryPath) ──────────────────
+DEST_DIR=""
 case "$PLATFORM" in
   darwin-*) DEST_DIR="$HOME/Library/Application Support/HypeProof-Studio/sdk/$VERSION" ;;
   linux-*)  DEST_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/HypeProof-Studio/sdk/$VERSION" ;;
@@ -117,7 +137,7 @@ DEST_BIN="$DEST_DIR/claude"
 MARKER="$DEST_BIN.verified.json"
 
 # ── Idempotency: a valid existing seed is left untouched ─────────────────────
-if [ "$FORCE" != "yes" ] && [ -x "$DEST_BIN" ] && [ -f "$MARKER" ]; then
+if [ -z "$DOWNLOAD_ONLY" ] && [ "$FORCE" != "yes" ] && [ -x "$DEST_BIN" ] && [ -f "$MARKER" ]; then
   CUR_SIZE="$(wc -c < "$DEST_BIN" | tr -d ' ')"
   if grep -q "\"sdkVersion\": \"$VERSION\"" "$MARKER" && grep -q "\"size\": $CUR_SIZE" "$MARKER"; then
     say "Already seeded and verified — nothing to do"
@@ -156,6 +176,26 @@ if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
 Refusing to install. (Corrupt download? Wrong --version/--tarball?)"
 fi
 printf '  ok: %s\n' "$ACTUAL_SHA"
+
+# ── Release mode: stage the verified tarball + sha256, install nothing ───────
+if [ -n "$DOWNLOAD_ONLY" ]; then
+  # Same entry the installers extract: package/claude.exe on win32 (see
+  # seed-sdk-binary.ps1), package/claude elsewhere.
+  case "$PLATFORM" in win32-*) SEED_ENTRY="package/claude.exe" ;; *) SEED_ENTRY="package/claude" ;; esac
+  tar -tzf "$TGZ" "$SEED_ENTRY" >/dev/null 2>&1 \
+    || err "Tarball has no $SEED_ENTRY — not a native SDK seed for $PLATFORM"
+  mkdir -p "$DOWNLOAD_ONLY"
+  cp -f "$TGZ" "$DOWNLOAD_ONLY/$SEED_NAME"
+  if command -v sha256sum >/dev/null 2>&1; then
+    SHA256="$(sha256sum "$DOWNLOAD_ONLY/$SEED_NAME" | cut -d' ' -f1)"
+  else
+    SHA256="$(shasum -a 256 "$DOWNLOAD_ONLY/$SEED_NAME" | cut -d' ' -f1)"
+  fi
+  printf '%s  %s\n' "$SHA256" "$SEED_NAME" > "$DOWNLOAD_ONLY/$SEED_NAME.sha256"
+  say "Staged release seed (nothing installed)"
+  printf '  seed   : %s\n  sha256 : %s\n' "$DOWNLOAD_ONLY/$SEED_NAME" "$SHA256"
+  exit 0
+fi
 
 # ── Extract + install atomically ─────────────────────────────────────────────
 say "Extracting package/claude"

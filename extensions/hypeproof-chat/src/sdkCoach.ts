@@ -51,10 +51,12 @@ import {
 } from "./proxyClientHelpers";
 import { WORLD_ARCHIVE_DIR, filterCoachVisibleFiles } from "./chatPanelHelpers";
 import { stallNotice } from "./coachIdentity.ts";
+import { profileAudience, rateLimitStallText } from "./seatVocabulary.ts";
 import {
   buildSdkQueryOptions,
   consumeSdkStream,
   evaluateSdkToolUse,
+  sdkProviderErrorFriendly,
   SDK_STALL_FRIENDLY,
   SDK_STREAM_STALL_MS,
   absolutizeToolPaths,
@@ -203,6 +205,13 @@ export interface SdkCoachArgs {
    * today's turn, byte for byte (test/orchestrator-switch.smoke.mjs).
    */
   orchestrator?: OrchestratorHostArgs;
+  /**
+   * REQ-STUDIO-TRIAL-BUSY — where the busy notice (SDK_BUSY_NOTICE) goes on a seat that
+   * has a busy policy but no orchestrator turn (a native-trial seat). Optional: absent,
+   * the notice is dropped and the bounded abort still ends the turn. An orchestrator
+   * turn keeps its own timeline notice and does not read this.
+   */
+  onNotice?: (text: string) => void;
   /**
    * #282 W4a — the hypeproofChat.sdkBinaryPath setting (highest-priority
    * binary override). Undefined/empty = unset; resolution then walks
@@ -823,9 +832,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       yield event;
     }
   })();
-  // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
-  // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
-  const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
+  // A2/A4 — one busy notice per turn and a bounded busy wait. An orchestrator turn posts
+  // the notice as its timeline line. A native-trial seat (REQ-STUDIO-TRIAL-BUSY) gets the
+  // same bound: its `429 trial_busy` lease refusal is otherwise retried by the CLI until
+  // it prints its raw "API Error" line. sdkBusyPolicyFor answers undefined elsewhere.
+  const busy = orchestratorTurn
+    ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text))
+    : sdkBusyPolicyFor({ activityKind: args.profile.activity_kind }, (text) => args.onNotice?.(text));
 
   // Map SDK messages → the proxyChat callback shape via the pure consumer
   // (sdkCoachHelpers.consumeSdkStream — unit-tested). Three exits besides
@@ -878,7 +891,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +
           `Likely a gateway retry storm (429/529/5xx) or a first turn that never produced a token.`,
       );
-      return new CoachStallError(status===429?'요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)':status&&status>=500?'AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. ('+status+')':stallNotice(args.coachName), status);
+      return new CoachStallError(status===429?rateLimitStallText(profileAudience(args.profile)):status&&status>=500?sdkProviderErrorFriendly(status):stallNotice(args.coachName), status);
     },
     // Silence that is NOT a stall: an open modal, or a tool the SDK is still
     // running (one budget of slack after the decision — a long subagent gets

@@ -52,6 +52,7 @@
 | US-T19 | US-01/14/15 | 지원 OS별 최종 App 후보×현재/후보 Service, 공개 App×후보 Service를 체험/수업 각각 실행. 고정 Module v1 중 v2 발행, 미지원 조합 대조. | 지원 조합 진입·실제 대화·파일/도구·전환·복귀 성공. 미지원은 원인 표시, v1 수업 유지. Windows 설치/실행 미관측은 BLOCKED. | 패키지 + 실제 OS + API | NOT RUN |
 | US-T20 | US-16 | 배포 기록의 정상/누락 revision/옛 번들/다른 endpoint 대조. 비운영 후보에서 App/Service/Module 각 정상 복귀와 데이터 재열기. | 관측 대상과 증거 일치, 머지/빌드/공개/사용자 적용 구분. 복귀 버전에서 파일·참여 호환 확인. 예전 기록 재라벨링으로 PASS 생성 금지. | 릴리스 기록 + 실제 복구 | NOT RUN |
 | US-T21 | US-03/05/10/17 | 동의한 신규 사용자 및 체험 후 수업 사용자에게 자기 과제로 시작·전환·복귀·다음 실행 출처 설명 요청. 진행자 도움은 기록. | 잘못된 앱/활동 선택과 도움 필요 지점을 실제 행동으로 기록. 기술 PASS와 사용자 이해를 별도 판단, 자동 페르소나를 사람 관측으로 쓰지 않음. | 사람 사용성 관찰 | NOT RUN |
+| US-T22 | US-01 | 릴리스 자산 목록과 바이트 검사(`scripts/release/test/sdk-seed-assets.test.mjs`, 로컬 fixture registry, 네트워크 없음). 정상 대조는 두 플랫폼 seed+sha256+manifest. 실패 대조는 seed 누락·sha256 누락·다른 SDK 버전 seed·바이트 변조·sha512 불일치·플랫폼 바이너리 없는 tarball, 그리고 App 안에 native 패키지/seed가 든 합성 번들(`verify-branding.sh`). | 정상은 PASS, 각 실패 대조는 해당 사유로 FAIL. 공개 릴리스의 실제 자산 목록은 `verify-unified-release.yml`이 draft 해제 전에 같은 판정기로 확인한다. 단위 PASS를 공개 체험 실행 PASS로 옮기지 않는다. | 스크립트 + 릴리스 워크플로 | 단위 PASS / 릴리스 NOT RUN |
 
 ## 실행 순서와 비용
 

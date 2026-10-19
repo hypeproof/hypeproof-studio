@@ -4,6 +4,7 @@ import { constants as fsConstants } from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { activityConnections, activityService } from './activityConnections';
+import { isFreeSeat } from './seatVocabulary';
 import { ImageEditClient, imageEditFailureMessage, type ImageEditRequest, type ImageEditResult } from './imageEditClient';
 import { prepareImageEditAsset, saveImageEditOutput, imageEditSelection, imageEditComparisonHtml, type ImageEditAsset } from './imageEditAssets';
 import { imageBytesHash, inspectEditPng } from './imageEditPng';
@@ -92,7 +93,7 @@ export async function runImageEdit(context: vscode.ExtensionContext, options: Im
       if (identity(context) !== activity || activityService(configured) !== service || await context.secrets.get(TOKEN_KEY) !== options.token) throw new Error(stopped);
     };
     await guard();
-    const client = new ImageEditClient({ token: options.token, proxyUrl: options.proxyUrl });
+    const client = new ImageEditClient({ token: options.token, proxyUrl: options.proxyUrl, free: isFreeSeat(options.profile) });
     const read = () => stateFor(context, root);
     const update = async (job: Job) => { await guard(); const state = read(), at = state.jobs.findIndex(item => item.id === job.id); if (at >= 0) state.jobs[at] = job; else { if (state.jobs.length >= 30) throw new Error('저장된 이미지 작업이 많아요. 기존 작업을 먼저 확인해 주세요.'); state.jobs.push(job); } await context.workspaceState.update(KEY, state); };
     const matching = read().jobs.filter(job => job.activity === activity && job.service === service);
@@ -165,7 +166,7 @@ export async function runImageEdit(context: vscode.ExtensionContext, options: Im
     if (job.cancelRequested || result?.cancel_requested || result?.state === 'completed_after_cancel') { void vscode.window.showInformationMessage('취소 요청이 있는 작업입니다. 늦게 완료된 결과는 자동 저장하거나 적용하지 않았어요.'); return; }
     if (!job.output) {
       if (!result || result.id !== job.id || result.original_sha256 !== job.originalSha256) throw new Error('편집 작업과 원본 기록이 일치하지 않아 결과를 저장하지 않았어요.');
-      if (result.state !== 'succeeded') { void vscode.window.showInformationMessage(result.state === 'failed' ? imageEditFailureMessage(result.error_code ?? 'unknown') : '완료를 아직 확인하지 못했어요. 새 요청을 보내기 전에 이전 작업 확인으로 같은 작업 ID를 조회해 주세요.'); return; }
+      if (result.state !== 'succeeded') { void vscode.window.showInformationMessage(result.state === 'failed' ? imageEditFailureMessage(result.error_code ?? 'unknown', isFreeSeat(options.profile)) : '완료를 아직 확인하지 못했어요. 새 요청을 보내기 전에 이전 작업 확인으로 같은 작업 ID를 조회해 주세요.'); return; }
       const bytes = await client.output(job.id); await guard();
       const saved = await saveImageEditOutput(root, original, result, bytes); job.output = { relativePath: saved.relativePath, sha256: saved.sha256 }; await update(job);
     }
