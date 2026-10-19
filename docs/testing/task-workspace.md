@@ -208,3 +208,5 @@ CC-04 starts its two-turn naming window at the first useful request. Greetings, 
 ### Rename save failure recovery
 
 Keep the typed task name until a matching host save result arrives. A failed or unconfirmed save must leave the editor and value available for explicit retry; pending saves do not dispatch duplicates. Cancel and task/activity changes invalidate the pending UI request so late results cannot close another editor. Validate actual host persistence failure and recovery, draft/search preservation, and exact request matching separately from native window acceptance.
+
+A delayed rename success or failure must preserve focus when the user has moved to the composer, search, or another control. Continue typing across the acknowledgment and verify every character remains in the draft, with no send. When focus still belongs to the rename form, success returns it to the title button and failure returns it to the retained name. Recheck ownership again on the animation frame so a newer focus or task change wins.

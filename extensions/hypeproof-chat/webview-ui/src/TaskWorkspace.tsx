@@ -65,6 +65,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [renamePending, setRenamePending] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const renameRequest = useRef<{ id: string; scopeKey: string } | null>(null);
+  const renameForm = useRef<HTMLFormElement>(null);
   const renameButton = useRef<HTMLButtonElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const main = useRef<HTMLElement>(null);
@@ -267,12 +268,22 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       if (!sourceDialog && restore?.isConnected) restore.focus({ preventScroll: true });
     };
   }, [sourceDialog, railDialog, closeSources]);
+  const restoreRenameFocus = (target: () => HTMLElement | null) => {
+    const origin = document.activeElement;
+    if (!origin || !renameForm.current?.contains(origin)) return;
+    const owner = current.current.scopeKey;
+    requestAnimationFrame(() => {
+      // A delayed result must not interrupt typing or a later task/panel choice.
+      if (current.current.scopeKey !== owner || (document.activeElement !== origin && document.activeElement !== document.body)) return;
+      target()?.focus({ preventScroll: true });
+    });
+  };
   const finishRename = () => {
+    restoreRenameFocus(() => renameButton.current);
     renameRequest.current = null;
     setRenamePending(null);
     setRenameError(null);
     setRenaming(false);
-    requestAnimationFrame(() => renameButton.current?.focus({ preventScroll: true }));
   };
   useEffect(() => onHostMessage(message => {
     if (message.type !== 'taskRenameResult') return;
@@ -283,7 +294,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     if (message.saved) finishRename();
     else {
       setRenameError('이름을 저장하지 못했습니다. 입력한 이름으로 다시 시도해 주세요.');
-      requestAnimationFrame(() => titleInput.current?.focus({ preventScroll: true }));
+      restoreRenameFocus(() => titleInput.current);
     }
   }), []);
   useEffect(() => {
@@ -349,7 +360,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     <section ref={main} className="tw-main" aria-label="작업 공간">
       <header className="tw-heading">
         <button className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}>☰</button>
-        {renaming ? <form className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
+        {renaming ? <form ref={renameForm} className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
           <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} readOnly={!!renamePending} aria-describedby={renameError ? 'task-rename-error' : undefined} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && !imeComposing(event)) finishRename(); }} />
           <button className="tw-quiet" disabled={!title.trim() || blocked || !!renamePending} aria-busy={!!renamePending}>{renamePending ? '저장 중…' : '저장'}</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
