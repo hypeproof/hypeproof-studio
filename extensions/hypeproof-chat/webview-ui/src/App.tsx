@@ -17,6 +17,7 @@ import { runVoiceCapabilityProbe } from "./voiceProbe";
 import { ChatPanel } from "./ChatPanel";
 import { TaskWorkspaceFrame } from './TaskWorkspace';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
+import type { VerdictMap, VerdictState } from '../../src/answerVerdict';
 import { InstructorChatPanel } from "./InstructorChatPanel"; // #1298
 import { ChatErrorBoundary } from "./ChatErrorBoundary";
 import { VerifyPanel } from "./VerifyPanel";
@@ -311,6 +312,8 @@ export function App() {
   const activeStream = useRef<string | null>(null);
   const pendingSend = useRef(false);
   const [sendPending, setSendPending] = useState(false);
+  // CGP-CHAT-R-005 — the active task's verdicts as the host last confirmed them (drawn optimistically on click).
+  const [verdicts, setVerdicts] = useState<VerdictMap>({});
   const [shouldCrash, setShouldCrash] = useState(false);
   const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -383,6 +386,7 @@ export function App() {
         }
         case "config":      dispatch({ type: "config", config: msg.config }); break;
         case "history":     dispatch({ type: "history", messages: msg.messages }); break;
+        case "answerVerdicts": setVerdicts(msg.verdicts); break;
         case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId }); break;
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
@@ -562,6 +566,12 @@ export function App() {
     return true;
   };
 
+  // CGP-CHAT-R-005 — a verdict is drawn at once and confirmed (or put back) by the host's answer.
+  const judgeAnswer = (messageId: string, next: VerdictState | null) => {
+    setVerdicts(({ [messageId]: _previous, ...rest }) => next ? { ...rest, [messageId]: next } : rest);
+    postToHost({ type: "answerVerdict", messageId, verdict: next?.verdict ?? null, ...(next?.reason ? { reason: next.reason } : {}), ...(next?.note ? { note: next.note } : {}) });
+  };
+
   // S-04 (#48): "다시 보내기" on a stream error reuses the LAST user prompt
   // that's already in history. The worker idempotently writes turn rows so
   // a retry doesn't double-count.
@@ -682,6 +692,8 @@ export function App() {
         onRetry={retry}
         onRetryLast={retryLast}
         onEditResend={editResend}
+        verdicts={verdicts}
+        onVerdict={judgeAnswer}
         onDismissError={dismissError}
         onCancel={cancel}
         onClear={() => postToHost({ type: "clearHistory" })}

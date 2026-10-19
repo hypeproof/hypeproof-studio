@@ -586,6 +586,11 @@ export type WebviewMessage = (
   | { type: "discardStagedImage"; stageId: string }
   | { type: "retryMessage"; activityId?:string; prompt: string; history: ChatMessage[]; images?: string[]; toolMode?: import('./turnTools').TurnToolMode; sourceMessageId?: string; userMessageId?: string }
   | { type: "cancelStream"; streamId: string }
+  /**
+   * CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT) — the learner's verdict on one finished answer in a
+   * personal task; `verdict: null` removes it. Stored locally and recorded in the spool (DEC-09).
+   */
+  | { type: "answerVerdict"; messageId: string; verdict: import('./answerVerdict').AnswerVerdict | null; reason?: import('./answerVerdict').VerdictReason; note?: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
@@ -728,6 +733,8 @@ export type HostMessage = (
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
+  /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
+  | { type: "answerVerdicts"; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
   | { type: "streamStart"; streamId: string; messageId: string }
   | { type: "streamChunk"; streamId: string; delta: string }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173

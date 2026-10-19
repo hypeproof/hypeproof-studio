@@ -188,6 +188,21 @@
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action:focus-visible { outline: 2px solid var(--tw-accent); outline-offset: 1px; }
 .hps-shell[data-chat-detail="personal"] .hps-copy-status { font-size: 12px; margin-left: 4px; }
 
+/* CGP-CHAT-R-005 — answer verdict. The two buttons share the ghost action style above; pressed state is
+   a check mark plus aria-pressed, never colour alone. Reasons are a small wrapped group under the row. */
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-verdict[aria-pressed="true"] { color: var(--vscode-foreground, #e1e1e1); background: var(--vscode-list-inactiveSelectionBackground, #2b3037); }
+.hps-verdict-reasons { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; color: var(--tw-muted, var(--vscode-descriptionForeground, #9aa0a6)); font-size: 12px; }
+.hps-verdict-reason-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.hps-verdict-reason { min-height: 44px; min-width: 44px; padding: 4px 12px; border-radius: 22px; border: 1px solid var(--hp-control-line, #748F79); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.hps-verdict-reason[aria-pressed="true"] { color: var(--vscode-foreground, #e1e1e1); background: var(--vscode-list-inactiveSelectionBackground, #2b3037); }
+.hps-verdict-reason:focus-visible, .hps-verdict-note textarea:focus-visible, .hps-verdict-note button:focus-visible { outline: 2px solid var(--tw-accent, var(--vscode-focusBorder, #799ed7)); outline-offset: 1px; }
+.hps-verdict-note { display: flex; flex-direction: column; gap: 4px; }
+.hps-verdict-note textarea { min-height: 56px; resize: vertical; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: var(--vscode-input-background, #1e1e1e); color: var(--vscode-input-foreground, inherit); font: inherit; font-size: 13px; }
+.hps-verdict-note-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.hps-verdict-note-actions button { min-width: 44px; min-height: 44px; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.hps-verdict-note-actions button:disabled { opacity: .5; cursor: default; }
+.hps-verdict-privacy { margin: 0; }
+
 /* Code disclosure: the answer's quiet secondary, not a 16px emoji pill (UI audit P0-2). */
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle {
   display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin-left: -8px;

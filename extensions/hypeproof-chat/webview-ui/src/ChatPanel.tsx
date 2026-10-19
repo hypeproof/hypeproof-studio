@@ -7,6 +7,8 @@ import { TurnReviewBar } from './TurnReviewBar';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { EditAction, EditPrompt, VersionPager } from './EditResend';
+import { VerdictButtons, VerdictReasons } from './AnswerVerdict';
+import { verdictTargets, type VerdictMap, type VerdictState } from '../../src/answerVerdict';
 import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions, type VersionPager as Pager } from '../../src/editResend';
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { imeComposing } from './imeGuard';
@@ -125,6 +127,9 @@ interface Props {
   onRetryLast: () => void;
   /** CGP-CHAT-R-002 — resend an edited copy of the latest prompt. Absent (instructor mode): no "수정". */
   onEditResend?: (original: ChatMessage, editOf: string, text: string, images: string[]) => boolean | void;
+  /** CGP-CHAT-R-005 — the learner's verdict per answer, and the setter. Absent: no verdict controls. */
+  verdicts?: VerdictMap;
+  onVerdict?: (messageId: string, next: VerdictState | null) => void;
   onDismissError: () => void;
   onCancel: () => void;
   onClear: () => void;
@@ -1085,6 +1090,9 @@ export function ChatPanel(props: Props) {
       row.querySelector<HTMLButtonElement>('.hps-edit-prompt')?.focus({ preventScroll: true });
     });
   };
+  // CGP-CHAT-R-005 — verdicts sit on the last answer bubble of each finished turn, personal task chat only
+  // (SX-06 lists what a classroom/lesson rail may show; a verdict control is not on that list).
+  const judgeable = personalWorkspace && !props.instructor && props.onVerdict ? verdictTargets(shown.items, streaming) : null;
   const saveEdit = (original: ChatMessage, text: string, images: string[]) => {
     const editOf = original.editOf ?? original.id;
     if (props.onEditResend?.(original, editOf, text, images) === false) return;
@@ -1382,6 +1390,8 @@ export function ChatPanel(props: Props) {
               revertNote={!props.instructor && !!turnReview}
               onCancelEdit={cancelEdit}
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
+              verdict={judgeable?.has(m.id) ? props.verdicts?.[m.id] ?? null : undefined}
+              onVerdict={judgeable?.has(m.id) && props.onVerdict ? (next) => props.onVerdict?.(m.id, next) : undefined}
             />
           ),
         )}
@@ -2154,6 +2164,8 @@ function MessageItem({
   onSaveEdit,
   editDraft,
   onEditChange,
+  verdict,
+  onVerdict,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -2190,6 +2202,9 @@ function MessageItem({
   onSaveEdit?: (text: string, images: string[]) => void;
   editDraft?: InlineEditDraft;
   onEditChange?: (text: string, images: string[]) => void;
+  /** CGP-CHAT-R-005 — present (null = no verdict yet) on an answer that offers a verdict. */
+  verdict?: VerdictState | null;
+  onVerdict?: (next: VerdictState | null) => void;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -2276,7 +2291,9 @@ function MessageItem({
       {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer
         content={message.content}
         onRun={renderable ? () => onRunCode(renderable) : undefined}
-        onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined} />}
+        onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined}
+        verdict={onVerdict ? <VerdictButtons state={verdict ?? undefined} onChange={onVerdict} /> : undefined} />}
+      {personal && onVerdict && verdict?.verdict === 'fix' && !isStreamingThis && <VerdictReasons state={verdict} onChange={onVerdict} />}
     </div>
   );
 }

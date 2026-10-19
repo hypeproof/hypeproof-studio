@@ -6278,6 +6278,39 @@
       ]
     },
     {
+      "id": "ST-IMP-ANSWER-VERDICT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/answerVerdict.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AnswerVerdict.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANSWER-VERDICT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-ANSWER-VERDICT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/answer-verdict.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-verdict.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

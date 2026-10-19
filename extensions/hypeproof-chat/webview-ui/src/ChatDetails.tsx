@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' | 'code' | 'play' | 'chevron'; size?: number }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -23,7 +23,7 @@ export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' |
  * the answer text leads and these follow it (Jay 2026-10-19: the bordered retry square beside the
  * speaker label read as an out-of-place "restart").
  */
-export function CopyAnswer({ content, onRun, onRetry }: { content: string; onRun?: () => void; onRetry?: () => void }) {
+export function CopyAnswer({ content, onRun, onRetry, verdict }: { content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const mounted = useRef(true);
   const copyAttempt = useRef(0);
@@ -50,6 +50,7 @@ export function CopyAnswer({ content, onRun, onRetry }: { content: string; onRun
     {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" title="같은 요청으로 답변을 한 번 더 받아요">
       <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
     </button>}
+    {verdict}
     <span role="status" className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
   </div>;
 }
