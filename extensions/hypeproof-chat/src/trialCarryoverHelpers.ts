@@ -11,7 +11,7 @@
 
 export interface CarryoverMessage { id?: string; role: string; content: string; createdAt?: number }
 /** The trial that held the folder: its record id, name and canonical home folder (its task-store key). */
-export interface CarryoverSource { id: string; name: string; workspace: string }
+export interface CarryoverSource { id: string; name: string; workspace: string; free?: boolean }
 export interface CarryoverOffer {
   version: 1;
   /** The pass activity (ActivityConnections record id) the offer belongs to. */
@@ -20,9 +20,10 @@ export interface CarryoverOffer {
   status: "pending" | "accepted" | "declined";
   decidedAt?: number;
 }
+/** `free`: the source was the free allowance, so the visible strings say 무료 사용 instead of 체험 (SPEC iteration 4 §2.4). */
 export type CarryoverView =
-  | { status: "offer"; fromName: string }
-  | { status: "accepted"; fromName: string; transcript: Array<{ role: "user" | "assistant"; content: string }> };
+  | { status: "offer"; fromName: string; free?: boolean }
+  | { status: "accepted"; fromName: string; free?: boolean; transcript: Array<{ role: "user" | "assistant"; content: string }> };
 
 /** globalState key; global because the offer is written before the window reopens the pass folder. */
 export const carryoverOfferKey = (passId: string) => "hps.carryover.offer." + passId;
@@ -37,11 +38,11 @@ export function carryoverAdvertised(profile: { pass?: unknown; conversation_carr
  * without the pass mark) counts — a class or an earlier pass is not "체험에서 하던 대화".
  */
 export function carryoverSourceOf(
-  previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean } | undefined | null,
+  previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean; free?: boolean } | undefined | null,
   passId: string,
 ): CarryoverSource | null {
   if (!previous || previous.id === passId || previous.kind !== "trial" || previous.pass || typeof previous.workspace !== "string" || !previous.workspace) return null;
-  return { id: previous.id, name: previous.name, workspace: previous.workspace };
+  return { id: previous.id, name: previous.name, workspace: previous.workspace, ...(previous.free ? { free: true } : {}) };
 }
 
 export function newOffer(passId: string, from: CarryoverSource): CarryoverOffer {
@@ -52,6 +53,7 @@ export function validOffer(value: unknown, passId: string): CarryoverOffer | nul
   const o = value as CarryoverOffer | null | undefined;
   if (!o || o.version !== 1 || o.passId !== passId || !o.from || typeof o.from.id !== "string" || typeof o.from.name !== "string" || typeof o.from.workspace !== "string" || !o.from.workspace) return null;
   if (o.status !== "pending" && o.status !== "accepted" && o.status !== "declined") return null;
+  if (o.from.free !== undefined && typeof o.from.free !== "boolean") return null;
   return o;
 }
 
@@ -79,9 +81,9 @@ export function carryoverView(args: {
   const transcript = readableTranscript(args.trialHistory);
   if (offer.status === "pending") {
     if (hasLearnerMessage(args.passHistory) || transcript.length === 0) return null;
-    return { status: "offer", fromName: offer.from.name };
+    return { status: "offer", fromName: offer.from.name, ...(offer.from.free ? { free: true } : {}) };
   }
-  if (offer.status === "accepted" && transcript.length > 0) return { status: "accepted", fromName: offer.from.name, transcript };
+  if (offer.status === "accepted" && transcript.length > 0) return { status: "accepted", fromName: offer.from.name, ...(offer.from.free ? { free: true } : {}), transcript };
   return null;
 }
 
@@ -95,14 +97,16 @@ const clip = (s: string, max: number) => {
  * message in the pass conversation. Deterministic (no model call): the learner's last requests
  * and the coach's last answer, clipped. The full trial text stays only in the read-only view.
  */
-export function carryoverSummary(trialHistory: readonly CarryoverMessage[], opts: { maxRequests?: number; requestChars?: number; replyChars?: number } = {}): string {
-  const { maxRequests = 5, requestChars = 140, replyChars = 400 } = opts;
+export function carryoverSummary(trialHistory: readonly CarryoverMessage[], opts: { maxRequests?: number; requestChars?: number; replyChars?: number; free?: boolean } = {}): string {
+  const { maxRequests = 5, requestChars = 140, replyChars = 400, free = false } = opts;
   const t = readableTranscript(trialHistory);
   const asks = t.filter((m) => m.role === "user").slice(-maxRequests).map((m) => "- " + clip(m.content, requestChars));
   const lastReply = [...t].reverse().find((m) => m.role === "assistant");
-  const lines = ["체험에서 하던 대화를 이어서 해요. 아래는 체험 대화를 줄인 내용이에요. 체험 대화 전체는 위에서 읽기만 할 수 있어요."];
-  if (asks.length) lines.push("", "체험에서 요청한 것:", ...asks);
-  if (lastReply) lines.push("", "체험의 마지막 답변: " + clip(lastReply.content, replyChars));
+  const lines = free
+    ? ["무료 사용 중 하던 대화를 이어서 해요. 아래는 무료 사용 대화를 줄인 내용이에요. 무료 사용 대화 전체는 위에서 읽기만 할 수 있어요."]
+    : ["체험에서 하던 대화를 이어서 해요. 아래는 체험 대화를 줄인 내용이에요. 체험 대화 전체는 위에서 읽기만 할 수 있어요."];
+  if (asks.length) lines.push("", free ? "무료 사용 중 요청한 것:" : "체험에서 요청한 것:", ...asks);
+  if (lastReply) lines.push("", (free ? "무료 사용의 마지막 답변: " : "체험의 마지막 답변: ") + clip(lastReply.content, replyChars));
   return lines.join("\n");
 }
 
@@ -146,6 +150,6 @@ export async function applyCarryoverDecision(args: {
   const next = decideOffer(offer, args.decision, view, args.now);
   if (!next) return null;
   await args.stores.offers.update(key, next);
-  if (next.status === "accepted") await args.appendSeed(carryoverSummary(trialHistory));
+  if (next.status === "accepted") await args.appendSeed(carryoverSummary(trialHistory, { free: !!next.from.free }));
   return next;
 }

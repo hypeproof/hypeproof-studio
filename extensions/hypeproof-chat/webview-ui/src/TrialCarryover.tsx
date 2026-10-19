@@ -9,13 +9,16 @@ import type { CarryoverView } from "../../src/trialCarryoverHelpers";
 export function TrialCarryover(props: { view: CarryoverView | null | undefined; busy?: boolean; onDecide: (decision: "confirm" | "decline") => void }) {
   const { view } = props;
   if (!view) return null;
+  // Free start (SPEC iteration 4 §2.4) — a free-allowance source says 무료 사용; a code-issued trial keeps 체험.
+  const word = view.free ? "무료 사용" : "체험";
   if (view.status === "offer") {
+    const title = view.free ? "무료 사용 중 하던 대화 이어가기" : "체험에서 하던 대화 이어가기";
     return (
-      <section className="hps-carryover" aria-label="체험에서 하던 대화 이어가기">
-        <p className="hps-carryover-title"><strong>체험에서 하던 대화 이어가기</strong></p>
+      <section className="hps-carryover" aria-label={title}>
+        <p className="hps-carryover-title"><strong>{title}</strong></p>
         <p className="hps-carryover-body">
-          「{view.fromName}」에서 나눈 대화를 이어서 할 수 있어요. 이어가면 체험 대화를 읽기 전용으로 보여 주고,
-          줄인 내용을 이 대화에 남겨 코치가 읽게 해요. 이어가지 않으면 새 대화로 시작해요. 체험 대화는 그대로 남아요.
+          「{view.fromName}」에서 나눈 대화를 이어서 할 수 있어요. 이어가면 {word} 대화를 읽기 전용으로 보여 주고,
+          줄인 내용을 이 대화에 남겨 코치가 읽게 해요. 이어가지 않으면 새 대화로 시작해요. {word} 대화는 그대로 남아요.
         </p>
         <div className="hps-carryover-actions">
           <button type="button" className="hp-cta-primary" disabled={props.busy} onClick={() => props.onDecide("confirm")}>이어가기</button>
@@ -26,7 +29,7 @@ export function TrialCarryover(props: { view: CarryoverView | null | undefined; 
   }
   return (
     <details className="hps-carryover hps-carryover-transcript">
-      <summary>「{view.fromName}」 체험 대화 보기 (읽기 전용)</summary>
+      <summary>「{view.fromName}」 {word} 대화 보기 (읽기 전용)</summary>
       <ol className="hps-carryover-list" aria-readonly="true">
         {view.transcript.map((m, i) => (
           <li key={i} className={"hps-carryover-" + m.role}>

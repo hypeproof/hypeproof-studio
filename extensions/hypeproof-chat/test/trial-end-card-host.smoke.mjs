@@ -113,7 +113,7 @@ async function present(error, profile, { products = 200 } = {}) {
 }
 
 test('an open-trial seat that ran out ends in one card built from the Service catalogue', async () => {
-  for (const [err, title] of [[EXHAUSTED, '무료 체험을 모두 사용했습니다'], [EXPIRED, '무료 체험 시간이 끝났습니다']]) {
+  for (const [err, title] of [[EXHAUSTED, '무료 사용량을 모두 썼습니다'], [EXPIRED, '무료 사용 시간이 끝났습니다']]) {
     const r = await present(err, openTrial);
     assert.equal(r.posts.length, 1);
     const [post] = r.posts;
@@ -159,7 +159,12 @@ test('negative controls: no card mid-work, on a code-issued trial, on a pass, or
   // No catalogue: no facts to show, so no card and no made-up price; the turn ends as today.
   r = await present(EXHAUSTED, openTrial, { products: 404 });
   // Baseline under the same catalogue outage: REQ-L12 ⑬'s notice drops its pass pointer when nothing is sold.
-  assert.deepEqual(r.posts, (await present(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' }, { products: 404 })).posts);
+  // Free start (SPEC iteration 4 §2.4): the open-trial seat is the free allowance, so its notice says 무료,
+  // while the code-issued trial keeps its 체험 sentence byte for byte (negative control).
+  const nativePosts = (await present(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' }, { products: 404 })).posts;
+  assert.equal(nativePosts[0].error, '체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.');
+  assert.equal(JSON.stringify(r.posts), JSON.stringify(nativePosts.map(p => ({ ...p, error: '무료로 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.' }))));
+  assert.ok(!r.posts[0].error.includes('체험'));
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.commands, []);
 });
