@@ -27,7 +27,7 @@ import * as path from "node:path";
 // Explicit .ts specifiers: the leaf/pure-module graph must load under
 // `node --experimental-strip-types` (smoke tests) which resolves specifiers
 // literally; esbuild + tsc (allowImportingTsExtensions) accept them.
-import { safeNavigateUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
+import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
 import {
   MCP_BROWSER_OPEN,
   MCP_BROWSER_SCREENSHOT,
@@ -2580,10 +2580,11 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
   // modal-gates it by default (requireApprovalFor includes "openBrowser").
   // Screenshot/live-preview auto-allow in evaluateSdkToolUse and never get here.
   if (action.toolName === MCP_BROWSER_OPEN) {
-    const url = firstString(action.input, ["url"]) ?? "";
+    const raw = action.input && typeof action.input === "object" ? (action.input as Record<string, unknown>).url : null;
+    const url = browserOpenUrl(raw) ?? "";
     return {
       kind: "openBrowser",
-      description: `브라우저 열기: ${url || safeStringify(action.input)}`,
+      description: `브라우저 열기: ${url === BLANK_BROWSER_URL ? "빈 브라우저" : url || safeStringify(action.input)}`,
       payload: { url },
     };
   }
@@ -2961,10 +2962,11 @@ export function evaluateSdkToolUse(args: {
   // permittedMcpToolsFor withholds it otherwise).
   if (toolName === MCP_BROWSER_OPEN) {
     // URL policy: the SAME whitelist the #278 browser-control loop uses
-    // (safeNavigateUrl) — http(s)/localhost/file only; javascript:, vscode:,
-    // data:, bare local paths are rejected before any modal is shown.
-    const url = firstString(input, ["url"]) ?? "";
-    if (!safeNavigateUrl(url)) {
+    // http(s)/localhost/file plus the exact inert about:blank page. Omission
+    // selects that blank page; hostile schemes and malformed inputs still fail.
+    const raw = input && typeof input === "object" ? (input as Record<string, unknown>).url : null;
+    const url = browserOpenUrl(raw);
+    if (!url) {
       return {
         decision: "deny",
         reason: `browser_open URL rejected by policy: ${url || "(empty)"}`,

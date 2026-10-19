@@ -13,6 +13,17 @@ only for citations in this task, and preserves composer focus. A pinned source i
 not replaced by later citations. Classroom, account authority and shared Service
 memory remain governed by their existing contracts.
 
+UX22: a failed draft write must explicitly distinguish text still on screen from
+persisted text. The unsaved warning cannot be dismissed or cleared by an unrelated
+task-list/config refresh; a confirmed write clears it. A conflicting disk revision
+must not be described as a transient selection failure or overwritten. Keep the
+current draft editable and explain its unsaved state until it can be preserved.
+Explicit recovery snapshots the current composer and forks its displayed history,
+draft, images and pending items into a new task against the latest valid disk
+revision. Other tasks and concurrent edits remain unchanged. Queued text stays
+paused; recovery alone must not send a model request. A failed recovery leaves the
+original task and unsaved input visible and editable.
+
 [Design](design/task-workspace.md) and [TW/CP acceptance](testing/task-workspace.md)
 separate filesystem/host/built-UI evidence from native, Windows and customer proof.
 
@@ -26,6 +37,12 @@ motion, and tied to real state. Enter/Shift+Enter/Korean IME, queue/stop and dra
 recovery retain their existing meaning. Light/dark and 320px layouts must remain
 usable. Visual acceptance is independently reviewed against the implementation
 revision; functional test counts alone do not prove ChatGPT-level quality.
+
+UX13: a response completing while the learner reads earlier content must keep the
+visible paragraph within 2 CSSpx, not merely preserve the scroll offset. Busy
+feedback stays inside the existing heading so removing it cannot move the
+transcript. Its status still explains that switching tasks requires stopping the
+active work. Draft, selection and explicit latest-message behavior remain intact.
 
 ### Chat reference interaction (CG-IMPL-R1)
 
@@ -44,6 +61,68 @@ turn and retry identity. A recovered message with a different mode remains a
 separate, durable paused item; neither current draft nor mode is overwritten and
 no error recovery silently starts a new run. Reject duplicate pending dispatches.
 
+`REQ-C6` / UX10 turn isolation: a stopped turn's late chunks, citations,
+tool rows or terminal events must not change a later turn's answer, Stop button,
+error state, pending-send lock or current draft. Repeated starts must not erase
+already displayed text. Existing host preflight refusals (`tools`, `connection`,
+`activity`) remain visible when no turn is active. Stop preserves the partial
+answer and unsent draft without submitting it; the next send is explicit.
+If storage fails after an app-written or model response starts, the host reports
+that response's identity and releases its activity; it must not strand the UI in
+an active state or label a running-turn failure as an uncorrelated preflight error.
+This includes standalone button/command replies from publish, project switching,
+and image editing: history persistence owns the activity until it settles. Each
+reply emits one terminal result after releasing its own ownership, without
+releasing another pending request. A storage error preserves the visible answer
+and unsent draft and permits an explicit next question.
+Such an app-reply storage error must not offer to resend the last user prompt:
+that would repeat an unrelated action instead of retrying the failed save.
+
+`REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
+while another message is queued or being drafted remains a separate durable
+recovery item with its original tool mode and images. It never retags or appends
+to later input. Duplicate refusal notices do not duplicate the item. Recovery is
+explicit; its retry sends only that request's attachments, preserves the next
+draft and queue, and returns keyboard focus to the composer. Refused dispatch
+keeps the recovery item. The draft validator and task store preserve these items
+through reopen; no provider capability is granted by the saved preference.
+Verification: `e2e/queued-photo-send.mjs` (real React), `turn-tools.test.mjs`
+(real disk reopen), and separately identified native fixture evidence.
+
+`REQ-C16` recovery capacity (UX38): before dispatching a new request, reserve
+space for its possible refusal alongside existing recovered requests: at most
+eight items and 24 MiB of UTF-8 serialized recovery data. At capacity, retain
+the composer, images and parked request and explain how to recover space.
+Explicit retries of an existing item remain available. Reading legacy data or
+receiving a late refusal never silently truncates previously owned input; an
+over-limit list blocks new dispatches until the learner resolves it. Removal
+requires an explicit per-item confirmation with Cancel. The scrollable list
+must leave the composer usable at 600px height and split-pane width. This
+supports Human judgment stays visible / OWNERSHIP, without claiming a learning
+outcome. The limit covers recovery data, not total workspace storage or future
+host-staged files. Real React, disk reopening and isolated native evidence have
+separate identities; no live provider or installed RC acceptance is inferred.
+
+`REQ-C16` queue recovery (UX-QUEUE-01): completing a response removes its parked
+message only after the composer accepts that send. An unready photo or refused
+dispatch leaves the original text and tool mode in a durable paused item with an
+explicit Send action, preserving the next draft and staged photo. A later photo
+acknowledgement or unrelated render must not send it automatically. Stop still
+restores the text without dispatch. This supports Product Intent principle 2,
+Human judgment stays visible, and exposes OWNERSHIP through explicit recovery; it is not a measured learning
+outcome. `e2e/queued-photo-send.mjs` verifies the React component boundary;
+native, full host persistence and live-model acceptance remain separate.
+
+`REQ-C16` host readiness (UX-QUEUE-03): a successful completion may release a
+parked follow-up only after the previous turn's history, observation writes,
+active-stream cleanup and activity lease release have finished. This also applies
+to app-written replies. A failed write cannot announce success, and stopping
+during final persistence must not produce a later successful completion.
+`pending-send.smoke.mjs` and `turn-tools.test.mjs` hold these asynchronous
+boundaries for no-model, proxy and SDK paths; isolated native queue/photo evidence
+checks the actual workspace lease. Synthetic service evidence does not establish
+live-provider, Windows or signed-release acceptance.
+
 A message-level citation opens one contextual preview with its real title,
 hostname and URL. It does not imply sentence-level attribution or fetched page
 content. Previewing another citation leaves an existing pin intact. Native browser
@@ -58,6 +137,36 @@ is revision-bound. Matched screenshots and independent interaction review are
 required; local synthetic success is separate from live SDK/account, signed
 release, Windows and physical IME acceptance. No whole-product parity claim is
 inferred from these selected flows.
+
+### Compact personal conversation (CC-R1, #1762)
+
+`REQ-STUDIO-TASK-WORKSPACE` also names new default tasks from meaningful content within the first two
+user turns locally, without extra inference. An explicitly renamed title is never
+overwritten. Legacy snapshots with unknown title provenance remain readable and
+protected. Numeric early replies may use the preceding numbered option as context.
+
+`REQ-STUDIO-CHAT-DETAIL` keeps model/effort, routine usage and opted-in observation
+behind an accessible settings dialog in personal mode. Current model, funding and
+profile authority do not change. Unknown/required/unavailable access has a visible
+recovery entry. Small assistant branding and borderless answer actions use quiet
+16–18px artwork while retaining 44px targets. Classroom controls stay unchanged.
+
+Explicit, flat numbered answer invitations in the latest completed assistant turn
+can be clicked or activated by keyboard. Picking prepares an editable reply and
+preserves other draft text; only the normal Send action submits it. Instructions,
+code, ambiguous lists, old turns and streaming fragments do not become choices.
+
+`REQ-STUDIO-CHAT-REFERENCE` distinguishes opening a general browser from previewing
+authored local files. A plain browser-open request without an address opens a blank
+browser through the existing gated browser tool, never starts a local website or
+invents a destination. Unrequested model HTML/agent.md output is never saved or
+automatically previewed on that turn. SDK tool admission and proxy browser actions
+remain limited to the blank-browser request, under existing profile grants and
+approval. Website preview remains an explicit, separate intent.
+
+Acceptance CC-01–CC-05 in [the verification contract](testing/task-workspace.md)
+uses the actual shipped theme tokens and full personal control profile. Synthetic
+model/tool tests do not establish live inference or installed release behavior.
 
 ## Curriculum runtime proposal — 2026-09-29
 
@@ -702,7 +811,7 @@ Three per-cohort switches the 2026-10-17 dental seminar turns on through `/v1/pr
 | REQ-STUDIO-NATIVE-ALLOWANCE-UI | TUX-SP-13 (trial diagnosis C2/U3, CU-13/14, INT-ACCESS-05). The only source is the Service's `trial` block on `/v1/profile` (`state`, `ends_at`, `request_limit`, `requests_used`; Service `svc-profile-trial-status`). The candidate card states the allowance (`AI 요청 40번 · 오후 3시 20분까지`; no end time before the grant starts). The connected card shows what is left. The chat header carries a passive remaining line, re-read after each trial turn (a profile read spends no attempt). It is text only, with no button or offer. An exhausted or expired grant shows the ended card (`체험이 끝났습니다`) instead of `이어서 하기`: the files are kept, and peer choices follow (`이어서 하려면 이용권으로 시작하기`, only when passes are sold and only on press, per REQ-L12 ①; `지난 대화 보기` for an exhausted grant). A malformed block shows nothing, never 0 or unlimited. A pass keeps REQ-L12 ⑩ (`passSummary`/`passEnd`) and is never read as a trial. Older Service without the block: today's screens, unchanged. **Not claimed**: an expired grant whose profile read is refused (403 `trial_expired`) still reaches the start page as an error with entry choices (ind-trial-end-notice owns that copy); turn-based counting (svc-turn-allowance) is not shipped, so the line counts attempts. | `webview-ui/src/activityLabel.ts` (pure); `test/trial-status.smoke.mjs`; `e2e/trial-ux/run.mjs` TUX-SP-13A/B/C/D/N |
 | REQ-STUDIO-FREE-START | Free start without a code, a trial word or a class push (SPEC iteration 4 §2, Jay 2026-10-19; TUX-SP-14/15/16, US-04/19, REQ-L12 ⑭). A free seat shows no allowance or remaining count while in use (start card, connected card, chat header); only the end card speaks, and it offers a pass (Jay 2026-10-19, TUX-SP-13G/13H, TUX-SP-14A). Runs only while the Service advertises it at `GET /v1/trial/offer` (`entry: "open"` + `claim: "/v1/free/claim"` + boolean `available`); the machine setting `hypeproofChat.freeStart: "off"` forces today's page. With the Service flag off the offer is `code`/404 and every screen is today's (negative controls in the host test: `code`, 404, `open` without `claim`, setting off). First open: one age question, then `POST /v1/free/claim` with a per-install UUID v4 (SecretStorage, globalState fallback) and straight into the served workspace and chat through the ordinary `connectCourse` → `beginCourse` path, with no preview, folder choice or 체험/수업 choice. `참여 코드가 있어요` is a small secondary link to the existing code form (one label `참여 코드`). The card leads with what the person can do: title `바로 시작할 수 있습니다` and `로그인 없이 바로 시작합니다.` on both the age step and the saved-age step, then the allowance line in body text *before* the age question or the Primary (it is the offer, not a note under `아니요`); the secondary links sit on the card's left axis (design re-critique iter4, `e2e/trial-ux/run.mjs` TUX-SP-14A order and alignment checks, negative control: no allowance line without the advertisement). On a free seat, leaving the pass list says `돌아가기`, not `시작 방법 다시 선택` (it goes back; it is not a start-over, REQ-L12-14 with flag-off TUX-SP-13 keeping the old label), and the connected card's footer says `만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.` instead of the code sentence (TUX-SP-13F, negative control: a code-issued seat keeps `참여 코드에 연결된 활동과 이용 조건이 적용됩니다.`). Under 14 is blocked locally and only counted at the Service (`age_ok:false`). Refusals show the Service sentence; daily cap and pause are calm notices; `claim_busy` retries once; below `min_app_version` nothing is claimed and `업데이트 확인` is offered. App versions are `x.y.z[-pre]` with up to four digits in major and minor (Service `APP_VERSION_RE`), so the shipped calendar versions (`2026.1019.0`, tags `v2026.MMDD.N`) are compared against the floor and sent in the claim unchanged; a 1-3 digit bound refused every release (iteration-4 e2e D1, host test calendar floor case). Free-seat copy (profile `studio-open-trial`, no pass) never says 체험: activity label `무료 사용`, allowance and remaining lines `무료 AI 요청 …`, ended card `무료 사용이 끝났습니다`, end card `무료 사용량을 모두 썼습니다` / `무료 사용 시간이 끝났습니다`, notices `무료로 쓸 수 있는 AI 요청을 모두 썼어요…` / `무료 사용 시간이 끝났어요…`, banner titles, the image-edit busy sentence, carry-over strings, and the in-chat daily-cap notice (no retry; a calm `role="status"` notice in the stop-notice palette with only `닫기` — no `🚨 신고하기`, no request id, because a drained day is a scheduled state, not a fault — D4, `test/seat-vocabulary-render.test.tsx` with a generic-failure positive control). Relaunch on an ended free seat never offers a fresh start (iteration-4 e2e D2): the Service serves the ended profile under `HPS_FREE_START` (`trial.state: "expired"`), so the connected card becomes the ended card; if the profile is still refused with 403 `trial_expired` and the free sentence, the free card is drawn as `무료 사용이 끝났습니다` / `무료 사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.` with `이어서 하려면 이용권으로 시작하기` (only while passes are sold) and `참여 코드가 있어요`, no `바로 시작하기`, no allowance line, and the failure sentence is not repeated as an error (host test D2 case; negative controls: a code-issued trial's expiry keeps today's error, a served profile wins over a stale failure). Matchers accept the Service's free sentences (Service SPEC §1.3) as separate whole phrases; code-issued trial (`studio-native-trial`) and pass sentences stay byte-equal (negative controls). The install id and the issued token never reach a webview, log or funnel event; `trial_entry` reports the claim's outcome. Login at purchase (Jay 2026-10-19, TUX-SP-17): before purchase there is no login; at purchase a free seat, or a newcomer while free start is advertised, must sign in with Google first. The account entry is the one Primary on the pass list and no pay button, payer question or order exists until signed in; the order then carries the account bearer. Without an account runtime (accounts not enabled on this build or Service) the pass list shows the calm notice `결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.` and never falls back to an anonymous checkout. Code-issued and class seats are unchanged until the Service answers 401 `account_required`, after which the same gate applies and no anonymous retry is sent. The Service refuses free start (`free_start_unavailable`) unless `HPS_PURCHASE_ACCOUNT_REQUIRED`, `HPS_ACCOUNTS` and `HPS_ACCOUNT_LAB_KEY` are all set (host test login-at-purchase cases with a no-runtime negative control and a code-seat control; `e2e/trial-ux/run.mjs` TUX-SP-17 with a today's-choice-list control). **Not claimed**: a real Google sign-in or the production account rollout, a real Service with `HPS_FREE_START` enabled (built in parallel), a packaged app, the non-member update source (SPEC §2.6, separate item), or Jay's two visual remarks (separate item). | `src/freeStart.ts`, `src/trialOffer.ts`, `src/startPage.ts`, `webview-ui/src/StartPage.tsx`; `test/free-start.smoke.mjs` (pure, with controls), `test/free-start-host.smoke.mjs` (host over an HTTP stub on 127.0.0.1:18851); `e2e/trial-ux/run.mjs` TUX-SP-13F/13G/14A/14B/15/16/17 and REQ-L12-14; `e2e/start-page/run.mjs` |
 | REQ-STUDIO-FREE-NOTIFY-OPTIN | Optional email opt-in on a free seat's end card (Jay 2026-10-19, "ㅇㅇ 해야지"; TUX-COND-08). Purpose: HypeProof can reach people who leave without paying, without adding upgrade pressure ([Product Intent](PRODUCT-INTENT.md) INT-ACCESS-05: keep the results after a limit or expiry and apply no unnecessary upgrade pressure; CU-13). Shown only on the TUX-COND-07 end card of a free seat whose `/v1/profile` carries `notify_optin: { available: true, consent_version }` (Service `HPS_FREE_NOTIFY_OPTIN`, default off, free seats only). It is a quiet secondary section below the pass offer; the pass Primary stays the card's one Primary. Explicit opt-in (Korean advertising consent, 정보통신망법 §50): no checkbox, nothing pre-checked or pre-filled, pressing `받기` is the consent and the consent items are printed above it. The address travels webview → host → Service (`POST /v1/free/notify-optin` with the seat's own credential, body `{ email, consent: true, consent_version }`) and is never stored by Studio (no settings, globalState, SecretStorage, log or webview state); only a per-seat submitted flag keyed by a one-way hash of the credential is kept. After success: `소식을 보내 드릴게요.` with a small `그만 받기` that calls `DELETE /v1/free/notify-optin`. It blocks nothing and adds no login before purchase. **Not shown**: not advertised, `available` false, code-issued trials, passes, before the end. **Not claimed**: the final consent copy, retention period and minors (14-18) policy are pending Jay's decision; no email is sent by this change. | `src/trialEndCard.ts` (`notifyOptinOffered`, `NOTIFY_OPTIN_COPY`), `src/notifyOptin.ts`, `src/chatPanelProvider.ts` (`handleNotifyOptin`), `webview-ui/src/TrialEndCard.tsx`; `test/notify-optin-host.smoke.mjs`; `e2e/trial-ux/run.mjs` TUX-COND-08/08N |
-| REQ-STUDIO-CHAT-POLISH | Personal chat reads as one calm column (Jay 2026-10-19 on the Dev app: "아이콘이 너무 크다", "다시 시작하는 것이 안 어울린다", "너무 구려"; UI audit iter4 P0-1/P0-2/P0-J). Both remarks were the bordered 44px `↻` (답변 다시 만들기) beside the small `h 코치` label, confirmed against Jay's own screenshot and re-rendered headlessly before/after. Personal task chat only (`data-chat-detail="personal"`); classroom chat renders byte-identical (render control). ① Answer actions: copy, preview (`.hps-msg-run`, `미리보기`) and ask-again (`.hps-msg-retry`, `다시 받기`, aria-label `답변 다시 받기`) sit in one ghost row under the answer, same size (32px hit area, no visible box), the first icon on the text's left edge. Retry is offered on the latest coach answer only, and never on a free seat (`activity.free`), because a retry is a new turn (REQ-STUDIO-TURN-ID) and would spend one of the free turns. ② Speaker labels (`나`, coach name) are read by screen readers but not drawn; the `h` mark is gone. One spacing scale for turns (24px between turns, 8px inside). ③ The code disclosure is a 12px ghost toggle with a line icon (`코드 보기 · N줄` / `코드 숨기기`, `aria-expanded`), not a 16px emoji pill. ④ `내 작업 돌아보기` is a compact disclosure on the chat column's left edge. ⑤ Model and thinking depth share one quiet row above the composer: the model select (accessible name `대화 모델`, the hint moves to its title), `생각 깊이` (가볍게/보통/깊게; classroom keeps `Effort`), and `적용 기록` for the effort records. `이용권 · 사용량` moves into the header menu and opens above the composer on request; it still opens by itself while a funding choice is required, and stays until the learner closes it. On a free seat its default-policy line says `무료 사용의 기본 이용 정책을 적용합니다.` instead of `수업·체험의 …`. ⑥ The chat header is drawn into the task heading (`HeadingSlotContext`), giving one row: task title, the passive remaining line (still a `span` inside `.hps-header`, TUX-SP-13), `자료` as a plain header button, then the menu; a fixed coach name is screen-reader only. ⑦ The disabled send button reads as disabled (neutral fill, muted icon at full opacity), not as a dimmed Primary. ⑧ On a narrow header (≤640px: sidebar, 390px) the remaining count is never clipped (`무료 AI 요청 8번 남음`, not `무료 AI 요청 8…`); only the ` · …까지` part gives way, and the span's `title` keeps the full line (design re-critique iter4; TUX-SP-13B 390px whole-count check with a 1280px positive control). **Not claimed**: the VS Code shell (editor watermark, Dock icon) and the packaged Dev app itself were not rendered; the remaining line keeps SPEC §2.4 copy (`무료 AI 요청 {n}번 남음`). | `webview-ui/src/ChatPanel.tsx`, `ChatDetails.tsx`, `EffortControl.tsx`, `AccessControl.tsx`, `TaskWorkspace.tsx`, `headingSlot.ts`, `chatDetails.css`, `taskWorkspace.css`; `e2e/trial-ux/run.mjs` TUX-CHAT-10P (retry: paid personal seat latest answer only = positive, free seat = negative, classroom unchanged) and TUX-CHAT-17 (one header row, settings row, access from the menu) |
+| REQ-STUDIO-CHAT-POLISH | Personal chat reads as one calm column (Jay 2026-10-19 on the Dev app: "아이콘이 너무 크다", "다시 시작하는 것이 안 어울린다", "너무 구려"; UI audit iter4 P0-1/P0-2/P0-J). Both remarks were the bordered 44px `↻` (답변 다시 만들기) beside the small `h 코치` label, confirmed against Jay's own screenshot and re-rendered headlessly before/after. Personal task chat only (`data-chat-detail="personal"`); classroom chat renders byte-identical (render control). ① Answer actions: copy, preview (`.hps-msg-run`, `미리보기`) and ask-again (`.hps-msg-retry`, `다시 받기`, aria-label `답변 다시 받기`) sit in one ghost row under the answer, same size (44px hit area as REQ-STUDIO-CHAT-DETAIL asks, no visible box), the first icon on the text's left edge. Retry is offered on the latest coach answer only, and never on a free seat (`activity.free`), because a retry is a new turn (REQ-STUDIO-TURN-ID) and would spend one of the free turns. ② Speaker labels (`나`, coach name) are read by screen readers but not drawn; the `h` mark is gone (this supersedes the 18px mark of #1763's REQ-STUDIO-CHAT-DETAIL wording). One spacing scale for turns (24px between turns, 8px inside). ③ The code disclosure is a 12px ghost toggle with a line icon (`코드 보기 · N줄` / `코드 숨기기`, `aria-expanded`), not a 16px emoji pill. ④ `내 작업 돌아보기` lives in the settings dialog (REQ-STUDIO-CHAT-DETAIL, #1763). ⑤ Merged with #1763: model, thinking depth and usage live in the `대화 설정` dialog, not on the work surface. Under `응답 고급 설정` the model select (`대화 모델`) and `생각 깊이` (가볍게/보통/깊게; classroom keeps `Effort` on its own rows) with `적용 기록` for the effort records. The header menu keeps `이용권 · 사용량`, which opens the same dialog with the usage section open and focused; `설정` opens it with focus on its close button. An access problem (unknown, notice, required choice, unavailable choice) shows the `이용권 확인` recovery entry above the composer, which opens the dialog on usage. On a free seat its default-policy line says `무료 사용의 기본 이용 정책을 적용합니다.` instead of `수업·체험의 …`. ⑥ The chat header is drawn into the task heading (`HeadingSlotContext`), giving one row: task title, the passive remaining line (still a `span` inside `.hps-header`, TUX-SP-13), `자료` as a plain header button, then the menu; a fixed coach name is screen-reader only. ⑦ The disabled send button reads as disabled (neutral fill, muted icon at full opacity), not as a dimmed Primary. ⑧ On a narrow header (≤640px: sidebar, 390px) the remaining count is never clipped (`무료 AI 요청 8번 남음`, not `무료 AI 요청 8…`); only the ` · …까지` part gives way, and the span's `title` keeps the full line (design re-critique iter4; TUX-SP-13B 390px whole-count check with a 1280px positive control). **Not claimed**: the VS Code shell (editor watermark, Dock icon) and the packaged Dev app itself were not rendered; the remaining line keeps SPEC §2.4 copy (`무료 AI 요청 {n}번 남음`). | `webview-ui/src/ChatPanel.tsx`, `ChatDetails.tsx`, `EffortControl.tsx`, `AccessControl.tsx`, `TaskWorkspace.tsx`, `headingSlot.ts`, `chatDetails.css`, `taskWorkspace.css`; `e2e/trial-ux/run.mjs` TUX-CHAT-10P (retry: paid personal seat latest answer only = positive, free seat = negative, classroom unchanged) and TUX-CHAT-17 (one header row, model/effort/usage only in the settings dialog, usage from the menu) |
 | REQ-STUDIO-NATIVE-FUNNEL-EVENTS | Trial diagnosis fix card studio-funnel-events (U5; design `open-trial-conversion.md` §8.1), consuming the Service contract of fix card ot-funnel-events (hypeproof-service `worker/src/routes/trial-events.ts`, `lib/trial-funnel.ts`, schema `hps-trial-funnel/1`). Default off: only a seat whose token is a native trial grant (`native_trial: true`) is probed, once per token, with `GET /v1/trial/events`; only a 200 `{schema: "hps-trial-funnel/1", events}` turns it on (the Service answers 404 while `HPS_OPEN_TRIAL` is not `enabled`). Cohort seats are never probed. Events go to `POST /v1/trial/events` with the grant's bearer token and exactly `{type, fields}`; never to the session-only `/v1/trace/event`, which refuses a trial grant (403 `session_inactive`). Only types the probe lists are sent. App types and fields are the Service's: `trial_entry` {outcome: granted/reused/signed_in, app_version? (calendar versions such as `2026.1019.0` included), os?: darwin/win32/linux} (signed_in for a personal-account credential, reused for a grant stored before this launch, granted otherwise), `trial_tool_result` {kind: write/edit/preview/publish, ok}, `offer_viewed`/`offer_clicked`/`offer_dismissed` {surface: start_page/end_card}. Any other field (ids, paths, text) is dropped; an unknown type or out-of-range value is not sent; an optional field the Service would refuse is omitted. Entry, first offer view and first result per kind/outcome once per grant. Events before a grant exists wait in a 16-entry memory queue and are dropped when the seat is not a trial grant or the probe says off. With the route on, a trial grant stops liveness posts to `/v1/trace/event`. Fire-and-forget; a failure never reaches the learner. **Not claimed**: entry view, age answer and sign-in started/completed are not Service event types (account-only events need the Service account session guard to admit the route; Service follow-up), so the App sends none of them; the end card offer surface is not on `main`, so `surface: end_card` has no caller yet; `offer_viewed` on the start page is approximated as "passes sold and no activity card shown"; the Service route is on an unmerged branch and not deployed. | `src/funnelEvents.ts` (pure); `test/funnel-events.smoke.mjs` against `test/fixtures/service-contracts/trial-funnel.json` (verdicts captured from the Service `parseAppEvent`; real-parser cross-check with `HPS_SERVICE_WORKER_DIR`), flag-off and whitelist negative controls |
 
 [NAT-01–12](requirements/studio-native-trial.md) define the product scope; [T01–25](testing/studio-native-trial-validation.md) define acceptance tests.

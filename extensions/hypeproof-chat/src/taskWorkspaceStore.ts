@@ -4,6 +4,7 @@ import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, unlink } fr
 import { basename, join } from 'node:path';
 import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
+import { suggestTaskTitle } from './taskTitle.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -77,7 +78,7 @@ function validMessage(value: unknown): value is ChatMessage {
 }
 
 function validDraft(value: unknown): value is ActivityDraft {
-  return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused']) && validActivityDraft(value);
+  return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered']) && validActivityDraft(value);
 }
 
 function validSurface(value: unknown): value is TaskSurfaceSelection | null {
@@ -90,8 +91,9 @@ function validSurface(value: unknown): value is TaskSurfaceSelection | null {
 }
 
 function validTask(value: unknown): value is TaskDocument {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'title', 'createdAt', 'updatedAt', 'messageCount', 'messages', 'draft', 'sourceSelection', 'importedLegacy'])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'title', 'titleOrigin', 'createdAt', 'updatedAt', 'messageCount', 'messages', 'draft', 'sourceSelection', 'importedLegacy'])) return false;
   return nonempty(value.id, 256) && nonempty(value.title, 160) && timestamp(value.createdAt) && timestamp(value.updatedAt) &&
+    (value.titleOrigin === undefined || ['default', 'automatic', 'manual'].includes(value.titleOrigin as string)) &&
     value.updatedAt >= value.createdAt && Array.isArray(value.messages) && value.messages.every(validMessage) &&
     new Set(value.messages.map(message => message.id)).size === value.messages.length && value.messageCount === value.messages.length &&
     validDraft(value.draft) && validSurface(value.sourceSelection) && typeof value.importedLegacy === 'boolean';
@@ -191,8 +193,8 @@ export class TaskWorkspaceStore {
       task.messages = this.mergeMessages([], legacyMessages);
       task.messageCount = task.messages.length;
       task.draft = clone(legacyDraft);
-      task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length;
-      if (task.importedLegacy) task.title = '이전 대화';
+      task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length || !!task.draft.recovered?.length;
+      if (task.importedLegacy) { task.title = '이전 대화'; task.titleOrigin = 'manual'; }
       return { version: 1, scope: this.scope, revision: 0, activeTaskId: task.id, tasks: [task] };
     }).catch(error => {
       // Failed first import must not look like an empty, ready workspace.
@@ -224,13 +226,17 @@ export class TaskWorkspaceStore {
   }
 
   rename(taskId: string, title: string): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, task => { task.title = normalizedTitle(title); });
+    return this.updateTask(taskId, task => { task.title = normalizedTitle(title); task.titleOrigin = 'manual'; });
   }
   append(taskId: string, messages: ChatMessage[]): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
       if (!Array.isArray(messages) || !messages.every(validMessage)) fail('invalid', '저장할 대화 형식이 올바르지 않습니다.');
       task.messages = this.mergeMessages(task.messages, messages);
       task.messageCount = task.messages.length;
+      if (task.titleOrigin === 'default' || task.titleOrigin === 'automatic') {
+        const title = suggestTaskTitle(task.messages);
+        if (title) { task.title = title; task.titleOrigin = 'automatic'; }
+      }
     });
   }
   saveDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
@@ -238,6 +244,24 @@ export class TaskWorkspaceStore {
       if (!validDraft(draft)) fail('invalid', '저장할 초안 형식이 올바르지 않습니다.');
       task.draft = clone(draft);
     });
+  }
+  /** Explicitly fork the displayed work; never merge it over another writer's changes. */
+  recoverDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
+    const current = this.requireData(this.data);
+    if (taskId !== current.activeTaskId || !validDraft(draft)) return Promise.reject(new TaskWorkspaceStoreError('stale', '현재 작업의 입력을 다시 확인해 주세요.'));
+    const original = clone(this.requireTask(current, taskId));
+    return this.mutate(data => {
+      const latest = this.requireData(data);
+      const recovered = this.newTask(`${original.title.slice(0, 150)} · 복구`, Date.now());
+      recovered.messages = original.messages;
+      recovered.messageCount = recovered.messages.length;
+      recovered.sourceSelection = original.sourceSelection;
+      recovered.draft = clone(draft);
+      if (recovered.draft.queued !== null) recovered.draft.queuedPaused = true;
+      latest.tasks.push(recovered);
+      latest.activeTaskId = recovered.id;
+      return latest;
+    }, true);
   }
   clearHistory(taskId: string): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => { task.messages = []; task.messageCount = 0; });
@@ -250,7 +274,7 @@ export class TaskWorkspaceStore {
   }
 
   private newTask(title: string, now: number): TaskDocument {
-    return { id: randomUUID(), title, createdAt: now, updatedAt: now, messageCount: 0,
+    return { id: randomUUID(), title, titleOrigin: title === '새 작업' ? 'default' : 'manual', createdAt: now, updatedAt: now, messageCount: 0,
       messages: [], draft: emptyActivityDraft(), sourceSelection: null, importedLegacy: false };
   }
   private mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
@@ -369,7 +393,7 @@ export class TaskWorkspaceStore {
     await unlink(lease.path);
   }
 
-  private mutate(change: (data: WorkspaceData | undefined) => WorkspaceData): Promise<TaskWorkspaceView> {
+  private mutate(change: (data: WorkspaceData | undefined) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -388,10 +412,11 @@ export class TaskWorkspaceStore {
             if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
             disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
           } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
-          if ((disk?.revision ?? 0) !== (this.data?.revision ?? 0) || JSON.stringify(disk) !== JSON.stringify(this.data)) fail('stale', '다른 창에서 기록이 변경되었습니다. 작업을 다시 열어 주세요.');
-          const next = change(this.data ? clone(this.data) : undefined);
+          if (!recoverFromDisk && ((disk?.revision ?? 0) !== (this.data?.revision ?? 0) || JSON.stringify(disk) !== JSON.stringify(this.data))) fail('stale', '다른 창에서 기록이 변경되었습니다. 작업을 다시 열어 주세요.');
+          const base = recoverFromDisk ? disk : this.data;
+          const next = change(base ? clone(base) : undefined);
           if (this.data && JSON.stringify(next) === JSON.stringify(this.data)) return this.getView();
-          next.revision = (this.data?.revision ?? 0) + 1;
+          next.revision = (base?.revision ?? 0) + 1;
           const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
           decode(content, this.scope);
           const temporaryPath = `${this.filePath}.tmp-${lock.owner.nonce}`;

@@ -1,11 +1,11 @@
 # HypeProof Studio
 
-VSCodium fork rebranded as **HypeProof Studio**. The repo also holds the Worker (`worker/`) and the Chalk instructor surface (`chalk/`); see `products.yaml`.
+VSCodium fork rebranded as **HypeProof Studio**. The repo also holds the Chalk instructor surface (`chalk/`); see `products.yaml`. The Worker is no longer here: it moved to `hypeproof/hypeproof-service` (private) in #1587.
 Strategic + phase plan: see [METAPLAN.md](./METAPLAN.md). Do not duplicate it here.
 
 ## Product philosophy (READ BEFORE DESIGNING UX)
 
-Studio is a prepared environment where learners exercise and examine their agency, judgment and responsibility while working with AI. The current research model is the **six-capability candidate model** (`candidate-capability-v1` — FRAMING, JUDGMENT, ORCHESTRATE, VERIFY, ADAPT, OWNERSHIP), adopted 2026-09-13 (#1020). The **7 AI Native Assets** are `legacy-seven-assets`: historical, still readable, never produced by a new assessment. Neither is an established learning outcome, and there is deliberately no conversion table between them — see `worker/src/lib/measurement-core/capability-models.ts`. Every UX decision in the chat panel, welcome flow, approval modals and onboarding must connect to observable learner behavior and a testable hypothesis.
+Studio is a prepared environment where learners exercise and examine their agency, judgment and responsibility while working with AI. The current research model is the **six-capability candidate model** (`candidate-capability-v1` — FRAMING, JUDGMENT, ORCHESTRATE, VERIFY, ADAPT, OWNERSHIP), adopted 2026-09-13 (#1020). The **7 AI Native Assets** are `legacy-seven-assets`: historical, still readable, never produced by a new assessment. Neither is an established learning outcome, and there is deliberately no conversion table between them — see `worker/src/lib/measurement-core/capability-models.ts` in `hypeproof/hypeproof-service`. Every UX decision in the chat panel, welcome flow, approval modals and onboarding must connect to observable learner behavior and a testable hypothesis.
 
 **Capability names are not learner-facing during work.** SX-01/06/07/59 keep scores, capability labels and evaluation sentences off the work screen; the observation results panel is drawn only where a cohort opted in via `observation.assess` (ADR 0010).
 
@@ -15,7 +15,7 @@ Use this traceability order for product decisions:
 
 `Product Intent` is a product-design layer and is **not** the same concept as the Human Asset `INTENT`.
 
-- Philosophy and asset definitions: [hypeprooflab/PHILOSOPHY.md](https://github.com/jayleekr/hypeprooflab/blob/main/PHILOSOPHY.md). [docs/seven-assets.md](./docs/seven-assets.md) is the Studio reference and compatibility index, not a second definition. Do **not** fork the definitions elsewhere.
+- Philosophy and asset definitions: [hypeprooflab/PHILOSOPHY.md](https://github.com/hypeproof/hypeprooflab/blob/main/PHILOSOPHY.md). [docs/seven-assets.md](./docs/seven-assets.md) is the Studio reference and compatibility index, not a second definition. Do **not** fork the definitions elsewhere.
 - Product-intent layer: [docs/PRODUCT-INTENT.md](./docs/PRODUCT-INTENT.md) — translates philosophy into product design principles
 - UX mapping: METAPLAN §4.5 (asset → concrete chat-panel feature)
 - Behavioral contract: [docs/studio-requirements.md](./docs/studio-requirements.md) — REQ-### rows across Studio behavior domains, with test-layer assignments. PR touching Studio behavior must update this doc.
@@ -39,10 +39,19 @@ Latest detail: git history.
 
 - `vscodium-base/` — **submodule** → `jayleekr/vscodium@hps/main`. **Do not edit upstream files directly**; add a patch under `vscodium-base/patches/`. Pointer is pinned — bump deliberately only, never auto-follow. Policy: [.claude/rules/build-pipeline.md](.claude/rules/build-pipeline.md) "Submodule bump policy".
 - `extensions/hypeproof-chat/` — own VS Code extension (React webview), bundled as a built-in extension (`scripts/inject-builtin-extensions.sh`). It talks to the Worker.
-- `worker/` — Cloudflare Worker (`api.hypeproof-ai.xyz`): model proxy, cohort profiles, token auth, classroom operations.
 - `chalk/` — Chalk instructor surface (`chalk.hypeproof-ai.xyz`).
-- `proxy-poc/` — early Python proxy, superseded by `worker/`; kept for reference.
+- `proxy-poc/` — early Python proxy, superseded by the Worker; kept for reference.
 - `METAPLAN.md` — phased build plan. Always cross-reference by section (§N) rather than copying.
+- Not in this repo: the Worker (`api.hypeproof-ai.xyz`: model proxy, cohort profiles, token auth, classroom operations). There is no `worker/` directory. Its source is in `hypeproof/hypeproof-service` (private); Studio's tests and dev scripts use the pinned `@hypeproof/service-testkit` package listed in `config/service-packages.json`.
+
+## Install order
+
+In a new clone or worktree, run `npm run bootstrap:service` before any `npm ci`.
+
+- Node 22.22.1: `scripts/setup.sh` and `scripts/check-env.sh` accept only that version.
+- `gh auth login` with an account that can read `hypeproof/hypeproof-service`. The bootstrap downloads the pinned packages through `gh`.
+- Without the bootstrap, `npm ci` ends in `npm error code ENOENT` on a `.private-service-cache/*.tgz` path and does not mention the bootstrap.
+- Details: [AGENTS.md](./AGENTS.md#install-order).
 
 ## Language
 

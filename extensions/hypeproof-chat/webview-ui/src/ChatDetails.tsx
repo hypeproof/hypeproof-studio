@@ -89,6 +89,28 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   return { away, onScroll, toLatest };
 }
 
+/** Measure the active selection edge with the editor's actual wrapping and font. */
+function composerCaretLine(node: HTMLTextAreaElement) {
+  const style = getComputedStyle(node);
+  const mirror = document.createElement('div');
+  for (const property of ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+    'lineHeight', 'textIndent', 'textTransform', 'tabSize', 'wordSpacing', 'paddingTop',
+    'paddingRight', 'paddingBottom', 'paddingLeft'] as const) mirror.style[property] = style[property];
+  Object.assign(mirror.style, { position: 'fixed', visibility: 'hidden', pointerEvents: 'none',
+    left: '-10000px', top: '0', width: `${node.clientWidth}px`, boxSizing: 'border-box',
+    whiteSpace: 'pre-wrap', overflowWrap: 'break-word' });
+  const edge = node.selectionDirection === 'backward' ? node.selectionStart : node.selectionEnd;
+  mirror.textContent = node.value.slice(0, edge);
+  const marker = document.createElement('span');
+  marker.textContent = node.value.slice(edge) || '.';
+  mirror.append(marker);
+  document.body.append(mirror);
+  const top = marker.offsetTop;
+  const height = parseFloat(style.lineHeight) || 24;
+  mirror.remove();
+  return { top, bottom: top + height };
+}
+
 /** Keep one editor node while compact and expanded layouts share draft ownership. */
 export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled: boolean, draft: string, hasContext = false) {
   const [expanded, setExpanded] = useState(false);
@@ -99,9 +121,25 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
     const footer = node.closest<HTMLElement>('.hps-input-area');
     const card = node.closest<HTMLElement>('.hps-input');
     let previous = '';
+    let caret = composerCaretLine(node);
+    let caretVisible = caret.top >= node.scrollTop - 1 && caret.bottom <= node.scrollTop + node.clientHeight + 1;
+    const rememberCaret = () => {
+      caret = composerCaretLine(node);
+      caretVisible = caret.top >= node.scrollTop - 1 && caret.bottom <= node.scrollTop + node.clientHeight + 1;
+    };
+    node.addEventListener('scroll', rememberCaret);
+    node.addEventListener('select', rememberCaret);
+    node.addEventListener('keyup', rememberCaret);
+
     const geometry = () => [card?.clientWidth, shell?.clientHeight, footer?.offsetHeight,
       ...Array.from(shell?.children ?? []).filter(child => child !== footer && !child.classList.contains('hps-messages')).map(child => (child as HTMLElement).offsetHeight)].join(':');
     const fit = () => {
+      // Measure before temporarily collapsing the editor. Follow an editing end
+      // only when it was visible; a reader who scrolled up keeps their position.
+      const readingTop = node.scrollTop;
+      const followEnd = node.selectionStart === node.value.length
+        && node.selectionEnd === node.value.length
+        && node.scrollHeight - readingTop - node.clientHeight <= 1;
       const cardStyle = card && getComputedStyle(card);
       const inset = cardStyle ? parseFloat(cardStyle.paddingLeft) + parseFloat(cardStyle.paddingRight) : 16;
       const tools = card?.querySelector<HTMLElement>('.hps-composer-tools');
@@ -121,6 +159,13 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
       node.style.maxHeight = `${cap}px`;
       node.style.height = '0px';
       node.style.height = `${Math.min(cap, Math.max(24, node.scrollHeight))}px`;
+      node.scrollTop = followEnd ? node.scrollHeight : readingTop;
+      if (document.activeElement === node && caretVisible) {
+        const next = composerCaretLine(node);
+        if (next.bottom > node.scrollTop + node.clientHeight) node.scrollTop = next.bottom - node.clientHeight;
+        else if (next.top < node.scrollTop) node.scrollTop = next.top;
+      }
+      rememberCaret();
       previous = geometry();
     };
     fit();
@@ -128,7 +173,12 @@ export function useGrowingComposer(ref: RefObject<HTMLTextAreaElement>, enabled:
     if (card) resize.observe(card);
     if (shell) resize.observe(shell);
     if (footer) resize.observe(footer);
-    return () => resize.disconnect();
+    return () => {
+      resize.disconnect();
+      node.removeEventListener('scroll', rememberCaret);
+      node.removeEventListener('select', rememberCaret);
+      node.removeEventListener('keyup', rememberCaret);
+    };
   }, [enabled, draft, ref, hasContext, expanded]);
   return expanded;
 }

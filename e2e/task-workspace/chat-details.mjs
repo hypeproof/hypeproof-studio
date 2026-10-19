@@ -9,7 +9,8 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 900 
 const page = await context.newPage();
 const output = resolve(process.env.HPS_CHAT_EVIDENCE ?? 'e2e/test-results/chat-details');
 await mkdir(output, { recursive: true });
-const checks = [], errors = [];
+const checks = [], errors = [], measurements = [];
+const EMBEDDED_SHELL = '352px';
 page.on('pageerror', error => errors.push(error.message));
 const input = page.locator('.hps-input textarea');
 const transcript = page.locator('.hps-messages');
@@ -27,7 +28,41 @@ try {
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
   expect(await input.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await expect(page.getByRole('button', { name: '메시지 보내기' })).toBeVisible();
+  // The focused editing end must survive a smaller composer viewport.
+  await input.press('ControlOrMeta+End');
+  await input.press('ArrowRight');
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
+  const resizeDraft = await input.inputValue();
+  // Embedded webviews can shrink without resizing the top-level browser viewport. The personal chat
+  // header is drawn into the task heading (REQ-STUDIO-CHAT-POLISH ⑥), so the shell carries no header
+  // and must shrink below 400px before the composer cap (shell - footer chrome - 96px transcript)
+  // drops under 192px.
+  await page.locator('.hps-shell').evaluate((node, height) => { node.style.height = height; }, EMBEDDED_SHELL);
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: resolve(output, 'composer-embedded-small.png') });
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
   await page.setViewportSize({ width: 1024, height: 400 });
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeLessThanOrEqual(1);
+  expect(await input.evaluate(node => node.selectionStart)).toBe(resizeDraft.length);
+  await expect(input).toHaveValue(resizeDraft);
+  await page.screenshot({ path: resolve(output, 'composer-end-small.png') });
+  // Scrolling up to read is intentional, even if the caret remains at the end.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await input.hover();
+  await page.mouse.wheel(0, -240);
+  await expect.poll(() => input.evaluate(node => node.scrollHeight - node.scrollTop - node.clientHeight)).toBeGreaterThan(100);
+  const draftReadingTop = await input.evaluate(node => node.scrollTop);
+  await page.locator('.hps-shell').evaluate((node, height) => { node.style.height = height; }, EMBEDDED_SHELL);
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await expect.poll(() => input.evaluate(node => node.scrollTop)).toBe(draftReadingTop);
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
+  await page.setViewportSize({ width: 1024, height: 400 });
+  await expect.poll(() => input.evaluate(node => node.scrollTop)).toBe(draftReadingTop);
+  await expect(input).toHaveValue(resizeDraft);
+  expect(server.sent).toHaveLength(0);
   const controlFits = name => page.getByRole('button', { name }).evaluate(node => node.getBoundingClientRect().bottom <= innerHeight);
   await expect.poll(() => controlFits('메시지 보내기')).toBe(true);
   await expect.poll(() => transcript.evaluate(node => node.clientHeight)).toBeGreaterThanOrEqual(90);
@@ -42,6 +77,23 @@ try {
   await page.reload();
   await expect(input).toHaveValue('긴 초안입니다.\n'.repeat(40));
   expect(await input.evaluate(node => node.clientHeight)).toBeLessThanOrEqual(192);
+  // A visible caret in the middle of a draft must also survive height loss.
+  await input.fill(Array.from({ length: 40 }, (_, i) => `초안 ${i + 1} 편집 문장`).join('\n'));
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
+  await input.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home');
+  for (let i = 0; i < 20; i++) await input.press('ArrowDown');
+  const middleSelection = await input.evaluate(node => node.selectionEnd);
+  expect(await input.evaluate(node => node.value.slice(0, node.selectionEnd).split('\n').length - 1)).toBe(20);
+  await page.locator('.hps-shell').evaluate((node, height) => { node.style.height = height; }, EMBEDDED_SHELL);
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBeLessThan(192);
+  await expect.poll(() => input.evaluate(node => {
+    const line = parseFloat(getComputedStyle(node).lineHeight);
+    const row = node.value.slice(0, node.selectionEnd).split('\n').length - 1;
+    return (row + 1) * line - node.scrollTop <= node.clientHeight && row * line >= node.scrollTop;
+  })).toBe(true);
+  expect(await input.evaluate(node => node.selectionEnd)).toBe(middleSelection);
+  await page.locator('.hps-shell').evaluate(node => { node.style.height = ''; });
+  await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(192);
   await input.fill('');
   await expect.poll(() => input.evaluate(node => node.clientHeight)).toBe(shortHeight);
   checks.push('CP-02: multiline/restored draft grows, caps and shrinks; 400px window keeps Send/Stop and transcript inside viewport');
@@ -97,21 +149,39 @@ try {
   await input.press('ArrowLeft');
   const caret = await input.evaluate(node => node.selectionStart);
   const readingTop = await transcript.evaluate(node => node.scrollTop);
+  // scrollTop alone misses a transcript moving when surrounding chrome changes.
+  const readingAnchor = await transcript.evaluate(node => {
+    const viewport = node.getBoundingClientRect();
+    const paragraph = [...node.querySelectorAll('.hps-prose p')].find(p => {
+      const bounds = p.getBoundingClientRect();
+      return bounds.top >= viewport.top + 20 && bounds.bottom <= viewport.bottom - 20;
+    });
+    if (!paragraph) throw Error('No visible reading paragraph');
+    return { text: paragraph.textContent, top: paragraph.getBoundingClientRect().top };
+  });
+  const readingAnchorTop = () => transcript.evaluate((node, text) => {
+    const paragraph = [...node.querySelectorAll('.hps-prose p')].find(p => p.textContent === text);
+    if (!paragraph) throw Error('Reading paragraph disappeared');
+    return paragraph.getBoundingClientRect().top;
+  }, readingAnchor.text);
   await fixture('delta');
   await fixture('delta');
   await expect.poll(() => transcript.evaluate(node => node.scrollTop)).toBe(readingTop);
+  await expect.poll(async () => Math.abs((await readingAnchorTop()) - readingAnchor.top)).toBeLessThanOrEqual(2);
   await expect(input).toBeFocused();
   await expect(input).toHaveValue('읽으면서 쓰는 초안');
   expect(await input.evaluate(node => node.selectionStart)).toBe(caret);
   await fixture('stop');
   await expect.poll(() => transcript.evaluate(node => node.scrollTop)).toBe(readingTop);
+  await expect.poll(async () => Math.abs((await readingAnchorTop()) - readingAnchor.top)).toBeLessThanOrEqual(2);
+  measurements.push({ case: 'reading-completion', before: readingAnchor.top, after: await readingAnchorTop() });
   await page.getByRole('button', { name: '최신 메시지' }).click();
   await expect.poll(bottomGap).toBeLessThanOrEqual(48);
   await fixture('stream');
   await fixture('delta');
   await expect.poll(bottomGap).toBeLessThanOrEqual(48);
   await fixture('stop');
-  checks.push('CP-04: real wheel reading position/draft/caret survive deltas and completion; latest resumes follow');
+  checks.push('CP-04: real wheel reading paragraph stays within 2 CSSpx through deltas and completion; draft/caret survive and latest resumes follow');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await fixture('stream');
@@ -149,11 +219,24 @@ try {
       await expect(transcript).toContainText('release-candidate-sha256-0123456789abcdef');
       await expect(page.getByRole('button', { name: '메시지 보내기' })).toBeVisible();
       await page.screenshot({ path: resolve(output, `${theme}-${width}.png`) });
+      const idleTop = await transcript.evaluate(node => node.getBoundingClientRect().top);
+      await fixture('stream');
+      await expect(page.locator('.tw-run-note')).toContainText('작업 중');
+      const busyTop = await transcript.evaluate(node => node.getBoundingClientRect().top);
+      expect(Math.abs(busyTop - idleTop)).toBeLessThanOrEqual(2);
+      expect(await page.locator('.tw-run-note').evaluate(node => {
+        const bounds = node.getBoundingClientRect();
+        return bounds.left >= 0 && bounds.right <= innerWidth && bounds.height > 0;
+      })).toBe(true);
+      await page.screenshot({ path: resolve(output, `${theme}-${width}-busy.png`) });
+      await fixture('stop');
+      await expect.poll(() => transcript.evaluate(node => node.getBoundingClientRect().top)).toBe(idleTop);
+      measurements.push({ case: 'busy-layout', theme, width, idleTop, busyTop });
     }
   }
   checks.push('CP-01: rich Markdown/table/expanded code/long identifier fit dark/light 320/390/1440; code text contrast exceeds 4.5:1');
   expect(errors).toEqual([]);
-  await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', checks, scope: 'built React + actual task host/store; synthetic stream/model seam; browser clipboard policy; not OS IME or signed app acceptance', errors }, null, 2));
+  await writeFile(resolve(output, 'result.json'), JSON.stringify({ status: 'PASS', checks, measurements, scope: 'built React + actual task host/store; synthetic stream/model seam; browser clipboard policy; not OS IME or signed app acceptance', errors }, null, 2));
   console.log(JSON.stringify({ status: 'PASS', checks: checks.length, output }));
 } catch (error) {
   await page.screenshot({ path: resolve(output, 'failure.png') });

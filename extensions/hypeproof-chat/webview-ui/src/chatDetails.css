@@ -174,10 +174,10 @@
 .hps-shell[data-chat-detail="personal"] .hps-msg-user .hps-msg-body { padding: 10px 16px; border-radius: 18px 18px 6px 18px; }
 
 /* Actions under an answer: copy · preview · ask again — same size, same ghost style, the first
-   icon on the answer text's left edge. 32px hit area (WCAG 2.5.8 AA asks 24px) without a box. */
-.hps-shell[data-chat-detail="personal"] .hps-answer-actions { gap: 2px; min-height: 32px; margin-top: -4px; flex-wrap: wrap; }
+   icon on the answer text's left edge. 44px hit area (REQ-STUDIO-CHAT-DETAIL, #1763) without a box. */
+.hps-shell[data-chat-detail="personal"] .hps-answer-actions { gap: 2px; min-height: 44px; margin-top: -8px; flex-wrap: wrap; }
 .hps-shell[data-chat-detail="personal"] .hps-answer-actions .hps-answer-action {
-  display: inline-flex; align-items: center; gap: 6px; min-width: 32px; min-height: 32px; margin: 0;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 44px; min-height: 44px; margin: 0;
   padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--tw-muted);
   font-size: 12px; line-height: 1.4; opacity: 1;
 }
@@ -194,47 +194,46 @@
 }
 .hps-shell[data-chat-detail="personal"] .hps-codepill-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
 
-/* "내 작업 돌아보기": a compact disclosure on the chat column's left edge, not a full-width box. */
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation {
-  margin: 8px max(20px, calc((100% - var(--chat-column)) / 2)) 0; padding: 0; border: 0; border-radius: 0; max-height: 40vh;
-}
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation > summary {
-  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; margin-left: -8px; padding: 4px 8px;
-  border-radius: 6px; color: var(--tw-muted); font-size: 12px; list-style: none;
-}
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation > summary::-webkit-details-marker { display: none; }
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation > summary::before {
-  content: ""; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg); transition: transform 120ms ease-out;
-}
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation[open] > summary::before { transform: rotate(45deg); }
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation > summary:hover { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
-.hps-shell[data-chat-detail="personal"] > .hps-native-observation[open] { padding-bottom: 12px; border-bottom: 1px solid var(--tw-line); font-size: 13px; }
-
-/* Model and thinking depth: one quiet row above the composer, aligned with its text. */
-.hps-composer-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; padding: 0; font-size: 12px; color: var(--tw-muted); }
-.hps-composer-settings .hps-model-selection { margin: 0; gap: 0; }
-.hps-composer-settings .hps-effort { display: contents; }
-.hps-composer-settings label { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
-.hps-composer-settings select {
-  min-height: 32px; max-width: 100%; padding: 4px 6px; margin: 0 0 0 -6px; border: 1px solid transparent; border-radius: 6px;
-  background: transparent; color: var(--vscode-foreground, #e1e1e1); font: inherit; font-size: 12px; cursor: pointer;
-}
-.hps-composer-settings .hps-effort label select { margin-left: 0; }
-.hps-composer-settings select:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, #2b3037); }
-.hps-composer-settings select:disabled { cursor: default; color: var(--tw-muted); }
-.hps-composer-settings select:focus-visible { outline: 2px solid var(--tw-accent); outline-offset: 1px; }
-.hps-composer-settings option { background: var(--vscode-input-background, #25282e); color: var(--vscode-foreground, #e1e1e1); }
-.hps-composer-settings .hps-effort > small { flex: 1 1 100%; order: 3; }
-.hps-composer-settings .hps-effort > details { flex: 0 0 auto; margin-left: auto; min-width: 0; }
-.hps-composer-settings .hps-effort > details > summary { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 8px; border-radius: 6px; list-style: none; }
-.hps-composer-settings .hps-effort > details > summary::-webkit-details-marker { display: none; }
-.hps-composer-settings .hps-effort > details > summary:hover { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
-.hps-composer-settings .hps-effort > details[open] { flex: 1 1 100%; order: 4; margin-left: 0; padding: 4px 8px 8px; border-top: 1px solid var(--tw-line); }
-.hps-shell[data-chat-detail="personal"] .hps-input-area > .hps-access { margin: 0; }
-
 /* Send: the one Primary. Disabled reads as disabled, not as a dimmed Primary (low contrast olive). */
 .hps-shell[data-chat-detail="personal"] .hps-input .hps-btn-send:disabled {
   opacity: 1; background: var(--vscode-list-inactiveSelectionBackground, #30353d); color: var(--tw-muted);
 }
 .hps-shell[data-chat-detail="personal"] .hps-codepill { margin: 4px 0 0; }
+
+/* Personal chat keeps secondary controls behind settings and the conversation in view. */
+.hps-shell[data-chat-detail="personal"] .hps-header { padding-block: 4px; min-height: 36px; }
+.hps-shell[data-chat-detail="personal"] .hps-ai-disclosure {
+  border: 0; padding: 0; margin: 0; background: transparent; color: var(--tw-muted); font-size: 11px; line-height: 1.5;
+}
+.hps-shell[data-chat-detail="personal"] .hps-empty { padding: 16px 0 0; }
+.hps-shell[data-chat-detail="personal"] .hps-empty-greeting { font-size: 17px; line-height: 1.65; max-width: 640px; }
+.hps-shell[data-chat-detail="personal"] .hps-chips-rack { margin: 0; padding: 0; gap: 10px; }
+.hps-shell[data-chat-detail="personal"] .hps-chips-label { font-size: 11px; color: var(--tw-muted); opacity: 1; }
+.hps-shell[data-chat-detail="personal"] .hps-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 8px; }
+.hps-shell[data-chat-detail="personal"] .hps-chip { padding: 12px; border: 1px solid var(--tw-line); border-radius: 10px; text-align: left; background: transparent; min-height: 44px; }
+.hps-shell[data-chat-detail="personal"] .hps-chip-text { font-size: 13px; line-height: 1.5; }
+.hps-shell[data-chat-detail="personal"] .hps-chip-caption { font-size: 11px; line-height: 1.5; font-style: normal; color: var(--tw-muted); opacity: 1; margin-top: 5px; }
+.hps-preferences { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; color: var(--vscode-foreground, #f2f4e8); background: var(--tw-panel); border: 1px solid var(--tw-line); border-radius: 16px; box-shadow: 0 12px 48px #0005; overflow: auto; }
+.hps-preferences::backdrop { background: #0006; }
+.hps-preferences > header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--tw-line); }
+.hps-preferences h2 { font-size: 16px; font-weight: 600; margin: 0; }
+.hps-preferences > header button { width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: inherit; font-size: 24px; border-radius: 8px; }
+.hps-preferences-body { padding: 8px 20px 16px; font-size: 13px; line-height: 1.6; }
+.hps-preferences-body > details { border: 0; border-bottom: 1px solid var(--tw-line); border-radius: 0; padding: 8px 0; margin: 0; max-height: none; }
+.hps-preferences summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 500; }
+.hps-preferences .hps-model-selection, .hps-preferences .hps-effort { margin: 12px 0; padding: 0; }
+.hps-preferences select { max-width: 100%; min-height: 36px; font-size: 13px; }
+.hps-preferences p, .hps-preferences small { color: var(--tw-muted); overflow-wrap: anywhere; }
+.hps-preferences .hps-all-settings { margin-top: 12px; padding: 8px 0; border: 0; min-height: 44px; background: transparent; color: inherit; }
+.hps-access-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--tw-muted); font-size: 12px; }
+.hps-access-attention button { color: inherit; background: transparent; border: 0; text-decoration: underline; min-height: 32px; }
+.hps-reply-choices { display: flex; flex-direction: column; gap: 6px; margin: 16px 0 4px; }
+.hps-shell[data-chat-detail="personal"] .hps-reply-choices button { display: flex; align-items: baseline; gap: 12px; width: 100%; padding: 10px 12px; min-height: 44px; text-align: left; font-size: 14px; line-height: 1.55; border: 1px solid var(--tw-line); border-radius: 9px; color: inherit; background: transparent; }
+.hps-reply-choices button:hover { background: var(--vscode-list-hoverBackground, #ffffff0a); }
+.hps-choice-number { color: var(--tw-muted); flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hps-choice-help { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--tw-muted); font-size: 11px; }
+.hps-choice-help button { border: 0; background: transparent; color: inherit; text-decoration: underline; min-height: 44px; padding: 0 8px; font-size: 12px; }
+@media (max-height: 500px) {
+  .hps-shell[data-chat-detail="personal"] .hps-empty { padding-top: 0; }
+  .hps-shell[data-chat-detail="personal"] .hps-messages { gap: 16px; }
+}

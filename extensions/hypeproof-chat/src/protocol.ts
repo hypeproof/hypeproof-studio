@@ -479,6 +479,7 @@ export interface SuggestionChip {
 // Webview → Host
 export type WebviewMessage = (
   | { type: 'taskCreate' }
+  | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
   | { type: 'taskRename'; title: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
@@ -660,7 +661,7 @@ export type HostMessage = (
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
-  | { type: 'taskWorkspaceError'; error: string | null }
+  | { type: 'taskWorkspaceError'; error: string | null; draftSaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[];toolMode?:import('./turnTools').TurnToolMode}
@@ -775,8 +776,8 @@ export type HostMessage = (
       /** When error — the Korean sentence the server produced. */
       message?: string;
     }
-  /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". */
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retry?: false; trialEndCard?: TrialEndCardView }
+  /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". `retryable: false` (#1819) — the answer could not be saved; same effect. */
+  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
   | { type: "actionResult"; requestId: string; approved: boolean }
   /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
   | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }

@@ -5809,6 +5809,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "## Personal task workspace (#1756)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Compact personal conversation (CC-R1, #1762)"
         }
       ]
     },
@@ -5888,6 +5892,24 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/citationPreview.css"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/taskTitle.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserIntent.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPreferences.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ModelControl.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ReplyChoices.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/replyChoiceParser.ts"
         }
       ]
     },
@@ -5940,6 +5962,21 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/turn-tools.test.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-title.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/reply-choices.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/browser-intent.smoke.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/chat-compact.mjs"
+        },
+        {
+          "path": "e2e/task-workspace/native-compact.mjs"
         }
       ]
     },
@@ -5954,6 +5991,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Personal chat detail (CP-R1)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Compact personal conversation (CC-R1, #1762)"
         }
       ]
     },
@@ -5968,6 +6009,10 @@
         {
           "path": "docs/studio-requirements.md",
           "section": "### Chat reference interaction (CG-IMPL-R1)"
+        },
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "### Compact personal conversation (CC-R1, #1762)"
         }
       ]
     },

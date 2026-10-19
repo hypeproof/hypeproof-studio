@@ -12,6 +12,7 @@ interface Props {
   messages: ChatMessage[];
   busy: boolean;
   error: string | null;
+  unsavedDraft?: boolean;
   onDismissError: () => void;
   children: ReactNode;
 }
@@ -50,7 +51,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, onDismissError, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, onDismissError, children }: Props) {
   const [filter, setFilter] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -299,7 +300,7 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
         </li>)}
       </ul>
       {!visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}
-      <p className="tw-local-note">이 기기에 보관됩니다</p>
+      <p className="tw-local-note" role="status">{unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
     <section ref={main} className="tw-main" aria-label="작업 공간">
       <header className="tw-heading">
@@ -309,11 +310,15 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
           <button className="tw-quiet" disabled={!title.trim() || blocked}>저장</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />
+        <span className="tw-run-note" role="status" aria-live="polite" title={busy ? '멈춘 뒤 다른 작업으로 이동할 수 있습니다.' : undefined}>
+          {busy && <>작업 중<span className="tw-run-help">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span></>}
+        </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>
-      {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>}</div>}
+      {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && (unsavedDraft
+        ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskRecoverDraft' })}>새 작업에 보관</button>
+        : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
-      {busy && <p className="tw-run-note" role="status">작업 중입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</p>}
       <div id="task-conversation" className="tw-conversation" tabIndex={-1}><HeadingSlotContext.Provider value={headingSlot}>{children}</HeadingSlotContext.Provider></div>
     </section>
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}

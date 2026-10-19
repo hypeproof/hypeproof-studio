@@ -1,10 +1,16 @@
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
+import type { RecoveredRequest } from '../../src/activityDraft';
+import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
+import { ModelControl } from './ModelControl';
+import { ChatPreferences } from './ChatPreferences';
+import { ReplyChoices } from './ReplyChoices';
+import { replyChoices } from './replyChoiceParser';
 import { activityDetail, activityLabel, trialHeaderLine } from "./activityLabel";
 import { errorBannerPresentation } from "./errorBannerPresentation";
 import { TrialEndCard } from "./TrialEndCard";
@@ -278,7 +284,16 @@ export function ChatPanel(props: Props) {
   const [toolMode, setToolMode] = useState<TurnToolMode>(saved?.toolMode ?? 'auto');
   const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
   const [queuedPaused, setQueuedPaused] = useState(separateQueue);
+  const [recovered, setRecovered] = useState<RecoveredRequest[]>(saved?.recovered ?? []);
+  const recoveryAtCapacity = useMemo(() => recoveryFull(recovered), [recovered]);
+  const [discardRequest, setDiscardRequest] = useState<RecoveredRequest | null>(null);
   const [composing, setComposing] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
+  // section opens with focus on it (the #1814 menu shortcut, kept inside the #1763 dialog).
+  const [preferencesUsage, setPreferencesUsage] = useState(false);
+  const openPreferences = (usage: boolean) => { setPreferencesUsage(usage); setPreferencesOpen(true); };
+  const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
   // a brief reason when a paste is rejected (too big / too many).
@@ -371,7 +386,7 @@ export function ChatPanel(props: Props) {
   const [lastImport, setLastImport] = useState<LastImport | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   // A draft that never imported an instructor prompt is saved exactly as before U3: no `imports` key at all.
-  const draftPayload = () => ({text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
+  const draftPayload = () => ({...(recovered.length ? {recovered} : {}),text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
   const activityId = config?.activity?.id;
@@ -380,20 +395,23 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
     if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
-  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused]);
+  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
       if (msg.type === "inputRejected") {
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
-        if (current.text.trim() && current.toolMode !== rejectedMode) {
-          setQueued(q => q === msg.text ? q : draftAfterStop(q ?? '', msg.text));
-          setQueuedToolMode(rejectedMode); setQueuedPaused(true);
-        } else {
-          setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
-          setToolMode(rejectedMode);
+        if (current.queued !== null || current.text.trim() || current.recovered?.length) {
+          // A refusal belongs to its original request, never to the later parked
+          // message or its attachments. Keep both durable and explicitly paused.
+          const request = {text: msg.text, toolMode: rejectedMode, images: msg.images ?? []};
+          setRecovered(items => items.some(item => item.text === request.text && item.toolMode === request.toolMode && JSON.stringify(item.images) === JSON.stringify(request.images)) ? items : [...items, request]);
+          if (current.queued !== null) setQueuedPaused(true);
+          return;
         }
+        setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
+        setToolMode(rejectedMode);
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
       }
       if (msg.type === "activityFreeze") {
@@ -530,13 +548,13 @@ export function ChatPanel(props: Props) {
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
+  const funding = config?.access;
+  const fundingChoice = funding?.view?.choices.find(choice => choice.id === funding.selected);
+  const accessNeedsAttention = !!funding && (funding.status === 'unknown' || !!funding.notice ||
+    (!!funding.view?.required && !funding.selected) || (!!fundingChoice && (!fundingChoice.available ||
+      !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
   const headingSlot = useContext(HeadingSlotContext);
-  // Personal chat: the usage panel is opened from the header menu, or stays up while a funding
-  // choice is still required (then it opens itself, exactly as before).
-  const [accessOpen, setAccessOpen] = useState(false);
-  const accessRequired = !!config?.access?.view?.required && !config?.access?.selected;
-  useEffect(() => { if (accessRequired) setAccessOpen(true); }, [accessRequired]);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
@@ -595,10 +613,18 @@ export function ChatPanel(props: Props) {
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
 
+  const reserveRecovery = (text: string, images: string[] = pendingImages, mode: TurnToolMode = toolMode) => {
+    if (canReserveRecovery(recovered, {text, images, toolMode: mode})) return true;
+    setImgNote(recovered.length
+      ? '보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 지금 작성한 내용과 사진은 그대로입니다.'
+      : '메시지와 사진이 너무 커서 보내지 않았어요. 내용을 나누거나 사진을 줄여 주세요. 입력한 내용은 그대로입니다.');
+    return false;
+  };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
     if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
+    if (!reserveRecovery(value, pendingImages, mode)) return false;
     if (personalWorkspace) viewport.toLatest();
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
@@ -615,6 +641,26 @@ export function ChatPanel(props: Props) {
     return true;
   };
 
+  const retryRecovered = (request: RecoveredRequest) => {
+    if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
+    // Send only this request's images; later staged photos/imports belong to the
+    // untouched composer. A refused send keeps the recovery item for another try.
+    if (props.onSend(request.text, request.images.length ? request.images : undefined, undefined, undefined, request.toolMode) === false) return;
+    setRecovered(items => items.filter(item => item !== request));
+    textareaRef.current?.focus({preventScroll: true});
+  };
+
+  const editRecovered = (request: RecoveredRequest) => {
+    if (streaming || frozen || props.sendPending || props.sendLocked) return;
+    if (draft.trim() || pendingImages.length || stagedPhotos.length || imports.length) {
+      setImgNote('작성 중인 메시지를 먼저 보내거나 입력창을 비운 뒤 수정해 주세요. 두 메시지는 그대로 보관되어 있습니다.');
+      return;
+    }
+    setDraft(request.text); setToolMode(request.toolMode); setPendingImages(request.images);
+    setRecovered(items => items.filter(item => item !== request));
+    setImgNote(null); textareaRef.current?.focus({preventScroll: true});
+  };
+
   // #416 — the turn ended: send the message the participant parked during it.
   // Edge-triggered (see shouldFlushQueue): firing while `streaming` is still
   // true would hit submit()'s own guard and silently drop the message.
@@ -622,13 +668,20 @@ export function ChatPanel(props: Props) {
     const prev = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
     // #751 U4 — a turn the instructor cut off hands the parked message back, exactly like the learner's own Stop. Never sent.
+    if (queuedPaused) return;
     if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice || !!error)) { restoreQueuedToDraft(); return; }
     if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice || !!error)) return;
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
-    setQueued(null);
-    submit(text, queuedToolMode);
+    // A staging/pending-send guard can refuse this edge. Keep the message and
+    // its mode until acceptance; a paused item gives it an explicit retry path
+    // instead of silently losing it or sending later on an unrelated render.
+    if (submit(text, queuedToolMode)) setQueued(null);
+    else {
+      setQueuedPaused(true);
+      setImgNote(note => note ?? '메시지를 보내지 못해 보관했습니다. 준비가 끝나면 보관한 메시지의 보내기를 눌러 주세요.');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming, queued, queuedPaused]);
 
@@ -840,6 +893,18 @@ export function ChatPanel(props: Props) {
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
+  const handleReplyChoice = (answer: string) => {
+    if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
+    // A choice prepares an editable reply, never sends or replaces an existing draft.
+    const messageId = messages.filter(message => message.role !== 'tool').at(-1)?.id ?? '';
+    const previous = lastReplyChoice.current;
+    setDraft(current => previous?.messageId === messageId && current.endsWith(previous.answer)
+      ? current.slice(0, -previous.answer.length) + answer
+      : current.trim() ? `${current}\n${answer}` : answer);
+    lastReplyChoice.current = { messageId, answer };
+    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+  };
+
   const handleChip = (chip: SuggestionChip) => {
     if (chip.style === "weak") return;       // contrast-only chips are not clickable
     // Drop the chip text into draft and focus textarea so kid can append/edit.
@@ -855,6 +920,7 @@ export function ChatPanel(props: Props) {
    */
   const handleWorldPick = (chip: string) => {
     if (busy) return;
+    if (!reserveRecovery(chip, [], 'auto')) return;
     setWorldPending(true);
     props.onSend(chip);
     setRollExpand(null);
@@ -873,7 +939,8 @@ export function ChatPanel(props: Props) {
     const combined = rollExpand.original
       ? `${rollExpand.original} — 그리고 ${extra}`
       : extra;
-    props.onSend(combined, pendingImages.length > 0 ? pendingImages : undefined);
+    if (!reserveRecovery(combined, pendingImages, 'auto')) return;
+    if (props.onSend(combined, pendingImages.length > 0 ? pendingImages : undefined) === false) return;
     setDraft("");
     setPendingImages([]);
     setImgNote(null);
@@ -989,10 +1056,10 @@ export function ChatPanel(props: Props) {
             활동 변경
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
-          {/* Personal chat: usage lives behind the header menu (the remaining line already shows the
-              count); the panel opens above the composer only when the learner asks for it. */}
-          {personalWorkspace && config?.access && <button onClick={() => setAccessOpen(true)} title="이용권과 사용량 확인">이용권 · 사용량</button>}
-          <button onClick={props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
+          {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
+              already shows the count). */}
+          {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} title="이용권과 사용량 확인">이용권 · 사용량</button>}
+          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
         </HeaderActions>
       </header>;
       return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
@@ -1126,7 +1193,7 @@ export function ChatPanel(props: Props) {
           keep that off the work screen, and SX-59 names the remedy as "학습 경험 프로필에서
           비활성" rather than deletion, because the trial's own TUX-OBS-07 is to read it. So it
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
-      {showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
+      {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
@@ -1151,7 +1218,7 @@ export function ChatPanel(props: Props) {
           <ChipRack
             chips={initialChips}
             onPick={handleChip}
-            label="이렇게 시작해볼까요? (탭하면 입력창에 들어가요)"
+            label={personalWorkspace ? "시작할 질문" : "이렇게 시작해볼까요? (탭하면 입력창에 들어가요)"}
           />
         )}
 
@@ -1175,6 +1242,8 @@ export function ChatPanel(props: Props) {
               personal={personalWorkspace}
               isLatest={m.id === latestAssistantId}
               freeSeat={!!config?.activity?.free}
+              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? handleReplyChoice : undefined}
+              onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
             />
           ),
         )}
@@ -1238,7 +1307,7 @@ export function ChatPanel(props: Props) {
             message={error}
             requestId={props.errorRequestId}
             runbookUrl={props.errorRunbookUrl}
-            canRetry={props.canRetryLast}
+            canRetry={props.canRetryLast && recovered.length === 0}
             onRetry={props.onRetryLast}
             onDismiss={props.onDismissError}
             onReport={props.onReportProblem}
@@ -1260,36 +1329,14 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
-        {/* Personal chat: model and thinking depth share one compact row above the composer
-            (Jay 2026-10-19: four stacked control rows read as clutter). Classroom keeps its rows. */}
-        {(() => { const modelHint = config.profile?.model_selection ? (config.profile.model_selection.choices.length === 1
-            ? (config.profile.model_selection.source === 'lesson' ? '이 수업에서 고정한 모델' : '사용 가능한 모델 1개')
-            : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요') : '';
-          const model = config.profile?.model_selection && <div className="hps-model-selection">
-          <label>{personalWorkspace ? <span className="hps-sr-only">모델</span> : '모델 '}<select aria-label="대화 모델" title={personalWorkspace ? modelHint : undefined} value={config.model}
-            disabled={config.profile.model_selection.choices.length === 1}
-            onChange={e => postToHost({ type: 'selectModel', alias: e.target.value })}
-            onKeyDown={e => {
-              // Embedded Mac webviews can forward native select keys to the workbench.
-              // Keep version navigation in this control, including without a native popup.
-              if (e.altKey || e.ctrlKey || e.metaKey || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-              const choices = config.profile?.model_selection?.choices ?? [];
-              if (!choices.length) return;
-              const current = choices.findIndex(c => c.alias === config.model);
-              const next = e.key === 'Home' ? 0 : e.key === 'End' ? choices.length - 1
-                : Math.max(0, Math.min(choices.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1)));
-              e.preventDefault(); e.stopPropagation();
-              if (choices[next]) postToHost({ type: 'selectModel', alias: choices[next].alias });
-            }}>
-
-            {config.profile.model_selection.choices.map(c => <option key={c.id} value={c.alias}>{c.label}</option>)}
-          </select></label>
-          <small className={personalWorkspace ? "hps-sr-only" : undefined}>{modelHint}</small>
-        </div>;
-          return personalWorkspace
-            ? <>{(model || config.effort || config.effortResult) && <div className="hps-composer-settings">{model}<EffortControl config={config} post={postToHost} personal /></div>}
-                {(accessOpen || accessRequired) && <AccessControl config={config} streaming={streaming} post={postToHost} defaultOpen focusOnMount={!accessRequired} onClosed={() => { if (!accessRequired) setAccessOpen(false); }} />}</>
-            : <>{model}<EffortControl config={config} post={postToHost} /><AccessControl config={config} streaming={streaming} post={postToHost} /></>; })()}
+        {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
+            settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
+        {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
+          <EffortControl config={config} post={postToHost} />
+          <AccessControl config={config} streaming={streaming} post={postToHost} /></>}
+        {personalWorkspace && accessNeedsAttention && <div className="hps-access-attention" role="status">
+          <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
+        </div>}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1320,6 +1367,20 @@ export function ChatPanel(props: Props) {
           }} />
         )}
         {imgNote && <div className="hps-img-note">{imgNote}</div>}
+        {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
+        {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
+          {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>
+            <span className="hps-queued-label">보내지 못한 메시지{request.toolMode === 'web-search' ? ' · 웹 검색' : ''}{request.images.length ? ` · 사진 ${request.images.length}장` : ''}</span>
+            <span className="hps-queued-text" title={request.text}>{request.text}</span>
+            <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || unavailable || props.sendLocked} onClick={() => retryRecovered(request)}>다시 보내기</button>
+            <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || props.sendLocked} onClick={() => editRecovered(request)}>수정하기</button>
+            {discardRequest === request ? <span className="hps-recovery-confirm" role="group" aria-label="메시지 삭제 확인" onKeyDown={event => {if(event.key === 'Escape'){event.preventDefault();setDiscardRequest(null);textareaRef.current?.focus({preventScroll:true});}}}>
+              <span>이 메시지와 사진을 삭제할까요?</span>
+              <button type="button" className="hps-queued-send" autoFocus onClick={() => {setDiscardRequest(null);requestAnimationFrame(() => textareaRef.current?.focus({preventScroll:true}));}}>취소</button>
+              <button type="button" className="hps-queued-send" onClick={() => {setRecovered(items => items.filter(item => item !== request));setDiscardRequest(null);setImgNote(null);textareaRef.current?.focus({preventScroll:true});}}>삭제 확인</button>
+            </span> : <button type="button" className="hps-queued-send" onClick={() => setDiscardRequest(request)}>삭제</button>}
+          </div>)}
+        </div>}
         {queued !== null && (
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".
@@ -1500,6 +1561,16 @@ export function ChatPanel(props: Props) {
           </div>
         </div>
       </footer>
+      {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
+        <details className="hps-advanced-response"><summary>응답 고급 설정</summary>
+          <p>선택한 설정은 다음 요청부터 적용됩니다.</p>
+          <ModelControl config={config} streaming={streaming} />
+          <EffortControl config={config} post={postToHost} personal />
+        </details>
+        <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
+        {showsObservationResults(config.profile?.observation) && <NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} />}
+        <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
+      </ChatPreferences>}
     </div>
   );
 }
@@ -1874,6 +1945,8 @@ function MessageItem({
   personal = false,
   isLatest = false,
   freeSeat = false,
+  onPickReply,
+  onWriteReply,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -1897,7 +1970,10 @@ function MessageItem({
    * a "refresh-looking" control would silently spend one of the ten free turns.
    */
   freeSeat?: boolean;
+  onPickReply?: (answer: string) => void;
+  onWriteReply?: () => void;
 }) {
+  const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
     () => (message.role === "assistant" ? extractRenderableHtml(message.content) : null),
     [message.role, message.content],
@@ -1942,7 +2018,7 @@ function MessageItem({
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       <div className="hps-msg-body">
-        {message.role === "assistant" ? (
+        {question && onPickReply && onWriteReply ? <ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
             streaming={isStreamingThis}
@@ -1967,6 +2043,8 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
+      {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
+          latest answer only and never on a free seat. */}
       {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer
         content={message.content}
         onRun={renderable ? () => onRunCode(renderable) : undefined}

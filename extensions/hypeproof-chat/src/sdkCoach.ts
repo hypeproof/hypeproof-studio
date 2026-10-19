@@ -719,6 +719,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         args.onActivity?.({kind:'approval',id:options.toolUseID,name,input,allowed,actor,at:Date.now()});
       };
       lastToolCallAt = Date.now();
+      // A browser-only turn cannot turn a model's mistaken authoring plan into writes,
+      // a preview, or a delegated task. The existing capability/approval gates still run.
+      if (args.browserHost?.generalBrowserRequest &&
+          (name !== MCP_BROWSER_OPEN || (input?.url !== undefined && input.url !== "about:blank"))) {
+        decision(false);
+        return { behavior: "deny" as const, message: "브라우저만 열어 달라는 요청이에요. browser_open에서 url을 생략해 빈 브라우저를 열어 주세요." };
+      }
       // 상대경로를 먼저 흡수한다. 벤더 SDK 의 파일 도구는 절대경로만 받으므로
       // (`sdk-tools.d.ts`: "must be absolute, not relative") `Read("agent.md")` 는
       // 파일이 있어도 거부된다. 코치는 그걸 "파일이 없다"로 읽고 `find ~` 로
