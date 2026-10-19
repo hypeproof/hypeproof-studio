@@ -7,7 +7,7 @@ import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace
 import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
-import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import type { ClassRepo } from "./publish/githubContinue";
 
@@ -372,7 +372,8 @@ export class StartPage {
       started: !this.candidate && this.started && !!p,
       candidate: !!this.candidate,
       previousConnected: this.candidate ? this.candidate.previousConnected : !!p,
-      error: this.error ?? (!p ? this.chat.profileFailure()?.friendly : undefined),
+      // REQ-L12 (13) — after a free trial ended, name the pass entry while it is drawn. Never open it.
+      error: withTrialPassPointer(this.error ?? (!p ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),

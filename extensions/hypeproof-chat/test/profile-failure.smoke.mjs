@@ -122,7 +122,7 @@ const errBody = (code, type = "auth") =>
 
 console.log("profile-failure.smoke.mjs — all assertions passed");
 
-assert.match(classifyProfileFailure(403,errBody('trial_expired')).friendly,/개인 체험 시간이 끝/);
+assert.match(classifyProfileFailure(403,errBody('trial_expired')).friendly,/체험 시간이 끝/);
 assert.equal(classifyProfileFailure(403,errBody('not_in_roster')).reason,'forbidden');
 assert.doesNotMatch(classifyProfileFailure(403,errBody('not_in_roster')).friendly,/시간이 끝/);
 
@@ -138,7 +138,7 @@ const withMessage = (code, message) => JSON.stringify({ error: { code, message }
 assert.equal(classifyProfileFailure(401, withMessage('trial_revoked_or_reissued', '환불했거나 새 코드로 바뀐 이용권입니다.')).friendly, '환불했거나 새 코드로 바뀐 이용권입니다.');
 assert.match(classifyProfileFailure(401, JSON.stringify({ error: { code: 'trial_revoked_or_reissued' } })).friendly, /환불했거나 새 코드로 바뀐 코드/);
 assert.equal(classifyProfileFailure(403, withMessage('trial_expired', '이용권 기간이 끝났습니다. 작업 파일은 그대로 보존됩니다.')).friendly, '이용권 기간이 끝났습니다. 작업 파일은 그대로 보존됩니다.');
-assert.match(classifyProfileFailure(403, withMessage('trial_expired', '개인 체험 시간이 끝났습니다.')).friendly, /새 체험을 요청/);
+assert.doesNotMatch(classifyProfileFailure(403, withMessage('trial_expired', '개인 체험 시간이 끝났습니다.')).friendly, /코드 발급 담당자|새 체험을 요청/);
 const { passSpentNotice, PASS_SPENT_FRIENDLY } = await import("../src/passPurchase.ts");
 assert.equal(passSpentNotice(new Error('Claude Code returned an error result: API Error: Request rejected (429) · 이용권의 AI 요청 횟수를 모두 썼습니다. 만든 파일과 대화는 그대로 남아 있습니다.')), PASS_SPENT_FRIENDLY);
 assert.equal(passSpentNotice(new Error('API Error: 429 rate limited')), null);

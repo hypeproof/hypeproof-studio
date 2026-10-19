@@ -121,9 +121,9 @@ export function restorePendingOrder(raw: string | undefined, service: string, si
   } catch { return null; }
 }
 
-export async function fetchProducts(proxyUrl: string): Promise<PassProduct[] | null> {
+export async function fetchProducts(proxyUrl: string, signal?: AbortSignal): Promise<PassProduct[] | null> {
   try {
-    const r = await fetch(`${base(proxyUrl)}/purchase/products`, { headers: { accept: "application/json" } });
+    const r = await fetch(`${base(proxyUrl)}/purchase/products`, { headers: { accept: "application/json" }, ...(signal ? { signal } : {}) });
     return r.ok ? parseProducts(await r.json()) : null;
   } catch { return null; }
 }
@@ -198,4 +198,55 @@ export const PASS_SPENT_FRIENDLY =
 export function passSpentNotice(err: unknown): string | null {
   const m = (err as { message?: unknown } | null)?.message;
   return typeof m === "string" && /trial_exhausted|이용권의 AI 요청 횟수를 모두 썼습니다/.test(m) ? PASS_SPENT_FRIENDLY : null;
+}
+
+/**
+ * REQ-L12 (13) — a free trial that ran out. The SDK host sees only text, and the Service's
+ * trial sentences carry no code: the real runs (2026-10-18, SDK 0.3.299) read
+ * "API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다." and
+ * "Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. …". A bare
+ * `trial_exhausted` code (proxy path) counts only for a turn that did not run on a bought pass,
+ * because the Service uses the same code for both.
+ */
+export type TrialEnding = "exhausted" | "expired";
+export function trialEnding(err: unknown, onPass = false): TrialEnding | null {
+  const m = (err as { message?: unknown } | null)?.message;
+  if (typeof m !== "string") return null;
+  if (/개인 체험의 총 요청 한도에 도달했습니다/.test(m)) return "exhausted";
+  if (/개인 체험 시간이 끝났습니다/.test(m)) return "expired";
+  if (!onPass && /\btrial_exhausted\b/.test(m)) return "exhausted";
+  return null;
+}
+
+/** Trial endings in 해요체, like the purchase copy. The files stay (CU-14); nothing is charged or opened. */
+export const TRIAL_EXHAUSTED_FRIENDLY = "체험에서 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
+export const TRIAL_EXPIRED_FRIENDLY = "체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
+/** The way on, named only when the Service sells passes. The person chooses it; it is never opened for them. */
+export const TRIAL_PASS_POINTER_CHAT = "계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
+export const TRIAL_PASS_POINTER_START = "계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
+
+export function trialEndNotice(ending: TrialEnding, passesSold: boolean): string {
+  const said = ending === "exhausted" ? TRIAL_EXHAUSTED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY;
+  return passesSold ? `${said} ${TRIAL_PASS_POINTER_CHAT}` : said;
+}
+
+/** The start page's error line after a trial expired: the pointer is added only while passes are sold. */
+export function withTrialPassPointer(error: string | undefined, passesSold: boolean): string | undefined {
+  return error === TRIAL_EXPIRED_FRIENDLY && passesSold ? `${error} ${TRIAL_PASS_POINTER_START}` : error;
+}
+
+/**
+ * Whether the Service sells passes right now: one unauthenticated catalogue read, bounded so a
+ * slow Service never holds back the notice. Unknown counts as not sold, so no dead pointer is shown.
+ */
+export async function passesOnSale(proxyUrl: string, timeoutMs = 3000): Promise<boolean> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const products = await Promise.race([
+      fetchProducts(proxyUrl, ctrl.signal),
+      new Promise<null>((resolve) => ctrl.signal.addEventListener("abort", () => resolve(null), { once: true })),
+    ]);
+    return !!products?.length;
+  } finally { clearTimeout(timer); }
 }

@@ -1,7 +1,7 @@
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
-import { passSpentNotice } from "./passPurchase";
+import { passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
@@ -5921,6 +5921,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
     if (isAbortError(err) || current?.signal?.aborted) return;
+    // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
+    // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never
+    // opens the purchase screen or the code box, and leaves the saved code alone.
+    const ending = trialEnding(err, !!current?.profile?.pass);
+    if (ending) {
+      const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
+      if (current?.signal?.aborted) return;
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold) });
+      return;
+    }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }
