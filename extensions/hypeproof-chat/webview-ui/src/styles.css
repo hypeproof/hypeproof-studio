@@ -797,8 +797,8 @@ html, body, #root {
 
 .hps-img-note {
   font-size: 11px;
-  color: var(--vscode-inputValidation-warningForeground, #d7a05a);
-  opacity: 0.9;
+  /* This guidance sits on the editor surface, not a warning-colored input. */
+  color: var(--vscode-foreground, #e1e1e1);
 }
 .hps-image-preparing {
   font-size: 11px;

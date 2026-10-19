@@ -322,6 +322,7 @@ export function ChatPanel(props: Props) {
     return true;
   };
   const [imgNote, setImgNote] = useState<string | null>(null);
+  const imageNoteId = useId();
   // D-028 — photos staged in the host until this message is sent. Not part of the saved draft:
   // the host deletes staged files when the window closes.
   const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
@@ -781,7 +782,7 @@ export function ChatPanel(props: Props) {
               setImgNote(`이미지는 한 번에 최대 ${MAX_IMAGES}장까지 붙일 수 있어요.`);
               return prev;
             }
-            setImgNote(null);
+            // A sibling read may already have failed; a successful image is not recovery.
             return [...prev, url];
           });
         })
@@ -832,7 +833,7 @@ export function ChatPanel(props: Props) {
             setImgNote(`이미지는 한 번에 최대 ${MAX_IMAGES}장까지 붙일 수 있어요.`);
             return prev;
           }
-          setImgNote(null);
+          // Keep failures from other reads in this preparation batch visible.
           return [...prev, url];
         });
       })
@@ -1432,7 +1433,8 @@ export function ChatPanel(props: Props) {
             __html: renderInlineMd(ux.hints.short_input.message_md),
           }} />
         )}
-        {imgNote && <div className="hps-img-note">{imgNote}</div>}
+        <div className="hps-sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="attachment-announcer">{imgNote || ''}</div>
+        {imgNote && <div id={imageNoteId} className="hps-img-note">{imgNote}</div>}
         {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
         {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
           {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>
@@ -1527,7 +1529,7 @@ export function ChatPanel(props: Props) {
             autoFocus
             readOnly={unavailable}
             aria-label={composerLabel(coachName)}
-            aria-describedby={personalWorkspace ? "personal-composer-hint" : undefined}
+            aria-describedby={[personalWorkspace ? "personal-composer-hint" : '', imgNote ? imageNoteId : ''].filter(Boolean).join(' ') || undefined}
             value={draft}
             onChange={(e) => {
               // Manual edits own the entire draft, even if it ends with an old choice.
