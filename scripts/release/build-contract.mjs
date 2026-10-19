@@ -17,7 +17,8 @@ const repository = fileURLToPath(new URL('../../', import.meta.url));
 export const contractSources = ['scripts/release/build-contract.mjs', 'e2e/unified-release/artifact.mjs',
   '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml',
   'scripts/release/cloud-executor/build-cache.mjs', 'scripts/release/cloud-executor/provider.mjs',
-  'scripts/release/engine/core.mjs'];
+  'scripts/release/engine/core.mjs', 'scripts/release/cloud-executor/build-preflight.mjs',
+  'scripts/release/cloud-executor/workflow-gate.mjs'];
 
 // An old candidate would execute its old workflows, ignoring every new safety input.
 // Require the exact reviewed contract revision before the first remote mutation.

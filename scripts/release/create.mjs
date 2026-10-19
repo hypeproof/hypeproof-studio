@@ -14,6 +14,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {assertManagedCandidateSupport, buildDispatches, buildTagMessage} from './build-contract.mjs';
+import {engineEnabled,executionBody,guardedEffect} from './cloud-executor/workflow-gate.mjs';
 
 export function actions(plan, {acceptNotRun = false} = {}) {
   if (plan.schema !== 'hps-release-plan/0') return {stop: `unknown plan schema ${plan.schema}`};
@@ -25,7 +26,7 @@ export function actions(plan, {acceptNotRun = false} = {}) {
   return {steps: ['tag', 'builds', 'branch', 'pr']};
 }
 
-function main() {
+async function main() {
   const {values} = parseArgs({options: {plan: {type: 'string'}, 'accept-not-run': {type: 'boolean'}, 'managed-draft': {type: 'boolean'}}});
   if (!values.plan) throw new Error('--plan is required');
   const planPath = path.resolve(values.plan);
@@ -46,6 +47,8 @@ function main() {
   // Reject invalid identities before creating a tag or making any GitHub writes.
   const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
   if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
+  const controlled=engineEnabled();
+  if(controlled&&!values['managed-draft'])throw Error('BLOCKED engine mode requires a managed reserved candidate');
   let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
   if (dispatches.length && values['managed-draft']) {
     const original = fs.readFileSync(prBodyFile, 'utf8');
@@ -60,13 +63,18 @@ function main() {
         '--body-file', path.join(dir, plan.issueBody));
       say(`Smoke FAIL: opened ${url}. No rc tag and no release PR.`);
     }
-    if (step === 'tag') {
+    if (step === 'tag' && controlled) {
+      const identity={repository:repo,repositoryId:Number(process.env.GITHUB_REPOSITORY_ID),sourceSha:plan.candidate,rcTag:plan.rcTag,version:plan.version};
+      await guardedEffect({body:executionBody({path:'release-cut:tag-create',identity,effect:{kind:'managed-tag',tagMessage:buildTagMessage(plan,{managedDraft:true})}}),managed:true,perform:true});
+      say('Service created the reserved managed tag; builder execution is tag-push only.');
+    }
+    if (step === 'tag' && !controlled) {
       if (run('git', 'ls-remote', '--tags', 'origin', `refs/tags/${plan.rcTag}`)) throw new Error(`${plan.rcTag} already exists`);
       run('git', 'tag', '-a', plan.rcTag, plan.candidate, '-m', buildTagMessage(plan, {managedDraft: values['managed-draft'] ?? false}));
       run('git', 'push', 'origin', `refs/tags/${plan.rcTag}`);
       say(`Tagged ${plan.rcTag} on ${plan.candidate.slice(0, 8)}.`);
     }
-    if (step === 'builds') {
+    if (step === 'builds' && !controlled) {
       // A tag pushed with the workflow token starts no workflow; a dispatch does.
       for (const dispatch of dispatches) {
         const inputs = Object.entries(dispatch.inputs).flatMap(([name, value]) => ['-f', `${name}=${value}`]);
@@ -110,4 +118,4 @@ function finish(lines) {
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Release cut — create\n\n${lines.map(l => `- ${l}`).join('\n')}\n`);
 }
 
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === new URL(import.meta.url).pathname) main();
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === new URL(import.meta.url).pathname) await main();

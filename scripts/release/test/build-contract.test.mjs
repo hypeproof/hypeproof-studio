@@ -232,7 +232,7 @@ test('managed Windows collects distributable packages without unpacked helper ex
   fs.mkdirSync(path.join(build, 'VSCode-win32-x64'));
   for (const name of names('win32-x64')) fs.writeFileSync(path.join(build, 'assets', name), 'fixture package');
   fs.writeFileSync(path.join(build, 'VSCode-win32-x64', 'HypeProof Studio.exe'), 'unpacked App, not a release package');
-  const locate = Object.values(workflow('build-windows.yml').jobs)[0].steps.find(s => s.name === 'Locate artifacts');
+  const locate = workflow('build-windows.yml').jobs['build-win'].steps.find(s => s.name === 'Locate artifacts');
   const execute = mode => spawnSync('bash', ['-e', '-c', locate.run], {cwd: build, encoding: 'utf8',
     env: {...process.env, HPS_MANAGED_DRAFT: mode}});
   const managed = execute('true');
@@ -246,7 +246,7 @@ test('managed Windows collects distributable packages without unpacked helper ex
 
 test('both workflow upload scripts stop at the draft and use validated outputs to gate automatic acceptance', t => {
   for (const [name, platform] of [['build-mac.yml', 'darwin-arm64'], ['build-windows.yml', 'win32-x64']]) {
-    const doc = workflow(name), job = Object.values(doc.jobs)[0], steps = job.steps;
+    const doc = workflow(name), job = doc.jobs[name==='build-mac.yml'?'build-mac':'build-win'], steps = job.steps;
     const inputs = doc[true].workflow_dispatch.inputs; // YAML 1.1 reads "on" as true.
     assert.equal(inputs.ref.default, '');
     assert.equal(inputs.managed_draft.default, false);

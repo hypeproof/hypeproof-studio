@@ -58,8 +58,17 @@ concurrency:
   group: mirror-release-${{ inputs.tag || github.event.release.tag_name }}
   cancel-in-progress: false
 
+env:
+  RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+  RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
+
 jobs:
   mirror:
+    environment: release-publication
+    permissions:
+      contents: read
+      actions: read
+      id-token: write # publication only; never evidence signing authority
     runs-on: ubuntu-latest
     # MUST cover WAIT_TIMEOUT_MIN below plus the mirroring work itself.
     #
@@ -175,6 +184,11 @@ jobs:
           GH_TOKEN: ${{ secrets.MIRROR_RELEASE_PAT }}
         run: |
           set -euo pipefail
+          if [[ -n "${RELEASE_ENGINE_URL:-}" || "${RELEASE_ENGINE_ENABLED:-}" == true ]]; then
+            git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+            node scripts/release/cloud-executor/workflow-gate.mjs perform mirror:release-create-edit-upload mirror-existing-publication
+            exit 0
+          fi
           [[ -n "${GH_TOKEN:-}" ]] || { echo "::error::MIRROR_RELEASE_PAT is required for real mirror writes"; exit 1; }
           mkdir -p dist
           # Use the default token for source download, then the mirror PAT for target writes.
@@ -250,8 +264,11 @@ jobs:
           # stable 이면 빈 문자열 → 아래 두 줄은 이전과 완전히 같은 명령이다.
           # create 는 릴리즈가 이미 있으면 no-op 이므로 edit 에도 같이 건다 —
           # 그래야 어느 경로로 만들어졌든 프리릴리즈 표시가 확정된다.
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:release-create-edit-upload release-create
           gh release create "$TAG" --repo "$TARGET_REPO" --title "${name:-HypeProof Studio $TAG}" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-} 2>/dev/null || true
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:release-create-edit-upload release-edit
           gh release edit "$TAG" --repo "$TARGET_REPO" --notes-file mirror-release-notes.md ${PRERELEASE_FLAG:-}
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:release-create-edit-upload release-upload
           gh release upload "$TAG" --repo "$TARGET_REPO" dist/* --clobber
           # Installer bundle (#1617): this tag's two installers and two SDK seeders
           # as release assets, so a participation-code install can assemble a class
@@ -261,6 +278,7 @@ jobs:
           for f in install.sh install.ps1 seed-sdk-binary.sh seed-sdk-binary.ps1; do
             git show "$TAG:scripts/$f" > "install-bundle/$f"
           done
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only mirror:install-bundle-upload release-upload
           gh release upload "$TAG" --repo "$TARGET_REPO" install-bundle/* --clobber
 
       - name: Verify mirror

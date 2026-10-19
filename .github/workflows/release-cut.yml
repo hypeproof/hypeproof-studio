@@ -42,6 +42,10 @@ concurrency:
   group: release-cut
   cancel-in-progress: false
 
+env:
+  RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+  RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
+
 jobs:
   dry-run:
     runs-on: ubuntu-latest
@@ -94,8 +98,13 @@ jobs:
           if [[ $code -eq 1 && "$MODE" != create ]]; then exit 1; fi
           exit 0
 
-      - uses: actions/upload-artifact@v4
+      - name: Require current artifact storage reservation
+        id: artifact-budget-1
         if: always()
+        shell: bash
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize dry-run:artifact-store artifact-store
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.artifact-budget-1.outcome == 'success'
         with:
           name: release-cut
           path: ${{ runner.temp }}/release-cut/
@@ -112,6 +121,7 @@ jobs:
       pull-requests: write
       issues: write
       actions: write
+      id-token: write # managed execution only; cannot sign evidence
     steps:
       - uses: actions/checkout@v4
         with:

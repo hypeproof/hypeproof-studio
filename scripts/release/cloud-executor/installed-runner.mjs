@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {appIdentity,sha256,treeHash} from '../../../e2e/unified-release/artifact.mjs';
 import {installedPlan} from './evidence.mjs';
 import {requireThat,hashBytes} from './provider.mjs';
+import {engineEnabled} from './workflow-gate.mjs';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 const command=(exe,args)=>execFileSync(exe,args,{stdio:'pipe',timeout:240000});
 const same=(a,b)=>process.platform==='win32'?path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase():fs.realpathSync(a)===fs.realpathSync(b);
@@ -70,11 +71,11 @@ export async function executeInstalledTarget({collection,policy,pins,previous,as
  requireThat(artifactRole,'unknown installed target');
  const checks=plan.checks.filter(check=>check.artifactId===target);
  fs.mkdirSync(outputDirectory,{recursive:true});
- const reports=[];
+ const reports=[];const startedAt=new Date().toISOString();
  const record=(check,verdict,observed,proof={})=>{
   const file=path.join(outputDirectory,`${check.id}.json`);const detail={...proof,provider:{repository:process.env.GITHUB_REPOSITORY,repositoryId:Number(process.env.GITHUB_REPOSITORY_ID),runId:Number(process.env.GITHUB_RUN_ID),runAttempt:Number(process.env.GITHUB_RUN_ATTEMPT)},sourceSha:collection.identity.sourceSha,packageSha256:check.artifact.sha256,environment:{kind:'installed-app',target:check.artifact.platform,runnerId:process.env.RUNNER_NAME??'unavailable',fixture:'synthetic-profile-on-actual-installed-app'},observed,verdict};
   fs.writeFileSync(file,JSON.stringify(detail,null,2));const bytes=fs.readFileSync(file);
-  reports.push({testId:check.id,requirementId:check.requirementId,expected:check.expected,sourceSha:collection.identity.sourceSha,artifactDigest:check.artifact.sha256,...pins,environment:detail.environment,observed,verdict,file:{path:file,sha256:hashBytes(bytes),size:bytes.length}});
+  reports.push({startedAt,endedAt:new Date().toISOString(),testId:check.id,requirementId:check.requirementId,expected:check.expected,sourceSha:collection.identity.sourceSha,artifactDigest:check.artifact.sha256,...pins,environment:detail.environment,observed,verdict,file:{path:file,sha256:hashBytes(bytes),size:bytes.length}});
  };
  const supported=process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted'&&((target==='mac'&&process.platform==='darwin')||(target!=='mac'&&process.platform==='win32'));
  if(!supported) {for(const check of checks)record(check,'NOT_RUN','Disposable supported native host unavailable');return {plan,reports};}
@@ -133,7 +134,9 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===fs.realpathSync(process.arg
  try {
   const collection=JSON.parse(fs.readFileSync(collectionFile,'utf8'));
   const previousPath=path.join(previousDirectory,'previous.json');
-  const result=await executeInstalledTarget({collection,policy:JSON.parse(fs.readFileSync(path.join(root,'scripts/release/engine/policy.example.json'),'utf8')),pins:{serviceSha:JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8')).sha,testRevision:collection.identity.sourceSha,rubricRevision:collection.identity.sourceSha},previous:fs.existsSync(previousPath)?JSON.parse(fs.readFileSync(previousPath,'utf8')):null,assetsDirectory,previousDirectory,outputDirectory,target});
+  const context=process.env.HPS_VERIFICATION_CONTEXT?JSON.parse(fs.readFileSync(process.env.HPS_VERIFICATION_CONTEXT,'utf8')):null;
+  requireThat(!engineEnabled()||context,'configured canonical verification context required');
+  const result=await executeInstalledTarget({collection,policy:context?.policy??JSON.parse(fs.readFileSync(path.join(root,'scripts/release/engine/policy.example.json'),'utf8')),pins:context?{serviceSha:context.serviceSha,testRevision:context.testRevision,rubricRevision:context.rubricRevision}:{serviceSha:JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8')).sha,testRevision:collection.identity.sourceSha,rubricRevision:collection.identity.sourceSha},previous:fs.existsSync(previousPath)?JSON.parse(fs.readFileSync(previousPath,'utf8')):null,assetsDirectory,previousDirectory,outputDirectory,target});
   fs.writeFileSync(path.join(outputDirectory,'installed-reports.json'),JSON.stringify(result,null,2));
   if(result.reports.some(r=>r.verdict!=='PASS'))process.exitCode=2;
  }catch {console.error('BLOCKED installed runner identity/setup invalid');process.exitCode=2;}

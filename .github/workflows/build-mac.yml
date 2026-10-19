@@ -53,8 +53,33 @@ concurrency:
   group: build-mac-${{ github.event.inputs.ref || github.ref }}
   cancel-in-progress: false # never cancel an in-flight release build
 
+env:
+  RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+  RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
+
 jobs:
+  engine-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      skip_build: ${{ steps.promotion.outputs.skip_build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.candidate_sha || inputs.ref || github.ref }}
+          fetch-depth: 0
+      - name: Detect exact final promotion before allocating native builder
+        id: promotion
+        run: node scripts/release/cloud-executor/build-preflight.mjs
   build-mac:
+    needs: engine-preflight
+    if: needs.engine-preflight.outputs.skip_build != 'true'
+    permissions:
+      contents: write
+      actions: write
+      id-token: write # build execution audience only; not evidence signer authority
     runs-on: macos-15 # arm64 on GitHub-hosted macos-14+
     timeout-minutes: 180 # full build is 1–2 h; headroom under the 6 h cap
 
@@ -91,6 +116,22 @@ jobs:
         with:
           node-version: "22.22.1"
 
+      - name: Verify candidate and resolve build identity
+        id: contract
+        shell: bash
+        env:
+          HPS_BUILD_REF: ${{ inputs.ref }}
+          HPS_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          HPS_MANAGED_DRAFT: ${{ inputs.managed_draft }}
+          HPS_RELEASE_VERSION: ${{ inputs.release_version }}
+        run: node scripts/release/build-contract.mjs preflight "$RUNNER_TEMP/hps-build-contract.json"
+
+      - name: Require current build reservation before execution
+        shell: bash
+        env:
+          HPS_MANAGED_DRAFT: ${{ steps.contract.outputs.managed_draft }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:build build-start
+
       - name: Identify download cache inputs
         id: download-cache
         shell: bash
@@ -107,15 +148,6 @@ jobs:
         shell: bash
         run: node scripts/release/cloud-executor/build-cache.mjs import
 
-      - name: Verify candidate and resolve build identity
-        id: contract
-        shell: bash
-        env:
-          HPS_BUILD_REF: ${{ inputs.ref }}
-          HPS_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
-          HPS_MANAGED_DRAFT: ${{ inputs.managed_draft }}
-          HPS_RELEASE_VERSION: ${{ inputs.release_version }}
-        run: node scripts/release/build-contract.mjs preflight "$RUNNER_TEMP/hps-build-contract.json"
 
       # dag.yaml task D (#676) — live-class release freeze, fail-fast half.
       #
@@ -433,7 +465,13 @@ jobs:
           node scripts/release/build-contract.mjs record "$RUNNER_TEMP/hps-build-contract.json" \
             darwin-arm64 dist "$RUNNER_TEMP/hps-draft-artifact/HypeProof Studio.app"
 
+      - name: Require current artifact storage reservation
+        id: artifact-budget-1
+        if: always()
+        shell: bash
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:artifact-store artifact-store
       - name: Upload artifact (debugging / workflow_dispatch)
+        if: steps.artifact-budget-1.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: hypeproof-studio-darwin-arm64
@@ -473,8 +511,15 @@ jobs:
             node scripts/release/build-contract.mjs check-upload "$RUNNER_TEMP/hps-build-contract.json" \
               darwin-arm64 dist "$RUNNER_TEMP/hps-draft-artifact/HypeProof Studio.app"
           fi
+          if [[ -n "${RELEASE_ENGINE_URL:-}" || "${RELEASE_ENGINE_ENABLED:-}" == true ]]; then
+            export HPS_ENGINE_ASSET_DIR=dist
+            export HPS_ENGINE_ARTIFACT_NAME=hypeproof-studio-darwin-arm64
+            node scripts/release/cloud-executor/workflow-gate.mjs perform build-mac:draft-assets draft-assets
+            exit 0
+          fi
           TAG="${GITHUB_REF#refs/tags/}"
           PRERELEASE_FLAG="$(bash scripts/tag-is-prerelease.sh "$TAG")"
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only build-mac:draft-assets release-create
           gh release create "$TAG" --draft --title "HypeProof Studio $TAG" \
             --generate-notes --verify-tag $PRERELEASE_FLAG 2>/dev/null || true
           # Both builds may create the draft. Never replace bytes of a public release.
@@ -483,6 +528,7 @@ jobs:
           assets=(dist/*.zip dist/*.exe)
           (( ${#assets[@]} > 0 )) || exit 1
           if [[ "$HPS_MANAGED_DRAFT" == true ]]; then assets+=(dist/draft-build-darwin-arm64.json); fi
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only build-mac:draft-assets release-upload
           gh release upload "$TAG" "${assets[@]}"
 
       # workflow_dispatch is explicit because GITHUB_TOKEN release events do
@@ -494,6 +540,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only build-mac:acceptance-dispatch workflow-dispatch
           gh workflow run verify-unified-release.yml --repo "$GITHUB_REPOSITORY" \
             -f tag="${GITHUB_REF#refs/tags/}"
 
@@ -504,8 +551,13 @@ jobs:
           HPS_PUBLIC_CACHE_HIT: ${{ steps.public-npm-cache.outputs.cache-hit }}
         run: node scripts/release/cloud-executor/build-cache.mjs export
 
-      - name: Preserve build cache timing observations
+      - name: Require current artifact storage reservation
+        id: artifact-budget-2
         if: always()
+        shell: bash
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:artifact-store artifact-store
+      - name: Preserve build cache timing observations
+        if: always() && steps.artifact-budget-2.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: build-cache-darwin-arm64

@@ -15,10 +15,18 @@ permissions:
 concurrency:
   group: unified-release-${{ inputs.tag }}
   cancel-in-progress: false
+env:
+  RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+  RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
+
 jobs:
   candidate:
     runs-on: ubuntu-latest
     timeout-minutes: 165
+    permissions:
+      contents: read
+      actions: read
+      id-token: write # collection storage reservation only
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       published: ${{ steps.candidate.outputs.published }}
@@ -54,8 +62,15 @@ jobs:
           done
           echo 'Both OS packages did not arrive; candidate remains draft.' >&2
           exit 1
+      - name: Require current artifact storage reservation
+        id: artifact-budget-1
+        if: always()
+        shell: bash
+        env:
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/candidate-input.json
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize candidate:artifact-store artifact-store
       - name: Archive exact managed candidate input
-        if: steps.candidate.outputs.managed == 'true'
+        if: always() && steps.artifact-budget-1.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: managed-candidate-input
@@ -70,10 +85,11 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write # collection storage reservation only
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.candidate.outputs.sha }}
+          ref: ${{ github.workflow_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
@@ -91,7 +107,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release/cloud-executor/previous-release.mjs "${{ runner.temp }}/managed-assets/collection.json" "${{ runner.temp }}/managed-assets/previous"
+      - name: Require current artifact storage reservation
+        id: artifact-budget-2
+        if: always()
+        shell: bash
+        env:
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize collect-managed:artifact-store artifact-store
       - name: Archive exact bytes and collection
+        if: steps.artifact-budget-2.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: managed-candidate-bytes
@@ -101,6 +125,7 @@ jobs:
   installed-managed:
     needs: [candidate, collect-managed]
     if: needs.candidate.outputs.managed == 'true'
+    environment: release-verification
     strategy:
       fail-fast: false
       # Actual public flow fixtures own one synthetic acceptance session.
@@ -118,10 +143,11 @@ jobs:
     permissions:
       contents: read
       actions: read
+      id-token: write # exact protected verifier; build jobs cannot use this signer audience
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.candidate.outputs.sha }}
+          ref: ${{ github.workflow_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
@@ -129,6 +155,18 @@ jobs:
         with:
           name: managed-candidate-bytes
           path: ${{ runner.temp }}/managed-assets
+      - name: Obtain canonical pinned verification context
+        id: context
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: node scripts/release/cloud-executor/evidence-client.mjs context "$RUNNER_TEMP/managed-assets/collection.json" "$RUNNER_TEMP/verification-context.json" "$TARGET"
+      - name: Require independently reserved native verification budget
+        shell: bash
+        env:
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+          TARGET: ${{ matrix.target }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize "installed:$TARGET" verify-start
       - name: Bootstrap pinned Service test dependencies
         env:
           GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
@@ -138,7 +176,7 @@ jobs:
       - name: Resolve pinned Service source
         id: service
         shell: bash
-        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(node -p "require(process.env.RUNNER_TEMP+'/verification-context.json').serviceSha")" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: hypeproof/hypeproof-service
@@ -180,18 +218,51 @@ jobs:
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
           HPS_INSTALLED_PORTABLE_REFERENCE: ${{ runner.temp }}/portable-reference
           TARGET: ${{ matrix.target }}
+          HPS_VERIFICATION_CONTEXT: ${{ runner.temp }}/verification-context.json
         run: |
           node --experimental-strip-types scripts/release/cloud-executor/installed-runner.mjs \
             "$RUNNER_TEMP/managed-assets/collection.json" "$RUNNER_TEMP/managed-assets/previous" \
             "$RUNNER_TEMP/managed-assets" "$RUNNER_TEMP/installed-evidence" "$TARGET"
-      - name: Preserve installed evidence including failed and blocked checks
+      - name: Require current artifact storage reservation
+        id: artifact-budget-3
         if: always()
+        shell: bash
+        env:
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
+      - name: Preserve installed evidence including failed and blocked checks
+        id: evidence-artifact
+        if: always() && steps.artifact-budget-3.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: installed-${{ matrix.target }}
+          path: ${{ runner.temp }}/installed-evidence/*.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Require current artifact storage reservation
+        id: artifact-budget-4
+        if: always()
+        shell: bash
+        env:
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
+      - name: Preserve separate native diagnostics and screenshots
+        if: always() && steps.artifact-budget-4.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-diagnostics-${{ matrix.target }}
           path: ${{ runner.temp }}/installed-evidence/
           if-no-files-found: warn
           retention-days: 14
+      - name: Submit observed reports using protected workflow OIDC
+        if: always() && steps.context.outcome == 'success'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          HPS_EVIDENCE_ARTIFACT_ID: ${{ steps.evidence-artifact.outputs.artifact-id }}
+        run: |
+          node scripts/release/cloud-executor/evidence-client.mjs submit \
+            "$RUNNER_TEMP/installed-evidence/installed-reports.json" "$RUNNER_TEMP/verification-context.json" "$TARGET"
   acceptance:
     needs: candidate
     if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.managed != 'true'
@@ -309,8 +380,13 @@ jobs:
           app="$RUNNER_TEMP/candidate-app"
           if [[ "$RUNNER_OS" == macOS ]]; then app="$app/HypeProof Studio.app"; fi
           node e2e/unified-release/public.mjs "$app" "$RUNNER_TEMP/unified-evidence/public" "$SOURCE_SHA" "${TAG#v}"
-      - name: Upload synthetic acceptance evidence
+      - name: Require current artifact storage reservation
+        id: artifact-budget-5
         if: always()
+        shell: bash
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize acceptance:artifact-store artifact-store
+      - name: Upload synthetic acceptance evidence
+        if: always() && steps.artifact-budget-5.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: unified-${{ matrix.platform }}
@@ -378,6 +454,32 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$TAG" --json isDraft --jq .isDraft | grep -qx true
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only verify-unified:publish acceptance-upload
           gh release upload "$TAG" dist/unified-acceptance.json --clobber
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only verify-unified:publish release-publish
           gh release edit "$TAG" --draft=false
+          node scripts/release/cloud-executor/workflow-gate.mjs legacy-only verify-unified:mirror-dispatch mirror-dispatch
           gh workflow run mirror-release.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG" -f dry_run=false
+  publish-managed:
+    needs: [candidate, collect-managed, installed-managed]
+    if: needs.candidate.outputs.managed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release-verification
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: managed-candidate-bytes
+          path: ${{ runner.temp }}/managed-assets
+      - name: Request same-byte publication through current manager intent
+        env:
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+        run: node scripts/release/cloud-executor/workflow-gate.mjs perform verify-unified:publish publish-existing-draft
