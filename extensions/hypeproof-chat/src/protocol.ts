@@ -661,7 +661,7 @@ export type HostMessage = (
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
-  | { type: 'taskWorkspaceError'; error: string | null; draftSaveFailed?: boolean }
+  | { type: 'taskWorkspaceError'; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[];toolMode?:import('./turnTools').TurnToolMode}

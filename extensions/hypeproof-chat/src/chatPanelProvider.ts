@@ -444,6 +444,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     while (this.turnRequests.size > 64) this.turnRequests.delete(this.turnRequests.keys().next().value!);
     return userId;
   }
+  private interruptedHistory?: { scope: string; messages: ChatMessage[] };
+  private interruptedHistoryError(): string | null {
+    return this.interruptedHistory?.scope === this.turnRequestScope()
+      ? '중단한 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.' : null;
+  }
+  private async retryInterruptedHistory(): Promise<void> {
+    const pending = this.interruptedHistory;
+    if (!pending || pending.scope !== this.turnRequestScope()) return;
+    try { await this.appendHistory(pending.messages); }
+    catch { throw new Error(this.interruptedHistoryError()!); }
+    if (this.interruptedHistory === pending) {
+      this.interruptedHistory = undefined;
+      await this.post({ type: 'taskWorkspaceError', error: null, historySaveFailed: true });
+    }
+  }
   private taskChanging = false;
   private sourceOpening?: string;
   /** Only this flow's tab can be reused/replaced; user-navigated or foreign tabs are left alone. */
@@ -522,6 +537,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           let recoveryDraft: ActivityDraft | undefined;
           await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined);
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
+          await this.retryInterruptedHistory();
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
           if (msg.type === 'taskCreate') await store.create('새 작업', expected);
           else if (msg.type === 'taskRecoverDraft') {
@@ -2493,6 +2509,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
     }
     await this.draftWrites;
+    if (this.interruptedHistory) await this.retryInterruptedHistory();
   }
 
   /** #751 — metadata-only observer for remote classroom operations; null unless the learner connected. */
@@ -2637,6 +2654,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
       }
       await this.context.workspaceState.update(key, []);
+      if (this.interruptedHistory && this.interruptedHistory.scope === this.turnRequestScope()) {
+        this.interruptedHistory = undefined;
+        await this.post({ type: 'taskWorkspaceError', error: null, historySaveFailed: true });
+      }
       // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
@@ -4390,7 +4411,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.draftWrites=save.catch(()=>{});
       try {
         await save;
-        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: null });
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: !!this.interruptedHistoryError() });
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce && this.draftFlush.source===source) this.draftFlush.resolve();
       } catch (failure) {
         const conflict = failure instanceof TaskWorkspaceStoreError && failure.code === 'stale';
@@ -4412,6 +4433,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') {
       try {
         requestedMode = msg.type === 'retryMessage' ? retryTurnToolMode(this.retryMessages(), msg) : turnToolMode(msg.toolMode);
+        if (this.interruptedHistoryError()) throw new Error('중단한 대화가 아직 저장되지 않았습니다. 작업을 다시 선택해 저장을 재시도한 뒤 보내 주세요.');
       } catch (error) {
         await this.post({ type: 'inputRejected', text: msg.type === 'sendMessage' ? msg.text : msg.prompt, images: msg.images,
           ...(validTurnToolMode(msg.toolMode) ? { toolMode: msg.toolMode } : {}) });
@@ -5252,6 +5274,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
     const webActivity = new WebSearchActivity();
+    // Freeze the visible conversation at cancellation. Runtime callbacks may settle
+    // later; neither those bytes nor a later task belong to this interrupted turn.
+    let interruptedItems: ChatMessage[] | undefined;
+    const captureInterrupted = () => {
+      interruptedItems = this.finishTurnItems(streamId, messageId, assistantText, assistantCitations, effectiveCoachName);
+    };
+    if (ctrl.signal.aborted) captureInterrupted();
+    else ctrl.signal.addEventListener('abort', captureInterrupted, { once: true });
+
     // #580 — this turn's spool recording state. spoolRuntime is the runtime that
     // **actually ran**, reflecting an SDK→proxy fallback — quantifying the cause of a
     // turn with no usage requires the recorded runtime to match reality (no silent
@@ -5309,6 +5340,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(instructorPromptRefs?.length ? { instructorPromptRefs } : {}),
       });
       const onDelta = (delta: string) => {
+        if (ctrl.signal.aborted) return;
         if (pendingShown) clearPending();
         assistantText += delta;
         const t = this.turnTimelines.get(streamId);
@@ -5319,6 +5351,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         tryReveal(assistantText);
       };
       const onCitations = (cites: import("./protocol").Citation[]) => {
+        if (ctrl.signal.aborted) return;
         for (const c of cites) assistantCitations.push(c);
         void this.post({ type: "streamCitations", streamId, citations: cites });
       };
@@ -5896,8 +5929,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       });
       // On user-initiated stop the cancelStream handler already ended the stream
-      // in the webview; don't post streamEnd or commit the truncated turn
-      // (parity with the proxy path, which throws on abort).
+      // in the webview. Persist the frozen interrupted conversation in finally,
+      // without a successful streamEnd (the proxy path may throw on abort).
       if (!ctrl.signal.aborted) {
         clearPending();
         if (mode === 'web-search') {
@@ -5941,6 +5974,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
+      let interruptedSaveError: unknown;
+      let interruptedSaveFailed = false;
+      if (ctrl.signal.aborted) {
+        try {
+          this.interruptedHistory = { scope: this.turnRequestScope(), messages: [
+            { id: userId, role: "user", content: historyText, createdAt: Date.now(), toolMode: mode },
+            ...(interruptedItems ?? []),
+          ] };
+          await this.retryInterruptedHistory();
+        } catch (error) {
+          interruptedSaveFailed = true;
+          interruptedSaveError = error;
+          await this.post({ type: 'taskWorkspaceError', error: '중단한 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.', historySaveFailed: true });
+        }
+      }
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
       // the main loop does). A closed turn id is refused by the Service from then on; best effort, bounded by the Service.
       if (bindingKey && token) void closeTurn({ proxyUrl, token, turnId: streamId, outcome: ctrl.signal.aborted ? "aborted" : spoolStatus === "ok" ? "completed" : "failed" });
@@ -5995,6 +6043,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.verifyTurnRecorder = null;
       void this.loadAccess(true).then(()=>this.postConfig()).catch(()=>{});
       this.turnTimelines.delete(streamId);
+      // Persistence failure must not skip closing the runtime and verification turn.
+      if (interruptedSaveFailed) throw interruptedSaveError;
     }
     } catch (error) {
       completedStreamId = undefined;
@@ -6788,8 +6838,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async postHistory(): Promise<void> {
     const error = this.currentTaskStore?.()?.getView().error;
     if (error) { await this.post({ type: 'taskWorkspaceError', error: error.message }); return; }
-    const messages = this.getHistory();
+    const saved = this.getHistory();
+    const pending = this.interruptedHistory && this.interruptedHistory.scope === this.turnRequestScope() ? this.interruptedHistory : undefined;
+    const ids = new Set(saved.map(message => message.id));
+    const messages = pending ? [...saved, ...pending.messages.filter(message => !ids.has(message.id))] : saved;
     await this.post({ type: "history", messages });
+    if (pending) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: true });
   }
 
   private async appendHistory(msgs: ChatMessage[]): Promise<void> {

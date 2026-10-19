@@ -136,3 +136,40 @@ test('actual browser host opens a blank right-hand browser without starting a we
     assert.equal(previewStarts, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('interrupted history survives failed storage and recovers in the same task', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-interrupted-'));
+  try {
+    let f;
+    const draft = { text: '다음 질문', images: [], queued: null };
+    f = await createTaskHarness(root, message => {
+      if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft }));
+    });
+    const id = f.store.getView().activeTaskId;
+    const messages = [{ id: 'interrupted-user', role: 'user', content: '계획해줘', createdAt: 1 }, { id: 'interrupted-answer', role: 'assistant', content: '부분 답변', createdAt: 2 }];
+    f.h.interruptedHistory = { scope: f.h.turnRequestScope(), messages };
+    const append = f.store.append.bind(f.store);
+    f.store.append = async () => { throw Error('synthetic disk refusal'); };
+    await f.handle(f.scoped({ type: 'saveActivityDraft', draft }));
+    assert.match(f.posts.at(-1).error, /중단한 대화를 저장하지 못했습니다/);
+    await f.handle(f.scoped({ type: 'taskCreate' }));
+    assert.equal(f.store.getView().activeTaskId, id, 'failed persistence blocks leaving the transcript');
+    assert.equal(f.h.connectionChanging, false);
+    assert.equal(f.store.getHistory().length, 0);
+    await f.h.postHistory();
+    assert.deepEqual(Array.from(f.posts.findLast(row => row.type === 'history').messages, row => row.content), ['계획해줘', '부분 답변'], 'reopened view retains unsaved conversation');
+    assert.equal(f.posts.at(-1).historySaveFailed, true);
+    assert.equal(f.store.getHistory().length, 0, 'showing pending content does not claim durable storage');
+    await assert.rejects(f.h.setConnectionChanging(true), /중단한 대화를 저장하지 못했습니다/, 'activity transition must not leave pending history behind');
+    await f.h.setConnectionChanging(false);
+    assert.equal(f.h.connectionChanging, false);
+    f.store.append = append;
+    await f.handle(f.scoped({ type: 'taskSelect', id }));
+    assert.equal(f.store.getView().activeTaskId, id);
+    assert.deepEqual(Array.from(f.store.getHistory(), row => row.content), ['계획해줘', '부분 답변']);
+    assert.equal(f.store.getDraft().text, draft.text);
+    await f.handle(f.scoped({ type: 'taskSelect', id }));
+    assert.equal(f.store.getHistory().length, 2, 'repeat recovery does not duplicate the transcript');
+    assert.equal(f.h.interruptedHistoryError(), null);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

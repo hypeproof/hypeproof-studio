@@ -112,3 +112,17 @@ for(const fail of [false,true]){
  assert.equal(h.accessState.selected,'b','idle choice is available again');
 }
 console.log('PASS pending send: authentication wait, retry, overlapping failures, history persistence and connection preparation');
+// Failed interrupted writes remain task-bound and recover exactly once.
+{
+ const h=host();let scope='original',writes=0,refuse=true;
+ h.turnRequestScope=()=>scope;
+ const messages=[{id:'stopped-user',role:'user',content:'계획해줘'},{id:'stopped-answer',role:'assistant',content:'부분 답변'}];
+ h.interruptedHistory={scope,messages};
+ h.appendHistory=async items=>{writes++;assert.equal(items,messages);if(refuse)throw Error('synthetic disk refusal');};
+ await assert.rejects(h.retryInterruptedHistory(),/중단한 대화를 저장하지 못했습니다/);
+ assert.ok(h.interruptedHistoryError(),'failed persistence remains visible');
+ scope='other';await h.retryInterruptedHistory();assert.equal(writes,1,'never append another task transcript here');
+ assert.equal(h.interruptedHistoryError(),null);
+ scope='original';refuse=false;await h.retryInterruptedHistory();await h.retryInterruptedHistory();
+ assert.equal(writes,2,'recovered transcript is not written twice');assert.equal(h.interruptedHistoryError(),null);
+}
