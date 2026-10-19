@@ -3,6 +3,7 @@ import type { AssetScoreChunk, ChatMessage, Citation, ResolvedProfile } from "./
 
 import {
   buildProxyHeaders,
+  clientTurnIdHeader,
   observationHeaders,
   classifyProfileFailure,
   friendlyTransportMessage,
@@ -235,7 +236,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
   const headers = buildProxyHeaders({ token, coachName, coachPersonality, previewUrl });
 
   if (args.effort) headers['x-hps-effort'] = args.effort;
-  if (args.turnId) headers['x-hps-turn-id'] = args.turnId;
+  Object.assign(headers, clientTurnIdHeader(args.turnId));
   if (args.lessonBinding && /^(token:[a-f0-9]{16}|[a-f0-9]{32})$/.test(args.lessonBinding)) headers['x-hps-lesson-binding'] = args.lessonBinding;
   if (args.lessonStep && /^[a-zA-Z0-9_-]{1,64}$/.test(args.lessonStep)) {
     headers['x-hps-lesson-step'] = args.lessonStep;

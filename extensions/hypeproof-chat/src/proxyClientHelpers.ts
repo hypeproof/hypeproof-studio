@@ -238,6 +238,23 @@ export function lessonBindingHeader(key: string | undefined): Record<string, str
   return key && /^(token:[a-f0-9]{16}|[a-f0-9]{32})$/.test(key) ? { "x-hps-lesson-binding": key } : {};
 }
 
+/**
+ * REQ-STUDIO-TURN-ID — the per-user-message join key (`x-hps-turn-id`). The host mints one
+ * UUID per user message (chatPanelProvider `streamId`) and every request of that message
+ * carries it on both runtimes: each tool step, every automatic retry and the CLI's side calls.
+ * The Service keys request settings, lesson-turn admission, budget jobs and (behind its own
+ * flag) the open-trial turn allowance on it. The grammar is the Service's `validTurnId`; a
+ * value outside it is dropped rather than sent, because the Service refuses it as
+ * `invalid_turn_id` instead of ignoring it.
+ */
+export const CLIENT_TURN_ID_HEADER = "x-hps-turn-id";
+export function validClientTurnId(v: unknown): v is string {
+  return typeof v === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(v);
+}
+export function clientTurnIdHeader(turnId: unknown): Record<string, string> {
+  return validClientTurnId(turnId) ? { [CLIENT_TURN_ID_HEADER]: turnId } : {};
+}
+
 // ── #580 — 스트림 청크의 토큰 usage 파싱 ────────────────────────────────────
 
 /** 요청 1건의 토큰 4종 — 스풀 usage 레코드로 가는 캐논 형태. */

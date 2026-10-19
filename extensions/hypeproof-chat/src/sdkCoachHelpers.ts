@@ -41,6 +41,7 @@ import {
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
+import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./proxyClientHelpers.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
@@ -1178,7 +1179,9 @@ export function buildSdkGatewayEnv(
     custom.push(`x-hps-lesson-step: ${args.lessonStep}`);
     if (args.helpMode && /^[a-z_]{1,32}$/.test(args.helpMode)) custom.push(`x-hps-help-mode: ${args.helpMode}`);
   }
-  if (args.turnId && /^[a-zA-Z0-9_-]{1,128}$/.test(args.turnId)) custom.push(`x-hps-turn-id: ${args.turnId}`);
+  // REQ-STUDIO-TURN-ID — ANTHROPIC_CUSTOM_HEADERS is fixed for the CLI process, i.e. for
+  // the turn, so every request the CLI makes for this user message carries the same id.
+  if (validClientTurnId(args.turnId)) custom.push(`${CLIENT_TURN_ID_HEADER}: ${args.turnId}`);
   if (args.workspace?.trim()) {
     custom.push(`x-hps-workspace: ${encodeURIComponent(args.workspace.trim())}`);
   }
