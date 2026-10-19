@@ -243,10 +243,28 @@ jobs:
           HPS_INSTALLED_PORTABLE_REFERENCE: ${{ runner.temp }}/portable-reference
           TARGET: ${{ matrix.target }}
           HPS_VERIFICATION_CONTEXT: ${{ runner.temp }}/verification-context.json
+          HPS_NATIVE_TEST_SEAT_JSON: ${{ secrets.HPS_NATIVE_TEST_SEAT_JSON }}
+          HPS_NATIVE_TEST_SEAT_FILE: ${{ runner.temp }}/native-test-seat.json
+          HPS_NATIVE_EXPECTED_TEAM_ID: ${{ vars.HPS_NATIVE_EXPECTED_TEAM_ID }}
+          HPS_NATIVE_EXPECTED_PUBLISHER_THUMBPRINT: ${{ vars.HPS_NATIVE_EXPECTED_PUBLISHER_THUMBPRINT }}
         run: |
+          # Existing synthetic seat only; never create accounts or expose its
+          # bridge secret in logs/artifacts. Absence is reported by the harness.
+          node --input-type=module - <<'NODE'
+          import {writeFileSync} from 'node:fs';
+          const value=process.env.HPS_NATIVE_TEST_SEAT_JSON;
+          if(value)writeFileSync(process.env.HPS_NATIVE_TEST_SEAT_FILE,value,{mode:0o600,flag:'wx'});
+          NODE
+          unset HPS_NATIVE_TEST_SEAT_JSON
           node --experimental-strip-types scripts/release/cloud-executor/installed-runner.mjs \
             "$RUNNER_TEMP/managed-assets/collection.json" "$RUNNER_TEMP/managed-assets/previous" \
             "$RUNNER_TEMP/managed-assets" "$RUNNER_TEMP/installed-evidence" "$TARGET"
+      - name: Remove temporary synthetic seat credential
+        if: always()
+        shell: bash
+        env:
+          HPS_NATIVE_TEST_SEAT_FILE: ${{ runner.temp }}/native-test-seat.json
+        run: node --input-type=module -e "import {rmSync} from 'node:fs'; rmSync(process.env.HPS_NATIVE_TEST_SEAT_FILE,{force:true});"
       - name: Require current artifact storage reservation
         id: artifact-budget-3
         if: always()
