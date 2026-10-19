@@ -81,7 +81,7 @@ export async function runInstalledPlan(plan, runner) {
     requireThat(['PASS','FAIL','BLOCKED','NOT_RUN'].includes(report?.verdict),'invalid runner verdict');
     requireThat(report.sourceSha===plan.identity.sourceSha && report.requirementId===check.requirementId && report.expected===check.expected && report.testId===check.id && report.artifactDigest===check.artifact.sha256 && report.environment?.kind==='installed-app' && report.environment.target===check.artifact.platform && typeof report.environment.runnerId==='string' && report.environment.runnerId.length>0,'installed evidence identity mismatch');
     requireThat(['serviceSha','testRevision','rubricRevision'].every(k=>report[k]===plan.pins[k]),'installed evidence revision mismatch');
-    requireThat(report.file?.uri&&hash.test(report.file.sha256)&&report.file.size>0&&typeof report.observed==='string'&&report.observed.length>0,'installed evidence bytes/observation required');
+    requireThat((report.file?.uri||report.file?.path)&&hash.test(report.file.sha256)&&report.file.size>0&&typeof report.observed==='string'&&report.observed.length>0,'installed evidence bytes/observation required');
     checks.push({...check,...report});
   }
   return {...plan,checks,verdict:checks.some(c=>c.verdict==='FAIL')?'FAIL':checks.some(c=>c.verdict==='BLOCKED')?'BLOCKED':checks.some(c=>c.verdict==='NOT_RUN')?'NOT_RUN':'PASS',promotion:'NOT_AUTHORIZED'};

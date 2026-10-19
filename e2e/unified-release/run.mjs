@@ -94,7 +94,18 @@ try{
  const receipt={schema:'hps-unified-acceptance/1',status:'PASS',sourceSha,sourceDirty:false,platform,mode:'candidate-unmodified',app,assets,treeBefore:before,treeAfter:treeHash(appDirectory),activities};
  if(platform==='win32-x64'&&!serviceOnly){
   const installers=JSON.parse(fs.readFileSync(path.join(assetDirectory,'installer-verification.json'),'utf8'));
-  receipt.installerPayloadsVerified=installers.portableTree===before&&Object.entries(assets).filter(([n])=>/Setup.*\.exe$/.test(n)).every(([n,digest])=>installers.installers?.some(row=>row.name===n&&row.sha256===digest&&row.payloadMatches===true));
+  let candidatePayloadVerified=installers.portableTree===before;
+  const portable=process.env.HPS_INSTALLED_PORTABLE_REFERENCE;
+  if(portable){
+   if(treeHash(portable)!==installers.portableTree)throw Error('Portable reference changed after installer verification');
+   const compare=(relative='')=>{for(const entry of fs.readdirSync(path.join(portable,relative),{withFileTypes:true})){
+    const next=path.join(relative,entry.name);
+    if(entry.isDirectory())compare(next);
+    else if(!entry.isFile()||sha256(path.join(portable,next))!==sha256(path.join(appDirectory,next)))throw Error('Installed candidate payload differs from untouched portable reference');
+   }};compare();candidatePayloadVerified=true;
+   receipt.installedPayloadReference={tree:installers.portableTree,appTree:before};
+  }
+  receipt.installerPayloadsVerified=candidatePayloadVerified&&Object.entries(assets).filter(([n])=>/Setup.*\.exe$/.test(n)).every(([n,digest])=>installers.installers?.some(row=>row.name===n&&row.sha256===digest&&row.payloadMatches===true));
  }
  if(serviceOnly){
   if(before!==receipt.treeAfter)throw Error('Public App modified');

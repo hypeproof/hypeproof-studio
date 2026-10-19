@@ -15,7 +15,9 @@ const isReleaseTag = value => typeof value === 'string' && value === value.trim(
 const marker = 'hps-managed-draft/1';
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 export const contractSources = ['scripts/release/build-contract.mjs', 'e2e/unified-release/artifact.mjs',
-  '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml'];
+  '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml',
+  'scripts/release/cloud-executor/build-cache.mjs', 'scripts/release/cloud-executor/provider.mjs',
+  'scripts/release/engine/core.mjs'];
 
 // An old candidate would execute its old workflows, ignoring every new safety input.
 // Require the exact reviewed contract revision before the first remote mutation.
@@ -118,7 +120,15 @@ export function packageAssets(dist, platform) {
   return assets;
 }
 
-export function draftIdentity(contract, {dist, platform, app}) {
+export function workflowProvider(env = process.env) {
+  if (env.GITHUB_ACTIONS !== 'true') return undefined;
+  const provider = {repository: env.GITHUB_REPOSITORY, repositoryId: Number(env.GITHUB_REPOSITORY_ID),
+    runId: Number(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT)};
+  if (provider.repository !== 'hypeproof/hypeproof-studio' || !['repositoryId', 'runId', 'runAttempt'].every(key => Number.isSafeInteger(provider[key]) && provider[key] > 0)) fail('trusted workflow repository/run identity required');
+  return provider;
+}
+
+export function draftIdentity(contract, {dist, platform, app, provider = workflowProvider()}) {
   // This is a build inventory, never a signed black-box acceptance or approval.
   requireSha(contract.sourceSha);
   requireCandidateTag(contract.publicationTag, `v${contract.releaseVersion}`);
@@ -127,7 +137,7 @@ export function draftIdentity(contract, {dist, platform, app}) {
   const identity = appIdentity(app, platform === 'darwin-arm64' ? 'darwin' : 'win32');
   if (identity.sha !== contract.sourceSha || identity.version !== contract.releaseVersion || identity.extensionVersion !== contract.releaseVersion || identity.name !== 'HypeProof Studio') fail('packaged App identity differs from the build contract');
   return {...contract, schema: 'hps-draft-build/1', platform, app: identity,
-    assets: packageAssets(dist, platform), acceptance: 'NOT_RUN', promotion: 'NOT_AUTHORIZED'};
+    ...(provider ? {provider} : {}), assets: packageAssets(dist, platform), acceptance: 'NOT_RUN', promotion: 'NOT_AUTHORIZED'};
 }
 
 export function assertRemoteCandidate(output, contract) {

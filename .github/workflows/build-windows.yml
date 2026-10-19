@@ -88,6 +88,22 @@ jobs:
           # the same toolchain as Mac.
           node-version: "22.22.1"
 
+      - name: Identify download cache inputs
+        id: download-cache
+        shell: bash
+        run: node scripts/release/cloud-executor/build-cache.mjs
+
+      - name: Restore npm download cache only
+        id: public-npm-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/hps-public-npm-cache
+          key: hps-npm-${{ runner.os }}-${{ runner.arch }}-${{ steps.download-cache.outputs.identity }}
+
+      - name: Import verified public npm tarball cache
+        shell: bash
+        run: node scripts/release/cloud-executor/build-cache.mjs import
+
       - name: Verify candidate and resolve build identity
         id: contract
         shell: bash
@@ -466,6 +482,8 @@ jobs:
 
           Write-Host "HypeProof Studio.exe exited cleanly during launch smoke."
 
+      # GITHUB_REPOSITORY_ID/GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT are trusted runner
+      # context. build-contract records and rechecks them on managed upload.
       - name: Record managed draft artifact identity
         if: steps.contract.outputs.managed_draft == 'true'
         shell: bash
@@ -531,3 +549,19 @@ jobs:
           set -euo pipefail
           gh workflow run verify-unified-release.yml --repo "$GITHUB_REPOSITORY" \
             -f tag="${GITHUB_REF#refs/tags/}"
+
+      - name: Export public npm tarballs only (exclude private Service packages)
+        if: always()
+        shell: bash
+        env:
+          HPS_PUBLIC_CACHE_HIT: ${{ steps.public-npm-cache.outputs.cache-hit }}
+        run: node scripts/release/cloud-executor/build-cache.mjs export
+
+      - name: Preserve build cache timing observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-cache-win32-x64
+          path: ${{ runner.temp }}/hps-build-cache.json
+          if-no-files-found: warn
+          retention-days: 14

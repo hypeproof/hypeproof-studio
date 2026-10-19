@@ -98,3 +98,58 @@ inside this library. Current CLI is intentionally read-only.
 Local transport fixtures exercise real HTTP response parsing and identity guards.
 They provide no provider execution, installed application, human acceptance or
 cold/warm performance evidence.
+
+## Concrete workflow wiring (follow-up)
+
+`build-contract.mjs` now includes trusted Actions repository ID/name and run/attempt
+in both record and check-upload inventory generation. The existing Mac/Windows
+workflows use that same inventory and still upload original packages once.
+`release-cut.yml` passes S6's existing scoped issuer secret and optional cohort/URL
+repository variables. Missing values remain NOT_RUN; no new credentials are issued.
+
+`verify-unified-release.yml` now splits managed candidates from its existing legacy
+acceptance/publication path. Managed candidates produce a pinned identity artifact,
+then `collect-candidate.mjs` downloads inventories and packages by numeric IDs and
+rereads the source tag, numeric draft and exact run attempts after downloading.
+A separate native matrix owns Mac, Windows User and Windows System installation.
+`previous-release.mjs` chooses the highest lower published stable version, binds its
+numeric release, resolves its source tag, and checks every downloaded digest.
+An unavailable previous version cannot pass update acceptance.
+
+`installed-runner.mjs` installs untouched candidate packages into disposable hosted
+runner directories, verifies on-disk source/version and the actual launched
+executable, and waits for the native workbench. It invokes existing product
+`renderInstallerScript` / `renderWindowsUpdateWrapper` against a real N−1 install,
+then checks candidate installation and restarts that installation using its retained
+profile. It compares persisted project/settings and an OS-encrypted synthetic
+account sentinel. The generated updater script and before/after proofs are retained.
+This runner never patches or re-signs the app and removes provider credentials from
+the Electron process environment.
+
+The updater primitive and synthetic encrypted account are useful execution evidence,
+but cannot establish actual Studio sign-in session continuity or an updater UI click.
+Therefore UPDATE-* remains BLOCKED even if those primitive checks succeed. Actual
+account/session continuity still needs its own native scenario. A missing native host
+produces NOT_RUN for its required checks. Failures of product identity or retention
+produce FAIL; missing host/access prerequisites produce BLOCKED. Existing native
+trial/classroom and public-Service drivers run on the actual fresh installed package
+for PUBLIC-FLOW-*; their successful process exit alone does not grant PASS because
+the resulting source/tree/activity receipts are checked too. Windows compares every
+portable reference payload byte with the installed directory while allowing actual
+installer bookkeeping files; both installer payload proofs remain required.
+
+The existing workflow's legacy acceptance/publication criteria remain intact.
+Managed collection/native jobs never publish or sign. The coordinator must bind
+any real dispatch/model stage to its current reservation, fencing and resource gate.
+No cloud or native stage was run merely by adding this source wiring.
+
+The two build workflows now cache only immutable public npm registry tarballs.
+`build-cache.mjs` derives the key from source, locks, Node/ABI, architecture and seed
+script digests. Import/export copies only exact public registry tarball keys present
+in pinned locks, checks integrity, and strips request/auth metadata. Local `file:`
+Service archives, credentials, logs, `node_modules` and private source never enter
+the saved public-cache directory. No broad restore prefix is used. This enables
+same-revision rerun reuse without claiming a measured cold/warm improvement.
+The existing Mac prepare/reset pipeline and Rust cache remain unchanged because
+this checkout lacks a runnable submodule and no native timing/ABI evidence was
+available to safely remove preparation or cache compiled outputs.

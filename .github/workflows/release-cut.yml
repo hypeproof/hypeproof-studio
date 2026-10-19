@@ -69,6 +69,9 @@ jobs:
           # Without a secret the check reports NOT_RUN. The admin password is never passed here.
           HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
+          HPS_LAB_TOKEN_READ_ISSUER: ${{ secrets.HPS_LAB_TOKEN_READ_ISSUER }}
+          HPS_LAB_TOKEN_READ_COHORT: ${{ vars.HPS_LAB_TOKEN_READ_COHORT }}
+          HPS_LAB_TOKEN_READ_URL: ${{ vars.HPS_LAB_TOKEN_READ_URL }}
           MODE: ${{ inputs.mode }}
           CANDIDATE: ${{ inputs.candidate }}
           SINCE: ${{ inputs.since }}

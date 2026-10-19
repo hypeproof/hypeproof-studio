@@ -14,6 +14,24 @@ export function identity(value) {
 const integer = n => Number.isSafeInteger(n) && n > 0;
 export class GitHubTransport {
   constructor({token = process.env.GH_TOKEN, fetchImpl = fetch, maxBytes = 64 * 1024 * 1024} = {}) { this.token = token; this.fetch = fetchImpl; this.maxBytes = maxBytes; }
+  async downloadAsset(assetId) {
+    requireThat(Number.isSafeInteger(assetId)&&assetId>0,'numeric asset ID required');
+    const headers={Accept:'application/octet-stream','X-GitHub-Api-Version':'2022-11-28'};
+    if(this.token)headers.Authorization=`Bearer ${this.token}`;
+    let response;
+    try {response=await this.fetch(`https://api.github.com/repos/hypeproof/hypeproof-studio/releases/assets/${assetId}`,{headers,redirect:'manual',signal:AbortSignal.timeout(30000)});} catch {throw Error('asset transport unavailable');}
+    // GitHub uses a short-lived signed URL on a dedicated asset origin. Never
+    // forward Authorization across the redirect, or accept arbitrary origins.
+    if([301,302,303,307,308].includes(response.status)) {
+      const target=new URL(response.headers.get('location'));
+      requireThat(target.protocol==='https:'&&(!target.port||target.port==='443')&&['release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(target.hostname)&&!target.username&&!target.password,'untrusted asset redirect');
+      try {response=await this.fetch(target,{redirect:'error',signal:AbortSignal.timeout(120000)});} catch {throw Error('asset download unavailable');}
+    }
+    requireThat(response.ok,'asset download refused');
+    const chunks=[];let size=0;
+    for await(const chunk of response.body??[]) {size+=chunk.length;requireThat(size<=this.maxBytes,'asset byte limit exceeded');chunks.push(chunk);}
+    return Buffer.concat(chunks);
+  }
   async request(method, endpoint, body) {
     requireThat(/^\/repos\/hypeproof\/hypeproof-studio(?:\/|$)/.test(endpoint) && !endpoint.includes('..'), 'endpoint outside canonical source repository');
     const url = new URL(endpoint, 'https://api.github.com');

@@ -22,6 +22,8 @@ jobs:
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       published: ${{ steps.candidate.outputs.published }}
+      managed: ${{ steps.candidate.outputs.managed }}
+      version: ${{ steps.candidate.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,8 +33,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          HPS_CANDIDATE_INPUT: ${{ runner.temp }}/candidate-input.json
         run: |
           set -euo pipefail
+          node scripts/release/cloud-executor/workflow-input.mjs
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
           sha="$(git rev-parse "$TAG^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -50,9 +54,147 @@ jobs:
           done
           echo 'Both OS packages did not arrive; candidate remains draft.' >&2
           exit 1
+      - name: Archive exact managed candidate input
+        if: steps.candidate.outputs.managed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-candidate-input
+          path: ${{ runner.temp }}/candidate-input.json
+          if-no-files-found: error
+          retention-days: 14
+  collect-managed:
+    needs: candidate
+    if: needs.candidate.outputs.managed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - uses: actions/download-artifact@v4
+        with:
+          name: managed-candidate-input
+          path: ${{ runner.temp }}/managed-input
+      - name: Collect numeric draft and exact successful build attempts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/cloud-executor/collect-candidate.mjs "${{ runner.temp }}/managed-input/candidate-input.json" "${{ runner.temp }}/managed-assets"
+      - name: Resolve untouched previous supported packages
+        id: previous
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/cloud-executor/previous-release.mjs "${{ runner.temp }}/managed-assets/collection.json" "${{ runner.temp }}/managed-assets/previous"
+      - name: Archive exact bytes and collection
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-candidate-bytes
+          path: ${{ runner.temp }}/managed-assets/
+          if-no-files-found: error
+          retention-days: 14
+  installed-managed:
+    needs: [candidate, collect-managed]
+    if: needs.candidate.outputs.managed == 'true'
+    strategy:
+      fail-fast: false
+      # Actual public flow fixtures own one synthetic acceptance session.
+      max-parallel: 1
+      matrix:
+        include:
+          - os: macos-15
+            target: mac
+          - os: windows-latest
+            target: win-user
+          - os: windows-latest
+            target: win-system
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.candidate.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+      - uses: actions/download-artifact@v4
+        with:
+          name: managed-candidate-bytes
+          path: ${{ runner.temp }}/managed-assets
+      - name: Bootstrap pinned Service test dependencies
+        env:
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+        run: node scripts/bootstrap-service-packages.mjs
+      - name: Install native driver dependencies
+        run: npm ci --prefix e2e
+      - name: Resolve pinned Service source
+        id: service
+        shell: bash
+        run: echo "sha=$(node -p "require('./config/service-deployment.json').sha")" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: hypeproof/hypeproof-service
+          ref: ${{ steps.service.outputs.sha }}
+          token: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          path: .service-source
+      - name: Install pinned Service packages
+        working-directory: .service-source
+        run: npm run setup:packages -- worker
+      - name: Extract untouched portable reference (Mac)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: ditto -xk "$RUNNER_TEMP/managed-assets/HypeProof-Studio-darwin-arm64.zip" "$RUNNER_TEMP/portable-reference"
+      - name: Extract untouched portable reference and verify both installer payloads
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $asset = @(Get-ChildItem "$env:RUNNER_TEMP/managed-assets/*win32-x64*.zip")
+          if ($asset.Count -ne 1) { throw 'Expected exactly one untouched portable package' }
+          Expand-Archive -LiteralPath $asset[0].FullName -DestinationPath "$env:RUNNER_TEMP/portable-reference"
+          node e2e/unified-release/install-windows.mjs "$env:RUNNER_TEMP/managed-assets" "$env:RUNNER_TEMP/portable-reference"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Seed pinned SDK for Mac native runner
+        if: runner.os == 'macOS'
+        shell: bash
+        run: bash scripts/seed-sdk-binary.sh --version "$(node e2e/unified-release/sdk-seed.mjs version "$RUNNER_TEMP/portable-reference/HypeProof Studio.app")"
+      - name: Seed pinned SDK for Windows native runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = node e2e/unified-release/sdk-seed.mjs version "$env:RUNNER_TEMP/portable-reference"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/seed-sdk-binary.ps1 -Version $version
+      - name: Execute actual installation, product updater and installed activity checks
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
+          HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
+          HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
+          HPS_INSTALLED_PORTABLE_REFERENCE: ${{ runner.temp }}/portable-reference
+          TARGET: ${{ matrix.target }}
+        run: |
+          node --experimental-strip-types scripts/release/cloud-executor/installed-runner.mjs \
+            "$RUNNER_TEMP/managed-assets/collection.json" "$RUNNER_TEMP/managed-assets/previous" \
+            "$RUNNER_TEMP/managed-assets" "$RUNNER_TEMP/installed-evidence" "$TARGET"
+      - name: Preserve installed evidence including failed and blocked checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-${{ matrix.target }}
+          path: ${{ runner.temp }}/installed-evidence/
+          if-no-files-found: warn
+          retention-days: 14
   acceptance:
     needs: candidate
-    if: needs.candidate.outputs.published != 'true'
+    if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.managed != 'true'
     strategy:
       fail-fast: false
       # One session key per cohort: each OS run opens and closes the synthetic
@@ -177,7 +319,7 @@ jobs:
           retention-days: 14
   publish:
     needs: [candidate, acceptance]
-    if: needs.candidate.outputs.published != 'true'
+    if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.managed != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
