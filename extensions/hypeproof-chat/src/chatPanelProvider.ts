@@ -538,7 +538,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       if ((msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') && msg.requestId) {
         await this.post({ type: 'sourceOpenResult', requestId: msg.requestId, url: msg.url, taskId: msg.taskId, opened: false, error: message });
-      } else await this.post({ type: 'taskWorkspaceError', error: message });
+      } else await this.post({ type: 'taskWorkspaceError', error: message, ...(msg.type === 'taskRecoverDraft' ? { draftSaveFailed: true } : {}) });
     }
   }
   private accessState:AccessState|undefined;

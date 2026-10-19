@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createTaskHarness } from './task-workspace-harness.mjs';
@@ -92,6 +92,14 @@ test('actual host identifies an unsaved conflicting draft without overwriting an
     assert.equal(await readFile(other.filePath, 'utf8'), bytes);
     assert.equal(f.store.getDraft().text, '저장된 초안');
     const request = f.scoped({ type: 'taskRecoverDraft' });
+    await writeFile(other.filePath, 'unreadable fixture snapshot');
+    await f.handle(request);
+    assert.equal(f.posts.at(-1).draftSaveFailed, true, 'a newer recovery failure must replace the previous persistent draft warning');
+    assert.match(f.posts.at(-1).error, /작업 기록 파일을 읽을 수 없습니다/);
+    assert.equal(await readFile(other.filePath, 'utf8'), 'unreadable fixture snapshot');
+    assert.equal(f.store.getView().activeTaskId, id);
+    assert.equal(f.h.connectionChanging, false);
+    await writeFile(other.filePath, bytes);
     await Promise.all([f.handle(request), f.handle(request)]);
     const recovered = f.store.getActiveTask();
     assert.notEqual(recovered.id, id);

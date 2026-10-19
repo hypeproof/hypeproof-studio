@@ -1,5 +1,5 @@
 import { chromium, expect } from '@playwright/test';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { serveTaskWorkspace } from './server.mjs';
 import { resolvedProfile } from '../../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs';
@@ -90,6 +90,15 @@ try {
   await server.fixture.h.post({ type: 'taskWorkspaceState', view: server.fixture.store.getView() });
   await expect(page.locator('.tw-error')).toContainText('저장하지 못했습니다');
   await expect(input).toHaveValue('저장 실패 후에도 남아야 하는 입력');
+  const savedBytes = await readFile(server.fixture.store.filePath, 'utf8');
+  await writeFile(server.fixture.store.filePath, 'unreadable fixture snapshot');
+  await page.getByRole('button', { name: '새 작업에 보관', exact: true }).click();
+  await expect(page.locator('.tw-error')).toContainText('작업 기록 파일을 읽을 수 없습니다');
+  await expect(page.locator('.tw-local-note')).toContainText('저장되지 않은 입력');
+  await expect(input).toHaveValue('저장 실패 후에도 남아야 하는 입력');
+  await expect(input).toBeEditable();
+  expect(await readFile(server.fixture.store.filePath, 'utf8')).toBe('unreadable fixture snapshot');
+  await writeFile(server.fixture.store.filePath, savedBytes);
   await page.locator('.tw-task').filter({ hasText: '매일 릴리즈' }).click();
   await expect(input).toHaveValue('다음에 이어 쓸 입력');
   await expect(page.locator('.tw-error')).toHaveCount(0);
