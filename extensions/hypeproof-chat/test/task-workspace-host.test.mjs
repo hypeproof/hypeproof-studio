@@ -151,7 +151,7 @@ test('interrupted history survives failed storage and recovers in the same task'
     const append = f.store.append.bind(f.store);
     f.store.append = async () => { throw Error('synthetic disk refusal'); };
     await f.handle(f.scoped({ type: 'saveActivityDraft', draft }));
-    assert.match(f.posts.at(-1).error, /중단한 대화를 저장하지 못했습니다/);
+    assert.match(f.posts.at(-1).error, /받은 대화를 저장하지 못했습니다/);
     await f.handle(f.scoped({ type: 'taskCreate' }));
     assert.equal(f.store.getView().activeTaskId, id, 'failed persistence blocks leaving the transcript');
     assert.equal(f.h.connectionChanging, false);
@@ -160,7 +160,7 @@ test('interrupted history survives failed storage and recovers in the same task'
     assert.deepEqual(Array.from(f.posts.findLast(row => row.type === 'history').messages, row => row.content), ['계획해줘', '부분 답변'], 'reopened view retains unsaved conversation');
     assert.equal(f.posts.at(-1).historySaveFailed, true);
     assert.equal(f.store.getHistory().length, 0, 'showing pending content does not claim durable storage');
-    await assert.rejects(f.h.setConnectionChanging(true), /중단한 대화를 저장하지 못했습니다/, 'activity transition must not leave pending history behind');
+    await assert.rejects(f.h.setConnectionChanging(true), /받은 대화를 저장하지 못했습니다/, 'activity transition must not leave pending history behind');
     await f.h.setConnectionChanging(false);
     assert.equal(f.h.connectionChanging, false);
     f.store.append = append;
