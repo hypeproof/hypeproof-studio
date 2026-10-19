@@ -370,7 +370,14 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <header className="tw-heading">
         <button className="tw-rail-toggle tw-quiet" aria-label={railOpen ? '작업 목록 닫기' : '작업 목록 열기'} aria-expanded={railOpen} onClick={() => { setRailOpen(!railOpen); setSourcesOpen(false); }}>☰</button>
         {renaming ? <form ref={renameForm} className="tw-rename" onSubmit={event => { event.preventDefault(); submitRename(); }}>
-          <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} readOnly={!!renamePending} aria-describedby={renameError ? 'task-rename-error' : undefined} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Escape' && !imeComposing(event)) finishRename(); }} />
+          <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} readOnly={!!renamePending} aria-describedby={renameError ? 'task-rename-error' : undefined} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => {
+            // IME confirmation must not trigger the form's implicit submit.
+            if (imeComposing(event)) {
+              if (event.key === 'Enter') event.preventDefault();
+              return;
+            }
+            if (event.key === 'Escape') finishRename();
+          }} />
           <button className="tw-quiet" disabled={!title.trim() || blocked || !!renamePending} aria-busy={!!renamePending}>{renamePending ? '저장 중…' : '저장'}</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />

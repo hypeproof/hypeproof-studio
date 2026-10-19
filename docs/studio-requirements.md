@@ -1445,3 +1445,12 @@ announcements, keyboard focus and unsent drafts remain unchanged. This supports
 Useful work first and Minimum necessary intervention: learners can read the
 failure and make an explicit recovery choice. Verify the built webview at narrow
 and wide widths in light/dark themes; native acceptance remains separate.
+
+### Task rename composition confirmation (REQ-C16)
+
+Enter while the task-name input reports IME composition (including keyCode229)
+confirms text without implicitly submitting the rename form. Ordinary Enter after
+composition and the explicit Save action retain normal single-save behavior.
+Composition Escape does not cancel the editor; ordinary Escape does. Unsent chat
+drafts remain independent. Controlled Chromium composition evidence does not
+substitute for installed OS IME acceptance.
