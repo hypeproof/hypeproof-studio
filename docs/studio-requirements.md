@@ -194,7 +194,9 @@ content. Previewing another citation leaves an existing pin intact. Native brows
 opening and return acknowledge the current task, request and URL. Reuse only the
 owned source tab; never close or reuse a foreign tab. Failed/stale opening cannot
 produce a success state. Close, Escape and acknowledged return preserve draft and
-reading anchor and restore focus to the exact citation. Narrow drawers contain
+reading anchor. Closing from within the panel restores focus to the exact citation;
+Escape from an input outside the nonmodal panel preserves that input focus and selection
+so immediate typing continues there. Narrow drawers contain
 focus; reduced motion suppresses nonessential transitions.
 
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)
