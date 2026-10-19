@@ -130,6 +130,14 @@ test('an open-trial seat that ran out ends in one card built from the Service ca
   }
 });
 
+// The card path reads nothing on these seats. The only read allowed is REQ-L12 ⑬'s trial-end notice (merged
+// alongside this card), which checks once, without a credential, whether passes are sold before it names
+// '이용권으로 시작하기'; it fires on the Service's trial sentence whatever the seat.
+function onlyNoticeCatalogueRead(requests) {
+  assert.ok(requests.length <= 1, JSON.stringify(requests));
+  for (const q of requests) assert.deepEqual(q, { method: 'GET', url: '/v1/purchase/products', authorization: null });
+}
+
 test('negative controls: no card mid-work, on a code-issued trial, on a pass, or without a catalogue', async () => {
   // Baseline: what the host posts today for each error (a code-issued trial seat). The errors come from
   // another realm than the bundled host, so the baseline is measured, not assumed.
@@ -142,14 +150,16 @@ test('negative controls: no card mid-work, on a code-issued trial, on a pass, or
   // Flag off (HPS_OPEN_TRIAL off: only code-issued trial seats exist): the turn ends exactly as before, without a catalogue read.
   r = await present(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' });
   assert.equal(r.posts[0].trialEndCard, undefined);
-  assert.deepEqual(r.requests, []);
+  assert.deepEqual(r.posts, await baseline(EXHAUSTED));
+  onlyNoticeCatalogueRead(r.requests);
   // A bought pass is never offered the trial card.
   r = await present(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } });
   assert.equal(r.posts[0].trialEndCard, undefined);
-  assert.deepEqual(r.requests, []);
+  onlyNoticeCatalogueRead(r.requests);
   // No catalogue: no facts to show, so no card and no made-up price; the turn ends as today.
   r = await present(EXHAUSTED, openTrial, { products: 404 });
-  assert.deepEqual(r.posts, await baseline(EXHAUSTED));
+  // Baseline under the same catalogue outage: REQ-L12 ⑬'s notice drops its pass pointer when nothing is sold.
+  assert.deepEqual(r.posts, (await present(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' }, { products: 404 })).posts);
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.commands, []);
 });
