@@ -1808,3 +1808,9 @@ html, body, #root {
 .hps-queued-send:disabled { opacity: .5; cursor: default; }
 .hps-queued-send:focus-visible { outline: 2px solid var(--vscode-focusBorder, #446b9b); outline-offset: 2px; }
 .hps-recovered { font-size: 12px; }
+
+/* CGP-DS-R-028: Korean prose wraps at word (eojeol) boundaries; long URLs and tokens still wrap. */
+.hps-msg-body, .hps-prose, .hp-mission-sentence, .hp-mission-acceptance, .hps-error-banner-msg, .hps-stop-notice {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}

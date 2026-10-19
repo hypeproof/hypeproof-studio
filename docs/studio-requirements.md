@@ -52,6 +52,17 @@ error is not also announced as completed; the stop notice and the error banner s
 Token chunks are never announced, and opening or reopening the panel announces nothing. Screen
 reader runs (VoiceOver, NVDA) are not yet recorded. Test: `test/response-announcer.test.tsx`.
 
+CGP-DS-R-027 / CGP-DS-R-028 (2026-10-19), extending TUX-CHAT-03 and DES-03 for the chat
+webview in every mode. While an IME composition is open (`isComposing` or legacy `keyCode` 229),
+the keys belong to the IME: the composer stops them from reaching ancestor handlers, and every
+Enter/Escape handler in the chat panel and task workspace (sources panel, rail dialog, task
+rename, chat menu, discard confirmation, naming steps) ignores them, so composing "안녕" and
+pressing Enter or Escape never sends, closes or dismisses anything. Korean prose (message bodies,
+mission sentence and acceptance, error and stop notices) breaks between eojeol with
+`word-break: keep-all` while `overflow-wrap: anywhere` still wraps long URLs and tokens.
+Physical macOS 2-set and Windows MS IME runs are not yet recorded. Test:
+`test/korean-input.smoke.mjs`.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop
