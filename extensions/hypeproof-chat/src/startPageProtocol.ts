@@ -66,6 +66,12 @@ export interface FreeStartView {
   allowance?: string;
   /** This build is below the Service's floor; the update button is drawn. */
   tooOld?: boolean;
+  /**
+   * The saved free seat's window is over and the Service refused its profile (403 `trial_expired`
+   * with the free sentence). The card says so instead of offering a fresh start the Service would
+   * not give (a reclaim answers `reused` and the seat stays expired; e2e D2).
+   */
+  ended?: "expired";
 }
 export type StartRequest =
   | { type: "startReady" }
