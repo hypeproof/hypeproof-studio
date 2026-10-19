@@ -41,3 +41,15 @@
   --hp-line: #D7DDD2;
   --hp-control-line: #76837A;    /* 3.6:1 on Paper, 4.0:1 on white */
 }
+
+/* CGP-DS-R-015: `workbench.reduceMotion: "on"` stops nonessential motion even when the OS allows
+ * it (the host sets data-reduced-motion). The OS `prefers-reduced-motion` rules in each file still
+ * apply on their own. State stays readable without motion (DES-11). */
+:root[data-reduced-motion="true"] *,
+:root[data-reduced-motion="true"] *::before,
+:root[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

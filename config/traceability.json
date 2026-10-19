@@ -6312,6 +6312,33 @@
           "path": "extensions/hypeproof-chat/test/class-update-hold.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-MOTION-PREFERENCE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/motionPreference.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-REDUCED-MOTION",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-MOTION-PREFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/reduced-motion.smoke.mjs"
+        }
+      ]
     }
   ]
 }

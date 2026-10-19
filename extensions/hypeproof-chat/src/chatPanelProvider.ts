@@ -176,6 +176,7 @@ import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
+import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
@@ -6833,6 +6834,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
         access:this.accessState,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
+        reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },
@@ -7048,7 +7050,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const csp = buildChatPanelCsp({ cspSource: webview.cspSource, nonce });
     html = html.replace("<head>", `<head><meta http-equiv="Content-Security-Policy" content="${csp}">`);
     html = html.replace(/<script /g, `<script nonce="${nonce}" `);
-    return html;
+    return withReducedMotionAttr(html, reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")));
   }
 }
 

@@ -85,6 +85,15 @@ start-page control whose literal border fails 3:1 on its own background. Not yet
 personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fallbacks in
 `styles.css`; tracked as the next DES-11 slice.
 
+CGP-DS-R-015 (2026-10-19), extending CP-R1's "disabled under reduced motion": an explicit
+preference wins over the OS default. With VS Code's `workbench.reduceMotion` set to "on", every
+Studio webview (chat panel, start page, local review) renders with `data-reduced-motion="true"`
+on its root and `tokens.css` stops nonessential animation, transitions and smooth scrolling even
+when the OS allows motion; a settings change reaches the open chat panel without a reload. "auto"
+follows the OS through `prefers-reduced-motion`. "off" also follows the OS instead of forcing
+motion back on, because re-enabling animation against an OS accessibility setting is the riskier
+direction. State stays readable without motion. Test: `test/reduced-motion.smoke.mjs`.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop

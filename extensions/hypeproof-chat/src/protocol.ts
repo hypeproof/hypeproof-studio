@@ -119,6 +119,8 @@ export interface EffortRequestRecord {
   request_class?: string;
 }
 export interface ChatConfig {
+  /** CGP-DS-R-015: `workbench.reduceMotion` is "on"; the webview stops nonessential motion. */
+  reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
