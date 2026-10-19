@@ -1738,6 +1738,33 @@ html, body, #root {
   color: var(--vscode-textLink-foreground, #3794ff);
 }
 .hps-trial-end-card-escape:hover { text-decoration: underline; }
+/* TUX-COND-08 — optional email section: secondary, below the pass offer, smaller and quieter
+   than the Primary (CU-13). A plain secondary button, never the theme's primary colour. */
+.hps-notify-optin {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  font-size: 12px; color: var(--vscode-descriptionForeground, inherit);
+}
+.hps-notify-optin-prompt, .hps-notify-optin-done { margin: 0 0 6px; line-height: 1.5; }
+.hps-notify-optin-row { display: flex; gap: 6px; min-width: 0; }
+.hps-notify-optin-input {
+  flex: 1 1 auto; min-width: 0; padding: 4px 6px; font-size: 12px;
+  color: var(--vscode-input-foreground, inherit); background: var(--vscode-input-background, transparent);
+  border: 1px solid var(--vscode-input-border, rgba(127, 127, 127, 0.4)); border-radius: 3px;
+}
+.hps-notify-optin-submit {
+  flex: 0 0 auto; cursor: pointer; padding: 4px 10px; font-size: 12px; border-radius: 3px;
+  border: 1px solid var(--vscode-button-border, rgba(127, 127, 127, 0.4));
+  background: var(--vscode-button-secondaryBackground, transparent); color: var(--vscode-button-secondaryForeground, inherit);
+}
+.hps-notify-optin-submit:disabled { cursor: default; opacity: 0.6; }
+.hps-notify-optin-consent { margin: 6px 0 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.hps-notify-optin-withdraw {
+  border: 0; padding: 0; cursor: pointer; background: transparent; font-size: 12px;
+  color: var(--vscode-textLink-foreground, #3794ff);
+}
+.hps-notify-optin-withdraw:hover { text-decoration: underline; }
+.hps-notify-optin-error { margin: 6px 0 0; color: var(--vscode-errorForeground, #f48771); }
 
 /* REQ-L12 ⑫ — trial conversation carry-over offer and read-only trial transcript. */
 .hps-carryover {
