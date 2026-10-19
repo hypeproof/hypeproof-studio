@@ -15,10 +15,30 @@ try {
  await p.goto(`http://127.0.0.1:${server.address().port}`);await p.getByRole('heading',{name:'어떻게 시작할까요?'}).waitFor();
  await p.getByRole('button',{name:'파일',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioFiles');
  await p.getByRole('button',{name:'설정',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'openStudioSettings');
- await p.getByRole('button',{name:'AI 체험하기',exact:true}).click();
+ // TUX-SP-12 — before "AI 체험하기" is chosen, the choice says a code is needed today and the
+ // allowance the Service advertises. Offer off (positive), offer with numbers, offer open: this build
+ // has only the code path, so the card keeps the code line and agrees with the screen it leads to.
+ const codeLine='지금은 발급받은 체험 코드가 있어야 시작할 수 있습니다.';
+ const offerState=async trialOffer=>p.evaluate(o=>window.dispatchEvent(new MessageEvent('message',{data:{type:'startState',state:{version:'test',checking:false,...(o?{trialOffer:o}:{})}}})),trialOffer);
+ const trialChoice=p.getByRole('button',{name:'AI 체험하기',exact:true});
+ await p.getByText(codeLine,{exact:true}).waitFor();
+ assert.equal(await p.getByText(/AI 요청 \d/).count(),0,'no invented allowance when the Service does not advertise one');
+ assert.match(await trialChoice.getAttribute('aria-describedby'),/trial-entry-note/);
+ await offerState({entry:'code',durationHours:1.5,requestLimit:77});
+ await p.getByText('체험 1시간 30분 · AI 요청 77번',{exact:true}).waitFor();assert.equal(await p.getByText(codeLine,{exact:true}).count(),1);
+ await p.setViewportSize({width:390,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,'trial-note-390.png'),fullPage:true});await p.setViewportSize({width:1280,height:900});
+ await offerState({entry:'open',durationHours:1,requestLimit:40});
+ await p.getByText('체험 1시간 · AI 요청 40번',{exact:true}).waitFor();
+ assert.equal(await p.getByText(codeLine,{exact:true}).count(),1,'a code-only build keeps the code line even when the Service advertises open entry');
+ // The note never runs into the choice's accessible name.
+ assert.equal(await trialChoice.count(),1);
+ await trialChoice.click();
  assert.deepEqual(await p.evaluate(()=>window.sent.map(m=>m.type)),['startReady','openStudioFiles','openStudioSettings']);
+ // The card and the screen it leads to agree: that screen asks for a code.
  await p.getByRole('heading',{name:'내 삶에 AI 더하기'}).waitFor();
+ await p.getByText(/지금은 발급받은 체험 코드가 필요합니다/).waitFor();
  await p.getByRole('button',{name:'시작 방법 다시 선택'}).click();
+ await offerState(undefined);await p.getByText(codeLine,{exact:true}).waitFor();
  await p.getByRole('button',{name:'수업에 참여하기',exact:true}).click();
  assert.equal(await p.getByText('나비',{exact:true}).count(),0);assert.equal(await p.locator('#course-code').getAttribute('type'),'password');
  const submit=p.getByRole('button',{name:'코드 확인하기'});assert.equal(await submit.isDisabled(),true);

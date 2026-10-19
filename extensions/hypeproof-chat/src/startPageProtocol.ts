@@ -27,6 +27,8 @@ export interface StartState {
   inbox?: import("./classroomInbox").InboxView;
   /** REQ-L12 — buying a pass. Presentation only: the order secret and the issued code never leave the host. */
   purchase?: import("./passPurchase").PurchaseView;
+  /** TUX-SP-12 — the trial entry mode and allowance the Service advertises. Absent: not advertised. */
+  trialOffer?: import("./trialOffer").TrialOffer;
   /**
    * "GitHub에서 이어하기" while a code is being confirmed (candidate): what this seat's GitHub
    * holds. Absent when the cohort does not publish to GitHub.

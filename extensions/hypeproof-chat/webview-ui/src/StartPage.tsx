@@ -8,6 +8,7 @@ import "./start.css";
 import { AccountEntry } from "./AccountEntry";
 import { InstructorInbox } from "./InstructorInbox";
 import { activityLabel, passSummary } from "./activityLabel";
+import { trialEntryNote } from "../../src/trialOffer";
 
 export function StartPage() {
   const [state, setState] = useState<StartState>({ checking: true, version: "" });
@@ -37,6 +38,8 @@ export function StartPage() {
   const copy = startPageCopy(state.coachName);
   const activity = activityLabel(state.profile?.kind, state.profile?.pass, "활동");
   const passLeft = passSummary(state.profile?.pass);
+  // TUX-SP-12 — said before the choice: a code is needed today (until the Service advertises open entry), and the Service's allowance.
+  const trialNote = trialEntryNote(state.trialOffer);
   const choose = (next: "trial" | "classroom") => { setToken(""); setEntry(next); setEditing(true); };
   // REQ-L12 — buying a pass. The host owns the order; this view shows its stage and sends intents.
   const purchase = state.purchase;
@@ -116,7 +119,10 @@ export function StartPage() {
               screen explicitly and writes "draw it as a list of options and do not draw
               both as Primary". The "코드 확인하기" that appears after choosing is the only
               Primary in this flow. */}
-          <button className="studio-choice" disabled={state.checking} onClick={() => choose("trial")}>AI 체험하기 <span aria-hidden="true">→</span></button>
+          <div className="studio-choice-group">
+            <button className="studio-choice" disabled={state.checking} onClick={() => choose("trial")} aria-describedby={trialNote.code || trialNote.allowance ? "trial-entry-note" : undefined}>AI 체험하기 <span aria-hidden="true">→</span></button>
+            {(trialNote.code || trialNote.allowance) && <p id="trial-entry-note" className="studio-choice-note">{trialNote.code && <span>{trialNote.code}</span>}{trialNote.allowance && <span>{trialNote.allowance}</span>}</p>}
+          </div>
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("classroom")}>수업에 참여하기 <span aria-hidden="true">→</span></button>
           {/* REQ-L12 — a third peer choice, drawn only when the Service sells passes. Chosen by the person; never opened for them. */}
           {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); }}>이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
