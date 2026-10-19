@@ -132,7 +132,9 @@ for (const [label, error, ending] of [['exhausted', SDK_EXHAUSTED, 'exhausted'],
 test('classroom 429 is not a trial ending: no catalogue read, unchanged generic notice', async () => {
   const r = await present(CLASSROOM_429, catalogue);
   assert.deepEqual(r.requests, []);
-  assert.equal(r.posts[0].error, CLASSROOM_429.message);
+  // REQ-M44 (merged with this notice): the banner carries the Service's sentence, not the CLI wrapper.
+  assert.equal(r.posts[0].error, '실행 중인 작업이 있거나 이 수업의 요청 한도에 도달했습니다.');
+  assert.doesNotMatch(r.posts[0].error, /API Error|Claude Code/);
   assert.doesNotMatch(r.posts[0].error, /체험이 끝|이용권으로 시작하기/);
   assert.deepEqual(r.commands, []);
 });
