@@ -13,6 +13,8 @@ const { errorBannerPresentation } = await import('../webview-ui/src/errorBannerP
 
 // ── Observed SDK texts (positive) ────────────────────────────────────────────────────────
 const SDK_EXHAUSTED = 'Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.';
+// The trial's AI cost ceiling (local Worker 429 trial_cost_exhausted, 2026-10-19).
+const SDK_COST = 'Claude Code returned an error result: API Error: Request rejected (429) · 체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다. 만든 파일과 대화는 그대로 남아 있습니다.';
 const SDK_EXPIRED = 'Claude Code returned an error result: Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.';
 
 // ── Refusals that are NOT a trial ending (negative) ─────────────────────────────────────
@@ -26,12 +28,16 @@ const STALL_429 = '요청 한도에 도달해 응답을 받지 못했습니다. 
 // Controls first: the matcher must see both observed texts and nothing else.
 assert.equal(p.trialEnding(new Error(SDK_EXHAUSTED)), 'exhausted');
 assert.equal(p.trialEnding(new Error(SDK_EXPIRED)), 'expired');
+assert.equal(p.trialEnding(new Error(SDK_COST)), 'exhausted');
+assert.equal(p.passSpentNotice(new Error(SDK_COST)), null, 'a spent trial never gets the pass copy');
 for (const text of [CLASSROOM_429, BUDGET_429, TRIAL_BUSY_429, PASS_SPENT_429, PASS_EXPIRED_403, STALL_429, 'API Error: 429 rate limited', ''])
   assert.equal(p.trialEnding(new Error(text)), null, text);
 for (const notAnError of [null, undefined, 'plain string', { message: 7 }]) assert.equal(p.trialEnding(notAnError), null);
 // A bare code (proxy path) is a trial ending only when the turn did not run on a bought pass.
 assert.equal(p.trialEnding(new Error('429 trial_exhausted'), false), 'exhausted');
 assert.equal(p.trialEnding(new Error('429 trial_exhausted'), true), null);
+assert.equal(p.trialEnding(new Error('429 trial_cost_exhausted'), false), 'exhausted');
+assert.equal(p.trialEnding(new Error('429 trial_cost_exhausted'), true), null);
 // The pass copy still reaches pass holders; the trial text never gets the pass copy.
 assert.equal(p.passSpentNotice(new Error(PASS_SPENT_429)), p.PASS_SPENT_FRIENDLY);
 assert.equal(p.passSpentNotice(new Error(SDK_EXHAUSTED)), null);
