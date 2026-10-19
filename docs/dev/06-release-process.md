@@ -146,12 +146,18 @@ Every PR body has a `## Release check` section. The release cut copies it into t
 PR checklist. Write three lines:
 
 ```text
+Release manager check: yes|no — <reason>
 How to verify: <where> → <what to click or run> → <expected result>
 Smoke: <yes|no> — <reason>
 Smoke check: <scripts/release/smoke/checks/sN-*.mjs or #issue, only for yes>
 ```
 
-- Keep `How to verify` on the first line. The release manager reads it.
+- Write `Release manager check` on the first line.
+- Answer `yes` when a user can see or meet the changed behavior in the rc App.
+- Answer `no` when the PR changes release tooling, CI, vendored tooling, or docs only.
+  A `no` answer puts the PR in the automatic group regardless of its title type or files.
+  The reason is shown in the release PR to explain why no check is needed.
+- `How to verify` is required only when the answer is `yes`. The release manager reads it.
 - Write all three parts of `How to verify`. The release manager must be able to do it
   without the author.
 - Answer `Smoke: yes` when the PR adds a dependency on another repository or a server
