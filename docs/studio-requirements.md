@@ -145,7 +145,9 @@ that would repeat an unrelated action instead of retrying the failed save.
 
 `REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
 while another message is queued or being drafted remains a separate durable
-recovery item with its original tool mode and images. It never retags or appends
+recovery item. Attachment-only drafts, staged photos, imported references and
+in-progress image preparation also own the composer even with empty text. The rejected request stays
+a separate item with its original tool mode and images. It never retags or appends
 to later input. Duplicate refusal notices do not duplicate the item. Recovery is
 explicit; its retry sends only that request's attachments, preserves the next
 draft and queue, and returns keyboard focus to the composer. Refused dispatch

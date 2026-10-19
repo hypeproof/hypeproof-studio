@@ -419,6 +419,8 @@ export function ChatPanel(props: Props) {
   const draftPayload = () => ({...(recovered.length ? {recovered} : {}),text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
+  const composerHasAttachments = useRef(false);
+  composerHasAttachments.current = !!(pendingImages.length || stagedPhotos.length || imports.length);
   const activityId = config?.activity?.id;
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
   const initialDraft = useRef(true);
@@ -432,7 +434,7 @@ export function ChatPanel(props: Props) {
       if (msg.type === "inputRejected") {
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
-        if (current.queued !== null || current.text.trim() || current.recovered?.length) {
+        if (current.queued !== null || current.text.trim() || current.recovered?.length || composerHasAttachments.current || preparingImagesRef.current) {
           // A refusal belongs to its original request, never to the later parked
           // message or its attachments. Keep both durable and explicitly paused.
           const request = {text: msg.text, toolMode: rejectedMode, images: msg.images ?? []};
