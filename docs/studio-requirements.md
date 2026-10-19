@@ -89,7 +89,10 @@ CGP-DS-R-015 (2026-10-19), extending CP-R1's "disabled under reduced motion": an
 preference wins over the OS default. With VS Code's `workbench.reduceMotion` set to "on", every
 Studio webview (chat panel, start page, local review) renders with `data-reduced-motion="true"`
 on its root and `tokens.css` stops nonessential animation, transitions and smooth scrolling even
-when the OS allows motion; a settings change reaches the open chat panel without a reload. "auto"
+when the OS allows motion, and JS scrolling asks `motion.ts` instead of requesting a smooth
+scroll. A settings change reaches the open chat panel without a reload; the start page and local
+review apply it the next time they open. The preview panel shows the learner's own page and is
+not restyled. "auto"
 follows the OS through `prefers-reduced-motion`. "off" also follows the OS instead of forcing
 motion back on, because re-enabling animation against an OS accessibility setting is the riskier
 direction. State stays readable without motion. Test: `test/reduced-motion.smoke.mjs`.
