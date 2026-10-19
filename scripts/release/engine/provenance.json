@@ -5,6 +5,6 @@
   "repository": "hypeproof/hypeproof-studio",
   "sourcePath": "scripts/release/engine/core.mjs",
   "baseRevision": "862f757baea74b78aa9c0570d7ed334bd0a1671a",
-  "sourceSha256": "1661f8e1558a7604cddd21ed94342c6ee7cd78d9a6ecd83e057a1aa6cb96c6e5",
+  "sourceSha256": "5175b28ed1c562ea14e7aca57361e88723864ecb67e8ab4bca3159d2ecb09ed1",
   "contract": "hps-release-core/1"
 }

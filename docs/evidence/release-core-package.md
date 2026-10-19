@@ -35,3 +35,22 @@ by this implementer. Test-only generated Ed25519 signatures are protocol fixture
 The core still relies on a trusted host's synchronous byte verifier; the engine
 cannot prove that a callback actually observed remote bytes. No cloud ledger or
 network adapter implementation is included in this slice.
+
+## Independent repair 1: rejected verifier Promise
+
+The independent verifier found that refusing an async verifier still leaked its
+rejected Promise. A child process returned BLOCKED with no artifact, then exited
+1 on an unhandled rejection. This invalidated the earlier boundary completeness
+claim; the original independent evidence and `core/rejected-verifier-red.log`
+remain preserved.
+
+The core now attaches rejection handling before synchronously refusing a returned
+thenable. It never awaits the verifier or accepts its eventual result. A packed
+consumer child runs with `--unhandled-rejections=strict`, checks both an async
+throw and an ordinary callback returning `Promise.reject`, and must exit 0 after
+an event-loop turn with both decisions BLOCKED and no artifact recorded. The same
+rejected-verifier cases also run in Node/workerd replay. Ten integrated scenarios
+pass with zero skips after this repair (`core/rejected-verifier-after.log`). The
+first implementation's tarball remains preserved; `core/repair-01` contains the
+new source-hash-bound tarball and identity for consumer pin updates. Independent
+reverification is still required; this is implementer self-check evidence.

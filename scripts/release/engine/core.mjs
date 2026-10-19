@@ -17,7 +17,12 @@ function verifiedFile(checkFile, file) {
   require(typeof checkFile === 'function', 'file verifier required');
   const result = checkFile(file);
   require(result !== false, 'file verification failed');
-  require(!result || typeof result.then !== 'function', 'file verifier must be synchronous');
+  if (result && typeof result.then === 'function') {
+    // Refusal stays synchronous, but a rejected verifier must not crash the host.
+    // Handling rejection never turns its eventual result into byte verification.
+    Promise.resolve(result).catch(() => {});
+    throw new Error('file verifier must be synchronous');
+  }
 }
 
 export function canonical(value) {

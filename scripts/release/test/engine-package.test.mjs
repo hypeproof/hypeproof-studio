@@ -80,20 +80,22 @@ function replay(core, f) {
   const changedBytes = core.readiness(state, item.id, f.policy, f.now, file => checkFile({...file, size: file.size + 1}));
   const missingVerifier = core.readiness(state, item.id, f.policy, f.now);
   const asyncVerifier = core.readiness(state, item.id, f.policy, f.now, async () => {});
+  const asyncRejectVerifier = core.readiness(state, item.id, f.policy, f.now, async () => {throw new Error('async verifier rejected');});
+  const promiseRejectVerifier = core.readiness(state, item.id, f.policy, f.now, () => Promise.reject(new Error('ordinary verifier rejected')));
   const falseVerifier = core.readiness(state, item.id, f.policy, f.now, () => false);
   const thenableVerifier = core.readiness(state, item.id, f.policy, f.now, () => ({then() {}}));
   const artifactBase = core.applyEvent(core.initialState(), f.events[0], f.policy, {now: f.now}).state;
-  const refusedArtifact = [undefined, () => false, async () => {}, () => ({then() {}})].map(verifier => {
+  const refusedArtifact = [undefined, () => false, async () => {}, async () => {throw new Error('async verifier rejected');}, () => Promise.reject(new Error('ordinary verifier rejected')), () => ({then() {}})].map(verifier => {
     const outcome = core.applyEvent(artifactBase, f.events[1], f.policy, {now: f.now, checkFile: verifier});
     return {result: outcome.result, artifactCount: Object.keys(outcome.state.candidates[f.candidateId].artifacts).length};
   });
-  return {results, refusedArtifact, stateDigest: core.digest(state), canonical: core.canonical({z: [3, 2], a: '한글'}), status, tampered, wrongKey, changedBytes, missingVerifier, asyncVerifier, falseVerifier, thenableVerifier};
+  return {results, refusedArtifact, stateDigest: core.digest(state), canonical: core.canonical({z: [3, 2], a: '한글'}), status, tampered, wrongKey, changedBytes, missingVerifier, asyncVerifier, asyncRejectVerifier, promiseRejectVerifier, falseVerifier, thenableVerifier};
 }
 function assertReplay(result) {
   assert.equal(result.status.status, 'READY_FOR_PUBLISHER');
   assert.equal(result.results.at(-1).status, 'PROMOTION_INTENT');
   for (const refused of result.refusedArtifact) { assert.equal(refused.result.status, 'BLOCKED'); assert.equal(refused.artifactCount, 0); }
-  for (const name of ['tampered', 'wrongKey', 'changedBytes', 'missingVerifier', 'asyncVerifier', 'falseVerifier', 'thenableVerifier']) assert.equal(result[name].status, 'BLOCKED', name);
+  for (const name of ['tampered', 'wrongKey', 'changedBytes', 'missingVerifier', 'asyncVerifier', 'asyncRejectVerifier', 'promiseRejectVerifier', 'falseVerifier', 'thenableVerifier']) assert.equal(result[name].status, 'BLOCKED', name);
   assert.match(result.tampered.reason, /signature verification/);
   assert.match(result.wrongKey.reason, /signature verification/);
   assert.match(result.changedBytes.reason, /digest\/size mismatch/);
@@ -134,6 +136,24 @@ test('FIN02 installed tarball replays signed release decisions in an isolated co
   const results = f.events.map(event => ingest(ledger, event, f.policy, {now: f.now}));
   assert.deepEqual(results, result.results);
   assert.equal(local.digest(readState(ledger)), result.stateDigest);
+  // A refused async verifier must not crash the host on the next event-loop turn.
+  fs.writeFileSync(path.join(consumer.root, 'rejected-verifier.mjs'), `
+import * as core from '@hypeproof/release-engine-core';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {setImmediate} from 'node:timers/promises';
+const f = JSON.parse(fs.readFileSync('fixture.json'));
+const state = core.applyEvent(core.initialState(), f.events[0], f.policy, {now: f.now}).state;
+for (const checkFile of [async () => {throw new Error('async verifier rejected');}, () => Promise.reject(new Error('ordinary verifier rejected'))]) {
+  const out = core.applyEvent(state, f.events[1], f.policy, {now: f.now, checkFile});
+  assert.equal(out.result.status, 'BLOCKED');
+  assert.match(out.result.reason, /must be synchronous/);
+  assert.deepEqual(out.state.candidates[f.candidateId].artifacts, {});
+  await setImmediate();
+}
+console.log('Rejected async and ordinary Promise verifiers blocked; process survived.');
+`);
+  assert.match(consumer.run(process.execPath, ['--unhandled-rejections=strict', 'rejected-verifier.mjs']), /process survived/);
 });
 
 // Always exercise workerd: install the pinned runtime with npm ci --prefix scripts/release/engine.
