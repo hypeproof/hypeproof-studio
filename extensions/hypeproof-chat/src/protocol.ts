@@ -168,6 +168,8 @@ export interface UpdateOffer {
   notes: string;            // markdown — webview renders as plain text for now
   releaseUrl: string;
   sizeBytes: number;
+  /** CGP-SHELL-R-001: a class seat is active, so the banner offers no install. */
+  heldForClass?: boolean;
 }
 
 export interface CoachInfo {

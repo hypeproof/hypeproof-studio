@@ -2466,7 +2466,9 @@ function UpdateBanner({
           새 버전 v{offer.version} 나왔어요{sizeMb ? ` · ${sizeMb}` : ""}
         </div>
         <div className="hps-update-banner-sub">
-          업데이트하면 자동으로 재시작됩니다. 작업 중인 내용은 미리 저장해주세요.
+          {offer.heldForClass
+            ? "수업이 끝나면 설치할 수 있어요."
+            : "업데이트하면 자동으로 재시작됩니다. 작업 중인 내용은 미리 저장해주세요."}
         </div>
         {expanded && offer.notes && (
           <pre className="hps-update-banner-notes">{offer.notes}</pre>
@@ -2481,13 +2483,13 @@ function UpdateBanner({
         )}
       </div>
       <div className="hps-update-banner-actions">
-        <button
+        {!offer.heldForClass && <button
           className="hps-update-banner-install"
           onClick={onInstall}
           title={`v${offer.version} 다운로드 + 자동 적용`}
         >
           업데이트
-        </button>
+        </button>}
         <button
           className="hps-update-banner-dismiss"
           onClick={() => onDismiss(offer.version)}

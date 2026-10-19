@@ -6271,6 +6271,47 @@
           "path": "extensions/hypeproof-chat/test/control-contrast.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-AUTO-UPDATE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## I. Auto-update (#72)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-CLASS-UPDATE-HOLD",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-AUTO-UPDATE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/updateCheckerHelpers.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CLASS-UPDATE-HOLD",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-AUTO-UPDATE",
+        "ST-IMP-CLASS-UPDATE-HOLD"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/class-update-hold.test.tsx"
+        }
+      ]
     }
   ]
 }

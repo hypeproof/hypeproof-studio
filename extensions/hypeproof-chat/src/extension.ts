@@ -45,6 +45,7 @@ import {
   reportInstallUpdateFailure,
   registerPublicUpdateSignal,
 } from "./updateChecker";
+import { CLASS_UPDATE_HOLD_COPY } from "./updateCheckerHelpers";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
@@ -634,7 +635,9 @@ export async function activate(context: vscode.ExtensionContext) {
             sizeBytes: info.sizeBytes,
           });
           vscode.window.showInformationMessage(
-            `새 버전 v${info.version} 발견. 채팅 패널 상단의 배너에서 설치할 수 있어요.`,
+            provider.isClassUpdateHeld()
+              ? `새 버전 v${info.version} 발견. ${CLASS_UPDATE_HOLD_COPY}`
+              : `새 버전 v${info.version} 발견. 채팅 패널 상단의 배너에서 설치할 수 있어요.`,
           );
         } else {
           provider.setAvailableUpdate(null);
@@ -647,6 +650,11 @@ export async function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand("hypeproof-chat.installUpdate", async () => {
+      // CGP-SHELL-R-001: no download, install or restart while a class seat is active.
+      if (provider.isClassUpdateHeld()) {
+        void vscode.window.showInformationMessage(CLASS_UPDATE_HOLD_COPY);
+        return;
+      }
       try {
         // Re-fetch to be safe (the stored banner state might be stale).
         const current = currentBundleVersion();
