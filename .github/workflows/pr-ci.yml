@@ -82,7 +82,7 @@ jobs:
           node scripts/test-unified-launcher.mjs
       - name: Release cut and publish gate controls
         if: ${{ !cancelled() }}
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-manifest.test.mjs
       - name: review-pr.sh shell safety (#1302 SIGPIPE + ERR trap)
         if: ${{ !cancelled() }}
         run: bash scripts/test/review-pr-shell.test.sh

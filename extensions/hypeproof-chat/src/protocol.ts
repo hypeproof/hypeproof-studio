@@ -422,6 +422,7 @@ export interface SuggestionChip {
 // Webview → Host
 export type WebviewMessage = (
   | { type: 'taskCreate' }
+  | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
   | { type: 'taskRename'; title: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
@@ -596,7 +597,7 @@ export type HostMessage = (
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
-  | { type: 'taskWorkspaceError'; error: string | null }
+  | { type: 'taskWorkspaceError'; error: string | null; draftSaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
   | {type:'inputRejected';text:string;images?:string[];toolMode?:import('./turnTools').TurnToolMode}
@@ -711,7 +712,7 @@ export type HostMessage = (
       /** When error — the Korean sentence the server produced. */
       message?: string;
     }
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string }
+  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retryable?: boolean }
   | { type: "actionResult"; requestId: string; approved: boolean }
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the

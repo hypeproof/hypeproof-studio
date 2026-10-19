@@ -41,6 +41,7 @@ interface State {
   timeline: TimelineState;
   streamId: string | null;
   error: string | null;
+  errorRetryable: boolean;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
@@ -101,7 +102,7 @@ type Action =
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string }
+  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retryable?: boolean }
   | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
@@ -117,6 +118,7 @@ const initialState: State = {
   timeline: emptyTimeline(),
   streamId: null,
   error: null,
+  errorRetryable: true,
   errorRequestId: null,
   errorRunbookUrl: null,
   pageNotice: null,
@@ -242,6 +244,7 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         timeline: timelineEnd(state.timeline, Date.now()),
         error: action.error,
+        errorRetryable: action.retryable !== false,
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
       };
@@ -283,9 +286,15 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const scope = useRef<string | undefined>();
   const taskScope = useRef<string | undefined>();
+  // The bridge can deliver an old turn after Stop. Update this synchronously,
+  // before React renders, so a late terminal event cannot end the next turn.
+  const activeStream = useRef<string | null>(null);
+  const pendingSend = useRef(false);
+  const [sendPending, setSendPending] = useState(false);
   const [shouldCrash, setShouldCrash] = useState(false);
   const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -303,15 +312,40 @@ export function App() {
         setWorkspace(msg.config.taskWorkspace);
         setWorkspaceError(null);
         if (scope.current !== msg.config.activity?.id || taskScope.current !== (msg.config.taskWorkspace?.activeTaskId ?? undefined)) {
+          setDraftSaveError(null);
           setIncomingImage(null);
           verifyRequests.current.clear();
+          activeStream.current = null;
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
       } else if (msg.activityId && msg.activityId !== scope.current) return;
+      if ("streamId" in msg) {
+        if (msg.type === "streamStart") {
+          // One turn owns this view; a repeated start must not clear its text.
+          if (activeStream.current !== null) return;
+          activeStream.current = msg.streamId;
+        } else if (msg.streamId !== activeStream.current) {
+          // These host refusal codes are emitted before streamStart. They still
+          // need to explain an idle preflight failure, never terminate a live turn.
+          const preflight = msg.type === "streamError" && activeStream.current === null
+            && ["tools", "connection", "activity"].includes(msg.streamId);
+          if (!preflight) return;
+        }
+        if (["streamEnd", "streamStopped", "streamError"].includes(msg.type)) activeStream.current = null;
+      }
+      if (["streamStart", "inputRejected", "streamError", "streamEnd", "streamStopped"].includes(msg.type)) {
+        pendingSend.current = false; setSendPending(false);
+      }
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
-        case 'taskWorkspaceError': setWorkspaceError(msg.error); return;
+        case 'taskWorkspaceError':
+          setWorkspaceError(msg.error);
+          // A list/config refresh is not proof that the current draft reached disk.
+          // Only a successful draft acknowledgement or a new scope releases this warning.
+          if (msg.draftSaveFailed) setDraftSaveError(msg.error);
+          else if (msg.error === null) setDraftSaveError(null);
+          return;
         // #897 (VO-01) — 음성 capability 프로브. **원시 관측만** 돌려보내고 판정은
         // 호스트가 한다. 화면에 아무것도 바꾸지 않는다 — 이건 계측기다.
         case "probeVoiceCapability": {
@@ -345,7 +379,7 @@ export function App() {
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
         case "streamEnd":   dispatch({ type: "streamEnd" }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retryable: msg.retryable }); break;
         case "actionResult": /* not yet routed to UI */ break;
         case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
@@ -363,13 +397,6 @@ export function App() {
   // 전에 role:"tool" 이 걸러진다(chatTimeline.modelHistory).
   const messages = state.timeline.items;
 
-  const pendingSend = useRef(false);
-  const [sendPending, setSendPending] = useState(false);
-  useEffect(() => onHostMessage(msg => {
-    if (['streamStart', 'inputRejected', 'streamError', 'streamEnd', 'streamStopped'].includes(msg.type)) {
-      pendingSend.current = false; setSendPending(false);
-    }
-  }), []);
   useEffect(() => { pendingSend.current = false; setSendPending(false); }, [state.config?.activity?.id, state.config?.taskWorkspace?.activeTaskId]);
   const beginRequest = () => {
     if (pendingSend.current || state.streamId) return false;
@@ -521,7 +548,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={workspaceError} onDismissError={() => setWorkspaceError(null)}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} onDismissError={() => setWorkspaceError(null)}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel
@@ -543,7 +570,7 @@ export function App() {
           error={state.error}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
-          canRetryLast={hasLastUserPrompt && !state.streamId}
+          canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
@@ -594,7 +621,7 @@ export function App() {
         error={state.error}
         errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
-        canRetryLast={hasLastUserPrompt && !state.streamId}
+        canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId}
         onSend={send}
         sendPending={sendPending}
         onRetry={retry}

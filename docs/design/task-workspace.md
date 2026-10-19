@@ -50,8 +50,12 @@ At narrow widths, navigation and sources open on explicit action. These drawers
 contain keyboard focus, make background controls inert, close on Escape and return
 focus to the opener. Personal tasks without a lesson omit the mission banner and
 default classroom operations; explicit Service panel choices still apply. Failed
-draft writes keep the current task and input, show one dismissible error and clear
-the error after a successful save.
+draft writes keep the current task and input and show a persistent unsaved warning.
+Unrelated state refreshes and dismissal cannot clear that warning; only a confirmed
+save can. For a conflicting disk revision, explicit recovery captures the current
+composer and displayed history into a new task against the latest valid snapshot.
+It preserves other tasks and concurrent edits, keeps queued input paused, and does
+not send a request. Failed recovery keeps the original unsaved input editable.
 
 This is the approved VS-02/03 foundation. Standalone Electron, branches, durable
 in-flight tool journals, curated memory, full-text search, OAuth popup ownership
@@ -120,3 +124,27 @@ The new layer introduces no UI framework or full-shell build. Compile only the
 extension and webview, prepare an isolated installed-shell development copy, then
 verify its exact file digests. Record incremental cloud/model spend separately
 from local wall time; synthetic checks incur no model call.
+
+
+## Compact personal conversation (CC-R1)
+
+The conversation owns the main column. Advanced response settings, access details
+and opted-in observation use the existing controls inside a native dialog; the
+current funding error retains a direct entry above the composer. Escape restores
+the opener. The profile's model/effort restrictions remain authoritative.
+
+Keep the shipped theme palette (canvas #151D19, panel #18231C, ink #F2F4E8,
+secondary #ACB9A5, border #35483A, focus/action #D5F279) through VS Code variables.
+Body typography is system sans, 16px/1.625; controls 13–14px, metadata 11px.
+Assistant artwork is 18px and action glyphs 16px inside transparent 44px targets.
+Starter suggestions are compact and wrap; settings never reserve transcript height.
+
+Clickable clarification is a conservative presentation of an explicit numbered
+invitation, not an authority to execute model text. It prepares text in the existing
+composer and retains manual Send. Default task naming is local and provenance-bound;
+it introduces no model request, remote transcript copy or inferred human approval.
+
+General browsing uses the existing browser capability and approval gates. An absent
+URL means a blank browser, while local website preview requires an authored-preview
+intent. Neither a tool description nor a synthetic passing call proves live model
+selection; that remains a separate observation.

@@ -106,9 +106,51 @@ cannot cancel an unresolved defect.
 - Native source rendering requires a nonempty document capture and the document composited within its actual browser-pane bounds. A loaded DOM or an empty PNG is not rendering evidence. The fixture's known white page is sampled only inside its measured pane, accounting for optional workbench sidebars.
 - A preflight credential failure must settle pending-send state and restore the rejected request with its original tool mode; no paid request is made.
 
+### Recovery and composer continuity follow-up
+
+- A failed draft write stays visibly unsaved across unrelated state refreshes. A
+  revision conflict cannot overwrite the other writer. Explicit recovery forks the
+  displayed history and current draft into a new task; queue and recovered requests
+  remain paused. A failed recovery retains the original input.
+- Refused requests retain their own text, images and tool mode independently of the
+  next draft. Admission reserves recovery space before dispatch; late or legacy
+  over-limit data is never truncated. Removing an item requires explicit confirmation.
+- Completion releases a queued request only after host persistence and activity
+  ownership settle. Stop and stale terminal events cannot release or mutate a later
+  turn. Storage failures retain the visible answer without leaving the UI busy.
+- Resizing a short pane or changing line wrapping keeps a previously visible active
+  caret visible, including a caret in the middle of a long draft. Deliberately
+  scrolling away from the caret must not force a jump back. Text and selection are
+  preserved, and resize alone never sends.
+
+Use the existing task host/store and turn-tools tests, `pending-send.smoke.mjs`,
+`e2e/queued-photo-send.mjs`, `e2e/stop-stream.mjs` and
+`e2e/task-workspace/chat-details.mjs` for these controlled boundaries. A browser
+selection-range assertion does not prove selection direction, physical IME or
+native focus. Native app tests must be scheduled separately when the user permits
+foreground interaction; background checks cannot establish native acceptance.
+
 ### Review-driven R3 controls
 
 - Personal menu hover and source errors remain readable in light/dark themes, including fallback colors; Settings has a visible text label.
 - Successful pointer/keyboard Send and explicit Stop leave the personal composer ready for immediate next typing. A refused submission does not move focus.
 - Failed source Return preserves the already-opened identity and direct retry. Pending Return remains focusable but cannot dispatch twice. Late or unsolicited acknowledgments cannot take focus from a different source or draft. Unknown host errors use operation-specific safe copy.
 - Image adjacency must use a profile granting image_paste and assert a visible image; a successful fixture control response alone is not evidence. Combine search selection, image removal, error/Stop and a400px-high window without losing the next draft.
+
+
+## Compact conversation acceptance (CC-R1, #1762)
+
+| ID | Expected behavior | Focused evidence |
+| --- | --- | --- |
+| CC-01 | Full personal profile shows no permanent model/effort/usage/observation block; settings retain values, Escape focus and draft. Access recovery stays visible. | `e2e/task-workspace/chat-compact.mjs` |
+| CC-02 | Actual HypeProof green tokens, light theme, short/narrow panes; 18px branding, 16px answer glyphs and 44px targets; composer visible. | Matched screenshots plus independent visual review |
+| CC-03 | Latest explicit numbered question yields keyboard/click choices; preserve draft, no automatic send; code/instruction/partial/old lists remain prose. | `test/reply-choices.smoke.mjs`, compact browser flow |
+| CC-04 | First useful turns name default tasks locally; numeric replies use question context; rename and restart are durable; legacy provenance is protected. | `test/task-title.smoke.mjs`, `test/task-workspace-store.test.mjs` |
+| CC-05 | General browser intent opens blank native browser without local preview; other URLs and capability/approval restrictions stay enforced. | Browser intent, MCP, URL and SDK controls; native observation separately |
+
+Fixtures emulate Service/model seams without a provider request. Record source SHA,
+UI package hashes, theme, viewport and environment with results. Green fixture pixels
+are not an installed-app check; live account/tool routing and physical-device behavior
+must be observed separately or marked NOT RUN/BLOCKED.
+
+CC-05 negative controls also feed complete HTML fences, a successful HTML write notification and proxy-loop HTML into the actual provider. Existing index.html and agent.md must survive browser-only turns; an explicit authoring request is the positive control. SDK Write/Bash/delegation and invented destinations are denied before actions, while blank browser opening still needs its existing grant and approval.

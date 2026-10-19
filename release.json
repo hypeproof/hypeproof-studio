@@ -1,0 +1,8 @@
+{
+  "schema": "hype-release-manifest/1",
+  "product": "studio",
+  "provides": {},
+  "requires": {
+    "studio-api": { "package": "@hypeproof/service-contracts", "manifest": "extensions/hypeproof-chat/package.json" }
+  }
+}

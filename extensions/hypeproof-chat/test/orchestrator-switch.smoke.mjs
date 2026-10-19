@@ -335,19 +335,22 @@ const ok = (name) => {
 // the host's `orchestrator` argument. The first eight were taken at 7b8a315 (A1+A2+A3
 // merged) and came out identical at d2a73755, d3ebcbd1 and 48cf6d86. The two publish
 // profiles were taken at 48cf6d86, where one-click publish (#1650) added publish_site.
+// #1762 updates only the two browser descriptions and browser_open's optional URL
+// schema. Restoring those three fields reproduced every prior off-case digest;
+// tool grants, policy decisions, approvals and all other turn surfaces are unchanged.
 const BASE = {
   kidsChat: "e4650ad1dc31c51b",
   // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
   // carry their own browser flag's tools. Re-taken on the #1527 merge; the other eight are unchanged.
-  kidsPolluted: "b5acb3ff355601bf",
+  kidsPolluted: "494abfee75d563cb",
   adultRW: "7ddfb7c2911645e8",
-  adultWide: "df0a1ba6e0920f98",
+  adultWide: "0f8ef91d064a446f",
   adultSubagents: "d07543df34fa6401",
-  adultCR: "6cda00d7ffa4fdd6",
-  minorFlagAdultTier: "99035f6bafb010d6",
-  unknownTier: "bfef4df1d7d9b589",
+  adultCR: "00772988edc47763",
+  minorFlagAdultTier: "827f3fd3545f46c8",
+  unknownTier: "1586a2743f9cca25",
   adultPublishOnly: "277052a7471ddaf3",
-  adultBrowserPublish: "39edc7360c618388",
+  adultBrowserPublish: "449ef9ac1a1a11e5",
 };
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");

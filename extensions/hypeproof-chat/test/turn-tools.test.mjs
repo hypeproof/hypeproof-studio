@@ -11,7 +11,9 @@ import { build } from 'esbuild';
 import { turnToolsAvailability, retryTurnToolMode, WebSearchActivity } from '../src/turnTools.ts';
 import { SdkWebCitations } from '../src/sdkWebCitations.ts';
 import { validActivityDraft, preservedDraftContent } from '../src/activityDraft.ts';
+import { canReserveRecovery, recoveryFull } from '../src/recoveryCapacity.ts';
 import { TaskWorkspaceStore } from '../src/taskWorkspaceStore.ts';
+import { MCP_BROWSER_OPEN, MCP_LIVE_PREVIEW_START } from '../src/browserMcp.ts';
 
 const require = createRequire(import.meta.url), extension = fileURLToPath(new URL('..', import.meta.url));
 const profile = { profile_id: 'adult-test', tools: { web_search: true }, coach_runtime: 'agent-sdk', sdk_tools: { read: true, write: true, browser: true, subagents: true }, ux: { coach: { naming_mode: 'fixed', fallback_name: '코치' } } };
@@ -21,7 +23,27 @@ const searchOutput = (url = 'https://example.test/reference') => ({ query: 'sour
 const copy = value => JSON.parse(JSON.stringify(value));
 const temporary = t => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-turn-tools-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; };
 
-const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {runSdkCoach,SdkUnavailableError} from './src/sdkCoach';", resolveDir: extension, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent', plugins: [{ name: 'scripted-provider-runtime', setup(b) {
+test('recovery admission bounds count and UTF-8 bytes without deleting legacy disk input', async t => {
+  const next={text:'새 요청',images:[],toolMode:'auto'};
+  const legacy=Array.from({length:12},(_,i)=>({text:`보관 ${i}`,images:['data:image/png;base64,cGhvdG8='],toolMode:'web-search'}));
+  assert.equal(canReserveRecovery(legacy.slice(0,7),next),true);
+  assert.equal(canReserveRecovery(legacy.slice(0,8),next),false);
+  const large={text:'큰 사진',toolMode:'auto',images:Array.from({length:3},()=>`data:image/png;base64,${'A'.repeat(8*1024*1024)}`)};
+  assert.equal(validActivityDraft({text:'',images:[],queued:null,recovered:[large]}),true,'valid older drafts remain readable');
+  assert.equal(recoveryFull([large]),true,'byte budget applies even to one recovered item');
+  assert.equal(canReserveRecovery([],large),false,'reserve the potential refusal before sending');
+  const root=temporary(t),store=new TaskWorkspaceStore(root,'capacity');await store.initialize();
+  const id=store.getView().activeTaskId;
+  const draft={text:'현재 초안',images:[],queued:'대기 요청',queuedPaused:true,recovered:legacy};
+  await store.saveDraft(id,draft);
+  const reopened=new TaskWorkspaceStore(root,'capacity');
+  assert.deepEqual(reopened.getDraft(),draft,'above-cap legacy items survive exact disk reopen');
+  assert.equal(canReserveRecovery(reopened.getDraft().recovered,next),false);
+  await reopened.saveDraft(id,{...draft,recovered:legacy.slice(1)});
+  assert.deepEqual(new TaskWorkspaceStore(root,'capacity').getDraft().recovered,legacy.slice(1),'explicit removal changes only the selected item');
+});
+
+const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {runSdkCoach,SdkUnavailableError} from './src/sdkCoach'; export {BrowserControl} from './src/browserControl';", resolveDir: extension, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent', plugins: [{ name: 'scripted-provider-runtime', setup(b) {
   b.onResolve({ filter: /^\.\/sdkCoach$/ }, args => args.importer.endsWith('/chatPanelProvider.ts') ? { path: 'sdk', namespace: 'runtime' } : undefined);
   b.onResolve({ filter: /^\.\/proxyClient$/ }, args => args.importer.endsWith('/chatPanelProvider.ts') ? { path: 'proxy', namespace: 'runtime' } : undefined);
   b.onLoad({ filter: /.*/, namespace: 'runtime' }, args => ({ loader: 'ts', resolveDir: extension, contents: args.path === 'sdk'
@@ -40,7 +62,7 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
     Buffer, URL, TextEncoder, TextDecoder, AbortController, AbortSignal, DOMException, crypto: globalThis.crypto, setTimeout, clearTimeout,
     fetch: async () => { calls.network++; throw new Error('Network is forbidden in this test'); },
   });
-  const { ChatPanelProvider, runSdkCoach, SdkUnavailableError } = module.exports;
+  const { ChatPanelProvider, runSdkCoach, SdkUnavailableError, BrowserControl } = module.exports;
   const h = Object.create(ChatPanelProvider.prototype), state = new Map();
   const context = { workspaceState: { get: (key, fallback) => state.get(key) ?? fallback, update: async (key, value) => state.set(key, value) }, secrets: { get: async () => 'synthetic-test-token' } };
   Object.assign(h, { context, nativeHistoryScope: 'task-a', pendingSends: 0, activeStreams: new Map(), turnTimelines: new Map(), turnRequests: new Map(),
@@ -54,8 +76,226 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
     resolveCoachCwd: () => undefined, crSdkResults: { reset() {}, onToolUse() {}, onToolResult() {} }, liveServer: { currentUrl: () => undefined },
     buildBrowserMcpHost: () => ({}), saveAgentMdIfPresent: async () => {}, observationWrites: Promise.resolve(), sitePublisher: () => ({ available: () => false }),
   });
-  return { h, posts, history, runtime, calls, runSdkCoach, SdkUnavailableError, root };
+  return { h, posts, history, runtime, calls, runSdkCoach, SdkUnavailableError, BrowserControl, root, vscode };
 }
+
+// Completion is the UI's permission to submit its queued follow-up. Hold each
+// real host persistence boundary to catch a reply that is displayed too early.
+test('queued follow-up becomes ready only after history and observations settle', async t => {
+  for (const runtimeMode of ['proxy', 'agent-sdk']) {
+    const f = fixture(t, { runtimeMode, resolvedProfile: { ...copy(profile), coach_runtime: runtimeMode } });
+    let releaseSave, enteredSave, releaseObservations;
+    const saving = new Promise(resolve => { enteredSave = resolve; });
+    const saved = new Promise(resolve => { releaseSave = resolve; });
+    f.h.observationWrites = new Promise(resolve => { releaseObservations = resolve; });
+    const appendHistory = f.h.appendHistory;
+    f.h.appendHistory = async items => { enteredSave(); await saved; await appendHistory(items); };
+    const post = f.h.post;
+    f.h.post = async event => {
+      if (event.type === 'streamEnd') assert.equal(f.h.hasActiveStream(), false, 'completion must allow the next request');
+      return post(event);
+    };
+    const pending = f.h.handleMessage({ type: 'sendMessage', text: '일정을 정리해줘', history: [], toolMode: 'auto' });
+    await saving;
+    assert.equal(f.posts.some(event => event.type === 'streamEnd'), false, 'history write is still pending');
+    releaseSave();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.posts.some(event => event.type === 'streamEnd'), false, 'observation write is still pending');
+    releaseObservations();
+    await pending;
+    assert.equal(f.posts.filter(event => event.type === 'streamEnd').length, 1);
+    assert.equal(f.posts.some(event => event.type === 'streamError'), false);
+    assert.equal(f.h.hasActiveStream(), false);
+    assert.equal(f.calls.network, 0);
+  }
+});
+
+test('Stop during final persistence does not later announce a successful completion', async t => {
+  const f = fixture(t);
+  let releaseObservations, saved;
+  f.h.observationWrites = new Promise(resolve => { releaseObservations = resolve; });
+  const historySaved = new Promise(resolve => { saved = resolve; });
+  const appendHistory = f.h.appendHistory;
+  f.h.appendHistory = async items => { await appendHistory(items); saved(); };
+  const pending = f.h.handleMessage({ type: 'sendMessage', text: '작업 정리', history: [], toolMode: 'auto' });
+  await historySaved;
+  await new Promise(resolve => setImmediate(resolve));
+  for (const controller of f.h.activeStreams.values()) controller.abort();
+  releaseObservations();
+  await pending;
+  assert.equal(f.posts.some(event => event.type === 'streamEnd'), false);
+  assert.equal(f.h.hasActiveStream(), false);
+});
+
+const browserOnlyText = '웹브라우저를 열어줘봐 옆에';
+const authoredPageText = '새 웹페이지를 만들어줘';
+const generatedHtml = '<!doctype html><html><head><title>Fixture page</title></head><body><h1>Generated fixture</h1></body></html>';
+const htmlFence = '```html\n' + generatedHtml + '\n```';
+
+// Keep the actual revealBuilt/saveGameToWorkspace methods. Only VS Code I/O and
+// native preview presentation are substituted; writes reach a real temporary file.
+function workspacePreview(f) {
+  const reveals = [], shown = [], written = [], index = path.join(f.root, 'index.html');
+  fs.writeFileSync(index, 'PRESERVE EXISTING WORK');
+  f.vscode.workspace.workspaceFolders = [{ uri: { fsPath: f.root } }];
+  f.vscode.workspace.fs = {
+    readFile: uri => fs.promises.readFile(uri.fsPath),
+    writeFile: async (uri, bytes) => { written.push(uri.fsPath); await fs.promises.writeFile(uri.fsPath, bytes); },
+  };
+  f.vscode.Uri.joinPath = (uri, name) => ({ fsPath: path.join(uri.fsPath, name) });
+  f.h.resolveCoachCwd = () => f.root;
+  f.h.emitArtifactChanged = () => {};
+  f.h.isLiveServerPreview = () => false;
+  f.h.preview = { show: async html => { shown.push(html); } };
+  const reveal = f.h.revealBuilt.bind(f.h);
+  f.h.revealBuilt = (...args) => { const running = reveal(...args); reveals.push(running); return running; };
+  return { reveals, shown, written, index };
+}
+
+test('browser-only streamed HTML cannot overwrite a page or save instructions; explicit authoring still reveals', async t => {
+  for (const [text, browserOnly] of [[browserOnlyText, true], [authoredPageText, false]]) {
+    const f = fixture(t), page = workspacePreview(f), agentSaves = [];
+    delete f.h.buildBrowserMcpHost;
+    f.h.siteCheckTabs = new Set();
+    f.h.saveAgentMdIfPresent = async text => { agentSaves.push(text); };
+    f.runtime.sdk = async args => {
+      f.calls.sdk.push(args);
+      assert.equal(args.browserHost.generalBrowserRequest, browserOnly, 'original user intent reaches the real per-turn host');
+      args.onDelta(htmlFence + '\n```agent.md\nUnexpected instructions\n```');
+      return { kind: 'success' };
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text, history: [], toolMode: 'auto', userMessageId: 'html-turn' });
+    await Promise.all(page.reveals);
+    assert.equal(f.calls.sdk.length, 1);
+    assert.equal(f.posts.some(event => event.type === 'streamError'), false);
+    assert.equal(page.reveals.length, browserOnly ? 0 : 1, text);
+    assert.equal(page.shown.length, browserOnly ? 0 : 1, text);
+    assert.equal(page.written.length, browserOnly ? 0 : 1, text);
+    assert.equal(fs.readFileSync(page.index, 'utf8'), browserOnly ? 'PRESERVE EXISTING WORK' : generatedHtml, text);
+    assert.equal(agentSaves.length, browserOnly ? 0 : 1, 'browser-only turns cannot persist model-authored instructions');
+    assert.equal(f.calls.network, 0);
+  }
+});
+
+test('browser-only successful HTML Write events cannot trigger delayed preview; explicit authoring still does', async t => {
+  for (const [text, browserOnly] of [[browserOnlyText, true], [authoredPageText, false]]) {
+    const f = fixture(t), page = workspacePreview(f), authored = path.join(f.root, 'page.html');
+    const delayedReveals = [], revealWritten = f.h.revealWrittenHtml.bind(f.h);
+    f.h.revealWrittenHtml = (...args) => { const running = revealWritten(...args); delayedReveals.push(running); return running; };
+    fs.writeFileSync(authored, generatedHtml);
+    t.after(() => clearTimeout(f.h.revealTimer));
+    f.runtime.sdk = async args => {
+      f.calls.sdk.push(args);
+      // An observed success event must not itself authorize another preview/write.
+      args.onActivity({ kind: 'tool_use', id: 'html-write', name: 'Write', input: { file_path: authored, content: generatedHtml } });
+      args.onActivity({ kind: 'tool_result', id: 'html-write', isError: false });
+      return { kind: 'success' };
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text, history: [], toolMode: 'auto', userMessageId: 'write-turn' });
+    await new Promise(resolve => setTimeout(resolve, 1050));
+    await Promise.all(delayedReveals);
+    await Promise.all(page.reveals);
+    assert.equal(f.calls.sdk.length, 1);
+    assert.equal(f.posts.some(event => event.type === 'streamError'), false);
+    assert.equal(delayedReveals.length, browserOnly ? 0 : 1, text);
+    assert.equal(page.reveals.length, browserOnly ? 0 : 1, text);
+    assert.equal(page.shown.length, browserOnly ? 0 : 1, text);
+    assert.equal(page.written.length, browserOnly ? 0 : 1, text);
+    assert.equal(fs.readFileSync(page.index, 'utf8'), browserOnly ? 'PRESERVE EXISTING WORK' : generatedHtml, text);
+    assert.equal(f.calls.network, 0);
+  }
+});
+
+test('browser-only proxy loop cannot reveal HTML, invent a destination, or retarget blank navigation', async t => {
+  for (const [text, browserOnly] of [[browserOnlyText, true], [authoredPageText, false]]) {
+    const f = fixture(t, { runtimeMode: 'proxy', resolvedProfile: { ...copy(profile), coach_runtime: 'proxy', browser_control: { enabled: true, max_iterations: 2 } } });
+    const page = workspacePreview(f), executed = [], retargeted = [];
+    // Exercise the real loop and its policy, with the native CDP action boundary scripted.
+    f.BrowserControl.prototype.execute = async call => { executed.push(copy(call)); return { isError: false, content: [{ type: 'text', text: 'Fixture browser result' }] }; };
+    f.h.liveServer.currentUrl = () => 'http://127.0.0.1:50123/';
+    const retarget = f.h.retargetLoopbackNavigation.bind(f.h);
+    f.h.retargetLoopbackNavigation = call => { retargeted.push(copy(call)); return retarget(call); };
+    f.runtime.proxy = async args => {
+      f.calls.proxy.push(args);
+      if (f.calls.proxy.length === 1) return { text: htmlFence, toolUses: [
+        { id: 'blank', name: 'browser_navigate', input: {} },
+        { id: 'invented', name: 'browser_navigate', input: { url: 'http://localhost:3000/' } },
+        { id: 'click', name: 'browser_click', input: { ref: 'e1' } },
+      ] };
+      args.onDelta('브라우저 요청을 처리했습니다.');
+      return { text: '브라우저 요청을 처리했습니다.', toolUses: [] };
+    };
+    await f.h.handleMessage({ type: 'sendMessage', text, history: [], toolMode: 'auto', userMessageId: 'proxy-turn' });
+    await Promise.all(page.reveals);
+    assert.equal(f.calls.proxy.length, 2);
+    assert.equal(f.posts.some(event => event.type === 'streamError'), false);
+    assert.deepEqual(executed.map(call => call.id), browserOnly ? ['blank'] : ['blank', 'invented', 'click']);
+    if (browserOnly) assert.equal(executed[0].input.url, 'about:blank');
+    else assert.equal(executed.find(call => call.id === 'invented').input.url, 'http://127.0.0.1:50123/');
+    assert.equal(retargeted.length, browserOnly ? 0 : 3);
+    assert.equal(page.reveals.length, browserOnly ? 0 : 1);
+    assert.equal(page.shown.length, browserOnly ? 0 : 1);
+    assert.equal(fs.readFileSync(page.index, 'utf8'), browserOnly ? 'PRESERVE EXISTING WORK' : generatedHtml);
+    const results = f.calls.proxy[1].toolTurns.at(-1).content;
+    assert.deepEqual(copy(results.map(result => [result.tool_use_id, Boolean(result.is_error)])), [['blank', false], ['invented', browserOnly], ['click', browserOnly]]);
+    assert.equal(f.calls.sdk.length + f.calls.network, 0);
+  }
+});
+
+test('browser-only SDK turn denies file, shell, delegation and invented URLs before approval while preserving blank-browser gates', async t => {
+  for (const browserOnly of [true, false]) {
+    const f = fixture(t), approvals = [], decisions = [], target = path.join(f.root, 'index.html');
+    fs.writeFileSync(target, 'PRESERVE EXISTING WORK');
+    const attempts = [
+      ['Write', { file_path: target, content: generatedHtml }],
+      ['Bash', { command: 'printf fixture > index.html' }],
+      ['Agent', { subagent_type: '리서처', prompt: 'Review the page' }],
+      [MCP_LIVE_PREVIEW_START, {}],
+      [MCP_BROWSER_OPEN, { url: 'https://invented.example/' }],
+      [MCP_BROWSER_OPEN, {}],
+    ];
+    const sdk = {
+      tool: (name, description, inputSchema, handler) => ({ name, description, inputSchema, handler }),
+      createSdkMcpServer: options => options,
+      query: args => (async function* () {
+        for (const [name, input] of attempts) {
+          const result = await args.options.canUseTool(name, input, { toolUseID: `attempt-${decisions.length}` });
+          decisions.push([name, result.behavior]);
+          if (name === 'Write' && result.behavior === 'allow') fs.writeFileSync(target, input.content);
+        }
+        yield { type: 'result', subtype: 'success', is_error: false };
+      })(),
+    };
+    const args = { sdk, zod: require('zod'), binaryResolution: { available: true, reasons: [] }, gatewayUrl: 'http://127.0.0.1:1/v1', token: 'test', model: 'fixture',
+      profile: { ...copy(profile), sdk_tools: { ...profile.sdk_tools, shell: true } }, systemPrompt: '', history: [], cwd: f.root,
+      userText: browserOnly ? browserOnlyText : authoredPageText, toolMode: 'auto', signal: new AbortController().signal, stallTimeoutMs: 0, onDelta() {},
+      requestApproval: async action => { approvals.push(action.toolName); return true; },
+      browserHost: { generalBrowserRequest: browserOnly, livePreviewUrl: async () => undefined },
+    };
+    await f.runSdkCoach(args);
+    if (browserOnly) {
+      assert.deepEqual(decisions, attempts.map(([name], i) => [name, i === attempts.length - 1 ? 'allow' : 'deny']));
+      assert.deepEqual(approvals, [MCP_BROWSER_OPEN], 'disallowed effects never reach an approval prompt');
+      assert.equal(fs.readFileSync(target, 'utf8'), 'PRESERVE EXISTING WORK');
+    } else {
+      assert.equal(decisions[0][1], 'allow', 'explicit authoring retains granted writes');
+      assert.equal(decisions[1][1], 'allow', 'explicit authoring retains granted shell approval');
+      assert.equal(decisions[2][1], 'allow', 'explicit authoring retains granted delegation');
+      assert.ok(approvals.includes('Write') && approvals.includes('Bash'));
+      assert.equal(fs.readFileSync(target, 'utf8'), generatedHtml);
+    }
+    for (const [granted, approved] of [[false, true], [true, false]]) {
+      let asked = 0, admission;
+      await f.runSdkCoach({ ...args, profile: { ...args.profile, sdk_tools: { browser: granted } }, browserHost: { ...args.browserHost, generalBrowserRequest: true },
+        requestApproval: async () => { asked++; return approved; },
+        sdk: { ...sdk, query: options => (async function* () { admission = await options.options.canUseTool(MCP_BROWSER_OPEN, {}, { toolUseID: 'blank-control' }); yield { type: 'result', subtype: 'success', is_error: false }; })() },
+      });
+      assert.equal(admission.behavior, 'deny', 'a blank browser still needs both grant and approval');
+      assert.equal(asked, granted ? 1 : 0);
+    }
+    assert.equal(f.calls.network, 0);
+  }
+});
 
 test('actual provider refuses unavailable search before model, observation, or input context consumption', async t => {
   const cases = [
@@ -213,6 +453,21 @@ test('durable draft, paused queue and user mode survive restart without acceptin
   assert.equal(validActivityDraft({ ...draft, queued: null }), false);
   assert.notDeepEqual(preservedDraftContent(draft), preservedDraftContent({ text: 'Recovered search\nNew draft', images: [], queued: null, toolMode: 'auto' }), 'merging differently selected requests loses intent');
   assert.deepEqual(preservedDraftContent({ ...draft, toolMode: 'web-search' }), preservedDraftContent({ text: 'Recovered search\nNew draft', images: [], queued: null, toolMode: 'web-search' }));
+});
+
+test('recovered requests retain their own text, tool mode and photos across disk reopen', async t => {
+  const root=temporary(t),store=new TaskWorkspaceStore(root,'recovered');await store.initialize();
+  const id=store.getView().activeTaskId;
+  const recovered=[{text:'Failed search A',toolMode:'web-search',images:['data:image/png;base64,c3ludGhldGlj']}];
+  const draft={text:'Next draft D',images:[],queued:'Queued C',queuedPaused:true,toolMode:'auto',queuedToolMode:'auto',recovered};
+  await store.saveDraft(id,draft);
+  const reopened=new TaskWorkspaceStore(root,'recovered');assert.deepEqual(reopened.getDraft(),draft);
+  assert.notDeepEqual(preservedDraftContent(draft),preservedDraftContent({...draft,recovered:[]}), 'recovery text participates in preservation checks');
+  const before=fs.readFileSync(store.filePath,'utf8');
+  for(const bad of [{...recovered[0],toolMode:'force-all-tools'},{...recovered[0],images:['https://untrusted.test/photo']},{...recovered[0],text:42},{...recovered[0],credential:'forbidden'}]){
+    await assert.rejects(reopened.saveDraft(id,{...draft,recovered:[bad]}));
+    assert.equal(fs.readFileSync(store.filePath,'utf8'),before);
+  }
 });
 
 test('actual events distinguish success, failure and no search without reading model claims', () => {

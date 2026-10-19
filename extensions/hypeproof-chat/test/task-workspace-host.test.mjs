@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createTaskHarness } from './task-workspace-harness.mjs';
@@ -66,5 +66,73 @@ test('actual host retains more than 200 messages and does not silently drop a fa
     assert.equal(f.h.connectionChanging, false);
     assert.match(f.posts.at(-1).error, /저장하지 못했습니다/);
     assert.equal(f.h.getHistory().length, 240);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('actual host identifies an unsaved conflicting draft without overwriting another writer', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-conflict-'));
+  try {
+    const unsaved = { text: '화면에만 있는 새 초안', images: ['data:image/png;base64,cGhvdG8='], queued: '보관한 질문', queuedToolMode: 'web-search' };
+    let f;
+    f = await createTaskHarness(root, message => {
+      if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: unsaved }));
+    });
+    const id = f.store.getView().activeTaskId;
+    await f.store.append(id, [{ id: 'context', role: 'user', content: '원래 대화 맥락', createdAt: 1 }]);
+    await f.handle(f.scoped({ type: 'saveActivityDraft', draft: { text: '저장된 초안', images: [], queued: null } }));
+    const other = new f.store.constructor(root, 'synthetic-personal-a');
+    await other.rename(id, '다른 창의 이름');
+    const bytes = await readFile(other.filePath, 'utf8');
+    await f.handle(f.scoped({ type: 'saveActivityDraft', draft: { text: '화면에만 있는 새 초안', images: [], queued: null } }));
+    const error = f.posts.at(-1);
+    assert.equal(error.type, 'taskWorkspaceError');
+    assert.equal(error.draftSaveFailed, true);
+    assert.match(error.error, /다른 창.*충돌.*현재 화면에만/);
+    assert.doesNotMatch(error.error, /다시 선택/);
+    assert.equal(await readFile(other.filePath, 'utf8'), bytes);
+    assert.equal(f.store.getDraft().text, '저장된 초안');
+    const request = f.scoped({ type: 'taskRecoverDraft' });
+    await writeFile(other.filePath, 'unreadable fixture snapshot');
+    await f.handle(request);
+    assert.equal(f.posts.at(-1).draftSaveFailed, true, 'a newer recovery failure must replace the previous persistent draft warning');
+    assert.match(f.posts.at(-1).error, /작업 기록 파일을 읽을 수 없습니다/);
+    assert.equal(await readFile(other.filePath, 'utf8'), 'unreadable fixture snapshot');
+    assert.equal(f.store.getView().activeTaskId, id);
+    assert.equal(f.h.connectionChanging, false);
+    await writeFile(other.filePath, bytes);
+    await Promise.all([f.handle(request), f.handle(request)]);
+    const recovered = f.store.getActiveTask();
+    assert.notEqual(recovered.id, id);
+    assert.equal(f.store.getView().tasks.length, 2, 'repeated clicks cannot create duplicate recovery tasks');
+    assert.deepEqual(JSON.parse(JSON.stringify(recovered.draft)), { ...unsaved, queuedPaused: true });
+    assert.equal(recovered.messages[0].content, '원래 대화 맥락');
+    const latest = new f.store.constructor(root, 'synthetic-personal-a');
+    assert.equal(latest.getTask(id).title, '다른 창의 이름');
+    assert.equal(latest.getTask(id).draft.text, '저장된 초안');
+    assert.equal(latest.getActiveTask().id, recovered.id);
+    assert.equal(f.h.connectionChanging, false);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('actual browser host opens a blank right-hand browser without starting a website', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-browser-'));
+  try {
+    const f = await createTaskHarness(root);
+    let previewStarts = 0;
+    f.h.siteCheckTabs = new Set();
+    f.h.liveServer = { currentUrl: () => null };
+    f.h.isCurriculumRuntimeEnabled = () => false;
+    f.h.startLivePreview = async () => { previewStarts++; return 'http://127.0.0.1:50000/'; };
+    const {runBrowserOpen, runLivePreviewStart} = await import('../src/browserMcp.ts');
+    const host = f.h.buildBrowserMcpHost('웹브라우저를 열어줘봐 옆에');
+    assert.equal((await runLivePreviewStart(host)).isError, true);
+    assert.equal((await runBrowserOpen(host, 'http://127.0.0.1:3000/')).isError, true);
+    assert.equal((await runBrowserOpen(host, undefined)).isError, undefined);
+    assert.deepEqual(f.opened.map(row => [row.url, row.options.viewColumn, row.options.preserveFocus]), [['about:blank', 2, true]]);
+    assert.equal(previewStarts, 0);
+    const authoring = f.h.buildBrowserMcpHost('내 웹사이트 미리보기를 열어줘');
+    assert.equal((await runLivePreviewStart(authoring)).isError, undefined);
+    assert.equal(previewStarts, 1);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

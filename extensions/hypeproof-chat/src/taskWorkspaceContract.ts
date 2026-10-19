@@ -13,6 +13,8 @@ export interface TaskSummary {
 export interface TaskSurfaceSelection { url: string; pinned: boolean }
 
 export interface TaskDocument extends TaskSummary {
+  /** Absent on old snapshots: preserve the existing name because its origin is unknown. */
+  titleOrigin?: 'default' | 'automatic' | 'manual';
   messages: ChatMessage[];
   draft: ActivityDraft;
   sourceSelection: TaskSurfaceSelection | null;
