@@ -1,4 +1,4 @@
-# Pester 5 tests for install.ps1 POSIX-shell detection (PRA-09, trial diagnosis I11).
+# Pester 5 tests for install.ps1 POSIX-shell detection (PRA-12, trial diagnosis I11).
 #
 # The installer asks winget for Git.Git in USER scope first, which lands Git Bash
 # under %LOCALAPPDATA%\Programs\Git. The old check looked only at

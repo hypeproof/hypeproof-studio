@@ -684,7 +684,7 @@ function Invoke-ToolPost($tool) {
 # user-scope Git.Git lands in %LOCALAPPDATA%\Programs\Git, not Program Files.
 # Checking only C:\Program Files\Git sent those participants into the WSL
 # install prompt (admin + reboot) on a machine that already had Git Bash
-# (trial diagnosis I11, PRA-09). The git.exe on PATH covers a custom install dir.
+# (trial diagnosis I11, PRA-12). The git.exe on PATH covers a custom install dir.
 # C:\Windows\System32\bash.exe is the WSL launcher, not Git Bash, and is never a
 # candidate. String concatenation, not Join-Path: Join-Path resolves PSDrives
 # and throws on a host without the drive (see Update-ProcessPath).
@@ -1076,7 +1076,7 @@ function Invoke-Doctor {
     }
 
     # POSIX shell must exist: Git Bash in any scope, or WSL with a distro. The
-    # inbox wsl.exe stub alone is not a shell (PRA-09).
+    # inbox wsl.exe stub alone is not a shell (PRA-12).
     $gitBash = Find-GitBash
     if ($gitBash) {
         Write-Ok "POSIX shell: Git Bash ($gitBash)"

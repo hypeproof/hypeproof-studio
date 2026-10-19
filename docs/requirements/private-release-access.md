@@ -17,7 +17,7 @@ People outside the organization install from a class kit (PRA-08, #1617).
 | PRA-06 | The requirement workflow supplies a Contents-read credential to the private Harness checkout without widening its normal workflow token. |
 | PRA-07 | Service development packages and deployment source remain private. Authenticate immutable release acquisition with existing Contents-read access, verify SHA-256 before installing, and stage artifacts only in ignored local/CI cache. No Service package tarball or source snapshot is committed to Studio or copied into Studio releases. Bundled packages preserve canonical implementation bytes and existing authorization behavior. |
 | PRA-08 | A person outside the organization installs from a class kit: the release's archive, `install.sh` or `install.ps1` and SDK seeder in one folder with `kit-info.txt` and `SHA256SUMS` (`install.sh --kit`, `install.ps1 -KitDir`). Every kit file is checked against `SHA256SUMS` before use; kit mode makes no GitHub call and asks for no login; dependency installs, app copy, SDK seed and doctor are the member steps. A kit comes from `scripts/make-class-kit.sh` (instructor hand-off) or from the Lab site's participation-code install, which checks the code with the Service and assembles the kit from release assets. `mirror-release` attaches the tag's installers and seeders to every release for that purpose. `SHA256SUMS` detects damage; it does not authenticate who handed the folder over. |
-| PRA-09 | The Windows installer (`install.ps1`) accepts Git Bash in any install scope as the POSIX shell: Program Files, `%LOCALAPPDATA%\Programs\Git` (winget user scope, which the installer requests first) or the Git root of the `git.exe` on PATH. A user-scope Git therefore never reaches the WSL install offer. WSL counts only when `wsl -l -q` exits 0 and lists a distribution; the inbox `wsl.exe` stub alone does not pass the doctor. `C:\Windows\System32\bash.exe` (the WSL launcher) is never treated as Git Bash. Trial diagnosis I11. |
+| PRA-12 | The Windows installer (`install.ps1`) accepts Git Bash in any install scope as the POSIX shell: Program Files, `%LOCALAPPDATA%\Programs\Git` (winget user scope, which the installer requests first) or the Git root of the `git.exe` on PATH. A user-scope Git therefore never reaches the WSL install offer. WSL counts only when `wsl -l -q` exits 0 and lists a distribution; the inbox `wsl.exe` stub alone does not pass the doctor. `C:\Windows\System32\bash.exe` (the WSL launcher) is never treated as Git Bash. Trial diagnosis I11. |
 
 ## Validation
 
@@ -44,7 +44,7 @@ without GitHub, damaged kits refused) and `scripts/tests/install-kit-fixture.ps1
 output kept off the return value, old optional tools reported). The Lab
 participation-code bootstrap is covered on the Lab side.
 
-PRA-09 controls: `scripts/tests/install-posix-shell.Tests.ps1` (Pester 5, mocked
+PRA-12 controls: `scripts/tests/install-posix-shell.Tests.ps1` (Pester 5, mocked
 paths, functions loaded from `install.ps1` itself): machine-scope and user-scope
 Git, a custom Git root from PATH and a WSL distro pass; no Git with only the
 `wsl.exe` stub fails the doctor and still reaches the WSL offer; the System32 WSL

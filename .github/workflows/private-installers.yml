@@ -45,7 +45,7 @@ jobs:
             if ($scenario -ne 'success' -and $code -eq 0) { throw "Negative control failed: $scenario" }
           }
           exit 0
-      # PRA-09: Git Bash in any scope counts; the inbox wsl.exe stub does not.
+      # PRA-12: Git Bash in any scope counts; the inbox wsl.exe stub does not.
       # Every path is mocked; nothing is installed.
       - name: POSIX shell detection (Pester, mocked paths)
         shell: pwsh
@@ -54,7 +54,7 @@ jobs:
           $r = Invoke-Pester scripts/tests/install-posix-shell.Tests.ps1 -Output Detailed -PassThru
           if ($r.FailedCount -gt 0 -or $r.PassedCount -eq 0) { throw 'POSIX shell detection tests failed' }
 
-  # PRA-09 field check, manual only: does winget's USER-scope Git.Git land Git
+  # PRA-12 field check, manual only: does winget's USER-scope Git.Git land Git
   # Bash where Find-GitBash looks (%LOCALAPPDATA%\Programs\Git)? The mocked
   # tests above assume that path; this job is the only thing that observes it.
   # It installs Git, so it does not run on every pull request.
