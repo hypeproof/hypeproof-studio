@@ -704,12 +704,71 @@ function Invoke-ToolPost($tool) {
 # ----------------------------------------------------------------------------
 # 8. POSIX shell guarantee (Git Bash, else WSL)
 # ----------------------------------------------------------------------------
+#
+# Where Git Bash can live. Install-WingetPackage asks for USER scope first, and a
+# user-scope Git.Git lands in %LOCALAPPDATA%\Programs\Git, not Program Files.
+# Checking only C:\Program Files\Git sent those participants into the WSL
+# install prompt (admin + reboot) on a machine that already had Git Bash
+# (trial diagnosis I11, PRA-12). The git.exe on PATH covers a custom install dir.
+# C:\Windows\System32\bash.exe is the WSL launcher, not Git Bash, and is never a
+# candidate. String concatenation, not Join-Path: Join-Path resolves PSDrives
+# and throws on a host without the drive (see Update-ProcessPath).
+function Get-GitBashCandidates {
+    $c = New-Object System.Collections.Generic.List[string]
+    foreach ($root in @($env:ProgramFiles, $env:ProgramW6432, ${env:ProgramFiles(x86)})) {
+        if ($root) { $c.Add($root.TrimEnd('\') + '\Git\bin\bash.exe') }
+    }
+    if ($env:LOCALAPPDATA) {
+        $c.Add($env:LOCALAPPDATA.TrimEnd('\') + '\Programs\Git\bin\bash.exe')
+    }
+    $git = Resolve-ToolCommand 'git'
+    if ($git -and $git.Source) {
+        $m = [regex]::Match([string]$git.Source, '^(?<root>.+?)\\(cmd|bin|mingw64\\bin)\\git\.exe$', 'IgnoreCase')
+        if ($m.Success) { $c.Add($m.Groups['root'].Value + '\bin\bash.exe') }
+    }
+    $c.Add('C:\Program Files\Git\bin\bash.exe')
+    $seen = @{}
+    foreach ($p in $c) {
+        $k = $p.ToLowerInvariant()
+        if ($seen.ContainsKey($k)) { continue }
+        $seen[$k] = $true
+        $p
+    }
+}
+
+function Find-GitBash {
+    foreach ($p in @(Get-GitBashCandidates)) {
+        if (Test-Path -LiteralPath $p -PathType Leaf) { return $p }
+    }
+    return $null
+}
+
+# Installed WSL distributions. The inbox wsl.exe exists on every Windows 10/11
+# machine; with no distro, `wsl -l -q` prints help text and exits non-zero. So
+# "wsl resolves" is not a shell, and non-empty output is not a distro list
+# unless the exit code is 0. Output is UTF-16; Windows PowerShell 5.1 keeps the
+# NULs, which are stripped before comparing.
+function Get-WslDistroNames {
+    $wsl = Resolve-ToolCommand 'wsl'
+    if (-not $wsl) { return @() }
+    try {
+        $global:LASTEXITCODE = 0
+        $out = & $wsl.Source -l -q 2>$null
+        if ($LASTEXITCODE -ne 0) { return @() }
+    } catch { return @() }
+    return @($out | ForEach-Object { ([string]$_ -replace "`0", '').Trim() } | Where-Object { $_ })
+}
+
+function Test-WslDistro {
+    return (@(Get-WslDistroNames).Count -gt 0)
+}
+
 function Ensure-PosixShell {
     param($receipt)
-    $gitBash = 'C:\Program Files\Git\bin\bash.exe'
-    if (Test-Path $gitBash) {
+    $gitBash = Find-GitBash
+    if ($gitBash) {
         Write-Ok "POSIX shell available: Git Bash ($gitBash)"
-        Add-ToUserPath 'C:\Program Files\Git\bin' $receipt
+        Add-ToUserPath ($gitBash.Substring(0, $gitBash.LastIndexOf('\'))) $receipt
         # Sanity: the bundled skills need real bash idioms ([[ ]], set -euo pipefail).
         try {
             $v = & $gitBash -c 'echo $BASH_VERSION'
@@ -721,13 +780,10 @@ function Ensure-PosixShell {
     Write-Warn2 'Git Bash not found (Git.Git should have provided it).'
     # WSL fallback - heavier; only if Git Bash truly unavailable.
     if (Test-Command 'wsl') {
-        try {
-            $distros = (& wsl -l -q) 2>$null
-            if ($distros) {
-                Write-Ok 'WSL present with a distro - POSIX shell available via wsl.'
-                return $true
-            }
-        } catch { }
+        if (Test-WslDistro) {
+            Write-Ok 'WSL present with a distro - POSIX shell available via wsl.'
+            return $true
+        }
         if (Confirm-Or 'Git Bash를 찾지 못했습니다. 대신 WSL에 Ubuntu를 설치할까요?' $false) {
             & wsl --install -d Ubuntu 2>&1 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
             Write-Warn2 'WSL/Ubuntu 설치를 마치려면 컴퓨터를 다시 시작해야 할 수 있습니다.'
@@ -1044,12 +1100,15 @@ function Invoke-Doctor {
         Write-Ok ("{0}: {1}" -f $tool.id, (($ver -split "`n")[0]).Trim())
     }
 
-    # POSIX shell must exist.
-    $gitBash = 'C:\Program Files\Git\bin\bash.exe'
-    if ((Test-Path $gitBash) -or (Test-Command 'wsl')) {
-        Write-Ok 'POSIX shell: available'
+    # POSIX shell must exist: Git Bash in any scope, or WSL with a distro. The
+    # inbox wsl.exe stub alone is not a shell (PRA-12).
+    $gitBash = Find-GitBash
+    if ($gitBash) {
+        Write-Ok "POSIX shell: Git Bash ($gitBash)"
+    } elseif (Test-WslDistro) {
+        Write-Ok 'POSIX shell: WSL distro'
     } else {
-        $fail += 'POSIX shell: neither Git Bash nor WSL available'
+        $fail += 'POSIX shell: no Git Bash and no WSL distro (wsl.exe without a distro is not a shell)'
     }
 
     # git config.
