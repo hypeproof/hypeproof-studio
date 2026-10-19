@@ -169,9 +169,34 @@ await test("marker: same shape the runtime trusts", () => {
 
 await test("offer gate: default off; on only with no binary on a pinned platform", () => {
   assert.equal(H.sdkSeedOnDemandEnabled({ setting: undefined, profile: {} }), false);
-  assert.equal(H.sdkSeedOnDemandEnabled({ setting: false, profile: { sdk_seed_on_demand: "true" } }), false);
   assert.equal(H.sdkSeedOnDemandEnabled({ setting: true, profile: null }), true);
-  assert.equal(H.sdkSeedOnDemandEnabled({ setting: false, profile: { sdk_seed_on_demand: true } }), true);
+  // Service-advertised switch (HPS_SDK_SEED_OFFER, hypeproof-service): the
+  // profile's `sdk_seed.fetch` turns the OFFER on with the setting off — same
+  // shape as `purchase?.available`. Positive control first.
+  assert.equal(H.sdkSeedOnDemandEnabled({ setting: false, profile: { sdk_seed: { fetch: true } } }), true);
+  assert.equal(H.sdkSeedOnDemandEnabled({ setting: undefined, profile: { activity_kind: "trial", sdk_seed: { fetch: true } } }), true);
+  // Negative controls: only the exact boolean `true` under `sdk_seed.fetch`.
+  for (const profile of [
+    { sdk_seed: { fetch: "true" } },
+    { sdk_seed: { fetch: 1 } },
+    { sdk_seed: { fetch: false } },
+    { sdk_seed: {} },
+    { sdk_seed: true },
+    { sdk_seed: null },
+    { sdk_seed: "fetch" },
+    { fetch: true },
+    // The draft key no Service ever sent is not a second contract.
+    { sdk_seed_on_demand: true },
+    "sdk_seed",
+    undefined,
+  ]) assert.equal(H.sdkSeedOnDemandEnabled({ setting: false, profile }), false, `opened by ${JSON.stringify(profile)}`);
+  // A setting value that is not exactly `true` does not open it either.
+  assert.equal(H.sdkSeedOnDemandEnabled({ setting: "true", profile: {} }), false);
+  // Wiring: the host must hand the SERVED profile to the gate, or the Service
+  // switch ships inert while every helper assertion above stays green.
+  const host = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  assert.match(host, /sdkSeedOnDemandEnabled\(\{\s*setting:\s*cfg\.get<boolean>\("sdkSeedOnDemand", false\),\s*profile\s*\}\)/);
+  assert.match(host, /await this\.maybeOfferSdkSeed\(profile,/);
   const none = { available: false, reasons: ["x"] };
   const base = { enabled: true, resolution: none, platformKey: "darwin-arm64", urls: {}, declined: false, inFlight: false };
   assert.equal(H.sdkSeedOfferDecision(base), "offer");

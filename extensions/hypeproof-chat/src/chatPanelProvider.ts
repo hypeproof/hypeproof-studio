@@ -4055,7 +4055,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /**
    * REQ-M46 (studio-sdk-seed-on-demand) — offer to fetch the public native SDK
    * seed when no binary resolves. Default off: `hypeproofChat.sdkSeedOnDemand`
-   * or a profile that advertises `sdk_seed_on_demand: true`. Nothing is
+   * or a profile that advertises `sdk_seed: { fetch: true }`. Nothing is
    * downloaded without the user's confirmation, and a seed is installed only
    * when its sha256 matches the release and its sha512 the value pinned in this
    * App (sdkSeedHelpers). Never throws: the turn goes on either way.

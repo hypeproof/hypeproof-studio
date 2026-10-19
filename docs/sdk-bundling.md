@@ -317,8 +317,12 @@ a seed tarball. Fetching the seed in the App is a separate, default-off change
 ## 10. Fetching the seed in the App (studio-sdk-seed-on-demand, REQ-M46)
 
 Default off: `hypeproofChat.sdkSeedOnDemand` (machine scope, restricted in
-untrusted workspaces), or a profile that advertises `sdk_seed_on_demand: true`
-(no Service sends it yet). When it is on and `resolveSdkBinary` finds nothing
+untrusted workspaces), or a profile that advertises `sdk_seed: { fetch: true }`.
+The Service sends that field to native trial and pass seats only, and only when
+`HPS_SDK_SEED_OFFER=enabled` (hypeproof-service, default off) — a trial user
+cannot reach a machine-scoped setting, so the Service switch is how a raw-zip
+trial install gets the offer. Either switch opens only the offer: the user
+still confirms and the seed is still verified. When it is on and `resolveSdkBinary` finds nothing
 before an agent-sdk turn, the host asks once per session in a modal. On
 confirmation `fetchSdkSeed` (`src/sdkSeedFetch.ts`) reads `sdk-seed.json` from
 the public release of the App's own tag (`v<extension version>`), downloads the

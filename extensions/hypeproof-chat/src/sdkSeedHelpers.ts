@@ -141,12 +141,17 @@ export function judgeSdkSeedBinary(size: number, minBytes: number = SDK_BINARY_M
 /**
  * Default-off gate. The offer exists only when the machine setting
  * `hypeproofChat.sdkSeedOnDemand` is true or the Service advertises it on the
- * profile (`sdk_seed_on_demand: true`; no Service sends it today).
+ * profile as `sdk_seed: { fetch: true }` (hypeproof-service HPS_SDK_SEED_OFFER,
+ * sent to native trial/pass seats only; same pattern as `purchase?.available`).
+ * The setting is machine-scoped and a trial user cannot reach it; the profile
+ * switch is how a raw-zip trial install gets the offer. Either way this only
+ * opens the OFFER: the user still confirms, and the seed is still verified.
  */
 export function sdkSeedOnDemandEnabled(args: { setting: unknown; profile: unknown }): boolean {
   if (args.setting === true) return true;
-  return !!args.profile && typeof args.profile === "object" &&
-    (args.profile as Record<string, unknown>).sdk_seed_on_demand === true;
+  if (!args.profile || typeof args.profile !== "object") return false;
+  const seed = (args.profile as { sdk_seed?: unknown }).sdk_seed;
+  return !!seed && typeof seed === "object" && (seed as { fetch?: unknown }).fetch === true;
 }
 
 export type SdkSeedOfferDecision =
