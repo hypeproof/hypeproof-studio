@@ -46,7 +46,14 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChang
     {kept.length > 0 && <div className="hps-msg-images">
       {kept.map((url, i) => <span key={i} className="hps-edit-image">
         <img src={url} alt={`첨부 이미지 ${i + 1}`} />
-        <button type="button" onClick={() => { const next = kept.filter((_, j) => j !== i); setKept(next); onChange?.(value, next); }} aria-label={`첨부 이미지 ${i + 1} 빼기`}>×</button>
+        <button type="button" onClick={(event) => {
+          const next = kept.filter((_, j) => j !== i);
+          // Return the keyboard before its last attachment control unmounts.
+          // An unrelated focus owner keeps its focus; no delayed callback can steal it.
+          if (!next.length && document.activeElement === event.currentTarget) area.current?.focus({ preventScroll: true });
+          setKept(next);
+          onChange?.(value, next);
+        }} aria-label={`첨부 이미지 ${i + 1} 빼기`}>×</button>
       </span>)}
     </div>}
     <textarea

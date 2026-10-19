@@ -1473,3 +1473,7 @@ If an accepted edited request fails before any answer is saved, retain its text 
 ### Inline attachment removal targets (REQ-STUDIO-CHAT-EDIT-RESEND)
 
 Each retained image in the prompt editor has a minimum 44×44px non-shrinking tile. Its remove button stays inside that tile, independently clickable even for tiny or mixed-size images at narrow widths. Images keep their aspect ratio; removing an attachment never sends the prompt or changes the separate composer draft.
+
+### Attachment removal clarity and focus (REQ-STUDIO-CHAT-EDIT-RESEND)
+
+Keep the attachment removal glyph readable on a compact opaque, theme-aware backing within its existing 44px hit target. When deleting the last attachment removes the focused control, focus returns to the edit textarea without an extra Tab. Do not move a different focus owner or change either draft.
