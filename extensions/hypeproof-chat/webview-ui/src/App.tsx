@@ -314,6 +314,9 @@ export function App() {
   const [sendPending, setSendPending] = useState(false);
   // CGP-CHAT-R-005 — the active task's verdicts as the host last confirmed them (drawn optimistically on click).
   const [verdicts, setVerdicts] = useState<VerdictMap>({});
+  const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
+  const latestVerdictRequests = useRef(new Map<string, string>());
+  const ownVerdictRequests = useRef(new Set<string>());
   const [shouldCrash, setShouldCrash] = useState(false);
   const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -340,6 +343,9 @@ export function App() {
           setHistorySaveError(null);
           setIncomingImage(null);
           verifyRequests.current.clear();
+          pendingVerdicts.current.clear();
+          latestVerdictRequests.current.clear();
+          ownVerdictRequests.current.clear();
           activeStream.current = null;
         }
         scope.current = msg.config.activity?.id;
@@ -365,6 +371,7 @@ export function App() {
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'taskWorkspaceError':
+          if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
           setWorkspaceError(msg.error);
           if (msg.historySaveFailed) setHistorySaveError(msg.error);
           // A list/config refresh is not proof that the current draft reached disk.
@@ -386,7 +393,19 @@ export function App() {
         }
         case "config":      dispatch({ type: "config", config: msg.config }); break;
         case "history":     dispatch({ type: "history", messages: msg.messages }); break;
-        case "answerVerdicts": setVerdicts(msg.verdicts); break;
+        case "answerVerdicts": {
+          const latest = msg.messageId ? latestVerdictRequests.current.get(msg.messageId) : undefined;
+          if (latest && msg.requestId && ownVerdictRequests.current.has(msg.requestId) && latest !== msg.requestId) break;
+          if (msg.messageId && pendingVerdicts.current.get(msg.messageId)?.requestId === msg.requestId) pendingVerdicts.current.delete(msg.messageId);
+          const next = { ...msg.verdicts };
+          // A saved snapshot must not replace a newer choice whose write is still pending.
+          for (const [id, pending] of pendingVerdicts.current) {
+            if (pending.value) next[id] = pending.value;
+            else delete next[id];
+          }
+          setVerdicts(next);
+          break;
+        }
         case "streamStart": dispatch({ type: "streamStart", streamId: msg.streamId, messageId: msg.messageId }); break;
         case "attachedImagesSaved": dispatch({ type: "attachmentsSaved", note: msg.note }); break;
         case "streamChunk": dispatch({ type: "streamChunk", delta: msg.delta }); break;
@@ -568,8 +587,12 @@ export function App() {
 
   // CGP-CHAT-R-005 — a verdict is drawn at once and confirmed (or put back) by the host's answer.
   const judgeAnswer = (messageId: string, next: VerdictState | null) => {
+    const requestId = crypto.randomUUID();
+    ownVerdictRequests.current.add(requestId);
+    latestVerdictRequests.current.set(messageId, requestId);
+    pendingVerdicts.current.set(messageId, { requestId, value: next });
     setVerdicts(({ [messageId]: _previous, ...rest }) => next ? { ...rest, [messageId]: next } : rest);
-    postToHost({ type: "answerVerdict", messageId, verdict: next?.verdict ?? null, ...(next?.reason ? { reason: next.reason } : {}), ...(next?.note ? { note: next.note } : {}) });
+    postToHost({ type: "answerVerdict", requestId, messageId, verdict: next?.verdict ?? null, ...(next?.reason ? { reason: next.reason } : {}), ...(next?.note ? { note: next.note } : {}) });
   };
 
   // S-04 (#48): "다시 보내기" on a stream error reuses the LAST user prompt

@@ -7177,7 +7177,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // The saved conversation holds finished turns only (a turn is saved when it ends), so a running
     // turn is not in it and an earlier answer stays judgeable while the next one streams.
     const history = store.getHistory(taskId);
-    if (!verdictTargets(history, false).has(request.messageId)) { await this.postVerdicts(); return; }
+    if (!verdictTargets(history, false).has(request.messageId)) {
+      await this.post({ type: "answerVerdicts", activityId, taskId, requestId: request.requestId, messageId: request.messageId, verdicts: store.getVerdicts(taskId) });
+      return;
+    }
     const promptId = promptIdFor(history, request.messageId);
     const turnId = this.answerTurns?.get(request.messageId.split("#")[0]);
     const event: VerdictEvent = {
@@ -7192,12 +7195,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     try {
       const verdicts = await store.recordVerdict(taskId, event);
       if (this.currentTaskStore?.() !== store || activityConnections(this.context)?.scope !== activityId) return;
-      await this.post({ type: "answerVerdicts", activityId, taskId, verdicts });
+      await this.post({ type: "answerVerdicts", activityId, taskId, requestId: request.requestId, messageId: request.messageId, verdicts });
     } catch (error) {
       // A delayed failure belongs to the originating workspace, not the task now on screen.
       if (this.currentTaskStore?.() !== store || activityConnections(this.context)?.scope !== activityId) return;
-      await this.post({ type: "answerVerdicts", activityId, taskId, verdicts: store.getVerdicts(taskId) });
-      await this.post({ activityId, taskId, type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '답변에 남긴 선택을 저장하지 못했습니다.' });
+      await this.post({ type: "answerVerdicts", activityId, taskId, requestId: request.requestId, messageId: request.messageId, verdicts: store.getVerdicts(taskId) });
+      await this.post({ activityId, taskId, type: 'taskWorkspaceError', verdictRequestId: request.requestId, verdictMessageId: request.messageId, error: error instanceof Error ? error.message : '답변에 남긴 선택을 저장하지 못했습니다.' });
     }
   }
 
