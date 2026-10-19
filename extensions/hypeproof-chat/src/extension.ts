@@ -43,6 +43,7 @@ import {
   currentBundleVersion,
   reportManualUpdateCheckFailure,
 } from "./updateChecker";
+import { isUpdateDeferredError } from "./updateTransport";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
 import { canonicalizeExistingPath, decideWorkspaceSwitch, isSameLocation } from "./workspaceRouting";
@@ -655,6 +656,11 @@ export async function activate(context: vscode.ExtensionContext) {
           onUpdateScheduled: () => provider.setAvailableUpdate(null),
         });
       } catch (error) {
+        // D19: a rate-limited anonymous public re-check is "check later", not a failure.
+        if (isUpdateDeferredError(error)) {
+          void reportManualUpdateCheckFailure(error);
+          return;
+        }
         vscode.window.showErrorMessage(`업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. ${(error as Error).message}`);
       }
     }),
