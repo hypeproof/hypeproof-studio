@@ -12,6 +12,7 @@ interface Props {
   busy: boolean;
   error: string | null;
   unsavedDraft?: boolean;
+  unsavedHistory?: boolean;
   onDismissError: () => void;
   children: ReactNode;
 }
@@ -50,7 +51,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, onDismissError, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, onDismissError, children }: Props) {
   const [filter, setFilter] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -298,7 +299,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </li>)}
       </ul>
       {!visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}
-      <p className="tw-local-note" role="status">{unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
+      <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
     </nav>
     <section ref={main} className="tw-main" aria-label="작업 공간">
       <header className="tw-heading">
@@ -312,7 +313,9 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>
-      {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && (unsavedDraft
+      {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && (unsavedHistory
+        ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskSelect', id: view.activeTaskId! })}>대화 저장 다시 시도</button>
+        : unsavedDraft
         ? <button className="tw-quiet" disabled={blocked} onClick={() => postToHost({ type: 'taskRecoverDraft' })}>새 작업에 보관</button>
         : <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>)}</div>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
