@@ -49,6 +49,7 @@ import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTur
 import {
   coachSeatKeyFor,
   isAbortError,
+  sdkErrorDisplayText,
   sdkToolToActionRequest,
   summarizeToolInput,
   withCoachSeatLock,
@@ -5998,7 +5999,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       return;
     }
-    const reason = err instanceof Error ? err.message : "문제가 발생했습니다. 운영 담당자에게 문의해 주세요.";
+    // REQ-M44 — the SDK's own error text ("Claude Code returned an error result: API Error: …") never reaches the
+    // banner: the Service's sentence, or a Korean line by status. The App's own Korean errors pass through unchanged.
+    const reason = sdkErrorDisplayText(err);
     const requestId = err instanceof ProxyTransportError ? err.requestId : undefined;
     if (requestId) this.lastRequestId = requestId;
     void this.post({ type: "streamError", streamId, error: reason, requestId });
