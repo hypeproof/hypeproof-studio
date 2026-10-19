@@ -68,3 +68,26 @@ test('actual host retains more than 200 messages and does not silently drop a fa
     assert.equal(f.h.getHistory().length, 240);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+test('actual browser host opens a blank right-hand browser without starting a website', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-browser-'));
+  try {
+    const f = await createTaskHarness(root);
+    let previewStarts = 0;
+    f.h.siteCheckTabs = new Set();
+    f.h.liveServer = { currentUrl: () => null };
+    f.h.isCurriculumRuntimeEnabled = () => false;
+    f.h.startLivePreview = async () => { previewStarts++; return 'http://127.0.0.1:50000/'; };
+    const {runBrowserOpen, runLivePreviewStart} = await import('../src/browserMcp.ts');
+    const host = f.h.buildBrowserMcpHost('웹브라우저를 열어줘봐 옆에');
+    assert.equal((await runLivePreviewStart(host)).isError, true);
+    assert.equal((await runBrowserOpen(host, 'http://127.0.0.1:3000/')).isError, true);
+    assert.equal((await runBrowserOpen(host, undefined)).isError, undefined);
+    assert.deepEqual(f.opened.map(row => [row.url, row.options.viewColumn, row.options.preserveFocus]), [['about:blank', 2, true]]);
+    assert.equal(previewStarts, 0);
+    const authoring = f.h.buildBrowserMcpHost('내 웹사이트 미리보기를 열어줘');
+    assert.equal((await runLivePreviewStart(authoring)).isError, undefined);
+    assert.equal(previewStarts, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

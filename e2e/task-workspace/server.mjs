@@ -5,10 +5,10 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTaskHarness } from '../../extensions/hypeproof-chat/test/task-workspace-harness.mjs';
 
-export async function serveTaskWorkspace({ port = 0, directory, profile = null, turnTools = { webSearch: { available: false, reason: "현재 연결에서는 웹 검색을 사용할 수 없습니다." } } } = {}) {
+export async function serveTaskWorkspace({ port = 0, directory, profile = null, seedHistory = true, configExtras = {}, fixtureActions = {}, turnTools = { webSearch: { available: false, reason: "현재 연결에서는 웹 검색을 사용할 수 없습니다." } } } = {}) {
   const root = directory ?? await mkdtemp(join(tmpdir(), 'hps-vessel-browser-'));
   const clients = new Set();
-  const f = await createTaskHarness(root, message => { for (const client of clients) client.write(`data: ${JSON.stringify(message)}\n\n`); }, { profile, turnTools });
+  const f = await createTaskHarness(root, message => { for (const client of clients) client.write(`data: ${JSON.stringify(message)}\n\n`); }, { profile, turnTools, configExtras });
   let failNextDraft = false;
   let failNextSourceOpen = false;
   let failNextSourceReturn = false;
@@ -37,7 +37,7 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
     return saveDraft(...args);
   };
   const id = f.store.getView().activeTaskId;
-  if (f.store.getHistory().length === 0 && f.store.getView().tasks.length === 1) {
+  if (seedHistory && f.store.getHistory().length === 0 && f.store.getView().tasks.length === 1) {
     await f.store.rename(id, '릴리즈 엔진 설계');
     await f.store.append(id, [
       { id: 'fixture-user', role: 'user', content: '매일 새 기능을 전달하려면 어디부터 바꾸면 좋을까?', createdAt: 1 },
@@ -45,6 +45,8 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
       { id: 'fixture-answer', role: 'assistant', content: '먼저 릴리즈 후보와 검증 결과를 하나로 묶겠습니다.\n\n**검증이 끝난 같은 파일**을 담당자가 승인하도록 만들고, 실패하면 원인을 남겨 다음 실행에서 이어갑니다.\n\n기존 화면과 기록 저장을 재사용하면 앱 전체를 매번 다시 만들 필요가 없습니다.', createdAt: 3, citations: [{ url: 'https://www.electronjs.org/docs/latest/tutorial/security', title: 'Electron 보안 지침', domain: 'electronjs.org', tier: 3 }] },
     ]);
   }
+  const theme = JSON.parse(await readFile(new URL('../../extensions/hypeproof-chat/media/hypeproof-theme.json', import.meta.url), 'utf8'));
+  const nativeTheme = '<style>:root{color-scheme:dark;' + Object.entries(theme.colors).map(([key,value]) => `--vscode-${key.replaceAll('.', '-')}:${value};`).join('') + '--vscode-descriptionForeground:#ACB9A5;}</style>';
   const dist = resolve(dirname(fileURLToPath(import.meta.url)), '../../extensions/hypeproof-chat/webview-ui/dist');
   const bridge = `<script>
     (() => {
@@ -59,8 +61,10 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
       const url = new URL(request.url, 'http://127.0.0.1');
       if (url.pathname === '/fixture-controls') {
         response.setHeader('content-type', 'text/html; charset=utf-8');
-        response.end(`<!doctype html><html lang="ko"><title>독립 검증용 제어</title><body><h1>독립 검증용 제어</h1><p>실제 제품 UI 밖의 합성 이벤트입니다. 다른 탭의 작업 화면에 적용합니다.</p><button data-action="rich">표·코드·긴 문장 추가</button> <button data-action="history">이전 대화 20개 추가</button> <button data-action="source">새 출처 추가</button> <button data-action="stream">실행 시작</button> <button data-action="delta">응답 이어 쓰기</button> <button data-action="stop">실행 종료</button> <button data-action="fail-draft">다음 입력 저장 실패</button> <button data-action="fail-source-open">다음 출처 열기 실패</button> <button data-action="fail-source-return">다음 대화 복귀 실패</button> <button data-action="image">합성 이미지 첨부</button> <button data-action="tools-available">합성 웹 검색 사용 가능</button> <button data-action="tools-unavailable">합성 웹 검색 사용 불가</button> <button data-action="reject">합성 요청 실패</button><p id="status" role="status"></p><p><a href="/?theme=light" target="_blank">밝은 화면 열기</a> <a href="/" target="_blank">어두운 화면 열기</a></p><script>document.querySelectorAll('button').forEach(button=>button.onclick=async()=>{const response=await fetch('/fixture/'+button.dataset.action,{method:'POST'});document.querySelector('#status').textContent=response.ok?button.textContent+' 적용됨':'실패';});</script></body></html>`); return;
+        response.end(`<!doctype html><html lang="ko"><title>독립 검증용 제어</title><body><h1>독립 검증용 제어</h1><p>실제 제품 UI 밖의 합성 이벤트입니다. 다른 탭의 작업 화면에 적용합니다.</p><button data-action="rich">표·코드·긴 문장 추가</button> <button data-action="history">이전 대화 20개 추가</button> <button data-action="source">새 출처 추가</button> <button data-action="stream">실행 시작</button> <button data-action="delta">응답 이어 쓰기</button> <button data-action="stop">실행 종료</button> <button data-action="fail-draft">다음 입력 저장 실패</button> <button data-action="fail-source-open">다음 출처 열기 실패</button> <button data-action="fail-source-return">다음 대화 복귀 실패</button> <button data-action="image">합성 이미지 첨부</button> <button data-action="tools-available">합성 웹 검색 사용 가능</button> <button data-action="tools-unavailable">합성 웹 검색 사용 불가</button> <button data-action="reject">합성 요청 실패</button>${Object.entries(fixtureActions).map(([key,value]) => `<button data-action="${key}">${value.label}</button>`).join(" ")}<p id="status" role="status"></p><p><a href="/?theme=light" target="_blank">밝은 화면 열기</a> <a href="/" target="_blank">어두운 화면 열기</a></p><script>document.querySelectorAll('button').forEach(button=>button.onclick=async()=>{const response=await fetch('/fixture/'+button.dataset.action,{method:'POST'});document.querySelector('#status').textContent=response.ok?button.textContent+' 적용됨':'실패';});</script></body></html>`); return;
       }
+      const fixtureAction = fixtureActions[url.pathname.replace('/fixture/', '')];
+      if (url.pathname.startsWith('/fixture/') && request.method === 'POST' && fixtureAction) { await fixtureAction.run(f); response.end('{}'); return; }
       if (url.pathname === '/fixture/tools-available' && request.method === 'POST') { turnTools.webSearch = { available: true }; await f.h.postConfig(); response.end('{}'); return; }
       if (url.pathname === '/fixture/tools-unavailable' && request.method === 'POST') { turnTools.webSearch = { available: false, reason: '현재 연결에서는 웹 검색을 사용할 수 없습니다.' }; await f.h.postConfig(); response.end('{}'); return; }
       if (url.pathname === '/fixture/reject' && request.method === 'POST') {
@@ -115,7 +119,7 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
       if (target.endsWith('index.html')) {
         if (url.searchParams.get('clipboard') === 'denied') response.setHeader('Permissions-Policy', 'clipboard-write=()');
         const light = url.searchParams.get('theme') === 'light' ? '<style>:root{color-scheme:light;--vscode-sideBar-background:#f5f6f7;--vscode-editor-background:#fff;--vscode-foreground:#24282f;--vscode-descriptionForeground:#626873;--vscode-panel-border:#d9dde2;--vscode-input-background:#f4f5f6;--vscode-list-inactiveSelectionBackground:#e9edf2;--vscode-list-hoverBackground:#e4e9ef;--vscode-focusBorder:#3068a7;--vscode-button-background:#365d95;--vscode-button-foreground:#fff;}</style>' : '';
-        body = Buffer.from(body.toString().replace('<head>', '<head>' + bridge + light));
+        body = Buffer.from(body.toString().replace('<head>', '<head>' + bridge + (url.searchParams.get('theme') === 'green' ? nativeTheme : light)));
       }
       response.setHeader('content-type', target.endsWith('.js') ? 'text/javascript' : target.endsWith('.css') ? 'text/css' : 'text/html'); response.end(body);
     } catch (error) { response.writeHead(500).end(String(error.message)); }
@@ -124,7 +128,7 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
   return { url: `http://127.0.0.1:${server.address().port}`, root, fixture: f, sent, canceled, close: async () => { for (const client of clients) client.end(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); } };
 }
 
-if (process.argv.includes('--serve')) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv.includes('--serve')) {
   const { resolvedProfile } = await import('../../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs');
   const result = await serveTaskWorkspace({ port: Number(process.env.PORT ?? 8789), directory: process.env.HPS_TASK_FIXTURE_DIR, profile: resolvedProfile(3, { lesson: undefined, input: { image_paste: true }, welcome: { greeting_md: '개인 작업을 이어가세요.', example_prompts: [] } }) });
   console.log(JSON.stringify({ url: result.url, directory: result.root, scope: 'built product React + actual host task handlers + real local store; synthetic Service and browser API' }));
