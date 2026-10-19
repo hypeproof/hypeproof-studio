@@ -32,6 +32,7 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   const full = parseTrialOffer({ entry: 'open', duration_hours: 24, request_limit: 10, unit: 'turn', claim: '/v1/free/claim', min_app_version: '0.1.58', available: true });
   assert.deepEqual({ ...full }, { entry: 'open', durationHours: 24, requestLimit: 10, unit: 'turn', claim: FREE_CLAIM_PATH, minAppVersion: '0.1.58', available: true });
   assert.equal(freeStartAdvertised(full), true, 'positive: the full advertisement turns free start on');
+  assert.equal(parseTrialOffer({ entry: 'open', min_app_version: '2026.1019.0' }).minAppVersion, '2026.1019.0', 'a calendar-version floor is kept');
   // Drained day.
   const drained = parseTrialOffer({ entry: 'open', claim: '/v1/free/claim', available: false, reason: 'daily_cap', resumes_at: '2026-10-19T15:00:00.000Z' });
   assert.equal(drained.reason, 'daily_cap'); assert.equal(drained.resumesAt, '2026-10-19T15:00:00.000Z'); assert.equal(freeStartAdvertised(drained), true);
@@ -59,6 +60,14 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   assert.equal(fs.belowFloor('0.1.58', '0.1.58'), false);
   assert.equal(fs.belowFloor('0.1.57', undefined), false, 'no floor advertised → not below');
   assert.equal(fs.belowFloor('test', '0.1.58'), false, 'unreadable version → let the Service decide');
+  // Shipped releases are calendar versions (tags v2026.MMDD.N[-rc.N]).
+  assert.equal(fs.compareVersions('2026.1019.0', '2026.1019.0'), 0);
+  assert.equal(fs.compareVersions('2026.1017.0', '2026.1019.0'), -1);
+  assert.equal(fs.compareVersions('2026.1019.0-rc.1', '2026.1019.0'), -1, 'calendar prerelease < release');
+  assert.equal(fs.compareVersions('2026.1019.0', '0.1.58'), 1, 'calendar > 0.x');
+  assert.equal(fs.belowFloor('2026.1017.0', '2026.1019.0'), true);
+  assert.equal(fs.belowFloor('2026.1019.0', '2026.1019.0'), false);
+  assert.equal(fs.compareVersions('20261.1019.0', '0.1.0'), null, 'still bounded: 5-digit major');
   assert.equal(fs.freeClaimUrl('http://127.0.0.1:18851/v1/'), 'http://127.0.0.1:18851/v1/free/claim');
   assert.equal(fs.freeClaimUrl('https://api.hypeproof-ai.xyz/v1'), 'https://api.hypeproof-ai.xyz/v1/free/claim');
   assert.equal(fs.isInstallId('3f0c1d2e-6a4b-4c8d-9e1f-0a1b2c3d4e5f'), true);
@@ -158,7 +167,8 @@ const noTrialWord = (s, what) => assert.ok(typeof s === 'string' && !s.includes(
   const b = banner.errorBannerPresentation;
   assert.deepEqual({ ...b(purchase.FREE_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '무료 사용량을 모두 썼어요' });
   assert.deepEqual({ ...b(purchase.FREE_EXPIRED_FRIENDLY) }, { icon: '⏳', title: '무료 사용 시간이 끝났어요' });
-  assert.deepEqual({ ...b(purchase.FREE_DAILY_CAP_NOTICE) }, { icon: '🌙', title: '오늘 무료 사용량이 모두 소진됐어요' }, 'positive: the cap notice is not a lost connection');
+  assert.deepEqual({ ...b(purchase.FREE_DAILY_CAP_NOTICE) }, { icon: '🌙', title: '오늘 무료 사용량이 모두 소진됐어요', tone: 'notice' }, 'positive: the cap notice is a calm notice, not a lost connection (D4)');
+  for (const m of [purchase.FREE_EXHAUSTED_FRIENDLY, purchase.TRIAL_EXHAUSTED_FRIENDLY, ...unrelated.map((e) => e.message)]) assert.equal(b(m).tone, undefined, `negative: only the daily cap is a notice: ${m}`);
   assert.deepEqual({ ...b(purchase.TRIAL_EXHAUSTED_FRIENDLY) }, { icon: '⏳', title: '체험이 끝났어요' }, 'negative: code trial banner unchanged');
   for (const e of unrelated) assert.notEqual(b(e.message).icon, '⏳', `negative: ${e.message}`);
   assert.equal(b('무료 이미지 생성은 지원하지 않습니다.').title, '문제가 생겼어요');

@@ -32,8 +32,8 @@ export interface TrialOffer {
 
 /** The only claim route this build knows how to call (Service SPEC §1.2). */
 export const FREE_CLAIM_PATH = "/v1/free/claim";
-/** Same bound as the Service (`VERSION_RE` in lib/trial-funnel.ts). */
-const VERSION_RE = /^\d{1,3}\.\d{1,3}\.\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$/;
+/** Same bound as the Service (`VERSION_RE` in lib/trial-funnel.ts). Releases are calendar versions (`2026.1017.0`). */
+const VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$/;
 
 /** The note under the "AI 체험하기" choice. The allowance is present only when the Service advertised it. */
 export interface TrialEntryNote {
