@@ -485,7 +485,7 @@ export type WebviewMessage = (
   | { type: 'taskCreate' }
   | { type: 'taskRecoverDraft' }
   | { type: 'taskSelect'; id: string }
-  | { type: 'taskRename'; title: string }
+  | { type: 'taskRename'; title: string; requestId?: string }
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
@@ -664,6 +664,7 @@ export type WebviewMessage = (
 export type HostMessage = (
   | { type: 'sourceOpenResult'; requestId: string; url: string; taskId: string; opened: boolean; error?: string }
   | { type: 'sourceReturn'; requestId: string; url: string; taskId: string }
+  | { type: 'taskRenameResult'; requestId: string; saved: boolean }
   | { type: 'taskWorkspaceState'; view: import('./taskWorkspaceContract').TaskWorkspaceView }
   | { type: 'taskWorkspaceError'; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
