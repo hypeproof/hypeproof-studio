@@ -29,6 +29,13 @@ function NotCovered({ items }: { items: string[] }) {
   </p>;
 }
 
+function failedTitle(view: TurnReviewView): string {
+  if (view.failed?.length) return "일부 파일을 되돌리지 못했어요";
+  if (view.tooLarge) return "작업 폴더에 파일이 너무 많아서 되돌리지 못했어요";
+  if (!view.beforeRestoreKept && view.nothingChanged) return "지금 상태를 먼저 보관하지 못해서 되돌리지 않았어요";
+  return "되돌리지 못했어요";
+}
+
 export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBarProps) {
   const n = turnReviewCount(view);
   if (view.state === "restored") {
@@ -42,12 +49,10 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
   }
   if (view.state === "failed") {
     return <section className="hps-turn-review" data-testid="turn-review" data-state="failed" role="alert">
-      {view.nothingChanged
-        ? <p className="hps-turn-review-title">지금 상태를 먼저 보관하지 못해서 아무 파일도 바꾸지 않았어요.</p>
-        : <>
-          <p className="hps-turn-review-title">일부 파일을 되돌리지 못했어요</p>
-          {!!view.failed?.length && <ul className="hps-turn-review-failed">{view.failed.map((p) => <li key={p}><code>{p}</code></li>)}</ul>}
-        </>}
+      {/* Each line states one measured fact: what failed, whether any file changed, whether 복구 직전 was kept. */}
+      <p className="hps-turn-review-title">{failedTitle(view)}</p>
+      {!!view.failed?.length && <ul className="hps-turn-review-failed">{view.failed.map((p) => <li key={p}><code>{p}</code></li>)}</ul>}
+      {view.nothingChanged && <p className="hps-turn-review-note">작업 폴더의 파일은 하나도 바꾸지 않았어요.</p>}
       {view.beforeRestoreKept && <p className="hps-turn-review-note">되돌리기 직전 상태는 따로 보관해 뒀어요.</p>}
       <NotCovered items={view.notCovered} />
       <p className="hps-turn-review-note">{EXTERNAL_NOTE}</p>

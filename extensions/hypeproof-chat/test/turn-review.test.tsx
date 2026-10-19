@@ -65,9 +65,30 @@ t("negative control: a partial failure never reads as success and names the file
 });
 t("nothing changed when the pre-revert state could not be kept", () => {
   const html = bar({ ...OPEN, state: "failed", failed: [], nothingChanged: true, beforeRestoreKept: false });
-  has(html, "아무 파일도 바꾸지 않았어요");
+  has(html, "지금 상태를 먼저 보관하지 못해서 되돌리지 않았어요");
+  has(html, "작업 폴더의 파일은 하나도 바꾸지 않았어요.");
   lacks(html, "일부 파일을 되돌리지 못했어요");
   lacks(html, "직전 상태");
+});
+t("folder_too_large: kept 복구 직전 and nothing changed, with no contradicting line", () => {
+  // The host's mapping of a restoreToPoint outcome { error: "folder_too_large", touched: false, beforeRestore }.
+  const html = bar({ ...OPEN, state: "failed", failed: [], nothingChanged: true, tooLarge: true, beforeRestoreKept: true });
+  has(html, "작업 폴더에 파일이 너무 많아서 되돌리지 못했어요");
+  has(html, "작업 폴더의 파일은 하나도 바꾸지 않았어요.");
+  has(html, "되돌리기 직전 상태는 따로 보관해 뒀어요.");
+  lacks(html, "보관하지 못해서");
+  lacks(html, "일부 파일을 되돌리지 못했어요");
+});
+t("a partial failure after changes does not say nothing changed", () => {
+  const html = bar({ ...OPEN, state: "failed", failed: ["docs/a.txt"], nothingChanged: false, beforeRestoreKept: true });
+  has(html, "일부 파일을 되돌리지 못했어요");
+  lacks(html, "하나도 바꾸지 않았어요");
+});
+t("unsafe paths only (nothing touched): names the files and says nothing changed", () => {
+  const html = bar({ ...OPEN, state: "failed", failed: ["notes/a.txt"], nothingChanged: true, beforeRestoreKept: true });
+  has(html, "일부 파일을 되돌리지 못했어요");
+  has(html, "<code>notes/a.txt</code>");
+  has(html, "작업 폴더의 파일은 하나도 바꾸지 않았어요.");
 });
 
 // The default chat render has no bar (the host sends one only after a turn changed files), so the A5 digests stay.

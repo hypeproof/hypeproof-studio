@@ -324,7 +324,8 @@ export function diffRestorePoint(point: Pick<RestoreManifest, "files" | "notCove
 
 export interface RestoreFailure {
   path: string;
-  reason: "snapshot_damaged" | "write_failed" | "remove_failed" | "verify_mismatch";
+  /** `unsafe_path`: a component of the path (or the file itself) is a link, not a directory, or leaves the folder; nothing was written through it. */
+  reason: "snapshot_damaged" | "write_failed" | "remove_failed" | "verify_mismatch" | "unsafe_path";
 }
 
 export interface RestoreOutcome {
@@ -340,6 +341,8 @@ export interface RestoreOutcome {
   notCovered: NotCovered[];
   /** Digest of the folder after the revert, from a fresh scan. */
   afterDigest?: string;
+  /** Whether anything in the folder was changed (a file written or removed, a directory made or removed). */
+  touched: boolean;
   error?: string;
 }
 
@@ -360,6 +363,46 @@ function inside(root: string, target: string): boolean {
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
 }
 
+const errCode = (e: unknown) => (e as NodeJS.ErrnoException)?.code;
+
+/**
+ * Is it safe to change `rel` under `realRoot` (already a real path)? Every existing parent
+ * component must be a real directory (lstat: not a link) whose real path stays inside the
+ * folder; the target itself, when it exists, must be of `kind` and not a link. A missing
+ * component ends the walk: everything below it will be created by us, one level at a time.
+ */
+async function safeToChange(realRoot: string, rel: string, kind: "file" | "dir"): Promise<boolean> {
+  if (!safeRel(rel)) return false;
+  const parts = rel.split("/");
+  let cur = realRoot;
+  for (let i = 0; i < parts.length; i++) {
+    cur = path.join(cur, parts[i]);
+    const last = i === parts.length - 1;
+    let st: import("node:fs").Stats;
+    try { st = await fs.lstat(cur); } catch (e) { return errCode(e) === "ENOENT"; }
+    if (st.isSymbolicLink()) return false;
+    if (!last && !st.isDirectory()) return false;
+    if (last && (kind === "file" ? !st.isFile() : !st.isDirectory())) return false;
+    try { if (!inside(realRoot, await fs.realpath(cur))) return false; } catch { return false; }
+  }
+  return true;
+}
+
+/** Create the missing parents of `rel` one level at a time, refusing any component that is not a real directory. */
+async function makeParents(realRoot: string, rel: string, onMade: () => void): Promise<boolean> {
+  const parts = rel.split("/").slice(0, -1);
+  let cur = realRoot;
+  for (const part of parts) {
+    cur = path.join(cur, part);
+    try { await fs.mkdir(cur); onMade(); } catch (e) { if (errCode(e) !== "EEXIST") return false; }
+    let st: import("node:fs").Stats;
+    try { st = await fs.lstat(cur); } catch { return false; }
+    if (st.isSymbolicLink() || !st.isDirectory()) return false;
+    try { if (!inside(realRoot, await fs.realpath(cur))) return false; } catch { return false; }
+  }
+  return true;
+}
+
 /**
  * Put the folder back to `point`. Order: record "복구 직전" (a failure there stops
  * everything), remove files the point does not have, write every file whose bytes differ
@@ -367,18 +410,22 @@ function inside(root: string, target: string): boolean {
  * directories the point did not have and are now empty, then rescan and verify.
  */
 export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcome> {
-  const root = path.resolve(req.root);
   const failed: RestoreFailure[] = [];
+  let root: string;
+  try { root = await fs.realpath(path.resolve(req.root)); }
+  catch { return { ok: false, restored: [], removed: [], failed: [], notCovered: [], touched: false, error: "before_restore_failed: work folder unreadable" }; }
+  let touched = false;
+  const mark = () => { touched = true; };
   let before: RestoreManifest;
   try {
     // The "복구 직전" point must survive this revert's own pruning, and so must the target
     // (its blobs are about to be read).
     before = (await takeRestorePoint({ store: req.store, root, id: req.beforeRestoreId, turnId: req.point.turnId, kind: "before_restore", now: req.now, keep: req.keep, protect: [req.point.id], limits: req.limits })).point;
   } catch (e) {
-    return { ok: false, restored: [], removed: [], failed: [], notCovered: [], error: `before_restore_failed: ${String((e as Error)?.message ?? e).slice(0, 160)}` };
+    return { ok: false, restored: [], removed: [], failed: [], notCovered: [], touched: false, error: `before_restore_failed: ${String((e as Error)?.message ?? e).slice(0, 160)}` };
   }
   if (!before.complete) {
-    return { ok: false, beforeRestore: before, restored: [], removed: [], failed: [], notCovered: [], error: "folder_too_large" };
+    return { ok: false, beforeRestore: before, restored: [], removed: [], failed: [], notCovered: [], touched: false, error: "folder_too_large" };
   }
   const target = new Map(req.point.files.map((f) => [f.path, f]));
   const uncoveredInPoint = new Set(req.point.notCovered.map((n) => n.path));
@@ -390,8 +437,8 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
   for (const f of before.files) {
     if (target.has(f.path) || uncoveredInPoint.has(f.path)) continue;
     const abs = path.join(root, ...f.path.split("/"));
-    if (!inside(root, abs)) { failed.push({ path: f.path, reason: "remove_failed" }); continue; }
-    try { await fs.unlink(abs); removed.push(f.path); } catch { failed.push({ path: f.path, reason: "remove_failed" }); }
+    if (!inside(root, abs) || !(await safeToChange(root, f.path, "file"))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
+    try { await fs.unlink(abs); mark(); removed.push(f.path); } catch { failed.push({ path: f.path, reason: "remove_failed" }); }
   }
 
   // 2. Files whose bytes differ, or that are gone: write the pre-turn bytes.
@@ -401,24 +448,32 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
     const now = current.get(f.path);
     if (now && now.sha256 === f.sha256 && now.size === f.size) continue;
     const abs = path.join(root, ...f.path.split("/"));
-    if (!inside(root, abs)) { failed.push({ path: f.path, reason: "write_failed" }); continue; }
+    // Never write through a link: a folder or file swapped for a link (to anywhere) is refused and named.
+    if (!inside(root, abs) || !(await safeToChange(root, f.path, "file"))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
     let data: Buffer;
     try { data = await fs.readFile(blobPath(req.store, f.sha256)); } catch { failed.push({ path: f.path, reason: "snapshot_damaged" }); continue; }
     if (sha256(data) !== f.sha256 || data.length !== f.size) { failed.push({ path: f.path, reason: "snapshot_damaged" }); continue; }
+    if (!(await makeParents(root, f.path, mark))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
+    // Re-check right before writing: the parents were just made or verified.
+    if (!(await safeToChange(root, f.path, "file"))) { failed.push({ path: f.path, reason: "unsafe_path" }); continue; }
+    const tmp = `${abs}.hps-restore-${randomUUID()}.tmp`;
     try {
-      await fs.mkdir(path.dirname(abs), { recursive: true });
-      const tmp = `${abs}.hps-restore-${randomUUID()}.tmp`;
-      await fs.writeFile(tmp, data);
+      await fs.writeFile(tmp, data, { flag: "wx" }); // never through an existing entry
       await fs.rename(tmp, abs);
+      mark();
       restored.push(f.path);
-    } catch { failed.push({ path: f.path, reason: "write_failed" }); }
+    } catch {
+      try { await fs.unlink(tmp); } catch (e) { if (errCode(e) !== "ENOENT") mark(); }
+      failed.push({ path: f.path, reason: "write_failed" });
+    }
   }
 
   // 3. Directories the point did not have, deepest first, only when empty.
   const keepDirs = new Set(req.point.dirs);
   for (const d of [...before.dirs].sort((a, b) => b.length - a.length)) {
     if (keepDirs.has(d) || uncoveredInPoint.has(d)) continue;
-    try { await fs.rmdir(path.join(root, ...d.split("/"))); } catch { /* not empty (uncovered content) or gone: leave it */ }
+    if (!(await safeToChange(root, d, "dir"))) continue; // a link is never followed; it stays, and the scan names it
+    try { await fs.rmdir(path.join(root, ...d.split("/"))); mark(); } catch { /* not empty (uncovered content) or gone: leave it */ }
   }
 
   // 4. Verify from a fresh scan: every point file has its manifest hash, every removed file is gone.
@@ -441,5 +496,6 @@ export async function restoreToPoint(req: RestoreRequest): Promise<RestoreOutcom
     failed,
     notCovered,
     afterDigest: after.digest,
+    touched,
   };
 }

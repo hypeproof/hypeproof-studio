@@ -4474,7 +4474,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         restoredCount: out.restored.length + out.removed.length,
         failed: out.failed.map((f) => f.path),
         beforeRestoreKept: !!out.beforeRestore,
-        nothingChanged: !!out.error,
+        nothingChanged: !out.touched,
+        tooLarge: out.error === "folder_too_large",
         notCovered: out.notCovered.map((n) => n.path),
       };
       this.spool?.recordWorkflow({
@@ -4490,7 +4491,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
     } catch {
       // Nothing is claimed: an unexpected failure reads as a partial failure with no list.
-      review.view = { ...review.view, state: "failed", failed: [], beforeRestoreKept: false };
+      // Unknown whether anything was written, so neither "nothing changed" nor "kept" is claimed.
+      review.view = { ...review.view, state: "failed", failed: [], beforeRestoreKept: false, nothingChanged: false, tooLarge: false };
       this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_revert", payload: { restore_point: review.point.id, target_digest: review.point.digest, ok: false, error: "unexpected", ...counts } });
     } finally {
       this.turnRestoreBusy = false;

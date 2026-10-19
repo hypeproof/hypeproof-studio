@@ -963,9 +963,17 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
   not have are removed, every file whose bytes differ is written from its copy after the copy's own
   sha256 is checked against the manifest (a damaged copy is not written over the learner's file),
   directories the turn created are removed when empty, and the folder is rescanned: every point
-  file must have its manifest hash and every removed file must be gone. Success reads "이번 요청
+  file must have its manifest hash and every removed file must be gone. Nothing is ever written,
+  created or removed through a link: before each write, mkdir, unlink or rmdir every existing
+  path component is checked with lstat (no link, a real directory, real path inside the folder),
+  missing parents are created one level at a time and re-checked, and a target that is itself a
+  link is refused. Such a path is reported as failed (`unsafe_path`) and the link is left in place;
+  the "복구 직전" point names it as not covered (`link`). A turn that replaced `docs/` with a link to
+  an outside folder therefore cannot make the revert write outside the work folder. Success reads "이번 요청
   전으로 되돌렸어요 …"; any difference reads "일부 파일을 되돌리지 못했어요" with the files, never
-  success. Both state that the pre-revert state is kept and that published sites, the browser and
+  success. The failure lines state only measured facts from the outcome: which files failed,
+  whether any file in the folder was changed (`touched`), whether "복구 직전" was kept, and for a
+  folder too large to restore, that reason. Both state whether the pre-revert state is kept and that published sites, the browser and
   command side effects outside the work folder are not restored. New sends wait while a revert runs.
 - **Evidence (REQ-Q1).** Keep and revert are local spool workflow events `turn_review_keep` and
   `turn_review_revert` with the restore point id, before/target/after manifest digests and counts.
@@ -980,7 +988,8 @@ page shown stays until the learner reopens it), and any Chalk view. Mid-turn cha
 work folder are out of scope by design. Verification: U (`extensions/hypeproof-chat/test/turn-restore.smoke.mjs`
 — real temp folders with planted add/change/delete including a nested directory and a binary,
 exact-hash revert, 복구 직전 round trip, caps, links, pruning, tampered-copy and lying-manifest
-negative controls, host wiring lock; `extensions/hypeproof-chat/test/turn-review.test.tsx` — bar
+negative controls, a parent folder or target file swapped for a link to outside (outside listing and
+bytes unchanged; both fail on the previous code), a deep nested positive control, host wiring lock; `extensions/hypeproof-chat/test/turn-review.test.tsx` — bar
 states and copy, partial failure never reads as success, default chat render has no bar). Native
 app run: NOT RUN.
 

@@ -165,6 +165,79 @@ await t("links are recorded as not covered and never followed", async () => {
   eq(point.notCovered, [{ path: "out", reason: "link" }]);
 });
 
+const listing = (dir) => fs.readdirSync(dir).sort();
+const bytesOf = (dir) => Object.fromEntries(listing(dir).map((n) => [n, fs.readFileSync(path.join(dir, n), "utf8")]));
+
+await t("security (a): a parent folder swapped for a link to outside is refused; the outside folder is unchanged", async () => {
+  const root = tmp("swapdir"); const store = tmp("store"); const outside = tmp("outside");
+  write(root, "docs/a.txt", "inside a");
+  write(root, "docs/sub/b.txt", "inside b");
+  write(root, "index.html", "page");
+  write(outside, "a.txt", "OUTSIDE ORIGINAL");
+  write(outside, "keep.txt", "untouched");
+  const { point } = await takeRestorePoint({ store, root, id: "sa", turnId: "sa", kind: "turn" });
+  // The turn: rm -rf docs && ln -s <outside> docs (and an ordinary change elsewhere).
+  fs.rmSync(path.join(root, "docs"), { recursive: true });
+  fs.symlinkSync(outside, path.join(root, "docs"));
+  write(root, "index.html", "changed page");
+  const outsideBefore = bytesOf(outside);
+  const out = await restoreToPoint({ store, root, point, beforeRestoreId: "sa-before" });
+  ok(!out.ok, "a revert through a link must not succeed");
+  eq(out.failed.map((f) => [f.path, f.reason]).sort(), [["docs/a.txt", "unsafe_path"], ["docs/sub/b.txt", "unsafe_path"]], "failures");
+  ok(!out.restored.includes("docs/a.txt"), "claimed restored through a link");
+  eq(listing(outside), ["a.txt", "keep.txt"], "outside listing changed");
+  eq(bytesOf(outside), outsideBefore, "outside bytes changed");
+  ok(!fs.existsSync(path.join(outside, "sub")), "a directory was created outside");
+  ok(fs.lstatSync(path.join(root, "docs")).isSymbolicLink(), "the link itself is left for the learner to see");
+  eq(fs.readFileSync(path.join(root, "index.html"), "utf8"), "page", "the safe file is still restored");
+  // 복구 직전 names the link instead of skipping it silently.
+  const pre = await loadRestorePoint(store, "sa-before");
+  eq(pre.notCovered, [{ path: "docs", reason: "link" }], "복구 직전 must record the link as not covered");
+  ok(out.notCovered.some((n) => n.path === "docs" && n.reason === "link"), "outcome names the link");
+  ok(out.touched, "index.html was written");
+});
+
+await t("security (b): a target file replaced by a link to an outside file is refused; the outside file is unchanged", async () => {
+  const root = tmp("swapfile"); const store = tmp("store"); const outside = tmp("outside");
+  write(root, "notes/a.txt", "inside");
+  write(outside, "secret.txt", "OUTSIDE SECRET");
+  const { point } = await takeRestorePoint({ store, root, id: "sb", turnId: "sb", kind: "turn" });
+  fs.unlinkSync(path.join(root, "notes/a.txt"));
+  fs.symlinkSync(path.join(outside, "secret.txt"), path.join(root, "notes/a.txt"));
+  const out = await restoreToPoint({ store, root, point, beforeRestoreId: "sb-before" });
+  ok(!out.ok, "must fail");
+  eq(out.failed, [{ path: "notes/a.txt", reason: "unsafe_path" }]);
+  eq(fs.readFileSync(path.join(outside, "secret.txt"), "utf8"), "OUTSIDE SECRET", "outside file overwritten");
+  eq(listing(outside), ["secret.txt"]);
+  ok(fs.lstatSync(path.join(root, "notes/a.txt")).isSymbolicLink(), "link replaced silently");
+  eq((await loadRestorePoint(store, "sb-before")).notCovered, [{ path: "notes/a.txt", reason: "link" }]);
+  eq(out.touched, false, "nothing was changed");
+});
+
+await t("security (c) positive control: a normal deep nested restore still works after the link checks", async () => {
+  const root = tmp("nested"); const store = tmp("store");
+  write(root, "a/b/c/d.txt", "deep");
+  write(root, "a/b/e.bin", BIN);
+  const { point } = await takeRestorePoint({ store, root, id: "sc", turnId: "sc", kind: "turn" });
+  fs.rmSync(path.join(root, "a"), { recursive: true });
+  write(root, "a/x.txt", "new");
+  const out = await restoreToPoint({ store, root, point, beforeRestoreId: "sc-before" });
+  ok(out.ok, JSON.stringify(out.failed));
+  eq(fs.readFileSync(path.join(root, "a/b/c/d.txt"), "utf8"), "deep");
+  eq(hashOf(root, "a/b/e.bin"), sha(BIN));
+  ok(!has(root, "a/x.txt"), "added file left");
+  eq((await scanFolder(root)).digest, point.digest);
+});
+
+await t("folder_too_large reports that nothing was changed while 복구 직전 was kept", async () => {
+  const root = tmp("big"); const store = tmp("store");
+  write(root, "a.txt", "1");
+  const { point } = await takeRestorePoint({ store, root, id: "ft", turnId: "ft", kind: "turn" });
+  for (let i = 0; i < 6; i++) write(root, `d${i}/f.txt`, "x");
+  const out = await restoreToPoint({ store, root, point, beforeRestoreId: "ft-before", limits: { entriesMax: 4 } });
+  eq([out.ok, out.error, out.touched, !!out.beforeRestore], [false, "folder_too_large", false, true]);
+});
+
 await t("pruning keeps the newest N points and drops blobs nobody names", async () => {
   const root = tmp("prune"); const store = tmp("store");
   for (let i = 0; i < 12; i++) {
@@ -255,6 +328,8 @@ await t("host wiring: one restore point before every runtime, one review after i
   ok(/case "turnRevert":\s*case "turnKeep":\s*case "turnReviewClose":\s*await this\.handleTurnReviewMessage\(msg\);/.test(src), "webview messages not routed");
   ok(/recordWorkflow\(\{ turnId: review\.point\.turnId, event: "turn_review_keep"/.test(src), "keep not recorded");
   ok(/event: "turn_review_revert"/.test(src), "revert not recorded");
+  ok(src.includes("nothingChanged: !out.touched,") && src.includes('tooLarge: out.error === "folder_too_large",'), "bar flags must come from the measured outcome");
+  ok(!src.includes("nothingChanged: !!out.error"), "an error is not the same as nothing changed");
   eq((src.match(/if \(this\.turnRestoreBusy\) \{ await this\.refuseSendWhileRestoring\([^)]*\); return; \}\s*await this\.handleSend\(/g) ?? []).length, 2, "send and retry must wait for a running revert");
 });
 

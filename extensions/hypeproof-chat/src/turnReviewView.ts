@@ -18,8 +18,10 @@ export interface TurnReviewView {
   failed?: string[];
   /** The "복구 직전" point was recorded, so the state before the revert can still be recovered. */
   beforeRestoreKept?: boolean;
-  /** Why nothing was changed at all (the pre-revert point could not be recorded, or the folder is too large). */
+  /** After a revert attempt: no file in the folder was written or removed (from the restore outcome, not inferred). */
   nothingChanged?: boolean;
+  /** The revert was refused because the folder has more entries than a restore point covers. */
+  tooLarge?: boolean;
   /** A one-line refusal for the last button press (e.g. a turn is running); the bar stays as it was. */
   notice?: string;
 }
