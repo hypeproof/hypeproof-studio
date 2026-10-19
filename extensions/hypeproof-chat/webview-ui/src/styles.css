@@ -1108,6 +1108,25 @@ html, body, #root {
   font-size: 11px;
 }
 
+/* AE-15 / CGP-ART-R-002 — review bar for the last turn's file changes. Neutral surface, no accent:
+   neither choice is the "right" one. */
+.hps-turn-review {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--vscode-descriptionForeground, #888);
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hps-turn-review[data-state="failed"] { border-left-color: var(--vscode-errorForeground, #f14c4c); }
+.hps-turn-review-title { margin: 0 0 4px; font-weight: 600; }
+.hps-turn-review-note { margin: 4px 0; color: var(--vscode-descriptionForeground, #888); }
+.hps-turn-review ul { margin: 2px 0 6px; padding-left: 18px; }
+.hps-turn-review code { overflow-wrap: anywhere; }
+.hps-turn-review-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.hps-turn-review-actions button { font-size: 12px; padding: 4px 10px; cursor: pointer; }
+
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
  * `.hps-tool-log` box is gone — that was the container that split the screen into two

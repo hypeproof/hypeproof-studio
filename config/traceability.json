@@ -6402,6 +6402,58 @@
           "path": "extensions/hypeproof-chat/test/ai-can-do.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-REQ-TURN-RESTORE",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE",
+        "ST-REQ-LEARNING-AGENT-EXPERIENCE",
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Per-turn restore points (#673)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-TURN-RESTORE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-RESTORE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/turnRestore.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/turnReviewView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TurnReviewBar.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TURN-RESTORE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-RESTORE",
+        "ST-IMP-TURN-RESTORE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/turn-restore.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/turn-review.test.tsx"
+        }
+      ]
     }
   ]
 }
