@@ -2301,7 +2301,8 @@ function ErrorBanner({
         <div className="hps-error-banner-msg">{message}</div>
         {runbookUrl && (
           <div className="hps-error-banner-runbook">
-            <a href={runbookUrl} target="_blank" rel="noopener noreferrer">
+            {/* CGP-ART-R-008: the host decides where a link opens; a raw target=_blank anchor would reach the system browser. */}
+            <a href={runbookUrl} onClick={(e) => { e.preventDefault(); postToHost({ type: "openExternal", url: runbookUrl }); }}>
               📖 강사 안내 — 세션 여는 법
             </a>
           </div>
