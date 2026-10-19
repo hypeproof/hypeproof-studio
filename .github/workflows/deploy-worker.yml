@@ -138,9 +138,7 @@ jobs:
             -H 'content-type: application/json' \
             -d '{}' 2>/dev/null)"
           if [[ "$code" == "200" ]]; then
-            echo "canary session closed"
-          elif [[ "$code" == "404" ]]; then
-            echo "no open canary session (already closed by trap — ok)"
+            echo "canary session closed (or already closed — endpoint is idempotent)"
           else
             echo "::error::canary session close returned HTTP $code"
             exit 1
