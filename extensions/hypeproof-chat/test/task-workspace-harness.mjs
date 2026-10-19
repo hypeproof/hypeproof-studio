@@ -32,11 +32,15 @@ export async function createTaskHarness(root, onMessage = () => {}, { profile = 
   Object.assign(h, { context, taskWorkspace: { activityId: activity.id, store }, taskChanging: false, connectionChanging: false, draftWrites: Promise.resolve(), activeStreams: new Map(), pendingSends: 0, elementQueue: { queued: null }, aiDisclosure: { noticeForReady: () => null }, postInbox: async () => {}, postLearningState: async () => {} });
   const source = { postMessage: async message => { const copy = JSON.parse(JSON.stringify(message)); posts.push(copy); onMessage(copy); return true; } };
   h.editorChat = { webview: source, reveal: () => { if (browserState.failReturn) throw Error('Synthetic focus failure'); browserState.commands.push('editorChat.reveal'); } };
-  h.postConfig = async () => h.post({ type: 'config', config: {
-    proxyUrl: 'http://127.0.0.1/v1', model: 'fixture-no-model', hasToken: true, ...configExtras,
-    activity: { ...activity, verified: true }, activityDraft: store.getDraft(), taskWorkspace: store.getView(),
-    coach: { name: 'HypeProof', personality: '', configured: true }, profile, turnTools,
-  } });
+  h.postConfig = async () => {
+    // Match production: a recreated UI must read the accepted draft after persistence.
+    await h.draftWrites;
+    return h.post({ type: 'config', config: {
+      proxyUrl: 'http://127.0.0.1/v1', model: 'fixture-no-model', hasToken: true, ...configExtras,
+      activity: { ...activity, verified: true }, activityDraft: store.getDraft(), taskWorkspace: store.getView(),
+      coach: { name: 'HypeProof', personality: '', configured: true }, profile, turnTools,
+    } });
+  };
   return { h, store, source, opened, posts, connections, activity, browserState,
     handle: message => h.handleMessage(message, source),
     scoped: message => ({ ...message, activityId: activity.id, taskId: store.getView().activeTaskId }),
