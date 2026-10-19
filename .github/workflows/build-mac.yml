@@ -374,8 +374,10 @@ jobs:
         run: |
           set -euo pipefail
           OUT_DIR="vscodium-base/VSCode-darwin-arm64"
-          APP="$(cd "$OUT_DIR" && ls -d *.app | head -1)"
-          [ -n "$APP" ] || { echo "::error::no .app in $OUT_DIR"; ls -la "$OUT_DIR"; exit 1; }
+          shopt -s nullglob
+          APPS=("$OUT_DIR"/*.app)
+          (( ${#APPS[@]} == 1 )) || { echo "::error::expected one .app in $OUT_DIR"; ls -la "$OUT_DIR"; exit 1; }
+          APP="${APPS[0]##*/}"
           node scripts/install-shell-brand.mjs "$OUT_DIR/$APP/Contents/Resources/app/out/media"
           PLIST="$OUT_DIR/$APP/Contents/Info.plist"
           HPS_VER="${HPS_VERSION:-$(bash scripts/resolve-version.sh)}"
@@ -459,8 +461,9 @@ jobs:
             -s -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
           # Prepend to the search list so codesign finds the identity, keeping
           # the runner's existing keychains (login/System) usable.
-          EXISTING="$(security list-keychains -d user | sed 's/[[:space:]]*"//g')"
-          security list-keychains -d user -s "$KEYCHAIN" $EXISTING
+          EXISTING=()
+          while IFS= read -r existing; do EXISTING+=("$existing"); done < <(security list-keychains -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//')
+          security list-keychains -d user -s "$KEYCHAIN" "${EXISTING[@]}"
           rm -f "$RUNNER_TEMP/cert.p12"
           # Print the identity list BEFORE selecting from it. The previous
           # version captured find-identity into $(...) and threw the output
@@ -528,8 +531,10 @@ jobs:
           mkdir -p dist
           OUT_DIR="vscodium-base/VSCode-darwin-arm64"
           [ -d "$OUT_DIR" ] || { echo "::error::$OUT_DIR not found"; ls -la vscodium-base || true; exit 1; }
-          APP="$(cd "$OUT_DIR" && ls -d *.app | head -1)"
-          [ -n "$APP" ] || { echo "::error::no .app in $OUT_DIR"; ls -la "$OUT_DIR"; exit 1; }
+          shopt -s nullglob
+          APPS=("$OUT_DIR"/*.app)
+          (( ${#APPS[@]} == 1 )) || { echo "::error::expected one .app in $OUT_DIR"; ls -la "$OUT_DIR"; exit 1; }
+          APP="${APPS[0]##*/}"
           # Version stamp happened in the pre-sign "Stamp product version" step
           # (#361) so the ad-hoc seal covers it — do NOT stamp here.
           ( cd "$OUT_DIR" && zip -ry "$GITHUB_WORKSPACE/dist/HypeProof-Studio-darwin-arm64.zip" "$APP" )
@@ -613,7 +618,7 @@ jobs:
           PRERELEASE_FLAG="$(bash scripts/tag-is-prerelease.sh "$TAG")"
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only build-mac:draft-assets release-create
           gh release create "$TAG" --draft --title "HypeProof Studio $TAG" \
-            --generate-notes --verify-tag $PRERELEASE_FLAG 2>/dev/null || true
+            --generate-notes --verify-tag ${PRERELEASE_FLAG:+"$PRERELEASE_FLAG"} 2>/dev/null || true
           # Both builds may create the draft. Never replace bytes of a public release.
           [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == true ]] || { echo 'Refusing to overwrite a published release'; exit 1; }
           shopt -s nullglob

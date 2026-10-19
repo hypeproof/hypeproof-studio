@@ -674,7 +674,7 @@ jobs:
           PRERELEASE_FLAG="$(bash scripts/tag-is-prerelease.sh "$TAG")"
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only build-win:draft-assets release-create
           gh release create "$TAG" --draft --title "HypeProof Studio $TAG" \
-            --generate-notes --verify-tag $PRERELEASE_FLAG 2>/dev/null || true
+            --generate-notes --verify-tag ${PRERELEASE_FLAG:+"$PRERELEASE_FLAG"} 2>/dev/null || true
           # Both builds may create the draft. Never replace bytes of a public release.
           [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == true ]] || { echo 'Refusing to overwrite a published release'; exit 1; }
           shopt -s nullglob
