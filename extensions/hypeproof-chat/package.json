@@ -26,7 +26,8 @@
         "hypeproofChat.sdkBinaryPath",
         "hypeproofChat.coachRuntime",
         "hypeproofChat.proxyUrl",
-        "hypeproofChat.requireApprovalFor"
+        "hypeproofChat.requireApprovalFor",
+        "hypeproofChat.sdkSeedOnDemand"
       ]
     }
   },
@@ -466,6 +467,12 @@
           "default": "",
           "scope": "machine",
           "description": "Absolute path to a claude CLI binary for the agent-sdk coach runtime (epic #282). Highest-priority override; when empty, resolution falls through HPS_SDK_BINARY (env) → the seeded per-user location (scripts/seed-sdk-binary.sh) → node_modules (dev). If nothing resolves, the coach falls back to the proxy runtime. Machine-scoped: this selects an executable, so a workspace must not be able to set it."
+        },
+        "hypeproofChat.sdkSeedOnDemand": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "studio-sdk-seed-on-demand (REQ-M46). When no claude CLI binary resolves before an agent-sdk turn, ask the user to download the native SDK seed from this App's own public release into the seeded per-user location; it is installed only if its sha256 matches the release and its sha512 matches the value pinned in this App. Default off. Machine-scoped: it fetches an executable, so a workspace must not be able to turn it on."
         },
         "hypeproofChat.sdkStallTimeoutMs": {
           "type": "number",
