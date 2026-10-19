@@ -298,6 +298,21 @@ export function ChatPanel(props: Props) {
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
   // a brief reason when a paste is rejected (too big / too many).
   const [pendingImages, setPendingImages] = useState<string[]>(config?.activityDraft?.images ?? []);
+  const preparingImagesRef = useRef(0);
+  const [preparingImages, setPreparingImages] = useState(0);
+  const beginImagePreparation = () => {
+    preparingImagesRef.current++;
+    setPreparingImages(preparingImagesRef.current);
+    return () => {
+      preparingImagesRef.current--;
+      setPreparingImages(preparingImagesRef.current);
+    };
+  };
+  const imagePreparationBlocksSend = () => {
+    if (!preparingImagesRef.current) return false;
+    setImgNote("이미지를 준비하는 중이에요. 준비가 끝나면 보내 주세요.");
+    return true;
+  };
   const [imgNote, setImgNote] = useState<string | null>(null);
   // D-028 — photos staged in the host until this message is sent. Not part of the saved draft:
   // the host deletes staged files when the window closes.
@@ -630,6 +645,7 @@ export function ChatPanel(props: Props) {
     return false;
   };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
+    if (imagePreparationBlocksSend()) return false;
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
     if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
@@ -661,7 +677,7 @@ export function ChatPanel(props: Props) {
 
   const editRecovered = (request: RecoveredRequest) => {
     if (streaming || frozen || props.sendPending || props.sendLocked) return;
-    if (draft.trim() || pendingImages.length || stagedPhotos.length || imports.length) {
+    if (draft.trim() || pendingImages.length || preparingImagesRef.current || stagedPhotos.length || imports.length) {
       setImgNote('작성 중인 메시지를 먼저 보내거나 입력창을 비운 뒤 수정해 주세요. 두 메시지는 그대로 보관되어 있습니다.');
       return;
     }
@@ -734,6 +750,7 @@ export function ChatPanel(props: Props) {
   // the count, and surfaces a brief note on limit/failure.
   const attachImageFiles = (imageFiles: File[]) => {
     for (const f of imageFiles) {
+      const finish = beginImagePreparation();
       fitPastedImage(f)
         .then((url) => {
           if (!url) return;
@@ -748,7 +765,8 @@ export function ChatPanel(props: Props) {
         })
         .catch(() => {
           setImgNote("이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.");
-        });
+        })
+        .finally(finish);
     }
   };
 
@@ -782,6 +800,7 @@ export function ChatPanel(props: Props) {
   const incomingNonce = incomingImage?.nonce;
   useEffect(() => {
     if (!incomingImage || !imagePasteEnabled) return;
+    const finish = beginImagePreparation();
     fitDataUrl(incomingImage.dataUrl)
       .then((url) => {
         if (!url) return;
@@ -794,7 +813,8 @@ export function ChatPanel(props: Props) {
           return [...prev, url];
         });
       })
-      .catch(() => setImgNote(platformizeKeys("이미지를 붙이지 못했어요. ⌘V로 다시 시도해 주세요.")));
+      .catch(() => setImgNote(platformizeKeys("이미지를 붙이지 못했어요. ⌘V로 다시 시도해 주세요.")))
+      .finally(finish);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingNonce]);
 
@@ -943,6 +963,7 @@ export function ChatPanel(props: Props) {
   };
 
   const handleRollSend = () => {
+    if (imagePreparationBlocksSend()) return;
     const extra = draft.trim();
     if (!extra || !rollExpand) return;
     const combined = rollExpand.original
@@ -1427,6 +1448,9 @@ export function ChatPanel(props: Props) {
             </button>
           </div>
         )}
+        {preparingImages > 0 && (
+          <div className="hps-img-note" role="status">이미지 {preparingImages}장을 준비하고 있어요. 준비가 끝나면 보낼 수 있어요.</div>
+        )}
         {pendingImages.length > 0 && (
           <div className="hps-attachments" aria-label="첨부한 이미지">
             {pendingImages.map((url, i) => (
@@ -1498,6 +1522,7 @@ export function ChatPanel(props: Props) {
               // IME any less load-bearing.
               if (e.key !== "Enter" || e.shiftKey || isComposing || unavailable) return;
               e.preventDefault();
+              if (imagePreparationBlocksSend()) return;
               // Roll-expand owns Enter while it is open (idle-only flow).
               if (rollExpand && !streaming) {
                 handleRollSend();
@@ -1573,7 +1598,7 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={(!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
