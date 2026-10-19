@@ -27,7 +27,8 @@
         "hypeproofChat.coachRuntime",
         "hypeproofChat.proxyUrl",
         "hypeproofChat.requireApprovalFor",
-        "hypeproofChat.sdkSeedOnDemand"
+        "hypeproofChat.sdkSeedOnDemand",
+        "hypeproofChat.freeStart"
       ]
     }
   },
@@ -446,6 +447,13 @@
           "default": "https://api.hypeproof-ai.xyz/v1",
           "scope": "machine",
           "description": "Base URL for the HypeProof Proxy (OpenAI-compatible). Override for local dev (e.g. http://localhost:8787/v1). Machine-scoped: a workspace cannot repoint the coach at an untrusted gateway."
+        },
+        "hypeproofChat.freeStart": {
+          "type": "string",
+          "enum": ["service", "off"],
+          "default": "service",
+          "scope": "machine",
+          "description": "Free start (no code on first open). \"service\": follow what the Service advertises at /v1/trial/offer (entry \"open\" with a claim route). \"off\": always show the code-based start page."
         },
         "hypeproofChat.model": {
           "type": "string",

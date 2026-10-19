@@ -121,7 +121,9 @@ export interface EffortRequestRecord {
 export interface ChatConfig {
   turnTools?: import('./turnTools').TurnToolsAvailability;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus};
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
+    /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
+    free?:boolean};
   activityDraft?: import('./activityDraft').ActivityDraft;
   /** REQ-L12 ⑫ — trial carry-over offer or the read-only trial transcript; absent unless the Service advertises it. */
   carryover?: import('./trialCarryoverHelpers').CarryoverView;

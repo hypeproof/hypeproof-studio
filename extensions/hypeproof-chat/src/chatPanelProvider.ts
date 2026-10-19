@@ -1,7 +1,7 @@
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
-import { passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
+import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
 import { catalogueWithin, endCardAdvertised, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
@@ -162,7 +162,7 @@ import {
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
-import { profileAudience, type SeatAudience } from "./seatVocabulary.ts";
+import { isFreeSeat, profileAudience, type SeatAudience } from "./seatVocabulary.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
 import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
@@ -1897,6 +1897,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   });
   /** The seat token found at the first profile read of this process (entry outcome `reused` vs `granted`). */
   private funnelStartupToken: string | null | undefined = undefined;
+  /** Free start — the claim's own outcome for the token it issued (a rotated reuse is still "reused"). */
+  private funnelClaimHint: { token: string; outcome: "granted" | "reused" } | null = null;
   /** The token whose /v1/trial/events probe has run (or is running); null = none. */
   private funnelProbedToken: string | null = null;
   private readonly artifactGate = new ArtifactChangeGate();
@@ -2970,6 +2972,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.funnel.emit(event);
   }
 
+  /** Free start (SPEC iteration 4 §1.5) — `trial_entry` reports the claim's outcome for this token. Memory only. */
+  noteFreeClaim(token: string, outcome: "granted" | "reused"): void {
+    this.funnelClaimHint = { token, outcome };
+  }
+
   /**
    * studio-funnel-events — point the reporter at the Service route for this seat.
    * Not a trial grant → off. A trial grant → GET /v1/trial/events once per token; only a
@@ -3002,7 +3009,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const version = this.context.extension?.packageJSON?.version;
       this.funnel.emit({
         type: "trial_entry",
-        outcome: entryOutcome({ account: p.access_identity?.kind === 'account' || typeof payload?.personal_account === "string", token, startupToken: this.funnelStartupToken }),
+        outcome: this.funnelClaimHint?.token === token ? this.funnelClaimHint.outcome
+          : entryOutcome({ account: p.access_identity?.kind === 'account' || typeof payload?.personal_account === "string", token, startupToken: this.funnelStartupToken }),
         app_version: typeof version === "string" ? version : undefined,
         os: funnelOs(process.platform),
       });
@@ -6178,11 +6186,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
     // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never
     // opens the purchase screen or the code box, and leaves the saved code alone.
+    // Free start (SPEC iteration 4 §2.4) — today's free budget is drained: a calm notice with
+    // the 00:00 KST time, no retry button and no purchase opened. Files and conversation stay.
+    if (isFreeSeat(current?.profile) && freeDailyCapReached(err)) {
+      void this.post({ type: "streamError", streamId, error: FREE_DAILY_CAP_NOTICE, retry: false });
+      return;
+    }
     const ending = trialEnding(err, !!current?.profile?.pass);
     if (ending) {
       const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
       if (current?.signal?.aborted) return;
-      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold) });
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile)) });
       return;
     }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
@@ -6614,7 +6628,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         hasToken: !!token,
         ...(taskView ? { taskWorkspace: taskView } : {}),
         ...(activity && carryover ? { carryover } : {}),
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{})},
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),

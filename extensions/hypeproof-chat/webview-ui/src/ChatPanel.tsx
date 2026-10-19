@@ -533,7 +533,7 @@ export function ChatPanel(props: Props) {
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
   // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
-  const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial) : null;
+  const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial, Date.now(), !!config.activity.free) : null;
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -782,7 +782,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{activityDetail(config.activity) && <> · {activityDetail(config.activity)}</>}
+        {activityLabel(config.activity.kind, config.activity.pass, undefined, !!config.activity.free)} · {config.activity.name}{activityDetail(config.activity) && <> · {activityDetail(config.activity)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -1010,7 +1010,7 @@ export function ChatPanel(props: Props) {
         // step the record holds.
         busy={streaming || awaitingRecord}
         activity={config?.activity ? {
-          label: activityLabel(config.activity.kind, config.activity.pass),
+          label: activityLabel(config.activity.kind, config.activity.pass, undefined, !!config.activity.free),
           // TUX-SP-13 — a pass's end date, or a trial's passive remaining line (text only, no button).
           ...(activityDetail(config.activity) ? { detail: activityDetail(config.activity)! } : {}),
           name: config.activity.name,

@@ -10,7 +10,12 @@ import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
 import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import type { ClassReposOutcome } from "./publish/publishHost";
-import { fetchTrialOffer, type TrialOffer } from "./trialOffer";
+import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, freeAllowanceLine, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import type { FreeStartView } from "./startPageProtocol";
+import { isFreeSeat } from "./seatVocabulary";
+import { qrDataUrl } from "./testQr";
+import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
 
 /**
@@ -79,6 +84,16 @@ export class StartPage {
   /** The code issued for the saved order, while its activity is previewed but not yet entered. */
   private purchaseToken?: string;
   private github?: GithubLook;
+  /** Free start (TUX-SP-14) — a claim, or the entry it leads into, is running. */
+  private freeClaiming = false;
+  /** The last claim refusal, shown until the next attempt. */
+  private freeRefusal?: FreeClaimRefusal;
+  /** The current seat is the free allowance (read in refresh; steers the purchase payer question). */
+  private freeSeatNow = false;
+  /** SPEC §2.5 — a guardian pays: the checkout link and QR shown instead of opening a browser here. */
+  private guardianCheckout?: { url: string; qr: string };
+  /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
+  private offerWaited = false;
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -210,9 +225,17 @@ export class StartPage {
     const config = vscode.workspace.getConfiguration("hypeproofChat");
     return { proxyUrl: config.get<string>("proxyUrl", DEFAULT_PROXY_URL), siteBase: config.get<string>("siteBase", DEFAULT_SITE_BASE) };
   }
+  /** The current seat's participant token (free-credential header only). */
+  private async currentToken(): Promise<string | undefined> {
+    try { return (await activityConnections(this.context)?.token()) ?? await this.context.secrets.get(TOKEN_KEY); }
+    catch { return undefined; }
+  }
   private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
   private purchaseView(): PurchaseView {
+    const payerAdult = this.context.globalState?.get<unknown>(PAYER_ADULT_KEY);
     return {
+      ...(this.freeSeatNow ? { freeSeat: true, ...(typeof payerAdult === "boolean" ? { payerAdult } : {}) } : {}),
+      ...(this.guardianCheckout && this.order ? { guardian: this.guardianCheckout } : {}),
       available: !!this.products?.length || !!this.order,
       ...(this.products?.length ? { products: this.products } : {}),
       ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
@@ -225,6 +248,85 @@ export class StartPage {
   private async loadTrialOffer(): Promise<void> {
     if (this.trialOffer !== undefined) return;
     this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl);
+  }
+
+  // ── Free start (SPEC iteration 4 §2; TUX-SP-14/15/16) ────────────────────────────────────────
+  /** Advertised by the Service and not switched off on this machine. */
+  private freeStartOn(): boolean {
+    const setting = vscode.workspace.getConfiguration("hypeproofChat").get<string>("freeStart", "service");
+    return setting !== "off" && freeStartAdvertised(this.trialOffer);
+  }
+  private ageAnswer(): AgeAnswer | undefined {
+    const v = this.context.globalState?.get<unknown>(AGE_KEY);
+    return isAgeAnswer(v) ? v : undefined;
+  }
+  private appVersion(): string { return String(this.context.extension.packageJSON.version ?? ""); }
+  private freeStartView(): FreeStartView | undefined {
+    if (!this.freeStartOn()) return undefined;
+    const offer = this.trialOffer!;
+    const age = this.ageAnswer();
+    const allowance = freeAllowanceLine(offer);
+    const tooOld = belowFloor(this.appVersion(), offer.minAppVersion) || this.freeRefusal?.code === "app_too_old";
+    return {
+      ...(age ? { age } : {}),
+      ...(this.freeClaiming ? { claiming: true } : {}),
+      ...(this.freeRefusal ? { refusal: this.freeRefusal } : {}),
+      ...(offer.available === false ? { unavailable: offer.reason ?? "paused" } : {}),
+      ...(allowance ? { allowance } : {}),
+      ...(tooOld ? { tooOld: true } : {}),
+    };
+  }
+  /**
+   * The per-install id (UUID v4), created at the first claim. SecretStorage first; if it cannot be
+   * used, globalState (not synced). It never reaches a webview, a log line or a funnel event.
+   */
+  private async installId(): Promise<string> {
+    try { const v = await this.context.secrets.get(INSTALL_ID_KEY); if (isInstallId(v)) return v; } catch { /* fall back below */ }
+    const kept = this.context.globalState?.get<unknown>(INSTALL_ID_KEY);
+    if (isInstallId(kept)) return kept;
+    const id = randomUUID();
+    try { await this.context.secrets.store(INSTALL_ID_KEY, id); }
+    catch { await this.context.globalState?.update(INSTALL_ID_KEY, id); }
+    return id;
+  }
+  private async freeStartAge(answer: AgeAnswer): Promise<void> {
+    if (!this.freeStartOn() || this.freeClaiming) return;
+    await this.context.globalState?.update(AGE_KEY, answer);
+    this.freeRefusal = undefined; this.error = undefined;
+    await this.refresh();
+    if (answer === "14+") { await this.freeStartClaim(); return; }
+    // Under 14: the block is shown whatever the Service answers (also offline). The claim is sent
+    // with age_ok:false only so the Service counts the refusal; nothing is issued.
+    try { await claimFreeStart({ proxyUrl: this.settings().proxyUrl, installId: await this.installId(), appVersion: this.appVersion(), ageOk: false }); }
+    catch { /* counted or not, the block stands */ }
+  }
+  private async freeStartClaim(): Promise<void> {
+    if (!this.freeStartOn() || this.busy || this.freeClaiming || this.ageAnswer() !== "14+") return;
+    if (this.chat.hasActiveStream()) { this.error = "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요."; await this.refresh(); return; }
+    if (belowFloor(this.appVersion(), this.trialOffer?.minAppVersion)) {
+      this.freeRefusal = { code: "app_too_old", message: FREE_CLAIM_REFUSALS.app_too_old! }; await this.refresh(); return;
+    }
+    this.freeClaiming = true; this.freeRefusal = undefined; this.error = undefined;
+    await this.refresh();
+    try {
+      const proxyUrl = this.settings().proxyUrl;
+      const installId = await this.installId();
+      const claim = (): Promise<FreeClaimResult> => claimFreeStart({ proxyUrl, installId, appVersion: this.appVersion(), ageOk: true });
+      let result = await claim();
+      // A request in flight holds the seat's lease: one automatic retry, then the busy sentence.
+      if (!result.ok && result.code === "claim_busy") { await new Promise(r => setTimeout(r, 3000)); result = await claim(); }
+      if (!result.ok) { this.freeRefusal = { code: result.code, message: result.message, ...(result.resumesAt ? { resumesAt: result.resumesAt } : {}) }; return; }
+      this.chat.noteFreeClaim?.(result.code, result.outcome);
+      // From here the issued token takes the ordinary entry path, without a preview or a folder choice:
+      // the served profile names the workspace (~/HypeProofTrial), created if missing.
+      await this.handle({ type: "connectCourse", token: result.code });
+      if (this.candidate?.token === result.code && !this.error) await this.handle({ type: "beginCourse" });
+    } catch {
+      this.freeRefusal = { code: "network", message: "연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요." };
+    } finally {
+      this.freeClaiming = false;
+      await this.refresh();
+    }
   }
   /**
    * TUX-COND-07 — "이용권 살펴보기" on the chat's end-of-trial card. The person pressed it, so
@@ -267,7 +369,7 @@ export class StartPage {
   private async endPurchase(message: string): Promise<void> {
     this.stopPurchaseWait();
     await this.context.secrets.delete(PENDING_PURCHASE_KEY);
-    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message;
+    this.order = undefined; this.purchaseStage = "stopped"; this.purchaseMessage = message; this.guardianCheckout = undefined;
     await this.refresh();
   }
   private async purchaseTick(): Promise<void> {
@@ -349,6 +451,10 @@ export class StartPage {
       this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
       await this.refresh(); this.schedulePurchasePoll(0); return;
     }
+    if (msg.type === "purchasePayer") {
+      if (typeof msg.adult === "boolean") await this.context.globalState?.update(PAYER_ADULT_KEY, msg.adult);
+      await this.refresh(); return;
+    }
     if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
     if (!this.products?.some(p => p.id === msg.productId)) return;
     const { proxyUrl, siteBase } = this.settings();
@@ -357,13 +463,18 @@ export class StartPage {
       if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
       const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
       if (this.accounts && !accountToken) throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
-      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken);
+      // SPEC iteration 4 §2.5 — an order made from a free seat carries its credential so the Service
+      // can link the purchase to the free start. Header only; never shown or sent to the checkout page.
+      const freeCredential = this.freeSeatNow ? await this.currentToken() : undefined;
+      const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken, freeCredential);
       const order = result && result !== "bad_checkout" ? { ...result, ...(accountToken ? {accountOwned:true} : {}) } : result;
       if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
       // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
       await this.context.secrets.store(PENDING_PURCHASE_KEY, JSON.stringify(order));
       this.order = order; this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
-      await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl));
+      // Under 19 on a free seat: the guardian pays on their own phone, so the page is shown here as a link and QR.
+      if (msg.guardian && this.freeSeatNow) this.guardianCheckout = { url: order.checkoutUrl, qr: qrDataUrl(order.checkoutUrl) };
+      else { this.guardianCheckout = undefined; await vscode.env.openExternal(vscode.Uri.parse(order.checkoutUrl)); }
       this.schedulePurchasePoll();
     } catch (e) { this.purchaseStage = "stopped"; this.purchaseMessage = e instanceof AccountError ? e.message : PURCHASE_COPY.orderFailed; }
     finally { this.busy = false; await this.refresh(); }
@@ -402,6 +513,10 @@ export class StartPage {
     try { activities=await activityConnections(this.context)?.list(); }
     catch { this.error ??= "저장된 활동 목록을 읽지 못했습니다. 참여 코드를 다시 입력해 주세요."; }
     const legacyHistory=this.context.workspaceState?.keys?.().some(isLegacyHistoryKey);
+    // SPEC §2.5 — the running seat (not a candidate being previewed) decides the payer question and the header.
+    const running = this.candidate ? null : p;
+    this.freeSeatNow = isFreeSeat(running);
+    const freeStart = this.freeStartView();
     const state: StartState = {
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),
       legacyHistory,
@@ -418,8 +533,9 @@ export class StartPage {
       purchase: this.purchaseView(),
       ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
+      ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
-      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
+      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), ...(isFreeSeat(p) ? { free: true } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.
@@ -459,11 +575,24 @@ export class StartPage {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "openLocalReview") { await vscode.commands.executeCommand("hypeproof-chat.localReview"); return; }
     if (msg.type === "startReady") {
-      void this.accounts?.refreshView(); await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+      void this.accounts?.refreshView();
+      // Free start — a newcomer should land on the free card, not see the code choices flash first.
+      // The first paint waits for the offer at most 1.5 s; a slow or absent Service paints as today.
+      if (!this.offerWaited) {
+        this.offerWaited = true;
+        // (A host without timers — the vm test harness — simply does not wait.)
+        const bound = typeof setTimeout === "function" ? new Promise(r => setTimeout(r, 1500)) : Promise.resolve();
+        await Promise.race([this.loadTrialOffer(), bound]);
+      }
+      await this.refresh(); void Promise.all([this.loadProducts(), this.loadTrialOffer()]).then(() => this.refresh()); return; }
+    if (msg.type === "freeStartAge") { if (isAgeAnswer(msg.answer)) await this.freeStartAge(msg.answer); return; }
+    if (msg.type === "freeStartClaim") { await this.freeStartClaim(); return; }
+    if (msg.type === "freeStartGuardian") { await vscode.env.openExternal(vscode.Uri.parse(guardianUrl(this.settings().siteBase))); return; }
+    if (msg.type === "freeStartUpdate") { await vscode.commands.executeCommand("hypeproof-chat.checkForUpdates"); return; }
     // studio-funnel-events — the start-page pass offer (Service type offer_*, surface start_page).
     if (msg.type === "purchaseOpen") this.chat.funnelEmit?.({ type: "offer_clicked", surface: "start_page" });
     if ((msg.type === "purchaseHide" || msg.type === "purchaseCancel") && !this.order) this.chat.funnelEmit?.({ type: "offer_dismissed", surface: "start_page" });
-    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
+    if (msg.type === "purchaseOpen" || msg.type === "purchaseStart" || msg.type === "purchasePayer" || msg.type === "purchaseReopen" || msg.type === "purchaseRetry" || msg.type === "purchaseCancel" || msg.type === "purchaseHide") { await this.handlePurchase(msg); return; }
     if (msg.type === "inboxOpen") { await this.chat.inboxSource?.inboxOpened(msg.objectId, msg.generation); return; }
     if (msg.type === "inboxLink") { await this.chat.handleInboxLink(msg); return; }
     if (msg.type === "openStudioFiles" || msg.type === "openStudioSettings") {

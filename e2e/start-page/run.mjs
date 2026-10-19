@@ -6,7 +6,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 const repo=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const dist=path.join(repo,'extensions/hypeproof-chat/webview-ui/dist');
-const out=path.join(repo,'e2e/test-results/start-page');await fs.mkdir(out,{recursive:true});
+const out=path.resolve(process.env.HPS_START_PAGE_OUT||path.join(repo,'e2e/test-results/start-page'));await fs.mkdir(out,{recursive:true});
 const server=http.createServer(async(req,res)=>{try {const url=new URL(req.url,'http://local');const name=url.pathname==='/'?'index.html':url.pathname.slice(1);if(name.includes('..'))throw Error();let body=await fs.readFile(path.join(dist,name));if(name==='index.html')body=Buffer.from(body.toString().replace('<html','<html data-surface="start"'));res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(body);}catch{res.writeHead(404).end();}});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true});
 try {
@@ -61,6 +61,16 @@ try {
  await state({error:'개인 체험 시간이 끝났습니다.'});await p.getByRole('alert').waitFor();assert.equal(await p.getByRole('button',{name:'이어서 하기'}).count(),0);
  await state({profile:{...profile,id:'kids-test',name:'어린이 만들기 수업',coach:'직접 이름 짓는 코치'}});await p.getByText('어린이 만들기 수업',{exact:true}).waitFor();
  await p.getByRole('button',{name:'연결 해제',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'disconnectCourse');
+ // TUX-SP-14 — a full free-start advertisement replaces the three peer choices with the age card
+ // (deeper cases live in e2e/trial-ux). Control: the code-only 'open' offer above kept the choices.
+ await state({trialOffer:{entry:'open',durationHours:24,requestLimit:10,claim:'/v1/free/claim',available:true},freeStart:{allowance:'무료 AI 요청 10번 · 첫 요청부터 24시간'}});
+ // The person had opened the code form earlier in this run; with free start it offers "돌아가기".
+ await p.getByRole('heading',{name:'참여 코드로 시작하기'}).waitFor();await p.getByRole('button',{name:'돌아가기',exact:true}).click();
+ await p.getByRole('heading',{name:'시작하기 전에 한 가지만 확인합니다'}).waitFor();
+ assert.equal(await p.getByRole('button',{name:'AI 체험하기',exact:true}).count(),0);assert.equal(await p.getByRole('button',{name:'수업에 참여하기',exact:true}).count(),0);
+ assert.doesNotMatch(await p.locator('.studio-connect').innerText(),/체험/);
+ for(const width of [390,1280]){await p.setViewportSize({width,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,`free-start-${width}.png`),fullPage:true});}
+ await p.setViewportSize({width:1280,height:900});
  await state({});
  for(const width of [390,768,1280]){await p.setViewportSize({width,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,`start-${width}.png`),fullPage:true});}
  const storage=await p.evaluate(()=>({local:localStorage.length,session:sessionStorage.length}));assert.deepEqual(storage,{local:0,session:0});assert.deepEqual(errors,[]);

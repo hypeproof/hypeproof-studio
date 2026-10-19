@@ -59,7 +59,7 @@ for (const err of [CLASS_429, BUSY, NETWORK, null, undefined, 'string error', { 
 const card = c.trialEndCardView({ profile: trialProfile(), err: EXHAUSTED, products: catalogue });
 assert.ok(card, 'open-trial seat + trial ending + catalogue → card');
 assert.equal(card.ending, 'exhausted');
-assert.equal(card.title, '무료 체험을 모두 사용했습니다');
+assert.equal(card.title, '무료 사용량을 모두 썼습니다');
 assert.equal(card.primary, '이용권 살펴보기');
 assert.equal(card.escape, '오늘은 여기까지');
 // Facts first: files kept, then the Service's own numbers for the suggested pass, then the no-renewal promise.
@@ -84,7 +84,7 @@ assert.equal(c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, product
   '이어서 작업하려면 이용권이 필요합니다. 라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
 assert.equal(c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: catalogue }).productId, p.defaultProduct(catalogue).id);
 const expired = c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: catalogue });
-assert.equal(expired.title, '무료 체험 시간이 끝났습니다');
+assert.equal(expired.title, '무료 사용 시간이 끝났습니다');
 
 // No countdown, scarcity, guilt or loss copy anywhere on the card.
 for (const v of [card, expired]) {

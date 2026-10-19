@@ -433,7 +433,7 @@ try {
     await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
     const card = p.locator('.hps-trial-end-card');
     await expect(card).toHaveCount(1);
-    await expect(card.getByRole('heading')).toHaveText('무료 체험을 모두 사용했습니다');
+    await expect(card.getByRole('heading')).toHaveText('무료 사용량을 모두 썼습니다');
     await expect(card).toContainText('만든 파일은 작업 폴더에 그대로 있습니다');
     // The Service's numbers for the suggested pass, never a hardcoded price.
     await expect(card).toContainText('라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
@@ -481,6 +481,125 @@ try {
     await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
     assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
   }, { cfg: trialActivity });
+  // ── Free start (SPEC iteration 4 §2.3/§2.4; TUX-SP-14/15/16) ─────────────────────────────
+  // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
+  // start page (free start not advertised) does contain 체험, so the checker can fail.
+  const FREE_OFFER = { entry: 'open', durationHours: 24, requestLimit: 10, unit: 'turn', claim: '/v1/free/claim', available: true };
+  const freeStart = (extra = {}) => ({ trialOffer: FREE_OFFER, freeStart: { allowance: '무료 AI 요청 10번 · 첫 요청부터 24시간', ...extra } });
+  const cardText = p => p.locator('.studio-connect').innerText();
+  await test('TUX-SP-14A', 'Free start: one age question, no 체험/수업 choice, code is a small link', async p => {
+    await startState(p, {});
+    assert.match(await cardText(p), /체험/, 'control: today\'s start page says 체험, so the checker below can fail');
+    await startState(p, freeStart());
+    await expect(p.locator('#connect-title')).toHaveText('시작하기 전에 한 가지만 확인합니다');
+    await expect(p.getByText('만 14세 이상인가요?', { exact: true })).toBeVisible();
+    await expect(btn(p, 'AI 체험하기')).toHaveCount(0);
+    await expect(btn(p, '수업에 참여하기')).toHaveCount(0);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveText(/^네, 만 14세 이상입니다/);
+    await expect(p.getByText('무료 AI 요청 10번 · 첫 요청부터 24시간', { exact: true })).toBeVisible();
+    assert.doesNotMatch(await cardText(p), /체험/, 'no 체험 on the free card');
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-14A-age-390.png'), fullPage: true });
+    await btn(p, '네, 만 14세 이상입니다').click();
+    await request(p, { type: 'freeStartAge', answer: '14+' });
+    // Claiming: the free card stays; the candidate preview never shows, even when the host already has one.
+    await startState(p, { ...freeStart({ age: '14+', claiming: true }), checking: true, candidate: true, profile: { ...course, id: 'studio-open-trial', kind: 'trial', free: true } });
+    await expect(p.getByText('작업 공간을 준비하고 있습니다.', { exact: true })).toBeVisible();
+    await expect(p.getByText('이 활동으로 시작할까요?')).toHaveCount(0);
+    await expect(btn(p, '이 활동 시작하기')).toHaveCount(0);
+    await expect(btn(p, '다른 작업 폴더 선택')).toHaveCount(0);
+    // Saved age: a single Primary, no question again.
+    await startState(p, freeStart({ age: '14+' }));
+    await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
+    await btn(p, '바로 시작하기').click();
+    await request(p, { type: 'freeStartClaim' });
+    // The code path: one label, no trial/class split.
+    await btn(p, '참여 코드가 있어요').click();
+    await expect(p.locator('label[for="course-code"]')).toHaveText('참여 코드');
+    await expect(p.getByText('강사나 운영자에게 받은 코드를 붙여 넣으세요.', { exact: true })).toBeVisible();
+    assert.doesNotMatch(await cardText(p), /체험/);
+    await btn(p, '돌아가기').click();
+    await expect(btn(p, '바로 시작하기')).toBeVisible();
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'nothing opens the purchase for the person');
+  }, { surface: 'start' });
+  await test('TUX-SP-14B', 'Free start refusals: Service sentence shown as given; app too old offers the update', async p => {
+    const limit = '이 네트워크에서 오늘 시작할 수 있는 횟수를 모두 사용했습니다. 내일 다시 시도하거나, 참여 코드나 이용권으로 시작해 주세요.';
+    await startState(p, freeStart({ age: '14+', refusal: { code: 'network_limit', message: limit } }));
+    await expect(p.getByRole('alert')).toHaveText(limit);
+    await expect(btn(p, '바로 시작하기')).toBeEnabled();
+    await startState(p, freeStart({ age: '14+', refusal: { code: 'network', message: '연결하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.' } }));
+    await expect(btn(p, '바로 시작하기')).toBeEnabled();
+    await startState(p, freeStart({ age: '14+', tooOld: true, refusal: { code: 'app_too_old', message: '이 Studio는 바로 시작하기를 지원하지 않는 버전입니다. 최신 Studio로 업데이트한 뒤 다시 열어 주세요.' } }));
+    await expect(btn(p, '바로 시작하기')).toHaveCount(0);
+    await btn(p, '업데이트 확인').click();
+    await request(p, { type: 'freeStartUpdate' });
+  }, { surface: 'start' });
+  await test('TUX-SP-15', 'Under 14: guardian block, no claim button, the code link stays', async p => {
+    await startState(p, { ...freeStart({ age: 'under14' }), purchase: { available: true } });
+    await expect(p.locator('#connect-title')).toHaveText('보호자와 함께 시작해 주세요');
+    await expect(p.getByText('만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. 지금은 앱에서 보호자 동의를 받을 수 없어 여기서 시작할 수 없습니다.', { exact: true })).toBeVisible();
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '이용권으로 시작하기')).toHaveCount(0);
+    await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
+    await btn(p, '보호자 안내 보기 ↗').click();
+    await request(p, { type: 'freeStartGuardian' });
+    assert.equal(emitted(await requests(p), 'freeStartClaim').length, 0);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-15-under14-390.png'), fullPage: true });
+  }, { surface: 'start' });
+  await test('TUX-SP-16', 'Daily cap drained: calm notice with 00:00 KST, no Primary, no purchase opened', async p => {
+    await startState(p, { ...freeStart({ age: '14+' }), trialOffer: { ...FREE_OFFER, available: false, reason: 'daily_cap' }, freeStart: { age: '14+', unavailable: 'daily_cap' }, purchase: { available: true } });
+    await expect(p.locator('#connect-title')).toHaveText('밤 12시 이후에 시작할 수 있습니다');
+    const notice = p.locator('.studio-notice');
+    await expect(notice).toHaveText('오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 시작할 수 있습니다.');
+    await expect(notice).toHaveAttribute('role', 'status');
+    await expect(p.getByRole('alert')).toHaveCount(0);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '참여 코드가 있어요')).toBeVisible();
+    await expect(btn(p, '이용권으로 시작하기')).toBeVisible();
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-16-drained-390.png'), fullPage: true });
+    // A newcomer who has not answered the age question sees the same calm state, not the question.
+    await startState(p, { trialOffer: { ...FREE_OFFER, available: false, reason: 'daily_cap' }, freeStart: { unavailable: 'daily_cap' } });
+    await expect(p.getByText('만 14세 이상인가요?')).toHaveCount(0);
+    await expect(p.locator('.studio-notice')).toBeVisible();
+  }, { surface: 'start' });
+  await test('TUX-SP-13F', 'Free seat labels: 무료 사용 on the start card and in the chat header, never 체험', async p => {
+    await startState(p, { profile: trialSeat(nearLimit, { id: 'studio-open-trial', free: true }) });
+    await expect(p.locator('.studio-verified')).toHaveText('무료 사용');
+    await expect(courseRow(p, '남은 무료 사용')).toHaveText(/^무료 AI 요청 3번 남음 · /);
+    assert.doesNotMatch(await cardText(p), /체험/);
+    await startState(p, { profile: trialSeat(exhausted, { id: 'studio-open-trial', free: true }) });
+    await expect(p.locator('#connect-title')).toHaveText('무료 사용이 끝났습니다');
+    await expect(courseRow(p, '무료 사용')).toHaveText('무료 AI 요청 40번 모두 사용');
+    assert.doesNotMatch(await cardText(p), /체험/);
+    // Negative control: the same seat without the free mark keeps today's wording.
+    await startState(p, { profile: trialSeat(exhausted) });
+    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+  }, { surface: 'start' });
+  await test('TUX-SP-13G', 'Free seat chat header: 무료 사용 label and remaining line', async p => {
+    await expect(p.getByLabel('현재 활동')).toContainText('무료 사용 · 합성 체험');
+    await expect(p.getByLabel('현재 활동')).toContainText('무료 AI 요청 3번 남음');
+  }, { cfg: { activity: { ...trialActivity(nearLimit), free: true } } });
+  await test('REQ-L12-14', 'Free seat purchase: payer question, then the guardian checkout as link and QR', async p => {
+    const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true }, ...freeStart({ age: '14+' }) });
+    await btn(p, '이용권으로 시작하기').click();
+    await request(p, { type: 'purchaseOpen' });
+    await expect(p.getByText('결제하는 분이 만 19세 이상인가요?', { exact: true })).toBeVisible();
+    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    await btn(p, '아니요').click();
+    await request(p, { type: 'purchasePayer', adult: false });
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: false }, ...freeStart({ age: '14+' }) });
+    await btn(p, '보호자에게 결제 요청하기').click();
+    await request(p, { type: 'purchaseStart', productId: 'pass-lite', guardian: true });
+    await startState(p, { purchase: { available: true, stage: 'waiting', order: { label: '라이트', amount: 30000 }, message: '브라우저에서 결제를 마치면 자동으로 이어져요.', freeSeat: true, payerAdult: false, guardian: { url: 'https://site.test/studio/checkout?order=x', qr: 'data:image/svg+xml;base64,PHN2Zy8+' } }, ...freeStart({ age: '14+' }) });
+    await expect(p.getByRole('img', { name: '보호자 결제 페이지 QR 코드' })).toBeVisible();
+    await expect(p.getByText('결제는 보호자가 해 주세요. 보호자 휴대폰으로 이 QR을 열면 결제 페이지가 열립니다.', { exact: true })).toBeVisible();
+    // Negative control: an adult payer on the same seat goes to today's checkout button.
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
+    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
+  }, { surface: 'start' });
   await test('TUX-A11Y-01', 'Visible controls have names and keyboard focus including citation and settings', async p => {
     await expect(p.getByRole('textbox',{name:'코치에게 보낼 메시지'})).toBeVisible();
     await expect(btn(p,'설정')).toBeVisible();

@@ -21,7 +21,7 @@
  * bought pass, because the Service uses the same code for both. (Studio #1765 matches the same sentences for its notice.)
  */
 import type { ResolvedProfile, TrialEndCardView } from "./protocol.ts";
-import { defaultProduct, fetchProducts, passFacts, type PassProduct } from "./passPurchase.ts";
+import { FREE_EXHAUSTED_SERVICE, FREE_EXPIRED_SERVICE, defaultProduct, fetchProducts, passFacts, type PassProduct } from "./passPurchase.ts";
 
 export type TrialEnding = TrialEndCardView["ending"];
 
@@ -29,8 +29,9 @@ export type TrialEnding = TrialEndCardView["ending"];
 export const OPEN_TRIAL_PROFILE_ID = "studio-open-trial";
 
 export const TRIAL_END_CARD_COPY = {
-  titleExhausted: "무료 체험을 모두 사용했습니다",
-  titleExpired: "무료 체험 시간이 끝났습니다",
+  // Free start (SPEC iteration 4 §2.4): the free allowance is never called a 체험.
+  titleExhausted: "무료 사용량을 모두 썼습니다",
+  titleExpired: "무료 사용 시간이 끝났습니다",
   kept: "만든 파일은 작업 폴더에 그대로 있습니다. 대화도 계속 볼 수 있습니다.",
   needPass: "이어서 작업하려면 이용권이 필요합니다.",
   noRenewal: "한 번만 결제하며 자동으로 다시 결제되지 않습니다.",
@@ -47,6 +48,9 @@ export function trialEndReason(err: unknown, onPass: boolean): TrialEnding | nul
   // sentence, so the sentence is matched; the code is matched for clients that pass it through.
   if (/체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다/.test(m)) return "exhausted";
   if (/개인 체험 시간이 끝났습니다/.test(m)) return "expired";
+  // The Service's free-grant sentences (SPEC iteration 4 §1.3), as separate whole phrases.
+  if (FREE_EXHAUSTED_SERVICE.test(m)) return "exhausted";
+  if (FREE_EXPIRED_SERVICE.test(m)) return "expired";
   if (!onPass && /\btrial_(?:cost_)?exhausted\b/.test(m)) return "exhausted";
   return null;
 }

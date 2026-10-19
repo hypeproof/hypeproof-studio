@@ -69,3 +69,17 @@ export const reportReceipt = (a: SeatAudience, reportId: string): string =>
 
 /** Words a solo seat must never see in the copy above (used by the smoke test). */
 export const CLASSROOM_ONLY_WORDS = ["스태프", "강사", "운영 담당자", "Jay"] as const;
+
+// ── Free start (SPEC iteration 4 §2.4) ────────────────────────────────────────────────────────
+// The free allowance a newcomer gets without a code is served as the open-trial profile. Its
+// learner-facing copy never says 체험 and never points at a class; code-issued trials
+// (`studio-native-trial`) and bought passes keep their wording.
+
+/** The Service profile id of the free allowance (Service `profiles/studio-open-trial.ts`). */
+export const FREE_PROFILE_ID = "studio-open-trial";
+
+/** A seat on the free allowance: the open-trial profile and no bought pass. */
+export function isFreeSeat(p?: { profile_id?: string | null; id?: string | null; pass?: unknown } | null): boolean {
+  if (!p || p.pass) return false;
+  return (p.profile_id ?? p.id) === FREE_PROFILE_ID;
+}

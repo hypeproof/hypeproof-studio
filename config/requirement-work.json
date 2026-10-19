@@ -36,10 +36,11 @@
         "US-15",
         "US-16",
         "US-17",
-        "US-18"
+        "US-18",
+        "US-19"
       ],
       "inline_prefixes": [],
-      "sha256": "01dc00f91cd4148294ae5f134d3248034629f15703484cbb43d799b53cf6c373",
+      "sha256": "456cf25a5dc2868a37c66b6be8979d95bfadcad7163479cb945fd67a0b536e58",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/unified-studio-experience.md",
@@ -449,12 +450,15 @@
         "TUX-SP-09",
         "TUX-SP-10",
         "TUX-SP-12",
-        "TUX-SP-13"
+        "TUX-SP-13",
+        "TUX-SP-14",
+        "TUX-SP-15",
+        "TUX-SP-16"
       ],
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "61205afa255c3ab87498e8cdf7b5e139b9c6b479ed1832f9e92b514439e29a49",
+      "sha256": "d52152cb31b6b302ad4107e02b8341aff9bbcdf4e48b3baf99009218c152eb83",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -1884,7 +1888,8 @@
             "US-15",
             "US-16",
             "US-17",
-            "US-18"
+            "US-18",
+            "US-19"
           ]
         }
       ],
@@ -2018,7 +2023,10 @@
             "TUX-SP-09",
             "TUX-SP-10",
             "TUX-SP-12",
-            "TUX-SP-13"
+            "TUX-SP-13",
+            "TUX-SP-14",
+            "TUX-SP-15",
+            "TUX-SP-16"
           ]
         }
       ],

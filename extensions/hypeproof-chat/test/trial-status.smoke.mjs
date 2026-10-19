@@ -97,7 +97,7 @@ assert.match(start, /passSummary\(/, "pass seats keep passSummary");
 const chat = readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
 assert.doesNotMatch(chat, /passEnd\(/, "both chat headers go through activityDetail");
 assert.equal((chat.match(/activityDetail\(/g) ?? []).length >= 2, true, "naming header and mission header both carry the detail");
-assert.match(chat, /trialHeaderLine\(config\.activity\.trial\)/, "the personal-workspace chat header (no mission header) carries the trial line");
+assert.match(chat, /trialHeaderLine\(config\.activity\.trial, Date\.now\(\), !!config\.activity\.free\)/, "the personal-workspace chat header (no mission header) carries the trial line");
 assert.match(chat, /className="hps-trial-left"[^>]*>\{trialLine\}<\/span>/, "the trial line is plain text, not a button");
 const host = readFileSync(new URL("../src/startPage.ts", import.meta.url), "utf8");
 assert.match(host, /p\.trial && !p\.pass/, "the start page host forwards the trial block only for a non-pass seat");

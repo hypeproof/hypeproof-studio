@@ -471,3 +471,15 @@
 .studio-account .studio-google:hover:not(:disabled) { background: #f8faff; }
 .studio-account .studio-google:focus-visible { outline: 2px solid #4285f4; outline-offset: 2px; }
 .studio-account .studio-google svg { flex: 0 0 20px; margin: 0!important; }
+/* TUX-SP-14/15/16 — free start card. Same tokens as the rest of the card; one Primary, quiet links. */
+.studio-free { display:grid; gap:12px; }
+.studio-question { margin:0 0 2px; font-size:15px; line-height:1.5; font-weight:550; color:var(--studio-text); word-break:keep-all; }
+.studio-free-links { display:flex; flex-wrap:wrap; justify-content:center; gap:4px 18px; margin-top:4px; }
+.studio-free-links .studio-text-button { margin:0; }
+.studio-free-guardian { color:var(--studio-text); text-decoration:underline; text-underline-offset:3px; margin:0 auto; }
+/* A calm notice, not an error: today's free budget is gone or paused. No red, no countdown. */
+.studio-notice { margin:0; font-size:12px; line-height:1.6; color:var(--studio-text); background:var(--studio-panel); border:1px solid var(--studio-line); border-radius:7px; padding:12px; word-break:keep-all; }
+.studio-guardian-pay { display:grid; justify-items:center; gap:8px; margin:0 0 12px; }
+.studio-guardian-pay img { background:#fff; border-radius:6px; padding:6px; }
+.studio-guardian-pay .studio-help { margin:0; text-align:center; }
+.studio-guardian-pay .studio-text-button { margin:0; }

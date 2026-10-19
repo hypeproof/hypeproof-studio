@@ -51,6 +51,14 @@ export interface PurchaseView {
    * start tab closes, so a later visit never opens the purchase view by itself (REQ-L12 ①).
    */
   focus?: number;
+  /**
+   * SPEC iteration 4 §2.5 — the current seat is the free allowance. The payer question is asked
+   * once before checkout; `payerAdult` is the saved answer (absent → not asked yet).
+   */
+  freeSeat?: boolean;
+  payerAdult?: boolean;
+  /** A guardian pays: the checkout page as a link and a QR (data URL), instead of opening a browser here. */
+  guardian?: { url: string; qr: string };
 }
 
 /** Studio keeps waiting this long after the order's payment deadline, for a confirm that was already in flight. */
@@ -134,9 +142,14 @@ export async function fetchProducts(proxyUrl: string, signal?: AbortSignal): Pro
   } catch { return null; }
 }
 
-export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string): Promise<PendingOrder | "bad_checkout" | null> {
+/**
+ * `freeCredential` (SPEC iteration 4 §1.6/§2.5): the free seat's participant token, sent only as
+ * `x-hps-free-credential` so the Service can link this order to the free start it came from. The
+ * Service ignores a bad value; the token never reaches a webview or the checkout page.
+ */
+export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string, freeCredential?: string): Promise<PendingOrder | "bad_checkout" | null> {
   try {
-    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
+    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}), ...(freeCredential ? { "x-hps-free-credential": freeCredential } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
     return r.status === 201 ? parseOrder(await r.json(), productId, proxyUrl, siteBase) : null;
   } catch { return null; }
 }
@@ -232,8 +245,32 @@ export function trialEnding(err: unknown, onPass = false): TrialEnding | null {
   // The trial's AI cost ceiling (Service `trial_cost_exhausted`, 429): the SDK surfaces only the sentence.
   if (/체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다/.test(m)) return "exhausted";
   if (/개인 체험 시간이 끝났습니다/.test(m)) return "expired";
+  // Free start (SPEC iteration 4 §1.3) — the Service's free-grant sentences, one per ending.
+  if (FREE_EXHAUSTED_SERVICE.test(m)) return "exhausted";
+  if (FREE_EXPIRED_SERVICE.test(m)) return "expired";
   if (!onPass && /\btrial_(?:cost_)?exhausted\b/.test(m)) return "exhausted";
   return null;
+}
+
+/**
+ * The Service's sentences for a free grant (SPEC iteration 4 §1.3). Matched as whole phrases,
+ * never a bare 무료 (a one-token Korean match also hits unrelated sentences).
+ */
+export const FREE_EXHAUSTED_SERVICE = /무료로 쓸 수 있는 AI 요청을 모두 썼습니다/;
+export const FREE_EXPIRED_SERVICE = /무료 사용 시간이 끝났습니다/;
+/** Global daily cap drained (`cohort_paused`, reason `open_trial_daily_cap:<day>`). */
+export const FREE_DAILY_CAP_SERVICE = /오늘 준비한 무료 사용량이 모두 소진되었습니다/;
+
+/** Free-seat endings in 해요체. No 체험: the free allowance is not a trial to the person using it. */
+export const FREE_EXHAUSTED_FRIENDLY = "무료로 쓸 수 있는 AI 요청을 모두 썼어요. 만든 파일과 대화는 그대로 있어요.";
+export const FREE_EXPIRED_FRIENDLY = "무료 사용 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.";
+/** The calm chat notice when today's free budget is gone. No retry button, no purchase opened. */
+export const FREE_DAILY_CAP_NOTICE = "오늘 준비한 무료 사용량이 모두 소진되었습니다. 밤 12시(한국 시간) 이후에 다시 쓸 수 있습니다. 만든 파일과 대화는 그대로 남아 있습니다.";
+
+/** Whether this turn stopped because today's free budget is drained (free seats only). */
+export function freeDailyCapReached(err: unknown): boolean {
+  const m = (err as { message?: unknown } | null)?.message;
+  return typeof m === "string" && (FREE_DAILY_CAP_SERVICE.test(m) || /open_trial_daily_cap:/.test(m));
 }
 
 /** Trial endings in 해요체, like the purchase copy. The files stay (CU-14); nothing is charged or opened. */
@@ -243,14 +280,16 @@ export const TRIAL_EXPIRED_FRIENDLY = "체험 시간이 끝났어요. 만든 파
 export const TRIAL_PASS_POINTER_CHAT = "계속하려면 시작 화면의 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
 export const TRIAL_PASS_POINTER_START = "계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
 
-export function trialEndNotice(ending: TrialEnding, passesSold: boolean): string {
-  const said = ending === "exhausted" ? TRIAL_EXHAUSTED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY;
+export function trialEndNotice(ending: TrialEnding, passesSold: boolean, free = false): string {
+  const said = free
+    ? (ending === "exhausted" ? FREE_EXHAUSTED_FRIENDLY : FREE_EXPIRED_FRIENDLY)
+    : (ending === "exhausted" ? TRIAL_EXHAUSTED_FRIENDLY : TRIAL_EXPIRED_FRIENDLY);
   return passesSold ? `${said} ${TRIAL_PASS_POINTER_CHAT}` : said;
 }
 
 /** The start page's error line after a trial expired: the pointer is added only while passes are sold. */
 export function withTrialPassPointer(error: string | undefined, passesSold: boolean): string | undefined {
-  return error === TRIAL_EXPIRED_FRIENDLY && passesSold ? `${error} ${TRIAL_PASS_POINTER_START}` : error;
+  return (error === TRIAL_EXPIRED_FRIENDLY || error === FREE_EXPIRED_FRIENDLY) && passesSold ? `${error} ${TRIAL_PASS_POINTER_START}` : error;
 }
 
 /**
