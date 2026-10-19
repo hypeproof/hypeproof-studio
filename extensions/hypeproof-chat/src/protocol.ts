@@ -532,6 +532,8 @@ export type WebviewMessage = (
   | { type: "ready" }
   // CR-09 — the student removes the picked element before sending (CR switch only).
   | { type: "removeElementContext" }
+  /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
+  | { type: "removePageContext" }
   // cr-verify — "Test my product" (CR-12–CR-16; CR switch only, re-checked by the host).
   | { type: "verifyOpen" }
   // `requestId`: the panel that asked; only it sends the resulting `sendText` (two chat views receive every post).
@@ -749,6 +751,8 @@ export type HostMessage = (
   | { type: "pageAttached"; label: string }
   // CR-09 — the picked element queued for the next turn (null = none): exactly what goes.
   | { type: "elementAttached"; element: ElementPreview | null }
+  /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
+  | { type: "pageAttachment"; attachment: import("./pageContext").PageAttachmentPreview | null }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own
   // sentence the panel sends next through the normal send path (the coach context rides
   // with it, model-only). `error`: why the last action was refused.

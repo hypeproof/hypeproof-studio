@@ -1857,3 +1857,11 @@ html, body, #root {
 .hp-ai-can-do ul { margin: 6px 0; padding: 0; list-style: none; }
 .hp-ai-can-do li { margin: 4px 0; overflow-wrap: anywhere; word-break: keep-all; }
 .hp-ai-can-do li[data-on="false"] { color: var(--hp-muted); }
+
+/* CGP-ART-R-007: page text going with the next message. */
+.hps-page-attachment { margin: 6px 0; padding: 8px 10px; border: 1px solid var(--vscode-panel-border, #6b6b6b); border-radius: 8px; font-size: 13px; }
+.hps-page-attachment-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.hps-page-attachment-head strong { overflow-wrap: anywhere; }
+.hps-page-attachment-remove { margin-inline-start: auto; min-height: 44px; min-width: 44px; padding: 0 12px; }
+.hps-page-attachment pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; font: inherit; margin: 6px 0 0; }
+.hps-page-attachment-note { margin: 6px 0 0; font-size: 12px; }
