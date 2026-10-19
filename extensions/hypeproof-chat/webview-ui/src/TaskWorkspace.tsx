@@ -291,7 +291,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
       <ul className="tw-task-list">
         {visibleTasks.map(task => <li key={task.id}>
-          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId) postToHost({ type: 'taskSelect', id: task.id }); }}>
+          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
             <span className="tw-task-meta"><span>{task.messageCount ? `대화 ${task.messageCount}` : '시작 전'}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
