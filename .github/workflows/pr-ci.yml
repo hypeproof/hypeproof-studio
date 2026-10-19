@@ -11,6 +11,7 @@ on:
       - 'config/service-packages.json'
       - 'scripts/bootstrap-service-packages.mjs'
       - 'scripts/test/bootstrap-service-packages.test.mjs'
+      - 'scripts/release/**'
       - 'test/service-integration/**'
       - 'chalk/**'
       - 'extensions/hypeproof-chat/**'
