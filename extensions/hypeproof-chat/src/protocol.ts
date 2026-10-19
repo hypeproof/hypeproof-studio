@@ -198,6 +198,28 @@ export interface TrialEndCardView {
   productId: string;
   /** Title and facts as one line, for the banner fallback and screen readers. */
   text: string;
+  /**
+   * Optional "이메일로 소식 받기" section below the pass offer (TUX-COND-08). Present only on a free
+   * seat whose `/v1/profile` advertises `notify_optin` (Service HPS_FREE_NOTIFY_OPTIN, default off).
+   * Secondary and skippable: it never replaces the Primary and nothing is pre-checked.
+   */
+  notify?: TrialEndNotifyView;
+}
+
+/** TUX-COND-08 — the end card's optional email section. Copy comes from the host (trialEndCard.ts). */
+export interface TrialEndNotifyView {
+  /** The Service's consent version; the host sends it back with the address. */
+  consentVersion: string;
+  /** This seat already left an address (a local flag; the address itself is never stored). */
+  submitted: boolean;
+  prompt: string;
+  label: string;
+  placeholder: string;
+  button: string;
+  consent: string;
+  done: string;
+  withdraw: string;
+  withdrawn: string;
 }
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
@@ -213,6 +235,8 @@ export interface ResolvedProfile {
   pass?: PassStatus;
   /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */
   trial?: TrialStatus;
+  /** TUX-COND-08 — a free seat may leave an email on its end card (Service HPS_FREE_NOTIFY_OPTIN, default off). Absent → no section. */
+  notify_optin?: { available: boolean; consent_version: string };
   /**
    * REQ-L12 ⑫ exception (ot-conversation-carryover) — the Service offers "체험에서 하던 대화 이어가기"
    * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
@@ -549,6 +573,9 @@ export type WebviewMessage = (
   | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
   | { type: "trialEndCardPasses" }
+  /** TUX-COND-08 — the optional email on the end card. The address goes to the host and on to the Service only. */
+  | { type: "notifyOptinSubmit"; email: string }
+  | { type: "notifyOptinWithdraw" }
   | { type: "installUpdate" }              // #72: user clicked "Install Now" on update banner
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
   | { type: "clearHistory" }
@@ -751,6 +778,8 @@ export type HostMessage = (
   /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". */
   | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retry?: false; trialEndCard?: TrialEndCardView }
   | { type: "actionResult"; requestId: string; approved: boolean }
+  /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
+  | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the

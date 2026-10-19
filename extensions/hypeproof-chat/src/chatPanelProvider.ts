@@ -2,7 +2,8 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
-import { catalogueWithin, endCardAdvertised, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { catalogueWithin, endCardAdvertised, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
@@ -4657,6 +4658,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // purchase view (REQ-L12 ②); no order is created until they choose there.
         void vscode.commands.executeCommand("hypeproof-chat.showPasses");
         return;
+      case "notifyOptinSubmit":
+      case "notifyOptinWithdraw":
+        // TUX-COND-08 — the optional email on the end card. Never stored; only a submitted flag is.
+        void this.handleNotifyOptin(msg.type === "notifyOptinSubmit" ? msg.email : null);
+        return;
       case "installUpdate":
         // #72. User clicked "Install Now" on the update banner.
         void vscode.commands.executeCommand("hypeproof-chat.installUpdate");
@@ -6160,6 +6166,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * TUX-COND-08 — submit (`email` given) or withdraw (`null`) the optional notify opt-in of this
+   * free seat. Re-checks that the seat's profile still advertises it, then calls the Service with
+   * the seat's own credential. The address lives only in this call: it is never written to
+   * settings, globalState, SecretStorage, a log or a trace. Only the submitted flag is kept.
+   */
+  private async handleNotifyOptin(email: string | null): Promise<void> {
+    const reply = (state: "subscribed" | "withdrawn" | "error", message?: string) =>
+      void this.post({ type: "notifyOptinResult", state, ...(message ? { message } : {}) });
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxy = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const consentVersion = notifyOptinOffered(this.cachedProfile);
+    if (!token || !proxy || !consentVersion) return reply("error", NOTIFY_OPTIN_ERRORS.failed);
+    if (email === null) {
+      const r = await withdrawNotifyOptin(proxy, token);
+      if (!r.ok) return reply("error", r.message);
+      await setNotifySubmitted(this.context.globalState, token, false).catch(() => undefined);
+      return reply("withdrawn");
+    }
+    const address = plausibleEmail(email);
+    if (!address) return reply("error", NOTIFY_OPTIN_ERRORS.invalid);
+    const r = await submitNotifyOptin(proxy, token, address, consentVersion);
+    if (!r.ok) return reply("error", r.message);
+    await setNotifySubmitted(this.context.globalState, token, true).catch(() => undefined);
+    return reply("subscribed");
+  }
+
+  /**
    * Turn raw errors into kid-friendly messages and recovery actions. The kid
    * must never see raw JSON. Expired/missing token → auto-reopen the token
    * input box (teacher pastes a fresh one). Session/roster → friendly nudge
@@ -6179,7 +6212,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
     // purchase view, and any other turn ending falls through unchanged.
     if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
-      const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl) });
+      const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
       if (current.signal?.aborted) return;
       if (card) { void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card }); return; }
     }

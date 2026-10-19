@@ -11,7 +11,7 @@
 | TUX-SP-13 | 실제 React에서 처음(fresh)·한도 근처(near-limit)·다 씀(exhausted)·끝남(expired) 렌더와 음성 대조군(이용권·수업 좌석은 그대로) + 순수 함수 대조군 | `e2e/trial-ux/run.mjs` TUX-SP-13A/B/C/D/N, `extensions/hypeproof-chat/test/trial-status.smoke.mjs` |
 | TUX-CHAT-01~16 | 실제 React에서 전송·키보드·예약·이미지·코드·링크·오류 + 실제 호스트 전송/중지/삭제 | `e2e/trial-ux/run.mjs`, extension smoke, Electron 기록 |
 | TUX-OBS-01~10 | 실제 React에서 기록·동의·평가·정정·scope 전환 + 실제 평가 API/저장·재시작 | `e2e/trial-ux/run.mjs`, native observation 계약/실제 API, Electron 기록 |
-| TUX-COND-01~07 | 조건별 controlled host 이벤트로 실제 React 렌더 + 설치/복구 호스트 검증 | `e2e/trial-ux/run.mjs`, updater·error boundary smoke, 별도 앱 사본. TUX-COND-07 은 `e2e/trial-ux/run.mjs` TUX-COND-07(한도 시나리오)·TUX-COND-07N(작업 중 카드 없음), `test/trial-end-card.smoke.mjs`, `test/trial-end-card-host.smoke.mjs`, `test/start-page-purchase.smoke.mjs` |
+| TUX-COND-01~08 | 조건별 controlled host 이벤트로 실제 React 렌더 + 설치/복구 호스트 검증 | `e2e/trial-ux/run.mjs`, updater·error boundary smoke, 별도 앱 사본. TUX-COND-07 은 `e2e/trial-ux/run.mjs` TUX-COND-07(한도 시나리오)·TUX-COND-07N(작업 중 카드 없음), `test/trial-end-card.smoke.mjs`, `test/trial-end-card-host.smoke.mjs`, `test/start-page-purchase.smoke.mjs`. TUX-COND-08 은 `e2e/trial-ux/run.mjs` TUX-COND-08(이메일 구역·받기·그만 받기)·TUX-COND-08N(광고 없음·이미 냄), `test/notify-optin-host.smoke.mjs`(host→Service 경로, 저장 안 됨) |
 | TUX-HOST-01~08 | 실제 Electron·OS·파일시스템·로컬 신고 수신기 | `e2e/tests/native-trial-live.spec.ts`, `native-entry-controls.spec.ts`, `native-approval-controls.spec.ts`, `native-browser-input.spec.ts`, `26-report-resilience.spec.ts` 및 실제 앱 실행 기록 |
 | TUX-A11Y-01~04 | 브라우저 DOM/키보드/viewport + 실제 앱 focus·늦은 응답·좁은 패널 | `e2e/trial-ux/run.mjs`, Electron 화면·입력 기록 |
 

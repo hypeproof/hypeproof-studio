@@ -70,6 +70,17 @@ const endCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id
 assert.ok(endCard, 'positive control: an open-trial ending yields a card');
 assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial' }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: code-issued trial (flag off)');
 assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: mid-work failure');
+// TUX-COND-08 — the optional email section rides on the same card, only when the Service advertises it.
+const notifyOffer = { available: true, consent_version: 'free-notify-2026-10-19' };
+const notifyCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses });
+assert.equal(notifyCard?.notify?.consentVersion, notifyOffer.consent_version, 'positive control: an advertised free seat gets the section');
+assert.equal(endCard.notify, undefined, 'negative control: not advertised');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: { ...notifyOffer, available: false } }, err: endCardExhausted, products: endCardPasses }).notify, undefined, 'negative control: available false');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: code-issued trial');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer, pass: { request_limit: 1, requests_used: 1 } }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: pass seat');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: before the end');
+const notifySubmittedCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial', notify_optin: notifyOffer }, err: endCardExhausted, products: endCardPasses, notifySubmitted: true });
+assert.equal(notifySubmittedCard.notify.submitted, true);
 const trialActivity = { activity: { id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true } };
 const server = http.createServer(async (req, res) => {
   try {
@@ -550,6 +561,75 @@ try {
     await host(p, { type: 'streamError', streamId: 'fail2', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
     await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
     assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+  }, { cfg: trialActivity });
+  // TUX-COND-08 — optional "이메일로 소식 받기" below the pass offer (Jay 2026-10-19). The webview's
+  // setState throws in this harness, so a persisted address would fail the case; localStorage is
+  // checked empty after every case too.
+  const SYNTHETIC_EMAIL = 'learner.synthetic@example.com';
+  await test('TUX-COND-08', 'Free end card: optional email section, explicit opt-in, address only to the host, withdraw', async p => {
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: notifyCard.text, trialEndCard: notifyCard });
+    const card = p.locator('.hps-trial-end-card');
+    const section = card.getByTestId('notify-optin');
+    await expect(section).toHaveCount(1);
+    await expect(section).toContainText('새 기능과 할인 소식을 이메일로 받아 볼래요? (선택)');
+    await expect(section).toContainText('[수집 항목: 이메일 · 목적: 서비스·할인 소식 안내 · 보관: 수신 거부 또는 1년 뒤 삭제]');
+    // The pass offer stays the one Primary, first in the card; the section comes after it.
+    await expect(card.locator('.hps-trial-end-card-primary')).toHaveCount(1);
+    assert.equal(await card.evaluate(el => {
+      const primary = el.querySelector('.hps-trial-end-card-primary'), s = el.querySelector('[data-testid="notify-optin"]');
+      return !!(primary.compareDocumentPosition(s) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }), true, 'the section is below the pass offer');
+    // Explicit opt-in (정보통신망법 §50): no checkbox, nothing pre-checked or pre-filled; 받기 needs an address.
+    await expect(card.locator('input[type="checkbox"], input[type="radio"]')).toHaveCount(0);
+    const input = section.getByRole('textbox', { name: '이메일' });
+    await expect(input).toHaveValue('');
+    await expect(btn(p, '받기')).toBeDisabled();
+    // Nothing is sent by drawing the card.
+    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length, 0);
+    await p.screenshot({ path: path.join(out, 'TUX-COND-08-form.png'), fullPage: true });
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'no overflow at 390px');
+    await input.fill(SYNTHETIC_EMAIL);
+    await btn(p, '받기').click();
+    await request(p, { type: 'notifyOptinSubmit', email: SYNTHETIC_EMAIL });
+    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length, 1);
+    await expect(btn(p, '받기')).toBeDisabled();
+    // A Service refusal shows its sentence and keeps the form.
+    await host(p, { type: 'notifyOptinResult', state: 'error', message: '이메일 주소를 다시 확인해 주세요.' });
+    await expect(section.getByRole('alert')).toHaveText('이메일 주소를 다시 확인해 주세요.');
+    await btn(p, '받기').click();
+    await host(p, { type: 'notifyOptinResult', state: 'subscribed' });
+    await expect(section).toContainText('소식을 보내 드릴게요.');
+    await expect(section.getByRole('textbox')).toHaveCount(0);
+    assert.ok(!(await p.content()).includes(SYNTHETIC_EMAIL), 'the address is gone from the page after success');
+    await p.screenshot({ path: path.join(out, 'TUX-COND-08-done.png'), fullPage: true });
+    // Withdraw is a small link-style button; it asks the host, which calls the delete route.
+    await btn(p, '그만 받기').click();
+    await request(p, { type: 'notifyOptinWithdraw' });
+    await host(p, { type: 'notifyOptinResult', state: 'withdrawn' });
+    await expect(section).toContainText('이제 소식을 보내지 않을게요.');
+    // The pass Primary still works and the section never opened the purchase view by itself.
+    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+    await btn(p, '이용권 살펴보기').click();
+    await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
+  }, { cfg: trialActivity });
+  await test('TUX-COND-08N', 'Email section absent when not advertised; an earlier submission shows the done line (controls)', async p => {
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(1);
+    await expect(p.getByTestId('notify-optin')).toHaveCount(0);
+    await expect(p.getByText('이메일로 받아 볼래요', { exact: false })).toHaveCount(0);
+    // Mid-work: no card, no section.
+    await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
+    await expect(p.getByTestId('notify-optin')).toHaveCount(0);
+    await host(p, { type: 'streamEnd', streamId: 'work' });
+    // A seat that already submitted: done line and withdraw, no empty form.
+    await host(p, { type: 'streamStart', streamId: 'limit2', messageId: 'a-limit2' });
+    await host(p, { type: 'streamError', streamId: 'limit2', error: notifySubmittedCard.text, trialEndCard: notifySubmittedCard });
+    await expect(p.getByTestId('notify-optin')).toContainText('소식을 보내 드릴게요.');
+    await expect(p.getByTestId('notify-optin').getByRole('textbox')).toHaveCount(0);
+    await expect(btn(p, '그만 받기')).toBeVisible();
+    assert.equal(emitted(await requests(p), 'notifyOptinSubmit').length + emitted(await requests(p), 'notifyOptinWithdraw').length, 0);
   }, { cfg: trialActivity });
   // ── Free start (SPEC iteration 4 §2.3/§2.4; TUX-SP-14/15/16) ─────────────────────────────
   // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
