@@ -8,6 +8,7 @@ import s1 from '../smoke/checks/s1-service-health.mjs';
 import s3 from '../smoke/checks/s3-cohort-token.mjs';
 import s4 from '../smoke/checks/s4-chat-api.mjs';
 import {judge} from '../smoke/checks/s5-candidate-ci.mjs';
+import {runSmokeChecks} from '../smoke/smoke.mjs';
 
 const pr = (number, title, files = [], extra = {}) => ({
   number, title, body: '', author: {login: 'dev'},
@@ -214,4 +215,41 @@ test('S3 binds a fresh synthetic token and requires successful cleanup, without 
     fetchImpl: async () => { throw Error('secret'); }});
   assert.equal(transport.result, 'FAIL');
   assert.doesNotMatch(transport.detail, /secret/);
+});
+
+// Stub check factory for smoke order tests.
+const stub = (id, result, detail = '') => ({id, name: id, run: async () => ({result, detail})});
+const ctx = {};
+
+test('smoke runs read-only checks (S1, S2, S5) before session-opening checks (S3, S4)', async () => {
+  const order = [];
+  const tracked = id => ({id, name: id, run: async () => { order.push(id); return {result: 'PASS', detail: ''}; }});
+  await runSmokeChecks([tracked('S4'), tracked('S3'), tracked('S5'), tracked('S2'), tracked('S1')], ctx);
+  assert.deepEqual(order.slice(0, 3).sort(), ['S1', 'S2', 'S5']);
+  assert.deepEqual(order.slice(3).sort(), ['S3', 'S4']);
+});
+
+test('smoke skips S3 and S4 with NOT_RUN when S1 fails', async () => {
+  const checks = await runSmokeChecks([stub('S1', 'FAIL'), stub('S2', 'PASS'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'PASS')], ctx);
+  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
+  assert.equal(byId.S3.result, 'NOT_RUN');
+  assert.equal(byId.S4.result, 'NOT_RUN');
+  assert.match(byId.S3.detail, /skipped: S1 failed/);
+  assert.match(byId.S4.detail, /skipped: S1 failed/);
+});
+
+test('smoke skips S3 and S4 with NOT_RUN when S5 fails', async () => {
+  const checks = await runSmokeChecks([stub('S1', 'PASS'), stub('S2', 'PASS'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'FAIL')], ctx);
+  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
+  assert.equal(byId.S3.result, 'NOT_RUN');
+  assert.equal(byId.S4.result, 'NOT_RUN');
+  assert.match(byId.S3.detail, /skipped: S5 failed/);
+  assert.match(byId.S4.detail, /skipped: S5 failed/);
+});
+
+test('smoke does not skip S3 and S4 when only S2 fails', async () => {
+  const checks = await runSmokeChecks([stub('S1', 'PASS'), stub('S2', 'FAIL'), stub('S3', 'PASS'), stub('S4', 'PASS'), stub('S5', 'PASS')], ctx);
+  const byId = Object.fromEntries(checks.map(c => [c.id, c]));
+  assert.equal(byId.S3.result, 'PASS');
+  assert.equal(byId.S4.result, 'PASS');
 });
