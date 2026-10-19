@@ -8,6 +8,7 @@ import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingCompo
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { imeComposing } from './imeGuard';
 import { scrollBehavior } from './motion';
+import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -1048,6 +1049,7 @@ export function ChatPanel(props: Props) {
     <div
       className={`hps-shell${dragActive ? " hps-shell-drag" : ""}`}
       data-chat-detail={personalWorkspace ? 'personal' : undefined}
+      data-text-size={normalizeTextSize(config?.textSize) === 'base' ? undefined : normalizeTextSize(config?.textSize)}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1643,6 +1645,14 @@ export function ChatPanel(props: Props) {
           <ModelControl config={config} streaming={streaming} />
           <EffortControl config={config} post={postToHost} personal />
         </details>
+        <fieldset className="hps-text-size">
+          <legend>글자 크기</legend>
+          {TEXT_SIZES.map(size => <label key={size}>
+            <input type="radio" name="hps-text-size" value={size} checked={normalizeTextSize(config.textSize) === size}
+              onChange={() => postToHost({ type: 'setTextSize', size })} />
+            <span>{TEXT_SIZE_LABELS[size]}</span>
+          </label>)}
+        </fieldset>
         <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} />}
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>

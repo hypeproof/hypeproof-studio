@@ -177,6 +177,7 @@ import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
+import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
@@ -4745,6 +4746,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "requestAction":
         await this.handleActionRequest(msg.action);
         return;
+      case "setTextSize":
+        await this.context.globalState.update(TEXT_SIZE_KEY, normalizeTextSize(msg.size));
+        await this.postConfig();
+        return;
       case "openSettings":
         void vscode.commands.executeCommand("workbench.action.openSettings", "hypeproofChat");
         return;
@@ -6837,6 +6842,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         access:this.accessState,
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         reduceMotion: reduceMotionForced(vscode.workspace.getConfiguration("workbench").get("reduceMotion")),
+        textSize: normalizeTextSize(this.context.globalState?.get(TEXT_SIZE_KEY)),
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
         update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile, activity) },

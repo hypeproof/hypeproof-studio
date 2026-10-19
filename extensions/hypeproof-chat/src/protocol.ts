@@ -119,6 +119,8 @@ export interface EffortRequestRecord {
   request_class?: string;
 }
 export interface ChatConfig {
+  /** CGP-DS-R-009: chat text size chosen on this device. */
+  textSize?: import('./textSize').TextSize;
   /** CGP-DS-R-015: `workbench.reduceMotion` is "on"; the webview stops nonessential motion. */
   reduceMotion?: boolean;
   turnTools?: import('./turnTools').TurnToolsAvailability;
@@ -574,6 +576,8 @@ export type WebviewMessage = (
   | { type: "cancelStream"; streamId: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
+  /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */
+  | { type: "setTextSize"; size: string }
   | { type: "setToken" }
   | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
   /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
