@@ -439,3 +439,24 @@ export function pickInflight<T>(
   map.set(key, p);
   return p;
 }
+
+// ---------------------------------------------------------------------------
+// Release access (REQ-I14). The release mirror is private: only members with a
+// GitHub login can read it. Everyone else — including no-code trial users —
+// gets new builds from the homepage download page, so the copy says exactly
+// that instead of a developer instruction or a "try again later" promise that
+// can never come true.
+
+export const UPDATE_DOWNLOAD_URL = "https://hypeproof-ai.xyz/download";
+export const UPDATE_ACCESS_NOTICE_KEY = "hypeproofChat.updateAccessNotice";
+
+/** Student-facing copy (Korean is the product; see CLAUDE.md §Language). */
+export const UPDATE_ACCESS_MANUAL_COPY =
+  "이 Studio에서는 앱 안에서 새 버전을 확인할 수 없어요. 새 버전은 홈페이지에서 받을 수 있어요.";
+export const UPDATE_ACCESS_PASSIVE_COPY = "새 버전은 홈페이지에서 받을 수 있어요.";
+export const UPDATE_OPEN_HOMEPAGE_LABEL = "홈페이지 열기";
+
+/** Show the passive homepage line at most once per installed app version. */
+export function shouldShowAccessNotice(lastNoticedVersion: unknown, currentVersion: string): boolean {
+  return lastNoticedVersion !== currentVersion;
+}

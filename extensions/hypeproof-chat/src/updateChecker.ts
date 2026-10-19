@@ -17,7 +17,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as cp from "child_process";
-import { downloadVerifiedUpdate, fetchLatestRelease, trustedUpdateUrl } from "./updateTransport";
+import { downloadVerifiedUpdate, fetchLatestRelease, isUpdateAccessError, trustedUpdateUrl } from "./updateTransport";
 import {
   compareVersions,
   isUpdateVersion,
@@ -30,7 +30,13 @@ import {
   pickDarwinAsset,
   pickWindowsInstaller,
   renderWindowsUpdateWrapper,
+  shouldShowAccessNotice,
   MIN_FREE_DISK_BYTES,
+  UPDATE_ACCESS_MANUAL_COPY,
+  UPDATE_ACCESS_NOTICE_KEY,
+  UPDATE_ACCESS_PASSIVE_COPY,
+  UPDATE_DOWNLOAD_URL,
+  UPDATE_OPEN_HOMEPAGE_LABEL,
   type AssetPicker,
   type GhRelease,
   type UpdateInfo,
@@ -431,6 +437,10 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
       info = await checkForUpdates(deps.currentVersion);
     } catch (error) {
       console.warn(`[hypeproof-chat/update] check failed: ${(error as Error).message}`);
+      // No release access is permanent, not transient: say once per app
+      // version where new builds come from instead of failing silently
+      // (REQ-I14). Transient failures stay silent (REQ-I11).
+      if (!disposed && isUpdateAccessError(error)) await noticeHomepageUpdateOnce(deps);
       return; // A failed check must not erase a previously confirmed update.
     }
     if (disposed) return;
@@ -461,6 +471,36 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
       timer = null;
     },
   };
+}
+
+async function noticeHomepageUpdateOnce(deps: SchedulerDeps): Promise<void> {
+  const last = deps.context.globalState.get<string>(UPDATE_ACCESS_NOTICE_KEY);
+  if (!shouldShowAccessNotice(last, deps.currentVersion)) return;
+  await deps.context.globalState.update(UPDATE_ACCESS_NOTICE_KEY, deps.currentVersion);
+  // Non-modal and not awaited: a passive line, never a blocking dialog.
+  void offerHomepage(UPDATE_ACCESS_PASSIVE_COPY);
+}
+
+async function offerHomepage(text: string): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(text, UPDATE_OPEN_HOMEPAGE_LABEL);
+  if (choice === UPDATE_OPEN_HOMEPAGE_LABEL) {
+    await vscode.env.openExternal(vscode.Uri.parse(UPDATE_DOWNLOAD_URL));
+  }
+}
+
+/**
+ * Copy for a failed manual check (command palette). Without release access the
+ * answer is the homepage download — no developer instruction and no "try again
+ * later" (REQ-I14). Other failures keep the retry copy.
+ */
+export async function reportManualUpdateCheckFailure(error: unknown): Promise<void> {
+  if (isUpdateAccessError(error)) {
+    await offerHomepage(UPDATE_ACCESS_MANUAL_COPY);
+    return;
+  }
+  await vscode.window.showWarningMessage(
+    `업데이트를 확인하지 못했습니다. 잠시 후 다시 시도해주세요. ${(error as Error)?.message ?? ""}`,
+  );
 }
 
 export async function dismissVersion(
