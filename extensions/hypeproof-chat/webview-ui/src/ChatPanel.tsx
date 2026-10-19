@@ -962,6 +962,8 @@ export function ChatPanel(props: Props) {
 
   const handleChip = (chip: SuggestionChip) => {
     if (chip.style === "weak") return;       // contrast-only chips are not clickable
+    // Personal starters share the editable-choice ownership rule: keep manual text.
+    if (personalWorkspace) { handleReplyChoice(chip.text); return; }
     // Drop the chip text into draft and focus textarea so kid can append/edit.
     setDraft(chip.text);
     setTimeout(() => textareaRef.current?.focus(), 0);
