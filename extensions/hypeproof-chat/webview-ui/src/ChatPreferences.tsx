@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { imeComposing } from './imeGuard';
 
 /**
  * Native dialog keeps keyboard focus inside settings without a second modal implementation.
@@ -16,6 +17,12 @@ export function ChatPreferences({ open, onClose, initialFocus, children }: { ope
     if (!open && node?.open) node.close();
   }, [open, initialFocus]);
   return <dialog ref={dialog} className="hps-preferences" aria-labelledby="chat-preferences-title"
+    onKeyDown={event => {
+      if (imeComposing(event)) return;
+      // The top-layer dialog owns Escape. Keep its native cancel behavior while
+      // preventing the workspace underneath from dismissing the sources panel.
+      if (event.key === 'Escape') event.stopPropagation();
+    }}
     onCancel={onClose} onClose={onClose}>
     <header><h2 id="chat-preferences-title">대화 설정</h2><button type="button" autoFocus aria-label="대화 설정 닫기" onClick={onClose}>×</button></header>
     <div className="hps-preferences-body">{children}</div>
