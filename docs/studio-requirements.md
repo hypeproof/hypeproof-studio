@@ -55,6 +55,20 @@ through reopen; no provider capability is granted by the saved preference.
 Verification: `e2e/queued-photo-send.mjs` (real React), `turn-tools.test.mjs`
 (real disk reopen), and separately identified native fixture evidence.
 
+`REQ-C16` recovery capacity (UX38): before dispatching a new request, reserve
+space for its possible refusal alongside existing recovered requests: at most
+eight items and 24 MiB of UTF-8 serialized recovery data. At capacity, retain
+the composer, images and parked request and explain how to recover space.
+Explicit retries of an existing item remain available. Reading legacy data or
+receiving a late refusal never silently truncates previously owned input; an
+over-limit list blocks new dispatches until the learner resolves it. Removal
+requires an explicit per-item confirmation with Cancel. The scrollable list
+must leave the composer usable at 600px height and split-pane width. This
+supports Human judgment stays visible / OWNERSHIP, without claiming a learning
+outcome. The limit covers recovery data, not total workspace storage or future
+host-staged files. Real React, disk reopening and isolated native evidence have
+separate identities; no live provider or installed RC acceptance is inferred.
+
 `REQ-C16` queue recovery (UX-QUEUE-01): completing a response removes its parked
 message only after the composer accepts that send. An unready photo or refused
 dispatch leaves the original text and tool mode in a durable paused item with an

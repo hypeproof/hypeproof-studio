@@ -11,6 +11,7 @@ import { build } from 'esbuild';
 import { turnToolsAvailability, retryTurnToolMode, WebSearchActivity } from '../src/turnTools.ts';
 import { SdkWebCitations } from '../src/sdkWebCitations.ts';
 import { validActivityDraft, preservedDraftContent } from '../src/activityDraft.ts';
+import { canReserveRecovery, recoveryFull } from '../src/recoveryCapacity.ts';
 import { TaskWorkspaceStore } from '../src/taskWorkspaceStore.ts';
 import { MCP_BROWSER_OPEN, MCP_LIVE_PREVIEW_START } from '../src/browserMcp.ts';
 
@@ -21,6 +22,26 @@ const toolResult = (id, value, error = false) => ({ type: 'user', message: { con
 const searchOutput = (url = 'https://example.test/reference') => ({ query: 'source question', results: ['commentary https://invented.test/', { tool_use_id: 'server-search-id', content: [{ title: 'Observed search hit', url }] }] });
 const copy = value => JSON.parse(JSON.stringify(value));
 const temporary = t => { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-turn-tools-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root; };
+
+test('recovery admission bounds count and UTF-8 bytes without deleting legacy disk input', async t => {
+  const next={text:'새 요청',images:[],toolMode:'auto'};
+  const legacy=Array.from({length:12},(_,i)=>({text:`보관 ${i}`,images:['data:image/png;base64,cGhvdG8='],toolMode:'web-search'}));
+  assert.equal(canReserveRecovery(legacy.slice(0,7),next),true);
+  assert.equal(canReserveRecovery(legacy.slice(0,8),next),false);
+  const large={text:'큰 사진',toolMode:'auto',images:Array.from({length:3},()=>`data:image/png;base64,${'A'.repeat(8*1024*1024)}`)};
+  assert.equal(validActivityDraft({text:'',images:[],queued:null,recovered:[large]}),true,'valid older drafts remain readable');
+  assert.equal(recoveryFull([large]),true,'byte budget applies even to one recovered item');
+  assert.equal(canReserveRecovery([],large),false,'reserve the potential refusal before sending');
+  const root=temporary(t),store=new TaskWorkspaceStore(root,'capacity');await store.initialize();
+  const id=store.getView().activeTaskId;
+  const draft={text:'현재 초안',images:[],queued:'대기 요청',queuedPaused:true,recovered:legacy};
+  await store.saveDraft(id,draft);
+  const reopened=new TaskWorkspaceStore(root,'capacity');
+  assert.deepEqual(reopened.getDraft(),draft,'above-cap legacy items survive exact disk reopen');
+  assert.equal(canReserveRecovery(reopened.getDraft().recovered,next),false);
+  await reopened.saveDraft(id,{...draft,recovered:legacy.slice(1)});
+  assert.deepEqual(new TaskWorkspaceStore(root,'capacity').getDraft().recovered,legacy.slice(1),'explicit removal changes only the selected item');
+});
 
 const bundle = await build({ stdin: { contents: "export {ChatPanelProvider} from './src/chatPanelProvider'; export {runSdkCoach,SdkUnavailableError} from './src/sdkCoach'; export {BrowserControl} from './src/browserControl';", resolveDir: extension, loader: 'ts' }, bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], write: false, logLevel: 'silent', plugins: [{ name: 'scripted-provider-runtime', setup(b) {
   b.onResolve({ filter: /^\.\/sdkCoach$/ }, args => args.importer.endsWith('/chatPanelProvider.ts') ? { path: 'sdk', namespace: 'runtime' } : undefined);

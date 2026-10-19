@@ -1704,10 +1704,12 @@ html, body, #root {
 
 /* Recovered requests use the existing parked-message hierarchy, with a bounded
    list so failure recovery never pushes the composer off a short window. */
-.hps-recovery-list { max-height: 160px; overflow-y: auto; overscroll-behavior: contain; }
+.hps-recovery-list { max-height: min(160px, 25vh); min-height: 0; flex-shrink: 1; overflow-y: auto; overscroll-behavior: contain; }
 .hps-recovered { flex-wrap: wrap; }
 .hps-recovered .hps-queued-text { min-width: 80px; }
 .hps-recovered button:focus-visible { outline: 2px solid var(--vscode-focusBorder, #446b9b); outline-offset: 2px; }
+.hps-recovery-notice { font-size: 12px; line-height: 1.5; padding: 6px 4px; color: var(--vscode-descriptionForeground, #647078); }
+.hps-recovery-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-basis: 100%; }
 
 .hps-queued-send {
   flex: 0 0 auto;

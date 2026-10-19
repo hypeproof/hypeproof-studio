@@ -80,6 +80,31 @@ async function scenario(name, run) {
   }
 }
 try {
+  await scenario('recovery-capacity-preserves-new-input', async ({ page, input, queue, render, sends }) => {
+    await page.evaluate(activityId => {
+      for (let i=0;i<8;i++) for(let duplicate=0;duplicate<2;duplicate++) {
+        window.dispatchEvent(new MessageEvent('message',{data:{type:'inputRejected',activityId,text:`보관할 요청 ${i+1}`,toolMode:'web-search',images:['data:image/png;base64,c3ludGhldGlj']}}));
+      }
+    },fixture.config.activity.id);
+    const recovered=page.locator('.hps-recovered');
+    await expect(recovered).toHaveCount(8);
+    await render({streaming:false,error:'합성 거절'});
+    await input.press('Enter');
+    await expect(input).toHaveValue('다음 초안 D');
+    assert.equal((await sends()).length,0,'new requests must stop before recovery storage grows again');
+    await queue.getByRole('button',{name:'보내기',exact:true}).click();
+    assert.equal((await sends()).length,0,'parked sends obey the same recovery capacity');
+    await expect(queue).toContainText('대기 메시지 C');
+    await expect(page.getByRole('status').filter({hasText:'보관한 메시지를 먼저'})).toBeVisible();
+    await page.waitForFunction(()=>window.hostEvents.filter(m=>m.type==='saveActivityDraft').at(-1)?.draft.recovered?.length===8);
+    await page.evaluate(()=>window.reopen());
+    await expect(recovered).toHaveCount(8);await expect(input).toHaveValue('다음 초안 D');
+    await recovered.first().getByRole('button',{name:'다시 보내기',exact:true}).click();
+    await expect(recovered).toHaveCount(7);assert.equal((await sends()).length,1);
+    await queue.getByRole('button',{name:'보내기',exact:true}).click();
+    await expect(queue).toHaveCount(0);assert.equal((await sends()).length,2);
+    await expect(input).toHaveValue('다음 초안 D');
+  });
   await scenario('rejected-search-keeps-existing-queue', async ({ page, input, queue, render, sends }) => {
     const reject = () => page.evaluate(activityId => window.dispatchEvent(new MessageEvent('message', {data: {
       type: 'inputRejected', activityId, text: '실패한 검색 요청 A', toolMode: 'web-search', images: ['data:image/png;base64,c3ludGhldGlj']
@@ -127,6 +152,31 @@ try {
     await recovered.getByRole('button',{name:'수정하기',exact:true}).click();
     await expect(input).toHaveValue('실패한 검색 요청 A');await expect(recovered).toHaveCount(0);
     await expect(input).toBeFocused();assert.equal((await sends()).length,2);
+  });
+  await scenario('recovery-cleanup-small-window', async ({page,input,queue,render,sends}) => {
+    await page.setViewportSize({width:560,height:600});
+    await page.evaluate(activityId=>{
+      for(let i=0;i<12;i++)window.dispatchEvent(new MessageEvent('message',{data:{type:'inputRejected',activityId,text:`기존 메시지 ${i+1} — 사진과 검색 의도를 보존합니다`,toolMode:'web-search',images:['data:image/png;base64,c3ludGhldGlj']}}));
+    },fixture.config.activity.id);
+    await render({streaming:false,error:'합성 거절'});
+    const recovered=page.locator('.hps-recovered');await expect(recovered).toHaveCount(12);
+    await recovered.last().getByRole('button',{name:'삭제',exact:true}).focus();await page.keyboard.press('Enter');
+    const confirmation=page.getByRole('group',{name:'메시지 삭제 확인'});
+    await expect(confirmation.getByRole('button',{name:'취소',exact:true})).toBeFocused();
+    await page.keyboard.press('Escape');await expect(recovered).toHaveCount(12);await expect(input).toBeFocused();
+    await page.screenshot({path:join(output,'small-window-recovery-before-cleanup.png')});
+    await recovered.last().getByRole('button',{name:'삭제',exact:true}).click();
+    await confirmation.getByRole('button',{name:'삭제 확인',exact:true}).click();
+    await expect(recovered).toHaveCount(11);await expect(input).toBeFocused();
+    await expect(input).toHaveValue('다음 초안 D');await expect(queue).toContainText('대기 메시지 C');
+    await expect.poll(async()=>page.evaluate(()=>window.hostEvents.filter(m=>m.type==='saveActivityDraft').at(-1)?.draft.recovered?.length)).toBe(11);
+    await page.evaluate(()=>window.reopen());await expect(recovered).toHaveCount(11);
+    await expect(recovered.last()).toContainText('기존 메시지 11');await expect(input).toHaveValue('다음 초안 D');
+    const geometry=await page.evaluate(()=>{const r=document.querySelector('.hps-recovery-list').getBoundingClientRect(),i=document.querySelector('.hps-input textarea').getBoundingClientRect();return {listHeight:r.height,inputTop:i.top,inputBottom:i.bottom,height:innerHeight,width:innerWidth,scrollWidth:document.documentElement.scrollWidth};});
+    assert.ok(geometry.listHeight<=151,JSON.stringify(geometry));
+    assert.ok(geometry.inputTop>=0&&geometry.inputBottom<=geometry.height,JSON.stringify(geometry));
+    assert.ok(geometry.scrollWidth<=geometry.width,JSON.stringify(geometry));
+    assert.equal((await sends()).length,0,'cleanup never sends any input');
   });
   await scenario('ready-photo-completion', async ({ input, queue, render, stage, ack, sends }) => {
     const photo = await stage(); await ack(photo); await render({ streaming: false });
