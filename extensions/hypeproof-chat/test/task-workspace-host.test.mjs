@@ -206,3 +206,30 @@ test('rename acknowledges the matching request only after persistence and report
     assert.equal(f.store.getDraft().text, '보존할 초안');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+
+test('config snapshot waits for an accepted draft write before recreating the UI', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-config-draft-'));
+  let release, saving, config;
+  try {
+    const f = await createTaskHarness(root);
+    let entered;
+    const started = new Promise(resolve => { entered = resolve; });
+    const held = new Promise(resolve => { release = resolve; });
+    const save = f.store.saveDraft.bind(f.store);
+    f.store.saveDraft = async (...args) => { entered(); await held; return save(...args); };
+    saving = f.handle(f.scoped({ type: 'saveActivityDraft', draft: { text: '보존할 초안 ABC', images: [], queued: null } }));
+    await started;
+    config = f.h.postConfig();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.posts.filter(message => message.type === 'config').length, 0, 'do not publish an older draft while the accepted write is pending');
+    release();
+    await Promise.all([saving, config]);
+    assert.equal(f.posts.findLast(message => message.type === 'config').config.activityDraft.text, '보존할 초안 ABC');
+    assert.equal(f.store.getDraft().text, '보존할 초안 ABC');
+  } finally {
+    release?.();
+    await Promise.allSettled([saving, config]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
