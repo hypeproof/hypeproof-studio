@@ -3176,6 +3176,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // it from the second one on and the record gets buried under warnings.
     if (this.fallbackNoticeShown) return;
     this.fallbackNoticeShown = true;
+    // CGP-AGENT-R-003: the capability card now follows the proxy runtime.
+    void this.postConfig();
     this.postToolLog(streamId, {
       id: randomId(),
       icon: "⚠️",
@@ -6833,7 +6835,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       type: "config",
       config: {
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
-        ...(toolProfile && !local && !isInstructor ? { aiCapabilities: aiCapabilities(toolProfile, toolRuntime) } : {}),
+        // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
+        ...(toolProfile && !local && !isInstructor ? { aiCapabilities: aiCapabilities(toolProfile, this.fallbackNoticeShown ? 'proxy' : toolRuntime) } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,

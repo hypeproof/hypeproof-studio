@@ -12,7 +12,7 @@ export interface AiCapability { key: AiCapabilityKey; label: string; on: boolean
 export const AI_CAPABILITY_LABELS: Record<AiCapabilityKey, string> = {
   read: "작업 폴더의 파일 읽기",
   write: "작업 폴더의 파일 고치기",
-  shell: "명령 실행하기 (실행 전에 물어봐요)",
+  shell: "명령 실행하기",
   subagents: "다른 도우미 AI에게 일 나눠 맡기기",
   browser: "Studio 브라우저로 페이지 열고 살펴보기",
   web_search: "웹에서 찾아보기",

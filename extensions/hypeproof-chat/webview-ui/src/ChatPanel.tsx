@@ -1216,7 +1216,7 @@ export function ChatPanel(props: Props) {
       {/* #751 U2 — instructor notices/materials: the coach rail's "강사 메시지" kind (SX-06), outside the message stream
           (SX-05), closed by default, no Primary (SX-04). Drawn with or without a lesson. */}
       {/* CGP-AGENT-R-003 — what the AI can do on this seat. Same rail, closed by default, no Primary. */}
-      {!props.instructor && config?.aiCapabilities && <AiCanDo items={config.aiCapabilities} />}
+      {!props.instructor && config?.aiCapabilities && <AiCanDo items={config.aiCapabilities} solo={audience === 'solo'} />}
       <InstructorInbox inbox={inbox} post={postToHost} promptImport={{ onImport: importPrompt, onUndo: undoImport, disabled: frozen, draft, last: lastImport, note: importNote }} />
       {/* #751 native help — the learner's own request to the instructor of this class. Same rail, closed by default, no Primary. */}
       {/* #1298 — hidden for instructor mode; instructor has no student help-request surface. */}
@@ -1668,15 +1668,16 @@ export function ChatPanel(props: Props) {
 // ---------------------------------------------------------------------------
 
 /** CGP-AGENT-R-003: every REQ-M38 key is listed; an off key reads "안 해요" so nothing is implied. */
-function AiCanDo({ items }: { items: NonNullable<ChatConfig['aiCapabilities']> }) {
+function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilities']>; solo: boolean }) {
+  // Trial diagnosis D3: a solo seat (trial, pass, personal) has no lesson and no teacher.
   return <details className="hp-rail-lesson hp-ai-can-do">
-    <summary>이 수업에서 AI가 할 수 있는 일</summary>
+    <summary>{solo ? '여기서 AI가 할 수 있는 일' : '이 수업에서 AI가 할 수 있는 일'}</summary>
     <ul>
       {items.map(item => <li key={item.key} data-capability={item.key} data-on={item.on ? 'true' : 'false'}>
         <span aria-hidden="true">{item.on ? '✓' : '–'}</span> {item.label}: <strong>{item.on ? '해요' : '안 해요'}</strong>
       </li>)}
     </ul>
-    <p className="hp-rail-lesson-note">수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.</p>
+    <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
 }
 

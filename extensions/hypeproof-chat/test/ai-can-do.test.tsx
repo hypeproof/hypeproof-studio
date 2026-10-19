@@ -53,8 +53,15 @@ t("card renders every row with 해요 / 안 해요 and stays closed", () => {
   if (!/data-capability="read" data-on="true">[\s\S]*?<strong>해요<\/strong>/.test(html)) throw new Error("read on");
   if (!/data-capability="shell" data-on="false">[\s\S]*?<strong>안 해요<\/strong>/.test(html)) throw new Error("shell off");
 });
-t("negative control: no card without capabilities, and none for an instructor", () => {
+t("negative control: no card without capabilities", () => {
   if (renderToStaticMarkup(<ChatPanel {...PROPS} config={config()} instructor={false} />).includes("hp-ai-can-do")) throw new Error("card without data");
+});
+t("solo seats get no classroom or teacher words (trial diagnosis D3)", () => {
+  const trial = { ...config(aiCapabilities(adult, "agent-sdk")), profile: { ...config().profile, activity_kind: "trial", profile_id: "studio-native-trial" }, activity: { id: "t1", name: "AI 체험", kind: "trial", workspace: "/tmp/t", verified: true } } as unknown as ChatConfig;
+  const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={trial} instructor={false} />);
+  const card = /<details class="hp-rail-lesson hp-ai-can-do">[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
+  if (!card.includes("여기서 AI가 할 수 있는 일")) throw new Error("solo title missing");
+  for (const word of ["수업", "선생님"]) if (card.includes(word)) throw new Error(`solo card says ${word}`);
 });
 
 if (fail) { console.error(`ai-can-do: ${fail} failed`); process.exit(1); }
