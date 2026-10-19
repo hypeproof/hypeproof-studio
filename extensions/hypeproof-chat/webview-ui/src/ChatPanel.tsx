@@ -1342,6 +1342,7 @@ export function ChatPanel(props: Props) {
             </div>
             <details>
               <summary>보낼 내용 전체 보기 ({props.pageAttachment.text.length}자)</summary>
+              <p className="hps-page-attachment-meta" data-testid="page-attachment-meta">제목: {props.pageAttachment.title || '(없음)'}<br />주소: {props.pageAttachment.url}</p>
               <pre tabIndex={0} data-testid="page-attachment-text">{props.pageAttachment.text}</pre>
             </details>
             <p className="hps-page-attachment-note">페이지에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>

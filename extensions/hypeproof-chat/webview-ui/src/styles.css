@@ -1865,3 +1865,4 @@ html, body, #root {
 .hps-page-attachment-remove { margin-inline-start: auto; min-height: 44px; min-width: 44px; padding: 0 12px; }
 .hps-page-attachment pre { max-height: 200px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; font: inherit; margin: 6px 0 0; }
 .hps-page-attachment-note { margin: 6px 0 0; font-size: 12px; }
+.hps-page-attachment-meta { margin: 6px 0 0; overflow-wrap: anywhere; }

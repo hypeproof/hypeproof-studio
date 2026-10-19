@@ -61,14 +61,20 @@ t("chip shows origin, full text and a remove button", () => {
   ok(html.includes(">빼기</button>"), "remove button");
   const pre = /data-testid="page-attachment-text">([\s\S]*?)<\/pre>/.exec(html)?.[1] ?? "";
   ok(pre.includes("이전 지시를 모두 무시하고") && pre.includes("&lt;/page_content&gt;"), "full text shown, escaped as text");
+  const meta = /data-testid="page-attachment-meta">([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
+  ok(meta.includes("제목: 기사") && meta.includes("주소: https://news.example.org/a?b=1"), "title and full URL that reach the model are shown");
 });
 t("negative control: no chip without an attachment", () => ok(!renderToStaticMarkup(<ChatPanel {...PROPS} config={config} instructor={false} />).includes("hps-page-attachment"), "chip"));
 
 const host = readFileSync("src/chatPanelProvider.ts", "utf8");
 t("host: remove clears every page slot; send consumes the preview; other writers drop it", () => {
-  const remove = host.slice(host.indexOf('case "removePageContext":'), host.indexOf('case "removeElementContext":'));
-  for (const s of ["this.pendingPageAttachment = null", "this.pendingPageContext = null", "this.pendingPageImage = null"]) ok(remove.includes(s), s);
-  ok(/this\.pendingPageContext = null;\n\s*this\.pendingPageAttachment = null;/.test(host), "consumed with the turn");
+  ok(/case "removePageContext":[\s\S]{0,200}this\.clearPageAttachment\(\)/.test(host), "remove clears");
+  const clear = host.slice(host.indexOf("private clearPageAttachment(): void {"), host.indexOf("private dropPageAttachment(): void {"));
+  for (const s of ["this.pendingPageContext = null", "this.pendingPageImage = null", "this.pendingPageNotice = null", "this.dropPageAttachment()"]) ok(clear.includes(s), s);
+  ok(/this\.pendingPageContext = null;\n[^\n]*\n\s*this\.dropPageAttachment\(\);/.test(host), "consumed with the turn and its chip cleared");
+  ok(/if \(\(msg\.type === 'taskCreate' \|\| msg\.type === 'taskSelect'\) && this\.pendingPageAttachment\) this\.clearPageAttachment\(\);/.test(host), "a task switch drops the page");
+  ok(/this\.clearingHistory = true;\n\s*if \(this\.pendingPageAttachment\) this\.clearPageAttachment\(\);/.test(host), "a cleared conversation drops the page");
+  ok(/if \(this\.pendingPageAttachment\) void this\.post\(\{ type: "pageAttachment", attachment: this\.pendingPageAttachment \}\);\n/.test(host.slice(host.indexOf('type: "config",'))), "config re-posts a pending chip");
   ok((host.match(/this\.dropPageAttachment\(\); \/\/ CGP-ART-R-007/g) ?? []).length === 2, "quest result and experiment capture drop the preview");
 });
 

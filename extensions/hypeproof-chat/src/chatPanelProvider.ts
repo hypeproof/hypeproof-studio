@@ -562,6 +562,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
           else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
           this.orchestratorState = undefined;
+          // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
+          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
           await this.postConfig();
           await this.postHistory();
         } finally {
@@ -2110,6 +2112,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the guest reacting in the next message is enough. Attached quietly to the next
     // turn only, with no notification.
   }
+  /** CGP-ART-R-007 — remove queued page text, screenshot and notice; nothing from the page is sent. */
+  private clearPageAttachment(): void {
+    if (!this.pendingPageAttachment) return;
+    this.pendingPageContext = null;
+    this.pendingPageImage = null;
+    this.pendingPageNotice = null;
+    void this.post({ type: "pageAttached", label: "" });
+    this.dropPageAttachment();
+  }
   /** CGP-ART-R-007 — the queued page text is replaced or gone; stop showing it as going out. */
   private dropPageAttachment(): void {
     if (!this.pendingPageAttachment) return;
@@ -2695,6 +2706,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   async clearHistory(): Promise<void> {
     if (this.clearingHistory || this.taskChanging || this.connectionChanging || this.hasActiveStream()) return;
     this.clearingHistory = true;
+    if (this.pendingPageAttachment) this.clearPageAttachment(); // CGP-ART-R-007 — a new conversation starts without the old page
     const key = this.historyKey();
     const taskStore = this.currentTaskStore?.();
     const taskId = taskStore?.getView().activeTaskId;
@@ -4958,13 +4970,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "removePageContext":
         // CGP-ART-R-007 — removed before sending: nothing from the page goes with the next turn.
-        if (this.pendingPageAttachment) {
-          this.pendingPageAttachment = null;
-          this.pendingPageContext = null;
-          this.pendingPageImage = null;
-          this.pendingPageNotice = null;
-          void this.post({ type: "pageAttached", label: "" });
-        }
+        this.clearPageAttachment();
         void this.post({ type: "pageAttachment", attachment: null });
         return;
       case "removeElementContext":
@@ -5314,7 +5320,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.pullQuestResultFromPreview();
     const pageContext = this.pendingPageContext;
     this.pendingPageContext = null;
-    this.pendingPageAttachment = null;
+    // A page attached while this send was between its awaits is consumed now: clear its chip too.
+    this.dropPageAttachment();
     // #308 — the notice describes the queued context; once consumed, stop
     // resurrecting it on webview remounts (webview clears its copy on userSent).
     this.pendingPageNotice = null;
@@ -7042,6 +7049,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(isInstructor && local ? { instructorModelChoices: localModelSelection(local).choices } : {}),
       },
     });
+    // CGP-ART-R-007 — a config for another activity or task resets the webview's state; queued page
+    // text must stay visible for as long as it would be sent.
+    if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
     // #649 — when the webview remounts (panel hide → show, reload) the highlight
     // disappears. Announce the currently open world once more to restore the strip's
     // aria-pressed.
