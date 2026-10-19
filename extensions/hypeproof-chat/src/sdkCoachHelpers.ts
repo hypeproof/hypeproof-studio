@@ -1714,6 +1714,21 @@ export const SDK_TRUNCATED_FRIENDLY =
   "\"더 간결하게 다시 만들어줘\" 라고 요청하거나, 만들던 파일을 열어 어디까지 됐는지 확인해 주세요.";
 
 /**
+ * CGP-AGENT-R-008 — the model declined the request (`stop_reason: "refusal"`).
+ *
+ * 5.5 models return a refusal as HTTP 200 with that stop reason and usually no text
+ * (docs/requirements/learning-agent-experience.md, "거절"). The proxy route appends the
+ * Worker's `REFUSAL_NOTICE`; `/v1/messages` passes SSE through untouched, so on the SDK
+ * path the learner got an empty turn. The fact sentence is shared with the Worker and
+ * drift-checked by the smoke test; the next step adds the file check every SDK result
+ * notice gives, because tools may already have run earlier in the same run (#968).
+ */
+export const SDK_REFUSED_FRIENDLY =
+  "\n\n---\n⚠️ **AI가 안전 기준에 따라 이 요청에는 답하지 않았습니다.**\n" +
+  "무엇을 하려는지 조금 더 설명해서 다시 요청해 주세요. **저장된 변경이 있는지 작업 파일을 확인해 주세요.** " +
+  "계속 같은 답이 나오면 강사에게 알려 주세요.";
+
+/**
  * 이 `result` 가 학생에게 보여줄 종료 안내가 있는지. 없으면 null(정상 종료).
  *
  * `is_error` 를 함께 보는 이유: subtype 이름 규칙에만 기대면 SDK 가 규칙을 바꾸는
@@ -1725,6 +1740,8 @@ export function sdkResultNotice(msg: Record<string, unknown>): string | null {
   // 잘림을 **먼저** 본다. 성공 result 에도 붙을 수 있고, 그때 학생에게 중요한
   // 사실은 "왜 끝났나"가 아니라 "문서가 완성되지 않았다"이기 때문이다.
   if (msg["stop_reason"] === "max_tokens") return SDK_TRUNCATED_FRIENDLY;
+  // A refusal can arrive on a success result; checking error subtypes alone misses it.
+  if (msg["stop_reason"] === "refusal") return SDK_REFUSED_FRIENDLY;
   if (subtype === "error_max_turns") return SDK_MAX_TURNS_FRIENDLY;
   const known = SDK_RESULT_ERROR_FRIENDLY[subtype];
   if (known) return known;
