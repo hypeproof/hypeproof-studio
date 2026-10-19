@@ -781,10 +781,11 @@
         "PRA-06",
         "PRA-07",
         "PRA-08",
-        "PRA-11"
+        "PRA-11",
+        "PRA-13"
       ],
       "inline_prefixes": [],
-      "sha256": "a1b124a51f6c083c5f46f8ea985fe4626c24d117e3a3b278f143c1e25baa6ba0",
+      "sha256": "0bcf333f1c777c433b727f5ef50ef13dc42fb9956b56d385ef84518617adb2f0",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3901,6 +3902,39 @@
       ],
       "verification_inputs": [
         "scripts/test-installer-sdk-seed.sh"
+      ]
+    },
+    {
+      "id": "installer-korean-copy",
+      "title": "Learner-facing installer prompts, headers and doctor verdict in Korean",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-13"
+          ]
+        }
+      ],
+      "depends_on": [
+        "installer-sdk-seed-fail-closed"
+      ],
+      "next_action": "Merge after the SDK seed fail-closed change; run one Mac install without Homebrew and one Windows install without Git Bash and confirm the consent prompts, step headers and doctor verdict read in Korean.",
+      "design_delta": "install.sh and install.ps1 ask the Homebrew, nvm and WSL questions, print step headers, the doctor verdict and the final line in Korean, with Korean answer hints; tool output and diagnostic log lines stay as they are. Both installers read Korean and Korean-IME answers (아니요, ㄴ, ㅜ / 네, ㅇ, ㅛ) the way the learner meant; a not-understood answer is asked again and, after three tries, taken as no.",
+      "positive_control": "Korean prompts and headers that keep tool names pass, and both shipped installers pass with at least their known number of prompts and headers (scripts/test-check-installer-korean.py). Every yes answer, Korean, IME jamo or English, and Enter on a default-yes question is read as yes by both shipped parsers (scripts/test-installer-answers.sh).",
+      "negative_control": "English confirm/Confirm-Or/Read-Host prompts, step headers, [Y/n] answer hints and doctor verdicts are rejected (scripts/test-check-installer-korean.py). Every no answer, including 아니요 (which the old install.sh read as yes and so installed Homebrew), is read as no, and a not-understood answer is never read as yes (scripts/test-installer-answers.sh).",
+      "evidence_required": "Studio commit and the static check output. A real install on each platform is required before completion; a static check is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "scripts/install.ps1",
+        "scripts/check-installer-korean.py"
+      ],
+      "verification_inputs": [
+        "scripts/test-check-installer-korean.py",
+        "scripts/test-installer-answers.sh",
+        "scripts/test-installer-kit.sh"
       ]
     },
     {

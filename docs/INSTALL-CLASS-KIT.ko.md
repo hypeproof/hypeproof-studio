@@ -67,7 +67,7 @@ GitHub 로그인과 조직 초대는 필요 없다.
 bash install.sh --kit .
 ```
 
-끝에 `doctor: all manifest checks passed` 와 `SDK: seeded + verified` 가 보여야 한다.
+끝에 `점검(doctor): 모든 항목 통과` 와 `SDK: seeded + verified` 가 보여야 한다.
 SDK 시드가 빠지거나 실패하면 doctor 가 `SDK: 설치되지 않았습니다 — 멈춘 단계: …` 와 복구 명령을 찍고 non-zero 로 끝난다
 (Windows 설치기와 같다). 앱 안에서 SDK를 받는 기능은 아직 없다([sdk-bundling](sdk-bundling.md)). `registry.npmjs.org` 접속을 확인하고 찍힌 명령(같은 키트 설치 명령)을 다시 실행한다.
 
@@ -80,7 +80,7 @@ SDK 시드가 빠지거나 실패하면 doctor 가 `SDK: 설치되지 않았습�
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -KitDir .
 ```
 
-끝에 `doctor: ALL CHECKS PASSED` 또는 `doctor: REQUIRED CHECKS PASSED` 가 보여야 한다.
+끝에 `점검(doctor): 모든 항목 통과` 또는 `점검(doctor): 필수 항목 통과` 가 보여야 한다.
 
 설치가 끝나면 앱을 열고 수업 참여 코드를 입력한다. 다시 실행해도 된다. 이미 설치된 것은 건너뛴다.
 
