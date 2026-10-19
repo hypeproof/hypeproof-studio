@@ -3,10 +3,10 @@
   "provenance": {
     "repository": "hypeproof/hypeproof-service",
     "branch": "fix/trial-ot-funnel-events-20261018",
-    "commit": "1acb6c5",
+    "commit": "981c888",
     "note": "Captured from the unmerged Service branch commit by running its parseAppEvent (samples[].accepted is the real parser verdict). Regenerate when the Service contract changes.",
     "sources": {
-      "worker/src/lib/trial-funnel.ts": "8a0d39086f1f1fdce04066fc51316fc9b3462f507f757e8a8ca73f2aa6768e76",
+      "worker/src/lib/trial-funnel.ts": "3fa492309b0a32989c0aed87fac6af4a504fc53815ed3f46f7e8d9bde0a98097",
       "worker/src/routes/trial-events.ts": "8dc886d28d1053d43f747c2582bf3c87fdb48c694de5b799149f9d9185195d3f",
       "worker/src/index.ts": "458c87ee5a850dd108c106e129dd8f78bdc710ea2fff41247e1a953d30eb4688"
     }

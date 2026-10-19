@@ -139,6 +139,15 @@ if (process.env.HPS_SERVICE_WORKER_DIR) {
     assert.deepEqual(r.event, b, "the Service records exactly what Studio sent");
   }
   for (const s of CONTRACT.samples) assert.equal(svc.parseAppEvent(s.body).ok, s.accepted, `fixture stale for ${JSON.stringify(s.body)}`);
+  for (const [t, spec] of Object.entries(svc.APP_EVENTS)) assert.deepEqual(CONTRACT.app_events[t], spec.fields, `fixture app_events stale for ${t}`);
+  // Provenance pins the exact Service sources the fixture was captured from; a moved
+  // Service head must be followed by a regenerated fixture, not a silently stale pin.
+  const { createHash } = await import("node:crypto");
+  const repo = dir.replace(/\/worker$/, "");
+  for (const [rel, sha] of Object.entries(CONTRACT.provenance.sources)) {
+    const actual = createHash("sha256").update(readFileSync(`${repo}/${rel}`)).digest("hex");
+    assert.equal(actual, sha, `fixture provenance stale for ${rel}: regenerate from the Service head`);
+  }
   console.log("funnel-events smoke: real Service parser cross-check ok");
 }
 
