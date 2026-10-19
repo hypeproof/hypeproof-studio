@@ -242,3 +242,22 @@
 
 /* CGP-DS-R-028: personal prose keeps eojeol line breaks too. */
 .hps-shell[data-chat-detail="personal"] .hps-msg-body { word-break: keep-all; }
+
+/* CGP-DS-R-009: chat text size in personal chat (the picker lives in 대화 설정). Base stays as above
+   (16px body and composer); 크게 / 아주 크게 add 2px / 4px to the body, the composer and the
+   reply-choice text inside answers. Control heights and 44px targets do not change. */
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-msg-body,
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-input textarea { font-size: 18px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-msg-body,
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-input textarea { font-size: 20px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-reply-choices button { font-size: 16px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-reply-choices button { font-size: 18px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-choice-number { font-size: 14px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-choice-number { font-size: 16px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-choice-help { font-size: 13px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-choice-help { font-size: 15px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="large"] .hps-choice-help button { font-size: 14px; }
+.hps-shell[data-chat-detail="personal"][data-text-size="xlarge"] .hps-choice-help button { font-size: 16px; }
+.hps-text-size { border: 0; border-bottom: 1px solid var(--tw-line); margin: 0; padding: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.hps-text-size legend { padding: 0; font-weight: 500; min-height: 32px; }
+.hps-text-size label { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }

@@ -6348,6 +6348,33 @@
           "path": "extensions/hypeproof-chat/test/reduced-motion.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-TEXT-SIZE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/textSize.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TEXT-SIZE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-TEXT-SIZE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/text-size.test.tsx"
+        }
+      ]
     }
   ]
 }

@@ -102,6 +102,13 @@ follows the OS through `prefers-reduced-motion`. "off" also follows the OS inste
 motion back on, because re-enabling animation against an OS accessibility setting is the riskier
 direction. State stays readable without motion. Test: `test/reduced-motion.smoke.mjs`.
 
+CGP-DS-R-009 (2026-10-19): in personal chat the learner chooses a text size, 기본 / 크게 / 아주 크게,
+in the 대화 설정 dialog. Message bodies and the composer read 16/18/20px, and the reply-choice text
+inside answers grows by the same 2px steps; control heights and 44px targets do not change. The
+choice is a device preference (`globalState`, not part of any lesson or activity) and applies when
+the host confirms it. The default size adds no markup. Not built: classroom seats have no settings
+dialog, so they keep the base size; code pills keep their size. Test: `test/text-size.test.tsx`.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop
