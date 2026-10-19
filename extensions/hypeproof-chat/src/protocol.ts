@@ -119,6 +119,8 @@ export interface EffortRequestRecord {
   request_class?: string;
 }
 export interface ChatConfig {
+  /** CGP-AGENT-R-003: what the AI can do on this seat, one row per REQ-M38 key. */
+  aiCapabilities?: import('./aiCapabilities').AiCapability[];
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
   /** CGP-DS-R-015: `workbench.reduceMotion` is "on"; the webview stops nonessential motion. */

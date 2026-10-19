@@ -1815,3 +1815,8 @@ html, body, #root {
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
+
+/* CGP-AGENT-R-003: capability card rows. State is a symbol plus the word (SX-50), never colour alone. */
+.hp-ai-can-do ul { margin: 6px 0; padding: 0; list-style: none; }
+.hp-ai-can-do li { margin: 4px 0; overflow-wrap: anywhere; word-break: keep-all; }
+.hp-ai-can-do li[data-on="false"] { color: var(--hp-muted); }
