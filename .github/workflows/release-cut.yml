@@ -91,6 +91,30 @@ jobs:
           if [[ $code -eq 1 && "$MODE" != create ]]; then exit 1; fi
           exit 0
 
+      # Safety net for job cancellation (SIGKILL skips the trap in run-sdk-contract.sh).
+      # S4 calls run-sdk-contract.sh via spawnSync; a hard kill of this runner bypasses
+      # that script's EXIT trap and leaves canary-internal open. The close endpoint
+      # accepts a call without a jti and ends any open session on the cohort.
+      - name: Close canary session (always)
+        if: always()
+        env:
+          HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
+        run: |
+          [[ -z "${HPS_CANARY_ISSUER:-}" ]] && exit 0
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            -X POST "https://api.hypeproof-ai.xyz/admin/cohorts/canary-internal/session/close" \
+            -H "Authorization: Bearer $HPS_CANARY_ISSUER" \
+            -H 'content-type: application/json' \
+            -d '{}' 2>/dev/null)"
+          if [[ "$code" == "200" ]]; then
+            echo "canary session closed"
+          elif [[ "$code" == "404" ]]; then
+            echo "no open canary session (already closed by S4 — ok)"
+          else
+            echo "::error::canary session close returned HTTP $code"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
