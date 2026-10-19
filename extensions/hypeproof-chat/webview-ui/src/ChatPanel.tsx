@@ -1456,7 +1456,7 @@ export function ChatPanel(props: Props) {
             requestId={props.errorRequestId}
             runbookUrl={props.errorRunbookUrl}
             canRetry={props.canRetryLast && recovered.length === 0}
-            onRetry={() => recoverToComposer(props.onRetryLast)}
+            onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(props.onRetryLast); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
             onReport={props.onReportProblem}
             audience={audience}

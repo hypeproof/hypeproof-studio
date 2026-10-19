@@ -261,6 +261,8 @@ t("composer send is refused while the edit box is open, and only then", () => {
     assert.ok(at > 0, fn);
     assert.match(panel.slice(at, at + 260), /if \(composerBlockedByEdit\(editingId, editableId\)\) \{ setImgNote\(EDIT_OPEN_NOTE\); return/, fn);
   }
+  // The error banner's 다시 보내기 also starts a turn, which would close the editor and drop its text.
+  assert.match(panel, /onRetry=\{\(\) => \{ if \(composerBlockedByEdit\(editingId, editableId\)\) \{ setImgNote\(EDIT_OPEN_NOTE\); return; \} recoverToComposer\(props\.onRetryLast\); \}\}/, "banner retry");
 });
 
 console.log(`edit-resend smoke OK (${n})`);
