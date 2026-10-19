@@ -8,6 +8,7 @@
 |---|---|---|
 | TUX-SP-01~10 | 실제 React에서 입력·버튼·상태 분기 + Electron 연결/시작/폴더·패널 이동 | `e2e/trial-ux/run.mjs`, 기존 `e2e/tests/native-trial-live.spec.ts`, `startPage` 호스트 테스트 |
 | TUX-SP-12 | 실제 React: 알림 없음(코드 문장 있음·숫자 없음, 양성) · `code`+이용 범위(Service 값 그대로) · `open`(코드만 구현한 빌드라 코드 문장 유지, 선택 뒤 화면과 일치) + 호스트: 자격증명 없는 조회 1회, `/v1/profile` 0회 | `e2e/start-page/run.mjs`, `extensions/hypeproof-chat/test/trial-offer.smoke.mjs` |
+| TUX-SP-13 | 실제 React에서 처음(fresh)·한도 근처(near-limit)·다 씀(exhausted)·끝남(expired) 렌더와 음성 대조군(이용권·수업 좌석은 그대로) + 순수 함수 대조군 | `e2e/trial-ux/run.mjs` TUX-SP-13A/B/C/D/N, `extensions/hypeproof-chat/test/trial-status.smoke.mjs` |
 | TUX-CHAT-01~16 | 실제 React에서 전송·키보드·예약·이미지·코드·링크·오류 + 실제 호스트 전송/중지/삭제 | `e2e/trial-ux/run.mjs`, extension smoke, Electron 기록 |
 | TUX-OBS-01~10 | 실제 React에서 기록·동의·평가·정정·scope 전환 + 실제 평가 API/저장·재시작 | `e2e/trial-ux/run.mjs`, native observation 계약/실제 API, Electron 기록 |
 | TUX-COND-01~06 | 조건별 controlled host 이벤트로 실제 React 렌더 + 설치/복구 호스트 검증 | `e2e/trial-ux/run.mjs`, updater·error boundary smoke, 별도 앱 사본 |

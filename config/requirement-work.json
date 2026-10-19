@@ -447,12 +447,13 @@
         "TUX-SP-08",
         "TUX-SP-09",
         "TUX-SP-10",
-        "TUX-SP-12"
+        "TUX-SP-12",
+        "TUX-SP-13"
       ],
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "db42197f5566e434a2c707480bb24ad382989c87b8934a455361052be74561a0",
+      "sha256": "5e1ca79cbeeb688972b9bef8e2290227e3a5370fdec72224c200cfa697662000",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -2011,7 +2012,8 @@
             "TUX-SP-08",
             "TUX-SP-09",
             "TUX-SP-10",
-            "TUX-SP-12"
+            "TUX-SP-12",
+            "TUX-SP-13"
           ]
         }
       ],

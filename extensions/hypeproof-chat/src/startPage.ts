@@ -389,7 +389,7 @@ export class StartPage {
       ...(this.accounts ? {account:this.accounts.view()} : {}),
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
-      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
+      ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
         // describes the mode instead of showing the placeholder as a name.

@@ -7,7 +7,7 @@ import "./start.css";
 
 import { AccountEntry } from "./AccountEntry";
 import { InstructorInbox } from "./InstructorInbox";
-import { activityLabel, passSummary } from "./activityLabel";
+import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
 import { trialEntryNote } from "../../src/trialOffer";
 
 export function StartPage() {
@@ -40,6 +40,12 @@ export function StartPage() {
   const passLeft = passSummary(state.profile?.pass);
   // TUX-SP-12 — said before the choice: a code is needed today (until the Service advertises open entry), and the Service's allowance.
   const trialNote = trialEntryNote(state.trialOffer);
+  // TUX-SP-13 — a trial seat's allowance (candidate), what is left (connected), or the ended card.
+  // A pass keeps passSummary and is never read as a trial.
+  const trial = state.profile?.pass ? undefined : state.profile?.trial;
+  const ended = trialEndedFacts(trial);
+  const trialLeft = ended ? null : state.candidate ? trialAllowance(trial) : trialSummary(trial);
+  const openPurchase = () => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); };
   const choose = (next: "trial" | "classroom") => { setToken(""); setEntry(next); setEditing(true); };
   // REQ-L12 — buying a pass. The host owns the order; this view shows its stage and sends intents.
   const purchase = state.purchase;
@@ -76,16 +82,20 @@ export function StartPage() {
       </section>
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
         <div className="studio-card-top"><span className="studio-step">시작하기</span><span className="studio-dot"/></div>
-        <h2 id="connect-title">{showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? "수업에 참여하기" : "어떻게 시작할까요?"}</h2>
-        <p className="studio-card-description">{showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? "발급받은 참여 코드로 수업을 확인하세요." : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
+        <h2 id="connect-title">{showProfile && ended ? ended.title : showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? "수업에 참여하기" : "어떻게 시작할까요?"}</h2>
+        <p className="studio-card-description">{showProfile && ended ? ended.description : showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? "발급받은 참여 코드로 수업을 확인하세요." : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
         {state.profile && !editing ? <>
-          <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
-          {ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <span aria-hidden="true">↗</span></button>}
-          {gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
-          {gh?.status === "unavailable" && <p className="studio-help">GitHub에 올린 홈페이지를 확인하지 못했어요. 새로 시작해도 돼요.</p>}
+          <div className="studio-course"><span className="studio-verified">{activity}</span><h3>{state.profile.name}</h3><dl><div><dt>{copy.coachRowLabel}</dt><dd>{state.profile.coach}</dd></div>{state.profile.kind !== "trial" && state.profile.kind !== "personal" && <div><dt>회차</dt><dd>{state.profile.series}</dd></div>}{passLeft && <div><dt>남은 이용</dt><dd>{passLeft}</dd></div>}{ended ? <div><dt>체험</dt><dd>{ended.row}</dd></div> : trialLeft && <div><dt>{state.candidate ? "체험 한도" : "남은 체험"}</dt><dd>{trialLeft}</dd></div>}<div><dt>작업 폴더</dt><dd>{state.profile.workspace}</dd></div></dl></div>
+          {/* TUX-SP-13 — an ended trial has no "이어서 하기": peer choices only (SX-04), and the pass is opened only by the person (REQ-L12 ①). */}
+          {ended ? (purchase?.available || (ended.reason === "exhausted" && !state.candidate)) && <div className="studio-entry-options" role="group" aria-label="체험 이후 고르기">
+            {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이어서 하려면 이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
+            {ended.reason === "exhausted" && !state.candidate && <button className="studio-choice" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? "활동 여는 중…" : "지난 대화 보기"} <span aria-hidden="true">→</span></button>}
+          </div> : ghChoice ? <GithubChoice github={gh!} checking={state.checking} /> : <button className="studio-primary" disabled={state.checking || ghBusy} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "beginCourse" }); }}>{state.checking ? (gh?.working === "signin" ? "GitHub 로그인 기다리는 중…" : "활동 여는 중…") : state.started ? copy.continueButton : state.candidate ? "이 활동 시작하기" : "이어서 하기"} <span aria-hidden="true">↗</span></button>}
+          {!ended && gh?.status === "signin" && !gh.working && <button className="studio-text-button" disabled={state.checking} onClick={() => postToHost({ type: "githubSignIn" })}>다른 컴퓨터에서 올린 홈페이지 불러오기 (GitHub 로그인)</button>}
+          {!ended && gh?.status === "unavailable" && <p className="studio-help">GitHub에 올린 홈페이지를 확인하지 못했어요. 새로 시작해도 돼요.</p>}
           {/* #751 U2 — a quiet line under the one Primary (SX-02/04): the same list, from the same host read, as the work screen. */}
           {!state.candidate && <InstructorInbox inbox={state.inbox ?? null} post={postToHost} quiet />}
-          {state.candidate && !ghChoice && <button className="studio-text-button" disabled={state.checking || ghBusy} onClick={() => postToHost({type:"chooseActivityFolder"})}>다른 작업 폴더 선택</button>}
+          {state.candidate && !ghChoice && !ended && <button className="studio-text-button" disabled={state.checking || ghBusy} onClick={() => postToHost({type:"chooseActivityFolder"})}>다른 작업 폴더 선택</button>}
           <div className="studio-course-actions"><button className="studio-text-button" onClick={() => { setEditing(true); setEntry(null); setToken(""); }} disabled={state.checking}>다른 활동 선택</button><button className="studio-text-button" onClick={() => postToHost({ type: state.candidate ? "cancelCandidate" : "disconnectCourse" })} disabled={state.checking}>{state.candidate ? "선택 취소" : "연결 해제"}</button></div>
         </> : buying ? <div className="studio-purchase">
           {purchase?.stage === "waiting" || purchase?.stage === "connecting" ? <>
@@ -125,7 +135,7 @@ export function StartPage() {
           </div>
           <button className="studio-choice" disabled={state.checking} onClick={() => choose("classroom")}>수업에 참여하기 <span aria-hidden="true">→</span></button>
           {/* REQ-L12 — a third peer choice, drawn only when the Service sells passes. Chosen by the person; never opened for them. */}
-          {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); }}>이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
+          {purchase?.available && <button className="studio-choice" disabled={state.checking} onClick={openPurchase}>이용권으로 시작하기 <span aria-hidden="true">→</span></button>}
           {state.profile && <button className="studio-text-button" onClick={() => setEditing(false)}>기존 활동으로 돌아가기</button>}
           {purchase?.order && !purchase.stage && <button className="studio-text-button" disabled={state.checking} onClick={() => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseRetry" }); }}>결제 중인 이용권 이어서 보기 · {purchase.order.label}</button>}
         </div> : <form onSubmit={connect}>

@@ -187,6 +187,77 @@ try {
     await test(`TUX-SP-${id}`, `${label}: keyboard action emits correct host request`, async p => { await btn(p, label).focus(); await expect(btn(p, label)).toBeFocused(); await btn(p, label).press('Enter'); await request(p, { type }); }, { surface: 'start' });
   }
   await test('TUX-SP-10', 'Disconnected coach has start-page CTA', async p => { await btn(p, '시작 화면 열기').click(); await request(p, { type: 'setToken' }); await expect(draft(p)).toHaveCount(0); }, { profile: null });
+  // TUX-SP-13 — the trial allowance (CU-13): candidate card, passive header line, ended card. The
+  // Service's `trial` block is the only source; a pass keeps passSummary (negative).
+  const trialEnds = new Date(Date.now() + 50 * 60_000).toISOString();
+  const trialSeat = (trial, extra = {}) => ({ ...course, kind: 'trial', trial, ...extra });
+  const fresh = { state: 'active', ends_at: trialEnds, request_limit: 40, requests_used: 0 };
+  const nearLimit = { ...fresh, requests_used: 37 };
+  const exhausted = { ...fresh, state: 'exhausted', requests_used: 40 };
+  const expiredTrial = { ...fresh, state: 'expired', ends_at: new Date(Date.now() - 60_000).toISOString(), requests_used: 12 };
+  const courseRow = (p, dt) => p.locator('.studio-course dl > div').filter({ has: p.locator('dt', { hasText: new RegExp(`^${dt}$`) }) }).locator('dd');
+  const taskWorkspace = { scope: 'synthetic-scope', revision: 1, activeTaskId: 't1', tasks: [{ id: 't1', title: '합성 작업', createdAt: 1, updatedAt: 1, messageCount: 0 }], sourceSelection: null };
+  const trialActivity = trial => ({ id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true, trial });
+  await test('TUX-SP-13A', 'Fresh trial: candidate card states the allowance; connected card shows what is left', async p => {
+    await startState(p, { profile: trialSeat(fresh), candidate: true });
+    await expect(courseRow(p, '체험 한도')).toHaveText(/^AI 요청 40번 · (\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?까지$/); // the date appears when the end is not today
+    await expect(btn(p, '이 활동 시작하기')).toBeEnabled();
+    await startState(p, { profile: trialSeat(fresh) });
+    await expect(courseRow(p, '남은 체험')).toHaveText(/^AI 요청 40번 남음 · /);
+    await btn(p, '이어서 하기').click(); await request(p, { type: 'beginCourse' });
+    await expect(p.getByText('체험이 끝났습니다')).toHaveCount(0);
+  }, { surface: 'start' });
+  await test('TUX-SP-13B', 'Near-limit trial: passive remaining line in the chat header, no button', async p => {
+    const line = p.locator('.hps-header .hps-trial-left');
+    await expect(line).toHaveText(/^AI 요청 3번 남음 · /);
+    await expect(line.locator('button, a')).toHaveCount(0);
+    assert.equal(await line.evaluate(el => el.tagName), 'SPAN');
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the line fits the 390px header');
+    await p.screenshot({ path: path.join(out, 'TUX-SP-13B-personal-header.png') });
+    await host(p, { type: 'config', config: config(native, { taskWorkspace, activity: trialActivity(fresh) }) });
+    await expect(line).toHaveText(/^AI 요청 40번 남음 · /);
+    // The mission header (a trial without a personal workspace) carries the same line as its detail.
+    await host(p, { type: 'config', config: config(native, { activity: trialActivity(nearLimit) }) });
+    await expect(p.getByLabel('현재 활동')).toContainText('AI 요청 3번 남음');
+    await expect(p.locator('.hps-trial-left')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'the header never opens the purchase');
+  }, { cfg: { taskWorkspace, activity: trialActivity(nearLimit) } });
+  await test('TUX-SP-13C', 'Exhausted trial: ended card instead of "이어서 하기"; pass only on press', async p => {
+    await startState(p, { profile: trialSeat(exhausted) });
+    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.getByText('AI 요청을 모두 사용했습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
+    await expect(courseRow(p, '체험')).toHaveText('AI 요청 40번 모두 사용');
+    await expect(btn(p, '이어서 하기')).toHaveCount(0);
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '이어서 하려면 이용권으로 시작하기')).toHaveCount(0);
+    await startState(p, { profile: trialSeat(exhausted), purchase: { available: true } });
+    assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'an ended trial never opens the purchase by itself');
+    await btn(p, '이어서 하려면 이용권으로 시작하기').click(); await request(p, { type: 'purchaseOpen' });
+    await startState(p, { profile: trialSeat(exhausted) });
+    await btn(p, '지난 대화 보기').click(); await request(p, { type: 'beginCourse' });
+    await expect(btn(p, '다른 활동 선택')).toBeVisible();
+    await startState(p, { profile: trialSeat(exhausted), candidate: true });
+    await expect(btn(p, '이 활동 시작하기')).toHaveCount(0); await expect(btn(p, '지난 대화 보기')).toHaveCount(0); await expect(btn(p, '선택 취소')).toBeEnabled();
+  }, { surface: 'start' });
+  await test('TUX-SP-13D', 'Expired trial: ended card, no "이어서 하기" and no stale begin', async p => {
+    await startState(p, { profile: trialSeat(expiredTrial) });
+    await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.getByText('체험 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.')).toBeVisible();
+    await expect(courseRow(p, '체험')).toHaveText(/^(\d+월 \d+일 )?(오전|오후) \d+시( \d+분)?에 끝남$/);
+    await expect(btn(p, '이어서 하기')).toHaveCount(0); await expect(btn(p, '지난 대화 보기')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'beginCourse').length, 0);
+  }, { surface: 'start' });
+  await test('TUX-SP-13N', 'Negative: a pass seat keeps passSummary and is never drawn as an ended trial', async p => {
+    const pass = { request_limit: 200, requests_used: 20, expires_at: Date.now() + 20 * 86_400_000 };
+    await startState(p, { profile: trialSeat(exhausted, { pass }) });
+    await expect(courseRow(p, '남은 이용')).toHaveText(/^AI 요청 180번 남음 · \d+월 \d+일까지$/);
+    await expect(btn(p, '이어서 하기')).toBeEnabled();
+    await expect(p.getByText('체험이 끝났습니다')).toHaveCount(0);
+    await expect(courseRow(p, '체험')).toHaveCount(0); await expect(courseRow(p, '남은 체험')).toHaveCount(0);
+    // A classroom seat (no trial block) is unchanged too.
+    await startState(p, { profile: course });
+    await expect(btn(p, '이어서 하기')).toBeEnabled(); await expect(courseRow(p, '남은 체험')).toHaveCount(0);
+  }, { surface: 'start' });
   await test('TUX-CHAT-01', 'All three real profile suggestions fill and focus draft without sending', async p => {
     for (const chip of native.ux.suggestions.initial) { const button = p.getByRole('button', { name: new RegExp(chip.text) }); await button.click(); await expect(draft(p)).toHaveValue(chip.text); await expect(draft(p)).toBeFocused(); }
     assert.equal(emitted(await requests(p), 'sendMessage').length, 0);
