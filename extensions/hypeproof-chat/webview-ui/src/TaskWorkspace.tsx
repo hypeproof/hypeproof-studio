@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ChatMessage, Citation } from '../../src/protocol';
 import type { TaskWorkspaceView } from '../../src/taskWorkspaceContract';
+import { TASK_RUN_STATE_LABELS, taskRunAccessibleName, type TaskRunState } from '../../src/taskRunState';
 import { onHostMessage, postToHost } from './vscode';
 import { CitationPreview, CitationPreviewContext, SourceIcon, citationAddress } from './CitationPreview';
 import { HeadingSlotContext } from './headingSlot';
@@ -15,6 +16,8 @@ interface Props {
   error: string | null;
   unsavedDraft?: boolean;
   unsavedHistory?: boolean;
+  /** REQ-STUDIO-TASK-RUN-STATE — the active task's run state; inactive tasks never get one. */
+  runState?: TaskRunState | null;
   onDismissError: () => void;
   children: ReactNode;
 }
@@ -53,7 +56,7 @@ interface ReadingPosition {
 }
 
 /** The host owns persistence; this surface never treats browser storage as a transcript. */
-export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, onDismissError, children }: Props) {
+export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = false, unsavedHistory = false, runState = null, onDismissError, children }: Props) {
   const [filter, setFilter] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
@@ -356,12 +359,18 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
       <label className="tw-search"><span>작업 찾기</span><input name="task-search" autoComplete="off" type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="작업 이름으로 찾기…" /></label>
       <div className="tw-rail-heading">최근 작업 <span>{view.tasks.length}</span></div>
       <ul className="tw-task-list">
-        {visibleTasks.map(task => <li key={task.id}>
-          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
+        {visibleTasks.map(task => {
+          // Only the active task has a run state: tasks never run concurrently, and a stored transcript cannot tell how it ended.
+          const state = task.id === view.activeTaskId ? runState : null;
+          const metaId = `tw-task-meta-${task.id}`;
+          return <li key={task.id}>
+          <button className="tw-task" aria-current={task.id === view.activeTaskId ? 'page' : undefined} aria-label={taskRunAccessibleName(task.title, state)} aria-describedby={state ? metaId : undefined} disabled={blocked} onClick={() => { setRailOpen(false); if (task.id !== view.activeTaskId || error) postToHost({ type: 'taskSelect', id: task.id }); }}>
             <span className="tw-task-title">{task.title}</span>
-            <span className="tw-task-meta"><span>{task.messageCount ? `대화 ${task.messageCount}` : '시작 전'}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
+            {state && <span className="tw-task-state" data-run-state={state}><span aria-hidden="true" className="tw-task-state-symbol">{TASK_RUN_STATE_LABELS[state].symbol}</span>{TASK_RUN_STATE_LABELS[state].label}</span>}
+            <span id={metaId} className="tw-task-meta"><span>{task.messageCount ? `대화 ${task.messageCount}` : '시작 전'}</span><time dateTime={new Date(task.updatedAt).toISOString()}>{date.format(task.updatedAt)}</time></span>
           </button>
-        </li>)}
+        </li>;
+        })}
       </ul>
       {!visibleTasks.length && <p className="tw-empty-search">찾는 이름이 없습니다. 다른 이름으로 찾아보세요.</p>}
       <p className="tw-local-note" role="status">{unsavedHistory ? '저장되지 않은 대화가 있습니다' : unsavedDraft ? '저장되지 않은 입력이 있습니다' : '이 기기에 보관됩니다'}</p>
@@ -381,8 +390,10 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
           <button className="tw-quiet" disabled={!title.trim() || blocked || !!renamePending} aria-busy={!!renamePending}>{renamePending ? '저장 중…' : '저장'}</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
         <div ref={setHeadingSlot} className="tw-heading-slot" />
-        <span className="tw-run-note" role="status" aria-live="polite" title={busy ? '멈춘 뒤 다른 작업으로 이동할 수 있습니다.' : undefined}>
-          {busy && <>작업 중<span className="tw-run-help">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span></>}
+        <span className="tw-run-note" role="status" aria-live="polite" title={busy ? (runState === 'approval' ? '화면에 뜬 확인 창에서 골라 주세요.' : '멈춘 뒤 다른 작업으로 이동할 수 있습니다.') : undefined}>
+          {busy && (runState === 'approval'
+            ? <>승인 기다리는 중<span className="tw-run-help">입니다. 화면에 뜬 확인 창에서 골라 주세요.</span></>
+            : <>작업 중<span className="tw-run-help">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span></>)}
         </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>

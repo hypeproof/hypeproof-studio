@@ -33,6 +33,7 @@ import type { MemoryView } from "../../src/memoryView";
 import type { EvidenceView } from "../../src/evidenceView";
 import type { PublishView } from "../../src/publishView";
 import type { VerifyView } from "../../src/verifyView";
+import { deriveTaskRunState, type TaskTurnOutcome } from "../../src/taskRunState";
 
 interface State {
   config: ChatConfig | null;
@@ -71,6 +72,8 @@ interface State {
   review: ReviewPanelState;
   aiNotice: string | null;          // #320 — AI disclosure at session start (host-gated)
   stopNotice: string | null;        // #497 — Stop 을 눌러 턴이 끊겼음을 알리는 인라인 안내
+  /** REQ-STUDIO-TASK-RUN-STATE — how this view's last turn ended; null until one ends here. */
+  lastOutcome: TaskTurnOutcome;
   /** #649 — 지금 열려 있는 세상 id. 친구 스트립이 이 버튼을 강조한다(aria-pressed). */
   openWorldId: string | null;
   /**
@@ -105,7 +108,8 @@ type Action =
   | ReviewPanelAction
   | { type: "verifySent" }
   | { type: "aiDisclosure"; text: string }
-  | { type: "streamEnd" }
+  /** `failed` — the host closed the stream but the turn's result was a failure (#751 U4). `dismissed` — the learner closed the error banner; the outcome stays. */
+  | { type: "streamEnd"; failed?: boolean; dismissed?: boolean }
   | { type: "streamStopped"; by?: "instructor" }
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
@@ -144,6 +148,7 @@ const initialState: State = {
   verifySend: null,
   aiNotice: null,
   stopNotice: null,
+  lastOutcome: null,
   openWorldId: null,
   publish: null,
 };
@@ -163,6 +168,7 @@ function reducer(state: State, action: Action): State {
         streamId: action.streamId,
         error: null,
         stopNotice: null,   // #497 — 새 턴이 시작되면 이전 중지 안내는 사라진다
+        lastOutcome: null,
         // #503 — 직전 턴의 툴 줄을 **비우지 않는다**. 예전에는 여기서 toolLog 를
         // [] 로 밀어서, 다음 턴이 시작되는 순간 이전 턴이 무슨 도구를 썼는지가
         // 통째로 증발했다(스크롤을 올려도 말풍선만 남았다).
@@ -235,6 +241,7 @@ function reducer(state: State, action: Action): State {
         errorRequestId: null,
         errorRunbookUrl: null,
         trialEndCard: null,
+        lastOutcome: action.dismissed ? state.lastOutcome : action.failed ? "error" : "done",
       };
     case "streamStopped":
       // #497 — 턴이 완주한 게 아니라 사용자가 끊은 것. streamEnd 와 같은 상태
@@ -251,6 +258,7 @@ function reducer(state: State, action: Action): State {
         errorRequestId: null,
         errorRunbookUrl: null,
         stopNotice: action.by === "instructor" ? INSTRUCTOR_STOP_NOTICE : STOP_NOTICE,
+        lastOutcome: "stopped",
       };
     case "streamError":
       return {
@@ -263,6 +271,7 @@ function reducer(state: State, action: Action): State {
         errorRunbookUrl: action.runbookUrl ?? null,
         errorRetry: action.retry !== false,
         trialEndCard: action.trialEndCard ?? null,
+        lastOutcome: "error",
       };
     case "attachmentsSaved": {
       const items = [...state.timeline.items];
@@ -281,6 +290,7 @@ function reducer(state: State, action: Action): State {
         elementPreview: null, // CR-09 — the picked element went with this turn
         pageAttachment: null, // CGP-ART-R-007 — the page text went with this turn
         stopNotice: null,   // #497 — 다시 입력했으면 중지 안내는 역할을 다했다
+        lastOutcome: null,
         timeline: {
           ...state.timeline,
           items: [
@@ -322,6 +332,8 @@ export function App() {
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   const [historySaveError, setHistorySaveError] = useState<string | null>(null);
+  // REQ-STUDIO-TASK-RUN-STATE — the host raised a tool approval modal and it is still open.
+  const [approvalPending, setApprovalPending] = useState(false);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -347,6 +359,7 @@ export function App() {
           latestVerdictRequests.current.clear();
           ownVerdictRequests.current.clear();
           activeStream.current = null;
+          setApprovalPending(false);
         }
         scope.current = msg.config.activity?.id;
         taskScope.current = msg.config.taskWorkspace?.activeTaskId ?? undefined;
@@ -367,9 +380,12 @@ export function App() {
       }
       if (["streamStart", "inputRejected", "streamError", "streamEnd", "streamStopped"].includes(msg.type)) {
         pendingSend.current = false; setSendPending(false);
+        // A modal never outlives its turn; a turn boundary is never "waiting for approval".
+        setApprovalPending(false);
       }
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
+        case 'approvalWait': setApprovalPending(msg.waiting === true); return;
         case 'taskWorkspaceError':
           if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
           setWorkspaceError(msg.error);
@@ -424,7 +440,7 @@ export function App() {
         case "aiDisclosure": dispatch({ type: "aiDisclosure", text: msg.text }); break;
         case "worldOpened": dispatch({ type: "worldOpened", id: msg.id }); break;
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
-        case "streamEnd":   dispatch({ type: "streamEnd" }); break;
+        case "streamEnd":   dispatch({ type: "streamEnd", failed: msg.failed === true }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
         case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, retryable: msg.retryable, trialEndCard: msg.trialEndCard }); break;
         case "actionResult": /* not yet routed to UI */ break;
@@ -616,7 +632,7 @@ export function App() {
     }
   };
 
-  const dismissError = () => dispatch({ type: "streamEnd" });
+  const dismissError = () => dispatch({ type: "streamEnd", dismissed: true });
 
   const cancel = () => {
     if (state.streamId) postToHost({ type: "cancelStream", streamId: state.streamId });
@@ -625,11 +641,17 @@ export function App() {
   // streamEnd dispatches don't carry error info; clear-on-end is fine because
   // the existing reducer only sets error on streamError, never on streamEnd.
   const hasLastUserPrompt = messages.some((m) => m.role === "user");
+  const runState = deriveTaskRunState({
+    preparing: sendPending,
+    running: !!state.streamId || !!state.verify?.running,
+    approvalPending,
+    lastOutcome: state.lastOutcome,
+  });
 
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} onDismissError={() => setWorkspaceError(null)}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={historySaveError ?? draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} unsavedHistory={!!historySaveError} runState={runState} onDismissError={() => setWorkspaceError(null)}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel

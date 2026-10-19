@@ -191,6 +191,33 @@ verdict data, with an injected `answer_verdict` spool line as the negative contr
 the controls and reasons render, Korean labels, negative controls for streaming, user lines,
 classroom, lesson and instructor).
 
+`REQ-STUDIO-TASK-RUN-STATE` (extends [AE-03](requirements/learning-agent-experience.md);
+CGP-AGENT-R-022 / REQ-CGP-AGENT-46 recast after its "next waiting task" premise was refuted, 2026-10-20):
+tasks never run concurrently and switching stays blocked during a run, so the personal task rail
+shows a run state only next to the active task. One short label in words plus a decorative symbol,
+never colour alone: `응답 준비 중` (sent, stream not open yet), `작업 중` (a turn or the verify run is
+streaming), `승인 기다리는 중` (the host raised a tool approval modal and it is still open), `멈춤`
+(the learner or the instructor stopped the turn), `오류` (the turn failed, including a stream that
+closed normally with a failed result, #751 U4, and still after the error banner is dismissed),
+`끝남` (the turn completed). Precedence is approval > running > preparing, then the last terminal
+outcome; a new send clears the old outcome. The rail button's accessible name is "작업 이름, state"
+and its count/date line stays as its description. While approval is pending the busy line reads
+`승인 기다리는 중입니다. 화면에 뜬 확인 창에서 골라 주세요.` instead of the 작업 중 line. The host reports
+the wait (`approvalWait`) only around a modal it actually raised (`resolveActionApprovalTracked`); an
+auto-allowed, remembered or policy-refused request reports none. Not built: a last outcome for
+inactive tasks (the stored transcript carries no stop or error marker, so they show nothing rather
+than a guess); an outcome after reopening a task or the window (the state lives in the view); a
+`승인 기다리는 곳으로` command (the approval is a native modal that takes focus itself, so the webview
+has no single focus target); 정책 대기 and input-waiting states; the classroom chat (no task rail).
+The host's `pendingApprovals` map, read by `opsRuntime`, is still never filled, so the classroom ops
+status does not report approval waits; this requirement does not change it. Tests:
+`test/task-run-state.smoke.mjs` (each state from its inputs, precedence, old outcomes never shown
+during a run, labels and symbols, accessible name; the host wait around a real modal, none without a
+modal, cleared when the modal throws), `test/task-run-state.test.tsx` (rail labels, accessible names,
+words in every state element, no state on inactive tasks or without evidence, busy-line copy,
+switching still blocked; reducer outcomes for complete, stop, instructor stop, error, failed result,
+dismissed banner and new send).
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop

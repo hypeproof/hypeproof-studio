@@ -746,7 +746,10 @@ export type HostMessage = (
   // The message name is deliberately not written here again:
   // `test/sx-legacy-score-removed.smoke.mjs` checks this file for the absence of
   // that name.
-  | { type: "streamEnd"; streamId: string }
+  /** `failed` — the stream closed normally but the turn's result was a failure (#751 U4); the task rail shows 오류, not 끝남. */
+  | { type: "streamEnd"; streamId: string; failed?: true }
+  /** REQ-STUDIO-TASK-RUN-STATE — a tool approval modal is open (`waiting: true`) or has just been answered. */
+  | { type: "approvalWait"; waiting: boolean }
   // #497 — user pressed Stop. Distinct from streamEnd (the turn did NOT finish)
   // and from streamError (nothing went wrong — the user asked for this, so no
   // "문제가 생겼어요" banner and no 🚨 신고하기 button). The webview leaves the
