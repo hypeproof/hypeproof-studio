@@ -126,7 +126,7 @@ test('S1 passes a healthy versioned Service and fails the rest', async () => {
 test('S5 leaves out the release-cut run itself, and only that run', () => {
   const run = (name, status, conclusion, id) => ({name, status, conclusion, url: `https://github.com/o/r/actions/runs/${id}/job/1`});
   const done = run('build', 'completed', 'success', 100);
-  const self = run('dry-run', 'in_progress', '', 200);
+  const self = run('cut', 'in_progress', '', 200);
   // the bug: our own job counted as still running
   assert.equal(judge([done, self], undefined).result, 'NOT_RUN');
   assert.equal(judge([done, self], '200').result, 'PASS');
