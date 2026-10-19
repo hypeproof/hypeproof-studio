@@ -17,10 +17,14 @@ import type { ResolvedProfile } from "./protocol";
 /** Where a non-member gets the installer that also seeds the SDK binary (Lab `/studio/install`). */
 export const SDK_INSTALL_PAGE = "hypeproof-ai.xyz/studio/install";
 
-/** Cause + remedy. No staff, instructor or operator: a solo seat has nobody to call. No retry: resending cannot help. */
+/**
+ * Cause + remedy. No staff, instructor or operator: a solo seat has nobody to call. No retry: resending cannot help.
+ * No code either: an open-trial seat was never issued one, and the Lab page decides whether a code is
+ * asked (HPS_STUDIO_OPEN_INSTALL, Lab card lab-open-install-scripts), so the notice defers to the page.
+ */
 export const SDK_MISSING_NOTICE =
   "이 Studio에는 AI 작업 도구(Agent SDK 실행 파일)가 설치되어 있지 않아 코치를 실행할 수 없어요. " +
-  `${SDK_INSTALL_PAGE} 에서 받은 코드로 설치 도구를 내려받아 실행한 뒤 Studio를 다시 열어 주세요. ` +
+  `${SDK_INSTALL_PAGE} 의 안내대로 설치 도구를 내려받아 실행한 뒤 Studio를 다시 열어 주세요. ` +
   "대화와 작업은 그대로 남아 있어요.";
 
 /**
