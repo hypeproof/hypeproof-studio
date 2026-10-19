@@ -3,6 +3,10 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {engineRequest,workflowCaller} from './workflow-gate.mjs';
 const require=(ok,message)=>{if(!ok)throw Error('BLOCKED evidence: '+message);};
+export async function registerCollection(collection,options={}) {
+ const caller=workflowCaller(options.env),result=await engineRequest('/v1/evidence/collection',{collection,caller},{...options,audience:'hypeproof-release-verifier'});
+ require(result?.status==='ARTIFACTS_RECORDED'||result?.status==='COLLECTION_RECORDED'||result?.status==='RECORDED','canonical collection registration unavailable');return result;
+}
 export async function evidenceContext(identity,options={}) {
  const caller=workflowCaller(options.env),context=await engineRequest('/v1/evidence/context',{identity,caller},{...options,audience:'hypeproof-release-verifier'});
  require(context?.candidateId&&/^[a-f0-9]{64}$/.test(context.manifestDigest)&&context.reporterId&&context.testRevision===caller.workflowSha&&context.policy&&/^[a-f0-9]{40}$/.test(context.serviceSha)&&/^[a-f0-9]{40}$/.test(context.rubricRevision),'canonical verification context unavailable');return context;
@@ -19,7 +23,8 @@ export async function submitEvidence({reports,context,target},options={}) {
 if(process.argv[1]&&fileURLToPath(import.meta.url)===fs.realpathSync(process.argv[1])) {
  try {
   const [mode,input,contextPath,target]=process.argv.slice(2);
-  if(mode==='context'){const collection=JSON.parse(fs.readFileSync(input,'utf8'));fs.writeFileSync(contextPath,JSON.stringify(await evidenceContext({...collection.identity,target}),null,2));}
+  if(mode==='collection'){const collection=JSON.parse(fs.readFileSync(input,'utf8'));await registerCollection(collection);}
+  else if(mode==='context'){const collection=JSON.parse(fs.readFileSync(input,'utf8'));fs.writeFileSync(contextPath,JSON.stringify(await evidenceContext({...collection.identity,target}),null,2));}
   else if(mode==='submit'){const reports=JSON.parse(fs.readFileSync(input,'utf8')).reports,context=JSON.parse(fs.readFileSync(contextPath,'utf8'));const records=await submitEvidence({reports,context,target});fs.writeFileSync(path.join(path.dirname(input),'signed-records.json'),JSON.stringify(records,null,2));}
   else throw Error('unknown evidence command');
  }catch(error){console.error(error.message.startsWith('BLOCKED')?error.message:'BLOCKED evidence context or observed report unavailable');process.exitCode=1;}

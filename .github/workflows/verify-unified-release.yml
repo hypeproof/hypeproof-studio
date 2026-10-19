@@ -1,4 +1,5 @@
 name: Verify and publish Unified Studio
+run-name: Verify Studio ${{ inputs.tag }}
 on:
   workflow_dispatch:
     inputs:
@@ -67,9 +68,11 @@ jobs:
         if: always()
         shell: bash
         env:
+          HPS_ENGINE_ARTIFACT_NAME: managed-candidate-input
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/candidate-input.json
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize candidate:artifact-store artifact-store
       - name: Archive exact managed candidate input
+        id: stored-artifact-1
         if: always() && steps.artifact-budget-1.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -77,7 +80,16 @@ jobs:
           path: ${{ runner.temp }}/candidate-input.json
           if-no-files-found: error
           retention-days: 14
+      - name: Reconcile immutable stored artifact using fresh workflow identity
+        if: always() && steps.stored-artifact-1.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: managed-candidate-input
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/candidate-input.json
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.stored-artifact-1.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete candidate:artifact-store artifact-store
   collect-managed:
+    environment: release-collection
     needs: candidate
     if: needs.candidate.outputs.managed == 'true'
     runs-on: ubuntu-latest
@@ -101,6 +113,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release/cloud-executor/collect-candidate.mjs "${{ runner.temp }}/managed-input/candidate-input.json" "${{ runner.temp }}/managed-assets"
+      - name: Register exact collected receipts and immutable artifact bytes
+        run: node scripts/release/cloud-executor/evidence-client.mjs collection "${{ runner.temp }}/managed-assets/collection.json"
       - name: Resolve untouched previous supported packages
         id: previous
         continue-on-error: true
@@ -112,9 +126,11 @@ jobs:
         if: always()
         shell: bash
         env:
+          HPS_ENGINE_ARTIFACT_NAME: managed-candidate-bytes
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize collect-managed:artifact-store artifact-store
       - name: Archive exact bytes and collection
+        id: stored-artifact-2
         if: steps.artifact-budget-2.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -122,6 +138,14 @@ jobs:
           path: ${{ runner.temp }}/managed-assets/
           if-no-files-found: error
           retention-days: 14
+      - name: Reconcile immutable stored artifact using fresh workflow identity
+        if: always() && steps.stored-artifact-2.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: managed-candidate-bytes
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.stored-artifact-2.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete collect-managed:artifact-store artifact-store
   installed-managed:
     needs: [candidate, collect-managed]
     if: needs.candidate.outputs.managed == 'true'
@@ -228,6 +252,7 @@ jobs:
         if: always()
         shell: bash
         env:
+          HPS_ENGINE_ARTIFACT_NAME: installed-${{ matrix.target }}
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
       - name: Preserve installed evidence including failed and blocked checks
@@ -239,14 +264,24 @@ jobs:
           path: ${{ runner.temp }}/installed-evidence/*.json
           if-no-files-found: error
           retention-days: 14
+      - name: Reconcile immutable stored artifact using fresh workflow identity
+        if: always() && steps.evidence-artifact.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: installed-${{ matrix.target }}
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.evidence-artifact.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete installed-managed:artifact-store artifact-store
       - name: Require current artifact storage reservation
         id: artifact-budget-4
         if: always()
         shell: bash
         env:
+          HPS_ENGINE_ARTIFACT_NAME: installed-diagnostics-${{ matrix.target }}
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
       - name: Preserve separate native diagnostics and screenshots
+        id: stored-artifact-4
         if: always() && steps.artifact-budget-4.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -254,6 +289,14 @@ jobs:
           path: ${{ runner.temp }}/installed-evidence/
           if-no-files-found: warn
           retention-days: 14
+      - name: Reconcile immutable stored artifact using fresh workflow identity
+        if: always() && steps.stored-artifact-4.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: installed-diagnostics-${{ matrix.target }}
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.stored-artifact-4.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete installed-managed:artifact-store artifact-store
       - name: Submit observed reports using protected workflow OIDC
         if: always() && steps.context.outcome == 'success'
         shell: bash
@@ -384,8 +427,11 @@ jobs:
         id: artifact-budget-5
         if: always()
         shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: unified-${{ matrix.platform }}
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize acceptance:artifact-store artifact-store
       - name: Upload synthetic acceptance evidence
+        id: stored-artifact-5
         if: always() && steps.artifact-budget-5.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
@@ -393,6 +439,13 @@ jobs:
           path: ${{ runner.temp }}/unified-evidence/
           if-no-files-found: warn
           retention-days: 14
+      - name: Reconcile immutable stored artifact using fresh workflow identity
+        if: always() && steps.stored-artifact-5.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: unified-${{ matrix.platform }}
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.stored-artifact-5.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete acceptance:artifact-store artifact-store
   publish:
     needs: [candidate, acceptance]
     if: needs.candidate.outputs.published != 'true' && needs.candidate.outputs.managed != 'true'
@@ -460,26 +513,13 @@ jobs:
           gh release edit "$TAG" --draft=false
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only verify-unified:mirror-dispatch mirror-dispatch
           gh workflow run mirror-release.yml --repo "$GITHUB_REPOSITORY" -f tag="$TAG" -f dry_run=false
-  publish-managed:
+  managed-verification-complete:
     needs: [candidate, collect-managed, installed-managed]
     if: needs.candidate.outputs.managed == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment: release-verification
+    timeout-minutes: 2
     permissions:
       contents: read
-      actions: read
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.workflow_sha }}
-          fetch-depth: 0
-      - uses: actions/download-artifact@v4
-        with:
-          name: managed-candidate-bytes
-          path: ${{ runner.temp }}/managed-assets
-      - name: Request same-byte publication through current manager intent
-        env:
-          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
-        run: node scripts/release/cloud-executor/workflow-gate.mjs perform verify-unified:publish publish-existing-draft
+      - name: Verification recorded; manager approval remains separate
+        run: echo 'Observed evidence submitted. The server driver waits for terminal metering and fresh manager approval before same-byte publication.'

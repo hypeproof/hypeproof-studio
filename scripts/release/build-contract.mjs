@@ -18,7 +18,7 @@ export const contractSources = ['scripts/release/build-contract.mjs', 'e2e/unifi
   '.github/workflows/build-mac.yml', '.github/workflows/build-windows.yml',
   'scripts/release/cloud-executor/build-cache.mjs', 'scripts/release/cloud-executor/provider.mjs',
   'scripts/release/engine/core.mjs', 'scripts/release/cloud-executor/build-preflight.mjs',
-  'scripts/release/cloud-executor/workflow-gate.mjs'];
+  'scripts/release/cloud-executor/workflow-gate.mjs','scripts/release/cloud-executor/runner-upload.mjs'];
 
 // An old candidate would execute its old workflows, ignoring every new safety input.
 // Require the exact reviewed contract revision before the first remote mutation.

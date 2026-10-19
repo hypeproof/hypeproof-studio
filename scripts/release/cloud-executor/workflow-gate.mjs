@@ -63,9 +63,10 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===fs.realpathSync(process.arg
   const stored=process.env.HPS_ENGINE_IDENTITY_FILE?JSON.parse(fs.readFileSync(process.env.HPS_ENGINE_IDENTITY_FILE,'utf8')):null;
   const baseIdentity=stored?(stored.identity??stored):workflowIdentity();
   const identity={...baseIdentity,...(process.env.TARGET?{target:process.env.TARGET}:{})};
-  const effect={kind,...(stored?.releaseId?{releaseId:stored.releaseId}:{}),...(process.env.HPS_ENGINE_ASSET_DIR?{assets:fileInventory(process.env.HPS_ENGINE_ASSET_DIR),artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{})};
+  const effect={kind,...(process.env.HPS_ENGINE_ARTIFACT_NAME?{artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{}),...(stored?.releaseId?{releaseId:stored.releaseId}:{}),...(process.env.HPS_ENGINE_ASSET_DIR?{assets:fileInventory(process.env.HPS_ENGINE_ASSET_DIR),artifactName:process.env.HPS_ENGINE_ARTIFACT_NAME}:{})};
   const body=executionBody({path:effectPath,identity,effect});
   if(mode==='authorize')await authorizeExecution(body);
+  else if(mode==='complete'){const artifactId=Number(process.env.HPS_ENGINE_ARTIFACT_ID);require(Number.isSafeInteger(artifactId)&&artifactId>0,'immutable artifact ID required');const result=await engineRequest('/v1/execution/complete',{...body,receipt:{artifactId}});require(result.status==='SUCCEEDED'&&result.requestDigest===digest(body),'artifact storage completion UNKNOWN');}
   else if(mode==='perform')await guardedEffect({body,managed,perform:true});
   else throw Error('unknown gate command');
  }catch(error){console.error(error.message.startsWith('BLOCKED')?error.message:'BLOCKED release engine request/identity unavailable');process.exitCode=1;}

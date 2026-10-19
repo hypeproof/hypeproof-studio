@@ -44,7 +44,7 @@ test('all actual gh release and acceptance/mirror dispatch writes have a direct 
  }
 });
 test('both native builders depend on Ubuntu final-marker preflight and reservation before expensive work',()=>{
- for(const name of ['build-mac.yml','build-windows.yml']){const source=fs.readFileSync('.github/workflows/'+name,'utf8');assert.match(source,/needs: engine-preflight\n    if: needs.engine-preflight.outputs.skip_build != 'true'/);assert.ok(source.indexOf('workflow-gate.mjs authorize')<source.indexOf('Restore npm download cache'));assert.match(source,/workflow-gate\.mjs perform build-(mac|win):draft-assets draft-assets/);}
+ for(const name of ['build-mac.yml','build-windows.yml']){const source=fs.readFileSync('.github/workflows/'+name,'utf8');assert.match(source,/needs: engine-preflight\n    if: needs.engine-preflight.outputs.skip_build != 'true'/);assert.ok(source.indexOf('workflow-gate.mjs authorize')<source.indexOf('Restore npm download cache'));assert.match(source,/runner-upload\.mjs build-(mac|win):draft-assets dist/);}
 });
 test('controlled legacy CLI refuses all direct write paths before commands',()=>{
  for(const path of paths){const result=spawnSync(process.execPath,['scripts/release/cloud-executor/workflow-gate.mjs','legacy-only',path,'fixture'],{env:{...process.env,RELEASE_ENGINE_ENABLED:'true'},encoding:'utf8'});assert.equal(result.status,1);assert.match(result.stderr,/legacy mutation disabled/);}

@@ -182,11 +182,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.MIRROR_RELEASE_PAT }}
+          HPS_SOURCE_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [[ -n "${RELEASE_ENGINE_URL:-}" || "${RELEASE_ENGINE_ENABLED:-}" == true ]]; then
             git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
-            node scripts/release/cloud-executor/workflow-gate.mjs perform mirror:release-create-edit-upload mirror-existing-publication
+            node scripts/release/cloud-executor/runner-upload.mjs mirror:release-create-edit-upload "$RUNNER_TEMP/approved-mirror-bytes" mirror
             exit 0
           fi
           [[ -n "${GH_TOKEN:-}" ]] || { echo "::error::MIRROR_RELEASE_PAT is required for real mirror writes"; exit 1; }

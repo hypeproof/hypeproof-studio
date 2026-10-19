@@ -102,8 +102,11 @@ jobs:
         id: artifact-budget-1
         if: always()
         shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: release-cut
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize dry-run:artifact-store artifact-store
       - uses: actions/upload-artifact@v4
+        id: stored-artifact-1
         if: always() && steps.artifact-budget-1.outcome == 'success'
         with:
           name: release-cut
@@ -111,6 +114,13 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Reconcile immutable stored artifact using fresh workflow identity
+        if: always() && steps.stored-artifact-1.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: release-cut
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.stored-artifact-1.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete dry-run:artifact-store artifact-store
   create:
     needs: dry-run
     if: inputs.mode == 'create' && needs.dry-run.result == 'success'
