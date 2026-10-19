@@ -2601,7 +2601,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
       }
       await this.context.workspaceState.update(key, []);
-      if (this.interruptedHistory?.scope === this.turnRequestScope()) this.interruptedHistory = undefined;
+      if (this.interruptedHistory && this.interruptedHistory.scope === this.turnRequestScope()) this.interruptedHistory = undefined;
       // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
