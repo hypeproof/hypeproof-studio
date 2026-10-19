@@ -24,6 +24,7 @@
 //    `could`, and says what it left out (A5, `consultSuccessText`).
 // 6. One timeline event per consult (running → done | error), and the cap is counted.
 
+import { denialTag } from "./denialSource.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -147,12 +148,15 @@ export const CONSULT_MESSAGES: Record<ConsultCode, string> = {
   context_invalid: "도우미에게 보낼 수 없는 요청이에요. 질문과 파일 경로를 확인해 주세요.",
   busy: "지금 다른 요청이 끝나지 않아 도우미에게 묻지 못했어요. 코치 혼자 이어서 해 주세요.",
   roster_changed: "도우미 구성이 바뀌어 이번에는 묻지 못했어요. 다음 메시지부터 새 구성으로 물을 수 있어요.",
-  agent_model_unavailable: "이 수업에서는 이 도우미의 모델을 쓸 수 없어요. 다른 모델로 바꾸지 않았어요.",
+  // REQ-STUDIO-DENIAL-SOURCE — these two codes each cover causes of different sources
+  // (orchestrator_off: the served switch, the minor invariant and an old Service's 404), so
+  // the coach is told the source is unknown rather than a guessed "이 수업에서는".
+  agent_model_unavailable: `${denialTag("unknown")} 지금은 이 도우미의 모델을 쓸 수 없어요. 다른 모델로 바꾸지 않았어요.`,
   agent_output_invalid: "도우미의 답이 약속한 형식이 아니어서 쓰지 않았어요. 코치 혼자 이어서 해 주세요.",
   upstream: "도우미가 답하지 못했어요. 코치 혼자 이어서 해 주세요.",
   offline: "서비스에 연결하지 못해 도우미에게 묻지 못했어요. 코치 혼자 이어서 해 주세요.",
   trial_exhausted: "이용권의 AI 요청 횟수를 모두 썼어요. 만든 파일과 대화는 그대로 남아 있어요.",
-  orchestrator_off: "이 수업에서는 도우미를 쓸 수 없어요. 코치 혼자 이어서 해 주세요.",
+  orchestrator_off: `${denialTag("unknown")} 지금은 도우미를 쓸 수 없어요. 코치 혼자 이어서 해 주세요.`,
 };
 
 /** The timeline's short reason after the agent label. */

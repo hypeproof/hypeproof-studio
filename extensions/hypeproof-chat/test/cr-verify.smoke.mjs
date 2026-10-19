@@ -909,7 +909,8 @@ await test("the session's switch check refuses runTool on its own, with nothing 
   const calls = s.page.calls.length;
   const r = await s.session.runTool({ criterion_id: c.id, plan: PLAN(PLAN_START) });
   assert.equal(r.isError, true);
-  assert.match(r.text, /쓸 수 없어요/);
+  // REQ-STUDIO-DENIAL-SOURCE: the switch-off tool result names its source (a lesson setting).
+  assert.equal(r.text, "[수업 설정] 이 수업에서는 제품 테스트를 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요.");
   assert.equal(s.recorder.batch.events.length, before);
   assert.equal(s.page.calls.length, calls, "the tab was not touched");
   // Control: switched back on, the same open run is tested.

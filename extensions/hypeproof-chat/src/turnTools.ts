@@ -1,3 +1,5 @@
+import { denialCopy, lessonFeatureOff } from './denialSource.ts';
+import { profileAudience } from './seatVocabulary.ts';
 import type { ChatMessage, ResolvedProfile } from './protocol';
 
 /** A request preference, never a capability grant. Missing values preserve legacy auto mode. */
@@ -17,19 +19,25 @@ export function turnToolsAvailability(args: {
   local?: boolean;
   instructor?: boolean;
 }): TurnToolsAvailability {
+  // REQ-STUDIO-DENIAL-SOURCE — each reason names who decided: this connection/runtime
+  // (앱 버전/환경), the served profile (수업 설정), or no profile yet (확인 안 됨).
+  const audience = profileAudience(args.profile);
+  const feature = '웹 검색';
   const reason = args.local || args.instructor
-    ? '이 로컬 구독 연결은 웹 검색 선택을 아직 지원하지 않습니다.'
-    : !args.profile || args.profile.tools?.web_search !== true
-      ? '현재 이용권이나 활동에서 웹 검색을 사용할 수 없습니다.'
-      : args.runtime !== 'agent-sdk'
-        ? '현재 실행 환경은 웹 검색 선택을 지원하지 않습니다.'
-        : undefined;
+    ? denialCopy({ source: 'runtime', feature, reason: '이 로컬 구독 연결은 웹 검색 선택을 아직 지원하지 않아요' }, audience)
+    : !args.profile
+      ? denialCopy({ source: 'unknown', feature, reason: '수업 정보를 아직 받지 못했어요' }, audience)
+      : args.profile.tools?.web_search !== true
+        ? lessonFeatureOff(feature, audience)
+        : args.runtime !== 'agent-sdk'
+          ? denialCopy({ source: 'runtime', feature, reason: '지금 실행 환경은 웹 검색 선택을 지원하지 않아요' }, audience)
+          : undefined;
   return { webSearch: reason ? { available: false, reason } : { available: true } };
 }
 
 export function requireTurnTools(mode: TurnToolMode, availability: TurnToolsAvailability): void {
   if (mode === 'web-search' && !availability.webSearch.available) {
-    throw new TurnToolModeError(availability.webSearch.reason ?? '웹 검색을 사용할 수 없습니다.');
+    throw new TurnToolModeError(availability.webSearch.reason ?? denialCopy({ source: 'unknown', feature: '웹 검색' }));
   }
 }
 
@@ -50,7 +58,8 @@ export function retryTurnToolMode(messages: readonly ChatMessage[], request: {
 export function toolsForTurn<T extends { permittedTools: string[]; permittedMcpTools: string[]; permittedAgentTools: string[]; orchestrator?: unknown }>(agent: T, mode: TurnToolMode): T {
   if (mode === 'auto') return agent;
   const web = ['WebSearch', 'WebFetch'];
-  if (!web.every(name => agent.permittedTools.includes(name))) throw new TurnToolModeError('현재 활동에서 웹 검색을 사용할 수 없습니다.');
+  // The permitted set is the served profile's grant: a lesson setting.
+  if (!web.every(name => agent.permittedTools.includes(name))) throw new TurnToolModeError(lessonFeatureOff('웹 검색'));
   return { ...agent, permittedTools: web, permittedMcpTools: [], permittedAgentTools: [], orchestrator: undefined };
 }
 

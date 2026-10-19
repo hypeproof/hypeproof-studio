@@ -183,7 +183,8 @@ ok("glue: the context key mirrors the switch and the SDK server registers CR too
     assert.match(r.content[0].text, new RegExp(`알 수 없는 도구: ${name}`), `${name} is unknown with the switch off`);
   }
   assert.deepEqual(CR_SURFACES.proxyTools.filter((n) => !isCrBrowserTool(n) && !isCrVerifyTool(n)), [], "every inventoried proxy tool is a CR browser or verify tool");
-  await assert.rejects(control.pickElement({ root: null }), /요소 고르기를 쓸 수 없어요/);
+  // REQ-STUDIO-DENIAL-SOURCE: switch off is a lesson setting, said as one.
+  await assert.rejects(control.pickElement({ root: null }), { message: "이 수업에서는 요소 고르기를 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." });
   const legacy = await control.execute({ id: "t", name: "browser_navigate", input: { url: "https://example.com/" } });
   assert.doesNotMatch(legacy.content[0].text, /범위 밖/, "switch off: the pre-CR navigate path, no origin scope");
   enabled = true;

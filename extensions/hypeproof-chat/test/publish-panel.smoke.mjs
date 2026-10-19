@@ -85,8 +85,8 @@ ok("CR-T17 UI negative: no report, another version's report, a fail or an incomp
   ok("CR-64: a miss is shown with its cause, a pass is not announced");
 }
 {
-  const { text, html } = await render(view({ available: false, reason: "이 수업에서는 사용자 테스트 공개를 쓸 수 없어요." }));
-  assert.match(text, /쓸 수 없어요/);
+  const { text, html } = await render(view({ available: false, reason: "이 수업에서는 사용자 테스트 공개를 쓰지 않도록 정해져 있어요. 필요하면 선생님께 이야기해 주세요." }));
+  assert.match(text, /쓰지 않도록 정해져 있어요/);
   assert.doesNotMatch(html, /publish-submit/);
   ok("unavailable: the reason, no action");
 }

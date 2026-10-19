@@ -2,11 +2,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { inspectEditPng,imageBytesHash,type PngInfo } from './imageEditPng.ts';
 import type { ImageEditResult } from './imageEditClient.ts';
+import { classifyDenial, denialCopy } from './denialSource.ts';
 export interface ImageEditAsset {relativePath:string;sha256:string;dataUrl:string;bytes:Uint8Array;info:PngInfo}
 function workspaceFile(cwd:string,rel:string,allowMissing=false):string{
  const root=fs.realpathSync(cwd);if(!rel||path.isAbsolute(rel)||/[\\\x00]/.test(rel)||rel.split('/').some(p=>!p||p==='.'||p==='..'))throw new Error('작업 폴더 안의 이미지 상대경로만 사용할 수 있어요.');
  let at=root;for(const part of rel.split('/')){at=path.join(at,part);if(allowMissing&&!fs.existsSync(at))continue;if(fs.lstatSync(at).isSymbolicLink())throw new Error('연결된 파일·폴더를 이미지 작업에 쓰지 않았어요.');}
- const relative=path.relative(root,at);if(relative==='..'||relative.startsWith(`..${path.sep}`)||path.isAbsolute(relative))throw new Error('작업 폴더 밖의 파일은 사용할 수 없어요.');return at;
+ const relative=path.relative(root,at);if(relative==='..'||relative.startsWith(`..${path.sep}`)||path.isAbsolute(relative))throw new Error(denialCopy({source:classifyDenial('path_outside_workspace'),reason:'작업 폴더 밖의 파일이에요'}));return at;
 }
 export async function prepareImageEditAsset(cwd:string,relativePath:string):Promise<ImageEditAsset>{
  const file=workspaceFile(cwd,relativePath);const st=fs.lstatSync(file);if(!st.isFile()||st.size===0||st.size>4*1024*1024)throw new Error('4MB 이하의 PNG 원본을 선택해 주세요.');

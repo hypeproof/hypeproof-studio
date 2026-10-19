@@ -16,6 +16,8 @@
 // written from it. A student token never writes a director decision, and the director never
 // prepares a pack.
 
+import { denialCopy, lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import { curriculumRequest } from "./galleryPublish.ts";
 import { extractJsonObject } from "./skillView.ts";
 import type { SkillCompletion } from "./skillSession.ts";
@@ -23,6 +25,8 @@ import { REVIEW_MESSAGES, directorFormProblems, regenerationVerdict, type Direct
 
 export interface ReviewPorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   /** The student token (TOKEN_KEY). */
   token(): Promise<string | null>;
   /** The director's issuer token (ISSUER_TOKEN_KEY), never the student's. */
@@ -36,12 +40,15 @@ export interface ReviewPorts {
   now?(): number;
 }
 
-const OFF = "이 수업에서는 주간 리뷰를 쓸 수 없어요.";
+/** The served switch is off: a lesson setting (REQ-M38 features). */
+const OFF = (a?: SeatAudience) => lessonFeatureOff("주간 리뷰", a);
 const SIGN_IN = "참여 코드를 먼저 입력해 주세요.";
 const NO_PROJECT = "아직 프로젝트가 없어요. 먼저 사용자 테스트용으로 공개해 주세요.";
 const NO_DIRECTOR = "강사 토큰을 넣어야 디렉터 화면을 볼 수 있어요.";
 const DECIDING = "결정을 기록하고 있어요.";
-const msg = (r: { code: string; message: string; status?: number }) => REVIEW_MESSAGES[r.code] ?? (r.code === "not_found" ? OFF : r.message.startsWith("공개하지 못했어요") ? `주간 리뷰를 읽지 못했어요 (${r.status ?? "?"})` : r.message);
+// A Service 404 cannot tell "off for this lesson" from "not there": source unknown, never a guess.
+const NOT_FOUND = denialCopy({ source: "unknown", feature: "주간 리뷰", reason: "서비스에서 찾지 못했어요" });
+const msg = (r: { code: string; message: string; status?: number }) => REVIEW_MESSAGES[r.code] ?? (r.code === "not_found" ? NOT_FOUND : r.message.startsWith("공개하지 못했어요") ? `주간 리뷰를 읽지 못했어요 (${r.status ?? "?"})` : r.message);
 
 type Client = { base: string; token: string; fetchImpl?: typeof fetch };
 
@@ -93,7 +100,7 @@ export class ReviewSession {
 
   /** The team's pack of the week (the newest experiment's unless `week` is given), read now; no model call. */
   async studentView(week?: number): Promise<ReviewView> {
-    if (!this.ports.switchOn()) return this.none("student", OFF);
+    if (!this.ports.switchOn()) return this.none("student", OFF(this.ports.audience?.()));
     const token = await this.ports.token();
     if (!token) return this.none("student", SIGN_IN);
     const client = this.client(token);
@@ -113,7 +120,7 @@ export class ReviewSession {
    * on the facts alone, before any model call, starts over once.
    */
   async prepare(week?: number): Promise<{ ok: true; regenerated: string[]; unchanged: boolean } | { ok: false; message: string }> {
-    if (!this.ports.switchOn()) return { ok: false, message: OFF };
+    if (!this.ports.switchOn()) return { ok: false, message: OFF(this.ports.audience?.()) };
     if (this.running) return { ok: false, message: "주간 리뷰를 준비하고 있어요." };
     const token = await this.ports.token();
     if (!token) return { ok: false, message: SIGN_IN };

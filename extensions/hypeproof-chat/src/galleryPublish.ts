@@ -12,6 +12,7 @@
 //
 // `vscode` 를 import 하지 않는다 — 순수 로직이라 플레인 Node + 주입 fetch 로
 // 검증한다 (spoolUploader.ts 와 같은 규율).
+import { denialCopy } from "./denialSource.ts";
 
 /** lab 사이트. 설정으로 덮을 수 있다 — 로컬 dev 서버(:3000)에 붙여 보기 위함. */
 export const SITE_BASE_PROD = "https://hypeproof-ai.xyz";
@@ -188,7 +189,9 @@ export type CurriculumResult<T> =
 
 /** Korean words for the Service's refusal codes (the code stays on the result for the record). */
 const CURRICULUM_MESSAGES: Record<string, string> = {
-  not_found: "이 프로젝트를 찾지 못했거나, 이 수업에서는 사용자 테스트 공개를 쓸 수 없어요.",
+  // REQ-STUDIO-DENIAL-SOURCE — a 404 cannot tell a missing project from the switch being
+  // off: the source is unknown, never a guessed lesson setting.
+  not_found: denialCopy({ source: "unknown", feature: "사용자 테스트 공개", reason: "이 프로젝트를 찾지 못했거나 이 수업에서 꺼져 있는지 확인하지 못했어요" }),
   expiry_required: "링크를 언제까지 열어 둘지 골라 주세요.",
   invalid_expiry: "링크 기간은 지금부터 90일 안에서 골라 주세요.",
   invalid_channel: "채널 이름은 40자까지 쓸 수 있어요.",

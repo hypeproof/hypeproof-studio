@@ -11,6 +11,8 @@
 // events by `productVerification` for exactly this version (CR-81); nothing here sets it.
 // The project's test origin joins the Experiment Browser's allowed origins (CR-11).
 
+import { lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import { productVerification } from "@hypeproof/measurement-core/verification";
 import type { ObservationEvent } from "@hypeproof/measurement-core/legacy-observation";
 import { buildPublishSet, publishSetRefusalText, type PublishSet } from "./publishSet.ts";
@@ -19,6 +21,8 @@ import type { PublishExperimentView, PublishForm, PublishLinkView, PublishView }
 
 export interface PublishPorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   token(): Promise<string | null>;
   /** The Service's curriculum base (`curriculumBase(proxyUrl)`). */
   base(): string;
@@ -211,7 +215,7 @@ export class PublishSession {
       timing: this.timing,
       notice,
     };
-    if (!this.ports.switchOn()) return { ...empty, reason: "이 수업에서는 사용자 테스트 공개를 쓸 수 없어요." };
+    if (!this.ports.switchOn()) return { ...empty, reason: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ...empty, reason: SIGN_IN };
     const resolved = await this.resolveProject(client);
@@ -270,7 +274,7 @@ export class PublishSession {
    * and nothing is uploaded when the set is refused (the scan runs before any request).
    */
   async submit(form: PublishForm): Promise<{ ok: true; share_url: string } | { ok: false; message: string; lines?: string[] }> {
-    if (!this.ports.switchOn()) return { ok: false, message: "이 수업에서는 사용자 테스트 공개를 쓸 수 없어요." };
+    if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const days = form.expires_in_days;
     if (typeof days !== "number" || !Number.isFinite(days) || days <= 0 || days > 90) return { ok: false, message: "링크를 언제까지 열어 둘지 골라 주세요." };
     const client = await this.client();
@@ -343,7 +347,7 @@ export class PublishSession {
 
   /** Another channel's link for a running experiment (CR-73). */
   async link(experimentId: string, form: { channel?: string; expires_in_days?: number }): Promise<{ ok: true; share_url: string } | { ok: false; message: string }> {
-    if (!this.ports.switchOn()) return { ok: false, message: "이 수업에서는 사용자 테스트 공개를 쓸 수 없어요." };
+    if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const days = form.expires_in_days;
     if (typeof days !== "number" || !Number.isFinite(days) || days <= 0 || days > 90) return { ok: false, message: "링크를 언제까지 열어 둘지 골라 주세요." };
     const client = await this.client();
@@ -354,7 +358,7 @@ export class PublishSession {
 
   /** Turn a link off for good (CR-19). Other links of the experiment keep serving (CR-73). */
   async revoke(linkId: string): Promise<{ ok: true } | { ok: false; message: string }> {
-    if (!this.ports.switchOn()) return { ok: false, message: "이 수업에서는 사용자 테스트 공개를 쓸 수 없어요." };
+    if (!this.ports.switchOn()) return { ok: false, message: lessonFeatureOff("사용자 테스트 공개", this.ports.audience?.()) };
     const client = await this.client();
     if (!client) return { ok: false, message: SIGN_IN };
     const r = await curriculumRequest(client, "POST", `/links/${encodeURIComponent(linkId)}/revoke`, {});

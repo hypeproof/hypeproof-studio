@@ -12,6 +12,8 @@
 //
 // The skill list comes from the Service only: a file in the student's workspace is never a skill.
 
+import { lessonFeatureOff } from "./denialSource.ts";
+import type { SeatAudience } from "./seatVocabulary.ts";
 import { curriculumRequest } from "./galleryPublish.ts";
 import type { MemoryAnswer } from "./memoryView.ts";
 import { SKILL_MESSAGES, extractJsonObject, resultSections, skillFormProblems, skillInput, writtenLines, type SkillForm, type SkillListing, type SkillResult, type SkillsView, type SkillWeek } from "./skillView.ts";
@@ -53,6 +55,8 @@ export async function completeSkillRequest(
 
 export interface SkillPorts {
   switchOn(): boolean;
+  /** Seat wording for the switch-off copy (REQ-STUDIO-DENIAL-SOURCE). Default classroom. */
+  audience?(): SeatAudience;
   token(): Promise<string | null>;
   base(): string;
   fetchImpl?: typeof fetch;
@@ -61,7 +65,8 @@ export interface SkillPorts {
   complete(prompt: string, headers: Record<string, string>): Promise<SkillCompletion>;
 }
 
-const OFF = "이 수업에서는 커리큘럼 스킬을 쓸 수 없어요.";
+/** The served switch is off: a lesson setting (REQ-M38 features). */
+const OFF = (a?: SeatAudience) => lessonFeatureOff("커리큘럼 스킬", a);
 const SIGN_IN = "참여 코드를 먼저 입력해 주세요.";
 const NO_PROJECT = "아직 프로젝트가 없어요. 먼저 사용자 테스트용으로 공개해 주세요.";
 const msg = (r: { code: string; message: string; status?: number }) => SKILL_MESSAGES[r.code] ?? (r.message.startsWith("공개하지 못했어요") ? `스킬을 실행하지 못했어요 (${r.status ?? "?"})` : r.message);
@@ -101,7 +106,7 @@ export class SkillSession {
   /** The panel's view, read now: the Service's skills, the run's week and team evidence, and the other form choices from Venture Memory. */
   async view(): Promise<SkillsView> {
     const none = (notice: string): SkillsView => ({ available: false, notice, week: null, skills: [], pickers: { experiments: [], decisions: [], evidence: [] }, result: this.result });
-    if (!this.ports.switchOn()) return none(OFF);
+    if (!this.ports.switchOn()) return none(OFF(this.ports.audience?.()));
     const client = await this.client();
     if (!client) return none(SIGN_IN);
     const projectId = await this.project(client);
@@ -130,7 +135,7 @@ export class SkillSession {
 
   /** Run one skill. Refused before any call when the switch is off or the form is incomplete. */
   async run(skill: string, form: SkillForm): Promise<{ ok: true } | { ok: false; message: string }> {
-    if (!this.ports.switchOn()) return { ok: false, message: OFF };
+    if (!this.ports.switchOn()) return { ok: false, message: OFF(this.ports.audience?.()) };
     const formProblems = skillFormProblems(skill, form);
     if (formProblems.length) return { ok: false, message: formProblems.join(" ") };
     if (this.running) return { ok: false, message: "스킬이 이미 실행 중이에요." };
