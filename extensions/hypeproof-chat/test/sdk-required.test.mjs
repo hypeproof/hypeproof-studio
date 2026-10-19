@@ -36,6 +36,8 @@ function assertInstallNotice(text, label) {
   assert.doesNotMatch(text, STAFF, `${label}: no staff on a solo seat`);
   assert.doesNotMatch(text, ENGLISH_SDK_ERROR, `${label}: no English runtime error`);
   assert.doesNotMatch(text, /다시 (보내|시도)/, `${label}: does not suggest resending`);
+  // An open-trial seat has no issued code; whether the install page asks for one is Lab's call.
+  assert.doesNotMatch(text, /코드/, `${label}: does not ask for a code`);
 }
 
 // ── Pure copy and routing ────────────────────────────────────────────────────
