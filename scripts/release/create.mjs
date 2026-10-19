@@ -56,12 +56,12 @@ function main() {
   }
 
   // Reject invalid identities and a missing PR token before creating a tag or making any GitHub writes.
+  const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
+  if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
   const releasePrToken = prToken(decision.steps, process.env);
   if (releasePrToken) {
     pr = (...a) => execFileSync('gh', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: {...process.env, GH_TOKEN: releasePrToken}}).trim();
   }
-  const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
-  if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
   let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
   if (dispatches.length && values['managed-draft']) {
     const original = fs.readFileSync(prBodyFile, 'utf8');
