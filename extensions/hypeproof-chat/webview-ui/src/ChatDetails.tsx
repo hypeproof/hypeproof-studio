@@ -17,6 +17,7 @@ export function ChatIcon({ kind }: { kind: 'send' | 'stop' | 'copy' | 'check' | 
 export function CopyAnswer({ content }: { content: string }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const mounted = useRef(true);
+  const copyAttempt = useRef(0);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (state === 'idle') return;
@@ -24,8 +25,11 @@ export function CopyAnswer({ content }: { content: string }) {
     return () => clearTimeout(timer);
   }, [state]);
   const copy = async () => {
-    try { await navigator.clipboard.writeText(content); if (mounted.current) setState('copied'); }
-    catch { if (mounted.current) setState('failed'); }
+    const attempt = ++copyAttempt.current;
+    setState('idle');
+    // Older clipboard completions must not replace the latest attempt's feedback.
+    try { await navigator.clipboard.writeText(content); if (mounted.current && attempt === copyAttempt.current) setState('copied'); }
+    catch { if (mounted.current && attempt === copyAttempt.current) setState('failed'); }
   };
   return <div className="hps-answer-actions">
     <button type="button" className="hps-copy-answer" onClick={copy} aria-label="답변 복사" title="답변 복사">
