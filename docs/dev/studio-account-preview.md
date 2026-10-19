@@ -76,14 +76,16 @@ return and OS URI dispatch. It also verifies background refresh leaves the other
 window focused, then closes its own app and deletes its synthetic account. Google
 OAuth, Windows protocol execution and released builds remain independent checks.
 
-## Production enablement path (off by default)
+## Production enablement path (on by default since decision B3)
 
-Machine-only `hypeproofChat.accountsEnabled` activates the same account client only
+Machine-only `hypeproofChat.accountsEnabled` defaults to `true` (decision B3, 2026-10-19: a
+released free-start user must be able to sign in to buy). It activates the same account client only
 when `proxyUrl` is exactly `https://api.hypeproof-ai.xyz/v1` and `siteBase` is exactly
 `https://hypeproof-ai.xyz`. Alternate hosts, credentials, ports, paths, queries and
 fragments are rejected. `accountsPreview` and the development environment flag
-remain strictly loopback-only and cannot activate production accounts. Neither
-setting is changed on user machines by this PR. Coordinated Service/web activation,
+remain strictly loopback-only and cannot activate production accounts. The default
+only arms the setting: any other Service or site still has no accounts, and a user can
+turn it off. Coordinated Service/web activation,
 legal acceptance and real Google/native release checks still precede launch.
 
 On first return VS Code can ask whether HypeProof Chat may open the URI. The user

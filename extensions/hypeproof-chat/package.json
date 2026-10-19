@@ -519,9 +519,9 @@
         },
         "hypeproofChat.accountsEnabled": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "scope": "machine",
-          "description": "Enable personal accounts only on the canonical HypeProof HTTPS Service and account site. Requires an approved account rollout; local preview is a separate setting."
+          "description": "Enable personal accounts (Google sign-in at purchase). Takes effect only on the canonical HypeProof HTTPS Service and account site; any other Service or site has no accounts. Local preview is a separate setting."
         },
         "hypeproofChat.publicUpdates": {
           "type": "boolean",
