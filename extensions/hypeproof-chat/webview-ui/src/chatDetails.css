@@ -197,7 +197,8 @@
 .hps-verdict-reason[aria-pressed="true"] { color: var(--vscode-foreground, #e1e1e1); background: var(--vscode-list-inactiveSelectionBackground, #2b3037); }
 .hps-verdict-reason:focus-visible, .hps-verdict-note textarea:focus-visible, .hps-verdict-note button:focus-visible { outline: 2px solid var(--tw-accent, var(--vscode-focusBorder, #799ed7)); outline-offset: 1px; }
 .hps-verdict-note { display: flex; flex-direction: column; gap: 4px; }
-.hps-verdict-note textarea { min-height: 56px; resize: vertical; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: var(--vscode-input-background, #1e1e1e); color: var(--vscode-input-foreground, inherit); font: inherit; font-size: 13px; }
+.hps-verdict-note textarea { min-height: 56px; resize: vertical; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: var(--vscode-input-background, var(--vscode-editor-background, #1e1e1e)); color: var(--vscode-input-foreground, var(--vscode-foreground, #e1e1e1)); font: inherit; font-size: 13px; }
+.hps-verdict-note textarea::placeholder { color: var(--vscode-input-foreground, var(--vscode-foreground, #e1e1e1)); opacity: 1; }
 .hps-verdict-note-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .hps-verdict-note-actions button { min-width: 44px; min-height: 44px; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--hp-control-line, #748F79); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .hps-verdict-note-actions button:disabled { opacity: .5; cursor: default; }
