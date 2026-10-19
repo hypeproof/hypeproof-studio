@@ -87,10 +87,10 @@ Agent가 실제 문서를 읽고 assessment를 작성하며, 별도 모델 API k
 attestation이다. 이 과정을 독립 human approval 또는 URL/테스트 결과 자체의 자동 검증이라고 부르지 않는다.
 
 ```bash
-python3 scripts/hype-pr/pr.py inspect --repo jayleekr/hypeprooflab \
+python3 scripts/hype-pr/pr.py inspect --repo hypeproof/hypeprooflab \
   --output /tmp/impact.json --assessment-template /tmp/assessment.json
 # Skill 지침에 따라 assessment를 작성한다. 원문/상세 reasoning은 public PR에 복사하지 않는다.
-python3 scripts/hype-pr/pr.py prepare --repo jayleekr/hypeprooflab --assessment /tmp/assessment.json
+python3 scripts/hype-pr/pr.py prepare --repo hypeproof/hypeprooflab --assessment /tmp/assessment.json
 # 출력된 receipt path를 아래 create --preparation 에 전달한다.
 ```
 
@@ -99,6 +99,17 @@ Harness가 없으면 명시적으로 실패한다. 정책·엔진 복제나 fall
 원격 기준 commit이 로컬에 없으면 `git fetch origin main` 후 다시 실행한다. source를 읽을 권한이
 없으면 권한을 복구한다. 코드 변경/새 commit/base·다른 repo의 전진은 다시 검토할 이유다.
 `create`의 `--path`는 dry-run 참고용이며 실제 생성의 위험 판정은 git diff로 계산한다.
+
+다른 저장소(`policy/change-impact.json`의 `repositories`와 `external_sources`)의 source는
+같은 이름의 sibling clone에서 읽는다. clone이 없거나 쓸 수 없으면(git work tree가 아님,
+`.git`이 가리키는 저장소가 없음, origin이 그 저장소가 아님) 파일마다 GitHub API로 읽는다.
+느리고 rate limit을 쓴다. 이때 `inspect`, `prepare`, `create --apply`는 저장소마다 한 줄을
+stderr에 낸다. 확인한 경로, 이유, 고치는 명령(`gh repo clone hypeproof/<repo> <경로>`)이
+들어 있다. 도구가 대신 clone하거나 고치지는 않는다. `inspect` JSON의
+`local_source_gaps`에도 같은 내용이 있고, fingerprint와 receipt에는 들어가지 않으므로
+clone을 추가해도 준비가 낡지 않는다. clone은 작업 repo의 main checkout 옆,
+`HYPEPROOF_HARNESS` 옆, 실행 중인 Harness checkout 옆 순서로 찾는다. 일부러 API로만 읽으려면
+`HYPEPROOF_NO_LOCAL_SOURCES=1`을 설정한다. 그러면 안내도 나오지 않는다.
 
 ## Work GitHub transport
 
@@ -144,7 +155,7 @@ guarded PR 생성으로 별도 확인한다. 사용자에게 Work transport 구�
 
 ```bash
 python3 scripts/hype-pr/pr.py plan \
-  --repo jayleekr/hypeproof-studio \
+  --repo hypeproof/hypeproof-studio \
   --author JinyongShin \
   --path docs/dev/cohort.md \
   --auto-merge
@@ -154,12 +165,12 @@ python3 scripts/hype-pr/pr.py plan \
 
 ```bash
 python3 scripts/hype-pr/pr.py request-reviewers \
-  --repo jayleekr/sediment \
+  --repo hypeproof/sediment \
   --pr 87
 
 # 실제 GitHub mutation
 python3 scripts/hype-pr/pr.py request-reviewers \
-  --repo jayleekr/sediment \
+  --repo hypeproof/sediment \
   --pr 87 \
   --apply
 ```
@@ -169,7 +180,7 @@ python3 scripts/hype-pr/pr.py request-reviewers \
 
 ```bash
 python3 scripts/hype-pr/pr.py create \
-  --repo jayleekr/hypeproof-harness \
+  --repo hypeproof/hypeproof-harness \
   --head feat/hype-pr-workflow-harness \
   --issue 123 \
   --title "Add hype-pr workflow harness" \
