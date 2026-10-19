@@ -20,9 +20,28 @@ const { friendlyTransportMessage, IMAGE_TOO_LARGE_FRIENDLY } = await import(
 
 // ─── Everything else → null → caller falls back to the generic card ──────────
 {
-  for (const s of [400, 422, 429, 500, 502, 529, 200]) {
+  for (const s of [400, 422, 500, 502, 529, 200]) {
     assert.equal(friendlyTransportMessage(s), null, `status ${s} has no special copy`);
   }
+}
+
+
+
+// Rate-limit guidance uses only a validated delay, never raw headers or bodies.
+{
+  const now = Date.UTC(2026, 9, 20, 0, 0, 0);
+  const generic = friendlyTransportMessage(429);
+  assert.match(generic, /요청이 잠시 제한/);
+  assert.match(generic, /잠시 후 다시 시도/);
+  assert.match(friendlyTransportMessage(429, "2", now), /약 2초 후/);
+  assert.match(friendlyTransportMessage(429, "61", now), /약 2분 후/);
+  assert.match(friendlyTransportMessage(429, new Date(now + 2000).toUTCString(), now), /약 2초 후/);
+  for (const header of [null, "", "-2", "1.5", "Infinity", "999999999999999999999", "604801", "2 seconds", "secret-token", new Date(now - 1000).toUTCString()]) {
+    assert.equal(friendlyTransportMessage(429, header, now), generic, `invalid/stale header ${header}`);
+  }
+  assert.equal(friendlyTransportMessage(429, "0", now), generic);
+  assert.equal(friendlyTransportMessage(413, "2", now), IMAGE_TOO_LARGE_FRIENDLY);
+  assert.equal(friendlyTransportMessage(500, "2", now), null);
 }
 
 console.log("proxy-transport-friendly.smoke.mjs — all assertions passed");

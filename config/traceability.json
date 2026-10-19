@@ -5919,6 +5919,12 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/replyChoiceParser.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/proxyClient.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/proxyClientHelpers.ts"
         }
       ]
     },
@@ -5986,6 +5992,9 @@
         },
         {
           "path": "e2e/task-workspace/native-compact.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/proxy-transport-friendly.smoke.mjs"
         }
       ]
     },

@@ -181,3 +181,12 @@ CC-05 negative controls also feed complete HTML fences, a successful HTML write 
   learner to press a Stop control that is no longer present. Keep the busy gate;
   running streams still require stopping. After settlement, navigation preserves
   the old partial answer and draft and excludes late callbacks from the new task.
+
+### Proxy rate-limit recovery (#1893)
+
+Replay HTTP 429 through the real proxy adapter: delta-seconds and IMF-fixdate
+Retry-After headers appear as a readable wait, while missing/malformed/past or
+more-than-seven-day delays use generic wait guidance without raw header text.
+Keep 413 and non-rate-limit controls. In the UI/host/store fixture, verify no
+automatic retry, one explicit retry on the same endpoint/model, and draft/history
+preservation through reload. Native and real-provider acceptance are separate.

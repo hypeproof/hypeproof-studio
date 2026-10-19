@@ -29,6 +29,11 @@ separate filesystem/host/built-UI evidence from native, Windows and customer pro
 
 ### Personal chat detail (CP-R1)
 
+Proxy request-limit failures explain the temporary restriction and show a valid
+server-provided retry delay. Missing, malformed, expired, or implausible delay
+headers use safe generic wait guidance. This presentation must not automatically
+retry, change providers, clear drafts, or alter authentication handling.
+
 Reading a wide table retains its horizontal position while editing a draft or
 receiving another answer. Unchanged Markdown is reused; changed text still renders
 without remounting stable table/link elements solely because the parent rerenders.
