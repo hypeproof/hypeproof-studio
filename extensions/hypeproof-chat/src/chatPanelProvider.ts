@@ -181,6 +181,7 @@ import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSa
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
 import { aiCapabilities } from "./aiCapabilities";
+import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
@@ -561,6 +562,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
           else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
           this.orchestratorState = undefined;
+          // CGP-ART-R-007 — queued page text belongs to the conversation it was attached in.
+          if ((msg.type === 'taskCreate' || msg.type === 'taskSelect') && this.pendingPageAttachment) this.clearPageAttachment();
           await this.postConfig();
           await this.postHistory();
         } finally {
@@ -1093,6 +1096,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // an image with the NEXT turn so the coach can *see* the page. image_paste-
   // gated; consumed once, like pendingPageContext.
   private pendingPageImage: string | null = null;
+  /** CGP-ART-R-007 — what the learner sees for the queued page text (null when none). */
+  private pendingPageAttachment: PageAttachmentPreview | null = null;
   // #308 — inline "붙였어요" notice queued for the webview. post() silently
   // drops messages while the view is unresolved, and extension.ts calls
   // attachPageContext() BEFORE panel.focus creates the view — so the notice
@@ -2062,17 +2067,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * too. History keeps the user's clean text.
    */
   attachPageContext(ctx: { url: string; title: string; text: string; imageBase64?: string }): void {
-    const body = ctx.text.trim().slice(0, 3000);
-    this.pendingPageContext =
-      `[현재 브라우저 페이지]\nURL: ${ctx.url}\n제목: ${ctx.title}\n` +
-      `--- 페이지 내용(일부) ---\n${body}\n---\n` +
-      `위 페이지를 참고해서 답해줘.`;
     // capturePageContext returns raw JPEG base64 (no data: prefix). Only attach
     // when the cohort allows images — otherwise the worker would drop it anyway.
     this.pendingPageImage =
       ctx.imageBase64 && this.isImagePasteEnabled()
         ? `data:image/jpeg;base64,${ctx.imageBase64}`
         : null;
+    // CGP-ART-R-007 — the model gets the page as quoted data, and the learner sees exactly that text.
+    const page = buildPageAttachment(ctx, !!this.pendingPageImage);
+    this.pendingPageContext = page.modelText;
+    this.pendingPageAttachment = page.preview;
+    void this.post({ type: "pageAttachment", attachment: page.preview });
     // #308 — announce inline in the chat panel, NOT via a VS Code toast (a toast
     // pauses the integrated browser). The webview clears it on the next send.
     const withShot = !!this.pendingPageImage;
@@ -2096,6 +2101,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       .filter(([k]) => k !== "ok")
       .map(([k, v]) => `${k}=${String(v)}`)
       .join(" ");
+    this.dropPageAttachment(); // CGP-ART-R-007: this slot now carries something else
     this.pendingPageContext =
       `[게스트 결과] ${ok ? "성공" : "실패"} · ${kv}` +
       (attempts > 1 ? ` · ${attempts}번째 시도` : "") +
@@ -2105,6 +2111,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // is noise to the child. The child just played it and already knows the result;
     // the guest reacting in the next message is enough. Attached quietly to the next
     // turn only, with no notification.
+  }
+  /** CGP-ART-R-007 — remove queued page text, screenshot and notice; nothing from the page is sent. */
+  private clearPageAttachment(): void {
+    if (!this.pendingPageAttachment) return;
+    this.pendingPageContext = null;
+    this.pendingPageImage = null;
+    this.pendingPageNotice = null;
+    void this.post({ type: "pageAttached", label: "" });
+    this.dropPageAttachment();
+  }
+  /** CGP-ART-R-007 — the queued page text is replaced or gone; stop showing it as going out. */
+  private dropPageAttachment(): void {
+    if (!this.pendingPageAttachment) return;
+    this.pendingPageAttachment = null;
+    void this.post({ type: "pageAttachment", attachment: null });
   }
   /** Rounds since the last success (a success resets it). */
   private questAttempts = 0;
@@ -2338,6 +2359,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return;
     }
     this.pendingPageImage = `data:${blob.media_type};base64,${Buffer.from(blob.bytes).toString('base64')}`;
+    this.dropPageAttachment(); // CGP-ART-R-007: this slot now carries something else
     this.pendingPageContext =
       `[실험 브라우저 기록] 붙인 화면은 ${picked.item.label}에서 찍은 것이다 (${picked.item.description}). ` +
       (picked.item.state === "current" ? "지금 파일과 같은 버전이다." : "지금 파일과 다를 수 있다. 지금 화면처럼 말하지 마라.");
@@ -2684,6 +2706,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   async clearHistory(): Promise<void> {
     if (this.clearingHistory || this.taskChanging || this.connectionChanging || this.hasActiveStream()) return;
     this.clearingHistory = true;
+    if (this.pendingPageAttachment) this.clearPageAttachment(); // CGP-ART-R-007 — a new conversation starts without the old page
     const key = this.historyKey();
     const taskStore = this.currentTaskStore?.();
     const taskId = taskStore?.getView().activeTaskId;
@@ -4790,6 +4813,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         }
         // CR-09 — a remount must still show the picked element that is queued to go.
         if (this.elementQueue.queued) this.postElementPreview();
+        // CGP-ART-R-007 — and the page text that is queued to go.
+        if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
         // #320 — AI disclosure at session start (REQ-C14). First "ready" of
         // a session shows the notice; hide/show remounts within the same
         // session return null here and stay silent. A history clear resets
@@ -4942,6 +4967,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "saveCoach":
         await this.saveCoachFromWebview(msg.name, msg.personality);
+        return;
+      case "removePageContext":
+        // CGP-ART-R-007 — removed before sending: nothing from the page goes with the next turn.
+        this.clearPageAttachment();
+        void this.post({ type: "pageAttachment", attachment: null });
         return;
       case "removeElementContext":
         // CR-09 — the student removed the picked element; a CR-only message (CR-T02 inventory).
@@ -5290,6 +5320,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     await this.pullQuestResultFromPreview();
     const pageContext = this.pendingPageContext;
     this.pendingPageContext = null;
+    // A page attached while this send was between its awaits is consumed now: clear its chip too.
+    this.dropPageAttachment();
     // #308 — the notice describes the queued context; once consumed, stop
     // resurrecting it on webview remounts (webview clears its copy on userSent).
     this.pendingPageNotice = null;
@@ -7017,6 +7049,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(isInstructor && local ? { instructorModelChoices: localModelSelection(local).choices } : {}),
       },
     });
+    // CGP-ART-R-007 — a config for another activity or task resets the webview's state; queued page
+    // text must stay visible for as long as it would be sent.
+    if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
     // #649 — when the webview remounts (panel hide → show, reload) the highlight
     // disappears. Announce the currently open world once more to restore the strip's
     // aria-pressed.

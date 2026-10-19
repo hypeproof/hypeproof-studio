@@ -77,6 +77,9 @@ interface Props {
   /** CR-09 — the picked element queued for the next turn (Curriculum Runtime only). */
   elementPreview?: import("../../src/protocol").ElementPreview | null;
   onRemoveElement?: () => void;
+  /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
+  pageAttachment?: import("../../src/pageContext").PageAttachmentPreview | null;
+  onRemovePageAttachment?: () => void;
   /** cr-verify — the "내 제품 테스트" panel, drawn above the composer when the host shows it. */
   verifyPanel?: import("react").ReactNode;
   /** cr-verify — a product test is driving the browser: nothing is sent until it ends. */
@@ -1326,6 +1329,23 @@ export function ChatPanel(props: Props) {
         {props.pageNotice && (
           <div className="hps-page-notice" role="status" aria-live="polite">
             {props.pageNotice}
+          </div>
+        )}
+
+        {/* CGP-ART-R-007 — exactly the page text that goes with the next message, from which site, removable. */}
+        {props.pageAttachment && (
+          <div className="hps-page-attachment" role="group" aria-label="다음 메시지와 함께 보낼 페이지 내용" data-testid="page-attachment">
+            <div className="hps-page-attachment-head">
+              <strong>페이지 내용 · {props.pageAttachment.host}</strong>
+              {props.pageAttachment.withImage && <span> · 화면 사진도 함께 보내요</span>}
+              <button type="button" className="hps-page-attachment-remove" onClick={props.onRemovePageAttachment}>빼기</button>
+            </div>
+            <details>
+              <summary>보낼 내용 전체 보기 ({props.pageAttachment.text.length}자)</summary>
+              <p className="hps-page-attachment-meta" data-testid="page-attachment-meta">제목: {props.pageAttachment.title || '(없음)'}<br />주소: {props.pageAttachment.url}</p>
+              <pre tabIndex={0} data-testid="page-attachment-text">{props.pageAttachment.text}</pre>
+            </details>
+            <p className="hps-page-attachment-note">페이지에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
           </div>
         )}
 

@@ -6454,6 +6454,33 @@
           "path": "extensions/hypeproof-chat/test/turn-review.test.tsx"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-PAGE-ATTACHMENT",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/pageContext.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-PAGE-ATTACHMENT",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-NATIVE-BROWSER",
+        "ST-IMP-PAGE-ATTACHMENT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/page-attachment.test.tsx"
+        }
+      ]
     }
   ]
 }
