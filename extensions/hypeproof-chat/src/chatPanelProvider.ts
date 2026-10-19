@@ -4423,6 +4423,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
       const flush = this.draftFlush;
+      if (msg.nonce && flush?.nonce === msg.nonce && flush.source === source && msg.imagePreparationFailed) {
+        flush.reject(new Error('이미지를 준비하지 못해 작업을 바꾸지 않았어요. 현재 입력은 그대로입니다. 이미지를 다시 붙이거나 작업 이동을 다시 선택해 주세요.'));
+        return;
+      }
       if (msg.nonce && flush?.nonce === msg.nonce && flush.source === source && flush.capture) {
         flush.capture(msg.draft);
         flush.resolve();

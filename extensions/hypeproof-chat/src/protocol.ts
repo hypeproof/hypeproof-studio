@@ -485,7 +485,7 @@ export type WebviewMessage = (
   | { type: 'taskSourceSelection'; selection: import('./taskWorkspaceContract').TaskSurfaceSelection }
   | { type: 'taskOpenSource'; url: string; requestId?: string }
   | { type: 'taskReturnFromSource'; requestId: string; url: string }
-  | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string}
+  | {type:'saveActivityDraft';activityId:string;draft:import('./activityDraft').ActivityDraft;nonce?:string;imagePreparationFailed?:boolean}
   /**
    * #897 (VO-01) — the **raw observation** from the voice capability probe. It
    * carries no verdict: the webview measures, the host's voiceCapabilityHelpers

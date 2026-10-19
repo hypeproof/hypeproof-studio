@@ -435,10 +435,10 @@ export function ChatPanel(props: Props) {
       }
       if (msg.type === "activityFreeze") {
         setFrozen(msg.frozen);
-        if (!msg.frozen) deferredDraftFlush.current = null;
+        if (!msg.frozen) { deferredDraftFlush.current = null; imagePreparationFailed.current = false; }
         if (msg.nonce) {
           if (preparingImagesRef.current) deferredDraftFlush.current = msg.nonce;
-          else postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce:msg.nonce});
+          else postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce:msg.nonce,imagePreparationFailed:imagePreparationFailed.current});
         }
       }
       if (msg.type === "activityDraftError") setDraftError(msg.error);
@@ -446,13 +446,13 @@ export function ChatPanel(props: Props) {
     return off;
   }, [activityId,taskId]);
   // Navigation already waits for this nonce-bound draft write. Do not acknowledge
-  // a snapshot that omits an image still being read. A failed/abandoned read keeps
-  // the task through the existing bounded host timeout; unfreeze cancels the nonce.
+  // a snapshot that omits an image still being read. Report failed preparation to
+  // the same nonce-bound handshake; abandoned reads use the existing host timeout.
   useEffect(() => {
     const nonce = deferredDraftFlush.current;
-    if (!nonce || preparingImages || imagePreparationFailed.current || !activityId) return;
+    if (!nonce || preparingImages || !activityId) return;
     deferredDraftFlush.current = null;
-    postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce});
+    postToHost({type:"saveActivityDraft",activityId,taskId,draft:snapshot.current,nonce,imagePreparationFailed:imagePreparationFailed.current});
   }, [preparingImages,pendingImages,activityId,taskId]);
   // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
   // one itself (dropped from Finder, it opened as a tab): draw its chip.

@@ -47,5 +47,24 @@ try {
   await expect(input).toHaveValue('작업을 바꿔도 이미지와 이 질문을 보존해 주세요');
   await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(1);
   expect(server.sent).toHaveLength(0);
+  // A failure can race the nonce request, not only the final persistence effect.
+  for (const afterFreeze of [false, true]) {
+    await paste();
+    await expect.poll(() => page.evaluate(() => window.pendingReads.length)).toBe(1);
+    await page.locator('.tw-task:not([aria-current])').click();
+    await expect.poll(() => server.fixture.h.connectionChanging).toBe(true);
+    if (afterFreeze) await expect(input).not.toBeEditable();
+    await page.evaluate(() => window.pendingReads.shift()(true));
+    await expect(page.getByText('이미지를 준비하지 못해 작업을 바꾸지 않았어요.', { exact: false })).toBeVisible();
+    expect(server.fixture.store.getView().activeTaskId).toBe(originalTask);
+    await expect(input).toBeEditable();
+    await expect(input).toHaveValue('작업을 바꿔도 이미지와 이 질문을 보존해 주세요');
+    expect(server.fixture.store.getDraft().images).toHaveLength(1);
+    await page.locator('.tw-task:not([aria-current])').click();
+    await expect.poll(() => server.fixture.store.getView().activeTaskId).not.toBe(originalTask);
+    await page.locator('.tw-task:not([aria-current])').click();
+    await expect.poll(() => server.fixture.store.getView().activeTaskId).toBe(originalTask);
+  }
+  expect(server.sent).toHaveLength(0);
   console.log('PASS image navigation: waits for image, saves original draft, changes task, restores attachment; no send or cross-task pollution');
 } finally { await page.close(); await browser.close(); await server.close(); }
