@@ -936,6 +936,7 @@ CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). B
 - **Readable, neutral review actions.** Keep and restore actions use the surrounding theme and typography, with equal visual emphasis, at least 44px click targets, visible keyboard focus, and disabled feedback while restoration runs. This supports OWNERSHIP without nudging either choice.
 - **Keyboard continuity after restore.** A result for the same turn continues a focused restore action at its confirmation button. If the learner moves focus or clicks outside the review while waiting, preserve that destination instead. Unsolicited results, a different turn and a remounted review must not take focus.
 - **Review resynchronization.** A mounted chat requests its current task-scoped review after subscribing, so task return and webview reload retain an existing host review. Other tasks see none, and dismissed results remain dismissed. This does not promise recovery after restarting the extension host.
+- **Delayed decisions retain ownership.** A keep operation completing after a newer review arrives may dismiss only the review it captured; it must leave the newer review available.
 - **Restore point before each coach turn.** When a turn runs on any runtime (proxy, agent-sdk,
   local) and the coach has a work folder (`resolveCoachCwd`), `chatPanelProvider.beginTurnRestore`
   records it before the runtime starts: a manifest of every file (posix relative path, size,

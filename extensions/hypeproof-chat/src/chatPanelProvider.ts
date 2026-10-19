@@ -4482,8 +4482,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       try { afterDigest = (await scanFolder(review.root)).digest; } catch { /* recorded without it */ }
       // REQ-Q1 — local evidence: digests and counts only, never paths or contents.
       this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_keep", payload: { restore_point: review.point.id, before_digest: review.point.digest, ...(afterDigest ? { after_digest: afterDigest } : {}), ...counts } });
-      this.turnReview = null;
-      this.postTurnReview();
+      // A newer turn may finish while the keep evidence scan is awaiting disk.
+      if (this.turnReview === review) {
+        this.turnReview = null;
+        this.postTurnReview();
+      }
       return;
     }
     if (this.hasActiveStream() || this.pendingSends > 0 || this.turnRestoreBusy || this.taskChanging || this.verifySession?.running) {
