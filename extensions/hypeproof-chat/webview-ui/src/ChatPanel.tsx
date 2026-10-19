@@ -484,6 +484,15 @@ export function ChatPanel(props: Props) {
   const [worldPending, setWorldPending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Explicit recovery actions remove their own control. Return typing to the
+  // existing draft without moving the viewport or resetting its selection.
+  const recoverToComposer = (action: (() => void) | undefined) => {
+    const editor = textareaRef.current;
+    const selection = editor && [editor.selectionStart, editor.selectionEnd, editor.selectionDirection] as const;
+    action?.();
+    editor?.focus({ preventScroll: true });
+    if (editor && selection) editor.setSelectionRange(...selection);
+  };
   const imagePicker = useRef<HTMLInputElement>(null);
   useEffect(() => bindComposerFocus(() => textareaRef.current, activityId), [activityId]);
   /** Previous `streaming` value — the flush must fire on the edge, not the state. */
@@ -1308,8 +1317,8 @@ export function ChatPanel(props: Props) {
             requestId={props.errorRequestId}
             runbookUrl={props.errorRunbookUrl}
             canRetry={props.canRetryLast && recovered.length === 0}
-            onRetry={props.onRetryLast}
-            onDismiss={props.onDismissError}
+            onRetry={() => recoverToComposer(props.onRetryLast)}
+            onDismiss={() => recoverToComposer(props.onDismissError)}
             onReport={props.onReportProblem}
             audience={audience}
           />
