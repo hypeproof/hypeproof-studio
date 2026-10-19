@@ -17,6 +17,8 @@
 // for "별똥별" (받침) as well as "제작 파트너". With the default name "코치" every
 // helper reproduces today's literal strings byte for byte.
 
+import { degradedRemedy, type SeatAudience } from "./seatVocabulary.ts";
+
 export interface CoachIdentityState {
   name: string;
   personality: string;
@@ -117,15 +119,23 @@ export const shellApprovalTitle = (name: string): string => `${asSubject(name)} 
 export const browserApprovalTitle = (name: string): string => `${asSubject(name)} 브라우저를 열려고 해요:`;
 
 /**
- * #476 in-panel notice when the SDK runtime fell back to the proxy.
- * REQ-M45 — a solo seat (trial, personal, pass) has no staff to call, so its next
- * step is the installer that seeds the SDK binary. The classroom wording is unchanged.
+ * #476 in-panel notice when the SDK runtime fell back to the proxy. The remedy follows
+ * the seat (trial diagnosis D3): a solo seat (trial, personal, pass) has no staff to call,
+ * so its next step is the installer that seeds the SDK binary (REQ-M45). The classroom
+ * wording is unchanged. The second argument is a `SeatAudience` or `{ solo }`.
  */
-export const coachDegradedNotice = (name: string, opts: { solo?: boolean } = {}): string =>
-  `지금 ${asTopic(name)} 파일 저장·명령 실행 도구 없이 돌고 있어요 — 만들기와 미리보기는 그대로 되지만, ` +
-  (opts.solo
-    ? "저장소·배포는 이 상태에서 안 돼요. hypeproof-ai.xyz/studio/install 의 설치 도구로 다시 설치하면 모두 쓸 수 있어요."
-    : "저장소·배포는 이 상태에서 안 돼요. 스태프를 불러주세요.");
+export const coachDegradedNotice = (
+  name: string,
+  audience: SeatAudience | { solo?: boolean } = "classroom",
+): string => {
+  const solo = typeof audience === "string" ? audience === "solo" : !!audience.solo;
+  return (
+    `지금 ${asTopic(name)} 파일 저장·명령 실행 도구 없이 돌고 있어요 — 만들기와 미리보기는 그대로 되지만, ` +
+    (solo
+      ? "저장소·배포는 이 상태에서 안 돼요. hypeproof-ai.xyz/studio/install 의 설치 도구로 다시 설치하면 모두 쓸 수 있어요."
+      : `저장소·배포는 이 상태에서 안 돼요. ${degradedRemedy("classroom")}`)
+  );
+};
 
 /** #308 page-attach inline notice. */
 export const pageAttachedNotice = (name: string, withShot: boolean, label: string): string =>

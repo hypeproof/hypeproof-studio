@@ -43,7 +43,7 @@ import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
 import { runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
-import { isSoloSeat, SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
+import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
@@ -157,6 +157,7 @@ import {
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
+import { profileAudience, type SeatAudience } from "./seatVocabulary.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
 import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
@@ -1909,6 +1910,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.cachedProfile?.profile_id;
   }
 
+  /** Trial diagnosis D3 — solo (trial/pass/personal) or classroom wording for host-side copy. */
+  getSeatAudience(): SeatAudience {
+    return profileAudience(this.cachedProfile);
+  }
+
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
   isPageContextEnabled(): boolean {
     return this.cachedProfile?.input?.page_context === true;
@@ -2970,7 +2976,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postToolLog(streamId, {
       id: randomId(),
       icon: "⚠️",
-      label: coachDegradedNotice(this.coachDisplayName(), { solo: isSoloSeat(this.cachedProfile) }),
+      label: coachDegradedNotice(this.coachDisplayName(), profileAudience(this.cachedProfile)),
       state: "error",
     });
   }
@@ -5323,6 +5329,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           signal: ctrl.signal,
           coachName: effectiveCoachName,
           coachPersonality: effectiveCoachPersonality,
+          audience: profileAudience(this.cachedProfile),
           // #507 — send the address of the live server that is up on every turn.
           // Omitted when there is none: the worker then says "it is not up yet + do
           // not guess the port" on our behalf.
@@ -5851,6 +5858,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           signal: p.signal,
           coachName: p.coachName,
           coachPersonality: p.coachPersonality,
+          audience: profileAudience(this.cachedProfile),
           // #507 — re-read on every turn inside the loop: the server address that
           // live_preview_start just brought up has to be in the next turn's context for
           // there to be no reason left to guess.
@@ -6028,7 +6036,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     // REQ-M44 — the SDK's own error text ("Claude Code returned an error result: API Error: …") never reaches the
     // banner: the Service's sentence, or a Korean line by status. The App's own Korean errors pass through unchanged.
-    const reason = sdkErrorDisplayText(err);
+    const reason = sdkErrorDisplayText(err, profileAudience(this.cachedProfile));
     const requestId = err instanceof ProxyTransportError ? err.requestId : undefined;
     if (requestId) this.lastRequestId = requestId;
     void this.post({ type: "streamError", streamId, error: reason, requestId });

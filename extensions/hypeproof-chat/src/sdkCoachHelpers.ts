@@ -13,6 +13,7 @@
 // Type-only import — erased at build/strip time, so this file stays a leaf
 // module that Node can run standalone in the smoke tests.
 import { stallNotice } from "./coachIdentity.ts";
+import { rateLimitStallText, TRANSPORT_FAILURE_SOLO, type SeatAudience } from "./seatVocabulary.ts";
 import type {
   AgentDefinition,
   HookCallback,
@@ -2180,8 +2181,10 @@ export function sdkServiceSentence(text: string): string {
  * The banner text for a failed turn (handleSendError's generic branch). The App's own errors are already Korean
  * and pass through unchanged; a CLI/SDK error text becomes the Service's sentence, else a Korean line by status.
  */
-export function sdkErrorDisplayText(err: unknown): string {
-  if (!(err instanceof Error)) return SDK_ERROR_GENERIC_FRIENDLY;
+export function sdkErrorDisplayText(err: unknown, audience: SeatAudience = "classroom"): string {
+  // Trial diagnosis D3 (REQ-L14): a solo seat has no staff or instructor to ask, so its fallback lines drop them.
+  const generic = audience === "solo" ? TRANSPORT_FAILURE_SOLO : SDK_ERROR_GENERIC_FRIENDLY;
+  if (!(err instanceof Error)) return generic;
   const line = (err as { sdkErrorLine?: unknown }).sdkErrorLine;
   const own = typeof line === "string" ? line : "";
   if (!SDK_CLI_ERROR_TEXT.test(err.message) && !own) return err.message;
@@ -2189,9 +2192,9 @@ export function sdkErrorDisplayText(err: unknown): string {
   if (sentence) return sentence;
   const s = (err as { status?: unknown }).status;
   const status = typeof s === "number" ? s : sdkCliErrorStatus(own) ?? sdkCliErrorStatus(err.message);
-  if (status === 429) return SDK_RATE_LIMIT_FRIENDLY;
+  if (status === 429) return audience === "solo" ? rateLimitStallText("solo") : SDK_RATE_LIMIT_FRIENDLY;
   if (status !== undefined && status >= 500) return sdkProviderErrorFriendly(status);
-  return SDK_ERROR_GENERIC_FRIENDLY;
+  return generic;
 }
 
 export async function consumeSdkStream(

@@ -183,7 +183,7 @@ const failedResult = { type: "result", subtype: "success", is_error: true, resul
 {
   const src = fs.readFileSync(path.join(here, "../src/chatPanelProvider.ts"), "utf8");
   const body = src.slice(src.indexOf("private async handleSendError("), src.indexOf("private async handleActionRequest("));
-  assert.match(body, /sdkErrorDisplayText\(err\)/, "handleSendError builds the banner text with sdkErrorDisplayText");
+  assert.match(body, /sdkErrorDisplayText\(err[,)]/, "handleSendError builds the banner text with sdkErrorDisplayText");
   assert.doesNotMatch(body, /const reason = err instanceof Error \? err\.message/, "the raw message is no longer the banner text");
 }
 

@@ -51,11 +51,11 @@ import {
 } from "./proxyClientHelpers";
 import { WORLD_ARCHIVE_DIR, filterCoachVisibleFiles } from "./chatPanelHelpers";
 import { stallNotice } from "./coachIdentity.ts";
+import { profileAudience, rateLimitStallText } from "./seatVocabulary.ts";
 import {
   buildSdkQueryOptions,
   consumeSdkStream,
   evaluateSdkToolUse,
-  SDK_RATE_LIMIT_FRIENDLY,
   sdkProviderErrorFriendly,
   SDK_STALL_FRIENDLY,
   SDK_STREAM_STALL_MS,
@@ -884,7 +884,7 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         `[coach] SDK stream stalled: no progress for ${stallMs}ms — aborting the turn (#403). ` +
           `Likely a gateway retry storm (429/529/5xx) or a first turn that never produced a token.`,
       );
-      return new CoachStallError(status===429?SDK_RATE_LIMIT_FRIENDLY:status&&status>=500?sdkProviderErrorFriendly(status):stallNotice(args.coachName), status);
+      return new CoachStallError(status===429?rateLimitStallText(profileAudience(args.profile)):status&&status>=500?sdkProviderErrorFriendly(status):stallNotice(args.coachName), status);
     },
     // Silence that is NOT a stall: an open modal, or a tool the SDK is still
     // running (one budget of slack after the decision — a long subagent gets

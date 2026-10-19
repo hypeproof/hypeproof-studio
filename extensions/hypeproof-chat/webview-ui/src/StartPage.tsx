@@ -72,7 +72,7 @@ export function StartPage() {
         </div>
       </section>
       <section className="studio-connect" aria-labelledby="connect-title" aria-busy={state.checking}>
-        <div className="studio-card-top"><span className="studio-step">GET STARTED</span><span className="studio-dot"/></div>
+        <div className="studio-card-top"><span className="studio-step">시작하기</span><span className="studio-dot"/></div>
         <h2 id="connect-title">{showProfile ? (state.started ? copy.startedTitle : state.candidate ? "이 활동으로 시작할까요?" : "이어서 시작할까요?") : buying ? purchaseTitle : entry === "trial" ? "내 삶에 AI 더하기" : entry === "classroom" ? "수업에 참여하기" : "어떻게 시작할까요?"}</h2>
         <p className="studio-card-description">{showProfile ? (state.started ? copy.startedDescription : state.candidate ? (state.previousConnected ? "작업 폴더를 준비한 뒤 연결합니다. 시작 전에는 기존 활동이 유지됩니다." : "사용할 작업 폴더를 확인한 뒤 시작하세요.") : "연결된 활동을 확인한 뒤 이어서 시작하세요.") : buying ? (purchase?.stage && purchase.stage !== "choosing" ? "" : `${chosen?.durationDays ?? 30}일 동안 쓰는 이용권이에요. 한 번만 결제하고, 자동으로 다시 결제되지 않아요.`) : entry === "trial" ? "일상의 고민부터 만들고 싶은 것까지, AI와 함께 시작해보세요. 지금은 발급받은 체험 코드가 필요합니다." : entry === "classroom" ? "발급받은 참여 코드로 수업을 확인하세요." : "혼자 AI를 체험하거나, 참여한 수업을 이어갈 수 있습니다."}</p>
         {state.profile && !editing ? <>
@@ -138,7 +138,7 @@ export function StartPage() {
         <div className="studio-card-footer">{buying ? "쓰기 전이면 전액 환불해요. 쓰기 시작한 뒤에는 쓰지 않은 만큼 환불해요." : entry === "trial" && !showProfile ? "체험 코드가 없다면 코드 발급 담당자에게 요청해 주세요. 수업 참여는 기존 코드를 사용합니다." : "참여 코드에 연결된 활동과 이용 조건이 적용됩니다."}</div>
       </section>
     </div>
-    <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <span aria-hidden="true">↗</span></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">MAKE · VERIFY · OWN</span></footer>
+    <footer className="studio-bottom"><button onClick={() => postToHost({ type: "openLocalFolder" })}>작업 폴더 열기 <span aria-hidden="true">↗</span></button><span>{state.workspace ? `현재 폴더 · ${state.workspace}` : "내 파일은 내 작업 폴더에 남습니다."}</span><span className="studio-build">만들기 · 검토하기 · 내 것으로</span></footer>
   </main>;
 }
 
