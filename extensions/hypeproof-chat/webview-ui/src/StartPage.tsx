@@ -10,6 +10,7 @@ import { InstructorInbox } from "./InstructorInbox";
 import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
 import { trialEntryNote } from "../../src/trialOffer";
 import { FREE_START_COPY } from "../../src/freeStart";
+import { PURCHASE_COPY } from "../../src/passPurchase";
 
 export function StartPage() {
   const [state, setState] = useState<StartState>({ checking: true, version: "" });
@@ -124,7 +125,8 @@ export function StartPage() {
           <div className="studio-course-actions"><button className="studio-text-button" onClick={() => { setEditing(true); setEntry(null); setToken(""); }} disabled={state.checking}>다른 활동 선택</button><button className="studio-text-button" onClick={() => postToHost({ type: state.candidate ? "cancelCandidate" : "disconnectCourse" })} disabled={state.checking}>{state.candidate ? "선택 취소" : "연결 해제"}</button></div>
         </> : buying ? <div className="studio-purchase">
           {/* SPEC iteration 4 §2.5 — with free start the Google sign-in sits at purchase, never on first open. */}
-          {free && state.account && (!purchase?.stage || purchase.stage === "choosing") && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}
+          {/* Login at purchase (2026-10-19): while an account is needed, the entry below the list is the Primary instead. */}
+          {free && state.account && !purchase?.login && (!purchase?.stage || purchase.stage === "choosing") && <AccountEntry account={state.account} checking={state.checking} post={postToHost} />}
           {purchase?.stage === "waiting" || purchase?.stage === "connecting" ? <>
             {purchase.order && <div className="studio-course"><span className="studio-verified">{purchase.stage === "connecting" ? "결제 확인" : "결제 기다리는 중"}</span><h3>{purchase.order.label}</h3><dl><div><dt>결제할 금액</dt><dd>{won(purchase.order.amount)}</dd></div></dl></div>}
             {purchase.guardian && <div className="studio-guardian-pay"><img src={purchase.guardian.qr} width={160} height={160} alt="보호자 결제 페이지 QR 코드" /><p className="studio-help">{FREE_START_COPY.guardianPayHelp}</p><a href={purchase.guardian.url} className="studio-text-button" target="_blank" rel="noreferrer">결제 페이지 주소 열기 ↗</a></div>}
@@ -143,15 +145,24 @@ export function StartPage() {
               {p.tagline && <span className="studio-plan-for">{p.tagline}</span>}
               <span className="studio-plan-what">AI 요청 {p.requestLimit.toLocaleString("ko-KR")}번 · {p.durationDays}일 동안</span>
             </button>)}</div>
-            {/* SPEC iteration 4 §2.5 — on a free seat, one question before checkout; under 19 a guardian pays. */}
-            {purchase?.freeSeat && purchase.payerAdult === undefined ? <div className="studio-entry-options" role="group" aria-labelledby="payer-question">
+            {/* Login at purchase (Jay 2026-10-19): Google sign-in comes before checkout. The account entry is
+                the one Primary and no pay button is offered until signed in (SX-04). Without an account
+                sign-in on this build or Service, a calm notice and no checkout: never an anonymous order. */}
+            {purchase?.login === "signIn" && state.account ? <div className="studio-purchase-login" role="group" aria-labelledby="purchase-login-lead">
+              <p id="purchase-login-lead" className="studio-question">{PURCHASE_COPY.signInFirst}</p>
+              <AccountEntry account={state.account} checking={state.checking} post={postToHost} />
+            </div>
+            : purchase?.login ? <p className="studio-notice" role="status">{PURCHASE_COPY.loginUnavailable}</p>
+            /* SPEC iteration 4 §2.5 — on a free seat, one question before checkout; under 19 a guardian pays. */
+            : purchase?.freeSeat && purchase.payerAdult === undefined ? <div className="studio-entry-options" role="group" aria-labelledby="payer-question">
               <p id="payer-question" className="studio-question">{FREE_START_COPY.payerQuestion}</p>
               <button className="studio-choice" disabled={state.checking} onClick={() => postToHost({ type: "purchasePayer", adult: true })}>{FREE_START_COPY.payerYes} <span aria-hidden="true">→</span></button>
               <button className="studio-choice" disabled={state.checking} onClick={() => postToHost({ type: "purchasePayer", adult: false })}>{FREE_START_COPY.payerNo} <span aria-hidden="true">→</span></button>
             </div>
             : purchase?.freeSeat && purchase.payerAdult === false ? <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id, guardian: true }); }}>{state.checking ? "결제 페이지를 준비하고 있어요" : FREE_START_COPY.guardianPay} <span aria-hidden="true">→</span></button>
             : <button className="studio-primary" disabled={state.checking} onClick={() => { setState(s => ({ ...s, checking: true, error: undefined })); postToHost({ type: "purchaseStart", productId: chosen.id }); }}>{state.checking ? "결제 창을 열고 있어요" : `${won(chosen.amount)} 결제하러 가기`} <span aria-hidden="true">↗</span></button>}
-            <p className="studio-help">브라우저가 열려요. 결제하고 돌아오면 바로 쓸 수 있어요.</p>
+            {!purchase?.login && purchase?.message && <p className="studio-help" role="status">{purchase.message}</p>}
+            {!purchase?.login && <p className="studio-help">브라우저가 열려요. 결제하고 돌아오면 바로 쓸 수 있어요.</p>}
             <button className="studio-text-button" disabled={state.checking} onClick={leavePurchase}>{free ? "돌아가기" : "시작 방법 다시 선택"}</button>
           </> : <>
             <p className="studio-help" role="status">{purchase?.message ?? "이용권을 불러오고 있어요."}</p>

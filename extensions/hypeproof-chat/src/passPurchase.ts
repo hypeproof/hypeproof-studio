@@ -59,6 +59,13 @@ export interface PurchaseView {
   payerAdult?: boolean;
   /** A guardian pays: the checkout page as a link and a QR (data URL), instead of opening a browser here. */
   guardian?: { url: string; qr: string };
+  /**
+   * Login at purchase (Jay 2026-10-19). Set while this purchase needs a Google account and none is
+   * signed in: `signIn` — the account entry is the Primary and no pay button is offered;
+   * `unavailable` — this build or Service has no account sign-in, so nothing can be bought here
+   * (a calm notice, never an anonymous checkout). Absent: checkout as before.
+   */
+  login?: "signIn" | "unavailable";
 }
 
 /** Studio keeps waiting this long after the order's payment deadline, for a confirm that was already in flight. */
@@ -82,6 +89,10 @@ export const PURCHASE_COPY = {
   claimFailed: "결제는 확인했는데 이용권을 넣지 못했어요. 다시 연결을 눌러 주세요. 결제 내역은 그대로 있어요.",
   cancelled: "구매를 멈췄어요. 이미 결제했다면 다시 연결을 눌러 주세요.",
   unfinished: "결제한 이용권을 아직 넣지 못했어요. 다시 연결을 눌러 주세요.",
+  /** Login at purchase: the lead above the Google button, and the Service's `account_required`. */
+  signInFirst: "이용권을 사려면 Google로 로그인해 주세요.",
+  /** Login at purchase, but no account sign-in on this build or Service: calm, no checkout. */
+  loginUnavailable: "결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.",
 } as const;
 
 const ORDER_ID = /^ord_[0-9a-f]{32}$/;
@@ -147,10 +158,13 @@ export async function fetchProducts(proxyUrl: string, signal?: AbortSignal): Pro
  * `x-hps-free-credential` so the Service can link this order to the free start it came from. The
  * Service ignores a bad value; the token never reaches a webview or the checkout page.
  */
-export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string, freeCredential?: string): Promise<PendingOrder | "bad_checkout" | null> {
+export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string, freeCredential?: string): Promise<PendingOrder | "bad_checkout" | "account_required" | null> {
   try {
     const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}), ...(freeCredential ? { "x-hps-free-credential": freeCredential } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
-    return r.status === 201 ? parseOrder(await r.json(), productId, proxyUrl, siteBase) : null;
+    if (r.status === 201) return parseOrder(await r.json(), productId, proxyUrl, siteBase);
+    // Login at purchase (Service HPS_PURCHASE_ACCOUNT_REQUIRED): the order needs a Google account.
+    if (r.status === 401) { const body: unknown = await r.json().catch(() => null); if (isRecord(body) && body.error === "account_required") return "account_required"; }
+    return null;
   } catch { return null; }
 }
 

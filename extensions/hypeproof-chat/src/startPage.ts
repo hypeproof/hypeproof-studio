@@ -90,6 +90,10 @@ export class StartPage {
   private freeRefusal?: FreeClaimRefusal;
   /** The current seat is the free allowance (read in refresh; steers the purchase payer question). */
   private freeSeatNow = false;
+  /** No activity at all while the Service advertises free start: a newcomer buying before any use. */
+  private freeNewcomer = false;
+  /** This window's Service refused an order with `account_required` (login at purchase). */
+  private accountRequired = false;
   /** SPEC §2.5 — a guardian pays: the checkout link and QR shown instead of opening a browser here. */
   private guardianCheckout?: { url: string; qr: string };
   /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
@@ -104,6 +108,8 @@ export class StartPage {
 
   accountChanged(): void {
     if (this.candidate?.accountPass && this.accounts?.view().status === "signedOut") this.candidate = undefined;
+    // Signed in after a login-at-purchase prompt: the prompt has been answered.
+    if (this.accounts?.view().status === "signedIn" && this.purchaseMessage === PURCHASE_COPY.signInFirst) this.purchaseMessage = undefined;
     if (this.panel) void this.refresh();
   }
 
@@ -231,9 +237,26 @@ export class StartPage {
     catch { return undefined; }
   }
   private stopPurchaseWait(): void { if (this.purchaseTimer) clearTimeout(this.purchaseTimer); this.purchaseTimer = undefined; }
+  /**
+   * Login at purchase (Jay 2026-10-19, "결제할때 구글로그인 필수로 하자"). A free seat, a newcomer
+   * under free start, and any purchase after the Service answered `account_required` need a Google
+   * account. The Service's free-start readiness requires HPS_PURCHASE_ACCOUNT_REQUIRED, so an
+   * advertised free start means anonymous orders are refused anyway. Code-issued and class seats
+   * keep today's path until the Service says otherwise. Never asked before purchase: the first
+   * screen has no login.
+   */
+  private loginAtPurchase(): boolean { return this.freeSeatNow || this.freeNewcomer || this.accountRequired; }
+  /** What blocks checkout for want of an account; undefined when checkout may go ahead. */
+  private loginGate(): PurchaseView["login"] {
+    if (!this.loginAtPurchase()) return undefined;
+    if (!this.accounts) return "unavailable";
+    return this.accounts.view().status === "signedIn" ? undefined : "signIn";
+  }
   private purchaseView(): PurchaseView {
     const payerAdult = this.context.globalState?.get<unknown>(PAYER_ADULT_KEY);
+    const login = this.order ? undefined : this.loginGate();
     return {
+      ...(login ? { login } : {}),
       ...(this.freeSeatNow ? { freeSeat: true, ...(typeof payerAdult === "boolean" ? { payerAdult } : {}) } : {}),
       ...(this.guardianCheckout && this.order ? { guardian: this.guardianCheckout } : {}),
       available: !!this.products?.length || !!this.order,
@@ -468,16 +491,30 @@ export class StartPage {
     }
     if (msg.type !== "purchaseStart" || typeof msg.productId !== "string" || this.order || this.busy) return;
     if (!this.products?.some(p => p.id === msg.productId)) return;
+    // Login at purchase without an account runtime: no anonymous fallback. The view offers no pay
+    // button in this state; this guards a stale view.
+    if (this.loginGate() === "unavailable") { this.purchaseStage = "choosing"; this.purchaseMessage = undefined; await this.refresh(); return; }
     const { proxyUrl, siteBase } = this.settings();
     this.busy = true; await this.refresh();
     try {
       if (this.accounts && !this.accounts.matches(proxyUrl, siteBase)) throw new AccountError("settings_changed", "서버 설정이 바뀌었어요. Studio를 다시 열고 로그인해 주세요.");
       const accountToken = this.accounts ? await this.accounts.accessToken() : undefined;
-      if (this.accounts && !accountToken) throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
+      if (this.accounts && !accountToken) {
+        if (this.loginAtPurchase()) { this.purchaseStage = "choosing"; this.purchaseMessage = PURCHASE_COPY.signInFirst; return; }
+        throw new AccountError("authentication_required", "Google로 로그인한 뒤 이용권을 구매해 주세요.");
+      }
       // SPEC iteration 4 §2.5 — an order made from a free seat carries its credential so the Service
       // can link the purchase to the free start. Header only; never shown or sent to the checkout page.
       const freeCredential = this.freeSeatNow ? await this.currentToken() : undefined;
       const result = await createOrder(proxyUrl, msg.productId, siteBase, accountToken, freeCredential);
+      if (result === "account_required") {
+        // The Service requires a Google account for this order. Back to the list with the sign-in
+        // as the Primary (or the calm notice without an account runtime); nothing was ordered.
+        this.accountRequired = true; this.purchaseStage = "choosing";
+        this.purchaseMessage = this.accounts ? PURCHASE_COPY.signInFirst : undefined;
+        if (this.accounts && accountToken) await this.accounts.refreshView();
+        return;
+      }
       const order = result && result !== "bad_checkout" ? { ...result, ...(accountToken ? {accountOwned:true} : {}) } : result;
       if (!order || order === "bad_checkout") { this.purchaseStage = "stopped"; this.purchaseMessage = order ? PURCHASE_COPY.badCheckout : PURCHASE_COPY.orderFailed; return; }
       // Save before opening the browser: once the buyer can pay, the secret must already be on disk.
@@ -527,6 +564,7 @@ export class StartPage {
     // SPEC §2.5 — the running seat (not a candidate being previewed) decides the payer question and the header.
     const running = this.candidate ? null : p;
     this.freeSeatNow = isFreeSeat(running);
+    this.freeNewcomer = !p && this.freeStartOn();
     const freeStart = this.freeStartView(running);
     const state: StartState = {
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),

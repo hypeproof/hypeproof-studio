@@ -688,6 +688,55 @@ try {
     await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
     await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
   }, { surface: 'start' });
+  await test('TUX-SP-17', 'Login at purchase: Google sign-in is the Primary before checkout; never on the first screen; no anonymous fallback', async p => {
+    // Selectors follow StartPage.tsx: AccountEntry's signed-out button is `.studio-google` (studio-primary).
+    const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
+    const signedOut = { status: 'signedOut' };
+    const signedIn = { status: 'signedIn', account: { id: 'acc_1', email: 'learner@example.test', display_name: '학습자' }, passes: [] };
+    const google = p.locator('.studio-google');
+    // Control: today's choice list (no free start) draws the account entry, so the checker below can fail.
+    await startState(p, { account: signedOut, purchase: { available: true } });
+    await expect(google).toHaveCount(1);
+    // The first screen of free start has no login, even with the account runtime present.
+    await startState(p, { account: signedOut, purchase: { available: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
+    await expect(p.locator('#connect-title')).toHaveText('바로 시작할 수 있습니다');
+    await expect(google).toHaveCount(0);
+    // The pass list on a free seat while signed out: the Google button is the one Primary, no pay button, no payer question.
+    await btn(p, '이용권으로 시작하기').click();
+    await request(p, { type: 'purchaseOpen' });
+    await startState(p, { account: signedOut, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, login: 'signIn' }, ...freeStart({ age: '14+' }) });
+    await expect(p.getByText('이용권을 사려면 Google로 로그인해 주세요.', { exact: true })).toBeVisible();
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
+    await expect(google).toHaveCount(1);
+    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    await expect(btn(p, '보호자에게 결제 요청하기')).toHaveCount(0);
+    await expect(p.getByText('결제하는 분이 만 19세 이상인가요?')).toHaveCount(0);
+    await expect(p.getByRole('radiogroup', { name: '이용권 고르기' })).toBeVisible(); // the passes stay visible to choose from
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await p.screenshot({ path: path.join(out, 'TUX-SP-17-sign-in-390.png'), fullPage: true });
+    await btn(p, 'Google로 시작하기').click();
+    await request(p, { type: 'accountSignIn' });
+    assert.equal(emitted(await requests(p), 'purchaseStart').length, 0, 'no checkout before sign-in');
+    // Signed in: the gate is gone and checkout follows (payer question first on a free seat).
+    await startState(p, { account: signedIn, purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: true }, ...freeStart({ age: '14+' }) });
+    await expect(google).toHaveCount(0);
+    await expect(p.getByText('이용권을 사려면 Google로 로그인해 주세요.')).toHaveCount(0);
+    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
+    // No account sign-in on this build or Service: a calm notice, no Primary, no checkout, no red alert.
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, login: 'unavailable' }, ...freeStart({ age: '14+' }) });
+    const notice = p.locator('.studio-purchase .studio-notice');
+    await expect(notice).toHaveText('결제는 Google 로그인과 함께 열려요. 잠시 뒤 다시 확인해 주세요.');
+    await expect(notice).toHaveAttribute('role', 'status');
+    await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(0);
+    await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    await expect(p.getByRole('alert')).toHaveCount(0);
+    await expect(btn(p, '돌아가기')).toBeVisible();
+    await p.screenshot({ path: path.join(out, 'TUX-SP-17-unavailable-390.png'), fullPage: true });
+    // Negative control: a code-issued seat with no gate keeps today's pay button (still on the pass list).
+    await startState(p, { purchase: { available: true, products: passes, stage: 'choosing' } });
+    await expect(btn(p, '30,000원 결제하러 가기')).toBeVisible();
+    await expect(google).toHaveCount(0);
+  }, { surface: 'start' });
   await test('TUX-A11Y-01', 'Visible controls have names and keyboard focus including citation and settings', async p => {
     await expect(p.getByRole('textbox',{name:'코치에게 보낼 메시지'})).toBeVisible();
     await expect(btn(p,'설정')).toBeVisible();
