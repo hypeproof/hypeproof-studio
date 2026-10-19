@@ -2,6 +2,7 @@
 // Drawn only from what the host measured (turnReviewView.ts); it never auto-dismisses: the next turn
 // replaces it, or the learner closes it after a decision.
 
+import { useEffect, useRef } from "react";
 import type { TurnReviewView } from "../../src/turnReviewView";
 import { turnReviewCount } from "../../src/turnReviewView";
 
@@ -37,18 +38,46 @@ function failedTitle(view: TurnReviewView): string {
 }
 
 export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBarProps) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    const abandon = (event: Event) => {
+      if (event.target instanceof Node && !sectionRef.current?.contains(event.target)) {
+        pendingFocus.current = null;
+      }
+    };
+    document.addEventListener("focusin", abandon);
+    document.addEventListener("pointerdown", abandon);
+    return () => {
+      document.removeEventListener("focusin", abandon);
+      document.removeEventListener("pointerdown", abandon);
+    };
+  }, []);
+  useEffect(() => {
+    if (pendingFocus.current !== view.turnId) {
+      pendingFocus.current = null;
+      return;
+    }
+    if (view.state !== "restored" && view.state !== "failed") return;
+    pendingFocus.current = null;
+    // Only continue the user's own keyboard path; unrelated results never take focus.
+    if (document.activeElement === document.body || sectionRef.current?.contains(document.activeElement)) {
+      confirmRef.current?.focus();
+    }
+  }, [view.turnId, view.state]);
   const n = turnReviewCount(view);
   if (view.state === "restored") {
-    return <section className="hps-turn-review" data-testid="turn-review" data-state="restored" role="status" aria-live="polite">
+    return <section ref={sectionRef} className="hps-turn-review" data-testid="turn-review" data-state="restored" role="status" aria-live="polite">
       <p className="hps-turn-review-title">이번 요청 전으로 되돌렸어요. 파일 {view.restoredCount ?? 0}개가 그대로 돌아온 것을 확인했어요.</p>
       {view.beforeRestoreKept && <p className="hps-turn-review-note">되돌리기 직전 상태도 따로 보관해 뒀어요.</p>}
       <NotCovered items={view.notCovered} />
       <p className="hps-turn-review-note">{EXTERNAL_NOTE}</p>
-      <div className="hps-turn-review-actions"><button type="button" onClick={onClose}>확인</button></div>
+      <div className="hps-turn-review-actions"><button ref={confirmRef} type="button" onClick={onClose}>확인</button></div>
     </section>;
   }
   if (view.state === "failed") {
-    return <section className="hps-turn-review" data-testid="turn-review" data-state="failed" role="alert">
+    return <section ref={sectionRef} className="hps-turn-review" data-testid="turn-review" data-state="failed" role="alert">
       {/* Each line states one measured fact: what failed, whether any file changed, whether 복구 직전 was kept. */}
       <p className="hps-turn-review-title">{failedTitle(view)}</p>
       {!!view.failed?.length && <ul className="hps-turn-review-failed">{view.failed.map((p) => <li key={p}><code>{p}</code></li>)}</ul>}
@@ -56,11 +85,11 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
       {view.beforeRestoreKept && <p className="hps-turn-review-note">되돌리기 직전 상태는 따로 보관해 뒀어요.</p>}
       <NotCovered items={view.notCovered} />
       <p className="hps-turn-review-note">{EXTERNAL_NOTE}</p>
-      <div className="hps-turn-review-actions"><button type="button" onClick={onClose}>확인</button></div>
+      <div className="hps-turn-review-actions"><button ref={confirmRef} type="button" onClick={onClose}>확인</button></div>
     </section>;
   }
   const busy = view.state === "restoring";
-  return <section className="hps-turn-review" data-testid="turn-review" data-state={view.state} aria-label="이번에 바뀐 파일">
+  return <section ref={sectionRef} className="hps-turn-review" data-testid="turn-review" data-state={view.state} aria-label="이번에 바뀐 파일">
     <p className="hps-turn-review-title">AI가 이번에 바꾼 파일 {n}개</p>
     <details>
       <summary>바뀐 파일 보기</summary>
@@ -73,7 +102,10 @@ export function TurnReviewBar({ view, onRevert, onKeep, onClose }: TurnReviewBar
     <p className="hps-turn-review-note">되돌리면 이번 요청 전 상태로 돌아가요. 지금 상태도 따로 보관해 둬요. {EXTERNAL_NOTE}</p>
     {view.notice && <p className="hps-turn-review-note" role="status">{view.notice}</p>}
     <div className="hps-turn-review-actions">
-      <button type="button" onClick={onRevert} disabled={busy}>{busy ? "되돌리는 중…" : "되돌리기"}</button>
+      <button type="button" onClick={(event) => {
+        pendingFocus.current = document.activeElement === event.currentTarget ? view.turnId : null;
+        onRevert();
+      }} disabled={busy}>{busy ? "되돌리는 중…" : "되돌리기"}</button>
       <button type="button" onClick={onKeep} disabled={busy}>이대로 둘게요</button>
     </div>
   </section>;
