@@ -1726,6 +1726,36 @@
       ]
     },
     {
+      "id": "ST-TEST-SDK-SEED-ON-DEMAND",
+      "stage": "test",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/sdk-seed-fetch.smoke.mjs"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SDK-SEED-ON-DEMAND",
+      "stage": "implementation",
+      "owner": "JinyongShin",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-TEST-SDK-SEED-ON-DEMAND"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/sdkSeedHelpers.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkSeedFetch.ts"
+        }
+      ]
+    },
+    {
       "id": "ST-DES-UNIFIED-DELIVERY",
       "stage": "design",
       "owner": "JinyongShin",
