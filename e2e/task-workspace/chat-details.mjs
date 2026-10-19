@@ -102,6 +102,31 @@ try {
   await expect(page.locator('.hps-copy-status')).toContainText('복사하지 못했습니다');
   await expect(page.getByText('복사됨', { exact: true })).toHaveCount(0);
   checks.push('CP-03: real browser clipboard success verified; browser Permissions-Policy denial never reports success');
+  // Control settlement order independently from the real clipboard-policy controls above.
+  await page.goto(server.url);
+  await page.evaluate(() => {
+    window.copyAttempts = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: content => new Promise((resolve, reject) => window.copyAttempts.push({ content, resolve, reject })),
+    } });
+  });
+  const copyButton = page.getByRole('button', { name: '답변 복사', exact: true });
+  const copyStatus = page.locator('.hps-copy-status');
+  await copyButton.click(); await copyButton.click();
+  await expect.poll(() => page.evaluate(() => window.copyAttempts.length)).toBe(2);
+  await page.evaluate(() => window.copyAttempts[1].reject(new DOMException('Denied', 'NotAllowedError')));
+  await expect(copyStatus).toContainText('복사하지 못했습니다');
+  await page.evaluate(() => window.copyAttempts[0].resolve());
+  await expect(copyStatus).toContainText('복사하지 못했습니다');
+  await copyButton.click(); await expect(copyStatus).toHaveText('');
+  await copyButton.click();
+  await page.evaluate(() => window.copyAttempts[3].resolve());
+  await expect(copyStatus).toHaveText('답변을 복사했습니다');
+  await page.evaluate(() => window.copyAttempts[2].reject(new DOMException('Denied', 'NotAllowedError')));
+  await expect(copyStatus).toHaveText('답변을 복사했습니다');
+  expect(server.sent).toHaveLength(0);
+  checks.push('CP-03: latest copy owns feedback in both completion orders; a new attempt clears stale feedback; zero sends');
+
   await page.goto(server.url);
 
   await input.fill('첫 문장');
