@@ -196,6 +196,9 @@ Run the `release-cut` workflow from the Actions tab. It has two modes.
 | `dry-run` (default) | Calculates the range, runs smoke and writes the release PR body as an artifact | Read |
 | `create` | Also creates the rc tag, the rc builds, branch `release/<version>` and the release PR, or the smoke failure issue | Write, in a separate job |
 
+The run has two jobs. The `cut` job runs in both modes and has read permissions only. The
+`create` job runs only in `create` mode, after `cut` passes. A `create` run shows both jobs.
+
 - `since` is for a trial only. It moves the baseline back in time. `create` refuses it.
 - `accept_not_run` lets `create` continue when a smoke check is `NOT_RUN`. The release PR
   shows the `NOT_RUN` result. Use it only while a credential is missing.

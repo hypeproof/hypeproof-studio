@@ -43,7 +43,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  dry-run:
+  cut:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -100,8 +100,8 @@ jobs:
           retention-days: 14
 
   create:
-    needs: dry-run
-    if: inputs.mode == 'create' && needs.dry-run.result == 'success'
+    needs: cut
+    if: inputs.mode == 'create' && needs.cut.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
