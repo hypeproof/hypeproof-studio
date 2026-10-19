@@ -67,6 +67,21 @@ test('new task titles follow the first request and selected option, survive rest
   assert.deepEqual(reopened.getHistory().map(row => row.id), ['request', 'options', 'choice', 'later']);
 });
 
+test('introductory greetings do not exhaust automatic naming before the first useful request', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'greeting-title');
+  await store.initialize();
+  const id = store.getView().activeTaskId;
+  await store.append(id, [message('hello', '안녕'), message('ack', '네')]);
+  assert.equal(store.getActiveTask().title, '새 작업');
+  await store.saveDraft(id, draft('다음 초안'));
+  await store.append(id, [message('topic', '여행 일정을 계획하고 싶어')]);
+  const reopened = new TaskWorkspaceStore(root, 'greeting-title');
+  assert.equal(reopened.getActiveTask().title, '여행 일정을 계획하고 싶어');
+  assert.equal(reopened.getView().tasks[0].title, '여행 일정을 계획하고 싶어');
+  assert.equal(reopened.getDraft().text, '다음 초안');
+  assert.deepEqual(reopened.getHistory().map(row => row.id), ['hello', 'ack', 'topic']);
+});
+
 test('both numeric and full clickable replies persist the specific title instead of a general request', async t => {
   const root = temporary(t), label = '글쓰기나 정리: 메일, 보고서, 메모, 자료 요약';
   for (const reply of ['1', `1. ${label}`]) {

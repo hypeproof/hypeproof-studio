@@ -60,14 +60,13 @@ function selectedOption(messages: readonly TaskTitleMessage[], index: number, ch
   return null;
 }
 
-/** Use at most two user turns. A concrete numbered choice can refine the first request. */
+/** Start the two-turn naming window at the first useful request, not introductory greetings. */
 export function suggestTaskTitle(messages: readonly TaskTitleMessage[]): string | null {
   let title: string | null = null;
   let userTurns = 0;
   for (let index = 0; index < messages.length && userTurns < 2; index++) {
     const message = messages[index];
     if (message.role !== 'user') continue;
-    userTurns++;
     const number = selectedNumber(message.content);
     const choice = number !== null ? { number } : numberedOption(message.content);
     const selected = choice ? selectedOption(messages, index, choice) : null;
@@ -78,6 +77,8 @@ export function suggestTaskTitle(messages: readonly TaskTitleMessage[]): string 
         if (title) break;
       }
     }
+    // Once a topic exists, only the following user turn may refine it.
+    if (title) userTurns++;
   }
   return title;
 }

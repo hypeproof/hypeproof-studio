@@ -200,3 +200,7 @@ recovery. Re-enter the same activity/workspace and verify saved draft/history an
 reload. Connected activity transitions must still acknowledge the current draft;
 persistence failure must still block them. Synthetic admission evidence does not
 establish native or live authentication acceptance.
+
+### Automatic naming after introductory turns
+
+CC-04 starts its two-turn naming window at the first useful request. Greetings, bare acknowledgements and unresolved numeric replies before a topic do not leave the task permanently named “새 작업”. The immediately following user turn can still refine the name from an offered option; later topics cannot rename it. Manual names remain protected. Existing title and workspace-store tests cover delayed naming, persistence, draft preservation and settled-title controls. Native verification remains separate.
