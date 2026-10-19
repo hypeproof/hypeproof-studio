@@ -71,18 +71,21 @@ jobs:
 
       - name: Admit fixed candidate artifact action API envelope
         run: node scripts/release/cloud-executor/workflow-api.mjs candidate-job
+        id: workflow-api-job
 
       - name: Require current artifact storage reservation
         id: artifact-budget-1
-        if: always()
+        if: always() && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: managed-candidate-input
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/candidate-input.json
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize candidate:artifact-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job candidate-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize candidate:artifact-store artifact-store
       - name: Archive exact managed candidate input
         id: stored-artifact-1
-        if: always() && steps.artifact-budget-1.outcome == 'success'
+        if: always() && steps.artifact-budget-1.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: managed-candidate-input
@@ -90,7 +93,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Reconcile immutable stored artifact using fresh workflow identity
-        if: always() && steps.stored-artifact-1.outcome == 'success'
+        if: always() && steps.stored-artifact-1.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: managed-candidate-input
@@ -120,6 +123,7 @@ jobs:
           CANDIDATE_VERSION: ${{ needs.candidate.outputs.version }}
           TAG: ${{ inputs.tag }}
         run: node scripts/release/cloud-executor/workflow-api.mjs collect-job
+        id: workflow-api-job
       - uses: actions/download-artifact@v4
         with:
           name: managed-candidate-input
@@ -138,15 +142,17 @@ jobs:
         run: node scripts/release/cloud-executor/previous-release.mjs "${{ runner.temp }}/managed-assets/collection.json" "${{ runner.temp }}/managed-assets/previous"
       - name: Require current artifact storage reservation
         id: artifact-budget-2
-        if: always()
+        if: always() && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: managed-candidate-bytes
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize collect-managed:artifact-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job collect-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize collect-managed:artifact-store artifact-store
       - name: Archive exact bytes and collection
         id: stored-artifact-2
-        if: steps.artifact-budget-2.outcome == 'success'
+        if: steps.artifact-budget-2.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: managed-candidate-bytes
@@ -154,7 +160,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Reconcile immutable stored artifact using fresh workflow identity
-        if: always() && steps.stored-artifact-2.outcome == 'success'
+        if: always() && steps.stored-artifact-2.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: managed-candidate-bytes
@@ -198,6 +204,7 @@ jobs:
           TAG: ${{ inputs.tag }}
           TARGET: ${{ matrix.target }}
         run: node scripts/release/cloud-executor/workflow-api.mjs installed-job
+        id: workflow-api-job
       - uses: actions/download-artifact@v4
         with:
           name: managed-candidate-bytes
@@ -306,15 +313,17 @@ jobs:
         run: node --input-type=module -e "import {rmSync} from 'node:fs'; rmSync(process.env.HPS_NATIVE_TEST_SEAT_FILE,{force:true});"
       - name: Require current artifact storage reservation
         id: artifact-budget-3
-        if: always()
+        if: always() && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: installed-${{ matrix.target }}
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job installed-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
       - name: Preserve installed evidence including failed and blocked checks
         id: evidence-artifact
-        if: always() && steps.artifact-budget-3.outcome == 'success'
+        if: always() && steps.artifact-budget-3.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: installed-${{ matrix.target }}
@@ -322,7 +331,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Reconcile immutable stored artifact using fresh workflow identity
-        if: always() && steps.evidence-artifact.outcome == 'success'
+        if: always() && steps.evidence-artifact.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: installed-${{ matrix.target }}
@@ -331,15 +340,17 @@ jobs:
         run: node scripts/release/cloud-executor/workflow-gate.mjs complete installed-managed:artifact-store artifact-store
       - name: Require current artifact storage reservation
         id: artifact-budget-4
-        if: always()
+        if: always() && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: installed-diagnostics-${{ matrix.target }}
           HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job installed-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize installed-managed:artifact-store artifact-store
       - name: Preserve separate native diagnostics and screenshots
         id: stored-artifact-4
-        if: always() && steps.artifact-budget-4.outcome == 'success'
+        if: always() && steps.artifact-budget-4.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: installed-diagnostics-${{ matrix.target }}
@@ -347,7 +358,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Reconcile immutable stored artifact using fresh workflow identity
-        if: always() && steps.stored-artifact-4.outcome == 'success'
+        if: always() && steps.stored-artifact-4.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: installed-diagnostics-${{ matrix.target }}

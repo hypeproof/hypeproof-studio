@@ -13,6 +13,6 @@ export function controlledInputs(env=process.env,{head=()=>execFileSync('git',['
 }
 export function smokeGuard(env=process.env,{inputs=controlledInputs(env),authorize=authorizeExecution,clock=Date.now}={}){
  if(!inputs)return null;
- return async id=>{if(id==='S5')return workflowApiBudget('s5-ci',{env,identity:inputs.identity,authorize,clock});check(smokeResources[id],'unknown smoke check');const grants=[];for(const resource of smokeResources[id])grants.push(await authorize(executionBody({path:`smoke:${id}:${resource}`,identity:inputs.identity,effect:{kind:'verify-start',checkId:id,batchScope:smokeScopes[id]}},env),{env}));
+ return async id=>{const target=inputs.identity?.target;check(['mac','win-user','win-system'].includes(target),'fixed smoke target required');if(id==='S5')return workflowApiBudget('s5-ci',{env,identity:inputs.identity,authorize,clock});check(smokeResources[id],'unknown smoke check');const grants=[];for(const resource of smokeResources[id])grants.push(await authorize(executionBody({path:`smoke:${target}:${id}:${resource}`,identity:inputs.identity,effect:{kind:'verify-start',checkId:id,batchScope:smokeScopes[id]}},env),{env}));
   const deadline=Math.min(...grants.map(g=>Date.parse(g.expiresAt)));const permit=()=>check(clock()<deadline,'smoke first effect budget authorization expired');permit();return {deadline,permit,scope:smokeScopes[id],resources:smokeResources[id]};};
 }

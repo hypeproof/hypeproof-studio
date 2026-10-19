@@ -6,20 +6,20 @@ Configure a separate approved `github-workflow-api` resource for each credential
 
 | Role | Path | Max delegated commands/fetches | Minutes before new delegation stops | Exact batchScope |
 |---|---|---:|---:|---|
-| build-job | `build-managed:job-api-batch` | 1 | 240 | `protected-native-build-fixed-actions-cache-and-artifact-command-envelope` |
+| build-job | `build-mac:job-api-batch` / `build-win:job-api-batch` | 1 | 240 | `protected-native-build-fixed-actions-cache-and-artifact-command-envelope` |
 | candidate-job | `candidate:job-api-batch` | 1 | 180 | `protected-candidate-fixed-artifact-action-envelope` |
 | mirror-job | `mirror:job-api-batch` | 1 | 180 | `protected-mirror-max151-release-view-commands-fixed-job-envelope` |
 | repair-output | `repair-output:job-api-batch` | 1 | 20 | `protected-repair-single-fixed-output-upload-action-envelope` |
 | observe-candidate | `observe-managed:api-batch` | 128 | 20 | `numeric-candidate-max128-http-delegations-no-retry` |
-| assembly-admit | `assembly:api-batch` | 2 | 20 | `reviewed-compiled-artifact-two-metadata-reads-one-fixed-actions-download-envelope` |
-| runner-upload | `runner-upload:api-batch` | 100 | 120 | `original-runner-max100-assets-no-retry-upload-envelope` |
+| assembly-admit | `build-mac:assembly-api-batch` / `build-win:assembly-api-batch` | 2 | 20 | `reviewed-compiled-artifact-two-metadata-reads-one-fixed-actions-download-envelope` |
+| runner-upload | `build-mac:runner-api-batch` / `build-win:runner-api-batch` | 100 | 120 | `original-runner-max100-assets-no-retry-upload-envelope` |
 | runner-mirror | `runner-mirror:api-batch` | 297 | 120 | `mirror-max99-source-download-redirect-and-upload-envelope` |
 | collect-job | `collect-managed:job-api-batch` | 1 | 20 | `protected-collection-job-fixed-actions-and-artifact-command-envelope` |
-| installed-job | `installed-managed:job-api-batch` | 1 | 90 | `protected-installed-job-fixed-actions-and-artifact-command-envelope` |
+| installed-job | fixed target paths below | 1 | 90 | `protected-installed-job-fixed-actions-and-artifact-command-envelope` |
 | candidate-wait | `candidate:api-batch` | 151 | 180 | `candidate-wait-max150-view-commands-one-optional-download` |
 | collect-candidate | `collect-managed:api-batch` | 512 | 20 | `numeric-candidate-max512-http-delegations-no-retry` |
 | previous-release | `previous-managed:api-batch` | 128 | 20 | `previous-release-max128-http-delegations-no-retry` |
-| s5-ci | `smoke:S5:api-batch` | 2020 | 30 | `candidate-ci-max20-pages-2000-run-metadata-command-envelope` |
+| s5-ci | fixed target paths below | 2020 | 30 | `candidate-ci-max20-pages-2000-run-metadata-command-envelope` |
 | repair-draft-pr | `repair-draft-pr:bot-api-batch` | 4 | 20 | `separate-bot-fixed-hype-pr-inspect-prepare-create-single-push-command-envelope` |
 
 Each authorization uses current protected job OIDC. A private REQUESTED receipt is written before POST; interruption/unknown authorization and existing receipt block a new request. The first delegation must begin before the original authorization expires. The already reserved bounded command lifecycle does not renew consent or refresh authority; every permit and delegation checks the server-authorized deadline. Redirect fetches count separately. No automatic command/request retry is added. Private receipts whitelist candidate identity and never contain tokens.
@@ -27,3 +27,11 @@ Each authorization uses current protected job OIDC. A private REQUESTED receipt 
 Native build and verification job envelopes cover their fixed artifact Actions commands. Internal Action/gh/hype-pr request counts and retries are NOT_OBSERVED; these are opaque finite command envelopes with source/job/run/time limits, not claimed exact requests. Candidate polling is max150 commands plus one optional download, S5 max20 pages/2000 checks, and managed mirror polling max151 view commands. Direct collector/previous/observer/assembly HTTP paths are independently gated and capped; mirror source bytes remain exact per-asset protected downloads. Optional PR bot allocation is separate from Service WRITE and workflow tokens and is required before inspect/prepare/push/create. Disabled optional PR performs none of these operations.
 
 The executable gate necessarily runs after checkout/setup: OIDC bootstrap, Git clone/submodules, setup-node and external Action internals are not independently observed HTTP usage and cannot borrow the Service API request pool. These platform/bootstrap activities need their own approved included entitlement and bounded workflow/job envelope; this source does not fabricate provider remaining, a provider hard cap, or exact counts. Existing mutable external Action refs are not independently immutable source proof. Protected release-cut intentionally blocks managed mode; legacy installed/publish routes retain their existing managed-mode exclusions. No live workflow or provider operation was run.
+
+## Matrix identity and failure cleanup
+
+Configure explicit paths, not a shared path containing only the role. Installed job paths are `installed-managed:mac:job-api-batch`, `installed-managed:win-user:job-api-batch`, `installed-managed:win-system:job-api-batch`. S5 uses `smoke:mac:S5:api-batch`, `smoke:win-user:S5:api-batch`, `smoke:win-system:S5:api-batch`. All other smoke units/scopes are unchanged but their paths are `smoke:{mac|win-user|win-system}:{S1|S2|S3|S4|S6}:{resource}` with only the existing per-check resource allowlist. Invalid/missing targets fail before authorization.
+
+Exact protected build-mac.yml/build-windows.yml caller identity selects `build-mac`/`build-win` prefixes for `:job-api-batch`, `:assembly-api-batch`, and `:runner-api-batch`. No arbitrary workflow or target suffix is accepted. Each path config must bind the correct platform verifier/build stage, workflow SHA/ref, trustId and protected job name. The corresponding signed workflow contract must allow precisely those paths/stages and original static batchScope/wall. Windows and Mac trust cannot share one trustId pretending both exact workflow identities. Service effect-key duplicate protection is unchanged.
+
+Managed diagnostic storage/upload paths require `steps.workflow-api-job.outcome == success` in addition to storage authority, including all `always()` paths. Disabled legacy behavior remains explicit. Before storage authorization, `check-job` reads the existing private STARTED receipt, binds same run/attempt/static scope, checks the server deadline, and never requests a new allocation. Owned-seat cleanup, local credential removal and local timing export remain unconditional. Opaque Actions still require their approved source/job envelope; internal request counts are not observed.

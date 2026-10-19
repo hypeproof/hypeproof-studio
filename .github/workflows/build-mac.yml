@@ -156,6 +156,7 @@ jobs:
       - name: Admit fixed managed build action API envelope
         shell: bash
         run: node scripts/release/cloud-executor/workflow-api.mjs build-job
+        id: workflow-api-job
 
       - name: Require current build reservation before execution
         shell: bash
@@ -558,14 +559,16 @@ jobs:
 
       - name: Require current artifact storage reservation
         id: artifact-budget-1
-        if: always()
+        if: always() && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: hypeproof-studio-darwin-arm64
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:artifact-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job build-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:artifact-store artifact-store
       - name: Upload artifact (debugging / workflow_dispatch)
         id: stored-artifact-1
-        if: steps.artifact-budget-1.outcome == 'success'
+        if: steps.artifact-budget-1.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: hypeproof-studio-darwin-arm64
@@ -584,7 +587,7 @@ jobs:
       # artifact above, so after class the operator re-dispatches against the
       # same tag ref and only the publish repeats.
       - name: Reconcile immutable stored artifact using fresh workflow identity
-        if: always() && steps.stored-artifact-1.outcome == 'success'
+        if: always() && steps.stored-artifact-1.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: hypeproof-studio-darwin-arm64
@@ -652,10 +655,12 @@ jobs:
         env:
           RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES: ${{ vars.RELEASE_ENGINE_ASSEMBLY_MAX_ARTIFACT_BYTES }}
           HPS_ENGINE_ARTIFACT_NAME: compiled-engine-darwin-arm64
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:compiled-engine-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job build-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:compiled-engine-store artifact-store
       - name: Store immutable compiled engine input only
         id: compiled-store
-        if: steps.artifact-budget-3.outcome == 'success'
+        if: steps.artifact-budget-3.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           compression-level: 0
@@ -683,14 +688,16 @@ jobs:
 
       - name: Require current artifact storage reservation
         id: artifact-budget-2
-        if: always()
+        if: always() && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: build-cache-darwin-arm64
-        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:artifact-store artifact-store
+        run: |
+          node scripts/release/cloud-executor/workflow-api.mjs check-job build-job
+          node scripts/release/cloud-executor/workflow-gate.mjs authorize build-mac:artifact-store artifact-store
       - name: Preserve build cache timing observations
         id: stored-artifact-2
-        if: always() && steps.artifact-budget-2.outcome == 'success'
+        if: always() && steps.artifact-budget-2.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: build-cache-darwin-arm64
@@ -698,7 +705,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Reconcile immutable stored artifact using fresh workflow identity
-        if: always() && steps.stored-artifact-2.outcome == 'success'
+        if: always() && steps.stored-artifact-2.outcome == 'success' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         shell: bash
         env:
           HPS_ENGINE_ARTIFACT_NAME: build-cache-darwin-arm64

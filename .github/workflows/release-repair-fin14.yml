@@ -23,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     environment: release-repair
+    env:
+      RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+      RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
     permissions:
       contents: read
       id-token: write
@@ -72,9 +75,10 @@ jobs:
           RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
           RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
         run: node scripts/release/cloud-executor/workflow-api.mjs repair-output
+        id: workflow-api-job
       - uses: actions/upload-artifact@v4
         id: repair-output
-        if: steps.repair-storage.outputs.authorized == 'true'
+        if: steps.repair-storage.outputs.authorized == 'true' && ((env.RELEASE_ENGINE_ENABLED != 'true' && env.RELEASE_ENGINE_URL == '') || steps.workflow-api-job.outcome == 'success')
         with:
           name: release-repair-output
           path: |
