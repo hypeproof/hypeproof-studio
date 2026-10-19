@@ -13,7 +13,7 @@ function host(){
  const posts=[];
  // Exercise request snapshots and retry validation too; a partial method copy
  // can fail before the deferred storage boundary this test is meant to cover.
- return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
+ return Object.assign(Object.create(proto),{pendingSends:0,activeStreams:new Map(),turnTimelines:new Map(),turnRequests:new Map(),getHistory:()=>[],posts,post:async message=>{posts.push(message);}});
 }
 // Pause the actual send before profile/stream creation. Both submit routes must
 // own the connection immediately; an exception must release that ownership.
@@ -47,14 +47,49 @@ for(const type of ['sendMessage','retryMessage']) for(const toolMode of ['auto',
 for(const fail of [false,true]){
  const h=host(),save=deferred();h.cachedProfile={worlds:[{id:'synthetic',emoji:'',guest:'테스트',chip:'테스트'}]};
  h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ const post=h.post;h.post=async message=>{if(message.type==='streamEnd')assert.equal(h.hasActiveStream(),false,'completion must permit the queued follow-up');return post(message);};
  const pending=proto.handleSend.call(h,'다른 친구도 있어?',[]);
  assert.equal(h.activeStreams.size,0);assert.equal(h.hasActiveStream(),true,'history persistence still owns activity');
+ assert.equal(h.posts.some(message=>message.type==='streamEnd'),false,'saving history is not yet completion');
  if(fail){
   save.reject(new Error('synthetic history failure'));await assert.rejects(pending,/synthetic history failure/);
   assert.equal(h.posts.find(message=>message.type==='inputRejected')?.text,'다른 친구도 있어?');
   assert.equal(h.posts.find(message=>message.type==='inputRejected')?.toolMode,'auto');
   assert.ok(h.posts.some(message=>message.type==='streamError'),'a displayed reply must not hide a failed history write');
+  assert.equal(h.posts.find(message=>message.type==='streamError').streamId,h.posts.find(message=>message.type==='streamStart').streamId,'a post-start storage failure belongs to that displayed turn, not a preflight code');
+  assert.equal(h.posts.some(message=>message.type==='streamEnd'),false,'failed storage cannot signal successful completion');
  }else{save.resolve();await pending;assert.equal(h.posts.some(message=>message.type==='inputRejected'),false);}
+ assert.equal(h.hasActiveStream(),false);
+}
+// App-authored replies outside handleSend (publish/switch/image edit) own the
+// same persistence boundary and must always terminate their displayed stream.
+for(const fail of [false,true]){
+ const h=host(),save=deferred();h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ const post=h.post;h.post=async message=>{
+  if(['streamEnd','streamError'].includes(message.type))assert.equal(h.hasActiveStream(),false,'terminal notification must release standalone reply ownership first');
+  return post(message);
+ };
+ const pending=proto.postAppReply.call(h,'앱에서 작업 결과를 알려드립니다.');
+ assert.equal(h.hasActiveStream(),true,'standalone reply locks while history is being saved');
+ assert.deepEqual(h.posts.map(message=>message.type),['streamStart','streamChunk']);
+ if(fail){save.reject(new Error('synthetic app reply storage failure'));await assert.rejects(pending,/synthetic app reply storage failure/);}
+ else{save.resolve();await pending;}
+ const terminal=h.posts.filter(message=>['streamEnd','streamError','streamStopped'].includes(message.type));
+ assert.equal(terminal.length,1,'exactly one completion or failure for the displayed reply');
+ assert.equal(terminal[0].type,fail?'streamError':'streamEnd');
+ if(fail)assert.equal(terminal[0].retryable,false,'replaying an unrelated user prompt cannot retry an app history write');
+ assert.equal(terminal[0].streamId,h.posts[0].streamId);
+ assert.equal(h.hasActiveStream(),false);
+}
+// A standalone reply settling cannot release a different pending request.
+{
+ const h=host(),save=deferred(),auth=deferred();h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ h.context={secrets:{get:()=>auth.promise}};
+ const reply=proto.postAppReply.call(h,'작업 결과');
+ const send=proto.handleSend.call(h,'후속 질문',[]);
+ save.reject(new Error('reply failed'));await assert.rejects(reply,/reply failed/);
+ assert.equal(h.hasActiveStream(),true,'another request retains ownership');
+ auth.reject(new Error('send failed'));await assert.rejects(send,/send failed/);
  assert.equal(h.hasActiveStream(),false);
 }
 // The inverse ordering: preparation already owns the connection, so no send

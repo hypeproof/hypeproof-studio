@@ -106,6 +106,30 @@ cannot cancel an unresolved defect.
 - Native source rendering requires a nonempty document capture and the document composited within its actual browser-pane bounds. A loaded DOM or an empty PNG is not rendering evidence. The fixture's known white page is sampled only inside its measured pane, accounting for optional workbench sidebars.
 - A preflight credential failure must settle pending-send state and restore the rejected request with its original tool mode; no paid request is made.
 
+### Recovery and composer continuity follow-up
+
+- A failed draft write stays visibly unsaved across unrelated state refreshes. A
+  revision conflict cannot overwrite the other writer. Explicit recovery forks the
+  displayed history and current draft into a new task; queue and recovered requests
+  remain paused. A failed recovery retains the original input.
+- Refused requests retain their own text, images and tool mode independently of the
+  next draft. Admission reserves recovery space before dispatch; late or legacy
+  over-limit data is never truncated. Removing an item requires explicit confirmation.
+- Completion releases a queued request only after host persistence and activity
+  ownership settle. Stop and stale terminal events cannot release or mutate a later
+  turn. Storage failures retain the visible answer without leaving the UI busy.
+- Resizing a short pane or changing line wrapping keeps a previously visible active
+  caret visible, including a caret in the middle of a long draft. Deliberately
+  scrolling away from the caret must not force a jump back. Text and selection are
+  preserved, and resize alone never sends.
+
+Use the existing task host/store and turn-tools tests, `pending-send.smoke.mjs`,
+`e2e/queued-photo-send.mjs`, `e2e/stop-stream.mjs` and
+`e2e/task-workspace/chat-details.mjs` for these controlled boundaries. A browser
+selection-range assertion does not prove selection direction, physical IME or
+native focus. Native app tests must be scheduled separately when the user permits
+foreground interaction; background checks cannot establish native acceptance.
+
 ### Review-driven R3 controls
 
 - Personal menu hover and source errors remain readable in light/dark themes, including fallback colors; Settings has a visible text label.

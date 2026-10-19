@@ -135,7 +135,7 @@ const WORLDS = [
     "세상 여는 중에도 친구 버튼이 살아 있다 — 연타로 세상 열기가 겹친다",
   );
   assert.ok(
-    /if \(busy\) return;\s*\n\s*setWorldPending\(true\);/.test(panel),
+    /const handleWorldPick = \(chip: string\) => \{\s*if \(busy\) return;\s*(?:if \(!reserveRecovery\(chip, \[\], 'auto'\)\) return;\s*)?setWorldPending\(true\);\s*props\.onSend\(chip\);/.test(panel),
     "친구 클릭이 pending 을 세우지 않는다",
   );
   // 지금 열린 세상은 다시 못 누른다 — 재클릭은 아이가 고친 세상을 원본으로 되돌린다.

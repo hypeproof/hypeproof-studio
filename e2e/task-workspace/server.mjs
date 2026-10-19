@@ -100,7 +100,7 @@ export async function serveTaskWorkspace({ port = 0, directory, profile = null, 
         // Model seam only: record send/cancel intent without dispatching a paid request.
         // Task/history/draft handling still goes through the actual provider and store.
         if (message.type === 'sendMessage' || message.type === 'retryMessage') { sent.push(message); await startStream(); }
-        else if (message.type === 'cancelStream') { canceled.push(message); f.h.pendingSends = 0; await f.h.post({ type: 'streamStopped', by: 'user' }); }
+        else if (message.type === 'cancelStream') { canceled.push(message); f.h.pendingSends = 0; await f.h.post({ type: 'streamStopped', streamId: message.streamId }); }
         else await f.handle(message);
         response.end('{}'); return;
       }

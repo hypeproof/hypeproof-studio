@@ -18,6 +18,8 @@ source_paths:
   - scripts/resolve-version.sh
   - config/pr-body-contract.json
   - docs/RELEASE-CHECKLIST.md
+  - release.json
+  - chalk/release.json
 quality_gates:
   - version-documented
   - rollback-documented
@@ -119,6 +121,22 @@ Do not change this format without a reason that covers all of these limits:
 
 A tag with `-` (for example `-rc.1`) is a prerelease. The updater does not install
 prereleases.
+
+## Release dependency check
+
+`release.json` (Studio) and `chalk/release.json` (Chalk) declare the Service contracts that
+each product needs. The check itself is the Harness engine, not code in this repository:
+`scripts/release-deps/` in `hypeproof/hypeproof-harness` (see its README). It answers
+whether every live release, plus the candidate, has a live provider for each requirement.
+
+- Studio requires `studio-api` at the line of `@hypeproof/service-contracts` pinned in
+  `extensions/hypeproof-chat/package.json`. That is the package bundled into the App. The
+  root `package.json` is test tooling and is not shipped.
+- Chalk requires `chalk-admin` at the line pinned in `chalk/package.json`.
+- The App sends its version without the `v` in `x-hps-client-version`. Tag `v2026.1017.0`
+  is reported as `2026.1017.0`. See [Version](#version).
+- When you change one of these pins, keep it in `config/service-packages.json`.
+  `scripts/release/test/release-manifest.test.mjs` fails otherwise.
 
 ## Release check in PRs
 
