@@ -6,7 +6,7 @@ const receipt={status:'AVAILABLE',channel:'stable',repository:'hypeproof/hypepro
 const options={platform:'darwin',arch:'arm64',clock:()=>now};
 assert.equal(await fetchConfiguredCustomerRelease({},options),undefined);
 let calls=0;
-const release=await fetchConfiguredCustomerRelease(env,{...options,fetchImpl:async(url,init)=>{calls++;assert.equal(url,'https://release.hypeproof-ai.xyz/api/release/customer/channels/stable/mac');assert.equal(init.credentials,'omit');assert.equal(init.headers.authorization,undefined);assert.equal(init.redirect,'error');return Response.json(receipt);}});
+const release=await fetchConfiguredCustomerRelease(env,{...options,fetchImpl:async(url,init)=>{calls++;assert.equal(url,'https://release.hypeproof-ai.xyz/v1/customer/channels/stable/mac');assert.equal(init.credentials,'omit');assert.equal(init.headers.authorization,undefined);assert.equal(init.redirect,'error');return Response.json(receipt);}});
 assert.equal(calls,1);assert.equal(release.tag_name,receipt.version);assert.equal(release.prerelease,false);assert.equal(release.assets[0].url,'https://api.github.com/repos/hypeproof/hypeproof-studio-releases/releases/assets/177');assert.equal(release.assets[0].digest,'sha256:'+receipt.sha256);
 const asset={downloadUrl:release.assets[0].url,sizeBytes:3,digest:release.assets[0].digest};
 assert.equal(authorizeCustomerReleaseAsset(asset,env,options),true);assert.equal(authorizeCustomerReleaseAsset(asset,{},options),false);

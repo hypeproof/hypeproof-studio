@@ -36,7 +36,7 @@ export async function fetchConfiguredCustomerRelease(
 ): Promise<EngineGhRelease | undefined> {
   const config = configuration(env, platform, arch);
   if (!config) return undefined;
-  const response = await fetchImpl(`${config.origin}/api/release/customer/channels/${config.channel}/${config.artifactId}`, {
+  const response = await fetchImpl(`${config.origin}/v1/customer/channels/${config.channel}/${config.artifactId}`, {
     method: 'GET', headers: {accept: 'application/json'}, credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(15_000),
   });
   demand(response.ok, `Customer release check failed: HTTP ${response.status}`);
