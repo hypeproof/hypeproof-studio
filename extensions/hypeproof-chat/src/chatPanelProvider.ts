@@ -197,6 +197,7 @@ import {
   WebviewMessage,
   ActionRequest,
 } from "./protocol";
+import { applyCarryoverDecision, carryoverAdvertised, carryoverState, type CarryoverStores } from "./trialCarryoverHelpers";
 import {
   isShowIntent,
   clampHistory,
@@ -4324,6 +4325,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case 'refreshAccess':
         await this.loadAccess(true);await this.postConfig();return;
+      case 'carryoverDecision':
+        await this.decideCarryover(msg.decision);
+        return;
       case 'selectFunding':
         await this.loadAccess();
         if(!this.hasActiveStream()&&this.accessState?.view?.choices.some(c=>c.id===msg.id&&c.active))this.accessState={...this.accessState,selected:msg.id,notice:'선택한 이용권을 다음 작업부터 사용합니다.'};
@@ -6327,6 +6331,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (scope !== activityConnections(this.context)?.scope) return;
     const taskStore = this.currentTaskStore?.();
     const taskView = taskStore?.getView();
+    // REQ-L12 ⑫ — flag off (no Service offer) reads nothing and changes nothing.
+    const carryover = activity && carryoverAdvertised(profile) ? carryoverState(activity.id, true, this.carryoverStores()).view : null;
     const toolProfile = profile ? accessProfile(profile, this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected)) : null;
     const toolRuntime = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: toolProfile?.coach_runtime, minorCohort: toolProfile?.minor_cohort,
@@ -6339,6 +6345,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         model:local?.model??model,
         hasToken: !!token,
         ...(taskView ? { taskWorkspace: taskView } : {}),
+        ...(activity && carryover ? { carryover } : {}),
         ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
@@ -6416,6 +6423,36 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // history out.
     const next = clampTimeline([...current, ...msgs], HISTORY_MAX);
     await this.context.workspaceState.update(this.historyKey(), next);
+  }
+
+  /**
+   * REQ-L12 ⑫ exception (ot-conversation-carryover) — the stores behind the trial carry-over offer.
+   * The trial transcript is read from its own activity's key and never written into the pass
+   * history; only the visible summary message is (trialCarryoverHelpers.ts).
+   */
+  private carryoverStores(): CarryoverStores {
+    return {
+      offers: this.context.globalState,
+      trialHistory: (trialId) => this.context.workspaceState.get<ChatMessage[]>(historyKeyForCohort(trialId), []),
+      passHistory: () => this.getHistory(),
+    };
+  }
+
+  /**
+   * The learner's explicit answer. Confirm posts the summary as a visible app message in the pass
+   * conversation (the coach reads it from the next turn's history). No SDK session, credential or
+   * runtime state from the trial seat is reused: the pass runs on its own grant from a fresh start.
+   */
+  private async decideCarryover(decision: 'confirm' | 'decline'): Promise<void> {
+    const activity = activityConnections(this.context)?.current;
+    if (activity && !this.hasActiveStream()) {
+      const profile = await this.ensureProfile();
+      if (activityConnections(this.context)?.current?.id === activity.id) {
+        await applyCarryoverDecision({ passId: activity.id, advertised: carryoverAdvertised(profile), decision, stores: this.carryoverStores(),
+          appendSeed: (text) => this.postAppReply(text), now: Date.now() });
+      }
+    }
+    await this.postConfig();
   }
 
   private historyKey(): string {

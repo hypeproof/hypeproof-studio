@@ -25,6 +25,7 @@ import { EvidencePanel } from "./EvidencePanel";
 import { MemoryPanel } from "./MemoryPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { TrialCarryover } from "./TrialCarryover";
 import { pressDecision, reviewPanelReducer, type ReviewPanelAction, type ReviewPanelState } from "./reviewPanelState";
 import type { SkillsView } from "../../src/skillView";
 import type { MemoryView } from "../../src/memoryView";
@@ -464,6 +465,10 @@ export function App() {
     />
   ) : null;
 
+  // REQ-L12 ⑫ — the trial carry-over offer / read-only trial transcript (host-gated on the Service offer).
+  const carryoverPanel = state.config?.carryover ? (
+    <TrialCarryover view={state.config.carryover} busy={!!state.streamId} onDecide={(decision) => postToHost({ type: "carryoverDecision", decision })} />
+  ) : null;
   const reviewPanel = state.review ? (
     <ReviewPanel
       view={state.review.view}
@@ -571,7 +576,7 @@ export function App() {
         messages={messages}
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
-        verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        verifyPanel={carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });

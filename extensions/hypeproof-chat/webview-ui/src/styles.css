@@ -1701,3 +1701,17 @@ html, body, #root {
 .hps-evidence-note textarea, .hps-evidence-note input, .hps-evidence-note select { width: 100%; box-sizing: border-box; }
 .hps-evidence-variants { border-collapse: collapse; }
 .hps-evidence-variants td, .hps-evidence-variants th { border: 1px solid var(--vscode-panel-border, #8884); padding: 2px 4px; text-align: left; }
+
+/* REQ-L12 ⑫ — trial conversation carry-over offer and read-only trial transcript. */
+.hps-carryover {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--vscode-focusBorder, #888);
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  border-radius: 4px;
+}
+.hps-carryover-title, .hps-carryover-body { margin: 0 0 6px; }
+.hps-carryover-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hps-carryover-list { margin: 6px 0 0; padding-left: 0; list-style: none; max-height: 240px; overflow-y: auto; }
+.hps-carryover-list li { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hps-carryover-who { font-weight: 600; margin-right: 6px; color: var(--vscode-descriptionForeground, #888); }
