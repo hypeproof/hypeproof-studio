@@ -176,6 +176,7 @@ import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
+import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
   clampTimeline,
@@ -6825,7 +6826,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         effort, effortNotice:this.effortNotice, effortResult:this.effortResult,
         coach: this.getCoach(),
         profile: profile ? { ...profile, model_selection: local?localModelSelection(local):selection } : null,
-        update: local ? undefined : this.availableUpdate,
+        update: local ? undefined : this.availableUpdate && { ...this.availableUpdate, heldForClass: classUpdateHold(profile) },
         ...(this.sitePublisher().available() ? { sitePublish: true } : {}),
         ...(isInstructor ? { isInstructor: true } : {}),
         ...(instructorBrief ? { instructorBrief } : {}),
@@ -6866,6 +6867,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Best-effort push; if webview isn't ready yet, the next postConfig
     // (e.g., after panel reveal) picks it up.
     void this.postConfig();
+  }
+
+  /** CGP-SHELL-R-001 — the active seat is a class, so no update installs now. */
+  isClassUpdateHeld(): boolean {
+    return classUpdateHold(this.cachedProfile);
   }
 
   getAvailableUpdate(): import("./protocol").UpdateOffer | null {

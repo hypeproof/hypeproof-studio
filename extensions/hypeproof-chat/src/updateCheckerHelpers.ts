@@ -449,6 +449,17 @@ export function pickInflight<T>(
 // that instead of a developer instruction or a "try again later" promise that
 // can never come true.
 
+/**
+ * CGP-SHELL-R-001: no update install while a class seat is active. A restart mid-lesson costs
+ * the learner the lesson, so a classroom activity holds the install until the class seat is no
+ * longer the active one; the banner only says when it can be installed. The client does not yet
+ * receive the class window's end time (DEC-25), so the whole class seat counts as the window.
+ */
+export function classUpdateHold(profile: { activity_kind?: string } | null | undefined): boolean {
+  return profile?.activity_kind === "classroom";
+}
+export const CLASS_UPDATE_HOLD_COPY = "수업 중에는 업데이트를 설치하지 않아요. 수업이 끝나면 설치할 수 있어요.";
+
 export const UPDATE_DOWNLOAD_URL = "https://hypeproof-ai.xyz/download";
 export const UPDATE_ACCESS_NOTICE_KEY = "hypeproofChat.updateAccessNotice";
 
