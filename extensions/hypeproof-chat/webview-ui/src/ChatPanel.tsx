@@ -508,7 +508,12 @@ export function ChatPanel(props: Props) {
   }, []);
   // AE-15 / CGP-ART-R-002 — the last coach turn's file review. The host owns it and re-sends it on "ready"; null clears it.
   const [turnReview, setTurnReview] = useState<import("../../src/turnReviewView").TurnReviewView | null>(null);
-  useEffect(() => onHostMessage((msg) => { if (msg.type === "turnReviewState") setTurnReview(msg.view); }), []);
+  useEffect(() => {
+    const off = onHostMessage((msg) => { if (msg.type === "turnReviewState") setTurnReview(msg.view); });
+    // Subscribe before asking: ready/config can precede this task-scoped panel's mount.
+    postToHost({ type: "turnReviewRequest" });
+    return off;
+  }, []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
   useEffect(() => {

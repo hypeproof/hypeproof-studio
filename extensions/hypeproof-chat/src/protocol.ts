@@ -629,6 +629,7 @@ export type WebviewMessage = (
   // host answers a callback from an older one with nothing. Opening a card is kept on this device; it is not reported.
   | { type: "inboxRequest" }
   // AE-15 / CGP-ART-R-002 — the learner's decision on the last turn's review bar; `turnId` must name the bar the host holds.
+  | { type: "turnReviewRequest" }
   | { type: "turnRevert"; turnId: string }
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }

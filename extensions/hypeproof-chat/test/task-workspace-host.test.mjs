@@ -233,3 +233,32 @@ test('config snapshot waits for an accepted draft write before recreating the UI
     await rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('mounted review requests recover only the owning task and never resurrect dismissed results', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-review-'));
+  try {
+    let f;
+    f = await createTaskHarness(root, message => {
+      if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: f.store.getDraft() }));
+    });
+    const first = f.store.getView().activeTaskId;
+    const view = { turnId: 'review-turn', state: 'restored', added: [], changed: ['note.txt'], deleted: [], notCovered: [], restoredCount: 1 };
+    f.h.turnReview = { taskKey: first, view };
+    const request = async () => {
+      const count = f.posts.length;
+      await f.handle(f.scoped({ type: 'turnReviewRequest' }));
+      const reply = f.posts.slice(count).find(message => message.type === 'turnReviewState');
+      assert.ok(reply, 'every mounted subscriber receives an explicit current state');
+      return reply.view;
+    };
+    assert.deepEqual(await request(), view);
+    await f.handle(f.scoped({ type: 'taskCreate' }));
+    assert.equal(await request(), null, 'another task must not see the review');
+    await f.handle(f.scoped({ type: 'turnReviewClose', turnId: view.turnId }));
+    await f.handle(f.scoped({ type: 'taskSelect', id: first }));
+    assert.deepEqual(await request(), view, 'returning to the owning task recovers its review');
+    await f.handle(f.scoped({ type: 'turnReviewClose', turnId: view.turnId }));
+    assert.equal(await request(), null, 'a later remount must not resurrect a closed result');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
