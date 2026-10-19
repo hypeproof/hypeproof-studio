@@ -11,7 +11,9 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 _spec = importlib.util.spec_from_file_location("pr_impact", ROOT / "scripts/change-impact/impact.py")
@@ -39,12 +41,12 @@ def organization_repo(repo):
     return next((org for org, former in TRANSFERRED.items() if former == repo), None)
 
 
-def git(checkout, *args):
-    return subprocess.check_output(["git", "-C", str(checkout), *args], timeout=60).decode().strip()
+def git(checkout, *args, stderr=None):
+    return subprocess.check_output(["git", "-C", str(checkout), *args], timeout=60, stderr=stderr).decode().strip()
 
 
-def repo_identity(checkout):
-    remote = git(checkout, "remote", "get-url", "origin")
+def repo_identity(checkout, stderr=None):
+    remote = git(checkout, "remote", "get-url", "origin", stderr=stderr)
     match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([^/]+/[^/]+?)(?:\.git)?/?", remote)
     if not match:
         raise ValueError("origin must identify the intended GitHub repository")
@@ -65,36 +67,96 @@ def local_sources(policy, checkout):
     only for blob reads (see `Reader.content_roots`). Set
     HYPEPROOF_NO_LOCAL_SOURCES to read everything from the API instead.
     """
+    return source_checkouts(policy, checkout)[0]
+
+
+# What a repository without a usable sibling checkout costs. Said once per repository.
+API_READS = "its sources are read through the GitHub API instead, which is slow and counts against rate limits"
+
+
+def checkout_problem(candidate, repo):
+    """Why a directory cannot serve `repo`'s pinned reads, or None when it can."""
+    if not (candidate / ".git").exists():
+        return "not a git work tree"
+    try:
+        # git's own message is not passed on: the caller names the directory and the fix.
+        identity = repo_identity(candidate, stderr=subprocess.DEVNULL)
+    except ValueError:
+        # The address is not repeated either. A remote URL can carry a credential.
+        return "its origin is not a plain https://github.com/ or git@github.com: address"
+    except (subprocess.SubprocessError, OSError):
+        try:
+            git(candidate, "rev-parse", "--git-dir", stderr=subprocess.DEVNULL)
+        except (subprocess.SubprocessError, OSError):
+            # A worktree whose repository was deleted looks like this.
+            return "git cannot open it: its .git does not lead to a repository"
+        return "it has no origin remote"
+    if identity != repo:
+        return f"its origin is {organization_repo(identity) or identity}"
+    return None
+
+
+def source_checkouts(policy, checkout):
+    """`local_sources`, and for each repository it could not find, why and what to do.
+
+    A sibling that is missing or cannot be used was skipped without a word, and
+    every source of that repository then went through the API. Nobody could see
+    why one run took six minutes and the next thirty seconds. The second value
+    maps each such repository to the path that was checked, the reason and the
+    command that fixes it.
+
+    Nothing is cloned or repaired here. A directory that is in the way may hold
+    someone's work, and where to keep a clone is the owner's decision.
+    """
     if os.environ.get("HYPEPROOF_NO_LOCAL_SOURCES"):
-        return {}
-    bases = {ROOT.parent}
+        return {}, {}
+    # In the order a clone is looked for. The first one is where a missing clone
+    # is expected, so it is the consumer's own workspace: that is also where the
+    # launcher looks for Harness.
+    bases = []
+    try:
+        # The consumer may be a worktree, whose siblings are not next to it.
+        common = Path(git(checkout, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+        bases.append(common.parent.parent)
+    except (subprocess.SubprocessError, OSError, IndexError):
+        pass
     # ROOT can be a throwaway clone with no siblings, in which case the real
     # working copies are next to the canonical Harness checkout instead.
     configured = os.environ.get("HYPEPROOF_HARNESS")
     if configured:
-        bases.add(Path(configured).expanduser().resolve().parent)
-    try:
-        # The consumer may be a worktree, whose siblings are not next to it.
-        common = Path(git(checkout, "rev-parse", "--path-format=absolute", "--git-common-dir"))
-        bases.add(common.parent.parent)
-    except (subprocess.SubprocessError, OSError, IndexError):
-        pass
-    found = {}
+        bases.append(Path(configured).expanduser().resolve().parent)
+    bases.append(ROOT.parent)
+    found, gaps = {}, {}
     # External source repositories are read at pinned commits only, so a sibling
     # clone can serve them the same way.
     for repo in [*policy["repositories"], *impact.external_sources(policy)]:
-        for base in bases:
-            candidate = base / repo.split("/")[-1]
-            if not (candidate / ".git").exists():
+        name, unusable = repo.split("/")[-1], None
+        for base in dict.fromkeys(bases):
+            candidate = base / name
+            if not candidate.exists():
                 continue
-            try:
-                if repo_identity(candidate) != repo:
-                    continue
-            except (subprocess.SubprocessError, OSError, ValueError):
-                continue
-            found[repo] = str(candidate)
-            break
-    return found
+            problem = checkout_problem(candidate, repo)
+            if problem is None:
+                found[repo] = str(candidate)
+                break
+            unusable = unusable or (candidate, problem)
+        if repo in found:
+            continue
+        path, reason = unusable or (bases[0] / name, "nothing is there")
+        # The organization path is the one to clone, also for a registry ID that
+        # still carries the former owner (#287).
+        slug = organization_repo(repo) or repo
+        clone = f"gh repo clone {slug} {shlex.quote(str(path))}"
+        gaps[repo] = {"repository": slug, "state": "unusable" if unusable else "missing",
+                      "path": str(path), "reason": reason, "consequence": API_READS,
+                      "fix": f"move {shlex.quote(str(path))} aside, then {clone}" if unusable else clone}
+    return found, gaps
+
+
+def gap_notice(gap):
+    """One line for a person: where it looked, why not, what that costs and the fix."""
+    return (f"no usable local clone of {gap['repository']} at {gap['path']} ({gap['reason']}); "
+            f"{gap['consequence']}. Fix: {gap['fix']}")
 
 
 def tool_version():
@@ -109,7 +171,7 @@ def tool_version():
     return impact.digest({str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths})
 
 
-def inspect(checkout, repo, base="main", roots=None, members=()):
+def inspect(checkout, repo, base="main", roots=None, members=(), local_gaps=False):
     checkout = Path(git(checkout, "rev-parse", "--show-toplevel"))
     if repo_identity(checkout) != repo:
         raise ValueError("checkout origin does not match --repo")
@@ -127,7 +189,13 @@ def inspect(checkout, repo, base="main", roots=None, members=()):
     if repo not in policy["repositories"]:
         raise ValueError("repository is outside change-impact onboarding scope")
     policy["members"] = list(members)
-    reader = impact.Reader({**(roots or {}), repo: str(checkout)}, local_sources(policy, checkout))
+    found, absent = source_checkouts(policy, checkout)
+    reader = impact.Reader({**(roots or {}), repo: str(checkout)}, found)
+    # The repository under inspection is read from this checkout, whatever is next to it.
+    source_gaps = [gap for source, gap in absent.items() if source not in reader.roots]
+    for gap in source_gaps:
+        # Said before the reads start: a run stopped for being slow has then already said why.
+        print(f"hype-pr: {gap_notice(gap)}", file=sys.stderr)
     after = impact.snapshot(reader, policy, {repo: head})
     before = impact.snapshot(reader, policy, {**after["commits"], repo: merge_base})
     planned = impact.plan(before, after)
@@ -184,6 +252,10 @@ def inspect(checkout, repo, base="main", roots=None, members=()):
               "paths": paths, "changed_nodes": planned["changed"], "tasks": planned["tasks"],
               "nodes": nodes, "unmapped": unmapped, "blockers": blockers, "existing_debt": debt}
     report["fingerprint"] = impact.digest(report)
+    if local_gaps and source_gaps:
+        # After the fingerprint, and only on request. This describes the machine, not
+        # the change: a receipt must not go stale because someone cloned a repository.
+        report["local_source_gaps"] = source_gaps
     return report
 
 

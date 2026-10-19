@@ -2,7 +2,7 @@
 
 > 작성일 2026-09-08 · 상태: 활성
 
-> **출처(provenance)**: `jayleekr/hypeproof-harness:docs/AGENT-GUIDE.ko.md`
+> **출처(provenance)**: `hypeproof/hypeproof-harness:docs/AGENT-GUIDE.ko.md`
 > 의 vendored 사본. 직접 수정하지 말 것 — 변경은 harness에서 PR로.
 
 이 문서는 Claude Code, Codex, OpenClaw 등 코딩 에이전트가 공통으로 따라야
@@ -72,8 +72,8 @@ ready, 다른 세션 작업, 리뷰 대기, 의존성, 사람/환경 대기, 재
 
 리뷰 요청과 배포 권한은 repo마다 다르게 해석하지 않는다.
 
-- Jay가 주최하는 일반 HypeProof 제품 작업은 reviewer를 요청하지 않는다. 필수 CI와
-  해당 작업의 증거 게이트가 통과하면 조정 세션이 exact head를 머지한다. PR 생성 때
+- 일반 HypeProof 작업은 현재 사용자의 명시적 요청 없이 reviewer를 요청하지 않는다.
+  현재 작업의 머지 권한과 저장소 정책, 필수 CI·증거 게이트를 모두 충족한 exact head만 머지한다. PR 생성 때
   CODEOWNERS catch-all이 자동으로 만든 요청도 `hype-pr`가 제거한다.
 - 사용자가 특정 PR의 리뷰를 명시한 경우에만 `--request-reviewers`를 붙인다. 이때
   명단은 Harness의 `policy/members.yaml`에서 읽고 작성자는 제외한다.
@@ -96,6 +96,7 @@ ready, 다른 세션 작업, 리뷰 대기, 의존성, 사람/환경 대기, 재
 - `.claude/skills/skill-creator/`
 - `.claude/skills/hype-pr/` (`.agents/skills/hype-pr/`에서도 발견 가능)
 - `.claude/skills/hype-deliver/`
+- `.claude/skills/hype-release/`
 - `.claude/skills/hype-align/` (`.agents/skills/hype-align/`에서도 발견 가능)
 - `.claude/skills/hype-verify/`
 - `.claude/skills/hype-coordinate/`
@@ -105,6 +106,7 @@ ready, 다른 세션 작업, 리뷰 대기, 의존성, 사람/환경 대기, 재
 - `.claude/skills/hypeproof-operator/`
 - `scripts/notify/`
 - `scripts/hype-pr/`
+- `scripts/hype-release/`
 - `docs/MEMBER-GUIDE.ko.md`
 - `docs/AGENT-GUIDE.ko.md`
 - `docs/HYPE-PR.ko.md`

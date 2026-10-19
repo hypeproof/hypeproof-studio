@@ -485,7 +485,10 @@ def prepared_report(args, policy):
 
 def command_prepare(args, policy):
     module = preparation_module()
-    report = module.inspect(args.checkout, parse_repo(args.repo), args.base, members=active_members(policy))
+    # Only the inspect report lists the repositories without a usable local clone.
+    # What prepare binds into a receipt must not depend on what is cloned here.
+    report = module.inspect(args.checkout, parse_repo(args.repo), args.base, members=active_members(policy),
+                            local_gaps=args.command == "inspect")
     if args.command == "inspect":
         if args.output:
             Path(args.output).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
