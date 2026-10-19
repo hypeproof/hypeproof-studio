@@ -303,10 +303,11 @@ export function ChatPanel(props: Props) {
   const beginImagePreparation = () => {
     preparingImagesRef.current++;
     setPreparingImages(preparingImagesRef.current);
-    return () => {
+    const finish = () => {
       preparingImagesRef.current--;
       setPreparingImages(preparingImagesRef.current);
     };
+    return finish;
   };
   const imagePreparationBlocksSend = () => {
     if (!preparingImagesRef.current) return false;
