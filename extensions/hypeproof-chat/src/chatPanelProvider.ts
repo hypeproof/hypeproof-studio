@@ -175,7 +175,7 @@ import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { resolveBrowserSafety } from "./browserSafetyHelpers";
+import { resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
   clampTimeline,
@@ -2529,7 +2529,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Shared with the start page: one rule for what a click on an instructor link may do. */
   async handleInboxLink(msg: { objectId: string; url: string; generation: number; action: "open" | "copy" }): Promise<void> {
     const url = await this.inboxSource?.inboxLink(msg.objectId, msg.url, msg.generation); if (!url) return;
-    if (msg.action === "copy") await vscode.env.clipboard.writeText(url); else void vscode.env.openExternal(vscode.Uri.parse(url));
+    if (msg.action === "copy") await vscode.env.clipboard.writeText(url); else await this.openLearnerLink(url);
+  }
+  /**
+   * CGP-ART-R-008 — the one exit for links a learner clicks in chat. Minor cohorts stay in the
+   * integrated browser (its hardened session enforces the allowlist); others confirm the host
+   * before the system browser opens.
+   */
+  async openLearnerLink(raw: unknown): Promise<void> {
+    const route = routeExternalLink(raw, resolveBrowserSafety(this.cachedProfile));
+    if (route.kind === "refuse") return;
+    if (route.kind === "integrated") {
+      await vscode.window.openBrowserTab(route.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+      return;
+    }
+    const choice = await vscode.window.showWarningMessage(
+      "바깥 사이트를 열까요?",
+      { modal: true, detail: `${route.host}\n${route.url}` },
+      "열기",
+      "링크 복사",
+    );
+    if (choice === "열기") await vscode.env.openExternal(vscode.Uri.parse(route.url));
+    else if (choice === "링크 복사") await vscode.env.clipboard.writeText(route.url);
   }
   private opsLastArtifact: string | undefined;
   // #751 R3 — why new AI runs are held. Local editing, saving, Stop and export never consult this.
@@ -4792,14 +4813,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "previewReady":
         return;
       case "openExternal":
-        // #173 — citation chip click. Guard the URL: http(s) only, no
-        // file://, javascript:, vscode:, etc. The webview should never
-        // request anything else (citations come from the worker which only
-        // emits web_search_result entries), but defend against a compromised
-        // upstream that might inject a hostile scheme.
-        if (typeof msg.url === "string" && /^https?:\/\//i.test(msg.url)) {
-          void vscode.env.openExternal(vscode.Uri.parse(msg.url));
-        }
+        // #173 citation chip click. routeExternalLink keeps the http(s)-only guard against a
+        // hostile scheme from a compromised upstream; CGP-ART-R-008 adds the cohort-aware exit.
+        void this.openLearnerLink(msg.url);
         return;
       case "publishToGallery":
         void this.publishToGallery();
