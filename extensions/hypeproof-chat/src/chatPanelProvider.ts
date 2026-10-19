@@ -1001,7 +1001,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (ownsCompletion) {
         this.pendingSends--;
         await this.post(failed
-          ? { type: "streamError", streamId: sid, error: "답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요." }
+          ? { type: "streamError", streamId: sid, retryable: false, error: "답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요." }
           : { type: "streamEnd", streamId: sid });
       }
     }

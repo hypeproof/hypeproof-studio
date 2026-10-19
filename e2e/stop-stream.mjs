@@ -101,9 +101,10 @@ try {
  checks.push('A real host-protocol preflight refusal still restores input and displays its error before any streamStart.');
 
  await emit({ type: 'streamStart', streamId: 'app-reply', messageId: 'app-reply-answer' }, { type: 'streamChunk', streamId: 'app-reply', delta: '앱에서 알려준 작업 결과' });
- await emit({ type: 'streamError', streamId: 'app-reply', error: '답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요.' });
+ await emit({ type: 'streamError', streamId: 'app-reply', retryable: false, error: '답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요.' });
  await expect(page.getByText('앱에서 알려준 작업 결과', { exact: true })).toBeVisible();
  await expect(page.locator('.hps-error-banner')).toContainText('답변을 기록에 저장하지 못했어요.');
+ await expect(page.getByRole('button', { name: '다시 보내기', exact: true })).toHaveCount(0);
  await expect(input).toHaveValue('세 번째 초안 E');
  await expect(page.getByRole('button', { name: '메시지 보내기', exact: true })).toBeEnabled();
  assert.equal((await requests()).length, 4, 'an app reply failure cannot send a user request');

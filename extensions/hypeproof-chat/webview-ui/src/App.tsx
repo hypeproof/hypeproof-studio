@@ -41,6 +41,7 @@ interface State {
   timeline: TimelineState;
   streamId: string | null;
   error: string | null;
+  errorRetryable: boolean;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
@@ -101,7 +102,7 @@ type Action =
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string }
+  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retryable?: boolean }
   | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
@@ -117,6 +118,7 @@ const initialState: State = {
   timeline: emptyTimeline(),
   streamId: null,
   error: null,
+  errorRetryable: true,
   errorRequestId: null,
   errorRunbookUrl: null,
   pageNotice: null,
@@ -242,6 +244,7 @@ function reducer(state: State, action: Action): State {
         streamId: null,
         timeline: timelineEnd(state.timeline, Date.now()),
         error: action.error,
+        errorRetryable: action.retryable !== false,
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
       };
@@ -368,7 +371,7 @@ export function App() {
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
         case "streamEnd":   dispatch({ type: "streamEnd" }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retryable: msg.retryable }); break;
         case "actionResult": /* not yet routed to UI */ break;
         case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
@@ -559,7 +562,7 @@ export function App() {
           error={state.error}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
-          canRetryLast={hasLastUserPrompt && !state.streamId}
+          canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
@@ -610,7 +613,7 @@ export function App() {
         error={state.error}
         errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
-        canRetryLast={hasLastUserPrompt && !state.streamId}
+        canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId}
         onSend={send}
         sendPending={sendPending}
         onRetry={retry}

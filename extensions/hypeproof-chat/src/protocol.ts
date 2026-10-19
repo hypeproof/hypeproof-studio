@@ -711,7 +711,7 @@ export type HostMessage = (
       /** When error — the Korean sentence the server produced. */
       message?: string;
     }
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string }
+  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retryable?: boolean }
   | { type: "actionResult"; requestId: string; approved: boolean }
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the

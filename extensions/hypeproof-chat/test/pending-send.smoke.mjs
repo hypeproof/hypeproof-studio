@@ -77,6 +77,7 @@ for(const fail of [false,true]){
  const terminal=h.posts.filter(message=>['streamEnd','streamError','streamStopped'].includes(message.type));
  assert.equal(terminal.length,1,'exactly one completion or failure for the displayed reply');
  assert.equal(terminal[0].type,fail?'streamError':'streamEnd');
+ if(fail)assert.equal(terminal[0].retryable,false,'replaying an unrelated user prompt cannot retry an app history write');
  assert.equal(terminal[0].streamId,h.posts[0].streamId);
  assert.equal(h.hasActiveStream(),false);
 }

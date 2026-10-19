@@ -58,6 +58,8 @@ and image editing: history persistence owns the activity until it settles. Each
 reply emits one terminal result after releasing its own ownership, without
 releasing another pending request. A storage error preserves the visible answer
 and unsent draft and permits an explicit next question.
+Such an app-reply storage error must not offer to resend the last user prompt:
+that would repeat an unrelated action instead of retrying the failed save.
 
 `REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
 while another message is queued or being drafted remains a separate durable
