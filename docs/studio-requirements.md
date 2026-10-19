@@ -1454,3 +1454,12 @@ composition and the explicit Save action retain normal single-save behavior.
 Composition Escape does not cancel the editor; ordinary Escape does. Unsent chat
 drafts remain independent. Controlled Chromium composition evidence does not
 substitute for installed OS IME acceptance.
+
+### Prompt edit focus continuity (REQ-STUDIO-CHAT-EDIT-RESEND)
+
+Explicit Cancel or Escape returns keyboard focus to the originating Edit action.
+Deferred restoration must not override a later task or intentional focus choice.
+An accepted resend returns focus to the separate composer while preserving its
+text and selection; a rejected resend keeps the editor. Version paging remains
+view-only and does not resend. This makes explicit user actions continuous without
+changing the original/edited history contract.

@@ -302,6 +302,7 @@ export function ChatPanel(props: Props) {
   // CGP-CHAT-R-002 — which version of each edited prompt is drawn (view only), and the line being edited.
   const [versionChoice, setVersionChoice] = useState<Record<string, number>>({});
   const [editingId, setEditingId] = useState<string | null>(null);
+  const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
@@ -1069,12 +1070,26 @@ export function ChatPanel(props: Props) {
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
   }) : null;
   const editing = editingId !== null && editingId === editableId ? editingId : null;
+  editFocusScope.current = JSON.stringify([activityId, taskId]);
+  const cancelEdit = () => {
+    const owner = editFocusScope.current;
+    const origin = document.activeElement;
+    const row = origin?.closest('.hps-msg');
+    setEditingId(null);
+    requestAnimationFrame(() => {
+      // A later task or intentional focus choice owns the keyboard now.
+      if (editFocusScope.current !== owner || !row?.isConnected) return;
+      if (document.activeElement !== origin && document.activeElement !== document.body) return;
+      row.querySelector<HTMLButtonElement>('.hps-edit-prompt')?.focus({ preventScroll: true });
+    });
+  };
   const saveEdit = (original: ChatMessage, text: string, images: string[]) => {
     const editOf = original.editOf ?? original.id;
     if (props.onEditResend?.(original, editOf, text, images) === false) return;
     setEditingId(null);
     // The new version is drawn: forget a choice that pointed at an older one.
     setVersionChoice(({ [editOf]: _dropped, ...rest }) => rest);
+    recoverToComposer(undefined);
   };
 
   // #642 — if the screen is static for the 1–3 minutes the coach is working, a kid
@@ -1360,7 +1375,7 @@ export function ChatPanel(props: Props) {
               onEdit={m.id === editableId ? () => setEditingId(m.id) : undefined}
               editing={m.id === editing}
               revertNote={!props.instructor && !!turnReview}
-              onCancelEdit={() => setEditingId(null)}
+              onCancelEdit={cancelEdit}
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
             />
           ),
