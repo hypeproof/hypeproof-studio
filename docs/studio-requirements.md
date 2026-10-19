@@ -196,7 +196,8 @@ owned source tab; never close or reuse a foreign tab. Failed/stale opening canno
 produce a success state. Close, Escape and acknowledged return preserve draft and
 reading anchor. Closing from within the panel restores focus to the exact citation;
 Escape from an input outside the nonmodal panel preserves that input focus and selection
-so immediate typing continues there. Narrow drawers contain
+so immediate typing continues there. Deferred panel opening focus must also yield
+to a newer user-selected editing target before its animation frame runs. Narrow drawers contain
 focus; reduced motion suppresses nonessential transitions.
 
 Acceptance CG-01–CG-06 in [the verification contract](testing/task-workspace.md)

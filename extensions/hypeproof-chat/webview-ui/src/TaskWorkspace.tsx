@@ -221,9 +221,11 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     pendingFocus.current = null;
     closingFocus.current = null;
     const target = focus === 'source-title' ? (sourcePanel.current?.querySelector<HTMLElement>('#task-source-title') ?? sourcePanel.current?.querySelector<HTMLElement>('.tw-source-close')) : focus;
+    const focusOrigin = origin ?? document.activeElement;
     if (target?.isConnected) requestAnimationFrame(() => {
-      // Hiding a focused panel may move focus to BODY; a deliberate new target wins.
-      const unchangedFocus = !origin || document.activeElement === origin || document.activeElement === document.body;
+      // Both opening and closing yield to a newer editing target while the frame waits.
+      // Hiding a focused panel may legitimately move focus to BODY.
+      const unchangedFocus = document.activeElement === focusOrigin || document.activeElement === document.body;
       if (target.isConnected && current.current.scopeKey === scopeKey && sourceDisplay.current.open === sourcesOpen && unchangedFocus) target.focus({ preventScroll: true });
     });
   }, [sourcesOpen, preview, scopeKey, sourceRequest?.requestId]);
