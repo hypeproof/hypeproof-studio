@@ -1,0 +1,8 @@
+{
+  "schema": "hype-release-manifest/1",
+  "product": "chalk",
+  "provides": {},
+  "requires": {
+    "chalk-admin": { "package": "@hypeproof/service-contracts", "manifest": "chalk/package.json" }
+  }
+}
