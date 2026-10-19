@@ -19,7 +19,7 @@ Base: `studio@origin/main:` snapshot (docs, chalk/src, extensions/hypeproof-chat
 3. **".hp-cta-secondary border 1.75:1": CONFIRMED in substance, wrong class name** — source class is `.hp-cta-quiet` (`webview-ui/src/styles.css:1305-1309`, `--hp-line #35483A` on `--hp-bg #151D19`, `tokens.css:20,28`); in lesson mode Send/Run/Retry/Install take the same 1px `--hp-line` border (`styles.css:1290-1296`). Fails DES-11 3:1.
 4. **REQ-M17 "writes always reviewed" is stale** — REQ-E1 (corrected 2026-10-14) and `chatPanelProvider.ts:6192-6212`: writeFile has no modal, non-destructive shell auto-runs. Refutes REQ-CGP-AGENT-05's premise; AGENT-46 refuted (tasks never run concurrently, `TaskWorkspace.tsx:310`); "remember similar commands" gap refuted (`chatPanelProvider.ts:6086-6100`).
 5. **"Minors have no version restore": PARTIAL** — kids'/world cohorts archive before overwrite (`chatPanelProvider.ts:3202-3256`); what is missing is a restore UI. A "프로젝트 기억" panel ships (gated per class), so "no learner memory" is half wrong.
-6. **design-system.md premise REFUTED** — it assumed no Studio CSS; `tokens.css` (10 tokens) + ~2,595 lines of webview CSS ship. Text goes down to 10px (not 11px); IME guard covers Enter only; reduced motion follows only the OS.
+6. **visual-system.md premise REFUTED** — it assumed no Studio CSS; `tokens.css` (10 tokens) + ~2,595 lines of webview CSS ship. Text goes down to 10px (not 11px); IME guard covers Enter only; reduced motion follows only the OS.
 7. **Chat-core P0s already shipped**: R53 choice card = `ReplyChoices.tsx` (CC-R1); R48 start/stop announced only in personal mode, no completion announcement (PARTIAL).
 8. **"No quit guard" (SHELL-04): UNVERIFIABLE app-wide** — extension src has no quit hook (searched `quit|before-quit|onWillShutdown` in `src/`); the Electron/VSCodium layer is absent from the snapshot.
 9. **All 5 voice ALREADY (VO-xx) rows are SPECIFIED-ONLY** — helpers exist but `VoicePanel.tsx` is unmounted ("학생에게 이 패널은 열리지 않는다"). V-04's default copy "음성은 저장하지 않아요" asserts a retention policy VO-25 says still needs approval. LEARN-01 cites `SessionDesign.steps[].materials[]`, which does not exist. AE-15 restore points (relied on by chat-core and agents) exist only in docs.
@@ -29,7 +29,7 @@ Base: `studio@origin/main:` snapshot (docs, chalk/src, extensions/hypeproof-chat
 ---
 
 
-## Part: Verification: chat-core.md + design-system.md vs studio-main (origin/main snapshot)
+## Part: Verification: chat-core.md + visual-system.md vs studio-main (origin/main snapshot)
 
 Paths: `X` = `studio@origin/main:extensions/hypeproof-chat`, `W` = `X/webview-ui/src`, `D` = `studio@origin/main:docs`, `C` = `studio@origin/main:chalk/src/ui`. Line numbers are from the snapshot.
 
@@ -37,7 +37,7 @@ Summary
 - P0 rows checked: 19 (chat-core 3, design-system 16). Current-state claims: 8 CONFIRMED (2 of them "already met"), 8 REFUTED/PARTIAL, 3 not a state claim. 14 P0s overlap an existing requirement ID and should be "extend X" (DES-02/06/11, SX-49/50/52, TUX-CHAT-03, CC-R1 in REQ-STUDIO-CHAT-DETAIL).
 - ALREADY rows checked: 42 (chat-core 36 incl. CHAT-70 sub-verdict, design-system 6). 27 IMPLEMENTED, 9 PARTIAL, 4 SPECIFIED-ONLY (AE-15 restore, AE-02 IDE context, moderation is Service-side, M1 lockdown is cohort-level), 2 UNVERIFIABLE (window chrome, Service moderation).
 - REJECT rows checked: 24 (chat-core 19, design-system 5). 0 contradict an existing Studio REQ; 1 needs a caveat (CHAT-29 vs REQ-L12 in-app pass purchase).
-- Biggest correction: design-system.md was written believing no Studio CSS existed. `W/tokens.css` (41 lines, 10 tokens) and 2,595 lines of webview CSS ship. Several "none"/"not specified" claims flip to "partial".
+- Biggest correction: visual-system.md was written believing no Studio CSS existed. `W/tokens.css` (41 lines, 10 tokens) and 2,595 lines of webview CSS ship. Several "none"/"not specified" claims flip to "partial".
 - Key confirmed defect: the quiet/secondary CTA border (`--hp-line #35483A` on `--hp-bg #151D19`) measures 1.75:1, which fails DES-11's 3:1. The class is `.hp-cta-quiet` in source (`W/styles.css:1305-1309`), not `.hp-cta-secondary`, which exists only in the design doc. Send also takes this style in lesson mode (`styles.css:1290-1296`).
 
 ### 1. P0 requirements: current-state claims and duplicates

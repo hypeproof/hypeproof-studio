@@ -494,48 +494,48 @@ CGP-SHELL-095,CGP-SHELL-95,SHELL,feature,Cloud environments and desktops,DEFER,N
 CGP-SHELL-096,CGP-SHELL-96,SHELL,feature,Codex Micro hardware,REJECT,None,,,,CGP-AGENT-069,settings-account-shell.md:197
 CGP-SHELL-097,CGP-SHELL-97,SHELL,feature,Computer history (Chronicle),REJECT,None,,,,CGP-KNOW-052,settings-account-shell.md:198
 CGP-SHELL-098,CGP-SHELL-98,SHELL,feature,Remote connections,DEFER,None,,,,CGP-AGENT-059,settings-account-shell.md:199
-CGP-DS-001,CGP-DS-01,DS,feature,Three-tier token system,ADAPT,Both,P0,,,,design-system.md:167
-CGP-DS-002,CGP-DS-02,DS,feature,Host-theme bridge to VS Code,ADOPT,Studio,P0,CP-R1,,,design-system.md:168
-CGP-DS-003,CGP-DS-03,DS,feature,Light/dark single-declaration tokens,ADAPT,Both,P1,CP-R1,,,design-system.md:169
-CGP-DS-004,CGP-DS-04,DS,feature,Alpha-derived neutrals,ADAPT,Both,P0,,,,design-system.md:170
-CGP-DS-005,CGP-DS-05,DS,feature,Six status intents,ADAPT,Both,P0,SX-21; SX-50,,,design-system.md:171
-CGP-DS-006,CGP-DS-06,DS,feature,Accent color picker,REJECT,Studio,,,,,design-system.md:172
-CGP-DS-007,CGP-DS-07,DS,feature,Proprietary brand typeface,REJECT,Both,,CC-R1,,,design-system.md:173
-CGP-DS-008,CGP-DS-08,DS,feature,Separate UI / content / code font tokens,ADOPT,Both,P1,CP-R1,,,design-system.md:174
-CGP-DS-009,CGP-DS-09,DS,feature,Semantic type scale with paired metrics,ADAPT,Both,P0,CC-R1,,,design-system.md:175
-CGP-DS-010,CGP-DS-10,DS,feature,User text-size settings,ADAPT,Studio,P1,AE-T03,,,design-system.md:176
-CGP-DS-011,CGP-DS-11,DS,feature,4px spacing unit and control-size ladder,ADOPT,Both,P0,,,,design-system.md:177
-CGP-DS-012,CGP-DS-12,DS,feature,Radius scale with global multiplier,ADAPT,Both,P2,,,,design-system.md:178
-CGP-DS-013,CGP-DS-13,DS,feature,Theme-aware elevation,ADAPT,Both,P2,,,,design-system.md:179
-CGP-DS-014,CGP-DS-14,DS,feature,Container-query layout,ADOPT,Studio,P1,,,,design-system.md:180
-CGP-DS-015,CGP-DS-15,DS,feature,Motion tokens,ADAPT,Both,P1,CP-R1,,,design-system.md:181
-CGP-DS-016,CGP-DS-16,DS,feature,Reduced-motion tri-state,ADAPT,Studio,P0,CP-05,,,design-system.md:182
-CGP-DS-017,CGP-DS-17,DS,feature,Forced-colors / high contrast,ADOPT,Both,P1,CP-R1,,,design-system.md:183
-CGP-DS-018,CGP-DS-18,DS,feature,Focus-visible ring,ALREADY,Both,P0,,,,design-system.md:184
-CGP-DS-019,CGP-DS-19,DS,feature,Stroke icon system,ADAPT,Both,P1,CC-R1,,,design-system.md:185
-CGP-DS-020,CGP-DS-20,DS,feature,Pointer-cursor preference,REJECT,Studio,,,DEC-34,,design-system.md:186
-CGP-DS-021,CGP-DS-21,DS,feature,Composer surface,ALREADY,Studio,P0,CP-R1,,,design-system.md:187
-CGP-DS-022,CGP-DS-22,DS,feature,Message presentation,ADAPT,Studio,P1,CP-R1,,,design-system.md:188
-CGP-DS-023,CGP-DS-23,DS,feature,Sidebar list rows,ADAPT,Chalk,P0,,,,design-system.md:189
-CGP-DS-024,CGP-DS-24,DS,feature,Menu styling,ADAPT,Both,P1,,,,design-system.md:190
-CGP-DS-025,CGP-DS-25,DS,feature,Dialog and bottom sheet,ADAPT,Both,P0,SX-52; CC-R1,,,design-system.md:191
-CGP-DS-026,CGP-DS-26,DS,feature,Tooltip styling,ADAPT,Both,P0,,,,design-system.md:192
-CGP-DS-027,CGP-DS-27,DS,feature,Toasts and live regions,ADAPT,Both,P1,CP-R1,,,design-system.md:193
-CGP-DS-028,CGP-DS-28,DS,feature,Loading and streaming motion,ALREADY,Studio,,CP-R1; REQ-M35,,,design-system.md:194
-CGP-DS-029,CGP-DS-29,DS,feature,Logical properties and RTL,ADOPT,Both,P2,,,,design-system.md:195
-CGP-DS-030,CGP-DS-30,DS,feature,IME composition guards,ADAPT,Both,P0,TUX-CHAT-03; CP-06,,,design-system.md:196
-CGP-DS-031,CGP-DS-31,DS,feature,Line-breaking rules,ADAPT,Both,P0,,,,design-system.md:197
-CGP-DS-032,CGP-DS-32,DS,feature,Density modes,REJECT,Both,,,,,design-system.md:198
-CGP-DS-033,CGP-DS-33,DS,feature,Theme customization suite,REJECT,Studio,,,,,design-system.md:199
-CGP-DS-034,CGP-DS-34,DS,feature,Non-color diff markers,ADOPT,Studio,P1,SX-50; SX-16,,,design-system.md:200
-CGP-DS-035,CGP-DS-35,DS,feature,Tabular numerals,ADOPT,Chalk,P2,,,,design-system.md:201
-CGP-DS-036,CGP-DS-36,DS,feature,Stable scrollbar gutter,ADOPT,Studio,P1,,,,design-system.md:202
-CGP-DS-037,CGP-DS-37,DS,feature,Hover/pointer media gating,ALREADY,Both,,CP-R1,,,design-system.md:203
-CGP-DS-038,CGP-DS-38,DS,feature,Branded startup loader,ADAPT,Studio,P2,,,,design-system.md:204
-CGP-DS-039,CGP-DS-39,DS,feature,Window chrome tokens,ALREADY,Studio,,,,,design-system.md:205
-CGP-DS-040,CGP-DS-40,DS,feature,Math typesetting fonts,DEFER,Studio,,,,CGP-CHAT-040,design-system.md:206
-CGP-DS-041,CGP-DS-41,DS,feature,Emoji font stack,ADOPT,Both,P2,REQ-M35,,,design-system.md:207
-CGP-DS-042,CGP-DS-42,DS,feature,Placeholder and tertiary text contrast,ADAPT,Both,P0,,,,design-system.md:208
+CGP-DS-001,CGP-DS-01,DS,feature,Three-tier token system,ADAPT,Both,P0,,,,visual-system.md:167
+CGP-DS-002,CGP-DS-02,DS,feature,Host-theme bridge to VS Code,ADOPT,Studio,P0,CP-R1,,,visual-system.md:168
+CGP-DS-003,CGP-DS-03,DS,feature,Light/dark single-declaration tokens,ADAPT,Both,P1,CP-R1,,,visual-system.md:169
+CGP-DS-004,CGP-DS-04,DS,feature,Alpha-derived neutrals,ADAPT,Both,P0,,,,visual-system.md:170
+CGP-DS-005,CGP-DS-05,DS,feature,Six status intents,ADAPT,Both,P0,SX-21; SX-50,,,visual-system.md:171
+CGP-DS-006,CGP-DS-06,DS,feature,Accent color picker,REJECT,Studio,,,,,visual-system.md:172
+CGP-DS-007,CGP-DS-07,DS,feature,Proprietary brand typeface,REJECT,Both,,CC-R1,,,visual-system.md:173
+CGP-DS-008,CGP-DS-08,DS,feature,Separate UI / content / code font tokens,ADOPT,Both,P1,CP-R1,,,visual-system.md:174
+CGP-DS-009,CGP-DS-09,DS,feature,Semantic type scale with paired metrics,ADAPT,Both,P0,CC-R1,,,visual-system.md:175
+CGP-DS-010,CGP-DS-10,DS,feature,User text-size settings,ADAPT,Studio,P1,AE-T03,,,visual-system.md:176
+CGP-DS-011,CGP-DS-11,DS,feature,4px spacing unit and control-size ladder,ADOPT,Both,P0,,,,visual-system.md:177
+CGP-DS-012,CGP-DS-12,DS,feature,Radius scale with global multiplier,ADAPT,Both,P2,,,,visual-system.md:178
+CGP-DS-013,CGP-DS-13,DS,feature,Theme-aware elevation,ADAPT,Both,P2,,,,visual-system.md:179
+CGP-DS-014,CGP-DS-14,DS,feature,Container-query layout,ADOPT,Studio,P1,,,,visual-system.md:180
+CGP-DS-015,CGP-DS-15,DS,feature,Motion tokens,ADAPT,Both,P1,CP-R1,,,visual-system.md:181
+CGP-DS-016,CGP-DS-16,DS,feature,Reduced-motion tri-state,ADAPT,Studio,P0,CP-05,,,visual-system.md:182
+CGP-DS-017,CGP-DS-17,DS,feature,Forced-colors / high contrast,ADOPT,Both,P1,CP-R1,,,visual-system.md:183
+CGP-DS-018,CGP-DS-18,DS,feature,Focus-visible ring,ALREADY,Both,P0,,,,visual-system.md:184
+CGP-DS-019,CGP-DS-19,DS,feature,Stroke icon system,ADAPT,Both,P1,CC-R1,,,visual-system.md:185
+CGP-DS-020,CGP-DS-20,DS,feature,Pointer-cursor preference,REJECT,Studio,,,DEC-34,,visual-system.md:186
+CGP-DS-021,CGP-DS-21,DS,feature,Composer surface,ALREADY,Studio,P0,CP-R1,,,visual-system.md:187
+CGP-DS-022,CGP-DS-22,DS,feature,Message presentation,ADAPT,Studio,P1,CP-R1,,,visual-system.md:188
+CGP-DS-023,CGP-DS-23,DS,feature,Sidebar list rows,ADAPT,Chalk,P0,,,,visual-system.md:189
+CGP-DS-024,CGP-DS-24,DS,feature,Menu styling,ADAPT,Both,P1,,,,visual-system.md:190
+CGP-DS-025,CGP-DS-25,DS,feature,Dialog and bottom sheet,ADAPT,Both,P0,SX-52; CC-R1,,,visual-system.md:191
+CGP-DS-026,CGP-DS-26,DS,feature,Tooltip styling,ADAPT,Both,P0,,,,visual-system.md:192
+CGP-DS-027,CGP-DS-27,DS,feature,Toasts and live regions,ADAPT,Both,P1,CP-R1,,,visual-system.md:193
+CGP-DS-028,CGP-DS-28,DS,feature,Loading and streaming motion,ALREADY,Studio,,CP-R1; REQ-M35,,,visual-system.md:194
+CGP-DS-029,CGP-DS-29,DS,feature,Logical properties and RTL,ADOPT,Both,P2,,,,visual-system.md:195
+CGP-DS-030,CGP-DS-30,DS,feature,IME composition guards,ADAPT,Both,P0,TUX-CHAT-03; CP-06,,,visual-system.md:196
+CGP-DS-031,CGP-DS-31,DS,feature,Line-breaking rules,ADAPT,Both,P0,,,,visual-system.md:197
+CGP-DS-032,CGP-DS-32,DS,feature,Density modes,REJECT,Both,,,,,visual-system.md:198
+CGP-DS-033,CGP-DS-33,DS,feature,Theme customization suite,REJECT,Studio,,,,,visual-system.md:199
+CGP-DS-034,CGP-DS-34,DS,feature,Non-color diff markers,ADOPT,Studio,P1,SX-50; SX-16,,,visual-system.md:200
+CGP-DS-035,CGP-DS-35,DS,feature,Tabular numerals,ADOPT,Chalk,P2,,,,visual-system.md:201
+CGP-DS-036,CGP-DS-36,DS,feature,Stable scrollbar gutter,ADOPT,Studio,P1,,,,visual-system.md:202
+CGP-DS-037,CGP-DS-37,DS,feature,Hover/pointer media gating,ALREADY,Both,,CP-R1,,,visual-system.md:203
+CGP-DS-038,CGP-DS-38,DS,feature,Branded startup loader,ADAPT,Studio,P2,,,,visual-system.md:204
+CGP-DS-039,CGP-DS-39,DS,feature,Window chrome tokens,ALREADY,Studio,,,,,visual-system.md:205
+CGP-DS-040,CGP-DS-40,DS,feature,Math typesetting fonts,DEFER,Studio,,,,CGP-CHAT-040,visual-system.md:206
+CGP-DS-041,CGP-DS-41,DS,feature,Emoji font stack,ADOPT,Both,P2,REQ-M35,,,visual-system.md:207
+CGP-DS-042,CGP-DS-42,DS,feature,Placeholder and tertiary text contrast,ADAPT,Both,P0,,,,visual-system.md:208
 CGP-CHAT-R-001,CGP-CHAT-R48,CHAT,req,The chat announces response lifecycle to assistive tech.,ADOPT,Studio,P0,CGP-CHAT-048; PI#1; AE-06,,,chat-core.md:192
 CGP-CHAT-R-002,CGP-CHAT-R65,CHAT,req,The learner can edit their latest sent prompt and resend it.,ADAPT,Studio,P0,CGP-CHAT-065; PI#2; PI#3 (Iterate),DEC-08,,chat-core.md:193
 CGP-CHAT-R-003,CGP-CHAT-R53,CHAT,req,A coach question offering choices renders as a card that requires an explicit learner pick.,ADAPT,Studio,P0,CGP-CHAT-053; PI#2; PI#6,,,chat-core.md:194
@@ -740,40 +740,40 @@ CGP-SHELL-R-032,REQ-SHELL-32 (CGP-79),SHELL,req,The issuer page accepts a pasted
 CGP-SHELL-R-033,REQ-SHELL-33 (CGP-82),SHELL,req,"At first join, the learner acknowledges the class rules, and the time is recorded for the instructor.",ADAPT,Both,P2,CGP-SHELL-082; PI#2,,,settings-account-shell.md:251
 CGP-SHELL-R-034,REQ-SHELL-34 (CGP-86),SHELL,req,Chalk shows each seat's Studio version and flags seats below the cohort's minimum.,ADAPT,Chalk,P1,CGP-SHELL-086; PI#1; ADM-02,CGP-SHELL-R-003; DEC-24,,settings-account-shell.md:252
 CGP-SHELL-R-035,REQ-SHELL-35 (CGP-89),SHELL,req,"After an update, the learner sees up to 3 short Korean ""새로운 기능"" lines once.",ADAPT,Studio,P2,CGP-SHELL-089; PI#3,,,settings-account-shell.md:253
-CGP-DS-R-001,REQ-CGP-DS-01,DS,req,"Studio chat webview and Chalk resolve every color, font, size, radius, shadow and duration from one token source with primitive → semantic → component tiers",ADAPT,Both,P0,CGP-DS-001; PI#1; SX-49,CGP-DS-R-002; DEC-27,,design-system.md:224
-CGP-DS-R-002,REQ-CGP-DS-01a,DS,req,"The three conflicting palettes (SX `#202C24`, CC-R1 `#18231C`, CP-R1 `#17191d`/`#202226`) are reconciled into one documented set",ADAPT,Both,P0,CGP-DS-001; SX-49,DEC-27,,design-system.md:225
-CGP-DS-R-003,REQ-CGP-DS-02,DS,req,Every semantic token in the Studio webview has a `--vscode-*` source and an HP fallback,ADOPT,Studio,P0,CGP-DS-002; PI#1; PI#4,CGP-DS-R-001; DEC-27,,design-system.md:226
-CGP-DS-R-004,REQ-CGP-DS-03,DS,req,Webview follows the host theme kind (light/dark/high-contrast),ADAPT,Both,P1,CGP-DS-003; PI#1,CGP-DS-R-003,,design-system.md:227
-CGP-DS-R-005,REQ-CGP-DS-04,DS,req,Hover and pressed fills derive from the foreground via `color-mix`; boundaries that identify a control never do,ADAPT,Both,P0,CGP-DS-004; DES-11,CGP-DS-R-001,,design-system.md:228
-CGP-DS-R-006,REQ-CGP-DS-05,DS,req,"Status is expressed as named intents (info/caution/danger/success plus `source_state`), each with text, icon and color",ADAPT,Both,P0,CGP-DS-005; PI#5; SX-21; SX-50,CGP-DS-R-001,,design-system.md:229
-CGP-DS-R-007,REQ-CGP-DS-08,DS,req,"UI, content (chat prose), and code fonts are separate tokens",ADOPT,Both,P1,CGP-DS-008; PI#1,CGP-DS-R-001; DEC-28,,design-system.md:230
-CGP-DS-R-008,REQ-CGP-DS-09,DS,req,Learner text uses a semantic scale whose smallest step is 14px,ADAPT,Studio,P0,CGP-DS-009; DES-02,CGP-DS-R-001; DEC-28; DEC-29,,design-system.md:231
-CGP-DS-R-009,REQ-CGP-DS-10,DS,req,Learner can choose a chat text size (기본 / 크게 / 아주 크게),ADAPT,Studio,P1,CGP-DS-010; PI#1; PI#4,CGP-DS-R-008,,design-system.md:232
-CGP-DS-R-010,REQ-CGP-DS-11,DS,req,Spacing uses a 4px unit; interactive control heights come from a ladder whose learner minimum is 44px,ADOPT,Studio,P0,CGP-DS-011; DES-06,CGP-DS-R-001,,design-system.md:233
-CGP-DS-R-011,REQ-CGP-DS-12,DS,req,Radii come from one scale; nested radii are computed (outer − inset),ADAPT,Both,P2,CGP-DS-012; none,CGP-DS-R-001,,design-system.md:234
-CGP-DS-R-012,REQ-CGP-DS-13,DS,req,Elevation uses ≤3 named levels with theme-specific alpha,ADAPT,Both,P2,CGP-DS-013; none,CGP-DS-R-001,,design-system.md:235
-CGP-DS-R-013,REQ-CGP-DS-14,DS,req,Chat layout responds to pane width via container queries,ADOPT,Studio,P1,CGP-DS-014; PI#1,,,design-system.md:236
-CGP-DS-R-014,REQ-CGP-DS-15,DS,req,Motion durations and easings are tokens,ADAPT,Both,P1,CGP-DS-015; PI#4,CGP-DS-R-001,,design-system.md:237
-CGP-DS-R-015,REQ-CGP-DS-16,DS,req,"Reduced motion honors an explicit app/VS Code preference, falling back to the OS",ADAPT,Studio,P0,CGP-DS-016; PI#4; CP-05,CGP-DS-R-014,,design-system.md:238
-CGP-DS-R-016,REQ-CGP-DS-17,DS,req,High-contrast/forced-colors renders every control and state,ADOPT,Both,P1,CGP-DS-017; DES-11,CGP-DS-R-001,,design-system.md:239
-CGP-DS-R-017,REQ-CGP-DS-18,DS,req,"Focus ring is one token (2px solid, 2px offset) that is visible in every theme",ADAPT,Both,P0,CGP-DS-018; DES-06; DES-11,CGP-DS-R-001,,design-system.md:240
-CGP-DS-R-018,REQ-CGP-DS-19,DS,req,"Icons come from one licensed stroke set, sized 16/20/24, using currentColor",ADAPT,Both,P1,CGP-DS-019; SX-50,,,design-system.md:241
-CGP-DS-R-019,REQ-CGP-DS-21,DS,req,Composer placeholder text meets 4.5:1,ADAPT,Studio,P0,CGP-DS-021; DES-11,CGP-DS-R-034,,design-system.md:242
-CGP-DS-R-020,REQ-CGP-DS-22,DS,req,Prose column is capped near 40 Hangul syllables per line,ADAPT,Studio,P1,CGP-DS-022; DES-02,DEC-29,,design-system.md:243
-CGP-DS-R-021,REQ-CGP-DS-23,DS,req,Chalk sidebar/list row actions are visible without hover,ADAPT,Chalk,P0,CGP-DS-023; DES-06,,,design-system.md:244
-CGP-DS-R-022,REQ-CGP-DS-24,DS,req,"Menus share one style token set, with item height ≥44px on learner surfaces",ADAPT,Studio,P1,CGP-DS-024; DES-06,,,design-system.md:245
-CGP-DS-R-023,REQ-CGP-DS-25,DS,req,Dialogs are reserved for destructive or settings flows; any dialog traps focus and restores it to its opener,ADAPT,Both,P0,CGP-DS-025; SX-52,,,design-system.md:246
-CGP-DS-R-024,REQ-CGP-DS-26,DS,req,Tooltips never carry the only label of a control,ADAPT,Both,P0,CGP-DS-026; DES-06,,,design-system.md:247
-CGP-DS-R-025,REQ-CGP-DS-27,DS,req,Transient confirmations use a live region and persist ≥4s or until dismissed,ADAPT,Both,P1,CGP-DS-027; PI#5,CGP-DS-R-014,,design-system.md:248
-CGP-DS-R-026,REQ-CGP-DS-29,DS,req,New CSS uses logical properties,ADOPT,Both,P2,CGP-DS-029; none,,,design-system.md:249
-CGP-DS-R-027,REQ-CGP-DS-30,DS,req,"IME composition never triggers Enter-send, Escape-close or any single-key shortcut",ADAPT,Both,P0,CGP-DS-030; SX-19; TUX-CHAT-03,,,design-system.md:250
-CGP-DS-R-028,REQ-CGP-DS-31,DS,req,Korean prose wraps at word (eojeol) boundaries; long tokens still wrap,ADAPT,Both,P0,CGP-DS-031; DES-03,,,design-system.md:251
-CGP-DS-R-029,REQ-CGP-DS-34,DS,req,Before/after and diff views show symbols as well as color,ADOPT,Studio,P1,CGP-DS-034; SX-16; SX-50,,,design-system.md:252
-CGP-DS-R-030,REQ-CGP-DS-35,DS,req,Numeric columns and counters use tabular figures,ADOPT,Chalk,P2,CGP-DS-035; none,,,design-system.md:253
-CGP-DS-R-031,REQ-CGP-DS-36,DS,req,Transcript scroller reserves a stable scrollbar gutter,ADOPT,Studio,P1,CGP-DS-036; UX13,,,design-system.md:254
-CGP-DS-R-032,REQ-CGP-DS-38,DS,req,Startup and empty states use only HP marks,ADAPT,Studio,P2,CGP-DS-038; none,,,design-system.md:255
-CGP-DS-R-033,REQ-CGP-DS-41,DS,req,Emoji render with the OS color emoji stack,ADOPT,Both,P2,CGP-DS-041; none,,,design-system.md:256
-CGP-DS-R-034,REQ-CGP-DS-42,DS,req,No text token below 4.5:1 is used for readable text,ADAPT,Both,P0,CGP-DS-042; DES-11,CGP-DS-R-002; DEC-27,,design-system.md:257
+CGP-DS-R-001,REQ-CGP-DS-01,DS,req,"Studio chat webview and Chalk resolve every color, font, size, radius, shadow and duration from one token source with primitive → semantic → component tiers",ADAPT,Both,P0,CGP-DS-001; PI#1; SX-49,CGP-DS-R-002; DEC-27,,visual-system.md:224
+CGP-DS-R-002,REQ-CGP-DS-01a,DS,req,"The three conflicting palettes (SX `#202C24`, CC-R1 `#18231C`, CP-R1 `#17191d`/`#202226`) are reconciled into one documented set",ADAPT,Both,P0,CGP-DS-001; SX-49,DEC-27,,visual-system.md:225
+CGP-DS-R-003,REQ-CGP-DS-02,DS,req,Every semantic token in the Studio webview has a `--vscode-*` source and an HP fallback,ADOPT,Studio,P0,CGP-DS-002; PI#1; PI#4,CGP-DS-R-001; DEC-27,,visual-system.md:226
+CGP-DS-R-004,REQ-CGP-DS-03,DS,req,Webview follows the host theme kind (light/dark/high-contrast),ADAPT,Both,P1,CGP-DS-003; PI#1,CGP-DS-R-003,,visual-system.md:227
+CGP-DS-R-005,REQ-CGP-DS-04,DS,req,Hover and pressed fills derive from the foreground via `color-mix`; boundaries that identify a control never do,ADAPT,Both,P0,CGP-DS-004; DES-11,CGP-DS-R-001,,visual-system.md:228
+CGP-DS-R-006,REQ-CGP-DS-05,DS,req,"Status is expressed as named intents (info/caution/danger/success plus `source_state`), each with text, icon and color",ADAPT,Both,P0,CGP-DS-005; PI#5; SX-21; SX-50,CGP-DS-R-001,,visual-system.md:229
+CGP-DS-R-007,REQ-CGP-DS-08,DS,req,"UI, content (chat prose), and code fonts are separate tokens",ADOPT,Both,P1,CGP-DS-008; PI#1,CGP-DS-R-001; DEC-28,,visual-system.md:230
+CGP-DS-R-008,REQ-CGP-DS-09,DS,req,Learner text uses a semantic scale whose smallest step is 14px,ADAPT,Studio,P0,CGP-DS-009; DES-02,CGP-DS-R-001; DEC-28; DEC-29,,visual-system.md:231
+CGP-DS-R-009,REQ-CGP-DS-10,DS,req,Learner can choose a chat text size (기본 / 크게 / 아주 크게),ADAPT,Studio,P1,CGP-DS-010; PI#1; PI#4,CGP-DS-R-008,,visual-system.md:232
+CGP-DS-R-010,REQ-CGP-DS-11,DS,req,Spacing uses a 4px unit; interactive control heights come from a ladder whose learner minimum is 44px,ADOPT,Studio,P0,CGP-DS-011; DES-06,CGP-DS-R-001,,visual-system.md:233
+CGP-DS-R-011,REQ-CGP-DS-12,DS,req,Radii come from one scale; nested radii are computed (outer − inset),ADAPT,Both,P2,CGP-DS-012; none,CGP-DS-R-001,,visual-system.md:234
+CGP-DS-R-012,REQ-CGP-DS-13,DS,req,Elevation uses ≤3 named levels with theme-specific alpha,ADAPT,Both,P2,CGP-DS-013; none,CGP-DS-R-001,,visual-system.md:235
+CGP-DS-R-013,REQ-CGP-DS-14,DS,req,Chat layout responds to pane width via container queries,ADOPT,Studio,P1,CGP-DS-014; PI#1,,,visual-system.md:236
+CGP-DS-R-014,REQ-CGP-DS-15,DS,req,Motion durations and easings are tokens,ADAPT,Both,P1,CGP-DS-015; PI#4,CGP-DS-R-001,,visual-system.md:237
+CGP-DS-R-015,REQ-CGP-DS-16,DS,req,"Reduced motion honors an explicit app/VS Code preference, falling back to the OS",ADAPT,Studio,P0,CGP-DS-016; PI#4; CP-05,CGP-DS-R-014,,visual-system.md:238
+CGP-DS-R-016,REQ-CGP-DS-17,DS,req,High-contrast/forced-colors renders every control and state,ADOPT,Both,P1,CGP-DS-017; DES-11,CGP-DS-R-001,,visual-system.md:239
+CGP-DS-R-017,REQ-CGP-DS-18,DS,req,"Focus ring is one token (2px solid, 2px offset) that is visible in every theme",ADAPT,Both,P0,CGP-DS-018; DES-06; DES-11,CGP-DS-R-001,,visual-system.md:240
+CGP-DS-R-018,REQ-CGP-DS-19,DS,req,"Icons come from one licensed stroke set, sized 16/20/24, using currentColor",ADAPT,Both,P1,CGP-DS-019; SX-50,,,visual-system.md:241
+CGP-DS-R-019,REQ-CGP-DS-21,DS,req,Composer placeholder text meets 4.5:1,ADAPT,Studio,P0,CGP-DS-021; DES-11,CGP-DS-R-034,,visual-system.md:242
+CGP-DS-R-020,REQ-CGP-DS-22,DS,req,Prose column is capped near 40 Hangul syllables per line,ADAPT,Studio,P1,CGP-DS-022; DES-02,DEC-29,,visual-system.md:243
+CGP-DS-R-021,REQ-CGP-DS-23,DS,req,Chalk sidebar/list row actions are visible without hover,ADAPT,Chalk,P0,CGP-DS-023; DES-06,,,visual-system.md:244
+CGP-DS-R-022,REQ-CGP-DS-24,DS,req,"Menus share one style token set, with item height ≥44px on learner surfaces",ADAPT,Studio,P1,CGP-DS-024; DES-06,,,visual-system.md:245
+CGP-DS-R-023,REQ-CGP-DS-25,DS,req,Dialogs are reserved for destructive or settings flows; any dialog traps focus and restores it to its opener,ADAPT,Both,P0,CGP-DS-025; SX-52,,,visual-system.md:246
+CGP-DS-R-024,REQ-CGP-DS-26,DS,req,Tooltips never carry the only label of a control,ADAPT,Both,P0,CGP-DS-026; DES-06,,,visual-system.md:247
+CGP-DS-R-025,REQ-CGP-DS-27,DS,req,Transient confirmations use a live region and persist ≥4s or until dismissed,ADAPT,Both,P1,CGP-DS-027; PI#5,CGP-DS-R-014,,visual-system.md:248
+CGP-DS-R-026,REQ-CGP-DS-29,DS,req,New CSS uses logical properties,ADOPT,Both,P2,CGP-DS-029; none,,,visual-system.md:249
+CGP-DS-R-027,REQ-CGP-DS-30,DS,req,"IME composition never triggers Enter-send, Escape-close or any single-key shortcut",ADAPT,Both,P0,CGP-DS-030; SX-19; TUX-CHAT-03,,,visual-system.md:250
+CGP-DS-R-028,REQ-CGP-DS-31,DS,req,Korean prose wraps at word (eojeol) boundaries; long tokens still wrap,ADAPT,Both,P0,CGP-DS-031; DES-03,,,visual-system.md:251
+CGP-DS-R-029,REQ-CGP-DS-34,DS,req,Before/after and diff views show symbols as well as color,ADOPT,Studio,P1,CGP-DS-034; SX-16; SX-50,,,visual-system.md:252
+CGP-DS-R-030,REQ-CGP-DS-35,DS,req,Numeric columns and counters use tabular figures,ADOPT,Chalk,P2,CGP-DS-035; none,,,visual-system.md:253
+CGP-DS-R-031,REQ-CGP-DS-36,DS,req,Transcript scroller reserves a stable scrollbar gutter,ADOPT,Studio,P1,CGP-DS-036; UX13,,,visual-system.md:254
+CGP-DS-R-032,REQ-CGP-DS-38,DS,req,Startup and empty states use only HP marks,ADAPT,Studio,P2,CGP-DS-038; none,,,visual-system.md:255
+CGP-DS-R-033,REQ-CGP-DS-41,DS,req,Emoji render with the OS color emoji stack,ADOPT,Both,P2,CGP-DS-041; none,,,visual-system.md:256
+CGP-DS-R-034,REQ-CGP-DS-42,DS,req,No text token below 4.5:1 is used for readable text,ADAPT,Both,P0,CGP-DS-042; DES-11,CGP-DS-R-002; DEC-27,,visual-system.md:257
 CGP-CHAT-D-001,CGP-CHAT-D48,CHAT,design,Live announcements are invisible and non-repetitive,ADOPT,Studio,P0,CGP-CHAT-R-001,,,chat-core.md:234
 CGP-CHAT-D-002,CGP-CHAT-D65,CHAT,design,Edit-in-place on the latest prompt,ADAPT,Studio,P0,CGP-CHAT-R-002,,,chat-core.md:235
 CGP-CHAT-D-003,CGP-CHAT-D53,CHAT,design,Question card,ADAPT,Studio,P0,CGP-CHAT-R-003,,,chat-core.md:236
@@ -965,31 +965,31 @@ CGP-SHELL-D-031,DES-SHELL-31 (REQ-32),SHELL,design,Roster import shows a preview
 CGP-SHELL-D-032,DES-SHELL-32 (REQ-33),SHELL,design,Rules acknowledgement is a single screen at join.,ADAPT,Both,P2,CGP-SHELL-R-033,,,settings-account-shell.md:294
 CGP-SHELL-D-033,DES-SHELL-33 (REQ-34),SHELL,design,Version column in Chalk manage list.,ADAPT,Chalk,P1,CGP-SHELL-R-034,,,settings-account-shell.md:295
 CGP-SHELL-D-034,DES-SHELL-34 (REQ-35),SHELL,design,What's-new panel is dismissible and short.,ADAPT,Studio,P2,CGP-SHELL-R-035,,,settings-account-shell.md:296
-CGP-DS-D-001,DES-CGP-DS-01,DS,design,Token file `tokens.css` is imported first; semantic names follow `--hp-{text|bg|border|ring}-{role}-{state}`,ADAPT,Both,P0,CGP-DS-R-001,,,design-system.md:265
-CGP-DS-D-002,DES-CGP-DS-02,DS,design,"Mapping, for example: `--hp-text: var(--vscode-foreground, #F2F4E8)`, `--hp-ring: var(--vscode-focusBorder, #D5F279)`, `--hp-bg: var(--vscode-sideBar-background, #151D19)`, `--hp-code-bg: var(--vscode-textCodeBlock-background, …)`",ADOPT,Studio,P0,CGP-DS-R-003,,,design-system.md:266
-CGP-DS-D-003,DES-CGP-DS-04,DS,design,"Hover = text color at 8%, pressed 12–16% (light) or 12–20% (dark) over the surface; control boundary token ≥3:1",ADAPT,Both,P0,CGP-DS-R-005,,,design-system.md:267
-CGP-DS-D-004,DES-CGP-DS-05,DS,design,"Status chip: 16px icon + 14px label, 4px radius, 8px inline padding, soft background",ADAPT,Both,P0,CGP-DS-R-006,,,design-system.md:268
-CGP-DS-D-005,DES-CGP-DS-09,DS,design,"Learner scale: 14 / 16 / 18 / 22 / 28px; line-height 1.5 (labels), **1.65–1.75 (Hangul prose)**; tracking 0 for Hangul; weights 400/600 only",ADAPT,Studio,P0,CGP-DS-R-008,,,design-system.md:269
-CGP-DS-D-006,DES-CGP-DS-10,DS,design,Text size: 16 / 18 / 20px body; controls scale proportionally; 44px targets unchanged,ADAPT,Studio,P1,CGP-DS-R-009,,,design-system.md:270
-CGP-DS-D-007,DES-CGP-DS-11,DS,design,"Spacing ladder 4, 8, 12, 16, 20, 24, 32px; control heights 32 (non-learner dense), 44 (learner default), 48 (primary CTA)",ADOPT,Studio,P0,CGP-DS-R-010,,,design-system.md:271
-CGP-DS-D-008,DES-CGP-DS-12,DS,design,Radii 4 / 8 / 12 / 16 / 24 / full; composer 16–24px; user bubble 16–20px; dialog 12px,ADAPT,Both,P2,CGP-DS-R-011,,,design-system.md:272
-CGP-DS-D-009,DES-CGP-DS-13,DS,design,"Elevation: none (inline), 1 (cards: `0 1px 2px`), 2 (menus/popovers: `0 4px 8px -2px`, alpha .10 light / .30 dark)",ADAPT,Both,P2,CGP-DS-R-012,,,design-system.md:273
-CGP-DS-D-010,DES-CGP-DS-14,DS,design,"Container thresholds: compact <28rem (448px), regular ≥28rem, wide ≥43rem",ADOPT,Studio,P1,CGP-DS-R-013,,,design-system.md:274
-CGP-DS-D-011,DES-CGP-DS-15,DS,design,"`--hp-dur-press 140ms`, `--hp-dur-enter 180ms`, `--hp-dur-confirm 160ms`, `--hp-dur-move 240ms`; enter `cubic-bezier(.19,1,.22,1)`, exit `cubic-bezier(.4,0,1,1)`; no springs or bounces on learner surfaces",ADAPT,Both,P1,CGP-DS-R-014,,,design-system.md:275
-CGP-DS-D-012,DES-CGP-DS-16,DS,design,Reduced-motion state is on `<html data-reduced-motion=true|false>` set by the host; CSS gates with `:not([data-reduced-motion])` plus the media query,ADAPT,Studio,P0,CGP-DS-R-015,,,design-system.md:276
-CGP-DS-D-013,DES-CGP-DS-17,DS,design,"Forced colors: buttons `border:1px solid ButtonText`, bubbles `border:1px solid CanvasText`, focus `outline-color: Highlight`",ADOPT,Both,P1,CGP-DS-R-016,,,design-system.md:277
-CGP-DS-D-014,DES-CGP-DS-18,DS,design,Focus: `outline: 2px solid var(--hp-ring); outline-offset: 2px`; inset −2px inside scroll containers,ADAPT,Both,P0,CGP-DS-R-017,,,design-system.md:278
-CGP-DS-D-015,DES-CGP-DS-19,DS,design,"Icon sizes 16 (inline), 20 (toolbar), 24 (empty states); 1.5–2px stroke; `currentColor`; status glyphs move from Unicode to icons with the same labels",ADAPT,Both,P1,CGP-DS-R-018,,,design-system.md:279
-CGP-DS-D-016,DES-CGP-DS-21,DS,design,"Composer: radius 20px, min-height 48px, padding 12px, send button 44×44 inside; placeholder uses `--hp-text-muted` (≥4.5:1), not opacity",ADAPT,Studio,P0,CGP-DS-R-019,,,design-system.md:280
-CGP-DS-D-017,DES-CGP-DS-22,DS,design,"Prose max-width 40em; user bubble radius 18px, background = text at 6–8%, max-width 85%; assistant unboxed with an 18px identity mark",ADAPT,Studio,P1,CGP-DS-R-020,,,design-system.md:281
-CGP-DS-D-018,DES-CGP-DS-23,DS,design,"Chalk list rows ≥44px; actions are persistent icon+label buttons; scroll fade mask 16px top, 32px bottom",ADAPT,Chalk,P0,CGP-DS-R-021,,,design-system.md:282
-CGP-DS-D-019,DES-CGP-DS-24,DS,design,"Menu: radius 12px, 4px gutter, items 44px (learner) / 32px (Chalk dense), 14px text, separator 1px border token",ADAPT,Studio,P1,CGP-DS-R-022,,,design-system.md:283
-CGP-DS-D-020,DES-CGP-DS-25,DS,design,"Dialog 320–480px, radius 12px, padding 20–24px, backdrop dim 40% dark / 30% light, enter 180ms, exit 120ms; ≤390px becomes a bottom sheet",ADAPT,Both,P0,CGP-DS-R-023,,,design-system.md:284
-CGP-DS-D-021,DES-CGP-DS-26,DS,design,"Tooltip: 14px, radius 8px, padding 4×8, delay 500ms hover / immediate on focus; shortcut shown as text",ADAPT,Both,P0,CGP-DS-R-024,,,design-system.md:285
-CGP-DS-D-022,DES-CGP-DS-27,DS,design,"Toast: bottom of the chat pane, content-width ≤ 360px, 14px, icon + text; success auto-hides at 4s; error persists",ADAPT,Both,P1,CGP-DS-R-025,,,design-system.md:286
-CGP-DS-D-023,DES-CGP-DS-29,DS,design,"Use `padding-inline`, `margin-inline`, `inset-inline`, `text-align:start`",ADOPT,Both,P2,CGP-DS-R-026,,,design-system.md:287
-CGP-DS-D-024,DES-CGP-DS-30,DS,design,"IME guard covers Enter, Escape, Tab, Arrow-up history and Cmd/Ctrl+Enter",ADAPT,Both,P0,CGP-DS-R-027,,,design-system.md:288
-CGP-DS-D-025,DES-CGP-DS-31,DS,design,`:lang(ko)` prose: `word-break:keep-all; overflow-wrap:anywhere; line-break:strict`; headings `text-wrap:balance`; paragraphs `text-wrap:pretty`,ADAPT,Both,P0,CGP-DS-R-028,,,design-system.md:289
-CGP-DS-D-026,DES-CGP-DS-34,DS,design,Diff: `+`/`−` gutter glyph plus green/red tint at ≤15% alpha; removed text also struck through,ADOPT,Studio,P1,CGP-DS-R-029,,,design-system.md:290
-CGP-DS-D-027,DES-CGP-DS-36,DS,design,`scrollbar-gutter: stable` on the transcript; thin scrollbar uses `--vscode-scrollbarSlider-*`,ADOPT,Studio,P1,CGP-DS-R-031,,,design-system.md:291
-CGP-DS-D-028,DES-CGP-DS-42,DS,design,"Muted tokens: forest `#ACB9A5` (8.4:1 on #151D19 / 7.1:1 on #202C24, OK); CP-R1 `#a4aab3` (6.8:1 on #202226, OK); never ChatGPT-style 3.2:1 tertiary",ADAPT,Both,P0,CGP-DS-R-034,,,design-system.md:292
+CGP-DS-D-001,DES-CGP-DS-01,DS,design,Token file `tokens.css` is imported first; semantic names follow `--hp-{text|bg|border|ring}-{role}-{state}`,ADAPT,Both,P0,CGP-DS-R-001,,,visual-system.md:265
+CGP-DS-D-002,DES-CGP-DS-02,DS,design,"Mapping, for example: `--hp-text: var(--vscode-foreground, #F2F4E8)`, `--hp-ring: var(--vscode-focusBorder, #D5F279)`, `--hp-bg: var(--vscode-sideBar-background, #151D19)`, `--hp-code-bg: var(--vscode-textCodeBlock-background, …)`",ADOPT,Studio,P0,CGP-DS-R-003,,,visual-system.md:266
+CGP-DS-D-003,DES-CGP-DS-04,DS,design,"Hover = text color at 8%, pressed 12–16% (light) or 12–20% (dark) over the surface; control boundary token ≥3:1",ADAPT,Both,P0,CGP-DS-R-005,,,visual-system.md:267
+CGP-DS-D-004,DES-CGP-DS-05,DS,design,"Status chip: 16px icon + 14px label, 4px radius, 8px inline padding, soft background",ADAPT,Both,P0,CGP-DS-R-006,,,visual-system.md:268
+CGP-DS-D-005,DES-CGP-DS-09,DS,design,"Learner scale: 14 / 16 / 18 / 22 / 28px; line-height 1.5 (labels), **1.65–1.75 (Hangul prose)**; tracking 0 for Hangul; weights 400/600 only",ADAPT,Studio,P0,CGP-DS-R-008,,,visual-system.md:269
+CGP-DS-D-006,DES-CGP-DS-10,DS,design,Text size: 16 / 18 / 20px body; controls scale proportionally; 44px targets unchanged,ADAPT,Studio,P1,CGP-DS-R-009,,,visual-system.md:270
+CGP-DS-D-007,DES-CGP-DS-11,DS,design,"Spacing ladder 4, 8, 12, 16, 20, 24, 32px; control heights 32 (non-learner dense), 44 (learner default), 48 (primary CTA)",ADOPT,Studio,P0,CGP-DS-R-010,,,visual-system.md:271
+CGP-DS-D-008,DES-CGP-DS-12,DS,design,Radii 4 / 8 / 12 / 16 / 24 / full; composer 16–24px; user bubble 16–20px; dialog 12px,ADAPT,Both,P2,CGP-DS-R-011,,,visual-system.md:272
+CGP-DS-D-009,DES-CGP-DS-13,DS,design,"Elevation: none (inline), 1 (cards: `0 1px 2px`), 2 (menus/popovers: `0 4px 8px -2px`, alpha .10 light / .30 dark)",ADAPT,Both,P2,CGP-DS-R-012,,,visual-system.md:273
+CGP-DS-D-010,DES-CGP-DS-14,DS,design,"Container thresholds: compact <28rem (448px), regular ≥28rem, wide ≥43rem",ADOPT,Studio,P1,CGP-DS-R-013,,,visual-system.md:274
+CGP-DS-D-011,DES-CGP-DS-15,DS,design,"`--hp-dur-press 140ms`, `--hp-dur-enter 180ms`, `--hp-dur-confirm 160ms`, `--hp-dur-move 240ms`; enter `cubic-bezier(.19,1,.22,1)`, exit `cubic-bezier(.4,0,1,1)`; no springs or bounces on learner surfaces",ADAPT,Both,P1,CGP-DS-R-014,,,visual-system.md:275
+CGP-DS-D-012,DES-CGP-DS-16,DS,design,Reduced-motion state is on `<html data-reduced-motion=true|false>` set by the host; CSS gates with `:not([data-reduced-motion])` plus the media query,ADAPT,Studio,P0,CGP-DS-R-015,,,visual-system.md:276
+CGP-DS-D-013,DES-CGP-DS-17,DS,design,"Forced colors: buttons `border:1px solid ButtonText`, bubbles `border:1px solid CanvasText`, focus `outline-color: Highlight`",ADOPT,Both,P1,CGP-DS-R-016,,,visual-system.md:277
+CGP-DS-D-014,DES-CGP-DS-18,DS,design,Focus: `outline: 2px solid var(--hp-ring); outline-offset: 2px`; inset −2px inside scroll containers,ADAPT,Both,P0,CGP-DS-R-017,,,visual-system.md:278
+CGP-DS-D-015,DES-CGP-DS-19,DS,design,"Icon sizes 16 (inline), 20 (toolbar), 24 (empty states); 1.5–2px stroke; `currentColor`; status glyphs move from Unicode to icons with the same labels",ADAPT,Both,P1,CGP-DS-R-018,,,visual-system.md:279
+CGP-DS-D-016,DES-CGP-DS-21,DS,design,"Composer: radius 20px, min-height 48px, padding 12px, send button 44×44 inside; placeholder uses `--hp-text-muted` (≥4.5:1), not opacity",ADAPT,Studio,P0,CGP-DS-R-019,,,visual-system.md:280
+CGP-DS-D-017,DES-CGP-DS-22,DS,design,"Prose max-width 40em; user bubble radius 18px, background = text at 6–8%, max-width 85%; assistant unboxed with an 18px identity mark",ADAPT,Studio,P1,CGP-DS-R-020,,,visual-system.md:281
+CGP-DS-D-018,DES-CGP-DS-23,DS,design,"Chalk list rows ≥44px; actions are persistent icon+label buttons; scroll fade mask 16px top, 32px bottom",ADAPT,Chalk,P0,CGP-DS-R-021,,,visual-system.md:282
+CGP-DS-D-019,DES-CGP-DS-24,DS,design,"Menu: radius 12px, 4px gutter, items 44px (learner) / 32px (Chalk dense), 14px text, separator 1px border token",ADAPT,Studio,P1,CGP-DS-R-022,,,visual-system.md:283
+CGP-DS-D-020,DES-CGP-DS-25,DS,design,"Dialog 320–480px, radius 12px, padding 20–24px, backdrop dim 40% dark / 30% light, enter 180ms, exit 120ms; ≤390px becomes a bottom sheet",ADAPT,Both,P0,CGP-DS-R-023,,,visual-system.md:284
+CGP-DS-D-021,DES-CGP-DS-26,DS,design,"Tooltip: 14px, radius 8px, padding 4×8, delay 500ms hover / immediate on focus; shortcut shown as text",ADAPT,Both,P0,CGP-DS-R-024,,,visual-system.md:285
+CGP-DS-D-022,DES-CGP-DS-27,DS,design,"Toast: bottom of the chat pane, content-width ≤ 360px, 14px, icon + text; success auto-hides at 4s; error persists",ADAPT,Both,P1,CGP-DS-R-025,,,visual-system.md:286
+CGP-DS-D-023,DES-CGP-DS-29,DS,design,"Use `padding-inline`, `margin-inline`, `inset-inline`, `text-align:start`",ADOPT,Both,P2,CGP-DS-R-026,,,visual-system.md:287
+CGP-DS-D-024,DES-CGP-DS-30,DS,design,"IME guard covers Enter, Escape, Tab, Arrow-up history and Cmd/Ctrl+Enter",ADAPT,Both,P0,CGP-DS-R-027,,,visual-system.md:288
+CGP-DS-D-025,DES-CGP-DS-31,DS,design,`:lang(ko)` prose: `word-break:keep-all; overflow-wrap:anywhere; line-break:strict`; headings `text-wrap:balance`; paragraphs `text-wrap:pretty`,ADAPT,Both,P0,CGP-DS-R-028,,,visual-system.md:289
+CGP-DS-D-026,DES-CGP-DS-34,DS,design,Diff: `+`/`−` gutter glyph plus green/red tint at ≤15% alpha; removed text also struck through,ADOPT,Studio,P1,CGP-DS-R-029,,,visual-system.md:290
+CGP-DS-D-027,DES-CGP-DS-36,DS,design,`scrollbar-gutter: stable` on the transcript; thin scrollbar uses `--vscode-scrollbarSlider-*`,ADOPT,Studio,P1,CGP-DS-R-031,,,visual-system.md:291
+CGP-DS-D-028,DES-CGP-DS-42,DS,design,"Muted tokens: forest `#ACB9A5` (8.4:1 on #151D19 / 7.1:1 on #202C24, OK); CP-R1 `#a4aab3` (6.8:1 on #202226, OK); never ChatGPT-style 3.2:1 tertiary",ADAPT,Both,P0,CGP-DS-R-034,,,visual-system.md:292
