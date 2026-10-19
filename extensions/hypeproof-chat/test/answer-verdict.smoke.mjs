@@ -1,5 +1,6 @@
 // CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT, DEC-09) — the verdict model behind "맞아요 / 고쳐야 해요".
-// Pure functions, the production task store on disk and the production session spool. No vscode, no React.
+// Pure functions, the production task store on disk, and the real outbound paths (class snapshot,
+// class collection, session-log upload) run over a spool plus a verdict file. No vscode, no React.
 //
 // .claude/rules/verification.md §2: each judgement has a positive control (a good sample passes) and a
 // negative control (a bad sample fails), so a too-strict and a too-lenient rule both show up.
@@ -12,10 +13,13 @@ import path from "node:path";
 
 const {
   appendVerdict, latestVerdicts, parseVerdictRequest, previousVerdict, promptIdFor,
-  validVerdictEvent, verdictPayload, verdictTargets, REASON_LABELS, VERDICT_LABELS, VERDICT_NOTE_MAX,
+  validVerdictEvent, verdictEvidence, verdictTargets, REASON_LABELS, VERDICT_LABELS, VERDICT_NOTE_MAX,
 } = await import("../src/answerVerdict.ts");
 const { TaskWorkspaceStore } = await import("../src/taskWorkspaceStore.ts");
 const { SessionSpool } = await import("../src/sessionSpool.ts");
+const { freezeSnapshot, freezeCollection } = await import("../src/evidenceSnapshot.ts");
+const { uploadAllPending } = await import("../src/spoolUploader.ts");
+const { taskWorkspaceRoot } = await import("../src/trialCarryoverSource.ts");
 const { decodeBeforeEditResend } = await import("./fixtures/task-store-validator-before-edit-resend.mjs");
 
 let n = 0;
@@ -62,14 +66,14 @@ await t("an empty note is dropped, not stored as an empty string", () => {
   assert.deepEqual(parseVerdictRequest({ messageId: "a1", verdict: "fix", reason: "wrong", note: "   " }), { messageId: "a1", verdict: "fix", reason: "wrong" });
 });
 
-await t("spool payload: ids, codes and the note's length, never its text", () => {
-  const event = ev("a1", "fix", { promptId: "u1", reason: "other", note: NOTE });
-  const payload = verdictPayload(event, "right");
-  assert.deepEqual(payload, { message_id: "a1", prompt_id: "u1", verdict: "fix", previous: "right", reason: "other", note_length: NOTE.length });
-  assert.ok(!JSON.stringify(payload).includes(NOTE.slice(0, 4)), "note text in the payload");
+await t("evidence row: time, ids, codes and the note's length, never its text", () => {
+  const event = ev("a1", "fix", { promptId: "u1", turnId: "stream-1", reason: "other", note: NOTE });
+  const payload = verdictEvidence(event, "right");
+  assert.deepEqual(payload, { at, message_id: "a1", prompt_id: "u1", turn_id: "stream-1", verdict: "fix", previous: "right", reason: "other", note_length: NOTE.length });
+  assert.ok(!JSON.stringify(payload).includes(NOTE.slice(0, 4)), "note text in the evidence row");
   // Negative control: the check above does see text when it is there.
   assert.ok(JSON.stringify({ ...payload, note: NOTE }).includes(NOTE.slice(0, 4)));
-  assert.deepEqual(verdictPayload(ev("a1", null), "fix"), { message_id: "a1", verdict: "removed", previous: "fix", note_length: 0 });
+  assert.deepEqual(verdictEvidence(ev("a1", null), "fix"), { at, message_id: "a1", verdict: "removed", previous: "fix", note_length: 0 });
   for (const key of Object.keys(payload)) assert.ok(!/score|grade|level|rank/i.test(key), `score-like field ${key}`);
 });
 
@@ -102,7 +106,8 @@ await t("history cap: superseded events go first, so every message keeps its lat
 });
 
 await t("stored events validate; a stored note without a reason or a junk key does not (negative control)", () => {
-  assert.ok(validVerdictEvent(ev("a1", "fix", { reason: "wrong", note: NOTE, promptId: "u1" })));
+  assert.ok(validVerdictEvent(ev("a1", "fix", { reason: "wrong", note: NOTE, promptId: "u1", turnId: "stream-1" })));
+  assert.ok(!validVerdictEvent(ev("a1", "fix", { turnId: "a b" })));
   assert.ok(!validVerdictEvent(ev("a1", "fix", { note: NOTE })));
   assert.ok(!validVerdictEvent({ ...ev("a1", "right"), score: 1 }));
   assert.ok(!validVerdictEvent({ ...ev("a1", "right"), at: -1 }));
@@ -186,23 +191,88 @@ try {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ── production session spool: what lands in events.jsonl ────────────────────
-const spoolRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hps-answer-verdict-spool-"));
-try {
-  const spool = new SessionSpool({ root: spoolRoot, appVersion: "0.0.0-test", os: { platform: "darwin", release: "25", arch: "arm64" }, now: () => new Date(at), newSessionId: () => "session-1" });
-  const event = ev("a1", "fix", { promptId: "u1", reason: "other", note: NOTE });
-  spool.recordWorkflow({ turnId: "stream-1", event: "answer_verdict", payload: verdictPayload(event, "none") });
-  await spool.flush();
-  const lines = fs.readFileSync(path.join(spool.currentSessionDir(), "events.jsonl"), "utf8").trim().split("\n");
-  await t("spool: one answer_verdict workflow event, without the note text", () => {
-    const records = lines.map((line) => JSON.parse(line)).filter((record) => record.type === "workflow");
-    assert.equal(records.length, 1);
-    assert.equal(records[0].event, "answer_verdict");
-    assert.deepEqual(records[0].payload, { message_id: "a1", prompt_id: "u1", verdict: "fix", previous: "none", reason: "other", note_length: NOTE.length });
-    assert.ok(!lines.join("\n").includes(NOTE), "note text reached the spool");
-  });
-} finally {
-  fs.rmSync(spoolRoot, { recursive: true, force: true });
+// ── DEC-09: nothing that leaves the device carries a verdict ────────────────
+// The host must not write verdicts to the session spool at all (read its source), and the three
+// outbound paths that exist — the class snapshot (/2 copy), the class collection (/3, kinds incl.
+// `record`, which selects every line) and the session-log upload — are run for real over a spool
+// plus a verdict file. Negative control: the same run WITH an injected answer_verdict spool line
+// must show it on every path, which proves the probe would see a leak.
+await t("host: the verdict handler never touches the spool", () => {
+  const source = fs.readFileSync(new URL("../src/chatPanelProvider.ts", import.meta.url), "utf8");
+  const start = source.indexOf("private async handleAnswerVerdict(");
+  assert.ok(start > 0, "handler not found");
+  const body = source.slice(start, source.indexOf("\n  private async postHistory(", start));
+  assert.ok(body.length > 200, "handler body not isolated");
+  assert.ok(!/spool/i.test(body), "the verdict handler mentions the spool");
+  assert.ok(!source.includes("answer_verdict"), "an answer_verdict event is still written somewhere");
+  // Control: the probe does see spool use in a handler that has it (the edit-resend path).
+  assert.ok(/this\.spool\?\.recordWorkflow\(\{ event: "edit_resend"/.test(source));
+});
+
+const T = Date.parse("2026-10-20T03:00:00Z");
+const ident = { u: "synthetic", c: "test", p: "test" };
+const scope = { grant_id: "g", class_run_id: "run", seat_id: "A1", student: ident, activity: null, run: { starts_at: T - 60_000, ends_at: T + 3_600_000 } };
+const consent = { purpose: "class_report", notice_version: "v1" };
+const MARKERS = ["answer_verdict", "verdict-answer-7f3", NOTE, "not_wanted"];
+const text = (files) => files.map((f) => new TextDecoder().decode(f.data ?? f)).join("\n");
+
+async function outbound(inject) {
+  const storage = fs.mkdtempSync(path.join(os.tmpdir(), "hps-verdict-leak-"));
+  try {
+    // The verdict file, written by the production store where the app keeps it.
+    const store = new TaskWorkspaceStore(taskWorkspaceRoot(storage), "personal-scope");
+    await store.initialize();
+    const taskId = store.getView().activeTaskId;
+    await store.append(taskId, [u("u-7f3", "질문"), a("verdict-answer-7f3", "답")]);
+    await store.recordVerdict(taskId, ev("verdict-answer-7f3", "fix", { promptId: "u-7f3", turnId: "stream-7f3", reason: "not_wanted", note: NOTE }));
+    assert.ok(fs.readFileSync(store.verdictsPath, "utf8").includes(NOTE), "fixture: the verdict file holds the verdict");
+    // The session spool of the same learner, with an ordinary turn in it.
+    const spoolRoot = path.join(storage, "logs", "sessions");
+    const spool = new SessionSpool({ root: spoolRoot, appVersion: "test", os: { platform: "darwin", release: "test", arch: "arm64" }, now: () => new Date(T), newSessionId: () => "11111111-1111-4111-8111-111111111111" });
+    spool.noteIdentity(ident);
+    spool.recordPrompt({ turnId: "stream-7f3", runtime: "proxy", text: "PROMPT-SEEN" });
+    if (inject) spool.recordWorkflow({ turnId: "stream-7f3", event: "answer_verdict", payload: { message_id: "verdict-answer-7f3", reason: "not_wanted", note: NOTE } });
+    await spool.flush();
+    const sent = {};
+    const snap = await spool.readForSnapshot(0);
+    const frozen = freezeSnapshot(snap.files, scope, "batch", consent, T + 1000, snap);
+    assert.equal(frozen.ok, true, `snapshot: ${frozen.code}`);
+    sent.snapshot = text(frozen.files);
+    const src = await spool.readForCollection(0, ident);
+    sent.collection = "";
+    for (const kinds of [["record"], ["prompts"], ["artifacts", "prompts"]]) {
+      const copy = freezeCollection(src, scope, "batch", consent, kinds, T + 1000);
+      assert.equal(copy.ok, true, `collection ${kinds}: ${copy.code}`);
+      sent.collection += text(copy.files);
+    }
+    const sealed = await spool.seal();
+    const bodies = [];
+    const results = await uploadAllPending(spoolRoot, {
+      baseUrl: "https://example.invalid/v1", token: "t", identity: { u: ident.u, c: ident.c }, allowFresh: sealed ? [sealed] : [],
+      now: () => new Date(T + 1000),
+      fetchFn: async (url, init) => { bodies.push(`${url}\n${Buffer.from(init.body).toString("utf8")}`); return { ok: true, status: 200, json: async () => ({ key: url }) }; },
+    });
+    assert.ok(results.length === 1 && results[0].ok, `upload: ${JSON.stringify(results)}`);
+    sent.upload = bodies.join("\n");
+    return sent;
+  } finally {
+    fs.rmSync(storage, { recursive: true, force: true });
+  }
 }
+
+const clean = await outbound(false);
+await t("class snapshot, class collection (record/prompts/artifacts) and log upload carry no verdict data", () => {
+  for (const [path_, body] of Object.entries(clean)) {
+    assert.ok(body.includes("PROMPT-SEEN"), `${path_}: positive control, the ordinary turn did not go out`);
+    for (const marker of MARKERS) assert.ok(!body.includes(marker), `${path_} carries ${marker}`);
+  }
+});
+const leaky = await outbound(true);
+await t("negative control: an answer_verdict line in the spool WOULD leave on every path", () => {
+  for (const [path_, body] of Object.entries(leaky)) {
+    if (path_ === "collection") assert.ok(body.includes("answer_verdict"), "collection (record) did not include the injected line");
+    else assert.ok(body.includes("answer_verdict") && body.includes(NOTE), `${path_} did not include the injected line`);
+  }
+});
 
 console.log(`answer-verdict: ${n} checks OK`);

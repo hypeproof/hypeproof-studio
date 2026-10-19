@@ -165,27 +165,29 @@ button removes the verdict. `고쳐야 해요` opens a small labelled group (`�
 reason, `틀렸어요` / `내가 원한 게 아니에요` / `너무 어려워요` / `기타`; under a chosen reason an optional note
 (at most 300 characters, saved with `저장`) and the line `이 선택은 AI에게 보내지 않아요.` Changing or
 removing a verdict appends a new event and the latest event per answer wins for display, so the
-history is kept. Storage: the verdict events live in a per-scope sidecar
-`task-workspaces/<scope>.verdicts.json`, written under the task store's lock; the task file is not
+history is kept. DEC-09: verdicts are stored only on this device in the task's verdict file; not in
+the session log, not uploaded, not collected, not shown to instructors or Chalk. The verdict file is
+a per-scope sidecar `<scope>.verdicts.json` in the task store's directory, written under the task
+store's lock. It holds the evidence history: one event per change with the time, message id, prompt
+id (the user line the answer replied to), turn id (when this window produced the answer), verdict,
+reason code and the optional note (the note is kept for the learner's own screen; any evidence
+summary uses `verdictEvidence`, which carries only the note's length). The host writes nothing to the
+session spool for a verdict, so neither the session-log upload (`spoolUploader.ts`) nor class record
+snapshots and collections (`evidenceSnapshot.ts`), which read only spool sessions, can carry one;
+nothing reads the verdict file except the task store. Verdicts are not chat messages and never enter
+the model history, and they are not shown as a score or count anywhere. The task file is not
 touched, so an older build opens the task as before and only does not draw verdicts. An unreadable
-sidecar is set aside, never overwritten, and costs only the drawn verdicts; clearing the task's
-conversation drops its verdicts. Reopening a task draws the learner's last choice per answer.
-Evidence (REQ-Q1): the host records one `answer_verdict` workflow event in the local session spool
-per change, with `message_id`, `prompt_id` (the user line the answer replied to), the spool turn id
-when this window produced the answer, `verdict` (`right` / `fix` / `removed`), `previous`, `reason`
-and `note_length`. The note text is never in the spool; it stays only in the local sidecar, next to
-the transcript it belongs to. DEC-09: verdicts are not sent to the model vendor (they are not chat
-messages and never enter the history), not shown as a score or count anywhere, not shown to
-instructors and not read by Chalk; nothing in this repo outside the chat extension (Chalk included) reads `answer_verdict`. The spool file
-itself still travels wherever the existing spool upload and consented class collection already take
-it. Not built in classroom seats or lessons: SX-06 fixes what the classroom coach rail may show
+verdict file is set aside, never overwritten, and costs only the drawn verdicts; clearing the task's
+conversation drops its verdicts. Reopening a task draws the learner's last choice per answer. Not built in classroom seats or lessons: SX-06 fixes what the classroom coach rail may show
 (questions, hints, checklists, learner requests, instructor messages, AI notices) and SX-07 keeps
 self-evaluation out of work time, so a verdict control there needs an SX design change first. Also
 not built: instructor mode (no controls; the host refuses the message), verdicts on app replies being
 told apart from coach answers, and a verdict on an answer the learner stopped is not marked as
-partial. Tests: `test/answer-verdict.smoke.mjs` (request rules, payload without text, append and
-latest-wins, history cap, targets, store round trip, legacy load, task file unchanged and read by the
-pre-change validator, unreadable sidecar, clear, spool line), `test/answer-verdict.test.tsx` (where
+partial. Tests: `test/answer-verdict.smoke.mjs` (request rules, evidence row without text, append
+and latest-wins, history cap, targets, store round trip, legacy load, task file unchanged and read by
+the pre-change validator, unreadable sidecar, clear; the verdict handler never uses the spool; the
+real class snapshot, class collection and log upload run over a spool plus a verdict file carry no
+verdict data, with an injected `answer_verdict` spool line as the negative control), `test/answer-verdict.test.tsx` (where
 the controls and reasons render, Korean labels, negative controls for streaming, user lines,
 classroom, lesson and instructor).
 

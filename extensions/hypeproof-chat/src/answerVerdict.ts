@@ -4,12 +4,15 @@
 // Pure: no vscode, no React. The webview (where the controls go) and the host (what is accepted,
 // stored and recorded) apply the same rules, so they live here once.
 //
-// Data model: an append-only list of verdict events per task. The latest event for a message wins
-// for display; an event with `verdict: null` removes the verdict. Earlier events are kept, so a
-// changed mind stays visible as history (the spool also gets one event per change).
+// Data model: an append-only list of verdict events per task, kept ONLY in the task's local verdict
+// file (taskWorkspaceStore `<scope>.verdicts.json`). The latest event for a message wins for display;
+// an event with `verdict: null` removes the verdict. Earlier events are kept, so a changed mind stays
+// as history: that list is the evidence record.
 //
-// What this is NOT: a score. Nothing here is summed, averaged, ranked or shown to anyone but the
-// learner. The spool event never carries the note text, only its length (DEC-09, AE-20).
+// DEC-09: nothing here goes to the session spool. The spool is uploaded ("오늘 활동 기록 보내기") and
+// collected for class records (evidenceSnapshot.ts), the verdict file is read by neither, so a verdict
+// is not uploaded, not collected and not shown to instructors or Chalk (AE-20). It is not a score:
+// nothing here is summed, averaged or ranked.
 
 import type { ChatMessage } from "./protocol";
 
@@ -34,6 +37,8 @@ export interface VerdictEvent {
   messageId: string;
   /** The user line that asked for this answer (the turn's request id), when there is one. */
   promptId?: string;
+  /** The coach turn's id (the spool streamId) when this window produced the answer; absent after reopening. */
+  turnId?: string;
   verdict: AnswerVerdict | null;
   reason?: VerdictReason;
   note?: string;
@@ -80,9 +85,10 @@ export function parseVerdictRequest(value: unknown): VerdictRequest | null {
 
 /** A stored event (sidecar shape). */
 export function validVerdictEvent(value: unknown): value is VerdictEvent {
-  if (!isRecord(value) || !onlyKeys(value, ["messageId", "promptId", "verdict", "reason", "note", "at"])) return false;
+  if (!isRecord(value) || !onlyKeys(value, ["messageId", "promptId", "turnId", "verdict", "reason", "note", "at"])) return false;
   if (!validMessageId(value.messageId) || !validVerdict(value.verdict)) return false;
   if (value.promptId !== undefined && !validMessageId(value.promptId)) return false;
+  if (value.turnId !== undefined && !validMessageId(value.turnId)) return false;
   if (typeof value.at !== "number" || !Number.isSafeInteger(value.at) || value.at < 0) return false;
   return consistent(value.verdict, value.reason, value.note);
 }
@@ -150,11 +156,16 @@ export function verdictTargets(messages: readonly ChatMessage[], streaming: bool
   return out;
 }
 
-/** DEC-09 — the `answer_verdict` workflow payload. Ids, codes and a length; never the note text. */
-export function verdictPayload(event: VerdictEvent, previous: AnswerVerdict | "none"): Record<string, unknown> {
+/**
+ * One stored event as an evidence row: ids, codes and the note's length. The note text itself stays
+ * in the event for the learner's own screen; anything that summarises verdicts uses this shape.
+ */
+export function verdictEvidence(event: VerdictEvent, previous: AnswerVerdict | "none"): Record<string, unknown> {
   return {
+    at: event.at,
     message_id: event.messageId,
     ...(event.promptId ? { prompt_id: event.promptId } : {}),
+    ...(event.turnId ? { turn_id: event.turnId } : {}),
     verdict: event.verdict ?? "removed",
     previous,
     ...(event.reason ? { reason: event.reason } : {}),

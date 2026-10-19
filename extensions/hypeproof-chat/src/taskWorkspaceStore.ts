@@ -116,12 +116,12 @@ function decodeVersions(text: string, scope: string): VersionsData {
 
 function decodeVerdicts(text: string, scope: string): VerdictsData {
   let envelope: unknown;
-  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '답변 평가 기록을 읽을 수 없습니다.'); }
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '답변 선택 기록을 읽을 수 없습니다.'); }
   if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
-      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '답변 평가 기록의 무결성을 확인할 수 없습니다.');
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '답변 선택 기록의 무결성을 확인할 수 없습니다.');
   const data = envelope.data;
   if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
-      !Object.entries(data.tasks).every(([id, events]) => nonempty(id, 256) && Array.isArray(events) && events.every(validVerdictEvent))) return fail('corrupt', '답변 평가 기록의 형식이 일치하지 않습니다.');
+      !Object.entries(data.tasks).every(([id, events]) => nonempty(id, 256) && Array.isArray(events) && events.every(validVerdictEvent))) return fail('corrupt', '답변 선택 기록의 형식이 일치하지 않습니다.');
   return data as unknown as VerdictsData;
 }
 
@@ -372,7 +372,7 @@ export class TaskWorkspaceStore {
    * as the task file, writing only the verdict sidecar. Resolves the task's latest verdicts.
    */
   recordVerdict(taskId: string, event: VerdictEvent): Promise<VerdictMap> {
-    if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 평가 형식이 올바르지 않습니다.'));
+    if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 선택 형식이 올바르지 않습니다.'));
     return this.mutateVerdicts(taskId, history => appendVerdict(history, clone(event)));
   }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
@@ -546,7 +546,7 @@ export class TaskWorkspaceStore {
     let text: string;
     try {
       const stat = await lstat(this.verdictsPath);
-      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '답변 평가 기록 파일의 위치를 확인해야 합니다.');
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '답변 선택 기록 파일의 위치를 확인해야 합니다.');
       text = await readFile(this.verdictsPath, 'utf8');
     } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
     try { return decodeVerdicts(text, this.scope); }
@@ -584,7 +584,7 @@ export class TaskWorkspaceStore {
         }
       } catch (error) {
         if (error instanceof TaskWorkspaceStoreError) throw error;
-        throw new TaskWorkspaceStoreError('io', '답변 평가를 저장하지 못했습니다. 다시 시도해 주세요.');
+        throw new TaskWorkspaceStoreError('io', '답변에 남긴 선택을 저장하지 못했습니다. 다시 시도해 주세요.');
       }
     });
     this.queue = operation.then(() => {}, () => {});
