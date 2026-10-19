@@ -25,6 +25,7 @@ import * as vscode from "vscode";
 import * as os from "os";
 import { TOKEN_KEY } from "./extension";
 import { ChatMessage } from "./protocol";
+import { reportContactPlaceholder, reportContactPrompt, reportReceipt, type SeatAudience } from "./seatVocabulary";
 import {
   hashJti,
   extractJtiUnverified,
@@ -48,6 +49,8 @@ export interface ReportProblemDeps {
    * the array — we only ever take the tail.
    */
   getRecentTurns: () => ChatMessage[];
+  /** Trial diagnosis D3 — solo seats are not told to wait for "Jay". Omitted → classroom copy. */
+  getAudience?: () => SeatAudience;
 }
 
 // Fallback only. The installed extension reports its own package version (#751 R1):
@@ -122,6 +125,7 @@ function collectMetadata(deps: ReportProblemDeps, jtiHash?: string): Record<stri
 }
 
 export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<void> {
+  const audience: SeatAudience = deps.getAudience?.() ?? "classroom";
   // Step 1: description.
   const description = await vscode.window.showInputBox({
     title: "문제 신고하기",
@@ -154,8 +158,8 @@ export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<
   // Step 3: contact (optional).
   const contact = await vscode.window.showInputBox({
     title: "연락처 (선택)",
-    prompt: "Jay가 회신할 수 있는 연락처 (디스코드 ID, 이메일 등). 비워둬도 OK.",
-    placeHolder: "tj.kr (선택)",
+    prompt: reportContactPrompt(audience),
+    placeHolder: reportContactPlaceholder(audience),
     ignoreFocusOut: true,
     validateInput: (v) => (v && v.length > 200 ? "200자 이하로 줄여주세요." : null),
   });
@@ -191,7 +195,7 @@ export async function runReportProblemCommand(deps: ReportProblemDeps): Promise<
 
       const result = await submitReport(proxyUrl, body, token);
       if (result.ok) {
-        const msg = `신고 접수됐어요. ID: ${result.reportId}\nJay가 #hypeproof-studio 채널에서 확인하는 대로 회신드릴게요.`;
+        const msg = reportReceipt(audience, result.reportId);
         vscode.window.showInformationMessage(msg);
       } else {
         vscode.window.showWarningMessage(`신고 전송 실패: ${result.reason}`);

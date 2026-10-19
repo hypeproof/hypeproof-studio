@@ -255,11 +255,17 @@ if [[ "${REQUIRE_SDK_VENDOR:-0}" == "1" || -n "$SDK_DEP" ]]; then
     # must NEVER land in the shipped bundle — they reach students via the W4a seed
     # (scripts/seed-sdk-binary.sh); bundling them clobbers Anthropic's Developer-ID
     # signature. `find` (not a shell glob) so an empty match is safe under zsh too.
-    LEAKED_BIN=$(find "$EXT_DIR/dist/vendor/node_modules/@anthropic-ai" -maxdepth 1 -type d -name 'claude-agent-sdk-*' 2>/dev/null || true)
+    # The release also publishes those packages as public seed assets
+    # (claude-agent-sdk-<platform>-<version>.tgz, studio-public-sdk-seed); a
+    # copy of one inside the extension is the same leak in another form.
+    LEAKED_BIN=$( {
+      find "$EXT_DIR/dist/vendor/node_modules/@anthropic-ai" -maxdepth 1 -type d -name 'claude-agent-sdk-*' 2>/dev/null
+      find "$EXT_DIR" -type f -name 'claude-agent-sdk-*.tgz' 2>/dev/null
+    } || true)
     if [[ -z "$LEAKED_BIN" ]]; then
-      ok "No per-platform SDK binary package leaked into the shipped vendor tree"
+      ok "No per-platform SDK binary package or native seed in the shipped extension"
     else
-      bad "Per-platform SDK binary package(s) leaked into the shipped vendor (must be seeded, not bundled):"
+      bad "Per-platform SDK binary package(s) or native seed(s) inside the shipped extension (must be seeded, not bundled):"
       echo "$LEAKED_BIN" | sed 's/^/      /'
     fi
   fi

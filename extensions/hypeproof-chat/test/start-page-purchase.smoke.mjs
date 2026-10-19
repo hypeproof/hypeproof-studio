@@ -31,7 +31,7 @@ function harness({ saved, settings = {} } = {}) {
     if (u.pathname === '/v1/purchase/orders') return json(201, { order_id: ID, order_secret: SECRET, amount: 50000, currency: 'KRW', label: '30일 이용권', expires_at: Date.now() + 1800000, checkout_url: world.checkout });
     if (u.pathname === `/v1/purchase/orders/${ID}/claim`) { const a = world.claims.shift() ?? { status: 503, body: { error: 'seat_unavailable' } }; return json(a.status, a.body); }
     if (u.pathname === `/v1/purchase/orders/${ID}`) return json(200, { order_id: ID, state: world.poll, claimed: false });
-    if (u.pathname === '/v1/profile') return world.profileStatus === 200 ? json(200, profile) : json(401, { error: { code: 'signature' } });
+    if (u.pathname === '/v1/profile') return world.profileStatus === 200 ? json(200, profile) : world.profileStatus === 403 ? json(403, { error: { code: 'trial_expired', type: 'session_window', message: '개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.' } }) : json(401, { error: { code: 'signature' } });
     return json(404, {});
   };
   const module = { exports: {} };
@@ -186,4 +186,54 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   assert.equal(moved.world.calls.length, 0);
   assert.equal(moved.world.states.length, 0);
   console.log('PASS purchase resume: an open order resumes, a claimed one waits for the buyer, another Service gets nothing');
+}
+
+// ── REQ-L12 (13): after a free trial expired, the start page points to passes, never opens them ──
+{
+  const TRIAL_ENDED = '체험 시간이 끝났어요. 만든 파일과 대화는 그대로 있어요.';
+  const POINTER = "계속하려면 '이용권으로 시작하기'에서 이용권을 고를 수 있어요.";
+  // The same code entered again: the Service answers 403 trial_expired (observed 2026-10-18).
+  const again = harness({ settings: { profileStatus: 403 } });
+  await again.page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r));
+  await again.page.handle({ type: 'connectCourse', token: CODE });
+  const state = again.world.states.at(-1).state;
+  assert.equal(state.error, `${TRIAL_ENDED} ${POINTER}`);
+  assert.doesNotMatch(state.error, /코드 발급 담당자/);
+  assert.equal(state.purchase.available, true, 'the entry it names is drawn');
+  assert.equal(state.purchase.stage, undefined, 'the purchase screen is not opened for the person');
+  assert.equal(again.world.opened.length, 0);
+  assert.equal(again.world.calls.filter(c => c.path.startsWith('/v1/purchase/orders')).length, 0, 'no order is created');
+  // No passes on sale: the same ending, no pointer to an entry that is not drawn.
+  const closed = harness({ settings: { profileStatus: 403, products: 404 } });
+  await closed.page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r));
+  await closed.page.handle({ type: 'connectCourse', token: CODE });
+  assert.equal(closed.world.states.at(-1).state.error, TRIAL_ENDED);
+  // Other start-page errors are left as they are.
+  const other = harness({ settings: { profileStatus: 401 } });
+  await other.page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r));
+  await other.page.handle({ type: 'connectCourse', token: CODE });
+  assert.doesNotMatch(other.world.states.at(-1).state.error, /이용권으로 시작하기/);
+  console.log('PASS trial expiry on the start page: kept files, the pass entry named only while sold, nothing opened');
+}
+
+// ── TUX-COND-07: the chat card's "이용권 살펴보기" opens the pass list, once, and nothing else ──
+{
+  const { world, page, view } = harness();
+  page.panel.reveal = () => {};
+  // Control: an ordinary visit never carries the focus mark, so the list never opens by itself.
+  await page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r));
+  assert.equal(view().focus, undefined);
+  await page.showPurchase();
+  assert.equal(view().stage, 'choosing');
+  assert.equal(typeof view().focus, 'number');
+  assert.equal(world.opened.length, 0, 'showing the list creates no order and opens no browser');
+  assert.equal(world.calls.filter(c => c.path === '/v1/purchase/orders').length, 0);
+  // Leaving the list clears the mark: a later refresh does not reopen it.
+  await page.handle({ type: 'purchaseCancel' });
+  assert.equal(view().focus, undefined);
+  console.log('PASS end-of-trial card: the pass list opens only on the press, without an order');
 }

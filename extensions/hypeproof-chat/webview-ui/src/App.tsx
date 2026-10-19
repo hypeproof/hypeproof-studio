@@ -1,6 +1,6 @@
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
-import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage } from "../../src/protocol";
+import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
 import {
   emptyTimeline,
   timelineCitations,
@@ -25,6 +25,7 @@ import { EvidencePanel } from "./EvidencePanel";
 import { MemoryPanel } from "./MemoryPanel";
 import { SkillsPanel } from "./SkillsPanel";
 import { ReviewPanel } from "./ReviewPanel";
+import { TrialCarryover } from "./TrialCarryover";
 import { pressDecision, reviewPanelReducer, type ReviewPanelAction, type ReviewPanelState } from "./reviewPanelState";
 import type { SkillsView } from "../../src/skillView";
 import type { MemoryView } from "../../src/memoryView";
@@ -43,7 +44,10 @@ interface State {
   error: string | null;
   errorRetryable: boolean;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
+  /** TUX-COND-07 — the inline end-of-trial card the host sent with this turn's ending (drawn instead of the banner). */
+  trialEndCard: TrialEndCardView | null;
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
+  errorRetry: boolean;             // REQ-M45 — false when resending cannot help (missing SDK binary)
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
   /** CR-09 — the picked element queued for the next turn; the student can remove it. */
   elementPreview: ElementPreview | null;
@@ -102,7 +106,7 @@ type Action =
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retryable?: boolean }
+  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
   | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
@@ -121,6 +125,8 @@ const initialState: State = {
   errorRetryable: true,
   errorRequestId: null,
   errorRunbookUrl: null,
+  errorRetry: true,
+  trialEndCard: null,
   pageNotice: null,
   elementPreview: null,
   verify: null,
@@ -221,6 +227,7 @@ function reducer(state: State, action: Action): State {
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
+        trialEndCard: null,
       };
     case "streamStopped":
       // #497 — 턴이 완주한 게 아니라 사용자가 끊은 것. streamEnd 와 같은 상태
@@ -247,6 +254,8 @@ function reducer(state: State, action: Action): State {
         errorRetryable: action.retryable !== false,
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
+        errorRetry: action.retry !== false,
+        trialEndCard: action.trialEndCard ?? null,
       };
     case "attachmentsSaved": {
       const items = [...state.timeline.items];
@@ -281,6 +290,9 @@ function reducer(state: State, action: Action): State {
       };
   }
 }
+
+/** Exported for the reducer contract tests (test/sdk-required.test.mjs); not a runtime API. */
+export { reducer as chatPanelReducer, initialState as chatPanelInitialState };
 
 export function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -379,7 +391,7 @@ export function App() {
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
         case "streamEnd":   dispatch({ type: "streamEnd" }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retryable: msg.retryable }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, retryable: msg.retryable, trialEndCard: msg.trialEndCard }); break;
         case "actionResult": /* not yet routed to UI */ break;
         case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
@@ -491,6 +503,10 @@ export function App() {
     />
   ) : null;
 
+  // REQ-L12 ⑫ — the trial carry-over offer / read-only trial transcript (host-gated on the Service offer).
+  const carryoverPanel = state.config?.carryover ? (
+    <TrialCarryover view={state.config.carryover} busy={!!state.streamId} onDecide={(decision) => postToHost({ type: "carryoverDecision", decision })} />
+  ) : null;
   const reviewPanel = state.review ? (
     <ReviewPanel
       view={state.review.view}
@@ -570,7 +586,7 @@ export function App() {
           error={state.error}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
-          canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId}
+          canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
           onSend={send}
           onRetry={retry}
           onRetryLast={retryLast}
@@ -598,7 +614,7 @@ export function App() {
         messages={messages}
         pageNotice={state.pageNotice}
         elementPreview={state.elementPreview}
-        verifyPanel={verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
+        verifyPanel={carryoverPanel || verifyPanel || publishPanel || evidencePanel || memoryPanel || skillsPanel || reviewPanel ? <>{carryoverPanel}{verifyPanel}{publishPanel}{evidencePanel}{memoryPanel}{skillsPanel}{reviewPanel}</> : null}
         sendLocked={!!state.verify?.running || !!workspace?.error}
         onRemoveElement={() => {
           dispatch({ type: "elementAttached", element: null });
@@ -621,7 +637,9 @@ export function App() {
         error={state.error}
         errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
-        canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId}
+        trialEndCard={state.trialEndCard}
+        onTrialEndCardPasses={() => postToHost({ type: "trialEndCardPasses" })}
+        canRetryLast={state.errorRetryable && hasLastUserPrompt && !state.streamId && state.errorRetry}
         onSend={send}
         sendPending={sendPending}
         onRetry={retry}

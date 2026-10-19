@@ -11,8 +11,9 @@ import { ModelControl } from './ModelControl';
 import { ChatPreferences } from './ChatPreferences';
 import { ReplyChoices } from './ReplyChoices';
 import { replyChoices } from './replyChoiceParser';
-import { activityLabel, passEnd } from "./activityLabel";
+import { activityDetail, activityLabel, trialHeaderLine } from "./activityLabel";
 import { errorBannerPresentation } from "./errorBannerPresentation";
+import { TrialEndCard } from "./TrialEndCard";
 import {NativeObservationPanel} from './NativeObservationPanel';
 import { MissionHeader } from './MissionHeader';
 import { recordShownBy, recordViewKey, stepViewOnPick, stepViewOnState, taskFlowSeat, type StepViewSettled } from './missionHeaderLogic';
@@ -29,7 +30,9 @@ import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type Impor
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { HeadingSlotContext } from "./headingSlot";
 import type {
   ChatConfig,
   ChatMessage,
@@ -43,6 +46,7 @@ import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
+import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
 import { classroomPanelsShown } from "../../src/classroomPanels";
 import { decideEnter, draftAfterStop, shouldFlushQueue, shouldRestoreQueue } from "./sendQueue";
 import {
@@ -100,6 +104,10 @@ interface Props {
   error: string | null;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;  // #165 — render as clickable runbook link
+  /** TUX-COND-07 — the end-of-trial card for this turn ending; drawn instead of the error banner. */
+  trialEndCard?: import("../../src/protocol").TrialEndCardView | null;
+  /** TUX-COND-07 — the card's Primary. The host opens the start page's pass list; nothing else does. */
+  onTrialEndCardPasses?: () => void;
   canRetryLast: boolean;
   sendPending?: boolean;
   onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
@@ -281,6 +289,10 @@ export function ChatPanel(props: Props) {
   const [discardRequest, setDiscardRequest] = useState<RecoveredRequest | null>(null);
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
+  // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
+  // section opens with focus on it (the #1814 menu shortcut, kept inside the #1763 dialog).
+  const [preferencesUsage, setPreferencesUsage] = useState(false);
+  const openPreferences = (usage: boolean) => { setPreferencesUsage(usage); setPreferencesOpen(true); };
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
@@ -534,14 +546,20 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
+  const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const funding = config?.access;
   const fundingChoice = funding?.view?.choices.find(choice => choice.id === funding.selected);
   const accessNeedsAttention = !!funding && (funding.status === 'unknown' || !!funding.notice ||
     (!!funding.view?.required && !funding.selected) || (!!fundingChoice && (!fundingChoice.available ||
       !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
+  const headingSlot = useContext(HeadingSlotContext);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
+  // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
+  // line sits in the chat header. Text only (CU-13): no button, no offer. A pass is never read as a trial.
+  const trialLine = personalWorkspace && config?.activity && !config.activity.pass ? trialHeaderLine(config.activity.trial, Date.now(), !!config.activity.free) : null;
   const galleryEnabled =
     publishing?.enabled === true && publishing?.strategy === "hypeproof_gallery";
   // #140 / #747 — one identity rule shared with the host (coachIdentity.ts):
@@ -825,7 +843,7 @@ export function ChatPanel(props: Props) {
     return (
       <>
       {config?.activity && <div className="hps-activity-header" aria-label="현재 활동">
-        {activityLabel(config.activity.kind, config.activity.pass)} · {config.activity.name}{passEnd(config.activity.pass) && <> · {passEnd(config.activity.pass)}</>}
+        {activityLabel(config.activity.kind, config.activity.pass, undefined, !!config.activity.free)} · {config.activity.name}{activityDetail(config.activity) && <> · {activityDetail(config.activity)}</>}
         {!config.activity.verified && <p role="status">연결을 확인하지 못했습니다. 저장된 기록을 볼 수 있으며, 다시 연결한 뒤 보낼 수 있습니다.</p>}
       </div>}
       {draftError && <p role="alert">{draftError}</p>}
@@ -958,6 +976,8 @@ export function ChatPanel(props: Props) {
     ux.suggestions.follow_up.length > 0;
   // #414 — if a real activity log showed up this turn, the spinner does not invent fake stages.
   const turnHasActivity = hasActivityThisTurn(messages);
+  // Personal chat offers retry on the latest coach answer only.
+  const latestAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id;
 
   // #642 — if the screen is static for the 1–3 minutes the coach is working, a kid
   // reads it as broken (2026-08-20, real device). The runner bar goes above the
@@ -980,10 +1000,14 @@ export function ChatPanel(props: Props) {
       {dragActive && (
         <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 🖼</div>
       )}
-      <header className="hps-header">
+      {(() => { const header = <header className="hps-header">
         {ux.coach.naming_mode === "fixed"
-          ? <strong title={`이 수업의 AI 이름: ${coachName}`} className="hps-coach-name">{coachName}</strong>
+          // Personal chat: a fixed name is not a control, and the one header row has no room for a
+          // label that names nothing the learner can act on. It stays readable to screen readers.
+          ? <strong title={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
+        {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
+        {trialLine && <span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
@@ -1032,9 +1056,13 @@ export function ChatPanel(props: Props) {
             활동 변경
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
-          <button onClick={personalWorkspace ? () => setPreferencesOpen(true) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
+          {/* Personal chat: usage opens the settings dialog on its usage section (the remaining line
+              already shows the count). */}
+          {personalWorkspace && config?.access && <button onClick={() => openPreferences(true)} title="이용권과 사용량 확인">이용권 · 사용량</button>}
+          <button onClick={personalWorkspace ? () => openPreferences(false) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
         </HeaderActions>
-      </header>
+      </header>;
+      return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
       {!props.instructor && !personalWorkspace && <MissionHeader
@@ -1066,8 +1094,9 @@ export function ChatPanel(props: Props) {
         // step the record holds.
         busy={streaming || awaitingRecord}
         activity={config?.activity ? {
-          label: activityLabel(config.activity.kind, config.activity.pass),
-          ...(passEnd(config.activity.pass) ? { detail: passEnd(config.activity.pass)! } : {}),
+          label: activityLabel(config.activity.kind, config.activity.pass, undefined, !!config.activity.free),
+          // TUX-SP-13 — a pass's end date, or a trial's passive remaining line (text only, no button).
+          ...(activityDetail(config.activity) ? { detail: activityDetail(config.activity)! } : {}),
           name: config.activity.name,
           verified: !!config.activity.verified,
         } : null}
@@ -1211,6 +1240,8 @@ export function ChatPanel(props: Props) {
               onRunCode={props.onRunCode}
               onRetry={props.onRetry}
               personal={personalWorkspace}
+              isLatest={m.id === latestAssistantId}
+              freeSeat={!!config?.activity?.free}
               onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? handleReplyChoice : undefined}
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
             />
@@ -1269,7 +1300,9 @@ export function ChatPanel(props: Props) {
           />
         )}
 
-        {error && (
+        {error && props.trialEndCard && props.onTrialEndCardPasses ? (
+          <TrialEndCard card={props.trialEndCard} onPasses={props.onTrialEndCardPasses} onDismiss={props.onDismissError} />
+        ) : error && (
           <ErrorBanner
             message={error}
             requestId={props.errorRequestId}
@@ -1278,6 +1311,7 @@ export function ChatPanel(props: Props) {
             onRetry={props.onRetryLast}
             onDismiss={props.onDismissError}
             onReport={props.onReportProblem}
+            audience={audience}
           />
         )}
       </div>
@@ -1295,11 +1329,13 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
+        {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
+            settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
         {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
           <EffortControl config={config} post={postToHost} />
           <AccessControl config={config} streaming={streaming} post={postToHost} /></>}
         {personalWorkspace && accessNeedsAttention && <div className="hps-access-attention" role="status">
-          <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => setPreferencesOpen(true)}>이용권 확인</button>
+          <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => openPreferences(true)}>이용권 확인</button>
         </div>}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
@@ -1513,7 +1549,7 @@ export function ChatPanel(props: Props) {
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
+                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             ) : (
               <button
@@ -1523,19 +1559,19 @@ export function ChatPanel(props: Props) {
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}
               >
-                {personalWorkspace ? <ChatIcon kind="send" /> : 'Send'}
+                {personalWorkspace ? <ChatIcon kind="send" /> : '보내기'}
               </button>
             )}
           </div>
         </div>
       </footer>
-      {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => setPreferencesOpen(false)}>
+      {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => { setPreferencesOpen(false); setPreferencesUsage(false); }} initialFocus={preferencesUsage ? '.hps-access > summary' : undefined}>
         <details className="hps-advanced-response"><summary>응답 고급 설정</summary>
           <p>선택한 설정은 다음 요청부터 적용됩니다.</p>
           <ModelControl config={config} streaming={streaming} />
-          <EffortControl config={config} post={postToHost} />
+          <EffortControl config={config} post={postToHost} personal />
         </details>
-        <AccessControl config={config} streaming={streaming} post={postToHost} />
+        <AccessControl key={preferencesUsage ? 'usage' : 'plain'} config={config} streaming={streaming} post={postToHost} defaultOpen={preferencesUsage} />
         {showsObservationResults(config.profile?.observation) && <NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} />}
         <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
       </ChatPreferences>}
@@ -1911,6 +1947,8 @@ function MessageItem({
   onRunCode,
   onRetry,
   personal = false,
+  isLatest = false,
+  freeSeat = false,
   onPickReply,
   onWriteReply,
 }: {
@@ -1929,6 +1967,13 @@ function MessageItem({
   onRunCode: (html: string) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   personal?: boolean;
+  /** Personal chat: retry is offered on the latest coach answer only (the ChatGPT/Claude pattern). */
+  isLatest?: boolean;
+  /**
+   * Personal chat on the free allowance: no retry. A retry is a new turn (REQ-STUDIO-TURN-ID), so
+   * a "refresh-looking" control would silently spend one of the ten free turns.
+   */
+  freeSeat?: boolean;
   onPickReply?: (answer: string) => void;
   onWriteReply?: () => void;
 }) {
@@ -1941,19 +1986,22 @@ function MessageItem({
     !streaming &&
     message.role === "assistant" &&
     ux.retry_button.enabled &&
-    message.content.length > 0;
+    message.content.length > 0 &&
+    (!personal || (isLatest && !freeSeat));
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
     <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`}>
-      <div className="hps-msg-role">
+      <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from
           * before this change, a bubble still streaming) it falls back to the live name.
           * Re-resolving here would make the past change along the moment the name changes.
           */}
-        <span>{personal && message.role === 'assistant' && <span className="hps-assistant-mark" aria-hidden="true">h</span>}{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
-        {renderable && (
+        {/* Personal chat: the speaker is read out, not drawn — the bubble and the column already
+            say who is speaking, and a label on some turns but not others read as inconsistent. */}
+        <span>{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
+        {!personal && renderable && (
           <button
             className="hps-msg-run"
             onClick={() => onRunCode(renderable)}
@@ -1967,9 +2015,8 @@ function MessageItem({
             className="hps-msg-retry"
             onClick={() => onRetry(retryPrompt.content, retryPrompt)}
             title="다른 방식으로 한 번 더 만들기"
-            aria-label={personal ? "답변 다시 만들기" : undefined}
           >
-            {personal ? <ChatIcon kind="retry" /> : '🔄'}
+            🔄
           </button>
         )}
       </div>
@@ -2000,10 +2047,12 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
-      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <div className="hps-message-actions">
-        <CopyAnswer content={message.content} />
-        {retryPrompt && <button type="button" className="hps-msg-retry" title="답변 다시 만들기" aria-label="답변 다시 만들기" onClick={() => onRetry(retryPrompt.content, retryPrompt)}><ChatIcon kind="retry" /></button>}
-      </div>}
+      {/* Merge of #1814 polish and #1763: one ghost row (copy · preview · ask again), retry on the
+          latest answer only and never on a free seat. */}
+      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer
+        content={message.content}
+        onRun={renderable ? () => onRunCode(renderable) : undefined}
+        onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined} />}
     </div>
   );
 }
@@ -2123,14 +2172,14 @@ function AssistantContent({
           // Stream ended with the fence still open → render partial + retry note.
           return (
             <div key={i}>
-              <CodePill code={seg.value} />
+              <CodePill code={seg.value} personal={personal} />
               <div className="hps-stream-note">
-                응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요.
+                {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : "응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요."}
               </div>
             </div>
           );
         }
-        return <CodePill key={i} code={seg.value} />;
+        return <CodePill key={i} code={seg.value} personal={personal} />;
       })}
       {personal && streaming && !hasOpenFence && <ResponsePending hasContent />}
       {!personal && streaming && !hasOpenFence && content.length > 0 && (
@@ -2142,14 +2191,18 @@ function AssistantContent({
   );
 }
 
-function CodePill({ code }: { code: string }) {
+function CodePill({ code, personal = false }: { code: string; personal?: boolean }) {
   const [open, setOpen] = useState(false);
   const lines = code.split("\n").length;
   return (
     <div className="hps-codepill">
-      <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
+      {/* Personal chat: a quiet disclosure in the answer's own type size, with a line icon from the
+          chat's icon set instead of a colour emoji (UI audit P0-2). */}
+      {personal ? <button className="hps-codepill-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <ChatIcon kind="code" size={14} /><span>{open ? "코드 숨기기" : `코드 보기 · ${lines}줄`}</span>
+      </button> : <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
         {open ? "▾" : "▸"} 📄 코드 {open ? "숨기기" : `보기 (${lines}줄)`}
-      </button>
+      </button>}
       {open && <pre className="hps-codepill-body">{code}</pre>}
     </div>
   );
@@ -2198,6 +2251,7 @@ function ErrorBanner({
   onRetry,
   onDismiss,
   onReport,
+  audience = "classroom",
 }: {
   message: string;
   requestId: string | null;
@@ -2206,14 +2260,22 @@ function ErrorBanner({
   onRetry: () => void;
   onDismiss: () => void;
   onReport: () => void;
+  audience?: SeatAudience;
 }) {
   // Spot common transport-layer signals so the framing is honest about the
   // recovery path. We don't try to classify perfectly — just enough to pick
   // between "연결 끊김" (worth retrying) and "토큰/세션 문제" (go to the instructor).
-  const { icon, title } = errorBannerPresentation(message);
+  const { icon, title, tone } = errorBannerPresentation(message);
+  // Free start D4 — a scheduled state (the drained daily cap) is announced politely and offers
+  // only 닫기: there is nothing to report, retry or trace.
+  const notice = tone === "notice";
 
   return (
-    <div className="hps-error-banner" role="alert">
+    <div
+      className={notice ? "hps-error-banner hps-error-banner--notice" : "hps-error-banner"}
+      role={notice ? "status" : "alert"}
+      aria-live={notice ? "polite" : undefined}
+    >
       <div className="hps-error-banner-icon">{icon}</div>
       <div className="hps-error-banner-body">
         <div className="hps-error-banner-title">{title}</div>
@@ -2225,25 +2287,27 @@ function ErrorBanner({
             </a>
           </div>
         )}
-        {requestId && (
-          <div className="hps-error-banner-rid" title="강사에게 이 ID를 알려주세요 — Jay가 바로 추적할 수 있어요">
+        {requestId && !notice && (
+          <div className="hps-error-banner-rid" title={errorIdTitle(audience)}>
             ID: <code>{requestId}</code>
           </div>
         )}
       </div>
       <div className="hps-error-banner-actions">
-        {canRetry && (
+        {canRetry && !notice && (
           <button className="hps-error-banner-retry" onClick={onRetry}>
             다시 보내기
           </button>
         )}
-        <button
-          className="hps-error-banner-report"
-          onClick={onReport}
-          title="이 문제를 Jay에게 신고합니다 (request_id 등 메타데이터 자동 첨부) — #64"
-        >
-          🚨 신고하기
-        </button>
+        {!notice && (
+          <button
+            className="hps-error-banner-report"
+            onClick={onReport}
+            title={reportButtonTitle(audience)}
+          >
+            🚨 신고하기
+          </button>
+        )}
         <button
           className="hps-error-banner-dismiss"
           onClick={onDismiss}

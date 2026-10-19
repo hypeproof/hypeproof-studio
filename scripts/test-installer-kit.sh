@@ -220,7 +220,7 @@ else printf '%s\n' "$out"; bad "kit install failed"; fi
 if [ -f "$APPS/HypeProof Studio.app/Contents/Info.plist" ]; then pass "app copied from the kit archive"
 else bad "app was not installed"; fi
 
-for line in 'class kit verified: Studio 9.9.9' "SDK version the installed app loads: ${SDK_VERSION}" 'Already seeded and verified' 'SDK seeded (canonical seeder)' 'doctor: all manifest checks passed'; do
+for line in 'class kit verified: Studio 9.9.9' "SDK version the installed app loads: ${SDK_VERSION}" 'Already seeded and verified' 'SDK seeded (canonical seeder)' '점검(doctor): 모든 항목 통과'; do
   if printf '%s' "$out" | grep -q -F "$line"; then pass "output has: $line"
   else bad "output lacks: $line"; fi
 done

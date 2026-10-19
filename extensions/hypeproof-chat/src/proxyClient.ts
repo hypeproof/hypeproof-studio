@@ -3,6 +3,7 @@ import type { AssetScoreChunk, ChatMessage, Citation, ResolvedProfile } from "./
 
 import {
   buildProxyHeaders,
+  clientTurnIdHeader,
   observationHeaders,
   classifyProfileFailure,
   friendlyTransportMessage,
@@ -15,6 +16,8 @@ import {
   type ProxyStreamUsage,
 } from "./proxyClientHelpers.ts";
 import { ORCHESTRATOR_FORMAT } from "./sdkCoachHelpers.ts";
+import { SdkRequiredError, trialRequiresSdkMessage } from "./sdkRequiredHelpers.ts";
+import { transportFailureText, type SeatAudience } from "./seatVocabulary.ts";
 
 /**
  * A5 (orchestrator spec §2.2 condition 4, §2.3, §4.1) — this build's capability declaration on
@@ -188,6 +191,8 @@ interface ProxyChatArgs {
   coachPersonality?: string;
   /** #507 — 지금 떠 있는 라이브 서버 주소(없으면 생략). 워커가 문구를 만든다. */
   previewUrl?: string;
+  /** Trial diagnosis D3 — picks the generic failure card's remedy. Omitted → classroom copy. */
+  audience?: SeatAudience;
 }
 
 // Streaming OpenAI-compatible chat completion call against the HypeProof Proxy.
@@ -231,7 +236,7 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
   const headers = buildProxyHeaders({ token, coachName, coachPersonality, previewUrl });
 
   if (args.effort) headers['x-hps-effort'] = args.effort;
-  if (args.turnId) headers['x-hps-turn-id'] = args.turnId;
+  Object.assign(headers, clientTurnIdHeader(args.turnId));
   if (args.lessonBinding && /^(token:[a-f0-9]{16}|[a-f0-9]{32})$/.test(args.lessonBinding)) headers['x-hps-lesson-binding'] = args.lessonBinding;
   if (args.lessonStep && /^[a-zA-Z0-9_-]{1,64}$/.test(args.lessonStep)) {
     headers['x-hps-lesson-step'] = args.lessonStep;
@@ -253,13 +258,16 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
       authErr.requestId = rid;
       throw authErr;
     }
+    // REQ-M45 — 409 trial_requires_sdk: an SDK-only grant reached the proxy route. Keep the
+    // Service sentence, add the cause and the install remedy, and offer no retry.
+    const sdkRequired = trialRequiresSdkMessage(res.status, text);
+    if (sdkRequired) throw new SdkRequiredError(sdkRequired, rid);
     // #358 — a few non-auth statuses have a specific, friendlier message than
     // the generic card (today: 413 = oversized pasted image). Fall back to the
     // generic copy otherwise. Never dump raw JSON at a 9-10 year old; the
     // request_id is appended so the operator can DM a single string.
     throw new ProxyTransportError(
-      friendlyTransportMessage(res.status) ??
-        "문제가 발생했습니다. 다시 시도하거나 운영 담당자에게 문의해 주세요.",
+      friendlyTransportMessage(res.status) ?? transportFailureText(args.audience ?? "classroom"),
       rid,
     );
   }

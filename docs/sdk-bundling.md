@@ -291,3 +291,56 @@ Deferred to a later W4 slice:
     extension's `@anthropic-ai/claude-agent-sdk` dependency, or forced with
     `REQUIRE_SDK_VENDOR=1` (see `.claude/rules/build-pipeline.md`). Still TODO:
     an actual SDK-turn smoke on the packaged app.
+
+## 9. Public native seed on the release (studio-public-sdk-seed, 2026-10-19)
+
+The public zips vendor the SDK JS but no native binary, and a public-zip user
+has no installer to seed one. Each release therefore carries, beside the zips:
+
+- `claude-agent-sdk-<platform>-<version>.tgz` for every App platform
+  (`darwin-arm64`, `win32-x64`) — the unmodified npm tarball, so
+  `seed-sdk-binary.sh --tarball` still verifies it against the pinned sha512;
+- `<that name>.sha256` in `sha256sum` format;
+- `sdk-seed.json` (`hps-sdk-seed/1`: version, per-platform name, size, sha256,
+  npm SRI) for a future in-app or Lab fetcher.
+
+`verify-unified-release.yml` reads the SDK version both shipped zips vendor,
+requires it to equal the tag's `SDK_BINARY_VERSION`, stages the tarballs with
+`seed-sdk-binary.sh --download-only`, writes and checks the manifest
+(`scripts/release/sdk-seed-assets.mjs`), uploads them while the release is still a
+draft and asserts the release asset list before publishing. `mirror-release.yml`
+re-checks the bytes when a release carries `sdk-seed.json`. `verify-branding.sh`
+still fails a bundle that carries a native package, and now also one that carries
+a seed tarball. Fetching the seed in the App is a separate, default-off change
+(studio-sdk-seed-on-demand).
+
+## 10. Fetching the seed in the App (studio-sdk-seed-on-demand, REQ-M46)
+
+Default off: `hypeproofChat.sdkSeedOnDemand` (machine scope, restricted in
+untrusted workspaces), or a profile that advertises `sdk_seed: { fetch: true }`.
+The Service sends that field to native trial and pass seats only, and only when
+`HPS_SDK_SEED_OFFER=enabled` (hypeproof-service, default off) — a trial user
+cannot reach a machine-scoped setting, so the Service switch is how a raw-zip
+trial install gets the offer. Either switch opens only the offer: the user
+still confirms and the seed is still verified. When it is on and `resolveSdkBinary` finds nothing
+before an agent-sdk turn, the host asks once per session in a modal. On
+confirmation `fetchSdkSeed` (`src/sdkSeedFetch.ts`) reads `sdk-seed.json` from
+the public release of the App's own tag (`v<extension version>`), downloads the
+platform tarball and installs it only when:
+
+- the manifest schema, SDK version, asset name and size are as expected;
+- the byte count equals the listed size (the download stops as soon as it is
+  exceeded), the sha256 equals the release value, and the sha512 equals the
+  value pinned in `sdkBinaryManifest.ts` — so the release origin carries no
+  trust of its own;
+- `package/claude[.exe]` is a regular file in the tarball and at least
+  `SDK_BINARY_MIN_BYTES`.
+
+The binary is renamed into `seededSdkBinaryPath` first and the `.verified.json`
+marker (`seededBy: studio-sdk-seed-on-demand`) is written last, so an
+interrupted install never looks trusted. Any refusal leaves no binary, marker
+or temp file, and the turn goes on as it did before. Judges are pure in
+`src/sdkSeedHelpers.ts` (including a streaming tar reader, so the ~250 MB
+binary is never buffered); `test/sdk-seed-fetch.smoke.mjs` runs them against a
+local fixture server. A real run needs a clean account: dev machines are
+already seeded.

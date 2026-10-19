@@ -17,7 +17,14 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import * as cp from "child_process";
-import { downloadVerifiedUpdate, fetchLatestRelease, trustedUpdateUrl } from "./updateTransport";
+import {
+  downloadVerifiedUpdate,
+  fetchLatestUpdateRelease,
+  isUpdateAccessError,
+  isUpdateDeferredError,
+  trustedUpdateUrl,
+  type ReleaseFetchOptions,
+} from "./updateTransport";
 import {
   compareVersions,
   isUpdateVersion,
@@ -30,7 +37,14 @@ import {
   pickDarwinAsset,
   pickWindowsInstaller,
   renderWindowsUpdateWrapper,
+  shouldShowAccessNotice,
   MIN_FREE_DISK_BYTES,
+  UPDATE_ACCESS_MANUAL_COPY,
+  UPDATE_ACCESS_NOTICE_KEY,
+  UPDATE_ACCESS_PASSIVE_COPY,
+  UPDATE_DEFERRED_MANUAL_COPY,
+  UPDATE_DOWNLOAD_URL,
+  UPDATE_OPEN_HOMEPAGE_LABEL,
   type AssetPicker,
   type GhRelease,
   type UpdateInfo,
@@ -41,11 +55,37 @@ const CHECK_INTERVAL_MS = 24 * 3600 * 1000;
 const INITIAL_DELAY_MS = 30 * 1000;
 const DISMISSAL_KEY = "hypeproofChat.updateDismissals";
 
+// D19: a Studio without member access reads the public release the Lab download
+// serves. On when the machine setting `hypeproofChat.publicUpdates` is true, or when
+// a registered signal (the Service's free-start offer) says so. Off by default.
+const PUBLIC_UPDATES_SETTING = "publicUpdates";
+let publicUpdateSignal: (() => boolean) | null = null;
+
+/** Register the free-start signal that turns public updates on (null clears it). */
+export function registerPublicUpdateSignal(signal: (() => boolean) | null): void {
+  publicUpdateSignal = signal;
+}
+
+/** Whether non-member update checks read the public release. Read at each check. */
+export function publicUpdatesEnabled(): boolean {
+  try {
+    if (publicUpdateSignal?.() === true) return true;
+  } catch { /* a failing signal means "not advertised" */ }
+  try {
+    return vscode.workspace?.getConfiguration?.("hypeproofChat")?.get<boolean>(PUBLIC_UPDATES_SETTING, false) === true;
+  } catch { return false; }
+}
+
 /**
  * Read the private organization release API using the member’s GitHub login.
  * The 24h cadence + 1 strructor per user means we're nowhere near the limit.
+ * Without member access and with public updates on, read the public release
+ * anonymously instead (D19); the cadence is unchanged.
  */
-export async function checkForUpdates(currentVersion: string): Promise<UpdateInfo> {
+export async function checkForUpdates(
+  currentVersion: string,
+  options: ReleaseFetchOptions = { publicUpdates: publicUpdatesEnabled() },
+): Promise<UpdateInfo> {
   // The updater ships per-platform paths (#447): macOS swaps the .app bundle
   // via a bash installer; Windows runs the Inno Setup .exe. Each platform
   // selects its own release asset. Any other platform (Linux) has no updater
@@ -54,7 +94,8 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateInf
   const pickAsset = assetPickerForPlatform();
   if (!pickAsset) throw new Error("이 플랫폼은 앱 내 업데이트를 지원하지 않습니다.");
   if (!isUpdateVersion(currentVersion)) throw new Error("현재 앱 버전을 확인할 수 없습니다.");
-  const release = await fetchLatestRelease() as GhRelease;
+  const { release: fetched, source } = await fetchLatestUpdateRelease(options);
+  const release = fetched as GhRelease;
   if (!release || !isUpdateVersion(release.tag_name) || !Array.isArray(release.assets)) {
     throw new Error("업데이트 서버의 응답을 확인할 수 없습니다.");
   }
@@ -62,10 +103,12 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateInf
   if (compareVersions(release.tag_name, currentVersion) > 0 && !info.available && !release.prerelease && !release.draft) {
     throw new Error("이 플랫폼의 새 설치 파일이 아직 준비되지 않았습니다.");
   }
-  if (info.available && (!trustedUpdateUrl(info.downloadUrl) || !/^sha256:[a-f0-9]{64}$/i.test(info.digest ?? ""))) {
+  // The asset must belong to the repository the release was read from: a public
+  // release never points the download at the private mirror, and vice versa.
+  if (info.available && (!trustedUpdateUrl(info.downloadUrl, source) || !/^sha256:[a-f0-9]{64}$/i.test(info.digest ?? ""))) {
     throw new Error("새 설치 파일의 출처 또는 검증 정보를 확인할 수 없습니다.");
   }
-  return info;
+  return { ...info, source };
 }
 
 /** The release-asset picker for the running OS, or null if we have no updater. */
@@ -431,6 +474,11 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
       info = await checkForUpdates(deps.currentVersion);
     } catch (error) {
       console.warn(`[hypeproof-chat/update] check failed: ${(error as Error).message}`);
+      // No release access is permanent, not transient: say once per app
+      // version where new builds come from instead of failing silently
+      // (REQ-I14). Transient failures stay silent (REQ-I11), and so does a
+      // rate-limited anonymous public check (D19): the next 24h check retries.
+      if (!disposed && isUpdateAccessError(error)) await noticeHomepageUpdateOnce(deps);
       return; // A failed check must not erase a previously confirmed update.
     }
     if (disposed) return;
@@ -461,6 +509,57 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
       timer = null;
     },
   };
+}
+
+async function noticeHomepageUpdateOnce(deps: SchedulerDeps): Promise<void> {
+  const last = deps.context.globalState.get<string>(UPDATE_ACCESS_NOTICE_KEY);
+  if (!shouldShowAccessNotice(last, deps.currentVersion)) return;
+  await deps.context.globalState.update(UPDATE_ACCESS_NOTICE_KEY, deps.currentVersion);
+  // Non-modal and not awaited: a passive line, never a blocking dialog.
+  void offerHomepage(UPDATE_ACCESS_PASSIVE_COPY);
+}
+
+async function offerHomepage(text: string): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(text, UPDATE_OPEN_HOMEPAGE_LABEL);
+  if (choice === UPDATE_OPEN_HOMEPAGE_LABEL) {
+    await vscode.env.openExternal(vscode.Uri.parse(UPDATE_DOWNLOAD_URL));
+  }
+}
+
+/**
+ * Copy for a failed manual check (command palette). Without release access the
+ * answer is the homepage download — no developer instruction and no "try again
+ * later" (REQ-I14). Other failures keep the retry copy.
+ */
+export async function reportManualUpdateCheckFailure(error: unknown): Promise<void> {
+  if (isUpdateAccessError(error)) {
+    await offerHomepage(UPDATE_ACCESS_MANUAL_COPY);
+    return;
+  }
+  // D19: the anonymous public check is rate limited. Calm info line, no warning.
+  if (isUpdateDeferredError(error)) {
+    await vscode.window.showInformationMessage(UPDATE_DEFERRED_MANUAL_COPY);
+    return;
+  }
+  await vscode.window.showWarningMessage(
+    `업데이트를 확인하지 못했습니다. 잠시 후 다시 시도해주세요. ${(error as Error)?.message ?? ""}`,
+  );
+}
+
+/**
+ * Copy for a failed install (banner button). A re-check without release access, or a
+ * rate-limited anonymous re-check, gets the same calm copy as a manual check instead
+ * of an error that appends the internal English detail. Other failures keep the
+ * error line: the update did not complete and the app keeps running.
+ */
+export async function reportInstallUpdateFailure(error: unknown): Promise<void> {
+  if (isUpdateAccessError(error) || isUpdateDeferredError(error)) {
+    await reportManualUpdateCheckFailure(error);
+    return;
+  }
+  await vscode.window.showErrorMessage(
+    `업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. ${(error as Error)?.message ?? ""}`,
+  );
 }
 
 export async function dismissVersion(

@@ -1,6 +1,9 @@
 import type { ChatConfig, CourseEffort, EffortRequestRecord, ResolvedProfile, WebviewMessage } from '../../src/protocol';
 
 const labels: Record<CourseEffort,string> = {low:'Low',medium:'Medium',high:'High'};
+/** Personal chat: the same levels in the learner's language (Jay 2026-10-19: "Effort" in a Korean UI). */
+export const PERSONAL_EFFORT_LABEL = '생각 깊이';
+const personalLabels: Record<CourseEffort,string> = {low:'가볍게',medium:'보통',high:'깊게'};
 
 // ADR 0011 (orchestrator spec §5.2, AE-27) — on an orchestrator seat the Service records which
 // agent sent each request, and each row names it before the model: `검토 도우미 · Claude Haiku
@@ -45,20 +48,21 @@ export function requestModelLabel(r: EffortRequestRecord, profile: ResolvedProfi
     ?? r.model;
 }
 
-export function EffortControl({config,post}:{config:ChatConfig;post:(m:WebviewMessage)=>void}) {
+export function EffortControl({config,post,personal=false}:{config:ChatConfig;post:(m:WebviewMessage)=>void;personal?:boolean}) {
   const policy = config.effort;
   const result = config.effortResult;
+  const shown = personal ? personalLabels : labels;
   return <div className="hps-effort">
-    {policy && <label>Effort <select aria-label="Effort" value={policy.value} disabled={policy.allowed.length===1}
+    {policy && <label>{personal ? `${PERSONAL_EFFORT_LABEL} ` : 'Effort '}<select aria-label={personal ? PERSONAL_EFFORT_LABEL : 'Effort'} value={policy.value} disabled={policy.allowed.length===1}
       onChange={e=>post({type:'selectEffort',value:e.target.value as CourseEffort})}
       onKeyDown={e=>{
         if(e.altKey||e.ctrlKey||e.metaKey||!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;
         const current=policy.allowed.indexOf(policy.value);
         const next=e.key==='Home'?0:e.key==='End'?policy.allowed.length-1:Math.max(0,Math.min(policy.allowed.length-1,current+(e.key==='ArrowDown'?1:-1)));
         e.preventDefault();e.stopPropagation();post({type:'selectEffort',value:policy.allowed[next]});
-      }}>{policy.allowed.map(v=><option key={v} value={v}>{labels[v]}</option>)}</select></label>}
+      }}>{policy.allowed.map(v=><option key={v} value={v}>{shown[v]}</option>)}</select></label>}
     {config.effortNotice && <small role="status">{config.effortNotice}</small>}
-    {(policy||result) && <details><summary>Effort 설정 확인</summary>
+    {(policy||result) && <details><summary>{personal ? '적용 기록' : 'Effort 설정 확인'}</summary>
       {policy && <p>{policy.allowed.length===1?'강사가 정한 처리 수준입니다.':'수업에서 허용한 범위 안에서 다음 요청부터 바뀝니다.'} 모델마다 속도와 사용량이 다릅니다.</p>}
       {result?.state==='loading' && <p>이번 요청의 적용 기록을 확인 중입니다.</p>}
       {result?.state==='unknown' && <p>적용 기록 미확인 — 기록이 늦거나 연결되지 않았을 수 있습니다.</p>}
@@ -69,7 +73,7 @@ export function EffortControl({config,post}:{config:ChatConfig;post:(m:WebviewMe
           // no_receipt: no effort was recorded for this request, so no level is claimed either way.
           // unknown: a reason this build cannot word; only that part is marked.
           return <li key={r.request_id} data-agent={who?r.agent||undefined:undefined}>
-            {who?`${who} · `:null}{requestModelLabel(r,config.profile)}: {r.reason==='no_receipt'?'처리 수준 기록 없음':<>요청 {r.requested?labels[r.requested]:'수업 기본값'} → 적용 {r.applied?labels[r.applied]:'처리 수준 미지원'}</>}
+            {who?`${who} · `:null}{requestModelLabel(r,config.profile)}: {r.reason==='no_receipt'?'처리 수준 기록 없음':<>요청 {r.requested?shown[r.requested]:'수업 기본값'} → 적용 {r.applied?shown[r.applied]:'처리 수준 미지원'}</>}
             {r.reason==='course_default'?' · 수업 기본값':''}{r.reason==='unknown'?' · 적용 이유 미확인':''}{r.status>=400?' · 요청 실패':''}
           </li>;
         })}</ul>

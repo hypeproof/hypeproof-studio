@@ -13,6 +13,7 @@
 // Type-only import — erased at build/strip time, so this file stays a leaf
 // module that Node can run standalone in the smoke tests.
 import { stallNotice } from "./coachIdentity.ts";
+import { rateLimitStallText, TRANSPORT_FAILURE_SOLO, type SeatAudience } from "./seatVocabulary.ts";
 import type {
   AgentDefinition,
   HookCallback,
@@ -40,6 +41,7 @@ import {
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
+import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./clientTurnId.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";
@@ -1177,7 +1179,9 @@ export function buildSdkGatewayEnv(
     custom.push(`x-hps-lesson-step: ${args.lessonStep}`);
     if (args.helpMode && /^[a-z_]{1,32}$/.test(args.helpMode)) custom.push(`x-hps-help-mode: ${args.helpMode}`);
   }
-  if (args.turnId && /^[a-zA-Z0-9_-]{1,128}$/.test(args.turnId)) custom.push(`x-hps-turn-id: ${args.turnId}`);
+  // REQ-STUDIO-TURN-ID — ANTHROPIC_CUSTOM_HEADERS is fixed for the CLI process, i.e. for
+  // the turn, so every request the CLI makes for this user message carries the same id.
+  if (validClientTurnId(args.turnId)) custom.push(`${CLIENT_TURN_ID_HEADER}: ${args.turnId}`);
   if (args.workspace?.trim()) {
     custom.push(`x-hps-workspace: ${encodeURIComponent(args.workspace.trim())}`);
   }
@@ -1612,15 +1616,22 @@ export interface SdkBusyPolicy {
 }
 
 /**
- * The busy policy for this seat: only an orchestrator seat gets one (spec
- * §13.2 row A2). Undefined elsewhere, so consumeSdkStream behaves exactly as
- * before.
+ * The busy policy for this seat. Two kinds of seat get one:
+ * - an orchestrator seat (spec §13.2 row A2);
+ * - a native-trial seat (`activity_kind: "trial"`, which a bought pass also is;
+ *   REQ-STUDIO-TRIAL-BUSY). The Service holds one lease per trial grant and
+ *   refuses an overlapping request with `429 trial_busy` and no
+ *   `x-should-retry`, so the CLI retried it 11 times over 186 s and then showed
+ *   its raw "API Error: Request rejected (429)" line (observed 2026-10-18).
+ *   The trial profile serves `orchestrator.enabled: false`, so the A2 gate alone
+ *   never reached it.
+ * Undefined elsewhere, so consumeSdkStream behaves exactly as before.
  */
 export function sdkBusyPolicyFor(
-  agent: Pick<AgentCoachOptions, "orchestrator">,
+  agent: Pick<AgentCoachOptions, "orchestrator"> & { activityKind?: string | null },
   onNotice: (text: string) => void,
 ): SdkBusyPolicy | undefined {
-  return agent.orchestrator ? { onNotice } : undefined;
+  return agent.orchestrator || agent.activityKind === "trial" ? { onNotice } : undefined;
 }
 
 /**
@@ -2103,6 +2114,92 @@ export function sdkTerminalFailure(msg: Record<string, unknown>, standingRetrySt
   return { failed: true, subtype: /^[a-z_]{1,40}$/.test(subtype) ? subtype : "unknown", ...(status !== undefined ? { status } : {}) };
 }
 
+// ── REQ-M44 — the CLI's own API-error line is not the coach speaking ──────────
+//
+// When the gateway refuses a request (the Service's 401/403/409/429, a provider 5xx), the CLI prints the refusal
+// as an assistant message of its own: `error` set and/or the `<synthetic>` model, text such as
+// "API Error: Request rejected (429) · <Service sentence>" or "Failed to authenticate. API Error: 403 <sentence>".
+// Then it ends the turn with an `is_error` result and query() throws
+// "Claude Code returned an error result: <the same line>" (recorded 2026-10-18 on SDK 0.3.299,
+// test/fixtures/sdk-gateway-errors.json). Before this, the line went into the coach's bubble AND the banner, so
+// the learner read English plumbing twice and the Service's sentence twice. Now the bubble stays silent and the
+// banner shows the Service's sentence once.
+
+/** The App's generic Korean line for a refusal that carries no sentence a person can read. */
+export const SDK_ERROR_GENERIC_FRIENDLY = "문제가 발생했습니다. 운영 담당자에게 문의해 주세요.";
+/** Shared with the stall watchdog (sdkCoach.ts), so one event reads the same whichever way the turn ended. */
+export const SDK_RATE_LIMIT_FRIENDLY =
+  "요청 한도에 도달해 응답을 받지 못했습니다. 잠시 후 다시 시도하거나 강사에게 체험 한도를 확인해 주세요. (429)";
+export const sdkProviderErrorFriendly = (status: number): string =>
+  `AI 서비스 오류로 응답을 받지 못했습니다. 작업 파일은 보존돼 있습니다. (${status})`;
+
+/** Text the CLI produces itself (not the model) when a request or the process fails. */
+const SDK_CLI_ERROR_TEXT = /Claude Code returned an error result|Claude Code process (?:exited|terminated)|API Error:|Failed to authenticate/;
+
+/** The text of a CLI-generated API-error assistant message, or null for anything the model said. */
+export function sdkCliErrorLine(msg: Record<string, unknown>): string | null {
+  if (msg["type"] !== "assistant") return null;
+  const synthetic = (msg["message"] as { model?: unknown } | undefined)?.model === "<synthetic>";
+  if (msg["error"] === undefined && !synthetic) return null;
+  const text = extractSdkText(msg);
+  // `<synthetic>` alone also carries non-error lines ("No response requested."); only an error line is hidden.
+  if (msg["error"] === undefined && !/API Error:|Failed to authenticate/.test(text)) return null;
+  return text;
+}
+
+/** The HTTP status an "API Error: …" line names, if it names one. */
+export function sdkCliErrorStatus(text: string): number | undefined {
+  const m = /API Error:\s*(?:Request rejected\s*)?\(?(\d{3})\)?/.exec(text);
+  return m ? Number(m[1]) : undefined;
+}
+
+/** The human sentence inside a CLI error text (the Service's Korean message), or "" when there is none. */
+export function sdkServiceSentence(text: string): string {
+  let rest = text.trim();
+  for (let i = 0; i < 6; i++) {
+    const before = rest;
+    rest = rest
+      .replace(/^Claude Code returned an error result:\s*/, "")
+      .replace(/^Failed to authenticate\.?\s*/, "")
+      .replace(/^API Error:\s*(?:Request rejected\s*)?(?:\(\d{3}\)|\d{3})?\s*[·:-]?\s*/, "")
+      .trim();
+    if (rest === before) break;
+  }
+  // A body the CLI did not unwrap: take the Service's own message field.
+  if (rest.startsWith("{")) {
+    try {
+      const body = JSON.parse(rest) as { error?: { message?: unknown } | string; message?: unknown };
+      const inner = typeof body.error === "object" && body.error ? body.error.message : body.message;
+      rest = typeof inner === "string" ? inner : "";
+    } catch {
+      rest = "";
+    }
+  }
+  // The [hps:<code>] tag is for bindingRefusalCode, never for the learner; "(status 500)" is plumbing.
+  rest = rest.replace(/\s*\[hps:[a-z_]+\]/g, "").replace(/\s*\(status \d{3}\)\.?/g, "").trim();
+  return /[가-힣]/.test(rest) ? rest : "";
+}
+
+/**
+ * The banner text for a failed turn (handleSendError's generic branch). The App's own errors are already Korean
+ * and pass through unchanged; a CLI/SDK error text becomes the Service's sentence, else a Korean line by status.
+ */
+export function sdkErrorDisplayText(err: unknown, audience: SeatAudience = "classroom"): string {
+  // Trial diagnosis D3 (REQ-L14): a solo seat has no staff or instructor to ask, so its fallback lines drop them.
+  const generic = audience === "solo" ? TRANSPORT_FAILURE_SOLO : SDK_ERROR_GENERIC_FRIENDLY;
+  if (!(err instanceof Error)) return generic;
+  const line = (err as { sdkErrorLine?: unknown }).sdkErrorLine;
+  const own = typeof line === "string" ? line : "";
+  if (!SDK_CLI_ERROR_TEXT.test(err.message) && !own) return err.message;
+  const sentence = sdkServiceSentence(err.message) || sdkServiceSentence(own);
+  if (sentence) return sentence;
+  const s = (err as { status?: unknown }).status;
+  const status = typeof s === "number" ? s : sdkCliErrorStatus(own) ?? sdkCliErrorStatus(err.message);
+  if (status === 429) return audience === "solo" ? rateLimitStallText("solo") : SDK_RATE_LIMIT_FRIENDLY;
+  if (status !== undefined && status >= 500) return sdkProviderErrorFriendly(status);
+  return generic;
+}
+
 export async function consumeSdkStream(
   stream: AsyncIterable<unknown>,
   h: SdkStreamHandlers,
@@ -2114,6 +2211,14 @@ export async function consumeSdkStream(
   let progressAt = Date.now();
   let lastRetryStatus: number | undefined;
   let end: SdkTurnEnd = { failed: false };
+  /** REQ-M44 — the CLI's API-error line still standing (no model answer after it). Never shown in the bubble. */
+  let cliError: string | undefined;
+  /** The refusal as the real SDK throws it, so passSpentNotice / bindingRefusalCode / the spool read the same. */
+  const cliRefusal = (text: string, status: number | undefined): Error => {
+    const err = new Error(`Claude Code returned an error result: ${text}`);
+    if (status !== undefined) Object.defineProperty(err, "status", { value: status, enumerable: false });
+    return err;
+  };
   /**
    * The blocked state is only sampled when the budget expires, so a modal that
    * closes mid-window would otherwise leave the coach ~0ms to answer. One grace
@@ -2192,7 +2297,11 @@ export async function consumeSdkStream(
   try {
     for (;;) {
       const step = await nextEvent();
-      if (step.done) return end;
+      if (step.done) {
+        // The CLI refused and the stream just ended: the refusal is the turn's end, not silence.
+        if (cliError !== undefined) throw cliRefusal(cliError, (end.failed ? end.status : undefined) ?? lastRetryStatus ?? sdkCliErrorStatus(cliError));
+        return end;
+      }
       // Check BEFORE emitting so a chunk isn't flushed to the webview after stop.
       if (h.isAborted()) throw h.makeAbortError();
       const msg = (step.value ?? {}) as Record<string, unknown>;
@@ -2222,6 +2331,8 @@ export async function consumeSdkStream(
         // …and ends a busy episode: the next rush counts from zero again.
         busyRetries = 0;
         busySince = undefined;
+        // …and answers an earlier CLI error line too.
+        cliError = undefined;
       }
       const fatal = sdkFatalAuthStatus(msg);
       if (fatal !== null) {
@@ -2265,7 +2376,10 @@ export async function consumeSdkStream(
         if (usage) h.onUsage(usage);
       }
       const type = String(msg["type"] ?? "");
-      if (type === "assistant" || type === "text" || type === "content_block_delta") {
+      const cliLine = sdkCliErrorLine(msg);
+      // REQ-M44 — the CLI's API-error line is plumbing, not the coach: keep it for the banner, out of the bubble.
+      if (cliLine !== null) cliError = cliLine;
+      else if (type === "assistant" || type === "text" || type === "content_block_delta") {
         const delta = extractSdkText(msg);
         if (delta) h.onDelta(delta);
       }
@@ -2277,6 +2391,9 @@ export async function consumeSdkStream(
       // 대신 폴백으로 떨어진다.
       const failure = sdkTerminalFailure(msg, lastRetryStatus);
       if (failure) end = failure;
+      // REQ-M44 — a turn the gateway refused ends in the banner with the Service's sentence, once. The generic
+      // REQ-M39 notice ("다시 한 번 부탁하거나…") would only add a second, futile message to the bubble.
+      if (failure && cliError !== undefined) throw cliRefusal(cliError, failure.status ?? sdkCliErrorStatus(cliError));
       const notice = sdkResultNotice(msg);
       if (notice) {
         console.warn(`[coach] SDK 종료 오류 subtype=${String(msg["subtype"] ?? "(none)")}`);
@@ -2294,6 +2411,11 @@ export async function consumeSdkStream(
     const standing = end.failed ? end.status ?? lastRetryStatus : lastRetryStatus;
     if (standing !== undefined && err instanceof Error && (err as { status?: unknown }).status === undefined) {
       try { Object.defineProperty(err, "status", { value: standing, enumerable: false }); } catch { /* a frozen error stays unclassified */ }
+    }
+    // REQ-M44 — the SDK threw on its own ("Claude Code process exited with code 1") after a CLI error line: carry
+    // that line so the banner can still show the Service's sentence instead of the process message.
+    if (cliError !== undefined && err instanceof Error && (err as { sdkErrorLine?: unknown }).sdkErrorLine === undefined) {
+      try { Object.defineProperty(err, "sdkErrorLine", { value: cliError, enumerable: false }); } catch { /* frozen: the generic line */ }
     }
     throw err;
   }

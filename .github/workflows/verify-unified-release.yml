@@ -232,6 +232,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: node scripts/release/publish-gate.mjs --tag "$TAG"
+      # studio-public-sdk-seed (US-01). The zips vendor the Agent SDK JS but never
+      # the native `claude` binary, and verify-branding.sh keeps it that way. A
+      # public-zip user has no installer to seed it, so the release carries the
+      # unmodified npm tarball for each App platform, a sha256 file beside it and
+      # sdk-seed.json. Attached while still a draft: a public release never
+      # appears without its seed, and a failure here leaves the draft unpublished.
+      - name: Attach the public native SDK seed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          meta="$RUNNER_TEMP/sdk-meta" seed="$RUNNER_TEMP/sdk-seed"
+          mkdir -p "$meta"
+          vendored='extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json'
+          win_zips=(dist/HypeProof.Studio-win32-x64-*.zip)
+          [[ ${#win_zips[@]} -eq 1 && -f "${win_zips[0]}" ]] || { echo "::error::expected one Windows zip in the release"; exit 1; }
+          unzip -p dist/HypeProof-Studio-darwin-arm64.zip "HypeProof Studio.app/Contents/Resources/app/$vendored" > "$meta/darwin.json"
+          unzip -p "${win_zips[0]}" "resources/app/$vendored" > "$meta/win32.json"
+          # The version the shipped Apps vendor, not the one main pins today.
+          version="$(node scripts/release/sdk-seed-assets.mjs app-version "$meta/darwin.json" "$meta/win32.json")"
+          pinned="$(git show "$TAG:extensions/hypeproof-chat/src/sdkBinaryManifest.ts" | sed -n 's/^export const SDK_BINARY_VERSION = "\([0-9.]*\)";.*/\1/p')"
+          [[ "$version" == "$pinned" ]] || { echo "::error::Apps vendor Agent SDK $version but $TAG pins SDK_BINARY_VERSION=$pinned"; exit 1; }
+          # --version: the pinned sha512 when main pins the same version, npm's
+          # dist.integrity otherwise. Either way the bytes are npm's.
+          for platform in darwin-arm64 win32-x64; do
+            bash scripts/seed-sdk-binary.sh --platform "$platform" --version "$version" --download-only "$seed"
+          done
+          node scripts/release/sdk-seed-assets.mjs manifest "$seed" "$version"
+          gh release upload "$TAG" "$seed"/* --clobber
+          gh release view "$TAG" --json assets | node scripts/release/sdk-seed-assets.mjs list "$version"
       - name: Publish and dispatch the public mirror
         env:
           GH_TOKEN: ${{ github.token }}

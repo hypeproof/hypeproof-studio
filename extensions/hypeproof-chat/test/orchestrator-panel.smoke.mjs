@@ -210,12 +210,14 @@ const OLD_SCREENS = {
 /**
  * Taken on main before A5 with HPS_A5_RECORD_BASE=1: on 21bd15ba, and again on fbde0482 (#1527, the
  * branch's rebase base), where they were identical. Two runs on each gave the same digests.
+ * The four ChatPanel digests were re-taken for trial diagnosis D9 (REQ-L14): the markup differs
+ * from the earlier base only in the send button label, "Send" → "보내기" (diffed with HPS_A5_DUMP_DIR).
  */
 const BASE = {
-  "ChatPanel/adult-plain": "10df95da41ec08638d40440233fc00c6f843bc6bcd35a9c328413b06d442fdb8",
-  "ChatPanel/adult-effort-observed": "2ba790f80c7bdad44fe675b27e2d6973bb318f6e37fc15a40595991726c0dfd4",
-  "ChatPanel/adult-timeline": "48fec8151b904cea8dc4df64d6801771bca33e170bd15545284ca8857d3f0a22",
-  "ChatPanel/kids": "cba8c09433b9aa505124027b568348897a3ae0387a33be438612a0e39c8c7a44",
+  "ChatPanel/adult-plain": "4d39854667e9c13436304c44bb2f492ae3d4524bb32335dce69ea2dc3785bf15",
+  "ChatPanel/adult-effort-observed": "36fdeaec05bdf404a7e2e91c6e0bc69b9bcdbc8445fe015609499dd932ffdd9e",
+  "ChatPanel/adult-timeline": "514c17d61edff25f192deed918928c04590e7bde9bc53bbe086ad330e61e961e",
+  "ChatPanel/kids": "660d0ea5222440bfc887deeaf9efed68474671ea4f9ccdd7eb3fe66191873eba",
   "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
   "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",

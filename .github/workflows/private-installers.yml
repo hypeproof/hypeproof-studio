@@ -8,6 +8,7 @@ on:
       - 'scripts/tests/install-win-fixture.ps1'
       - 'scripts/tests/win-release-set.ps1'
       - 'scripts/tests/install-kit-fixture.ps1'
+      - 'scripts/tests/install-posix-shell.Tests.ps1'
       - '.github/workflows/private-installers.yml'
   push:
     branches: [main]
@@ -18,7 +19,9 @@ on:
       - 'scripts/tests/install-win-fixture.ps1'
       - 'scripts/tests/win-release-set.ps1'
       - 'scripts/tests/install-kit-fixture.ps1'
+      - 'scripts/tests/install-posix-shell.Tests.ps1'
       - '.github/workflows/private-installers.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -58,3 +61,40 @@ jobs:
             if ($scenario -eq 'no-windows' -and $out -notmatch 'has a Windows installer') { throw 'no-windows did not report the missing Windows release' }
           }
           exit 0
+      # PRA-12: Git Bash in any scope counts; the inbox wsl.exe stub does not.
+      # Every path is mocked; nothing is installed.
+      - name: POSIX shell detection (Pester, mocked paths)
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0
+          $r = Invoke-Pester scripts/tests/install-posix-shell.Tests.ps1 -Output Detailed -PassThru
+          if ($r.FailedCount -gt 0 -or $r.PassedCount -eq 0) { throw 'POSIX shell detection tests failed' }
+
+  # PRA-12 field check, manual only: does winget's USER-scope Git.Git land Git
+  # Bash where Find-GitBash looks (%LOCALAPPDATA%\Programs\Git)? The mocked
+  # tests above assume that path; this job is the only thing that observes it.
+  # It installs Git, so it does not run on every pull request.
+  winget-git-user-scope:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Git.Git in user scope and locate Git Bash
+        shell: pwsh
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { throw 'winget is not available on this runner image' }
+          winget install --id Git.Git --exact --source winget --scope user --force --accept-package-agreements --accept-source-agreements --silent --disable-interactivity
+          Write-Host "winget exit: $LASTEXITCODE"
+          $userBash = "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe"
+          Write-Host "user-scope bash.exe present: $(Test-Path -LiteralPath $userBash)"
+          if (-not (Test-Path -LiteralPath $userBash)) {
+            Get-ChildItem "$env:LOCALAPPDATA\Programs" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.FullName)" }
+            throw "winget user scope did not produce $userBash"
+          }
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/install.ps1).Path, [ref]$null, [ref]$null)
+          $ast.EndBlock.Statements | Where-Object { $_ -is [System.Management.Automation.Language.FunctionDefinitionAst] } |
+            Where-Object { $_.Name -in @('Resolve-ToolCommand', 'Get-GitBashCandidates') } |
+            ForEach-Object { . ([scriptblock]::Create($_.Extent.Text)) }
+          $c = @(Get-GitBashCandidates)
+          $c | ForEach-Object { Write-Host "  candidate: $_" }
+          if ($c -notcontains $userBash) { throw 'Get-GitBashCandidates does not include the winget user-scope path' }

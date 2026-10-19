@@ -1,7 +1,9 @@
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
-import { passSpentNotice } from "./passPurchase";
+import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
+import { catalogueWithin, endCardAdvertised, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
 import { decideMode, profileFailureToStatus } from './chalk/modeDecision';
@@ -43,14 +45,20 @@ import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
-import { runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+import { resolveSdkBinaryForHost, runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+import { fetchSdkSeed } from "./sdkSeedFetch";
+import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
+import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
+import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
   isAbortError,
+  sdkErrorDisplayText,
   sdkToolToActionRequest,
+  seededSdkBinaryPath,
   summarizeToolInput,
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
@@ -156,6 +164,7 @@ import {
   profileNotReadyNotice,
   shellApprovalTitle,
 } from "./coachIdentity.ts";
+import { isFreeSeat, profileAudience, type SeatAudience } from "./seatVocabulary.ts";
 // A5 (ADR 0011) — the front-line orchestrator's panel side: the switch, the roster's labels,
 // the seat's session and the host arguments runSdkCoach takes.
 import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs } from "./orchestratorSurfaces";
@@ -199,6 +208,8 @@ import {
   WebviewMessage,
   ActionRequest,
 } from "./protocol";
+import { applyCarryoverDecision, carryoverAdvertised, carryoverState, type CarryoverStores } from "./trialCarryoverHelpers";
+import { carryoverStoresFor, taskWorkspaceRoot, taskWorkspaceScope } from "./trialCarryoverSource";
 import {
   isShowIntent,
   clampHistory,
@@ -217,6 +228,7 @@ import {
   coachRitualDoneKeyForCohort,
   stateBucketId,
   extractCohortIdUnverified,
+  decodeTokenPayloadUnverified,
   browserToolLogLine,
   AiDisclosureGate,
   sdkFallbackLogLine,
@@ -243,6 +255,7 @@ import { sitePublishAllowed, type AccessCheck } from "./publish/publishContract"
 import { nextFreeFolder } from "./publish/githubContinue";
 import type { GithubContinueSource } from "./startPage";
 import { isMinorProfile } from "./sdkCoachHelpers";
+import { FunnelReporter, entryOutcome, funnelOs, funnelProfileStep, funnelToolKind, isTrialGrantToken, parseTrialEventsProbe, trialEventsUrl, usesTraceRoute, type ToolResultKind } from "./funnelEvents";
 import {
   ArtifactChangeGate,
   startHeartbeat,
@@ -445,7 +458,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const activity = activityConnections(this.context)?.current;
     if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
     if (this.taskWorkspace?.activityId === activity.id) return;
-    const store = new TaskWorkspaceStore(path.join(this.context.globalStorageUri.fsPath, 'task-workspaces'), JSON.stringify([activity.id, activity.workspace]));
+    const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
     this.taskWorkspace = { activityId: activity.id, store };
     try {
       await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
@@ -562,6 +575,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private profileGeneration=0;
+  // REQ-M46 — the user declined the seed download this session (asked once,
+  // not every turn), and the one download in flight.
+  private sdkSeedDeclined = false;
+  private sdkSeedInFlight: Promise<void> | null = null;
   // #1298 — instructor-mode state and server calls. Reset in invalidateProfile().
   private _instructorMode = new InstructorModeManager();
   private nativeObservationError: string | null = null;
@@ -1884,6 +1901,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private lastActivityAt = Date.now();
   private heartbeat: HeartbeatPinger | null = null;
+  /**
+   * studio-funnel-events — App funnel events on the Service's grant-scoped POST /v1/trial/events.
+   * Off until a GET probe of that route answers (Service flag HPS_OPEN_TRIAL); never /v1/trace/event.
+   */
+  private readonly funnel = new FunnelReporter({
+    send: async (url, token, body) => {
+      const version = this.context.extension?.packageJSON?.version;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          ...(typeof version === "string" && version ? { "x-hps-client-version": version } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      });
+      return res.status;
+    },
+    log: (line) => this.logChannel?.appendLine(line),
+  });
+  /** The seat token found at the first profile read of this process (entry outcome `reused` vs `granted`). */
+  private funnelStartupToken: string | null | undefined = undefined;
+  /** Free start — the claim's own outcome for the token it issued (a rotated reuse is still "reused"). */
+  private funnelClaimHint: { token: string; outcome: "granted" | "reused" } | null = null;
+  /** The token whose /v1/trial/events probe has run (or is running); null = none. */
+  private funnelProbedToken: string | null = null;
   private readonly artifactGate = new ArtifactChangeGate();
 
   constructor(
@@ -1931,6 +1975,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   getProfileId(): string | undefined {
     return this.cachedProfile?.profile_id;
+  }
+
+  /** Trial diagnosis D3 — solo (trial/pass/personal) or classroom wording for host-side copy. */
+  getSeatAudience(): SeatAudience {
+    return profileAudience(this.cachedProfile);
   }
 
   /** #278 — is "페이지를 코치에게" allowed for this cohort? Default off (minor-safe). */
@@ -2632,6 +2681,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (connections?.current) return r.profile.activity_id !== connections.current.serverId ? null : { ...r.profile, workspace_root: connections.current.workspace };
     return r.profile;
   }
+  /**
+   * TUX-SP-13 — re-read only the trial block after a trial turn so the header's passive line follows the Service (CU-13).
+   * The profile read spends no attempt. Any failure keeps the last confirmed value; the turn's own error says what ended.
+   */
+  private async refreshTrialStatus(proxyUrl: string, token: string): Promise<void> {
+    const r = await fetchProfileResult({ proxyUrl, token }).catch(() => null);
+    const current = this.cachedProfile;
+    if (!r?.ok || !r.profile.trial || r.profile.pass || !current?.trial || current.activity_id !== r.profile.activity_id) return;
+    if (await this.context.secrets.get(TOKEN_KEY) !== token || this.cachedProfile !== current) return;
+    this.cachedProfile = { ...current, trial: r.profile.trial };
+    await this.postConfig();
+  }
   /** Same token, same activity: only what the lesson version decides changes (steps, AI name, model list, tool policy). */
   private async adoptProfile(p: ResolvedProfile, token: string): Promise<void> {
     if (await this.context.secrets.get(TOKEN_KEY) !== token) return;
@@ -2742,8 +2803,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
     const token = await this.context.secrets.get(TOKEN_KEY);
+    if (this.funnelStartupToken === undefined) this.funnelStartupToken = token ?? null;
     if (!token) {
       this.lastProfileFailure = null;
+      // No seat yet (open entry before a grant): funnel events wait in memory.
+      this.funnel.setTarget(undefined);
       return null;
     }
 
@@ -2785,7 +2849,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.nativeHistoryScope=(p?.access_identity?.kind==='account')?p.access_identity.scope:(p?.observation||this.activeCohortId==='studio-native-trial')?'native-'+(p?.observation?.scope??createHash('sha256').update(token).digest('hex')):null;
         // Task E — a resolved profile means we have a usable token; start the
         // chat-independent ping. Failures back off inside the pinger.
-        if(p?.access_identity?.kind!=='account')this.startLiveness();else this.stopLiveness();
+        // studio-funnel-events — a trial grant whose funnel route is on never posts to the
+        // session-only /v1/trace/event; everything else keeps its liveness exactly as before.
+        if(p?.access_identity?.kind!=='account' && usesTraceRoute(this.funnel.active && this.funnelProbedToken===token, decodeTokenPayloadUnverified(token)))this.startLiveness();else this.stopLiveness();
+        void this.refreshFunnelTarget(p, token, proxyUrl);
         await this.migrateLegacyStateForActiveCohort();
         // Apply tone-appropriate labels to the preview panel (#159).
         const labels = labelsForProfile(p);
@@ -2891,6 +2958,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // rejection — status 0 makes the pinger back off and retry rather than
     // stopping for good.
     if (!token) return { ok: false, status: 0 };
+    // studio-funnel-events — the trace route refuses a trial grant (403 session_inactive); do not send.
+    if (!usesTraceRoute(this.funnel.active && this.funnelProbedToken === token, decodeTokenPayloadUnverified(token))) return { ok: false, status: 0 };
     const version = this.context.extension?.packageJSON?.version;
     try {
       const res = await fetch(`${proxyUrl.replace(/\/$/, "")}/trace/event`, {
@@ -2925,6 +2994,58 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.context.subscriptions.push({ dispose: () => this.stopLiveness() });
   }
 
+  /** studio-funnel-events — one App funnel event; validated, whitelisted and fire-and-forget. */
+  funnelEmit(event: unknown): void {
+    this.funnel.emit(event);
+  }
+
+  /** Free start (SPEC iteration 4 §1.5) — `trial_entry` reports the claim's outcome for this token. Memory only. */
+  noteFreeClaim(token: string, outcome: "granted" | "reused"): void {
+    this.funnelClaimHint = { token, outcome };
+  }
+
+  /**
+   * studio-funnel-events — point the reporter at the Service route for this seat.
+   * Not a trial grant → off. A trial grant → GET /v1/trial/events once per token; only a
+   * `hps-trial-funnel/1` answer turns it on (404 while the Service flag is off). A network
+   * failure leaves it "unknown" so the next profile read probes again. A failed profile read keeps
+   * an already-probed token's target (see funnelProfileStep). Never throws.
+   */
+  private async refreshFunnelTarget(p: ResolvedProfile | null, token: string, proxyUrl: string): Promise<void> {
+    try {
+      const payload = decodeTokenPayloadUnverified(token);
+      const step = funnelProfileStep({ profileOk: !!p, trialGrant: isTrialGrantToken(payload), token, probedToken: this.funnelProbedToken });
+      if (step === "keep") return;
+      if (step === "unknown") { this.funnelProbedToken = null; this.funnel.setTarget(undefined); return; }
+      if (step === "off") { this.funnelProbedToken = null; this.funnel.setTarget(null); return; }
+      if (!p) return;
+      this.funnelProbedToken = token;
+      const url = trialEventsUrl(proxyUrl);
+      let probe: ReturnType<typeof parseTrialEventsProbe>;
+      try {
+        const res = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000) });
+        probe = parseTrialEventsProbe(res.status, res.status === 200 ? await res.json().catch(() => null) : null);
+      } catch {
+        this.funnelProbedToken = null;
+        return;
+      }
+      if (await this.context.secrets.get(TOKEN_KEY) !== token) return;
+      if (!probe) { this.funnel.setTarget(null); return; }
+      this.funnel.setTarget({ url, token, events: probe.events });
+      if (p.access_identity?.kind !== 'account') this.stopLiveness();
+      const version = this.context.extension?.packageJSON?.version;
+      this.funnel.emit({
+        type: "trial_entry",
+        outcome: this.funnelClaimHint?.token === token ? this.funnelClaimHint.outcome
+          : entryOutcome({ account: p.access_identity?.kind === 'account' || typeof payload?.personal_account === "string", token, startupToken: this.funnelStartupToken }),
+        app_version: typeof version === "string" ? version : undefined,
+        os: funnelOs(process.platform),
+      });
+    } catch (err) {
+      this.logChannel?.appendLine(`[funnel] target not set: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+  }
+
   stopLiveness(): void {
     const h = this.heartbeat;
     this.heartbeat = null;
@@ -2956,6 +3077,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Developer record of an SdkUnavailableError, verbatim (REQ-M30 ③; REQ-M45 keeps it when no fallback runs). */
+  private logSdkUnavailable(reason: string): void {
+    this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
+    this.logChannel.appendLine(sdkFallbackLogLine(reason, new Date()));
+  }
+
   /**
    * #476 — records the agent-sdk → proxy fallback for **three audiences**.
    *
@@ -2978,8 +3105,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the worker, so it lands with a deploy and needs no app release.
    */
   private noteSdkFallback(reason: string, streamId: string): void {
-    this.logChannel ??= vscode.window.createOutputChannel("HypeProof Coach");
-    this.logChannel.appendLine(sdkFallbackLogLine(reason, new Date()));
+    this.logSdkUnavailable(reason);
 
     // Once per session. The fallback keeps happening on that machine (without the
     // seed the next turn is the same), so attaching it every turn means nobody reads
@@ -2989,7 +3115,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     this.postToolLog(streamId, {
       id: randomId(),
       icon: "⚠️",
-      label: coachDegradedNotice(this.coachDisplayName()),
+      label: coachDegradedNotice(this.coachDisplayName(), profileAudience(this.cachedProfile)),
       state: "error",
     });
   }
@@ -4072,6 +4198,98 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * REQ-M46 (studio-sdk-seed-on-demand) — offer to fetch the public native SDK
+   * seed when no binary resolves. Default off: `hypeproofChat.sdkSeedOnDemand`
+   * or a profile that advertises `sdk_seed: { fetch: true }`. Nothing is
+   * downloaded without the user's confirmation, and a seed is installed only
+   * when its sha256 matches the release and its sha512 the value pinned in this
+   * App (sdkSeedHelpers). Never throws: the turn goes on either way.
+   */
+  private async maybeOfferSdkSeed(profile: unknown, settingPath: string | undefined, signal: AbortSignal): Promise<void> {
+    try {
+      const cfg = vscode.workspace.getConfiguration("hypeproofChat");
+      const enabled = sdkSeedOnDemandEnabled({ setting: cfg.get<boolean>("sdkSeedOnDemand", false), profile });
+      if (!enabled) return;
+      if (this.sdkSeedInFlight) {
+        await this.sdkSeedInFlight;
+        return;
+      }
+      const platformKey = sdkSeedPlatformKey(process.platform, process.arch);
+      const appVersion = String((this.context.extension.packageJSON as { version?: unknown }).version ?? "");
+      const urls = platformKey ? sdkSeedUrls({ appVersion, platformKey }) : null;
+      const decision = sdkSeedOfferDecision({
+        enabled,
+        resolution: resolveSdkBinaryForHost({ settingPath }),
+        platformKey,
+        urls,
+        declined: this.sdkSeedDeclined,
+        inFlight: false,
+      });
+      if (decision !== "offer" || !platformKey) {
+        if (decision === "unsupported-platform" || decision === "no-release") console.warn(`[coach] SDK seed not offered: ${decision}`);
+        return;
+      }
+      const megabytes = Math.round((SDK_BINARY_MANIFEST[platformKey]?.unpackedSize ?? 0) / (1024 * 1024));
+      const download = "내려받기";
+      const choice = await vscode.window.showInformationMessage(
+        "AI 실행 도구를 내려받을까요?",
+        {
+          modal: true,
+          detail:
+            `이 컴퓨터에는 AI 코치가 쓰는 실행 도구가 아직 없습니다. HypeProof Studio 공개 릴리스에서 내려받아 ` +
+            `파일이 맞는지 확인한 뒤 설치합니다. 디스크 공간이 약 ${megabytes} MB 필요합니다.`,
+        },
+        download,
+      );
+      if (choice !== download) {
+        this.sdkSeedDeclined = true;
+        return;
+      }
+      const destBinary = seededSdkBinaryPath({ platform: process.platform, homeDir: os.homedir(), env: process.env });
+      const run = (async () => {
+        const result = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: "AI 실행 도구를 내려받는 중…" },
+          (progress) => {
+            let reported = 0;
+            return fetchSdkSeed({
+              appVersion,
+              platformKey,
+              destBinary,
+              signal,
+              onProgress: (received, total) => {
+                const pct = Math.floor((received / total) * 100);
+                if (pct > reported) {
+                  progress.report({ increment: pct - reported, message: `${pct}%` });
+                  reported = pct;
+                }
+              },
+            });
+          },
+        );
+        if (result.ok) {
+          console.info(`[coach] SDK seed installed at ${result.path} (${result.size} bytes)`);
+          return;
+        }
+        console.warn(`[coach] SDK seed ${result.stage} failed: ${result.reason}`);
+        if (signal.aborted) return;
+        void vscode.window.showWarningMessage(
+          result.stage === "verify"
+            ? "내려받은 파일이 확인값과 달라 설치하지 않았습니다. 다음 메시지를 보낼 때 다시 시도할 수 있습니다."
+            : "AI 실행 도구를 내려받지 못했습니다. 인터넷 연결을 확인하고 다음 메시지를 보낼 때 다시 시도해 주세요.",
+        );
+      })();
+      this.sdkSeedInFlight = run;
+      try {
+        await run;
+      } finally {
+        this.sdkSeedInFlight = null;
+      }
+    } catch (err) {
+      console.warn("[coach] SDK seed offer failed:", err);
+    }
+  }
+
+  /**
    * #457 — the work folder the coach stands in. The opened folder, then the profile's
    * workspace_root. With neither it returns undefined, but it **does not pass over
    * silently**: that state means the coach cannot find files, and with no log the
@@ -4362,6 +4580,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case 'refreshAccess':
         await this.loadAccess(true);await this.postConfig();return;
+      case 'carryoverDecision':
+        await this.decideCarryover(msg.decision);
+        return;
       case 'selectFunding':
         await this.loadAccess();
         if(!this.hasActiveStream()&&this.accessState?.view?.choices.some(c=>c.id===msg.id&&c.active))this.accessState={...this.accessState,selected:msg.id,notice:'선택한 이용권을 다음 작업부터 사용합니다.'};
@@ -4469,6 +4690,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #64. Webview's error banner has a 🚨 link; we delegate to the same
         // command so the QuickInput cascade lives in one place.
         void vscode.commands.executeCommand("hypeproof-chat.reportProblem");
+        return;
+      case "trialEndCardPasses":
+        // TUX-COND-07 — the person pressed the card's Primary. The start page opens its own
+        // purchase view (REQ-L12 ②); no order is created until they choose there.
+        void vscode.commands.executeCommand("hypeproof-chat.showPasses");
+        return;
+      case "notifyOptinSubmit":
+      case "notifyOptinWithdraw":
+        // TUX-COND-08 — the optional email on the end card. Never stored; only a submitted flag is.
+        void this.handleNotifyOptin(msg.type === "notifyOptinSubmit" ? msg.email : null);
         return;
       case "installUpdate":
         // #72. User clicked "Install Now" on the update banner.
@@ -5113,6 +5344,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const toolLabels = new Map<string, string>();
       // .html paths Written/Edited during an SDK turn (tool_use id → absolute path) — previewed when the tool_result succeeds.
       const htmlWrites = new Map<string, string>();
+      const funnelTools = new Map<string, ToolResultKind>();
       // The "building the next action" notice line (the silent stretch between a tool
       // result and the next call).
       let pendingShown = false;
@@ -5160,6 +5392,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.mcpBrowser?.crNewTurn();
       const onActivity = (a: import("./sdkCoachHelpers").SdkActivity) => {
         webActivity.observe(a);
+        // studio-funnel-events — first write/edit/preview/publish result (kind + ok only).
+        if (a.kind==='tool_use') { const k = funnelToolKind(a.name); if (k) funnelTools.set(a.id, k); }
+        if (a.kind==='tool_result' && funnelTools.has(a.id)) { this.funnel.emit({ type: "trial_tool_result", kind: funnelTools.get(a.id), ok: !a.isError }); funnelTools.delete(a.id); }
         if (a.kind==='tool_use') this.crSdkResults.onToolUse(a.id, a.name, this.isCurriculumRuntimeEnabled());
         if (observation && (a.kind==='tool_use' || a.kind==='approval')) {
           try { observation.toolRequest(streamId,a.id,`${a.name}(${summarizeToolInput(a.name,a.input,300,this.resolveCoachCwd())})`); this.persistObservation(observation); }
@@ -5366,6 +5601,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           signal: ctrl.signal,
           coachName: effectiveCoachName,
           coachPersonality: effectiveCoachPersonality,
+          audience: profileAudience(this.cachedProfile),
           // #507 — send the address of the live server that is up on every turn.
           // Omitted when there is none: the worker then says "it is not up yet + do
           // not guess the port" on our behalf.
@@ -5488,6 +5724,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!token) {
           throw new ProxyAuthError("missing", TOKEN_MISSING_FRIENDLY);
         }
+        // REQ-M46 — default off. With the setting on (or the Service advertising
+        // it) and no binary, ask before this turn; a confirmed, verified download
+        // lands in the seeded location and runSdkCoach then resolves it. Declined
+        // or failed, the turn continues exactly as before.
+        await this.maybeOfferSdkSeed(profile, cfg.get<string>("sdkBinaryPath", "") || undefined, ctrl.signal);
         try {
           const sdkEnd = await runSdkCoach({
             toolMode: mode,
@@ -5587,6 +5828,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               learnerGoal: () =>
                 learnerGoalText(goalViewOf(profile.lesson, activityConnections(this.context)?.current?.id ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY))),
             }),
+            // REQ-STUDIO-TRIAL-BUSY — a native-trial seat's busy notice joins this turn's timeline
+            // as the same ⏳ line an orchestrator notice draws (orchestratorToolEntry).
+            onNotice: (text) => this.postToolLog(streamId, { id: `notice:${randomId()}`, icon: "⏳", label: text, state: "done", at: Date.now() }),
           });
           // #751 U4 — the SDK closed the stream normally but its result said the turn failed (the learner already read the
           // notice). Not thrown: the notice and the words stay in the conversation exactly as shown, nothing is re-sent. The
@@ -5594,9 +5838,21 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const ended = sdkTurnEndFailure(sdkEnd);
           if (ended) { spoolStatus = "error"; spoolErrorKind = ended.errorKind; opsFailure = ended.failure; }
         } catch (err) {
-          if (mode === 'web-search' && err instanceof SdkUnavailableError) throw new TurnToolModeError('웹 검색 실행 환경을 사용할 수 없습니다. SDK 연결을 확인하거나 웹 검색 선택을 해제해 주세요.');
-          if (!(err instanceof SdkUnavailableError)||fundingSource) throw err;
-          if (selection && (selection.source === 'lesson' || (profile && savedModel?.scope === modelSelectionScope(profile)))) throw new Error('선택한 모델의 실행 환경을 사용할 수 없습니다. Studio의 Agent SDK 설치를 확인하거나 강사에게 알려주세요. 대화와 작업은 보존됩니다.');
+          if (!(err instanceof SdkUnavailableError)) throw err;
+          // REQ-M45 — an SDK-only seat (native trial, pass) or a picked pass is refused on the proxy
+          // route by the Service, so it never falls back: every branch shows the same install notice
+          // and the raw English reason goes to the developer log only. Classroom seats keep the
+          // existing web-search / picked-model copy and the REQ-M7 fallback below.
+          const outcome = sdkUnavailableOutcome({
+            profile,
+            fundingSource,
+            webSearch: mode === 'web-search',
+            modelPicked: !!selection && (selection.source === 'lesson' || (!!profile && savedModel?.scope === modelSelectionScope(profile))),
+          });
+          if (outcome.kind === 'fail') {
+            if (outcome.requiredSdk) this.logSdkUnavailable(err.message);
+            throw mode === 'web-search' && !outcome.requiredSdk ? new TurnToolModeError(outcome.error.message) : outcome.error;
+          }
           // Pre-Phase-1: the SDK package isn't installed. Keep the classroom
           // working — fall back to the proxy runtime for this turn instead of
           // showing the student a technical error.
@@ -5688,6 +5944,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
       // the main loop does). A closed turn id is refused by the Service from then on; best effort, bounded by the Service.
       if (bindingKey && token) void closeTurn({ proxyUrl, token, turnId: streamId, outcome: ctrl.signal.aborted ? "aborted" : spoolStatus === "ok" ? "completed" : "failed" });
+      // TUX-SP-13 — the header's remaining line is as of the last profile read; a trial turn spends attempts, so re-read it.
+      if (profile?.trial && !profile.pass && token) void this.refreshTrialStatus(proxyUrl, token);
       // #580 — always record the end of the turn. A user abort also arrives through
       // catch, so the signal is checked first. When there is an SDK turn total it is
       // carried along — the control against the sum of the per-request usage records.
@@ -5891,6 +6149,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           signal: p.signal,
           coachName: p.coachName,
           coachPersonality: p.coachPersonality,
+          audience: profileAudience(this.cachedProfile),
           // #507 — re-read on every turn inside the loop: the server address that
           // live_preview_start just brought up has to be in the next turn's context for
           // there to be no reason left to guess.
@@ -5976,6 +6235,33 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * TUX-COND-08 — submit (`email` given) or withdraw (`null`) the optional notify opt-in of this
+   * free seat. Re-checks that the seat's profile still advertises it, then calls the Service with
+   * the seat's own credential. The address lives only in this call: it is never written to
+   * settings, globalState, SecretStorage, a log or a trace. Only the submitted flag is kept.
+   */
+  private async handleNotifyOptin(email: string | null): Promise<void> {
+    const reply = (state: "subscribed" | "withdrawn" | "error", message?: string) =>
+      void this.post({ type: "notifyOptinResult", state, ...(message ? { message } : {}) });
+    const token = await this.context.secrets.get(TOKEN_KEY);
+    const proxy = vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+    const consentVersion = notifyOptinOffered(this.cachedProfile);
+    if (!token || !proxy || !consentVersion) return reply("error", NOTIFY_OPTIN_ERRORS.failed);
+    if (email === null) {
+      const r = await withdrawNotifyOptin(proxy, token);
+      if (!r.ok) return reply("error", r.message);
+      await setNotifySubmitted(this.context.globalState, token, false).catch(() => undefined);
+      return reply("withdrawn");
+    }
+    const address = plausibleEmail(email);
+    if (!address) return reply("error", NOTIFY_OPTIN_ERRORS.invalid);
+    const r = await submitNotifyOptin(proxy, token, address, consentVersion);
+    if (!r.ok) return reply("error", r.message);
+    await setNotifySubmitted(this.context.globalState, token, true).catch(() => undefined);
+    return reply("subscribed");
+  }
+
+  /**
    * Turn raw errors into kid-friendly messages and recovery actions. The kid
    * must never see raw JSON. Expired/missing token → auto-reopen the token
    * input box (teacher pastes a fresh one). Session/roster → friendly nudge
@@ -5990,6 +6276,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
     if (isAbortError(err) || current?.signal?.aborted) return;
+    // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
+    // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
+    // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
+    // purchase view, and any other turn ending falls through unchanged.
+    if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
+      const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
+      if (current.signal?.aborted) return;
+      if (card) { void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card }); return; }
+    }
+    // REQ-L12 (13) — a free trial that ran out (requests or time) is not a crash either. The notice
+    // says the files stay and, only while passes are sold, names '이용권으로 시작하기'. It never
+    // opens the purchase screen or the code box, and leaves the saved code alone.
+    // Free start (SPEC iteration 4 §2.4) — today's free budget is drained: a calm notice with
+    // the 00:00 KST time, no retry button and no purchase opened. Files and conversation stay.
+    if (isFreeSeat(current?.profile) && freeDailyCapReached(err)) {
+      void this.post({ type: "streamError", streamId, error: FREE_DAILY_CAP_NOTICE, retry: false });
+      return;
+    }
+    const ending = trialEnding(err, !!current?.profile?.pass);
+    if (ending) {
+      const sold = current?.proxyUrl ? await passesOnSale(current.proxyUrl) : false;
+      if (current?.signal?.aborted) return;
+      void this.post({ type: "streamError", streamId, error: trialEndNotice(ending, sold, isFreeSeat(current?.profile)) });
+      return;
+    }
     // REQ-L12 — a spent pass is not a crash: say what happened and where to buy again.
     const spent = passSpentNotice(err);
     if (spent) { void this.post({ type: "streamError", streamId, error: spent }); return; }
@@ -6057,7 +6368,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       return;
     }
-    const reason = err instanceof Error ? err.message : "문제가 발생했습니다. 운영 담당자에게 문의해 주세요.";
+    // REQ-M45 — the install notice: shown as is, with its request ID, and without "다시 보내기".
+    if (err instanceof SdkRequiredError) {
+      if (err.requestId) this.lastRequestId = err.requestId;
+      void this.post({ type: "streamError", streamId, error: err.message, ...(err.requestId ? { requestId: err.requestId } : {}), retry: false });
+      return;
+    }
+    // REQ-M44 — the SDK's own error text ("Claude Code returned an error result: API Error: …") never reaches the
+    // banner: the Service's sentence, or a Korean line by status. The App's own Korean errors pass through unchanged.
+    const reason = sdkErrorDisplayText(err, profileAudience(this.cachedProfile));
     const requestId = err instanceof ProxyTransportError ? err.requestId : undefined;
     if (requestId) this.lastRequestId = requestId;
     void this.post({ type: "streamError", streamId, error: reason, requestId });
@@ -6396,6 +6715,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (scope !== activityConnections(this.context)?.scope) return;
     const taskStore = this.currentTaskStore?.();
     const taskView = taskStore?.getView();
+    // REQ-L12 ⑫ — flag off (no Service offer) reads nothing and changes nothing.
+    const carryover = activity && carryoverAdvertised(profile) ? carryoverState(activity.id, true, this.carryoverStores()).view : null;
     const toolProfile = profile ? accessProfile(profile, this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected)) : null;
     const toolRuntime = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: toolProfile?.coach_runtime, minorCohort: toolProfile?.minor_cohort,
@@ -6408,7 +6729,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         model:local?.model??model,
         hasToken: !!token,
         ...(taskView ? { taskWorkspace: taskView } : {}),
-        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{})},
+        ...(activity && carryover ? { carryover } : {}),
+        ...(activity ? {activity:{id:activity.id,name:activity.name,kind:activity.kind,workspace:activity.workspace,verified:!!profile,...(profile?.pass?{pass:profile.pass}:{}),...(profile?.trial&&!profile.pass?{trial:profile.trial}:{}),...(isFreeSeat(profile)?{free:true}:{})},
           activityDraft:taskStore && !taskView?.error ? taskStore.getDraft() : this.context.workspaceState.get('hps.activity.draft.'+activity.id,emptyActivityDraft())} : {}),
         // AE-01 (#554) — every mount and reconnect starts from the goal stored for THIS lesson revision and activity.
         studentGoal: goalViewOf(profile?.lesson, scope ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY)),
@@ -6485,6 +6807,39 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // history out.
     const next = clampTimeline([...current, ...msgs], HISTORY_MAX);
     await this.context.workspaceState.update(this.historyKey(), next);
+  }
+
+  /**
+   * REQ-L12 ⑫ exception (ot-conversation-carryover) — the stores behind the trial carry-over offer.
+   * The trial transcript is read from the trial's own task store and never written into the pass
+   * history; only the visible summary message is (trialCarryoverHelpers.ts, trialCarryoverSource.ts).
+   */
+  private carryoverStores(): CarryoverStores {
+    // A trial keeps its conversation in its own TaskWorkspaceStore (prepareTaskWorkspace); the
+    // workspaceState key holds only pre-migration history, read when no store file exists yet.
+    return carryoverStoresFor({
+      globalStoragePath: this.context.globalStorageUri.fsPath,
+      offers: this.context.globalState,
+      legacyHistory: (trialId) => this.context.workspaceState.get<ChatMessage[]>(historyKeyForCohort(trialId), []),
+      passHistory: () => this.getHistory(),
+    });
+  }
+
+  /**
+   * The learner's explicit answer. Confirm posts the summary as a visible app message in the pass
+   * conversation (the coach reads it from the next turn's history). No SDK session, credential or
+   * runtime state from the trial seat is reused: the pass runs on its own grant from a fresh start.
+   */
+  private async decideCarryover(decision: 'confirm' | 'decline'): Promise<void> {
+    const activity = activityConnections(this.context)?.current;
+    if (activity && !this.hasActiveStream()) {
+      const profile = await this.ensureProfile();
+      if (activityConnections(this.context)?.current?.id === activity.id) {
+        await applyCarryoverDecision({ passId: activity.id, advertised: carryoverAdvertised(profile), decision, stores: this.carryoverStores(),
+          appendSeed: (text) => this.postAppReply(text), now: Date.now() });
+      }
+    }
+    await this.postConfig();
   }
 
   private historyKey(): string {

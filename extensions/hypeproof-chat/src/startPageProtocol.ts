@@ -6,6 +6,8 @@ export interface ActivitySummary {
   kind?: 'trial' | 'personal' | 'classroom';
   /** REQ-L12 — the activity was entered with a bought pass. */
   pass?: boolean;
+  /** Free start (SPEC iteration 4 §2.4) — the free allowance; labelled 무료 사용, never 체험. */
+  free?: boolean;
   workspace: string;
 }
 export interface StartState {
@@ -18,7 +20,9 @@ export interface StartState {
   candidate?: boolean;
   previousConnected?: boolean;
   error?: string;
-  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; id: string; name: string; coach: string; series: string; workspace: string };
+  profile?: { kind?: "trial" | "personal" | "classroom"; pass?: import("./protocol").PassStatus; trial?: import("./protocol").TrialStatus; id: string; name: string; coach: string; series: string; workspace: string;
+    /** Free start (SPEC iteration 4 §2.4) — the free allowance seat: labels say 무료 사용, never 체험. */
+    free?: boolean };
   /** #747 — resolved AI display name for the connected seat; absent → "코치". */
   coachName?: string;
   workspace?: string;
@@ -27,6 +31,13 @@ export interface StartState {
   inbox?: import("./classroomInbox").InboxView;
   /** REQ-L12 — buying a pass. Presentation only: the order secret and the issued code never leave the host. */
   purchase?: import("./passPurchase").PurchaseView;
+  /** TUX-SP-12 — the trial entry mode and allowance the Service advertises. Absent: not advertised. */
+  trialOffer?: import("./trialOffer").TrialOffer;
+  /**
+   * TUX-SP-14/15/16 — free start, present only while the Service advertises it (and the local
+   * setting is not "off"). Presentation only: the install id and the issued token stay in the host.
+   */
+  freeStart?: FreeStartView;
   /**
    * "GitHub에서 이어하기" while a code is being confirmed (candidate): what this seat's GitHub
    * holds. Absent when the cohort does not publish to GitHub.
@@ -41,6 +52,26 @@ export interface StartState {
     /** A sign-in or a download is running. */
     working?: "signin" | "download";
   };
+}
+export interface FreeStartView {
+  /** The saved age answer; absent → ask the one question. */
+  age?: "14+" | "under14";
+  /** A claim is running. */
+  claiming?: boolean;
+  /** The last claim's refusal (the Service's sentence, shown as given; `code` steers layout only). */
+  refusal?: { code: string; message: string; resumesAt?: string };
+  /** The Service said today's free start is not available (offer `available:false`). */
+  unavailable?: "daily_cap" | "paused";
+  /** "무료 AI 요청 10번 · 첫 요청부터 24시간", only from numbers the Service advertised. */
+  allowance?: string;
+  /** This build is below the Service's floor; the update button is drawn. */
+  tooOld?: boolean;
+  /**
+   * The saved free seat's window is over and the Service refused its profile (403 `trial_expired`
+   * with the free sentence). The card says so instead of offering a fresh start the Service would
+   * not give (a reclaim answers `reused` and the seat stays expired; e2e D2).
+   */
+  ended?: "expired";
 }
 export type StartRequest =
   | { type: "startReady" }
@@ -59,7 +90,12 @@ export type StartRequest =
   | { type: "purchaseHide" }
   | { type: "openLocalFolder" }
   | { type: "purchaseOpen" }
-  | { type: "purchaseStart"; productId: string }
+  | { type: "purchaseStart"; productId: string; guardian?: boolean }
+  | { type: "purchasePayer"; adult: boolean }
+  | { type: "freeStartAge"; answer: "14+" | "under14" }
+  | { type: "freeStartClaim" }
+  | { type: "freeStartGuardian" }
+  | { type: "freeStartUpdate" }
   | { type: "purchaseReopen" }
   | { type: "purchaseRetry" }
   | { type: "purchaseCancel" }

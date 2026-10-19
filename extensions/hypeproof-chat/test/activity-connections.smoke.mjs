@@ -46,6 +46,26 @@ try{
  const undoPass=await store.commit('synthetic-c',pass('c',a),a);
  assert.throws(()=>store.prepare(a,profile('a'),()=>assert.fail('an activity that is not a pass cannot take it back')),/다른 활동/);
  await undoPass();assert.equal(fs.readFileSync(store['bindingPath'](a),'utf8'),beforePass);
+ // A lost free credential (reinstall, cleared keychain) claims a new free seat; it continues in its home.
+ {
+  const home=path.join(tmp,'free-home');fs.mkdirSync(home);
+  const own=()=>{const c=context(),m=new Map();return {...c,secrets:{...c.secrets,keys:async()=>[...m.keys()],get:async k=>m.get(k),store:async(k,v)=>{m.set(k,v);},delete:async k=>m.delete(k)}};};
+  const free=(id)=>({...profile(id),profile_id:'studio-open-trial',workspace_root:home});
+  const freeStore=new ActivityConnections(own(),()=>origin,()=>home,async()=>free('f'));
+  await freeStore.commit('synthetic-f',free('f'),home);
+  assert.equal(JSON.parse(fs.readFileSync(freeStore['bindingPath'](home),'utf8')).free,true,'a free binding is marked');
+  const lost=new ActivityConnections(own(),()=>origin,()=>home,async()=>free('e'));
+  let prepared=false;lost.prepare(home,free('e'),()=>{prepared=true;});assert.equal(prepared,true,'a new free seat prepares its home over an earlier free seat');
+  await lost.commit('synthetic-e',free('e'),home);assert.equal(await lost.token(),'synthetic-e');
+  // Negative controls: a class seat in that folder is not taken over, and a free seat takes over only its home.
+  const classHome=path.join(tmp,'class-home');fs.mkdirSync(classHome);
+  await new ActivityConnections(own(),()=>origin,()=>classHome,async()=>profile('d')).commit('synthetic-d',profile('d'),classHome);
+  assert.throws(()=>lost.prepare(classHome,{...free('9'),workspace_root:classHome},()=>assert.fail('a free seat must not take over a class folder')),/다른 활동/);
+  assert.throws(()=>lost.prepare(a,free('9'),()=>assert.fail('a free seat takes over only its home folder')),/다른 활동/);
+  // A pass bought later takes the folder; a new free seat cannot take it back.
+  await lost.commit('synthetic-p',{...pass('7',home)},home);
+  assert.throws(()=>lost.prepare(home,free('8'),()=>assert.fail('a free seat must not take back a pass folder')),/다른 활동/);
+ }
  await undo();assert.equal(store.current.ref,first.ref,'failed navigation rolls back exact old reference');
  root=a;origin='https://different.invalid/v1';assert.equal(await store.token(),undefined,'changed server gets no saved credential');origin='https://synthetic.invalid/v1';
  failStore=true;await assert.rejects(()=>store.commit('rotation',profile('a'),a),/store failure/);failStore=false;

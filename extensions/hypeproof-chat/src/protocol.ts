@@ -1,5 +1,10 @@
 /** REQ-L12 — what the Service reports for a bought pass. `expires_at` is absent until the pass is first connected. */
 export interface PassStatus { request_limit: number; requests_used: number; expires_at?: number }
+/**
+ * TUX-SP-13 / CU-13 — what the Service confirms about a one-hour trial grant (`trial` on /v1/profile).
+ * `ends_at` is null until the grant has started. Never sent for a pass, which keeps `pass`.
+ */
+export interface TrialStatus { state: "not_started" | "active" | "exhausted" | "expired"; ends_at: string | null; request_limit: number; requests_used: number }
 import type { StartRequest, StartResponse } from "./startPageProtocol";
 // Shared message contract between extension host (Node) and webview (browser).
 // Import this file from both sides; do not redefine these types anywhere else.
@@ -116,8 +121,12 @@ export interface EffortRequestRecord {
 export interface ChatConfig {
   turnTools?: import('./turnTools').TurnToolsAvailability;
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
-  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus};
+  activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus;
+    /** Free start (SPEC iteration 4 §2.4) — the seat is the free allowance (`studio-open-trial`, no pass): its copy says 무료 사용, never 체험. */
+    free?:boolean};
   activityDraft?: import('./activityDraft').ActivityDraft;
+  /** REQ-L12 ⑫ — trial carry-over offer or the read-only trial transcript; absent unless the Service advertises it. */
+  carryover?: import('./trialCarryoverHelpers').CarryoverView;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
@@ -173,6 +182,45 @@ export interface CoachInfo {
  * sides updated together.
  */
 /** Kept in this file (not in lessonBinding.ts) because the webview build type-checks protocol.ts and must not follow Node-side imports. */
+/**
+ * TUX-COND-07 — what the inline end-of-trial card shows. Built by the host (`trialEndCard.ts`)
+ * from the Service catalogue; the webview only renders it. No price or count is ever made up here.
+ */
+export interface TrialEndCardView {
+  ending: "exhausted" | "expired";
+  title: string;
+  facts: string[];
+  /** The one Primary. Pressing it is the only way the purchase view opens (REQ-L12 ①). */
+  primary: string;
+  /** The escape: closes the card, nothing else. */
+  escape: string;
+  /** The catalogue pass whose facts are shown. */
+  productId: string;
+  /** Title and facts as one line, for the banner fallback and screen readers. */
+  text: string;
+  /**
+   * Optional "이메일로 소식 받기" section below the pass offer (TUX-COND-08). Present only on a free
+   * seat whose `/v1/profile` advertises `notify_optin` (Service HPS_FREE_NOTIFY_OPTIN, default off).
+   * Secondary and skippable: it never replaces the Primary and nothing is pre-checked.
+   */
+  notify?: TrialEndNotifyView;
+}
+
+/** TUX-COND-08 — the end card's optional email section. Copy comes from the host (trialEndCard.ts). */
+export interface TrialEndNotifyView {
+  /** The Service's consent version; the host sends it back with the address. */
+  consentVersion: string;
+  /** This seat already left an address (a local flag; the address itself is never stored). */
+  submitted: boolean;
+  prompt: string;
+  label: string;
+  placeholder: string;
+  button: string;
+  consent: string;
+  done: string;
+  withdraw: string;
+  withdrawn: string;
+}
 export interface LessonBindingView { key: string; seq: number; source: "token" | "setting" | "base"; object_id: string | null; revision: number | null; enforced: boolean; not_applied?: string }
 export interface ResolvedProfile {
   /** #751 U3 — which lesson binding the Service executes this seat under. Present only where bindings are enforced. The app sends `key` back as its expectation; it never selects a lesson with it. */
@@ -185,6 +233,15 @@ export interface ResolvedProfile {
   activity_kind?: "trial" | "personal" | "classroom";
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
+  /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */
+  trial?: TrialStatus;
+  /** TUX-COND-08 — a free seat may leave an email on its end card (Service HPS_FREE_NOTIFY_OPTIN, default off). Absent → no section. */
+  notify_optin?: { available: boolean; consent_version: string };
+  /**
+   * REQ-L12 ⑫ exception (ot-conversation-carryover) — the Service offers "체험에서 하던 대화 이어가기"
+   * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
+   */
+  conversation_carryover?: { available: boolean };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -439,6 +496,8 @@ export type WebviewMessage = (
       observations: import('./voiceCapabilityHelpers').VoiceProbeObservations }
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}
+  /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
+  | {type:'carryoverDecision';decision:'confirm'|'decline'}
   | {type:'requestBudget';note:string}
   | { type: 'observationOpen' }
   /**
@@ -513,6 +572,11 @@ export type WebviewMessage = (
   | { type: "openSettings" }
   | { type: "setToken" }
   | { type: "openReportModal" }            // #64: user clicked 🚨 on error banner
+  /** TUX-COND-07 — the person pressed "이용권 살펴보기" on the end-of-trial card. Nothing else opens the purchase view. */
+  | { type: "trialEndCardPasses" }
+  /** TUX-COND-08 — the optional email on the end card. The address goes to the host and on to the Service only. */
+  | { type: "notifyOptinSubmit"; email: string }
+  | { type: "notifyOptinWithdraw" }
   | { type: "installUpdate" }              // #72: user clicked "Install Now" on update banner
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
   | { type: "clearHistory" }
@@ -712,8 +776,11 @@ export type HostMessage = (
       /** When error — the Korean sentence the server produced. */
       message?: string;
     }
-  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retryable?: boolean }
+  /** `retry: false` — resending cannot help (REQ-M45 missing SDK binary); the panel hides "다시 보내기". `retryable: false` (#1819) — the answer could not be saved; same effect. */
+  | { type: "streamError"; streamId: string; error: string; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
   | { type: "actionResult"; requestId: string; approved: boolean }
+  /** TUX-COND-08 — the answer to notifyOptinSubmit / notifyOptinWithdraw. Never carries the address. */
+  | { type: "notifyOptinResult"; state: "subscribed" | "withdrawn" | "error"; message?: string }
   | { type: "renderPreview"; html: string }
   // Test-only: forces a React render-time throw so e2e can verify the
   // ChatErrorBoundary fallback path (REQ-C7). Only sent from the
