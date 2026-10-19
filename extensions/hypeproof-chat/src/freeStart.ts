@@ -24,11 +24,12 @@ export const isAgeAnswer = (v: unknown): v is AgeAnswer => v === "14+" || v === 
 
 /** Learner-facing copy (합니다체, the start page's register). Never 체험, never 수업. */
 export const FREE_START_COPY = {
-  ageTitle: "시작하기 전에 한 가지만 확인합니다",
   ageQuestion: "만 14세 이상인가요?",
   ageYes: "네, 만 14세 이상입니다",
   ageNo: "아니요, 만 14세 미만입니다",
   readyTitle: "바로 시작할 수 있습니다",
+  readyBody: "로그인 없이 바로 시작합니다.",
+  footer: "만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.",
   start: "바로 시작하기",
   preparing: "작업 공간을 준비하고 있습니다.",
   codeLink: "참여 코드가 있어요",

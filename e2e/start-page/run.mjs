@@ -66,7 +66,7 @@ try {
  await state({trialOffer:{entry:'open',durationHours:24,requestLimit:10,claim:'/v1/free/claim',available:true},freeStart:{allowance:'무료 AI 요청 10번 · 첫 요청부터 24시간'}});
  // The person had opened the code form earlier in this run; with free start it offers "돌아가기".
  await p.getByRole('heading',{name:'참여 코드로 시작하기'}).waitFor();await p.getByRole('button',{name:'돌아가기',exact:true}).click();
- await p.getByRole('heading',{name:'시작하기 전에 한 가지만 확인합니다'}).waitFor();
+ await p.getByRole('heading',{name:'바로 시작할 수 있습니다'}).waitFor();await p.getByText('만 14세 이상인가요?',{exact:true}).waitFor();
  assert.equal(await p.getByRole('button',{name:'AI 체험하기',exact:true}).count(),0);assert.equal(await p.getByRole('button',{name:'수업에 참여하기',exact:true}).count(),0);
  assert.doesNotMatch(await p.locator('.studio-connect').innerText(),/체험/);
  for(const width of [390,1280]){await p.setViewportSize({width,height:900});assert.ok(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,`free-start-${width}.png`),fullPage:true});}

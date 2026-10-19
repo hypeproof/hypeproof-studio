@@ -554,8 +554,13 @@ try {
   await test('TUX-SP-14A', 'Free start: one age question, no 체험/수업 choice, code is a small link', async p => {
     await startState(p, {});
     assert.match(await cardText(p), /체험/, 'control: today\'s start page says 체험, so the checker below can fail');
+    await expect(p.locator('.studio-free-allowance')).toHaveCount(0); // negative control: no free offer line without the advertisement
     await startState(p, freeStart());
-    await expect(p.locator('#connect-title')).toHaveText('시작하기 전에 한 가지만 확인합니다');
+    // POLISH iter4 — the card leads with what the person can do (start now, no login); the age check follows.
+    await expect(p.locator('#connect-title')).toHaveText('바로 시작할 수 있습니다');
+    await expect(p.locator('.studio-card-description')).toHaveText('로그인 없이 바로 시작합니다.');
+    const offerFirst = await p.evaluate(() => { const a = document.querySelector('.studio-free-allowance'), q = document.getElementById('free-age-question'); return !!a && !!q && !!(a.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING); });
+    assert.equal(offerFirst, true, 'the allowance is read before the age question, not as a note under 아니요');
     await expect(p.getByText('만 14세 이상인가요?', { exact: true })).toBeVisible();
     await expect(btn(p, 'AI 체험하기')).toHaveCount(0);
     await expect(btn(p, '수업에 참여하기')).toHaveCount(0);
@@ -585,6 +590,9 @@ try {
     assert.doesNotMatch(await cardText(p), /체험/);
     await btn(p, '돌아가기').click();
     await expect(btn(p, '바로 시작하기')).toBeVisible();
+    // The secondary links sit on the card's left axis with everything else (not centred under the Primary).
+    const [linkX, primaryX] = await Promise.all([btn(p, '참여 코드가 있어요'), p.locator('.studio-connect .studio-primary')].map(async l => Math.round((await l.boundingBox()).x)));
+    assert.ok(Math.abs(linkX + 4 - primaryX) <= 2, `secondary links align left with the Primary: ${linkX} vs ${primaryX}`);
     assert.equal(emitted(await requests(p), 'purchaseOpen').length, 0, 'nothing opens the purchase for the person');
   }, { surface: 'start' });
   await test('TUX-SP-14B', 'Free start refusals: Service sentence shown as given; app too old offers the update', async p => {
@@ -631,6 +639,8 @@ try {
   await test('TUX-SP-13F', 'Free seat labels: 무료 사용 on the start card and in the chat header, never 체험', async p => {
     await startState(p, { profile: trialSeat(nearLimit, { id: 'studio-open-trial', free: true }) });
     await expect(p.locator('.studio-verified')).toHaveText('무료 사용');
+    // POLISH iter4 — a free seat has no code, so its footer never speaks of one.
+    await expect(p.locator('.studio-card-footer')).toHaveText('만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.');
     await expect(courseRow(p, '남은 무료 사용')).toHaveText(/^무료 AI 요청 3번 남음 · /);
     assert.doesNotMatch(await cardText(p), /체험/);
     await startState(p, { profile: trialSeat(exhausted, { id: 'studio-open-trial', free: true }) });
@@ -640,6 +650,7 @@ try {
     // Negative control: the same seat without the free mark keeps today's wording.
     await startState(p, { profile: trialSeat(exhausted) });
     await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
+    await expect(p.locator('.studio-card-footer')).toHaveText('참여 코드에 연결된 활동과 이용 조건이 적용됩니다.');
   }, { surface: 'start' });
   await test('TUX-SP-13G', 'Free seat chat header: 무료 사용 label and remaining line', async p => {
     await expect(p.getByLabel('현재 활동')).toContainText('무료 사용 · 합성 체험');
@@ -652,6 +663,9 @@ try {
     await request(p, { type: 'purchaseOpen' });
     await expect(p.getByText('결제하는 분이 만 19세 이상인가요?', { exact: true })).toBeVisible();
     await expect(btn(p, '30,000원 결제하러 가기')).toHaveCount(0);
+    // POLISH iter4 — leaving the pass list goes back; it is not a "start over" (Jay: 다시 시작 안 어울림).
+    await expect(btn(p, '돌아가기')).toBeVisible();
+    await expect(btn(p, '시작 방법 다시 선택')).toHaveCount(0);
     await btn(p, '아니요').click();
     await request(p, { type: 'purchasePayer', adult: false });
     await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true, payerAdult: false }, ...freeStart({ age: '14+' }) });
