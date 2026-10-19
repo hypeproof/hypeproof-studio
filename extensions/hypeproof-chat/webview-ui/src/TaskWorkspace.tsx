@@ -337,7 +337,14 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
 
   return <CitationPreviewContext.Provider value={{ previewSource, openSource, preview: sourcesOpen && previewSourceValue && preview ? { url: preview.url, messageId: preview.messageId } : null }}><div className="tw-workspace" data-sources-open={sourcesOpen} data-rail-open={railOpen} onKeyDown={event => {
     // Escape must work even in the frame before focus reaches the newly opened panel.
-    if (sourcesOpen && event.key === 'Escape' && !event.defaultPrevented && !imeComposing(event)) { event.preventDefault(); event.stopPropagation(); closeSources(); }
+    if (sourcesOpen && event.key === 'Escape' && !event.defaultPrevented && !imeComposing(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      // A nonmodal panel does not own focus after the user resumes editing elsewhere.
+      const active = document.activeElement;
+      const panelOwnsFocus = active === document.body || !!sourcePanel.current?.contains(active);
+      closeSources(undefined, panelOwnsFocus);
+    }
   }}>
     <a className="tw-skip" href="#task-conversation">대화로 바로 가기</a>
     <nav ref={rail} className="tw-rail" aria-label="내 작업" role={railDialog ? 'dialog' : undefined} aria-modal={railDialog || undefined} tabIndex={-1}>
