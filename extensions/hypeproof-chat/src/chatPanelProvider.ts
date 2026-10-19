@@ -2680,9 +2680,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   private clearingHistory = false;
   async clearHistory(): Promise<void> {
-    if (this.clearingHistory || this.hasActiveStream()) return;
+    if (this.clearingHistory || this.taskChanging || this.connectionChanging || this.hasActiveStream()) return;
     this.clearingHistory = true;
     const key = this.historyKey();
+    const taskStore = this.currentTaskStore?.();
+    const taskId = taskStore?.getView().activeTaskId;
     try {
       const choice = await vscode.window.showWarningMessage(
         "이 대화 기록을 지울까요?",
@@ -2690,8 +2692,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         "대화 지우기",
       );
       if (choice !== "대화 지우기" || this.hasActiveStream() || key !== this.historyKey()) return;
-      const taskStore = this.currentTaskStore?.();
-      const taskId = taskStore?.getView().activeTaskId;
+      if (this.taskChanging || this.connectionChanging || taskStore !== this.currentTaskStore?.() || taskId !== taskStore?.getView().activeTaskId) return;
       if (taskStore && taskId) {
         await taskStore.clearHistory(taskId);
         await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
@@ -2706,6 +2707,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       void this.post({ type: "history", messages: [] });
       // A cleared chat starts a new conversation, not a new trial allowance.
       void this.post({ type: "aiDisclosure", text: this.aiDisclosure.noticeForHistoryClear() });
+    } catch {
+      const message = "대화 삭제를 완료하지 못했어요. 현재 기록을 확인하고 잠시 뒤 다시 시도해 주세요.";
+      if (taskStore) await this.post({ type: 'taskWorkspaceError', error: message });
+      else void vscode.window.showErrorMessage(message);
     } finally { this.clearingHistory = false; }
   }
 
