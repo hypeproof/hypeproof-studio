@@ -6258,6 +6258,19 @@
           "path": "extensions/hypeproof-chat/test/korean-input.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-TEST-CONTROL-CONTRAST",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/control-contrast.smoke.mjs"
+        }
+      ]
     }
   ]
 }

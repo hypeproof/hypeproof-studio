@@ -270,7 +270,8 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-paper: #F4F6F0;    /* Paper · 회고, 변화 기록, 보고서 */
   --hp-ink-on-paper: #151D19;
   --hp-ink-on-accent: #18231C;   /* start.css .studio-primary가 이미 쓰는 값 */
-  --hp-line: #35483A;            /* start.css --studio-line */
+  --hp-line: #35483A;            /* start.css --studio-line · 장식 구분선 전용 */
+  --hp-control-line: #748F79;    /* 필수 컨트롤 경계(버튼·입력) · DES-11 3:1 */
   --hp-muted: #ACB9A5;           /* start.css --studio-muted · AI 설명, 보조 문구 */
 }
 [data-surface="growth"], .hp-reflection {
@@ -279,6 +280,7 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
   --hp-ink: var(--hp-ink-on-paper);
   --hp-muted: #4B5A4F;
   --hp-line: #D7DDD2;
+  --hp-control-line: #76837A;
 }
 ```
 
@@ -286,7 +288,7 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 
 | 규칙 | 적용 |
 |---|---|
-| 한 화면 Primary CTA 1개(SX-04) | `.hp-cta-primary`는 `--hp-accent` 배경 + `--hp-ink-on-accent`. A의 "다음 행동" 버튼 또는 완료 버튼 중 하나만 이 클래스를 가진다. B의 보내기, D의 저장은 `.hp-cta-secondary`(투명 배경, `--hp-line` 테두리) |
+| 한 화면 Primary CTA 1개(SX-04) | `.hp-cta-primary`는 `--hp-accent` 배경 + `--hp-ink-on-accent`. A의 "다음 행동" 버튼 또는 완료 버튼 중 하나만 이 클래스를 가진다. B의 보내기, D의 저장은 `.hp-cta-secondary`(투명 배경, `--hp-control-line` 테두리) |
 | 상태는 아이콘+문구(SX-50) | 완료 조건 `☐/☑ 문구`, 게이트 차단 `⚠ 기대 조건을 먼저 적어요`, source_state `● 실제 / ◌ 가상 / ◐ 자기 보고 / ? 미확인` + 라벨. 색만 바꾸는 상태 표시는 없다 |
 | 학습 화면에 숫자 카드 없음(SX-51) | `.hp-stat`는 단계 `ui: metric_board`(4·6주차) 안에서만 렌더한다. A·B·D·E에는 카운트 배지가 없다. "남은 단계 5"는 문장이지 카드가 아니다 |
 | 모달보다 inline(SX-52) | E는 카드, D는 서랍, 게이트 안내는 CTA 옆 문구. `showInformationMessage`류 모달은 파괴적 조작(삭제)에만 남긴다 |
@@ -306,6 +308,9 @@ AI가 쓴 글은 학생 행동으로 기록되지 않는다(SX-45). 검증기 �
 | Amber on Panel | 6.6:1 | 경고 문구 가능 |
 | Amber on Paper | 2.0:1 | 글자로 쓰지 않는다. Paper에서는 아이콘·테두리 + `--hp-ink-on-paper` 문구 |
 | Ink-on-paper on Paper | 17:1 | 본문 가능 |
+| Line(#35483A) on Deep forest / Panel | 1.75:1 / 1.48:1 | 장식 구분선만. 버튼·입력 경계로 쓰지 않는다(DES-11) |
+| Control line(#748F79) on Deep forest / Panel | 4.9:1 / 4.1:1 | 필수 컨트롤 경계 |
+| Control line on Paper(#76837A) on Paper / White | 3.6:1 / 4.0:1 | 필수 컨트롤 경계 |
 
 기존 스타일 이행:
 

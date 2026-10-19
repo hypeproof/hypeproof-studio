@@ -6,6 +6,7 @@
   --studio-bg:var(--hp-bg);
   --studio-panel:var(--hp-panel);
   --studio-line:var(--hp-line);
+  --studio-control-line:var(--hp-control-line);
   --studio-text:var(--hp-ink);
   --studio-muted:var(--hp-muted);
   --studio-accent:var(--hp-accent);
@@ -376,19 +377,19 @@
 .studio-primary { background: #D5F279; color: #18231C; }
 .studio-primary:hover:not(:disabled) { background: #E2FF92; }
 .studio-nav { display: flex; gap: 10px; }
-.studio-nav button { font: inherit; font-size: 12px; color: var(--studio-text); background: transparent; border: 1px solid var(--studio-line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+.studio-nav button { font: inherit; font-size: 12px; color: var(--studio-text); background: transparent; border: 1px solid var(--studio-control-line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
 .studio-nav button:hover { border-color: #D5F279; color: #D5F279; }
 .studio-nav button:focus-visible { outline: 2px solid #D5F279; outline-offset: 3px; }
 
 .studio-entry-options { display: grid; gap: 12px; }
-.studio-secondary { background: transparent; color: var(--studio-text); border-color: var(--studio-line); }
+.studio-secondary { background: transparent; color: var(--studio-text); border-color: var(--studio-control-line); }
 .studio-secondary:hover:enabled { background: var(--studio-bg); }
 /* SX-04 — peer options. Neither of the two is emphasized. The emphasized button
  * (Primary) is the single "코드 확인하기" that follows the choice. Inherits only
  * `.studio-primary`'s layout, with the emphasis taken out. */
 .studio-choice {
   width:100%;
-  border:1px solid var(--studio-line);
+  border:1px solid var(--studio-control-line);
   border-radius:7px;
   background:transparent;
   color:var(--studio-text);
@@ -412,7 +413,7 @@
 
 /* REQ-L12 — passes are a list of peer choices (SX-04): the selected one gets a border, never a second Primary. */
 .studio-plans { display:grid; gap:8px; margin-bottom:14px; }
-.studio-plan { width:100%; display:grid; grid-template-columns:1fr auto; gap:2px 12px; text-align:left; padding:13px 15px; border:1px solid var(--studio-line); border-radius:7px; background:transparent; color:var(--studio-text); cursor:pointer; font:inherit; word-break:keep-all; }
+.studio-plan { width:100%; display:grid; grid-template-columns:1fr auto; gap:2px 12px; text-align:left; padding:13px 15px; border:1px solid var(--studio-control-line); border-radius:7px; background:transparent; color:var(--studio-text); cursor:pointer; font:inherit; word-break:keep-all; }
 .studio-plan[aria-checked="true"] { border-color:var(--studio-accent); background:var(--studio-bg); }
 .studio-plan:hover:enabled { background:var(--studio-bg); }
 .studio-plan:disabled { opacity:.55; cursor:default; }
@@ -428,7 +429,7 @@
 .studio-github h3 { font-size: 13px; font-weight: 650; margin: 0; }
 .studio-repo-list { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
 .studio-repo-list legend { font-size: 11px; color: var(--studio-muted); padding: 0; margin-bottom: 6px; }
-.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: 10px; border: 1px solid var(--studio-line); border-radius: 7px; padding: 10px 12px; margin: 0; font-size: 13px; cursor: pointer; }
+.studio-repo-list label, .studio-repo-one { display: flex; align-items: center; gap: 10px; border: 1px solid var(--studio-control-line); border-radius: 7px; padding: 10px 12px; margin: 0; font-size: 13px; cursor: pointer; }
 .studio-repo-list label:has(input:checked) { border-color: #D5F279; }
 /* `.studio-connect input` styles the code field (width:100%, padding, border); undo it for radios,
  * or the radio takes the row and the name wraps one letter per line (seen in c-01-pick.png). */
