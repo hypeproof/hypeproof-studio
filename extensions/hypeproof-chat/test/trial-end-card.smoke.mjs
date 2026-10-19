@@ -1,6 +1,6 @@
 // TUX-COND-07 / REQ-L12 ①② — the inline end-of-trial card (src/trialEndCard.ts).
 // Pure judgment only: when the card is drawn, what it says, and that it never draws itself
-// mid-work, on a pass, or without the Service advertising it. No network, no VS Code.
+// mid-work, on a pass, or on any seat that is not the Service's open-trial profile. No network, no VS Code.
 //
 // Run: node --experimental-strip-types test/trial-end-card.smoke.mjs
 import assert from 'node:assert/strict';
@@ -19,15 +19,25 @@ const catalogue = [
   { id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200 },
   { id: 'pass-basic', label: '기본 이용권', amount: 55000, durationDays: 30, requestLimit: 350, recommended: true },
 ];
-const trialProfile = (extra = {}) => ({ activity_kind: 'trial', pass_offer: { end_card: true }, ...extra });
+// The open-trial seat as /v1/profile serves it (Service ot-open-profile, behind HPS_OPEN_TRIAL).
+const trialProfile = (extra = {}) => ({ activity_kind: 'trial', profile_id: 'studio-open-trial', ...extra });
 
-// ── The Service advertisement (the default-off flag) ────────────────────────────────────────
-assert.deepEqual(c.parsePassOffer({ end_card: true }), {});
-assert.deepEqual(c.parsePassOffer({ end_card: true, product_id: 'pass-lite' }), { productId: 'pass-lite' });
-for (const off of [undefined, null, {}, { end_card: false }, { end_card: 'true' }, [], 'end_card', { end_card: 1 }])
-  assert.equal(c.parsePassOffer(off), null, `not advertised: ${JSON.stringify(off)}`);
-// A malformed product id drops the preference, never the advertisement.
-assert.deepEqual(c.parsePassOffer({ end_card: true, product_id: 'a b' }), {});
+// ── Which seats get the card (the default-off flag is the Service's HPS_OPEN_TRIAL) ─────────
+assert.equal(c.OPEN_TRIAL_PROFILE_ID, 'studio-open-trial');
+// Positive control: the open-trial free tier.
+assert.equal(c.endCardAdvertised(trialProfile()), true);
+// Negative controls: a code-issued trial, a bought pass on either profile, a classroom or
+// personal seat, a missing kind, and no profile at all.
+for (const [name, profile] of [
+  ['code-issued trial', { activity_kind: 'trial', profile_id: 'studio-native-trial' }],
+  ['bought pass', { activity_kind: 'trial', profile_id: 'studio-native-trial', pass: { request_limit: 200, requests_used: 0 } }],
+  ['pass on open-trial id', trialProfile({ pass: { request_limit: 200, requests_used: 0 } })],
+  ['classroom', trialProfile({ activity_kind: 'classroom' })],
+  ['personal', trialProfile({ activity_kind: 'personal' })],
+  ['no kind', { profile_id: 'studio-open-trial' }],
+  ['look-alike id', trialProfile({ profile_id: 'studio-open-trial-2' })],
+  ['null', null], ['undefined', undefined],
+]) assert.equal(c.endCardAdvertised(profile), false, name);
 
 // ── Which turn endings are the end of a free trial ──────────────────────────────────────────
 // Positive controls: both observed sentences, and the bare code on a non-pass seat.
@@ -41,7 +51,7 @@ for (const err of [CLASS_429, BUSY, NETWORK, null, undefined, 'string error', { 
 
 // ── The card view ──────────────────────────────────────────────────────────────────────────
 const card = c.trialEndCardView({ profile: trialProfile(), err: EXHAUSTED, products: catalogue });
-assert.ok(card, 'advertised trial + trial ending + catalogue → card');
+assert.ok(card, 'open-trial seat + trial ending + catalogue → card');
 assert.equal(card.ending, 'exhausted');
 assert.equal(card.title, '무료 체험을 모두 사용했습니다');
 assert.equal(card.primary, '이용권 살펴보기');
@@ -55,10 +65,11 @@ assert.equal(card.productId, 'pass-basic');
 assert.ok(!/API Error|Claude Code|429|403/.test(card.text));
 assert.ok(card.text.startsWith(card.title));
 
-// The Service may name the pass to show; an unknown id falls back to the suggested one.
-assert.equal(c.trialEndCardView({ profile: trialProfile({ pass_offer: { end_card: true, product_id: 'pass-lite' } }), err: EXPIRED, products: catalogue }).facts[1],
+// Without a suggested pass the card names the catalogue's first, as the purchase list selects first.
+const plain = catalogue.map(({ recommended, ...rest }) => rest);
+assert.equal(c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: plain }).facts[1],
   '이어서 작업하려면 이용권이 필요합니다. 라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
-assert.equal(c.trialEndCardView({ profile: trialProfile({ pass_offer: { end_card: true, product_id: 'pass-gone' } }), err: EXPIRED, products: catalogue }).productId, 'pass-basic');
+assert.equal(c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: catalogue }).productId, p.defaultProduct(catalogue).id);
 const expired = c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: catalogue });
 assert.equal(expired.title, '무료 체험 시간이 끝났습니다');
 
@@ -69,13 +80,13 @@ for (const v of [card, expired]) {
 }
 
 // ── Negative controls: the card is absent ───────────────────────────────────────────────────
-// Mid-work: an ordinary failure on an advertised trial seat.
+// Mid-work: an ordinary failure on an open-trial seat.
 for (const err of [NETWORK, CLASS_429, BUSY])
   assert.equal(c.trialEndCardView({ profile: trialProfile(), err, products: catalogue }), null, `mid-work: ${err.message}`);
-// Not advertised (the flag is off): today's production behaviour stays.
+// Flag off (no open-trial seat exists): a code-issued trial ends exactly as today.
+assert.equal(c.trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial' }, err: EXHAUSTED, products: catalogue }), null);
 assert.equal(c.trialEndCardView({ profile: { activity_kind: 'trial' }, err: EXHAUSTED, products: catalogue }), null);
-assert.equal(c.trialEndCardView({ profile: trialProfile({ pass_offer: { end_card: false } }), err: EXHAUSTED, products: catalogue }), null);
-// A bought pass is never read as a trial, even if an offer were sent.
+// A bought pass is never read as a trial.
 assert.equal(c.trialEndCardView({ profile: trialProfile({ pass: { request_limit: 200, requests_used: 200 } }), err: EXHAUSTED, products: catalogue }), null);
 // A classroom seat never gets a purchase card.
 assert.equal(c.trialEndCardView({ profile: trialProfile({ activity_kind: 'classroom' }), err: EXHAUSTED, products: catalogue }), null);

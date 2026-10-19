@@ -7,10 +7,12 @@
  * own pass facts), one Primary "이용권 살펴보기" and the escape "오늘은 여기까지". The card never
  * opens the purchase view by itself, never counts down and is never shown mid-work.
  *
- * Default off. The card is drawn only when the Service advertises it on `/v1/profile`:
- *   pass_offer: { end_card: true, product_id?: string }
- * served for a non-pass trial seat while the Service's `HPS_TRIAL_END_CARD === "enabled"`.
- * Without that field (every Service today) the turn ends exactly as before.
+ * Default off. The card follows the Service's own open-trial switch: it is drawn only for a seat
+ * whose `/v1/profile` says `profile_id: "studio-open-trial"`, `activity_kind: "trial"` and no
+ * `pass` block. The Service serves that profile only while `HPS_OPEN_TRIAL === "enabled"`
+ * (Service ot-open-profile); with the switch off no seat has it, so every turn ends exactly as
+ * before. Code-issued trials (`studio-native-trial`) and bought passes never get the card.
+ * No new `/v1/profile` field is read: `profile_id`, `activity_kind` and `pass` are already served.
  *
  * The two trial sentences are the ones observed on 2026-10-18 (SDK 0.3.299); the Service sends
  * them without a code. The bare `trial_exhausted` code counts only off a bought pass, because the
@@ -20,7 +22,9 @@ import type { ResolvedProfile, TrialEndCardView } from "./protocol.ts";
 import { defaultProduct, fetchProducts, passFacts, type PassProduct } from "./passPurchase.ts";
 
 export type TrialEnding = TrialEndCardView["ending"];
-export interface PassOffer { productId?: string }
+
+/** The Service profile id of the open trial's free tier (Service `profiles/studio-open-trial.ts`). */
+export const OPEN_TRIAL_PROFILE_ID = "studio-open-trial";
 
 export const TRIAL_END_CARD_COPY = {
   titleExhausted: "무료 체험을 모두 사용했습니다",
@@ -32,15 +36,6 @@ export const TRIAL_END_CARD_COPY = {
   escape: "오늘은 여기까지",
 } as const;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
-
-/** The Service's advertisement. Anything but `end_card: true` is "not advertised". */
-export function parsePassOffer(input: unknown): PassOffer | null {
-  if (!isRecord(input) || input.end_card !== true) return null;
-  const id = input.product_id;
-  return typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? { productId: id } : {};
-}
-
 /** Whether this turn ended because the free trial ran out. Anything else is not the end of a trial. */
 export function trialEndReason(err: unknown, onPass: boolean): TrialEnding | null {
   const m = (err as { message?: unknown } | null | undefined)?.message;
@@ -51,11 +46,11 @@ export function trialEndReason(err: unknown, onPass: boolean): TrialEnding | nul
   return null;
 }
 
-type ProfileFacts = Pick<ResolvedProfile, "activity_kind" | "pass" | "pass_offer">;
+type ProfileFacts = Pick<ResolvedProfile, "activity_kind" | "pass" | "profile_id">;
 
-/** Whether the Service advertises the card for this seat at all (cheap; no network). */
+/** Whether this seat is an open-trial free-tier seat at all (cheap; no network). */
 export function endCardAdvertised(profile: ProfileFacts | null | undefined): boolean {
-  return !!profile && !profile.pass && profile.activity_kind === "trial" && !!parsePassOffer(profile.pass_offer);
+  return !!profile && !profile.pass && profile.activity_kind === "trial" && profile.profile_id === OPEN_TRIAL_PROFILE_ID;
 }
 
 /** The card for this turn ending, or `null` when the turn ends as it does today. */
@@ -63,10 +58,11 @@ export function trialEndCardView(input: { profile: ProfileFacts | null | undefin
   const { profile, err, products } = input;
   // A bought pass, a classroom or a personal seat never gets a purchase card.
   if (!profile || !endCardAdvertised(profile)) return null;
-  const offer = parsePassOffer(profile.pass_offer)!;
   const ending = trialEndReason(err, false);
   if (!ending || !products?.length) return null;
-  const product = (offer.productId && products.find(p => p.id === offer.productId)) || defaultProduct(products);
+  // The pass the Service itself suggests (`recommended`), else its first: the same one the
+  // purchase list selects first, so the card never names a pass the list does not lead with.
+  const product = defaultProduct(products);
   const title = ending === "exhausted" ? TRIAL_END_CARD_COPY.titleExhausted : TRIAL_END_CARD_COPY.titleExpired;
   const facts = [TRIAL_END_CARD_COPY.kept, `${TRIAL_END_CARD_COPY.needPass} ${passFacts(product)}`, TRIAL_END_CARD_COPY.noRenewal];
   return { ending, title, facts, primary: TRIAL_END_CARD_COPY.primary, escape: TRIAL_END_CARD_COPY.escape, productId: product.id, text: [title, ...facts].join(" ") };

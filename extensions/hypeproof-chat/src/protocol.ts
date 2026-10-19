@@ -202,13 +202,6 @@ export interface ResolvedProfile {
   activity_kind?: "trial" | "personal" | "classroom";
   /** REQ-L12 — present for a bought pass (a native-trial grant with a longer window). Presentation only. */
   pass?: PassStatus;
-  /**
-   * TUX-COND-07 — the Service advertises the inline end-of-trial card for this trial seat
-   * (`HPS_TRIAL_END_CARD === "enabled"` on the Service). Absent: today's behaviour. `product_id`
-   * optionally names the catalogue pass whose facts the card shows. Presentation only; parsed
-   * defensively by `trialEndCard.parsePassOffer`.
-   */
-  pass_offer?: { end_card?: boolean; product_id?: string };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;

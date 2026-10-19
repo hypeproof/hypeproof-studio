@@ -5927,9 +5927,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // proxy and agent-sdk paths — it's not an error, and the webview already
     // ended the stream. Don't show a banner.
     if (isAbortError(err) || current?.signal?.aborted) return;
-    // TUX-COND-07 — a free trial that ran out ends in one inline card, only where the Service
-    // advertises it (`pass_offer.end_card`, default off). The card carries the Service's own pass
-    // facts; it never opens the purchase view, and any other turn ending falls through unchanged.
+    // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
+    // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
+    // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
+    // purchase view, and any other turn ending falls through unchanged.
     if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
       const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl) });
       if (current.signal?.aborted) return;

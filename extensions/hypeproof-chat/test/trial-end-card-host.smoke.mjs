@@ -82,7 +82,7 @@ const catalogue = { products: [
   { id: 'pass-lite', label: '라이트', amount: 30000, currency: 'KRW', duration_hours: 720, request_limit: 200, recommended: true },
   { id: 'pass-basic', label: '기본', amount: 55000, currency: 'KRW', duration_hours: 720, request_limit: 350 },
 ] };
-const advertised = { activity_kind: 'trial', pass_offer: { end_card: true } };
+const openTrial = { activity_kind: 'trial', profile_id: 'studio-open-trial' };
 const EXHAUSTED = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
 const EXPIRED = new Error('Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다.');
 const MID_WORK = new Error('연결이 끊겼습니다. 다시 보내 주세요.');
@@ -112,9 +112,9 @@ async function present(error, profile, { products = 200 } = {}) {
   }
 }
 
-test('advertised trial that ran out ends in one card built from the Service catalogue', async () => {
+test('an open-trial seat that ran out ends in one card built from the Service catalogue', async () => {
   for (const [err, title] of [[EXHAUSTED, '무료 체험을 모두 사용했습니다'], [EXPIRED, '무료 체험 시간이 끝났습니다']]) {
-    const r = await present(err, advertised);
+    const r = await present(err, openTrial);
     assert.equal(r.posts.length, 1);
     const [post] = r.posts;
     assert.equal(post.type, 'streamError');
@@ -130,25 +130,25 @@ test('advertised trial that ran out ends in one card built from the Service cata
   }
 });
 
-test('negative controls: no card mid-work, without the advertisement, on a pass, or without a catalogue', async () => {
-  // Baseline: what the host posts today for each error (no advertisement). The errors come from
+test('negative controls: no card mid-work, on a code-issued trial, on a pass, or without a catalogue', async () => {
+  // Baseline: what the host posts today for each error (a code-issued trial seat). The errors come from
   // another realm than the bundled host, so the baseline is measured, not assumed.
-  const baseline = async (err) => (await present(err, { activity_kind: 'trial' })).posts;
-  // Mid-work failure on an advertised seat: identical to today, and not even a catalogue read.
-  let r = await present(MID_WORK, advertised);
+  const baseline = async (err) => (await present(err, { activity_kind: 'trial', profile_id: 'studio-native-trial' })).posts;
+  // Mid-work failure on an open-trial seat: identical to today, and not even a catalogue read.
+  let r = await present(MID_WORK, openTrial);
   assert.deepEqual(r.posts, await baseline(MID_WORK));
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.requests, []);
-  // Flag off (every Service today): the turn ends exactly as before, without a catalogue read.
-  r = await present(EXHAUSTED, { activity_kind: 'trial' });
+  // Flag off (HPS_OPEN_TRIAL off: only code-issued trial seats exist): the turn ends exactly as before, without a catalogue read.
+  r = await present(EXHAUSTED, { activity_kind: 'trial', profile_id: 'studio-native-trial' });
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.requests, []);
   // A bought pass is never offered the trial card.
-  r = await present(EXHAUSTED, { ...advertised, pass: { request_limit: 200, requests_used: 200 } });
+  r = await present(EXHAUSTED, { ...openTrial, pass: { request_limit: 200, requests_used: 200 } });
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.requests, []);
   // No catalogue: no facts to show, so no card and no made-up price; the turn ends as today.
-  r = await present(EXHAUSTED, advertised, { products: 404 });
+  r = await present(EXHAUSTED, openTrial, { products: 404 });
   assert.deepEqual(r.posts, await baseline(EXHAUSTED));
   assert.equal(r.posts[0].trialEndCard, undefined);
   assert.deepEqual(r.commands, []);

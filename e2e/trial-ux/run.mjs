@@ -56,17 +56,17 @@ for (const [key, value] of [['activityId', 'wrong-activity'], ['nonce', 'wrong-f
   assert.equal(containsRequest([{ ...draftControl, [key]: value }], draftControl), false, `wrong ${key} must not match the draft acknowledgement`);
 }
 // TUX-COND-07 — the end-of-trial card is built by the host's own pure helper, so the browser
-// renders what the host sends, not a paraphrase. Fixtures: the Service advertises the card and
+// renders what the host sends, not a paraphrase. Fixtures: an open-trial seat (studio-open-trial) and a Service that
 // sells two passes; the turn ended with the observed exhausted sentence.
 const endCardSrc = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/trialEndCard.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
 const { trialEndCardView } = await import(`data:text/javascript;base64,${Buffer.from(endCardSrc.outputFiles[0].text).toString('base64')}`);
 const endCardPasses = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }, { id: 'pass-basic', label: '기본', amount: 55000, durationDays: 30, requestLimit: 350 }];
 const endCardExhausted = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
-const endCard = trialEndCardView({ profile: { activity_kind: 'trial', pass_offer: { end_card: true } }, err: endCardExhausted, products: endCardPasses });
-// Controls for the judgment the browser case relies on: advertised → card; not advertised or mid-work → none.
-assert.ok(endCard, 'positive control: advertised trial ending yields a card');
-assert.equal(trialEndCardView({ profile: { activity_kind: 'trial' }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: flag off');
-assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', pass_offer: { end_card: true } }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: mid-work failure');
+const endCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: endCardExhausted, products: endCardPasses });
+// Controls for the judgment the browser case relies on: open-trial seat → card; code-issued trial or mid-work → none.
+assert.ok(endCard, 'positive control: an open-trial ending yields a card');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial' }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: code-issued trial (flag off)');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: mid-work failure');
 const trialActivity = { activity: { id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true } };
 const server = http.createServer(async (req, res) => {
   try {
