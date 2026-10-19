@@ -180,3 +180,58 @@ Observed locally on macOS arm64 / Node 24.4.1. Linux CI, Windows coordinator,
 Mac/Windows actual installation/update, provider allowance/billing, remote
 approval/promotion, customer delivery and seven-day operations remain NOT RUN.
 This closes the local decision/persistence slice, not the daily-release program.
+
+## Shared decision package (FIN-02)
+
+The same `scripts/release/engine/core.mjs` is packaged as
+`@hypeproof/release-engine-core@0.1.0`; no decision implementation is moved or
+copied. `package.json` exports only the root and `/core`, both pointing at that
+file. The tarball contains the core, package metadata, README and source-hash
+provenance. It excludes the Node filesystem store and CLI. The package remains
+private/unpublished; local packing does not authorize package publication.
+
+```bash
+npm pack ./scripts/release/engine --ignore-scripts --pack-destination /private/packages
+npm install --ignore-scripts --save-exact /private/packages/hypeproof-release-engine-core-0.1.0.tgz
+```
+
+Consumers commit the exact lockfile integrity and retain the tarball SHA-256 and
+source revision with their evidence. `provenance.json` records the originating
+base revision, source path, contract revision and exact core SHA-256. The final
+implementation revision belongs in the external handoff to avoid self-referential
+commit hashes. A sibling source checkout is not a dependency contract.
+
+The synchronous `applyEvent(state, event, policy, {now, checkFile})` returns
+`{state, result}`. The storage adapter owns serialization/CAS and atomic commit;
+the core adds no persistence or provider effects. Existing exported functions,
+wire schemas, canonical JSON bytes, SHA-256 and strict Ed25519/base64 signatures
+are preserved. `node:crypto` works directly in the tested workerd runtime with
+`nodejs_compat` and compatibility date `2026-10-06`; an async crypto rewrite is
+unnecessary for this runtime.
+
+Every file observation now refuses a missing verifier, `false`, a Promise or any
+thenable. Existing synchronous callbacks returning void remain supported. Fetch
+remote bytes before calling the engine; then synchronously verify their exact
+hash and size against the record, and bind that snapshot to the storage decision.
+A no-op callback is trusted code and cannot establish byte integrity. Remote
+fetch, snapshot freshness and persistence concurrency remain adapter obligations.
+
+Install the exact development runtime and run the regressions:
+
+```bash
+npm ci --prefix scripts/release/engine --ignore-scripts --no-audit --no-fund
+node --test scripts/release/test/engine.test.mjs scripts/release/test/engine-package.test.mjs
+```
+
+The package test installs a local tarball into an isolated temporary consumer,
+checks exact version/integrity and source provenance, verifies private subpaths
+are inaccessible, and replays signed promotion records through both the installed
+Node package and the CLI's filesystem adapter. The always-registered workerd test
+replays the same protocol through the packed core and compares complete results
+and final ledger digest. Missing Miniflare is a failure; it is never silently
+skipped. Miniflare `5.20261006.1-alpha` and workerd `1.20261006.1` are locked.
+`RELEASE_ENGINE_MINIFLARE_MODULE` is an optional local diagnostic override.
+Tampered bodies, other keys, changed bytes, missing/false/async/thenable verifiers
+must block. This local protocol/runtime proof does not establish installed-App
+acceptance, live Service integration, production storage concurrency, human
+approval, provider billing or publication. See [FIN-02 evidence](../evidence/release-core-package.md).

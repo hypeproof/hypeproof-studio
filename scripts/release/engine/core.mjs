@@ -12,6 +12,14 @@ const text = value => typeof value === 'string' && value.trim().length > 0;
 const time = value => typeof value === 'string' ? Date.parse(value) : NaN;
 const validTime = value => Number.isFinite(time(value));
 
+// Remote adapters must fetch bytes before entering this synchronous decision.
+function verifiedFile(checkFile, file) {
+  require(typeof checkFile === 'function', 'file verifier required');
+  const result = checkFile(file);
+  require(result !== false, 'file verification failed');
+  require(!result || typeof result.then !== 'function', 'file verifier must be synchronous');
+}
+
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
@@ -135,9 +143,9 @@ export function readiness(state, candidateId, policy, now = Date.now(), checkFil
     const item = candidate(state, candidateId);
     require(!Object.values(state.failures).some(f => ['product', 'test-contract'].includes(f.kind) && f.observations.some(o => o.candidateId === item.id)), 'recorded failure requires investigation and a new candidate');
     const manifest = manifestFor(item, policy);
-    for (const artifact of Object.values(item.artifacts)) checkFile(artifact);
+    for (const artifact of Object.values(item.artifacts)) verifiedFile(checkFile, artifact);
     const evidence = evidenceFor(item, policy, manifest);
-    for (const report of evidence) checkFile(report.body.file);
+    for (const report of evidence) verifiedFile(checkFile, report.body.file);
     budgetGate(state, item, policy, now);
     return {status: 'AWAITING_APPROVAL', manifest, manifestDigest: digest(manifest), evidenceDigest: digest(evidence.map(envelope => envelope.body))};
   } catch (error) {
@@ -222,7 +230,7 @@ function transition(state, event, policy, now, checkFile) {
     const required = policy.requiredArtifacts.find(a => a.id === data.artifact?.id);
     require(required, 'artifact is not in required policy');
     require(data.artifact.target === required.target, 'artifact target mismatch');
-    checkFile(data.artifact);
+    verifiedFile(checkFile, data.artifact);
     item.artifacts[required.id] = data.artifact;
     return {status: 'ARTIFACT_RECORDED', artifactId: required.id};
   }
@@ -244,7 +252,7 @@ function transition(state, event, policy, now, checkFile) {
     require(validTime(report.startedAt) && validTime(report.endedAt) && time(report.startedAt) <= time(report.endedAt) && time(report.endedAt) <= now && time(report.startedAt) >= time(item.createdAt), 'invalid evidence execution time');
     const previous = own(item.evidence, check.id);
     require(!previous || time(report.endedAt) > time(previous.body.endedAt) || digest(previous) === digest(data.envelope), 'older/conflicting evidence cannot replace the latest result');
-    checkFile(report.file);
+    verifiedFile(checkFile, report.file);
     item.evidence[check.id] = data.envelope;
     return {status: 'EVIDENCE_RECORDED', testId: check.id, verdict: report.verdict};
   }
