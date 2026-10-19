@@ -38,8 +38,8 @@ let port = 18851;
 for (;; port++) { try { await new Promise((ok, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', ok); }); break; } catch (e) { if (port >= 18899) throw e; } }
 const SERVICE = `http://127.0.0.1:${port}/v1`, SITE = 'https://site.test';
 
-function harness({ freeStart = 'service', version = '0.1.58', secretsThrow = false, current = null, globals } = {}) {
-  const world = { secrets: new Map(), global: globals ?? new Map(), states: [], opened: [], commands: [], begun: [], claimNotes: [], current };
+function harness({ freeStart = 'service', version = '0.1.58', secretsThrow = false, current = null, globals, failure = null } = {}) {
+  const world = { secrets: new Map(), global: globals ?? new Map(), states: [], opened: [], commands: [], begun: [], claimNotes: [], current, failure };
   const ctx = {
     workspaceState: { keys: () => [], get: (_k, d) => d, update: async () => {} },
     globalState: { get: (k, d) => world.global.has(k) ? world.global.get(k) : d, update: async (k, v) => { world.global.set(k, v); } },
@@ -51,7 +51,7 @@ function harness({ freeStart = 'service', version = '0.1.58', secretsThrow = fal
     extension: { packageJSON: { version } }, subscriptions: [],
   };
   const chat = {
-    openInEditor: async () => { world.begun.push('chat'); }, ensureProfile: async () => world.current ?? (world.secrets.get('hypeproofChat.workshopToken') === TOKEN_FREE ? svc.profile : null), profileFailure: () => null, invalidateProfile() {}, refreshConfig() {},
+    openInEditor: async () => { world.begun.push('chat'); }, ensureProfile: async () => world.current ?? (world.secrets.get('hypeproofChat.workshopToken') === TOKEN_FREE ? svc.profile : null), profileFailure: () => world.failure, invalidateProfile() {}, refreshConfig() {},
     hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => '코치', coachNameIsChosen: () => true,
     noteFreeClaim: (token, outcome) => world.claimNotes.push({ token, outcome }), funnelEmit() {},
   };
@@ -249,5 +249,30 @@ try {
   await h.page.handle({ type: 'purchaseStart', productId: 'pass-30d' });
   assert.equal(svc.requests.find(r => r.path === '/v1/purchase/orders').free, null, 'no free credential from a code-issued seat');
   assert.equal(h.world.opened.length, 1, 'today: the browser opens');
-  console.log(`PASS free-start host over HTTP :${port}: negatives (code/404/old/off), first open → age → claim → chat, reuse, fallback id, 9 refusals + busy retry + offline, floor, drained, under-14, purchase header + guardian`);
+  // ── e2e D2: relaunch on an expired free seat whose profile the Service refuses ───────────────
+  // The real classifier reads the real Service answer (403 trial_expired + the free sentence).
+  const { classifyProfileFailure } = await import('../src/proxyClientHelpers.ts');
+  const FREE_EXPIRED_BODY = JSON.stringify({ error: { code: 'trial_expired', type: 'session_window', message: '무료 사용 시간이 끝났습니다. 만든 파일과 대화는 그대로 남아 있습니다.' } });
+  const CODE_EXPIRED_BODY = JSON.stringify({ error: { code: 'trial_expired', type: 'session_window', message: '개인 체험 시간이 끝났습니다. 작업 파일은 그대로 보존됩니다.' } });
+  reset();
+  h = harness({ globals: new Map([['hypeproofChat.freeStart.age.v1', '14+']]), failure: classifyProfileFailure(403, FREE_EXPIRED_BODY) });
+  h.world.secrets.set('hypeproofChat.workshopToken', 'expired-free-' + 'e'.repeat(40));
+  await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(h.state().profile, undefined);
+  assert.equal(h.state().freeStart.ended, 'expired', 'the free card is told the seat ended');
+  assert.equal(h.state().error, undefined, 'the end is said once, by the card, not again as an error beside it');
+  assert.equal(claims().length, 0, 'nothing is claimed on relaunch');
+  // Negative control: a code-issued trial's expiry (its own sentence) keeps today's error and no ended flag.
+  reset();
+  h = harness({ globals: new Map([['hypeproofChat.freeStart.age.v1', '14+']]), failure: classifyProfileFailure(403, CODE_EXPIRED_BODY) });
+  await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(h.state().freeStart.ended, undefined, 'a code-issued trial is not read as a free seat');
+  assert.ok(h.state().error, 'its error stays as today');
+  // Negative control: the Service served the ended profile (trial.state expired) → the profile card draws it.
+  reset();
+  h = harness({ current: { ...freeProfile, trial: { state: 'expired', ends_at: Date.now() - 1, request_limit: 10, requests_used: 3 } }, failure: classifyProfileFailure(403, FREE_EXPIRED_BODY) });
+  await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(h.state().freeStart.ended, undefined, 'a served profile wins over a stale failure');
+  assert.equal(h.state().profile.free, true);
+  console.log(`PASS free-start host over HTTP :${port}: negatives (code/404/old/off), first open → age → claim → chat, reuse, fallback id, 9 refusals + busy retry + offline, floor, drained, under-14, purchase header + guardian, expired free seat relaunch (D2)`);
 } finally { server.close(); server.closeAllConnections?.(); }

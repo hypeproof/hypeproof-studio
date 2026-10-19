@@ -11,7 +11,7 @@ import type { StartRequest, StartState } from "./startPageProtocol";
 import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
-import { AGE_KEY, FREE_CLAIM_REFUSALS, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, freeAllowanceLine, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, freeAllowanceLine, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
 import { qrDataUrl } from "./testQr";
@@ -269,9 +269,11 @@ export class StartPage {
     return isAgeAnswer(v) ? v : undefined;
   }
   private appVersion(): string { return String(this.context.extension.packageJSON.version ?? ""); }
-  private freeStartView(): FreeStartView | undefined {
+  private freeStartView(running?: ResolvedProfile | null): FreeStartView | undefined {
     if (!this.freeStartOn()) return undefined;
     const offer = this.trialOffer!;
+    // e2e D2 — a saved free seat whose window is over: never offer a fresh start beside its end.
+    const ended = !running && !this.candidate ? freeSeatEnding(this.chat.profileFailure()) : undefined;
     const age = this.ageAnswer();
     const allowance = freeAllowanceLine(offer);
     const tooOld = belowFloor(this.appVersion(), offer.minAppVersion) || this.freeRefusal?.code === "app_too_old";
@@ -282,6 +284,7 @@ export class StartPage {
       ...(offer.available === false ? { unavailable: offer.reason ?? "paused" } : {}),
       ...(allowance ? { allowance } : {}),
       ...(tooOld ? { tooOld: true } : {}),
+      ...(ended ? { ended } : {}),
     };
   }
   /**
@@ -524,7 +527,7 @@ export class StartPage {
     // SPEC §2.5 — the running seat (not a candidate being previewed) decides the payer question and the header.
     const running = this.candidate ? null : p;
     this.freeSeatNow = isFreeSeat(running);
-    const freeStart = this.freeStartView();
+    const freeStart = this.freeStartView(running);
     const state: StartState = {
       legacyConnection:await activityConnections(this.context)?.hasLegacyConnection(),
       legacyHistory,
@@ -534,7 +537,8 @@ export class StartPage {
       candidate: !!this.candidate,
       previousConnected: this.candidate ? this.candidate.previousConnected : !!p,
       // REQ-L12 (13) — after a free trial ended, name the pass entry while it is drawn. Never open it.
-      error: withTrialPassPointer(this.error ?? (!p ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
+      // The free card states a free seat's end itself (freeStart.ended), so its failure sentence is not repeated.
+      error: withTrialPassPointer(this.error ?? (!p && !freeStart?.ended ? this.chat.profileFailure()?.friendly : undefined), !!this.products?.length),
       version: this.context.extension.packageJSON.version,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
       ...(this.chat.inboxSource ? { inbox: await this.chat.inboxSource.inboxView() } : {}),

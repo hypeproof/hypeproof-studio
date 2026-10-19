@@ -10,6 +10,7 @@
  * kill switch `hypeproofChat.freeStart: "off"` forces today's start page.
  */
 import { FREE_CLAIM_PATH } from "./trialOffer.ts";
+import { FREE_EXPIRED_SERVICE } from "./passPurchase.ts";
 
 /** SecretStorage key for the install id (globalState fallback under the same key). */
 export const INSTALL_ID_KEY = "hypeproofChat.installId.v1";
@@ -41,6 +42,9 @@ export const FREE_START_COPY = {
   under14Title: "보호자와 함께 시작해 주세요",
   under14Body: "만 14세 미만은 보호자의 동의가 있어야 사용할 수 있습니다. 지금은 앱에서 보호자 동의를 받을 수 없어 여기서 시작할 수 없습니다.",
   guardianLink: "보호자 안내 보기 ↗",
+  endedTitle: "무료 사용이 끝났습니다",
+  endedExpired: "무료 사용 시간이 끝났습니다. 만든 파일은 작업 폴더에 그대로 있습니다.",
+  endedPass: "이어서 하려면 이용권으로 시작하기",
   payerQuestion: "결제하는 분이 만 19세 이상인가요?",
   payerYes: "네",
   payerNo: "아니요",
@@ -150,4 +154,14 @@ export function freeAllowanceLine(offer: { requestLimit?: number; durationHours?
   if (!offer?.requestLimit || !offer.durationHours) return null;
   const hours = Math.round(offer.durationHours);
   return `무료 AI 요청 ${offer.requestLimit.toLocaleString("ko-KR")}번 · 첫 요청부터 ${hours}시간`;
+}
+
+/**
+ * The saved free seat ended and the Service refused its profile: 403 `trial_expired` carrying the
+ * free sentence (Service free-seat-copy, SPEC iteration 4 §1.3). A code-issued trial's sentence and
+ * a pass's sentence do not match, so their start pages are unchanged. A Service that serves the
+ * ended profile (trial.state "expired") never reaches this: the profile card draws the end.
+ */
+export function freeSeatEnding(failure: { code?: string; serviceMessage?: string } | null | undefined): "expired" | undefined {
+  return failure?.code === "trial_expired" && !!failure.serviceMessage && FREE_EXPIRED_SERVICE.test(failure.serviceMessage) ? "expired" : undefined;
 }
