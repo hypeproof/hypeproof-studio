@@ -65,6 +65,12 @@ export interface ChatMessage {
    * attached to a `user` or `tool` line.
    */
   assistantName?: string;
+  /**
+   * CGP-CHAT-R-002 (REQ-STUDIO-CHAT-EDIT-RESEND) — on a user line only: this line is an edited
+   * resend of the prompt whose group root is `editOf` (editResend.ts). Absent = its own root, so a saved
+   * conversation written before this field reads as one version per turn.
+   */
+  editOf?: string;
 }
 
 /**
@@ -571,7 +577,9 @@ export type WebviewMessage = (
   | { type: "refreshEffort" }
   | { type: "sendMessage"; activityId?:string; text: string; history: ChatMessage[]; images?: string[]; /** #751 U3 — instructor prompts imported into the draft this message was sent from (bodiless). */ imports?: Array<{ object_id: string; revision: number; hash16: string }>;
       /** D-028 — stage ids of photos attached as files; the host moves them into images/ on send. */
-      attachments?: string[]; toolMode?: import('./turnTools').TurnToolMode; userMessageId?: string }
+      attachments?: string[]; toolMode?: import('./turnTools').TurnToolMode; userMessageId?: string;
+      /** CGP-CHAT-R-002 — this send is an edited resend of the latest prompt group (its root user-message id). */
+      editOf?: string }
   /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
   | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
   /** D-028 — the participant removed a staged photo before sending; the host deletes it. */

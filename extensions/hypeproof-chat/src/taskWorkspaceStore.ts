@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
 import { suggestTaskTitle } from './taskTitle.ts';
+import { validEditOf } from './editResend.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -62,11 +63,13 @@ const sameLock = (a: LockRecord | undefined, b: LockRecord) => !!a &&
   a.dev === b.dev && a.ino === b.ino && a.owner.nonce === b.owner.nonce;
 
 function validMessage(value: unknown): value is ChatMessage {
-  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode'])) return false;
+  if (!isRecord(value) || !exactKeys(value, ['id', 'role', 'content', 'createdAt', 'tool', 'citations', 'images', 'assistantName', 'toolMode', 'editOf'])) return false;
   if (!nonempty(value.id, 256) || typeof value.role !== 'string' || !['user', 'assistant', 'system', 'tool'].includes(value.role) ||
       typeof value.content !== 'string' || !timestamp(value.createdAt)) return false;
   if (value.assistantName !== undefined && typeof value.assistantName !== 'string') return false;
   if (value.toolMode !== undefined && (value.role !== 'user' || !['auto', 'web-search'].includes(value.toolMode as string))) return false;
+  // CGP-CHAT-R-002 — an edited resend names its group root; only a user line can be one.
+  if (value.editOf !== undefined && (value.role !== 'user' || !validEditOf(value.editOf))) return false;
   if (value.images !== undefined && (!Array.isArray(value.images) || !value.images.every(image => typeof image === 'string' && image.startsWith('data:image/')))) return false;
   if (value.tool !== undefined && (!isRecord(value.tool) || !exactKeys(value.tool, ['icon', 'label', 'state']) ||
       typeof value.tool.icon !== 'string' || typeof value.tool.label !== 'string' || typeof value.tool.state !== 'string' || !['running', 'done', 'error'].includes(value.tool.state))) return false;

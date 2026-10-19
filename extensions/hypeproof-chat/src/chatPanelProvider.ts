@@ -195,6 +195,7 @@ import {
   type TimelineState,
   type ToolEntry,
 } from "./chatTimeline";
+import { currentVersions, editResendPayload, historyForEdit, latestUserTurn, validEditTarget, versionCount } from "./editResend";
 import { capturePageContext } from "./nativeBrowser";
 import { isGeneralBrowserOpenRequest } from "./browserIntent";
 import { validateAndRepairHtml, type HtmlStructureResult } from "./htmlStructure";
@@ -440,15 +441,34 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const scope = this.turnRequestScope();
     return [...this.getHistory(), ...[...(this.turnRequests ?? new Map()).values()].filter(value => value.scope === scope).map(value => value.message)];
   }
-  private rememberTurnRequest(text: string, mode: TurnToolMode, id?: string, retrySourceId?: string): string {
+  private rememberTurnRequest(text: string, mode: TurnToolMode, id?: string, retrySourceId?: string, editOf?: string): string {
     if (id !== undefined && (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id))) throw new TurnToolModeError('요청 식별자를 확인할 수 없습니다. 입력은 그대로 보관됩니다.');
     const userId = id ?? randomId();
     const previous = this.retryMessages().find(message => message.id === userId);
     if (previous && (retrySourceId !== userId || previous.content !== text || turnToolMode(previous.toolMode) !== mode)) throw new TurnToolModeError('이미 보낸 요청입니다. 원래 요청의 다시 보내기를 사용해 주세요.');
     this.turnRequests ??= new Map();
-    this.turnRequests.set(userId, { scope: this.turnRequestScope(), message: { id: userId, role: 'user', content: text, createdAt: Date.now(), toolMode: mode } });
+    this.turnRequests.set(userId, { scope: this.turnRequestScope(), message: { id: userId, role: 'user', content: text, createdAt: Date.now(), toolMode: mode, ...(editOf ? { editOf } : {}) } });
     while (this.turnRequests.size > 64) this.turnRequests.delete(this.turnRequests.keys().next().value!);
     return userId;
+  }
+  /**
+   * CGP-CHAT-R-002 — the prompts an edit may target: the saved conversation plus a failed request
+   * newer than it (failed turns are not saved, but their bubble is the latest one on screen).
+   */
+  private editableHistory(): ChatMessage[] {
+    const history = this.getHistory();
+    const ids = new Set(history.map(message => message.id));
+    const lastSaved = latestUserTurn(history)?.message.createdAt ?? -1;
+    const scope = this.turnRequestScope();
+    const failed = [...(this.turnRequests ?? new Map()).values()]
+      .filter(value => value.scope === scope && !ids.has(value.message.id) && value.message.createdAt > lastSaved).map(value => value.message);
+    return [...history, ...failed.slice(-1)];
+  }
+  /** Refuses an edit of anything but the latest prompt group, and any edit from instructor mode. */
+  private requireEditTarget(editOf: unknown): void {
+    if (this._instructorMode.isInstructor || !validEditTarget(this.editableHistory(), editOf)) {
+      throw new TurnToolModeError('마지막으로 보낸 메시지만 고칠 수 있어요. 고친 내용은 입력창에 남겨 두었어요.');
+    }
   }
   private interruptedHistory?: { scope: string; messages: ChatMessage[] };
   private interruptedHistoryError(): string | null {
@@ -4650,6 +4670,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (msg.type === 'sendMessage' || msg.type === 'retryMessage') {
       try {
         requestedMode = msg.type === 'retryMessage' ? retryTurnToolMode(this.retryMessages(), msg) : turnToolMode(msg.toolMode);
+        if (msg.type === 'sendMessage' && msg.editOf !== undefined) this.requireEditTarget(msg.editOf);
         if (this.interruptedHistoryError()) throw new Error('중단한 대화가 아직 저장되지 않았습니다. 작업을 다시 선택해 저장을 재시도한 뒤 보내 주세요.');
       } catch (error) {
         await this.post({ type: 'inputRejected', text: msg.type === 'sendMessage' ? msg.text : msg.prompt, images: msg.images,
@@ -4892,7 +4913,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       case "sendMessage":
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
-        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId);
+        await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf);
         return;
       case "stageImage":
         await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
@@ -5169,6 +5190,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     requestedMode?: TurnToolMode,
     userMessageId?: string,
     retrySourceId?: string,
+    editOf?: string,
   ): Promise<void> {
     const mode = turnToolMode(requestedMode);
     // cr-verify — a re-test is driving the tab and writing the record: the turn waits for it.
@@ -5188,7 +5210,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const deferCompletion = (streamId: string, signal?: AbortSignal) => { completedStreamId = streamId; completionSignal = signal; };
     let preflightComplete=false;
     try {
-    const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId);
+    // CGP-CHAT-R-002 — an error retry of an edited prompt (same id) stays a version of its group.
+    const versionOf = editOf ?? (retrySourceId !== undefined && retrySourceId === userMessageId ? this.retryMessages().find(message => message.id === retrySourceId)?.editOf : undefined);
+    const editedFrom = editOf ? latestUserTurn(this.editableHistory()) : null;
+    const versions = editOf ? versionCount(this.editableHistory(), editOf) : 0;
+    const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId, versionOf);
+    const userLine = (content: string): ChatMessage => ({ id: userId, role: "user", content, createdAt: Date.now(), toolMode: mode, ...(versionOf ? { editOf: versionOf } : {}) });
     const connections=activityConnections(this.context);
     // Instructor mode has no student activity connection — skip the acquire/verify gate.
     if (connections && !this._instructorMode.isInstructor) {
@@ -5201,10 +5228,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // stops it, and then the learner's text and attachments go straight back into the composer.
     if (this.opsObserver?.switchPendingSetting) await this.lessonBindingPreflight();
     preflightComplete=true;
+    // DEC-08 — an edited resend is measured as its own event; the original attempt keeps its own turn record.
+    if (editOf && editedFrom) this.spool?.recordWorkflow({ event: "edit_resend", payload: editResendPayload({
+      editOf, fromMessageId: editedFrom.message.id, toMessageId: userId, versions,
+      originalLength: editedFrom.message.content.length, editedLength: text.length, images: images?.length ?? 0, toolMode: mode,
+    }) });
     // #503 — the webview's history now has tool lines (role:"tool") mixed in. This is
     // the only path out to the model, so they are filtered once right at the entrance.
     // The proxy/SDK gateway calls below are a contract that knows only user/assistant.
-    const history = modelHistory(clampTimeline(activityConnections(this.context) ? this.getHistory() : rawHistory, HISTORY_MAX));
+    // CGP-CHAT-R-002 — only the latest version of each prompt goes to the model; an edit drops its whole group.
+    const conversation = activityConnections(this.context) ? this.getHistory() : rawHistory;
+    const history = modelHistory(clampTimeline(editOf ? historyForEdit(conversation, editOf) : currentVersions(conversation), HISTORY_MAX));
     // Learning wiki called by name ("팀 브레인에 정리해 줘", "팀 브레인으로 덱 만들어 줘", "팀 브레인에
     // 뭐 있어?"): the App answers with the skill instead of a coach turn. Checked before the show
     // intent below, so "… 보여 줘" with the name never opens the game instead. A pasted image is
@@ -5230,7 +5264,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
         await this.appendHistory([
-          { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
+          userLine(text),
           {
             id: aid,
             role: "assistant",
@@ -5252,7 +5286,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // 2026-10-15 — "프로젝트 변경" opens the project list (switchProject) instead of a coach turn:
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
     if (mode === 'auto' && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
-      await this.appendHistory([{ id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode }]);
+      await this.appendHistory([userLine(text)]);
       await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.", deferCompletion, responseStarted);
       // After this send settles: switchProject refuses while a send is pending (idle()).
       setTimeout(() => void this.switchProject(), 0);
@@ -5273,7 +5307,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
         await this.appendHistory([
-          { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
+          userLine(text),
           {
             id: aid,
             role: "assistant",
@@ -6182,7 +6216,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // window is reopened.
         if (!generalBrowserRequest) await this.saveAgentMdIfPresent(assistantText, streamId);
         await this.appendHistory([
-          { id: userId, role: "user", content: historyText, createdAt: Date.now(), toolMode: mode },
+          userLine(historyText),
           ...this.finishTurnItems(
             streamId,
             messageId,
@@ -6228,7 +6262,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (ctrl.signal.aborted || failedPartial) {
         try {
           this.interruptedHistory = { scope: this.turnRequestScope(), messages: [
-            { id: userId, role: "user", content: historyText, createdAt: Date.now(), toolMode: mode },
+            userLine(historyText),
             ...(interruptedItems ?? []),
           ] };
           await this.retryInterruptedHistory();
