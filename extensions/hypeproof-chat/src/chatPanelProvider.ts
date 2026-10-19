@@ -446,7 +446,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private interruptedHistory?: { scope: string; messages: ChatMessage[] };
   private interruptedHistoryError(): string | null {
     return this.interruptedHistory?.scope === this.turnRequestScope()
-      ? '중단한 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.' : null;
+      ? '받은 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.' : null;
   }
   private async retryInterruptedHistory(): Promise<void> {
     const pending = this.interruptedHistory;
@@ -5276,6 +5276,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Freeze the visible conversation at cancellation. Runtime callbacks may settle
     // later; neither those bytes nor a later task belong to this interrupted turn.
     let interruptedItems: ChatMessage[] | undefined;
+    let failedPartial = false;
+    let runtimeSettled = false;
     const captureInterrupted = () => {
       interruptedItems = this.finishTurnItems(streamId, messageId, assistantText, assistantCitations, effectiveCoachName);
     };
@@ -5339,7 +5341,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         ...(instructorPromptRefs?.length ? { instructorPromptRefs } : {}),
       });
       const onDelta = (delta: string) => {
-        if (ctrl.signal.aborted) return;
+        if (ctrl.signal.aborted || runtimeSettled) return;
         if (pendingShown) clearPending();
         assistantText += delta;
         const t = this.turnTimelines.get(streamId);
@@ -5350,7 +5352,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         tryReveal(assistantText);
       };
       const onCitations = (cites: import("./protocol").Citation[]) => {
-        if (ctrl.signal.aborted) return;
+        if (ctrl.signal.aborted || runtimeSettled) return;
         for (const c of cites) assistantCitations.push(c);
         void this.post({ type: "streamCitations", streamId, citations: cites });
       };
@@ -5957,6 +5959,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!ctrl.signal.aborted) deferCompletion(streamId, ctrl.signal);
       }
     } catch (err) {
+      runtimeSettled = true;
+      // Received text belongs to the conversation even when the transport fails.
+      // Keep a visible incomplete marker across reload without treating it as a
+      // successful answer or silently retrying the model request.
+      if (!ctrl.signal.aborted && assistantText.length > 0) {
+        this.postToolLog(streamId, { id: `incomplete-${streamId}`, icon: '⚠️', label: '답변을 완료하지 못했어요. 위 내용은 부분 답변입니다.', state: 'error' });
+        captureInterrupted();
+        failedPartial = true;
+      }
       spoolStatus = "error";
       spoolErrorKind = classifyTurnError(err);
       { const e = err as { status?: unknown; kind?: unknown; requestId?: unknown }; opsFailure = { ...(typeof e?.status === "number" ? { status: e.status } : {}), ...(typeof e?.kind === "string" ? { code: e.kind } : {}), ...(typeof e?.requestId === "string" ? { requestId: e.requestId } : {}) }; }
@@ -5973,9 +5984,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
       await this._instructorMode.revertModelOnTurnError(c => Promise.resolve(this.context.workspaceState.update('hps.modelChoice', c)));
     } finally {
+      runtimeSettled = true;
       let interruptedSaveError: unknown;
       let interruptedSaveFailed = false;
-      if (ctrl.signal.aborted) {
+      if (ctrl.signal.aborted || failedPartial) {
         try {
           this.interruptedHistory = { scope: this.turnRequestScope(), messages: [
             { id: userId, role: "user", content: historyText, createdAt: Date.now(), toolMode: mode },
@@ -5985,7 +5997,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         } catch (error) {
           interruptedSaveFailed = true;
           interruptedSaveError = error;
-          await this.post({ type: 'taskWorkspaceError', error: '중단한 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.', historySaveFailed: true });
+          await this.post({ type: 'taskWorkspaceError', error: '받은 대화를 저장하지 못했습니다. 이 화면을 닫기 전에 필요한 내용을 복사해 주세요.', historySaveFailed: true });
         }
       }
       // The host is the only party that knows a turn ended (an auxiliary request of the same turn ends with end_turn before
@@ -6858,7 +6870,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #503 — the cap is counted on 'what was said'. Counting tool lines inside the
     // same 200 lets a single SDK turn (dozens of lines) push the entire conversation
     // history out.
-    const next = clampTimeline([...current, ...msgs], HISTORY_MAX);
+    // A retry reuses its user-message id. Preserve the original position rather
+    // than appending the same question again after a failed partial response.
+    const merged = new Map(current.map(message => [message.id, message]));
+    for (const message of msgs) merged.set(message.id, message);
+    const next = clampTimeline([...merged.values()], HISTORY_MAX);
     await this.context.workspaceState.update(this.historyKey(), next);
   }
 

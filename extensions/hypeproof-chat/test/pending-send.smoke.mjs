@@ -119,7 +119,7 @@ for(const fail of [false,true]){
  const messages=[{id:'stopped-user',role:'user',content:'계획해줘'},{id:'stopped-answer',role:'assistant',content:'부분 답변'}];
  h.interruptedHistory={scope,messages};
  h.appendHistory=async items=>{writes++;assert.equal(items,messages);if(refuse)throw Error('synthetic disk refusal');};
- await assert.rejects(h.retryInterruptedHistory(),/중단한 대화를 저장하지 못했습니다/);
+ await assert.rejects(h.retryInterruptedHistory(),/받은 대화를 저장하지 못했습니다/);
  assert.ok(h.interruptedHistoryError(),'failed persistence remains visible');
  scope='other';await h.retryInterruptedHistory();assert.equal(writes,1,'never append another task transcript here');
  assert.equal(h.interruptedHistoryError(),null);
@@ -135,4 +135,12 @@ for (const stopped of [false, true]) {
  assert.equal(h.posts.filter(message=>message.type==='streamError').length,stopped?0:1,'uncancelled transport failure must end the spinner; explicit Stop stays quiet');
 }
 
+// Older workspaces also reuse the failed request id when the user retries.
+{
+ const h=host();let saved=[{id:'question',role:'user',content:'계획해줘',createdAt:1},{id:'partial',role:'assistant',content:'받은 부분',createdAt:2}];
+ h.getHistory=()=>saved;h.historyKey=()=> 'synthetic-history';
+ h.context={workspaceState:{update:async (_key,messages)=>{saved=messages;}}};
+ await h.appendHistory([{id:'question',role:'user',content:'계획해줘',createdAt:3},{id:'complete',role:'assistant',content:'완료한 답변',createdAt:4}]);
+ assert.deepEqual(Array.from(saved,message=>message.id),['question','partial','complete'],'retry preserves partial context and one original question');
+}
 console.log('PASS pending send: authentication wait, retry, overlapping failures, history persistence and connection preparation');
