@@ -56,6 +56,38 @@ jobs:
           echo "::add-mask::$token"
           export HPS_REPAIR_MODEL_TOKEN="$token"
           node scripts/release/repair/runner.mjs .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output"
+      - name: Authorize optional bounded repair output storage
+        id: repair-storage
+        if: success() && fromJSON(inputs.packet).executionBudget.output.enabled == true
+        env:
+          PACKET_DIGEST: ${{ inputs.packet_digest }}
+        run: |
+          token=$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=hypeproof-release-executor" | jq -r .value)
+          echo "::add-mask::$token"
+          export HPS_REPAIR_MODEL_TOKEN="$token"
+          node scripts/release/repair/output.mjs authorize .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output"
+      - uses: actions/upload-artifact@v4
+        id: repair-output
+        if: steps.repair-storage.outputs.authorized == 'true'
+        with:
+          name: release-repair-output
+          path: |
+            ${{ runner.temp }}/repair-output/repair.patch
+            ${{ runner.temp }}/repair-output/receipt.json
+          if-no-files-found: error
+          retention-days: ${{ steps.repair-storage.outputs.retention }}
+          overwrite: false
+          compression-level: 0
+      - name: Reconcile immutable output artifact
+        if: steps.repair-output.outcome == 'success'
+        env:
+          PACKET_DIGEST: ${{ inputs.packet_digest }}
+          ARTIFACT_ID: ${{ steps.repair-output.outputs.artifact-id }}
+        run: |
+          token=$(curl --fail --silent --show-error -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=hypeproof-release-executor" | jq -r .value)
+          echo "::add-mask::$token"
+          export HPS_REPAIR_MODEL_TOKEN="$token"
+          node scripts/release/repair/output.mjs complete .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output" "$ARTIFACT_ID"
       - uses: actions/checkout@v4
         if: success() && fromJSON(inputs.packet).createDraftPr == true
         with:
@@ -77,4 +109,4 @@ jobs:
           echo "::add-mask::$token"
           export HPS_REPAIR_MODEL_TOKEN="$token"
           node scripts/release/repair/draft-pr.mjs .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output" "$GITHUB_WORKSPACE/.repair-harness"
-      # No upload-artifact: durable patch retention needs the engine storage allowance.
+      # Output upload requires the existing engine storage permit; default disabled.
