@@ -42,6 +42,7 @@ import {
   dismissVersion,
   currentBundleVersion,
   reportManualUpdateCheckFailure,
+  reportInstallUpdateFailure,
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
@@ -655,7 +656,8 @@ export async function activate(context: vscode.ExtensionContext) {
           onUpdateScheduled: () => provider.setAvailableUpdate(null),
         });
       } catch (error) {
-        vscode.window.showErrorMessage(`업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. ${(error as Error).message}`);
+        // D19/REQ-I14: no access or a rate-limited re-check gets the manual-check copy.
+        void reportInstallUpdateFailure(error);
       }
     }),
 

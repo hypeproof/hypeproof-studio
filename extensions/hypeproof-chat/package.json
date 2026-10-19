@@ -523,6 +523,12 @@
           "scope": "machine",
           "description": "Enable personal accounts only on the canonical HypeProof HTTPS Service and account site. Requires an approved account rollout; local preview is a separate setting."
         },
+        "hypeproofChat.publicUpdates": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Without member access to the private release mirror, check for updates against the public HypeProof Studio release that the Lab download serves (read anonymously). Members are unchanged. Off by default."
+        },
         "hypeproofChat.accountsPreview": {
           "type": "boolean",
           "default": false,
