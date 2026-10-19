@@ -63,16 +63,34 @@ export function ResponsePending({ hasContent = false }: { hasContent?: boolean }
 }
 
 /** Keep live output in view only while the reader chooses to follow the bottom. */
-export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean, revision: unknown) {
+export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean, revision: unknown, textSize?: string) {
   const follow = useRef(true);
+  const readingAnchor = useRef<{ element: HTMLElement; offset: number } | null>(null);
   const [away, setAway] = useState(false);
+  const captureReadingPosition = () => {
+    readingAnchor.current = null;
+    const node = ref.current;
+    if (!enabled || follow.current || !node) return;
+    const viewport = node.getBoundingClientRect();
+    const middle = (viewport.top + viewport.bottom) / 2;
+    // A single answer can contain many screens of text. Preserve a visible
+    // passage near the reading area's center, not the whole message's top.
+    const passages = [...node.querySelectorAll<HTMLElement>('.hps-msg-body p, .hps-msg-body li, .hps-msg-body pre, .hps-msg-body h1, .hps-msg-body h2, .hps-msg-body h3, .hps-msg-body td, .hps-msg-body th')]
+      .map(element => ({ element, rect: element.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.height > 0 && rect.bottom > viewport.top && rect.top < viewport.bottom)
+      .sort((a, b) => Math.abs((a.rect.top + a.rect.bottom) / 2 - middle) - Math.abs((b.rect.top + b.rect.bottom) / 2 - middle));
+    if (passages[0]) readingAnchor.current = { element: passages[0].element, offset: passages[0].rect.top - viewport.top };
+  };
   const toLatest = () => {
+    readingAnchor.current = null;
     follow.current = true;
     setAway(false);
     // Instant positioning avoids a stream of competing smooth-scroll animations.
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
   };
   const onScroll = () => {
+    // A newer reader scroll takes precedence over an outstanding settings reply.
+    readingAnchor.current = null;
     if (!enabled || !ref.current) return;
     const node = ref.current;
     follow.current = node.scrollHeight - node.scrollTop - node.clientHeight <= 48;
@@ -80,7 +98,14 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
   };
   useLayoutEffect(() => {
     if (enabled && follow.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [enabled, revision, ref]);
+  }, [enabled, revision, ref, textSize]);
+  useLayoutEffect(() => {
+    const anchor = readingAnchor.current;
+    readingAnchor.current = null;
+    const node = ref.current;
+    if (!enabled || follow.current || !node || !anchor || !node.contains(anchor.element)) return;
+    node.scrollTop += anchor.element.getBoundingClientRect().top - node.getBoundingClientRect().top - anchor.offset;
+  }, [enabled, ref, textSize]);
   useEffect(() => {
     if (!enabled || !ref.current) return;
     const node = ref.current;
@@ -91,7 +116,7 @@ export function useChatViewport(ref: RefObject<HTMLDivElement>, enabled: boolean
     for (const child of node.children) resize.observe(child);
     return () => resize.disconnect();
   }, [enabled, revision, ref]);
-  return { away, onScroll, toLatest };
+  return { away, onScroll, toLatest, captureReadingPosition };
 }
 
 /** Measure the active selection edge with the editor's actual wrapping and font. */

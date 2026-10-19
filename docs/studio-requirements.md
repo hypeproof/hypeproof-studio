@@ -1518,3 +1518,7 @@ Keep the attachment removal glyph readable on a compact opaque, theme-aware back
 ### Settings above sources: Escape ownership
 
 When conversation settings is open above the desktop sources panel, Escape dismisses only the settings dialog. Preserve the underlying sources panel and composer draft, and retain the native dialog's cancellation and focus restoration. The sources panel keeps its existing dismissal behavior once settings is closed.
+
+### Reading continuity during text-size changes
+
+Changing conversation text size while reading older output keeps a visible passage in view across reflow, rather than preserving only raw scroll offset or the entire answer's top. Readers following the latest output keep bottom-follow. A newer scroll or explicit Latest action supersedes a pending reading anchor; removed content must not restore a stale position. Preserve the composer draft and focus.

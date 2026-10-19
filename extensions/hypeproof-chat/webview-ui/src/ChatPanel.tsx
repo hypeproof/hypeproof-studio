@@ -630,7 +630,7 @@ export function ChatPanel(props: Props) {
   const accessNeedsAttention = !!funding && (funding.status === 'unknown' || !!funding.notice ||
     (!!funding.view?.required && !funding.selected) || (!!fundingChoice && (!fundingChoice.available ||
       !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
-  const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
+  const viewport = useChatViewport(scrollRef, personalWorkspace, messages, normalizeTextSize(config?.textSize));
   const headingSlot = useContext(HeadingSlotContext);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
@@ -1757,7 +1757,7 @@ export function ChatPanel(props: Props) {
           <legend>글자 크기</legend>
           {TEXT_SIZES.map(size => <label key={size}>
             <input type="radio" name="hps-text-size" value={size} checked={normalizeTextSize(config.textSize) === size}
-              onChange={() => postToHost({ type: 'setTextSize', size })} />
+              onChange={() => { viewport.captureReadingPosition(); postToHost({ type: 'setTextSize', size }); }} />
             <span>{TEXT_SIZE_LABELS[size]}</span>
           </label>)}
         </fieldset>
