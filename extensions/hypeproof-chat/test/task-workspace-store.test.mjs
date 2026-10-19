@@ -21,6 +21,33 @@ const temporary = t => {
   return root;
 };
 
+test('explicit draft recovery forks displayed context onto the latest valid revision without replacing existing tasks', async t => {
+  const root = temporary(t), scope = 'draft-recovery', store = new TaskWorkspaceStore(root, scope);
+  await store.initialize();
+  const original = store.getView().activeTaskId;
+  await store.append(original, [message('context', 'Current displayed conversation')]);
+  const other = new TaskWorkspaceStore(root, scope);
+  await other.rename(original, 'Concurrent title');
+  await other.create('Other task', expected(other));
+  await other.saveDraft(other.getView().activeTaskId, draft('Other writer draft'));
+  const before = JSON.parse(fs.readFileSync(other.filePath, 'utf8')).data;
+  const unsaved = { ...draft('Unsaved current text'), images: ['data:image/png;base64,cGhvdG8='], queued: 'Pending question', recovered: [{ text: 'Rejected question', toolMode: 'auto', images: [] }] };
+  await store.recoverDraft(original, unsaved);
+  const after = JSON.parse(fs.readFileSync(store.filePath, 'utf8')).data;
+  assert.deepEqual(after.tasks.slice(0, before.tasks.length), before.tasks);
+  assert.equal(after.revision, before.revision + 1);
+  const recovered = store.getActiveTask();
+  assert.deepEqual(recovered.messages, [message('context', 'Current displayed conversation')]);
+  assert.deepEqual(recovered.draft, { ...unsaved, queuedPaused: true });
+  assert.equal(new TaskWorkspaceStore(root, scope).getActiveTask().id, recovered.id);
+  const validBytes = fs.readFileSync(store.filePath, 'utf8');
+  fs.writeFileSync(store.filePath, 'broken external file');
+  await assert.rejects(store.recoverDraft(recovered.id, draft('Keep this input')), hasCode('corrupt'));
+  assert.equal(fs.readFileSync(store.filePath, 'utf8'), 'broken external file');
+  assert.equal(store.getActiveTask().id, recovered.id);
+  fs.writeFileSync(store.filePath, validBytes);
+});
+
 test('new task titles follow the first request and selected option, survive restart, and stop after two user turns', async t => {
   const root = temporary(t), store = new TaskWorkspaceStore(root, 'automatic-title');
   await store.initialize();

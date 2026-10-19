@@ -1,4 +1,6 @@
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
+import type { RecoveredRequest } from '../../src/activityDraft';
+import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { bindComposerFocus } from './composerFocus';
@@ -274,6 +276,9 @@ export function ChatPanel(props: Props) {
   const [toolMode, setToolMode] = useState<TurnToolMode>(saved?.toolMode ?? 'auto');
   const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
   const [queuedPaused, setQueuedPaused] = useState(separateQueue);
+  const [recovered, setRecovered] = useState<RecoveredRequest[]>(saved?.recovered ?? []);
+  const recoveryAtCapacity = useMemo(() => recoveryFull(recovered), [recovered]);
+  const [discardRequest, setDiscardRequest] = useState<RecoveredRequest | null>(null);
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
@@ -369,7 +374,7 @@ export function ChatPanel(props: Props) {
   const [lastImport, setLastImport] = useState<LastImport | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   // A draft that never imported an instructor prompt is saved exactly as before U3: no `imports` key at all.
-  const draftPayload = () => ({text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
+  const draftPayload = () => ({...(recovered.length ? {recovered} : {}),text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
   const activityId = config?.activity?.id;
@@ -378,20 +383,23 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
     if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
-  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused]);
+  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
       if (msg.type === "inputRejected") {
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
-        if (current.text.trim() && current.toolMode !== rejectedMode) {
-          setQueued(q => q === msg.text ? q : draftAfterStop(q ?? '', msg.text));
-          setQueuedToolMode(rejectedMode); setQueuedPaused(true);
-        } else {
-          setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
-          setToolMode(rejectedMode);
+        if (current.queued !== null || current.text.trim() || current.recovered?.length) {
+          // A refusal belongs to its original request, never to the later parked
+          // message or its attachments. Keep both durable and explicitly paused.
+          const request = {text: msg.text, toolMode: rejectedMode, images: msg.images ?? []};
+          setRecovered(items => items.some(item => item.text === request.text && item.toolMode === request.toolMode && JSON.stringify(item.images) === JSON.stringify(request.images)) ? items : [...items, request]);
+          if (current.queued !== null) setQueuedPaused(true);
+          return;
         }
+        setDraft(d => d === msg.text ? d : draftAfterStop(d,msg.text));
+        setToolMode(rejectedMode);
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
       }
       if (msg.type === "activityFreeze") {
@@ -587,10 +595,18 @@ export function ChatPanel(props: Props) {
   // NOTE: the early return into the naming card sits **below this component's last
   // hook**. It must not go here (between hooks) — see the "Hook order" comment below.
 
+  const reserveRecovery = (text: string, images: string[] = pendingImages, mode: TurnToolMode = toolMode) => {
+    if (canReserveRecovery(recovered, {text, images, toolMode: mode})) return true;
+    setImgNote(recovered.length
+      ? '보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 지금 작성한 내용과 사진은 그대로입니다.'
+      : '메시지와 사진이 너무 커서 보내지 않았어요. 내용을 나누거나 사진을 줄여 주세요. 입력한 내용은 그대로입니다.');
+    return false;
+  };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
     if (stagedPhotos.some((p) => !p.ready)) { setImgNote("사진을 준비하는 중이에요. 잠시 뒤에 다시 보내 주세요."); return false; }
+    if (!reserveRecovery(value, pendingImages, mode)) return false;
     if (personalWorkspace) viewport.toLatest();
     // `text` given = the PARKED message going out when the turn ended (#416). It is its own message: it never contained the
     // prompt the learner imported into the draft meanwhile, so it carries no import reference — and the draft typed while
@@ -607,6 +623,26 @@ export function ChatPanel(props: Props) {
     return true;
   };
 
+  const retryRecovered = (request: RecoveredRequest) => {
+    if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
+    // Send only this request's images; later staged photos/imports belong to the
+    // untouched composer. A refused send keeps the recovery item for another try.
+    if (props.onSend(request.text, request.images.length ? request.images : undefined, undefined, undefined, request.toolMode) === false) return;
+    setRecovered(items => items.filter(item => item !== request));
+    textareaRef.current?.focus({preventScroll: true});
+  };
+
+  const editRecovered = (request: RecoveredRequest) => {
+    if (streaming || frozen || props.sendPending || props.sendLocked) return;
+    if (draft.trim() || pendingImages.length || stagedPhotos.length || imports.length) {
+      setImgNote('작성 중인 메시지를 먼저 보내거나 입력창을 비운 뒤 수정해 주세요. 두 메시지는 그대로 보관되어 있습니다.');
+      return;
+    }
+    setDraft(request.text); setToolMode(request.toolMode); setPendingImages(request.images);
+    setRecovered(items => items.filter(item => item !== request));
+    setImgNote(null); textareaRef.current?.focus({preventScroll: true});
+  };
+
   // #416 — the turn ended: send the message the participant parked during it.
   // Edge-triggered (see shouldFlushQueue): firing while `streaming` is still
   // true would hit submit()'s own guard and silently drop the message.
@@ -614,13 +650,20 @@ export function ChatPanel(props: Props) {
     const prev = prevStreamingRef.current;
     prevStreamingRef.current = streaming;
     // #751 U4 — a turn the instructor cut off hands the parked message back, exactly like the learner's own Stop. Never sent.
+    if (queuedPaused) return;
     if (shouldRestoreQueue(prev, streaming, queued, !!props.stopNotice || !!error)) { restoreQueuedToDraft(); return; }
     if (queuedPaused || unavailable || !shouldFlushQueue(prev, streaming, queued, !!props.stopNotice || !!error)) return;
     // cr-verify — a product test holds the tab: the parked message goes back to the draft, never lost.
     if (props.sendLocked) { restoreQueuedToDraft(); return; }
     const text = queued as string;
-    setQueued(null);
-    submit(text, queuedToolMode);
+    // A staging/pending-send guard can refuse this edge. Keep the message and
+    // its mode until acceptance; a paused item gives it an explicit retry path
+    // instead of silently losing it or sending later on an unrelated render.
+    if (submit(text, queuedToolMode)) setQueued(null);
+    else {
+      setQueuedPaused(true);
+      setImgNote(note => note ?? '메시지를 보내지 못해 보관했습니다. 준비가 끝나면 보관한 메시지의 보내기를 눌러 주세요.');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming, queued, queuedPaused]);
 
@@ -859,6 +902,7 @@ export function ChatPanel(props: Props) {
    */
   const handleWorldPick = (chip: string) => {
     if (busy) return;
+    if (!reserveRecovery(chip, [], 'auto')) return;
     setWorldPending(true);
     props.onSend(chip);
     setRollExpand(null);
@@ -877,7 +921,8 @@ export function ChatPanel(props: Props) {
     const combined = rollExpand.original
       ? `${rollExpand.original} — 그리고 ${extra}`
       : extra;
-    props.onSend(combined, pendingImages.length > 0 ? pendingImages : undefined);
+    if (!reserveRecovery(combined, pendingImages, 'auto')) return;
+    if (props.onSend(combined, pendingImages.length > 0 ? pendingImages : undefined) === false) return;
     setDraft("");
     setPendingImages([]);
     setImgNote(null);
@@ -1229,7 +1274,7 @@ export function ChatPanel(props: Props) {
             message={error}
             requestId={props.errorRequestId}
             runbookUrl={props.errorRunbookUrl}
-            canRetry={props.canRetryLast}
+            canRetry={props.canRetryLast && recovered.length === 0}
             onRetry={props.onRetryLast}
             onDismiss={props.onDismissError}
             onReport={props.onReportProblem}
@@ -1286,6 +1331,20 @@ export function ChatPanel(props: Props) {
           }} />
         )}
         {imgNote && <div className="hps-img-note">{imgNote}</div>}
+        {recoveryAtCapacity && <div className="hps-recovery-notice" role="status">보관한 메시지를 먼저 다시 보내거나 정리해 주세요. 새 메시지는 입력창에 남아 있습니다.</div>}
+        {recovered.length > 0 && <div className="hps-recovery-list" aria-label={`보내지 못한 메시지 ${recovered.length}개`}>
+          {recovered.map((request, index) => <div className="hps-queued hps-recovered" role="status" aria-live="polite" key={index}>
+            <span className="hps-queued-label">보내지 못한 메시지{request.toolMode === 'web-search' ? ' · 웹 검색' : ''}{request.images.length ? ` · 사진 ${request.images.length}장` : ''}</span>
+            <span className="hps-queued-text" title={request.text}>{request.text}</span>
+            <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || unavailable || props.sendLocked} onClick={() => retryRecovered(request)}>다시 보내기</button>
+            <button type="button" className="hps-queued-send" disabled={streaming || frozen || props.sendPending || props.sendLocked} onClick={() => editRecovered(request)}>수정하기</button>
+            {discardRequest === request ? <span className="hps-recovery-confirm" role="group" aria-label="메시지 삭제 확인" onKeyDown={event => {if(event.key === 'Escape'){event.preventDefault();setDiscardRequest(null);textareaRef.current?.focus({preventScroll:true});}}}>
+              <span>이 메시지와 사진을 삭제할까요?</span>
+              <button type="button" className="hps-queued-send" autoFocus onClick={() => {setDiscardRequest(null);requestAnimationFrame(() => textareaRef.current?.focus({preventScroll:true}));}}>취소</button>
+              <button type="button" className="hps-queued-send" onClick={() => {setRecovered(items => items.filter(item => item !== request));setDiscardRequest(null);setImgNote(null);textareaRef.current?.focus({preventScroll:true});}}>삭제 확인</button>
+            </span> : <button type="button" className="hps-queued-send" onClick={() => setDiscardRequest(request)}>삭제</button>}
+          </div>)}
+        </div>}
         {queued !== null && (
           // #416 — what is parked, and how to take it back. Cancel returns it to
           // the draft (see restoreQueuedToDraft): the × must not mean "delete".

@@ -14,6 +14,7 @@ import { isProjectSwitchRequest, projectSwitchBrief } from "./publish/projectSwi
 const PROJECT_SWITCH_BRIEF_KEY = "hps.projectSwitch.brief.v1";
 const PROJECT_SWITCH_BRIEF_TTL_MS = 24 * 60 * 60_000;
 import { emptyActivityDraft, preservedDraftContent, validActivityDraft } from './activityDraft';
+import type { ActivityDraft } from './activityDraft';
 import { requireTurnTools, retryTurnToolMode, turnToolMode, TurnToolModeError, turnToolsAvailability, validTurnToolMode, WebSearchActivity, type TurnToolMode } from './turnTools';
 import { verifyActivity } from './proxyClient';
 import { fetchAccessView, sendBudgetRequest, accessProfile, type AccessState } from './accessClient';
@@ -31,7 +32,7 @@ import { selectedExternalInstructions } from "./externalSkillCommands";
 import { runImageEdit, selectedImageEditContext } from "./imageEditCommands";
 import * as fs from "fs";
 import {createHash} from 'node:crypto';
-import { TaskWorkspaceStore } from './taskWorkspaceStore';
+import { TaskWorkspaceStore, TaskWorkspaceStoreError } from './taskWorkspaceStore';
 import { APPROVAL_PLACEHOLDER, approvalChoices, approvalMessage, approveArtifact } from "./artifactApproval.ts";
 import {NativeObservationRecorder} from './nativeObservationRecorder';
 import {OBSERVATION_FORMATS, validateFindings, validateObservation, asCapabilityModel, type ObservationBatch} from './nativeObservationContract';
@@ -505,10 +506,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         this.taskChanging = true;
         try {
           if (source) this.draftSource = source;
-          await this.setConnectionChanging(true);
+          let recoveryDraft: ActivityDraft | undefined;
+          await this.setConnectionChanging(true, msg.type === 'taskRecoverDraft' ? draft => { recoveryDraft = draft; } : undefined);
           if (this.currentTaskStore?.() !== store || store.getView().activeTaskId !== msg.taskId) throw new Error('열린 작업이 바뀌었습니다. 현재 작업에서 다시 시도해 주세요.');
           const expected = { taskId: msg.taskId, revision: store.getView().revision };
           if (msg.type === 'taskCreate') await store.create('새 작업', expected);
+          else if (msg.type === 'taskRecoverDraft') {
+            if (!recoveryDraft) throw new Error('현재 입력을 확인하지 못했습니다. 이 창을 유지하고 다시 시도해 주세요.');
+            await store.recoverDraft(msg.taskId, recoveryDraft);
+          }
           else if (msg.type === 'taskSelect') await store.select(msg.id, expected);
           else if (msg.type === 'taskRename') await store.rename(msg.taskId, msg.title);
           this.orchestratorState = undefined;
@@ -533,7 +539,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       if ((msg.type === 'taskOpenSource' || msg.type === 'taskReturnFromSource') && msg.requestId) {
         await this.post({ type: 'sourceOpenResult', requestId: msg.requestId, url: msg.url, taskId: msg.taskId, opened: false, error: message });
-      } else await this.post({ type: 'taskWorkspaceError', error: message });
+      } else await this.post({ type: 'taskWorkspaceError', error: message, ...(msg.type === 'taskRecoverDraft' ? { draftSaveFailed: true } : {}) });
     }
   }
   private accessState:AccessState|undefined;
@@ -990,13 +996,31 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the webview shows it and the next turn's history carries it, so the coach can continue
    * from the button's outcome instead of asking what happened.
    */
-  private async postAppReply(text: string): Promise<void> {
+  private async postAppReply(text: string, deferCompletion?: (streamId: string) => void, onStart?: (streamId: string) => void): Promise<void> {
     const sid = randomId();
     const aid = randomId();
-    void this.post({ type: "streamStart", streamId: sid, messageId: aid });
-    void this.post({ type: "streamChunk", streamId: sid, delta: text });
-    void this.post({ type: "streamEnd", streamId: sid });
-    await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+    // handleSend owns deferred replies. Button/command replies must retain
+    // their own ownership until persistence settles, including its failure path.
+    const ownsCompletion = !deferCompletion;
+    if (ownsCompletion) this.pendingSends++;
+    let failed = false;
+    try {
+      onStart?.(sid);
+      void this.post({ type: "streamStart", streamId: sid, messageId: aid });
+      void this.post({ type: "streamChunk", streamId: sid, delta: text });
+      await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+      deferCompletion?.(sid);
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      if (ownsCompletion) {
+        this.pendingSends--;
+        await this.post(failed
+          ? { type: "streamError", streamId: sid, retryable: false, error: "답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요." }
+          : { type: "streamEnd", streamId: sid });
+      }
+    }
   }
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
@@ -1446,10 +1470,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * and the reply are recorded like the other answers the App writes itself (show intent, guest list),
    * and neither goes to the spool, so the next ingest reads only the class conversation.
    */
-  private async answerBrainCall(text: string, intent: BrainIntent): Promise<void> {
+  private async answerBrainCall(text: string, intent: BrainIntent, deferCompletion: (streamId: string) => void, onStart: (streamId: string) => void): Promise<void> {
     const name = brainName(this.learningWikiPlan());
     const uid = randomId();
     const aid = randomId();
+    onStart(uid);
     void this.post({ type: "streamStart", streamId: uid, messageId: aid });
     let run: BrainRun | undefined;
     try {
@@ -1462,12 +1487,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Markdown hard breaks: one short sentence per line in one bubble.
     const reply = run.lines.join("  \n");
     void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-    void this.post({ type: "streamEnd", streamId: uid });
     await this.appendHistory([
       { id: randomId(), role: "user", content: text, createdAt: Date.now() },
       { id: aid, role: "assistant", content: reply, createdAt: Date.now(), assistantName: this.coachDisplayName() },
     ]);
     if (run.open) await this.openBrainFile(run.open);
+    deferCompletion(uid);
   }
 
   /** "팀 브레인에 뭐 있어?": the summary from the wiki state; no model call, nothing opened. */
@@ -2403,8 +2428,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private connectionChanging = false;
   private draftWrites: Promise<void> = Promise.resolve();
   private draftSource?: vscode.Webview;
-  private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void};
-  async setConnectionChanging(value: boolean): Promise<void> {
+  private draftFlush?: {nonce:string;source:vscode.Webview;resolve:()=>void;reject:(e:Error)=>void;capture?:(draft:ActivityDraft)=>void};
+  async setConnectionChanging(value: boolean, capture?: (draft: ActivityDraft) => void): Promise<void> {
     this.connectionChanging = value;
     if (!activityConnections(this.context)) return;
     await this.post({type:'activityFreeze',frozen:value});
@@ -2414,7 +2439,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const nonce=crypto.randomUUID();
       await new Promise<void>((resolve,reject)=>{
         const timer=setTimeout(()=>{this.draftFlush=undefined;reject(new Error('입력 저장을 확인하지 못했습니다. 활동을 유지하고 다시 시도해 주세요.'));},8000);
-        this.draftFlush={nonce,source,resolve:()=>{clearTimeout(timer);this.draftFlush=undefined;resolve();},reject:e=>{clearTimeout(timer);this.draftFlush=undefined;reject(e);}};
+        this.draftFlush={nonce,source,capture,resolve:()=>{clearTimeout(timer);this.draftFlush=undefined;resolve();},reject:e=>{clearTimeout(timer);this.draftFlush=undefined;reject(e);}};
         void source.postMessage({type:'activityFreeze',frozen:true,nonce,activityId:activityConnections(this.context)?.scope});
       });
     }
@@ -4127,11 +4152,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
     }
-    if (['taskCreate', 'taskSelect', 'taskRename', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
+    if (['taskCreate', 'taskRecoverDraft', 'taskSelect', 'taskRename', 'taskSourceSelection', 'taskOpenSource', 'taskReturnFromSource'].includes(msg.type)) {
       await this.handleTaskMessage(msg, source); return;
     }
     if (msg.type==='saveActivityDraft') {
       if (!connections?.scope || msg.activityId!==connections.scope || !validActivityDraft(msg.draft)) return;
+      const flush = this.draftFlush;
+      if (msg.nonce && flush?.nonce === msg.nonce && flush.source === source && flush.capture) {
+        flush.capture(msg.draft);
+        flush.resolve();
+        return;
+      }
       if (source && !msg.nonce) this.draftSource=source;
       const key='hps.activity.draft.'+msg.activityId;
       const save=this.draftWrites.then(async () => {
@@ -4143,10 +4174,15 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await save;
         if (taskStore) await this.post({ type: 'taskWorkspaceError', error: null });
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce && this.draftFlush.source===source) this.draftFlush.resolve();
-      } catch {
-        const error=new Error(taskStore ? '입력을 저장하지 못했습니다. 현재 작업과 입력은 그대로입니다. 다시 선택해 주세요.' : '입력을 저장하지 못했습니다. 기존 활동을 유지합니다.');
+      } catch (failure) {
+        const conflict = failure instanceof TaskWorkspaceStoreError && failure.code === 'stale';
+        const error=new Error(taskStore
+          ? conflict
+            ? '다른 창의 변경과 충돌해 입력을 저장하지 못했습니다. 이 입력은 현재 화면에만 있습니다. 현재 대화와 입력을 새 작업에 보관해 이어갈 수 있습니다.'
+            : '입력을 저장하지 못했습니다. 이 입력은 현재 화면에만 있습니다. 저장 공간을 확인한 뒤 작업을 다시 선택해 주세요.'
+          : '입력을 저장하지 못했습니다. 기존 활동을 유지합니다.');
         if (msg.nonce && this.draftFlush?.nonce===msg.nonce) this.draftFlush.reject(error);
-        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: error.message });
+        if (taskStore) await this.post({ type: 'taskWorkspaceError', error: error.message, draftSaveFailed: true });
         else await this.post({type:'activityDraftError',error:'입력을 저장하지 못했습니다. 활동을 바꾸기 전에 내용을 복사해 두세요.'});
       }
       return;
@@ -4657,6 +4693,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     this.pendingSends++;
     let releaseActivity: (()=>void) | undefined;
+    // streamEnd lets the webview flush its queued follow-up. Announce readiness
+    // only after persistence, stream cleanup and the activity lease have settled.
+    let completedStreamId: string | undefined;
+    let responseStreamId: string | undefined;
+    const responseStarted = (id: string) => { responseStreamId = id; };
+    let completionSignal: AbortSignal | undefined;
+    const deferCompletion = (streamId: string, signal?: AbortSignal) => { completedStreamId = streamId; completionSignal = signal; };
     let preflightComplete=false;
     try {
     const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId);
@@ -4683,7 +4726,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const wikiSwitch = this.cachedProfile?.learning_wiki;
     const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
-      await this.answerBrainCall(text, brainCall);
+      await this.answerBrainCall(text, brainCall, deferCompletion, responseStarted);
       return;
     }
     // "Show me / open it / run it" — if the kid asks to see the game in plain
@@ -4697,9 +4740,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const reply = labels.showIntentReply;
         const uid = randomId();
         const aid = randomId();
+        responseStarted(uid);
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
         await this.appendHistory([
           { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
           {
@@ -4713,6 +4756,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             assistantName: this.coachDisplayName(),
           },
         ]);
+        deferCompletion(uid);
         void this.revealBuilt(lastGame, { artifactSource: "existing" });
         return;
       }
@@ -4723,7 +4767,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
     if (mode === 'auto' && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
       await this.appendHistory([{ id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode }]);
-      await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.");
+      await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.", deferCompletion, responseStarted);
       // After this send settles: switchProject refuses while a send is pending (idle()).
       setTimeout(() => void this.switchProject(), 0);
       return;
@@ -4739,9 +4783,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const reply = guestListMessage(ws, shown);
         const uid = randomId();
         const aid = randomId();
+        responseStarted(uid);
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
         await this.appendHistory([
           { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
           {
@@ -4752,6 +4796,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             assistantName: this.coachDisplayName(),
           },
         ]);
+        deferCompletion(uid);
         return;
       }
     }
@@ -4903,6 +4948,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const ctrl = new AbortController();
     this.activeStreams.set(streamId, ctrl);
 
+    responseStarted(streamId);
     void this.post({ type: "streamStart", streamId, messageId });
     // #503 — this turn's single timeline. It runs the same reducer as the webview, so
     // the history keeps exactly the on-screen order.
@@ -5602,7 +5648,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const completion = webActivity.completion(assistantCitations.length);
           if (completion) this.postToolLog(streamId, { id: `web-search-result-${streamId}`, icon: '🔎', ...completion });
         }
-        void this.post({ type: "streamEnd", streamId });
         // #371 — persist the agent.md handoff fence, if the coach emitted one.
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
@@ -5621,6 +5666,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
         tryReveal(assistantText);
+        if (!ctrl.signal.aborted) deferCompletion(streamId, ctrl.signal);
       }
     } catch (err) {
       spoolStatus = "error";
@@ -5693,13 +5739,22 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnTimelines.delete(streamId);
     }
     } catch (error) {
+      completedStreamId = undefined;
+      // Storage/profile failures can also happen after a reply has started.
+      // Bind that error to its own turn so a late failure cannot end the next one.
+      if (responseStreamId) {
+        this.activeStreams.get(responseStreamId)?.abort();
+        this.activeStreams.delete(responseStreamId);
+        this.turnTimelines.delete(responseStreamId);
+      }
       // A pre-stream storage/profile failure still owns a pending UI request.
       // Restore its captured input before propagating an unexpected host error.
       await this.post({type:"inputRejected",text,images,toolMode:mode});
-      await this.post({type:"streamError",streamId:"activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
+      await this.post({type:"streamError",streamId:responseStreamId ?? "activity",error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
       if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
       try { releaseActivity?.(); } finally { this.pendingSends--; }
+      if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId });
     }
   }
 

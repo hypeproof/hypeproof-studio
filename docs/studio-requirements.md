@@ -13,6 +13,17 @@ only for citations in this task, and preserves composer focus. A pinned source i
 not replaced by later citations. Classroom, account authority and shared Service
 memory remain governed by their existing contracts.
 
+UX22: a failed draft write must explicitly distinguish text still on screen from
+persisted text. The unsaved warning cannot be dismissed or cleared by an unrelated
+task-list/config refresh; a confirmed write clears it. A conflicting disk revision
+must not be described as a transient selection failure or overwritten. Keep the
+current draft editable and explain its unsaved state until it can be preserved.
+Explicit recovery snapshots the current composer and forks its displayed history,
+draft, images and pending items into a new task against the latest valid disk
+revision. Other tasks and concurrent edits remain unchanged. Queued text stays
+paused; recovery alone must not send a model request. A failed recovery leaves the
+original task and unsaved input visible and editable.
+
 [Design](design/task-workspace.md) and [TW/CP acceptance](testing/task-workspace.md)
 separate filesystem/host/built-UI evidence from native, Windows and customer proof.
 
@@ -26,6 +37,12 @@ motion, and tied to real state. Enter/Shift+Enter/Korean IME, queue/stop and dra
 recovery retain their existing meaning. Light/dark and 320px layouts must remain
 usable. Visual acceptance is independently reviewed against the implementation
 revision; functional test counts alone do not prove ChatGPT-level quality.
+
+UX13: a response completing while the learner reads earlier content must keep the
+visible paragraph within 2 CSSpx, not merely preserve the scroll offset. Busy
+feedback stays inside the existing heading so removing it cannot move the
+transcript. Its status still explains that switching tasks requires stopping the
+active work. Draft, selection and explicit latest-message behavior remain intact.
 
 ### Chat reference interaction (CG-IMPL-R1)
 
@@ -43,6 +60,68 @@ Tool mode belongs to one request: save it with the draft, parked message, user
 turn and retry identity. A recovered message with a different mode remains a
 separate, durable paused item; neither current draft nor mode is overwritten and
 no error recovery silently starts a new run. Reject duplicate pending dispatches.
+
+`REQ-C6` / UX10 turn isolation: a stopped turn's late chunks, citations,
+tool rows or terminal events must not change a later turn's answer, Stop button,
+error state, pending-send lock or current draft. Repeated starts must not erase
+already displayed text. Existing host preflight refusals (`tools`, `connection`,
+`activity`) remain visible when no turn is active. Stop preserves the partial
+answer and unsent draft without submitting it; the next send is explicit.
+If storage fails after an app-written or model response starts, the host reports
+that response's identity and releases its activity; it must not strand the UI in
+an active state or label a running-turn failure as an uncorrelated preflight error.
+This includes standalone button/command replies from publish, project switching,
+and image editing: history persistence owns the activity until it settles. Each
+reply emits one terminal result after releasing its own ownership, without
+releasing another pending request. A storage error preserves the visible answer
+and unsent draft and permits an explicit next question.
+Such an app-reply storage error must not offer to resend the last user prompt:
+that would repeat an unrelated action instead of retrying the failed save.
+
+`REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
+while another message is queued or being drafted remains a separate durable
+recovery item with its original tool mode and images. It never retags or appends
+to later input. Duplicate refusal notices do not duplicate the item. Recovery is
+explicit; its retry sends only that request's attachments, preserves the next
+draft and queue, and returns keyboard focus to the composer. Refused dispatch
+keeps the recovery item. The draft validator and task store preserve these items
+through reopen; no provider capability is granted by the saved preference.
+Verification: `e2e/queued-photo-send.mjs` (real React), `turn-tools.test.mjs`
+(real disk reopen), and separately identified native fixture evidence.
+
+`REQ-C16` recovery capacity (UX38): before dispatching a new request, reserve
+space for its possible refusal alongside existing recovered requests: at most
+eight items and 24 MiB of UTF-8 serialized recovery data. At capacity, retain
+the composer, images and parked request and explain how to recover space.
+Explicit retries of an existing item remain available. Reading legacy data or
+receiving a late refusal never silently truncates previously owned input; an
+over-limit list blocks new dispatches until the learner resolves it. Removal
+requires an explicit per-item confirmation with Cancel. The scrollable list
+must leave the composer usable at 600px height and split-pane width. This
+supports Human judgment stays visible / OWNERSHIP, without claiming a learning
+outcome. The limit covers recovery data, not total workspace storage or future
+host-staged files. Real React, disk reopening and isolated native evidence have
+separate identities; no live provider or installed RC acceptance is inferred.
+
+`REQ-C16` queue recovery (UX-QUEUE-01): completing a response removes its parked
+message only after the composer accepts that send. An unready photo or refused
+dispatch leaves the original text and tool mode in a durable paused item with an
+explicit Send action, preserving the next draft and staged photo. A later photo
+acknowledgement or unrelated render must not send it automatically. Stop still
+restores the text without dispatch. This supports Product Intent principle 2,
+Human judgment stays visible, and exposes OWNERSHIP through explicit recovery; it is not a measured learning
+outcome. `e2e/queued-photo-send.mjs` verifies the React component boundary;
+native, full host persistence and live-model acceptance remain separate.
+
+`REQ-C16` host readiness (UX-QUEUE-03): a successful completion may release a
+parked follow-up only after the previous turn's history, observation writes,
+active-stream cleanup and activity lease release have finished. This also applies
+to app-written replies. A failed write cannot announce success, and stopping
+during final persistence must not produce a later successful completion.
+`pending-send.smoke.mjs` and `turn-tools.test.mjs` hold these asynchronous
+boundaries for no-model, proxy and SDK paths; isolated native queue/photo evidence
+checks the actual workspace lease. Synthetic service evidence does not establish
+live-provider, Windows or signed-release acceptance.
 
 A message-level citation opens one contextual preview with its real title,
 hostname and URL. It does not imply sentence-level attribution or fetched page

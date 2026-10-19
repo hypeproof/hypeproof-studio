@@ -50,8 +50,12 @@ At narrow widths, navigation and sources open on explicit action. These drawers
 contain keyboard focus, make background controls inert, close on Escape and return
 focus to the opener. Personal tasks without a lesson omit the mission banner and
 default classroom operations; explicit Service panel choices still apply. Failed
-draft writes keep the current task and input, show one dismissible error and clear
-the error after a successful save.
+draft writes keep the current task and input and show a persistent unsaved warning.
+Unrelated state refreshes and dismissal cannot clear that warning; only a confirmed
+save can. For a conflicting disk revision, explicit recovery captures the current
+composer and displayed history into a new task against the latest valid snapshot.
+It preserves other tasks and concurrent edits, keeps queued input paused, and does
+not send a request. Failed recovery keeps the original unsaved input editable.
 
 This is the approved VS-02/03 foundation. Standalone Electron, branches, durable
 in-flight tool journals, curated memory, full-text search, OAuth popup ownership
