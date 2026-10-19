@@ -11,6 +11,9 @@ const p = await import('../src/passPurchase.ts');
 const EXHAUSTED = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
 const EXPIRED = new Error('Failed to authenticate. API Error: 403 개인 체험 시간이 끝났습니다. 작업 파일은 그대로 남아 있습니다.');
 const PROXY_CODE = new Error('trial_exhausted');
+// The trial's AI cost ceiling: real local-Worker 429 (trial_cost_exhausted) as the SDK surfaces it, 2026-10-19.
+const COST = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다. 만든 파일과 대화는 그대로 남아 있습니다.');
+const COST_CODE = new Error('trial_cost_exhausted');
 const CLASS_429 = new Error('API Error: Request rejected (429) · 이 수업의 요청 한도에 도달했습니다.');
 const BUSY = new Error('API Error: Request rejected (429) · trial_busy');
 const NETWORK = new Error('fetch failed');
@@ -44,8 +47,11 @@ for (const [name, profile] of [
 assert.equal(c.trialEndReason(EXHAUSTED, false), 'exhausted');
 assert.equal(c.trialEndReason(EXPIRED, false), 'expired');
 assert.equal(c.trialEndReason(PROXY_CODE, false), 'exhausted');
+assert.equal(c.trialEndReason(COST, false), 'exhausted');
+assert.equal(c.trialEndReason(COST_CODE, false), 'exhausted');
 // Negative controls: the same code on a bought pass, classroom/budget/busy limits, ordinary failures.
 assert.equal(c.trialEndReason(PROXY_CODE, true), null);
+assert.equal(c.trialEndReason(COST_CODE, true), null);
 for (const err of [CLASS_429, BUSY, NETWORK, null, undefined, 'string error', { message: 7 }])
   assert.equal(c.trialEndReason(err, false), null, String(err?.message ?? err));
 
@@ -66,6 +72,13 @@ assert.ok(!/API Error|Claude Code|429|403/.test(card.text));
 assert.ok(card.text.startsWith(card.title));
 
 // Without a suggested pass the card names the catalogue's first, as the purchase list selects first.
+// The cost ceiling ends the trial with the same card, never the generic error banner.
+const costCard = c.trialEndCardView({ profile: trialProfile(), err: COST, products: catalogue });
+assert.ok(costCard, 'cost-ceiling refusal → card');
+assert.equal(costCard.ending, 'exhausted');
+assert.equal(costCard.primary, '이용권 살펴보기');
+assert.equal(c.trialEndCardView({ profile: trialProfile({ activity_kind: 'classroom' }), err: COST, products: catalogue }), null);
+
 const plain = catalogue.map(({ recommended, ...rest }) => rest);
 assert.equal(c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: plain }).facts[1],
   '이어서 작업하려면 이용권이 필요합니다. 라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');

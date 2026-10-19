@@ -15,8 +15,10 @@
  * No new `/v1/profile` field is read: `profile_id`, `activity_kind` and `pass` are already served.
  *
  * The two trial sentences are the ones observed on 2026-10-18 (SDK 0.3.299); the Service sends
- * them without a code. The bare `trial_exhausted` code counts only off a bought pass, because the
- * Service uses the same code for both. (Studio #1765 matches the same sentences for its notice.)
+ * them without a code. The cost-ceiling refusal (`trial_cost_exhausted`) reaches Studio through the
+ * SDK as its sentence only, so that sentence counts as "exhausted" too (observed 2026-10-19 against
+ * the local Worker). The bare `trial_exhausted` / `trial_cost_exhausted` codes count only off a
+ * bought pass, because the Service uses the same code for both. (Studio #1765 matches the same sentences for its notice.)
  */
 import type { ResolvedProfile, TrialEndCardView } from "./protocol.ts";
 import { defaultProduct, fetchProducts, passFacts, type PassProduct } from "./passPurchase.ts";
@@ -41,8 +43,11 @@ export function trialEndReason(err: unknown, onPass: boolean): TrialEnding | nul
   const m = (err as { message?: unknown } | null | undefined)?.message;
   if (typeof m !== "string") return null;
   if (/개인 체험의 총 요청 한도에 도달했습니다/.test(m)) return "exhausted";
+  // The trial's AI cost ceiling (Service `trial_cost_exhausted`, 429). The SDK surfaces only the
+  // sentence, so the sentence is matched; the code is matched for clients that pass it through.
+  if (/체험에서 쓸 수 있는 AI 사용량을 모두 썼습니다/.test(m)) return "exhausted";
   if (/개인 체험 시간이 끝났습니다/.test(m)) return "expired";
-  if (!onPass && /\btrial_exhausted\b/.test(m)) return "exhausted";
+  if (!onPass && /\btrial_(?:cost_)?exhausted\b/.test(m)) return "exhausted";
   return null;
 }
 
