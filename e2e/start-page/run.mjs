@@ -63,7 +63,7 @@ try {
  await p.getByRole('button',{name:'연결 해제',exact:true}).click();assert.equal(await p.evaluate(()=>window.sent.at(-1).type),'disconnectCourse');
  // TUX-SP-14 — a full free-start advertisement replaces the three peer choices with the age card
  // (deeper cases live in e2e/trial-ux). Control: the code-only 'open' offer above kept the choices.
- await state({trialOffer:{entry:'open',durationHours:24,requestLimit:10,claim:'/v1/free/claim',available:true},freeStart:{allowance:'무료 AI 요청 10번 · 첫 요청부터 24시간'}});
+ await state({trialOffer:{entry:'open',durationHours:24,requestLimit:10,claim:'/v1/free/claim',available:true},freeStart:{}});
  // The person had opened the code form earlier in this run; with free start it offers "돌아가기".
  await p.getByRole('heading',{name:'참여 코드로 시작하기'}).waitFor();await p.getByRole('button',{name:'돌아가기',exact:true}).click();
  await p.getByRole('heading',{name:'바로 시작할 수 있습니다'}).waitFor();await p.getByText('만 14세 이상인가요?',{exact:true}).waitFor();

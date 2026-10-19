@@ -11,7 +11,7 @@ import type { StartRequest, StartState } from "./startPageProtocol";
 import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
-import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, freeAllowanceLine, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
+import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
 import type { FreeStartView } from "./startPageProtocol";
 import { isFreeSeat } from "./seatVocabulary";
 import { qrDataUrl } from "./testQr";
@@ -275,14 +275,14 @@ export class StartPage {
     // e2e D2 — a saved free seat whose window is over: never offer a fresh start beside its end.
     const ended = !running && !this.candidate ? freeSeatEnding(this.chat.profileFailure()) : undefined;
     const age = this.ageAnswer();
-    const allowance = freeAllowanceLine(offer);
+    // Jay 2026-10-19: no allowance before use — a free seat just starts, the way other products
+    // do, and the end card asks for a pass when the allowance is spent.
     const tooOld = belowFloor(this.appVersion(), offer.minAppVersion) || this.freeRefusal?.code === "app_too_old";
     return {
       ...(age ? { age } : {}),
       ...(this.freeClaiming ? { claiming: true } : {}),
       ...(this.freeRefusal ? { refusal: this.freeRefusal } : {}),
       ...(offer.available === false ? { unavailable: offer.reason ?? "paused" } : {}),
-      ...(allowance ? { allowance } : {}),
       ...(tooOld ? { tooOld: true } : {}),
       ...(ended ? { ended } : {}),
     };

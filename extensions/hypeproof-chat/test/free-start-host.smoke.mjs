@@ -93,7 +93,8 @@ try {
   assert.equal(h.page.freeStartSignal(), false, 'no offer read yet: no public-update signal (REQ-I15)');
   await h.page.handle({ type: 'startReady' }); await h.settle();
   assert.equal(h.page.freeStartSignal(), true, 'advertised free start turns the public-update signal on (REQ-I15)');
-  assert.deepEqual({ ...h.state().freeStart }, { allowance: '무료 AI 요청 10번 · 첫 요청부터 24시간' }, 'the one question is asked: no age yet');
+  // Jay 2026-10-19: no allowance before use; the end card speaks when it is spent.
+  assert.deepEqual({ ...h.state().freeStart }, {}, 'the one question is asked: no age yet, and no allowance line');
   assert.equal(svc.requests.some(r => r.path === '/v1/profile'), false, 'nothing reads /v1/profile before the claim');
   await h.page.handle({ type: 'freeStartAge', answer: '14+' });
   assert.equal(shared.get('hypeproofChat.freeStart.age.v1'), '14+');

@@ -49,7 +49,8 @@ export function StartPage() {
   // A pass keeps passSummary and is never read as a trial.
   const trial = state.profile?.pass ? undefined : state.profile?.trial;
   const ended = trialEndedFacts(trial, Date.now(), freeSeat);
-  const trialLeft = ended ? null : state.candidate ? trialAllowance(trial, Date.now(), freeSeat) : trialSummary(trial, Date.now(), freeSeat);
+  // A free seat shows no allowance while it is in use (Jay 2026-10-19); its end still draws the ended card.
+  const trialLeft = ended || freeSeat ? null : state.candidate ? trialAllowance(trial, Date.now(), freeSeat) : trialSummary(trial, Date.now(), freeSeat);
   const openPurchase = () => { setEntry("purchase"); setEditing(true); postToHost({ type: "purchaseOpen" }); };
   const choose = (next: "trial" | "classroom") => { setToken(""); setEntry(next); setEditing(true); };
   // REQ-L12 — buying a pass. The host owns the order; this view shows its stage and sends intents.

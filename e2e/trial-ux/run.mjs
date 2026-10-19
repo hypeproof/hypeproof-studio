@@ -555,7 +555,8 @@ try {
   // Selectors follow StartPage.tsx's FreeStartCard branch. Control for the 체험 checker: today's
   // start page (free start not advertised) does contain 체험, so the checker can fail.
   const FREE_OFFER = { entry: 'open', durationHours: 24, requestLimit: 10, unit: 'turn', claim: '/v1/free/claim', available: true };
-  const freeStart = (extra = {}) => ({ trialOffer: FREE_OFFER, freeStart: { allowance: '무료 AI 요청 10번 · 첫 요청부터 24시간', ...extra } });
+  // Jay 2026-10-19: the host sends no allowance line for a free start; the end card speaks at the end.
+  const freeStart = (extra = {}) => ({ trialOffer: FREE_OFFER, freeStart: { ...extra } });
   const cardText = p => p.locator('.studio-connect').innerText();
   await test('TUX-SP-14A', 'Free start: one age question, no 체험/수업 choice, code is a small link', async p => {
     await startState(p, {});
@@ -565,14 +566,13 @@ try {
     // POLISH iter4 — the card leads with what the person can do (start now, no login); the age check follows.
     await expect(p.locator('#connect-title')).toHaveText('바로 시작할 수 있습니다');
     await expect(p.locator('.studio-card-description')).toHaveText('로그인 없이 바로 시작합니다.');
-    const offerFirst = await p.evaluate(() => { const a = document.querySelector('.studio-free-allowance'), q = document.getElementById('free-age-question'); return !!a && !!q && !!(a.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING); });
-    assert.equal(offerFirst, true, 'the allowance is read before the age question, not as a note under 아니요');
     await expect(p.getByText('만 14세 이상인가요?', { exact: true })).toBeVisible();
     await expect(btn(p, 'AI 체험하기')).toHaveCount(0);
     await expect(btn(p, '수업에 참여하기')).toHaveCount(0);
     await expect(p.locator('.studio-connect .studio-primary')).toHaveCount(1);
     await expect(p.locator('.studio-connect .studio-primary')).toHaveText(/^네, 만 14세 이상입니다/);
-    await expect(p.getByText('무료 AI 요청 10번 · 첫 요청부터 24시간', { exact: true })).toBeVisible();
+    await expect(p.locator('.studio-free-allowance')).toHaveCount(0);
+    assert.doesNotMatch(await cardText(p), /AI 요청 \d+번/, 'no allowance count before use (Jay 2026-10-19)');
     assert.doesNotMatch(await cardText(p), /체험/, 'no 체험 on the free card');
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await p.screenshot({ path: path.join(out, 'TUX-SP-14A-age-390.png'), fullPage: true });
@@ -647,7 +647,8 @@ try {
     await expect(p.locator('.studio-verified')).toHaveText('무료 사용');
     // POLISH iter4 — a free seat has no code, so its footer never speaks of one.
     await expect(p.locator('.studio-card-footer')).toHaveText('만든 파일과 대화는 이 컴퓨터에 남습니다. 로그인은 이용권을 결제할 때만 합니다.');
-    await expect(courseRow(p, '남은 무료 사용')).toHaveText(/^무료 AI 요청 3번 남음 · /);
+    await expect(p.locator('.studio-course dt', { hasText: '남은 무료 사용' })).toHaveCount(0); // no count while in use (Jay 2026-10-19)
+    assert.doesNotMatch(await cardText(p), /번 남음/);
     assert.doesNotMatch(await cardText(p), /체험/);
     await startState(p, { profile: trialSeat(exhausted, { id: 'studio-open-trial', free: true }) });
     await expect(p.locator('#connect-title')).toHaveText('무료 사용이 끝났습니다');
@@ -658,10 +659,13 @@ try {
     await expect(p.locator('#connect-title')).toHaveText('체험이 끝났습니다');
     await expect(p.locator('.studio-card-footer')).toHaveText('참여 코드에 연결된 활동과 이용 조건이 적용됩니다.');
   }, { surface: 'start' });
-  await test('TUX-SP-13G', 'Free seat chat header: 무료 사용 label and remaining line', async p => {
+  await test('TUX-SP-13G', 'Free seat chat header: 무료 사용 label, no remaining count while in use', async p => {
     await expect(p.getByLabel('현재 활동')).toContainText('무료 사용 · 합성 체험');
-    await expect(p.getByLabel('현재 활동')).toContainText('무료 AI 요청 3번 남음');
+    await expect(p.getByLabel('현재 활동')).not.toContainText('번 남음'); // Jay 2026-10-19
   }, { cfg: { activity: { ...trialActivity(nearLimit), free: true } } });
+  await test('TUX-SP-13H', 'Control: a code-issued trial still shows its remaining count in the header', async p => {
+    await expect(p.getByLabel('현재 활동')).toContainText('AI 요청 3번 남음');
+  }, { cfg: { activity: trialActivity(nearLimit) } });
   await test('REQ-L12-14', 'Free seat purchase: payer question, then the guardian checkout as link and QR', async p => {
     const passes = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }];
     await startState(p, { purchase: { available: true, products: passes, stage: 'choosing', freeSeat: true }, ...freeStart({ age: '14+' }) });

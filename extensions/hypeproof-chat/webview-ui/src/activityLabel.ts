@@ -86,7 +86,8 @@ export function trialHeaderLine(trial: TrialStatus | undefined | unknown, now = 
   const ended = trialEnded(trial, now);
   if (ended === "expired") return free ? "무료 사용 시간 끝남" : "체험 시간 끝남";
   if (ended === "exhausted") return free ? "무료 AI 요청을 모두 사용함" : "체험 요청을 모두 사용함";
-  return trialSummary(trial, now, free);
+  // A free seat counts nothing down while it is in use (Jay 2026-10-19); the end card speaks at the end.
+  return free ? null : trialSummary(trial, now, free);
 }
 
 /** The ended card that replaces "이어서 하기" on the start page. 합니다체, the start page's register. */
