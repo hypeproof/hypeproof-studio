@@ -4756,6 +4756,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "inboxRequest": await this.postInbox(); return;
+      case "turnReviewRequest": this.postTurnReview(); return;
       case "turnRevert":
       case "turnKeep":
       case "turnReviewClose":
