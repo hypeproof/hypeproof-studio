@@ -25,6 +25,17 @@ export function actions(plan, {acceptNotRun = false} = {}) {
   return {steps: ['tag', 'builds', 'branch', 'pr']};
 }
 
+// The workflow token cannot open pull requests while "Allow GitHub Actions to create and
+// approve pull requests" is off, and that switch would also let workflows approve them.
+// The PR step therefore uses a separate token (the org bot App in release-cut.yml). A PR
+// opened by an App also starts pull_request workflows; one opened by the workflow token does not.
+export function prToken(steps, env) {
+  if (!steps.includes('pr')) return null;
+  const token = env.RELEASE_PR_TOKEN;
+  if (!token) throw new Error('RELEASE_PR_TOKEN is required to open the release PR; refusing before any tag or branch is pushed');
+  return token;
+}
+
 function main() {
   const {values} = parseArgs({options: {plan: {type: 'string'}, 'accept-not-run': {type: 'boolean'}, 'managed-draft': {type: 'boolean'}}});
   if (!values.plan) throw new Error('--plan is required');
@@ -33,6 +44,7 @@ function main() {
   const dir = path.dirname(planPath);
   const repo = process.env.GITHUB_REPOSITORY ?? 'hypeproof/hypeproof-studio';
   const run = (cmd, ...a) => execFileSync(cmd, a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit']}).trim();
+  let pr = null;
   const summary = [];
   const say = line => { console.log(line); summary.push(line); };
 
@@ -43,7 +55,11 @@ function main() {
     process.exit(1);
   }
 
-  // Reject invalid identities before creating a tag or making any GitHub writes.
+  // Reject invalid identities and a missing PR token before creating a tag or making any GitHub writes.
+  const releasePrToken = prToken(decision.steps, process.env);
+  if (releasePrToken) {
+    pr = (...a) => execFileSync('gh', a, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], env: {...process.env, GH_TOKEN: releasePrToken}}).trim();
+  }
   const dispatches = decision.steps.includes('builds') ? buildDispatches(plan, {managedDraft: values['managed-draft'] ?? false}) : [];
   if (dispatches.length && values['managed-draft']) assertManagedCandidateSupport(plan.candidate);
   let prBodyFile = plan.prBody ? path.join(dir, plan.prBody) : null;
@@ -88,16 +104,16 @@ function main() {
       say(`Pushed ${plan.branch} with ${record}.`);
     }
     if (step === 'pr') {
-      try { run('gh', 'label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Weekly release PR (release-cut)'); } catch { /* exists */ }
-      const open = JSON.parse(run('gh', 'pr', 'list', '--repo', repo, '--head', plan.branch, '--state', 'open', '--json', 'number,url'));
+      try { pr('label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Weekly release PR (release-cut)'); } catch { /* exists */ }
+      const open = JSON.parse(pr('pr', 'list', '--repo', repo, '--head', plan.branch, '--state', 'open', '--json', 'number,url'));
       const body = prBodyFile;
       if (open.length) {
-        run('gh', 'pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body);
-        run('gh', 'pr', 'comment', String(open[0].number), '--repo', repo, '--body',
+        pr('pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body);
+        pr('pr', 'comment', String(open[0].number), '--repo', repo, '--body',
           `New candidate ${plan.rcTag} at ${plan.candidate.slice(0, 8)}. Approvals given before this comment were for an earlier candidate; review again.`);
         say(`Updated ${open[0].url} for ${plan.rcTag}.`);
       } else {
-        const url = run('gh', 'pr', 'create', '--repo', repo, '--base', 'main', '--head', plan.branch,
+        const url = pr('pr', 'create', '--repo', repo, '--base', 'main', '--head', plan.branch,
           '--title', plan.title, '--body-file', body, '--label', 'release');
         say(`Opened ${url}.`);
       }
