@@ -76,9 +76,9 @@ export class CloudExecutor {
     const release=releases[0];
     requireThat(integer(release.id) && release.draft===true, 'numeric draft release identity required');
     if(id.releaseId!==undefined)requireThat(release.id===id.releaseId,'draft release ID changed');
-    const runs=(await this.list(`${base}/actions/runs?head_sha=${id.sourceSha}`)).filter(row=>row.head_sha===id.sourceSha && ['.github/workflows/build-mac.yml','.github/workflows/build-windows.yml'].includes(row.path));
+    const runs=(await this.list(`${base}/actions/runs?head_sha=${id.sourceSha}`)).filter(row=>row.head_sha===id.sourceSha && ['.github/workflows/build-mac.yml','.github/workflows/build-windows.yml'].includes(row.path?.split('@')[0]));
     const builds=['build-mac.yml','build-windows.yml'].map(workflow=>{
-      const matches=runs.filter(r=>r.path===`.github/workflows/${workflow}` && r.head_branch===id.rcTag);
+      const matches=runs.filter(r=>r.path?.split('@')[0]===`.github/workflows/${workflow}` && r.head_branch===id.rcTag);
       requireThat(matches.length===1,`missing or duplicate ${workflow} builds`);
       const run=matches[0]; requireThat(integer(run.id)&&integer(run.run_attempt)&&run.repository?.id===id.repositoryId,'run identity mismatch');
       requireThat(run.event==='push','managed build must be tag push, never tag plus dispatch');

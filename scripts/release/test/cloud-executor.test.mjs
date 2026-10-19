@@ -74,3 +74,9 @@ test('eight installed checks stay NOT_RUN separately from smoke and optional UX;
  const cache={sourceSha,serviceSha:tagObject,lockDigest:'c'.repeat(64),seedScriptDigest:'d'.repeat(64),buildContractDigest:'e'.repeat(64),platform:'darwin',architecture:'arm64',nodeVersion:'22.22.1',sdkVersion:'1.2.3'};
  assert.notEqual(cacheIdentity(cache).key,cacheIdentity({...cache,sdkVersion:'1.2.4'}).key);
 });
+
+test('provider workflow paths with @ref suffix retain exact run/attempt/source checks',async()=>{
+ const f=fixture();for(const run of f.runs)run.path+='@refs/tags/'+id.rcTag;
+ const observed=await new CloudExecutor({transport:f.transport,now:()=>now}).observe(id);assert.equal(observed.builds.length,2);
+ f.runs[1].run_attempt++;await assert.rejects(new CloudExecutor({transport:f.transport}).observe(id),/runAttempt/);
+});
