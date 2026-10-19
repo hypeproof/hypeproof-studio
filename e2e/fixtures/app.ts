@@ -97,6 +97,21 @@ function isTransientStartupEvaluationError(error: unknown): boolean {
 }
 
 /**
+ * Read the workbench while a real folder switch reloads it. `expect.poll` fails on the
+ * first thrown error instead of retrying, so a read that lands inside the reload would
+ * end the run even though the switch is working. Only the navigation error becomes
+ * `pending` (the poll then tries again); every other error still surfaces.
+ */
+export async function readAcrossReload<T, P>(read: () => Promise<T>, pending: P): Promise<T | P> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isTransientStartupEvaluationError(error)) return pending;
+    throw error;
+  }
+}
+
+/**
  * Electron can replace its initial main-process execution context immediately
  * after launch. Retry only that one startup transition; every other failure is
  * surfaced on the first attempt and the retry count stays bounded.
