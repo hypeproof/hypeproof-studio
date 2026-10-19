@@ -932,6 +932,7 @@ evidence boundaries; it does not claim a measured learner capability outcome.
 [learning-agent-experience](requirements/learning-agent-experience.md); CGP-ART-R-002 and
 CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). Built:
 
+- **Readable, neutral review actions.** Keep and restore actions use the surrounding theme and typography, with equal visual emphasis, at least 44px click targets, visible keyboard focus, and disabled feedback while restoration runs. This supports OWNERSHIP without nudging either choice.
 - **Restore point before each coach turn.** When a turn runs on any runtime (proxy, agent-sdk,
   local) and the coach has a work folder (`resolveCoachCwd`), `chatPanelProvider.beginTurnRestore`
   records it before the runtime starts: a manifest of every file (posix relative path, size,
