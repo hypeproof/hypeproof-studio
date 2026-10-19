@@ -263,11 +263,11 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
     const sdkRequired = trialRequiresSdkMessage(res.status, text);
     if (sdkRequired) throw new SdkRequiredError(sdkRequired, rid);
     // #358 — a few non-auth statuses have a specific, friendlier message than
-    // the generic card (today: 413 = oversized pasted image). Fall back to the
+    // the generic card (413: oversized image, 429: request limit). Fall back to the
     // generic copy otherwise. Never dump raw JSON at a 9-10 year old; the
     // request_id is appended so the operator can DM a single string.
     throw new ProxyTransportError(
-      friendlyTransportMessage(res.status) ?? transportFailureText(args.audience ?? "classroom"),
+      friendlyTransportMessage(res.status, res.headers.get("retry-after")) ?? transportFailureText(args.audience ?? "classroom"),
       rid,
     );
   }

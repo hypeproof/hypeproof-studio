@@ -47,8 +47,24 @@ export const IMAGE_TOO_LARGE_FRIENDLY =
  * when there's nothing better than the generic card. Kept pure for unit tests;
  * auth statuses (401/403) are handled separately in classifyError.
  */
-export function friendlyTransportMessage(status: number): string | null {
+export function friendlyTransportMessage(status: number, retryAfter?: string | null, now = Date.now()): string | null {
   if (status === 413) return IMAGE_TOO_LARGE_FRIENDLY;
+  if (status === 429) {
+    const value = retryAfter?.trim() ?? "";
+    let seconds = NaN;
+    if (/^\d+$/.test(value)) seconds = Number(value);
+    else if (/^[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(value)) {
+      const date = Date.parse(value);
+      if (Number.isFinite(date) && new Date(date).toUTCString() === value) {
+        seconds = Math.ceil((date - now) / 1000);
+      }
+    }
+    // Never echo upstream text or invent a delay for malformed/expired headers.
+    const wait = Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 7 * 24 * 60 * 60
+      ? `약 ${seconds < 60 ? `${seconds}초` : `${Math.ceil(seconds / 60)}분`} 후`
+      : "잠시 후";
+    return `요청이 잠시 제한되었습니다. ${wait} 다시 시도해 주세요.`;
+  }
   return null;
 }
 
