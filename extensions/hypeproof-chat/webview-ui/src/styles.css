@@ -274,8 +274,9 @@ html, body, #root {
 .hps-prose pre { white-space: pre-wrap; }
 .hps-prose blockquote { margin: 0.8em 0; padding-left: 0.8em; border-left: 2px solid var(--vscode-textBlockQuote-border, #777); }
 .hps-markdown-table { max-width: 100%; overflow-x: auto; margin: 0.8em 0; }
-.hps-markdown-table table { border-collapse: collapse; width: 100%; }
-.hps-markdown-table th, .hps-markdown-table td { text-align: left; padding: 0.35em 0.6em; border: 1px solid var(--vscode-panel-border, #555); }
+.hps-markdown-table:focus-visible { outline: 2px solid var(--vscode-focusBorder, #799ed7); outline-offset: 2px; }
+.hps-markdown-table table { border-collapse: collapse; width: max-content; min-width: 100%; }
+.hps-markdown-table th, .hps-markdown-table td { min-width: 8rem; max-width: 28rem; text-align: left; padding: 0.35em 0.6em; border: 1px solid var(--vscode-panel-border, #555); }
 .hps-thinking-details { margin: 4px 0; min-width: 0; }
 .hps-thinking-details summary { cursor: pointer; }
 .hps-thinking-details pre { margin: 0; padding: 8px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; opacity: 0.75; }

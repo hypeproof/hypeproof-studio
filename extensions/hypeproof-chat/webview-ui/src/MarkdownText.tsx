@@ -15,7 +15,7 @@ export function MarkdownText({ text }: { text: string }) {
             : <span>{children}</span>,
           // A model-supplied image URL is not authorization to fetch it.
           img: ({ alt }) => <span>{alt ? `[이미지: ${alt}]` : '[이미지]'}</span>,
-          table: ({ children }) => <div className="hps-markdown-table"><table>{children}</table></div>,
+          table: ({ children }) => <div className="hps-markdown-table" role="region" aria-label="대화의 표" tabIndex={0}><table>{children}</table></div>,
           input: ({ checked }) => <span aria-label={checked ? '완료 항목' : '미완료 항목'}>{checked ? '☑' : '☐'}</span>,
         }}
       >{text}</Markdown>
