@@ -35,6 +35,17 @@ test('actual host refuses active navigation and foreign or unsafe sources', asyn
     await f.handle(f.scoped({ type: 'taskCreate' }));
     assert.equal(f.store.getView().activeTaskId, first);
     assert.match(f.posts.at(-1).error, /멈춘/);
+    const stopped = new AbortController(); stopped.abort();
+    f.h.activeStreams.set('stopped-turn', stopped);
+    await f.handle(f.scoped({ type: 'taskCreate' }));
+    assert.equal(f.store.getView().activeTaskId, first);
+    assert.match(f.posts.at(-1).error, /중단한 응답을 정리/);
+    assert.doesNotMatch(f.posts.at(-1).error, /멈춘 뒤/);
+    const running = new AbortController();
+    f.h.activeStreams.set('running-turn', running);
+    await f.handle(f.scoped({ type: 'taskCreate' }));
+    assert.match(f.posts.at(-1).error, /멈춘/, 'a different running stream still needs stopping');
+    f.h.activeStreams.clear();
     f.h.pendingSends = 0;
     f.h.verifySession = { running: true };
     await f.handle(f.scoped({ type: 'taskCreate' }));

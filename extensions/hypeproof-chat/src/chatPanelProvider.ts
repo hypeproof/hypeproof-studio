@@ -529,7 +529,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!knownSource(msg.selection.url)) throw new Error('이 작업에서 확인한 출처를 선택해 주세요.');
         await store.saveSurface(msg.taskId, msg.selection);
       } else {
-        if (this.hasActiveStream() || this.verifySession?.running || this.connectionChanging || this.clearingHistory) throw new Error('진행 중인 작업을 멈춘 뒤 다시 시도해 주세요.');
+        if (this.hasActiveStream() || this.verifySession?.running || this.connectionChanging || this.clearingHistory) {
+          // Stop hides the control immediately, while the aborted transport may still be settling.
+          const settlingStoppedResponse = this.activeStreams.size > 0
+            && [...this.activeStreams.values()].every(controller => controller.signal.aborted)
+            && !this.verifySession?.running && !this.worldOpening && !this.observationAssessment
+            && !(this.pendingApprovals?.size ?? 0) && !this.connectionChanging && !this.clearingHistory;
+          throw new Error(settlingStoppedResponse
+            ? '중단한 응답을 정리하고 있어요. 잠시 후 다시 시도해 주세요. 작성 중인 내용은 유지됩니다.'
+            : '진행 중인 작업을 멈춘 뒤 다시 시도해 주세요.');
+        }
         this.taskChanging = true;
         try {
           if (source) this.draftSource = source;
