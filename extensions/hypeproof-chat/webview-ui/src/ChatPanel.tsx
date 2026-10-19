@@ -5,6 +5,7 @@ import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
+import { useResponseAnnouncement } from './responseAnnouncer';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -587,6 +588,7 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const funding = config?.access;
@@ -1343,6 +1345,9 @@ export function ChatPanel(props: Props) {
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
             next input. */}
+        {/* CGP-CHAT-R-001: one polite line per turn start (classroom) and completion (both modes). */}
+        <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{responseAnnouncementText}</div>
+
         {props.stopNotice && (
           <div className="hps-stop-notice" role="status" aria-live="polite">
             <span className="hps-stop-notice-icon" aria-hidden="true">⏹</span>

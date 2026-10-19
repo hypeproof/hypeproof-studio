@@ -44,6 +44,14 @@ feedback stays inside the existing heading so removing it cannot move the
 transcript. Its status still explains that switching tasks requires stopping the
 active work. Draft, selection and explicit latest-message behavior remain intact.
 
+CGP-CHAT-R-001 (2026-10-19): the response lifecycle reaches assistive tech once per turn, in
+personal and classroom chat. One visually hidden polite live region announces "답변을 시작했어요"
+when a classroom turn starts (personal mode keeps `ResponsePending` as its start announcement, so
+nothing is said twice) and "답변이 끝났어요" when any turn completes. A turn ended by Stop or an
+error is not also announced as completed; the stop notice and the error banner speak for it.
+Token chunks are never announced, and opening or reopening the panel announces nothing. Screen
+reader runs (VoiceOver, NVDA) are not yet recorded. Test: `test/response-announcer.test.tsx`.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop

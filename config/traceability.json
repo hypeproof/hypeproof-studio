@@ -6204,6 +6204,33 @@
           "path": "extensions/hypeproof-chat/test/external-link-route.smoke.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-RESPONSE-ANNOUNCER",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/responseAnnouncer.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-RESPONSE-ANNOUNCER",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-RESPONSE-ANNOUNCER"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/response-announcer.test.tsx"
+        }
+      ]
     }
   ]
 }
