@@ -119,15 +119,14 @@
   justify-content:space-between;
   align-items:center;
   margin-bottom:30px}
+/* Letter-spaced Hangul reads as broken syllables ("시 작 하 기"), and the hollow dot beside it read
+   as an unchecked radio that does nothing (design re-critique iter4). Quiet 11px label, no dot. */
 .studio-step {
-  font-size:10px;
-  letter-spacing:2px;
+  font-size:11px;
+  letter-spacing:0;
   color:var(--studio-muted)}
 .studio-dot {
-  width:8px;
-  height:8px;
-  border:1px solid #9ba88c;
-  border-radius:50%}
+  display:none}
 .studio-connect h2 {
   font-size:24px;
   line-height:1.35;
