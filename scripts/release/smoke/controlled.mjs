@@ -1,3 +1,4 @@
+import {workflowApiBudget} from '../cloud-executor/workflow-api.mjs';
 import fs from 'node:fs';import {execFileSync} from 'node:child_process';
 import {engineEnabled,authorizeExecution,executionBody} from '../cloud-executor/workflow-gate.mjs';
 const check=(ok,why)=>{if(!ok)throw Error('BLOCKED: '+why);};
@@ -12,6 +13,6 @@ export function controlledInputs(env=process.env,{head=()=>execFileSync('git',['
 }
 export function smokeGuard(env=process.env,{inputs=controlledInputs(env),authorize=authorizeExecution,clock=Date.now}={}){
  if(!inputs)return null;
- return async id=>{check(smokeResources[id],'unknown smoke check');const grants=[];for(const resource of smokeResources[id])grants.push(await authorize(executionBody({path:`smoke:${id}:${resource}`,identity:inputs.identity,effect:{kind:'verify-start',checkId:id,batchScope:smokeScopes[id]}},env),{env}));
+ return async id=>{if(id==='S5')return workflowApiBudget('s5-ci',{env,identity:inputs.identity,authorize,clock});check(smokeResources[id],'unknown smoke check');const grants=[];for(const resource of smokeResources[id])grants.push(await authorize(executionBody({path:`smoke:${id}:${resource}`,identity:inputs.identity,effect:{kind:'verify-start',checkId:id,batchScope:smokeScopes[id]}},env),{env}));
   const deadline=Math.min(...grants.map(g=>Date.parse(g.expiresAt)));const permit=()=>check(clock()<deadline,'smoke first effect budget authorization expired');permit();return {deadline,permit,scope:smokeScopes[id],resources:smokeResources[id]};};
 }

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Read-only candidate collector. Every download uses numeric release/asset IDs.
 import fs from 'node:fs';
+import {workflowApiBudget,boundApiTransport} from './workflow-api.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CloudExecutor,GitHubTransport,requireThat,hashBytes} from './provider.mjs';
 import {collectAssets} from './evidence.mjs';
-export async function collectCandidate(input, directory, {transport=new GitHubTransport({maxBytes:1024*1024*1024}),now=Date.now}={}) {
+export async function collectCandidate(input, directory, {transport=new GitHubTransport({maxBytes:1024*1024*1024}),now=Date.now,env=process.env,authorize}={}) {
+ const budget=await workflowApiBudget('collect-candidate',{identity:input,env,authorize});transport=boundApiTransport(transport,budget);
  const executor=new CloudExecutor({transport,now});
  const observation=await executor.observe(input);
  const pinned={...input,releaseId:observation.releaseId,runs:Object.fromEntries(observation.builds.map(run=>[run.workflow,{id:run.id,attempt:run.attempt}]))};

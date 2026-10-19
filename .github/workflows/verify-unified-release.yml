@@ -49,20 +49,29 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
           sha="$(git rev-parse "$TAG^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          for ((attempt=1; attempt<=150; attempt++)); do
-            gh release view "$TAG" --json isDraft,assets > "$RUNNER_TEMP/candidate.json"
-            # Duplicate builder dispatch after successful promotion is read-only.
-            if jq -e '.isDraft == false' "$RUNNER_TEMP/candidate.json" >/dev/null; then
-              gh release download "$TAG" --dir "$RUNNER_TEMP/already-published"
-              node scripts/check-unified-release.mjs "$RUNNER_TEMP/already-published" "$sha" "${TAG#v}"
-              echo 'published=true' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            if jq -e '[.assets[].name] | any(. == "HypeProof-Studio-darwin-arm64.zip") and any(test("win32-x64.*\\.zip$")) and any(test("UserSetup.*\\.exe$")) and any(test("(?<!User)Setup.*\\.exe$"))' "$RUNNER_TEMP/candidate.json" >/dev/null; then exit 0; fi
-            sleep 60
-          done
-          echo 'Both OS packages did not arrive; candidate remains draft.' >&2
-          exit 1
+          mode="$(node --input-type=module -e "import {engineEnabled} from './scripts/release/cloud-executor/workflow-gate.mjs';process.stdout.write(engineEnabled()?'controlled':'legacy')")"
+          if [[ "$mode" == controlled ]]; then
+            node scripts/release/cloud-executor/candidate-wait.mjs "$HPS_CANDIDATE_INPUT"
+          else
+            for ((attempt=1; attempt<=150; attempt++)); do
+              gh release view "$TAG" --json isDraft,assets > "$RUNNER_TEMP/candidate.json"
+              # Duplicate builder dispatch after successful promotion is read-only.
+              if jq -e '.isDraft == false' "$RUNNER_TEMP/candidate.json" >/dev/null; then
+                gh release download "$TAG" --dir "$RUNNER_TEMP/already-published"
+                node scripts/check-unified-release.mjs "$RUNNER_TEMP/already-published" "$sha" "${TAG#v}"
+                echo 'published=true' >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if jq -e '[.assets[].name] | any(. == "HypeProof-Studio-darwin-arm64.zip") and any(test("win32-x64.*\\.zip$")) and any(test("UserSetup.*\\.exe$")) and any(test("(?<!User)Setup.*\\.exe$"))' "$RUNNER_TEMP/candidate.json" >/dev/null; then exit 0; fi
+              sleep 60
+            done
+            echo 'Both OS packages did not arrive; candidate remains draft.' >&2
+            exit 1
+          fi
+
+      - name: Admit fixed candidate artifact action API envelope
+        run: node scripts/release/cloud-executor/workflow-api.mjs candidate-job
+
       - name: Require current artifact storage reservation
         id: artifact-budget-1
         if: always()
@@ -105,6 +114,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
+      - name: Admit protected collection job API command envelope before provider actions
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+          CANDIDATE_VERSION: ${{ needs.candidate.outputs.version }}
+          TAG: ${{ inputs.tag }}
+        run: node scripts/release/cloud-executor/workflow-api.mjs collect-job
       - uses: actions/download-artifact@v4
         with:
           name: managed-candidate-input
@@ -175,6 +190,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.1'
+      - name: Admit protected installed job API command envelope before provider actions
+        shell: bash
+        env:
+          CANDIDATE_SHA: ${{ needs.candidate.outputs.sha }}
+          CANDIDATE_VERSION: ${{ needs.candidate.outputs.version }}
+          TAG: ${{ inputs.tag }}
+          TARGET: ${{ matrix.target }}
+        run: node scripts/release/cloud-executor/workflow-api.mjs installed-job
       - uses: actions/download-artifact@v4
         with:
           name: managed-candidate-bytes

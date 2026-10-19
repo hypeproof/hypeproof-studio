@@ -1,11 +1,13 @@
 // Read-only N−1 resolver/downloader. No latest alias and no package rebuild.
 import fs from 'node:fs';
+import {workflowApiBudget,boundApiTransport} from './workflow-api.mjs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {CloudExecutor,GitHubTransport,requireThat,hashBytes} from './provider.mjs';
 const tuple=tag=>/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(tag)?.slice(1).map(Number);
 const compare=(a,b)=>{for(let i=0;i<3;i++)if(a[i]!==b[i])return a[i]-b[i];return 0;};
-export async function previousRelease(collection,directory,{transport=new GitHubTransport({maxBytes:1024*1024*1024})}={}) {
+export async function previousRelease(collection,directory,{transport=new GitHubTransport({maxBytes:1024*1024*1024}),env=process.env,authorize}={}) {
+ const budget=await workflowApiBudget('previous-release',{identity:collection.identity,env,authorize});transport=boundApiTransport(transport,budget);
  const executor=new CloudExecutor({transport}); const base='/repos/hypeproof/hypeproof-studio';
  const candidates=(await executor.list(`${base}/releases`)).filter(r=>!r.draft&&!r.prerelease&&tuple(r.tag_name)&&compare(tuple(r.tag_name),tuple(collection.identity.version))<0).sort((a,b)=>compare(tuple(b.tag_name),tuple(a.tag_name)));
  requireThat(candidates.length>0,'no supported published previous version');const selected=candidates[0];

@@ -1,5 +1,6 @@
 // Original-runner transfer: archives never pass through Worker memory. The
 // Service journals UNKNOWN before each permit and re-observes numeric assets.
+import {workflowApiBudget} from './workflow-api.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -11,15 +12,20 @@ import {engineRequest,executionBody,workflowIdentity} from './workflow-gate.mjs'
 const require=(ok,message)=>{if(!ok)throw Error('BLOCKED runner upload: '+message);};
 async function inspect(file){const stat=fs.lstatSync(file);require(stat.isFile()&&stat.size>0,'nonempty original regular file required');const hash=createHash('sha256');for await(const chunk of fs.createReadStream(file))hash.update(chunk);return {name:path.basename(file),size:stat.size,sha256:hash.digest('hex')};}
 const authorizationRef=authorization=>({operationId:authorization.operationId,fence:authorization.fence,requestDigest:authorization.requestDigest});
-export async function transferDraft({identity,effectPath,directory,protocol={}},{env=process.env,fetchImpl=fetch,request=engineRequest,clock=Date.now}={}) {
- const invoke=(endpoint,body)=>request(endpoint,body,{env,fetchImpl});
+export async function transferDraft({identity,effectPath,directory,protocol={}},{env=process.env,fetchImpl=fetch,request=engineRequest,clock=Date.now,apiAuthorize}={}) {
+ const rawFetch=fetchImpl;
+ const budget=await workflowApiBudget(protocol.repository==='hypeproof/hypeproof-studio-releases'?'runner-mirror':'runner-upload',{identity,env,authorize:apiAuthorize,clock});
+ fetchImpl=(...args)=>{budget?.before();return rawFetch(...args);};
+ // Engine requests use their own server credential pool, never this runner allocation.
+ const invoke=(endpoint,body)=>request(endpoint,body,{env,fetchImpl:rawFetch});
  const repository=protocol.repository??'hypeproof/hypeproof-studio';require(['hypeproof/hypeproof-studio','hypeproof/hypeproof-studio-releases'].includes(repository),'target repository rejected');
  const create=executionBody({path:effectPath,identity,effect:{kind:protocol.createKind??'draft-release-create'}},env);
  const createAuth=await invoke('/v1/execution/authorize',create);let created;
  if(createAuth.status==='SUCCEEDED')created=createAuth;
  else {require(createAuth.status==='AUTHORIZED'&&createAuth.requestDigest===digest(create)&&Date.parse(createAuth.expiresAt)>clock(),'fresh draft authority required');created=await invoke('/v1/execution/perform',{...create,authorizationRef:authorizationRef(createAuth)});}
  require(created.status==='SUCCEEDED'&&created.requestDigest===digest(create)&&Number.isSafeInteger(created.receipt?.releaseId)&&created.receipt.releaseId>0,'numeric draft identity unavailable');
- const releaseId=created.receipt.releaseId,records=[];require(!created.receipt.repository||created.receipt.repository===repository,'target repository changed');if(protocol.prepareAssets)await protocol.prepareAssets(created.receipt);
+ const releaseId=created.receipt.releaseId,records=[];require(!created.receipt.repository||created.receipt.repository===repository,'target repository changed');if(protocol.prepareAssets)await protocol.prepareAssets(created.receipt,{fetchImpl});
+ require(fs.readdirSync(directory).length<=100,'bounded runner asset inventory exceeded');
  for(const name of fs.readdirSync(directory).sort()) {
   const file=path.join(directory,name),asset=await inspect(file);require(/^[A-Za-z0-9][A-Za-z0-9._+ -]{0,180}$/.test(name),'asset filename rejected');
   const body=executionBody({path:effectPath,identity,effect:{kind:protocol.uploadKind??'draft-asset-upload',releaseId,...asset,...(protocol.assetMetadata?.[asset.name]??{})}},env);let auth;
@@ -52,7 +58,7 @@ export async function transferDraft({identity,effectPath,directory,protocol={}},
 export async function transferMirror({identity,effectPath,directory},options={}) {
  const env=options.env??process.env,fetchImpl=options.fetchImpl??fetch;const metadata={};
  fs.mkdirSync(directory,{recursive:true});require(fs.readdirSync(directory).length===0,'mirror transfer needs an empty temporary directory');
- const protocol={repository:'hypeproof/hypeproof-studio-releases',createKind:'mirror-release-create',uploadKind:'mirror-asset-upload',publishKind:'mirror-publish',assetMetadata:metadata,prepareAssets:async context=>{
+ const protocol={repository:'hypeproof/hypeproof-studio-releases',createKind:'mirror-release-create',uploadKind:'mirror-asset-upload',publishKind:'mirror-publish',assetMetadata:metadata,prepareAssets:async(context,{fetchImpl})=>{
   require(context.repository==='hypeproof/hypeproof-studio-releases'&&Array.isArray(context.assets)&&context.assets.length>0&&context.assets.length<100,'approved mirror source inventory unavailable');
   for(const asset of context.assets){require(Number.isSafeInteger(asset.sourceAssetId)&&asset.sourceAssetId>0&&asset.name===path.basename(asset.name)&&/^[A-Za-z0-9][A-Za-z0-9._+ -]{0,180}$/.test(asset.name)&&Number.isSafeInteger(asset.size)&&asset.size>0&&/^[a-f0-9]{64}$/.test(asset.sha256),'approved source asset invalid');
    let response=await fetchImpl('https://api.github.com/repos/hypeproof/hypeproof-studio/releases/assets/'+asset.sourceAssetId,{headers:{accept:'application/octet-stream',...(env.HPS_SOURCE_GITHUB_TOKEN?{authorization:`Bearer ${env.HPS_SOURCE_GITHUB_TOKEN}`}:{})},redirect:'manual',signal:AbortSignal.timeout(1800000)});

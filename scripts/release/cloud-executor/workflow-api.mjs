@@ -1,0 +1,34 @@
+// Reviewed command/fetch envelopes, not exact GitHub request counts or Service-token rate pools.
+import {fileURLToPath} from 'node:url';
+import fs from 'node:fs';import path from 'node:path';
+import {engineEnabled,authorizeExecution,executionBody,workflowIdentity} from './workflow-gate.mjs';
+export const workflowApiScopes=Object.freeze({
+ 'build-job':{path:'build-managed:job-api-batch',batchScope:'protected-native-build-fixed-actions-cache-and-artifact-command-envelope',limit:1,wallMs:240*60*1000},
+ 'candidate-job':{path:'candidate:job-api-batch',batchScope:'protected-candidate-fixed-artifact-action-envelope',limit:1,wallMs:180*60*1000},
+ 'mirror-job':{path:'mirror:job-api-batch',batchScope:'protected-mirror-max151-release-view-commands-fixed-job-envelope',limit:1,wallMs:180*60*1000},
+ 'repair-output':{path:'repair-output:job-api-batch',batchScope:'protected-repair-single-fixed-output-upload-action-envelope',limit:1,wallMs:20*60*1000},
+ 'observe-candidate':{path:'observe-managed:api-batch',batchScope:'numeric-candidate-max128-http-delegations-no-retry',limit:128,wallMs:20*60*1000},
+ 'assembly-admit':{path:'assembly:api-batch',batchScope:'reviewed-compiled-artifact-two-metadata-reads-one-fixed-actions-download-envelope',limit:2,wallMs:20*60*1000},
+ 'runner-upload':{path:'runner-upload:api-batch',batchScope:'original-runner-max100-assets-no-retry-upload-envelope',limit:100,wallMs:120*60*1000},
+ 'runner-mirror':{path:'runner-mirror:api-batch',batchScope:'mirror-max99-source-download-redirect-and-upload-envelope',limit:297,wallMs:120*60*1000},
+ 'collect-job':{path:'collect-managed:job-api-batch',batchScope:'protected-collection-job-fixed-actions-and-artifact-command-envelope',limit:1,wallMs:20*60*1000},
+ 'installed-job':{path:'installed-managed:job-api-batch',batchScope:'protected-installed-job-fixed-actions-and-artifact-command-envelope',limit:1,wallMs:90*60*1000},
+ 'candidate-wait':{path:'candidate:api-batch',batchScope:'candidate-wait-max150-view-commands-one-optional-download',limit:151,wallMs:3*60*60*1000},
+ 'collect-candidate':{path:'collect-managed:api-batch',batchScope:'numeric-candidate-max512-http-delegations-no-retry',limit:512,wallMs:20*60*1000},
+ 'previous-release':{path:'previous-managed:api-batch',batchScope:'previous-release-max128-http-delegations-no-retry',limit:128,wallMs:20*60*1000},
+ 's5-ci':{path:'smoke:S5:api-batch',batchScope:'candidate-ci-max20-pages-2000-run-metadata-command-envelope',limit:2020,wallMs:30*60*1000},
+ 'repair-draft-pr':{path:'repair-draft-pr:bot-api-batch',batchScope:'separate-bot-fixed-hype-pr-inspect-prepare-create-single-push-command-envelope',limit:4,wallMs:20*60*1000},
+});
+const need=(ok,why)=>{if(!ok)throw Error('BLOCKED: '+why);};
+export function apiIdentity(value){const identity=value?.identity??value;need(identity?.repository==='hypeproof/hypeproof-studio'&&identity.repositoryId===1239447574&&/^[a-f0-9]{40}$/.test(identity.sourceSha??'')&&/^v\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(identity.rcTag??'')&&/^v\d+\.\d+\.\d+$/.test(identity.version??''),'canonical API batch candidate identity required');return Object.fromEntries(['repository','repositoryId','sourceSha','tagObject','rcTag','version','target'].filter(key=>identity[key]!==undefined).map(key=>[key,identity[key]]));}
+export async function workflowApiBudget(role,{identity,env=process.env,authorize=authorizeExecution,clock=Date.now}={}){
+ if(!engineEnabled(env))return null;const spec=workflowApiScopes[role];need(spec,'unknown API command envelope');identity=apiIdentity(identity);need(env.RUNNER_TEMP&&path.isAbsolute(env.RUNNER_TEMP),'isolated workflow API receipt directory required');
+ const directory=path.join(env.RUNNER_TEMP,'release-api-batches');fs.mkdirSync(directory,{recursive:true,mode:0o700});const file=path.join(directory,role+'.json');const receipt={schema:'hps-workflow-api-batch/1',role,path:spec.path,batchScope:spec.batchScope,unit:'workflow-api-batch',status:'REQUESTED',identity,runId:env.GITHUB_RUN_ID,runAttempt:env.GITHUB_RUN_ATTEMPT,commands:0,startedAt:null};
+ // Never reuse a granted/lost batch after process interruption or a manual CLI repeat.
+ fs.writeFileSync(file,JSON.stringify(receipt),{flag:'wx',mode:0o600});
+ const authorization=await authorize(executionBody({path:spec.path,identity,effect:{kind:'verify-start',batchScope:spec.batchScope}},env),{env});receipt.status='AUTHORIZED';receipt.operationId=authorization.operationId;receipt.fence=authorization.fence;fs.writeFileSync(file,JSON.stringify(receipt),{mode:0o600});
+ return {scope:spec.batchScope,receipt:file,permit(){if(receipt.startedAt===null)need(clock()<Date.parse(authorization.expiresAt),'API batch lease expired before first effect');},before(){const now=clock();if(receipt.startedAt===null){need(now<Date.parse(authorization.expiresAt),'API batch lease expired before first effect');receipt.startedAt=now;}need(now-receipt.startedAt<spec.wallMs&&receipt.commands<spec.limit,'API command envelope exhausted');receipt.commands++;receipt.status='STARTED';fs.writeFileSync(file,JSON.stringify(receipt),{mode:0o600});},limit:spec.limit};
+}
+export function boundApiTransport(transport,budget){if(!budget)return transport;const wrapped=Object.create(transport);if(typeof transport.fetch==='function')wrapped.fetch=(...args)=>{budget.before();return transport.fetch(...args);};else for(const method of ['request','downloadAsset'])if(typeof transport[method]==='function')wrapped[method]=(...args)=>{budget.before();return transport[method](...args);};return wrapped;}
+
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){try{const role=process.argv[2];need(['collect-job','installed-job','candidate-job','build-job','mirror-job','repair-output'].includes(role),'fixed job batch role required');if(engineEnabled()){let identity;if(role==='build-job'||role==='mirror-job')identity=workflowIdentity();else if(role==='candidate-job')identity=JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP,'candidate-input.json')));else if(role==='repair-output'){const p=JSON.parse(fs.readFileSync('.repair-packet.json'));identity={repository:p.repository,repositoryId:p.repositoryId,sourceSha:p.sourceSha,rcTag:p.rcTag,version:p.version};}else identity={repository:process.env.GITHUB_REPOSITORY,repositoryId:Number(process.env.GITHUB_REPOSITORY_ID),sourceSha:process.env.CANDIDATE_SHA,rcTag:process.env.TAG,version:'v'+process.env.CANDIDATE_VERSION,...(process.env.TARGET?{target:process.env.TARGET}:{})};const budget=await workflowApiBudget(role,{identity});budget?.before();}}catch{console.error('BLOCKED: protected job API command envelope unavailable; no fallback');process.exitCode=2;}}

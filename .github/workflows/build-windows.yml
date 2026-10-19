@@ -150,6 +150,10 @@ jobs:
           HPS_RELEASE_VERSION: ${{ inputs.release_version }}
         run: node scripts/release/build-contract.mjs preflight "$RUNNER_TEMP/hps-build-contract.json"
 
+      - name: Admit fixed managed build action API envelope
+        shell: bash
+        run: node scripts/release/cloud-executor/workflow-api.mjs build-job
+
       - name: Require current build reservation before execution
         shell: bash
         env:

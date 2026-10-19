@@ -93,6 +93,9 @@ jobs:
       # 프리릴리즈 판정 규칙을 여기 다시 적지 않는다 — 사본이 곧 드리프트다.
       - uses: actions/checkout@v4
 
+      - name: Admit bounded managed mirror command envelope
+        run: node scripts/release/cloud-executor/workflow-api.mjs mirror-job
+
       - name: Inspect source release (wait for every platform asset)
         shell: bash
         # 릴리즈 발행 시각과 자산 업로드 완료 시각은 다르다. macOS 빌드가 먼저 끝나고
@@ -108,6 +111,9 @@ jobs:
           deadline=$(( $(date +%s) + WAIT_TIMEOUT_MIN * 60 ))
           attempt=0
           while :; do
+            if [[ -n "${RELEASE_ENGINE_URL:-}" || "${RELEASE_ENGINE_ENABLED:-}" == true ]]; then
+              (( attempt < 151 )) || { echo "Bounded mirror API command envelope exhausted" >&2; exit 1; }
+            fi
             attempt=$(( attempt + 1 ))
             gh release view "$TAG" --repo "$SOURCE_REPO" --json tagName,name,body,assets,url,isPrerelease,isDraft > source-release.json
             # The app updates from the mirror. A draft has not passed the publish gate in

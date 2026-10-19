@@ -66,6 +66,12 @@ jobs:
           echo "::add-mask::$token"
           export HPS_REPAIR_MODEL_TOKEN="$token"
           node scripts/release/repair/output.mjs authorize .repair-packet.json "$PACKET_DIGEST" "$RUNNER_TEMP/repair-output"
+      - name: Admit fixed repair artifact action API envelope
+        if: steps.repair-storage.outputs.authorized == 'true'
+        env:
+          RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+          RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
+        run: node scripts/release/cloud-executor/workflow-api.mjs repair-output
       - uses: actions/upload-artifact@v4
         id: repair-output
         if: steps.repair-storage.outputs.authorized == 'true'
@@ -100,6 +106,8 @@ jobs:
         env:
           REPAIR_PACKET: ${{ inputs.packet }}
           PACKET_DIGEST: ${{ inputs.packet_digest }}
+          RELEASE_ENGINE_ENABLED: ${{ vars.RELEASE_ENGINE_ENABLED }}
+          RELEASE_ENGINE_URL: ${{ vars.RELEASE_ENGINE_URL }}
           HPS_REPAIR_DRAFT_PR_AUTHORIZED: ${{ vars.RELEASE_REPAIR_DRAFT_PR_AUTHORIZED }}
           GH_TOKEN: ${{ secrets.RELEASE_REPAIR_BOT_TOKEN }}
           HPS_REPAIR_MODEL_ORIGIN: https://release.hypeproof-ai.xyz
