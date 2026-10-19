@@ -7171,6 +7171,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async handleAnswerVerdict(msg: unknown): Promise<void> {
     const store = this.currentTaskStore?.();
     const taskId = store?.getView().activeTaskId;
+    const activityId = activityConnections(this.context)?.scope;
     const request = parseVerdictRequest(msg);
     if (!store || !taskId || !request || this._instructorMode.isInstructor || this.cachedProfile?.lesson) { await this.postVerdicts(); return; }
     // The saved conversation holds finished turns only (a turn is saved when it ends), so a running
@@ -7190,10 +7191,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     };
     try {
       const verdicts = await store.recordVerdict(taskId, event);
-      await this.post({ type: "answerVerdicts", taskId, verdicts });
+      if (this.currentTaskStore?.() !== store || activityConnections(this.context)?.scope !== activityId) return;
+      await this.post({ type: "answerVerdicts", activityId, taskId, verdicts });
     } catch (error) {
-      await this.postVerdicts();
-      await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '답변에 남긴 선택을 저장하지 못했습니다.' });
+      // A delayed failure belongs to the originating workspace, not the task now on screen.
+      if (this.currentTaskStore?.() !== store || activityConnections(this.context)?.scope !== activityId) return;
+      await this.post({ type: "answerVerdicts", activityId, taskId, verdicts: store.getVerdicts(taskId) });
+      await this.post({ activityId, taskId, type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '답변에 남긴 선택을 저장하지 못했습니다.' });
     }
   }
 
