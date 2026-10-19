@@ -52,13 +52,12 @@ idle_seconds() {
   ioreg -c IOHIDSystem | awk '/HIDIdleTime/ {print int($NF / 1000000000); exit}'
 }
 
+# Stop only what this suite launched: the shared launcher matches runs by their
+# own app path and user-data-dir (never by name), so the person's own Studio, a
+# Dev kit app and another session's runs survive. `sweep --owner-tree` also
+# covers runs whose owner is still alive inside the suite being aborted.
 kill_app() {
-  if [[ "$GATE" == "idle" ]]; then
-    # Only the prepared copy — the person at the keyboard may have Studio open.
-    pkill -f "$HPS_APP_PATH/Contents/MacOS/" 2>/dev/null || true
-  else
-    pkill -f "HypeProof Studio.app/Contents/MacOS/HypeProof Studio" 2>/dev/null || true
-  fi
+  node "$ROOT/scripts/studio-launch.mjs" sweep ${1:+--owner-tree "$1"} >&2 || true
 }
 
 # Preflight: fail fast if lock detection is unavailable, so we never silently
@@ -105,6 +104,8 @@ else
 fi
 
 echo "▶ gate passed ($GATE) — starting e2e (quiet mode)…"
+# Tag every Studio launch of this suite; checked (and cleaned) at the end.
+export HPS_LAUNCH_SESSION="${HPS_LAUNCH_SESSION:-quiet-$(date +%s)-$$}"
 if [[ $# -gt 0 ]]; then
   ( cd "$ROOT/e2e" && HPS_QUIET="${HPS_QUIET:-1}" "$@" ) &
 else
@@ -116,8 +117,8 @@ SUITE_PID=$!
 while kill -0 "$SUITE_PID" 2>/dev/null; do
   if person_present; then
     echo "✗ input resumed ($GATE gate) → aborting suite + killing app." >&2
+    kill_app "$SUITE_PID"
     kill "$SUITE_PID" 2>/dev/null || true
-    kill_app
     wait "$SUITE_PID" 2>/dev/null || true
     [[ "$GATE" == "idle" ]] && exit 75
     exit 3
@@ -127,6 +128,10 @@ done
 
 wait "$SUITE_PID"
 STATUS=$?
+# Fail the run when a launch of this suite left a process, a dir or a focus violation.
+if ! node "$ROOT/scripts/studio-launch.mjs" check --session "$HPS_LAUNCH_SESSION"; then
+  [[ "$STATUS" -eq 0 ]] && STATUS=4
+fi
 kill_app
 echo "▶ suite finished (exit $STATUS) behind the $GATE gate."
 exit "$STATUS"

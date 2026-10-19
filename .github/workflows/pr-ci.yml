@@ -91,6 +91,15 @@ jobs:
           node --test scripts/release/test/engine.test.mjs scripts/release/test/engine-package.test.mjs
           node --test e2e/paid-pass-recovery/proxy.test.mjs e2e/paid-pass-recovery/contract.test.mjs e2e/paid-pass-recovery/lifecycle.test.mjs
           node scripts/test-unified-launcher.mjs
+      # Studio test launches run in the background and clean up after
+      # themselves (Jay, 2026-10-19). The guard fails on a launch that
+      # bypasses scripts/lib/studio-launcher.mjs; the launcher controls use
+      # fake app processes, so no Studio build or display is needed.
+      - name: Studio launches go through the quiet launcher (guard + cleanup controls)
+        if: ${{ !cancelled() }}
+        run: |
+          node scripts/check-studio-launches.mjs
+          node --test scripts/test/studio-launch-guard.test.mjs scripts/test/studio-launcher.test.mjs
       - name: Release cut and publish gate controls
         if: ${{ !cancelled() }}
         run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/publish-gate.test.mjs scripts/release/test/release-manifest.test.mjs scripts/release/test/select-cases.test.mjs

@@ -37,6 +37,7 @@ import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { INBOX_CAPABILITY, INBOX_PROMPT_CAPABILITY, LESSON_BINDING_CAPABILITY } from '../../extensions/hypeproof-chat/src/classroomInbox.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
 import { proxyChat } from '../../extensions/hypeproof-chat/src/proxyClient.ts';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u3'));
 const MODE = process.env.HPS_U3_MODE === 'proxy' ? 'proxy' : 'full';
@@ -128,7 +129,7 @@ const tokenPath = path.join(home, 'synthetic-learner-token-u3.txt'); writeFileSy
 const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
 const appArgs = (folder) => ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', folder];
 const childEnv = { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path };
-let app = null; const launch = () => { app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs(ws), { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
+let app = null; const launch = () => { app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs(ws), { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-lesson-settings', secretStorage: 'inmemory' }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
 
 // ── seat A2: connected, fully capable, NEVER selected. It runs the real device client, so "nothing arrived" is measured. ──
 const synthRoot = path.join(userDir, 'synthetic-seats'), memory = () => { let s = null; return { async load() { return s && JSON.parse(s); }, async save(v) { s = JSON.stringify(v); } }; }; let eid = 0;
@@ -284,7 +285,7 @@ try {
   await setDraft(chat, 'HOLD-TWO 이 질문의 답이 오는 동안 설정이 바뀝니다'); await pressEnter(chat); await wait(() => holding > h0, 'the provider holds answer two open', 120000);
   const heldTurn = turns().at(-1); assert.deepEqual([heldTurn.version, heldTurn.binding_seq, heldTurn.closed, heldTurn.dispatched, heldTurn.completed], [V2, 1, 0, 1, 0], JSON.stringify(heldTurn));
   const v3Impact = await I.setting(V3, '3판으로 진행', '다음 질문부터 3판 단계로 진행합니다.'); assert.match(v3Impact, /A1 \(지금 m2026\.09\.18-2 · 수업 설정으로 전환된 상태\)/); await I.items(PREPARED, 'V3 is prepared while window 1 is still being answered'); assert.equal(bindings().length, 1);
-  spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs(ws2), { env: childEnv, stdio: 'ignore' }); const win2 = await wait(() => workbenches().find((w) => w !== win), 'the second window', 90000); await win2.waitForTimeout(6000);
+  spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), appArgs(ws2), { env: childEnv, stdio: 'ignore' }, { label: 'classroom-lesson-settings', secretStorage: 'inmemory' }); const win2 = await wait(() => workbenches().find((w) => w !== win), 'the second window', 90000); await win2.waitForTimeout(6000);
   const notHeld = '!' + hasText('HOLD-TWO'); let chat2 = await enterWork(notHeld);
   const v3grant = () => db("SELECT t.grant_id g,t.state s FROM classroom_distribution_targets t WHERE t.seat_id='A1' AND t.revision=2 ORDER BY t.updated_at DESC LIMIT 1")[0], firstGrant = v3grant().g;
   await connectSeat(win2); // this harness keeps secrets in memory PER WINDOW: the second window needs its own one-time code, which REPLACES window 1's connection

@@ -147,6 +147,27 @@ authentication path. Declare planned behavior as planned; a documented test is
 not an executed test. Keep changes in a focused branch and PR following the dev
 guide. Do not change production state merely to validate documentation.
 
+## Studio test launches
+
+Jay's rule (2026-10-19): tests run in the background, and a test that opens
+Studio cleans up after itself. Enforced in code; details in
+[studio-test-launch](.claude/rules/studio-test-launch.md).
+
+- Run tests in the background. A test must never take focus or show a window
+  on the screen of the person at the machine.
+- Open Studio only through the shared launcher: `launchStudio(electron, options, meta)`
+  or `spawnStudio(binary, args, options, meta)` from `scripts/lib/studio-launcher.mjs`,
+  or `node scripts/studio-launch.mjs run ... -- <binary>` from shell or Python.
+  `scripts/check-studio-launches.mjs` fails PR CI on any other launch.
+- Declare `secretStorage: 'inmemory' | 'os'`. In-memory secrets are lost when a
+  window reloads or reopens (e.g. into a workspace folder); use `'os'` for those flows.
+- Always clean up. The launcher kills only the processes it started, matched by
+  its own app path and user-data-dir, never by name. Jay's own Studio, his Dev kit
+  app (`trial-localtest-*`) and Codex's Dev app under `.codex-worktrees` must survive.
+  Never use `pkill -f "HypeProof Studio"`.
+- After a crash, `node scripts/studio-launch.mjs sweep` cleans runs whose owner
+  process is dead. A run that leaves a process, a dir or a focus violation fails.
+
 ## Install order
 
 `hypeproof/hypeproof-service` is private (DEC-023). The `@hypeproof/*`

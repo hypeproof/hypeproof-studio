@@ -18,6 +18,7 @@ import '@hypeproof/service-testkit/test/harness/loader.mjs';
 // Nothing here downloads anything. A current official shell, when available, is used the same way via HPS_DEVHOST_SOURCE.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -136,7 +137,8 @@ async function launch() {
   const token = await local.student('student-a'), ticket = (await local.request(local.base + '/pairings', 'POST', { seat_id: 'A1', roster_revision: 1 })).json.ticket, workspace = path.join(home, 'workspace'); mkdirSync(workspace, { recursive: true });
   writeFileSync(path.join(home, 'session.txt'), [`Local Service: ${origin} (synthetic; nothing here reaches production)`, `Instructor board data: GET ${origin}${local.base}/status  (Bearer = the instructor token below)`, `Instructor token: ${local.teacherToken}`, '', 'In the Studio COPY:', `  1. Paste this synthetic learner token when the chat panel asks: ${token}`, `  2. Command palette → “수업 연결” → code ${ticket} (10 minutes, single use)`, '  3. Open “내 수업”, press “채팅에 과제 넣기”, then “이 단계를 마쳤어요”; send a chat turn; try disconnect / reconnect.', '', 'Write results into docs/testing/classroom-admin.md as “isolated dev host (shell vX copy + current extension)”, with manifest.json. Never as a check of the installed app or of a release.'].join('\n'));
   console.log(readFileSync(path.join(home, 'session.txt'), 'utf8'));
-  const app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir', userData, '--extensions-dir', manifest.isolation.extensions_dir, '--use-inmemory-secretstorage', '--disable-updates', '--new-window', workspace], { stdio: 'ignore' });
+  // A person works in this window: visible by design, still tracked and cleaned up by the launcher.
+  const app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir', userData, '--extensions-dir', manifest.isolation.extensions_dir, '--use-inmemory-secretstorage', '--disable-updates', '--new-window', workspace], { stdio: 'ignore' }, { label: 'classroom-devhost', secretStorage: 'inmemory', interactive: true });
   const stop = () => { app.kill(); server.close(); local.close(); }; process.on('SIGINT', () => { stop(); process.exit(0); });
   const [code, signal] = await once(app, 'exit'); stop();
   assert.ok(code === 0 || signal === 'SIGTERM', `Studio exited abnormally (code=${code}, signal=${signal}); the host was not verified`);

@@ -22,6 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { localOps } from './service-fixture.mjs';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost'));
 const servicePort = Number(process.env.HPS_DEMO_SERVICE_PORT || 18761), boardPort = Number(process.env.HPS_DEMO_BOARD_PORT || 18762), prefix = 'demo-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
@@ -103,7 +104,7 @@ const rr=await chalk.fetch(new Request('http://localhost'+req.url,{method:req.me
 server2.listen(boardPort,'127.0.0.1');await once(server2,'listening');
 writeFileSync(path.join(home,'session.json'),JSON.stringify({origin,board:'http://127.0.0.1:'+boardPort+'/manage',guide:'http://127.0.0.1:'+boardPort+'/demo',cohort:local.cohort,teacherToken:local.teacherToken,pairing,student:seats[0].student_id,user_data_dir:userDir,workspace:ws,spool_root:path.join(fakeHome,'Library/Application Support/HypeProof-Studio/logs/sessions'),source_sha:head,shell:manifest.shell.version,agent_sdk:manifest.agent_sdk?.version??null,real:['Studio shell copy','extension + webview','Agent SDK + native binary','ops sync + commands','SessionSpool on disk','snapshot upload','Chalk board'],synthetic:['accounts','lesson','model answers','report evaluator','mail transport','seats A2/A3 signals']},null,2),{mode:0o600});
 const env=Object.fromEntries(Object.entries(process.env).filter(([k])=>!/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
-const app=spawn(path.join(copy,'Contents/MacOS/HypeProof Studio'),['--user-data-dir='+userDir,'--extensions-dir='+path.join(userDir,'extensions'),'--use-inmemory-secretstorage','--disable-workspace-trust','--disable-updates','--skip-welcome','--skip-release-notes',...(process.env.HPS_DEMO_PREPARE_A1==='1'?['--remote-debugging-port='+Number(process.env.HPS_DEMO_DEBUG_PORT||9361)]:[]),'--new-window',ws],{env:{...env,HOME:fakeHome,HPS_DEV_TOKEN_FILE:tokenPath,HPS_TEST_COACH_NAME:'연습 코치',HPS_SDK_BINARY:manifest.agent_sdk.binary.path},stdio:['ignore','ignore','inherit']});
+const app=spawnStudio(path.join(copy,'Contents/MacOS/HypeProof Studio'),['--user-data-dir='+userDir,'--extensions-dir='+path.join(userDir,'extensions'),'--use-inmemory-secretstorage','--disable-workspace-trust','--disable-updates','--skip-welcome','--skip-release-notes',...(process.env.HPS_DEMO_PREPARE_A1==='1'?['--remote-debugging-port='+Number(process.env.HPS_DEMO_DEBUG_PORT||9361)]:[]),'--new-window',ws],{env:{...env,HOME:fakeHome,HPS_DEV_TOKEN_FILE:tokenPath,HPS_TEST_COACH_NAME:'연습 코치',HPS_SDK_BINARY:manifest.agent_sdk.binary.path},stdio:['ignore','ignore','inherit']}, { label: 'classroom-demo', secretStorage: 'inmemory' });
 // HPS_DEMO_PREPARE_A1=1 — drive the REAL window once so seat A1 is a connected, consenting learner with a real spool record:
 // command palette → 수업 연결 (one-time code) → one chat turn (scripted provider) → 수업 기록 보내기 동의. Everything after that
 // (selection, collection, results) is done by a person on the board. Needs the debugging port; without the flag nothing is driven.

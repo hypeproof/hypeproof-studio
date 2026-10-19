@@ -27,6 +27,7 @@ import { chromium } from '@playwright/test';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import * as ops from '../../extensions/hypeproof-chat/src/classroomOps.ts';
 import { InboxSession, InboxStore, inboxDir } from '../../extensions/hypeproof-chat/src/classroomInboxStore.ts';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-u2'));
 const servicePort = Number(process.env.HPS_DIST_SERVICE_PORT || 18771), boardPort = Number(process.env.HPS_DIST_BOARD_PORT || 18772), debugPort = Number(process.env.HPS_DIST_DEBUG_PORT || 9371), prefix = 'u2-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-';
@@ -77,7 +78,7 @@ writeFileSync(path.join(userDir, 'User/settings.json'), JSON.stringify({ 'hypepr
 const tokenPath = path.join(home, 'synthetic-learner-token-u2.txt'); writeFileSync(tokenPath, token, { mode: 0o600 });
 const workHashes = () => Object.fromEntries(readdirSync(ws).filter((f) => statSync(path.join(ws, f)).isFile()).sort().map((f) => [f, sha(path.join(ws, f))]));
 const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/(API_KEY|AUTH_TOKEN|SIGNING_SECRET|ADMIN_PASSWORD|_SECRET$|HPS_TEST|ELECTRON_RUN_AS_NODE)/.test(k)));
-let app = null; const launch = () => { app = spawn(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws], { env: { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path }, stdio: ['ignore', 'ignore', 'inherit'] }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
+let app = null; const launch = () => { app = spawnStudio(path.join(copy, 'Contents/MacOS/HypeProof Studio'), ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws], { env: { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', HPS_SDK_BINARY: manifest.agent_sdk.binary.path }, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-distribution', secretStorage: 'inmemory' }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
 
 // ── seats A2/A3: connected, inbox-capable, NOT selected. They run the real device client, so "nothing arrived" is measured. ──
 const synthRoot = path.join(userDir, 'synthetic-seats'), synth = {}; const memory = () => { let s = null; return { async load() { return s && JSON.parse(s); }, async save(v) { s = JSON.stringify(v); } }; }; let eid = 0;

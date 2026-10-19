@@ -26,6 +26,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { localOps, OPS_ALL } from './service-fixture.mjs';
 import { HelpRecordStore } from '../../extensions/hypeproof-chat/src/classroomHelpStore.ts';
 import { macWindow } from './mac-window.mjs';
+import { spawnStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), home = path.resolve(process.env.HPS_DEVHOST_DIR || path.join(repo, 'e2e/test-results/classroom-devhost-help-storage'));
 const servicePort = Number(process.env.HPS_HELP_SERVICE_PORT || 18921), debugPort = Number(process.env.HPS_HELP_DEBUG_PORT || 9521), prefix = 'helpwin-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-', HOURS = 12;
@@ -73,9 +74,9 @@ const appEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/
 const childEnv = { ...appEnv, HOME: fakeHome, HPS_DEV_TOKEN_FILE: tokenPath, HPS_TEST_COACH_NAME: '연습 코치', ...(manifest.agent_sdk?.binary?.path ? { HPS_SDK_BINARY: manifest.agent_sdk.binary.path } : {}) };
 const appArgs = (ws) => ['--user-data-dir=' + userDir, '--extensions-dir=' + path.join(userDir, 'extensions'), '--use-inmemory-secretstorage', '--disable-workspace-trust', '--disable-updates', '--skip-welcome', '--skip-release-notes', '--remote-debugging-port=' + debugPort, '--new-window', ws];
 const bin = path.join(copy, 'Contents/MacOS/HypeProof Studio');
-let app = null; const launch = (ws) => { app = spawn(bin, appArgs(ws), { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
+let app = null; const launch = (ws) => { app = spawnStudio(bin, appArgs(ws), { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-help-windows', secretStorage: 'inmemory' }); app.on('exit', (code, signal) => console.log('APP_EXIT', code, signal)); return app; };
 /** A second window of the RUNNING app: the second process hands the folder to the first over its socket and exits. */
-const openSecond = async (ws) => { const p = spawn(bin, appArgs(ws), { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }); await Promise.race([once(p, 'exit'), new Promise((r) => setTimeout(r, 20000))]); };
+const openSecond = async (ws) => { const p = spawnStudio(bin, appArgs(ws), { env: childEnv, stdio: ['ignore', 'ignore', 'inherit'] }, { label: 'classroom-help-windows', secretStorage: 'inmemory' }); await Promise.race([once(p, 'exit'), new Promise((r) => setTimeout(r, 20000))]); };
 
 const W = macWindow({ debugPort, realFetch, out }), { sleep, wait, attach, toasts, palette, frame, press, enterWork, shot } = W;
 const pairing = async (seat) => (await local.request(local.base + '/pairings', 'POST', { seat_id: seat, roster_revision: 1 }, teacherToken)).json.ticket;

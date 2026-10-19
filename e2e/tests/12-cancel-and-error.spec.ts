@@ -17,6 +17,7 @@ import * as path from "node:path";
 import * as http from "node:http";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
 import { chatFrame, openChatContainer } from "../fixtures/app";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 interface MockServer {
   port: number;
@@ -149,7 +150,7 @@ async function launchPointedAtMock(port: number): Promise<LaunchedCtx> {
   const wsDir = path.join(userDataDir, "ws");
   fs.mkdirSync(wsDir, { recursive: true });
 
-  const app = await electron.launch({
+  const app = await launchStudio(electron, {
     executablePath: APP_BINARY,
     args: [
       `--user-data-dir=${userDataDir}`,
@@ -169,7 +170,7 @@ async function launchPointedAtMock(port: number): Promise<LaunchedCtx> {
       HPS_TEST_COACH_NAME: "코디",
     },
     timeout: 30_000,
-  });
+  }, { label: '12-cancel-and-error', secretStorage: 'inmemory' });
   const win = await app.firstWindow({ timeout: 30_000 });
   await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
   return { app, win, userDataDir };

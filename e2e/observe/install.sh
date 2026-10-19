@@ -63,6 +63,7 @@ codesign --verify --deep --strict "$APP" 2>&1 && log "서명 ✓"
 # 포트 기본값이 9222 가 아닌 이유: 죽은 인스턴스가 남긴 상태 때문에 9222 가 바인드는
 # 되는데 응답하지 않는 상황을 겪었다(2026-07-27). 포트를 바꾸니 즉시 붙었다.
 log "디버깅 포트 $PORT 로 기동"
+# studio-launch: interactive -- observes the instructor's real app in use, not a test launch
 open -a "HypeProof Studio" --args --remote-debugging-port="$PORT"
 for i in $(seq 1 30); do
   curl -s -m 2 "http://127.0.0.1:$PORT/json/version" >/dev/null 2>&1 && { log "CDP ✓ (${i}회)"; break; }

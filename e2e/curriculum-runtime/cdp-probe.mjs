@@ -33,6 +33,7 @@ import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, write
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = process.env.HPS_APP_PATH?.trim();
@@ -101,7 +102,7 @@ writeFileSync(join(userDir, "settings.json"), JSON.stringify({
 const wsDir = join(work, "ws");
 mkdirSync(wsDir);
 
-const app = await electron.launch({
+const app = await launchStudio(electron, {
   executablePath: binary,
   args: [
     `--user-data-dir=${join(work, "user-data")}`,
@@ -115,7 +116,7 @@ const app = await electron.launch({
   ],
   env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" },
   timeout: 60_000,
-});
+}, { label: 'cdp-probe', secretStorage: 'inmemory' });
 // Quiet mode, as e2e/fixtures/app.ts does: keep the window off Jay's display.
 await app.evaluate(({ app: a, BrowserWindow }) => {
   try { a.dock?.hide(); } catch { /* not macOS */ }

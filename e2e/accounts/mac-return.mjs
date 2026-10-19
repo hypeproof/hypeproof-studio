@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 assert.equal(process.platform,'darwin','This acceptance requires macOS');
 const state=process.env.HPS_ACCOUNT_DEV_STATE,out=process.env.HPS_ACCOUNT_EVIDENCE,configPath=process.env.HPS_ACCOUNT_CONFIG;
 assert(state&&out&&configPath,'Explicit owned app, evidence and local synthetic config paths required');
@@ -24,7 +25,7 @@ let app,identity,first,frame;
 try{
  const uid=randomUUID();identity=await call('/internal/accounts/upsert',{provider:'google',subject:'synthetic-native-return-'+uid,email:'native-'+uid+'@example.invalid',email_verified:true,display_name:'기기 복귀 검수',age_band:'14+',consents:['terms','privacy','overseas_transfer'].map(kind=>({kind,version:'2026-10-15',granted:true})),session_label:'Native return acceptance'});
  execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister',['-f',receipt.app]);
- app=await electron.launch({executablePath:path.join(receipt.app,'Contents/MacOS/HypeProof Studio'),args:['--user-data-dir='+profile,'--extensions-dir='+path.join(state,'extensions'),'--use-inmemory-secretstorage','--skip-welcome','--skip-release-notes','--disable-workspace-trust','--disable-background-timer-throttling','--remote-debugging-port=9394','--folder-uri',pathToFileURL(path.join(state,'workspace')).href],env:{...process.env,VSCODE_CLI:'1',HPS_TEST_E2E:'1'},timeout:45000});
+ app=await launchStudio(electron, {executablePath:path.join(receipt.app,'Contents/MacOS/HypeProof Studio'),args:['--user-data-dir='+profile,'--extensions-dir='+path.join(state,'extensions'),'--use-inmemory-secretstorage','--skip-welcome','--skip-release-notes','--disable-workspace-trust','--disable-background-timer-throttling','--remote-debugging-port=9394','--folder-uri',pathToFileURL(path.join(state,'workspace')).href],env:{...process.env,VSCODE_CLI:'1',HPS_TEST_E2E:'1'},timeout:45000}, { label: 'account-return', secretStorage: 'inmemory', quiet: 'caller', foreground: true });
  await app.evaluate(({shell})=>{globalThis.__accountReturnLinks=[];const original=shell.openExternal.bind(shell);shell.openExternal=async(url,...rest)=>{if(url.startsWith('http://localhost:3193/studio/connect')){globalThis.__accountReturnLinks.push(url);return;}return original(url,...rest);};});
  const driver=macWindow({debugPort:9394,realFetch:fetch,out});first=await driver.attach();
  await first.keyboard.press('Escape');frame=await driver.frame('.studio-account');

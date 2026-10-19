@@ -98,6 +98,7 @@ fi
 
 TOKEN_FILE="$STATE/local-participant-token.txt"
 SERVICE_CMD=(node --experimental-strip-types --experimental-sqlite --no-warnings "$ROOT/e2e/curriculum-runtime/app-service.mjs" "$PORT" "$TOKEN_FILE" on publish)
+# studio-launch: interactive -- a person follows the cr-e2e checklist in this Dev app
 APP_CMD=(python3 "$ROOT/scripts/studio-dev.py" --state-dir "$STATE" --provider service run --service local --inmemory-secrets)
 NGROK_CMD=("$NGROK" http "127.0.0.1:$PORT" --inspect=false --log=stdout --log-format=json --log-level=info)
 

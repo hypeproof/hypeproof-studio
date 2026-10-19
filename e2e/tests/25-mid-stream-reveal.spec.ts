@@ -13,6 +13,7 @@ import * as path from "node:path";
 import * as http from "node:http";
 import { APP_BINARY, TOKEN_FILE } from "../fixtures/global-setup";
 import { chatFrame, openChatContainer, previewFrame } from "../fixtures/app";
+import { launchStudio } from '../../scripts/lib/studio-launcher.mjs';
 
 const GAME_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>mid-stream-game</title></head><body><h1 id="mid-stream-marker">D2 mid-stream test</h1></body></html>`;
 
@@ -96,7 +97,7 @@ async function launchAt(port: number): Promise<Ctx> {
   }));
   const wsDir = path.join(userDataDir, "ws");
   fs.mkdirSync(wsDir, { recursive: true });
-  const app = await electron.launch({
+  const app = await launchStudio(electron, {
     executablePath: APP_BINARY,
     args: [
       `--user-data-dir=${userDataDir}`,
@@ -111,7 +112,7 @@ async function launchAt(port: number): Promise<Ctx> {
       HPS_TEST_E2E: "1", HPS_TEST_TOKEN: token, HPS_TEST_COACH_NAME: "코디",
     },
     timeout: 30_000,
-  });
+  }, { label: '25-mid-stream-reveal', secretStorage: 'inmemory' });
   const win = await app.firstWindow({ timeout: 30_000 });
   await win.waitForSelector(".monaco-workbench", { timeout: 30_000 });
   return { app, win, userDataDir };
