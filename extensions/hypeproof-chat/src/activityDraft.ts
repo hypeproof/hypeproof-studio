@@ -2,12 +2,14 @@
 /** `imports` (#751 U3): bodiless references to instructor prompts the learner imported into this draft. Local provenance, never an instruction. */
 import { validTurnToolMode, type TurnToolMode } from './turnTools.ts';
 export interface RecoveredRequest { text: string; toolMode: TurnToolMode; images: string[] }
-export interface ActivityDraft { recovered?: RecoveredRequest[]; text: string; images: string[]; queued: string | null; toolMode?: TurnToolMode; queuedToolMode?: TurnToolMode; queuedPaused?: boolean; imports?: Array<{ object_id: string; revision: number; hash16: string }> }
+export interface InlineEditDraft { messageId: string; text: string; images: string[] }
+export interface ActivityDraft { inlineEdit?: InlineEditDraft; recovered?: RecoveredRequest[]; text: string; images: string[]; queued: string | null; toolMode?: TurnToolMode; queuedToolMode?: TurnToolMode; queuedPaused?: boolean; imports?: Array<{ object_id: string; revision: number; hash16: string }> }
 export const emptyActivityDraft = (): ActivityDraft => ({text:'',images:[],queued:null});
 export function validActivityDraft(value: unknown): value is ActivityDraft {
   if (!value || typeof value !== 'object') return false;
   const d=value as ActivityDraft;
-  return (d.recovered===undefined || Array.isArray(d.recovered) && d.recovered.every(item=>!!item && typeof item==='object' && Object.keys(item).every(k=>['text','toolMode','images'].includes(k)) && validTurnToolMode(item.toolMode) && validActivityDraft({text:item.text,images:item.images,queued:null}))) &&
+  return (d.inlineEdit===undefined || !!d.inlineEdit && typeof d.inlineEdit==='object' && Object.keys(d.inlineEdit).every(k=>['messageId','text','images'].includes(k)) && typeof d.inlineEdit.messageId==='string' && d.inlineEdit.messageId.length>0 && d.inlineEdit.messageId.length<=256 && validActivityDraft({text:d.inlineEdit.text,images:d.inlineEdit.images,queued:null})) &&
+    (d.recovered===undefined || Array.isArray(d.recovered) && d.recovered.every(item=>!!item && typeof item==='object' && Object.keys(item).every(k=>['text','toolMode','images'].includes(k)) && validTurnToolMode(item.toolMode) && validActivityDraft({text:item.text,images:item.images,queued:null}))) &&
     typeof d.text==='string' && d.text.length<=200000 &&
     (d.toolMode===undefined || validTurnToolMode(d.toolMode)) &&
     (d.queuedToolMode===undefined || d.queued!==null && validTurnToolMode(d.queuedToolMode)) &&
@@ -26,6 +28,6 @@ export function preservedDraftContent(value: unknown): unknown {
   const parked = value.queued?.trim() ?? '', typed = value.text.trim();
   const mode=value.toolMode??'auto', parkedMode=value.queuedToolMode??'auto';
   const effectiveMode=parked && !typed ? parkedMode : mode;
-  return { ...(value.recovered?.length ? {recovered:value.recovered} : {}), text: parked ? (typed ? `${parked}\n${typed}` : parked) : value.text, images: value.images, imports: value.imports ?? [],
+  return { ...(value.inlineEdit ? {inlineEdit:value.inlineEdit} : {}), ...(value.recovered?.length ? {recovered:value.recovered} : {}), text: parked ? (typed ? `${parked}\n${typed}` : parked) : value.text, images: value.images, imports: value.imports ?? [],
     ...(parked && typed && mode!==parkedMode ? {toolModes:[{text:parked,mode:parkedMode},{text:typed,mode}]} : effectiveMode!=='auto' ? {toolMode:effectiveMode} : {}) };
 }

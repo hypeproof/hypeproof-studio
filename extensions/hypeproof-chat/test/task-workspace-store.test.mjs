@@ -410,3 +410,25 @@ test('symlinked storage roots, scope directories and scope files fail without wr
   await assert.rejects(linked.initialize(), hasCode('corrupt'));
   assert.equal(fs.readFileSync(preserved, 'utf8'), 'unrelated file');
 });
+
+// Navigation saves the same draft contract that reload reads; inline text is not a composer send.
+test('inline prompt edits remain task-scoped on disk without replacing the composer or transcript', async t => {
+  const root = temporary(t), store = new TaskWorkspaceStore(root, 'inline-edit');
+  await store.initialize();
+  const a = store.getView().activeTaskId;
+  await store.append(a, [message('prompt', 'Original prompt')]);
+  const saved = { ...draft('Separate composer'), inlineEdit: { messageId:'prompt', text:'Unsent\nrevision', images:['data:image/png;base64,YQ=='] } };
+  await store.saveDraft(a, saved);
+  await store.create('B', expected(store));
+  const b = store.getView().activeTaskId;
+  await store.saveDraft(b, draft('B draft'));
+  const reopened = new TaskWorkspaceStore(root, 'inline-edit');
+  assert.deepEqual(reopened.getDraft(a), saved);
+  assert.deepEqual(reopened.getDraft(b), draft('B draft'));
+  assert.equal(reopened.getTask(a).messages[0].content, 'Original prompt');
+  await reopened.select(a, expected(reopened));
+  await assert.rejects(reopened.saveDraft(a, {...saved, inlineEdit:{...saved.inlineEdit, images:['https://invalid/image']}}), hasCode('invalid'));
+  assert.deepEqual(reopened.getDraft(a), saved, 'invalid draft must not overwrite saved edit');
+  await reopened.saveDraft(a, draft('Separate composer'));
+  assert.deepEqual(new TaskWorkspaceStore(root, 'inline-edit').getDraft(a), draft('Separate composer'));
+});

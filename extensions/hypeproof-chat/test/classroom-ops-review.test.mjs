@@ -155,8 +155,8 @@ test('the learner is told what is happening in words, not the wire id; an action
 test('a deliberate instructor stop is never routed to the error banner, and the learner is told who stopped it', () => {
   const src = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
   const provider = src('../src/chatPanelProvider.ts'), app = src('../webview-ui/src/App.tsx');
-  const errorGate = /else if \(!ctrl\.signal\.aborted\) \{\s*if \(mode === 'web-search'\) await this\.post\(\{ type: 'inputRejected', text, images, toolMode: mode \}\);\s*await this\.handleSendError\(err, streamId, \{ profile, proxyUrl, token, signal: ctrl\.signal \}\);\s*\}/;
-  assert.match(provider, errorGate, 'both search input recovery and the error banner are inside this turn\'s abort guard');
+  const errorGate = /else if \(!ctrl\.signal\.aborted\) \{\s*(?:\/\/[^\n]*\n\s*)*if \(mode === 'web-search' \|\| \(versionOf && assistantText\.length === 0\)\) await this\.post\(\{ type: 'inputRejected', text, images, toolMode: mode \}\);\s*await this\.handleSendError\(err, streamId, \{ profile, proxyUrl, token, signal: ctrl\.signal \}\);\s*\}/;
+  assert.match(provider, errorGate, 'search/edit input recovery and the error banner are inside this turn\'s abort guard');
   assert.doesNotMatch(provider.replace('else if (!ctrl.signal.aborted) {', 'else {'), errorGate, 'removing the abort guard must fail the probe');
   assert.match(provider, /opsRequestStop\(\): void \{[\s\S]{0,300}?type: "streamStopped", streamId, by: "instructor"/, 'the classroom stop says it is the instructor\'s');
   const notice = app.match(/const INSTRUCTOR_STOP_NOTICE = "([^"]+)"/)?.[1] ?? '';

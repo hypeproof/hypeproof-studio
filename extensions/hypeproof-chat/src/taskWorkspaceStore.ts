@@ -107,7 +107,7 @@ function decodeVersions(text: string, scope: string): VersionsData {
 }
 
 function validDraft(value: unknown): value is ActivityDraft {
-  return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered']) && validActivityDraft(value);
+  return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered', 'inlineEdit']) && validActivityDraft(value);
 }
 
 function validSurface(value: unknown): value is TaskSurfaceSelection | null {
