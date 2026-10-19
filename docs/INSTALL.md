@@ -12,7 +12,7 @@
 2. GitHub CLI(`gh`)를 설치합니다.
 3. 터미널에서 `gh auth login --hostname github.com` 을 실행해 초대받은 계정으로 로그인합니다.
 
-초대가 없는 참가자는 담당 강사에게 설치 파일을 요청하세요.
+초대가 없는 수업 참가자와 이용권 구매자는 참여 코드로 https://hypeproof-ai.xyz/studio/install 에서 설치합니다.
 
 ---
 
