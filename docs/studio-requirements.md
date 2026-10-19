@@ -1389,3 +1389,14 @@ CLI restarts, two-process contention and SIGKILL with signed protocol fixtures.
 This is local engine evidence, not installed-App acceptance. Provider/billing,
 remote publish wiring, exact-byte customer delivery and seven-day operations
 remain NOT RUN. No workflow publication gate is bypassed or replaced.
+
+### Compact recovery layout (REQ-C16)
+
+Recovery banners keep the explanation above a wrapping horizontal action row,
+so secondary controls do not squeeze the message into a narrow column. Retry,
+report and dismiss retain their existing behavior and at least 44px target height.
+Long request identifiers wrap without horizontal overflow. Notice tone, alert
+announcements, keyboard focus and unsent drafts remain unchanged. This supports
+Useful work first and Minimum necessary intervention: learners can read the
+failure and make an explicit recovery choice. Verify the built webview at narrow
+and wide widths in light/dark themes; native acceptance remains separate.

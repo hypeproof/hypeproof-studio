@@ -904,9 +904,10 @@ html, body, #root {
 
 /* ---- S-04 (#48) error banner + fatal fallback ---------------------------- */
 .hps-error-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
   padding: 12px 14px;
   margin: 8px 0;
   background: rgba(255, 80, 80, 0.12);
@@ -914,16 +915,19 @@ html, body, #root {
   border-radius: 8px;
   color: var(--vscode-errorForeground, #ff9090);
 }
-.hps-error-banner-icon { font-size: 22px; line-height: 1; flex: 0 0 auto; }
+.hps-error-banner-icon { font-size: 16px; line-height: 20px; }
 .hps-error-banner-body { flex: 1 1 auto; min-width: 0; }
 .hps-error-banner-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
 .hps-error-banner-msg { font-size: 12px; color: var(--vscode-foreground, #ddd); word-break: break-word; }
-.hps-error-banner-actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.hps-error-banner-actions {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
 .hps-error-banner-retry,
 .hps-error-banner-dismiss,
 .hps-error-banner-report {
   border: 0; cursor: pointer; padding: 6px 12px; border-radius: 4px;
-  font-size: 12px; font-weight: 600; min-width: 84px; text-align: center;
+  font-size: 12px; font-weight: 600; min-width: 84px; min-height: 44px; text-align: center;
 }
 .hps-error-banner-retry {
   background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff);
@@ -978,6 +982,7 @@ html, body, #root {
 .hps-fatal-btn-ghost:hover { background: rgba(255,255,255,0.06); }
 
 .hps-error-banner-rid {
+  overflow-wrap: anywhere;
   margin-top: 6px;
   font-size: 11px;
   color: var(--vscode-descriptionForeground, #888);
