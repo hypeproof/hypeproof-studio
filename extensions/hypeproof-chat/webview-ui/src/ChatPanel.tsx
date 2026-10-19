@@ -1015,8 +1015,18 @@ export function ChatPanel(props: Props) {
           // label that names nothing the learner can act on. It stays readable to screen readers.
           ? <strong title={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
+        {/* US-05 (P0): the work screen's top names the current activity and whether it is a trial or a
+            class. Personal chat has no mission header (#1760), so the line that header carried moves
+            into this row with the same `현재 활동` label (the a11y contract in MissionHeader.tsx). The
+            kind stays visible; the name yields first on a narrow header (title keeps the full line). */}
+        {personalWorkspace && config?.activity && (() => {
+          const kind = activityLabel(config.activity.kind, config.activity.pass, undefined, !!config.activity.free);
+          return <span className="hps-activity-now" aria-label="현재 활동" title={`${kind} · ${config.activity.name}`}>
+            <span className="hps-activity-kind">{kind}</span><span className="hps-activity-name"> · {config.activity.name}</span>
+          </span>;
+        })()}
         {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
-        {trialLine && <span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
+        {trialLine &&<span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its
