@@ -1,7 +1,8 @@
 /**
- * CGP-DS-R-009: the learner chooses how large chat text reads. Body sizes per mode: classroom
- * 13/15/17px, personal 15/17/19px; the composer follows. 44px targets stay as they are. The choice
- * is a device preference (globalState), not part of any lesson or activity.
+ * CGP-DS-R-009: the learner chooses how large chat text reads in personal chat: body and composer
+ * 16/18/20px, reply-choice text +2/+4px. 44px targets stay as they are. The choice is a device
+ * preference (globalState), not part of any lesson or activity. Classroom seats have no settings
+ * dialog yet, so they keep the base size.
  */
 export const TEXT_SIZES = ["base", "large", "xlarge"] as const;
 export type TextSize = (typeof TEXT_SIZES)[number];
