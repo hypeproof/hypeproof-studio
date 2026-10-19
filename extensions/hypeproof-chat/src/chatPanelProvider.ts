@@ -198,6 +198,7 @@ import {
   ActionRequest,
 } from "./protocol";
 import { applyCarryoverDecision, carryoverAdvertised, carryoverState, type CarryoverStores } from "./trialCarryoverHelpers";
+import { carryoverStoresFor, taskWorkspaceRoot, taskWorkspaceScope } from "./trialCarryoverSource";
 import {
   isShowIntent,
   clampHistory,
@@ -444,7 +445,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const activity = activityConnections(this.context)?.current;
     if (!activity || isInstructor || !['trial', 'personal'].includes(activity.kind ?? '')) { this.taskWorkspace = undefined; return; }
     if (this.taskWorkspace?.activityId === activity.id) return;
-    const store = new TaskWorkspaceStore(path.join(this.context.globalStorageUri.fsPath, 'task-workspaces'), JSON.stringify([activity.id, activity.workspace]));
+    const store = new TaskWorkspaceStore(taskWorkspaceRoot(this.context.globalStorageUri.fsPath), taskWorkspaceScope(activity));
     this.taskWorkspace = { activityId: activity.id, store };
     try {
       await store.initialize(this.context.workspaceState.get<ChatMessage[]>(this.historyKey(), []), this.context.workspaceState.get('hps.activity.draft.' + activity.id, emptyActivityDraft()));
@@ -6427,15 +6428,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
   /**
    * REQ-L12 ⑫ exception (ot-conversation-carryover) — the stores behind the trial carry-over offer.
-   * The trial transcript is read from its own activity's key and never written into the pass
-   * history; only the visible summary message is (trialCarryoverHelpers.ts).
+   * The trial transcript is read from the trial's own task store and never written into the pass
+   * history; only the visible summary message is (trialCarryoverHelpers.ts, trialCarryoverSource.ts).
    */
   private carryoverStores(): CarryoverStores {
-    return {
+    // A trial keeps its conversation in its own TaskWorkspaceStore (prepareTaskWorkspace); the
+    // workspaceState key holds only pre-migration history, read when no store file exists yet.
+    return carryoverStoresFor({
+      globalStoragePath: this.context.globalStorageUri.fsPath,
       offers: this.context.globalState,
-      trialHistory: (trialId) => this.context.workspaceState.get<ChatMessage[]>(historyKeyForCohort(trialId), []),
+      legacyHistory: (trialId) => this.context.workspaceState.get<ChatMessage[]>(historyKeyForCohort(trialId), []),
       passHistory: () => this.getHistory(),
-    };
+    });
   }
 
   /**

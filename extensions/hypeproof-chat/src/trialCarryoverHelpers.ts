@@ -10,7 +10,8 @@
 //   - nothing from the trial seat's runtime (SDK session, credentials) is reused.
 
 export interface CarryoverMessage { id?: string; role: string; content: string; createdAt?: number }
-export interface CarryoverSource { id: string; name: string }
+/** The trial that held the folder: its record id, name and canonical home folder (its task-store key). */
+export interface CarryoverSource { id: string; name: string; workspace: string }
 export interface CarryoverOffer {
   version: 1;
   /** The pass activity (ActivityConnections record id) the offer belongs to. */
@@ -36,11 +37,11 @@ export function carryoverAdvertised(profile: { pass?: unknown; conversation_carr
  * without the pass mark) counts — a class or an earlier pass is not "체험에서 하던 대화".
  */
 export function carryoverSourceOf(
-  previous: { id: string; name: string; kind?: string; pass?: boolean } | undefined | null,
+  previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean } | undefined | null,
   passId: string,
 ): CarryoverSource | null {
-  if (!previous || previous.id === passId || previous.kind !== "trial" || previous.pass) return null;
-  return { id: previous.id, name: previous.name };
+  if (!previous || previous.id === passId || previous.kind !== "trial" || previous.pass || typeof previous.workspace !== "string" || !previous.workspace) return null;
+  return { id: previous.id, name: previous.name, workspace: previous.workspace };
 }
 
 export function newOffer(passId: string, from: CarryoverSource): CarryoverOffer {
@@ -49,7 +50,7 @@ export function newOffer(passId: string, from: CarryoverSource): CarryoverOffer 
 
 export function validOffer(value: unknown, passId: string): CarryoverOffer | null {
   const o = value as CarryoverOffer | null | undefined;
-  if (!o || o.version !== 1 || o.passId !== passId || !o.from || typeof o.from.id !== "string" || typeof o.from.name !== "string") return null;
+  if (!o || o.version !== 1 || o.passId !== passId || !o.from || typeof o.from.id !== "string" || typeof o.from.name !== "string" || typeof o.from.workspace !== "string" || !o.from.workspace) return null;
   if (o.status !== "pending" && o.status !== "accepted" && o.status !== "declined") return null;
   return o;
 }
@@ -114,8 +115,11 @@ export function decideOffer(offer: CarryoverOffer | null, decision: "confirm" | 
 /** The stores the host hands in: VS Code Mementos in the app, Maps in the tests. */
 export interface CarryoverStores {
   offers: { get(key: string): unknown; update(key: string, value: unknown): PromiseLike<void> | void };
-  /** The trial activity's own transcript (read only; never written by carry-over). */
-  trialHistory(trialId: string): readonly CarryoverMessage[];
+  /**
+   * The trial activity's own transcript (read only; never written by carry-over). In the app this
+   * is the trial's TaskWorkspaceStore, not workspaceState (trialCarryoverSource.ts).
+   */
+  trialHistory(source: CarryoverSource): readonly CarryoverMessage[];
   /** The pass conversation as it is now. */
   passHistory(): readonly CarryoverMessage[];
 }
@@ -123,7 +127,7 @@ export interface CarryoverStores {
 export function carryoverState(passId: string, advertised: boolean, stores: CarryoverStores) {
   const key = carryoverOfferKey(passId);
   const offer = validOffer(stores.offers.get(key), passId);
-  const trialHistory = offer ? stores.trialHistory(offer.from.id) : [];
+  const trialHistory = offer ? stores.trialHistory(offer.from) : [];
   const view = carryoverView({ advertised, offer, passHistory: offer ? stores.passHistory() : [], trialHistory });
   return { key, offer, view, trialHistory };
 }

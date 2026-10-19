@@ -17,10 +17,13 @@ import {
   applyCarryoverDecision, carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, carryoverState,
   carryoverSummary, carryoverView, newOffer, readableTranscript,
 } from '../src/trialCarryoverHelpers.ts';
+import {carryoverStoresFor, taskWorkspaceRoot, taskWorkspaceScope} from '../src/trialCarryoverSource.ts';
+import {TaskWorkspaceStore} from '../src/taskWorkspaceStore.ts';
 import {rendererStatus, renderComponent, visibleText} from './sx-render.mjs';
 
 const require = createRequire(import.meta.url);
-const PASS = 'p'.repeat(64), TRIAL = 't'.repeat(64);
+const PASS = 'p'.repeat(64), TRIAL = 't'.repeat(64), HOME = '/synthetic/home';
+const TRIAL_SOURCE = {id: TRIAL, name: '무료 체험', workspace: HOME};
 const trialHistory = [
   {id: '1', role: 'user', content: '우리 치과 홈페이지 첫 화면을 만들어 줘', createdAt: 1},
   {id: '2', role: 'tool', content: '🔧 Write(index.html) ✓', createdAt: 2},
@@ -38,14 +41,15 @@ assert.equal(carryoverAdvertised({conversation_carryover: {available: true}}), f
 assert.equal(carryoverAdvertised(null), false);
 console.log('PASS carry-over is off unless the Service advertises it on a pass');
 
-assert.deepEqual(carryoverSourceOf({id: TRIAL, name: '무료 체험', kind: 'trial'}, PASS), {id: TRIAL, name: '무료 체험'});
-assert.equal(carryoverSourceOf({id: TRIAL, name: '수업', kind: 'classroom'}, PASS), null, 'a class is not a trial');
-assert.equal(carryoverSourceOf({id: TRIAL, name: '이용권', kind: 'trial', pass: true}, PASS), null, 'an earlier pass is not a trial');
-assert.equal(carryoverSourceOf({id: PASS, name: '같은 활동', kind: 'trial'}, PASS), null, 'the pass itself');
+assert.deepEqual(carryoverSourceOf({id: TRIAL, name: '무료 체험', workspace: HOME, kind: 'trial'}, PASS), {id: TRIAL, name: '무료 체험', workspace: HOME});
+assert.equal(carryoverSourceOf({id: TRIAL, name: '무료 체험', kind: 'trial'}, PASS), null, 'no home folder → no task store to read');
+assert.equal(carryoverSourceOf({id: TRIAL, name: '수업', workspace: HOME, kind: 'classroom'}, PASS), null, 'a class is not a trial');
+assert.equal(carryoverSourceOf({id: TRIAL, name: '이용권', workspace: HOME, kind: 'trial', pass: true}, PASS), null, 'an earlier pass is not a trial');
+assert.equal(carryoverSourceOf({id: PASS, name: '같은 활동', workspace: HOME, kind: 'trial'}, PASS), null, 'the pass itself');
 assert.equal(carryoverSourceOf(undefined, PASS), null);
 console.log('PASS only a trial that held the folder can be the carry-over source');
 
-const pending = newOffer(PASS, {id: TRIAL, name: '무료 체험'});
+const pending = newOffer(PASS, TRIAL_SOURCE);
 assert.deepEqual(carryoverView({advertised: true, offer: pending, passHistory: [], trialHistory}), {status: 'offer', fromName: '무료 체험'});
 assert.equal(carryoverView({advertised: false, offer: pending, passHistory: [], trialHistory}), null, 'flag off hides a stored offer');
 assert.equal(carryoverView({advertised: true, offer: pending, passHistory: [{role: 'user', content: '안녕'}], trialHistory}), null, 'learner already talked: withdrawn');
@@ -72,7 +76,7 @@ function stores({offer = pending, pass = [], trial = trialHistory} = {}) {
   const seeds = [];
   return {
     offers, trialStore, passHistory, seeds,
-    stores: {offers: {get: (k) => offers.get(k), update: async (k, v) => { offers.set(k, v); }}, trialHistory: (id) => trialStore.get(id) ?? [], passHistory: () => passHistory},
+    stores: {offers: {get: (k) => offers.get(k), update: async (k, v) => { offers.set(k, v); }}, trialHistory: (source) => trialStore.get(source.id) ?? [], passHistory: () => passHistory},
     appendSeed: async (text) => { seeds.push(text); passHistory.push({role: 'assistant', content: text}); },
   };
 }
@@ -107,7 +111,7 @@ for (const [label, opts, advertised] of [
   ['flag off', {}, false],
   ['learner already talked', {pass: [{role: 'user', content: '안녕'}]}, true],
   ['no offer stored', {offer: null}, true],
-  ['offer for another pass', {offer: newOffer('q'.repeat(64), {id: TRIAL, name: '무료 체험'})}, true],
+  ['offer for another pass', {offer: newOffer('q'.repeat(64), TRIAL_SOURCE)}, true],
 ]) {
   const s = stores(opts);
   const out = await applyCarryoverDecision({passId: PASS, advertised, decision: 'confirm', stores: s.stores, appendSeed: s.appendSeed, now: 10});
@@ -134,7 +138,7 @@ vm.runInNewContext(bundle.outputFiles[0].text, {module: mod, exports: mod.export
 const {ActivityConnections, StartPage, ensureWorkspace} = mod.exports;
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hps-carryover-'));
 const profile = (id, home, {kind = 'trial', pass = false, carry} = {}) => ({activity_id: id.repeat(64), activity_kind: kind, profile_id: 'synthetic', display_name: pass ? '라이트 이용권' : '무료 체험', ux: {coach: {naming_mode: 'fixed'}}, welcome: {}, workspace_root: home, workspace_start: 'empty', ...(pass ? {pass: {request_limit: 200, requests_used: 0}} : {}), ...(carry === undefined ? {} : {conversation_carryover: {available: carry}})});
-async function enterPass({previousKind, carry}) {
+async function enterPass({previousKind, carry, trialTask}) {
   const base = fs.mkdtempSync(path.join(tmp, 'case-')), home = path.join(base, 'home'); fs.mkdirSync(home);
   const secrets = new Map(), state = new Map(), global = new Map();
   const raw = {globalStorageUri: {fsPath: path.join(base, 'storage')}, extension: {packageJSON: {version: 'test'}}, workspaceState: {keys: () => [...state.keys()], get: (k, d) => state.has(k) ? state.get(k) : d, update: async (k, v) => state.set(k, v)}, globalState: {get: (k, d) => global.has(k) ? global.get(k) : d, update: async (k, v) => global.set(k, v)}, secrets: {keys: async () => [...secrets.keys()], get: async (k) => secrets.get(k), store: async (k, v) => secrets.set(k, v), delete: async (k) => secrets.delete(k), onDidChange: () => ({dispose() {}})}};
@@ -142,7 +146,15 @@ async function enterPass({previousKind, carry}) {
   const before = profile('a', home, {kind: previousKind});
   const store = new ActivityConnections(raw, () => service, () => vscode.workspace.workspaceFolders[0].uri.fsPath, async () => responseProfile);
   await store.commit('synthetic-trial', before, home);
-  const trialId = store.current.id;
+  const trialId = store.current.id, trialRecord = JSON.parse(JSON.stringify(store.current));
+  // The trial talks the way the host stores it: its own TaskWorkspaceStore under globalStorage,
+  // keyed by the same helpers prepareTaskWorkspace uses. workspaceState is not involved.
+  let trialStore;
+  if (trialTask) {
+    trialStore = new TaskWorkspaceStore(taskWorkspaceRoot(raw.globalStorageUri.fsPath), taskWorkspaceScope(trialRecord));
+    await trialStore.initialize([], {text: '', images: [], queued: null});
+    if (trialTask.length) await trialStore.append(trialStore.getView().activeTaskId, structuredClone(trialTask));
+  }
   const scoped = store.wrap();
   const chat = {ensureProfile: async () => store.current?.serverId === before.activity_id ? before : responseProfile, profileFailure: () => null, invalidateProfile() {}, refreshConfig() {}, hasActiveStream: () => false, setConnectionChanging() {}, coachDisplayName: () => 'Coach', coachNameIsChosen: () => true, openInEditor: async () => {}};
   const page = new StartPage(scoped, chat, (p, commit, selected) => ensureWorkspace(p, scoped, false, commit, selected));
@@ -151,14 +163,57 @@ async function enterPass({previousKind, carry}) {
   await page.handle({type: 'connectCourse', token: 'synthetic-pass'});
   await page.handle({type: 'beginCourse'});
   assert.equal(store.current.serverId, responseProfile.activity_id, 'pass entered');
-  return {global, passId: store.current.id, trialId};
+  return {global, passId: store.current.id, trialId, trialRecord, trialStore, storage: raw.globalStorageUri.fsPath};
 }
 try {
   {
     const r = await enterPass({previousKind: 'trial', carry: true});
     const offer = JSON.parse(JSON.stringify(r.global.get(carryoverOfferKey(r.passId)))); // vm realm → plain object
-    assert.deepEqual(offer, {version: 1, passId: r.passId, from: {id: r.trialId, name: '무료 체험'}, status: 'pending'});
+    assert.deepEqual(offer, {version: 1, passId: r.passId, from: {id: r.trialId, name: '무료 체험', workspace: r.trialRecord.workspace}, status: 'pending'});
     console.log('PASS advertised pass over a trial folder records one pending offer (no mixing yet)');
+  }
+  // The trial conversation written through the real task store reaches the offer (positive
+  // control for the review finding: reading workspaceState gave [] here, so nothing was offered).
+  const offersOf = (r) => ({get: (k) => r.global.has(k) ? JSON.parse(JSON.stringify(r.global.get(k))) : undefined, update: async (k, v) => { r.global.set(k, v); }});
+  const staleLegacy = [{id: 'old', role: 'user', content: '이전 버전에서 하던 오래된 대화', createdAt: 0}, {id: 'old-a', role: 'assistant', content: '오래된 답변', createdAt: 0}];
+  {
+    const r = await enterPass({previousKind: 'trial', carry: true, trialTask: trialHistory});
+    assert.ok(fs.existsSync(r.trialStore.filePath), 'trial conversation is on disk in the task store');
+    const before = fs.readFileSync(r.trialStore.filePath, 'utf8');
+    const passHistory = [];
+    const stores = carryoverStoresFor({globalStoragePath: r.storage, offers: offersOf(r), legacyHistory: () => staleLegacy, passHistory: () => passHistory});
+    assert.deepEqual(carryoverState(r.passId, true, stores).view, {status: 'offer', fromName: '무료 체험'}, 'offer drawn from the trial task store');
+    const seeds = [];
+    const out = await applyCarryoverDecision({passId: r.passId, advertised: true, decision: 'confirm', stores, appendSeed: async (t) => { seeds.push(t); passHistory.push({role: 'assistant', content: t}); }, now: 10});
+    assert.equal(out.status, 'accepted');
+    assert.deepEqual(seeds, [carryoverSummary(trialHistory)], 'seed summarises the task-store conversation');
+    assert.doesNotMatch(seeds[0], /오래된/, 'leftover legacy history never reaches the seed');
+    assert.deepEqual(carryoverState(r.passId, true, stores).view.transcript, readableTranscript(trialHistory), 'read-only view shows the task-store conversation');
+    assert.equal(fs.readFileSync(r.trialStore.filePath, 'utf8'), before, 'trial task store untouched');
+    console.log('PASS trial conversation in the real task store is offered, shown and summarised');
+  }
+  {
+    // Negative control: the trial's store exists but its active task is empty; the leftover
+    // pre-migration copy in workspaceState must not be offered in its place.
+    const r = await enterPass({previousKind: 'trial', carry: true, trialTask: []});
+    const stores = carryoverStoresFor({globalStoragePath: r.storage, offers: offersOf(r), legacyHistory: () => staleLegacy, passHistory: () => []});
+    assert.equal(carryoverState(r.passId, true, stores).view, null, 'stale legacy history is not offered');
+    console.log('PASS empty trial task store + leftover legacy history: no offer (negative control)');
+  }
+  {
+    // A trial that never opened under the task store still has its legacy history as its only record.
+    const r = await enterPass({previousKind: 'trial', carry: true});
+    const stores = carryoverStoresFor({globalStoragePath: r.storage, offers: offersOf(r), legacyHistory: (id) => id === r.trialId ? trialHistory : [], passHistory: () => []});
+    assert.deepEqual(carryoverState(r.passId, true, stores).view, {status: 'offer', fromName: '무료 체험'});
+    assert.equal(fs.existsSync(path.join(taskWorkspaceRoot(r.storage), 'task-workspaces')) && fs.readdirSync(path.join(taskWorkspaceRoot(r.storage), 'task-workspaces')).length > 0, false, 'reading never creates a store');
+    console.log('PASS trial without a task store falls back to its only (legacy) record, read-only');
+  }
+  {
+    // The host keys the trial store with the same helpers the reader uses (no drift).
+    const host = fs.readFileSync(new URL('../src/chatPanelProvider.ts', import.meta.url), 'utf8');
+    assert.match(host, /new TaskWorkspaceStore\(taskWorkspaceRoot\(this\.context\.globalStorageUri\.fsPath\), taskWorkspaceScope\(activity\)\)/);
+    assert.match(host, /carryoverStoresFor\(\{\s*globalStoragePath: this\.context\.globalStorageUri\.fsPath/);
+    console.log('PASS host task store and carry-over reader share one key');
   }
   for (const [label, args] of [['flag absent', {previousKind: 'trial', carry: undefined}], ['flag false', {previousKind: 'trial', carry: false}], ['class before pass', {previousKind: 'classroom', carry: true}]]) {
     const r = await enterPass(args);

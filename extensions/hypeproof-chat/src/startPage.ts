@@ -353,7 +353,7 @@ export class StartPage {
    * trial conversation. Only an offer is written here (once per pass); nothing is copied or mixed
    * until the learner confirms it in the chat. Off unless the Service advertises it.
    */
-  private async recordCarryoverOffer(profile: ResolvedProfile, root: string, previous: { id: string; name: string; kind?: string; pass?: boolean } | undefined): Promise<void> {
+  private async recordCarryoverOffer(profile: ResolvedProfile, root: string, previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean } | undefined): Promise<void> {
     const pass = activityConnections(this.context)?.current;
     if (!pass || !carryoverAdvertised(profile) || !passTakesOver(profile, root)) return;
     const from = carryoverSourceOf(previous, pass.id);
