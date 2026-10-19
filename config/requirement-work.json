@@ -780,10 +780,11 @@
         "PRA-05",
         "PRA-06",
         "PRA-07",
-        "PRA-08"
+        "PRA-08",
+        "PRA-12"
       ],
       "inline_prefixes": [],
-      "sha256": "20204f24829ec89d30058fa9f020e7c2b5c63baa73fba95bae90781e89b66e9f",
+      "sha256": "cd0234b7c60075ee9fd1df77db3bdbc07ce339bbf6808023806fa0ea4cf5656c",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3870,6 +3871,36 @@
       "verification_inputs": [
         "scripts/test-installer-kit.sh",
         "scripts/tests/install-kit-fixture.ps1"
+      ]
+    },
+    {
+      "id": "installer-windows-posix-shell-detect",
+      "title": "Windows installer finds user-scope Git Bash and rejects the bare WSL stub",
+      "issue": 1782,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-12"
+          ]
+        }
+      ],
+      "depends_on": [
+        "non-member-class-kit-install"
+      ],
+      "next_action": "Merge the install.ps1 change; run the manual winget-git-user-scope job once and install on a real Windows PC with only user-scope Git to confirm the doctor passes without the WSL offer.",
+      "design_delta": "Find-GitBash checks Program Files, %LOCALAPPDATA%\\Programs\\Git and the Git root of git.exe on PATH, never System32 bash.exe; WSL counts only when wsl -l -q exits 0 and lists a distribution.",
+      "positive_control": "Machine-scope Git, user-scope Git, a custom Git root from PATH and a WSL distro each pass the doctor (scripts/tests/install-posix-shell.Tests.ps1, mocked paths).",
+      "negative_control": "No Git with only the wsl.exe stub fails the doctor and still reaches the WSL offer; System32 bash.exe is not accepted as Git Bash; against the previous implementation the user-scope and stub cases fail.",
+      "evidence_required": "Studio commit, the Pester output, and the winget-git-user-scope job log. A real Windows install with user-scope Git is required before completion; mocked paths are not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.ps1",
+        ".github/workflows/private-installers.yml"
+      ],
+      "verification_inputs": [
+        "scripts/tests/install-posix-shell.Tests.ps1"
       ]
     },
     {
