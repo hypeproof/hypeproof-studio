@@ -12,7 +12,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 import {
-  SEED_MANIFEST_NAME, checkSeedDirectory, expectedSeedAssets, parseSha256File, seedAssetName,
+  SEED_MANIFEST_NAME, checkSeedDirectory, expectedSeedAssets, parseSeedPlatforms, parseSha256File, seedAssetName,
   seedAssetProblems, vendoredSdkVersion,
 } from '../sdk-seed-assets.mjs';
 
@@ -166,6 +166,48 @@ test('list CLI reads `gh release view --json assets` output', () => {
   const missing = run(['HypeProof-Studio-darwin-arm64.zip']);
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /missing claude-agent-sdk-darwin-arm64-9\.9\.9\.tgz/);
+});
+
+const MAC_ONLY = JSON.stringify(['darwin-arm64']);
+
+test('seed platforms: omitted means every platform; unknown, empty or duplicate lists are refused', () => {
+  assert.deepEqual(parseSeedPlatforms(undefined), ['darwin-arm64', 'win32-x64']);
+  assert.deepEqual(parseSeedPlatforms(MAC_ONLY), ['darwin-arm64']);
+  assert.deepEqual(parseSeedPlatforms('["win32-x64","darwin-arm64"]'), ['darwin-arm64', 'win32-x64']);
+  for (const bad of ['[]', '["linux-x64"]', '["darwin-arm64","darwin-arm64"]', '"darwin-arm64"', 'darwin-arm64']) {
+    assert.throws(() => parseSeedPlatforms(bad), undefined, bad);
+  }
+});
+
+test('a Mac-only release: manifest/check/list pass for its platforms and fail against both (control)', async () => {
+  const dir = tmp('hps-seed-mac-');
+  const tarballs = {'darwin-arm64': makeTarball('claude', dir)};
+  const registry = await fixtureRegistry(tarballs);
+  try {
+    const out = path.join(dir, 'seed');
+    const r = await seed(['--platform', 'darwin-arm64', '--version', V, '--download-only', out], {HPS_NPM_REGISTRY: registry.url, HOME: path.join(dir, 'home')});
+    assert.equal(r.status, 0, r.out);
+    const cli = (args, input) => spawnSync(process.execPath, [CLI, ...args], {encoding: 'utf8', input});
+
+    // Negative control first: today's both-platform default refuses a Mac-only stage.
+    const both = cli(['manifest', out, V]);
+    assert.notEqual(both.status, 0);
+    assert.match(both.stderr, /missing claude-agent-sdk-win32-x64-9\.9\.9\.tgz/);
+
+    assert.equal(cli(['manifest', out, V, MAC_ONLY]).status, 0);
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, SEED_MANIFEST_NAME), 'utf8'));
+    assert.deepEqual(manifest.seeds.map(s => s.platform), ['darwin-arm64']);
+    assert.equal(cli(['check', out, V, MAC_ONLY]).status, 0);
+    assert.notEqual(cli(['check', out, V]).status, 0, 'the mirror check without platforms still requires both');
+    assert.notEqual(cli(['check', out, V, '["linux-x64"]']).status, 0, 'an unknown platform is refused');
+
+    const assets = JSON.stringify({assets: ['HypeProof-Studio-darwin-arm64.zip', ...expectedSeedAssets(V, ['darwin-arm64'])].map(name => ({name}))});
+    assert.equal(cli(['list', V, MAC_ONLY], assets).status, 0);
+    assert.notEqual(cli(['list', V], assets).status, 0);
+  } finally {
+    await registry.close();
+    fs.rmSync(dir, {recursive: true, force: true});
+  }
 });
 
 // verify-branding.sh runs every branding check; a synthetic tree fails the

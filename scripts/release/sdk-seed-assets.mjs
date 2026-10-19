@@ -10,11 +10,16 @@
 // so `seed-sdk-binary.sh --tarball` still verifies it against the pinned sha512.
 //
 // Pure judges plus a small CLI used by verify-unified-release.yml:
-//   sdk-seed-assets.mjs manifest DIR VERSION   write DIR/sdk-seed.json, then check DIR
-//   sdk-seed-assets.mjs check DIR VERSION      bytes: every seed, sha256 and manifest agree
-//   sdk-seed-assets.mjs list VERSION < JSON    names: `gh release view --json assets` output
+//   sdk-seed-assets.mjs manifest DIR VERSION [PLATFORMS]   write DIR/sdk-seed.json, then check DIR
+//   sdk-seed-assets.mjs check DIR VERSION [PLATFORMS]      bytes: every seed, sha256 and manifest agree
+//   sdk-seed-assets.mjs list VERSION [PLATFORMS] < JSON    names: `gh release view --json assets` output
 //   sdk-seed-assets.mjs app-version MAC_JSON WIN_JSON
 //                                              the vendored SDK package.json of both zips agree
+//
+// PLATFORMS is the JSON array `scripts/release/platforms.mjs list <release commit>`
+// prints: the seed covers the platforms that release ships an App for (a Mac-only
+// release carries only the darwin-arm64 seed). Omitted, it is every platform, the
+// stricter answer.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,6 +31,16 @@ export const SEED_MANIFEST_NAME = 'sdk-seed.json';
 export const SEED_MANIFEST_SCHEMA = 'hps-sdk-seed/1';
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const SEED_RE = /^claude-agent-sdk-([a-z0-9]+-[a-z0-9]+)-(\d+\.\d+\.\d+)\.tgz$/;
+
+/** Parses the PLATFORMS argument: a non-empty JSON array of known, distinct seed platforms. */
+export function parseSeedPlatforms(text) {
+  if (text === undefined) return [...SEED_PLATFORMS];
+  let list;
+  try { list = JSON.parse(text); } catch { throw Error(`platforms is not JSON: ${text}`); }
+  if (!Array.isArray(list) || list.length === 0) throw Error('platforms must be a non-empty JSON array');
+  if (list.some(p => !SEED_PLATFORMS.includes(p)) || new Set(list).size !== list.length) throw Error(`unknown or duplicate seed platform in ${text}`);
+  return SEED_PLATFORMS.filter(p => list.includes(p));
+}
 
 export function seedAssetName(platform, version) {
   return `claude-agent-sdk-${platform}-${version}.tgz`;
@@ -117,27 +132,29 @@ function fail(problems) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, ...args] = process.argv.slice(2);
   try {
-    if (command === 'manifest' && args.length === 2) {
-      const [dir, version] = args;
-      const pre = seedAssetProblems(fs.readdirSync(dir).concat(SEED_MANIFEST_NAME), version);
+    if (command === 'manifest' && (args.length === 2 || args.length === 3)) {
+      const [dir, version] = args, platforms = parseSeedPlatforms(args[2]);
+      const pre = seedAssetProblems(fs.readdirSync(dir).concat(SEED_MANIFEST_NAME), version, platforms);
       if (pre.length) fail(pre);
       else {
-        fs.writeFileSync(path.join(dir, SEED_MANIFEST_NAME), `${JSON.stringify(buildSeedManifest(dir, version), null, 2)}\n`);
-        const problems = checkSeedDirectory(dir, version);
-        if (problems.length) fail(problems); else console.log(`PASS staged native SDK seed ${version}: ${SEED_PLATFORMS.join(', ')}`);
+        fs.writeFileSync(path.join(dir, SEED_MANIFEST_NAME), `${JSON.stringify(buildSeedManifest(dir, version, platforms), null, 2)}\n`);
+        const problems = checkSeedDirectory(dir, version, platforms);
+        if (problems.length) fail(problems); else console.log(`PASS staged native SDK seed ${version}: ${platforms.join(', ')}`);
       }
-    } else if (command === 'check' && args.length === 2) {
-      const problems = checkSeedDirectory(...args);
-      if (problems.length) fail(problems); else console.log(`PASS native SDK seed bytes ${args[1]}`);
-    } else if (command === 'list' && args.length === 1) {
+    } else if (command === 'check' && (args.length === 2 || args.length === 3)) {
+      const platforms = parseSeedPlatforms(args[2]);
+      const problems = checkSeedDirectory(args[0], args[1], platforms);
+      if (problems.length) fail(problems); else console.log(`PASS native SDK seed bytes ${args[1]}: ${platforms.join(', ')}`);
+    } else if (command === 'list' && (args.length === 1 || args.length === 2)) {
+      const platforms = parseSeedPlatforms(args[1]);
       const release = JSON.parse(fs.readFileSync(0, 'utf8'));
       const names = (release.assets ?? []).map(a => (typeof a === 'string' ? a : a?.name));
-      const problems = seedAssetProblems(names, args[0]);
-      if (problems.length) fail(problems); else console.log(`PASS release lists the native SDK seed ${args[0]}`);
+      const problems = seedAssetProblems(names, args[0], platforms);
+      if (problems.length) fail(problems); else console.log(`PASS release lists the native SDK seed ${args[0]}: ${platforms.join(', ')}`);
     } else if (command === 'app-version' && args.length >= 1) {
       process.stdout.write(vendoredSdkVersion(...args.map(f => fs.readFileSync(f, 'utf8'))));
     } else {
-      console.error('Usage: sdk-seed-assets.mjs manifest DIR VERSION | check DIR VERSION | list VERSION < release.json | app-version PACKAGE_JSON...');
+      console.error('Usage: sdk-seed-assets.mjs manifest DIR VERSION [PLATFORMS] | check DIR VERSION [PLATFORMS] | list VERSION [PLATFORMS] < release.json | app-version PACKAGE_JSON...');
       process.exitCode = 2;
     }
   } catch (error) {

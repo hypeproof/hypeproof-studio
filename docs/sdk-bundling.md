@@ -297,14 +297,16 @@ Deferred to a later W4 slice:
 The public zips vendor the SDK JS but no native binary, and a public-zip user
 has no installer to seed one. Each release therefore carries, beside the zips:
 
-- `claude-agent-sdk-<platform>-<version>.tgz` for every App platform
-  (`darwin-arm64`, `win32-x64`) — the unmodified npm tarball, so
+- `claude-agent-sdk-<platform>-<version>.tgz` for every App platform the release
+  ships (`config/release-platforms.json` at the release commit; `darwin-arm64` only
+  since 2026-10-19, and Windows installs fall back to the newest release with
+  Windows assets and its seed) — the unmodified npm tarball, so
   `seed-sdk-binary.sh --tarball` still verifies it against the pinned sha512;
 - `<that name>.sha256` in `sha256sum` format;
 - `sdk-seed.json` (`hps-sdk-seed/1`: version, per-platform name, size, sha256,
   npm SRI) for a future in-app or Lab fetcher.
 
-`verify-unified-release.yml` reads the SDK version both shipped zips vendor,
+`verify-unified-release.yml` reads the SDK version the shipped zips vendor,
 requires it to equal the tag's `SDK_BINARY_VERSION`, stages the tarballs with
 `seed-sdk-binary.sh --download-only`, writes and checks the manifest
 (`scripts/release/sdk-seed-assets.mjs`), uploads them while the release is still a

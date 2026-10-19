@@ -195,8 +195,9 @@ jobs:
           # sdk-seed.json), mirrored with dist/* below. Re-check the bytes so the
           # mirror never carries a seed that disagrees with its checksum. Older
           # releases have no sdk-seed.json and are mirrored as before.
+          # The seed covers the platforms the tag ships (config/release-platforms.json at the tag).
           if [[ -f dist/sdk-seed.json ]]; then
-            node scripts/release/sdk-seed-assets.mjs check dist "$(jq -r .sdkVersion dist/sdk-seed.json)"
+            node scripts/release/sdk-seed-assets.mjs check dist "$(jq -r .sdkVersion dist/sdk-seed.json)" "$(node scripts/release/platforms.mjs list "$TAG")"
           fi
           ls -la dist
           cat > mirror-release-notes.md <<EOF

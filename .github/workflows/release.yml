@@ -47,6 +47,12 @@ jobs:
           grep -q 'Attach the public native SDK seed' .github/workflows/verify-unified-release.yml
           grep -q 'sdk-seed-assets.mjs list' .github/workflows/verify-unified-release.yml
           grep -q 'sdk-seed-assets.mjs check' .github/workflows/mirror-release.yml
+          # The seed follows the release's platforms, never a fixed pair (#1872).
+          grep -qF 'sdk-seed-assets.mjs manifest "$seed" "$version" "$platforms"' .github/workflows/verify-unified-release.yml
+          grep -qF 'sdk-seed-assets.mjs list "$version" "$platforms"' .github/workflows/verify-unified-release.yml
+          if grep -qF 'for platform in darwin-arm64 win32-x64' .github/workflows/verify-unified-release.yml; then
+            echo "::error::the native SDK seed hard-codes both platforms"; exit 1
+          fi
           node --test scripts/release/test/sdk-seed-assets.test.mjs
 
       - name: Summary

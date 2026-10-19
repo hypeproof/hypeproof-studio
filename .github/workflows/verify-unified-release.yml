@@ -238,31 +238,47 @@ jobs:
       # unmodified npm tarball for each App platform, a sha256 file beside it and
       # sdk-seed.json. Attached while still a draft: a public release never
       # appears without its seed, and a failure here leaves the draft unpublished.
+      # The seed covers the platforms this release ships (config/release-platforms.json at
+      # the release's own commit, like the gates above): a Mac-only release carries only
+      # the darwin-arm64 seed. The App reads only its own platform's entry, and Windows
+      # installs fall back to the newest release with Windows assets and its own seed.
       - name: Attach the public native SDK seed
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          SOURCE_SHA: ${{ needs.candidate.outputs.sha }}
         run: |
           set -euo pipefail
           meta="$RUNNER_TEMP/sdk-meta" seed="$RUNNER_TEMP/sdk-seed"
           mkdir -p "$meta"
+          platforms="$(node scripts/release/platforms.mjs list "$SOURCE_SHA")"
+          echo "native SDK seed platforms: $platforms"
           vendored='extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/package.json'
-          win_zips=(dist/HypeProof.Studio-win32-x64-*.zip)
-          [[ ${#win_zips[@]} -eq 1 && -f "${win_zips[0]}" ]] || { echo "::error::expected one Windows zip in the release"; exit 1; }
-          unzip -p dist/HypeProof-Studio-darwin-arm64.zip "HypeProof Studio.app/Contents/Resources/app/$vendored" > "$meta/darwin.json"
-          unzip -p "${win_zips[0]}" "resources/app/$vendored" > "$meta/win32.json"
+          metas=()
+          for platform in $(jq -r '.[]' <<<"$platforms"); do
+            case "$platform" in
+              darwin-arm64)
+                unzip -p dist/HypeProof-Studio-darwin-arm64.zip "HypeProof Studio.app/Contents/Resources/app/$vendored" > "$meta/$platform.json" ;;
+              win32-x64)
+                win_zips=(dist/HypeProof.Studio-win32-x64-*.zip)
+                [[ ${#win_zips[@]} -eq 1 && -f "${win_zips[0]}" ]] || { echo "::error::expected one Windows zip in the release"; exit 1; }
+                unzip -p "${win_zips[0]}" "resources/app/$vendored" > "$meta/$platform.json" ;;
+              *) echo "::error::no seed recipe for platform $platform"; exit 1 ;;
+            esac
+            metas+=("$meta/$platform.json")
+          done
           # The version the shipped Apps vendor, not the one main pins today.
-          version="$(node scripts/release/sdk-seed-assets.mjs app-version "$meta/darwin.json" "$meta/win32.json")"
+          version="$(node scripts/release/sdk-seed-assets.mjs app-version "${metas[@]}")"
           pinned="$(git show "$TAG:extensions/hypeproof-chat/src/sdkBinaryManifest.ts" | sed -n 's/^export const SDK_BINARY_VERSION = "\([0-9.]*\)";.*/\1/p')"
           [[ "$version" == "$pinned" ]] || { echo "::error::Apps vendor Agent SDK $version but $TAG pins SDK_BINARY_VERSION=$pinned"; exit 1; }
           # --version: the pinned sha512 when main pins the same version, npm's
           # dist.integrity otherwise. Either way the bytes are npm's.
-          for platform in darwin-arm64 win32-x64; do
+          for platform in $(jq -r '.[]' <<<"$platforms"); do
             bash scripts/seed-sdk-binary.sh --platform "$platform" --version "$version" --download-only "$seed"
           done
-          node scripts/release/sdk-seed-assets.mjs manifest "$seed" "$version"
+          node scripts/release/sdk-seed-assets.mjs manifest "$seed" "$version" "$platforms"
           gh release upload "$TAG" "$seed"/* --clobber
-          gh release view "$TAG" --json assets | node scripts/release/sdk-seed-assets.mjs list "$version"
+          gh release view "$TAG" --json assets | node scripts/release/sdk-seed-assets.mjs list "$version" "$platforms"
       - name: Publish and dispatch the public mirror
         env:
           GH_TOKEN: ${{ github.token }}
