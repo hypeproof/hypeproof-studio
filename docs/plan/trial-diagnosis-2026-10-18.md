@@ -17,7 +17,7 @@ report §11; decisions for Jay are in report §10 and design §10. Epic:
 | P2 heuristic review | done | Report §3/§4: two blind raters (weighted κ 0.69), impeccable critique/audit/onboard (detector not run, marked DEGRADED), WCAG 2.2 checklist on 7 pages, accidental vs intended friction | Keyboard walk, screen reader, zoom and contrast themes not tested |
 | P3 synthesis | done | Report §1, §3, §5 (verdict), §8 fix list, Appendix A fix cards | — |
 | P4 access options | partial | Design §2A (A/B/C/C′ compared, A recommended), §5 cost and §5.4 unit economics, §7 conversion; report §6/§6a | Decisions D1–D4, D15, D17–D24 are Jay's (report §10) |
-| P5 hand-off | partial | Report and design committed on this branch; epic and the draft PRs below (iteration 1 and 2) | US-04 P1 / NAT requirement rewrites; §8a decision-gated items (studio-public-update-path, lab-trial-request-ack, svc-price-revisions, lab-age-statement, studio-trial-install-profile, studio-release-signing, lab-funnel-analytics); §8b decision-gated items (D15 entry variants, ot-legal-open-access, ot-launch-enable, ot-order-trial-link, ot-guardian-checkout, Phase 4) |
+| P5 hand-off | partial | Report and design committed on this branch; epic, the draft PRs below (iterations 1–3) and the three integration PRs | US-04 P1 / NAT requirement rewrites; §8a decision-gated items (studio-public-update-path, lab-trial-request-ack, svc-price-revisions, lab-age-statement, studio-trial-install-profile, studio-release-signing, lab-funnel-analytics); §8b decision-gated items (D15 entry variants, ot-legal-open-access, ot-launch-enable, ot-order-trial-link, ot-guardian-checkout, Phase 4) |
 
 Iteration 1 — draft PRs for report §8a (independent fixes), none merged:
 
@@ -77,8 +77,8 @@ merged, no reviewers requested ("X on Y" = stacked on Y). Summary on the epic:
 
 Iteration-2 merge-order notes from the PR bodies:
 
-- Service migrations: service#127, #130 and #134 each add `0049-*.sql`; service#135 adds 0050.
-  Each later merge renumbers. Sibling Service branches also add flags to `worker/src/env.ts`.
+- Service migrations: service#127, #130 and #134 each added `0049-*.sql`; service#135 added 0050.
+  Resolved in iteration 3: 0049–0052 in that order. Sibling Service branches also add flags to `worker/src/env.ts`.
 - Lab `web/src/app/studio/trial/page.tsx` is edited by lab#1296 and lab#1298 (and the stack
   above lab#1298); the second to merge resolves the conflict.
 - Cross-repo: #1794 needs service#134; lab#1302 serves a code-free kit only after a release
@@ -88,9 +88,86 @@ Iteration-2 merge-order notes from the PR bodies:
   `conversation_carryover.available` (#1798), lab-open-install-scripts (lab#1302); the
   traceability owner on #1800 is a guess (JinyongShin) for Jay to confirm.
 
+Iteration 3 — gap fixes from the iteration-2 retro, defect fixes from the background e2e,
+and one integration PR per repo. All drafts, none merged, no reviewers, no force push.
+Summary on the epic:
+[#1782 comment](https://github.com/hypeproof/hypeproof-studio/issues/1782#issuecomment-6261013894).
+
+| Gap | PR | Change |
+|---|---|---|
+| svc-migration-renumber | [service#127](https://github.com/hypeproof/hypeproof-service/pull/127), [#130](https://github.com/hypeproof/hypeproof-service/pull/130), [#134](https://github.com/hypeproof/hypeproof-service/pull/134), [#135](https://github.com/hypeproof/hypeproof-service/pull/135) | Migration allocation: 0049 service#127, 0050 service#130, 0051 service#134, 0052 service#135 |
+| studio-ind-main-sync | [#1769](https://github.com/hypeproof/hypeproof-studio/pull/1769), [#1765](https://github.com/hypeproof/hypeproof-studio/pull/1765) | Synced with `main` |
+| svc-open-profile-moderation | [service#136](https://github.com/hypeproof/hypeproof-service/pull/136) | New |
+| svc-carryover-field | [service#137](https://github.com/hypeproof/hypeproof-service/pull/137) | New; sends `conversation_carryover.available` for #1798 |
+| seed-on-demand-switch | [service#138](https://github.com/hypeproof/hypeproof-service/pull/138), [#1800](https://github.com/hypeproof/hypeproof-studio/pull/1800) | New Service SDK seed offer; #1800 updated |
+| lab-open-install-scripts | [lab#1312](https://github.com/hypeproof/hypeprooflab/pull/1312) on lab#1302 | New (lab#1311); `HPS_STUDIO_OPEN_INSTALL` |
+| studio-funnel-fixture-regen | [#1794](https://github.com/hypeproof/hypeproof-studio/pull/1794) | Fixture regenerated from Service `4a5cf78`; stale again after service#134 moved to `a97bedc` |
+| clock-flag-copy | [#1804](https://github.com/hypeproof/hypeproof-studio/pull/1804), [lab#1298](https://github.com/hypeproof/hypeprooflab/pull/1298) | New #1804 (#1803); lab#1298 clock line follows `HPS_TRIAL_CLOCK_AT_MESSAGE` |
+| lab-studio-landing-retest | [lab#1292](https://github.com/hypeproof/hypeprooflab/pull/1292) | Retest note only |
+
+Defects from the e2e run and where they are fixed:
+
+| e2e case | Defect | Fixed on |
+|---|---|---|
+| E2E-END-02 | Cost-ceiling refusal shows a generic error banner instead of the end card | #1796, #1765 |
+| SVC-TURN-02 | `/v1/profile` trial status counts attempts, not turns, with the turn allowance on | [service#139](https://github.com/hypeproof/hypeproof-service/pull/139) (new, on service#132) |
+| SVC-COST-02 | `/v1/profile` trial status ignores the cost ceiling | service#130 |
+| SVC-FUN-03 | Funnel `trial_limit_near` / `trial_limit_reached` use attempts as turns | service#134 |
+| E2E-SDK-04 | SDK install notice asks a no-code open-trial user for a code | #1771 |
+| SVC-OFFER-01 | `GET /v1/trial/offer` (TUX-SP-12) has no Service implementation | service#125, service#139 |
+
+The e2e run has not been repeated on the fixed heads; each fix is covered by its branch tests.
+
+Integration PRs (merge one of these, or the drafts in the order its body lists):
+
+| Repo | PR | Head | Contains | Tests |
+|---|---|---|---|---|
+| Service | [service#140](https://github.com/hypeproof/hypeproof-service/pull/140) | `ac690db` | all 15 trial branches | typecheck pass; 147 pass / 2 fail, the same 2 as `main` (`cr-publish`, `owner-dom`) |
+| Studio | [#1806](https://github.com/hypeproof/hypeproof-studio/pull/1806) (#1805) | `917ad1eb` | all 19 `fix/trial-*` branches | tsc, extension `npm test`, `e2e/trial-ux` 56/0, start-page, native-trial-checks, photo-only-send, `next-work.py --check` |
+| Lab | [lab#1314](https://github.com/hypeproof/hypeprooflab/pull/1314) (lab#1313) | `f64a51db` | all 12 `fix/trial-lab-*` branches | not re-run (no branch changed) |
+
+hype-pr refuses `trial/` branch names, so the Studio and Lab integration PRs open from
+`chore/open-trial-integration-20261019` at the same commit.
+
+Background e2e summary (headless; Service `80d22e4`, Studio `bdfa21ff`; 80 pass / 6 fail):
+
+| Area | Case | Result | Observed |
+|---|---|---|---|
+| Studio | trial-ux | PASS | 56/0 |
+| Studio | start page ON / OFF | PASS | both |
+| Service ON | SVC-CLOCK-01 | PASS | profile read leaves `started_at` null; first message starts the window |
+| Service ON | SVC-TURN-01 | PASS | 3-attempt tool loop = 1 turn; 4th turn gets 429 `trial_exhausted` |
+| Service ON | SVC-TURN-02 | FAIL | profile status counts attempts |
+| Service ON | SVC-COST-01 | PASS | 2 admitted at 3,000 micro-USD; 3rd gets 429 `trial_cost_exhausted`, not charged |
+| Service ON | SVC-COST-02 | FAIL | profile status ignores the cost ceiling |
+| Service ON | SVC-EXP-01 | PASS | 403 `trial_expired` |
+| Service ON | SVC-MOD-01 | PASS | 400 `moderation_block`, 0 upstream calls |
+| Service ON | SVC-SEED-01 | PASS | `sdk_seed.fetch=true` |
+| Service ON | SVC-FUN-03 | FAIL | limit events count attempts |
+| Service ON | SVC-OFFER-01 | FAIL | no `/v1/trial/offer` |
+| Studio on real Worker | E2E-END-01 | PASS | end card with 이용권 살펴보기; nothing auto-opens; press emits 1 request |
+| Studio on real Worker | E2E-END-02 | FAIL | cost-ceiling refusal shows the generic banner |
+| Studio on real Worker | E2E-END-03 | PASS | |
+| Studio on real Worker | E2E-EXP-01 / 02 | PASS | time-ended card, no 🔌; ⏳ notice |
+| Studio on real Worker | E2E-SDK-01 / 02 / 03 | PASS | Korean install notice with `retry:false`; seed decision `offer`; real 409 `trial_requires_sdk` gets the Korean remedy |
+| Studio on real Worker | E2E-SDK-04 | FAIL | install notice asks for a code |
+| Studio on real Worker | E2E-FUN-01 / 02 | PASS | rows hold only a keyed hash; Service rejects email and text fields with 400 |
+| Studio on real Worker | E2E-SP-ON | PASS | |
+| Negative control, flags OFF | mint, events, products, clock, attempts, seed, funnel, start page | PASS | open-trial mint 400; `/v1/trial/events` and `/v1/purchase/products` 404; clock and attempt counting as today; no `sdk_seed`; 0 funnel rows; start page identical ON vs OFF |
+
+Not scored: with flags OFF, `/v1/profile` still adds an ungated `trial` block. Deviations: a
+synthetic purchase catalogue in the ON run, expiry simulated by aging a local D1 row, Studio
+host helpers called directly (no Extension Host). No REPORT.md was written; the evidence
+files stayed in the session scratchpad.
+
+Iteration-3 follow-ups: regenerate #1794's fixture against service#134 `a97bedc`; decide
+whether the ungated `/v1/profile` `trial` block needs a flag; service#130's GitHub base is
+still `main`, so its diff also shows service#125's commits.
+
 Blocked fixes: none.
 
-Open decisions for Jay:
+Open decisions for Jay (they also gate legal review, ot-legal-open-access, and launch enable,
+ot-launch-enable):
 
 - D15 trust event: A (account sign-in) recommended; B only as a second provider; C′ counters
   as secondary limits.
