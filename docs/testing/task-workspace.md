@@ -175,3 +175,9 @@ CC-05 negative controls also feed complete HTML fences, a successful HTML write 
   attempt clears stale guidance, preserves successful photos and the draft, and
   does not send. `e2e/photo-only-send.mjs` covers the controlled host boundary;
   actual storage failure and native file drops require separate evidence.
+
+- Stop then immediate task navigation: while an aborted transport still settles,
+  explain that the stopped response is being finalized rather than asking the
+  learner to press a Stop control that is no longer present. Keep the busy gate;
+  running streams still require stopping. After settlement, navigation preserves
+  the old partial answer and draft and excludes late callbacks from the new task.
