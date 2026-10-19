@@ -123,6 +123,8 @@ export interface ChatConfig {
   taskWorkspace?: import('./taskWorkspaceContract').TaskWorkspaceView;
   activity?: {id:string;name:string;kind?:'trial'|'personal'|'classroom';workspace:string;verified:boolean;pass?:PassStatus;trial?:TrialStatus};
   activityDraft?: import('./activityDraft').ActivityDraft;
+  /** REQ-L12 ⑫ — trial carry-over offer or the read-only trial transcript; absent unless the Service advertises it. */
+  carryover?: import('./trialCarryoverHelpers').CarryoverView;
   /** AE-01 (#554) — the learner's own goal for the served lesson revision (read from this device); null without a lesson. */
   studentGoal?: import('./studentGoal').StudentGoalView | null;
   access?: import('./accessClient').AccessState;
@@ -209,6 +211,11 @@ export interface ResolvedProfile {
   pass?: PassStatus;
   /** TUX-SP-13 — present for a one-hour trial grant (never with `pass`). Presentation only; absent on an older Service. */
   trial?: TrialStatus;
+  /**
+   * REQ-L12 ⑫ exception (ot-conversation-carryover) — the Service offers "체험에서 하던 대화 이어가기"
+   * on this pass (Service flag, default off). Absent → the pass starts a new conversation, as before.
+   */
+  conversation_carryover?: { available: boolean };
   access_identity?:{kind:'account';scope:string};
   model_selection?: {
     revision: 'hps-model-selection/1'; runtime: 'proxy' | 'agent-sdk'; provider: string;
@@ -462,6 +469,8 @@ export type WebviewMessage = (
       observations: import('./voiceCapabilityHelpers').VoiceProbeObservations }
   | {type:'refreshAccess'}
   | {type:'selectFunding';id:string}
+  /** REQ-L12 ⑫ — the learner's explicit answer to the trial carry-over offer. */
+  | {type:'carryoverDecision';decision:'confirm'|'decline'}
   | {type:'requestBudget';note:string}
   | { type: 'observationOpen' }
   /**

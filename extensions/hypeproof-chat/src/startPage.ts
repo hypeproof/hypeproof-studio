@@ -1,7 +1,8 @@
 import * as vscode from "vscode";
 import { AccountError, type AccountSession, type AccountPassBinding } from "./accountSession";
 import { ChatPanelProvider } from "./chatPanelProvider";
-import { ActivityConnectionError, activityConnections } from "./activityConnections";
+import { ActivityConnectionError, activityConnections, passTakesOver } from "./activityConnections";
+import { carryoverAdvertised, carryoverOfferKey, carryoverSourceOf, newOffer, validOffer } from "./trialCarryoverHelpers";
 import { fetchProfileResult, verifyActivity, ProxyTransportError } from "./proxyClient";
 import { sanitizeWorkshopToken, looksLikeIssuerTokenUnverified, reentryWorkspace } from "./chatPanelHelpers";
 import * as path from "node:path";
@@ -368,6 +369,22 @@ export class StartPage {
     finally { this.busy = false; await this.refresh(); }
   }
 
+  /**
+   * REQ-L12 ⑫ exception — a pass that takes over a trial's home folder may offer to continue the
+   * trial conversation. Only an offer is written here (once per pass); nothing is copied or mixed
+   * until the learner confirms it in the chat. Off unless the Service advertises it.
+   */
+  private async recordCarryoverOffer(profile: ResolvedProfile, root: string, previous: { id: string; name: string; workspace?: string; kind?: string; pass?: boolean } | undefined): Promise<void> {
+    const pass = activityConnections(this.context)?.current;
+    if (!pass || !carryoverAdvertised(profile) || !passTakesOver(profile, root)) return;
+    const from = carryoverSourceOf(previous, pass.id);
+    if (!from) return;
+    const key = carryoverOfferKey(pass.id);
+    if (validOffer(this.context.globalState.get(key), pass.id)) return;
+    try { await this.context.globalState.update(key, newOffer(pass.id, from)); }
+    catch { /* An offer that could not be saved is simply not shown; entry must not fail for it. */ }
+  }
+
   private async activateAccountPass(passId: string): Promise<void> {
     if (!this.accounts) throw new Error('account disabled');
     const settings = this.settings();
@@ -571,7 +588,10 @@ export class StartPage {
           if (connections) {
             const root = directory ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             if (!root) throw new Error('작업 폴더를 선택해 주세요.');
+            // REQ-L12 ⑫ — read who held this folder before the pass takes it over (carry-over offer).
+            const previousHolder = carryoverAdvertised(profile) ? await connections.forWorkspace(root).catch(() => undefined) : undefined;
             rollback = await connections.commit(candidate.token,profile!,root,candidate.accountPass);
+            await this.recordCarryoverOffer(profile!, root, previousHolder);
           } else await this.context.secrets.store(TOKEN_KEY, candidate.token);
           committed = true;
           // REQ-L12 — the purchased activity is entered; the order record has done its job.
