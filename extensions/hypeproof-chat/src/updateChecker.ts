@@ -546,6 +546,22 @@ export async function reportManualUpdateCheckFailure(error: unknown): Promise<vo
   );
 }
 
+/**
+ * Copy for a failed install (banner button). A re-check without release access, or a
+ * rate-limited anonymous re-check, gets the same calm copy as a manual check instead
+ * of an error that appends the internal English detail. Other failures keep the
+ * error line: the update did not complete and the app keeps running.
+ */
+export async function reportInstallUpdateFailure(error: unknown): Promise<void> {
+  if (isUpdateAccessError(error) || isUpdateDeferredError(error)) {
+    await reportManualUpdateCheckFailure(error);
+    return;
+  }
+  await vscode.window.showErrorMessage(
+    `업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. ${(error as Error)?.message ?? ""}`,
+  );
+}
+
 export async function dismissVersion(
   context: vscode.ExtensionContext,
   version: string,

@@ -8,11 +8,15 @@
 //   negative controls: setting off → no fetch at all (REQ-I14 unchanged);
 //                      member token → private mirror only, public never asked;
 //                      a public release whose asset points at the private mirror
-//                      (and the reverse) is refused
+//                      (and the reverse) is refused; a member 503 never reaches
+//                      the public release (request list); a 403 that is not a
+//                      rate limit is not deferred; a real install failure stays
+//                      an error line
 //   positive:          no credential / refused token + setting on → one anonymous
 //                      public read, banner, anonymous verified download;
 //                      403/429 → "check later" (silent automatic, calm manual);
-//                      public 404 → homepage copy; free-start signal alone turns it on
+//                      public 404 → homepage copy; install re-check access/rate
+//                      limit → manual-check copy; free-start signal alone turns it on
 //
 // Run: node test/update-public-source.smoke.mjs
 
@@ -62,7 +66,7 @@ const mod = new Module(resolve('test/update-public-host.cjs'));
 mod.filename = resolve('test/update-public-host.cjs');
 mod.paths = Module._nodeModulePaths(process.cwd());
 mod._compile(bundle.outputFiles[0].text, mod.filename);
-const { checkForUpdates, scheduleUpdateChecks, reportManualUpdateCheckFailure, registerPublicUpdateSignal, publicUpdatesEnabled } = mod.exports;
+const { checkForUpdates, scheduleUpdateChecks, reportManualUpdateCheckFailure, reportInstallUpdateFailure, registerPublicUpdateSignal, publicUpdatesEnabled } = mod.exports;
 const { downloadVerifiedUpdate, trustedUpdateUrl, updateUrlSource } = await import('../src/updateTransport.ts');
 
 const data = Buffer.from('public release bytes');
@@ -205,9 +209,12 @@ try {
   assert.equal(info.source, 'member');
   assert.equal(info.downloadUrl, PRIVATE_ASSET);
   // Member transient failure is not turned into a public read.
-  serve({ [PRIVATE_API]: () => new Response('', { status: 503 }), [PUBLIC_API]: () => assert.fail('no fallback on 503') });
+  // The public route answers with a valid release, so a reroute would succeed instead
+  // of failing with a message that happens to match; the request list is the check.
+  serve({ [PRIVATE_API]: () => new Response('', { status: 503 }), [PUBLIC_API]: () => Response.json(PUBLIC_RELEASE) });
   error = await checkError();
-  assert.match(error.message, /503/);
+  assert.deepEqual(requests, [{ url: PRIVATE_API, auth: 'Bearer member-token' }], 'a transient mirror failure never reaches the public release');
+  assert.equal(error.message, 'Update check failed: HTTP 503');
   console.log('PASS member path unchanged with the setting on (mirror only, 503 not rerouted)');
 
   // ── positive: token the mirror refuses (logged-in non-member) ─────────
@@ -238,8 +245,14 @@ try {
 
   // ── positive: rate limit → check later ─────────────────────────────────
   setCreds(null);
-  for (const status of [403, 429]) {
-    serve({ [PUBLIC_API]: () => Response.json({ message: 'API rate limit exceeded' }, { status }) });
+  const RATE_LIMITED = [
+    ['403 rate-limit body', () => Response.json({ message: 'API rate limit exceeded for 1.2.3.4.' }, { status: 403 })],
+    ['403 x-ratelimit-remaining 0', () => Response.json({ message: 'Forbidden' }, { status: 403, headers: { 'x-ratelimit-remaining': '0' } })],
+    ['403 retry-after (secondary limit)', () => Response.json({ message: 'Forbidden' }, { status: 403, headers: { 'retry-after': '60' } })],
+    ['429', () => new Response('', { status: 429 })],
+  ];
+  for (const [status, respond] of RATE_LIMITED) {
+    serve({ [PUBLIC_API]: respond });
     error = await checkError();
     assert.equal(error.code, 'update_check_deferred', `HTTP ${status}`);
     calls.length = 0;
@@ -260,6 +273,26 @@ try {
   }
   console.log('PASS 403/429 → check later (calm manual copy, silent automatic, banner kept)');
 
+  // ── negative control: a 403 that is not a rate limit is not deferred ──
+  // An abuse block or a repository access change must not leave a non-member
+  // silently un-updated forever: it gets the homepage answer, like no access.
+  for (const headers of [{}, { 'x-ratelimit-remaining': '42' }]) {
+    serve({ [PUBLIC_API]: () => Response.json({ message: 'Repository access blocked' }, { status: 403, headers }) });
+    error = await checkError();
+    assert.equal(error.code, 'update_access_unavailable', JSON.stringify(headers));
+    calls.length = 0;
+    await reportManualUpdateCheckFailure(error);
+    assert.match(calls[0].text, /홈페이지/);
+    const state = {};
+    calls.length = 0;
+    s = runScheduler(state);
+    await s.first();
+    assert.equal(state['hypeproofChat.updateAccessNotice'], '0.1.50', 'automatic check records the homepage notice');
+    assert.equal(calls[0]?.text, '새 버전은 홈페이지에서 받을 수 있어요.', 'automatic check is not silent');
+    s.dispose();
+  }
+  console.log('PASS non-rate-limit 403 → homepage answer, not a silent deferral');
+
   // ── positive: no public release yet → homepage copy ───────────────────
   serve({ [PUBLIC_API]: () => Response.json({ message: 'Not Found' }, { status: 404 }) });
   error = await checkError();
@@ -270,6 +303,27 @@ try {
   assert.ok(calls[0].items.includes('홈페이지 열기'));
   for (const f of FORBIDDEN) assert.doesNotMatch(userText(), f);
   console.log('PASS public 404 → homepage copy');
+
+  // ── installUpdate failure copy ─────────────────────────────────────────
+  // Positive: an access error (public 404 above) or a rate-limited re-check gets the
+  // manual-check copy, without the internal English detail appended.
+  calls.length = 0;
+  await reportInstallUpdateFailure(error);
+  assert.equal(calls[0].kind, 'info');
+  assert.match(calls[0].text, /홈페이지/);
+  assert.doesNotMatch(userText(), /HTTP|Public release|not available/);
+  serve({ [PUBLIC_API]: () => new Response('', { status: 429 }) });
+  error = await checkError();
+  calls.length = 0;
+  await reportInstallUpdateFailure(error);
+  assert.equal(calls[0].kind, 'info');
+  assert.doesNotMatch(userText(), /HTTP|rate limited/);
+  // Negative control: a real install failure stays an error line with its detail.
+  calls.length = 0;
+  await reportInstallUpdateFailure(new Error('Update SHA-256 mismatch'));
+  assert.equal(calls[0].kind, 'error');
+  assert.equal(calls[0].text, '업데이트를 완료하지 못했습니다. 현재 앱은 종료하지 않습니다. Update SHA-256 mismatch');
+  console.log('PASS installUpdate: access/deferred → calm copy; other failures stay errors');
 
   // ── the free-start signal alone turns it on; a throwing signal does not ─
   setting = false;

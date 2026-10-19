@@ -144,6 +144,18 @@ export async function fetchLatestRelease(): Promise<unknown> {
   return response.json();
 }
 
+/**
+ * GitHub marks a rate-limit 403 with `x-ratelimit-remaining: 0` (primary limit),
+ * a `retry-after` header (secondary limit), or a "rate limit" message in the body.
+ */
+async function isRateLimitResponse(response: Response): Promise<boolean> {
+  if (response.headers.get("x-ratelimit-remaining") === "0") return true;
+  if (response.headers.has("retry-after")) return true;
+  try {
+    return /rate limit/i.test(await response.text());
+  } catch { return false; }
+}
+
 /** Anonymous read of the public release (D19). Never carries a credential. */
 export async function fetchPublicLatestRelease(): Promise<unknown> {
   const response = await fetch(PUBLIC_RELEASES_API, {
@@ -151,10 +163,13 @@ export async function fetchPublicLatestRelease(): Promise<unknown> {
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   });
-  // Anonymous API budget exhausted (403 with the rate-limit body, or 429): check later.
-  if (response.status === 403 || response.status === 429) {
+  // Anonymous API budget exhausted: check later. A 403 that is not a rate limit
+  // (an abuse block, a repository access change) must not defer forever; it gets
+  // the same answer as no access, the homepage download.
+  if (response.status === 429 || (response.status === 403 && await isRateLimitResponse(response))) {
     throw new UpdateDeferredError(`Public release check rate limited: HTTP ${response.status}`);
   }
+  if (response.status === 403) throw new UpdateAccessError("Public release not readable: HTTP 403");
   // No public release yet (or the repository is not public): same answer as no access.
   if (response.status === 404) throw new UpdateAccessError("Public release not available: HTTP 404");
   if (!response.ok) throw new Error(`Update check failed: HTTP ${response.status}`);
