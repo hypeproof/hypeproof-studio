@@ -29,6 +29,10 @@ separate filesystem/host/built-UI evidence from native, Windows and customer pro
 
 ### Personal chat detail (CP-R1)
 
+Reading a wide table retains its horizontal position while editing a draft or
+receiving another answer. Unchanged Markdown is reused; changed text still renders
+without remounting stable table/link elements solely because the parent rerenders.
+
 `REQ-STUDIO-CHAT-DETAIL` (CP-R1): personal chat aligns prose and its expanding
 composer, makes live response/tool/source states legible and offers confirmed
 answer copying. Incoming output must not pull a reader away from older content;
