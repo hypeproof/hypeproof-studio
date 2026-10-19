@@ -29,10 +29,11 @@ export function VersionPager({ pager, onPage }: { pager: Pager; onPage: (index: 
  * The prompt opened in place. The composer and its saved draft are not touched, so Cancel is
  * exact: nothing changed anywhere. Save hands the text and the kept images to the caller.
  */
-export function EditPrompt({ text, images, revertNote, onCancel, onSave }: {
+export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChange }: {
   text: string;
   images: string[];
   revertNote: boolean;
+  onChange?: (text: string, images: string[]) => void;
   onCancel: () => void;
   onSave: (text: string, images: string[]) => void;
 }) {
@@ -45,14 +46,14 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave }: {
     {kept.length > 0 && <div className="hps-msg-images">
       {kept.map((url, i) => <span key={i} className="hps-edit-image">
         <img src={url} alt={`첨부 이미지 ${i + 1}`} />
-        <button type="button" onClick={() => setKept((all) => all.filter((_, j) => j !== i))} aria-label={`첨부 이미지 ${i + 1} 빼기`}>×</button>
+        <button type="button" onClick={() => { const next = kept.filter((_, j) => j !== i); setKept(next); onChange?.(value, next); }} aria-label={`첨부 이미지 ${i + 1} 빼기`}>×</button>
       </span>)}
     </div>}
     <textarea
       ref={area}
       value={value}
       aria-label="고칠 메시지"
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => { setValue(e.target.value); onChange?.(e.target.value, kept); }}
       onKeyDown={(e) => {
         if (imeComposing(e)) return;
         if (e.key === "Escape") { e.preventDefault(); onCancel(); }

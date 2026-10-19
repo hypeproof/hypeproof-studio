@@ -1,5 +1,5 @@
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
-import type { RecoveredRequest } from '../../src/activityDraft';
+import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
@@ -301,7 +301,8 @@ export function ChatPanel(props: Props) {
   const [discardRequest, setDiscardRequest] = useState<RecoveredRequest | null>(null);
   // CGP-CHAT-R-002 — which version of each edited prompt is drawn (view only), and the line being edited.
   const [versionChoice, setVersionChoice] = useState<Record<string, number>>({});
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [inlineEdit, setInlineEdit] = useState<InlineEditDraft | undefined>(saved?.inlineEdit);
+  const [editingId, setEditingId] = useState<string | null>(saved?.inlineEdit?.messageId ?? null);
   const editFocusScope = useRef('');
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
@@ -424,7 +425,7 @@ export function ChatPanel(props: Props) {
   const [lastImport, setLastImport] = useState<LastImport | null>(null);
   const [importNote, setImportNote] = useState<string | null>(null);
   // A draft that never imported an instructor prompt is saved exactly as before U3: no `imports` key at all.
-  const draftPayload = () => ({...(recovered.length ? {recovered} : {}),text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
+  const draftPayload = () => ({...(inlineEdit ? {inlineEdit} : {}),...(recovered.length ? {recovered} : {}),text:draft,images:pendingImages,queued,...(imports.length?{imports}:{}),toolMode,...(queued !== null ? {queuedToolMode,...(queuedPaused?{queuedPaused:true}:{})} : {})});
   const snapshot = useRef(draftPayload());
   snapshot.current = draftPayload();
   const composerHasAttachments = useRef(false);
@@ -435,7 +436,7 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
     if (activityId) postToHost({type:"saveActivityDraft",activityId,taskId,draft:draftPayload()});
-  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered]);
+  }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered,inlineEdit]);
   useEffect(() => {
     const off = onHostMessage(msg => {
       if (!activityId || msg.activityId !== activityId) return;
@@ -1076,6 +1077,7 @@ export function ChatPanel(props: Props) {
     const origin = document.activeElement;
     const row = origin?.closest('.hps-msg');
     setEditingId(null);
+    setInlineEdit(undefined);
     requestAnimationFrame(() => {
       // A later task or intentional focus choice owns the keyboard now.
       if (editFocusScope.current !== owner || !row?.isConnected) return;
@@ -1087,6 +1089,7 @@ export function ChatPanel(props: Props) {
     const editOf = original.editOf ?? original.id;
     if (props.onEditResend?.(original, editOf, text, images) === false) return;
     setEditingId(null);
+    setInlineEdit(undefined);
     // The new version is drawn: forget a choice that pointed at an older one.
     setVersionChoice(({ [editOf]: _dropped, ...rest }) => rest);
     recoverToComposer(undefined);
@@ -1372,8 +1375,10 @@ export function ChatPanel(props: Props) {
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
               pager={shown.pagers[m.id]}
               onPage={(key, index) => setVersionChoice((all) => ({ ...all, [key]: index }))}
-              onEdit={m.id === editableId ? () => setEditingId(m.id) : undefined}
+              onEdit={m.id === editableId ? () => { setEditingId(m.id); setInlineEdit(current => current?.messageId === m.id ? current : {messageId:m.id,text:m.content,images:m.images ?? []}); } : undefined}
               editing={m.id === editing}
+              editDraft={inlineEdit?.messageId === m.id ? inlineEdit : undefined}
+              onEditChange={(text, images) => setInlineEdit({messageId:m.id,text,images})}
               revertNote={!props.instructor && !!turnReview}
               onCancelEdit={cancelEdit}
               onSaveEdit={(text, images) => saveEdit(m, text, images)}
@@ -2147,6 +2152,8 @@ function MessageItem({
   revertNote = false,
   onCancelEdit,
   onSaveEdit,
+  editDraft,
+  onEditChange,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -2181,6 +2188,8 @@ function MessageItem({
   revertNote?: boolean;
   onCancelEdit?: () => void;
   onSaveEdit?: (text: string, images: string[]) => void;
+  editDraft?: InlineEditDraft;
+  onEditChange?: (text: string, images: string[]) => void;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -2227,8 +2236,9 @@ function MessageItem({
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       {message.role === 'user' && editing && onCancelEdit && onSaveEdit ? <EditPrompt
-        text={message.content}
-        images={message.images ?? []}
+        text={editDraft?.text ?? message.content}
+        images={editDraft?.images ?? message.images ?? []}
+        onChange={onEditChange}
         revertNote={revertNote}
         onCancel={onCancelEdit}
         onSave={onSaveEdit} /> : <div className="hps-msg-body">
