@@ -1,13 +1,14 @@
 // S5. The candidate commit's check-runs on main, including the macOS legs that only run after merge (#1599).
 // PASS: every check-run completed and none failed. Still running → NOT_RUN. Read-only (gh api).
 // On Actions the release-cut run's own job is a check-run on the same commit; it is left out by its run id.
+// Earlier release-cut runs on the same commit are not candidate CI either; they are left out by workflow id (#1845).
 import {execFileSync} from 'node:child_process';
 
 const BAD = new Set(['failure', 'timed_out', 'cancelled', 'action_required', 'startup_failure']);
 
-export function judge(all, runId) {
+export function judge(all, runId, ownWorkflowId) {
   const own = runId ? `/actions/runs/${runId}/` : null;
-  const eligible = own ? all.filter(r => !r.url.includes(own)) : all;
+  const eligible = all.filter(r => !(own && r.url.includes(own)) && !(ownWorkflowId && r.workflowId === ownWorkflowId));
   const latest = new Map();
   for (const run of eligible) {
     // Only supersede with evidence of the same workflow and job. Names alone
@@ -35,6 +36,9 @@ export default {
     const raw = execFileSync('gh', ['api', '--paginate', `repos/${repo}/commits/${sha}/check-runs?per_page=100&filter=all`,
       '--jq', '.check_runs[] | [.id, .name, .status, (.conclusion // ""), (.details_url // "")] | @tsv'], {encoding: 'utf8'});
     const metadata = new Map();
+    const ownWorkflowId = env.GITHUB_RUN_ID
+      ? JSON.parse(execFileSync('gh', ['api', `repos/${repo}/actions/runs/${env.GITHUB_RUN_ID}`], {encoding: 'utf8'})).workflow_id
+      : undefined;
     const runs = raw.trim().split('\n').filter(Boolean).map(line => {
       const [id, name, status, conclusion, url] = line.split('\t');
       const match = url.match(/\/actions\/runs\/(\d+)\//);
@@ -49,6 +53,6 @@ export default {
       }
       return {id: Number(id), name, status, conclusion, url, ...info};
     });
-    return judge(runs, env.GITHUB_RUN_ID);
+    return judge(runs, env.GITHUB_RUN_ID, ownWorkflowId);
   },
 };
