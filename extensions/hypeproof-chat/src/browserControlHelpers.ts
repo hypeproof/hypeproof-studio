@@ -27,15 +27,17 @@ const TEXT_ROLES = new Set<string>(["heading", "StaticText", "paragraph", "text"
 
 const NAV_SCHEME = /^(https?|file):\/\//i;
 const LOCALHOST = /^(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;
+export const BLANK_BROWSER_URL = "about:blank";
 
 /**
  * Whitelist a navigation URL. Returns a normalized absolute URL, or null for
- * disallowed schemes (javascript:, vscode:, data:, etc.) — the coach must not
- * be able to drive the browser to a hostile scheme.
+ * disallowed schemes (javascript:, vscode:, data:, etc.). Only the exact inert
+ * about:blank destination is allowed outside the existing navigation schemes.
  */
 export function safeNavigateUrl(input: string): string | null {
   const v = (input ?? "").trim();
   if (!v) return null;
+  if (v === BLANK_BROWSER_URL) return v;
   if (NAV_SCHEME.test(v)) return v;
   if (LOCALHOST.test(v)) return `http://${v}`;
   if (v.startsWith("/")) return null; // ambiguous local path — require file:// explicitly
@@ -44,6 +46,12 @@ export function safeNavigateUrl(input: string): string | null {
   if (/^[a-z][a-z0-9+.-]*:/i.test(v) && !NAV_SCHEME.test(v)) return null;
   if (/^[\w.-]+(\.[a-z]{2,})(\/|$|:)/i.test(v)) return `https://${v}`;
   return null;
+}
+
+/** Omission opens a blank browser; malformed or explicitly empty URLs stay invalid. */
+export function browserOpenUrl(input: unknown): string | null {
+  if (input === undefined) return BLANK_BROWSER_URL;
+  return typeof input === "string" ? safeNavigateUrl(input) : null;
 }
 
 const LOOPBACK_URL = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$|\?|#)/i;
@@ -117,7 +125,7 @@ export function resolveLivePreviewUrl(
  */
 export function originOfUrl(input: string): string | null {
   const url = safeNavigateUrl(input);
-  if (!url) return null;
+  if (!url || url === BLANK_BROWSER_URL) return null;
   try {
     return new URL(url).origin;
   } catch {

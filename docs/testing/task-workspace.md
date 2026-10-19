@@ -112,3 +112,21 @@ cannot cancel an unresolved defect.
 - Successful pointer/keyboard Send and explicit Stop leave the personal composer ready for immediate next typing. A refused submission does not move focus.
 - Failed source Return preserves the already-opened identity and direct retry. Pending Return remains focusable but cannot dispatch twice. Late or unsolicited acknowledgments cannot take focus from a different source or draft. Unknown host errors use operation-specific safe copy.
 - Image adjacency must use a profile granting image_paste and assert a visible image; a successful fixture control response alone is not evidence. Combine search selection, image removal, error/Stop and a400px-high window without losing the next draft.
+
+
+## Compact conversation acceptance (CC-R1, #1762)
+
+| ID | Expected behavior | Focused evidence |
+| --- | --- | --- |
+| CC-01 | Full personal profile shows no permanent model/effort/usage/observation block; settings retain values, Escape focus and draft. Access recovery stays visible. | `e2e/task-workspace/chat-compact.mjs` |
+| CC-02 | Actual HypeProof green tokens, light theme, short/narrow panes; 18px branding, 16px answer glyphs and 44px targets; composer visible. | Matched screenshots plus independent visual review |
+| CC-03 | Latest explicit numbered question yields keyboard/click choices; preserve draft, no automatic send; code/instruction/partial/old lists remain prose. | `test/reply-choices.smoke.mjs`, compact browser flow |
+| CC-04 | First useful turns name default tasks locally; numeric replies use question context; rename and restart are durable; legacy provenance is protected. | `test/task-title.smoke.mjs`, `test/task-workspace-store.test.mjs` |
+| CC-05 | General browser intent opens blank native browser without local preview; other URLs and capability/approval restrictions stay enforced. | Browser intent, MCP, URL and SDK controls; native observation separately |
+
+Fixtures emulate Service/model seams without a provider request. Record source SHA,
+UI package hashes, theme, viewport and environment with results. Green fixture pixels
+are not an installed-app check; live account/tool routing and physical-device behavior
+must be observed separately or marked NOT RUN/BLOCKED.
+
+CC-05 negative controls also feed complete HTML fences, a successful HTML write notification and proxy-loop HTML into the actual provider. Existing index.html and agent.md must survive browser-only turns; an explicit authoring request is the positive control. SDK Write/Bash/delegation and invented destinations are denied before actions, while blank browser opening still needs its existing grant and approval.

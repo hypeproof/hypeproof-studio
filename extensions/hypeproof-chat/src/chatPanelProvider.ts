@@ -180,6 +180,7 @@ import {
   type ToolEntry,
 } from "./chatTimeline";
 import { capturePageContext } from "./nativeBrowser";
+import { isGeneralBrowserOpenRequest } from "./browserIntent";
 import { validateAndRepairHtml, type HtmlStructureResult } from "./htmlStructure";
 import {
   PASTED_IMAGE_DIR,
@@ -3858,8 +3859,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.siteCheckPages;
   }
 
-  private buildBrowserMcpHost(): BrowserMcpHost {
+  private buildBrowserMcpHost(userText = ""): BrowserMcpHost {
     return {
+      generalBrowserRequest: isGeneralBrowserOpenRequest(userText),
       // A5 — the site check's page (spec §6.1). Asked only on an orchestrator turn whose roster
       // lists site_check; the live server is never started for it (livePreviewUrl below).
       viewportPage: (wrapperUrl: string) => this.siteCheckViewports().page(wrapperUrl),
@@ -4944,6 +4946,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: referenceFailure, state: "error" });
     }
 
+    const generalBrowserRequest = isGeneralBrowserOpenRequest(text);
     let assistantText = "";
     // REQ-D2: auto-reveal as soon as a renderable HTML block completes in
     // the stream, NOT waiting for streamEnd. The block closes (```) often
@@ -4957,7 +4960,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // spam, no UI dedup). Retry ONLY when the extracted html actually changed.
     let lastAttemptedHtml = "";
     const tryReveal = (text: string) => {
-      if (revealed) return;
+      if (generalBrowserRequest || revealed) return;
       const html = extractRenderableHtml(text);
       if (!html) return;
       if (html === lastAttemptedHtml) return; // unchanged → don't re-warn
@@ -5236,7 +5239,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               // save (debounce).
               // Instructor mode uses live_preview_start + browser_open; skip
               // the student auto-preview when the instructor writes an HTML file.
-              if (!this._instructorMode.isInstructor) {
+              if (!generalBrowserRequest && !this._instructorMode.isInstructor) {
                 if (this.revealTimer) clearTimeout(this.revealTimer);
                 this.revealTimer = setTimeout(() => {
                   this.revealTimer = undefined;
@@ -5271,6 +5274,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const runProxyRuntime = async () => {
         if (profile?.browser_control?.enabled) {
           await this.runBrowserLoop({
+            generalBrowserRequest,
             modelEcho,
             proxyUrl,
             model,
@@ -5378,7 +5382,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const browserTools: BrowserToolsForLocal | undefined =
             INSTRUCTOR_TOOL_PROFILE.sdk_tools?.browser
               ? (() => {
-                  const host = this.buildBrowserMcpHost();
+                  const host = this.buildBrowserMcpHost(text);
                   return {
                     definitions: [...INSTRUCTOR_LOCAL_BROWSER_DEFS],
                     call: async (name: string, input: unknown) => {
@@ -5386,7 +5390,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                         name === "live_preview_start"
                           ? await runLivePreviewStart(host)
                           : name === "browser_open"
-                            ? await runBrowserOpen(host, typeof (input as Record<string, unknown>)?.url === "string" ? (input as Record<string, unknown>).url as string : "")
+                            ? await runBrowserOpen(host, input && typeof input === "object" ? (input as Record<string, unknown>).url : null)
                             : null;
                       if (!r) throw new Error(`알 수 없는 브라우저 도구: ${name}`);
                       // isError mirrors the workspace/chalk tool convention: throw so the
@@ -5406,6 +5410,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             browserTools,
             signal:ctrl.signal,onDelta,onActivity,
             requestApproval:async action=>{
+              if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
               const approved=await this.resolveActionApproval({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;});
               return {approved,actor:prompted?'user':'policy'};
@@ -5421,6 +5426,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             history:history.map(m=>({role:m.role,content:m.content})),userText:userTextForModel,
             signal:ctrl.signal,onDelta,onActivity,chalkCtx,
             requestApproval:async action=>{
+              if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
               const approved=await this.resolveActionApproval({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;});
               return {approved,actor:prompted?'user':'policy'};
@@ -5522,7 +5528,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof
             // MCP tools. Always passed; runSdkCoach registers the server only
             // when the profile grants sdk_tools.browser (minors never do).
-            browserHost: this.buildBrowserMcpHost(),
+            browserHost: this.buildBrowserMcpHost(text),
             // A5 (ADR 0011) — the front-line orchestrator host. Always passed, like browserHost:
             // runSdkCoach turns the orchestrator on only for a seat the served roster is on for (an
             // adult with a well-formed roster, A2's binding); otherwise the turn is today's, byte for
@@ -5601,7 +5607,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
         // window is reopened.
-        await this.saveAgentMdIfPresent(assistantText, streamId);
+        if (!generalBrowserRequest) await this.saveAgentMdIfPresent(assistantText, streamId);
         await this.appendHistory([
           { id: userId, role: "user", content: historyText, createdAt: Date.now(), toolMode: mode },
           ...this.finishTurnItems(
@@ -5767,6 +5773,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the terminal (non-tool) turn only.
    */
   private async runBrowserLoop(p: {
+    generalBrowserRequest?: boolean;
     effort?: import('./protocol').CourseEffort;
     fundingSource?: string;
     lessonBinding?: string;
@@ -5854,7 +5861,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // rubric loop re-reads iteration-0's HTML every round and can't
         // converge on later fixes. tryReveal's once-per-stream latch does not
         // fire here (browser loop path), so reveal explicitly per iteration.
-        if (result.text) {
+        if (result.text && !p.generalBrowserRequest) {
           const iterHtml = extractRenderableHtml(result.text);
           // #580 — pass spoolTurnId only: passing streamId would create a logReveal
           // timeline line on every iteration and change the UI. Only the spool
@@ -5881,11 +5888,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           // running it. Fix it **before** building the log: if the on-screen line shows
           // the requested address, the participant reads an address different from
           // where it actually opened.
-          const fixed = this.retargetLoopbackNavigation(call);
+          const blankOpen = call.name === "browser_navigate" &&
+            (call.input?.url === undefined || call.input?.url === "about:blank");
+          const outsideBrowserIntent = p.generalBrowserRequest && !blankOpen;
+          const fixed = p.generalBrowserRequest
+            ? { call: blankOpen ? { ...call, input: { ...call.input, url: "about:blank" } } : call }
+            : this.retargetLoopbackNavigation(call);
           const line = browserToolLogLine(fixed.call.name, fixed.call.input);
           this.postToolLog(p.streamId, { id: call.id, ...line, state: "running" });
           // cr-verify — the verify tools go to the session (its runner drives the same control), switch on only.
-          const tr = isCrVerifyTool(fixed.call.name) && this.isCurriculumRuntimeEnabled()
+          const tr = outsideBrowserIntent
+            ? { isError: true, content: [{ type: "text" as const, text: "브라우저만 열어 달라는 요청이에요. browser_navigate로 about:blank를 열어 주세요." }] }
+            : isCrVerifyTool(fixed.call.name) && this.isCurriculumRuntimeEnabled()
             ? await this.runVerifyTool(fixed.call.name, (fixed.call.input ?? {}) as Record<string, unknown>)
             : await browser.execute(fixed.call);
           this.postToolLog(p.streamId, { id: call.id, ...line, state: tr.isError ? "error" : "done" });

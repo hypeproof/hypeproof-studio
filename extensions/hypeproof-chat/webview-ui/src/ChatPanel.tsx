@@ -5,6 +5,10 @@ import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
+import { ModelControl } from './ModelControl';
+import { ChatPreferences } from './ChatPreferences';
+import { ReplyChoices } from './ReplyChoices';
+import { replyChoices } from './replyChoiceParser';
 import { activityLabel, passEnd } from "./activityLabel";
 import { errorBannerPresentation } from "./errorBannerPresentation";
 import {NativeObservationPanel} from './NativeObservationPanel';
@@ -271,6 +275,8 @@ export function ChatPanel(props: Props) {
   const [queuedToolMode, setQueuedToolMode] = useState<TurnToolMode>(saved?.queuedToolMode ?? saved?.toolMode ?? 'auto');
   const [queuedPaused, setQueuedPaused] = useState(separateQueue);
   const [composing, setComposing] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const lastReplyChoice = useRef<{ messageId: string; answer: string } | null>(null);
   const [rollExpand, setRollExpand] = useState<{ original: string } | null>(null);
   // Pasted-image attachments for the next turn (data URLs). `imgNote` surfaces
   // a brief reason when a paste is rejected (too big / too many).
@@ -520,6 +526,11 @@ export function ChatPanel(props: Props) {
   // hype-dental D-025 — the Service decides per cohort whether the two classroom-operation panels
   // are drawn; absent → shown (classroomPanels.ts).
   const personalWorkspace = !!config?.taskWorkspace && !config?.profile?.lesson;
+  const funding = config?.access;
+  const fundingChoice = funding?.view?.choices.find(choice => choice.id === funding.selected);
+  const accessNeedsAttention = !!funding && (funding.status === 'unknown' || !!funding.notice ||
+    (!!funding.view?.required && !funding.selected) || (!!fundingChoice && (!fundingChoice.available ||
+      !!config?.profile?.model_selection?.choices.some(model => model.alias === config.model && !fundingChoice.allowed.models.includes(model.id)))));
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
@@ -821,6 +832,18 @@ export function ChatPanel(props: Props) {
     if (personalWorkspace) textareaRef.current?.focus({ preventScroll: true });
   };
 
+  const handleReplyChoice = (answer: string) => {
+    if (streaming || frozen || unavailable || props.sendLocked || props.sendPending) return;
+    // A choice prepares an editable reply, never sends or replaces an existing draft.
+    const messageId = messages.filter(message => message.role !== 'tool').at(-1)?.id ?? '';
+    const previous = lastReplyChoice.current;
+    setDraft(current => previous?.messageId === messageId && current.endsWith(previous.answer)
+      ? current.slice(0, -previous.answer.length) + answer
+      : current.trim() ? `${current}\n${answer}` : answer);
+    lastReplyChoice.current = { messageId, answer };
+    requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+  };
+
   const handleChip = (chip: SuggestionChip) => {
     if (chip.style === "weak") return;       // contrast-only chips are not clickable
     // Drop the chip text into draft and focus textarea so kid can append/edit.
@@ -964,7 +987,7 @@ export function ChatPanel(props: Props) {
             활동 변경
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
-          <button onClick={props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
+          <button onClick={personalWorkspace ? () => setPreferencesOpen(true) : props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
         </HeaderActions>
       </header>
 
@@ -1096,7 +1119,7 @@ export function ChatPanel(props: Props) {
           keep that off the work screen, and SX-59 names the remedy as "학습 경험 프로필에서
           비활성" rather than deletion, because the trial's own TUX-OBS-07 is to read it. So it
           follows the cohort's `assess` opt-in; recording keeps its own switch and stays on. */}
-      {showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
+      {!personalWorkspace && showsObservationResults(config?.profile?.observation) && <NativeObservationPanel scope={config!.profile!.observation!.scope} coachName={coachName} />}
       {!personalWorkspace && config?.profile?.profile_id === 'studio-native-trial' && !isObservationFormat(config.profile.observation?.format) && <p role="status">현재 연결은 작업 관찰을 지원하지 않습니다. 기존 작업 파일은 계속 사용할 수 있습니다.</p>}
 
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
@@ -1121,7 +1144,7 @@ export function ChatPanel(props: Props) {
           <ChipRack
             chips={initialChips}
             onPick={handleChip}
-            label="이렇게 시작해볼까요? (탭하면 입력창에 들어가요)"
+            label={personalWorkspace ? "시작할 질문" : "이렇게 시작해볼까요? (탭하면 입력창에 들어가요)"}
           />
         )}
 
@@ -1143,6 +1166,8 @@ export function ChatPanel(props: Props) {
               onRunCode={props.onRunCode}
               onRetry={props.onRetry}
               personal={personalWorkspace}
+              onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? handleReplyChoice : undefined}
+              onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
             />
           ),
         )}
@@ -1225,31 +1250,12 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
-        {config.profile?.model_selection && <div className="hps-model-selection">
-          <label>모델 <select aria-label="대화 모델" value={config.model}
-            disabled={config.profile.model_selection.choices.length === 1}
-            onChange={e => postToHost({ type: 'selectModel', alias: e.target.value })}
-            onKeyDown={e => {
-              // Embedded Mac webviews can forward native select keys to the workbench.
-              // Keep version navigation in this control, including without a native popup.
-              if (e.altKey || e.ctrlKey || e.metaKey || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-              const choices = config.profile?.model_selection?.choices ?? [];
-              if (!choices.length) return;
-              const current = choices.findIndex(c => c.alias === config.model);
-              const next = e.key === 'Home' ? 0 : e.key === 'End' ? choices.length - 1
-                : Math.max(0, Math.min(choices.length - 1, current + (e.key === 'ArrowDown' ? 1 : -1)));
-              e.preventDefault(); e.stopPropagation();
-              if (choices[next]) postToHost({ type: 'selectModel', alias: choices[next].alias });
-            }}>
-
-            {config.profile.model_selection.choices.map(c => <option key={c.id} value={c.alias}>{c.label}</option>)}
-          </select></label>
-          <small>{config.profile.model_selection.choices.length === 1
-            ? (config.profile.model_selection.source === 'lesson' ? '이 수업에서 고정한 모델' : '사용 가능한 모델 1개')
-            : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요'}</small>
+        {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
+          <EffortControl config={config} post={postToHost} />
+          <AccessControl config={config} streaming={streaming} post={postToHost} /></>}
+        {personalWorkspace && accessNeedsAttention && <div className="hps-access-attention" role="status">
+          <span>이용권 상태를 확인해 주세요.</span><button type="button" onClick={() => setPreferencesOpen(true)}>이용권 확인</button>
         </div>}
-        <EffortControl config={config} post={postToHost} />
-        <AccessControl config={config} streaming={streaming} post={postToHost} />
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1460,6 +1466,16 @@ export function ChatPanel(props: Props) {
           </div>
         </div>
       </footer>
+      {personalWorkspace && <ChatPreferences open={preferencesOpen} onClose={() => setPreferencesOpen(false)}>
+        <details className="hps-advanced-response"><summary>응답 고급 설정</summary>
+          <p>선택한 설정은 다음 요청부터 적용됩니다.</p>
+          <ModelControl config={config} streaming={streaming} />
+          <EffortControl config={config} post={postToHost} />
+        </details>
+        <AccessControl config={config} streaming={streaming} post={postToHost} />
+        {showsObservationResults(config.profile?.observation) && <NativeObservationPanel scope={config.profile!.observation!.scope} coachName={coachName} />}
+        <button type="button" className="hps-all-settings" onClick={() => { setPreferencesOpen(false); props.onSettings(); }}>앱 설정 열기</button>
+      </ChatPreferences>}
     </div>
   );
 }
@@ -1832,6 +1848,8 @@ function MessageItem({
   onRunCode,
   onRetry,
   personal = false,
+  onPickReply,
+  onWriteReply,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -1848,7 +1866,10 @@ function MessageItem({
   onRunCode: (html: string) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   personal?: boolean;
+  onPickReply?: (answer: string) => void;
+  onWriteReply?: () => void;
 }) {
+  const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
     () => (message.role === "assistant" ? extractRenderableHtml(message.content) : null),
     [message.role, message.content],
@@ -1878,7 +1899,7 @@ function MessageItem({
             ▶ Run
           </button>
         )}
-        {retryPrompt && (
+        {!personal && retryPrompt && (
           <button
             className="hps-msg-retry"
             onClick={() => onRetry(retryPrompt.content, retryPrompt)}
@@ -1891,7 +1912,7 @@ function MessageItem({
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
       <div className="hps-msg-body">
-        {message.role === "assistant" ? (
+        {question && onPickReply && onWriteReply ? <ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
             streaming={isStreamingThis}
@@ -1916,7 +1937,10 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
-      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer content={message.content} />}
+      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <div className="hps-message-actions">
+        <CopyAnswer content={message.content} />
+        {retryPrompt && <button type="button" className="hps-msg-retry" title="답변 다시 만들기" aria-label="답변 다시 만들기" onClick={() => onRetry(retryPrompt.content, retryPrompt)}><ChatIcon kind="retry" /></button>}
+      </div>}
     </div>
   );
 }

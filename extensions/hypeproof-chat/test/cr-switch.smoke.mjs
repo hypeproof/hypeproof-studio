@@ -195,7 +195,9 @@ ok("glue: the context key mirrors the switch and the SDK server registers CR too
   ok("proxy tools: unknown with the switch off, routed to the CR executor with it on (read per call)");
   // cr-verify — the verify tools never reach BrowserControl: the proxy loop and the SDK host
   // send them to the session only while the switch is on, and the session refuses them off.
-  assert.match(providerSrc, /const tr = isCrVerifyTool\(fixed\.call\.name\) && this\.isCurriculumRuntimeEnabled\(\)\s*\? await this\.runVerifyTool\(/);
+  // The browser-only intent guard may reject a tool first; accepted verify tools
+  // still require the live CR switch before they can reach the session.
+  assert.match(providerSrc, /: isCrVerifyTool\(fixed\.call\.name\) && this\.isCurriculumRuntimeEnabled\(\)\s*\? await this\.runVerifyTool\(/);
   assert.match(providerSrc, /const answer = !this\.isCurriculumRuntimeEnabled\(\)\s*\? \{ isError: true, text: `알 수 없는 도구: \$\{short\}` \}/);
   {
     let on = false;

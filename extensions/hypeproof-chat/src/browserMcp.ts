@@ -33,7 +33,8 @@ import { referenceCaptureMetadata, referenceCaptureText, type ReferenceCapture }
 // `node --experimental-strip-types` (smoke tests), which resolves ESM
 // specifiers literally. esbuild + tsc (allowImportingTsExtensions) accept it.
 import {
-  safeNavigateUrl,
+  BLANK_BROWSER_URL,
+  browserOpenUrl,
   isSameBrowserUrl,
   isLoopbackUrl,
   resolveLivePreviewUrl,
@@ -157,6 +158,8 @@ export interface BrowserOpenOutcome {
  * failures into isError tool results the model can react to in Korean.
  */
 export interface BrowserMcpHost {
+  /** Current turn asks only for a general browser. This is not a capability grant. */
+  generalBrowserRequest?: boolean;
   /**
    * Open (or reveal) the integrated browser at an already-policy-checked URL.
    *
@@ -443,10 +446,11 @@ export class SiteCheckViewports<Tab> {
 export const BROWSER_OPEN_TOOL_DEF = {
   name: "browser_open",
   description:
-    "통합 브라우저에서 URL을 연다. 학생의 라이브 프리뷰나 참고 사이트를 보여줄 때 사용. " +
-    "http(s)/localhost/file 주소만 허용되며, 실행 전 학생의 승인을 받는다. " +
+    "일반 웹 탐색이나 브라우저 열기 요청에 사용한다. URL이 없으면 url을 생략해 빈 통합 브라우저를 연다. " +
+    "브라우저만 열어 달라는 요청에 파일을 만들거나 live_preview_start를 호출하지 않는다. " +
+    "URL이 있으면 http(s)/localhost/file 주소 또는 about:blank만 허용되며, 실행 전 학생의 승인을 받는다. " +
     "이미 같은 주소가 열려 있으면 다시 열지 않는다(탭 중복·승인 모달 반복 방지).",
-  inputSchema: { type: "object" as const, properties: { url: { type: "string" } }, required: ["url"], additionalProperties: false },
+  inputSchema: { type: "object" as const, properties: { url: { type: "string" } }, required: [], additionalProperties: false },
 } as const;
 
 /**
@@ -456,6 +460,7 @@ export const BROWSER_OPEN_TOOL_DEF = {
 export const LIVE_PREVIEW_START_TOOL_DEF = {
   name: "live_preview_start",
   description:
+    "사용자가 만들거나 수정한 작업 폴더의 HTML을 미리 볼 때만 사용한다. 일반 브라우저 열기나 웹 탐색에는 browser_open을 사용한다. " +
     "학생 워크스페이스를 로컬 라이브 서버(127.0.0.1)로 서빙하고 통합 브라우저에서 연다. " +
     "파일이 바뀌면 자동 새로고침된다. 브라우저까지 열리므로 뒤이어 browser_open 을 부를 필요가 없다.",
   inputSchema: { type: "object" as const, properties: {}, required: [], additionalProperties: false },
@@ -517,7 +522,7 @@ export async function resolveAlreadyOpen(
   host: BrowserMcpHost,
   rawUrl: unknown,
 ): Promise<AlreadyOpenVerdict> {
-  const raw = safeNavigateUrl(typeof rawUrl === "string" ? rawUrl : "");
+  const raw = browserOpenUrl(rawUrl);
   if (!raw) return { url: null, current: undefined, alreadyOpen: false };
   // #507 — 추측된 루프백 포트를 **실제로 떠 있는** 라이브 서버로 교정한다.
   // 판정 함수 안에서 하는 이유: 승인 모달(canUseTool)과 핸들러가 같은 주소를
@@ -697,11 +702,17 @@ export function toMcpToolResult(r: {
  * correction, #415 duplicate suppression, #526 slot-displaced notice) without
  * duplicating it. The MCP server factory.tool callback delegates here.
  */
-export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise<McpToolResult> {
+export async function runBrowserOpen(host: BrowserMcpHost, raw?: unknown): Promise<McpToolResult> {
   const { url, current, alreadyOpen, redirectedFrom } = await resolveAlreadyOpen(host, raw);
   if (!url) {
     return {
       content: [{ type: "text", text: `이 주소는 열 수 없어요: ${raw}` }],
+      isError: true,
+    };
+  }
+  if (host.generalBrowserRequest && url !== BLANK_BROWSER_URL) {
+    return {
+      content: [{ type: "text", text: "주소 없는 일반 브라우저 열기 요청이에요. 주소를 추측하지 말고 browser_open에서 url을 생략하세요." }],
       isError: true,
     };
   }
@@ -777,6 +788,12 @@ export async function runBrowserOpen(host: BrowserMcpHost, raw: string): Promise
  * path can reuse the same logic. The MCP server factory.tool callback delegates here.
  */
 export async function runLivePreviewStart(host: BrowserMcpHost): Promise<McpToolResult> {
+  if (host.generalBrowserRequest) {
+    return {
+      content: [{ type: "text", text: "일반 브라우저 열기 요청에는 browser_open에서 url을 생략하세요. 작업 폴더 미리보기나 파일 생성은 요청되지 않아 시작하지 않았어요." }],
+      isError: true,
+    };
+  }
   const url = await host.startLivePreview();
   if (!url) {
     return withPageState(
@@ -812,8 +829,8 @@ export function buildHypeproofMcpServer(
   const browserOpen = factory.tool(
     BROWSER_OPEN_TOOL_DEF.name,
     BROWSER_OPEN_TOOL_DEF.description,
-    { url: z.string() },
-    async (args) => runBrowserOpen(host, typeof args["url"] === "string" ? (args["url"] as string) : ""),
+    { url: optionalSchema(z.string()) },
+    async (args) => runBrowserOpen(host, args["url"]),
   );
 
   const browserScreenshot = factory.tool(
