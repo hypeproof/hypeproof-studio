@@ -6311,6 +6311,39 @@
       ]
     },
     {
+      "id": "ST-IMP-TASK-RUN-STATE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/taskRunState.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/TaskWorkspace.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-TASK-RUN-STATE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TASK-WORKSPACE",
+        "ST-IMP-TASK-RUN-STATE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/task-run-state.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/task-run-state.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

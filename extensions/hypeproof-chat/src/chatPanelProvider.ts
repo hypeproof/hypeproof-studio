@@ -853,6 +853,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    */
   private turnTimelines = new Map<string, TimelineState>();
   private pendingApprovals = new Map<string, (approved: boolean) => void>();
+  /** REQ-STUDIO-TASK-RUN-STATE — approval modals open right now (resolveActionApprovalTracked). */
+  private approvalWaits = 0;
   /**
    * #476 — has the participant ever been told about the agent-sdk → proxy fallback
    * (once per session)?
@@ -5211,7 +5213,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     let responseStreamId: string | undefined;
     const responseStarted = (id: string) => { responseStreamId = id; };
     let completionSignal: AbortSignal | undefined;
-    const deferCompletion = (streamId: string, signal?: AbortSignal) => { completedStreamId = streamId; completionSignal = signal; };
+    // REQ-STUDIO-TASK-RUN-STATE — a turn whose stream closed normally but whose result failed (#751 U4) ends as 오류, not 끝남.
+    let completionFailed = false;
+    const deferCompletion = (streamId: string, signal?: AbortSignal, failed = false) => { completedStreamId = streamId; completionSignal = signal; completionFailed = failed; };
     let preflightComplete=false;
     try {
     // CGP-CHAT-R-002 — an error retry of an edited prompt (same id) stays a version of its group.
@@ -6006,7 +6010,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
-              const approved=await this.resolveActionApproval({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;});
+              const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;});
               return {approved,actor:prompted?'user':'policy'};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
@@ -6022,7 +6026,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             requestApproval:async action=>{
               if (generalBrowserRequest) return {approved:false,actor:'policy' as const};
               let prompted=false;
-              const approved=await this.resolveActionApproval({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;});
+              const approved=await this.resolveActionApprovalTracked({requestId:randomId(),...sdkToolToActionRequest(action)},()=>{prompted=true;});
               return {approved,actor:prompted?'user':'policy'};
             }});
           sdkTurnTotal.current={usage:{local_provider:local.provider,model:result.model,reported_usage:result.usage},totalCostUsd:null};
@@ -6121,7 +6125,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // executeShell hard-deny and writeFile workspace-scope actually fire.
             requestApproval: async (action) => {
               let prompted = false;
-              const approved = await this.resolveActionApproval({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; });
+              const approved = await this.resolveActionApprovalTracked({ requestId: randomId(), ...sdkToolToActionRequest(action) }, () => { prompted = true; });
               return {approved, actor: prompted ? 'user' as const : 'policy' as const};
             },
             // #282 P2 slice 2 — native-browser capabilities for the hypeproof
@@ -6234,7 +6238,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
         tryReveal(assistantText);
-        if (!ctrl.signal.aborted) deferCompletion(streamId, ctrl.signal);
+        if (!ctrl.signal.aborted) deferCompletion(streamId, ctrl.signal, (spoolStatus as "ok" | "error") === "error");
       }
     } catch (err) {
       runtimeSettled = true;
@@ -6355,7 +6359,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
       try { releaseActivity?.(); } finally { this.pendingSends--; }
-      if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId });
+      if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId, ...(completionFailed ? { failed: true as const } : {}) });
     }
   }
 
@@ -6725,8 +6729,25 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     void this.post({ type: "streamError", streamId, error: reason, requestId });
   }
 
+  /**
+   * REQ-STUDIO-TASK-RUN-STATE — tells the webview while a modal raised by this request is open, so the
+   * task rail and the busy line say 승인 기다리는 중. `onPrompted` fires right before every modal below;
+   * an auto-allowed or policy-refused request never shows one and never reports a wait.
+   */
+  async resolveActionApprovalTracked(req: ActionRequest, onPrompted?: () => void): Promise<boolean> {
+    let prompted = false;
+    try {
+      return await this.resolveActionApproval(req, () => {
+        if (!prompted) { prompted = true; this.approvalWaits++; void this.post({ type: "approvalWait", waiting: true }); }
+        onPrompted?.();
+      });
+    } finally {
+      if (prompted) { this.approvalWaits = Math.max(0, this.approvalWaits - 1); void this.post({ type: "approvalWait", waiting: this.approvalWaits > 0 }); }
+    }
+  }
+
   private async handleActionRequest(req: ActionRequest): Promise<void> {
-    const approved = await this.resolveActionApproval(req);
+    const approved = await this.resolveActionApprovalTracked(req);
     void this.post({ type: "actionResult", requestId: req.requestId, approved });
   }
 

@@ -146,3 +146,7 @@
 }
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
+/* REQ-STUDIO-TASK-RUN-STATE — words plus a symbol; colour is never the only carrier. */
+.tw-task-state { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 1px 6px; border: 1px solid var(--tw-line); border-radius: 999px; font-size: 11px; line-height: 1.5; }
+.tw-task-state-symbol { font-weight: 700; }
+.tw-task-state[data-run-state="approval"], .tw-task-state[data-run-state="error"] { font-weight: 700; border-width: 2px; }
