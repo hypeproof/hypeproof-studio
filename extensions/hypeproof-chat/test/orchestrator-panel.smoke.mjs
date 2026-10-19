@@ -975,7 +975,7 @@ if (!status.available) {
   // Control: a real abort (the learner pressed stop) shows nothing.
   const abort = new Error("aborted");
   abort.name = "AbortError";
-  await P.ChatPanelProvider.prototype.handleSendError.call(errHost, abort, "s-stop");
+  await P.ChatPanelProvider.prototype.handleSendError.call(errHost, abort, "s-stop", { signal: AbortSignal.abort() });
   assert.equal(banners.length, 1);
   ok("SdkBusyAbortError reaches the learner as the generic banner with its Korean line (control: a stop shows none)");
 }

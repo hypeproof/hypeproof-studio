@@ -111,7 +111,7 @@ for(const fail of [false,true]){
  await proto.handleMessage.call(h,{type:'selectFunding',id:'b'});
  assert.equal(h.accessState.selected,'b','idle choice is available again');
 }
-console.log('PASS pending send: authentication wait, retry, overlapping failures, history persistence and connection preparation');
+
 // Failed interrupted writes remain task-bound and recover exactly once.
 {
  const h=host();let scope='original',writes=0,refuse=true;
@@ -126,3 +126,13 @@ console.log('PASS pending send: authentication wait, retry, overlapping failures
  scope='original';refuse=false;await h.retryInterruptedHistory();await h.retryInterruptedHistory();
  assert.equal(writes,2,'recovered transcript is not written twice');assert.equal(h.interruptedHistoryError(),null);
 }
+
+// A transport abort is not a user Stop unless this turn was actually cancelled.
+for (const stopped of [false, true]) {
+ const h=host(), ctrl=new AbortController();
+ if(stopped) ctrl.abort();
+ await proto.handleSendError.call(h,Object.assign(new Error('synthetic transport timeout'),{name:'AbortError'}),'transport-abort',{profile:null,proxyUrl:'https://synthetic.invalid',signal:ctrl.signal});
+ assert.equal(h.posts.filter(message=>message.type==='streamError').length,stopped?0:1,'uncancelled transport failure must end the spinner; explicit Stop stays quiet');
+}
+
+console.log('PASS pending send: authentication wait, retry, overlapping failures, history persistence and connection preparation');

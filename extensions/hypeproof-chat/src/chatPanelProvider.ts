@@ -55,7 +55,6 @@ import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestId
 import { REFUSAL_COPY, bindingRefusalCode, candidateMatches, closeTurn, fetchTurnState, planPreflight, refusedTurnEnding, shouldRecheckEnforcement, tokenLessonSha } from "./lessonBinding";
 import {
   coachSeatKeyFor,
-  isAbortError,
   sdkErrorDisplayText,
   sdkToolToActionRequest,
   seededSdkBinaryPath,
@@ -6322,10 +6321,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     streamId: string,
     current?: { profile: ResolvedProfile | null; proxyUrl: string; token?: string; signal?: AbortSignal },
   ): Promise<void> {
-    // User-initiated stop (cancelStream) surfaces as an AbortError on both the
-    // proxy and agent-sdk paths — it's not an error, and the webview already
-    // ended the stream. Don't show a banner.
-    if (isAbortError(err) || current?.signal?.aborted) return;
+    // Only this turn's cancellation signal identifies a deliberate Stop. A
+    // transport can also throw AbortError (for example on timeout), and still
+    // needs a terminal error so the user can recover instead of waiting forever.
+    if (current?.signal?.aborted) return;
     // TUX-COND-07 — a free trial that ran out ends in one inline card, only on an open-trial seat
     // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
     // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
