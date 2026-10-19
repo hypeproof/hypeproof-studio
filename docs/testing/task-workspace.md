@@ -204,3 +204,7 @@ establish native or live authentication acceptance.
 ### Automatic naming after introductory turns
 
 CC-04 starts its two-turn naming window at the first useful request. Greetings, bare acknowledgements and unresolved numeric replies before a topic do not leave the task permanently named “새 작업”. The immediately following user turn can still refine the name from an offered option; later topics cannot rename it. Manual names remain protected. Existing title and workspace-store tests cover delayed naming, persistence, draft preservation and settled-title controls. Native verification remains separate.
+
+### Rename save failure recovery
+
+Keep the typed task name until a matching host save result arrives. A failed or unconfirmed save must leave the editor and value available for explicit retry; pending saves do not dispatch duplicates. Cancel and task/activity changes invalidate the pending UI request so late results cannot close another editor. Validate actual host persistence failure and recovery, draft/search preservation, and exact request matching separately from native window acceptance.
