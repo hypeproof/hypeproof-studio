@@ -14,7 +14,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onUri"
   ],
   "main": "./dist/extension.js",
   "capabilities": {
@@ -500,6 +501,18 @@
           "default": "https://hypeproof-ai.xyz",
           "description": "HypeProof Lab 사이트 주소. '갤러리에 올리기'가 여기로 보냅니다. 로컬 개발 서버에 붙여 볼 때만 바꾸세요 (예: http://localhost:3000). 아이 작품이 실제로 올라가는 목적지이므로 워크스페이스 설정이 아니라 머신 설정입니다 — proxyUrl 과 같은 범위입니다 (#748).",
           "scope": "machine"
+        },
+        "hypeproofChat.accountsEnabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Enable personal accounts only on the canonical HypeProof HTTPS Service and account site. Requires an approved account rollout; local preview is a separate setting."
+        },
+        "hypeproofChat.accountsPreview": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "description": "Enable the isolated personal account preview. Both proxyUrl and siteBase must point to loopback HTTP servers. Production account launch remains disabled."
         }
       }
     },

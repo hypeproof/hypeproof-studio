@@ -1,0 +1,61 @@
+// The real StartPage -> ActivityConnections -> SecretStorage adapter used by SDK/proxy chat.
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+const require=createRequire(import.meta.url);
+const bundle=await build({stdin:{contents:"export * from './src/startPage.ts';export * from './src/activityConnections.ts';export * from './src/accountSession.ts';",resolveDir:new URL('..',import.meta.url).pathname},bundle:true,platform:'node',format:'cjs',external:['vscode'],write:false});
+const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'studio-account-runtime-')),root=path.join(tmp,'workspace');fs.mkdirSync(root);
+const SERVICE='http://127.0.0.1:8793/v1',SITE='http://localhost:3193',ID='ord_'+'a'.repeat(32),SECRET='b'.repeat(64);
+let now=1000000,rotations=0,revoked=false,stops=0,service=SERVICE;
+const calls=[],states=[],secrets=new Map(),workspace=new Map();
+const profile={activity_id:'b'.repeat(64),activity_kind:'trial',profile_id:'adult',display_name:'Personal pass',workspace_root:root,pass:{request_limit:10,requests_used:1,expires_at:2000000000},ux:{coach:{naming_mode:'fixed',fallback_name:'Coach'}},welcome:{},series_index:1,series_total:1};
+const ctx={globalStorageUri:{fsPath:path.join(tmp,'storage')},workspaceState:{keys:()=>[...workspace.keys()],get:(k,d)=>workspace.get(k)??d,update:async(k,v)=>workspace.set(k,v)},secrets:{keys:async()=>[...secrets.keys()],get:async k=>secrets.get(k),store:async(k,v)=>secrets.set(k,v),delete:async k=>secrets.delete(k)},extension:{packageJSON:{version:'test'}},subscriptions:[]};
+const vscode={workspace:{workspaceFolders:[{name:'workspace',uri:{fsPath:root}}],getConfiguration:()=>({get:(k,d)=>k==='proxyUrl'?service:k==='siteBase'?SITE:d})},window:{},commands:{executeCommand:async()=>{}},Uri:{parse:u=>u},env:{openExternal:async()=>true}};
+const json=(status,body)=>new Response(JSON.stringify(body),{status});
+const fetch=async(url,init={})=>{
+ const p=new URL(url).pathname,headers=new Headers(init.headers);calls.push({p,auth:headers.get('authorization')});
+ if(p==='/v1/auth/refresh'){rotations++;return json(200,{access_token:'new-account-secret',refresh_token:'new-refresh-secret',session_id:'session-1',expires_in:3600});}
+ if(p==='/v1/profile')return json(200,profile);
+ if(p==='/v1/activity')return json(200,{activity_id:profile.activity_id});
+ if(revoked)return json(401,{error:'session_revoked'});
+ if(p==='/v1/me')return json(200,{account:{id:'acc_1',email:'test@example.test',display_name:'Test'}});
+ if(p==='/v1/me/passes')return json(200,{passes:[{id:ID,product_name:'Pass',status:'active',requests_used:1,requests_limit:10,requests_remaining:9,amount:10000}]});
+ if(p.endsWith('/activate'))return json(200,{access_token:'pass-secret-'+rotations,expires_in:3600});
+ if(p==='/v1/purchase/products')return json(200,{products:[{id:'pass',label:'Pass',amount:10000,currency:'KRW',duration_hours:720,request_limit:10}]});
+ if(p==='/v1/purchase/orders')return json(201,{order_id:ID,order_secret:SECRET,amount:10000,label:'Pass',expires_at:now+1800000,checkout_url:SITE+'/studio/checkout?order='+ID});
+ if(p==='/v1/purchase/orders/'+ID)return json(200,{state:'paid'});
+ throw Error('Unexpected '+p);
+};
+const module={exports:{}};vm.runInNewContext(bundle.outputFiles[0].text,{module,exports:module.exports,require:id=>id==='vscode'?vscode:require(id),fetch,console,Buffer,process,URL,AbortSignal,TextEncoder,structuredClone,Date,JSON,setTimeout:()=>1,clearTimeout:()=>{}});
+const {ActivityConnections,StartPage,AccountSession,ACCOUNT_SECRET_KEY}=module.exports;
+try {
+ const connections=new ActivityConnections(ctx,()=>service,()=>root,async()=>profile),scoped=connections.wrap();
+ const classroom={...profile,activity_id:'a'.repeat(64),pass:undefined,activity_kind:'classroom'};
+ await connections.commit('classroom-secret',classroom,root);const old=connections.current.ref;
+ secrets.set(ACCOUNT_SECRET_KEY,JSON.stringify({service:SERVICE,accessToken:'account-secret',refreshToken:'refresh-secret',sessionId:'session-1',expiresAt:now+3600000}));
+ const accounts=new AccountSession({service:SERVICE,site:SITE,secrets:scoped.secrets,label:'Test',fetch,now:()=>now,openBrowser:async()=>true,invalidated:async id=>{stops++;await connections.forgetAccount(id)}});
+ connections.accountToken=b=>accounts.resolvePass(b);
+ const chat={ensureProfile:async()=>connections.current?profile:null,profileFailure:()=>null,coachDisplayName:()=> 'Coach',coachNameIsChosen:()=>true,hasActiveStream:()=>false,setConnectionChanging:async()=>{},invalidateProfile(){},refreshConfig(){},openInEditor:async()=>{}};
+ const page=new StartPage(scoped,chat,async(_p,commit)=>{await commit(root);return false},undefined,accounts);page.panel={webview:{postMessage:async msg=>states.push(msg)}};
+ await page.handle({type:'accountActivate',passId:ID});
+ assert.equal(connections.current.ref,old,'preview preserves current classroom binding');
+ assert.equal(page.candidate.accountPass.sessionId,'session-1');
+ await page.handle({type:'beginCourse'});
+ assert.equal(connections.current.accountPass.passId,ID);assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),'pass-secret-0');
+ now+=3400000;
+ assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),'pass-secret-1','the same SecretStorage read used by handleSend/SDK renews the pass');
+ assert.equal(rotations,1);
+ page.panel={webview:{postMessage:async msg=>states.push(msg)}};
+ await page.handle({type:'purchaseOpen'});await page.handle({type:'purchaseStart',productId:'pass'});
+ assert.equal(calls.find(c=>c.p==='/v1/purchase/orders').auth,'Bearer new-account-secret');
+ assert.equal(JSON.parse(secrets.get('hypeproofChat.pendingPurchase')).accountOwned,true);
+ await page.purchaseTick();assert.equal(calls.filter(c=>c.p.endsWith('/claim')).length,0,'owned purchases never use anonymous claim');
+ const exposed=JSON.stringify(states);for(const secret of ['account-secret','refresh-secret','pass-secret',SECRET])assert.equal(exposed.includes(secret),false);
+ service='http://127.0.0.1:8999/v1';const before=calls.length;await page.handle({type:'accountActivate',passId:ID});assert.equal(calls.length,before,'changed Service receives no account token');service=SERVICE;
+ revoked=true;await accounts.refreshView();assert.equal(stops,1);assert.equal(connections.current,undefined);assert.equal(await scoped.secrets.get('hypeproofChat.workshopToken'),undefined);assert.equal(secrets.has(old),true,'classroom credential is retained');assert.equal(fs.existsSync(root),true);
+ accounts.dispose();console.log('PASS real start host: preview rollback, bound runtime refresh, account purchase bearer, no anonymous claim, no token view leaks, origin pinning and targeted revoke');
+} finally {fs.rmSync(tmp,{recursive:true,force:true});}

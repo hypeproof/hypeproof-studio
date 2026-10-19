@@ -185,7 +185,7 @@ def file_manifest(root):
     return result
 
 
-def configure_copy(app, identifier):
+def configure_copy(app, identifier, account_preview=False):
     root = app_resources(app)
     product_path = root / 'product.json'
     product = json.loads(product_path.read_text(encoding='utf-8'))
@@ -208,16 +208,45 @@ def configure_copy(app, identifier):
     # shipped Helper apps by that name. Changing it causes a fatal launch error.
     data['CFBundleIdentifier'] = product['darwinBundleIdentifier']
     data['CFBundleDisplayName'] = 'HypeProof Studio Dev'
-    data.pop('CFBundleURLTypes', None)
+    if account_preview:
+        data['CFBundleURLTypes'] = [{'CFBundleURLName': product['darwinBundleIdentifier'], 'CFBundleURLSchemes': [product['urlProtocol']]}]
+    else:
+        data.pop('CFBundleURLTypes', None)
     info.write_bytes(plistlib.dumps(data))
 
 
-def settings_for(existing, service, branch):
+def register_account_protocol(app, state):
+    """Register only this isolated account preview scheme, never the installed app's scheme."""
+    settings = json.loads((state / 'user-data/User/settings.json').read_text(encoding='utf-8'))
+    if not settings.get('hypeproofChat.accountsPreview'):
+        return
+    product = json.loads((app_resources(app) / 'product.json').read_text(encoding='utf-8'))
+    scheme = product.get('urlProtocol', '')
+    if not re.fullmatch(r'hypeproof-studio-dev-[a-f0-9]{12}', scheme):
+        raise RuntimeError('Account preview protocol must belong to this isolated development app.')
+    if is_mac_app(app):
+        run(['/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', '-f', app])
+    elif os.name == 'nt':
+        command = subprocess.list2cmdline([str(app / 'HypeProof Studio.exe'), '--user-data-dir=' + str(state / 'user-data'),
+                                           '--extensions-dir=' + str(state / 'extensions'), '--open-url', '--']) + ' "%1"'
+        key = 'HKCU\\Software\\Classes\\' + scheme
+        run(['reg.exe', 'add', key, '/ve', '/d', 'URL:HypeProof Studio account preview', '/f'])
+        run(['reg.exe', 'add', key, '/v', 'URL Protocol', '/d', '', '/f'])
+        run(['reg.exe', 'add', key + '\\shell\\open\\command', '/ve', '/d', command, '/f'])
+
+
+def settings_for(existing, service, branch, account_preview=False):
     result = dict(existing)
     result.update({'update.mode': 'none', 'extensions.autoUpdate': False,
                    'extensions.autoCheckUpdates': False,
                    'window.title': '[DEV · ' + service + ' · ' + branch + '] ${activeEditorShort} — ${rootName}',
                    'hypeproofChat.proxyUrl': 'http://127.0.0.1:8787/v1' if service == 'local' else 'https://api.hypeproof-ai.xyz/v1'})
+    if account_preview:
+        if service != 'local':
+            raise ValueError('Account preview requires the isolated local Service.')
+        result.update({'hypeproofChat.accountsPreview': True, 'hypeproofChat.proxyUrl': 'http://127.0.0.1:8793/v1', 'hypeproofChat.siteBase': 'http://localhost:3193'})
+    else:
+        result['hypeproofChat.accountsPreview'] = False
     colors = dict(result.get('workbench.colorCustomizations', {}))
     colors.update({'titleBar.activeBackground': '#493262', 'titleBar.activeForeground': '#ffffff'})
     result['workbench.colorCustomizations'] = colors
@@ -262,7 +291,7 @@ def check_runtime_dependencies(source, shipped, metadata):
             raise RuntimeError('Unbundled runtime dependency differs from base app: ' + name + '. Use a compatible base app; launcher does not package new SDK dependencies.')
 
 
-def prepare(repo, base, state, service):
+def prepare(repo, base, state, service, account_preview=False):
     app = state / ('HypeProof Studio Dev.app' if is_mac_app(base) else 'HypeProof Studio Dev')
     if app_running(app):
         raise RuntimeError('Save your work and quit only the development app before applying changes. It will not be killed.')
@@ -292,7 +321,7 @@ def prepare(repo, base, state, service):
     shutil.rmtree(target / 'webview-ui/dist')
     shutil.copytree(stage / 'webview', target / 'webview-ui/dist')
     shutil.copy2(ext / 'package.json', target / 'package.json')
-    configure_copy(candidate, hashlib.sha256(str(repo).encode()).hexdigest()[:12])
+    configure_copy(candidate, hashlib.sha256(str(repo).encode()).hexdigest()[:12], account_preview=account_preview)
     if is_mac_app(base):
         run(['codesign', '--force', '--deep', '--sign', '-', candidate])
         run(['codesign', '--verify', '--deep', candidate])
@@ -317,7 +346,7 @@ def prepare(repo, base, state, service):
     user.mkdir(parents=True, exist_ok=True)
     settings = user / 'settings.json'
     existing = json.loads(settings.read_text(encoding='utf-8')) if settings.exists() else {}
-    settings.write_text(json.dumps(settings_for(existing, service, branch), ensure_ascii=False, indent=2), encoding='utf-8')
+    settings.write_text(json.dumps(settings_for(existing, service, branch, account_preview), ensure_ascii=False, indent=2), encoding='utf-8')
     workspace = state / 'workspace'
     workspace.mkdir(exist_ok=True)
     receipt = {'format': FORMAT, 'source': str(repo), 'source_sha': source_before['sha'],
@@ -475,6 +504,7 @@ def main():
     parser.add_argument('--base-app', type=Path)
     parser.add_argument('--state-dir', type=Path)
     parser.add_argument('--service', choices=['local', 'live'], default='local')
+    parser.add_argument('--account-preview', action='store_true', help='Use the isolated account Service (8793) and Lab (3193); production accounts stay disabled.')
     parser.add_argument('--cdp-port', type=int, default=None,
                         help='Open CDP remote debugging port on 127.0.0.1 only. Default: off.')
     parser.add_argument('--provider', choices=['claude', 'codex', 'service'],
@@ -488,6 +518,8 @@ def main():
         raise RuntimeError('This development launcher supports macOS arm64 and Windows only.')
     if args.setup_local and args.service != 'local':
         raise ValueError('--setup-local cannot change a live Service.')
+    if args.account_preview and (args.service != 'local' or args.setup_local):
+        raise ValueError('--account-preview requires --service local and cannot mint a classroom code with --setup-local.')
     args.base_app = args.base_app or default_base()
     state_parent = Path(os.environ['LOCALAPPDATA']) / 'HypeProofStudioDev' if platform.system() == 'Windows' else Path.home() / 'Library/Application Support/HypeProof Studio Development'
     state = args.state_dir or state_parent / hashlib.sha256(str(REPO).encode()).hexdigest()[:12]
@@ -526,8 +558,10 @@ def main():
         with locked(state):
             if args.setup_local:
                 setup_local_participant(REPO, state)
-            app = prepare(REPO, args.base_app.resolve(), state, args.service)
+            app = prepare(REPO, args.base_app.resolve(), state, args.service, args.account_preview)
             if args.action == 'run':
+                if args.account_preview:
+                    register_account_protocol(app, state)
                 launch(app, state, local_runtime, cdp_port=args.cdp_port, inmemory_secrets=args.inmemory_secrets)
 
 

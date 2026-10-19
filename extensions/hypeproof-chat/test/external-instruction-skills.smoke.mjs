@@ -18,6 +18,7 @@ function fixture({files={'SKILL.md':skill,'references/check.md':'Check the keybo
  if(treePath)entries[0].path=treePath;
  const fetchImpl=async(url,init)=>{
   calls.push({url,init});assert.equal(init.redirect,'error');assert.equal(init.credentials,'omit');assert.equal(Object.keys(init.headers).some(k=>/authorization|cookie/i.test(k)),false);
+  if(url.endsWith('/git/trees/'+rev+'?recursive=1'))return new Response(JSON.stringify({sha:rev,truncated,tree:[{path:'skill',type:'tree',mode:'040000',sha:targetTree},...entries.map(e=>({...e,path:'skill/'+e.path})),...extra]}));
   if(url.includes('/commits/'))return new Response(JSON.stringify({sha:rev,commit:{tree:{sha:rootTree}}}));
   if(url.endsWith('/git/trees/'+rootTree))return new Response(JSON.stringify({tree:[{path:'skill',type:'tree',mode:'040000',sha:targetTree}]}));
   if(url.endsWith('/git/trees/'+targetTree+'?recursive=1'))return new Response(JSON.stringify({tree:[...entries,...extra],truncated}));
@@ -36,6 +37,12 @@ try {
  const declared=await downloadExternalSkill(source,fixture({files:{'SKILL.md':skill.replace('capabilities: [read, browser]','allowed-tools: Read Bash')}}).transport);assert.deepEqual([...declared.manifest.capabilities],['read','shell']);
  const good=fixture(),snapshot=await downloadExternalSkill(source,good.transport);
  assert.equal(snapshot.manifest.revision,revision);assert.equal(snapshot.manifest.license,'MIT');assert.deepEqual([...snapshot.manifest.capabilities],['read','browser']);assert.equal(snapshot.manifest.kind,'external-instructions');assert.ok(good.calls[0].url.endsWith('feature%2Fdesign'));
+ const pinnedFixture=fixture(),pinnedSource=externalSkillSource('https://github.com/example/skills',revision,'skill');
+ const pinned=await downloadExternalSkill(pinnedSource,pinnedFixture.transport);
+ assert.deepEqual(pinned.files,snapshot.files);assert.equal(pinnedFixture.calls.filter(c=>c.url.startsWith('https://api.github.com')).length,1,'full immutable revision needs only one metadata request');
+ for(const spec of [{truncated:true},{rawMismatch:true},{mode:'120000'},{mode:'100755'},{treePath:'../outside.md'},{extra:[{path:'skill',type:'blob',mode:'120000',sha:targetTree}]}])await assert.rejects(()=>downloadExternalSkill(pinnedSource,fixture(spec).transport));
+ for(const status of [403,429])await assert.rejects(()=>new PublicSkillTransport(async()=>new Response('',{status,headers:{'x-ratelimit-reset':String(Math.floor(Date.now()/1000)+60)}})).json('https://api.github.com/repos/example/skills'),new RegExp('HTTP '+status+'.*api.github.com'));
+ console.log('PASS immutable single-request metadata keeps ancestor, truncation, mode, traversal and blob hash checks; status is diagnosable');
  const store=new ExternalInstructionSkillStore(state,storage,workspace);
  assert.equal((await store.selected()).text,'','download and preview do not activate any skill');
  await store.save(snapshot,false);assert.equal((await store.selected()).text,'');await store.select(snapshot.manifest.id,snapshot.manifest.digest);

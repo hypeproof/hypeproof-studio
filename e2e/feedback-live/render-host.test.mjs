@@ -1,5 +1,16 @@
+import {createRequire} from 'node:module';
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
-import {renderConfig,renderProfile,startRenderHost,ownedFetchInterception,priorScreenshotCalls,screenshotReservationClient} from './render-host.mjs';import {toolResultImageHashes,screenshotCallHashes,digest,startGuard} from './guard.mjs';
+import {renderConfig,renderProfile,startRenderHost,capturedSourceVersions,captureEvidenceStore,assertCapturedResponse,ownedFetchInterception,priorScreenshotCalls,screenshotReservationClient} from './render-host.mjs';import {toolResultImageHashes,screenshotCallHashes,digest,startGuard} from './guard.mjs';
+import {createCompletionSession} from './render-completion.mjs';
+// Delete owned fixture files only after the actual host closure proof is complete.
+// Retry filesystem errors only; never retry host.close or relax test assertions.
+async function removeClosedHostFixture(t,base,hosts,{remove=fs.promises.rm,platform=process.platform}={}){
+ const cleanup=hosts.map(host=>host?.state.cleanup??null);
+ const admitted=cleanup.length>0&&cleanup.every(row=>row?.chromium_exited===true&&row.server_closed===true&&row.cdp_closed===1&&row.interception?.status==='PASS'&&row.interception.pending===0&&Array.isArray(row.interception.failures)&&row.interception.failures.length===0);
+ t.diagnostic(JSON.stringify({cleanup,removal_admitted:admitted,temporary_directory:base}));
+ assert(admitted,'Incomplete owned resource closure; temporary diagnostics retained');
+ await remove(base,{recursive:true,force:true,maxRetries:platform==='win32'?3:0,retryDelay:100});
+}
 const config={renderFeedback:{enabled:true,mode:'owned-headless',widths:[390,1280],maxScreenshots:6,repetitionId:'hps-render-20261016-r1-'+'a'.repeat(32),browserDependencyRoot:'/owned/e2e'},attempts:[{runtime:'sdk',scenario:'T10-T11',outputPaths:['candidate-1/keyboard.html']}]};
 test('default stays file-only; render double opt-in never invents browser grant or accepts flexible caps/IDs',()=>{
  assert.equal(renderConfig({}),null);assert.throws(()=>renderConfig({},['--allow-render-feedback']));assert.throws(()=>renderConfig(config));assert.deepEqual(renderConfig(config,['--allow-render-feedback']),config.renderFeedback);
@@ -9,8 +20,8 @@ test('default stays file-only; render double opt-in never invents browser grant 
 test('tool-result image metadata hashes real nested bytes separately from reference pixels, without raw payload retention',()=>{
  const data=Buffer.from('owned-screenshot-pixels').toString('base64'),body={messages:[{role:'user',content:[{type:'image',source:{type:'base64',data}},{type:'tool_result',content:[{type:'image',source:{type:'base64',data}}]}]}]},original=JSON.stringify(body);assert.deepEqual(toolResultImageHashes(body),[digest(Buffer.from(data,'base64'))]);assert.equal(JSON.stringify(body),original);assert(!JSON.stringify(toolResultImageHashes(body)).includes(data));assert.deepEqual(toolResultImageHashes({messages:[{content:[{type:'tool_result',is_error:true,content:'No capture'}]}]}),[]);
 });
-test('actual capture aborted before any next dispatch and failed capture both remain consumed after host restart; cleanup is explicit',async()=>{
- const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-render-host-controls-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const p of[workspace,evidence,temp])fs.mkdirSync(p);fs.copyFileSync(path.join(root,'extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html'),path.join(workspace,'keyboard.html'));
+test('actual capture aborted before any next dispatch and failed capture both remain consumed after host restart; cleanup is explicit',async t=>{
+ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-render-host-controls-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const p of[workspace,evidence,temp])fs.mkdirSync(p,{mode:0o700});fs.copyFileSync(path.join(root,'extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html'),path.join(workspace,'keyboard.html'));
  const keyFiles={keyFile:path.join(base,'provider-key'),serviceCredentialFile:path.join(base,'service-key'),controlKeyFile:path.join(base,'control-key')};for(const [name,value]of Object.entries({keyFile:'sk-ant-synthetic-control',serviceCredentialFile:'hps-guard-only-'+'a'.repeat(64),controlKeyFile:'hps-guard-control-'+'b'.repeat(64)}))fs.writeFileSync(keyFiles[name],value,{mode:0o600});
  const repetitionId=config.renderFeedback.repetitionId,activityId='synthetic-render-abort-control',ledgerFile=path.join(base,'guard.json'),g=await startGuard({...keyFiles,activityId,ledgerFile,renderRepetitionId:repetitionId,fetchImpl:async()=>{throw Error('No upstream dispatch allowed');}}),client=()=>screenshotReservationClient({guard:{origin:g.origin,id:g.snapshot().guard_id,controlKeyFile:keyFiles.controlKeyFile},activityId,repetitionId});
  const options={root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:client()};let host,second;
@@ -26,12 +37,12 @@ test('actual capture aborted before any next dispatch and failed capture both re
   await assert.rejects(host.host.openBrowser('http://example.com/'),/non-owned/);await host.close();assert.equal(host.state.cleanup.status,'PASS');assert.equal(host.state.cleanup.server_closed,true);assert.equal(host.state.cleanup.chromium_exited,true);
   // Simulate the runtime abort here: no subsequent model request exists.
   assert.equal(g.snapshot().rows.length,0);assert.equal(JSON.parse(fs.readFileSync(ledgerFile)).render_screenshot_attempts,2);assert.equal(priorScreenshotCalls(g.snapshot(),repetitionId),2);
-  const nextTemp=path.join(base,'next-runtime'),nextEvidence=path.join(base,'next-evidence');fs.mkdirSync(nextTemp);fs.mkdirSync(nextEvidence);let fatal=0;
+  const nextTemp=path.join(base,'next-runtime'),nextEvidence=path.join(base,'next-evidence');fs.mkdirSync(nextTemp);fs.mkdirSync(nextEvidence,{mode:0o700});let fatal=0;
   second=await startRenderHost({...options,temp:nextTemp,evidence:nextEvidence,reserveScreenshot:client(),priorScreenshots:priorScreenshotCalls(g.snapshot(),repetitionId),onFatal:()=>fatal++});const next=second.setCandidate(['keyboard.html']);await second.host.openBrowser(next.wrapperUrl);fs.writeFileSync(path.join(nextEvidence,'render-capture-0.jpg'),'owned collision forces capture storage failure');
   await assert.rejects(second.host.inspect('browser_screenshot',{}),/EEXIST/);assert.equal(fatal,1);assert.equal(second.state.cleanup.status,'PASS');assert.equal(g.snapshot().render_screenshot_attempts,3);assert.equal(g.snapshot().rows.length,0);
   const resumed=client();for(let i=4;i<=6;i++)assert.equal((await resumed()).attempt,i);await assert.rejects(client()(),/reservation refused/);assert.equal(g.snapshot().render_screenshot_attempts,6);assert.equal(JSON.parse(fs.readFileSync(ledgerFile)).render_screenshot_attempts,6);
   const badTemp=path.join(base,'setup-failure');fs.mkdirSync(badTemp);fs.mkdirSync(path.join(badTemp,'render-chromium'));await assert.rejects(startRenderHost({...options,temp:badTemp}),error=>error.code==='EEXIST'&&error.ownedCleanup.server_closed&&error.ownedCleanup.chromium_exited&&error.ownedCleanup.status==='PASS');assert.equal(globalThis.__hpsRenderVscode,undefined);
- }finally{await host?.close();await second?.close();await g.close();await assert.rejects(startGuard({...keyFiles,activityId,ledgerFile,renderRepetitionId:repetitionId}),/EEXIST/);fs.rmSync(base,{recursive:true,force:true});}
+ }finally{await host?.close();await second?.close();await g.close();await assert.rejects(startGuard({...keyFiles,activityId,ledgerFile,renderRepetitionId:repetitionId}),/EEXIST/);await removeClosedHostFixture(t,base,[host,second]);}
 });
 
 test('only durable guard counter retains consumed attempts; model message IDs are transport diagnostics',()=>{
@@ -51,4 +62,113 @@ test('interception shutdown unsubscribes then awaits pending command; refusal re
 test('blocked request and rejecting fatal callback are both awaited and cannot yield cleanup PASS',async()=>{
  let listener,blocked=0;const owned=ownedFetchInterception({cdp:{onEvent(fn){listener=fn;return{dispose(){}};},async send(method){assert.equal(method,'Fetch.failRequest');throw Error('seeded transport refusal');}},origin:'http://127.0.0.1:12345',onBlocked:async()=>{blocked++;},onFailure:async()=>{throw Error('seeded hold refusal');}});
  listener({method:'Fetch.requestPaused',params:{requestId:'blocked',request:{url:'https://example.invalid/'}}});const result=await owned.close();assert.equal(blocked,1);assert.equal(result.status,'FAIL');assert.equal(result.pending,0);assert.deepEqual(result.failures.map(x=>x.method),['Fetch.failRequest','fatal_callback']);
+});
+
+
+test('private captured source and served snapshots reject unknown, changed, missing, linked or substituted provenance',()=>{
+ const base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-revisions-')),image=Buffer.from('synthetic pixels'),source=Buffer.from('<p>source</p>'),served=Buffer.from('<p>source</p><script>injected</script>');
+ try{
+  const file='render-capture-0.jpg';fs.writeFileSync(path.join(base,file),image);const store=captureEvidenceStore(base),capture=store.record({file,sha256:digest(image),bytes:image.length,source_sha256:digest(source),page:{frameWidth:390}},{source,served});assert(store.verify(capture));assert.notEqual(capture.revision.source.sha256,capture.revision.served.sha256);assert(fs.readFileSync(path.join(base,capture.revision.source.file)).equals(source));assert(fs.readFileSync(path.join(base,capture.revision.served.file)).equals(served));
+  if(process.platform!=='win32'){assert.equal(fs.statSync(path.join(base,'private')).mode&0o777,0o700);assert.equal(fs.statSync(path.join(base,capture.revision.source.file)).mode&0o777,0o400);}
+  for(const changed of [{...capture,source_sha256:'unknown'},{...capture,file:'../outside'},{...capture,page:{frameWidth:1280}},{...capture,revision:{...capture.revision,source:{...capture.revision.source,file:'../outside'}}}])assert.throws(()=>store.verify(changed));
+  const sourceFile=path.join(base,capture.revision.source.file),saved=fs.readFileSync(sourceFile);fs.chmodSync(sourceFile,0o600);fs.writeFileSync(sourceFile,'tampered');assert.throws(()=>store.verify(capture),/Evidence/);fs.writeFileSync(sourceFile,saved);assert(store.verify(capture));fs.unlinkSync(sourceFile);assert.throws(()=>store.verify(capture));
+  const other=path.join(base,'outside');fs.writeFileSync(other,saved);fs.symlinkSync(other,sourceFile);assert.throws(()=>store.verify(capture),/unlinked/);fs.unlinkSync(sourceFile);fs.linkSync(other,sourceFile);assert.throws(()=>store.verify(capture),/unlinked/);fs.unlinkSync(sourceFile);fs.writeFileSync(sourceFile,saved,{mode:0o400});
+  fs.writeFileSync(path.join(base,file),'altered image');assert.throws(()=>store.verify(capture),/Evidence/);fs.writeFileSync(path.join(base,file),image);
+  const privateDir=path.join(base,'private'),moved=path.join(base,'moved-private');fs.renameSync(privateDir,moved);fs.symlinkSync(moved,privateDir,'dir');assert.throws(()=>store.verify(capture),/directory must be regular/);
+ }finally{fs.rmSync(base,{recursive:true,force:true});}
+});
+
+test('actual MCP duplicate open cannot reload edits; live preview reload retains revisions and stale recapture stays charged',async t=>{
+ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-render-revision-control-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of [workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});
+ const file=path.join(workspace,'keyboard.html'),initial=fs.readFileSync(path.join(root,'extensions/hypeproof-chat/test/fixtures/reference-design/keyboard.html')),final=Buffer.from(initial.toString()+'\n<p>Owned revision two</p>');assert.notDeepEqual(initial,final);fs.writeFileSync(file,initial);let attempts=0,host;
+ try{
+  host=await startRenderHost({root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:async()=>({attempt:++attempts,limit:6})});const view=host.setCandidate(['keyboard.html']);
+  const {runBrowserOpen,runLivePreviewStart}=createRequire(import.meta.url)(path.join(temp,'render-build/mcp.cjs'));await runBrowserOpen(host.host,view.wrapperUrl);assert(!fs.existsSync(path.join(evidence,'private')),'Navigation alone must not copy revisions to disk');await host.host.inspect('browser_screenshot',{});
+  const historical=structuredClone(host.state.captures[0]);assert(host.verifyCapture(historical));fs.writeFileSync(file,final);const opens=host.state.actions.filter(x=>x.name==='browser_open').length,duplicate=await runBrowserOpen(host.host,view.wrapperUrl);assert(duplicate.content.some(x=>x.text?.includes('다시 열지 않았어요')));assert.equal(host.state.actions.filter(x=>x.name==='browser_open').length,opens);await runLivePreviewStart(host.host);assert.equal(host.state.actions.filter(x=>x.name==='browser_open').length,opens+1);await host.host.inspect('browser_screenshot',{});
+  const read=await host.host.inspect('browser_read',{}),text=read.content.filter(x=>x.type==='text').map(x=>x.text).join('\n'),ref=text.split('\n').find(x=>x.includes('데스크톱 1280px')).match(/ref=(e\d+)/)[1];await host.host.inspect('browser_click',{ref});await host.host.inspect('browser_screenshot',{});
+  assert.equal(attempts,3);assert.equal(host.state.screenshot_attempts,3);assert.deepEqual(host.state.captures.map(x=>x.source_sha256),[digest(initial),digest(final),digest(final)]);assert.deepEqual(host.state.captures.map(x=>x.page.frameWidth),[390,390,1280]);assert.deepEqual(host.state.captures[0],historical);
+  for(const capture of host.state.captures){assert(host.verifyCapture(capture));assert.notEqual(capture.revision.source.sha256,capture.revision.served.sha256);assert(capture.page.frameId);}
+  assert.deepEqual(host.state.source_versions.captured_source_sha256,[digest(initial),digest(final)]);assert.equal(host.state.source_versions.captured_source_version_count,2);assert.equal(host.state.source_versions.exceeds_three_captured_versions,false);assert.equal(host.state.source_versions.uncaptured_source_versions,'UNKNOWN');assert.equal(fs.readdirSync(path.join(evidence,'private/render-revisions')).length,4);assert(fs.readFileSync(path.join(evidence,historical.revision.source.file)).equals(initial));
+  fs.writeFileSync(file,initial);const staleOpen=await runBrowserOpen(host.host,view.wrapperUrl);assert(staleOpen.content.some(x=>x.text?.includes('다시 열지 않았어요')));await assert.rejects(host.host.inspect('browser_screenshot',{}),/Candidate changed since its actual HTTP load/);assert.equal(attempts,4,'Failed stale-load capture remains charged');assert.equal(host.state.captures.length,3);assert.equal(host.state.cleanup.status,'PASS');
+ }finally{await host?.close();await removeClosedHostFixture(t,base,[host]);}
+});
+
+
+test('captured response requires exact document frame, loader, source, served bytes and uncached owned load',()=>{
+ const load={loadId:'1',sourceSha:'candidate-hash',servedSha:'response-hash'},frame={id:'owned-frame',loaderId:'owned-loader'},response={...load,frameId:frame.id,loaderId:frame.loaderId,status:200,cached:false};assert.doesNotThrow(()=>assertCapturedResponse(load,response,frame));
+ for(const delta of [{frameId:'another-frame'},{loaderId:'older-loader'},{sourceSha:'another-source'},{servedSha:'another-response'},{loadId:'older-load'},{cached:true},{status:304},{sourceSha:undefined}])assert.throws(()=>assertCapturedResponse(load,{...response,...delta},frame));
+ assert.throws(()=>assertCapturedResponse(load,null,frame));assert.throws(()=>assertCapturedResponse({...load,loadId:undefined},response,frame));assert.throws(()=>assertCapturedResponse(load,response,{id:frame.id}));
+});
+test('snapshot store refuses nonprivate or substituted owner directories and never exceeds six capture records',()=>{
+ const base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-revision-owner-')),moved=base+'-replaced',source=Buffer.from('candidate'),served=Buffer.from('served'),image=Buffer.from('image');
+ try{
+  if(process.platform!=='win32'){fs.chmodSync(base,0o755);assert.throws(()=>captureEvidenceStore(base),/must be private/);fs.chmodSync(base,0o700);}
+  const store=captureEvidenceStore(base);let capture;
+  for(let i=0;i<6;i++){const file='render-capture-'+i+'.jpg';fs.writeFileSync(path.join(base,file),image);capture=store.record({file,sha256:digest(image),bytes:image.length,source_sha256:digest(source)},{source,served});}
+  assert.equal(fs.readdirSync(path.join(base,'private/render-revisions')).length,2);assert.throws(()=>store.record({...capture,file:'render-capture-6.jpg'},{source,served}),/ceiling/);assert.equal(fs.readdirSync(path.join(base,'private/render-revisions')).length,2);
+  const file=path.join(base,capture.revision.served.file);fs.chmodSync(file,0o600);fs.writeFileSync(file,'tampered response');assert.throws(()=>store.verify(capture),/Evidence/);
+  fs.renameSync(base,moved);fs.mkdirSync(base,{mode:0o700});assert.throws(()=>store.verify(capture),/Owned evidence directory changed/);
+ }finally{fs.rmSync(base,{recursive:true,force:true});fs.rmSync(moved,{recursive:true,force:true});}
+});
+
+
+test('captured source version report separates revisions from SDK claims and leaves uncaptured edits unknown',()=>{
+ const captures=['a','b','c','final','final'].map(source=>({source_sha256:digest(source)})),before=structuredClone(captures),report=capturedSourceVersions(captures);
+ assert.deepEqual(report.captured_source_sha256,['a','b','c','final'].map(digest));assert.equal(report.captured_source_version_count,4);assert.equal(report.exceeds_three_captured_versions,true);assert.equal(report.uncaptured_source_versions,'UNKNOWN');assert.equal('sdk_candidate_claims' in report,false);assert.deepEqual(captures,before);
+ assert.equal(capturedSourceVersions(captures.slice(0,3)).exceeds_three_captured_versions,false);assert.equal(capturedSourceVersions([]).captured_source_version_count,0);assert.throws(()=>capturedSourceVersions([{source_sha256:'raw private text'}]));
+});
+
+test('actual candidate response race immediately aborts and holds once; subsequent operations and scripted dispatch are refused',async t=>{
+ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-response-fatal-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of[workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});
+ const file=path.join(workspace,'keyboard.html');fs.writeFileSync(file,'<!doctype html><p>Owned race control</p>');let host,attempts=0,holds=0,closes=0,dispatches=0,seen,fatalCalls=0;const deadline=Date.now()+60000,controller=new AbortController(),session=createCompletionSession({hold:async()=>{holds++;}});
+ const sdk={query(input){seen=input;return Object.assign((async function*(){yield{type:'system',subtype:'init',session_id:'01234567-1234-4321-8123-012345678901'};})(),{close(){closes++;}});}};
+ const stream=session.wrap(sdk).query({prompt:'synthetic',options:{abortController:controller,cwd:workspace,model:'synthetic',pathToClaudeCodeExecutable:'/unused',env:{CLAUDE_CONFIG_DIR:temp},allowedTools:[],settingSources:[],strictMcpConfig:true,tools:['Read'],canUseTool:async()=>({behavior:'allow'})}});for await(const event of stream){}
+ const originalRead=fs.readFileSync;
+ try{
+  host=await startRenderHost({root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:async()=>({attempt:++attempts,limit:6}),fatalToolErrors:true,onFatal:reason=>{fatalCalls++;return session.fail(reason);}});const view=host.setCandidate(['keyboard.html']);await host.host.openBrowser(view.wrapperUrl);await host.host.inspect('browser_screenshot',{});const historical=structuredClone(host.state.captures),remainingDeadline=deadline;
+  let reads=0;fs.readFileSync=function(target,...args){const value=originalRead.call(this,target,...args);return target===file&&++reads===2?Buffer.from('Different candidate source'):value;};
+  const response=await fetch(host.origin+'/keyboard.html');assert.equal(response.status,409);fs.readFileSync=originalRead;await session.settle();assert.equal(host.state.fatal,'candidate_response_binding_failed');assert.equal(fatalCalls,1);assert.equal(holds,1);assert.equal(closes,1);assert(controller.signal.aborted);assert.equal(session.snapshot().fatal,'candidate_response_binding_failed');
+  const actions=host.state.actions.length;for(const operation of[()=>host.host.openBrowser(view.wrapperUrl),()=>host.host.startLivePreview(),()=>host.host.currentPage(),()=>host.host.openPages(),()=>host.host.livePreviewUrl(),()=>host.host.inspect('browser_read',{}),()=>host.host.inspect('browser_screenshot',{}),()=>host.approveViewportClick({})])await assert.rejects(operation(),/host is stopped/);assert.throws(()=>host.setCandidate(['keyboard.html']),/host is stopped/);
+  const decision=await seen.options.canUseTool('Read',{});if(decision.behavior==='allow')dispatches++;assert.equal(decision.behavior,'deny');assert.equal(dispatches,0);assert.throws(()=>session.wrap(sdk,{resume:true}),/Fatal completion/);assert.equal(host.state.actions.length,actions);assert.equal(attempts,1);assert.equal(host.state.screenshot_attempts,1);assert.deepEqual(host.state.captures,historical);assert.equal(deadline,remainingDeadline);assert.equal((await fetch(host.origin+'/keyboard.html')).status,409);assert.equal(fatalCalls,1);await host.close();assert.equal(host.state.cleanup.status,'PASS');
+ }finally{fs.readFileSync=originalRead;await host?.close();await removeClosedHostFixture(t,base,[host]);}
+});
+
+for(const mode of ['throw','reject','timeout'])test('response race fatal callback '+mode+' is bounded and retained as cleanup FAIL without unhandled rejection',async t=>{
+ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-response-fatal-reject-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of[workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});const file=path.join(workspace,'keyboard.html');fs.writeFileSync(file,'<p>Owned response</p>');const originalRead=fs.readFileSync;let host,calls=0,cleanupVerified=false;
+ try{
+  host=await startRenderHost({root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:async()=>{throw Error('No capture allowed');},onFatal:()=>{calls++;if(mode==='timeout')return new Promise(()=>{});if(mode==='reject')return Promise.reject(Error('private refusal marker'));throw Error('private refusal marker');}});host.setCandidate(['keyboard.html']);let reads=0;fs.readFileSync=function(target,...args){const value=originalRead.call(this,target,...args);return target===file&&++reads===2?Buffer.from('changed'):value;};assert.equal((await fetch(host.origin+'/keyboard.html')).status,409);fs.readFileSync=originalRead;
+  await host.close();assert.equal(calls,1);assert.equal(host.state.fatal_callback_failed,true);assert.equal(host.state.cleanup.status,'FAIL');assert.deepEqual(host.state.cleanup.errors,['fatal_callback']);assert.equal(host.state.cleanup.chromium_exited,true);assert.equal(host.state.cleanup.server_closed,true);assert.equal(host.state.cleanup.cdp_closed,1);assert.deepEqual(host.state.cleanup.interception,{status:'PASS',pending:0,failures:[]});cleanupVerified=true;assert(!JSON.stringify(host.state).includes('private refusal marker'));
+ }finally{fs.readFileSync=originalRead;await host?.close();t.diagnostic(JSON.stringify({mode,cleanup:host?.state.cleanup??null,removal_admitted:cleanupVerified,temporary_directory:base}));
+  // Windows may temporarily refuse removal after an observed child exit. Retry
+  // only filesystem removal errors, never host shutdown or the tested callback.
+  // Failed resource assertions retain the owned directory; permanent rm errors fail.
+  if(cleanupVerified)await removeClosedHostFixture(t,base,[host]);
+ }
+});
+
+
+test('late HTTP binding failure during owned socket shutdown is settled after server closes and cannot report cleanup PASS',async t=>{
+ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..'),base=fs.mkdtempSync(path.join(os.tmpdir(),'hps-late-response-fatal-')),workspace=path.join(base,'work'),evidence=path.join(base,'evidence'),temp=path.join(base,'runtime');for(const dir of[workspace,evidence,temp])fs.mkdirSync(dir,{mode:0o700});const file=path.join(workspace,'keyboard.html');fs.writeFileSync(file,'<p>Owned source</p>');
+ const originalRead=fs.readFileSync,originalClose=WebSocket.prototype.close;let host,calls=0,closeCalls=0,responseStatus,requestTask;
+ try{
+  host=await startRenderHost({root,workspace,evidence,temp,dependencyRoot:path.join(root,'extensions/hypeproof-chat'),browserDependencyRoot:path.join(root,'e2e'),reserveScreenshot:async()=>{throw Error('No capture allowed');},onFatal:()=>{calls++;return Promise.reject(Error('private seeded callback refusal'));}});host.setCandidate(['keyboard.html']);let reads=0;
+  fs.readFileSync=function(target,...args){const bytes=originalRead.call(this,target,...args);return String(target)===file&&++reads===2?Buffer.from('<p>Concurrent replacement</p>'):bytes;};
+  // Preserve the independent reproduction: real response arrives after the first
+  // fatal settlement, while the first actual owned socket close is pending.
+  WebSocket.prototype.close=function(...args){if(++closeCalls===1){const socket=this;requestTask=(async()=>{await assert.rejects(host.host.inspect('browser_read',{}),/host is stopped/);await assert.rejects(host.host.currentPage(),/host is stopped/);const response=await fetch(host.origin+'/keyboard.html');responseStatus=response.status;await response.arrayBuffer();})().finally(()=>originalClose.apply(socket,args));}else originalClose.apply(this,args);};
+  await host.close();await requestTask;assert.equal(responseStatus,409);assert.equal(calls,1);assert.equal(host.state.fatal,'candidate_response_binding_failed');assert.equal(host.state.fatal_callback_failed,true);assert.equal(host.state.cleanup.status,'FAIL');assert.deepEqual(host.state.cleanup.errors,['fatal_callback']);assert.equal(host.state.cleanup.server_closed,true);assert.equal(host.state.cleanup.chromium_exited,true);assert.equal(host.state.cleanup.interception.status,'PASS');assert.equal(host.state.cleanup.interception.pending,0);assert.equal(host.state.screenshot_attempts,0);assert(!JSON.stringify(host.state).includes('private seeded'));
+ }finally{fs.readFileSync=originalRead;WebSocket.prototype.close=originalClose;await host?.close();await removeClosedHostFixture(t,base,[host]);}
+});
+
+
+test('fixture removal requires complete resource closure and retries only filesystem removal with bounded Windows options',async()=>{
+ const closed={chromium_exited:true,server_closed:true,cdp_closed:1,interception:{status:'PASS',pending:0,failures:[]}},diagnostics=[],t={diagnostic:value=>diagnostics.push(JSON.parse(value))};let calls=0;
+ const remove=async(base,options)=>{calls++;assert.equal(base,'owned-fixture');assert.deepEqual(options,{recursive:true,force:true,maxRetries:3,retryDelay:100});};
+ await removeClosedHostFixture(t,'owned-fixture',[{state:{cleanup:closed}}],{remove,platform:'win32'});assert.equal(calls,1);
+ for(const update of[{chromium_exited:false},{server_closed:false},{cdp_closed:0},{interception:{status:'FAIL',pending:0,failures:[]}},{interception:{status:'PASS',pending:1,failures:[]}},{interception:{status:'PASS',pending:0,failures:[{method:'Fetch.continueRequest'}]}}]){
+  await assert.rejects(removeClosedHostFixture(t,'owned-fixture',[{state:{cleanup:{...closed,...update}}}],{remove,platform:'win32'}),/diagnostics retained/);assert.equal(calls,1);assert.equal(diagnostics.at(-1).removal_admitted,false);
+ }
+ await assert.rejects(removeClosedHostFixture(t,'owned-fixture',[undefined],{remove,platform:'win32'}),/diagnostics retained/);assert.equal(calls,1);
+ const permanent=Object.assign(Error('permanent removal failure'),{code:'EPERM'});await assert.rejects(removeClosedHostFixture(t,'owned-fixture',[{state:{cleanup:closed}}],{platform:'win32',remove:async()=>{calls++;throw permanent;}}),error=>error===permanent);assert.equal(calls,2,'No helper-level retry or swallowed permanent failure');
+ await removeClosedHostFixture(t,'owned-fixture',[{state:{cleanup:closed}}],{platform:'darwin',remove:async(_base,options)=>assert.equal(options.maxRetries,0)});
 });

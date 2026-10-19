@@ -15,6 +15,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StartPage } from "./startPage";
+import { AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
+import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
 import {
   labelsForProfile,
@@ -202,9 +204,41 @@ export async function activate(context: vscode.ExtensionContext) {
   // cr-review — show the director's Weekly Review when the stored issuer token directs a switch-on cohort.
   void provider.refreshCrDirectorContext().catch(() => undefined);
   registerLocalReview(context, (webview, dist) => provider.renderHtml(webview, dist));
+  const accountConfig = vscode.workspace.getConfiguration('hypeproofChat');
+  const accountService = accountConfig.get<string>('proxyUrl', 'https://api.hypeproof-ai.xyz/v1');
+  const accountSite = accountConfig.get<string>('siteBase', 'https://hypeproof-ai.xyz');
+  const accountEnabled = accountPreviewEnabled(accountConfig.get<boolean>('accountsPreview', false) || process.env.HPS_ACCOUNTS === 'enabled', accountService, accountSite)
+    || accountProductionEnabled(accountConfig.get<boolean>('accountsEnabled', false), accountService, accountSite);
+  const accounts = accountEnabled ? new AccountSession({
+    service: accountService, site: accountSite, secrets: context.secrets,
+    label: `${process.platform === 'darwin' ? 'Mac' : process.platform === 'win32' ? 'Windows' : 'Studio'} · Studio ${context.extension.packageJSON.version}`,
+    openBrowser: url => vscode.env.openExternal(vscode.Uri.parse(url)),
+    createReturnUri: async state => (await vscode.env.asExternalUri(vscode.Uri.parse(`${vscode.env.uriScheme}://hypeproof.hypeproof-chat/account-return?state=${state}`))).toString(true),
+    returned: async () => { await startPage.show(); },
+    changed: () => startPage.accountChanged(),
+    lock: accountLock(context.globalStorageUri.fsPath),
+    invalidated: async sessionId => {
+      if (connections.current?.accountPass?.sessionId === sessionId) provider.opsRequestStop();
+      if (await connections.forgetAccount(sessionId)) { provider.invalidateProfile(); void provider.refreshConfig(); }
+    },
+  }) : undefined;
+  connections.accountToken = accounts ? binding => accounts.resolvePass(binding) : undefined;
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
-  }, provider.githubContinueSource());
+  }, provider.githubContinueSource(), accounts);
+  if (accounts) {
+    context.subscriptions.push(vscode.window.registerUriHandler({
+      handleUri: async uri => {
+        if (uri.scheme !== vscode.env.uriScheme || uri.authority !== 'hypeproof.hypeproof-chat' || uri.path !== '/account-return' || uri.fragment) return;
+        const query = new URLSearchParams(uri.query);
+        if ([...query.keys()].some(key => key !== 'state' && key !== 'windowId') || query.getAll('state').length !== 1) return;
+        const state = query.get('state') ?? '';
+        if (/^[a-f0-9]{64}$/.test(state)) await accounts.browserReturned(state);
+      },
+    }));
+    const accountWatch = setInterval(() => { void accounts.refreshView(); }, 15_000);
+    context.subscriptions.push({dispose: () => { clearInterval(accountWatch); accounts.dispose(); }});
+  }
   let initialSurfaceReady: Promise<void> = Promise.resolve();
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
   // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
@@ -215,7 +249,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const connections = activityConnections(context);
     const token = connections ? await connections.token() : undefined;
     const commit = async (directory?: string) => {
-      if (connections && token) await connections.commit(token, profile, directory ?? folder);
+      if (connections && token) await connections.commit(token, profile, directory ?? folder, connections.current?.accountPass);
     };
     await ensureWorkspace(profile, context, false, commit, folder);
   });

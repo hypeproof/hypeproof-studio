@@ -188,7 +188,7 @@ test('owned quit uses Mac CmdQ and actual Windows File Exit after observed focus
   ui.workbench=async()=>target;ui.focusWorkbench=async t=>{assert.equal(t,target);events.push(['focused']);};
   ui.clickText=async(t,label,css)=>{assert.equal(t,target);events.push(['native-click',label,css]);};
   await ui.quitOwned(platform);assert.equal(events[0][0],'focused');
-  if(platform==='darwin'){assert.equal(events[1][0],'Input.dispatchKeyEvent');assert.equal(events[1][1].key,'q');assert.equal(events[1][1].modifiers,4);assert.equal(events[1][1].type,'keyDown');assert.equal(events[2][1].type,'keyUp');}
+  if(platform==='darwin'){assert.equal(events[1][0],'Input.dispatchKeyEvent');assert.equal(events[1][1].key,'q');assert.equal(events[1][1].modifiers,4);assert.equal(events[1][1].type,'rawKeyDown');assert.equal('nativeVirtualKeyCode' in events[1][1],false);assert.equal(events[2][1].type,'keyUp');}
   else assert.deepEqual(events,[['focused'],['native-click','File','.menubar-menu-button'],['native-click','Exit','.monaco-menu .action-label']]);
  }
 });
@@ -319,7 +319,7 @@ test('scoped webview discovery cannot connect to another window iframe even when
 });
 
 function previewCloseFixture(){
- const before={resources:['saved.txt'],dirtyResources:[]};
+ const before={resources:['saved.txt'],dirtyResources:[],resource:'saved.txt',editorLabel:'saved.txt',focused:true};
  const preview={resource:'Untitled-2',resources:['saved.txt','Untitled-2'],editorLabel:'Untitled-2',focused:true,text:'# 외부 지침 스킬 · fixture\nprovenance',dirtyResources:['Untitled-2']};
  return {before,preview};
 }
@@ -374,4 +374,187 @@ test('actual headless quick input refuses visible wrong focus and waits for exac
 test('quick input cannot be ready when its document lacks focus despite exact active element',async()=>{
  const ui=new NativeUI('http://127.0.0.1:9777'),input={value:'>Exact',getBoundingClientRect:()=>({left:0,top:0,width:100,height:20})};const widget={querySelector:()=>input,getBoundingClientRect:()=>({width:100,height:40})};
  const document={querySelector:()=>widget,hasFocus:()=>false,activeElement:input,elementFromPoint:()=>input};const target={evaluate:expression=>vm.runInNewContext(expression,{document,getComputedStyle:()=>({display:'block',visibility:'visible'})})};const state=await ui.quickState(target);assert.equal(state.inputFocused,true);assert.equal(state.hostFocused,false);assert.equal(state.ready,false);
+});
+
+// Owned headless DOM/CDP controls, not native App acceptance or focus repair.
+test('actual CDP press scrolls once, observes stable usability and dispatches one triplet; stale/disabled/occluded controls get no input',async t=>{
+ const {createRequire}=await import('node:module');const require=createRequire(new URL('../package.json',import.meta.url));const {chromium}=require('playwright');
+ const browser=await chromium.launch({headless:true});
+ try{
+  async function fixture(html){const page=await browser.newPage({viewport:{width:600,height:400}});await page.setContent(html);const cdp=await page.context().newCDPSession(page),calls=[];const target={send:async(method,params)=>{calls.push({method,params});return cdp.send(method,params);}};const ui=new NativeUI('http://127.0.0.1:9777');await page.evaluate(()=>{const element=document.querySelector('#target'),original=element.scrollIntoView;window.fixtureScrolls=0;window.fixtureClicks=0;element.scrollIntoView=function(...args){window.fixtureScrolls++;return original.apply(this,args);};element.addEventListener('click',()=>window.fixtureClicks++);});return{page,target,ui,calls};}
+  const clicks=f=>f.calls.filter(row=>row.method==='Input.dispatchMouseEvent').map(row=>row.params.type);
+  await t.test('real smooth scroll waits beyond its initial offscreen geometry and clicks the original element once',async()=>{
+   const f=await fixture('<style>html{scroll-behavior:smooth}body{margin:0}#target{margin-top:1600px;width:100px;height:40px}</style><button id="target">Synthetic</button>');
+   try{await f.ui.press(f.target,'#target','synthetic smooth scroll',2500);assert.deepEqual(clicks(f),['mouseMoved','mousePressed','mouseReleased']);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.equal(await f.page.evaluate(()=>window.fixtureClicks),1);assert.equal(f.ui.phases.at(-1).outcome,'observed');assert(f.ui.phases.at(-1).state.inView&&f.ui.phases.at(-1).state.topmost);assert.equal(f.calls.filter(row=>row.method==='Runtime.evaluate').length,1);assert.equal(f.calls.filter(row=>row.method==='Runtime.releaseObject').length,1);}finally{await f.page.close();}
+  });
+  await t.test('a delayed disabled-to-enabled transition is observation, without reselecting or scrolling twice',async()=>{
+   const f=await fixture('<button id="target" disabled>Synthetic</button>');
+   try{let disabledObserved;const observed=new Promise(resolve=>disabledObserved=resolve);const send=f.target.send;f.target.send=async(method,params)=>{const result=await send(method,params);if(method==='Runtime.callFunctionOn'&&(result.result?.value?.state??result.result?.value)?.enabled===false)disabledObserved();return result;};const pending=f.ui.press(f.target,'#target','synthetic enable',1500);await observed;assert.deepEqual(clicks(f),[]);await f.page.locator('#target').evaluate(e=>{e.disabled=false;});await pending;assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.deepEqual(clicks(f),['mouseMoved','mousePressed','mouseReleased']);}finally{await f.page.close();}
+  });
+  for(const kind of ['disabled','occluded','replacement'])await t.test(kind+' refuses rather than re-clicking or reacquiring',async()=>{
+   const f=await fixture('<button id="target"'+(kind==='disabled'?' disabled':'')+'>Synthetic</button>'+(kind==='occluded'?'<div style="position:fixed;inset:0;background:white"></div>':''));
+   try{
+    if(kind==='replacement')await f.page.evaluate(()=>{const e=document.querySelector('#target'),original=e.scrollIntoView;e.scrollIntoView=function(...args){const result=original.apply(this,args);requestAnimationFrame(()=>e.replaceWith(e.cloneNode(true)));return result;};});
+    await assert.rejects(f.ui.press(f.target,'#target','synthetic negative',400),/Not a usable visible native control/);assert.deepEqual(clicks(f),[]);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),1);assert.equal(f.calls.filter(row=>row.method==='Runtime.evaluate').length,1);assert.equal(f.calls.filter(row=>row.method==='Runtime.releaseObject').length,1);
+    const state=f.ui.phases.at(-1).state;if(kind==='disabled')assert.equal(state.enabled,false);if(kind==='occluded')assert.equal(state.topmost,false);if(kind==='replacement')assert.equal(state.same,false);
+    assert(!JSON.stringify(f.ui.phases).includes('Synthetic'),'No control text enters readiness diagnostics');
+   }finally{await f.page.close();}
+  });
+ }finally{await browser.close();}
+});
+
+test('reload readiness refuses an old visible document and unknown identity, then observes an actual new CDP loader without focus actions',async()=>{
+ const {createRequire}=await import('node:module');const require=createRequire(new URL('../package.json',import.meta.url));const {chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.goto('data:text/html,<div class="hps-input"><textarea></textarea></div>');const cdp=await page.context().newCDPSession(page);await cdp.send('Page.enable');
+  const ui=new NativeUI('http://127.0.0.1:9777'),target={info:{id:'owned-target'},ownedWorkbenchId:'owned-workbench'};
+  ui.frame=async()=>{assert(await page.locator('.hps-input textarea').isVisible());const {frameTree}=await cdp.send('Page.getFrameTree');target.ownedFrameId=frameTree.frame.id;target.ownedLoaderId=frameTree.frame.loaderId;return target;};
+  for(const method of['press','key','palette','input','focusWorkbench'])ui[method]=()=>assert.fail('Readiness cannot repair via '+method);
+  const before=await ui.chatDocumentIdentity();await assert.rejects(ui.reloadedChatReady(before,1),/fresh post-reload/);await assert.rejects(ui.reloadedChatReady({...before,loader:null},1),/Exact previous/);
+  const actualIdentity=ui.chatDocumentIdentity.bind(ui);ui.chatDocumentIdentity=async()=>({...before,loader:undefined});await assert.rejects(ui.reloadedChatReady(before,1),/fresh post-reload/);ui.chatDocumentIdentity=actualIdentity;
+  let oldObserved;const observed=new Promise(resolve=>oldObserved=resolve);ui.chatDocumentIdentity=async()=>{const identity=await actualIdentity();if(identity.loader===before.loader)oldObserved();return identity;};
+  let completed=false;const pending=ui.reloadedChatReady(before,2500).then(result=>{completed=true;return result;});await observed;assert.equal(completed,false,'A still visible old textarea cannot admit Focus');await page.reload();const after=await pending;assert.notEqual(after.loader,before.loader);assert.equal(after.workbench,before.workbench);assert.equal(ui.phases.at(-1).outcome,'observed');
+ }finally{await browser.close();}
+});
+
+test('frame discovery retains actual frame and loader identity for reload observation',async()=>{
+ const {ui,target}=fixture(true);const send=target.send;target.send=async(method,args)=>method==='Page.getFrameTree'?{frameTree:{frame:{id:'owned-frame',loaderId:'owned-loader'}}}:send(method,args);ui.workbench=async()=>({info:{id:'owned-workbench'},evaluate:async()=>true});await ui.frame('textarea',500);assert.equal(target.ownedFrameId,'owned-frame');assert.equal(target.ownedLoaderId,'owned-loader');assert.equal(target.ownedWorkbenchId,'owned-workbench');
+});
+
+test('new file failure records only the exact readiness predicates, never content, titles or resource values',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),actions=[],target={send:async()=>assert.fail('No insertion before readiness')};ui.workbench=async()=>target;ui.focusWorkbench=async()=>{};ui.key=async(_target,key)=>actions.push(key);let samples=0;
+ ui.editorState=async()=>samples++===0?{resources:['PRIVATE_EXISTING.txt']}:{resources:['PRIVATE_EXISTING.txt','Untitled-1'],resource:'Untitled-1',editorLabel:'PRIVATE_WRONG_LABEL',focused:true,text:''};
+ await assert.rejects(ui.newTextFile('PRIVATE_INSERT',1),/new empty Untitled/);assert.deepEqual(actions,['n']);assert.deepEqual(ui.phases.at(-1).state,{focused:true,untitled:true,newResource:true,focusedResource:false,empty:true});assert(!JSON.stringify(ui.phases).includes('PRIVATE'));
+});
+
+test('press refuses unknown, oversized and expired readiness bounds without input and sanitizes remote errors',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),calls=[];const target={send:async(method)=>{calls.push(method);throw Error('PRIVATE_CDP_ERROR');}};
+ for(const timeout of [0,NaN,30001,Infinity])await assert.rejects(ui.press(target,'#private','synthetic',timeout),/readiness bound/);assert.deepEqual(calls,[]);
+ await assert.rejects(ui.press(target,'#private','synthetic',50),error=>!error.message.includes('PRIVATE')&&error.message.includes('Not a usable'));assert.deepEqual(calls,['Runtime.evaluate']);assert(!JSON.stringify(ui.phases).includes('PRIVATE'));
+});
+
+test('an unresponsive readiness sample consumes the same deadline, releases its handle and sends no input',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777'),calls=[];const target={send:async(method)=>{calls.push(method);if(method==='Runtime.evaluate')return{result:{objectId:'owned-fixture-object'}};if(method==='Runtime.callFunctionOn')return new Promise(()=>{});if(method==='Runtime.releaseObject')return{};assert.fail('No input after deadline');}};
+ const start=Date.now();await assert.rejects(ui.press(target,'#target','synthetic deadline',40),/Not a usable/);assert(Date.now()-start<1000,'No new deadline while a sample is pending');assert.deepEqual(calls,['Runtime.evaluate','Runtime.callFunctionOn','Runtime.releaseObject']);assert.equal(ui.phases.at(-1).outcome,'timeout');
+});
+
+function reloadDiscoveryFixture({workbench='owned-A',waitAt}={}){
+ const before={workbench:'owned-A',target:'old-chat',frame:'old-frame',loader:'old-loader'},ui=new NativeUI('http://127.0.0.1:9777');let release,enteredResolve,attachments=0;
+ const entered=new Promise(resolve=>enteredResolve=resolve),held=new Promise(resolve=>release=resolve);
+ const pause=async phase=>{if(waitAt===phase){enteredResolve();await held;}};
+ const target={info:{id:'new-chat'},evaluate:async()=>{await pause('visible');return true;},send:async method=>{await pause(method);return method==='Page.getFrameTree'?{frameTree:{frame:{id:'new-frame',loaderId:'new-loader'}}}:{executionContextId:1};}};
+ ui.list=async()=>{await pause('list');return[{type:'iframe',id:'new-chat',url:'http://hypeproof-chat.invalid/?id=new-chat'}];};
+ ui.workbench=async()=>{await pause('workbench');return{info:{id:workbench},evaluate:async()=>true};};ui.target=async()=>{attachments++;return target;};
+ return {ui,before,target,entered,release,get attachments(){return attachments;}};
+}
+test('one reload deadline rejects hung discovery and late workbench/CDP/DOM responses without later metadata or phase mutation',async t=>{
+ for(const waitAt of ['list','workbench','Page.getFrameTree','Page.createIsolatedWorld','visible'])await t.test(waitAt,async()=>{
+  const f=reloadDiscoveryFixture({waitAt}),pending=f.ui.reloadedChatReady(f.before,40);await f.entered;
+  await assert.rejects(pending,/fresh post-reload/);const phases=JSON.stringify(f.ui.phases);assert.equal(f.ui.phases.length,1);assert.equal(f.ui.phases[0].outcome,'timeout');assert.equal(f.target.ownedWorkbenchId,undefined);
+  f.release();await new Promise(resolve=>setImmediate(resolve));assert.equal(JSON.stringify(f.ui.phases),phases,'Late ignored await cannot publish readiness');assert.equal(f.target.ownedWorkbenchId,undefined,'No late frame ownership mutation');assert.equal(f.target.ownedFrameId,undefined);assert.equal(f.target.ownedLoaderId,undefined);
+ });
+});
+test('post-await clock rejection catches a fresh response after expiry even before the abort timer runs',async()=>{
+ const f=reloadDiscoveryFixture();f.ui.workbench=async()=>{const until=Date.now()+35;while(Date.now()<until){}return{info:{id:'owned-A'},evaluate:async()=>true};};
+ await assert.rejects(f.ui.reloadedChatReady(f.before,15),/fresh post-reload/);assert.equal(f.attachments,0);assert.equal(f.ui.phases.at(-1).outcome,'timeout');assert.equal(f.target.ownedWorkbenchId,undefined);
+});
+test('a fresh textarea in another workbench is never admitted or attached as the owned reload',async()=>{
+ const f=reloadDiscoveryFixture({workbench:'unrelated-B'});await assert.rejects(f.ui.reloadedChatReady(f.before,40),/fresh post-reload/);assert.equal(f.attachments,0);assert.equal(f.target.ownedWorkbenchId,undefined);assert.equal(f.ui.phases.at(-1).outcome,'timeout');
+});
+test('reload identity gate rejects another workbench even if a substituted identity method ignores its observation',async()=>{
+ const f=reloadDiscoveryFixture();f.ui.chatDocumentIdentity=async()=>({...f.before,workbench:'unrelated-B',loader:'fresh-loader'});await assert.rejects(f.ui.reloadedChatReady(f.before,20),/fresh post-reload/);assert.equal(f.ui.phases.at(-1).outcome,'timeout');
+});
+test('actual CDP observation abort removes pending requests without closing a preexisting shared target; late connection closes without registration',async()=>{
+ const OriginalWebSocket=globalThis.WebSocket,instances=[];
+ class FixtureSocket{
+  static OPEN=1;static CLOSED=3;
+  constructor(){this.readyState=0;instances.push(this);if(FixtureSocket.openImmediately)queueMicrotask(()=>this.open());}
+  open(){if(this.readyState===3)return;this.readyState=1;this.onopen?.();}
+  send(text){const row=JSON.parse(text);if(row.method==='Page.enable')queueMicrotask(()=>this.reply(row.id,{}));else this.last=row;}
+  reply(id,result){this.onmessage?.({data:JSON.stringify({id,result})});}
+  close(){if(this.readyState===3)return;this.readyState=3;this.closes=(this.closes??0)+1;this.onclose?.();}
+ }
+ globalThis.WebSocket=FixtureSocket;
+ try{
+  FixtureSocket.openImmediately=true;
+  const f=reloadDiscoveryFixture(),info={type:'iframe',id:'new-chat',url:'http://hypeproof-chat.invalid/?id=new-chat',webSocketDebuggerUrl:'ws://127.0.0.1:9777/owned'};f.ui.target=NativeUI.prototype.target.bind(f.ui);f.ui.list=async()=>[info];
+  const shared=await f.ui.target(info),socket=instances[0];assert.equal(shared.pending.size,0);
+  await assert.rejects(f.ui.reloadedChatReady(f.before,30),/fresh post-reload/);assert.equal(shared.pending.size,0,'Aborted request entries and their listeners must settle');assert.equal(socket.readyState,FixtureSocket.OPEN,'Do not close a preexisting owned shared target');assert.equal(f.ui.targets.get(info.id),shared);socket.reply(socket.last.id,{frameTree:{frame:{id:'late',loaderId:'late'}}});await new Promise(resolve=>setImmediate(resolve));assert.equal(shared.ownedWorkbenchId,undefined);assert.equal(shared.pending.size,0);f.ui.close();
+  FixtureSocket.openImmediately=false;
+  const late=reloadDiscoveryFixture();late.ui.target=NativeUI.prototype.target.bind(late.ui);late.ui.list=async()=>[info];
+  await assert.rejects(late.ui.reloadedChatReady(late.before,30),/fresh post-reload/);assert.equal(late.ui.targets.size,0);const pendingSocket=instances.at(-1);assert.equal(pendingSocket.readyState,FixtureSocket.CLOSED);pendingSocket.onopen?.();await new Promise(resolve=>setImmediate(resolve));assert.equal(late.ui.targets.size,0,'A late handshake cannot register a target');assert.equal(pendingSocket.closes,1);
+ }finally{globalThis.WebSocket=OriginalWebSocket;for(const socket of instances)socket.close();}
+});
+
+test('actual CDP retained control rescrolls only measured stable offscreen reflow, caps scrolls and retains one input triplet',async t=>{
+ const {createRequire}=await import('node:module'),require=createRequire(new URL('../package.json',import.meta.url)),{chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{
+  async function fixture(mode){
+   const page=await browser.newPage({viewport:{width:600,height:400}});await page.setContent('<style>html{scroll-behavior:smooth;overflow-anchor:none}body{margin:0}#growth{height:500px}#target{height:40px;width:110px}</style><div id="growth"></div><button id="target">PRIVATE_FIXTURE_TEXT</button>');
+   await page.evaluate(mode=>{window.fixtureScrolls=0;window.fixtureClicks=0;const e=document.querySelector('#target'),original=e.scrollIntoView;e.scrollIntoView=function(options){window.fixtureScrolls++;window.fixtureBehavior=options.behavior;if(mode!=='permanent')return original.call(this,options);};e.addEventListener('click',()=>window.fixtureClicks++);},mode);
+   const cdp=await page.context().newCDPSession(page),calls=[],ui=new NativeUI('http://127.0.0.1:9777');let growths=0;
+   const target={send:async(method,params)=>{calls.push({method,params});const result=await cdp.send(method,params);
+    if(method==='Runtime.callFunctionOn'&&result.result?.value?.scrolled&&(mode==='endless'||growths===0&&['late','replacement','occluded'].includes(mode))){growths++;await page.evaluate(mode=>{if(mode==='replacement'){const e=document.querySelector('#target');e.replaceWith(e.cloneNode(true));}else if(mode==='occluded'){const overlay=document.createElement('div');overlay.style='position:fixed;inset:0;background:white';document.body.append(overlay);}else document.querySelector('#growth').style.height=(parseFloat(getComputedStyle(document.querySelector('#growth')).height)+900)+'px';},mode);}
+    return result;
+   }};return{ui,page,calls,target};
+  }
+  const inputs=f=>f.calls.filter(c=>c.method==='Input.dispatchMouseEvent');
+  await t.test('late retained content growth needs one additional instant scroll and one click',async()=>{
+   const f=await fixture('late');try{await f.ui.press(f.target,'#target','synthetic late reflow',2200);const phase=f.ui.phases.at(-1);assert.equal(phase.scrolls,2);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),2);assert.equal(await f.page.evaluate(()=>window.fixtureBehavior),'instant');assert.equal(await f.page.evaluate(()=>window.fixtureClicks),1);assert.deepEqual(inputs(f).map(c=>c.params.type),['mouseMoved','mousePressed','mouseReleased']);assert.equal(f.calls.filter(c=>c.method==='Runtime.evaluate').length,1);assert.equal(phase.scroll_history.length,2);assert(phase.scroll_history[1].before.y>phase.scroll_history[0].after.y);assert(phase.layout_history.filter(x=>!x.inView).length>=2);assert(!JSON.stringify(f.ui.phases).includes('PRIVATE'));}finally{await f.page.close();}
+  });
+  for(const mode of ['endless','replacement','occluded','permanent'])await t.test(mode+' refuses without click or reselect',async()=>{
+   const f=await fixture(mode);try{await assert.rejects(f.ui.press(f.target,'#target','synthetic refusal',mode==='endless'?1800:400),/Not a usable visible native control/);const phase=f.ui.phases.at(-1);assert.equal(inputs(f).length,0);assert.equal(f.calls.filter(c=>c.method==='Runtime.evaluate').length,1);assert.equal(phase.scrolls,mode==='endless'?3:1);assert.equal(await f.page.evaluate(()=>window.fixtureScrolls),mode==='endless'?3:1);assert(phase.layout_history.length<=24);assert(phase.scroll_history.length<=3);assert(!JSON.stringify(f.ui.phases).includes('PRIVATE'));if(mode==='occluded')assert.equal(phase.state.topmost,false);if(mode==='permanent')assert.equal(phase.state.inView,false);if(mode==='replacement')assert.equal(phase.state.same,false);}finally{await f.page.close();}
+  });
+ }finally{await browser.close();}
+});
+
+// A Windows VK must never be interpreted as an Apple hardware scan code.
+test('native shortcuts use portable CDP key identity without platform-mismatched scan codes',async()=>{
+ const ui=new NativeUI('http://127.0.0.1:9777');
+ for(const [key,code,vk,modifiers] of [['a','KeyA',65,4],['a','KeyA',65,2],['F1','F1',112,0],['s','KeyS',83,4],['s','KeyS',83,2],['Enter','Enter',13,0],['Escape','Escape',27,0]]){
+  const events=[];await ui.key({send:async(method,args)=>events.push({method,...args})},key,modifiers);
+  assert.equal(events.length,2);
+  assert.deepEqual(events.map(e=>e.type),['rawKeyDown','keyUp']);
+  for(const e of events){assert.equal(e.method,'Input.dispatchKeyEvent');assert.equal(e.key,key);assert.equal(e.code,code);assert.equal(e.windowsVirtualKeyCode,vk);assert.equal('nativeVirtualKeyCode' in e,false);assert.equal('text' in e,false);}
+  assert.equal(events[0].modifiers,modifiers);assert.equal(events[1].modifiers,0);
+  assert.deepEqual(events[0].commands,key==='a'&&modifiers===4?['selectAll']:undefined);
+ }
+});
+
+ test('preview tab removal is not destination focus readiness and issues no second command',async()=>{
+  const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0,ready=false;
+  ui.editorState=async()=>state;ui.palette=async()=>{commands++;state={...before,focused:false};setTimeout(()=>{state=before;},60);};
+  const result=ui.closeOwnedPreview({},before,preview,500).then(()=>{ready=true;});await new Promise(r=>setTimeout(r,20));assert.equal(ready,false);await result;assert.equal(commands,1);
+ });
+ test('preview restoration refuses foreign editor and expires without more input',async()=>{
+  for(const change of [{focused:false},{resource:'foreign',editorLabel:'foreign'}]){
+   const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0;
+   ui.editorState=async()=>state;ui.palette=async()=>{commands++;state={...before,...change};};
+   await assert.rejects(ui.closeOwnedPreview({},before,preview,10),/Timed out/);assert.equal(commands,1);
+  }
+ });
+ test('chat destination requires original frame loader and document focus, not passive composer focus',async()=>{
+  const ui=new NativeUI('http://127.0.0.1:9777'),identity={workbench:'w',target:'t',frame:'f',loader:'l'};let focused=false;
+  const chat={ownedWorkbenchId:'w',info:{id:'t'},ownedFrameId:'f',ownedLoaderId:'l',evaluate:async()=>({documentFocused:focused,composerFocused:focused,activeTag:focused?'TEXTAREA':'BODY'})};ui.frame=async()=>chat;
+  const before={returnTarget:{kind:'chat',identity}};assert.equal(await ui.previewDestinationReady({},before),false);focused=true;assert.equal(await ui.previewDestinationReady({},before),true);
+  chat.evaluate=async()=>({documentFocused:true,composerFocused:false,activeTag:'BODY'});assert.equal(await ui.previewDestinationReady({},before),true,'passive reveal may restore document body without stealing composer focus');
+  chat.evaluate=async()=>({documentFocused:false,composerFocused:true,activeTag:'TEXTAREA'});assert.equal(await ui.previewDestinationReady({},before),false,'inner active textarea is insufficient when document lacks actual focus');
+  chat.ownedLoaderId='replacement';await assert.rejects(ui.previewDestinationReady({},before),/identity changed/);
+ });
+test('preview destination sampling shares one deadline even when a DOM observation hangs',async()=>{
+ const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let closed=false,commands=0;
+ ui.editorState=async()=>closed?new Promise(()=>{}):preview;ui.palette=async()=>{closed=true;commands++;};
+ const start=Date.now();await assert.rejects(ui.closeOwnedPreview({},before,preview,20),/Timed out/);assert(Date.now()-start<300);assert.equal(commands,1);
+});
+test('changed preview destination identity fails immediately without reselect or repeated sampling',async()=>{
+ const {before,preview}=previewCloseFixture(),ui=new NativeUI('http://127.0.0.1:9777');let state=preview,commands=0,samples=0;
+ ui.editorState=async()=>state;ui.palette=async()=>{commands++;state=before;};ui.previewDestinationReady=async()=>{samples++;throw Object.assign(Error('Preview destination identity changed'),{identityChanged:true});};
+ await assert.rejects(ui.closeOwnedPreview({},before,preview),/identity changed/);assert.equal(commands,1);assert.equal(samples,1);
+});
+test('actual recycled quick-list row refuses changed semantic command without clicking or reselection',async()=>{
+ const {createRequire}=await import('node:module'),require=createRequire(new URL('../package.json',import.meta.url)),{chromium}=require('playwright');const browser=await chromium.launch({headless:true});
+ try{const page=await browser.newPage();await page.setContent('<div class="quick-input-list"><div class="monaco-list-row"><span class="label-name">Expected command</span></div></div>');const cdp=await page.context().newCDPSession(page),ui=new NativeUI('http://127.0.0.1:9777'),calls=[];let sampled=false;
+ const target={send:async(method,params)=>{calls.push(method);const result=await cdp.send(method,params);if(method==='Runtime.callFunctionOn'&&!sampled){sampled=true;await page.locator('.label-name').evaluate(e=>{e.textContent='Other private command';});}return result;}};
+ await assert.rejects(ui.press(target,'.quick-input-list .monaco-list-row:nth-child(1)','Expected command',1000),/Not a usable/);assert.equal(calls.filter(x=>x==='Runtime.evaluate').length,1);assert.equal(calls.filter(x=>x==='Input.dispatchMouseEvent').length,0);assert.equal(ui.phases.at(-1).state.semantic_match,false);assert(!JSON.stringify(ui.phases).includes('Other private command'));
+ }finally{await browser.close();}
 });

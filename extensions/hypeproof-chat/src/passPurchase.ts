@@ -34,6 +34,8 @@ export interface PendingOrder {
   service: string;
   /** The seat was handed over once. The record stays until the activity is actually entered, so a lost code can be replaced. */
   claimed?: boolean;
+  /** Signed-in purchases are activated through the account, never anonymous claim. */
+  accountOwned?: boolean;
 }
 export type OrderState = "pending" | "confirming" | "paid" | "failed" | "refunded" | "expired";
 /** What the start page may show. No secret, no code. */
@@ -115,7 +117,7 @@ export function restorePendingOrder(raw: string | undefined, service: string, si
     const v = JSON.parse(raw);
     if (!isRecord(v) || v.service !== service) return null;
     const order = parseOrder({ order_id: v.id, order_secret: v.secret, amount: v.amount, label: v.label, expires_at: v.expiresAt, checkout_url: v.checkoutUrl }, String(v.productId ?? ""), service, siteBase);
-    return order && order !== "bad_checkout" ? { ...order, ...(v.claimed === true ? { claimed: true } : {}) } : null;
+    return order && order !== "bad_checkout" ? { ...order, ...(v.claimed === true ? { claimed: true } : {}), ...(v.accountOwned === true ? { accountOwned: true } : {}) } : null;
   } catch { return null; }
 }
 
@@ -126,9 +128,9 @@ export async function fetchProducts(proxyUrl: string): Promise<PassProduct[] | n
   } catch { return null; }
 }
 
-export async function createOrder(proxyUrl: string, productId: string, siteBase: string): Promise<PendingOrder | "bad_checkout" | null> {
+export async function createOrder(proxyUrl: string, productId: string, siteBase: string, accountToken?: string): Promise<PendingOrder | "bad_checkout" | null> {
   try {
-    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ product_id: productId }) });
+    const r = await fetch(`${base(proxyUrl)}/purchase/orders`, { method: "POST", headers: { "content-type": "application/json", ...(accountToken ? { authorization: `Bearer ${accountToken}` } : {}) }, body: JSON.stringify({ product_id: productId }), redirect: "error" });
     return r.status === 201 ? parseOrder(await r.json(), productId, proxyUrl, siteBase) : null;
   } catch { return null; }
 }
