@@ -134,7 +134,7 @@ html, body, #root {
 .hps-edit-actions button { min-width: 44px; min-height: 44px; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--vscode-button-secondaryBackground, #3a3d41); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .hps-edit-actions .hps-edit-save { background: var(--vscode-button-background, #5b5bff); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
 .hps-edit-actions .hps-edit-save:disabled { opacity: .5; cursor: default; }
-.hps-edit-image { position: relative; display: inline-block; }
+.hps-edit-image { position: relative; display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; flex-shrink: 0; }
 .hps-edit-image button { position: absolute; top: 0; right: 0; min-width: 44px; min-height: 44px; border: 0; background: transparent; color: #fff; text-shadow: 0 0 3px #000; font-size: 18px; cursor: pointer; }
 
 /* #173 — Citation chips under assistant messages. 4 trust tiers drive
