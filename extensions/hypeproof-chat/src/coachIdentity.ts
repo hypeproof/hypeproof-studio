@@ -116,10 +116,16 @@ export const approvalFallbackTitle = (name: string): string => `${asSubject(name
 export const shellApprovalTitle = (name: string): string => `${asSubject(name)} 명령을 실행하려고 해요:`;
 export const browserApprovalTitle = (name: string): string => `${asSubject(name)} 브라우저를 열려고 해요:`;
 
-/** #476 in-panel notice when the SDK runtime fell back to the proxy. */
-export const coachDegradedNotice = (name: string): string =>
+/**
+ * #476 in-panel notice when the SDK runtime fell back to the proxy.
+ * REQ-M45 — a solo seat (trial, personal, pass) has no staff to call, so its next
+ * step is the installer that seeds the SDK binary. The classroom wording is unchanged.
+ */
+export const coachDegradedNotice = (name: string, opts: { solo?: boolean } = {}): string =>
   `지금 ${asTopic(name)} 파일 저장·명령 실행 도구 없이 돌고 있어요 — 만들기와 미리보기는 그대로 되지만, ` +
-  "저장소·배포는 이 상태에서 안 돼요. 스태프를 불러주세요.";
+  (opts.solo
+    ? "저장소·배포는 이 상태에서 안 돼요. hypeproof-ai.xyz/studio/install 의 설치 도구로 다시 설치하면 모두 쓸 수 있어요."
+    : "저장소·배포는 이 상태에서 안 돼요. 스태프를 불러주세요.");
 
 /** #308 page-attach inline notice. */
 export const pageAttachedNotice = (name: string, withShot: boolean, label: string): string =>

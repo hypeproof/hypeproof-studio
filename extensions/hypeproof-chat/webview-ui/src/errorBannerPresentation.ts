@@ -22,16 +22,20 @@ export function errorBannerPresentation(message: string): ErrorBannerPresentatio
   // An ended trial is also account state. Checked before the connection frame because
   // "체험 시간이 끝났습니다" contains "시간" and used to read as a lost connection.
   const isTrialEnd = !isPass && TRIAL_END.test(message);
+  // REQ-M45 — the app lacks the Agent SDK binary: an install step, not a lock or a fault.
+  const isInstall = /설치 도구/.test(message);
   return {
-    icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️",
+    icon: isPass ? "🎟️" : isTrialEnd ? "⏳" : isInstall ? "🧰" : isAuth ? "🔒" : isConn ? "🔌" : "⚠️",
     title: isPass
       ? "이용권을 더 쓸 수 없어요"
       : isTrialEnd
         ? "체험이 끝났어요"
-        : isAuth
-          ? "잠시 멈춰요"
-          : isConn
-            ? "연결이 끊겼어요"
-            : "문제가 생겼어요",
+        : isInstall
+          ? "설치를 마무리해야 해요"
+          : isAuth
+            ? "잠시 멈춰요"
+            : isConn
+              ? "연결이 끊겼어요"
+              : "문제가 생겼어요",
   };
 }
