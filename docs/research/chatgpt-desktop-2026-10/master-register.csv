@@ -1,0 +1,995 @@
+id,orig_id,domain,kind,title,verdict,surface,priority,traces_to,depends_on,merged_into,source_file
+CGP-CHAT-001,CGP-CHAT-01,CHAT,feature,"Auto-growing composer, Enter/Shift+Enter",ALREADY,Studio,,TUX-CHAT-03,,,chat-core.md:57
+CGP-CHAT-002,CGP-CHAT-02,CHAT,feature,Stop response + stop confirmation,ALREADY,Studio,,REQ-C6; TUX-CHAT-04,,,chat-core.md:58
+CGP-CHAT-003,CGP-CHAT-03,CHAT,feature,Queue messages while responding,ALREADY,Studio,,REQ-C16; UX-QUEUE-01; TUX-CHAT-05,,,chat-core.md:59
+CGP-CHAT-004,CGP-CHAT-04,CHAT,feature,Steer (send into a running turn),ADAPT,Studio,P1,REQ-C16,,,chat-core.md:60
+CGP-CHAT-005,CGP-CHAT-05,CHAT,feature,Answer now / skip reasoning,DEFER,Studio,,,,,chat-core.md:61
+CGP-CHAT-006,CGP-CHAT-06,CHAT,feature,"Attach menu: files, photos, folders, library, browser tabs",ADAPT,Studio,P1,REQ-C10; TUX-CHAT-06; AE-02,,,chat-core.md:62
+CGP-CHAT-007,CGP-CHAT-07,CHAT,feature,Large paste becomes an attachment,ADAPT,Studio,P2,,,,chat-core.md:63
+CGP-CHAT-008,CGP-CHAT-08,CHAT,feature,@-mention picker,ADAPT,Studio,P2,,,,chat-core.md:64
+CGP-CHAT-009,CGP-CHAT-09,CHAT,feature,Slash command menu,DEFER,Both,,,,,chat-core.md:65
+CGP-CHAT-010,CGP-CHAT-10,CHAT,feature,Rich-text formatting toolbar in composer,REJECT,Studio,,,,,chat-core.md:66
+CGP-CHAT-011,CGP-CHAT-11,CHAT,feature,Prompt autocompletion (Tab to accept),REJECT,Studio,,,,,chat-core.md:67
+CGP-CHAT-012,CGP-CHAT-12,CHAT,feature,Dictation (speech to text in composer),ADAPT,Studio,P2,VO-36,,CGP-VOICE-017,chat-core.md:68
+CGP-CHAT-013,CGP-CHAT-13,CHAT,feature,Audio attachment recording,DEFER,Studio,,,,,chat-core.md:69
+CGP-CHAT-014,CGP-CHAT-14,CHAT,feature,Sketch attachment,ADAPT,Studio,P2,,,,chat-core.md:70
+CGP-CHAT-015,CGP-CHAT-15,CHAT,feature,Screenshot / appshot capture,ALREADY,Studio,,REQ-N3,,CGP-VOICE-015,chat-core.md:71
+CGP-CHAT-016,CGP-CHAT-16,CHAT,feature,Context-window meter + compaction,ADAPT,Studio,P1,,,,chat-core.md:72
+CGP-CHAT-017,CGP-CHAT-17,CHAT,feature,Status / usage popover,ALREADY,Both,,REQ-L9,,CGP-SHELL-069,chat-core.md:73
+CGP-CHAT-018,CGP-CHAT-18,CHAT,feature,Submit-blocked reasons,ALREADY,Studio,,TUX-CHAT-02; AE-12; AE-28; REQ-C13,,,chat-core.md:74
+CGP-CHAT-019,CGP-CHAT-19,CHAT,feature,Composer tips (rotating TIP),ADAPT,Both,P2,TUX-CHAT-01,,,chat-core.md:75
+CGP-CHAT-020,CGP-CHAT-20,CHAT,feature,Draft recovery,ALREADY,Studio,,,,,chat-core.md:76
+CGP-CHAT-021,CGP-CHAT-21,CHAT,feature,Model picker,ALREADY,Both,,REQ-M36; AE-25; REQ-K1,,,chat-core.md:82
+CGP-CHAT-022,CGP-CHAT-22,CHAT,feature,Reasoning-effort picker,ALREADY,Both,,REQ-M40,,,chat-core.md:83
+CGP-CHAT-023,CGP-CHAT-23,CHAT,feature,"""Think"" toggle / ""Think longer"" retry",ALREADY,Studio,,REQ-M40,,,chat-core.md:84
+CGP-CHAT-024,CGP-CHAT-24,CHAT,feature,Fast mode (speed × usage),DEFER,Studio,,REQ-M11,,,chat-core.md:85
+CGP-CHAT-025,CGP-CHAT-25,CHAT,feature,Model change / reroute notice,ALREADY,Studio,,REQ-M41; REQ-M42; AE-29; AE-33,,,chat-core.md:86
+CGP-CHAT-026,CGP-CHAT-26,CHAT,feature,Auto model-upgrade banner,REJECT,Studio,,AE-33,,,chat-core.md:87
+CGP-CHAT-027,CGP-CHAT-27,CHAT,feature,Permissive / cyber mode (Daybreak),REJECT,None,,,,,chat-core.md:88
+CGP-CHAT-028,CGP-CHAT-28,CHAT,feature,Usage limit reached,ALREADY,Both,,AB-01; REQ-L8,,,chat-core.md:89
+CGP-CHAT-029,CGP-CHAT-29,CHAT,feature,Upsell surfaces in chat,REJECT,None,,,,,chat-core.md:90
+CGP-CHAT-030,CGP-CHAT-30,CHAT,feature,Plan mode,ADAPT,Studio,P1,AE-36,,,chat-core.md:91
+CGP-CHAT-031,CGP-CHAT-31,CHAT,feature,Goal mode (autonomous pursuit),ALREADY,Studio,,AE-01,,CGP-AGENT-013,chat-core.md:92
+CGP-CHAT-032,CGP-CHAT-32,CHAT,feature,Personality switch,ALREADY,Chalk,,REQ-F1; AE-07,,,chat-core.md:93
+CGP-CHAT-033,CGP-CHAT-33,CHAT,feature,Per-chat memory switches,ALREADY,Studio,,,,CGP-KNOW-046,chat-core.md:94
+CGP-CHAT-034,CGP-CHAT-34,CHAT,feature,Permissions / full-access dropdown,ALREADY,Service,,REQ-M1; AE-09,,CGP-AGENT-001,chat-core.md:95
+CGP-CHAT-035,CGP-CHAT-35,CHAT,feature,Lockdown mode per chat,ALREADY,Service,,REQ-M1; REQ-M2,,,chat-core.md:96
+CGP-CHAT-036,CGP-CHAT-36,CHAT,feature,Temporary chat,REJECT,Studio,,AE-39,,CGP-KNOW-047,chat-core.md:97
+CGP-CHAT-037,CGP-CHAT-37,CHAT,feature,Locked chats (PIN-hidden),REJECT,None,,REQ-M37,DEC-34,,chat-core.md:98
+CGP-CHAT-038,CGP-CHAT-38,CHAT,feature,Markdown rendering,ALREADY,Studio,,TUX-CHAT-15,,,chat-core.md:104
+CGP-CHAT-039,CGP-CHAT-39,CHAT,feature,"Code block: copy, language, wrap, download",ADAPT,Studio,P1,TUX-CHAT-12; AE-06,,,chat-core.md:105
+CGP-CHAT-040,CGP-CHAT-40,CHAT,feature,Math (LaTeX) rendering + graphs,ADAPT,Studio,P2,,DEC-34,,chat-core.md:106
+CGP-CHAT-041,CGP-CHAT-41,CHAT,feature,LaTeX document editor / PDF compile,REJECT,None,,,,,chat-core.md:107
+CGP-CHAT-042,CGP-CHAT-42,CHAT,feature,Mermaid diagrams,DEFER,Studio,,,,,chat-core.md:108
+CGP-CHAT-043,CGP-CHAT-43,CHAT,feature,Charts from data (chart/table toggle),DEFER,Studio,,,,,chat-core.md:109
+CGP-CHAT-044,CGP-CHAT-44,CHAT,feature,In-chat code execution console,ALREADY,Studio,,REQ-D1; REQ-D2; REQ-N1,,,chat-core.md:110
+CGP-CHAT-045,CGP-CHAT-45,CHAT,feature,"Citations: hover card, sources panel by category",ALREADY,Studio,P2,TUX-CHAT-13,,,chat-core.md:111
+CGP-CHAT-046,CGP-CHAT-46,CHAT,feature,Thinking / worked-for timing,ALREADY,Studio,P2,REQ-M26; REQ-M27; TUX-CHAT-16,,,chat-core.md:112
+CGP-CHAT-047,CGP-CHAT-47,CHAT,feature,Tool activity rows,ALREADY,Studio,,REQ-C17; AE-04,,,chat-core.md:113
+CGP-CHAT-048,CGP-CHAT-48,CHAT,feature,Live-region announcements,ADOPT,Studio,P0,REQ-C14,,,chat-core.md:114
+CGP-CHAT-049,CGP-CHAT-49,CHAT,feature,Stream reconnect / server busy,ALREADY,Studio,,REQ-M39; REQ-C8; TUX-CHAT-14,,,chat-core.md:115
+CGP-CHAT-050,CGP-CHAT-50,CHAT,feature,Turn render error isolation,ADAPT,Studio,P2,REQ-C7; TUX-COND-04,,,chat-core.md:116
+CGP-CHAT-051,CGP-CHAT-51,CHAT,feature,Safety buffering wait,ALREADY,Studio,,REQ-M26; REQ-O2,,,chat-core.md:117
+CGP-CHAT-052,CGP-CHAT-52,CHAT,feature,Moderation notices,ALREADY,Service,,REQ-O1; REQ-C14,,,chat-core.md:118
+CGP-CHAT-053,CGP-CHAT-53,CHAT,feature,Inline question / option picker,ADAPT,Studio,P0,CC-R1,,,chat-core.md:119
+CGP-CHAT-054,CGP-CHAT-54,CHAT,feature,Tool approval / connector consent card,ALREADY,Studio,,REQ-E1; AE-13; AE-19; TUX-HOST-02,,,chat-core.md:120
+CGP-CHAT-055,CGP-CHAT-55,CHAT,feature,Subagent activity,DEFER,Studio,,REQ-M22,,CGP-AGENT-012,chat-core.md:121
+CGP-CHAT-056,CGP-CHAT-56,CHAT,feature,Sectioned conversation,ADAPT,Both,P2,AE-01,,,chat-core.md:122
+CGP-CHAT-057,CGP-CHAT-57,CHAT,feature,Writing block (email draft),DEFER,None,,,,,chat-core.md:123
+CGP-CHAT-058,CGP-CHAT-58,CHAT,feature,Quiz / flashcards / poll in chat,DEFER,None,,,,CGP-LEARN-017,chat-core.md:124
+CGP-CHAT-059,CGP-CHAT-59,CHAT,feature,Translation block,DEFER,None,,,,,chat-core.md:125
+CGP-CHAT-060,CGP-CHAT-60,CHAT,feature,CSV preview in user message,DEFER,Studio,,,,,chat-core.md:126
+CGP-CHAT-061,CGP-CHAT-61,CHAT,feature,Copy response,ALREADY,Studio,,,,,chat-core.md:132
+CGP-CHAT-062,CGP-CHAT-62,CHAT,feature,Copy whole chat as Markdown,ADAPT,Studio,P2,AE-39,,,chat-core.md:133
+CGP-CHAT-063,CGP-CHAT-63,CHAT,feature,Thumbs up/down + reason chips,ADAPT,Studio,P1,REQ-H1,,,chat-core.md:134
+CGP-CHAT-064,CGP-CHAT-64,CHAT,feature,Regenerate + version pager,ADAPT,Studio,P1,REQ-C5; TUX-CHAT-10; AE-35,,,chat-core.md:135
+CGP-CHAT-065,CGP-CHAT-65,CHAT,feature,Edit a sent message and resend,ADAPT,Studio,P0,,,,chat-core.md:136
+CGP-CHAT-066,CGP-CHAT-66,CHAT,feature,Fork / branch chat from a turn,DEFER,Studio,,,DEC-34,,chat-core.md:137
+CGP-CHAT-067,CGP-CHAT-67,CHAT,feature,Read aloud,ADAPT,Studio,P1,,,,chat-core.md:138
+CGP-CHAT-068,CGP-CHAT-68,CHAT,feature,Emoji reactions,REJECT,None,,,,,chat-core.md:139
+CGP-CHAT-069,CGP-CHAT-69,CHAT,feature,Favorites / save response,ALREADY,Studio,,,,,chat-core.md:140
+CGP-CHAT-070,CGP-CHAT-70,CHAT,feature,Share prompt / response / social,REJECT,Both,,AE-22,,,chat-core.md:141
+CGP-CHAT-071,CGP-CHAT-71,CHAT,feature,Follow-up suggestions,ALREADY,Studio,,CC-R1; TUX-COND-05,,,chat-core.md:142
+CGP-CHAT-072,CGP-CHAT-72,CHAT,feature,Select text in answer → ask / comment / edit,ADAPT,Studio,P1,,,,chat-core.md:143
+CGP-CHAT-073,CGP-CHAT-73,CHAT,feature,Response annotations,DEFER,None,,,,,chat-core.md:144
+CGP-CHAT-074,CGP-CHAT-74,CHAT,feature,Memory / skill citation chips,ADAPT,Studio,P2,,,CGP-KNOW-044,chat-core.md:145
+CGP-CHAT-075,CGP-CHAT-75,CHAT,feature,Hook / auto-review stats,REJECT,None,,,,CGP-AGENT-010,chat-core.md:146
+CGP-CHAT-076,CGP-CHAT-76,CHAT,feature,"Chat list: new, rename, pin, auto-title",ALREADY,Studio,,CC-R1,,,chat-core.md:152
+CGP-CHAT-077,CGP-CHAT-77,CHAT,feature,Archive / delete / unarchive,ADAPT,Studio,P2,TUX-CHAT-08,,,chat-core.md:153
+CGP-CHAT-078,CGP-CHAT-78,CHAT,feature,Unread / status per chat,DEFER,Studio,,,,CGP-AGENT-046,chat-core.md:154
+CGP-CHAT-079,CGP-CHAT-79,CHAT,feature,Global chat search,ADAPT,Studio,P2,,,,chat-core.md:155
+CGP-CHAT-080,CGP-CHAT-80,CHAT,feature,Find in chat (regex),ADAPT,Studio,P2,,,,chat-core.md:156
+CGP-CHAT-081,CGP-CHAT-81,CHAT,feature,User-message navigation rail + bookmarks,ADAPT,Studio,P2,,,,chat-core.md:157
+CGP-CHAT-082,CGP-CHAT-82,CHAT,feature,Scroll-to-bottom / reading anchor,ALREADY,Studio,,,,,chat-core.md:158
+CGP-CHAT-083,CGP-CHAT-83,CHAT,feature,Side chat (temporary),DEFER,Studio,,,,,chat-core.md:159
+CGP-CHAT-084,CGP-CHAT-84,CHAT,feature,Quick chat / popout hotkey window / floating composer,REJECT,None,,,DEC-34,,chat-core.md:160
+CGP-CHAT-085,CGP-CHAT-85,CHAT,feature,Undo toasts,ADAPT,Studio,P2,,,,chat-core.md:161
+CGP-CHAT-086,CGP-CHAT-86,CHAT,feature,Keyboard shortcuts dialog,ADAPT,Studio,P2,,,,chat-core.md:162
+CGP-CHAT-087,CGP-CHAT-87,CHAT,feature,Home hero + starter suggestions,ALREADY,Both,,TUX-CHAT-01,,,chat-core.md:163
+CGP-CHAT-088,CGP-CHAT-88,CHAT,feature,Artifact templates on home,REJECT,None,,,,,chat-core.md:164
+CGP-CHAT-089,CGP-CHAT-89,CHAT,feature,Share dialog with roles / live notes / facepile,DEFER,Both,,AE-22,,CGP-KNOW-008,chat-core.md:165
+CGP-CHAT-090,CGP-CHAT-90,CHAT,feature,Feedback dialog with diagnostics,ALREADY,Studio,,REQ-H1; REQ-H4; TUX-HOST-05,,,chat-core.md:166
+CGP-CHAT-091,CGP-CHAT-91,CHAT,feature,Value survey / streak counter,REJECT,None,,,,,chat-core.md:167
+CGP-CHAT-092,CGP-CHAT-92,CHAT,feature,Emoji / symbol picker for chats,DEFER,Studio,,,,CGP-KNOW-013,chat-core.md:168
+CGP-CHAT-093,CGP-CHAT-93,CHAT,feature,Desktop pet,REJECT,None,,REQ-M33,,CGP-SHELL-039,chat-core.md:169
+CGP-CHAT-094,CGP-CHAT-94,CHAT,feature,Run location / worktree / remote host,REJECT,None,,REQ-A1; REQ-P5,,CGP-AGENT-020,chat-core.md:170
+CGP-CHAT-095,CGP-CHAT-95,CHAT,feature,"Thread header actions (deeplink, new window, continue in)",REJECT,None,,,,,chat-core.md:171
+CGP-CHAT-096,CGP-CHAT-96,CHAT,feature,Commerce in composer,REJECT,None,,,,CGP-SHELL-090,chat-core.md:172
+CGP-CHAT-097,CGP-CHAT-97,CHAT,feature,Replay (batch result banner),REJECT,None,,,,,chat-core.md:173
+CGP-CHAT-098,CGP-CHAT-98,CHAT,feature,Elicitation page (out-of-app answer),DEFER,None,,,,,chat-core.md:174
+CGP-CHAT-099,CGP-CHAT-99,CHAT,feature,IDE context indicator,ALREADY,Studio,,AE-02; AE-41,,,chat-core.md:175
+CGP-CHAT-100,CGP-CHAT-100,CHAT,feature,"Diff stage/revert, PR from chat",ALREADY,Studio,,AE-15; REQ-P3,,CGP-AGENT-053,chat-core.md:176
+CGP-KNOW-001,CGP-KNOW-01,KNOW,feature,Projects index,ADAPT,Studio,P2,,,,projects-library-memory.md:38
+CGP-KNOW-002,CGP-KNOW-02,KNOW,feature,Project home: Chats / Sources tabs,ADAPT,Studio,P2,,,,projects-library-memory.md:39
+CGP-KNOW-003,CGP-KNOW-03,KNOW,feature,Project instructions,ALREADY,Both,,AE-01; BASE-04,,,projects-library-memory.md:40
+CGP-KNOW-004,CGP-KNOW-04,KNOW,feature,"Project sources (files, URL, Library)",ADAPT,Studio,P1,,,,projects-library-memory.md:41
+CGP-KNOW-005,CGP-KNOW-05,KNOW,feature,"App connector sources (Google Drive, Slack, Linear)",DEFER,Studio,,,,,projects-library-memory.md:42
+CGP-KNOW-006,CGP-KNOW-06,KNOW,feature,Saved responses as project sources,ADAPT,Studio,P1,,,,projects-library-memory.md:43
+CGP-KNOW-007,CGP-KNOW-07,KNOW,feature,Project memory scope,ADAPT,Both,P0,US-10,,,projects-library-memory.md:44
+CGP-KNOW-008,CGP-KNOW-08,KNOW,feature,Project sharing and roles,DEFER,Both,,RUN-03; BASE-01,DEC-33,,projects-library-memory.md:45
+CGP-KNOW-009,CGP-KNOW-09,KNOW,feature,Sharing-time privacy consequences,ADAPT,Both,P0,,,,projects-library-memory.md:46
+CGP-KNOW-010,CGP-KNOW-10,KNOW,feature,Share chat outside project,ADAPT,Studio,P1,,,,projects-library-memory.md:47
+CGP-KNOW-011,CGP-KNOW-11,KNOW,feature,Project invitation accept/decline,ALREADY,Both,,RUN-03,,,projects-library-memory.md:48
+CGP-KNOW-012,CGP-KNOW-12,KNOW,feature,Report project,DEFER,Studio,,,,,projects-library-memory.md:49
+CGP-KNOW-013,CGP-KNOW-13,KNOW,feature,"Project appearance (icon, colour)",ADAPT,Studio,P2,,DEC-34,,projects-library-memory.md:50
+CGP-KNOW-014,CGP-KNOW-14,KNOW,feature,Move chat between projects,ADAPT,Studio,P2,,,,projects-library-memory.md:51
+CGP-KNOW-015,CGP-KNOW-15,KNOW,feature,Pin projects/chats (max 10),DEFER,Studio,,,,,projects-library-memory.md:52
+CGP-KNOW-016,CGP-KNOW-16,KNOW,feature,Project file limit with upgrade,REJECT,Studio,,AB-01,,,projects-library-memory.md:53
+CGP-KNOW-017,CGP-KNOW-17,KNOW,feature,Local project from folders,ALREADY,Studio,,REQ-P5,,,projects-library-memory.md:54
+CGP-KNOW-018,CGP-KNOW-18,KNOW,feature,Folder trust consent,ADAPT,Studio,P1,REQ-E1,,,projects-library-memory.md:55
+CGP-KNOW-019,CGP-KNOW-19,KNOW,feature,Remote-device projects,REJECT,Studio,,,,CGP-AGENT-059,projects-library-memory.md:56
+CGP-KNOW-020,CGP-KNOW-20,KNOW,feature,Library home,ADAPT,Studio,P2,,,,projects-library-memory.md:62
+CGP-KNOW-021,CGP-KNOW-21,KNOW,feature,"Provenance filters (Generated vs Uploaded, type)",ADAPT,Studio,P1,,,,projects-library-memory.md:63
+CGP-KNOW-022,CGP-KNOW-22,KNOW,feature,Create new document/note/presentation/spreadsheet/image,DEFER,Studio,,,,,projects-library-memory.md:64
+CGP-KNOW-023,CGP-KNOW-23,KNOW,feature,Notes editor,DEFER,Studio,,,,,projects-library-memory.md:65
+CGP-KNOW-024,CGP-KNOW-24,KNOW,feature,Trash with 30-day restore,ADAPT,Studio,P0,US-10,,,projects-library-memory.md:66
+CGP-KNOW-025,CGP-KNOW-25,KNOW,feature,"Folders, move, favorites",DEFER,Studio,,,,,projects-library-memory.md:67
+CGP-KNOW-026,CGP-KNOW-26,KNOW,feature,Library picker into chat/project,ADAPT,Studio,P1,,,CGP-CHAT-006,projects-library-memory.md:68
+CGP-KNOW-027,CGP-KNOW-27,KNOW,feature,Cloud storage providers and Google export,DEFER,Studio,,,,,projects-library-memory.md:69
+CGP-KNOW-028,CGP-KNOW-28,KNOW,feature,"File preview with ""Ask about this file""",ADAPT,Studio,P1,,,,projects-library-memory.md:70
+CGP-KNOW-029,CGP-KNOW-29,KNOW,feature,File info and related chats,ADAPT,Studio,P2,,,,projects-library-memory.md:71
+CGP-KNOW-030,CGP-KNOW-30,KNOW,feature,Version history with restore,ADAPT,Studio,P0,CR-77,,,projects-library-memory.md:72
+CGP-KNOW-031,CGP-KNOW-31,KNOW,feature,Flashcards,DEFER,Studio,,,,CGP-LEARN-017,projects-library-memory.md:73
+CGP-KNOW-032,CGP-KNOW-32,KNOW,feature,Library sharing and access requests,ALREADY,Chalk,,,,,projects-library-memory.md:74
+CGP-KNOW-033,CGP-KNOW-33,KNOW,feature,Shared-content training/memory disclosure,ADAPT,Both,P1,,,,projects-library-memory.md:75
+CGP-KNOW-034,CGP-KNOW-34,KNOW,feature,File invitations from people,ALREADY,Studio,,,,,projects-library-memory.md:76
+CGP-KNOW-035,CGP-KNOW-35,KNOW,feature,Storage almost-full / full banner,ADAPT,Studio,P2,REQ-I5,,,projects-library-memory.md:77
+CGP-KNOW-036,CGP-KNOW-36,KNOW,feature,Daily attachment quota,ALREADY,Studio,,AB-01; US-11,,,projects-library-memory.md:78
+CGP-KNOW-037,CGP-KNOW-37,KNOW,feature,Upload error taxonomy,ADAPT,Studio,P0,,,,projects-library-memory.md:79
+CGP-KNOW-038,CGP-KNOW-38,KNOW,feature,Downloads manager (built-in browser),ADAPT,Studio,P2,,,,projects-library-memory.md:80
+CGP-KNOW-039,CGP-KNOW-39,KNOW,feature,Find in files and diff vs HEAD/index,ALREADY,Studio,,CR-77,,,projects-library-memory.md:81
+CGP-KNOW-040,CGP-KNOW-40,KNOW,feature,Memory master controls,ADAPT,Both,P0,,,,projects-library-memory.md:87
+CGP-KNOW-041,CGP-KNOW-41,KNOW,feature,Saved-memories manager,ADAPT,Studio,P0,,,,projects-library-memory.md:88
+CGP-KNOW-042,CGP-KNOW-42,KNOW,feature,Memory capacity and upsell,ADAPT,Studio,P2,,,,projects-library-memory.md:89
+CGP-KNOW-043,CGP-KNOW-43,KNOW,feature,"""About You"" memory summary",ADAPT,Studio,P1,SX-01,,,projects-library-memory.md:90
+CGP-KNOW-044,CGP-KNOW-44,KNOW,feature,Memory citations on answers,ADAPT,Studio,P0,,,,projects-library-memory.md:91
+CGP-KNOW-045,CGP-KNOW-45,KNOW,feature,Memory write indicator,ADAPT,Studio,P0,,,,projects-library-memory.md:92
+CGP-KNOW-046,CGP-KNOW-46,KNOW,feature,Per-chat memory switches (/memories),ADAPT,Studio,P1,,,,projects-library-memory.md:93
+CGP-KNOW-047,CGP-KNOW-47,KNOW,feature,Temporary chat,ADAPT,Studio,P2,,DEC-34,,projects-library-memory.md:94
+CGP-KNOW-048,CGP-KNOW-48,KNOW,feature,Agent memory as files / host-local memory,ADAPT,Studio,P1,,,,projects-library-memory.md:95
+CGP-KNOW-049,CGP-KNOW-49,KNOW,feature,Memory onboarding and consent,ADAPT,Both,P0,,,,projects-library-memory.md:96
+CGP-KNOW-050,CGP-KNOW-50,KNOW,feature,Personal custom instructions,ADAPT,Studio,P2,AE-01,,,projects-library-memory.md:97
+CGP-KNOW-051,CGP-KNOW-51,KNOW,feature,Memory excluded from shares,ADAPT,Both,P0,,,,projects-library-memory.md:98
+CGP-KNOW-052,CGP-KNOW-52,KNOW,feature,Computer history (Chronicle),REJECT,None,,,,,projects-library-memory.md:99
+CGP-KNOW-053,CGP-KNOW-53,KNOW,feature,Locked chats (PIN),DEFER,Studio,,REQ-Q2,,CGP-CHAT-037,projects-library-memory.md:100
+CGP-KNOW-054,CGP-KNOW-54,KNOW,feature,"Domain memories (Health, finance)",REJECT,None,,,,,projects-library-memory.md:101
+CGP-KNOW-055,CGP-KNOW-55,KNOW,feature,Legacy vs improved memory switch,REJECT,None,,,,,projects-library-memory.md:102
+CGP-KNOW-056,CGP-KNOW-56,KNOW,feature,Memory shared with connected apps,REJECT,None,,,,,projects-library-memory.md:103
+CGP-KNOW-057,CGP-KNOW-57,KNOW,feature,Writing style,REJECT,None,,,DEC-34,,projects-library-memory.md:104
+CGP-KNOW-058,CGP-KNOW-58,KNOW,feature,Work preferences,ALREADY,Studio,,REQ-E1,,,projects-library-memory.md:105
+CGP-KNOW-059,CGP-KNOW-59,KNOW,feature,"Personal vault (env vars, network secrets)",ALREADY,Service,,CR-29,,,projects-library-memory.md:106
+CGP-KNOW-060,CGP-KNOW-60,KNOW,feature,Public profile identity,REJECT,None,,,,,projects-library-memory.md:112
+CGP-KNOW-061,CGP-KNOW-61,KNOW,feature,Activity insights and token stats,REJECT,None,,SX-01,,,projects-library-memory.md:113
+CGP-KNOW-062,CGP-KNOW-62,KNOW,feature,Profile share card and visibility,REJECT,None,,,DEC-34,,projects-library-memory.md:114
+CGP-KNOW-063,CGP-KNOW-63,KNOW,feature,Showcase of sites and skills,ADAPT,Studio,P1,,,,projects-library-memory.md:115
+CGP-KNOW-064,CGP-KNOW-64,KNOW,feature,Conversation import from Claude,DEFER,Service,,,,,projects-library-memory.md:116
+CGP-KNOW-065,CGP-KNOW-65,KNOW,feature,External agent setup import,ALREADY,Studio,,,,,projects-library-memory.md:117
+CGP-KNOW-066,CGP-KNOW-66,KNOW,feature,Project settings import prompt,DEFER,Studio,,,,CGP-AGENT-018,projects-library-memory.md:118
+CGP-KNOW-067,CGP-KNOW-67,KNOW,feature,Personal-to-workspace data transfer,ADAPT,Both,P1,BASE-05; US-10; AB-13,,,projects-library-memory.md:119
+CGP-KNOW-068,CGP-KNOW-68,KNOW,feature,Workspace recovery gate,ADAPT,Studio,P0,US-12; AB-13; RUN-05,DEC-34,,projects-library-memory.md:120
+CGP-KNOW-069,CGP-KNOW-69,KNOW,feature,WhatsApp account link,REJECT,None,,,,,projects-library-memory.md:121
+CGP-KNOW-070,CGP-KNOW-70,KNOW,feature,GPT builder,ADAPT,Chalk,P1,BASE-04; VER-01; RUN-01,,CGP-AGENT-027,projects-library-memory.md:122
+CGP-KNOW-071,CGP-KNOW-71,KNOW,feature,Audio summary of a GPT/project,DEFER,Studio,,,,CGP-LEARN-020,projects-library-memory.md:123
+CGP-KNOW-072,CGP-KNOW-72,KNOW,feature,Chalk knowledge vs project sources (instructor side),ALREADY,Chalk,,KB-01,,,projects-library-memory.md:124
+CGP-AGENT-001,CGP-AGENT-01,AGENT,feature,Permission mode selector,ADAPT,Both,P0,REQ-E1; REQ-M17; REQ-M16; REQ-M38,,,agents-codex-automation.md:32
+CGP-AGENT-002,CGP-AGENT-02,AGENT,feature,Full access mode + confirm,REJECT,Studio,,REQ-M17; REQ-M18; AE-09,,,agents-codex-automation.md:33
+CGP-AGENT-003,CGP-AGENT-03,AGENT,feature,Capability disclosure card,ADAPT,Studio,P0,AE-07; REQ-M38,,,agents-codex-automation.md:34
+CGP-AGENT-004,CGP-AGENT-04,AGENT,feature,Command approval card,ADAPT,Studio,P1,AE-04,,,agents-codex-automation.md:35
+CGP-AGENT-005,CGP-AGENT-05,AGENT,feature,Path-scoped permission request,ADAPT,Studio,P0,REQ-M17,,,agents-codex-automation.md:36
+CGP-AGENT-006,CGP-AGENT-06,AGENT,feature,Network destination approval,ADAPT,Studio,P1,REQ-M20; REQ-M28,,,agents-codex-automation.md:37
+CGP-AGENT-007,CGP-AGENT-07,AGENT,feature,"Auto-review (""Approve for me"")",REJECT,Studio,,REQ-M28,,,agents-codex-automation.md:38
+CGP-AGENT-008,CGP-AGENT-08,AGENT,feature,Denied/blocked tool explanation,ADAPT,Both,P0,REQ-M17; AE-12; AE-40; REQ-M30,,,agents-codex-automation.md:39
+CGP-AGENT-009,CGP-AGENT-09,AGENT,feature,Safety refusal banner,ADAPT,Studio,P0,REQ-O2,,,agents-codex-automation.md:40
+CGP-AGENT-010,CGP-AGENT-10,AGENT,feature,Hooks approval + hook stats,DEFER,Chalk,,AE-16,,,agents-codex-automation.md:41
+CGP-AGENT-011,CGP-AGENT-11,AGENT,feature,Sandbox readiness banner,ALREADY,Studio,,REQ-M30; REQ-M7; REQ-M24,,,agents-codex-automation.md:42
+CGP-AGENT-012,CGP-AGENT-12,AGENT,feature,Subagents (parallel delegation),ADAPT,Studio,P1,REQ-M22,DEC-34,,agents-codex-automation.md:43
+CGP-AGENT-013,CGP-AGENT-13,AGENT,feature,Thread goal,ADAPT,Studio,P1,AE-01,,,agents-codex-automation.md:44
+CGP-AGENT-014,CGP-AGENT-14,AGENT,feature,Plan mode,ADAPT,Studio,P1,,,CGP-CHAT-030,agents-codex-automation.md:45
+CGP-AGENT-015,CGP-AGENT-15,AGENT,feature,Side chat,DEFER,Studio,,,,CGP-CHAT-083,agents-codex-automation.md:46
+CGP-AGENT-016,CGP-AGENT-16,AGENT,feature,Fork chat,ALREADY,Studio,,,,CGP-CHAT-066,agents-codex-automation.md:47
+CGP-AGENT-017,CGP-AGENT-17,AGENT,feature,`/init` AGENTS.md,ALREADY,Studio,,REQ-P4,,,agents-codex-automation.md:48
+CGP-AGENT-018,CGP-AGENT-18,AGENT,feature,Import from other AI apps,REJECT,Studio,,REQ-SS1; AE-16,DEC-34,,agents-codex-automation.md:49
+CGP-AGENT-019,CGP-AGENT-19,AGENT,feature,Scheduled tasks,ADAPT,Chalk,P2,,,,agents-codex-automation.md:50
+CGP-AGENT-020,CGP-AGENT-20,AGENT,feature,Local vs cloud execution,DEFER,Service,,,DEC-34,,agents-codex-automation.md:51
+CGP-AGENT-021,CGP-AGENT-21,AGENT,feature,Event triggers & polling monitors,DEFER,Chalk,,,,,agents-codex-automation.md:52
+CGP-AGENT-022,CGP-AGENT-22,AGENT,feature,Heartbeat automation on a chat,REJECT,Studio,,,,,agents-codex-automation.md:53
+CGP-AGENT-023,CGP-AGENT-23,AGENT,feature,Inbox-item summaries,ADAPT,Chalk,P1,ADM-02; AE-20,,,agents-codex-automation.md:54
+CGP-AGENT-024,CGP-AGENT-24,AGENT,feature,Consumer task templates,REJECT,Studio,,,,,agents-codex-automation.md:55
+CGP-AGENT-025,CGP-AGENT-25,AGENT,feature,Share a scheduled task by link,DEFER,Chalk,,,,,agents-codex-automation.md:56
+CGP-AGENT-026,CGP-AGENT-26,AGENT,feature,"Agent-proposed config change (""Proposed update"")",ADAPT,Chalk,P1,,,,agents-codex-automation.md:57
+CGP-AGENT-027,CGP-AGENT-27,AGENT,feature,Workspace agent builder,ADAPT,Chalk,P1,AE-07; AE-26; REQ-M36; REQ-M40; REQ-M38,,,agents-codex-automation.md:58
+CGP-AGENT-028,CGP-AGENT-28,AGENT,feature,Draft/publish versions + compare,ADAPT,Chalk,P1,AE-33; ADM-11,,,agents-codex-automation.md:59
+CGP-AGENT-029,CGP-AGENT-29,AGENT,feature,Private preview of draft,ALREADY,Chalk,,AE-11; AE-26,,,agents-codex-automation.md:60
+CGP-AGENT-030,CGP-AGENT-30,AGENT,feature,Agent sharing & roles,DEFER,Chalk,,ADM-01,,,agents-codex-automation.md:61
+CGP-AGENT-031,CGP-AGENT-31,AGENT,feature,Agent analytics,ADAPT,Chalk,P2,ADM-02; ADM-08; ADM-13,,,agents-codex-automation.md:62
+CGP-AGENT-032,CGP-AGENT-32,AGENT,feature,API channels / Slack deployment,REJECT,Service,,,,,agents-codex-automation.md:63
+CGP-AGENT-033,CGP-AGENT-33,AGENT,feature,Agent memory & reference files,ADAPT,Studio,P1,CR-35; CR-77,,CGP-KNOW-048,agents-codex-automation.md:64
+CGP-AGENT-034,CGP-AGENT-34,AGENT,feature,Templates gallery,ALREADY,Chalk,,,,,agents-codex-automation.md:65
+CGP-AGENT-035,CGP-AGENT-35,AGENT,feature,Per-app approval policy & shared account consent,ADAPT,Chalk,P1,REQ-E1,,,agents-codex-automation.md:66
+CGP-AGENT-036,CGP-AGENT-36,AGENT,feature,Skills catalog,ADAPT,Both,P1,AE-16,,,agents-codex-automation.md:67
+CGP-AGENT-037,CGP-AGENT-37,AGENT,feature,"Record/create skill, Computer History suggestions",DEFER,Studio,,,,,agents-codex-automation.md:68
+CGP-AGENT-038,CGP-AGENT-38,AGENT,feature,Plugin marketplace & install,REJECT,Studio,,REQ-M38; AE-16,,,agents-codex-automation.md:69
+CGP-AGENT-039,CGP-AGENT-39,AGENT,feature,Custom MCP server creation,REJECT,Service,,REQ-M19; REQ-M17,,,agents-codex-automation.md:70
+CGP-AGENT-040,CGP-AGENT-40,AGENT,feature,Plugin rewards / credits,REJECT,Studio,,,,,agents-codex-automation.md:71
+CGP-AGENT-041,CGP-AGENT-41,AGENT,feature,MCP tool activity rendering,ALREADY,Studio,,REQ-M27; AE-04,,CGP-CHAT-047,agents-codex-automation.md:72
+CGP-AGENT-042,CGP-AGENT-42,AGENT,feature,Website-exposed tools (Web MCP),DEFER,Studio,,REQ-N8,,,agents-codex-automation.md:73
+CGP-AGENT-043,CGP-AGENT-43,AGENT,feature,Gateway sign-in banner,ALREADY,Studio,,REQ-M15; AE-40,,,agents-codex-automation.md:74
+CGP-AGENT-044,CGP-AGENT-44,AGENT,feature,Sign in with ChatGPT consent,REJECT,Service,,,,,agents-codex-automation.md:75
+CGP-AGENT-045,CGP-AGENT-45,AGENT,feature,Mission Control,ADAPT,Chalk,P0,ADM-02; AE-20,,,agents-codex-automation.md:76
+CGP-AGENT-046,CGP-AGENT-46,AGENT,feature,Attention states in task list,ADAPT,Studio,P0,AE-03,DEC-34,,agents-codex-automation.md:77
+CGP-AGENT-047,CGP-AGENT-47,AGENT,feature,Notifications,ADAPT,Both,P1,,,,agents-codex-automation.md:78
+CGP-AGENT-048,CGP-AGENT-48,AGENT,feature,Find in chat,ADOPT,Studio,P2,,,CGP-CHAT-080,agents-codex-automation.md:79
+CGP-AGENT-049,CGP-AGENT-49,AGENT,feature,Workspace tabs/panes & command palette,ALREADY,Studio,,REQ-N3,,,agents-codex-automation.md:80
+CGP-AGENT-050,CGP-AGENT-50,AGENT,feature,Page element / region comment to chat,ALREADY,Studio,,CR-09; REQ-N3,,,agents-codex-automation.md:81
+CGP-AGENT-051,CGP-AGENT-51,AGENT,feature,Computer Use & Chrome tabs,DEFER,Studio,,AE-23,,,agents-codex-automation.md:82
+CGP-AGENT-052,CGP-AGENT-52,AGENT,feature,Changes panel (diff review),ADAPT,Studio,P0,AE-05; AE-15,,,agents-codex-automation.md:83
+CGP-AGENT-053,CGP-AGENT-53,AGENT,feature,Commit / push / PR with generated message,ADAPT,Studio,P2,REQ-P3,DEC-34,,agents-codex-automation.md:84
+CGP-AGENT-054,CGP-AGENT-54,AGENT,feature,File viewer niceties,ALREADY,Studio,,,,,agents-codex-automation.md:85
+CGP-AGENT-055,CGP-AGENT-55,AGENT,feature,Code Review / PR workspace,DEFER,Studio,,AE-31; AE-43,,,agents-codex-automation.md:86
+CGP-AGENT-056,CGP-AGENT-56,AGENT,feature,Codex Security scanning,REJECT,Service,,,,,agents-codex-automation.md:87
+CGP-AGENT-057,CGP-AGENT-57,AGENT,feature,Worktree creation & restore,ADAPT,Studio,P1,REQ-P4,,,agents-codex-automation.md:88
+CGP-AGENT-058,CGP-AGENT-58,AGENT,feature,Cloud environment setup,DEFER,Service,,,,,agents-codex-automation.md:89
+CGP-AGENT-059,CGP-AGENT-59,AGENT,feature,Cloud terminal & remote hosts,REJECT,Studio,,,DEC-34,,agents-codex-automation.md:90
+CGP-AGENT-060,CGP-AGENT-60,AGENT,feature,Shell output block & background terminals,ADAPT,Studio,P1,REQ-M27; REQ-N1,,,agents-codex-automation.md:91
+CGP-AGENT-061,CGP-AGENT-61,AGENT,feature,Apply cloud diff locally,DEFER,Studio,,,,,agents-codex-automation.md:92
+CGP-AGENT-062,CGP-AGENT-62,AGENT,feature,Share chat approval,ALREADY,Studio,,AE-22; ADM-07,,,agents-codex-automation.md:93
+CGP-AGENT-063,CGP-AGENT-63,AGENT,feature,Report response / conversation / app,ALREADY,Studio,,,,CGP-CHAT-090,agents-codex-automation.md:94
+CGP-AGENT-064,CGP-AGENT-64,AGENT,feature,Performance trace recording,ADAPT,Studio,P2,,,,agents-codex-automation.md:95
+CGP-AGENT-065,CGP-AGENT-65,AGENT,feature,Debug panel,DEFER,Studio,,,,,agents-codex-automation.md:96
+CGP-AGENT-066,CGP-AGENT-66,AGENT,feature,Service busy banner,ADAPT,Studio,P2,REQ-M26; AE-40,,,agents-codex-automation.md:97
+CGP-AGENT-067,CGP-AGENT-67,AGENT,feature,First-run autonomy step,ADAPT,Studio,P1,,,,agents-codex-automation.md:98
+CGP-AGENT-068,CGP-AGENT-68,AGENT,feature,Remote control from phone,REJECT,Studio,,,,,agents-codex-automation.md:99
+CGP-AGENT-069,CGP-AGENT-69,AGENT,feature,Codex Micro hardware,REJECT,Studio,,,,,agents-codex-automation.md:100
+CGP-AGENT-070,CGP-AGENT-70,AGENT,feature,Clean demo profile,ALREADY,Chalk,,,,,agents-codex-automation.md:101
+CGP-AGENT-071,CGP-AGENT-71,AGENT,feature,Consumer/vertical extras,REJECT,Studio,,,,,agents-codex-automation.md:102
+CGP-AGENT-072,CGP-AGENT-72,AGENT,feature,Pages/Spaces with assistant instructions + page automations,DEFER,Both,,,,CGP-ART-037,agents-codex-automation.md:103
+CGP-ART-001,CGP-ART-01,ART,feature,Artifact side-panel viewer,ALREADY,Studio,,REQ-M35; REQ-N10,,,artifacts-canvas-media.md:42
+CGP-ART-002,CGP-ART-02,ART,feature,"Annotate-to-edit (""Request edits"")",ADAPT,Studio,P1,CR-09,,,artifacts-canvas-media.md:43
+CGP-ART-003,CGP-ART-03,ART,feature,Post-apply change review,ADAPT,Studio,P0,CR-77,,,artifacts-canvas-media.md:44
+CGP-ART-004,CGP-ART-04,ART,feature,Discard-unsent-annotations guard,ADOPT,Studio,P1,,,,artifacts-canvas-media.md:45
+CGP-ART-005,CGP-ART-05,ART,feature,Annotate a plan document → revise,ADAPT,Chalk,P1,,,,artifacts-canvas-media.md:46
+CGP-ART-006,CGP-ART-06,ART,feature,Threaded artifact comments,ADAPT,Both,P1,,,,artifacts-canvas-media.md:47
+CGP-ART-007,CGP-ART-07,ART,feature,Visual design editor (CSS tweak panel),ADAPT,Studio,P2,,,,artifacts-canvas-media.md:48
+CGP-ART-008,CGP-ART-08,ART,feature,Webpage-suggested prompt transparency,ADAPT,Studio,P0,,,,artifacts-canvas-media.md:49
+CGP-ART-009,CGP-ART-09,ART,feature,External-link confirmation,ADAPT,Studio,P0,,,,artifacts-canvas-media.md:50
+CGP-ART-010,CGP-ART-10,ART,feature,Browser load-error diagnostics,ADAPT,Studio,P1,,,,artifacts-canvas-media.md:51
+CGP-ART-011,CGP-ART-11,ART,feature,Artifact result card in chat,ADAPT,Studio,P1,REQ-M35; CR-81,,,artifacts-canvas-media.md:52
+CGP-ART-012,CGP-ART-12,ART,feature,Plain-language sharing state,ADAPT,Studio,P1,CR-18; CR-19,,,artifacts-canvas-media.md:53
+CGP-ART-013,CGP-ART-13,ART,feature,Publication responsibility notice,ADAPT,Both,P1,CR-65; CR-67; REQ-L4; SX-41,,,artifacts-canvas-media.md:54
+CGP-ART-014,CGP-ART-14,ART,feature,Site analytics,ADAPT,Studio,P1,CR-21; CR-23; CR-28,,,artifacts-canvas-media.md:55
+CGP-ART-015,CGP-ART-15,ART,feature,Artifact template picker,ADAPT,Both,P2,REQ-M33,,,artifacts-canvas-media.md:56
+CGP-ART-016,CGP-ART-16,ART,feature,Present mode for decks,ADAPT,Studio,P2,CR-54,,,artifacts-canvas-media.md:57
+CGP-ART-017,CGP-ART-17,ART,feature,One-click slide improvement suggestions,ADAPT,Studio,P2,CR-56,,,artifacts-canvas-media.md:58
+CGP-ART-018,CGP-ART-18,ART,feature,Follow-the-agent while generating,ADAPT,Studio,P2,CR-68; REQ-M35,,,artifacts-canvas-media.md:59
+CGP-ART-019,CGP-ART-19,ART,feature,Image markup and region edits,ADAPT,Studio,P2,,,,artifacts-canvas-media.md:60
+CGP-ART-020,CGP-ART-20,ART,feature,Wait-state escalation copy,ADAPT,Studio,P1,REQ-M35; REQ-F8,,,artifacts-canvas-media.md:61
+CGP-ART-021,CGP-ART-21,ART,feature,"""What the AI touched"" summary",ADAPT,Studio,P2,,,,artifacts-canvas-media.md:62
+CGP-ART-022,CGP-ART-22,ART,feature,Before → after approval of a data change,ADAPT,Studio,P2,REQ-F8; REQ-K1,,,artifacts-canvas-media.md:63
+CGP-ART-023,CGP-ART-23,ART,feature,"Sites library (grid/list, pins, owner, updated)",ADAPT,Chalk,P2,,,,artifacts-canvas-media.md:64
+CGP-ART-024,CGP-ART-24,ART,feature,Open-in and export actions,ADAPT,Studio,P2,,,,artifacts-canvas-media.md:65
+CGP-ART-025,CGP-ART-25,ART,feature,Live Artifact Session sync and limits,ALREADY,Studio,,,,,artifacts-canvas-media.md:66
+CGP-ART-026,CGP-ART-26,ART,feature,In-app text and Markdown editor,ALREADY,Studio,,,,,artifacts-canvas-media.md:67
+CGP-ART-027,CGP-ART-27,ART,feature,"Version-bound result and ""verified"" state",ALREADY,Studio,,CR-10; CR-81,,,artifacts-canvas-media.md:68
+CGP-ART-028,CGP-ART-28,ART,feature,Site preview pane,ALREADY,Studio,,REQ-M35; CR-04,,,artifacts-canvas-media.md:69
+CGP-ART-029,CGP-ART-29,ART,feature,"Publish, share link, revoke",ALREADY,Studio,,CR-17; CR-73; CR-18; CR-19; REQ-P3,,,artifacts-canvas-media.md:70
+CGP-ART-030,CGP-ART-30,ART,feature,Agent browser-control consent,ALREADY,Studio,,REQ-M19; CR-11; CR-68,,,artifacts-canvas-media.md:71
+CGP-ART-031,CGP-ART-31,ART,feature,Website permission prompts,ALREADY,Studio,,REQ-N10; CR-66,,,artifacts-canvas-media.md:72
+CGP-ART-032,CGP-ART-32,ART,feature,Download confirmation,ALREADY,Studio,,,,,artifacts-canvas-media.md:73
+CGP-ART-033,CGP-ART-33,ART,feature,Tool-approval and connector-auth cards,ALREADY,Studio,,REQ-F8; REQ-K1,,CGP-CHAT-054,artifacts-canvas-media.md:74
+CGP-ART-034,CGP-ART-34,ART,feature,Product feedback on generated file,REJECT,None,,,,,artifacts-canvas-media.md:75
+CGP-ART-035,CGP-ART-35,ART,feature,Spreadsheet editor,DEFER,None,,,,,artifacts-canvas-media.md:76
+CGP-ART-036,CGP-ART-36,ART,feature,Presentation object editor,DEFER,None,,CR-54,,,artifacts-canvas-media.md:77
+CGP-ART-037,CGP-ART-37,ART,feature,"Pages (Spaces docs, canvas, sheets, slides)",DEFER,None,,,,,artifacts-canvas-media.md:78
+CGP-ART-038,CGP-ART-38,ART,feature,Notebook preview,DEFER,None,,,,,artifacts-canvas-media.md:79
+CGP-ART-039,CGP-ART-39,ART,feature,GIF editor,DEFER,None,,,,,artifacts-canvas-media.md:80
+CGP-ART-040,CGP-ART-40,ART,feature,Image generation home and history,DEFER,None,,,DEC-17,,artifacts-canvas-media.md:81
+CGP-ART-041,CGP-ART-41,ART,feature,Trending prompts and prompt sharing,REJECT,None,,,,,artifacts-canvas-media.md:82
+CGP-ART-042,CGP-ART-42,ART,feature,360 panorama viewer,DEFER,None,,,,,artifacts-canvas-media.md:83
+CGP-ART-043,CGP-ART-43,ART,feature,Maps and place cards,REJECT,None,,,,,artifacts-canvas-media.md:84
+CGP-ART-044,CGP-ART-44,ART,feature,Site custom domains,REJECT,None,,CR-17,,,artifacts-canvas-media.md:85
+CGP-ART-045,CGP-ART-45,ART,feature,Site environment variables and secrets,REJECT,None,,CR-29,,,artifacts-canvas-media.md:86
+CGP-ART-046,CGP-ART-46,ART,feature,Site database viewer and app sign-in,DEFER,None,,CR-65; CR-67,,,artifacts-canvas-media.md:87
+CGP-ART-047,CGP-ART-47,ART,feature,Site ownership transfer and delete-by-slug,DEFER,None,,CR-69,,,artifacts-canvas-media.md:88
+CGP-ART-048,CGP-ART-48,ART,feature,Site plugins (visitors use their own account data),REJECT,None,,CR-65; CR-67,,,artifacts-canvas-media.md:89
+CGP-ART-049,CGP-ART-49,ART,feature,Site scheduled tasks,REJECT,None,,,,,artifacts-canvas-media.md:90
+CGP-ART-050,CGP-ART-50,ART,feature,Profile showcase and access requests,REJECT,None,,,,CGP-KNOW-062,artifacts-canvas-media.md:91
+CGP-ART-051,CGP-ART-51,ART,feature,"Upsell handoff (""Upgrade to publish"", ""Continue in Work"")",REJECT,None,,INT-ACCESS-05; REQ-L12,,,artifacts-canvas-media.md:92
+CGP-ART-052,CGP-ART-52,ART,feature,Library upload and handoff of artifacts,DEFER,None,,,,,artifacts-canvas-media.md:93
+CGP-ART-053,CGP-ART-53,ART,feature,Agent password-manager sign-in,REJECT,None,,CR-11,,,artifacts-canvas-media.md:94
+CGP-ART-054,CGP-ART-54,ART,feature,Browser profile import,REJECT,None,,,,,artifacts-canvas-media.md:95
+CGP-ART-055,CGP-ART-55,ART,feature,Chrome extension side chat,REJECT,None,,,,,artifacts-canvas-media.md:96
+CGP-ART-056,CGP-ART-56,ART,feature,Connector and plugin permission ladder,DEFER,None,,REQ-M19; REQ-C13,,,artifacts-canvas-media.md:97
+CGP-ART-057,CGP-ART-57,ART,feature,Skills directory with safety review,DEFER,None,,CR-43,,,artifacts-canvas-media.md:98
+CGP-ART-058,CGP-ART-58,ART,feature,ChatGPT account auth web pages,ALREADY,Service,,REQ-L12; REQ-L13,,,artifacts-canvas-media.md:99
+CGP-ART-059,CGP-ART-59,ART,feature,Generic widgets,DEFER,None,,,,,artifacts-canvas-media.md:100
+CGP-ART-060,CGP-ART-60,ART,feature,Image preview dialog,ALREADY,Studio,,,,,artifacts-canvas-media.md:101
+CGP-LEARN-001,CGP-LEARN-01,LEARN,feature,Interactive learning block (inline explorable),ADAPT,Both,P0,SX-05,,,learning-education.md:172
+CGP-LEARN-002,CGP-LEARN-02,LEARN,feature,Versioned parametric block type contract,ADAPT,Chalk,P1,VER-01; REQ-B8,,,learning-education.md:173
+CGP-LEARN-003,CGP-LEARN-03,LEARN,feature,Stage-stepper mechanic,ADAPT,Studio,P1,,,,learning-education.md:174
+CGP-LEARN-004,CGP-LEARN-04,LEARN,feature,Parameter / mode controls with live caption,ADAPT,Studio,P1,,,,learning-education.md:175
+CGP-LEARN-005,CGP-LEARN-05,LEARN,feature,Time loop and algorithm stepper (play/pause/step/shuffle),ADAPT,Studio,P1,,,,learning-education.md:176
+CGP-LEARN-006,CGP-LEARN-06,LEARN,feature,Batch sampling / accumulate trials,ADAPT,Studio,P2,SX-15,,,learning-education.md:177
+CGP-LEARN-007,CGP-LEARN-07,LEARN,feature,2-D function graphing with viewport + feature tooltips,DEFER,Studio,,,,,learning-education.md:178
+CGP-LEARN-008,CGP-LEARN-08,LEARN,feature,3-D multivariable scene,REJECT,None,,,,,learning-education.md:179
+CGP-LEARN-009,CGP-LEARN-09,LEARN,feature,"Narrated diagram (Lottie, 3 semantic beats)",ADAPT,Both,P1,,,,learning-education.md:180
+CGP-LEARN-010,CGP-LEARN-10,LEARN,feature,Text-equivalent state description for every block,ADOPT,Studio,P0,TUX-A11Y,,,learning-education.md:181
+CGP-LEARN-011,CGP-LEARN-11,LEARN,feature,Responsive caption variants + container layout,ADOPT,Studio,,,,,learning-education.md:182
+CGP-LEARN-012,CGP-LEARN-12,LEARN,feature,Block reset / undo,ADOPT,Studio,P1,,,,learning-education.md:183
+CGP-LEARN-013,CGP-LEARN-13,LEARN,feature,"""This is incorrect / helpful / hide it"" feedback on a block",ADAPT,Both,P1,,,,learning-education.md:184
+CGP-LEARN-014,CGP-LEARN-14,LEARN,feature,Copy block expression,DEFER,Studio,,,,,learning-education.md:185
+CGP-LEARN-015,CGP-LEARN-15,LEARN,feature,Block catalog with thumbnails and curriculum families,ADAPT,Chalk,P2,CH-04,,,learning-education.md:186
+CGP-LEARN-016,CGP-LEARN-16,LEARN,feature,Graded quiz widget with results and celebration,REJECT,None,,SX-29; SX-35,,,learning-education.md:187
+CGP-LEARN-017,CGP-LEARN-17,LEARN,feature,"Flashcards (known/missed/unreviewed, shuffle, edit)",DEFER,None,,,,,learning-education.md:188
+CGP-LEARN-018,CGP-LEARN-18,LEARN,feature,"Language-learning practice cards (vocab, fill-blank, sentence builder, image choice/label, audio label, speak with live transcript, voice launcher)",DEFER,None,,VO-01,,,learning-education.md:189
+CGP-LEARN-019,CGP-LEARN-19,LEARN,feature,"Pronunciation widget (play, speed, inline ""hear how to pronounce"")",DEFER,None,,,,,learning-education.md:190
+CGP-LEARN-020,CGP-LEARN-20,LEARN,feature,"Audio summary ""Study guide"" format",DEFER,None,,,,,learning-education.md:191
+CGP-LEARN-021,CGP-LEARN-21,LEARN,feature,"Teen ""Learn it your way"" guided help",ALREADY,Studio,,SX-08; SX-10,,,learning-education.md:192
+CGP-LEARN-022,CGP-LEARN-22,LEARN,feature,"Teen personalization (accent color, voice)",REJECT,None,,SX-49; REQ-A6,,CGP-DS-006,learning-education.md:193
+CGP-LEARN-023,CGP-LEARN-23,LEARN,feature,"Teen wellbeing ""take a break"" reminders",DEFER,Studio,,REQ-M9,,,learning-education.md:194
+CGP-LEARN-024,CGP-LEARN-24,LEARN,feature,"Parental link (family invite, link/unlink, graduation at 18)",DEFER,Service,,REQ-O6,,CGP-SHELL-052,learning-education.md:195
+CGP-LEARN-025,CGP-LEARN-25,LEARN,feature,Minor safety notice on self-harm (to guardian) + account pause,ADAPT,Both,P0,REQ-O2,,,learning-education.md:196
+CGP-LEARN-026,CGP-LEARN-26,LEARN,feature,Trusted contact (adult-designated),DEFER,Service,,,,CGP-SHELL-056,learning-education.md:197
+CGP-LEARN-027,CGP-LEARN-27,LEARN,feature,"Quiet hours / study hours schedules (≤12 blocks, ≥5 min free per day, ""managed by your parent"")",ALREADY,Service,,REQ-M9; ADM-10,,CGP-SHELL-054,learning-education.md:198
+CGP-LEARN-028,CGP-LEARN-28,LEARN,feature,Age & guardian verification (Persona),ALREADY,Service,,REQ-O1,,CGP-SHELL-051,learning-education.md:199
+CGP-LEARN-029,CGP-LEARN-29,LEARN,feature,"Educator onboarding: role, grade band, subject, starter tasks (lesson plan, rubric, family message)",ADAPT,Chalk,P2,CH-01,,,learning-education.md:200
+CGP-LEARN-030,CGP-LEARN-30,LEARN,feature,Teen/student project-idea catalog at first run,REJECT,None,,,,CGP-SHELL-042,learning-education.md:201
+CGP-LEARN-031,CGP-LEARN-31,LEARN,feature,Customizable companion character (shape/color/eyes/eyewear/accessory),REJECT,None,,SX-29; REQ-F1,,,learning-education.md:202
+CGP-LEARN-032,CGP-LEARN-32,LEARN,feature,"Activity-state vocabulary (Working, Searching, Creating, Thinking, NeedsInput, Ready, Paused, Error)",ADAPT,Studio,P2,REQ-C17; REQ-E1,,,learning-education.md:203
+CGP-LEARN-033,CGP-LEARN-33,LEARN,feature,"Desktop mascot overlay (""Mini""/pets) with notification stack, quick chat, out-of-context approvals",REJECT,None,,SX-29; REQ-E1,,CGP-SHELL-039,learning-education.md:204
+CGP-LEARN-034,CGP-LEARN-34,LEARN,feature,"Persistent personal agent (""dots"") with eligibility, desktop access, messaging, schedules, safety pause",DEFER,None,,,,CGP-SHELL-094,learning-education.md:205
+CGP-LEARN-035,CGP-LEARN-35,LEARN,feature,Team Spaces with shared agent instructions + icon picker,ALREADY,Both,,SX-24,DEC-34,,learning-education.md:206
+CGP-LEARN-036,CGP-LEARN-36,LEARN,feature,"Template gallery (create/use/edit, by creator)",ALREADY,Chalk,,CH-07,,CGP-AGENT-034,learning-education.md:207
+CGP-LEARN-037,CGP-LEARN-37,LEARN,feature,"Mission Control feed with keyboard triage (next/previous, dismiss and advance, quick send)",ADAPT,Chalk,P2,ADM-02,,CGP-AGENT-045,learning-education.md:208
+CGP-LEARN-038,CGP-LEARN-38,LEARN,feature,Clinician CME credit auto-detected from conversations,REJECT,None,,SX-43,,,learning-education.md:209
+CGP-LEARN-039,CGP-LEARN-39,LEARN,feature,Health / clinician verification workspace,REJECT,None,,,,,learning-education.md:210
+CGP-LEARN-040,CGP-LEARN-40,LEARN,feature,"GPT-Rosalind lab access application (biosafety, .edu members)",REJECT,None,,,,,learning-education.md:211
+CGP-LEARN-041,CGP-LEARN-41,LEARN,feature,Student verification promo credits,REJECT,None,,REQ-L12,,,learning-education.md:212
+CGP-LEARN-042,CGP-LEARN-42,LEARN,feature,"Ads (""bazaar"") and seller reporting",REJECT,None,,,,,learning-education.md:213
+CGP-LEARN-043,CGP-LEARN-43,LEARN,feature,"Codex Security (""defenseFactory"") editors/environment",REJECT,None,,,,CGP-AGENT-056,learning-education.md:214
+CGP-VOICE-001,CGP-VOICE-01,VOICE,feature,Realtime voice chat from composer,ADAPT,Studio,P1,VO-06; VO-36; REQ-R5; REQ-R1,,,voice-multimodal.md:41
+CGP-VOICE-002,CGP-VOICE-02,VOICE,feature,Separate mic mute vs speaker/output mute,ADAPT,Studio,P1,,,,voice-multimodal.md:42
+CGP-VOICE-003,CGP-VOICE-03,VOICE,feature,Mic permission failure with deep link to OS settings,ADAPT,Studio,P1,VO-42,,,voice-multimodal.md:43
+CGP-VOICE-004,CGP-VOICE-04,VOICE,feature,Voice disclosure + onboarding (NUX),ADAPT,Both,P0,VO-25,,,voice-multimodal.md:44
+CGP-VOICE-005,CGP-VOICE-05,VOICE,feature,Voice picker with audio preview,ADAPT,Both,P2,VO-45,,,voice-multimodal.md:45
+CGP-VOICE-006,CGP-VOICE-06,VOICE,feature,Voice language select / auto-detect,ADAPT,Both,P1,VO-10,,,voice-multimodal.md:46
+CGP-VOICE-007,CGP-VOICE-07,VOICE,feature,"Voice ""intelligence"" level + latency nudge",ALREADY,Studio,,VO-45,,,voice-multimodal.md:47
+CGP-VOICE-008,CGP-VOICE-08,VOICE,feature,Voice narrates agent work / delegates tasks,ADAPT,Studio,P1,VO-18; VO-20,,,voice-multimodal.md:48
+CGP-VOICE-009,CGP-VOICE-09,VOICE,feature,Single active session across windows / transfer,ALREADY,Studio,,VO-09; REQ-R5,,,voice-multimodal.md:49
+CGP-VOICE-010,CGP-VOICE-10,VOICE,feature,Usage-limit and capacity states in voice,ALREADY,Studio,,VO-23; VO-24; VO-46,,,voice-multimodal.md:50
+CGP-VOICE-011,CGP-VOICE-11,VOICE,feature,Navigation guard while voice is active,ALREADY,Studio,,VO-40,,,voice-multimodal.md:51
+CGP-VOICE-012,CGP-VOICE-12,VOICE,feature,"Floating orb / compact call controls, movable",ADAPT,Studio,P2,VO-40,,,voice-multimodal.md:52
+CGP-VOICE-013,CGP-VOICE-13,VOICE,feature,Camera video in voice,DEFER,Studio,,REQ-N3; REQ-N10,,,voice-multimodal.md:53
+CGP-VOICE-014,CGP-VOICE-14,VOICE,feature,Screen share in voice,ADAPT,Studio,P2,VO-43; VO-12,,,voice-multimodal.md:54
+CGP-VOICE-015,CGP-VOICE-15,VOICE,feature,Appshots / screen context (window image + accessibility text),ADAPT,Studio,P1,REQ-N3; REQ-C18,,,voice-multimodal.md:55
+CGP-VOICE-016,CGP-VOICE-16,VOICE,feature,"Context attachment chip with ""what will be sent"" preview",ADOPT,Studio,P1,REQ-N3,,CGP-ART-008,voice-multimodal.md:56
+CGP-VOICE-017,CGP-VOICE-17,VOICE,feature,In-composer dictation,ADAPT,Studio,P0,VO-36,,,voice-multimodal.md:57
+CGP-VOICE-018,CGP-VOICE-18,VOICE,feature,Dictation error taxonomy,ADOPT,Studio,P1,VO-42,,,voice-multimodal.md:58
+CGP-VOICE-019,CGP-VOICE-19,VOICE,feature,Dictation recovery + local recording history,ADAPT,Studio,P1,VO-25,,,voice-multimodal.md:59
+CGP-VOICE-020,CGP-VOICE-20,VOICE,feature,System-wide (global) dictation into other apps,REJECT,None,,,,,voice-multimodal.md:60
+CGP-VOICE-021,CGP-VOICE-21,VOICE,feature,Custom dictation dictionary,ADAPT,Both,P2,VO-10,,,voice-multimodal.md:61
+CGP-VOICE-022,CGP-VOICE-22,VOICE,feature,Dictation start/stop sounds,ADOPT,Studio,P2,VO-26,,,voice-multimodal.md:62
+CGP-VOICE-023,CGP-VOICE-23,VOICE,feature,Microphone device picker,ADOPT,Studio,P1,VO-29,DEC-34,,voice-multimodal.md:63
+CGP-VOICE-024,CGP-VOICE-24,VOICE,feature,Read aloud (TTS of an answer),ADAPT,Studio,P1,,,CGP-CHAT-067,voice-multimodal.md:64
+CGP-VOICE-025,CGP-VOICE-25,VOICE,feature,In-app voice keyboard commands,ADAPT,Studio,P1,VO-41; VO-47,,,voice-multimodal.md:65
+CGP-VOICE-026,CGP-VOICE-26,VOICE,feature,"Global voice hotkey (""Start a Voice Chat from anywhere on desktop"")",REJECT,None,,VO-40,,CGP-CHAT-084,voice-multimodal.md:66
+CGP-VOICE-027,CGP-VOICE-27,VOICE,feature,"Popout / ""Mini"" hotkey window (quick ask from anywhere, voice in Mini)",DEFER,Studio,,,,CGP-CHAT-084,voice-multimodal.md:67
+CGP-VOICE-028,CGP-VOICE-28,VOICE,feature,Hotkey setter with conflict detection,ALREADY,Studio,,,,,voice-multimodal.md:68
+CGP-VOICE-029,CGP-VOICE-29,VOICE,feature,Searchable keyboard-shortcuts dialog,ADAPT,Studio,P2,,,CGP-CHAT-086,voice-multimodal.md:69
+CGP-VOICE-030,CGP-VOICE-30,VOICE,feature,Meetings note-taker + meeting bot,DEFER,Chalk,,,,,voice-multimodal.md:70
+CGP-VOICE-031,CGP-VOICE-31,VOICE,feature,Voice transcript view with speaker + copy,ALREADY,Studio,,VO-43,,,voice-multimodal.md:71
+CGP-VOICE-032,CGP-VOICE-32,VOICE,feature,Voice debug panel,ADAPT,Studio,P2,REQ-R1,,,voice-multimodal.md:72
+CGP-VOICE-033,CGP-VOICE-33,VOICE,feature,Voice/dictation availability gating by account/workspace,ADAPT,Both,P0,VO-36; VO-30; REQ-M38,,,voice-multimodal.md:73
+CGP-VOICE-034,CGP-VOICE-34,VOICE,feature,Computer Use (agent drives desktop apps),DEFER,Studio,,AE-23; AE-28; AB-10,,CGP-AGENT-051,voice-multimodal.md:74
+CGP-VOICE-035,CGP-VOICE-35,VOICE,feature,Per-app approval with scope choice,ADAPT,Studio,P2,REQ-M20; VO-17,,CGP-AGENT-004,voice-multimodal.md:75
+CGP-VOICE-036,CGP-VOICE-36,VOICE,feature,"Computer History (activity → memories, weekly recap ""light roast"")",REJECT,None,,,,CGP-KNOW-052,voice-multimodal.md:76
+CGP-VOICE-037,CGP-VOICE-37,VOICE,feature,Hardware macro pad (Codex Micro / Creator Micro V2),REJECT,None,,,,CGP-AGENT-069,voice-multimodal.md:77
+CGP-VOICE-038,CGP-VOICE-38,VOICE,feature,Push-to-talk / hold-to-talk interaction,ADAPT,Studio,P1,VO-08,,,voice-multimodal.md:78
+CGP-VOICE-039,CGP-VOICE-39,VOICE,feature,Local VAD (Silero),ADAPT,Studio,P1,VO-08,,,voice-multimodal.md:79
+CGP-VOICE-040,CGP-VOICE-40,VOICE,feature,Output-audio-driven visual (system audio spectrum),ALREADY,Studio,,VO-38,,,voice-multimodal.md:80
+CGP-VOICE-041,CGP-VOICE-41,VOICE,feature,Autoplay-blocked recovery,ADOPT,Studio,P1,VO-42,,,voice-multimodal.md:81
+CGP-VOICE-042,CGP-VOICE-42,VOICE,feature,Voice discoverability tip,ADAPT,Studio,P2,,,,voice-multimodal.md:82
+CGP-VOICE-043,CGP-VOICE-43,VOICE,feature,"""Voice chat active"" marker on chat list",ADAPT,Studio,P2,,,,voice-multimodal.md:83
+CGP-VOICE-044,CGP-VOICE-44,VOICE,feature,Built-in browser tab device indicators,ALREADY,Studio,,REQ-N10; REQ-D3,,,voice-multimodal.md:84
+CGP-VOICE-045,CGP-VOICE-45,VOICE,feature,Recorded audio message attachment,DEFER,Studio,,REQ-R3,,CGP-CHAT-013,voice-multimodal.md:85
+CGP-VOICE-046,CGP-VOICE-46,VOICE,feature,Face and voice biometric verification,REJECT,None,,,,,voice-multimodal.md:86
+CGP-VOICE-047,CGP-VOICE-47,VOICE,feature,Voice as a paid-plan upsell,REJECT,None,,VO-46,,,voice-multimodal.md:87
+CGP-VOICE-048,CGP-VOICE-48,VOICE,feature,Desktop pet / avatar overlay hosting voice controls,DEFER,Studio,,REQ-F8,,CGP-SHELL-039,voice-multimodal.md:88
+CGP-VOICE-049,CGP-VOICE-49,VOICE,feature,Character preview isolation,ALREADY,Studio,,REQ-D3,,,voice-multimodal.md:89
+CGP-VOICE-050,CGP-VOICE-50,VOICE,feature,Memory opt-in NUX modals,DEFER,None,,,,CGP-KNOW-049,voice-multimodal.md:90
+CGP-SHELL-001,CGP-SHELL-01,SHELL,feature,Background auto-update with restart notice,ADAPT,Studio,P0,REQ-I1,,,settings-account-shell.md:57
+CGP-SHELL-002,CGP-SHELL-02,SHELL,feature,Organization-managed updates,ADAPT,Both,P1,ADM-11,,,settings-account-shell.md:58
+CGP-SHELL-003,CGP-SHELL-03,SHELL,feature,Startup recovery dialogs,ALREADY,Studio,,REQ-A5; REQ-B5; REQ-I11,,,settings-account-shell.md:59
+CGP-SHELL-004,CGP-SHELL-04,SHELL,feature,Quit / close confirmation,ADOPT,Studio,P0,REQ-C16,,,settings-account-shell.md:60
+CGP-SHELL-005,CGP-SHELL-05,SHELL,feature,Menu bar (tray) presence,DEFER,Studio,,,,,settings-account-shell.md:61
+CGP-SHELL-006,CGP-SHELL-06,SHELL,feature,Launch at login,REJECT,Studio,,,,,settings-account-shell.md:62
+CGP-SHELL-007,CGP-SHELL-07,SHELL,feature,Global hotkey Popout Window,DEFER,Studio,,,,CGP-CHAT-084,settings-account-shell.md:63
+CGP-SHELL-008,CGP-SHELL-08,SHELL,feature,"Detached windows, keep-on-top, drag panes",ALREADY,Studio,,,,,settings-account-shell.md:64
+CGP-SHELL-009,CGP-SHELL-09,SHELL,feature,Deep links,ADAPT,Both,P1,,,,settings-account-shell.md:65
+CGP-SHELL-010,CGP-SHELL-10,SHELL,feature,Localized native menus and dialogs,ADAPT,Studio,P1,,,,settings-account-shell.md:66
+CGP-SHELL-011,CGP-SHELL-11,SHELL,feature,Command menu and rebindable shortcuts,ALREADY,Studio,,,,CGP-AGENT-049,settings-account-shell.md:67
+CGP-SHELL-012,CGP-SHELL-12,SHELL,feature,Dock badge for unread,ADAPT,Studio,P2,,,,settings-account-shell.md:68
+CGP-SHELL-013,CGP-SHELL-13,SHELL,feature,Desktop notifications,ADAPT,Studio,P2,,,CGP-AGENT-047,settings-account-shell.md:69
+CGP-SHELL-014,CGP-SHELL-14,SHELL,feature,Prevent sleep while running,ADOPT,Studio,P1,,,,settings-account-shell.md:70
+CGP-SHELL-015,CGP-SHELL-15,SHELL,feature,Single instance and background start,ALREADY,Studio,,,,,settings-account-shell.md:71
+CGP-SHELL-016,CGP-SHELL-16,SHELL,feature,Wrong-architecture launch warning,ALREADY,Studio,,,,,settings-account-shell.md:72
+CGP-SHELL-017,CGP-SHELL-17,SHELL,feature,OS permission purpose strings,ADAPT,Studio,P1,,,,settings-account-shell.md:73
+CGP-SHELL-018,CGP-SHELL-18,SHELL,feature,AppleScript,REJECT,Studio,,,,,settings-account-shell.md:74
+CGP-SHELL-019,CGP-SHELL-19,SHELL,feature,Document types and file viewers,DEFER,Studio,,REQ-A1,,,settings-account-shell.md:75
+CGP-SHELL-020,CGP-SHELL-20,SHELL,feature,Help menu diagnostics,ALREADY,Studio,,REQ-H1,,,settings-account-shell.md:76
+CGP-SHELL-021,CGP-SHELL-21,SHELL,feature,About and open-source licenses,ALREADY,Studio,,REQ-J4,,,settings-account-shell.md:77
+CGP-SHELL-022,CGP-SHELL-22,SHELL,feature,Offline and network error states,ADAPT,Studio,P1,,,,settings-account-shell.md:78
+CGP-SHELL-023,CGP-SHELL-23,SHELL,feature,Dock icon variants,REJECT,Studio,,REQ-J1,,,settings-account-shell.md:79
+CGP-SHELL-024,CGP-SHELL-24,SHELL,feature,Shell accessibility,ADOPT,Studio,P1,,,,settings-account-shell.md:80
+CGP-SHELL-025,CGP-SHELL-25,SHELL,feature,Panel render error boundary,ADOPT,Studio,P1,,,,settings-account-shell.md:81
+CGP-SHELL-026,CGP-SHELL-26,SHELL,feature,Settings page structure,ADAPT,Studio,P2,REQ-K1,,,settings-account-shell.md:87
+CGP-SHELL-027,CGP-SHELL-27,SHELL,feature,Admin-managed setting indicators,ADAPT,Studio,P1,REQ-K1; AB-03,,,settings-account-shell.md:88
+CGP-SHELL-028,CGP-SHELL-28,SHELL,feature,"Beta, employee-only and debug settings",REJECT,Studio,,,,,settings-account-shell.md:89
+CGP-SHELL-029,CGP-SHELL-29,SHELL,feature,Theme and colors,ADAPT,Studio,P2,,,,settings-account-shell.md:95
+CGP-SHELL-030,CGP-SHELL-30,SHELL,feature,Font sizes,ADAPT,Studio,P1,,,CGP-DS-010,settings-account-shell.md:96
+CGP-SHELL-031,CGP-SHELL-31,SHELL,feature,Reduced motion,ADOPT,Studio,P1,,,CGP-DS-016,settings-account-shell.md:97
+CGP-SHELL-032,CGP-SHELL-32,SHELL,feature,"Pointer cursors, font smoothing, diff markers",DEFER,Studio,,,,CGP-DS-020,settings-account-shell.md:98
+CGP-SHELL-033,CGP-SHELL-33,SHELL,feature,Send key and IME,ALREADY,Studio,,REQ-C16,,CGP-DS-030,settings-account-shell.md:99
+CGP-SHELL-034,CGP-SHELL-34,SHELL,feature,"Plain-text composer, smart punctuation, predictions",DEFER,Studio,,,,,settings-account-shell.md:100
+CGP-SHELL-035,CGP-SHELL-35,SHELL,feature,Educational tips toggle,ADAPT,Studio,P2,,,CGP-CHAT-019,settings-account-shell.md:101
+CGP-SHELL-036,CGP-SHELL-36,SHELL,feature,App UI language selector,DEFER,Studio,,,,,settings-account-shell.md:102
+CGP-SHELL-037,CGP-SHELL-37,SHELL,feature,Local storage management,ALREADY,Studio,,REQ-Q6; REQ-Q12,,,settings-account-shell.md:103
+CGP-SHELL-038,CGP-SHELL-38,SHELL,feature,"Microphone, dictation, voice hotkey",ALREADY,Studio,,,,CGP-VOICE-023,settings-account-shell.md:104
+CGP-SHELL-039,CGP-SHELL-39,SHELL,feature,Mini & Pets desktop companion,REJECT,Studio,,REQ-A6,DEC-34,,settings-account-shell.md:105
+CGP-SHELL-040,CGP-SHELL-40,SHELL,feature,Toys,DEFER,Studio,,,,,settings-account-shell.md:106
+CGP-SHELL-041,CGP-SHELL-41,SHELL,feature,Appshots,ALREADY,Studio,,,,CGP-VOICE-015,settings-account-shell.md:107
+CGP-SHELL-042,CGP-SHELL-42,SHELL,feature,Teen welcome: interests → idea cards,ADAPT,Studio,P2,NAT-03; REQ-A4,DEC-34,,settings-account-shell.md:113
+CGP-SHELL-043,CGP-SHELL-43,SHELL,feature,Role-based welcome,REJECT,Both,,,,,settings-account-shell.md:114
+CGP-SHELL-044,CGP-SHELL-44,SHELL,feature,Getting-started checklist,ADAPT,Chalk,P2,,,,settings-account-shell.md:115
+CGP-SHELL-045,CGP-SHELL-45,SHELL,feature,Sign-in methods and fallback,ADAPT,Studio,P1,REQ-A4; REQ-L13,,,settings-account-shell.md:116
+CGP-SHELL-046,CGP-SHELL-46,SHELL,feature,Mini-game while waiting for sign-in,REJECT,Studio,,,,,settings-account-shell.md:117
+CGP-SHELL-047,CGP-SHELL-47,SHELL,feature,Conversational setup,ALREADY,Studio,,NAT-03,,,settings-account-shell.md:118
+CGP-SHELL-048,CGP-SHELL-48,SHELL,feature,Import from other AI apps,DEFER,Both,,,,CGP-AGENT-018,settings-account-shell.md:119
+CGP-SHELL-049,CGP-SHELL-49,SHELL,feature,Example tour and accuracy education,ADAPT,Studio,P1,REQ-O1,,,settings-account-shell.md:120
+CGP-SHELL-050,CGP-SHELL-50,SHELL,feature,Workspace onboarding,ALREADY,Chalk,,ADM-01,,,settings-account-shell.md:121
+CGP-SHELL-051,CGP-SHELL-51,SHELL,feature,Age status and unknown-age safeguards,ALREADY,Service,,REQ-O1,,,settings-account-shell.md:127
+CGP-SHELL-052,CGP-SHELL-52,SHELL,feature,Parental controls linking,DEFER,Both,,,DEC-23,,settings-account-shell.md:128
+CGP-SHELL-053,CGP-SHELL-53,SHELL,feature,"""Settings changed by someone"" notice",ADAPT,Studio,P1,ADM-11,,,settings-account-shell.md:129
+CGP-SHELL-054,CGP-SHELL-54,SHELL,feature,Quiet hours,ADAPT,Studio,P1,REQ-B5; REQ-Q9,,,settings-account-shell.md:130
+CGP-SHELL-055,CGP-SHELL-55,SHELL,feature,Study hours,ALREADY,Both,,,,,settings-account-shell.md:131
+CGP-SHELL-056,CGP-SHELL-56,SHELL,feature,Trusted contact,DEFER,Service,,REQ-O2,DEC-23,,settings-account-shell.md:132
+CGP-SHELL-057,CGP-SHELL-57,SHELL,feature,Lockdown mode / external link confirmation,ADAPT,Studio,P1,,,CGP-ART-009,settings-account-shell.md:133
+CGP-SHELL-058,CGP-SHELL-58,SHELL,feature,Locked chats with PIN,REJECT,Studio,,,,CGP-CHAT-037,settings-account-shell.md:134
+CGP-SHELL-059,CGP-SHELL-59,SHELL,feature,Security and login,DEFER,Service,,,,,settings-account-shell.md:140
+CGP-SHELL-060,CGP-SHELL-60,SHELL,feature,Email add/change/verify,DEFER,Service,,,,,settings-account-shell.md:141
+CGP-SHELL-061,CGP-SHELL-61,SHELL,feature,Delete account,ADAPT,Service,P1,ADM-14,,,settings-account-shell.md:142
+CGP-SHELL-062,CGP-SHELL-62,SHELL,feature,Data export,ADAPT,Studio,P2,AB-13,,,settings-account-shell.md:143
+CGP-SHELL-063,CGP-SHELL-63,SHELL,feature,Training opt-out and privacy controls,ALREADY,Service,,REQ-Q9,,,settings-account-shell.md:144
+CGP-SHELL-064,CGP-SHELL-64,SHELL,feature,Shared links management,ALREADY,Chalk,,ADM-14,,,settings-account-shell.md:145
+CGP-SHELL-065,CGP-SHELL-65,SHELL,feature,Account / workspace switcher,DEFER,Studio,,REQ-Q2,,,settings-account-shell.md:146
+CGP-SHELL-066,CGP-SHELL-66,SHELL,feature,Personalization,ALREADY,Studio,,REQ-A6,,,settings-account-shell.md:147
+CGP-SHELL-067,CGP-SHELL-67,SHELL,feature,Usage-remaining meter,ADAPT,Studio,P0,REQ-L9; AB-11; AB-15,,,settings-account-shell.md:153
+CGP-SHELL-068,CGP-SHELL-68,SHELL,feature,Request more usage,ADAPT,Both,P1,AB-11,,,settings-account-shell.md:154
+CGP-SHELL-069,CGP-SHELL-69,SHELL,feature,Per-chat usage popover,REJECT,Studio,,AB-17; REQ-L5,,,settings-account-shell.md:155
+CGP-SHELL-070,CGP-SHELL-70,SHELL,feature,Usage history,ADAPT,Chalk,P1,AB-12; AB-15,,,settings-account-shell.md:156
+CGP-SHELL-071,CGP-SHELL-71,SHELL,feature,Admin monthly per-member limit,ALREADY,Chalk,,AB-04,,,settings-account-shell.md:157
+CGP-SHELL-072,CGP-SHELL-72,SHELL,feature,"Credits, auto-reload, instant reset",REJECT,Studio,,INT-ACCESS-05; AB-05,,,settings-account-shell.md:158
+CGP-SHELL-073,CGP-SHELL-73,SHELL,feature,Plans and checkout,ALREADY,Studio,,REQ-L12,,,settings-account-shell.md:159
+CGP-SHELL-074,CGP-SHELL-74,SHELL,feature,Cancellation retention flow,REJECT,Studio,,,,,settings-account-shell.md:160
+CGP-SHELL-075,CGP-SHELL-75,SHELL,feature,"Transactions, invoices, balance",DEFER,Service,,,,,settings-account-shell.md:161
+CGP-SHELL-076,CGP-SHELL-76,SHELL,feature,Ads controls,REJECT,None,,,,CGP-LEARN-042,settings-account-shell.md:162
+CGP-SHELL-077,CGP-SHELL-77,SHELL,feature,Seat types and team billing,DEFER,Service,,AB-02,,,settings-account-shell.md:163
+CGP-SHELL-078,CGP-SHELL-78,SHELL,feature,App limits under subscription sharing,DEFER,Service,,,,,settings-account-shell.md:164
+CGP-SHELL-079,CGP-SHELL-79,SHELL,feature,Invite by email or CSV,ADAPT,Chalk,P1,ADM-01,,,settings-account-shell.md:170
+CGP-SHELL-080,CGP-SHELL-80,SHELL,feature,Workspace discovery and join requests,REJECT,None,,,,,settings-account-shell.md:171
+CGP-SHELL-081,CGP-SHELL-81,SHELL,feature,Leave workspace,DEFER,Chalk,,,,,settings-account-shell.md:172
+CGP-SHELL-082,CGP-SHELL-82,SHELL,feature,Agreements and policy acknowledgement,ADAPT,Both,P2,,,,settings-account-shell.md:173
+CGP-SHELL-083,CGP-SHELL-83,SHELL,feature,Workspace recovery,ALREADY,Studio,,AB-13,,CGP-KNOW-068,settings-account-shell.md:174
+CGP-SHELL-084,CGP-SHELL-84,SHELL,feature,Teams and Team Spaces,DEFER,Chalk,,,,CGP-LEARN-035,settings-account-shell.md:175
+CGP-SHELL-085,CGP-SHELL-85,SHELL,feature,Team activity log,ALREADY,Chalk,,ADM-07,,,settings-account-shell.md:176
+CGP-SHELL-086,CGP-SHELL-86,SHELL,feature,Outdated-build banner,ADAPT,Chalk,P1,,,,settings-account-shell.md:177
+CGP-SHELL-087,CGP-SHELL-87,SHELL,feature,Product mode switcher,ALREADY,Studio,,,,,settings-account-shell.md:183
+CGP-SHELL-088,CGP-SHELL-88,SHELL,feature,Sidebar customization,DEFER,Studio,,,,,settings-account-shell.md:184
+CGP-SHELL-089,CGP-SHELL-89,SHELL,feature,"Help menu: guide, shortcuts, What's new",ADAPT,Studio,P2,,,,settings-account-shell.md:185
+CGP-SHELL-090,CGP-SHELL-90,SHELL,feature,Commerce and finance,REJECT,None,,,,,settings-account-shell.md:191
+CGP-SHELL-091,CGP-SHELL-91,SHELL,feature,WhatsApp account link,REJECT,None,,,,CGP-KNOW-069,settings-account-shell.md:192
+CGP-SHELL-092,CGP-SHELL-92,SHELL,feature,Space (pages workspace),DEFER,None,,,,CGP-ART-037,settings-account-shell.md:193
+CGP-SHELL-093,CGP-SHELL-93,SHELL,feature,Writing style setup,DEFER,None,,,,CGP-KNOW-057,settings-account-shell.md:194
+CGP-SHELL-094,CGP-SHELL-94,SHELL,feature,"Persistent agent ""dot"" and characters",DEFER,Studio,,REQ-A6,,,settings-account-shell.md:195
+CGP-SHELL-095,CGP-SHELL-95,SHELL,feature,Cloud environments and desktops,DEFER,None,,,,CGP-AGENT-058,settings-account-shell.md:196
+CGP-SHELL-096,CGP-SHELL-96,SHELL,feature,Codex Micro hardware,REJECT,None,,,,CGP-AGENT-069,settings-account-shell.md:197
+CGP-SHELL-097,CGP-SHELL-97,SHELL,feature,Computer history (Chronicle),REJECT,None,,,,CGP-KNOW-052,settings-account-shell.md:198
+CGP-SHELL-098,CGP-SHELL-98,SHELL,feature,Remote connections,DEFER,None,,,,CGP-AGENT-059,settings-account-shell.md:199
+CGP-DS-001,CGP-DS-01,DS,feature,Three-tier token system,ADAPT,Both,P0,,,,design-system.md:167
+CGP-DS-002,CGP-DS-02,DS,feature,Host-theme bridge to VS Code,ADOPT,Studio,P0,CP-R1,,,design-system.md:168
+CGP-DS-003,CGP-DS-03,DS,feature,Light/dark single-declaration tokens,ADAPT,Both,P1,CP-R1,,,design-system.md:169
+CGP-DS-004,CGP-DS-04,DS,feature,Alpha-derived neutrals,ADAPT,Both,P0,,,,design-system.md:170
+CGP-DS-005,CGP-DS-05,DS,feature,Six status intents,ADAPT,Both,P0,SX-21; SX-50,,,design-system.md:171
+CGP-DS-006,CGP-DS-06,DS,feature,Accent color picker,REJECT,Studio,,,,,design-system.md:172
+CGP-DS-007,CGP-DS-07,DS,feature,Proprietary brand typeface,REJECT,Both,,CC-R1,,,design-system.md:173
+CGP-DS-008,CGP-DS-08,DS,feature,Separate UI / content / code font tokens,ADOPT,Both,P1,CP-R1,,,design-system.md:174
+CGP-DS-009,CGP-DS-09,DS,feature,Semantic type scale with paired metrics,ADAPT,Both,P0,CC-R1,,,design-system.md:175
+CGP-DS-010,CGP-DS-10,DS,feature,User text-size settings,ADAPT,Studio,P1,AE-T03,,,design-system.md:176
+CGP-DS-011,CGP-DS-11,DS,feature,4px spacing unit and control-size ladder,ADOPT,Both,P0,,,,design-system.md:177
+CGP-DS-012,CGP-DS-12,DS,feature,Radius scale with global multiplier,ADAPT,Both,P2,,,,design-system.md:178
+CGP-DS-013,CGP-DS-13,DS,feature,Theme-aware elevation,ADAPT,Both,P2,,,,design-system.md:179
+CGP-DS-014,CGP-DS-14,DS,feature,Container-query layout,ADOPT,Studio,P1,,,,design-system.md:180
+CGP-DS-015,CGP-DS-15,DS,feature,Motion tokens,ADAPT,Both,P1,CP-R1,,,design-system.md:181
+CGP-DS-016,CGP-DS-16,DS,feature,Reduced-motion tri-state,ADAPT,Studio,P0,CP-05,,,design-system.md:182
+CGP-DS-017,CGP-DS-17,DS,feature,Forced-colors / high contrast,ADOPT,Both,P1,CP-R1,,,design-system.md:183
+CGP-DS-018,CGP-DS-18,DS,feature,Focus-visible ring,ALREADY,Both,P0,,,,design-system.md:184
+CGP-DS-019,CGP-DS-19,DS,feature,Stroke icon system,ADAPT,Both,P1,CC-R1,,,design-system.md:185
+CGP-DS-020,CGP-DS-20,DS,feature,Pointer-cursor preference,REJECT,Studio,,,DEC-34,,design-system.md:186
+CGP-DS-021,CGP-DS-21,DS,feature,Composer surface,ALREADY,Studio,P0,CP-R1,,,design-system.md:187
+CGP-DS-022,CGP-DS-22,DS,feature,Message presentation,ADAPT,Studio,P1,CP-R1,,,design-system.md:188
+CGP-DS-023,CGP-DS-23,DS,feature,Sidebar list rows,ADAPT,Chalk,P0,,,,design-system.md:189
+CGP-DS-024,CGP-DS-24,DS,feature,Menu styling,ADAPT,Both,P1,,,,design-system.md:190
+CGP-DS-025,CGP-DS-25,DS,feature,Dialog and bottom sheet,ADAPT,Both,P0,SX-52; CC-R1,,,design-system.md:191
+CGP-DS-026,CGP-DS-26,DS,feature,Tooltip styling,ADAPT,Both,P0,,,,design-system.md:192
+CGP-DS-027,CGP-DS-27,DS,feature,Toasts and live regions,ADAPT,Both,P1,CP-R1,,,design-system.md:193
+CGP-DS-028,CGP-DS-28,DS,feature,Loading and streaming motion,ALREADY,Studio,,CP-R1; REQ-M35,,,design-system.md:194
+CGP-DS-029,CGP-DS-29,DS,feature,Logical properties and RTL,ADOPT,Both,P2,,,,design-system.md:195
+CGP-DS-030,CGP-DS-30,DS,feature,IME composition guards,ADAPT,Both,P0,TUX-CHAT-03; CP-06,,,design-system.md:196
+CGP-DS-031,CGP-DS-31,DS,feature,Line-breaking rules,ADAPT,Both,P0,,,,design-system.md:197
+CGP-DS-032,CGP-DS-32,DS,feature,Density modes,REJECT,Both,,,,,design-system.md:198
+CGP-DS-033,CGP-DS-33,DS,feature,Theme customization suite,REJECT,Studio,,,,,design-system.md:199
+CGP-DS-034,CGP-DS-34,DS,feature,Non-color diff markers,ADOPT,Studio,P1,SX-50; SX-16,,,design-system.md:200
+CGP-DS-035,CGP-DS-35,DS,feature,Tabular numerals,ADOPT,Chalk,P2,,,,design-system.md:201
+CGP-DS-036,CGP-DS-36,DS,feature,Stable scrollbar gutter,ADOPT,Studio,P1,,,,design-system.md:202
+CGP-DS-037,CGP-DS-37,DS,feature,Hover/pointer media gating,ALREADY,Both,,CP-R1,,,design-system.md:203
+CGP-DS-038,CGP-DS-38,DS,feature,Branded startup loader,ADAPT,Studio,P2,,,,design-system.md:204
+CGP-DS-039,CGP-DS-39,DS,feature,Window chrome tokens,ALREADY,Studio,,,,,design-system.md:205
+CGP-DS-040,CGP-DS-40,DS,feature,Math typesetting fonts,DEFER,Studio,,,,CGP-CHAT-040,design-system.md:206
+CGP-DS-041,CGP-DS-41,DS,feature,Emoji font stack,ADOPT,Both,P2,REQ-M35,,,design-system.md:207
+CGP-DS-042,CGP-DS-42,DS,feature,Placeholder and tertiary text contrast,ADAPT,Both,P0,,,,design-system.md:208
+CGP-CHAT-R-001,CGP-CHAT-R48,CHAT,req,The chat announces response lifecycle to assistive tech.,ADOPT,Studio,P0,CGP-CHAT-048; PI#1; AE-06,,,chat-core.md:192
+CGP-CHAT-R-002,CGP-CHAT-R65,CHAT,req,The learner can edit their latest sent prompt and resend it.,ADAPT,Studio,P0,CGP-CHAT-065; PI#2; PI#3 (Iterate),DEC-08,,chat-core.md:193
+CGP-CHAT-R-003,CGP-CHAT-R53,CHAT,req,A coach question offering choices renders as a card that requires an explicit learner pick.,ADAPT,Studio,P0,CGP-CHAT-053; PI#2; PI#6,,,chat-core.md:194
+CGP-CHAT-R-004,CGP-CHAT-R30,CHAT,req,"""먼저 계획 보기"" mode shows a plan and waits for learner approval before any tool runs.",ADAPT,Studio,P1,CGP-CHAT-030; PI#2; PI#3; AE-36,CGP-AGENT-R-001; DEC-10,,chat-core.md:195
+CGP-CHAT-R-005,CGP-CHAT-R63,CHAT,req,Each completed answer offers a learner verdict with an optional reason.,ADAPT,Studio,P1,CGP-CHAT-063; PI#2; PI#5,DEC-09,,chat-core.md:196
+CGP-CHAT-R-006,CGP-CHAT-R64,CHAT,req,Retrying an answer keeps every attempt in the same turn with a pager.,ADAPT,Studio,P1,CGP-CHAT-064; PI#2; PI#5; AE-35,,,chat-core.md:197
+CGP-CHAT-R-007,CGP-CHAT-R72,CHAT,req,"Selecting text in an answer offers ""이 부분 질문하기"", which quotes it into the composer.",ADAPT,Studio,P1,CGP-CHAT-072; PI#3; AE-02,CGP-CHAT-R-011,,chat-core.md:198
+CGP-CHAT-R-008,CGP-CHAT-R39,CHAT,req,Every code block has copy and word-wrap controls.,ADAPT,Studio,P1,CGP-CHAT-039; PI#1,,,chat-core.md:199
+CGP-CHAT-R-009,CGP-CHAT-R67,CHAT,req,Each completed answer can be read aloud.,ADAPT,Studio,P1,CGP-CHAT-067; PI#1; AE-06,CGP-VOICE-R-024; DEC-04; DEC-06,,chat-core.md:200
+CGP-CHAT-R-010,CGP-CHAT-R16,CHAT,req,"When earlier conversation stops being sent in full, the transcript says so.",ADAPT,Studio,P1,CGP-CHAT-016; PI#5,,,chat-core.md:201
+CGP-CHAT-R-011,CGP-CHAT-R06,CHAT,req,The learner can attach a workspace file as context.,ADAPT,Studio,P1,CGP-CHAT-006; PI#2; AE-02,,,chat-core.md:202
+CGP-CHAT-R-012,CGP-CHAT-R04,CHAT,req,"A queued message can be explicitly sent into the running turn (""지금 방향 바꾸기"").",ADAPT,Studio,P1,CGP-CHAT-004; PI#2; PI#6,,,chat-core.md:203
+CGP-CHAT-R-013,CGP-CHAT-R74,CHAT,req,An answer shows what it actually drew on.,ADAPT,Studio,P2,CGP-KNOW-044; PI#5,,CGP-KNOW-R-026,chat-core.md:204
+CGP-CHAT-R-014,CGP-CHAT-R45,CHAT,req,Each source in a sources list is labelled by kind.,ADAPT,Studio,P2,CGP-CHAT-045; PI#5,,,chat-core.md:205
+CGP-CHAT-R-015,CGP-CHAT-R46,CHAT,req,A completed turn shows its real elapsed work time.,ADAPT,Studio,P2,CGP-CHAT-046; PI#5,,,chat-core.md:206
+CGP-CHAT-R-016,CGP-CHAT-R50,CHAT,req,A single turn that fails to render does not break the transcript.,ADAPT,Studio,P2,CGP-CHAT-050; PI#1,,,chat-core.md:207
+CGP-CHAT-R-017,CGP-CHAT-R07,CHAT,req,A long paste becomes a collapsible chip in the composer.,ADAPT,Studio,P2,CGP-CHAT-007; PI#1,CGP-CHAT-R-011,,chat-core.md:208
+CGP-CHAT-R-018,CGP-CHAT-R08,CHAT,req,Typing `@` lists workspace files to attach (personal/adult profile).,ADAPT,Studio,P2,CGP-CHAT-008; PI#2,CGP-CHAT-R-011,,chat-core.md:209
+CGP-CHAT-R-019,CGP-CHAT-R12,CHAT,req,Dictation fills the composer with editable text.,ADAPT,Studio,P2,CGP-VOICE-017; PI#1,,CGP-VOICE-R-012,chat-core.md:210
+CGP-CHAT-R-020,CGP-CHAT-R14,CHAT,req,The learner can draw a sketch and attach it.,ADAPT,Studio,P2,CGP-CHAT-014; PI#3,,,chat-core.md:211
+CGP-CHAT-R-021,CGP-CHAT-R19,CHAT,req,At most one lesson-authored tip appears above the composer.,ADAPT,Both,P2,CGP-CHAT-019; PI#4,,,chat-core.md:212
+CGP-CHAT-R-022,CGP-CHAT-R40,CHAT,req,Math in answers renders as math.,ADAPT,Studio,P2,CGP-CHAT-040; PI#1,DEC-32,,chat-core.md:213
+CGP-CHAT-R-023,CGP-CHAT-R56,CHAT,req,Lesson step boundaries appear in the transcript.,ADAPT,Both,P2,CGP-CHAT-056; PI#3; AE-01,,,chat-core.md:214
+CGP-CHAT-R-024,CGP-CHAT-R62,CHAT,req,The learner can copy their whole task conversation as text.,ADAPT,Studio,P2,CGP-CHAT-062; PI#2 (Ownership),,,chat-core.md:215
+CGP-CHAT-R-025,CGP-CHAT-R77,CHAT,req,A task can be archived and restored.,ADAPT,Studio,P2,CGP-CHAT-077; PI#2,,,chat-core.md:216
+CGP-CHAT-R-026,CGP-CHAT-R79,CHAT,req,The learner can search their own tasks.,ADAPT,Studio,P2,CGP-CHAT-079; PI#1,,,chat-core.md:217
+CGP-CHAT-R-027,CGP-CHAT-R80,CHAT,req,Find-in-chat searches the open transcript.,ADAPT,Studio,P2,CGP-CHAT-080; PI#1,,,chat-core.md:218
+CGP-CHAT-R-028,CGP-CHAT-R81,CHAT,req,"A ""내 질문"" list jumps to each of the learner's prompts.",ADAPT,Studio,P2,CGP-CHAT-081; PI#3,,,chat-core.md:219
+CGP-CHAT-R-029,CGP-CHAT-R85,CHAT,req,Low-stakes removals offer Undo instead of a confirm dialog.,ADAPT,Studio,P2,CGP-CHAT-085; PI#4,CGP-DS-R-025,,chat-core.md:220
+CGP-CHAT-R-030,CGP-CHAT-R86,CHAT,req,A shortcuts help sheet lists the chat keys that exist.,ADAPT,Studio,P2,CGP-CHAT-086; PI#1,,,chat-core.md:221
+CGP-KNOW-R-001,REQ-KNOW-01,KNOW,req,The task rail groups tasks under the current activity and filters them by title text.,ADAPT,Studio,P2,CGP-KNOW-001; PI#1,,,projects-library-memory.md:144
+CGP-KNOW-R-002,REQ-KNOW-02,KNOW,req,"The activity home offers two views, 작업 (tasks) and 자료 (materials), switching without losing the composer draft.",ADAPT,Studio,P2,CGP-KNOW-002; PI#1,,,projects-library-memory.md:145
+CGP-KNOW-R-003,REQ-KNOW-04,KNOW,req,A learner can add a file or https URL to the activity's 자료 list; each item records who added it (나/강사/AI) and is sent to the model only when the learner selects it for a turn.,ADAPT,Studio,P1,CGP-KNOW-004; PI#2; PI#5,CGP-CHAT-R-011,,projects-library-memory.md:146
+CGP-KNOW-R-004,REQ-KNOW-06,KNOW,req,"""팀 브레인에 남기기"" on one completed assistant turn creates a team-brain proposal citing that turn id; nothing is filed until the learner confirms.",ADAPT,Studio,P1,CGP-KNOW-006; PI#2; PI#3; PI#5,,,projects-library-memory.md:147
+CGP-KNOW-R-005,REQ-KNOW-07,KNOW,req,"Memory is scoped to one activity; a class or team activity never reads or writes the learner's personal memory, and the scope is fixed at activity creation.",ADAPT,Studio,P0,CGP-KNOW-007; PI#2; AB,CGP-KNOW-R-022; DEC-01,,projects-library-memory.md:148
+CGP-KNOW-R-006,REQ-KNOW-09,KNOW,req,"Every action that sends learner content outside the activity (help request, collect, gallery, site publish, share) first lists what is sent, to whom, and what is excluded.",ADAPT,Studio,P0,CGP-KNOW-009; PI#2,,,projects-library-memory.md:149
+CGP-KNOW-R-007,REQ-KNOW-10,KNOW,req,"Gallery/site publish whose audience is outside the class shows an extra ""누구나 볼 수 있어요"" confirmation naming the audience.",ADAPT,Studio,P1,CGP-KNOW-010; PI#2,CGP-KNOW-R-006,,projects-library-memory.md:150
+CGP-KNOW-R-008,REQ-KNOW-13,KNOW,req,A learner may give a task an emoji and colour; the title remains the accessible name.,ADAPT,Studio,P2,CGP-KNOW-013; PI#1,,,projects-library-memory.md:151
+CGP-KNOW-R-009,REQ-KNOW-14,KNOW,req,A personal task can move between personal activities; class tasks cannot leave their class activity.,ADAPT,Studio,P2,CGP-KNOW-014; PI#1,,,projects-library-memory.md:152
+CGP-KNOW-R-010,REQ-KNOW-18,KNOW,req,"Opening a non-class folder in a personal activity asks once whether Studio may read, edit and run files there; ""제한 모드로 열기"" keeps tools read-only.",ADAPT,Studio,P1,CGP-KNOW-018; PI#2,,,projects-library-memory.md:153
+CGP-KNOW-R-011,REQ-KNOW-20,KNOW,req,"""내 작품"" lists the learner's artifacts across tasks of the current activity, newest change first.",ADAPT,Studio,P2,CGP-KNOW-020; PI#1; PI#2,CGP-KNOW-R-012,,projects-library-memory.md:154
+CGP-KNOW-R-012,REQ-KNOW-21,KNOW,req,"Each artifact carries a provenance label derived from recorded events: AI가 만듦, 내가 올림, 내가 고침 (AI 결과를 사람이 수정).",ADAPT,Studio,P1,CGP-KNOW-021; PI#2; PI#5; PI#7,,,projects-library-memory.md:155
+CGP-KNOW-R-013,REQ-KNOW-24,KNOW,req,Deleting a learner file through Studio moves it to the activity trash; it can be restored to its original path until the activity is removed.,ADAPT,Studio,P0,CGP-KNOW-024; PI#1; AB (own files kept),DEC-12; DEC-13,,projects-library-memory.md:156
+CGP-KNOW-R-014,REQ-KNOW-26,KNOW,req,"""내 파일 붙이기"" attaches existing files from the current workspace to the next message under existing attachment grants and caps.",ADAPT,Studio,P1,CGP-CHAT-006; PI#1,,CGP-CHAT-R-011,projects-library-memory.md:157
+CGP-KNOW-R-015,REQ-KNOW-28,KNOW,req,"From an artifact, ""이 파일에 대해 묻기"" opens the composer with that file attached and an editable starter line.",ADAPT,Studio,P1,CGP-KNOW-028; PI#1; PI#2,CGP-CHAT-R-011,,projects-library-memory.md:158
+CGP-KNOW-R-016,REQ-KNOW-29,KNOW,req,An artifact's info view links to the task and turn that created it and the turn that last changed it.,ADAPT,Studio,P2,CGP-KNOW-029; PI#2; PI#5,CGP-KNOW-R-012,,projects-library-memory.md:159
+CGP-KNOW-R-017,REQ-KNOW-30,KNOW,req,"Each learner artifact has a visible version list (who changed it, when) and restore archives the current copy before replacing it.",ADAPT,Studio,P0,CGP-KNOW-030; PI#1; PI#2,DEC-12,,projects-library-memory.md:160
+CGP-KNOW-R-018,REQ-KNOW-33,KNOW,req,Any send-to-others action states whether the receiver's AI may store the content.,ADAPT,Both,P1,CGP-KNOW-033; PI#2; PI#5,CGP-KNOW-R-006,,projects-library-memory.md:161
+CGP-KNOW-R-019,REQ-KNOW-35,KNOW,req,"When free disk space in the workspace volume falls below the threshold needed to save work, Studio warns before a turn writes files.",ADAPT,Studio,P2,CGP-KNOW-035; PI#1; AB,,,projects-library-memory.md:162
+CGP-KNOW-R-020,REQ-KNOW-37,KNOW,req,Each attachment failure cause has its own learner message and next step; the attachment chip and draft remain.,ADAPT,Studio,P0,CGP-KNOW-037; PI#1; PI#4,,,projects-library-memory.md:163
+CGP-KNOW-R-021,REQ-KNOW-38,KNOW,req,Downloads started in the Studio browser are saved into the activity's `downloads/` folder and report completion or failure in the chat timeline.,ADAPT,Studio,P2,CGP-KNOW-038; PI#1,,,projects-library-memory.md:164
+CGP-KNOW-R-022,REQ-KNOW-40,KNOW,req,Memory is available only when the activity's Service profile enables it; minor cohorts default to off; the current state is visible in the activity.,ADAPT,Both,P0,CGP-KNOW-040; PI#2; REQ-O,DEC-01; DEC-02,,projects-library-memory.md:165
+CGP-KNOW-R-023,REQ-KNOW-41,KNOW,req,The learner can view and delete each remembered item; a deleted item is absent from all later requests.,ADAPT,Studio,P0,CGP-KNOW-041; PI#2,CGP-KNOW-R-022; CGP-KNOW-R-030; DEC-01,,projects-library-memory.md:166
+CGP-KNOW-R-024,REQ-KNOW-42,KNOW,req,Memory capacity is shown as used/limit with a cleanup entry and no purchase control.,ADAPT,Studio,P2,CGP-KNOW-042; AB,CGP-KNOW-R-023; DEC-01,,projects-library-memory.md:167
+CGP-KNOW-R-025,REQ-KNOW-43,KNOW,req,"A memory overview lists stated facts grouped by task; it never contains ability, personality or capability statements.",ADAPT,Studio,P1,CGP-KNOW-043; PI#7; SX-01,CGP-KNOW-R-030; DEC-01,,projects-library-memory.md:168
+CGP-KNOW-R-026,REQ-KNOW-44,KNOW,req,"An answer that used memory shows ""기억 사용 N"" listing the exact items; the learner can exclude an item from the rest of this task.",ADAPT,Studio,P0,CGP-KNOW-044; PI#2; PI#5,CGP-KNOW-R-022; CGP-KNOW-R-030; DEC-01,,projects-library-memory.md:169
+CGP-KNOW-R-027,REQ-KNOW-45,KNOW,req,"Every memory write appears as a timeline line in the turn that caused it, with an undo.",ADAPT,Studio,P0,CGP-KNOW-045; PI#2,CGP-KNOW-R-022; CGP-KNOW-R-030; DEC-01,,projects-library-memory.md:170
+CGP-KNOW-R-028,REQ-KNOW-46,KNOW,req,"Each task has two switches, ""이 작업에서 기억 쓰기"" and ""이 작업을 기억에 남기기""; ""쓰기"" locks after the first send.",ADAPT,Studio,P1,CGP-KNOW-046; PI#2; PI#4,CGP-KNOW-R-022; DEC-01,,projects-library-memory.md:171
+CGP-KNOW-R-029,REQ-KNOW-47,KNOW,req,"In personal adult activities, ""기록 없이 묻기"" creates a task that is not persisted, not remembered and not spooled; it is unavailable in class activities with a reason.",ADAPT,Studio,P2,CGP-KNOW-047; PI#4; consent,CGP-KNOW-R-022; DEC-01,,projects-library-memory.md:172
+CGP-KNOW-R-030,REQ-KNOW-48,KNOW,req,"Memory is stored as readable files inside the activity (`.hypeproof/memory/` or the team-brain folder) and the learner can open, read and delete them in Studio.",ADAPT,Studio,P1,CGP-KNOW-048; PI#2; PI#5,CGP-KNOW-R-022; DEC-01,,projects-library-memory.md:173
+CGP-KNOW-R-031,REQ-KNOW-49,KNOW,req,"First enablement of memory shows once what is stored, where, who can read it and how to delete it; for minors the enablement happens in Chalk, not in a learner pop-up.",ADAPT,Both,P0,CGP-KNOW-049; PI#2; REQ-O,CGP-KNOW-R-022; DEC-01; DEC-02,,projects-library-memory.md:174
+CGP-KNOW-R-032,REQ-KNOW-50,KNOW,req,"The learner can set a nickname the AI uses; no occupation or free ""about me"" field is collected for minor cohorts.",ADAPT,Studio,P2,CGP-KNOW-050; PI#1; REQ-O,,,projects-library-memory.md:175
+CGP-KNOW-R-033,REQ-KNOW-51,KNOW,req,"Help, collect, gallery and publish payloads exclude memory files unless the learner explicitly selects one.",ADAPT,Studio,P0,CGP-KNOW-051; PI#2,CGP-KNOW-R-006; DEC-01,,projects-library-memory.md:176
+CGP-KNOW-R-034,REQ-KNOW-63,KNOW,req,"Before gallery or site publish, Studio shows a visitor preview of exactly the published files and the audience.",ADAPT,Studio,P1,CGP-KNOW-063; PI#2; PI#5,CGP-KNOW-R-007,,projects-library-memory.md:177
+CGP-KNOW-R-035,REQ-KNOW-67,KNOW,req,"At class end or trial→class transition, ""내 작업 가져가기"" lists what moves (files, tasks, team brain) and what does not (class materials, instructor notes, class memory), then reports per-item results.",ADAPT,Both,P1,CGP-KNOW-067; PI#1; AB; BASE-05,,,projects-library-memory.md:178
+CGP-KNOW-R-036,REQ-KNOW-68,KNOW,req,"When an activity can no longer run AI (class ended, token expired, cohort paused, budget exhausted), one status screen states the cause, what still works and who can fix it.",ADAPT,Studio,P0,CGP-KNOW-068; PI#1; AB; US-12,,,projects-library-memory.md:179
+CGP-KNOW-R-037,REQ-KNOW-70,KNOW,req,"Chalk lessons can carry up to 4 conversation starters shown to learners as editable suggestions, and authoring shows that learners may elicit lesson material.",ADAPT,Chalk,P1,CGP-AGENT-027; PI#4; PI#6,,CGP-AGENT-R-015,projects-library-memory.md:180
+CGP-AGENT-R-001,REQ-CGP-AGENT-01a,AGENT,req,"Chalk lets the instructor choose one approval preset per lesson version from `항상 묻기`, `중요한 것만 묻기`, `바꾸기 전에 묻기`; there is no full-access preset.",ADAPT,Chalk,P0,CGP-AGENT-001; PI#2; PI#5,DEC-11,,agents-codex-automation.md:111
+CGP-AGENT-R-002,REQ-CGP-AGENT-01b,AGENT,req,Studio shows the active approval preset next to the composer as read-only text.,ADAPT,Studio,P0,CGP-AGENT-001; PI#2,CGP-AGENT-R-001; DEC-11,,agents-codex-automation.md:112
+CGP-AGENT-R-003,REQ-CGP-AGENT-03,AGENT,req,"Studio shows a ""이 수업에서 AI가 할 수 있는 일"" card derived from the resolved feature set (`read·write·shell·subagents·browser·web_search`) and the approval preset.",ADAPT,Studio,P0,CGP-AGENT-003; PI#2; PI#7,CGP-AGENT-R-001; CGP-AGENT-R-019; DEC-11,,agents-codex-automation.md:113
+CGP-AGENT-R-004,REQ-CGP-AGENT-04,AGENT,req,"A command approval offers ""이번 작업 동안 같은 종류 명령 허용"" for a non-destructive command prefix.",ADAPT,Studio,P1,CGP-AGENT-004; PI#2; PI#4,CGP-AGENT-R-001,,agents-codex-automation.md:114
+CGP-AGENT-R-005,REQ-CGP-AGENT-05,AGENT,req,"A write approval lists every file the tool call will change, in workspace-relative form.",ADAPT,Studio,P0,CGP-AGENT-005; PI#2; PI#5,,,agents-codex-automation.md:115
+CGP-AGENT-R-006,REQ-CGP-AGENT-06,AGENT,req,A browser-open approval shows the destination host and whether it is the learner's own preview or the public internet.,ADAPT,Studio,P1,CGP-AGENT-006; PI#2,,,agents-codex-automation.md:116
+CGP-AGENT-R-007,REQ-CGP-AGENT-08,AGENT,req,"Every denied tool call or disabled feature names its source: lesson setting, platform safety rule, or unsupported app version.",ADAPT,Both,P0,CGP-AGENT-008; PI#2; PI#5,,,agents-codex-automation.md:117
+CGP-AGENT-R-008,REQ-CGP-AGENT-09,AGENT,req,A model refusal on either runtime shows a composer banner with what the learner can still do.,ADAPT,Studio,P0,CGP-AGENT-009; PI#4; PI#5,,,agents-codex-automation.md:118
+CGP-AGENT-R-009,REQ-CGP-AGENT-12,AGENT,req,"When subagents are granted, the chat shows each delegation with helper name, delegated task, status and final response, plus ""모두 멈추기"".",ADAPT,Studio,P1,CGP-AGENT-012; PI#2; PI#3; PI#5,,,agents-codex-automation.md:119
+CGP-AGENT-R-010,REQ-CGP-AGENT-13,AGENT,req,The learner's goal is shown above the composer with status (진행 중 / 이룸 / 멈춤 / 예산 한도) and the remaining lesson budget.,ADAPT,Studio,P1,CGP-AGENT-013; PI#2; PI#5,,,agents-codex-automation.md:120
+CGP-AGENT-R-011,REQ-CGP-AGENT-14,AGENT,req,"A ""계획 먼저 보기"" toggle makes the coach return a numbered plan and perform no write/shell/browser tool until the learner approves the plan.",ADAPT,Studio,P1,CGP-CHAT-030; PI#2; PI#3; PI#6,,CGP-CHAT-R-004,agents-codex-automation.md:121
+CGP-AGENT-R-012,REQ-CGP-AGENT-19,AGENT,req,"Chalk can schedule a lesson operation (open participation, pause new runs, release a prepared notice/prompt) at a KST date-time, once or weekly.",ADAPT,Chalk,P2,CGP-AGENT-019; PI#1; PI#4,DEC-31,,agents-codex-automation.md:122
+CGP-AGENT-R-013,REQ-CGP-AGENT-23,AGENT,req,"Each Chalk attention item has a title ""state + object"" and a summary ""next step"".",ADAPT,Chalk,P1,CGP-AGENT-023; PI#4; PI#5,,,agents-codex-automation.md:123
+CGP-AGENT-R-014,REQ-CGP-AGENT-26,AGENT,req,Chalk authoring assistant proposes lesson-setting changes as a card that changes nothing until the instructor presses Apply.,ADAPT,Chalk,P1,CGP-AGENT-026; PI#2; PI#5,CGP-AGENT-R-015,,agents-codex-automation.md:124
+CGP-AGENT-R-015,REQ-CGP-AGENT-27,AGENT,req,"Chalk has one ""수업 AI 설정"" screen composing AI name/role/tone, instructions, model, effort, allowed features, approval preset and up to 4 starter prompts.",ADAPT,Chalk,P1,CGP-AGENT-027; PI#6; PI#7,CGP-AGENT-R-001; CGP-AGENT-R-016; DEC-30,,agents-codex-automation.md:125
+CGP-AGENT-R-016,REQ-CGP-AGENT-28,AGENT,req,"Before confirming a new lesson version, Chalk shows a per-field change list and an instruction text diff against the current version.",ADAPT,Chalk,P1,CGP-AGENT-028; PI#5,,,agents-codex-automation.md:126
+CGP-AGENT-R-017,REQ-CGP-AGENT-31,AGENT,req,"Chalk shows per-lesson AI usage: runs, active students, daily runs for 7 KST days.",ADAPT,Chalk,P2,CGP-AGENT-031; PI#5; PI#7,,,agents-codex-automation.md:127
+CGP-AGENT-R-018,REQ-CGP-AGENT-33,AGENT,req,"The learner can open ""AI가 기억하는 것"" for the current project and download it.",ADAPT,Studio,P1,CGP-KNOW-048; PI#2; PI#5,,CGP-KNOW-R-030,agents-codex-automation.md:128
+CGP-AGENT-R-019,REQ-CGP-AGENT-35,AGENT,req,Approval preset names and descriptions are shared between Chalk and Studio from one Service-owned catalog.,ADAPT,Both,P1,CGP-AGENT-035; PI#7,CGP-AGENT-R-001; DEC-11,,agents-codex-automation.md:129
+CGP-AGENT-R-020,REQ-CGP-AGENT-36,AGENT,req,"Studio shows the lesson's skills as a read-only shelf; the learner can view a skill's SKILL.md source and start ""써 보기"".",ADAPT,Studio,P1,CGP-AGENT-036; PI#1; PI#3,CGP-AGENT-R-015,,agents-codex-automation.md:130
+CGP-AGENT-R-021,REQ-CGP-AGENT-45,AGENT,req,"Chalk board uses five student states: 작업 중 / 막힘 / 선생님 확인 필요 / 쉬는 중 / 끝남, plus 확인 불가.",ADAPT,Chalk,P0,CGP-AGENT-045; PI#5,,,agents-codex-automation.md:131
+CGP-AGENT-R-022,REQ-CGP-AGENT-46,AGENT,req,"Studio's task list shows each task's AE-03 state, and one command moves focus to the next task waiting on the learner.",ADAPT,Studio,P0,CGP-AGENT-046; PI#2; PI#4,,,agents-codex-automation.md:132
+CGP-AGENT-R-023,REQ-CGP-AGENT-47a,AGENT,req,Studio notifies when the coach finishes a turn or waits for approval while the chat panel is not visible.,ADAPT,Studio,P1,CGP-AGENT-047; PI#4,CGP-AGENT-R-022,,agents-codex-automation.md:133
+CGP-AGENT-R-024,REQ-CGP-AGENT-47b,AGENT,req,Chalk notifies the instructor when a student sends a help request.,ADAPT,Chalk,P1,CGP-AGENT-047; PI#4; PI#5,,,agents-codex-automation.md:134
+CGP-AGENT-R-025,REQ-CGP-AGENT-48,AGENT,req,The chat panel supports find-in-transcript.,ADOPT,Studio,P2,CGP-CHAT-080; PI#1,,CGP-CHAT-R-027,agents-codex-automation.md:135
+CGP-AGENT-R-026,REQ-CGP-AGENT-52,AGENT,req,"Each task has a ""바뀐 것"" panel listing changed files with before/after and restore.",ADAPT,Studio,P0,CGP-AGENT-052; PI#2; PI#5,CGP-KNOW-R-017; DEC-12,,agents-codex-automation.md:136
+CGP-AGENT-R-027,REQ-CGP-AGENT-53,AGENT,req,Adult website tracks can save a checkpoint with an AI-suggested message that the learner reviews.,ADAPT,Studio,P2,CGP-AGENT-053; PI#2; PI#5,,,agents-codex-automation.md:137
+CGP-AGENT-R-028,REQ-CGP-AGENT-57,AGENT,req,"When the task folder is missing, Studio shows a recovery notice with one action.",ADAPT,Studio,P1,CGP-AGENT-057; PI#4,,,agents-codex-automation.md:138
+CGP-AGENT-R-029,REQ-CGP-AGENT-60,AGENT,req,"Shell rows show a purpose line, then `$ command` and the folder; a ""실행 중인 것"" list shows background processes with stop.",ADAPT,Studio,P1,CGP-AGENT-060; PI#2; PI#5,,,agents-codex-automation.md:139
+CGP-AGENT-R-030,REQ-CGP-AGENT-64,AGENT,req,Adult/instructor seats can record a performance trace kept locally by default.,ADAPT,Studio,P2,CGP-AGENT-064; PI#5,,,agents-codex-automation.md:140
+CGP-AGENT-R-031,REQ-CGP-AGENT-66,AGENT,req,"Studio shows a ""AI가 지금 붐벼요"" banner when the Service reports degraded upstream.",ADAPT,Studio,P2,CGP-AGENT-066; PI#4,,,agents-codex-automation.md:141
+CGP-AGENT-R-032,REQ-CGP-AGENT-67,AGENT,req,"The first entry into a lesson shows the capability card (REQ-CGP-AGENT-03) once, with a 다음 action.",ADAPT,Studio,P1,CGP-AGENT-067; PI#2; PI#3,CGP-AGENT-R-003,,agents-codex-automation.md:142
+CGP-ART-R-001,REQ-ART-01 (CGP-ART-02),ART,req,"In the learner-page preview, the learner can add up to 10 numbered annotations, each an element pick (CR-09) or a dragged rectangle, with a short comment each, and send them together as one coach request.",ADAPT,Studio,P1,CGP-ART-002; PI#2; PI#1,,,artifacts-canvas-media.md:123
+CGP-ART-R-002,REQ-ART-02 (CGP-ART-03),ART,req,"After the coach finishes a turn that changed the learner's page, the preview shows a review bar for that turn: the number of changed files and units (from `diffGuard`), and **되돌리기** (revert the whole turn to the version before it) and **이대로 둘게요** (keep).",ADAPT,Studio,P0,CGP-ART-003; PI#2; PI#5,CGP-KNOW-R-017; DEC-12,,artifacts-canvas-media.md:124
+CGP-ART-R-003,REQ-ART-03 (CGP-ART-04),ART,req,"Closing the preview, or switching activity, while unsent annotations exist asks to keep or discard them.",ADOPT,Studio,P1,CGP-ART-004; PI#2,CGP-ART-R-001,,artifacts-canvas-media.md:125
+CGP-ART-R-004,REQ-ART-04 (CGP-ART-05),ART,req,"In Chalk, an instructor can select a section of a `chalk-plan/1` plan (any element carrying a `data-chalk-*` marker) and attach a revision request to it. The generator revises only that section, and the result opens in the existing version compare (FB-01).",ADAPT,Chalk,P1,CGP-ART-005; PI#2; PI#5,,,artifacts-canvas-media.md:126
+CGP-ART-R-005,REQ-ART-05 (CGP-ART-06),ART,req,An instructor can leave a comment anchored to a place in a learner's approved artifact version (U1b). The learner sees it on that version in Studio and can reply or mark it handled. The coach is never assigned automatically.,ADAPT,Both,P1,CGP-ART-006; PI#2; PI#3; PI#5,,,artifacts-canvas-media.md:127
+CGP-ART-R-006,REQ-ART-06 (CGP-ART-07),ART,req,"For a picked element, the learner can adjust a small set of style properties (text color, background, font size, spacing, corner radius) with a live preview, then send the chosen values to the coach as a structured edit request. The tool does not write CSS itself.",ADAPT,Studio,P2,CGP-ART-007; PI#2; PI#3,,,artifacts-canvas-media.md:128
+CGP-ART-R-007,REQ-ART-07 (CGP-ART-08),ART,req,"When page context (`page_context`) or an element capture is attached to a turn, the learner sees exactly the text that will be sent, labeled with its source page origin, and can remove it before sending.",ADAPT,Studio,P0,CGP-ART-008; PI#2; PI#4,,,artifacts-canvas-media.md:129
+CGP-ART-R-008,REQ-ART-08 (CGP-ART-09),ART,req,"For minor cohorts (`browser_session.mode = ""safe""`), every link the learner opens from chat or preview opens inside the integrated safe-session browser, never the system browser. A link outside the allowlist shows a blocked notice and does not navigate. For adult cohorts, opening a link in the system browser first shows a confirmation with the host.",ADAPT,Studio,P0,CGP-ART-009; PI#2 (safety; native-browser-spec §5.2),DEC-14,,artifacts-canvas-media.md:130
+CGP-ART-R-009,REQ-ART-09 (CGP-ART-10),ART,req,"When the learner's preview fails to load, the preview tab shows one cause line in learner language from `previewRecovery`'s classification (server not running, page missing (404), computer offline) and one action.",ADAPT,Studio,P1,CGP-ART-010; PI#1; PI#5,,,artifacts-canvas-media.md:131
+CGP-ART-R-010,REQ-ART-10 (CGP-ART-11),ART,req,"When the coach builds or changes the learner's page, the chat shows one result card with a thumbnail, page title, short version id, verified state per CR-81, and actions **열기** and **폴더에서 보기**.",ADAPT,Studio,P1,CGP-ART-011; PI#5; PI#2,,,artifacts-canvas-media.md:132
+CGP-ART-R-011,REQ-ART-11 (CGP-ART-12),ART,req,"Every published test version shows one persistent sharing-state label next to the page: who can open it, until when, and how many links are active.",ADAPT,Studio,P1,CGP-ART-012; PI#2,,,artifacts-canvas-media.md:133
+CGP-ART-R-012,REQ-ART-12 (CGP-ART-13),ART,req,"The first time a learner publishes a test version, Studio shows a short responsibility notice. For minor cohorts with the institutional flag (SX-41), the instructor must confirm before the link opens.",ADAPT,Studio,P1,CGP-ART-013; PI#2 (SX-41; CR-65),CGP-ART-R-011; DEC-15,,artifacts-canvas-media.md:134
+CGP-ART-R-013,REQ-ART-13 (CGP-ART-14),ART,req,"For each test version, the learner sees counts of opened sessions and completed tasks for the last 7 days, compared with the previous 7 days. Each count opens its source sessions (CR-27).",ADAPT,Studio,P1,CGP-ART-014; PI#5,CGP-ART-R-011,,artifacts-canvas-media.md:135
+CGP-ART-R-014,REQ-ART-14 (CGP-ART-15),ART,req,"When the learner asks for a page or deck ""style"" without naming one, the coach may offer up to 6 instructor-provided starter styles as a visual picker with preview images. The learner may pick one, upload their own reference image or file, or skip.",ADAPT,Studio,P2,CGP-ART-015; PI#4; PI#6; PI#2,DEC-16,,artifacts-canvas-media.md:136
+CGP-ART-R-015,REQ-ART-15 (CGP-ART-16),ART,req,"The learner can present the deck full-screen from the deck view with next and previous slide (keys and buttons), a position indicator, and exit. Speaker notes stay hidden from the audience.",ADAPT,Studio,P2,CGP-ART-016; PI#1,,,artifacts-canvas-media.md:137
+CGP-ART-R-016,REQ-ART-16 (CGP-ART-17),ART,req,"A slide offers up to 3 suggestion chips (쉽게 줄이기, 그림으로 보이기, 핵심 강조). Each produces a CR-56 patch proposal for that slide only, which the student accepts or rejects.",ADAPT,Studio,P2,CGP-ART-017; PI#2; PI#5,,,artifacts-canvas-media.md:138
+CGP-ART-R-017,REQ-ART-17 (CGP-ART-18),ART,req,"While the coach is editing the learner's page, a **따라 보기** toggle (on by default) scrolls the preview to the most recently changed element after each live reload.",ADAPT,Studio,P2,CGP-ART-018; PI#1,,,artifacts-canvas-media.md:139
+CGP-ART-R-018,REQ-ART-18 (CGP-ART-19),ART,req,"In image edit (REQ-STUDIO-IMAGE-EDIT), the learner can mark one or more regions on the image (rectangle or brush) and attach a comment to each. They are sent as region masks with the edit request.",ADAPT,Studio,P2,CGP-ART-019; PI#2,,,artifacts-canvas-media.md:140
+CGP-ART-R-019,REQ-ART-19 (CGP-ART-20),ART,req,"When a coach turn has produced no new visible progress for 20 s, the progress line adds ""평소보다 오래 걸리고 있어요"" and a **멈추기** action. After 60 s it adds what is still running (tool name).",ADAPT,Studio,P1,CGP-ART-020; PI#1; PI#2,,,artifacts-canvas-media.md:141
+CGP-ART-R-020,REQ-ART-20 (CGP-ART-21),ART,req,"Each task shows a ""AI가 한 일"" summary: files read, created and changed, web pages opened, and searches, each expandable to the list.",ADAPT,Studio,P2,CGP-ART-021; PI#2; PI#5,,,artifacts-canvas-media.md:142
+CGP-ART-R-021,REQ-ART-21 (CGP-ART-22),ART,req,"When the coach asks approval to overwrite an existing workspace file, the approval modal shows a before and after summary (units changed and share changed, from `diffGuard`) before the learner approves.",ADAPT,Studio,P2,CGP-ART-022; PI#2,CGP-AGENT-R-005,,artifacts-canvas-media.md:143
+CGP-ART-R-022,REQ-ART-22 (CGP-ART-23),ART,req,"Chalk shows a class-results view: one card per learner with the latest approved artifact version, thumbnail, approval time, and open. It has grid and list layouts and a filter for ""승인 없음"".",ADAPT,Chalk,P2,CGP-ART-023; PI#5; PI#2,,,artifacts-canvas-media.md:144
+CGP-ART-R-023,REQ-ART-23 (CGP-ART-24),ART,req,The learner can export the deck as a single PDF and open their page's folder from the result card.,ADAPT,Studio,P2,CGP-ART-024; PI#1,,,artifacts-canvas-media.md:145
+CGP-LEARN-R-001,REQ-CGP-LEARN-01,LEARN,req,An interactive block appears for a learner only when the confirmed lesson version attaches it to the current `SessionDesign` step (`steps[].materials[]`); the coach cannot insert one on its own in v1.,ADAPT,Studio,P0,CGP-LEARN-001; PI#4; PI#6 (SX-05; SX-07),DEC-18; DEC-19,,learning-education.md:226
+CGP-LEARN-R-002,REQ-CGP-LEARN-02,LEARN,req,"A block never sits in the work canvas and never shows capability names, scores, grades or ""correct/incorrect"" judgments.",ADAPT,Both,P0,CGP-LEARN-001; PI#7 (SX-01/59; SX-43),CGP-LEARN-R-001,,learning-education.md:227
+CGP-LEARN-R-003,REQ-CGP-LEARN-03,LEARN,req,"Every block exposes a live text equivalent: a title, a controls help sentence, and a state description that updates on each change.",ADOPT,Studio,P0,CGP-LEARN-010; PI#3 (DES-11 classroom-design),CGP-LEARN-R-001; DEC-20,,learning-education.md:228
+CGP-LEARN-R-004,REQ-CGP-LEARN-04,LEARN,req,"Block references in a confirmed lesson pin `type`, `version` and parameter values; the validator rejects unknown types, unknown versions and out-of-range values.",ADAPT,Chalk,P1,CGP-LEARN-002; PI#6 (VER-01/02; REQ-B8),CGP-LEARN-R-001; DEC-19,,learning-education.md:229
+CGP-LEARN-R-005,REQ-CGP-LEARN-05,LEARN,req,Stage-stepper blocks advance only on learner action and show one step's title + one sentence at a time.,ADAPT,Studio,P1,CGP-LEARN-003; PI#4,CGP-LEARN-R-004; DEC-20,,learning-education.md:230
+CGP-LEARN-R-006,REQ-CGP-LEARN-06,LEARN,req,Parameter and mode controls are bounded by the type schema and re-state the result in the caption after every change.,ADAPT,Studio,P1,CGP-LEARN-004; PI#3,CGP-LEARN-R-004; DEC-20,,learning-education.md:231
+CGP-LEARN-R-007,REQ-CGP-LEARN-07,LEARN,req,Animated blocks start paused; play is an explicit action and step-by-step is always available.,ADAPT,Studio,P1,CGP-LEARN-005; PI#4,CGP-LEARN-R-004; DEC-20,,learning-education.md:232
+CGP-LEARN-R-008,REQ-CGP-LEARN-08,LEARN,req,"In a sampling block, the learner writes an expectation before the first batch; the result is shown beside the learner's own sentence, without a verdict.",ADAPT,Studio,P2,CGP-LEARN-006; PI#2; PI#5 (SX-14; SX-53; SX-57),CGP-LEARN-R-004; DEC-21,,learning-education.md:233
+CGP-LEARN-R-009,REQ-CGP-LEARN-09,LEARN,req,"Narrated diagrams attached by Chalk follow the 3-beat format with separable, localizable text layers.",ADAPT,Chalk,P1,CGP-LEARN-009; PI#3,CGP-LEARN-R-004; DEC-19; DEC-20,,learning-education.md:234
+CGP-LEARN-R-010,REQ-CGP-LEARN-10,LEARN,req,A learner can reset a block to its preset and undo the last change.,ADOPT,Studio,P1,CGP-LEARN-012; PI#4,CGP-LEARN-R-004; DEC-20,,learning-education.md:235
+CGP-LEARN-R-011,REQ-CGP-LEARN-11,LEARN,req,"A learner can report ""자료가 틀린 것 같아요"" on a block; the report reaches the lesson owner with block identity, and the learner can collapse a block they do not want.",ADAPT,Studio,P1,CGP-LEARN-013; PI#2; PI#5,CGP-LEARN-R-001,,learning-education.md:236
+CGP-LEARN-R-012,REQ-CGP-LEARN-12,LEARN,req,"Chalk offers a block picker filtered by the lesson's `audience_tier` and subject family, showing a thumbnail, title and one-line purpose.",ADAPT,Chalk,P2,CGP-LEARN-015; PI#6 (CH-04),CGP-LEARN-R-004; DEC-18; DEC-19,,learning-education.md:237
+CGP-LEARN-R-013,REQ-CGP-LEARN-13,LEARN,req,"When minor-cohort input is blocked for self-harm, the learner sees Korean help lines and the class instructor gets an immediate safety signal without conversation text.",ADAPT,Both,P0,CGP-LEARN-025; PI#2 (REQ-O2; SX-10 safety exception),DEC-22,,learning-education.md:238
+CGP-LEARN-R-014,REQ-CGP-LEARN-14,LEARN,req,Chalk first run asks the instructor once for grade band and subject and pre-fills the lesson audience.,ADAPT,Chalk,P2,CGP-LEARN-029; PI#6,,,learning-education.md:239
+CGP-LEARN-R-015,REQ-CGP-LEARN-15,LEARN,req,"Chalk's ""completion checklist"" helper produces observable acceptance items, never points or grade levels.",ADAPT,Chalk,P2,CGP-LEARN-029; PI#5; PI#7,,,learning-education.md:240
+CGP-LEARN-R-016,REQ-CGP-LEARN-16,LEARN,req,The Studio header shows one coach run state from a fixed set: 준비됨 / 생각 중 / 찾는 중 / 만드는 중 / 확인이 필요해요 / 멈춤 / 문제가 생겼어요.,ADAPT,Studio,P2,CGP-LEARN-032; PI#2,,,learning-education.md:241
+CGP-LEARN-R-017,REQ-CGP-LEARN-17,LEARN,req,"Chalk help-request queue supports keyboard triage: next, previous, open, resolve-and-advance.",ADAPT,Chalk,P2,CGP-AGENT-045; PI#1 (one-instructor intent; ADM-05; DES-06),,,learning-education.md:242
+CGP-VOICE-R-001,REQ-CGPV-01 (V-01),VOICE,req,"The voice session uses the VO-36–47 state set; no ChatGPT-only state is added (e.g. ""focus mode"" is a presentation of the big panel, not a session state)",ADAPT,Studio,P1,CGP-VOICE-001; PI#2; PI#5,DEC-03,,voice-multimodal.md:101
+CGP-VOICE-R-002,REQ-CGPV-02 (V-02),VOICE,req,Speaker/output mute is a separate control from mic mute,ADAPT,Studio,P1,CGP-VOICE-002; PI#2,DEC-03,,voice-multimodal.md:102
+CGP-VOICE-R-003,REQ-CGPV-03 (V-03),VOICE,req,Mic-permission denied offers a one-click path to the OS privacy pane,ADAPT,Studio,P1,CGP-VOICE-003; PI#1,DEC-03,,voice-multimodal.md:103
+CGP-VOICE-R-004,REQ-CGPV-04 (V-04),VOICE,req,First voice start shows a disclosure stating the actual retention policy for audio and transcript,ADAPT,Studio,P0,CGP-VOICE-004; PI#2; PI#5; VO-25,DEC-05,,voice-multimodal.md:104
+CGP-VOICE-R-005,REQ-CGPV-05 (V-05),VOICE,req,Voice selection is limited to voices allowed by the class; learners may preview before choosing,ADAPT,Studio,P2,CGP-VOICE-005; PI#6; Access,CGP-VOICE-R-024,,voice-multimodal.md:105
+CGP-VOICE-R-006,REQ-CGPV-06 (V-06),VOICE,req,Voice language defaults to Korean with auto-detect off for kids cohorts,ADAPT,Both,P1,CGP-VOICE-006; PI#1; VO-10,CGP-VOICE-R-024,,voice-multimodal.md:106
+CGP-VOICE-R-007,REQ-CGPV-08 (V-08),VOICE,req,"While the agent works, voice status speaks/labels only events that actually occurred",ADAPT,Studio,P1,CGP-VOICE-008; PI#2; PI#5,,,voice-multimodal.md:107
+CGP-VOICE-R-008,REQ-CGPV-12 (V-12),VOICE,req,Compact voice control can be moved to the four corners by keyboard,ADAPT,Studio,P2,CGP-VOICE-012; VO-47,,,voice-multimodal.md:108
+CGP-VOICE-R-009,REQ-CGPV-14 (V-14),VOICE,req,"""Show this"" in voice attaches an explicitly chosen Studio artifact/tab, never the OS screen",ADAPT,Studio,P2,CGP-VOICE-014; PI#2; VO-12/43,,,voice-multimodal.md:109
+CGP-VOICE-R-010,REQ-CGPV-15 (V-15),VOICE,req,Context capture (tab screenshot + text) for chat/voice is limited to Studio-owned surfaces,ADAPT,Studio,P1,CGP-VOICE-015; PI#2; CR-11,,,voice-multimodal.md:110
+CGP-VOICE-R-011,REQ-CGPV-16 (V-16),VOICE,req,Any context attachment shows exactly what will be sent before send,ADOPT,Studio,P1,CGP-ART-008; PI#2; PI#5,,CGP-ART-R-007,voice-multimodal.md:111
+CGP-VOICE-R-012,REQ-CGPV-17 (V-17),VOICE,req,Dictation inserts transcript into the composer draft at the caret; it never auto-sends by default,ADAPT,Studio,P1,CGP-VOICE-017; PI#1; PI#2,CGP-VOICE-R-024; DEC-03; DEC-04; DEC-06,,voice-multimodal.md:112
+CGP-VOICE-R-013,REQ-CGPV-17b,VOICE,req,Dictation insertion respects an open Korean IME composition,ADAPT,Studio,P0,CGP-VOICE-017; PI#1; CP-R1,,CGP-DS-R-027,voice-multimodal.md:113
+CGP-VOICE-R-014,REQ-CGPV-17c,VOICE,req,Dictation is a separate control and accessible name from voice chat,ADAPT,Studio,P1,CGP-VOICE-017; VO-36; VO-09,CGP-VOICE-R-012; DEC-03,,voice-multimodal.md:114
+CGP-VOICE-R-015,REQ-CGPV-18 (V-18),VOICE,req,Dictation failures are reported by cause with a recovery action,ADOPT,Studio,P1,CGP-VOICE-018; PI#1,CGP-VOICE-R-012; DEC-03,,voice-multimodal.md:115
+CGP-VOICE-R-016,REQ-CGPV-19 (V-19),VOICE,req,Failed transcription keeps audio only in memory until retry or dismiss; recovered text needs explicit insert,ADAPT,Studio,P1,CGP-VOICE-019; VO-25; PI#2,CGP-VOICE-R-012; CGP-VOICE-R-004; DEC-03; DEC-05,,voice-multimodal.md:116
+CGP-VOICE-R-017,REQ-CGPV-21 (V-21),VOICE,req,Instructors can attach a lesson vocabulary list used as recognition hints,ADAPT,Both,P2,CGP-VOICE-021; PI#6; VO-10,CGP-VOICE-R-012; DEC-03,,voice-multimodal.md:117
+CGP-VOICE-R-018,REQ-CGPV-22 (V-22),VOICE,req,Optional start/stop earcons for dictation and voice,ADOPT,Studio,P2,CGP-VOICE-022; VO-26,CGP-VOICE-R-012; DEC-03,,voice-multimodal.md:118
+CGP-VOICE-R-019,REQ-CGPV-23 (V-23),VOICE,req,Learners can choose the microphone input device,ADOPT,Studio,P1,CGP-VOICE-023; VO-29,CGP-VOICE-R-012; DEC-03,,voice-multimodal.md:119
+CGP-VOICE-R-020,REQ-CGPV-24 (V-24),VOICE,req,Each assistant answer can be read aloud on demand,ADAPT,Studio,P1,CGP-CHAT-067; PI#1; Access,,CGP-CHAT-R-009,voice-multimodal.md:120
+CGP-VOICE-R-021,REQ-CGPV-25 (V-25),VOICE,req,"Voice actions are registered as in-app commands, not global shortcuts",ADAPT,Studio,P1,CGP-VOICE-025; VO-40; VO-47,,,voice-multimodal.md:121
+CGP-VOICE-R-022,REQ-CGPV-29 (V-29),VOICE,req,A learner-level shortcut sheet lists only chat-panel shortcuts,ADAPT,Studio,P2,CGP-CHAT-086; PI#4,,CGP-CHAT-R-030,voice-multimodal.md:122
+CGP-VOICE-R-023,REQ-CGPV-32 (V-32),VOICE,req,Operators can force voice off and simulate a usage-limit warning in dev builds,ADAPT,Studio,P2,CGP-VOICE-032; PI#5,,,voice-multimodal.md:123
+CGP-VOICE-R-024,REQ-CGPV-33 (V-33),VOICE,req,"Class feature allowlist gains `voice`, `dictation`, `read_aloud` keys",ADAPT,Both,P0,CGP-VOICE-033; Access; PI#4,DEC-06; DEC-07,,voice-multimodal.md:124
+CGP-VOICE-R-025,REQ-CGPV-35 (V-35),VOICE,req,"Approvals may offer a ""this conversation"" scope; never ""always"" for minors",ADAPT,Studio,P2,CGP-AGENT-004; PI#2; VO-17,,CGP-AGENT-R-004,voice-multimodal.md:125
+CGP-VOICE-R-026,REQ-CGPV-38 (V-38),VOICE,req,Voice panel offers an optional push-to-talk mode,ADAPT,Studio,P1,CGP-VOICE-038; VO-08; PI#1,DEC-03,,voice-multimodal.md:126
+CGP-VOICE-R-027,REQ-CGPV-39 (V-39),VOICE,req,VAD load failure is visible and falls back to push-to-talk,ADAPT,Studio,P1,CGP-VOICE-039; VO-08; PI#5,CGP-VOICE-R-026; DEC-03,,voice-multimodal.md:127
+CGP-VOICE-R-028,REQ-CGPV-41 (V-41),VOICE,req,Blocked audio autoplay is recoverable by one click,ADOPT,Studio,P1,CGP-VOICE-041; VO-38/42,,,voice-multimodal.md:128
+CGP-VOICE-R-029,REQ-CGPV-42 (V-42),VOICE,req,Voice discoverability tip appears at most once,ADAPT,Studio,P2,CGP-VOICE-042; PI#4,CGP-VOICE-R-024,,voice-multimodal.md:129
+CGP-VOICE-R-030,REQ-CGPV-43 (V-43),VOICE,req,A conversation with an active voice session is marked in the session list,ADAPT,Studio,P2,CGP-VOICE-043; VO-40,,,voice-multimodal.md:130
+CGP-SHELL-R-001,REQ-SHELL-01 (CGP-01),SHELL,req,"During an active class session window, Studio does not show an update install prompt or start an install.",ADAPT,Studio,P0,CGP-SHELL-001; PI#1; ADM-11,,,settings-account-shell.md:219
+CGP-SHELL-R-002,REQ-SHELL-02 (CGP-01),SHELL,req,A downloaded and verified update installs on the next user-initiated quit when no coach turn is running.,ADAPT,Studio,P1,CGP-SHELL-001; PI#1,CGP-SHELL-R-001,,settings-account-shell.md:220
+CGP-SHELL-R-003,REQ-SHELL-03 (CGP-02),SHELL,req,An instructor can freeze the Studio version for a cohort for a date range.,ADAPT,Chalk,P1,CGP-SHELL-002; PI#1; ADM-11,CGP-SHELL-R-001; DEC-24,,settings-account-shell.md:221
+CGP-SHELL-R-004,REQ-SHELL-04 (CGP-04),SHELL,req,"Quitting or closing the last window while a coach turn runs, a preview build is in progress or an unsent queued message exists asks for confirmation and names what will stop.",ADOPT,Studio,P0,CGP-SHELL-004; PI#1,,,settings-account-shell.md:222
+CGP-SHELL-R-005,REQ-SHELL-05 (CGP-09),SHELL,req,A Chalk join link opens Studio on the join screen for the named class without carrying the participation code.,ADAPT,Both,P1,CGP-SHELL-009; PI#4; REQ-A4,,,settings-account-shell.md:223
+CGP-SHELL-R-006,REQ-SHELL-06 (CGP-10),SHELL,req,"Native menus, native dialogs and settings labels a learner can reach are shown in Korean.",ADAPT,Studio,P1,CGP-SHELL-010; PI#1,,,settings-account-shell.md:224
+CGP-SHELL-R-007,REQ-SHELL-07 (CGP-12),SHELL,req,The Dock/taskbar badge shows the count of unread teacher notices and help-request replies only.,ADAPT,Studio,P2,CGP-SHELL-012; PI#2; ADM-05,,,settings-account-shell.md:225
+CGP-SHELL-R-008,REQ-SHELL-08 (CGP-13),SHELL,req,Studio shows an OS notification only when the window is unfocused and either a teacher message arrives or a coach turn longer than 60 s finishes.,ADAPT,Studio,P2,CGP-AGENT-047; PI#4,,CGP-AGENT-R-023,settings-account-shell.md:226
+CGP-SHELL-R-009,REQ-SHELL-09 (CGP-14),SHELL,req,"While a coach turn, preview build or update download runs, Studio keeps the computer from sleeping and releases the block when it ends.",ADOPT,Studio,P1,CGP-SHELL-014; PI#1,,,settings-account-shell.md:227
+CGP-SHELL-R-010,REQ-SHELL-10 (CGP-17),SHELL,req,"Before any OS permission prompt, Studio shows its own Korean explanation of why the lesson step needs it, and asks only at that step.",ADAPT,Studio,P1,CGP-SHELL-017; PI#2; PI#4,,,settings-account-shell.md:228
+CGP-SHELL-R-011,REQ-SHELL-11 (CGP-22),SHELL,req,"When the network is lost, the chat panel shows one offline banner that states what still works.",ADAPT,Studio,P1,CGP-SHELL-022; PI#1; AB-13,,,settings-account-shell.md:229
+CGP-SHELL-R-012,REQ-SHELL-12 (CGP-24),SHELL,req,"The chat webview provides a ""skip to input"" link and keyboard-resizable panels.",ADOPT,Studio,P1,CGP-SHELL-024; PI#1,,,settings-account-shell.md:230
+CGP-SHELL-R-013,REQ-SHELL-13 (CGP-25),SHELL,req,A render error in one panel shows a retry inside that panel and keeps the composer text and chat history.,ADOPT,Studio,P1,CGP-SHELL-025; PI#1,,,settings-account-shell.md:231
+CGP-SHELL-R-014,REQ-SHELL-14 (CGP-26),SHELL,req,"The start page ""설정"" opens a learner settings sheet with at most 6 items; the full VS Code settings editor is reachable only from it via ""고급 설정"".",ADAPT,Studio,P2,CGP-SHELL-026; PI#4,,,settings-account-shell.md:232
+CGP-SHELL-R-015,REQ-SHELL-15 (CGP-27),SHELL,req,Settings fixed by the cohort profile are shown as locked with the reason.,ADAPT,Studio,P1,CGP-SHELL-027; PI#2; AB-03,CGP-AGENT-R-007,,settings-account-shell.md:233
+CGP-SHELL-R-016,REQ-SHELL-16 (CGP-29),SHELL,req,"Studio offers HP Dark, HP Light and ""시스템 따라가기"".",ADAPT,Studio,P2,CGP-SHELL-029; PI#1,CGP-DS-R-004; CGP-DS-R-002; DEC-27,,settings-account-shell.md:234
+CGP-SHELL-R-017,REQ-SHELL-17 (CGP-30),SHELL,req,The learner can set chat text size to 보통 / 크게 / 아주 크게.,ADAPT,Studio,P1,CGP-DS-010; PI#1,,CGP-DS-R-009,settings-account-shell.md:235
+CGP-SHELL-R-018,REQ-SHELL-18 (CGP-31),SHELL,req,Studio honors reduced motion from the OS and from its own setting.,ADOPT,Studio,P1,CGP-DS-016; PI#1,,CGP-DS-R-015,settings-account-shell.md:236
+CGP-SHELL-R-019,REQ-SHELL-19 (CGP-35),SHELL,req,Tips follow the intervention ladder and can be turned off.,ADAPT,Studio,P2,CGP-CHAT-019; PI#4; PI#6,,CGP-CHAT-R-021,settings-account-shell.md:237
+CGP-SHELL-R-020,REQ-SHELL-20 (CGP-42),SHELL,req,Example project ideas are shown only after the learner says they have no idea of what to make.,ADAPT,Studio,P2,CGP-SHELL-042; PI#2; PI#6; NAT-03,,,settings-account-shell.md:238
+CGP-SHELL-R-021,REQ-SHELL-21 (CGP-44),SHELL,req,Chalk shows the instructor a first-class preparation checklist whose progress is saved per instructor.,ADAPT,Chalk,P2,CGP-SHELL-044; PI#1,,,settings-account-shell.md:239
+CGP-SHELL-R-022,REQ-SHELL-22 (CGP-45),SHELL,req,"If the browser does not open for Google sign-in, Studio offers to copy the sign-in link.",ADAPT,Studio,P1,CGP-SHELL-045; PI#1,,,settings-account-shell.md:240
+CGP-SHELL-R-023,REQ-SHELL-23 (CGP-49),SHELL,req,"In the first session, Studio shows one card that AI can be wrong and links it to a check the learner performs.",ADAPT,Studio,P1,CGP-SHELL-049; PI#3; PI#5,,,settings-account-shell.md:241
+CGP-SHELL-R-024,REQ-SHELL-24 (CGP-53),SHELL,req,"When the instructor changes a learner's lesson settings, the learner sees what changed before the next turn.",ADAPT,Studio,P1,CGP-SHELL-053; PI#2,CGP-AGENT-R-016,,settings-account-shell.md:242
+CGP-SHELL-R-025,REQ-SHELL-25 (CGP-54),SHELL,req,"The chat panel shows when the current class window ends, 10 minutes before the end.",ADAPT,Studio,P1,CGP-SHELL-054; PI#4; PI#1,DEC-25,,settings-account-shell.md:243
+CGP-SHELL-R-026,REQ-SHELL-26 (CGP-57),SHELL,req,"For minor cohorts, opening an external link shows the full URL and asks for confirmation.",ADAPT,Studio,P1,CGP-ART-009; PI#2; REQ-O1,,CGP-ART-R-008,settings-account-shell.md:244
+CGP-SHELL-R-027,REQ-SHELL-27 (CGP-61),SHELL,req,"A learner or guardian can request account and data deletion, and the request's status is visible.",ADAPT,Service,P1,CGP-SHELL-061; INT-ACCESS-05; ADM-14,DEC-23,,settings-account-shell.md:245
+CGP-SHELL-R-028,REQ-SHELL-28 (CGP-62),SHELL,req,"""내 작업 내보내기"" saves a zip of the current workspace and the local chat transcript to a folder the learner picks.",ADAPT,Studio,P2,CGP-SHELL-062; PI#1; AB-13,,,settings-account-shell.md:246
+CGP-SHELL-R-029,REQ-SHELL-29 (CGP-67),SHELL,req,"Before sending, a pass holder sees the remaining requests in the pass and when that number was confirmed.",ADAPT,Studio,P0,CGP-SHELL-067; INT-ACCESS-01; AB-11; AB-15; REQ-L9,DEC-26,,settings-account-shell.md:247
+CGP-SHELL-R-030,REQ-SHELL-30 (CGP-68),SHELL,req,"A learner whose class allowance is low can ask the instructor for more, once per cooldown.",ADAPT,Studio,P1,CGP-SHELL-068; PI#2; AB-11,CGP-SHELL-R-029; DEC-26,,settings-account-shell.md:248
+CGP-SHELL-R-031,REQ-SHELL-31 (CGP-70),SHELL,req,Chalk budgets shows daily class usage with the as-of time and unconfirmed amounts separated.,ADAPT,Chalk,P1,CGP-SHELL-070; PI#5; AB-12,,,settings-account-shell.md:249
+CGP-SHELL-R-032,REQ-SHELL-32 (CGP-79),SHELL,req,The issuer page accepts a pasted or CSV roster and reports a result per row.,ADAPT,Chalk,P1,CGP-SHELL-079; PI#1; ADM-01,,,settings-account-shell.md:250
+CGP-SHELL-R-033,REQ-SHELL-33 (CGP-82),SHELL,req,"At first join, the learner acknowledges the class rules, and the time is recorded for the instructor.",ADAPT,Both,P2,CGP-SHELL-082; PI#2,,,settings-account-shell.md:251
+CGP-SHELL-R-034,REQ-SHELL-34 (CGP-86),SHELL,req,Chalk shows each seat's Studio version and flags seats below the cohort's minimum.,ADAPT,Chalk,P1,CGP-SHELL-086; PI#1; ADM-02,CGP-SHELL-R-003; DEC-24,,settings-account-shell.md:252
+CGP-SHELL-R-035,REQ-SHELL-35 (CGP-89),SHELL,req,"After an update, the learner sees up to 3 short Korean ""새로운 기능"" lines once.",ADAPT,Studio,P2,CGP-SHELL-089; PI#3,,,settings-account-shell.md:253
+CGP-DS-R-001,REQ-CGP-DS-01,DS,req,"Studio chat webview and Chalk resolve every color, font, size, radius, shadow and duration from one token source with primitive → semantic → component tiers",ADAPT,Both,P0,CGP-DS-001; PI#1; SX-49,CGP-DS-R-002; DEC-27,,design-system.md:224
+CGP-DS-R-002,REQ-CGP-DS-01a,DS,req,"The three conflicting palettes (SX `#202C24`, CC-R1 `#18231C`, CP-R1 `#17191d`/`#202226`) are reconciled into one documented set",ADAPT,Both,P0,CGP-DS-001; SX-49,DEC-27,,design-system.md:225
+CGP-DS-R-003,REQ-CGP-DS-02,DS,req,Every semantic token in the Studio webview has a `--vscode-*` source and an HP fallback,ADOPT,Studio,P0,CGP-DS-002; PI#1; PI#4,CGP-DS-R-001; DEC-27,,design-system.md:226
+CGP-DS-R-004,REQ-CGP-DS-03,DS,req,Webview follows the host theme kind (light/dark/high-contrast),ADAPT,Both,P1,CGP-DS-003; PI#1,CGP-DS-R-003,,design-system.md:227
+CGP-DS-R-005,REQ-CGP-DS-04,DS,req,Hover and pressed fills derive from the foreground via `color-mix`; boundaries that identify a control never do,ADAPT,Both,P0,CGP-DS-004; DES-11,CGP-DS-R-001,,design-system.md:228
+CGP-DS-R-006,REQ-CGP-DS-05,DS,req,"Status is expressed as named intents (info/caution/danger/success plus `source_state`), each with text, icon and color",ADAPT,Both,P0,CGP-DS-005; PI#5; SX-21; SX-50,CGP-DS-R-001,,design-system.md:229
+CGP-DS-R-007,REQ-CGP-DS-08,DS,req,"UI, content (chat prose), and code fonts are separate tokens",ADOPT,Both,P1,CGP-DS-008; PI#1,CGP-DS-R-001; DEC-28,,design-system.md:230
+CGP-DS-R-008,REQ-CGP-DS-09,DS,req,Learner text uses a semantic scale whose smallest step is 14px,ADAPT,Studio,P0,CGP-DS-009; DES-02,CGP-DS-R-001; DEC-28; DEC-29,,design-system.md:231
+CGP-DS-R-009,REQ-CGP-DS-10,DS,req,Learner can choose a chat text size (기본 / 크게 / 아주 크게),ADAPT,Studio,P1,CGP-DS-010; PI#1; PI#4,CGP-DS-R-008,,design-system.md:232
+CGP-DS-R-010,REQ-CGP-DS-11,DS,req,Spacing uses a 4px unit; interactive control heights come from a ladder whose learner minimum is 44px,ADOPT,Studio,P0,CGP-DS-011; DES-06,CGP-DS-R-001,,design-system.md:233
+CGP-DS-R-011,REQ-CGP-DS-12,DS,req,Radii come from one scale; nested radii are computed (outer − inset),ADAPT,Both,P2,CGP-DS-012; none,CGP-DS-R-001,,design-system.md:234
+CGP-DS-R-012,REQ-CGP-DS-13,DS,req,Elevation uses ≤3 named levels with theme-specific alpha,ADAPT,Both,P2,CGP-DS-013; none,CGP-DS-R-001,,design-system.md:235
+CGP-DS-R-013,REQ-CGP-DS-14,DS,req,Chat layout responds to pane width via container queries,ADOPT,Studio,P1,CGP-DS-014; PI#1,,,design-system.md:236
+CGP-DS-R-014,REQ-CGP-DS-15,DS,req,Motion durations and easings are tokens,ADAPT,Both,P1,CGP-DS-015; PI#4,CGP-DS-R-001,,design-system.md:237
+CGP-DS-R-015,REQ-CGP-DS-16,DS,req,"Reduced motion honors an explicit app/VS Code preference, falling back to the OS",ADAPT,Studio,P0,CGP-DS-016; PI#4; CP-05,CGP-DS-R-014,,design-system.md:238
+CGP-DS-R-016,REQ-CGP-DS-17,DS,req,High-contrast/forced-colors renders every control and state,ADOPT,Both,P1,CGP-DS-017; DES-11,CGP-DS-R-001,,design-system.md:239
+CGP-DS-R-017,REQ-CGP-DS-18,DS,req,"Focus ring is one token (2px solid, 2px offset) that is visible in every theme",ADAPT,Both,P0,CGP-DS-018; DES-06; DES-11,CGP-DS-R-001,,design-system.md:240
+CGP-DS-R-018,REQ-CGP-DS-19,DS,req,"Icons come from one licensed stroke set, sized 16/20/24, using currentColor",ADAPT,Both,P1,CGP-DS-019; SX-50,,,design-system.md:241
+CGP-DS-R-019,REQ-CGP-DS-21,DS,req,Composer placeholder text meets 4.5:1,ADAPT,Studio,P0,CGP-DS-021; DES-11,CGP-DS-R-034,,design-system.md:242
+CGP-DS-R-020,REQ-CGP-DS-22,DS,req,Prose column is capped near 40 Hangul syllables per line,ADAPT,Studio,P1,CGP-DS-022; DES-02,DEC-29,,design-system.md:243
+CGP-DS-R-021,REQ-CGP-DS-23,DS,req,Chalk sidebar/list row actions are visible without hover,ADAPT,Chalk,P0,CGP-DS-023; DES-06,,,design-system.md:244
+CGP-DS-R-022,REQ-CGP-DS-24,DS,req,"Menus share one style token set, with item height ≥44px on learner surfaces",ADAPT,Studio,P1,CGP-DS-024; DES-06,,,design-system.md:245
+CGP-DS-R-023,REQ-CGP-DS-25,DS,req,Dialogs are reserved for destructive or settings flows; any dialog traps focus and restores it to its opener,ADAPT,Both,P0,CGP-DS-025; SX-52,,,design-system.md:246
+CGP-DS-R-024,REQ-CGP-DS-26,DS,req,Tooltips never carry the only label of a control,ADAPT,Both,P0,CGP-DS-026; DES-06,,,design-system.md:247
+CGP-DS-R-025,REQ-CGP-DS-27,DS,req,Transient confirmations use a live region and persist ≥4s or until dismissed,ADAPT,Both,P1,CGP-DS-027; PI#5,CGP-DS-R-014,,design-system.md:248
+CGP-DS-R-026,REQ-CGP-DS-29,DS,req,New CSS uses logical properties,ADOPT,Both,P2,CGP-DS-029; none,,,design-system.md:249
+CGP-DS-R-027,REQ-CGP-DS-30,DS,req,"IME composition never triggers Enter-send, Escape-close or any single-key shortcut",ADAPT,Both,P0,CGP-DS-030; SX-19; TUX-CHAT-03,,,design-system.md:250
+CGP-DS-R-028,REQ-CGP-DS-31,DS,req,Korean prose wraps at word (eojeol) boundaries; long tokens still wrap,ADAPT,Both,P0,CGP-DS-031; DES-03,,,design-system.md:251
+CGP-DS-R-029,REQ-CGP-DS-34,DS,req,Before/after and diff views show symbols as well as color,ADOPT,Studio,P1,CGP-DS-034; SX-16; SX-50,,,design-system.md:252
+CGP-DS-R-030,REQ-CGP-DS-35,DS,req,Numeric columns and counters use tabular figures,ADOPT,Chalk,P2,CGP-DS-035; none,,,design-system.md:253
+CGP-DS-R-031,REQ-CGP-DS-36,DS,req,Transcript scroller reserves a stable scrollbar gutter,ADOPT,Studio,P1,CGP-DS-036; UX13,,,design-system.md:254
+CGP-DS-R-032,REQ-CGP-DS-38,DS,req,Startup and empty states use only HP marks,ADAPT,Studio,P2,CGP-DS-038; none,,,design-system.md:255
+CGP-DS-R-033,REQ-CGP-DS-41,DS,req,Emoji render with the OS color emoji stack,ADOPT,Both,P2,CGP-DS-041; none,,,design-system.md:256
+CGP-DS-R-034,REQ-CGP-DS-42,DS,req,No text token below 4.5:1 is used for readable text,ADAPT,Both,P0,CGP-DS-042; DES-11,CGP-DS-R-002; DEC-27,,design-system.md:257
+CGP-CHAT-D-001,CGP-CHAT-D48,CHAT,design,Live announcements are invisible and non-repetitive,ADOPT,Studio,P0,CGP-CHAT-R-001,,,chat-core.md:234
+CGP-CHAT-D-002,CGP-CHAT-D65,CHAT,design,Edit-in-place on the latest prompt,ADAPT,Studio,P0,CGP-CHAT-R-002,,,chat-core.md:235
+CGP-CHAT-D-003,CGP-CHAT-D53,CHAT,design,Question card,ADAPT,Studio,P0,CGP-CHAT-R-003,,,chat-core.md:236
+CGP-CHAT-D-004,CGP-CHAT-D30,CHAT,design,Plan mode indicator and plan card,ADAPT,Studio,P1,CGP-CHAT-R-004,,,chat-core.md:237
+CGP-CHAT-D-005,CGP-CHAT-D63,CHAT,design,Answer verdict controls,ADAPT,Studio,P1,CGP-CHAT-R-005,,,chat-core.md:238
+CGP-CHAT-D-006,CGP-CHAT-D64,CHAT,design,Attempt pager,ADAPT,Studio,P1,CGP-CHAT-R-006,,,chat-core.md:239
+CGP-CHAT-D-007,CGP-CHAT-D72,CHAT,design,Selection action popover,ADAPT,Studio,P1,CGP-CHAT-R-007,,,chat-core.md:240
+CGP-CHAT-D-008,CGP-CHAT-D39,CHAT,design,Code block chrome,ADAPT,Studio,P1,CGP-CHAT-R-008,,,chat-core.md:241
+CGP-CHAT-D-009,CGP-CHAT-D67,CHAT,design,Read-aloud control,ADAPT,Studio,P1,CGP-CHAT-R-009,,,chat-core.md:242
+CGP-CHAT-D-010,CGP-CHAT-D16,CHAT,design,Compaction notice,ADAPT,Studio,P1,CGP-CHAT-R-010,,,chat-core.md:243
+CGP-CHAT-D-011,CGP-CHAT-D06,CHAT,design,File context chip,ADAPT,Studio,P1,CGP-CHAT-R-011,,,chat-core.md:244
+CGP-CHAT-D-012,CGP-CHAT-D04,CHAT,design,Steer action,ADAPT,Studio,P1,CGP-CHAT-R-012,,,chat-core.md:245
+CGP-CHAT-D-013,CGP-CHAT-D74,CHAT,design,"""What it used"" chip",ADAPT,Studio,P2,CGP-CHAT-R-013,,CGP-KNOW-D-026,chat-core.md:246
+CGP-CHAT-D-014,CGP-CHAT-D45,CHAT,design,Source kind label,ADAPT,Studio,P2,CGP-CHAT-R-014,,,chat-core.md:247
+CGP-CHAT-D-015,CGP-CHAT-D46,CHAT,design,Elapsed time,ADAPT,Studio,P2,CGP-CHAT-R-015,,,chat-core.md:248
+CGP-CHAT-D-016,CGP-CHAT-D50,CHAT,design,Turn render fallback,ADAPT,Studio,P2,CGP-CHAT-R-016,,,chat-core.md:249
+CGP-CHAT-D-017,CGP-CHAT-D07,CHAT,design,Paste chip,ADAPT,Studio,P2,CGP-CHAT-R-017,,,chat-core.md:250
+CGP-CHAT-D-018,CGP-CHAT-D08,CHAT,design,`@` file list,ADAPT,Studio,P2,CGP-CHAT-R-018,,,chat-core.md:251
+CGP-CHAT-D-019,CGP-CHAT-D12,CHAT,design,Dictation button,ADAPT,Studio,P2,CGP-CHAT-R-019,,CGP-VOICE-D-010,chat-core.md:252
+CGP-CHAT-D-020,CGP-CHAT-D14,CHAT,design,Sketch canvas,ADAPT,Studio,P2,CGP-CHAT-R-020,,,chat-core.md:253
+CGP-CHAT-D-021,CGP-CHAT-D19,CHAT,design,Lesson tip,ADAPT,Both,P2,CGP-CHAT-R-021,,,chat-core.md:254
+CGP-CHAT-D-022,CGP-CHAT-D40,CHAT,design,Math rendering,ADAPT,Studio,P2,CGP-CHAT-R-022,,,chat-core.md:255
+CGP-CHAT-D-023,CGP-CHAT-D56,CHAT,design,Step divider,ADAPT,Both,P2,CGP-CHAT-R-023,,,chat-core.md:256
+CGP-CHAT-D-024,CGP-CHAT-D62,CHAT,design,Copy conversation,ADAPT,Studio,P2,CGP-CHAT-R-024,,,chat-core.md:257
+CGP-CHAT-D-025,CGP-CHAT-D77,CHAT,design,Archive,ADAPT,Studio,P2,CGP-CHAT-R-025,,,chat-core.md:258
+CGP-CHAT-D-026,CGP-CHAT-D79,CHAT,design,Task search,ADAPT,Studio,P2,CGP-CHAT-R-026,,,chat-core.md:259
+CGP-CHAT-D-027,CGP-CHAT-D80,CHAT,design,Find bar,ADAPT,Studio,P2,CGP-CHAT-R-027,,,chat-core.md:260
+CGP-CHAT-D-028,CGP-CHAT-D81,CHAT,design,My-questions list,ADAPT,Studio,P2,CGP-CHAT-R-028,,,chat-core.md:261
+CGP-CHAT-D-029,CGP-CHAT-D85,CHAT,design,Undo toast,ADAPT,Studio,P2,CGP-CHAT-R-029,,,chat-core.md:262
+CGP-CHAT-D-030,CGP-CHAT-D86,CHAT,design,Shortcuts sheet,ADAPT,Studio,P2,CGP-CHAT-R-030,,,chat-core.md:263
+CGP-KNOW-D-001,DES-KNOW-01,KNOW,design,"Rail search field at the top of the task list, collapses to an icon below 360px.",ADAPT,Studio,P2,CGP-KNOW-R-001,,,projects-library-memory.md:194
+CGP-KNOW-D-002,DES-KNOW-02,KNOW,design,작업/자료 as a two-item segmented control under the activity title.,ADAPT,Studio,P2,CGP-KNOW-R-002,,,projects-library-memory.md:195
+CGP-KNOW-D-003,DES-KNOW-04,KNOW,design,"자료 rows: icon, name, origin badge (나/강사/AI), added time; per-row ""이번 질문에 넣기"" toggle.",ADAPT,Studio,P1,CGP-KNOW-R-003,,,projects-library-memory.md:196
+CGP-KNOW-D-004,DES-KNOW-06,KNOW,design,"""팀 브레인에 남기기"" lives in the answer action row as a borderless 16px glyph with label on hover/focus and in accessible name; confirmation is an inline card under the answer.",ADAPT,Studio,P1,CGP-KNOW-R-004,,,projects-library-memory.md:197
+CGP-KNOW-D-005,DES-KNOW-07,KNOW,design,"Memory scope line in the activity header: ""AI 기억: 이 수업 안에서만"" / ""이 작업 공간 안에서만"".",ADAPT,Studio,P0,CGP-KNOW-R-005,,,projects-library-memory.md:198
+CGP-KNOW-D-006,DES-KNOW-09,KNOW,design,"Outbound confirmation is a native dialog: recipient, item checklist (unchecked by default except the action's own item), fixed ""포함하지 않는 것"" box, primary 보내기 / secondary 취소.",ADAPT,Studio,P0,CGP-KNOW-R-006,,,projects-library-memory.md:199
+CGP-KNOW-D-007,DES-KNOW-10,KNOW,design,"Public-audience step uses a distinct header ""누구나 볼 수 있어요"" with destination host in monospace.",ADAPT,Studio,P1,CGP-KNOW-R-007,,,projects-library-memory.md:200
+CGP-KNOW-D-008,DES-KNOW-13,KNOW,design,Emoji/colour picker from the task context menu; 8 colours with names.,ADAPT,Studio,P2,CGP-KNOW-R-008,,,projects-library-memory.md:201
+CGP-KNOW-D-009,DES-KNOW-14,KNOW,design,Move action in task context menu; disabled state for class tasks shows reason on focus.,ADAPT,Studio,P2,CGP-KNOW-R-009,,,projects-library-memory.md:202
+CGP-KNOW-D-010,DES-KNOW-18,KNOW,design,"Trust prompt: title ""이 폴더에서 작업할까요?"", three plain bullets (읽기/고치기/실행), primary 믿고 열기, secondary 제한 모드로 열기.",ADAPT,Studio,P1,CGP-KNOW-R-010,,,projects-library-memory.md:203
+CGP-KNOW-D-011,DES-KNOW-20,KNOW,design,"""내 작품"" as a drawer from the rail; list default, grid optional; each item shows thumbnail (HTML/image) or type glyph, name, provenance label, last change.",ADAPT,Studio,P2,CGP-KNOW-R-011,,,projects-library-memory.md:204
+CGP-KNOW-D-012,DES-KNOW-21,KNOW,design,"Provenance labels as text chips: ""AI가 만듦"", ""내가 올림"", ""내가 고침"", ""확인 안 됨"".",ADAPT,Studio,P1,CGP-KNOW-R-012,,,projects-library-memory.md:205
+CGP-KNOW-D-013,DES-KNOW-24,KNOW,design,"Trash entry at the bottom of ""내 작품""; delete shows a toast ""휴지통으로 옮겼어요 · 되돌리기"" for 8s.",ADAPT,Studio,P0,CGP-KNOW-R-013,,,projects-library-memory.md:206
+CGP-KNOW-D-014,DES-KNOW-26,KNOW,design,"""내 파일 붙이기"" in the composer tools menu; picker dialog with search and recent files.",ADAPT,Studio,P1,CGP-KNOW-R-014,,CGP-CHAT-D-011,projects-library-memory.md:207
+CGP-KNOW-D-015,DES-KNOW-28,KNOW,design,"""이 파일에 대해 묻기"" button in preview header.",ADAPT,Studio,P1,CGP-KNOW-R-015,,,projects-library-memory.md:208
+CGP-KNOW-D-016,DES-KNOW-29,KNOW,design,"Info popover with rows 종류, 크기, 만든 대화, 마지막으로 바꾼 대화.",ADAPT,Studio,P2,CGP-KNOW-R-016,,,projects-library-memory.md:209
+CGP-KNOW-D-017,DES-KNOW-30,KNOW,design,"Version list as a side panel: entries with actor chip (AI/나), relative time, 복원 button; compare toggle reuses existing diff view.",ADAPT,Studio,P0,CGP-KNOW-R-017,,,projects-library-memory.md:210
+CGP-KNOW-D-018,DES-KNOW-33,KNOW,design,"Memory-at-receiver line inside every outbound dialog, with icon + text.",ADAPT,Both,P1,CGP-KNOW-R-018,,,projects-library-memory.md:211
+CGP-KNOW-D-019,DES-KNOW-35,KNOW,design,Disk warning as a persistent bar above the composer.,ADAPT,Studio,P2,CGP-KNOW-R-019,,,projects-library-memory.md:212
+CGP-KNOW-D-020,DES-KNOW-37,KNOW,design,Attachment error renders inside the chip (red-outline plus text) and as a one-line message under the composer.,ADAPT,Studio,P0,CGP-KNOW-R-020,,,projects-library-memory.md:213
+CGP-KNOW-D-021,DES-KNOW-38,KNOW,design,"Download status lines in the chat timeline, subordinate to answers (secondary text, 13px).",ADAPT,Studio,P2,CGP-KNOW-R-021,,,projects-library-memory.md:214
+CGP-KNOW-D-022,DES-KNOW-40,KNOW,design,"Memory state line ""AI 기억: 켜짐/꺼짐"" in the settings dialog and activity header disclosure.",ADAPT,Both,P0,CGP-KNOW-R-022,,,projects-library-memory.md:215
+CGP-KNOW-D-023,DES-KNOW-41,KNOW,design,"""AI가 기억하는 것"" list in the settings dialog: item text, date, source link, delete.",ADAPT,Studio,P0,CGP-KNOW-R-023,,,projects-library-memory.md:216
+CGP-KNOW-D-024,DES-KNOW-42,KNOW,design,"Capacity bar with numeric text ""N/M개"".",ADAPT,Studio,P2,CGP-KNOW-R-024,,,projects-library-memory.md:217
+CGP-KNOW-D-025,DES-KNOW-43,KNOW,design,Overview grouped by task with plain sentences and a correction field at the bottom.,ADAPT,Studio,P1,CGP-KNOW-R-025,,,projects-library-memory.md:218
+CGP-KNOW-D-026,DES-KNOW-44,KNOW,design,"""기억 사용 N"" chip in the answer metadata row; opens the source shelf on a 기억 tab.",ADAPT,Studio,P0,CGP-KNOW-R-026,,,projects-library-memory.md:219
+CGP-KNOW-D-027,DES-KNOW-45,KNOW,design,"Memory write timeline line: secondary text, bookmark glyph, quoted item (1 line, expandable), 되돌리기 button.",ADAPT,Studio,P0,CGP-KNOW-R-027,,,projects-library-memory.md:220
+CGP-KNOW-D-028,DES-KNOW-46,KNOW,design,Two labelled switches in the task settings popover.,ADAPT,Studio,P1,CGP-KNOW-R-028,,,projects-library-memory.md:221
+CGP-KNOW-D-029,DES-KNOW-47,KNOW,design,"""기록 없이 묻기"" task uses a distinct header band ""기록이 남지 않는 작업"" across the top.",ADAPT,Studio,P2,CGP-KNOW-R-029,,,projects-library-memory.md:222
+CGP-KNOW-D-030,DES-KNOW-48,KNOW,design,"Memory files view reuses the ""내 작품"" drawer with a 기억 filter.",ADAPT,Studio,P1,CGP-KNOW-R-030,,,projects-library-memory.md:223
+CGP-KNOW-D-031,DES-KNOW-49,KNOW,design,"Adult consent dialog: 4 short lines (무엇을, 어디에, 누가 보는지, 지우는 법), buttons 켜기 / 나중에.",ADAPT,Both,P0,CGP-KNOW-R-031,,,projects-library-memory.md:224
+CGP-KNOW-D-032,DES-KNOW-50,KNOW,design,"Nickname field in settings: ""뭐라고 불러 줄까요?"".",ADAPT,Studio,P2,CGP-KNOW-R-032,,,projects-library-memory.md:225
+CGP-KNOW-D-033,DES-KNOW-51,KNOW,design,"Outbound dialog's item checklist shows memory files under a collapsed ""기억 파일 (기본 제외)"" group.",ADAPT,Studio,P0,CGP-KNOW-R-033,,,projects-library-memory.md:226
+CGP-KNOW-D-034,DES-KNOW-63,KNOW,design,"Visitor preview opens in the Studio browser with a top banner ""방문자에게 이렇게 보여요 · 공개 범위: …"".",ADAPT,Studio,P1,CGP-KNOW-R-034,,,projects-library-memory.md:227
+CGP-KNOW-D-035,DES-KNOW-67,KNOW,design,"""내 작업 가져가기"" as a two-column list (가져가는 것 / 남는 것) collapsing to one column ≤600px, followed by a per-item result list.",ADAPT,Both,P1,CGP-KNOW-R-035,,,projects-library-memory.md:228
+CGP-KNOW-D-036,DES-KNOW-68,KNOW,design,"Activity status screen replacing the composer area: cause headline, ""아직 할 수 있는 것"" list with buttons, ""다시 쓰려면"" contact line.",ADAPT,Studio,P0,CGP-KNOW-R-036,,,projects-library-memory.md:229
+CGP-KNOW-D-037,DES-KNOW-70,KNOW,design,Chalk: starters editor (4 single-line fields) beside the AI guidance; disclosure text next to material upload; Studio shows starters as wrapping compact chips (CC-R1).,ADAPT,Chalk,P1,CGP-KNOW-R-037,,CGP-AGENT-D-013,projects-library-memory.md:230
+CGP-AGENT-D-001,DES-CGP-AGENT-01,AGENT,design,"Approval preset label sits left of the send button as text + lock icon, not a dropdown.",ADAPT,Studio,P0,CGP-AGENT-R-002,,,agents-codex-automation.md:150
+CGP-AGENT-D-002,DES-CGP-AGENT-03,AGENT,design,"Capability card: one row per capability with icon, 16px label, state word ""해요/안 해요/물어봐요"".",ADAPT,Studio,P0,CGP-AGENT-R-003,,,agents-codex-automation.md:151
+CGP-AGENT-D-003,DES-CGP-AGENT-04,AGENT,design,"Command approval modal: purpose line (16px) first, `$ command` in monospace block with horizontal scroll, buttons 허락 / 거절 / 같은 종류 이번 작업 동안 허락.",ADAPT,Studio,P1,CGP-AGENT-R-004,,,agents-codex-automation.md:152
+CGP-AGENT-D-004,DES-CGP-AGENT-05,AGENT,design,Write approval lists files as chips with file icon.,ADAPT,Studio,P0,CGP-AGENT-R-005,,,agents-codex-automation.md:153
+CGP-AGENT-D-005,DES-CGP-AGENT-06,AGENT,design,"Browser approval shows host in bold and a badge ""내 미리보기"" or ""인터넷"".",ADAPT,Studio,P1,CGP-AGENT-R-006,,,agents-codex-automation.md:154
+CGP-AGENT-D-006,DES-CGP-AGENT-08,AGENT,design,Denial/disabled notice: inline row in the timeline with source label (수업 설정 / 안전 규칙 / 앱 버전) and one action button.,ADAPT,Both,P0,CGP-AGENT-R-007,,,agents-codex-automation.md:155
+CGP-AGENT-D-007,DES-CGP-AGENT-09,AGENT,design,"Refusal banner above the composer, dismissible, with ""이렇게 해 볼 수 있어요"" line.",ADAPT,Studio,P0,CGP-AGENT-R-008,,,agents-codex-automation.md:156
+CGP-AGENT-D-008,DES-CGP-AGENT-12,AGENT,design,"Subagent rows collapse into a single ""도우미 N명 · M명 끝남"" summary; expanded rows show name, task, status chip, ""결과 보기"".",ADAPT,Studio,P1,CGP-AGENT-R-009,,,agents-codex-automation.md:157
+CGP-AGENT-D-009,DES-CGP-AGENT-13,AGENT,design,"Goal strip above composer: goal text (1 line, expandable), status chip, budget meter with numeric label.",ADAPT,Studio,P1,CGP-AGENT-R-010,,,agents-codex-automation.md:158
+CGP-AGENT-D-010,DES-CGP-AGENT-14,AGENT,design,"Plan view: numbered steps, each editable inline; primary button ""이대로 진행"", secondary ""다시 계획"".",ADAPT,Studio,P1,CGP-AGENT-R-011,,CGP-CHAT-D-004,agents-codex-automation.md:159
+CGP-AGENT-D-011,DES-CGP-AGENT-23,AGENT,design,"Chalk attention list rows: bold title, muted summary, relative time, single action.",ADAPT,Chalk,P1,CGP-AGENT-R-013,,,agents-codex-automation.md:160
+CGP-AGENT-D-012,DES-CGP-AGENT-26,AGENT,design,Proposal card: field / 이전 / 새 값 table with Apply (primary) and 버리기.,ADAPT,Chalk,P1,CGP-AGENT-R-014,,,agents-codex-automation.md:161
+CGP-AGENT-D-013,DES-CGP-AGENT-27,AGENT,design,Single settings page with sections in order: 정체성 → 지시문 → 모델·처리 수준 → 기능·승인 → 시작 문장 → 미리보기.,ADAPT,Chalk,P1,CGP-AGENT-R-015,,,agents-codex-automation.md:162
+CGP-AGENT-D-014,DES-CGP-AGENT-28,AGENT,design,"Version diff: grouped change list on the left, instruction diff (added green underline, removed strike) on the right; stacks on mobile.",ADAPT,Chalk,P1,CGP-AGENT-R-016,,,agents-codex-automation.md:163
+CGP-AGENT-D-015,DES-CGP-AGENT-31,AGENT,design,Usage chart: 7 vertical bars (KST days) with value labels; table fallback.,ADAPT,Chalk,P2,CGP-AGENT-R-017,,,agents-codex-automation.md:164
+CGP-AGENT-D-016,DES-CGP-AGENT-33,AGENT,design,"Memory view: list grouped by task, author badge (AI/나), download button in header.",ADAPT,Studio,P1,CGP-AGENT-R-018,,CGP-KNOW-D-030,agents-codex-automation.md:165
+CGP-AGENT-D-017,DES-CGP-AGENT-36,AGENT,design,"Skill shelf: cards with icon, Korean display name (from `display_name`), one-line description, buttons ""보기"" and ""써 보기"".",ADAPT,Studio,P1,CGP-AGENT-R-020,,,agents-codex-automation.md:166
+CGP-AGENT-D-018,DES-CGP-AGENT-45,AGENT,design,"Board status chips: five states + 확인 불가, each with distinct icon and text.",ADAPT,Chalk,P0,CGP-AGENT-R-021,,,agents-codex-automation.md:167
+CGP-AGENT-D-019,DES-CGP-AGENT-46,AGENT,design,Task list badge right-aligned per row; 승인 기다림/입력 기다림 badges use an attention style plus text.,ADAPT,Studio,P0,CGP-AGENT-R-022,,,agents-codex-automation.md:168
+CGP-AGENT-D-020,DES-CGP-AGENT-47,AGENT,design,"In-app notice: toast bottom-right of chat panel, 5 s, with ""열기""; OS notification text ""코치가 기다려요: 미리보기 열기 허락"".",ADAPT,Studio,P1,CGP-AGENT-R-023; CGP-AGENT-R-024,,,agents-codex-automation.md:169
+CGP-AGENT-D-021,DES-CGP-AGENT-48,AGENT,design,"Find bar docks at top of chat panel with input, ""n / N"", up/down, close.",ADOPT,Studio,P2,CGP-AGENT-R-025,,CGP-CHAT-D-027,agents-codex-automation.md:170
+CGP-AGENT-D-022,DES-CGP-AGENT-52,AGENT,design,"바뀐 것 panel: file list with +/- line counts, inline before/after toggle (unified on <768px, split on ≥1024px), restore buttons per file and for all.",ADAPT,Studio,P0,CGP-AGENT-R-026,,,agents-codex-automation.md:171
+CGP-AGENT-D-023,DES-CGP-AGENT-53,AGENT,design,"Checkpoint dialog: message textarea prefilled and selected, primary ""저장 지점 남기기"".",ADAPT,Studio,P2,CGP-AGENT-R-027,,,agents-codex-automation.md:172
+CGP-AGENT-D-024,DES-CGP-AGENT-57,AGENT,design,Missing-folder notice replaces the composer area with message + two buttons.,ADAPT,Studio,P1,CGP-AGENT-R-028,,,agents-codex-automation.md:173
+CGP-AGENT-D-025,DES-CGP-AGENT-60,AGENT,design,"Shell row: purpose line, collapsible monospace block (`$ command`, folder caption), copy buttons on hover/focus; running-process list as a small panel with stop buttons.",ADAPT,Studio,P1,CGP-AGENT-R-029,,,agents-codex-automation.md:174
+CGP-AGENT-D-026,DES-CGP-AGENT-64,AGENT,design,"Trace recording: start dialog explaining 3 steps, a persistent red ""기록 중 · 멈추기"" pill while recording.",ADAPT,Studio,P2,CGP-AGENT-R-030,,,agents-codex-automation.md:175
+CGP-AGENT-D-027,DES-CGP-AGENT-66,AGENT,design,"Busy banner: amber info bar above the composer, one line.",ADAPT,Studio,P2,CGP-AGENT-R-031,,,agents-codex-automation.md:176
+CGP-AGENT-D-028,DES-CGP-AGENT-67,AGENT,design,"First-entry card: modal sheet with the capability card and one ""알겠어요"" button.",ADAPT,Studio,P1,CGP-AGENT-R-032,,,agents-codex-automation.md:177
+CGP-ART-D-001,DES-ART-01 (REQ-ART-01),ART,design,"Numbered circular markers (24 px, page-anchored) plus a bottom tray listing annotations as editable chips. A dragged rectangle has a 2 px dashed outline.",ADAPT,Studio,P1,CGP-ART-R-001,,,artifacts-canvas-media.md:164
+CGP-ART-D-002,DES-ART-02 (REQ-ART-02),ART,design,"A review bar pinned at the bottom of the preview: ""AI가 {n}곳을 바꿨어요"" + **되돌리기** (secondary) + **이대로 둘게요** (primary) + **바뀐 곳 보기**.",ADAPT,Studio,P0,CGP-ART-R-002,,,artifacts-canvas-media.md:165
+CGP-ART-D-003,DES-ART-03 (REQ-ART-03),ART,design,A modal dialog with two buttons.,ADOPT,Studio,P1,CGP-ART-R-003,,,artifacts-canvas-media.md:166
+CGP-ART-D-004,DES-ART-04 (REQ-ART-04),ART,design,"Chalk plan view: hovering a marked section shows a 1 px outline and a ""이 부분 고치기"" button. The request composer opens anchored to that section.",ADAPT,Chalk,P1,CGP-ART-R-004,,,artifacts-canvas-media.md:167
+CGP-ART-D-005,DES-ART-05 (REQ-ART-05),ART,design,"A comment pin on the artifact (16 px, instructor color distinct from the learner's annotation color), plus a side list grouped by open and handled.",ADAPT,Both,P1,CGP-ART-R-005,,,artifacts-canvas-media.md:168
+CGP-ART-D-006,DES-ART-06 (REQ-ART-06),ART,design,"A compact popover anchored to the picked element: 5 rows (색, 배경, 글자 크기, 간격, 모서리) with swatches from ""이 페이지에 쓰인 색"" plus a stepper.",ADAPT,Studio,P2,CGP-ART-R-006,,,artifacts-canvas-media.md:169
+CGP-ART-D-007,DES-ART-07 (REQ-ART-07),ART,design,"An attachment chip ""페이지 내용 · {host}"" in the composer. Clicking it expands a read-only panel with the full text, a monospace origin label, and **빼기**.",ADAPT,Studio,P0,CGP-ART-R-007,,,artifacts-canvas-media.md:170
+CGP-ART-D-008,DES-ART-08 (REQ-ART-08),ART,design,"Adult confirmation: a small dialog ""바깥 사이트를 열까요?"" with the host in bold, **열기** and **링크 복사**. Minor blocked notice: an inline banner in the browser tab, ""이 사이트는 수업에서 열 수 없어요"", with the host and **선생님께 알리기** (when the help channel exists).",ADAPT,Studio,P0,CGP-ART-R-008,,,artifacts-canvas-media.md:171
+CGP-ART-D-009,DES-ART-09 (REQ-ART-09),ART,design,"A full-tab friendly error: illustration-free, a cause line (16 px), one primary action, and the technical detail collapsed under ""자세히"".",ADAPT,Studio,P1,CGP-ART-R-009,,,artifacts-canvas-media.md:172
+CGP-ART-D-010,DES-ART-10 (REQ-ART-10),ART,design,"A chat result card: 16:10 thumbnail (lazy), title (1 line, ellipsis), ""판 {short id}"", and a status badge (확인됨 / 아직 확인 안 함 / 이전 판), plus 2 actions.",ADAPT,Studio,P1,CGP-ART-R-010,,,artifacts-canvas-media.md:173
+CGP-ART-D-011,DES-ART-11 (REQ-ART-11),ART,design,"A sharing-state pill next to the publish button, with a lock, link or broken-link icon and text.",ADAPT,Studio,P1,CGP-ART-R-011,,,artifacts-canvas-media.md:174
+CGP-ART-D-012,DES-ART-12 (REQ-ART-12),ART,design,"A notice sheet with 3 bullet lines and **알겠어요**. The minor path adds a waiting state with a spinner-free ""기다리는 중"" label and a time-since counter.",ADAPT,Studio,P1,CGP-ART-R-012,,,artifacts-canvas-media.md:175
+CGP-ART-D-013,DES-ART-13 (REQ-ART-13),ART,design,"Two stat tiles (연 사람, 끝까지 한 사람) with ""지난주보다 +{n}"", plus an expandable session list.",ADAPT,Studio,P1,CGP-ART-R-013,,,artifacts-canvas-media.md:176
+CGP-ART-D-014,DES-ART-14 (REQ-ART-14),ART,design,"A picker grid of 2 columns at 320 px and 3 at ≥640 px. Each tile has a preview image (4:3), title, and a radio. Last tile: ""내 참고 자료 올리기"". Footer: **건너뛰기**.",ADAPT,Studio,P2,CGP-ART-R-014,,,artifacts-canvas-media.md:177
+CGP-ART-D-015,DES-ART-15 (REQ-ART-15),ART,design,"Full-screen black letterbox with the slide scaled to fit, and a bottom-right position text that auto-hides after 2 s idle.",ADAPT,Studio,P2,CGP-ART-R-015,,,artifacts-canvas-media.md:178
+CGP-ART-D-016,DES-ART-16 (REQ-ART-16),ART,design,Chips under the selected slide thumbnail. The proposal opens as a side-by-side before and after with **반영** and **그대로**.,ADAPT,Studio,P2,CGP-ART-R-016,,,artifacts-canvas-media.md:179
+CGP-ART-D-017,DES-ART-17 (REQ-ART-17),ART,design,"A toggle in the preview toolbar with an eye icon and a ""따라 보기"" label.",ADAPT,Studio,P2,CGP-ART-R-017,,,artifacts-canvas-media.md:180
+CGP-ART-D-018,DES-ART-18 (REQ-ART-18),ART,design,"Region tools: rectangle and brush (3 sizes: 8, 16 and 32 px). Numbered region badges with comment fields. Undo and redo.",ADAPT,Studio,P2,CGP-ART-R-018,,,artifacts-canvas-media.md:181
+CGP-ART-D-019,DES-ART-19 (REQ-ART-19),ART,design,"The progress line copy changes at 20 s and 60 s, with a **멈추기** text button inline.",ADAPT,Studio,P1,CGP-ART-R-019,,,artifacts-canvas-media.md:182
+CGP-ART-D-020,DES-ART-20 (REQ-ART-20),ART,design,"A collapsible ""AI가 한 일"" row per task with verb counts as chips (읽음 3 · 만듦 1 · 바꿈 2 · 검색 1).",ADAPT,Studio,P2,CGP-ART-R-020,,,artifacts-canvas-media.md:183
+CGP-ART-D-021,DES-ART-21 (REQ-ART-21),ART,design,"An approval modal section: ""바뀌는 정도: {pct}%"" with a 4-step bar and a ""바뀐 곳 보기"" link to a diff.",ADAPT,Studio,P2,CGP-ART-R-021,,,artifacts-canvas-media.md:184
+CGP-ART-D-022,DES-ART-22 (REQ-ART-22),ART,design,"Chalk grid of cards (thumbnail 16:10, student display name, approval time) and list rows. A grid or list toggle is persisted per instructor.",ADAPT,Chalk,P2,CGP-ART-R-022,,,artifacts-canvas-media.md:185
+CGP-ART-D-023,DES-ART-23 (REQ-ART-23),ART,design,"Deck menu item ""PDF로 저장"" and card action ""폴더에서 보기"".",ADAPT,Studio,P2,CGP-ART-R-023,,,artifacts-canvas-media.md:186
+CGP-LEARN-D-001,DES-CGP-LEARN-01,LEARN,design,"Block lives in the coach rail as a collapsible ""자료"" card under the current step; opening expands in place (no modal, SX-52).",ADAPT,Studio,P0,CGP-LEARN-R-001,,,learning-education.md:248
+CGP-LEARN-D-002,DES-CGP-LEARN-02,LEARN,design,No judgment visuals inside blocks.,ADAPT,Both,P0,CGP-LEARN-R-002,,,learning-education.md:249
+CGP-LEARN-D-003,DES-CGP-LEARN-03,LEARN,design,"Live text equivalent is visible, not only for screen readers.",ADOPT,Studio,P0,CGP-LEARN-R-003,,,learning-education.md:250
+CGP-LEARN-D-004,DES-CGP-LEARN-04,LEARN,design,Version/params are visible to instructors only.,ADAPT,Chalk,P1,CGP-LEARN-R-004,,,learning-education.md:251
+CGP-LEARN-D-005,DES-CGP-LEARN-05,LEARN,design,Stage stepper.,ADAPT,Studio,P1,CGP-LEARN-R-005,,,learning-education.md:252
+CGP-LEARN-D-006,DES-CGP-LEARN-06,LEARN,design,Controls.,ADAPT,Studio,P1,CGP-LEARN-R-006,,,learning-education.md:253
+CGP-LEARN-D-007,DES-CGP-LEARN-07,LEARN,design,Motion.,ADAPT,Studio,P1,CGP-LEARN-R-007,,,learning-education.md:254
+CGP-LEARN-D-008,DES-CGP-LEARN-08,LEARN,design,Expectation-first sampling.,ADAPT,Studio,P2,CGP-LEARN-R-008,,,learning-education.md:255
+CGP-LEARN-D-009,DES-CGP-LEARN-09,LEARN,design,Diagram format.,ADAPT,Chalk,P1,CGP-LEARN-R-009,,,learning-education.md:256
+CGP-LEARN-D-010,DES-CGP-LEARN-10,LEARN,design,Reset/undo.,ADOPT,Studio,P1,CGP-LEARN-R-010,,,learning-education.md:257
+CGP-LEARN-D-011,DES-CGP-LEARN-11,LEARN,design,Report/collapse.,ADAPT,Studio,P1,CGP-LEARN-R-011,,,learning-education.md:258
+CGP-LEARN-D-012,DES-CGP-LEARN-12,LEARN,design,Chalk picker.,ADAPT,Chalk,P2,CGP-LEARN-R-012,,,learning-education.md:259
+CGP-LEARN-D-013,DES-CGP-LEARN-13,LEARN,design,Safety block + instructor signal.,ADAPT,Both,P0,CGP-LEARN-R-013,,,learning-education.md:260
+CGP-LEARN-D-014,DES-CGP-LEARN-14,LEARN,design,Instructor first-run.,ADAPT,Chalk,P2,CGP-LEARN-R-014,,,learning-education.md:261
+CGP-LEARN-D-015,DES-CGP-LEARN-15,LEARN,design,Checklist output.,ADAPT,Chalk,P2,CGP-LEARN-R-015,,,learning-education.md:262
+CGP-LEARN-D-016,DES-CGP-LEARN-16,LEARN,design,Run state.,ADAPT,Studio,P2,CGP-LEARN-R-016,,,learning-education.md:263
+CGP-LEARN-D-017,DES-CGP-LEARN-17,LEARN,design,Keyboard triage.,ADAPT,Chalk,P2,CGP-LEARN-R-017,,,learning-education.md:264
+CGP-VOICE-D-001,DES-CGPV-02,VOICE,design,Mic and speaker mute are two distinct icon buttons in both big panel and compact control,ADAPT,Studio,P1,CGP-VOICE-R-002,,,voice-multimodal.md:136
+CGP-VOICE-D-002,DES-CGPV-03,VOICE,design,Permission-denied card,ADAPT,Studio,P1,CGP-VOICE-R-003,,,voice-multimodal.md:137
+CGP-VOICE-D-003,DES-CGPV-04,VOICE,design,Voice disclosure sheet,ADAPT,Studio,P0,CGP-VOICE-R-004,,,voice-multimodal.md:138
+CGP-VOICE-D-004,DES-CGPV-05,VOICE,design,Voice picker,ADAPT,Studio,P2,CGP-VOICE-R-005,,,voice-multimodal.md:139
+CGP-VOICE-D-005,DES-CGPV-06,VOICE,design,Language selector,ADAPT,Both,P1,CGP-VOICE-R-006,,,voice-multimodal.md:140
+CGP-VOICE-D-006,DES-CGPV-08,VOICE,design,Agent-status line in voice panel,ADAPT,Studio,P1,CGP-VOICE-R-007,,,voice-multimodal.md:141
+CGP-VOICE-D-007,DES-CGPV-12,VOICE,design,Compact control corner snapping,ADAPT,Studio,P2,CGP-VOICE-R-008,,,voice-multimodal.md:142
+CGP-VOICE-D-008,DES-CGPV-14/15,VOICE,design,"""보여주기"" attach menu",ADAPT,Studio,P1,CGP-VOICE-R-009; CGP-VOICE-R-010,,,voice-multimodal.md:143
+CGP-VOICE-D-009,DES-CGPV-16,VOICE,design,Context chip,ADOPT,Studio,P1,CGP-VOICE-R-011,,CGP-ART-D-007,voice-multimodal.md:144
+CGP-VOICE-D-010,DES-CGPV-17,VOICE,design,Dictation button and states,ADAPT,Studio,P1,CGP-VOICE-R-012,,,voice-multimodal.md:145
+CGP-VOICE-D-011,DES-CGPV-17b,VOICE,design,IME-safe insertion,ADAPT,Studio,P0,CGP-VOICE-R-013,,CGP-DS-D-024,voice-multimodal.md:146
+CGP-VOICE-D-012,DES-CGPV-18,VOICE,design,Dictation error toast,ADOPT,Studio,P1,CGP-VOICE-R-015,,,voice-multimodal.md:147
+CGP-VOICE-D-013,DES-CGPV-19,VOICE,design,Recovery banner,ADAPT,Studio,P1,CGP-VOICE-R-016,,,voice-multimodal.md:148
+CGP-VOICE-D-014,DES-CGPV-21,VOICE,design,Chalk vocabulary editor,ADAPT,Both,P2,CGP-VOICE-R-017,,,voice-multimodal.md:149
+CGP-VOICE-D-015,DES-CGPV-23,VOICE,design,Mic picker,ADOPT,Studio,P1,CGP-VOICE-R-019,,,voice-multimodal.md:150
+CGP-VOICE-D-016,DES-CGPV-24,VOICE,design,Read-aloud control,ADAPT,Studio,P1,CGP-VOICE-R-020,,CGP-CHAT-D-009,voice-multimodal.md:151
+CGP-VOICE-D-017,DES-CGPV-25/29,VOICE,design,Shortcut sheet,ADAPT,Studio,P1,CGP-VOICE-R-021; CGP-VOICE-R-022,,,voice-multimodal.md:152
+CGP-VOICE-D-018,DES-CGPV-33,VOICE,design,Disabled-by-class state,ADAPT,Both,P0,CGP-VOICE-R-024,,,voice-multimodal.md:153
+CGP-VOICE-D-019,DES-CGPV-35,VOICE,design,Approval scope choice,ADAPT,Studio,P2,CGP-VOICE-R-025,,CGP-AGENT-D-003,voice-multimodal.md:154
+CGP-VOICE-D-020,DES-CGPV-38,VOICE,design,Push-to-talk,ADAPT,Studio,P1,CGP-VOICE-R-026,,,voice-multimodal.md:155
+CGP-VOICE-D-021,DES-CGPV-39/41,VOICE,design,Fallback notices,ADAPT,Studio,P1,CGP-VOICE-R-027; CGP-VOICE-R-028,,,voice-multimodal.md:156
+CGP-VOICE-D-022,DES-CGPV-42/43,VOICE,design,Tip and list marker,ADAPT,Studio,P2,CGP-VOICE-R-029; CGP-VOICE-R-030,,,voice-multimodal.md:157
+CGP-SHELL-D-001,DES-SHELL-01 (REQ-01/02),SHELL,design,"Update state is a single line in the start page / About, not a modal, during class.",ADAPT,Studio,P0,CGP-SHELL-R-001; CGP-SHELL-R-002,,,settings-account-shell.md:263
+CGP-SHELL-D-002,DES-SHELL-02 (REQ-03),SHELL,design,Chalk freeze control is a date-range picker with the active state badge on the cohort row.,ADAPT,Chalk,P1,CGP-SHELL-R-003,,,settings-account-shell.md:264
+CGP-SHELL-D-003,DES-SHELL-03 (REQ-04),SHELL,design,Quit dialog is a native dialog with the safe action as default.,ADOPT,Studio,P0,CGP-SHELL-R-004,,,settings-account-shell.md:265
+CGP-SHELL-D-004,DES-SHELL-04 (REQ-05),SHELL,design,Join screen opened from a link shows class name above an empty code field.,ADAPT,Both,P1,CGP-SHELL-R-005,,,settings-account-shell.md:266
+CGP-SHELL-D-005,DES-SHELL-05 (REQ-06),SHELL,design,Korean menus follow macOS/Windows conventions.,ADAPT,Studio,P1,CGP-SHELL-R-006,,,settings-account-shell.md:267
+CGP-SHELL-D-006,DES-SHELL-06 (REQ-07),SHELL,design,Badge shows a number only.,ADAPT,Studio,P2,CGP-SHELL-R-007,,,settings-account-shell.md:268
+CGP-SHELL-D-007,DES-SHELL-07 (REQ-08),SHELL,design,OS notification text is short and names the sender.,ADAPT,Studio,P2,CGP-SHELL-R-008,,CGP-AGENT-D-020,settings-account-shell.md:269
+CGP-SHELL-D-008,DES-SHELL-08 (REQ-09),SHELL,design,"No visible UI; optional small ""잠자기 막는 중"" in the turn status for adults.",ADOPT,Studio,P1,CGP-SHELL-R-009,,,settings-account-shell.md:270
+CGP-SHELL-D-009,DES-SHELL-09 (REQ-10),SHELL,design,"Permission explainer is an inline card in chat, not a modal.",ADAPT,Studio,P1,CGP-SHELL-R-010,,,settings-account-shell.md:271
+CGP-SHELL-D-010,DES-SHELL-10 (REQ-11),SHELL,design,Offline banner sits at the top of the chat panel.,ADAPT,Studio,P1,CGP-SHELL-R-011,,,settings-account-shell.md:272
+CGP-SHELL-D-011,DES-SHELL-11 (REQ-12),SHELL,design,Skip link visible on focus; splitter focus ring.,ADOPT,Studio,P1,CGP-SHELL-R-012,,,settings-account-shell.md:273
+CGP-SHELL-D-012,DES-SHELL-12 (REQ-13),SHELL,design,Panel error state replaces only the failed panel.,ADOPT,Studio,P1,CGP-SHELL-R-013,,,settings-account-shell.md:274
+CGP-SHELL-D-013,DES-SHELL-13 (REQ-14),SHELL,design,Learner settings sheet is a right-side sheet over the chat.,ADAPT,Studio,P2,CGP-SHELL-R-014,,,settings-account-shell.md:275
+CGP-SHELL-D-014,DES-SHELL-14 (REQ-15),SHELL,design,Locked row shows lock icon and reason.,ADAPT,Studio,P1,CGP-SHELL-R-015,,,settings-account-shell.md:276
+CGP-SHELL-D-015,DES-SHELL-15 (REQ-16),SHELL,design,HP Light uses Paper #F4F6F0 background and forest text.,ADAPT,Studio,P2,CGP-SHELL-R-016,,,settings-account-shell.md:277
+CGP-SHELL-D-016,DES-SHELL-16 (REQ-17),SHELL,design,Text size control is a 3-step segmented control with live preview.,ADAPT,Studio,P1,CGP-SHELL-R-017,,CGP-DS-D-006,settings-account-shell.md:278
+CGP-SHELL-D-017,DES-SHELL-17 (REQ-18),SHELL,design,"Reduced motion removes movement, keeps state changes.",ADOPT,Studio,P1,CGP-SHELL-R-018,,CGP-DS-D-012,settings-account-shell.md:279
+CGP-SHELL-D-018,DES-SHELL-18 (REQ-19),SHELL,design,Tip is an inline chip under the last message.,ADAPT,Studio,P2,CGP-SHELL-R-019,,CGP-CHAT-D-021,settings-account-shell.md:280
+CGP-SHELL-D-019,DES-SHELL-19 (REQ-20),SHELL,design,Idea cards appear as a list after the goal question.,ADAPT,Studio,P2,CGP-SHELL-R-020,,,settings-account-shell.md:281
+CGP-SHELL-D-020,DES-SHELL-20 (REQ-21),SHELL,design,Chalk checklist uses the existing start.html steps with a progress line.,ADAPT,Chalk,P2,CGP-SHELL-R-021,,,settings-account-shell.md:282
+CGP-SHELL-D-021,DES-SHELL-21 (REQ-22),SHELL,design,Copy-link fallback appears under the waiting spinner.,ADAPT,Studio,P1,CGP-SHELL-R-022,,,settings-account-shell.md:283
+CGP-SHELL-D-022,DES-SHELL-22 (REQ-23),SHELL,design,Accuracy card is an inline card in the chat stream.,ADAPT,Studio,P1,CGP-SHELL-R-023,,,settings-account-shell.md:284
+CGP-SHELL-D-023,DES-SHELL-23 (REQ-24),SHELL,design,"Settings-change notice is a system line in chat, not a modal.",ADAPT,Studio,P1,CGP-SHELL-R-024,,,settings-account-shell.md:285
+CGP-SHELL-D-024,DES-SHELL-24 (REQ-25),SHELL,design,Class-end line is quiet.,ADAPT,Studio,P1,CGP-SHELL-R-025,,,settings-account-shell.md:286
+CGP-SHELL-D-025,DES-SHELL-25 (REQ-26),SHELL,design,External link dialog emphasizes the host.,ADAPT,Studio,P1,CGP-SHELL-R-026,,CGP-ART-D-008,settings-account-shell.md:287
+CGP-SHELL-D-026,DES-SHELL-26 (REQ-27),SHELL,design,Deletion request status is a row with a state chip.,ADAPT,Service,P1,CGP-SHELL-R-027,,,settings-account-shell.md:288
+CGP-SHELL-D-027,DES-SHELL-27 (REQ-28),SHELL,design,Export shows progress and the result path.,ADAPT,Studio,P2,CGP-SHELL-R-028,,,settings-account-shell.md:289
+CGP-SHELL-D-028,DES-SHELL-28 (REQ-29),SHELL,design,Remaining-requests chip sits in the chat header next to the model name.,ADAPT,Studio,P0,CGP-SHELL-R-029,,,settings-account-shell.md:290
+CGP-SHELL-D-029,DES-SHELL-29 (REQ-30),SHELL,design,Request-more button appears inside the low-allowance notice.,ADAPT,Studio,P1,CGP-SHELL-R-030,,,settings-account-shell.md:291
+CGP-SHELL-D-030,DES-SHELL-30 (REQ-31),SHELL,design,Chalk daily chart is a stacked bar with a legend and a table alternative.,ADAPT,Chalk,P1,CGP-SHELL-R-031,,,settings-account-shell.md:292
+CGP-SHELL-D-031,DES-SHELL-31 (REQ-32),SHELL,design,Roster import shows a preview table before issuing.,ADAPT,Chalk,P1,CGP-SHELL-R-032,,,settings-account-shell.md:293
+CGP-SHELL-D-032,DES-SHELL-32 (REQ-33),SHELL,design,Rules acknowledgement is a single screen at join.,ADAPT,Both,P2,CGP-SHELL-R-033,,,settings-account-shell.md:294
+CGP-SHELL-D-033,DES-SHELL-33 (REQ-34),SHELL,design,Version column in Chalk manage list.,ADAPT,Chalk,P1,CGP-SHELL-R-034,,,settings-account-shell.md:295
+CGP-SHELL-D-034,DES-SHELL-34 (REQ-35),SHELL,design,What's-new panel is dismissible and short.,ADAPT,Studio,P2,CGP-SHELL-R-035,,,settings-account-shell.md:296
+CGP-DS-D-001,DES-CGP-DS-01,DS,design,Token file `tokens.css` is imported first; semantic names follow `--hp-{text|bg|border|ring}-{role}-{state}`,ADAPT,Both,P0,CGP-DS-R-001,,,design-system.md:265
+CGP-DS-D-002,DES-CGP-DS-02,DS,design,"Mapping, for example: `--hp-text: var(--vscode-foreground, #F2F4E8)`, `--hp-ring: var(--vscode-focusBorder, #D5F279)`, `--hp-bg: var(--vscode-sideBar-background, #151D19)`, `--hp-code-bg: var(--vscode-textCodeBlock-background, …)`",ADOPT,Studio,P0,CGP-DS-R-003,,,design-system.md:266
+CGP-DS-D-003,DES-CGP-DS-04,DS,design,"Hover = text color at 8%, pressed 12–16% (light) or 12–20% (dark) over the surface; control boundary token ≥3:1",ADAPT,Both,P0,CGP-DS-R-005,,,design-system.md:267
+CGP-DS-D-004,DES-CGP-DS-05,DS,design,"Status chip: 16px icon + 14px label, 4px radius, 8px inline padding, soft background",ADAPT,Both,P0,CGP-DS-R-006,,,design-system.md:268
+CGP-DS-D-005,DES-CGP-DS-09,DS,design,"Learner scale: 14 / 16 / 18 / 22 / 28px; line-height 1.5 (labels), **1.65–1.75 (Hangul prose)**; tracking 0 for Hangul; weights 400/600 only",ADAPT,Studio,P0,CGP-DS-R-008,,,design-system.md:269
+CGP-DS-D-006,DES-CGP-DS-10,DS,design,Text size: 16 / 18 / 20px body; controls scale proportionally; 44px targets unchanged,ADAPT,Studio,P1,CGP-DS-R-009,,,design-system.md:270
+CGP-DS-D-007,DES-CGP-DS-11,DS,design,"Spacing ladder 4, 8, 12, 16, 20, 24, 32px; control heights 32 (non-learner dense), 44 (learner default), 48 (primary CTA)",ADOPT,Studio,P0,CGP-DS-R-010,,,design-system.md:271
+CGP-DS-D-008,DES-CGP-DS-12,DS,design,Radii 4 / 8 / 12 / 16 / 24 / full; composer 16–24px; user bubble 16–20px; dialog 12px,ADAPT,Both,P2,CGP-DS-R-011,,,design-system.md:272
+CGP-DS-D-009,DES-CGP-DS-13,DS,design,"Elevation: none (inline), 1 (cards: `0 1px 2px`), 2 (menus/popovers: `0 4px 8px -2px`, alpha .10 light / .30 dark)",ADAPT,Both,P2,CGP-DS-R-012,,,design-system.md:273
+CGP-DS-D-010,DES-CGP-DS-14,DS,design,"Container thresholds: compact <28rem (448px), regular ≥28rem, wide ≥43rem",ADOPT,Studio,P1,CGP-DS-R-013,,,design-system.md:274
+CGP-DS-D-011,DES-CGP-DS-15,DS,design,"`--hp-dur-press 140ms`, `--hp-dur-enter 180ms`, `--hp-dur-confirm 160ms`, `--hp-dur-move 240ms`; enter `cubic-bezier(.19,1,.22,1)`, exit `cubic-bezier(.4,0,1,1)`; no springs or bounces on learner surfaces",ADAPT,Both,P1,CGP-DS-R-014,,,design-system.md:275
+CGP-DS-D-012,DES-CGP-DS-16,DS,design,Reduced-motion state is on `<html data-reduced-motion=true|false>` set by the host; CSS gates with `:not([data-reduced-motion])` plus the media query,ADAPT,Studio,P0,CGP-DS-R-015,,,design-system.md:276
+CGP-DS-D-013,DES-CGP-DS-17,DS,design,"Forced colors: buttons `border:1px solid ButtonText`, bubbles `border:1px solid CanvasText`, focus `outline-color: Highlight`",ADOPT,Both,P1,CGP-DS-R-016,,,design-system.md:277
+CGP-DS-D-014,DES-CGP-DS-18,DS,design,Focus: `outline: 2px solid var(--hp-ring); outline-offset: 2px`; inset −2px inside scroll containers,ADAPT,Both,P0,CGP-DS-R-017,,,design-system.md:278
+CGP-DS-D-015,DES-CGP-DS-19,DS,design,"Icon sizes 16 (inline), 20 (toolbar), 24 (empty states); 1.5–2px stroke; `currentColor`; status glyphs move from Unicode to icons with the same labels",ADAPT,Both,P1,CGP-DS-R-018,,,design-system.md:279
+CGP-DS-D-016,DES-CGP-DS-21,DS,design,"Composer: radius 20px, min-height 48px, padding 12px, send button 44×44 inside; placeholder uses `--hp-text-muted` (≥4.5:1), not opacity",ADAPT,Studio,P0,CGP-DS-R-019,,,design-system.md:280
+CGP-DS-D-017,DES-CGP-DS-22,DS,design,"Prose max-width 40em; user bubble radius 18px, background = text at 6–8%, max-width 85%; assistant unboxed with an 18px identity mark",ADAPT,Studio,P1,CGP-DS-R-020,,,design-system.md:281
+CGP-DS-D-018,DES-CGP-DS-23,DS,design,"Chalk list rows ≥44px; actions are persistent icon+label buttons; scroll fade mask 16px top, 32px bottom",ADAPT,Chalk,P0,CGP-DS-R-021,,,design-system.md:282
+CGP-DS-D-019,DES-CGP-DS-24,DS,design,"Menu: radius 12px, 4px gutter, items 44px (learner) / 32px (Chalk dense), 14px text, separator 1px border token",ADAPT,Studio,P1,CGP-DS-R-022,,,design-system.md:283
+CGP-DS-D-020,DES-CGP-DS-25,DS,design,"Dialog 320–480px, radius 12px, padding 20–24px, backdrop dim 40% dark / 30% light, enter 180ms, exit 120ms; ≤390px becomes a bottom sheet",ADAPT,Both,P0,CGP-DS-R-023,,,design-system.md:284
+CGP-DS-D-021,DES-CGP-DS-26,DS,design,"Tooltip: 14px, radius 8px, padding 4×8, delay 500ms hover / immediate on focus; shortcut shown as text",ADAPT,Both,P0,CGP-DS-R-024,,,design-system.md:285
+CGP-DS-D-022,DES-CGP-DS-27,DS,design,"Toast: bottom of the chat pane, content-width ≤ 360px, 14px, icon + text; success auto-hides at 4s; error persists",ADAPT,Both,P1,CGP-DS-R-025,,,design-system.md:286
+CGP-DS-D-023,DES-CGP-DS-29,DS,design,"Use `padding-inline`, `margin-inline`, `inset-inline`, `text-align:start`",ADOPT,Both,P2,CGP-DS-R-026,,,design-system.md:287
+CGP-DS-D-024,DES-CGP-DS-30,DS,design,"IME guard covers Enter, Escape, Tab, Arrow-up history and Cmd/Ctrl+Enter",ADAPT,Both,P0,CGP-DS-R-027,,,design-system.md:288
+CGP-DS-D-025,DES-CGP-DS-31,DS,design,`:lang(ko)` prose: `word-break:keep-all; overflow-wrap:anywhere; line-break:strict`; headings `text-wrap:balance`; paragraphs `text-wrap:pretty`,ADAPT,Both,P0,CGP-DS-R-028,,,design-system.md:289
+CGP-DS-D-026,DES-CGP-DS-34,DS,design,Diff: `+`/`−` gutter glyph plus green/red tint at ≤15% alpha; removed text also struck through,ADOPT,Studio,P1,CGP-DS-R-029,,,design-system.md:290
+CGP-DS-D-027,DES-CGP-DS-36,DS,design,`scrollbar-gutter: stable` on the transcript; thin scrollbar uses `--vscode-scrollbarSlider-*`,ADOPT,Studio,P1,CGP-DS-R-031,,,design-system.md:291
+CGP-DS-D-028,DES-CGP-DS-42,DS,design,"Muted tokens: forest `#ACB9A5` (8.4:1 on #151D19 / 7.1:1 on #202C24, OK); CP-R1 `#a4aab3` (6.8:1 on #202226, OK); never ChatGPT-style 3.2:1 tertiary",ADAPT,Both,P0,CGP-DS-R-034,,,design-system.md:292
