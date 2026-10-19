@@ -391,6 +391,15 @@ export async function proxyChat(args: ProxyChatArgs): Promise<ProxyChatResult> {
       }
     }
   }
+  // Transport EOF alone does not prove the answer finished. Keep the legacy
+  // usage-only EOF contract and explicit finish reasons, but surface a truncated
+  // response through the existing partial-history and explicit-retry path.
+  if (!finishReason && !lastUsage) {
+    throw new ProxyTransportError(
+      "앗, 응답이 중간에 끊겼어요. 다시 한 번 보내볼까요?",
+      chunkRequestId ?? res.headers.get("x-request-id") ?? undefined,
+    );
+  }
   return result();
 }
 
