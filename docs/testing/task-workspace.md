@@ -154,3 +154,9 @@ are not an installed-app check; live account/tool routing and physical-device be
 must be observed separately or marked NOT RUN/BLOCKED.
 
 CC-05 negative controls also feed complete HTML fences, a successful HTML write notification and proxy-loop HTML into the actual provider. Existing index.html and agent.md must survive browser-only turns; an explicit authoring request is the positive control. SDK Write/Bash/delegation and invented destinations are denied before actions, while blank browser opening still needs its existing grant and approval.
+
+- Attachment failure guidance: the visible note must meet 4.5:1 text contrast
+  on both fixture themes, including applied opacity. `image-preparation.mjs`
+  checks the actual failed-read note alongside preserved draft/images, repaste
+  recovery and one explicit send. Synthetic themes do not prove native theme
+  or operating-system clipboard acceptance.

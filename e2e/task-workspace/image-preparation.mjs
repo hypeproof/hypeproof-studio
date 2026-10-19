@@ -3,6 +3,8 @@ import { serveTaskWorkspace } from './server.mjs';
 import { resolvedProfile } from '../../extensions/hypeproof-chat/test/sx-screen-fixtures.mjs';
 
 const browser = await chromium.launch({ headless: true });
+try {
+for (const theme of ['dark', 'light']) {
 const server = await serveTaskWorkspace({ seedHistory: false, profile: resolvedProfile(3, { lesson: undefined, input: { image_paste: true, image_files: false } }) });
 const page = await browser.newPage();
 try {
@@ -22,7 +24,7 @@ try {
       }
     };
   });
-  await page.goto(server.url);
+  await page.goto(server.url + '/?theme=' + theme);
   const input = page.locator('.hps-input textarea');
   const send = page.getByRole('button', { name: '메시지 보내기', exact: true });
   const paste = () => input.evaluate(el => {
@@ -46,6 +48,22 @@ try {
   await page.evaluate(() => window.pendingReads.shift()(true));
   await expect(send).toBeEnabled();
   await expect(page.getByText('이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.')).toBeVisible();
+  const contrast = await page.locator('.hps-img-note').evaluate(node => {
+    const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const foreground = rgb(getComputedStyle(node).color);
+    let opacity = 1, background;
+    for (let parent = node; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      opacity *= Number(style.opacity);
+      if (!background && style.backgroundColor !== 'rgba(0, 0, 0, 0)') background = rgb(style.backgroundColor);
+    }
+    if (!background) throw new Error('No rendered background for attachment guidance');
+    const effective = foreground.map((channel, index) => channel * opacity + background[index] * (1 - opacity));
+    const luminance = color => color.map(n => n / 255).map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4).reduce((sum, n, i) => sum + n * [.2126, .7152, .0722][i], 0);
+    const fg = luminance(effective), bg = luminance(background);
+    return (Math.max(fg, bg) + .05) / (Math.min(fg, bg) + .05);
+  });
+  expect(contrast, `${theme} attachment failure guidance contrast`).toBeGreaterThanOrEqual(4.5);
   expect(server.sent).toHaveLength(0);
   await paste();
   await expect.poll(() => page.evaluate(() => window.pendingReads.length)).toBe(1);
@@ -63,4 +81,7 @@ try {
   await input.fill('다음 초안');
   await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(0);
   console.log('PASS pending images: Enter/pointer blocked, partial completion held, failure preserves draft/image, explicit repaste and send only once');
-} finally { await page.close(); await browser.close(); await server.close(); }
+} finally { await page.close(); await server.close(); }
+
+}
+} finally { await browser.close(); }
