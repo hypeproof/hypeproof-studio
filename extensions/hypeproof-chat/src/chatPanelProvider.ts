@@ -170,6 +170,8 @@ import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs 
 import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
+import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import type { TurnReviewView } from "./turnReviewView";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
@@ -4361,6 +4363,143 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * silently**: that state means the coach cannot find files, and with no log the
    * cause cannot be established after the fact.
    */
+  // AE-15 / CGP-ART-R-002 / CGP-AGENT-R-026 (#673) — per-turn restore points of the work folder (turnRestore.ts).
+  // The copies live in the extension's storage, per work folder and task, so the coach's tools never see them and every
+  // seat (minors too) gets them. One review bar at a time: the next turn replaces it.
+  private turnReview: { view: TurnReviewView; store: string; root: string; point: RestoreManifest; taskKey: string } | null = null;
+  private turnRestoreBusy = false;
+
+  private turnRestoreTaskKey(): string {
+    return this.currentTaskStore()?.getView().activeTaskId ?? "default";
+  }
+
+  private postTurnReview(): void {
+    const review = this.turnReview;
+    // A bar belongs to the task it was taken in; another open task sees none.
+    void this.post({ type: "turnReviewState", view: review && review.taskKey === this.turnRestoreTaskKey() ? review.view : null });
+  }
+
+  /** Before a coach turn: record the work folder. Never throws; a failure is one visible line and the turn runs without a revert. */
+  private async beginTurnRestore(streamId: string): Promise<{ store: string; root: string; point: RestoreManifest; taskKey: string } | null> {
+    if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
+    if (this._instructorMode?.isInstructor === true) return null; // the instructor surface draws no bar
+    let root: string;
+    try {
+      const cwd = this.resolveCoachCwd();
+      if (!cwd) return null;
+      root = await fs.promises.realpath(cwd);
+      if (!(await fs.promises.stat(root)).isDirectory()) return null;
+    } catch { return null; }
+    const base = this.context?.globalStorageUri?.fsPath;
+    if (!base) return null;
+    let taskKey: string;
+    let store: string;
+    try {
+      taskKey = this.turnRestoreTaskKey();
+      store = turnRestoreStoreDir(base, root, taskKey);
+    } catch { return null; }
+    try {
+      const { point } = await takeRestorePoint({ store, root, id: streamId, turnId: streamId, kind: "turn" });
+      if (!point.complete) {
+        await dropRestorePoint(store, point.id);
+        this.postToolLog(streamId, { id: `turn-restore-${streamId}`, icon: "⚠️", label: "작업 폴더에 파일이 너무 많아서 이번 요청은 되돌리기를 쓸 수 없어요.", state: "error" });
+        return null;
+      }
+      return { store, root, point, taskKey };
+    } catch {
+      this.postToolLog(streamId, { id: `turn-restore-${streamId}`, icon: "⚠️", label: "이번 요청 전 상태를 보관하지 못해서 이번에는 되돌리기를 쓸 수 없어요.", state: "error" });
+      return null;
+    }
+  }
+
+  /** After a coach turn: compare the folder with the turn's restore point and offer the review bar when anything changed. Never throws. */
+  private async endTurnRestore(handle: { store: string; root: string; point: RestoreManifest; taskKey: string } | null, streamId: string): Promise<void> {
+    if (!handle) return;
+    try {
+      const now = await scanFolder(handle.root);
+      if (!now.complete) {
+        this.postToolLog(streamId, { id: `turn-restore-end-${streamId}`, icon: "⚠️", label: "작업 폴더에 파일이 너무 많아져서 이번 요청은 되돌릴 수 없어요.", state: "error" });
+        return;
+      }
+      const changes = diffRestorePoint(handle.point, now);
+      if (changeCount(changes) === 0) { await dropRestorePoint(handle.store, handle.point.id); return; }
+      this.turnReview = {
+        ...handle,
+        view: { turnId: handle.point.turnId, state: "open", added: changes.added, changed: changes.changed, deleted: changes.deleted, notCovered: changes.notCovered.map((n) => n.path) },
+      };
+      this.postTurnReview();
+    } catch { /* the folder could not be read after the turn: no bar; the point stays until pruned */ }
+  }
+
+  /**
+   * AE-15 — a revert is rewriting the work folder: a send waits for it, its text going back to the composer.
+   * Callers test `turnRestoreBusy` synchronously first, so an ordinary send reaches handleSend with no extra tick.
+   */
+  private async refuseSendWhileRestoring(text: string, images: string[] | undefined, requestedMode: TurnToolMode | undefined): Promise<void> {
+    await this.post({ type: "inputRejected", text, images, toolMode: turnToolMode(requestedMode) });
+    await this.post({ type: "streamError", streamId: "activity", error: "파일을 되돌리는 중이에요. 끝난 뒤에 보내 주세요." });
+  }
+
+  private async handleTurnReviewMessage(msg: { type: "turnRevert" | "turnKeep" | "turnReviewClose"; turnId: string }): Promise<void> {
+    const review = this.turnReview;
+    if (!review || review.view.turnId !== msg.turnId || review.taskKey !== this.turnRestoreTaskKey()) return;
+    if (msg.type === "turnReviewClose") {
+      if (review.view.state === "restored" || review.view.state === "failed") { this.turnReview = null; this.postTurnReview(); }
+      return;
+    }
+    if (review.view.state !== "open") return;
+    const counts = { added: review.view.added.length, changed: review.view.changed.length, deleted: review.view.deleted.length, not_covered: review.view.notCovered.length };
+    if (msg.type === "turnKeep") {
+      let afterDigest: string | undefined;
+      try { afterDigest = (await scanFolder(review.root)).digest; } catch { /* recorded without it */ }
+      // REQ-Q1 — local evidence: digests and counts only, never paths or contents.
+      this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_keep", payload: { restore_point: review.point.id, before_digest: review.point.digest, ...(afterDigest ? { after_digest: afterDigest } : {}), ...counts } });
+      this.turnReview = null;
+      this.postTurnReview();
+      return;
+    }
+    if (this.hasActiveStream() || this.pendingSends > 0 || this.turnRestoreBusy || this.taskChanging || this.verifySession?.running) {
+      review.view = { ...review.view, notice: "진행 중인 작업이 끝난 뒤에 되돌릴 수 있어요." };
+      this.postTurnReview();
+      return;
+    }
+    this.turnRestoreBusy = true;
+    review.view = { ...review.view, state: "restoring", notice: undefined };
+    this.postTurnReview();
+    try {
+      const out = await restoreToPoint({ store: review.store, root: review.root, point: review.point, beforeRestoreId: `${review.point.id}-before-restore-${Date.now()}` });
+      review.view = {
+        ...review.view,
+        state: out.ok ? "restored" : "failed",
+        restoredCount: out.restored.length + out.removed.length,
+        failed: out.failed.map((f) => f.path),
+        beforeRestoreKept: !!out.beforeRestore,
+        nothingChanged: !out.touched,
+        tooLarge: out.error === "folder_too_large",
+        notCovered: out.notCovered.map((n) => n.path),
+      };
+      this.spool?.recordWorkflow({
+        turnId: review.point.turnId,
+        event: "turn_review_revert",
+        payload: {
+          restore_point: review.point.id, target_digest: review.point.digest,
+          ...(out.beforeRestore ? { before_restore_point: out.beforeRestore.id, before_digest: out.beforeRestore.digest } : {}),
+          ...(out.afterDigest ? { after_digest: out.afterDigest } : {}),
+          ok: out.ok, restored: out.restored.length, removed: out.removed.length, failed: out.failed.length,
+          ...counts, ...(out.error ? { error: out.error.split(":")[0] } : {}),
+        },
+      });
+    } catch {
+      // Nothing is claimed: an unexpected failure reads as a partial failure with no list.
+      // Unknown whether anything was written, so neither "nothing changed" nor "kept" is claimed.
+      review.view = { ...review.view, state: "failed", failed: [], beforeRestoreKept: false, nothingChanged: false, tooLarge: false };
+      this.spool?.recordWorkflow({ turnId: review.point.turnId, event: "turn_review_revert", payload: { restore_point: review.point.id, target_digest: review.point.digest, ok: false, error: "unexpected", ...counts } });
+    } finally {
+      this.turnRestoreBusy = false;
+      this.postTurnReview();
+    }
+  }
+
   private resolveCoachCwd(): string | undefined {
     const opened = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (opened) return opened;
@@ -4612,6 +4751,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "inboxRequest": await this.postInbox(); return;
+      case "turnRevert":
+      case "turnKeep":
+      case "turnReviewClose":
+        await this.handleTurnReviewMessage(msg);
+        return;
       case "inboxOpen": await this.inboxSource?.inboxOpened(msg.objectId, msg.generation); return;
       case "inboxLink": await this.handleInboxLink(msg); return;
       case "helpRequest": await this.helpSource?.refresh(); return;
@@ -4626,6 +4770,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "helpWithdraw": await this.helpSource?.withdraw(msg.key, msg.id); return;
       case "ready":
         await this.postInbox();
+        // AE-15 — a remount must still show the open review bar (it never auto-dismisses).
+        this.postTurnReview();
         await this.postConfig();
         await this.postHistory();
         await this.postLearningState();
@@ -4713,6 +4859,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       }
       case "sendMessage":
+        if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
         await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId);
         return;
       case "stageImage":
@@ -4725,6 +4872,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // #358 — carry the failed turn's image(s) through the retry so the
         // coach actually re-receives the screenshot (was text-only → "스크린샷을
         // 아직 못 받았어요").
+        if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.prompt, msg.images, requestedMode); return; }
         await this.handleSend(msg.prompt, msg.history, msg.images, undefined, undefined, requestedMode, msg.userMessageId, msg.sourceMessageId);
         return;
       case "voiceCapabilityProbeResult": {
@@ -5347,6 +5495,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const sdkTurnTotal: {
       current: { usage: Record<string, unknown>; totalCostUsd: number | null } | null;
     } = { current: null };
+    // AE-15 / CGP-ART-R-002 — the work folder as it was before this turn; the review bar compares against it.
+    const turnRestorePoint = await this.beginTurnRestore(streamId);
     try {
       if (effectiveImages?.length && profile?.input?.image_paste !== true) {
         throw new Error("이 활동은 이미지 분석을 허용하지 않아요.");
@@ -6097,6 +6247,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           : {}),
       });
       if (this.effortTurn?.id === streamId) void this.refreshEffortResult().catch(() => { /* panel may have closed */ });
+      // AE-15 — also after a stop or a failure: whatever the turn changed is offered for review.
+      await this.endTurnRestore(turnRestorePoint, streamId);
       this.activeStreams.delete(streamId);
       // cr-verify — the run this turn carried takes no more coach calls once the turn ends.
       this.verifySession?.endTurn();

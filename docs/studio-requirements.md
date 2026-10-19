@@ -926,6 +926,73 @@ Design, invocation and evidence boundaries: [managed candidate drafts](dev/06-re
 This delivery contract supports the existing Product Intent's visible human judgment and
 evidence boundaries; it does not claim a measured learner capability outcome.
 
+## Per-turn restore points (#673)
+
+`REQ-STUDIO-TURN-RESTORE` (first slice of AE-15 and AE-05 in
+[learning-agent-experience](requirements/learning-agent-experience.md); CGP-ART-R-002 and
+CGP-AGENT-R-026 of the ChatGPT desktop study, which extend AE-15; issue #673). Built:
+
+- **Restore point before each coach turn.** When a turn runs on any runtime (proxy, agent-sdk,
+  local) and the coach has a work folder (`resolveCoachCwd`), `chatPanelProvider.beginTurnRestore`
+  records it before the runtime starts: a manifest of every file (posix relative path, size,
+  sha256) plus a byte copy of each file (`src/turnRestore.ts`). `.git`, `node_modules`,
+  `.hypeproof` (adult page history) and `이전 세상` (kids' world archive) are not recorded, nor
+  `.DS_Store`/`Thumbs.db`. The copies live in the extension's global storage, one store per work
+  folder (sha256 of its real path) and task (active task id, else `default`), never in the work
+  folder: the coach's tools cannot list, read or rewrite them, a site publish or git commit of the
+  folder cannot carry them, and no seat-age gate applies, so minors get them too (adultArchive is
+  adult-only). Copies are content-addressed, so unchanged files cost nothing per point. The
+  instructor surface takes none.
+- **Bounds, never silent.** A file above 20 MB, files past 5000 or 200 MB per point, links and
+  unreadable entries are recorded as not covered and named on the bar; they are never claimed
+  restored, never removed by a revert, and an added file that was not copied stays. A folder walk
+  past 20,000 entries makes the point incomplete: the turn gets one ⚠️ timeline line and no revert,
+  because an unvisited file would look added. A point that cannot be written gets the same kind of
+  line and the turn runs. The newest 10 points per store are kept; pruning removes older manifests
+  and every copy no remaining point names. A turn that changed nothing drops its point.
+- **Review bar after the turn**, also after a stop or a failure. The folder is rescanned and
+  compared with the point. If anything was added, changed or deleted, the chat shows
+  "AI가 이번에 바꾼 파일 N개" with an expandable list (새로 만듦 / 바뀜 / 지움), the line
+  "AI가 일하는 동안 내가 직접 고친 파일도 함께 셌어요." (true: the comparison is of the folder, so a
+  manual edit inside the turn window counts), the not-covered names, the external-state line, and
+  **되돌리기** / **이대로 둘게요**. It never auto-dismisses; it survives a webview remount (re-sent
+  on `ready`), the next turn replaces it, and it is shown only in the task it was taken in.
+- **되돌리기.** Refused with a notice while a turn, a verify run or a task switch is in progress.
+  First the current folder is recorded as its own point (`before_restore`, the "복구 직전" state
+  AE-15 requires); if that fails, nothing is changed and the bar says so. Then files the point does
+  not have are removed, every file whose bytes differ is written from its copy after the copy's own
+  sha256 is checked against the manifest (a damaged copy is not written over the learner's file),
+  directories the turn created are removed when empty, and the folder is rescanned: every point
+  file must have its manifest hash and every removed file must be gone. Nothing is ever written,
+  created or removed through a link: before each write, mkdir, unlink or rmdir every existing
+  path component is checked with lstat (no link, a real directory, real path inside the folder),
+  missing parents are created one level at a time and re-checked, and a target that is itself a
+  link is refused. Such a path is reported as failed (`unsafe_path`) and the link is left in place;
+  the "복구 직전" point names it as not covered (`link`). A turn that replaced `docs/` with a link to
+  an outside folder therefore cannot make the revert write outside the work folder. Success reads "이번 요청
+  전으로 되돌렸어요 …"; any difference reads "일부 파일을 되돌리지 못했어요" with the files, never
+  success. The failure lines state only measured facts from the outcome: which files failed,
+  whether any file in the folder was changed (`touched`), whether "복구 직전" was kept, and for a
+  folder too large to restore, that reason. Both state whether the pre-revert state is kept and that published sites, the browser and
+  command side effects outside the work folder are not restored. New sends wait while a revert runs.
+- **Evidence (REQ-Q1).** Keep and revert are local spool workflow events `turn_review_keep` and
+  `turn_review_revert` with the restore point id, before/target/after manifest digests and counts.
+  No paths and no file contents.
+
+Not built: a per-task history of restore points or a picker for older ones (only the last turn is
+offered; older points are kept for 10 turns but have no UI), per-file restore, the CGP-AGENT-R-026
+"바뀐 것" panel and the CGP-ART-R-020 summary, artifact version ids (CGP-ART-R-002 (2)), separating
+tool success from check success (AE-05), attributing a change to shell or subagent tools (they are
+counted, as any folder change is, but not labelled), refreshing the preview after a revert (the
+page shown stays until the learner reopens it), and any Chalk view. Mid-turn changes outside the
+work folder are out of scope by design. Verification: U (`extensions/hypeproof-chat/test/turn-restore.smoke.mjs`
+— real temp folders with planted add/change/delete including a nested directory and a binary,
+exact-hash revert, 복구 직전 round trip, caps, links, pruning, tampered-copy and lying-manifest
+negative controls, a parent folder or target file swapped for a link to outside (outside listing and
+bytes unchanged; both fail on the previous code), a deep nested positive control, host wiring lock; `extensions/hypeproof-chat/test/turn-review.test.tsx` — bar
+states and copy, partial failure never reads as success, default chat render has no bar). Native
+app run: NOT RUN.
+
 ## Personal trial interaction coverage (#758)
 
 | ID | Requirement | Verification |

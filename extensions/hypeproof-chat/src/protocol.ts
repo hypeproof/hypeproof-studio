@@ -626,6 +626,10 @@ export type WebviewMessage = (
   // #751 U2 — the inbox of instructor notices/materials. `generation` is the connection the card list was drawn under: the
   // host answers a callback from an older one with nothing. Opening a card is kept on this device; it is not reported.
   | { type: "inboxRequest" }
+  // AE-15 / CGP-ART-R-002 — the learner's decision on the last turn's review bar; `turnId` must name the bar the host holds.
+  | { type: "turnRevert"; turnId: string }
+  | { type: "turnKeep"; turnId: string }
+  | { type: "turnReviewClose"; turnId: string }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
@@ -709,6 +713,8 @@ export type HostMessage = (
   | ({ type: "goalState" } & import("./studentGoal").GoalAnswer)
   /** #751 U2 — always read from disk by the host; the webview holds no copy of record. */
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
+  /** AE-15 / CGP-ART-R-002 — the review bar for the last coach turn's file changes; null removes it. */
+  | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
   | { type: "streamStart"; streamId: string; messageId: string }

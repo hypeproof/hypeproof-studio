@@ -3,6 +3,7 @@ import type { RecoveredRequest } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
 import type { TurnToolMode } from '../../src/turnTools';
 import { ComposerTools, SelectedTool } from './ComposerTools';
+import { TurnReviewBar } from './TurnReviewBar';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { useResponseAnnouncement } from './responseAnnouncer';
@@ -502,6 +503,9 @@ export function ChatPanel(props: Props) {
     const stop = () => { off(); document.removeEventListener("visibilitychange", ask); };
     return stop;
   }, []);
+  // AE-15 / CGP-ART-R-002 — the last coach turn's file review. The host owns it and re-sends it on "ready"; null clears it.
+  const [turnReview, setTurnReview] = useState<import("../../src/turnReviewView").TurnReviewView | null>(null);
+  useEffect(() => onHostMessage((msg) => { if (msg.type === "turnReviewState") setTurnReview(msg.view); }), []);
   // #751 native help — the host reads the learner, class connection and Service again for every draw; nothing is kept here.
   const [help, setHelp] = useState<import("../../src/classroomHelp").HelpView | null>(null);
   useEffect(() => {
@@ -1364,6 +1368,16 @@ export function ChatPanel(props: Props) {
             <span className="hps-stop-notice-icon" aria-hidden="true">⏹</span>
             {props.stopNotice}
           </div>
+        )}
+
+        {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
+        {!props.instructor && turnReview && (
+          <TurnReviewBar
+            view={turnReview}
+            onRevert={() => postToHost({ type: "turnRevert", turnId: turnReview.turnId })}
+            onKeep={() => postToHost({ type: "turnKeep", turnId: turnReview.turnId })}
+            onClose={() => postToHost({ type: "turnReviewClose", turnId: turnReview.turnId })}
+          />
         )}
 
         {showFollowUpChips && (
