@@ -453,3 +453,17 @@
 .hp-inbox-quiet .hp-inbox-link-url { font-size: 12px; opacity: .8; overflow-wrap: anywhere; min-width: 0; }
 .hp-inbox-quiet button { font: inherit; color: inherit; background: none; border: 1px solid currentColor; border-radius: 6px; min-height: 36px; padding: 4px 10px; cursor: pointer; }
 .hp-inbox-quiet :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* Personal account preview: a single primary sign-in action and plain pass choices. */
+.studio-account { border-bottom: 1px solid var(--vscode-widget-border, #ffffff20); padding-bottom: 20px; margin-bottom: 8px; }
+.studio-account h3 { font-size: 16px; margin: 14px 0 8px; }
+.studio-account-identity { display: flex; flex-direction: column; gap: 4px; }
+.studio-account-identity span, .studio-account-pass > span { font-size: 12px; color: var(--vscode-descriptionForeground, #aaa); overflow-wrap: anywhere; }
+.studio-account-pass { display: flex; flex-direction: column; gap: 7px; padding: 14px 0; }
+.studio-account-pass .studio-choice { margin-top: 4px; }
+
+/* Google's light button treatment keeps the multicolor mark on white. */
+.studio-account .studio-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; border-radius: 4px; min-height: 40px; padding: 10px 12px; justify-content: center; gap: 12px; font-family: Roboto, Arial, sans-serif; font-size: 14px!important; font-weight: 500!important; }
+.studio-account .studio-google:hover:not(:disabled) { background: #f8faff; }
+.studio-account .studio-google:focus-visible { outline: 2px solid #4285f4; outline-offset: 2px; }
+.studio-account .studio-google svg { flex: 0 0 20px; margin: 0!important; }
