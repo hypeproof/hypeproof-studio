@@ -83,12 +83,19 @@ try {
   await expect(page.locator('.tw-error')).toHaveCount(1);
   await expect(page.locator('[role="alert"]')).toHaveCount(1);
   await expect(input).toHaveValue('저장 실패 후에도 남아야 하는 입력');
-  await expect(page.locator('.tw-error')).toContainText('작업');
+  await expect(page.locator('.tw-error')).toContainText('저장하지 못했습니다');
+  await expect(page.getByRole('button', { name: '알림 닫기', exact: true })).toHaveCount(0);
+  await expect(page.locator('.tw-local-note')).toContainText('저장되지 않은 입력');
+  await server.fixture.h.postConfig();
+  await server.fixture.h.post({ type: 'taskWorkspaceState', view: server.fixture.store.getView() });
+  await expect(page.locator('.tw-error')).toContainText('저장하지 못했습니다');
+  await expect(input).toHaveValue('저장 실패 후에도 남아야 하는 입력');
   await page.locator('.tw-task').filter({ hasText: '매일 릴리즈' }).click();
   await expect(input).toHaveValue('다음에 이어 쓸 입력');
   await expect(page.locator('.tw-error')).toHaveCount(0);
   await expect(page.locator('.hp-mission')).toHaveCount(0);
-  checks.push('failed flush preserves task/draft, reports once, then clears on successful retry');
+  await expect(page.locator('.tw-local-note')).toHaveText('이 기기에 보관됩니다');
+  checks.push('failed flush retains an undismissable unsaved indicator across unrelated config/state refresh, then clears only after successful persistence');
   await page.setViewportSize({ width: 320, height: 900 });
   for (const action of ['select', 'create']) {
     const active = server.fixture.store.getView().activeTaskId;
@@ -100,7 +107,8 @@ try {
     await expect(page.getByRole('alert')).toContainText('입력을 저장하지 못했습니다');
     expect(server.fixture.store.getView().activeTaskId).toBe(active);
     await expect(input).toHaveValue('다음에 이어 쓸 입력');
-    await page.getByRole('button', { name: '알림 닫기' }).click();
+    await expect(page.getByRole('button', { name: '알림 닫기', exact: true })).toHaveCount(0);
+    await expect(page.locator('.tw-local-note')).toContainText('저장되지 않은 입력');
   }
   checks.push('narrow failed create/select closes the drawer and exposes the retained-task error');
   await page.setViewportSize({ width: 1440, height: 900 });

@@ -13,6 +13,17 @@ only for citations in this task, and preserves composer focus. A pinned source i
 not replaced by later citations. Classroom, account authority and shared Service
 memory remain governed by their existing contracts.
 
+UX22: a failed draft write must explicitly distinguish text still on screen from
+persisted text. The unsaved warning cannot be dismissed or cleared by an unrelated
+task-list/config refresh; a confirmed write clears it. A conflicting disk revision
+must not be described as a transient selection failure or overwritten. Keep the
+current draft editable and explain its unsaved state until it can be preserved.
+Explicit recovery snapshots the current composer and forks its displayed history,
+draft, images and pending items into a new task against the latest valid disk
+revision. Other tasks and concurrent edits remain unchanged. Queued text stays
+paused; recovery alone must not send a model request. A failed recovery leaves the
+original task and unsaved input visible and editable.
+
 [Design](design/task-workspace.md) and [TW/CP acceptance](testing/task-workspace.md)
 separate filesystem/host/built-UI evidence from native, Windows and customer proof.
 

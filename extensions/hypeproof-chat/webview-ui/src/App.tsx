@@ -294,6 +294,7 @@ export function App() {
   const [shouldCrash, setShouldCrash] = useState(false);
   const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
   // cr-verify — the verify requests THIS view made; the host echoes the id with the sentence to send.
   const verifyRequests = useRef(new Set<string>());
   const verifyRequest = () => {
@@ -311,6 +312,7 @@ export function App() {
         setWorkspace(msg.config.taskWorkspace);
         setWorkspaceError(null);
         if (scope.current !== msg.config.activity?.id || taskScope.current !== (msg.config.taskWorkspace?.activeTaskId ?? undefined)) {
+          setDraftSaveError(null);
           setIncomingImage(null);
           verifyRequests.current.clear();
           activeStream.current = null;
@@ -337,7 +339,13 @@ export function App() {
       }
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
-        case 'taskWorkspaceError': setWorkspaceError(msg.error); return;
+        case 'taskWorkspaceError':
+          setWorkspaceError(msg.error);
+          // A list/config refresh is not proof that the current draft reached disk.
+          // Only a successful draft acknowledgement or a new scope releases this warning.
+          if (msg.draftSaveFailed) setDraftSaveError(msg.error);
+          else if (msg.error === null) setDraftSaveError(null);
+          return;
         // #897 (VO-01) — 음성 capability 프로브. **원시 관측만** 돌려보내고 판정은
         // 호스트가 한다. 화면에 아무것도 바꾸지 않는다 — 이건 계측기다.
         case "probeVoiceCapability": {
@@ -540,7 +548,7 @@ export function App() {
   return (
     <ChatErrorBoundary onReset={() => { setShouldCrash(false); postToHost({ type: "ready" }); }}>
       <CrashIfFlagged crash={shouldCrash} />
-      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={workspaceError} onDismissError={() => setWorkspaceError(null)}>
+      <TaskWorkspaceFrame view={workspace} messages={messages} busy={!!state.streamId || !!state.verify?.running} error={draftSaveError ?? workspaceError} unsavedDraft={!!draftSaveError} onDismissError={() => setWorkspaceError(null)}>
       {/* #1298 — instructor tokens get the extended panel; student tokens get the standard one. */}
       {state.config?.isInstructor ? (
         <InstructorChatPanel

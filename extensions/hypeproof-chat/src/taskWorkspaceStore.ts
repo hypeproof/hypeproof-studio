@@ -245,6 +245,24 @@ export class TaskWorkspaceStore {
       task.draft = clone(draft);
     });
   }
+  /** Explicitly fork the displayed work; never merge it over another writer's changes. */
+  recoverDraft(taskId: string, draft: ActivityDraft): Promise<TaskWorkspaceView> {
+    const current = this.requireData(this.data);
+    if (taskId !== current.activeTaskId || !validDraft(draft)) return Promise.reject(new TaskWorkspaceStoreError('stale', '현재 작업의 입력을 다시 확인해 주세요.'));
+    const original = clone(this.requireTask(current, taskId));
+    return this.mutate(data => {
+      const latest = this.requireData(data);
+      const recovered = this.newTask(`${original.title.slice(0, 150)} · 복구`, Date.now());
+      recovered.messages = original.messages;
+      recovered.messageCount = recovered.messages.length;
+      recovered.sourceSelection = original.sourceSelection;
+      recovered.draft = clone(draft);
+      if (recovered.draft.queued !== null) recovered.draft.queuedPaused = true;
+      latest.tasks.push(recovered);
+      latest.activeTaskId = recovered.id;
+      return latest;
+    }, true);
+  }
   clearHistory(taskId: string): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => { task.messages = []; task.messageCount = 0; });
   }
@@ -375,7 +393,7 @@ export class TaskWorkspaceStore {
     await unlink(lease.path);
   }
 
-  private mutate(change: (data: WorkspaceData | undefined) => WorkspaceData): Promise<TaskWorkspaceView> {
+  private mutate(change: (data: WorkspaceData | undefined) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
@@ -394,10 +412,11 @@ export class TaskWorkspaceStore {
             if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
             disk = decode(await readFile(this.filePath, 'utf8'), this.scope);
           } catch (error) { if (codeOf(error) !== 'ENOENT') throw error; }
-          if ((disk?.revision ?? 0) !== (this.data?.revision ?? 0) || JSON.stringify(disk) !== JSON.stringify(this.data)) fail('stale', '다른 창에서 기록이 변경되었습니다. 작업을 다시 열어 주세요.');
-          const next = change(this.data ? clone(this.data) : undefined);
+          if (!recoverFromDisk && ((disk?.revision ?? 0) !== (this.data?.revision ?? 0) || JSON.stringify(disk) !== JSON.stringify(this.data))) fail('stale', '다른 창에서 기록이 변경되었습니다. 작업을 다시 열어 주세요.');
+          const base = recoverFromDisk ? disk : this.data;
+          const next = change(base ? clone(base) : undefined);
           if (this.data && JSON.stringify(next) === JSON.stringify(this.data)) return this.getView();
-          next.revision = (this.data?.revision ?? 0) + 1;
+          next.revision = (base?.revision ?? 0) + 1;
           const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
           decode(content, this.scope);
           const temporaryPath = `${this.filePath}.tmp-${lock.owner.nonce}`;

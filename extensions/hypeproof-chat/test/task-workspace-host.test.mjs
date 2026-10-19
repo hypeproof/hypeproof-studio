@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createTaskHarness } from './task-workspace-harness.mjs';
@@ -66,6 +66,43 @@ test('actual host retains more than 200 messages and does not silently drop a fa
     assert.equal(f.h.connectionChanging, false);
     assert.match(f.posts.at(-1).error, /저장하지 못했습니다/);
     assert.equal(f.h.getHistory().length, 240);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('actual host identifies an unsaved conflicting draft without overwriting another writer', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'task-host-conflict-'));
+  try {
+    const unsaved = { text: '화면에만 있는 새 초안', images: ['data:image/png;base64,cGhvdG8='], queued: '보관한 질문', queuedToolMode: 'web-search' };
+    let f;
+    f = await createTaskHarness(root, message => {
+      if (message.type === 'activityFreeze' && message.nonce) void f.handle(f.scoped({ type: 'saveActivityDraft', nonce: message.nonce, draft: unsaved }));
+    });
+    const id = f.store.getView().activeTaskId;
+    await f.store.append(id, [{ id: 'context', role: 'user', content: '원래 대화 맥락', createdAt: 1 }]);
+    await f.handle(f.scoped({ type: 'saveActivityDraft', draft: { text: '저장된 초안', images: [], queued: null } }));
+    const other = new f.store.constructor(root, 'synthetic-personal-a');
+    await other.rename(id, '다른 창의 이름');
+    const bytes = await readFile(other.filePath, 'utf8');
+    await f.handle(f.scoped({ type: 'saveActivityDraft', draft: { text: '화면에만 있는 새 초안', images: [], queued: null } }));
+    const error = f.posts.at(-1);
+    assert.equal(error.type, 'taskWorkspaceError');
+    assert.equal(error.draftSaveFailed, true);
+    assert.match(error.error, /다른 창.*충돌.*현재 화면에만/);
+    assert.doesNotMatch(error.error, /다시 선택/);
+    assert.equal(await readFile(other.filePath, 'utf8'), bytes);
+    assert.equal(f.store.getDraft().text, '저장된 초안');
+    const request = f.scoped({ type: 'taskRecoverDraft' });
+    await Promise.all([f.handle(request), f.handle(request)]);
+    const recovered = f.store.getActiveTask();
+    assert.notEqual(recovered.id, id);
+    assert.equal(f.store.getView().tasks.length, 2, 'repeated clicks cannot create duplicate recovery tasks');
+    assert.deepEqual(JSON.parse(JSON.stringify(recovered.draft)), { ...unsaved, queuedPaused: true });
+    assert.equal(recovered.messages[0].content, '원래 대화 맥락');
+    const latest = new f.store.constructor(root, 'synthetic-personal-a');
+    assert.equal(latest.getTask(id).title, '다른 창의 이름');
+    assert.equal(latest.getTask(id).draft.text, '저장된 초안');
+    assert.equal(latest.getActiveTask().id, recovered.id);
+    assert.equal(f.h.connectionChanging, false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
