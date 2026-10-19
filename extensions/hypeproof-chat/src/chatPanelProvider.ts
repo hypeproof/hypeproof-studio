@@ -175,7 +175,7 @@ import { CdpSession } from "./cdpSession";
 import { LiveServer } from "./liveServer";
 import { recoverLearnerPreview, type ArtifactState, type PreviewTabsState } from "./previewRecovery";
 import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./browserControl";
-import { resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
+import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import {
   clampTimeline,
@@ -2537,10 +2537,16 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * before the system browser opens.
    */
   async openLearnerLink(raw: unknown): Promise<void> {
-    const route = routeExternalLink(raw, resolveBrowserSafety(this.cachedProfile));
+    const persisted = vscode.workspace.getConfiguration("hypeproof.browser").get<boolean>("safeSession");
+    const route = routeExternalLink(raw, linkSafety(this.cachedProfile, persisted));
     if (route.kind === "refuse") return;
     if (route.kind === "integrated") {
-      await vscode.window.openBrowserTab(route.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+      try {
+        await vscode.window.openBrowserTab(route.url, { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+      } catch {
+        // Fail closed: no system-browser fallback for a safe session.
+        void vscode.window.showInformationMessage("이 링크를 Studio 브라우저에서 열 수 없어요. 강사에게 알려 주세요.");
+      }
       return;
     }
     const choice = await vscode.window.showWarningMessage(
