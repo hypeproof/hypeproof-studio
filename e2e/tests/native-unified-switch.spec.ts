@@ -77,7 +77,8 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   const bViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));await begin();
   await expect.poll(async()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,bViews)).toBe(0);
   await expect.poll(()=>ctx.win.title()).not.toContain('activity-b');
-  const aStart=await startFrame(ctx.win);await aStart.getByRole('button',{name:'이어서 하기',exact:true}).click();
+  // Choosing saved activity A and 이 활동 시작하기 is the pending intent: like B above, A
+  // resumes straight into chat after the folder reload, with no 이어서 하기 step.
   chat=await chatFrame(ctx.win);await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('A에서 작성 중인 합성 초안');
   expect(readFileSync(join(ctx.wsDir,'original-a.txt'),'utf8')).toBe('synthetic activity A');
   expect(readFileSync(join(second,'original-b.txt'),'utf8')).toBe('synthetic activity B');
