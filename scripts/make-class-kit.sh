@@ -32,7 +32,8 @@ usage() {
   cat <<'EOF'
 Usage: bash scripts/make-class-kit.sh --out <dir> [--version <x.y.z>] [--platform <p>]...
   --out <dir>        folder to create; it must not exist yet
-  --version <x.y.z>  Studio release to pack (default: the latest release)
+  --version <x.y.z>  Studio release to pack (default: the latest release; when it
+                     lacks a requested platform, the newest release that has them all)
   --platform <p>     darwin-arm64 | win32-x64; repeat for both (default: both)
 Needs: GitHub CLI logged in with a hypeproof member account (gh auth login).
 EOF
@@ -63,11 +64,12 @@ sha256_of() {  # sha256_of <file> -> lowercase hex digest
 # ── Arguments ────────────────────────────────────────────────────────────────
 OUT=""
 VERSION=""
+VERSION_GIVEN=0
 PLATFORM_ARGS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --out)      OUT="${2:?--out needs a folder}"; shift 2 ;;
-    --version)  VERSION="${2:?--version needs a value such as 0.1.56}"; shift 2 ;;
+    --version)  VERSION="${2:?--version needs a value such as 0.1.56}"; VERSION_GIVEN=1; shift 2 ;;
     --platform) PLATFORM_ARGS="${PLATFORM_ARGS} ${2:?--platform needs darwin-arm64 or win32-x64}"; shift 2 ;;
     -h|--help)  usage; exit 0 ;;
     *) usage >&2; die "Unknown argument: $1" ;;
@@ -134,6 +136,48 @@ EOF
   done
   return 1
 }
+
+# has_platforms "<asset names>" - whether the names cover every requested platform.
+# shellcheck disable=SC2254  # the globs must stay unquoted to match
+has_platforms() {
+  local names="$1" ok n
+  if [ "$want_darwin" = "1" ]; then
+    ok=0; for n in $names; do case "$n" in $GLOB_DARWIN_ARM64) ok=1 ;; esac; done
+    [ "$ok" = "1" ] || return 1
+  fi
+  if [ "$want_win" = "1" ]; then
+    ok=0; for n in $names; do case "$n" in $GLOB_WIN32_X64|$GLOB_WIN32_X64_FALLBACK) ok=1 ;; esac; done
+    [ "$ok" = "1" ] || return 1
+  fi
+  return 0
+}
+
+# Releases can be macOS only (config/release-platforms.json). When no version was
+# asked for and the latest release lacks a requested platform, pack the newest
+# published release (no drafts, no prereleases, ordered by created_at like
+# /releases/latest) that has every requested platform instead.
+RELEASE_LIST_JQ='.[] | select((.draft or .prerelease) | not) | [.created_at, .tag_name, ([.assets[].name] | join(" "))] | @tsv'
+if [ "$VERSION_GIVEN" = "0" ] && ! has_platforms "$(printf '%s\n' "$ASSETS" | cut -f1)"; then
+  latest="$VERSION"
+  say "v${latest} does not have every requested platform (${PLATFORMS}); looking for the newest release that has"
+  LIST="$(gh api "repos/${RELEASES_REPO}/releases?per_page=100" --paginate --jq "$RELEASE_LIST_JQ")" \
+    || die "Could not list the releases of ${RELEASES_REPO}. Run gh auth login with your member account."
+  VERSION=""
+  while IFS=$'\t' read -r _created tag names; do
+    [ -n "${tag:-}" ] || continue
+    if has_platforms "$names"; then VERSION="${tag#v}"; break; fi
+  done <<< "$(printf '%s\n' "$LIST" | LC_ALL=C sort -r -t "$(printf '\t')" -k1,1)"
+  [ -n "$VERSION" ] \
+    || die "No published release of ${RELEASES_REPO} has every requested platform (${PLATFORMS}). Ask for a Windows build, or pack --platform darwin-arm64."
+  printf '%s' "$VERSION" | grep -Eq '^[0-9]+(\.[0-9]+)+(-[0-9A-Za-z.]+)?$' \
+    || die "Not a Studio version: '${VERSION}'"
+  info "Packing v${VERSION}: the latest release v${latest} lacks a requested platform."
+  info "For the newest macOS build, make a separate kit with --platform darwin-arm64."
+  say "Reading release v${VERSION}"
+  ASSETS="$(gh api "repos/${RELEASES_REPO}/releases/tags/v${VERSION}" \
+    --jq '.assets[] | "\(.name)\t\(.url)\t\(.digest)"')" \
+    || die "Could not read release v${VERSION} of ${RELEASES_REPO}. Check your gh login."
+fi
 
 # Build in a sibling folder and rename at the end, so a failed run never leaves
 # something that looks like a finished kit.

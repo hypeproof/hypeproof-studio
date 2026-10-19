@@ -128,9 +128,14 @@ without Windows acceptance. Add `win32-x64` to the config before cutting instead
 
 - In-app updater: the mirror's latest release has no Windows installer, so
   `parseLatestRelease` reports no update. No banner, no error; they stay on their version.
-- `install-win.ps1` and `install.ps1` without a pinned version read `/releases/latest`
-  and fail with "No Studio asset matched". New Windows installs need a pinned version
-  that has Windows packages.
-- Lab `/api/download/win` and the `/studio/install/kit` Windows kit read the mirror's
-  latest release and return nothing for Windows. The Mac download and kit keep working:
-  mirror-release still attaches `install.sh` and `seed-sdk-binary.sh` to every release.
+- `install-win.ps1`, `install.ps1` and `make-class-kit.sh` without a pinned version
+  install the newest published release that has a Windows installer (PRA-09). When
+  `/releases/latest` has one they use it; otherwise they list the releases and skip
+  drafts, prereleases and macOS-only releases. A pinned version installs exactly that
+  release and fails if it has no Windows installer.
+- Lab `/api/download/win`, the paid-order Windows download and the `/studio/install/kit`
+  Windows kit fall back the same way (hypeprooflab `fix/studio-win-fallback-20261019`).
+  The Mac download and kit stay on the latest release: mirror-release still attaches
+  `install.sh` and `seed-sdk-binary.sh` to every release.
+- A Windows kit needs the installer plus `install.ps1` and `seed-sdk-binary.ps1` on the
+  same release, so the Lab kit falls back to the newest release that has all three.

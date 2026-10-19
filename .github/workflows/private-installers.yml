@@ -6,6 +6,8 @@ on:
       - 'scripts/install.ps1'
       - 'scripts/tests/bootstrap-win-private-fixture.ps1'
       - 'scripts/tests/install-win-fixture.ps1'
+      - 'scripts/tests/win-release-set.ps1'
+      - 'scripts/tests/install-kit-fixture.ps1'
       - '.github/workflows/private-installers.yml'
   push:
     branches: [main]
@@ -14,6 +16,8 @@ on:
       - 'scripts/install.ps1'
       - 'scripts/tests/bootstrap-win-private-fixture.ps1'
       - 'scripts/tests/install-win-fixture.ps1'
+      - 'scripts/tests/win-release-set.ps1'
+      - 'scripts/tests/install-kit-fixture.ps1'
       - '.github/workflows/private-installers.yml'
 permissions:
   contents: read
@@ -25,20 +29,32 @@ jobs:
       - name: Windows PowerShell 5.1 authentication and integrity controls
         shell: pwsh
         run: |
-          foreach ($scenario in @('success', 'auth-failed', 'bad-digest', 'bad-name')) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/install-win-fixture.ps1 -Scenario $scenario
+          # Positive: latest has Windows; latest is macOS only (falls back past a
+          # newer draft and prerelease); the fallback reads a second page; a pin.
+          $positive = @('success', 'mac-only-latest', 'paged', 'pinned')
+          $negative = @('auth-failed', 'bad-digest', 'bad-name', 'no-windows', 'pinned-mac-only')
+          foreach ($scenario in $positive + $negative) {
+            $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/install-win-fixture.ps1 -Scenario $scenario | Out-String
             $code = $LASTEXITCODE
-            if ($scenario -eq 'success' -and $code -ne 0) { throw 'Authenticated installer fixture failed' }
-            if ($scenario -ne 'success' -and $code -eq 0) { throw "Negative control failed: $scenario" }
+            Write-Host $out
+            if ($positive -contains $scenario -and $code -ne 0) { throw "Installer fixture failed: $scenario" }
+            if ($negative -contains $scenario -and $code -eq 0) { throw "Negative control failed: $scenario" }
           }
+          # No release has Windows: the error must say so, not a generic failure.
+          $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/install-win-fixture.ps1 -Scenario no-windows | Out-String
+          if ($out -notmatch 'has a Windows x64 installer yet') { throw 'no-windows did not report the missing Windows release' }
           exit 0
       - name: Windows PowerShell 5.1 private bootstrap functions
         shell: pwsh
         run: |
-          foreach ($scenario in @('success', 'auth-failed', 'bad-digest', 'bad-name', 'missing-digest')) {
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/bootstrap-win-private-fixture.ps1 -Scenario $scenario
+          $positive = @('success', 'mac-only-latest', 'paged', 'pinned', 'pinned-missing')
+          $negative = @('auth-failed', 'bad-digest', 'bad-name', 'missing-digest', 'no-windows', 'pinned-mac-only')
+          foreach ($scenario in $positive + $negative) {
+            $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/tests/bootstrap-win-private-fixture.ps1 -Scenario $scenario | Out-String
             $code = $LASTEXITCODE
-            if ($scenario -eq 'success' -and $code -ne 0) { throw 'Authenticated bootstrap fixture failed' }
-            if ($scenario -ne 'success' -and $code -eq 0) { throw "Negative control failed: $scenario" }
+            Write-Host $out
+            if ($positive -contains $scenario -and $code -ne 0) { throw "Bootstrap fixture failed: $scenario" }
+            if ($negative -contains $scenario -and $code -eq 0) { throw "Negative control failed: $scenario" }
+            if ($scenario -eq 'no-windows' -and $out -notmatch 'has a Windows installer') { throw 'no-windows did not report the missing Windows release' }
           }
           exit 0
