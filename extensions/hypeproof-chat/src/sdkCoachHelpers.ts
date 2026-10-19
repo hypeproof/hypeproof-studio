@@ -41,7 +41,7 @@ import {
   MCP_BROWSER_SELECT,
 } from "./browserMcp.ts";
 import { MCP_PUBLISH_SITE, sitePublishAllowed } from "./publish/publishContract.ts";
-import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./proxyClientHelpers.ts";
+import { CLIENT_TURN_ID_HEADER, validClientTurnId } from "./clientTurnId.ts";
 import { isCurriculumRuntimeEnabled } from "./curriculumRuntime.ts";
 import type { ActionRequest, ResolvedProfile } from "./protocol";
 import { SDK_BINARY_MIN_BYTES, SDK_BINARY_VERSION } from "./sdkBinaryManifest.ts";

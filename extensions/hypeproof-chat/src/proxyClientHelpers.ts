@@ -248,13 +248,7 @@ export function lessonBindingHeader(key: string | undefined): Record<string, str
  * value outside it is dropped rather than sent, because the Service refuses it as
  * `invalid_turn_id` instead of ignoring it.
  */
-export const CLIENT_TURN_ID_HEADER = "x-hps-turn-id";
-export function validClientTurnId(v: unknown): v is string {
-  return typeof v === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(v);
-}
-export function clientTurnIdHeader(turnId: unknown): Record<string, string> {
-  return validClientTurnId(turnId) ? { [CLIENT_TURN_ID_HEADER]: turnId } : {};
-}
+export { CLIENT_TURN_ID_HEADER, validClientTurnId, clientTurnIdHeader } from "./clientTurnId.ts";
 
 // ── #580 — 스트림 청크의 토큰 usage 파싱 ────────────────────────────────────
 
