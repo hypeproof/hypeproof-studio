@@ -5036,7 +5036,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // #173 — accumulate citations across the stream so they persist to history.
     const assistantCitations: import("./protocol").Citation[] = [];
     const webActivity = new WebSearchActivity();
-    // Freeze the visible transcript at cancellation. Runtime callbacks may settle
+    // Freeze the visible conversation at cancellation. Runtime callbacks may settle
     // later; neither those bytes nor a later task belong to this interrupted turn.
     let interruptedItems: ChatMessage[] | undefined;
     const captureInterrupted = () => {
@@ -5666,7 +5666,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
       });
       // On user-initiated stop the cancelStream handler already ended the stream
-      // in the webview. Persist the frozen interrupted transcript in finally,
+      // in the webview. Persist the frozen interrupted conversation in finally,
       // without a successful streamEnd (the proxy path may throw on abort).
       if (!ctrl.signal.aborted) {
         clearPending();
