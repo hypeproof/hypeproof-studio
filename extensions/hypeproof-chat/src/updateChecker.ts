@@ -36,6 +36,10 @@ import {
   type UpdateInfo,
 } from "./updateCheckerHelpers";
 
+import {authorizeCustomerReleaseAsset} from "./customerReleaseResolver.ts";
+import {verificationContext,verificationProfileFromStorage} from "./updateVerification.ts";
+const actualProfile=(context: vscode.ExtensionContext)=>Object.keys(process.env).some(k=>k.startsWith("HPS_RELEASE_VERIFY_")&&process.env[k])?verificationProfileFromStorage(context.globalStorageUri.fsPath):undefined;
+
 const EXPECTED_BUNDLE_ID = "ai.hypeproof.studio";
 const CHECK_INTERVAL_MS = 24 * 3600 * 1000;
 const INITIAL_DELAY_MS = 30 * 1000;
@@ -45,24 +49,25 @@ const DISMISSAL_KEY = "hypeproofChat.updateDismissals";
  * Read the private organization release API using the member’s GitHub login.
  * The 24h cadence + 1 strructor per user means we're nowhere near the limit.
  */
-export async function checkForUpdates(currentVersion: string): Promise<UpdateInfo> {
+export async function checkForUpdates(currentVersion: string, verificationProfile?: string): Promise<UpdateInfo> {
   // The updater ships per-platform paths (#447): macOS swaps the .app bundle
   // via a bash installer; Windows runs the Inno Setup .exe. Each platform
   // selects its own release asset. Any other platform (Linux) has no updater
   // yet, so skip the check entirely — no banner, no wrong-platform download
   // (the pre-#447 bug offered the 162 MB macOS zip as a "downgrade", #425/#438).
+  const verification=verificationContext({verificationProfile});
   const pickAsset = assetPickerForPlatform();
   if (!pickAsset) throw new Error("이 플랫폼은 앱 내 업데이트를 지원하지 않습니다.");
   if (!isUpdateVersion(currentVersion)) throw new Error("현재 앱 버전을 확인할 수 없습니다.");
-  const release = await fetchLatestRelease() as GhRelease;
+  const release = await fetchLatestRelease({verificationProfile}) as GhRelease;
   if (!release || !isUpdateVersion(release.tag_name) || !Array.isArray(release.assets)) {
     throw new Error("업데이트 서버의 응답을 확인할 수 없습니다.");
   }
-  const info = parseLatestRelease(release, currentVersion, pickAsset);
+  const info = parseLatestRelease(release, currentVersion, pickAsset, !verification && process.env.HPS_RELEASE_ENGINE_CHANNEL==="canary" && !!process.env.HPS_RELEASE_ENGINE_URL && (release as GhRelease & {engineChannel?:string}).engineChannel==="canary");
   if (compareVersions(release.tag_name, currentVersion) > 0 && !info.available && !release.prerelease && !release.draft) {
     throw new Error("이 플랫폼의 새 설치 파일이 아직 준비되지 않았습니다.");
   }
-  if (info.available && (!trustedUpdateUrl(info.downloadUrl) || !/^sha256:[a-f0-9]{64}$/i.test(info.digest ?? ""))) {
+  if (info.available && (!(verification ? trustedUpdateUrl(info.downloadUrl,{verificationProfile}) : authorizeCustomerReleaseAsset(info) || trustedUpdateUrl(info.downloadUrl)) || !/^sha256:[a-f0-9]{64}$/i.test(info.digest ?? ""))) {
     throw new Error("새 설치 파일의 출처 또는 검증 정보를 확인할 수 없습니다.");
   }
   return info;
@@ -71,7 +76,12 @@ export async function checkForUpdates(currentVersion: string): Promise<UpdateInf
 /** The release-asset picker for the running OS, or null if we have no updater. */
 function assetPickerForPlatform(): AssetPicker | null {
   if (process.platform === "darwin" && process.arch === "arm64") return pickDarwinAsset;
-  if (process.platform === "win32" && process.arch === "x64") return pickWindowsInstaller;
+  if (process.platform === "win32" && process.arch === "x64") {
+    let scope: unknown;try{scope=JSON.parse(fs.readFileSync(path.resolve(__dirname,"..","..","..","product.json"),"utf8")).target;}catch{/* Legacy portable installs preserve the existing picker. */}
+    if(scope==="system")return assets=>assets.find(a=>/Setup.*x64.*\.exe$/i.test(a.name)&&!/UserSetup/i.test(a.name));
+    if(scope==="user")return assets=>assets.find(a=>/UserSetup.*x64.*\.exe$/i.test(a.name));
+    return pickWindowsInstaller;
+  }
   return null;
 }
 
@@ -132,7 +142,7 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
       const zipPath = path.join(workDir, "update.zip");
 
       progress.report({ message: "다운로드 중…" });
-      await downloadVerifiedUpdate(info, zipPath);
+      await downloadVerifiedUpdate(info, zipPath,{verificationProfile:actualProfile(deps.context)});
 
       progress.report({ message: "압축 풀기…" });
       cp.execSync(`unzip -q ${shellQuote(zipPath)} -d ${shellQuote(workDir)}`);
@@ -152,10 +162,11 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
       progress.report({ message: "설치 스크립트 준비…" });
 
       // 4. Write installer.sh + log path
-      const supportDir = path.join(os.homedir(), "Library", "Application Support", "HypeProof-Studio");
+      const verification=verificationContext({verificationProfile:actualProfile(deps.context)});
+      const supportDir = verification ? path.join(verification.root,"updater-support") : path.join(os.homedir(), "Library", "Application Support", "HypeProof-Studio");
       fs.mkdirSync(supportDir, { recursive: true });
       const installerPath = path.join(supportDir, `installer-${info.version}.sh`);
-      const logDir = path.join(os.homedir(), "Library", "Logs", "HypeProofStudio");
+      const logDir = verification ? path.join(verification.root,"updater-logs") : path.join(os.homedir(), "Library", "Logs", "HypeProofStudio");
       fs.mkdirSync(logDir, { recursive: true });
       const logPath = path.join(logDir, `update-${info.version}.log`);
 
@@ -167,6 +178,7 @@ async function runUpdateMac(info: UpdateInfo, deps: UpdateRunnerDeps): Promise<v
         newVersion: info.version,
         oldVersion: currentVersion,
         logPath,
+        ...(verification?{relaunchArgs:[`--user-data-dir=${verification.profile}`,`--extensions-dir=${path.join(verification.root,"extensions")}`,`--remote-debugging-port=${verification.debugPort}`,verification.workspace]}:{}),
       });
       fs.writeFileSync(installerPath, script, { mode: 0o755 });
 
@@ -276,7 +288,7 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
       const exePath = path.join(workDir, installerName);
 
       progress.report({ message: "다운로드 중…" });
-      await downloadVerifiedUpdate(info, exePath);
+      await downloadVerifiedUpdate(info, exePath,{verificationProfile:actualProfile(deps.context)});
 
       // 2. Confirmation modal — the installer will close Studio, so warn first.
       const currentVersion = currentBundleVersion();
@@ -302,7 +314,8 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
       // relaunch after install, `/LOG` = a trace for failed-update reports.
       // Quitting before the install (rather than racing it) is what makes the
       // post-install relaunch reliable — see the function-level comment.
-      const logPath = path.join(os.tmpdir(), `hps-update-${info.version}.log`);
+      const verification=verificationContext({verificationProfile:actualProfile(deps.context)});
+      const logPath = path.join(verification?.root??os.tmpdir(), `hps-update-${info.version}.log`);
       const wrapperPath = path.join(workDir, "run-installer.ps1");
       // utf8 verbatim — renderWindowsUpdateWrapper already prefixes the UTF-8
       // BOM that Windows PowerShell 5.1 needs to read the baked-in installer
@@ -314,8 +327,9 @@ async function runUpdateWindows(info: UpdateInfo, deps: UpdateRunnerDeps): Promi
         wrapperPath,
         renderWindowsUpdateWrapper({
           appProcessName: windowsAppProcessName(),
+          ...(verification?{appExecutablePath:process.execPath,relaunchExecutable:process.execPath,relaunchArgs:[`--user-data-dir=${verification.profile}`,`--extensions-dir=${path.join(verification.root,"extensions")}`,`--remote-debugging-port=${verification.debugPort}`,verification.workspace],elevateInstaller:verification.target==="win-system"}:{}),
           installerPath: exePath,
-          installerArgs: ["/silent", "/mergetasks=runcode", `/LOG="${logPath}"`],
+          installerArgs: verification?["/silent","/MERGETASKS=!runcode",`/DIR=${verification.installRoot}`,`/LOG=${logPath}`]:["/silent", "/mergetasks=runcode", `/LOG="${logPath}"`],
         }),
         "utf8",
       );
@@ -428,7 +442,7 @@ export function scheduleUpdateChecks(deps: SchedulerDeps): vscode.Disposable {
     if (disposed) return;
     let info: UpdateInfo;
     try {
-      info = await checkForUpdates(deps.currentVersion);
+      info = await checkForUpdates(deps.currentVersion,actualProfile(deps.context));
     } catch (error) {
       console.warn(`[hypeproof-chat/update] check failed: ${(error as Error).message}`);
       return; // A failed check must not erase a previously confirmed update.

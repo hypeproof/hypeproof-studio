@@ -15,6 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { StartPage } from "./startPage";
+import {verificationProfileFromStorage} from "./updateVerification.ts";
 import { AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -615,7 +616,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("hypeproof-chat.checkForUpdates", async () => {
       try {
         const current = currentBundleVersion();
-        const info = await checkForUpdates(current);
+        const info = await checkForUpdates(current, verificationProfileFromStorage(context.globalStorageUri.fsPath));
         if (info.available) {
           provider.setAvailableUpdate({
             version: info.version,
@@ -639,7 +640,7 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         // Re-fetch to be safe (the stored banner state might be stale).
         const current = currentBundleVersion();
-        const info = await checkForUpdates(current);
+        const info = await checkForUpdates(current, verificationProfileFromStorage(context.globalStorageUri.fsPath));
         if (!info.available) {
           provider.setAvailableUpdate(null);
           vscode.window.showInformationMessage("최신 버전이라 업데이트 안 해도 됩니다.");

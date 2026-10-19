@@ -6,11 +6,17 @@ import { createHash } from "node:crypto";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import {verificationContext,verificationManifest,verificationAssetUrl,type VerificationOptions} from "./updateVerification.ts";
+
+import {fetchConfiguredCustomerRelease,authorizeCustomerReleaseAsset} from "./customerReleaseResolver.ts";
+
 const RELEASE_REPO = "hypeproof/hypeproof-studio-releases";
 export const RELEASES_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
 const ASSET_PATH = `/repos/${RELEASE_REPO}/releases/assets/`;
 
-export function trustedUpdateUrl(value: string): boolean {
+export function trustedUpdateUrl(value: string, options: VerificationOptions = {}): boolean {
+  const context=verificationContext(options);
+  if(context){try{const url=new URL(value);return url.origin===context.origin&&/^\/asset\/[a-z0-9-]+$/.test(url.pathname)&&!url.search&&!url.hash&&!url.username&&!url.password;}catch{return false;}}
   try {
     const url = new URL(value);
     return url.origin === "https://api.github.com" && !url.username && !url.password &&
@@ -32,9 +38,11 @@ export async function releaseToken(): Promise<string> {
   throw new Error("비공개 릴리스 접근 권한이 필요합니다. GitHub CLI에서 gh auth login을 실행하거나 HPS_RELEASE_TOKEN을 설정한 뒤 Studio를 다시 시작해 주세요.");
 }
 
-async function fetchAsset(url: string, signal: AbortSignal): Promise<Response> {
+async function fetchAsset(url: string, signal: AbortSignal, options: VerificationOptions, customerPublic = false): Promise<Response> {
+  if(verificationContext(options))return fetch(url,{redirect:"error",credentials:"omit",signal});
   const response = await fetch(url, {
-    headers: { authorization: `Bearer ${await releaseToken()}`, accept: "application/octet-stream" },
+    headers: { ...(customerPublic?{}:{authorization: `Bearer ${await releaseToken()}`}), accept: "application/octet-stream" },
+    credentials: customerPublic?"omit":"same-origin",
     redirect: "manual", signal,
   });
   if (![301, 302, 303, 307, 308].includes(response.status)) return response;
@@ -49,7 +57,10 @@ async function fetchAsset(url: string, signal: AbortSignal): Promise<Response> {
   return fetch(target.href, { redirect: "error", signal });
 }
 
-export async function fetchLatestRelease(): Promise<unknown> {
+export async function fetchLatestRelease(options: VerificationOptions = {}): Promise<unknown> {
+  const verification=verificationContext(options);
+  if(verification){const manifest=await verificationManifest(verification);return {tag_name:manifest.version,draft:false,prerelease:false,html_url:verification.origin+'/verification',body:'[로컬 검증 feed · 정식 배포 아님] 고정된 후보 파일로 실제 앱 updater를 검증합니다.',assets:manifest.assets.map(file=>({name:file.name,url:verificationAssetUrl(verification,file.id),browser_download_url:verificationAssetUrl(verification,file.id),size:file.size,digest:'sha256:'+file.sha256}))};}
+  const customerRelease=await fetchConfiguredCustomerRelease();if(customerRelease)return customerRelease;
   const response = await fetch(RELEASES_API, {
     headers: { accept: "application/vnd.github+json", authorization: `Bearer ${await releaseToken()}` },
     redirect: "error",
@@ -63,21 +74,24 @@ export async function fetchLatestRelease(): Promise<unknown> {
 export async function downloadVerifiedUpdate(
   asset: { downloadUrl: string; sizeBytes: number; digest?: string },
   destination: string,
-  options: { idleTimeoutMs?: number; totalTimeoutMs?: number } = {},
+  options: VerificationOptions & { idleTimeoutMs?: number; totalTimeoutMs?: number } = {},
 ): Promise<void> {
-  if (!trustedUpdateUrl(asset.downloadUrl)) throw new Error("Untrusted update download URL");
+  const verification=verificationContext(options);
+  const customerPublic=verification?false:authorizeCustomerReleaseAsset(asset);
+  if (!customerPublic && !trustedUpdateUrl(asset.downloadUrl, options)) throw new Error("Untrusted update download URL");
   if (!Number.isSafeInteger(asset.sizeBytes) || asset.sizeBytes <= 0 || asset.sizeBytes > 2 * 1024 ** 3) {
     throw new Error("Invalid update size");
   }
   if (!/^sha256:[a-f0-9]{64}$/i.test(asset.digest ?? "")) throw new Error("Update SHA-256 digest is missing");
 
+  if(verification){const manifest=await verificationManifest(verification);const file=manifest.assets.find(f=>verificationAssetUrl(verification,f.id)===asset.downloadUrl);if(!file||file.size!==asset.sizeBytes||'sha256:'+file.sha256!==asset.digest?.toLowerCase())throw new Error("Verification asset differs from pinned manifest");}
   const controller = new AbortController();
   const abort = () => controller.abort(new Error("Update download timed out"));
   const total = setTimeout(abort, options.totalTimeoutMs ?? 10 * 60_000);
   let idle = setTimeout(abort, options.idleTimeoutMs ?? 60_000);
   let created = false;
   try {
-    const response = await fetchAsset(asset.downloadUrl, controller.signal);
+    const response = await fetchAsset(asset.downloadUrl, controller.signal, options, customerPublic);
     if (!response.ok || !response.body) throw new Error(`Update download failed: HTTP ${response.status}`);
     const hash = createHash("sha256");
     let bytes = 0;

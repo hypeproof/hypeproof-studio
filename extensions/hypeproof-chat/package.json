@@ -574,5 +574,10 @@
     "jsqr": "^1.4.0",
     "qrcode-generator": "^2.0.4",
     "typescript": "^5.4.0"
+  },
+  "hypeproofReleaseVerification": {
+    "schema": "hps-native-verification-capability/1",
+    "loopbackPinnedFeed": true,
+    "isolatedRelaunch": true
   }
 }

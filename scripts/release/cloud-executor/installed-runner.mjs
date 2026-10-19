@@ -7,6 +7,8 @@ import {fileURLToPath} from 'node:url';
 import {appIdentity,sha256,treeHash} from '../../../e2e/unified-release/artifact.mjs';
 import {installedPlan} from './evidence.mjs';
 import {requireThat,hashBytes} from './provider.mjs';
+import {executeProductUpdate,nativeSigningEvidence} from './native-update.mjs';
+import os from 'node:os';
 import {engineEnabled} from './workflow-gate.mjs';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 const command=(exe,args)=>execFileSync(exe,args,{stdio:'pipe',timeout:240000});
@@ -25,8 +27,8 @@ export function validatePersistence(before,after) {
 }
 async function probe(app,{profile,workspace,ciphertext,secret,proofPath}={}) {
  const { _electron:electron }=createRequire(new URL('../../../e2e/package.json',import.meta.url))('@playwright/test');
- const before=treeHash(app);const args=['--skip-welcome','--skip-release-notes','--disable-workspace-trust'];
- if(profile)args.push(`--user-data-dir=${profile}`);
+ const before=treeHash(app);const args=['--skip-welcome','--skip-release-notes'];
+ requireThat(profile,'isolated profile is mandatory');args.push(`--user-data-dir=${profile}`);
  if(workspace)args.push(workspace);
  const env={...process.env}; for(const name of Object.keys(env))if(/API_KEY|SECRET|TOKEN|PASSWORD|ISSUER|CODE$/.test(name))delete env[name];
  const running=await electron.launch({executablePath:executable(app),args,env,timeout:60000});
@@ -38,32 +40,21 @@ async function probe(app,{profile,workspace,ciphertext,secret,proofPath}={}) {
     encrypted:input.secret&&encryptionAvailable?safeStorage.encryptString(input.secret).toString('base64'):null,
     decrypted:input.ciphertext&&encryptionAvailable?safeStorage.decryptString(Buffer.from(input.ciphertext,'base64')):null};
   },{ciphertext,secret});
+  requireThat(same(observed.userData,profile),'launched the real default profile instead of the isolated profile');
   requireThat(same(observed.execPath,executable(app)),'launched a different executable');
   if(proofPath)await window.screenshot({path:proofPath});
   return observed;
  } finally {await running.close();requireThat(treeHash(app)===before,'installed app mutated while running');}
 }
-async function install(file,destination) {
+async function install(file,destination,target) {
  fs.mkdirSync(destination,{recursive:true});
  if(process.platform==='darwin') {command('/usr/bin/ditto',['-xk',file,destination]);const app=path.join(destination,'HypeProof Studio.app');requireThat(fs.existsSync(app),'Mac package app missing');return app;}
- command(file,['/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/MERGETASKS=!runcode,!desktopicon,!quicklaunchicon',`/DIR=${destination}`]);return destination;
-}
-async function update(oldApp,newApp,assetFile,from,to,directory) {
- // Reuse exactly the product's native updater primitives at pinned test revision.
- const helpers=await import(new URL('../../../extensions/hypeproof-chat/src/updateCheckerHelpers.ts',import.meta.url));
- const script=path.join(directory,process.platform==='darwin'?'product-update.sh':'product-update.ps1');
- if(process.platform==='darwin') {
-  const bundleId=command('/usr/libexec/PlistBuddy',['-c','Print :CFBundleIdentifier',path.join(newApp,'Contents/Info.plist')]).toString().trim();
-  fs.writeFileSync(script,helpers.renderInstallerScript({newAppPath:newApp,oldAppPath:oldApp,expectedBundleId:bundleId,newVersion:to.version,oldVersion:from,logPath:path.join(directory,'product-update.log')}));
-  command('/bin/bash',[script]);
- } else {
-  fs.writeFileSync(script,helpers.renderWindowsUpdateWrapper({appProcessName:'HypeProof Studio',installerPath:assetFile,installerArgs:['/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/MERGETASKS=runcode',`/DIR=${oldApp}`,`/LOG=${path.join(directory,'product-update.log')}`]}));
-  command('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',script]);
+ if(target==='win-system'){
+  const args=['/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/MERGETASKS=!runcode,!desktopicon,!quicklaunchicon',`/DIR=${destination}`];
+  const ps=String.raw`$p=Start-Process -FilePath $env:HPS_NATIVE_INSTALLER -ArgumentList (ConvertFrom-Json $env:HPS_NATIVE_INSTALL_ARGS) -Verb RunAs -Wait -PassThru;exit $p.ExitCode`;
+  execFileSync('powershell.exe',['-NoProfile','-Command',ps],{env:{...process.env,HPS_NATIVE_INSTALLER:file,HPS_NATIVE_INSTALL_ARGS:JSON.stringify(args.map(value=>'"'+value.replace(/(\\*)"/g,'$1$1\\"').replace(/(\\+)$/g,'$1$1')+'"'))},stdio:'pipe',timeout:240000});return destination;
  }
- // Windows installer starts asynchronously. Observe exact identity, never exit0 => PASS.
- const deadline=Date.now()+180000;let ready=false;
- while(Date.now()<deadline) {try{assertApp(oldApp,to.sourceSha??to,to.version??to);ready=true;break;}catch{} await new Promise(r=>setTimeout(r,500));}
- return {script,ready};
+ command(file,['/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/MERGETASKS=!runcode,!desktopicon,!quicklaunchicon',`/DIR=${destination}`]);return destination;
 }
 export async function executeInstalledTarget({collection,policy,pins,previous,assetsDirectory,previousDirectory,outputDirectory,target}) {
  const plan=installedPlan(policy,collection,pins);
@@ -79,37 +70,29 @@ export async function executeInstalledTarget({collection,policy,pins,previous,as
  };
  const supported=process.env.GITHUB_ACTIONS==='true'&&process.env.RUNNER_ENVIRONMENT==='github-hosted'&&((target==='mac'&&process.platform==='darwin')||(target!=='mac'&&process.platform==='win32'));
  if(!supported) {for(const check of checks)record(check,'NOT_RUN','Disposable supported native host unavailable');return {plan,reports};}
- const work=fs.mkdtempSync(path.join(process.env.RUNNER_TEMP,'hps-installed-'));
+ const work=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'hps-installed-')));
+ const signing={teamId:process.env.HPS_NATIVE_EXPECTED_TEAM_ID,thumbprint:process.env.HPS_NATIVE_EXPECTED_PUBLISHER_THUMBPRINT};
  const asset=collection.assets.find(a=>a.id===artifactRole);const currentFile=packageFile(assetsDirectory,asset);
  let installedApp;
  for(const check of checks) {
   try {
    if(check.id.startsWith('INSTALL-')) {
-    installedApp=await install(currentFile,path.join(work,'fresh'));const app=assertApp(installedApp,collection.identity.sourceSha,collection.identity.version.slice(1));
+    if(process.platform==='win32')nativeSigningEvidence(null,currentFile,signing);
+    installedApp=await install(currentFile,path.join(work,'fresh'),target);const app=assertApp(installedApp,collection.identity.sourceSha,collection.identity.version.slice(1));
+    const security=nativeSigningEvidence(installedApp,currentFile,signing);
     const native=await probe(installedApp,{profile:path.join(work,'fresh-profile'),proofPath:path.join(outputDirectory,`${check.id}.png`)});
-    record(check,'PASS','Untouched candidate installed and its exact executable rendered the native workbench',{app,native});
+    record(check,'PASS','Untouched candidate installed and its exact executable rendered the native workbench',{app,native,security});
    } else if(check.id.startsWith('UPDATE-')) {
     requireThat(previous,'N−1 release packages/source not available');const previousAsset=previous.assets.find(a=>a.id===artifactRole);requireThat(previousAsset,'N−1 artifact role missing');
-    const oldApp=await install(packageFile(previousDirectory,previousAsset),path.join(work,'update'));
+    const previousFile=packageFile(previousDirectory,previousAsset);if(process.platform==='win32')nativeSigningEvidence(null,previousFile,signing);
+    const oldApp=await install(previousFile,path.join(work,'update'),target);
     assertApp(oldApp,previous.sourceSha,previous.version);
-    const workspace=path.join(work,'persistent-workspace');fs.mkdirSync(workspace);fs.writeFileSync(path.join(workspace,'retained.txt'),'release-update-workspace');
-    const initial=await probe(oldApp,{workspace,secret:'release-synthetic-account'});
-    requireThat(initial.encryptionAvailable&&initial.encrypted,'OS-protected credential store unavailable');
-    const settings=path.join(initial.userData,'User','settings.json');fs.mkdirSync(path.dirname(settings),{recursive:true});
-    const prior=fs.existsSync(settings)?JSON.parse(fs.readFileSync(settings,'utf8')):{};fs.writeFileSync(settings,JSON.stringify({...prior,'hypeproof.releasePersistence':'retained'}));
-    const credential=path.join(initial.userData,'hps-release-encrypted-account');fs.writeFileSync(credential,initial.encrypted);
-    const snapshot=(version,sourceSha,account)=>({workspace:sha256(path.join(workspace,'retained.txt')),settings:sha256(settings),encryptedFile:sha256(credential),version,sourceSha,account});
-    const before=snapshot(previous.version,previous.sourceSha,'release-synthetic-account');
-    const staged=process.platform==='darwin'?await install(currentFile,path.join(work,'stage')):null;
-    const transition=await update(oldApp,staged,currentFile,previous.version,{sourceSha:collection.identity.sourceSha,version:collection.identity.version.slice(1)},outputDirectory);
-    requireThat(transition.ready,'product updater did not install exact candidate within bound');
-    // Product wrapper reopens the app. Stop only this disposable installation
-    // before Playwright's observed restart into the same default profile.
-    if(process.platform==='darwin')command('/usr/bin/pkill',['-f',`^${oldApp.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}/Contents/MacOS/`]);
-    else command('powershell.exe',['-NoProfile','-NonInteractive','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '${executable(oldApp).replace(/'/g,"''")}' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`]);
-    const restarted=await probe(oldApp,{workspace,ciphertext:fs.readFileSync(credential,'utf8'),proofPath:path.join(outputDirectory,`${check.id}.png`)});
-    const after=snapshot(collection.identity.version.slice(1),collection.identity.sourceSha,restarted.decrypted);validatePersistence(before,after);
-    record(check,'BLOCKED','Product updater N−1→N, native restart and synthetic encrypted-account retention observed; real Studio sign-in continuity NOT_RUN',{previousReleaseId:previous.releaseId,previousAsset,before,after,restarted,updaterScriptSha256:sha256(transition.script),boundary:'Native updater primitive plus observed restart; third-party sign-in consent/session and updater UI click are separate acceptance'});
+    const workspace=path.join(work,'persistent-workspace'),profile=path.join(work,'update-profile');fs.mkdirSync(workspace);fs.mkdirSync(profile);
+    requireThat(process.env.HPS_NATIVE_TEST_SEAT_FILE,'existing synthetic Service account seat unavailable');
+    const seat=JSON.parse(fs.readFileSync(process.env.HPS_NATIVE_TEST_SEAT_FILE,'utf8'));
+    const observed=await executeProductUpdate({root:work,oldApp,profile,workspace,assetFile:currentFile,asset:{...asset,id:target},sourceSha:collection.identity.sourceSha,version:collection.identity.version,seat,output:path.join(outputDirectory,check.id),signing});
+    requireThat(observed.status==='PASS'&&observed.uiCheckInstallRestart&&observed.accountContinuity.noSecondApproval,'actual product updater and account continuity proof missing');
+    record(check,'PASS','Actual updater UI downloaded pinned candidate, installed and restarted it in isolated profile; workspace/settings and existing synthetic Service account retained',{previousReleaseId:previous.releaseId,previousAsset,observed});
    } else {
     requireThat(installedApp,'actual installed candidate unavailable for public flows');
     const app=assertApp(installedApp,collection.identity.sourceSha,collection.identity.version.slice(1));
@@ -125,7 +108,7 @@ export async function executeInstalledTarget({collection,policy,pins,previous,as
     requireThat(publicReceipt?.status==='PASS'&&publicReceipt.activities?.length===2,'public Service receipt missing');
     record(check,'PASS','Existing native trial/classroom and public Service drivers passed on actual installed candidate',{app,receipt,publicReceipt});
    }
-  } catch(error) {const missing=/unavailable|not available|access|credential store/.test(error.message??'');record(check,missing?'BLOCKED':'FAIL',error.message?.startsWith('Cloud executor:')?error.message:(missing?'Native host, N−1 package, keychain or pinned Service access unavailable':'Native process failed its installation/update contract'),{nativeProcessExitCode:Number.isInteger(error.status)?error.status:null});}
+  } catch(error) {const missing=/^BLOCKED:|unavailable|not available|access|credential store/.test(error.message??'');record(check,missing?'BLOCKED':'FAIL',error.message?.startsWith('Cloud executor:')?error.message:(missing?'Native host, original N−1 updater capability, signing, isolated account seat or pinned Service access unavailable':'Native process failed its installation/update contract'),{nativeProcessExitCode:Number.isInteger(error.status)?error.status:null});}
  }
  return {plan,reports};
 }
