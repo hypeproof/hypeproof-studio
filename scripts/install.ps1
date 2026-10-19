@@ -132,10 +132,35 @@ function Write-Err2([string]$m)  { Write-Host ("    XX  {0}" -f $m) -ForegroundC
 
 function Confirm-Or([string]$prompt, [bool]$default = $true) {
     if ($NonInteractive) { return $default }
-    $suffix = if ($default) { '[Y/n]' } else { '[y/N]' }
-    $ans = Read-Host ("    {0} {1}" -f $prompt, $suffix)
-    if ([string]::IsNullOrWhiteSpace($ans)) { return $default }
-    return ($ans -match '^(y|yes)$')
+    $suffix = if ($default) { '(Y/n, 그냥 Enter = 예)' } else { '(y/N, 그냥 Enter = 아니오)' }
+    for ($tries = 1; $tries -le 3; $tries++) {
+        $ans = Read-Host ("    {0} {1}" -f $prompt, $suffix)
+        switch (Get-ConfirmAnswer $ans) {
+            'empty' { return $default }
+            'yes'   { return $true }
+            'no'    { return $false }
+        }
+        # Not understood: ask again, and after three tries take the safe answer (no).
+        if ($tries -lt 3) {
+            Write-Host "    '예' 또는 '아니요'로 답해 주세요."
+        }
+    }
+    Write-Host "    답을 알아듣지 못해서 '아니요'로 처리합니다."
+    return $false
+}
+
+# Get-ConfirmAnswer <reply> -> 'yes' / 'no' / 'empty' / 'unknown'.
+# The prompt is Korean, so learners answer in Korean, and a learner with the
+# Korean IME on who presses y or n types the jamo on that key (y -> ㅛ, n -> ㅜ).
+# Kept in sync with confirm_answer in install.sh; scripts/test-installer-answers.sh
+# tests both. -match is case-insensitive.
+function Get-ConfirmAnswer([string]$reply) {
+    $a = ([string]$reply) -replace '\s', ''
+    $a = $a -replace '[.!?~]$', ''
+    if ($a -eq '') { return 'empty' }
+    if ($a -match '^(y|yes|ㅛ|ㅛㄷㄴ|네|넵|넹|예|응|ㅇ|ㅇㅇ)$') { return 'yes' }
+    if ($a -match '^(n|no|ㅜ|ㅜㅐ|아니.*|ㄴ|ㄴㄴ|싫어.*)$') { return 'no' }
+    return 'unknown'
 }
 
 # ----------------------------------------------------------------------------
@@ -703,9 +728,9 @@ function Ensure-PosixShell {
                 return $true
             }
         } catch { }
-        if (Confirm-Or 'Install Ubuntu on WSL as the POSIX shell fallback?' $false) {
+        if (Confirm-Or 'Git Bash를 찾지 못했습니다. 대신 WSL에 Ubuntu를 설치할까요?' $false) {
             & wsl --install -d Ubuntu 2>&1 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkGray }
-            Write-Warn2 'WSL/Ubuntu install may require a reboot to finish.'
+            Write-Warn2 'WSL/Ubuntu 설치를 마치려면 컴퓨터를 다시 시작해야 할 수 있습니다.'
             return $true
         }
     }
@@ -996,7 +1021,7 @@ function Seed-Sdk {
 # ----------------------------------------------------------------------------
 function Invoke-Doctor {
     param($manifest, $receipt)
-    Write-Head 'hps doctor - fail-closed manifest re-verification'
+    Write-Head '마지막 점검 (doctor)'
     Update-ProcessPath
     $fail = @()
     $missingOptional = @()
@@ -1087,21 +1112,21 @@ function Invoke-Doctor {
         # 실패다(#476 — 앱도 SDK 도 없는 기기가 초록을 받았다). 필수는 다 됐다는
         # 것과 전부 깔렸다는 것은 다른 말이고, 화면에서도 달라야 한다.
         if ($missingOptional.Count -gt 0) {
-            Write-Host ('==> doctor: REQUIRED CHECKS PASSED (optional missing: {0})' -f ($missingOptional -join ', ')) -ForegroundColor Green
+            Write-Host ('==> 점검(doctor): 필수 항목 통과 (없는 선택 도구: {0})' -f ($missingOptional -join ', ')) -ForegroundColor Green
             Write-Info '수업 진행에는 문제가 없습니다 - 위 도구는 학생 트랙에서 쓰이지 않습니다.'
             Write-Info '나중에 필요해지면 이 설치기를 다시 돌리면 됩니다(멱등).'
         } else {
-            Write-Host '==> doctor: ALL CHECKS PASSED' -ForegroundColor Green
+            Write-Host '==> 점검(doctor): 모든 항목 통과' -ForegroundColor Green
         }
         return 0
     }
-    Write-Host '==> doctor: FAILURES (fail-closed)' -ForegroundColor Red
+    Write-Host '==> 점검(doctor): 해결되지 않은 항목이 있습니다' -ForegroundColor Red
     foreach ($f in $fail) { Write-Err2 $f }
     Write-Host ''
-    Write-Host '    Remediation:' -ForegroundColor Yellow
-    Write-Host '      - Open a NEW terminal so freshly-installed tools land on PATH, then re-run.' -ForegroundColor Yellow
-    Write-Host '      - Re-run this installer (idempotent): irm .../install.ps1 | iex' -ForegroundColor Yellow
-    Write-Host '      - For gh: run `gh auth login`.' -ForegroundColor Yellow
+    Write-Host '    해결 방법:' -ForegroundColor Yellow
+    Write-Host '      - 새 터미널을 열어 방금 설치한 도구가 PATH에 잡히게 한 뒤 다시 실행하세요.' -ForegroundColor Yellow
+    Write-Host '      - 이 설치기는 다시 실행해도 안전합니다(끝난 단계는 건너뜁니다): irm .../install.ps1 | iex' -ForegroundColor Yellow
+    Write-Host '      - gh 오류라면 `gh auth login` 을 실행하세요.' -ForegroundColor Yellow
     return 1
 }
 
@@ -1110,7 +1135,7 @@ function Invoke-Doctor {
 # ----------------------------------------------------------------------------
 function Main {
     Write-Host ''
-    Write-Host 'HypeProof Windows bootstrap (install.ps1)' -ForegroundColor Magenta
+    Write-Host 'HypeProof 설치 (Windows, install.ps1)' -ForegroundColor Magenta
     Write-Host '=========================================' -ForegroundColor Magenta
 
     $arch = Get-Arch
@@ -1118,7 +1143,7 @@ function Main {
     $receipt.arch = $arch
     $manifest = $EMBEDDED_MANIFEST
 
-    Write-Head 'Detect environment'
+    Write-Head '이 컴퓨터 확인'
     Write-Info ("OS   : Windows {0}" -f [Environment]::OSVersion.Version)
     Write-Info ("Arch : {0}" -f $arch)
     Write-Info ("PS   : {0}" -f $PSVersionTable.PSVersion)
@@ -1131,7 +1156,7 @@ function Main {
     if ($script:KitDir) {
         # Class kit: the kit pins the Studio version. The remote manifest is read
         # for nothing else, so it is not fetched (it would need a GitHub login).
-        Write-Head 'Check the class kit'
+        Write-Head '수업 키트 확인'
         Use-ClassKit $manifest
     } else {
         Sync-ManifestVersions $manifest $ManifestUrl
@@ -1143,31 +1168,31 @@ function Main {
         return
     }
 
-    Write-Head 'Ensure package manager (winget)'
+    Write-Head '설치 도구 준비 (winget)'
     if (-not (Ensure-Winget)) {
-        Write-Err2 'Cannot proceed without winget.'
+        Write-Err2 'winget 없이는 계속할 수 없습니다.'
         $script:ExitCode = 2
         return
     }
 
-    Write-Head 'Install runtime dependencies (manifest tools)'
+    Write-Head '필요한 도구 확인과 설치'
     $anyRequiredFailed = $false
     foreach ($tool in $manifest.tools) {
         $ok = Ensure-Tool $tool $receipt
         if (-not $ok -and $tool.required) { $anyRequiredFailed = $true }
     }
 
-    Write-Head 'Guarantee a POSIX shell for bundled skills'
+    Write-Head '명령 실행 환경 준비 (Git Bash)'
     Ensure-PosixShell $receipt | Out-Null
 
-    Write-Head 'Configure git (CRLF + long paths)'
+    Write-Head 'git 설정 (줄바꿈, 긴 경로)'
     Configure-Git
 
     if ($SkipStudio) {
-        Write-Head 'Install HypeProof Studio app'
+        Write-Head 'HypeProof Studio 앱 설치'
         Write-Warn2 'HPS_SKIP_STUDIO=1 - skipping the Studio app install (deps only)'
     } else {
-        Write-Head 'Install HypeProof Studio app'
+        Write-Head 'HypeProof Studio 앱 설치'
         try { Install-Studio $manifest $receipt | Out-Null }
         catch { Write-Err2 "Studio install error: $($_.Exception.Message)" }
     }
@@ -1182,7 +1207,7 @@ function Main {
     # participants were missing. Seed-Sdk is idempotent - an already-seeded
     # machine short-circuits on the trusted marker, so re-running stays cheap
     # and safe, which is what the skill promises participants.
-    Write-Head 'Seed native SDK binary (claude.exe)'
+    Write-Head '코치 도구(SDK) 준비'
     try { Seed-Sdk $manifest $receipt | Out-Null }
     catch { Write-Err2 "SDK seed error: $($_.Exception.Message)" }
 
@@ -1197,9 +1222,9 @@ function Main {
 
     Write-Host ''
     if ($script:ExitCode -eq 0) {
-        Write-Host 'HypeProof is ready. Launch "HypeProof Studio" from the Start menu.' -ForegroundColor Green
+        Write-Host 'HypeProof 준비가 끝났습니다. 시작 메뉴에서 "HypeProof Studio"를 여세요.' -ForegroundColor Green
     } else {
-        Write-Host 'Setup incomplete - see doctor failures above. Open a new terminal and re-run.' -ForegroundColor Red
+        Write-Host '설치가 끝나지 않았습니다. 위 점검 결과를 확인하고 새 터미널을 열어 다시 실행하세요.' -ForegroundColor Red
     }
 }
 
