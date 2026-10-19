@@ -1467,3 +1467,5 @@ changing the original/edited history contract.
 ### Unsent prompt edit continuity (REQ-STUDIO-CHAT-EDIT-RESEND)
 
 Task navigation and webview reload preserve an open inline edit, its exact text and retained images in the existing task-scoped draft. This is separate from the composer draft and does not change the original transcript or send a request. Explicit Cancel/Escape discards only the inline edit; an accepted resend clears it, while rejected admission keeps it. Restored edit data is bound to the original message ID and cannot be applied to another message. Native installed-app restart and provider acceptance require separate evidence.
+
+If an accepted edited request fails before any answer is saved, retain its text and images through the existing paused input recovery path, separately from a later composer draft. An optimistic message visible on screen is not durable evidence.

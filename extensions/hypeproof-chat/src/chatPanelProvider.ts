@@ -6251,7 +6251,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const refused = bindingKey ? bindingRefusalCode(err) : null;
       if (refused && !ctrl.signal.aborted) await this.endRefusedTurn({ code: refused, streamId, proxyUrl, token, text, images, toolMode: mode });
       else if (!ctrl.signal.aborted) {
-        if (mode === 'web-search') await this.post({ type: 'inputRejected', text, images, toolMode: mode });
+        // An edited request with no answer has not reached persisted history.
+        // Preserve it through the existing durable recovery path before reporting the error.
+        if (mode === 'web-search' || (versionOf && assistantText.length === 0)) await this.post({ type: 'inputRejected', text, images, toolMode: mode });
         await this.handleSendError(err, streamId, { profile, proxyUrl, token, signal: ctrl.signal });
       }
       // #1298 — revert model choice if a direct-entry model caused this turn to fail.
