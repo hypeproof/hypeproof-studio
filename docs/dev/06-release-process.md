@@ -83,8 +83,10 @@ See [Approval](#approval).
 4. If smoke fails, the release cut opens an issue and stops. It does not create a tag or a PR.
 5. If smoke passes, the release cut creates the rc tag and starts the rc builds. It also opens
    the release PR.
-6. The rc builds run the automatic E2E on macOS and Windows. Then they publish the rc as a
-   prerelease.
+6. The rc builds run the automatic E2E on every platform in
+   `config/release-platforms.json` (macOS only since 2026-10-19; Windows is dispatch-only,
+   see [fast-mac-release.md](fast-mac-release.md)). Then they publish the rc as a
+   prerelease. The Mac build reuses the previous base app when the base is unchanged.
 7. The release manager installs the rc build and does the checks in the release PR.
 8. A member with write access approves the release PR.
 9. The `v` tag goes on the same commit as the rc tag.

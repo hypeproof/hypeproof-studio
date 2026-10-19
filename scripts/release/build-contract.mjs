@@ -5,6 +5,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {appIdentity, sha256} from '../../e2e/unified-release/artifact.mjs';
+import {PLATFORM, checkoutPlatforms} from './platforms.mjs';
 
 const shaPattern = /^[a-f0-9]{40}$/;
 const stablePattern = /^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/;
@@ -36,7 +37,9 @@ function requireCandidateTag(tag, version) {
   if (!/^[1-9]\d*$/.test(suffix)) fail('candidate tag must be release_version followed by -rc.N');
 }
 
-export function buildDispatches(plan, {managedDraft = false} = {}) {
+// Only the builders of the platforms this checkout ships (config/release-platforms.json).
+// Since 2026-10-19 that is Mac only; build-windows.yml stays dispatchable by hand.
+export function buildDispatches(plan, {managedDraft = false, platforms = checkoutPlatforms()} = {}) {
   requireSha(plan.candidate);
   requireCandidateTag(plan.rcTag, plan.version);
   if (typeof managedDraft !== 'boolean') fail('managedDraft must be a boolean');
@@ -44,7 +47,7 @@ export function buildDispatches(plan, {managedDraft = false} = {}) {
   // with older candidate workflows that do not declare the new inputs.
   const inputs = {ref: plan.candidate};
   if (managedDraft) Object.assign(inputs, {candidate_sha: plan.candidate, managed_draft: 'true', release_version: plan.version});
-  return ['build-mac.yml', 'build-windows.yml'].map(workflow => ({workflow, ref: plan.rcTag, inputs}));
+  return platforms.map(platform => ({workflow: PLATFORM[platform].workflow, ref: plan.rcTag, inputs}));
 }
 
 export function buildTagMessage(plan, {managedDraft = false} = {}) {

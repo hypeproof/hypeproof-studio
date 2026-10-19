@@ -30,7 +30,7 @@ summary below and a completed plan do not exhaust Studio/Chalk requirements.
 Report ready, claimed, review, dependency, human/environment and reconciliation work
 separately. Missing discovery input means unknown, not "no development remains".
 
-Shipped state (not a work list): the app is released for macOS arm64 and Windows x64
+Shipped state (not a work list): the app is released for macOS arm64 (Windows x64 builds are dispatch-only since 2026-10-19, docs/dev/fast-mac-release.md)
 through `v*` tags, the Worker runs in production at `api.hypeproof-ai.xyz`, and Chalk
 runs at `chalk.hypeproof-ai.xyz`. The Phase 4–5 milestones in METAPLAN are historical.
 Latest detail: git history.

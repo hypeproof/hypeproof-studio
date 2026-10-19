@@ -72,6 +72,9 @@ assert.ok(!/^\s*tags:/m.test(workerWf), "deploy-worker.yml has no tag trigger at
 for (const wf of [".github/workflows/build-mac.yml", ".github/workflows/build-windows.yml"]) {
   const y = read(wf);
   const block = /tags:\s*\n((?:\s*-\s*"[^"]*"\s*\n)+)/.exec(y);
+  // build-windows.yml is dispatch-only since 2026-10-19 (Mac-only releases): no
+  // tags block at all also means a c* tag cannot start it.
+  if (!block && wf.endsWith("build-windows.yml")) { assert.ok(!/^\s*push:/m.test(y), `${wf} has no push trigger`); continue; }
   assert.ok(block, `${wf} has a tags trigger block`);
   const patterns = [...block[1].matchAll(/-\s*"([^"]*)"/g)].map((m) => m[1]);
   for (const p of patterns) assert.match(p, /^v/, `${wf} tag pattern "${p}" must not match a c* tag`);

@@ -790,12 +790,13 @@
         "PRA-06",
         "PRA-07",
         "PRA-08",
+        "PRA-09",
         "PRA-11",
         "PRA-12",
         "PRA-13"
       ],
       "inline_prefixes": [],
-      "sha256": "b888df988602aaca16083316b262e7ab075667ae2ff1ca4abed88c0087788d10",
+      "sha256": "4a80f30f36e834fad322d4e2db7079bb3151dd8b9662f63b2a45a8f796149b89",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3834,7 +3835,8 @@
             "PRA-03",
             "PRA-04",
             "PRA-05",
-            "PRA-06"
+            "PRA-06",
+            "PRA-09"
           ]
         }
       ],
@@ -3851,12 +3853,15 @@
         "scripts/install.ps1",
         "scripts/install-mac.sh",
         "scripts/install-win.ps1",
-        ".github/workflows/requirement-work.yml"
+        ".github/workflows/requirement-work.yml",
+        "scripts/make-class-kit.sh"
       ],
       "verification_inputs": [
         "extensions/hypeproof-chat/test/update-transport.smoke.mjs",
         "scripts/tests/install-win-fixture.ps1",
-        "scripts/tests/bootstrap-win-private-fixture.ps1"
+        "scripts/tests/bootstrap-win-private-fixture.ps1",
+        "scripts/tests/win-release-set.ps1",
+        "scripts/test-installer-kit.sh"
       ]
     },
     {

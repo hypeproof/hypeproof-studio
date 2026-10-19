@@ -10,6 +10,14 @@
 #   - on a tag push, the .app is zipped to HypeProof-Studio-darwin-arm64.zip
 #     (name matches scripts/install-mac.sh ASSET_SUFFIX) and published to the
 #     GitHub Release, so the operator one-liner resolves it.
+#
+# Two build paths, chosen per run in "Choose build path" (2026-10-19):
+#   - repack (minutes): the base inputs (scripts/mac-base-key.sh) match a cached
+#     base app or a published release. Only the hypeproof-chat extension is
+#     rebuilt and swapped in (scripts/repack-mac.sh).
+#   - full (1–2 h): base inputs changed, nothing to reuse, or full_build=true.
+#     Saves the unsigned base app to the Actions cache for later repacks.
+# Both paths then share the same stamp → sign → verify → package → upload steps.
 name: Build macOS
 
 on:
@@ -39,6 +47,10 @@ on:
       # live class has to come back and dispatch it deliberately.
       override_live_session:
         description: "Publish even if a class is live (stable tag refs only; recorded in the job summary)"
+        type: boolean
+        default: false
+      full_build:
+        description: "Force the full 1–2 h VS Code build even when a reusable base app exists"
         type: boolean
         default: false
   push:
@@ -90,6 +102,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.22.1"
+          # ~/.npm for the extension, webview-ui and dist/vendor installs.
+          cache: npm
+          cache-dependency-path: |
+            extensions/hypeproof-chat/package-lock.json
+            extensions/hypeproof-chat/webview-ui/package-lock.json
 
       - name: Verify candidate and resolve build identity
         id: contract
@@ -128,12 +145,66 @@ jobs:
             macOS build of ${{ github.ref_name }} @ ${{ github.sha }} (pre-build gate)
         run: bash scripts/release-freeze-gate.sh "$GITHUB_REF"
 
+      # ── Fast path selection ────────────────────────────────────────────────
+      # The base app (everything except extensions/hypeproof-chat) depends only
+      # on the inputs hashed by scripts/mac-base-key.sh. Same key → reuse.
+      - name: Resolve Mac base key
+        id: basekey
+        shell: bash
+        run: echo "key=$(bash scripts/mac-base-key.sh HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Restores into the exact place the full build leaves its output, so every
+      # later step reads the same path in both modes. Actions caches are scoped:
+      # a tag run sees caches saved on that tag or on the default branch only, so
+      # seed it from main (docs/dev/fast-mac-release.md). The release download in
+      # the next step covers the unseeded case.
+      - name: Restore cached base app
+        id: basecache
+        if: inputs.full_build != true
+        uses: actions/cache/restore@v4
+        with:
+          path: vscodium-base/VSCode-darwin-arm64
+          key: ${{ steps.basekey.outputs.key }}
+
+      - name: Choose build path (repack when the base is reusable)
+        id: path
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FULL_BUILD: ${{ inputs.full_build }}
+          CACHE_HIT: ${{ steps.basecache.outputs.cache-hit }}
+          BASE_KEY: ${{ steps.basekey.outputs.key }}
+        run: |
+          set -euo pipefail
+          mode=full; source=none; base=""
+          if [[ "$FULL_BUILD" == true ]]; then
+            source=forced
+          elif [[ "$CACHE_HIT" == true ]]; then
+            mode=repack; source="actions-cache"; base="vscodium-base/VSCode-darwin-arm64/HypeProof Studio.app"
+          elif found="$(bash scripts/find-mac-base-release.sh "$BASE_KEY")"; then
+            tag="${found%% *}"; url="${found#* }"
+            curl -fsSL --retry 3 -o "$RUNNER_TEMP/base-darwin-arm64.zip" "$url"
+            mode=repack; source="release $tag"; base="$RUNNER_TEMP/base-darwin-arm64.zip"
+          fi
+          {
+            echo "mode=$mode"
+            echo "base=$base"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### macOS build path: $mode"
+            echo "- base key: \`$BASE_KEY\`"
+            echo "- base source: $source"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "build path: $mode (base: $source, key $BASE_KEY)"
+
       - name: Setup Python 3.11
+        if: steps.path.outputs.mode == 'full'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Free macOS runner disk
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         run: |
           set -euo pipefail
@@ -144,6 +215,7 @@ jobs:
           df -h /
 
       - name: Install build deps (libicns / icoutils / gnu-sed / jq / imagemagick / librsvg)
+        if: steps.path.outputs.mode == 'full'
         run: |
           brew install libicns icoutils gnu-sed jq imagemagick librsvg || true
           icns2png --version || true
@@ -152,9 +224,11 @@ jobs:
           rsvg-convert --version || true
 
       - name: Provision build env (from gitignored .env's committed example)
+        if: steps.path.outputs.mode == 'full'
         run: cp hypeproof-studio.env.example hypeproof-studio.env
 
       - name: Load HypeProof env
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         run: |
           # shellcheck source=/dev/null
@@ -184,10 +258,12 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Install brand assets
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         run: bash scripts/install-brand-assets.sh
 
       - name: Build icons
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         working-directory: vscodium-base
         run: bash icons/build_icons.sh
@@ -196,7 +272,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
         run: node scripts/bootstrap-service-packages.mjs
+
+      # Both paths. With setup-node's npm cache these are restores, not downloads;
+      # inject-builtin-extensions.sh then skips its own npm install.
+      - name: Install extension dependencies (npm ci)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund --prefix extensions/hypeproof-chat
+          npm ci --no-audit --no-fund --prefix extensions/hypeproof-chat/webview-ui
+
       - name: Fetch + prepare VS Code source
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         working-directory: vscodium-base
         env:
@@ -207,15 +294,18 @@ jobs:
           bash prepare_vscode.sh
 
       - name: Apply product.json overrides
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         working-directory: vscodium-base
         run: bash ../scripts/apply-product-overrides.sh
 
       - name: Inject hypeproof-chat
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         run: bash scripts/inject-builtin-extensions.sh
 
       - name: Build (macOS)
+        if: steps.path.outputs.mode == 'full'
         shell: bash
         # Use the canonical entry point (build-pipeline.md): scripts/run-build.sh.
         # Direct `bash build.sh` skips the .yet restore + vscode/ reset that
@@ -231,6 +321,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/run-build.sh
 
+      # Unsigned, unstamped base app for future repacks. Saved before any
+      # per-release step mutates it. On a tag ref the entry is visible to that
+      # tag only; on main it serves every later tag.
+      - name: Save base app to cache
+        if: steps.path.outputs.mode == 'full'
+        uses: actions/cache/save@v4
+        with:
+          path: vscodium-base/VSCode-darwin-arm64
+          key: ${{ steps.basekey.outputs.key }}
+
+      - name: Repack extension into the reused base app
+        if: steps.path.outputs.mode == 'repack'
+        shell: bash
+        env:
+          HPS_REPACK_BASE: ${{ steps.path.outputs.base }}
+        run: bash scripts/repack-mac.sh --base "$HPS_REPACK_BASE"
+
       # Stamp CFBundleShortVersionString on the built .app (#361). Must run
       # BEFORE Re-sign: apply-product-overrides.sh no longer stamps
       # vscode/package.json .version (that feeds the runtime vscode.version API
@@ -241,37 +348,9 @@ jobs:
       # the seal that #311 fixed, re-triggering "손상되어 열 수 없습니다".)
       - name: Stamp product version on Info.plist + product.json (#361)
         shell: bash
-        run: |
-          set -euo pipefail
-          OUT_DIR="vscodium-base/VSCode-darwin-arm64"
-          APP="$(cd "$OUT_DIR" && ls -d *.app | head -1)"
-          [ -n "$APP" ] || { echo "::error::no .app in $OUT_DIR"; ls -la "$OUT_DIR"; exit 1; }
-          node scripts/install-shell-brand.mjs "$OUT_DIR/$APP/Contents/Resources/app/out/media"
-          PLIST="$OUT_DIR/$APP/Contents/Info.plist"
-          HPS_VER="${HPS_VERSION:-$(bash scripts/resolve-version.sh)}"
-          if [ -n "$HPS_VER" ] && [ -f "$PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $HPS_VER" "$PLIST" \
-              || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $HPS_VER" "$PLIST"
-            echo "Stamped CFBundleShortVersionString → $HPS_VER (pre-sign)"
-            # Re-stamp the BUILT product.json too. apply-product-overrides.sh
-            # stamps it pre-build, but VS Code's gulp derives product.json.version
-            # from vscode/package.json .version during the build — and #361 stopped
-            # stamping THAT (it feeds the runtime vscode.version API). Net effect:
-            # the built product.json.version reverts to the raw VS Code version
-            # (1.116.x), tripping the #206 updater gate. Re-stamp the product
-            # version here, pre-sign, so the seal covers it and vscode.version
-            # (from package.json) stays the real engine version.
-            APP_PJSON="$OUT_DIR/$APP/Contents/Resources/app/product.json"
-            if [ -f "$APP_PJSON" ]; then
-              tmp=$(mktemp)
-              jq --arg v "$HPS_VER" '.version = $v' "$APP_PJSON" > "$tmp" && mv "$tmp" "$APP_PJSON"
-              echo "Stamped product.json.version → $HPS_VER (pre-sign)"
-            else
-              echo "::warning::built product.json not found at $APP_PJSON"
-            fi
-          else
-            echo "::warning::skipped version stamp (HPS_VER='$HPS_VER', plist='$PLIST')"
-          fi
+        # Both paths (scripts/repack-mac.sh already ran it; it is idempotent).
+        # The logic lives in scripts/stamp-mac-app.sh so the two paths cannot drift.
+        run: bash scripts/stamp-mac-app.sh
 
       # Our build modifies the bundle after Electron signed it (extension injection +
       # product.json rewrite), which breaks the seal. A *malformed* signature makes

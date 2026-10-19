@@ -22,11 +22,15 @@ jobs:
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       published: ${{ steps.candidate.outputs.published }}
+      matrix: ${{ steps.candidate.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Wait for both candidate packages
+      # Which OS packages to wait for, test and require comes from the tag's own
+      # config/release-platforms.json (scripts/release/platforms.mjs). Mac only
+      # since 2026-10-19; a tag without that file requires both.
+      - name: Wait for every configured candidate package
         id: candidate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -36,6 +40,8 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
           sha="$(git rev-parse "$TAG^{commit}")"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(node scripts/release/platforms.mjs matrix "$sha")" >> "$GITHUB_OUTPUT"
+          echo "release platforms: $(node scripts/release/platforms.mjs list "$sha")"
           for attempt in $(seq 1 150); do
             gh release view "$TAG" --json isDraft,assets > "$RUNNER_TEMP/candidate.json"
             # Duplicate builder dispatch after successful promotion is read-only.
@@ -45,10 +51,12 @@ jobs:
               echo 'published=true' >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            if jq -e '[.assets[].name] | any(. == "HypeProof-Studio-darwin-arm64.zip") and any(test("win32-x64.*\\.zip$")) and any(test("UserSetup.*\\.exe$")) and any(test("(?<!User)Setup.*\\.exe$"))' "$RUNNER_TEMP/candidate.json" >/dev/null; then exit 0; fi
+            # set -e + pipefail: a helper failure stops the job; empty output = complete.
+            jq -r '.assets[].name' "$RUNNER_TEMP/candidate.json" | node scripts/release/platforms.mjs missing "$sha" > "$RUNNER_TEMP/missing.txt"
+            if [[ ! -s "$RUNNER_TEMP/missing.txt" ]]; then exit 0; fi
             sleep 60
           done
-          echo 'Both OS packages did not arrive; candidate remains draft.' >&2
+          echo "Configured OS packages did not arrive (missing: $(paste -sd, "$RUNNER_TEMP/missing.txt")); candidate remains draft." >&2
           exit 1
   acceptance:
     needs: candidate
@@ -58,12 +66,7 @@ jobs:
       # One session key per cohort: each OS run opens and closes the synthetic
       # acceptance session (#1404), so the two must not overlap.
       max-parallel: 1
-      matrix:
-        include:
-          - os: macos-15
-            platform: darwin-arm64
-          - os: windows-latest
-            platform: win32-x64
+      matrix: ${{ fromJSON(needs.candidate.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -200,9 +203,9 @@ jobs:
           set -euo pipefail
           mkdir dist
           gh release download "$TAG" --dir dist
-          node --input-type=module <<'NODE'
+          PLATFORMS="$(node scripts/release/platforms.mjs list "$SOURCE_SHA")" node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const receipts=['darwin-arm64','win32-x64'].map(os=>JSON.parse(fs.readFileSync('receipts/unified-'+os+'/receipt.json','utf8')));
+          const receipts=JSON.parse(process.env.PLATFORMS).map(os=>JSON.parse(fs.readFileSync('receipts/unified-'+os+'/receipt.json','utf8')));
           fs.writeFileSync('dist/unified-acceptance.json',JSON.stringify({schema:'hps-unified-release/1',receipts},null,2));
           NODE
           node scripts/check-unified-release.mjs dist "$SOURCE_SHA" "${TAG#v}"

@@ -125,7 +125,7 @@ writePlan();
 
 console.log(`\n→ smoke ${smoke.result}. A real cut would create:`);
 if (smoke.result !== 'PASS') console.log('   ⚠ a check is NOT_RUN. A real cut stops here; the rest is a preview.');
-console.log(`   · tag ${rcTag} on ${short} (starts build-mac, build-windows and the automatic E2E)`);
+console.log(`   · tag ${rcTag} on ${short} (starts the configured platform builds and the automatic E2E)`);
 console.log(`   · branch ${branch} adding releases/${version}.md`);
 console.log(`   · release PR "${plan.title}"  (${path.join(out, 'release-pr.md')})`);
 console.log(`     ${groups.features.length} feature checks · ${groups.dependency.length} dependency/deploy · ${groups.automatic.length} automatic\n`);

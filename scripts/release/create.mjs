@@ -74,7 +74,7 @@ function main() {
       }
       say(values['managed-draft']
         ? `Started managed builds of ${plan.candidate} for ${plan.rcTag}, embedding ${plan.version}; draft upload only. Acceptance and promotion remain NOT_RUN.`
-        : `Started build-mac and build-windows on ${plan.rcTag}; they run the automatic E2E and publish a prerelease.`);
+        : `Started ${dispatches.map(d => d.workflow).join(' and ')} on ${plan.rcTag}; they run the automatic E2E and publish a prerelease.`);
     }
     if (step === 'branch') {
       run('git', 'checkout', '-q', '-B', plan.branch, plan.candidate);

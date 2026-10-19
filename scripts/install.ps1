@@ -818,6 +818,65 @@ function Configure-Git {
 # ----------------------------------------------------------------------------
 # 10. Studio app download + install (per-user, no admin)
 # ----------------------------------------------------------------------------
+# One release API answer as an object, or $null when gh fails or answers nothing.
+function Get-StudioReleaseJson([string]$url) {
+    try {
+        $raw = & gh api $url
+        if ($LASTEXITCODE -eq 0 -and $raw) { return (($raw -join "`n") | ConvertFrom-Json) }
+    } catch { }
+    return $null
+}
+
+# The release's Windows installer by the manifest globs, in glob order, or $null.
+# Probes members instead of dereferencing them: Main runs under StrictMode.
+function Select-StudioWindowsAsset($rel, $globs) {
+    if (-not $rel -or -not $rel.PSObject.Properties['assets']) { return $null }
+    foreach ($g in $globs) {
+        $a = @($rel.assets) | Where-Object { $_ -and $_.PSObject.Properties['name'] -and ([string]$_.name) -like $g } | Select-Object -First 1
+        if ($a) { return $a }
+    }
+    return $null
+}
+
+# Newest release that carries a Windows installer. Releases can be macOS only
+# (config/release-platforms.json, docs/dev/fast-mac-release.md), so /releases/latest
+# is not enough: when it has no Windows installer, walk the published releases and
+# take the newest one that has. Drafts and prereleases are skipped, as
+# /releases/latest skips them. Returns @{ release; asset; latest_tag } or throws.
+function Find-WindowsStudioRelease([string]$repo, $globs) {
+    $latest = Get-StudioReleaseJson "https://api.github.com/repos/$repo/releases/latest"
+    $latestTag = if ($latest -and $latest.PSObject.Properties['tag_name']) { [string]$latest.tag_name } else { '' }
+    $asset = Select-StudioWindowsAsset $latest $globs
+    if ($asset) { return @{ release = $latest; asset = $asset; latest_tag = $latestTag } }
+
+    $published = @()
+    $read = $false
+    for ($page = 1; $page -le 10; $page++) {
+        $list = Get-StudioReleaseJson "https://api.github.com/repos/$repo/releases?per_page=100&page=$page"
+        if ($null -eq $list) { break }
+        $read = $true
+        # foreach, not @(): Windows PowerShell 5.1 emits a parsed JSON array as one object.
+        $items = @(); foreach ($x in $list) { $items += $x }
+        foreach ($r in $items) {
+            if (-not $r -or -not $r.PSObject.Properties['tag_name']) { continue }
+            if ($r.PSObject.Properties['draft'] -and $r.draft) { continue }
+            if ($r.PSObject.Properties['prerelease'] -and $r.prerelease) { continue }
+            $published += $r
+        }
+        if ($items.Count -lt 100) { break }
+    }
+    if (-not $latest -and -not $read) {
+        throw "Could not read the releases of $repo. Run gh auth login with an organization member account."
+    }
+    # /releases/latest orders by created_at; use the same order here.
+    $sorted = @($published | Sort-Object -Property @{ Expression = { if ($_.PSObject.Properties['created_at']) { [string]$_.created_at } else { '' } } } -Descending)
+    foreach ($r in $sorted) {
+        $a = Select-StudioWindowsAsset $r $globs
+        if ($a) { return @{ release = $r; asset = $a; latest_tag = $latestTag } }
+    }
+    throw "No Studio release in $repo has a Windows installer (looked for [$($globs -join ', ')]). Ask the operator for a Windows build."
+}
+
 function Resolve-StudioAsset {
     param($manifest)
     # Class kit: the installer is in the kit folder, so the release API is not asked.
@@ -825,29 +884,38 @@ function Resolve-StudioAsset {
     $repo = $manifest.studio.releases_repo
     if ($repo -eq 'jayleekr/hypeproof-studio-releases') { $repo = 'hypeproof/hypeproof-studio-releases' }
     if ($repo -ne 'hypeproof/hypeproof-studio-releases') { throw 'Untrusted Studio release repository' }
-    $ver  = $manifest.studio.version
-    $tag  = "v$ver"
+    $globs = @($manifest.studio.asset_glob, $manifest.studio.asset_glob_fallback)
+    $ver  = [string]$manifest.studio.version
     $rel = $null
-    foreach ($u in @(
-        "https://api.github.com/repos/$repo/releases/tags/$tag",
-        "https://api.github.com/repos/$repo/releases/latest"
-    )) {
-        try { $raw = & gh api $u; if ($LASTEXITCODE -eq 0) { $rel = ($raw -join "`n") | ConvertFrom-Json; if ($rel) { break } } } catch { }
+    $asset = $null
+
+    # A pinned version installs exactly that release. If it has no Windows
+    # installer that is an error, not a reason to install something else.
+    if ($ver -and $ver -ne 'latest') {
+        $rel = Get-StudioReleaseJson "https://api.github.com/repos/$repo/releases/tags/v$ver"
+        if ($rel) {
+            $asset = Select-StudioWindowsAsset $rel $globs
+            if (-not $asset) {
+                throw "Studio $ver has no Windows installer (looked for [$($globs -join ', ')]). Pin a version that has Windows packages, or unset HPS_STUDIO_VERSION to get the newest one."
+            }
+        } else {
+            Write-Warn2 "Studio release v$ver was not found; using the newest release that has a Windows installer."
+        }
     }
-    if (-not $rel) { throw "No release found for $repo ($tag / latest)." }
+    if (-not $rel) {
+        $found = Find-WindowsStudioRelease $repo $globs
+        $rel = $found.release
+        $asset = $found.asset
+        if ($found.latest_tag -and $found.latest_tag -ne [string]$rel.tag_name) {
+            Write-Info ("The newest release {0} is macOS only; installing {1}, the newest release with a Windows installer." -f $found.latest_tag, $rel.tag_name)
+        }
+    }
 
     # Write the tag we actually resolved back into the manifest. With
-    # version='latest' the tag lookup 404s and we fall through to /releases/latest,
-    # so without this the receipt and the idempotent-skip compare would keep
-    # seeing the literal string 'latest' and reinstall on every run.
+    # version='latest' (or a fallback) the receipt and the idempotent-skip compare
+    # would otherwise keep seeing the literal string 'latest' and reinstall on every run.
     if ($rel.tag_name) { $manifest.studio.version = ($rel.tag_name -replace '^v', '') }
-
-    $globs = @($manifest.studio.asset_glob, $manifest.studio.asset_glob_fallback)
-    foreach ($g in $globs) {
-        $a = $rel.assets | Where-Object { $_.name -like $g } | Select-Object -First 1
-        if ($a) { return $a }
-    }
-    throw "No Studio asset matched globs [$($globs -join ', ')] in release $($rel.tag_name)."
+    return $asset
 }
 
 # Is the Studio APP actually on this machine? Presence only - never the receipt.

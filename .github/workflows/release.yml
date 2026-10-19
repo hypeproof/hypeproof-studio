@@ -2,7 +2,8 @@
 #
 # The actual tag build is split by platform:
 # - build-mac.yml: v* tag -> Mac arm64 artifact -> GitHub Release upload
-# - build-windows.yml: v* tag -> Windows x64 artifact -> GitHub Release upload
+# - build-windows.yml: dispatch only (Mac-only releases since 2026-10-19,
+#   config/release-platforms.json); a dispatch on a tag ref uploads to that release
 # - mirror-release.yml: explicit dispatch -> mirror source release assets to
 #   jayleekr/hypeproof-studio-releases after operator dry-run
 #
@@ -32,9 +33,10 @@ jobs:
           grep -Fq '"v*"' .github/workflows/build-mac.yml
           grep -q 'Upload draft candidate' .github/workflows/build-mac.yml
 
-          grep -q 'tags:' .github/workflows/build-windows.yml
-          grep -Fq '"v*"' .github/workflows/build-windows.yml
+          grep -q 'workflow_dispatch:' .github/workflows/build-windows.yml
           grep -q 'Upload draft candidate' .github/workflows/build-windows.yml
+          node scripts/release/platforms.mjs list HEAD
+          node --test scripts/release/test/platforms.test.mjs
 
           grep -q 'workflow_dispatch:' .github/workflows/mirror-release.yml
           grep -q 'MIRROR_RELEASE_PAT' .github/workflows/mirror-release.yml
@@ -52,7 +54,7 @@ jobs:
           {
             echo "## Release readiness"
             echo "- build-mac.yml has v* tag trigger and GitHub Release upload"
-            echo "- build-windows.yml has v* tag trigger and GitHub Release upload"
+            echo "- build-windows.yml is dispatch-only; release platforms: $(node scripts/release/platforms.mjs list HEAD)"
             echo "- mirror-release.yml remains explicit dispatch with PAT-gated writes"
             echo "- verify-unified-release.yml attaches the native SDK seed + sha256 before publishing"
           } >> "$GITHUB_STEP_SUMMARY"

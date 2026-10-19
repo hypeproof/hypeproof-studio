@@ -323,6 +323,24 @@ else
   warn "check-webview-csp-hash.py not found next to this script — CSP hash NOT verified"
 fi
 
+# 12. product.json core-file checksums. VS Code recomputes them at runtime and
+# shows "Your installation appears to be corrupt" on a mismatch. Built-in
+# extensions are not covered, so the repack fast path (scripts/repack-mac.sh)
+# cannot break them; this check keeps that a measurement on both paths.
+echo
+echo "12. product.json core-file checksums"
+SUM_CHECK="$(dirname "$0")/check-mac-checksums.mjs"
+if [[ -f "$SUM_CHECK" ]]; then
+  if SUM_OUT="$(node "$SUM_CHECK" "$APP" 2>&1)"; then
+    ok "$SUM_OUT"
+  else
+    echo "$SUM_OUT" | sed 's/^/      /'
+    bad "product.json checksums do not match the shipped core files (integrity warning at launch)"
+  fi
+else
+  warn "check-mac-checksums.mjs not found next to this script — checksums NOT verified"
+fi
+
 echo
 echo "Result: $PASS passed, $FAIL failed"
 exit $(( FAIL > 0 ? 1 : 0 ))
