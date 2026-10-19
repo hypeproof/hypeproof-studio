@@ -98,9 +98,14 @@ its own credentials on every run, on a cohort that cannot hold a real participan
 
 ## Service와 Module
 
-`deploy-worker.yml`은 ref를 SHA로 고정한 뒤 `verify-service-activities.yml`에서
-현재 공개 App의 두 활동을 같은 Service 후보로 검사한다. 통과한 SHA만 기존 배포
-절차에 전달한다. dry-run은 배포하지 않으며 호환성 실기를 완료했다고 보고하지 않는다.
+Since 2026-10-19 Studio does not deploy the Service Worker. hypeproof-service owns
+the deploy (`npm run release:deploy`, its `worker/DEPLOY.md`), and hypeproof-ops
+`opsdb.py` applies schema migrations. `deploy-worker.yml` is verification only: it
+runs the Service tests at the `config/service-deployment.json` pin, optionally runs
+`verify-service-activities.yml` (the public App's two activities against that
+Service SHA) and optionally the production verification scripts. It holds no
+Cloudflare credential. `config/service-deployment.json` is retired as a deploy pin;
+it remains the Service SHA that Studio's compatibility and e2e workflows test.
 Service 변경만으로 App 전체 빌드를 실행하지 않는다.
 
 현재 Module pin은 변경하지 않는다. Module 발행/복귀는 기존 불변 버전과 대상 강의

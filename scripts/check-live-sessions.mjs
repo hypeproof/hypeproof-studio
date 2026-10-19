@@ -13,7 +13,8 @@
 //   can be wrong, and the instructor only ever updates one of them.
 //
 // WHAT IT GATES
-//   - the worker deploy (.github/workflows/deploy-worker.yml)
+//   - the Service Worker deploy (hypeproof-service worker/scripts/release-deploy.mjs
+//     keeps its own copy of this script; Studio no longer deploys the Worker)
 //   - STABLE app tag builds (build-mac.yml / build-windows.yml). A stable tag
 //     publishes a non-prerelease GitHub Release, which the in-app update
 //     checker surfaces as a banner and mirror-release.yml propagates.
@@ -48,7 +49,7 @@
 //   #     HPS_API_BASE        default https://api.hypeproof-ai.xyz
 //   #     HPS_FREEZE_OVERRIDE "true" -> proceed anyway, loudly, and record it
 //   #     HPS_FREEZE_CONTEXT  free text stamped into the audit line
-//   #                         (deploy-worker.yml passes task C's worker
+//   #                         (the Service release script passes its worker
 //   #                         version, so the audit trail says WHAT was
 //   #                         deployed over a live class)
 //   #     HPS_FREEZE_FIXTURE  path to a JSON file to read INSTEAD of calling
@@ -299,7 +300,7 @@ async function main() {
 
   if (override) {
     // Proceed, but never quietly. The audit line carries the context the
-    // caller handed us (deploy-worker.yml passes task C's worker version), so
+    // caller handed us (the Service release script passes its worker version), so
     // afterwards it is answerable WHAT was deployed over a live class.
     const audit =
       `live-session freeze OVERRIDDEN — reason=${result.reason} ` +
@@ -332,8 +333,7 @@ async function main() {
   console.error("  2. App release only: cut a `-rc` tag instead. Dev-channel tags are");
   console.error("     exempt — the updater skips prereleases, so they reach nobody.");
   console.error("  3. Genuinely urgent: re-run with the override input set");
-  console.error("     (deploy-worker.yml: override_live_session=true; build-mac.yml /");
-  console.error("     build-windows.yml: dispatch against the tag ref with");
+  console.error("     (build-mac.yml / build-windows.yml: dispatch against the tag ref with");
   console.error("     override_live_session=true). It is recorded in the job summary.");
   write(ghOut, `decision=blocked\nreason=${result.reason}\nlive_sessions=${result.liveCount}\noverride=false\n`);
   write(

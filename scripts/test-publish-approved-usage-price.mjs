@@ -67,11 +67,9 @@ test('missing, oversized, malformed or altered success response cannot pass', as
   }
 });
 
-test('workflow opt-in is default off, dry runs cannot deploy/publish, no paid flag or SQL publication', async () => {
+test('Studio no longer deploys or publishes: the price step moved to hypeproof-service release:deploy', async () => {
   const workflow = await readFile(new URL('../.github/workflows/deploy-worker.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /publish_approved_usage_price:\n(?:.*\n){2}        default: false/);
-  assert.match(workflow, /name: Publish explicitly approved[^\n]*\n        if: \$\{\{ !inputs.dry_run && inputs.publish_approved_usage_price \}\}/);
-  assert.match(workflow, /price_args=\(\)/);
-  assert.match(workflow, /HPS_USAGE_APPROVED_PRICE_DIGESTS:\$\{APPROVED_PRICE_DIGEST\}/);
-  assert.doesNotMatch(workflow, /HPS_ACCESS_CONTRACTS:|keep.vars|INSERT INTO usage_price/);
+  const steps = workflow.replace(/^\s*#.*$/gm, '');
+  assert.doesNotMatch(steps, /wrangler|CLOUDFLARE_API_TOKEN|publish-approved-usage-price|HPS_USAGE_APPROVED_PRICE_DIGESTS|d1 execute/);
+  assert.match(workflow, /npm run release:deploy/);
 });

@@ -85,7 +85,7 @@ Cloudflare 와 Fly 는 **개인 계정 초대도 개인 토큰도 주지 않는�
 
 | 대상 | 워크플로 | 어떻게 |
 |---|---|---|
-| Studio Worker (Cloudflare) | `hypeproof-studio` → `deploy-worker.yml` | Actions 탭에서 **Run workflow** → **`dry_run` 체크를 끈다** (기본값 `true` 는 테스트·타입체크만 하고 배포하지 않는다) |
+| Studio Worker (Cloudflare) | `hypeproof-service` → `npm run release:deploy` | Deployed from Service since 2026-10-19 (`worker/DEPLOY.md` there). Studio's `deploy-worker.yml` only verifies and never deploys |
 | Sediment 백엔드 (Fly) | `sediment` → `fly-deploy.yml` | 런타임 경로(`services/sediment/{applications,lab_lib,lab_platform,scripts,prompts,data,config}`, `pyproject.toml`, `uv.lock`, `Dockerfile`, `infra/deploy/`)가 바뀐 `main` 머지만 자동 배포 · 그 밖의 변경(프론트·테스트·문서만)은 배포되지 않으니 필요하면 Run workflow |
 
 **즉 "배포할 수 있는 사람 = repo 에 write 가 있는 사람"** 이다. 새 멤버에게 따로 해줄
