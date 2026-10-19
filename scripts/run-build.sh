@@ -89,6 +89,15 @@ echo "  BUILD_SOURCEVERSION=${BUILD_SOURCEVERSION:-<unset — version.sh will de
   echo "==================================================="
 } | tee /dev/stderr
 
+# Explicit opt-in reuse; no fallback to a full build on invalid cache inputs.
+if [[ -n "${HPS_ASSEMBLY_MODE:-}" ]]; then
+  : "${HPS_ASSEMBLY_CACHE:?set immutable cache directory}"
+  if [[ -n "$LOGFILE" ]]; then
+    exec node scripts/release/cloud-executor/assembly.mjs "$HPS_ASSEMBLY_MODE" "$HPS_ASSEMBLY_CACHE" "${HPS_ASSEMBLY_MANIFEST_SHA256:-}" > "$LOGFILE" 2>&1
+  fi
+  exec node scripts/release/cloud-executor/assembly.mjs "$HPS_ASSEMBLY_MODE" "$HPS_ASSEMBLY_CACHE" "${HPS_ASSEMBLY_MANIFEST_SHA256:-}"
+fi
+
 cd vscodium-base
 
 # --- Pre-build reset ---------------------------------------------------------

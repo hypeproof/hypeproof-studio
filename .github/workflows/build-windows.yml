@@ -23,6 +23,19 @@ on:
       # when dispatching against a stable TAG ref, the one dispatch shape
       # that publishes a Release. Empty (i.e. never overridden) on the
       # `push: tags` path below.
+      engine_assembly_mode:
+        description: "Optional compiled engine path; requires separately approved engine/cache configuration"
+        type: choice
+        options: [full, compile-base, assemble]
+        default: full
+      engine_cache_artifact_id:
+        description: "Assemble only: immutable artifact ID from reviewed successful producer"
+        required: false
+        default: ""
+      engine_cache_manifest_sha256:
+        description: "Assemble only: independently pinned compiled-engine manifest SHA256"
+        required: false
+        default: ""
       override_live_session:
         description: "Publish even if a class is live (stable tag refs only; recorded in the job summary)"
         type: boolean
@@ -90,6 +103,20 @@ jobs:
       npm_config_target_arch: x64
 
     steps:
+      - name: Bind optional assembly to the reviewed workflow source
+        if: inputs.engine_assembly_mode && inputs.engine_assembly_mode != 'full'
+        shell: bash
+        env:
+          REQUESTED_REF: ${{ inputs.ref }}
+          REQUESTED_CANDIDATE: ${{ inputs.candidate_sha }}
+          WORKFLOW_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # This guard is workflow-owned and runs BEFORE candidate checkout.
+          # A reviewed producer must never execute arbitrary input ref scripts.
+          [[ -z "$REQUESTED_REF" || "$REQUESTED_REF" == "$WORKFLOW_COMMIT" ]]
+          [[ -z "$REQUESTED_CANDIDATE" || "$REQUESTED_CANDIDATE" == "$WORKFLOW_COMMIT" ]]
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -128,6 +155,30 @@ jobs:
         env:
           HPS_MANAGED_DRAFT: ${{ steps.contract.outputs.managed_draft }}
         run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-win:build build-start
+
+      - name: Admit optional compiled-engine reuse
+        id: assembly
+        shell: bash
+        env:
+          HPS_ASSEMBLY_REQUEST: ${{ inputs.engine_assembly_mode }}
+          HPS_ASSEMBLY_TARGET: win32-x64
+          HPS_ASSEMBLY_ARTIFACT_ID: ${{ inputs.engine_cache_artifact_id }}
+          HPS_ASSEMBLY_PIN: ${{ inputs.engine_cache_manifest_sha256 }}
+          RELEASE_ENGINE_ASSEMBLY_ENABLED: ${{ vars.RELEASE_ENGINE_ASSEMBLY_ENABLED }}
+          RELEASE_ENGINE_ASSEMBLY_WORKFLOW_SHA: ${{ vars.RELEASE_ENGINE_ASSEMBLY_WORKFLOW_SHA }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release/cloud-executor/assembly-workflow.mjs preflight
+
+      - name: Download reviewed immutable compiled-engine artifact
+        if: steps.assembly.outputs.mode == 'assemble'
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.engine_cache_artifact_id }}
+          merge-multiple: true
+          repository: hypeproof/hypeproof-studio
+          run-id: ${{ steps.assembly.outputs.producer_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ runner.temp }}/hps-compiled-engine
 
       - name: Identify download cache inputs
         id: download-cache
@@ -270,6 +321,7 @@ jobs:
         run: node scripts/install-shell-brand.mjs vscodium-base/vscode/src/vs/workbench/browser/parts/editor/media
 
       - name: Compile Windows source
+        if: steps.assembly.outputs.mode == 'full'
         shell: bash
         working-directory: vscodium-base
         run: |
@@ -279,7 +331,22 @@ jobs:
           export VSCODE_PUBLISH_COUNTER=1
           npm run gulp vscode-min-prepack
 
+      - name: Assemble fresh Studio and Service with verified compiled engine
+        if: steps.assembly.outputs.mode != 'full'
+        shell: bash
+        env:
+          HPS_ASSEMBLY_REQUEST: ${{ inputs.engine_assembly_mode }}
+          HPS_ASSEMBLY_TARGET: win32-x64
+          HPS_ASSEMBLY_ARTIFACT_ID: ${{ inputs.engine_cache_artifact_id }}
+          HPS_ASSEMBLY_PIN: ${{ inputs.engine_cache_manifest_sha256 }}
+          RELEASE_ENGINE_ASSEMBLY_ENABLED: ${{ vars.RELEASE_ENGINE_ASSEMBLY_ENABLED }}
+          RELEASE_ENGINE_ASSEMBLY_WORKFLOW_SHA: ${{ vars.RELEASE_ENGINE_ASSEMBLY_WORKFLOW_SHA }}
+          GH_TOKEN: ${{ secrets.HYPEPROOF_READ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/release/cloud-executor/assembly-workflow.mjs execute
+
       - name: Package Windows
+        if: steps.assembly.outputs.mode == 'full'
         shell: bash
         working-directory: vscodium-base
         env:
@@ -307,6 +374,13 @@ jobs:
           # here, right after packaging, rather than 3 steps later).
           VENDOR_SDK="VSCode-win32-${VSCODE_ARCH}/resources/app/extensions/hypeproof-chat/dist/vendor/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"
           if [ -f "$VENDOR_SDK" ]; then echo "vendor sanity: sdk.mjs present in packaged app"; else echo "::warning::vendor sanity: sdk.mjs MISSING from packaged app ($VENDOR_SDK)"; fi
+      - name: Fresh Windows version stamp and distributable installers
+        shell: bash
+        working-directory: vscodium-base
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
           # Re-stamp product.json.version on the PACKAGED app before it is zipped
           # + turned into installers. Parity with build-mac.yml #361: VS Code's
           # gulp re-derives product.json.version from vscode/package.json (the
@@ -606,6 +680,31 @@ jobs:
           node scripts/release/cloud-executor/workflow-gate.mjs legacy-only build-win:acceptance-dispatch workflow-dispatch
           gh workflow run verify-unified-release.yml --repo "$GITHUB_REPOSITORY" \
             -f tag="${GITHUB_REF#refs/tags/}"
+
+      - name: Require compiled-engine artifact storage reservation
+        id: artifact-budget-3
+        if: steps.assembly.outputs.mode == 'compile-base'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: compiled-engine-win32-x64
+        run: node scripts/release/cloud-executor/workflow-gate.mjs authorize build-win:compiled-engine-store artifact-store
+      - name: Store immutable compiled engine input only
+        id: compiled-store
+        if: steps.artifact-budget-3.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: compiled-engine-win32-x64
+          path: ${{ runner.temp }}/hps-compiled-engine
+          if-no-files-found: error
+          retention-days: 7
+      - name: Reconcile compiled-engine immutable artifact
+        if: steps.compiled-store.outcome == 'success'
+        shell: bash
+        env:
+          HPS_ENGINE_ARTIFACT_NAME: compiled-engine-win32-x64
+          HPS_ENGINE_ARTIFACT_ID: ${{ steps.compiled-store.outputs.artifact-id }}
+        run: node scripts/release/cloud-executor/workflow-gate.mjs complete build-win:compiled-engine-store artifact-store
 
       - name: Export public npm tarballs only (exclude private Service packages)
         if: always()
