@@ -470,7 +470,7 @@ export function ChatPanel(props: Props) {
     if (msg.type !== "imageStagedByHost") return;
     const { stageId, name, dataUrl } = msg;
     if (discardedPhotos.current.has(stageId)) return;
-    setImgNote(null);
+    // A sibling acknowledgement does not resolve a refused photo. New attachment attempts clear the note.
     setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev.map((p) => p.id === stageId ? { ...p, ready: true } : p) : [...prev, { id: stageId, name, thumb: null, ready: true }]));
     if (dataUrl) void photoThumb(dataUrl).then((thumb) => setStagedPhotos((prev) => prev.map((p) => (p.id === stageId ? { ...p, thumb } : p))));
   }), []);

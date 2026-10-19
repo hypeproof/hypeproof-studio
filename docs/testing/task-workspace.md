@@ -169,3 +169,9 @@ CC-05 negative controls also feed complete HTML fences, a successful HTML write 
 - Wide-table reading: scroll horizontally, edit the next draft and append another answer;
   preserve the table offset and draft, with no unintended send. Existing
   `e2e/task-workspace/readable-tables.mjs` covers desktop and narrow panes.
+
+- File-staged photos: a host refusal must remain visible and announced when a
+  sibling staging acknowledgement arrives in either order. A new attachment
+  attempt clears stale guidance, preserves successful photos and the draft, and
+  does not send. `e2e/photo-only-send.mjs` covers the controlled host boundary;
+  actual storage failure and native file drops require separate evidence.
