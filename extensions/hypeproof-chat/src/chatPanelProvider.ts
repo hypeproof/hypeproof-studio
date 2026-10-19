@@ -5542,6 +5542,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               learnerGoal: () =>
                 learnerGoalText(goalViewOf(profile.lesson, activityConnections(this.context)?.current?.id ?? null, this.context.workspaceState.get<unknown>(STUDENT_GOAL_KEY))),
             }),
+            // REQ-STUDIO-TRIAL-BUSY — a native-trial seat's busy notice joins this turn's timeline
+            // as the same ⏳ line an orchestrator notice draws (orchestratorToolEntry).
+            onNotice: (text) => this.postToolLog(streamId, { id: `notice:${randomId()}`, icon: "⏳", label: text, state: "done", at: Date.now() }),
           });
           // #751 U4 — the SDK closed the stream normally but its result said the turn failed (the learner already read the
           // notice). Not thrown: the notice and the words stay in the conversation exactly as shown, nothing is re-sent. The

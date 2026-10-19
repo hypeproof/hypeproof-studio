@@ -206,6 +206,13 @@ export interface SdkCoachArgs {
    */
   orchestrator?: OrchestratorHostArgs;
   /**
+   * REQ-STUDIO-TRIAL-BUSY — where the busy notice (SDK_BUSY_NOTICE) goes on a seat that
+   * has a busy policy but no orchestrator turn (a native-trial seat). Optional: absent,
+   * the notice is dropped and the bounded abort still ends the turn. An orchestrator
+   * turn keeps its own timeline notice and does not read this.
+   */
+  onNotice?: (text: string) => void;
+  /**
    * #282 W4a — the hypeproofChat.sdkBinaryPath setting (highest-priority
    * binary override). Undefined/empty = unset; resolution then walks
    * HPS_SDK_BINARY → seeded location → node_modules (REQ-M24).
@@ -818,9 +825,13 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       yield event;
     }
   })();
-  // A2/A4 — one busy notice per turn and a bounded busy wait, on orchestrator seats only
-  // (sdkBusyPolicyFor answers undefined elsewhere); the notice is a timeline line.
-  const busy = orchestratorTurn ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text)) : undefined;
+  // A2/A4 — one busy notice per turn and a bounded busy wait. An orchestrator turn posts
+  // the notice as its timeline line. A native-trial seat (REQ-STUDIO-TRIAL-BUSY) gets the
+  // same bound: its `429 trial_busy` lease refusal is otherwise retried by the CLI until
+  // it prints its raw "API Error" line. sdkBusyPolicyFor answers undefined elsewhere.
+  const busy = orchestratorTurn
+    ? sdkBusyPolicyFor(opts, (text) => orchestratorTurn.notice(text))
+    : sdkBusyPolicyFor({ activityKind: args.profile.activity_kind }, (text) => args.onNotice?.(text));
 
   // Map SDK messages → the proxyChat callback shape via the pure consumer
   // (sdkCoachHelpers.consumeSdkStream — unit-tested). Three exits besides
