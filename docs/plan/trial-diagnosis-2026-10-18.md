@@ -17,9 +17,9 @@ report §11; decisions for Jay are in report §10 and design §10. Epic:
 | P2 heuristic review | done | Report §3/§4: two blind raters (weighted κ 0.69), impeccable critique/audit/onboard (detector not run, marked DEGRADED), WCAG 2.2 checklist on 7 pages, accidental vs intended friction | Keyboard walk, screen reader, zoom and contrast themes not tested |
 | P3 synthesis | done | Report §1, §3, §5 (verdict), §8 fix list, Appendix A fix cards | — |
 | P4 access options | partial | Design §2A (A/B/C/C′ compared, A recommended), §5 cost and §5.4 unit economics, §7 conversion; report §6/§6a | Decisions D1–D4, D15, D17–D24 are Jay's (report §10) |
-| P5 hand-off | partial | Report and design committed on this branch; epic and the draft PRs below | US-04 P1 / NAT requirement rewrites; §8a items not yet started; all of §8b (open entry, cost ceiling, conversion) |
+| P5 hand-off | partial | Report and design committed on this branch; epic and the draft PRs below (iteration 1 and 2) | US-04 P1 / NAT requirement rewrites; §8a decision-gated items (studio-public-update-path, lab-trial-request-ack, svc-price-revisions, lab-age-statement, studio-trial-install-profile, studio-release-signing, lab-funnel-analytics); §8b decision-gated items (D15 entry variants, ot-legal-open-access, ot-launch-enable, ot-order-trial-link, ot-guardian-checkout, Phase 4) |
 
-Draft PRs for report §8a (independent fixes), none merged:
+Iteration 1 — draft PRs for report §8a (independent fixes), none merged:
 
 | Fix | PR | Issue |
 |---|---|---|
@@ -37,6 +37,56 @@ Draft PRs for report §8a (independent fixes), none merged:
 Merge-order notes from the PR bodies: #1765 and #1767 both edit `errorBannerPresentation.ts`;
 #1769, #1771 and #1775 all touch `coachDegradedNotice` / the 429 stall copy, and whichever
 lands later keeps a single solo-seat check.
+
+Iteration 2 — draft PRs for the remaining decision-free §8a items and §8b Phases 1–3, none
+merged, no reviewers requested ("X on Y" = stacked on Y). Summary on the epic:
+[#1782 comment](https://github.com/hypeproof/hypeproof-studio/issues/1782#issuecomment-6259099084).
+
+| Section | Fix | PR | Issue | Flag |
+|---|---|---|---|---|
+| §8a | svc-clock-first-message | [service#126](https://github.com/hypeproof/hypeproof-service/pull/126) | — | `HPS_TRIAL_CLOCK_AT_MESSAGE` |
+| §8a | svc-grant-purpose-timestamps | [service#127](https://github.com/hypeproof/hypeproof-service/pull/127) | — | none; migration 0049 before deploy |
+| §8a | svc-conversation-cache | [service#128](https://github.com/hypeproof/hypeproof-service/pull/128) | — | none |
+| §8a | studio-public-sdk-seed | [#1786](https://github.com/hypeproof/hypeproof-studio/pull/1786) | #1785 | none |
+| §8a | studio-sdk-seed-on-demand | [#1800](https://github.com/hypeproof/hypeproof-studio/pull/1800) on #1786 | #1799 | setting, default off |
+| §8a | studio-installer-seed-fail-closed | [#1788](https://github.com/hypeproof/hypeproof-studio/pull/1788) | #1787 | none |
+| §8a | studio-installer-korean | [#1802](https://github.com/hypeproof/hypeproof-studio/pull/1802) on #1788 | #1801 | none |
+| §8a | studio-win-posix-shell-detect | [#1790](https://github.com/hypeproof/hypeproof-studio/pull/1790) | #1789 | none |
+| §8a | lab-install-links | [lab#1290](https://github.com/hypeproof/hypeprooflab/pull/1290) | lab#1289 | none |
+| §8a | lab-install-kit-copy | [lab#1304](https://github.com/hypeproof/hypeprooflab/pull/1304) on lab#1290 | lab#1303 | none |
+| §8a | lab-install-a11y | [lab#1306](https://github.com/hypeproof/hypeprooflab/pull/1306) on lab#1290 | lab#1305 | none |
+| §8a | lab-studio-landing | [lab#1292](https://github.com/hypeproof/hypeprooflab/pull/1292) | lab#1291 | none |
+| §8a | lab-pricing-clarity | [lab#1294](https://github.com/hypeproof/hypeprooflab/pull/1294) | lab#1293 | none |
+| §8a | lab-terminology | [lab#1296](https://github.com/hypeproof/hypeprooflab/pull/1296) | lab#1295 | none |
+| §8a | lab-trial-page-order | [lab#1298](https://github.com/hypeproof/hypeprooflab/pull/1298) | lab#1297 | none |
+| §8a | lab-banner-a11y | [lab#1300](https://github.com/hypeproof/hypeprooflab/pull/1300) | lab#1299 | none |
+| 1 cost | ot-open-profile | [service#129](https://github.com/hypeproof/hypeproof-service/pull/129) | — | unreachable until entry |
+| 1 cost | ot-cost-ceiling | [service#130](https://github.com/hypeproof/hypeproof-service/pull/130) | — | `HPS_TRIAL_COST_CEILING` |
+| 1 cost | ot-daily-cap | [service#135](https://github.com/hypeproof/hypeproof-service/pull/135) on service#129 | — | `HPS_OPEN_TRIAL_DAILY_CAP` |
+| 1 cost | ot-moderation-always | [service#131](https://github.com/hypeproof/hypeproof-service/pull/131) | — | profile field |
+| 1 cost | svc-turn-allowance | [service#132](https://github.com/hypeproof/hypeproof-service/pull/132) | — | `HPS_TRIAL_TURN_ALLOWANCE` |
+| 1 cost | studio-turn-id | [#1792](https://github.com/hypeproof/hypeproof-studio/pull/1792) | #1791 | header only |
+| 2 entry | ot-grant-allowlist | [service#133](https://github.com/hypeproof/hypeproof-service/pull/133) | — | `HPS_GRANT_ALLOWLIST`; Service owner security review first |
+| 2 entry | ot-funnel-events | [service#134](https://github.com/hypeproof/hypeproof-service/pull/134) | — | with `HPS_OPEN_TRIAL` |
+| 2 entry | studio-funnel-events | [#1794](https://github.com/hypeproof/hypeproof-studio/pull/1794) | #1793 | follows Service offer; needs service#134 |
+| 2 entry | lab-open-install-kit | [lab#1302](https://github.com/hypeproof/hypeprooflab/pull/1302) | lab#1301 | `HPS_STUDIO_OPEN_INSTALL` |
+| 2 entry | lab-open-trial-page | [lab#1308](https://github.com/hypeproof/hypeprooflab/pull/1308) on lab#1298 | lab#1307 | `STUDIO_OPEN_TRIAL` |
+| 3 conversion | ot-end-card | [#1796](https://github.com/hypeproof/hypeproof-studio/pull/1796) | #1795 | follows Service offer |
+| 3 conversion | ot-conversation-carryover | [#1798](https://github.com/hypeproof/hypeproof-studio/pull/1798) | #1797 | Service field `conversation_carryover.available` (not yet sent) |
+| 3 conversion | lab-trial-to-pricing | [lab#1310](https://github.com/hypeproof/hypeprooflab/pull/1310) on lab#1308 | lab#1309 | `STUDIO_OPEN_TRIAL` |
+
+Iteration-2 merge-order notes from the PR bodies:
+
+- Service migrations: service#127, #130 and #134 each add `0049-*.sql`; service#135 adds 0050.
+  Each later merge renumbers. Sibling Service branches also add flags to `worker/src/env.ts`.
+- Lab `web/src/app/studio/trial/page.tsx` is edited by lab#1296 and lab#1298 (and the stack
+  above lab#1298); the second to merge resolves the conflict.
+- Cross-repo: #1794 needs service#134; lab#1302 serves a code-free kit only after a release
+  ships #1786's seed (503 until then); the lab#1298 "time starts at code entry" line changes
+  if service#126's flag is enabled.
+- Follow-ups named in PR bodies: NAT-11 text (service#126), the Service change that sends
+  `conversation_carryover.available` (#1798), lab-open-install-scripts (lab#1302); the
+  traceability owner on #1800 is a guess (JinyongShin) for Jay to confirm.
 
 Blocked fixes: none.
 
