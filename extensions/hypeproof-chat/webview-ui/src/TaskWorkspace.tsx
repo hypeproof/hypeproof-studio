@@ -306,11 +306,13 @@ export function TaskWorkspace({ view, messages, busy, error, onDismissError, chi
           <input ref={titleInput} aria-label="작업 이름" name="task-title" autoComplete="off" maxLength={100} value={title} onChange={event => setTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') finishRename(); }} />
           <button className="tw-quiet" disabled={!title.trim() || blocked}>저장</button><button type="button" className="tw-quiet" onClick={finishRename}>취소</button>
         </form> : <h1><button ref={renameButton} className="tw-title-button" title="작업 이름 바꾸기" disabled={blocked} onClick={() => { setTitle(active?.title ?? '새 작업'); setRenaming(true); }}>{active?.title ?? '작업 기록'}<span aria-hidden="true">⌄</span></button></h1>}
+        <span className="tw-run-note" role="status" aria-live="polite" title={busy ? '멈춘 뒤 다른 작업으로 이동할 수 있습니다.' : undefined}>
+          {busy && <>작업 중<span className="tw-run-help">입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</span></>}
+        </span>
         <button ref={sourceToggle} className="tw-quiet tw-sources-toggle" aria-expanded={sourcesOpen} aria-controls="task-sources" onClick={toggleSources}>자료{sources.length ? ` ${sources.length}` : ''}</button>
       </header>
       {(error || view.error) && <div className="tw-error" role="alert"><span>{view.error?.message || error}</span>{!view.error && <button className="tw-quiet" onClick={onDismissError}>알림 닫기</button>}</div>}
       {request?.error && !sourcesOpen && <div className="cp-source-open-error" role="alert"><span>{request.error}</span><button type="button" className="tw-quiet" onClick={revealRequestError}>출처 확인</button></div>}
-      {busy && <p className="tw-run-note" role="status">작업 중입니다. 멈춘 뒤 다른 작업으로 이동할 수 있습니다.</p>}
       <div id="task-conversation" className="tw-conversation" tabIndex={-1}>{children}</div>
     </section>
     {sourceDialog && <div className="tw-source-backdrop" aria-hidden="true" onMouseDown={event => event.preventDefault()} onClick={() => closeSources()} />}

@@ -27,6 +27,12 @@ recovery retain their existing meaning. Light/dark and 320px layouts must remain
 usable. Visual acceptance is independently reviewed against the implementation
 revision; functional test counts alone do not prove ChatGPT-level quality.
 
+UX13: a response completing while the learner reads earlier content must keep the
+visible paragraph within 2 CSSpx, not merely preserve the scroll offset. Busy
+feedback stays inside the existing heading so removing it cannot move the
+transcript. Its status still explains that switching tasks requires stopping the
+active work. Draft, selection and explicit latest-message behavior remain intact.
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop
