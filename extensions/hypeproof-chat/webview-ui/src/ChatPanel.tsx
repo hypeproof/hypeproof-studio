@@ -1424,7 +1424,11 @@ export function ChatPanel(props: Props) {
             aria-label={composerLabel(coachName)}
             aria-describedby={personalWorkspace ? "personal-composer-hint" : undefined}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              // Manual edits own the entire draft, even if it ends with an old choice.
+              lastReplyChoice.current = null;
+              setDraft(e.target.value);
+            }}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}

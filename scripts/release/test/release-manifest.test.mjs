@@ -41,6 +41,12 @@ for (const {file, product} of MANIFESTS) {
     assert.ok(Object.keys(m.requires ?? {}).length > 0, 'a product with no requirements is never checked');
   });
 
+  test(`${file}: every requirement names its Service surface (hypeproof-service#148)`, () => {
+    for (const [contract, entry] of Object.entries(readJson(file).requires)) {
+      assert.equal(entry.surface, contract, `${contract}: surface must equal the contract name`);
+    }
+  });
+
   test(`${file}: every package requirement resolves to a released Service package`, () => {
     const released = new Set(readJson('config/service-packages.json').packages.map(p => p.asset));
     for (const [contract, entry] of Object.entries(readJson(file).requires)) {
