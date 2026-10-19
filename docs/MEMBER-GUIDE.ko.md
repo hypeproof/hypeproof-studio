@@ -5,7 +5,7 @@
 > *"이 문서 따라 진행해줘"* 라고 에이전트에게 말하면 각 단계가 실제 명령으로
 > 실행된다.
 
-> **출처(provenance)**: `jayleekr/hypeproof-harness:docs/MEMBER-GUIDE.ko.md`
+> **출처(provenance)**: `hypeproof/hypeproof-harness:docs/MEMBER-GUIDE.ko.md`
 > 의 vendored 사본. 직접 수정하지 말 것 — 변경은 harness에서 PR로.
 
 ---
@@ -71,7 +71,7 @@ Jay에게 알려주면 된다.
 
 | 서비스 | 무엇에 쓰나 | 권한 | 수락 방법 |
 |---|---|---|---|
-| **GitHub** (`jayleekr/*` 4개 repo) | 코드 · PR · 머지 | Write | GitHub 알림/이메일에서 초대 4건 수락 |
+| **GitHub** (`hypeproof/*` 4개 repo) | 코드 · PR · 머지 | Write | GitHub 알림/이메일에서 초대 4건 수락 |
 | **Vercel** (`hype-proof-lab` 팀) | web(hypeproof-ai.xyz) 등 프론트 배포 | Developer | 이메일 초대 수락 (같은 이메일로 Vercel 가입) |
 | **HypeProof 포털** (`hypeproof-ai.xyz/members`) | 멤버 문서·재무·기회 보드 | 접근 원장 등재 (admin 이 `/members/admin` 에서) | 등재된 이메일로 로그인 |
 | **Supabase** (`sediment` org) | Sediment 프로덕션 Postgres 직접 조회 | Developer | 이메일 초대 수락 — **DB 를 직접 봐야 하는 사람만** |
@@ -94,7 +94,7 @@ Cloudflare 와 Fly 는 **개인 계정 초대도 개인 토큰도 주지 않는�
 
 write 는 멤버마다 repo 별로 따로 준다. 2026-09-15 기준 `hypeproof-studio` 는 멤버 전원이
 write 지만 `sediment` 는 **TJ-kr 이 read 뿐**이라 Sediment 배포를 실행할 수 없다. 내 권한은
-repo 의 Settings 가 아니라 `gh api repos/jayleekr/<repo>/collaborators/<내 id>/permission` 으로
+repo 의 Settings 가 아니라 `gh api repos/hypeproof/<repo>/collaborators/<내 id>/permission` 으로
 확인하고, `read` 로 나오면 Jay 에게 **그 repo 의 write** 를 요청한다 (계정 토큰이 아니다).
 
 **Studio Worker 는 프로덕션이다. 수업 중에는 배포하지 않는다.** 워크플로가 진행 중인 수업을
@@ -111,7 +111,7 @@ repo 의 Settings 가 아니라 `gh api repos/jayleekr/<repo>/collaborators/<내
 
 메인테이너 체크리스트 (새 멤버 조인 시):
 
-1. GitHub: `gh api -X PUT repos/jayleekr/<repo>/collaborators/<github-id> -f permission=push` × 4개 repo (hypeprooflab · hypeproof-studio · sediment · hypeproof-harness)
+1. GitHub: `gh api -X PUT repos/hypeproof/<repo>/collaborators/<github-id> -f permission=push` × 4개 repo (hypeprooflab · hypeproof-studio · sediment · hypeproof-harness)
 2. Vercel: `hype-proof-lab` 팀 → Members → Invite (Developer)
 3. **접근 원장: `hypeproof-ai.xyz/members/admin` → 이메일·displayName·역할 등재**
 4. `hypeprooflab/data/members.json`에 멤버 엔트리 추가 (PR)
@@ -144,7 +144,7 @@ CODEOWNERS는 전원 등록된 리뷰 요청 라우팅용으로만 남아 있다
 ### 2a. 1회성 온보딩 (권장 — 자동화)
 
 ```bash
-git clone git@github.com:jayleekr/hypeproof-harness.git
+git clone git@github.com:hypeproof/hypeproof-harness.git
 cd hypeproof-harness
 claude            # Claude Code 세션 시작
 # 세션에서:
@@ -175,7 +175,7 @@ claude            # Claude Code 세션 시작
 # 자기 워크스페이스 베이스 정하기 (자기 컨벤션 그대로)
 WS=~/CodeWorkspace         # 또는 ~/code, ~/dev, ~/projects, 어디든
 
-git clone --recursive git@github.com:jayleekr/<your-repo>.git "$WS/<your-repo>"
+git clone --recursive git@github.com:hypeproof/<your-repo>.git "$WS/<your-repo>"
 cd "$WS/<your-repo>"
 [ -d .githooks ] && git config core.hooksPath .githooks
 ```
@@ -266,8 +266,8 @@ repo별 세부 규칙은 각 consumer의 `README.md`, `DEV-GUIDE.md`, `docs/` �
 **파일 충돌**만 막는다 — **중복 작업**은 못 막는다.
 
 ```bash
-gh issue edit <N> --repo jayleekr/<repo> --add-label wip --add-assignee @me
-gh issue comment <N> --repo jayleekr/<repo> \
+gh issue edit <N> --repo hypeproof/<repo> --add-label wip --add-assignee @me
+gh issue comment <N> --repo hypeproof/<repo> \
   --body "claim: <세션 이름> / branch: <브랜치 이름>"
 ```
 
@@ -325,7 +325,7 @@ protection, CODEOWNERS, required checks가 요구하는 quorum을 따른다.
 /hype-review
 
 # 특정 PR을 내 기본 lens로 점검
-/hype-review https://github.com/jayleekr/<repo>/pull/<number>
+/hype-review https://github.com/hypeproof/<repo>/pull/<number>
 ```
 
 스킬이 `policy/members.yaml`의 사용자별 기본 lens를 읽어서 공통 질문, 역할별 질문,

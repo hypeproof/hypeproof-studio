@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cwd, env, exit } from "node:process";
 
-const REPO = env.REPO || env.GITHUB_REPOSITORY || "jayleekr/hypeproof-studio";
+const REPO = env.REPO || env.GITHUB_REPOSITORY || "hypeproof/hypeproof-studio";
 const MARKER_PREFIX = "hps:auto-task:";
 const OUT = env.OUT || "milestone-audit.json";
 
@@ -103,7 +103,7 @@ function buildTaskCatalog() {
       risk: "medium",
       labels: ["type:feature", "priority:medium", "autonomy:ready", "milestone:phase-6"],
       body: [
-        "Add/validate a workflow that mirrors main repo release assets to `jayleekr/hypeproof-studio-releases`.",
+        "Add/validate a workflow that mirrors main repo release assets to `hypeproof/hypeproof-studio-releases`.",
         "The workflow must support dry-run and require an explicit PAT secret for cross-repo writes.",
       ],
       acceptance: [

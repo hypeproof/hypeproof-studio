@@ -5,7 +5,7 @@
 # - build-windows.yml: dispatch only (Mac-only releases since 2026-10-19,
 #   config/release-platforms.json); a dispatch on a tag ref uploads to that release
 # - mirror-release.yml: explicit dispatch -> mirror source release assets to
-#   jayleekr/hypeproof-studio-releases after operator dry-run
+#   hypeproof/hypeproof-studio-releases after operator dry-run
 #
 # This dispatch-only workflow prevents the old Phase 6 TODO placeholder from
 # drifting back in and gives operators a cheap way to verify the release wiring

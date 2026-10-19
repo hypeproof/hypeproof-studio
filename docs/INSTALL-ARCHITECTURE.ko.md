@@ -51,7 +51,7 @@ exit 0으로 끝난다.
 ## 2. 원라인 커맨드
 
 > **호스팅 주의.** 아래 URL은 스크립트가 실제로 존재하는 트리
-> (`jayleekr/hypeproof-studio` — public)를 가리킨다. 릴리스 저장소
+> (`hypeproof/hypeproof-studio` — public)를 가리킨다. 릴리스 저장소
 > (`hypeproof-studio-releases`)에는 Studio 바이너리와 구형 `install-mac.sh` /
 > `install-win.ps1`만 있고 `install.sh` / `install.ps1` / `seed-sdk-binary.*` /
 > `dependencies.yaml`은 없다(404). 짧은 신뢰 도메인(`hypeproof.ai`) 미러는 §9의
@@ -60,7 +60,7 @@ exit 0으로 끝난다.
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/install.sh | bash
 ```
 
 버전 고정 실행(선택):
@@ -72,7 +72,7 @@ curl -fsSL …/install.sh | bash -s 0.1.33
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/jayleekr/hypeproof-studio/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/hypeproof/hypeproof-studio/main/scripts/install.ps1 | iex
 ```
 
 플래그를 쓰려면 먼저 내려받아 실행:
@@ -192,7 +192,7 @@ flowchart TD
 
 ### Studio 앱 / SDK
 
-- **Studio:** releases_repo `jayleekr/hypeproof-studio-releases`, version `0.1.33`.
+- **Studio:** releases_repo `hypeproof/hypeproof-studio-releases`, version `0.1.33`.
   asset glob — darwin-arm64(1급 타깃), darwin-x64(없을 수 있음 → fail-closed),
   win32-x64(`*UserSetup-x64-*.exe`, fallback `*Setup-x64-*.exe`).
 - **SDK:** npm 패키지 `@anthropic-ai/claude-code`, Studio 기대치

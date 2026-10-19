@@ -17,8 +17,8 @@
 ## 0. Merge PR #691
 
 ```bash
-gh pr view 691 --repo jayleekr/hypeproof-studio          # read it first
-gh pr merge 691 --repo jayleekr/hypeproof-studio --squash --delete-branch
+gh pr view 691 --repo hypeproof/hypeproof-studio          # read it first
+gh pr merge 691 --repo hypeproof/hypeproof-studio --squash --delete-branch
 ```
 
 **Verify:** `git log --oneline origin/main -1` names the merge.
@@ -38,13 +38,13 @@ The value is the one already in `worker/.dev.vars` — the same password
 authenticates against production.
 
 ```bash
-gh secret set HPS_ADMIN_PASSWORD --repo jayleekr/hypeproof-studio
+gh secret set HPS_ADMIN_PASSWORD --repo hypeproof/hypeproof-studio
 # paste the value from worker/.dev.vars when prompted (it is not echoed)
 ```
 
 **Verify:**
 ```bash
-gh secret list --repo jayleekr/hypeproof-studio | grep HPS_ADMIN_PASSWORD
+gh secret list --repo hypeproof/hypeproof-studio | grep HPS_ADMIN_PASSWORD
 ```
 
 **What it unblocks:** stable releases and worker deploys. Task D's freeze is
@@ -156,14 +156,14 @@ git tag v0.0.0-rc.1 && git push origin v0.0.0-rc.1
 
 ```bash
 # a) the source release is a PRERELEASE (task A)
-gh release view v0.0.0-rc.1 --repo jayleekr/hypeproof-studio --json isPrerelease
+gh release view v0.0.0-rc.1 --repo hypeproof/hypeproof-studio --json isPrerelease
 
 # b) a mirror run appeared WITHOUT anyone pressing anything (task K)
-gh run list --workflow=mirror-release.yml --repo jayleekr/hypeproof-studio --limit 3 \
+gh run list --workflow=mirror-release.yml --repo hypeproof/hypeproof-studio --limit 3 \
   --json event,createdAt,conclusion
 
 # c) the mirrored release is also a prerelease (task J)
-gh release view v0.0.0-rc.1 --repo jayleekr/hypeproof-studio-releases --json isPrerelease
+gh release view v0.0.0-rc.1 --repo hypeproof/hypeproof-studio-releases --json isPrerelease
 ```
 
 - (b) is the whole point of K: before this fix, **zero** mirror runs had ever
@@ -176,8 +176,8 @@ reaches no participant.
 
 **Clean up:**
 ```bash
-gh release delete v0.0.0-rc.1 --repo jayleekr/hypeproof-studio --yes
-gh release delete v0.0.0-rc.1 --repo jayleekr/hypeproof-studio-releases --yes
+gh release delete v0.0.0-rc.1 --repo hypeproof/hypeproof-studio --yes
+gh release delete v0.0.0-rc.1 --repo hypeproof/hypeproof-studio-releases --yes
 git push --delete origin v0.0.0-rc.1 && git tag -d v0.0.0-rc.1
 ```
 

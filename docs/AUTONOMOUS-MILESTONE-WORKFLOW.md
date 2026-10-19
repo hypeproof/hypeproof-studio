@@ -86,7 +86,7 @@ behavior, installer artifacts, or release distribution, the goal run must also:
 
 - `milestone-audit.yml`: scheduled/dispatch audit and optional task creation.
 - `mirror-release.yml`: dispatch-only release mirror sync to
-  `jayleekr/hypeproof-studio-releases`.
+  `hypeproof/hypeproof-studio-releases`.
 - `deploy-worker.yml`: dispatch-only Worker deploy with test and prod smoke.
 
 Keep deploy and mirror workflows dispatch-only until at least one successful

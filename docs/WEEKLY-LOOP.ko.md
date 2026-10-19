@@ -10,7 +10,7 @@
 > 흐름 전체를 다룬다. *"이번 주 루프 돌려줘"* 라고 에이전트에게 말하면 각
 > 단계가 실제 명령으로 실행된다.
 
-> **출처(provenance)**: `jayleekr/hypeproof-harness:docs/WEEKLY-LOOP.ko.md`
+> **출처(provenance)**: `hypeproof/hypeproof-harness:docs/WEEKLY-LOOP.ko.md`
 > 의 vendored 사본. 직접 수정하지 말 것 — 변경은 harness에서 PR로.
 
 ---
@@ -194,8 +194,8 @@ python3 scripts/weekly-harness/check.py --cycle weekly-2026-07-21
 | **만료(stale)** | claim 코멘트가 **24시간** 넘게 지난 `wip`은 죽은 선점이다. 코멘트로 회수 사실을 남기고 다시 잡아도 된다 |
 
 ```bash
-gh issue edit <N> --repo jayleekr/<repo> --add-label wip --add-assignee @me
-gh issue comment <N> --repo jayleekr/<repo> --body "claim: <세션 이름> / branch: <브랜치>"
+gh issue edit <N> --repo hypeproof/<repo> --add-label wip --add-assignee @me
+gh issue comment <N> --repo hypeproof/<repo> --body "claim: <세션 이름> / branch: <브랜치>"
 ```
 
 코멘트가 라벨과 짝이 되어야 하는 이유는 **만료 판정 때문이다.** 라벨에는
@@ -213,7 +213,7 @@ gh issue comment <N> --repo jayleekr/<repo> --body "claim: <세션 이름> / bra
 이슈를 닫기 전에, 본문이나 **닫는 코멘트**에 한 줄을 남긴다:
 
 ```
-Evidence: https://github.com/jayleekr/sediment/pull/42
+Evidence: https://github.com/hypeproof/sediment/pull/42
 ```
 
 `증거:` 도 같다. URL은 **GitHub 퍼머링크 3종** 중 하나여야 한다 — 새 ID 체계를
@@ -373,7 +373,7 @@ A. 먼저 `wip`을 단 쪽이 임자다. 나중에 본 쪽은 그 이슈를 놓�
 claim 코멘트가 24시간을 넘겼으면 죽은 선점이니 회수 코멘트를 남기고 가져간다.
 
 **Q. 라벨을 잘못 만들었으면?**
-A. `gh label delete weekly-<잘못된 날짜> --repo jayleekr/<repo>` 후 다시.
+A. `gh label delete weekly-<잘못된 날짜> --repo hypeproof/<repo>` 후 다시.
 라벨 형식은 `weekly-YYYY-MM-DD` — 항상 **다음 회의 날짜**다.
 
 ---

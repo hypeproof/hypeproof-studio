@@ -1,6 +1,6 @@
 # 개인 체험 UI·UX 테스트
 
-추적: [#758](https://github.com/jayleekr/hypeproof-studio/issues/758). 기준은 [화면별 조작 요구사항](../requirements/studio-native-trial-ux.md)의 `TUX-*` ID다. 상위 API·권한·관찰·사람 파일럿 테스트 [T01~25](studio-native-trial-validation.md)는 유지한다. 이 문서는 실행 계획과 판정 계약이며 PASS 보고서가 아니다. [2026-09-08 실행 결과](studio-native-trial-ux-results-2026-09-08.md)는 별도로 기록한다.
+추적: [#758](https://github.com/hypeproof/hypeproof-studio/issues/758). 기준은 [화면별 조작 요구사항](../requirements/studio-native-trial-ux.md)의 `TUX-*` ID다. 상위 API·권한·관찰·사람 파일럿 테스트 [T01~25](studio-native-trial-validation.md)는 유지한다. 이 문서는 실행 계획과 판정 계약이며 PASS 보고서가 아니다. [2026-09-08 실행 결과](studio-native-trial-ux-results-2026-09-08.md)는 별도로 기록한다.
 
 ## 실행 범위
 

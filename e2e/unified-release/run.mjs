@@ -35,7 +35,7 @@ try{
  for(const flag of ['HPS_NATIVE_ISOLATED_KEYCHAIN','HPS_CODEX_REHEARSAL','HPS_MODEL_REHEARSAL'])if(process.env[flag])throw Error('Incompatible acceptance override: '+flag);
  const app=appIdentity(appDirectory),before=treeHash(appDirectory);
  if(app.sha!==(publicAppSha??sourceSha)||app.version!==version||app.extensionVersion!==version||app.name!=='HypeProof Studio')throw Error('Candidate identity mismatch');
- // Without the per-user SDK binary the trial silently runs on the proxy and the Service refuses it (jayleekr/hypeprooflab#997).
+ // Without the per-user SDK binary the trial silently runs on the proxy and the Service refuses it (hypeproof/hypeprooflab#997).
  const sdk=checkSeededSdk(appDirectory);
  if(!sdk.ok)throw Error(`BLOCKED: Agent SDK ${sdk.version} binary not seeded for this user (${sdk.reason}: ${sdk.binary}); run scripts/seed-sdk-binary first`);
  const assets=Object.fromEntries(fs.readdirSync(assetDirectory).filter(n=>/\.(zip|exe)$/.test(n)).map(n=>[n,sha256(path.join(assetDirectory,n))]));

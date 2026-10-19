@@ -13,7 +13,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OWNER = "jayleekr"
+DEFAULT_OWNER = "hypeproof"
 DEFAULT_ADMINS = {"jayleekr", "JeHyeong2"}
 DEFAULT_WRITERS = {"ico1036", "xoqhdgh1002", "JinyongShin", "TJ-kr"}
 DEFAULT_REVIEW_LENSES: dict[str, list[str]] = {

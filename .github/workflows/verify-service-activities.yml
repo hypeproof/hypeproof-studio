@@ -92,7 +92,7 @@ jobs:
           $assets = @(Get-ChildItem "$env:RUNNER_TEMP/public-assets/*win32-x64*.zip")
           if ($assets.Count -ne 1) { throw 'Expected one Windows package' }
           Expand-Archive -LiteralPath $assets[0].FullName -DestinationPath "$env:RUNNER_TEMP/public-app"
-      # jayleekr/hypeprooflab#997: the App never ships the native Agent SDK binary;
+      # hypeproof/hypeprooflab#997: the App never ships the native Agent SDK binary;
       # each machine seeds it, as the installers do. Unseeded, every trial turn falls
       # back to the proxy and the Service answers 409 before any model call. Seed the
       # exact version the downloaded App vendors; run.mjs refuses to start otherwise.

@@ -208,7 +208,7 @@ This is local evidence; production deployment and live classroom behavior are se
 
 ## Feedback loop — a person's feedback, the learner's answer, the retrospective and the next draft (#1013) · 2026-10-05
 
-First slice of ledger item `feedback-loop` ([#1013](https://github.com/jayleekr/hypeproof-studio/issues/1013)): AE-42/AE-43 in
+First slice of ledger item `feedback-loop` ([#1013](https://github.com/hypeproof/hypeproof-studio/issues/1013)): AE-42/AE-43 in
 [learning-agent-experience](../requirements/learning-agent-experience.md) and CH-05/EDU-03 here. The requirement rows are not
 changed; this section records what was built and what was run. Everything sits behind the Service switch
 `HPS_FEEDBACK_LOOP=enabled`. Unset (the default), the new routes answer 404 `feedback_loop_unavailable`, no 0039 table is read or
@@ -397,7 +397,7 @@ names the draft revision it started). Share content stays in `classroom_shares` 
 
 ## Feedback loop, slice 2 — the learner's independent-task record and self-reliance (#1013) · 2026-10-06
 
-Second slice of ledger item `feedback-loop` ([#1013](https://github.com/jayleekr/hypeproof-studio/issues/1013)): EDU-04 and EDU-05
+Second slice of ledger item `feedback-loop` ([#1013](https://github.com/hypeproof/hypeproof-studio/issues/1013)): EDU-04 and EDU-05
 here, and the part of AE-42 that reports help use. The requirement rows are not changed. Everything stays behind
 `HPS_FEEDBACK_LOOP=enabled`, and no migration is added: both records live inside the share the learner chooses to send. This
 supersedes slice 1's "EDU-04/05 not built"; the human parts below are still NOT RUN.

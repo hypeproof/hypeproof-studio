@@ -20,7 +20,7 @@ Turn "I noticed something while using HypeProof Studio" into a structured,
 screenshot-attached, environment-stamped GitHub issue that a later solver skill
 can act on without re-triage.
 
-Repo: `jayleekr/hypeproof-studio`. Scripts live in `scripts/` next to this file;
+Repo: `hypeproof/hypeproof-studio`. Scripts live in `scripts/` next to this file;
 the reusable env collector is the repo-level `scripts/collect-studio-env.sh`.
 Downstream consumption contract: [references/solver-contract.md](references/solver-contract.md).
 

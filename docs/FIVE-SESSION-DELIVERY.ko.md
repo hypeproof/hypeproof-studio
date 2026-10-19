@@ -2,8 +2,8 @@
 
 > 상태: 활성
 > 파일명은 consumer 호환성을 위해 유지한다. 5세션 운영은 2026-09-14 실험 실패로 폐기했다.
-> 관련 작업: [Delivery Captain v2 #183](https://github.com/jayleekr/hypeproof-harness/issues/183)
-> 폐기된 작업: [Control plane Epic #166](https://github.com/jayleekr/hypeproof-harness/issues/166)
+> 관련 작업: [Delivery Captain v2 #183](https://github.com/hypeproof/hypeproof-harness/issues/183)
+> 폐기된 작업: [Control plane Epic #166](https://github.com/hypeproof/hypeproof-harness/issues/166)
 
 ## Exec Summary
 

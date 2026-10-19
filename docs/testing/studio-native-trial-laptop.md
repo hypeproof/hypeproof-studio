@@ -8,9 +8,9 @@
 
 ## 시작점
 
-- Studio Epic: https://github.com/jayleekr/hypeproof-studio/issues/744
-- Studio 구현 PR: https://github.com/jayleekr/hypeproof-studio/pull/745
-- Lab 연결 Epic: https://github.com/jayleekr/hypeprooflab/issues/753
+- Studio Epic: https://github.com/hypeproof/hypeproof-studio/issues/744
+- Studio 구현 PR: https://github.com/hypeproof/hypeproof-studio/pull/745
+- Lab 연결 Epic: https://github.com/hypeproof/hypeprooflab/issues/753
 - Lab 기존 웹 프로토타입 PR #754는 공개 체험으로 출시하지 않는다.
 - 작업 브랜치: `feat/issue-744-studio-trial`. 랩탑의 기존 작업을 덮어쓰지 말고
   `git status` 후 해당 브랜치 또는 별도 worktree에서 진행한다.

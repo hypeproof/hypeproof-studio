@@ -14,7 +14,7 @@ meeting opens with this table.
 
 USAGE:
     burndown.py --cycle weekly-2026-07-21
-    burndown.py --cycle weekly-2026-07-21 --repo jayleekr/sediment
+    burndown.py --cycle weekly-2026-07-21 --repo hypeproof/sediment
     burndown.py --cycle weekly-2026-07-21 --issues-json fixtures.json  # offline
 
 `--issues-json` bypasses `gh` for deterministic tests: a JSON object mapping
@@ -35,9 +35,9 @@ import sys
 from pathlib import Path
 
 DEFAULT_REPOS = [
-    "jayleekr/hypeprooflab",
-    "jayleekr/hypeproof-studio",
-    "jayleekr/sediment",
+    "hypeproof/hypeprooflab",
+    "hypeproof/hypeproof-studio",
+    "hypeproof/sediment",
 ]
 
 CYCLE_RE = re.compile(r"^weekly-\d{4}-\d{2}-\d{2}$")

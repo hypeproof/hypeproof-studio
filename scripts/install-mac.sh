@@ -24,12 +24,12 @@ err() { printf "\033[1;31mERROR:\033[0m %s\n" "$*" >&2; exit 1; }
 #    x86_64 install would otherwise fail later at download with a confusing
 #    "Could not find darwin-x64.zip" (hypeproof-studio#347-class silent gap).
 #    Fail early with a clear message. Intel support is an open OS-scope decision
-#    (jayleekr/hypeproof-studio#331) — turn this into a darwin-x64 suffix once a
+#    (hypeproof/hypeproof-studio#331) — turn this into a darwin-x64 suffix once a
 #    matching asset is produced.
 ARCH="$(uname -m)"
 case "$ARCH" in
   arm64)  ASSET_SUFFIX="darwin-arm64.zip" ;;
-  x86_64) err "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: jayleekr/hypeproof-studio#331)" ;;
+  x86_64) err "Intel Mac(x86_64)는 현재 지원되지 않습니다 — HypeProof Studio는 Apple Silicon(arm64) 전용 빌드만 제공합니다. (Intel 지원 여부는 논의 중: hypeproof/hypeproof-studio#331)" ;;
   *) err "Unsupported architecture: $ARCH" ;;
 esac
 

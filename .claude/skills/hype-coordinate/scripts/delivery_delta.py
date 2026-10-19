@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 HYPEPROOF_DELIVERY_REPOS = (
-    "jayleekr/hypeproof-harness",
-    "jayleekr/hypeproof-studio",
-    "jayleekr/hypeprooflab",
+    "hypeproof/hypeproof-harness",
+    "hypeproof/hypeproof-studio",
+    "hypeproof/hypeprooflab",
 )
 STATE_SCHEMA = 2
 DEFAULT_BATCH_SIZE = 5

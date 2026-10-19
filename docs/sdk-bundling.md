@@ -6,7 +6,7 @@ built-in (W4b, §7) shipped. A packaged build now has both halves it needs to ru
 the SDK coach: the vendored JS (shipped in the app) + a seeded native binary
 (W4a). The in-app consent download flow remains (W4b, deferred — instructor
 pre-seed covers venues today). Decided 2026-07-14.
-Epic: [#282](https://github.com/jayleekr/hypeproof-studio/issues/282) · ADR: [adr/0003-agent-sdk-coach-runtime.md](adr/0003-agent-sdk-coach-runtime.md) · Trigger: PR #317
+Epic: [#282](https://github.com/hypeproof/hypeproof-studio/issues/282) · ADR: [adr/0003-agent-sdk-coach-runtime.md](adr/0003-agent-sdk-coach-runtime.md) · Trigger: PR #317
 
 ## 1. Problem
 

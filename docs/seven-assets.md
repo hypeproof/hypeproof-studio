@@ -1,18 +1,18 @@
 # HypeProof — 7 AI Native Assets
 
-> 철학과 자산 정의의 정본은 [hypeprooflab/PHILOSOPHY.md](https://github.com/jayleekr/hypeprooflab/blob/main/PHILOSOPHY.md)다.
+> 철학과 자산 정의의 정본은 [hypeprooflab/PHILOSOPHY.md](https://github.com/hypeproof/hypeprooflab/blob/main/PHILOSOPHY.md)다.
 > 이 문서는 Studio의 참조·구현 호환 인덱스다. `docs/essence-v0.1.md`의 16 essence 체계는 계속 폐기 상태다.
 
 Status: Legacy implementation reference; Lab #782 research framework merged; measurement migration pending
 Owner: Jay
 Date: 2026-09-08
-Verified upstream: [6845cdb4](https://github.com/jayleekr/hypeprooflab/blob/6845cdb4391273d16ed09419eee806b0c03c04f9/PHILOSOPHY.md)
+Verified upstream: [6845cdb4](https://github.com/hypeproof/hypeprooflab/blob/6845cdb4391273d16ed09419eee806b0c03c04f9/PHILOSOPHY.md)
 
 2026-09-08 철학의 §6이 자산 정의를, §7이 제품 역할을, §8~9가 교육철학 계보와
 AI Discontinuity를, §11이 연구 질문을 소유한다. 이는 위 pinned revision의 설명이다.
-[Lab #777](https://github.com/jayleekr/hypeprooflab/issues/777)은 기존 일곱 개를 Candidate Model 0으로
+[Lab #777](https://github.com/hypeproof/hypeprooflab/issues/777)은 기존 일곱 개를 Candidate Model 0으로
 두고 상위 Human Capability Research와 v1 후보를 제안했다. 문서 기준은
-[Lab #782 · 1de0d9b8](https://github.com/jayleekr/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/PHILOSOPHY.md)로 병합됐다.
+[Lab #782 · 1de0d9b8](https://github.com/hypeproof/hypeprooflab/blob/1de0d9b84ee51880ef9fcc70688b18c1afa4ac4e/PHILOSOPHY.md)로 병합됐다.
 아래 역사적 핀·절 번호·enum을 새 정의로 바꾸지 않으며, 후보 타당화와 측정 구현은 별도다.
 일곱 자산은 수정 가능한 연구 모델이며
 기능 사용·산출물 완성만으로 성장했다고 판정하지 않는다. 철학의 Human Assets와

@@ -8,7 +8,7 @@
   "excluded": {
     "docs/requirements/studio-trial.md": {
       "reason": "선택형 웹 프로토타입의 역사 기록. 현재 실제 체험은 studio-native-trial.md가 대체하며 해당 문서를 원장에 포함한다.",
-      "sha256": "a34f930b06b151b00e47be9de64e0c9e5784a6610f8b6066995c80116fa6f24d"
+      "sha256": "1c4345c878ca05c026e0a84b3d0a7e5c0afa9ed04b997d8413d2e797cf6ffaef"
     },
     "docs/requirements/local-task-review.md": {
       "reason": "#1020 로컬 검토 슬라이스의 서술형 계약. 자체 요구사항 번호 없이 measurement-core.md의 MC-07·MC-21–25·MC-27–32·MC-34–35를 구현 범위로 인용하므로, 원장은 그 상위 문서를 센다.",
@@ -40,7 +40,7 @@
         "US-19"
       ],
       "inline_prefixes": [],
-      "sha256": "456cf25a5dc2868a37c66b6be8979d95bfadcad7163479cb945fd67a0b536e58",
+      "sha256": "8841eb414ad36d2dd0b2353bbdcf362dcfeb2207e3735b8f02e9b4da990159c6",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/unified-studio-experience.md",
@@ -120,7 +120,7 @@
         "AE-44"
       ],
       "inline_prefixes": [],
-      "sha256": "5937ee5091b447061a5873ca1866cbb28c8597ee23de83e4b6a560d068137c35",
+      "sha256": "e52fa8f0e63a5068af04021d2541b9d8fec9f4249dae197f9b2cc637aa284860",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/learning-agent-experience.md",
@@ -178,7 +178,7 @@
         "VO-47"
       ],
       "inline_prefixes": [],
-      "sha256": "a87be4ad9fe7799b6588c68930af1ed73a1c502bb67d02f311538fbdf3e33944",
+      "sha256": "528d874f79c5680ba3e032c7f0aa884dc77c6f225f21bcec73b863058afd0d63",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/voice-conversation.md",
@@ -384,7 +384,7 @@
         "ADM-14"
       ],
       "inline_prefixes": [],
-      "sha256": "1ccc63f3d7d98f4ecee3f158b31f6394ab4e0c9c34b7383768e58033f42541a1",
+      "sha256": "9068304904eefb998c0435b4a8ff7a42afbcb4ba800143445e723f31fd014bd0",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/classroom-admin.md",
@@ -460,7 +460,7 @@
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "eb0786073c19566e391e46b592166e5cafed50bf2bb47fbdc92bb33a35830144",
+      "sha256": "c21799eb3070fd301ae7c595fa94e6267c6099a1faeea916d71c392eddeb553b",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -519,7 +519,7 @@
         "IC-06",
         "IC-07"
       ],
-      "sha256": "a37e6962b46c19453fa3d1f74a40dd8ba9d2d345109047c6f13e46f8717a30c2",
+      "sha256": "181cf22cb50c7b3b14e2a9f2093ba9ba2cecf5cf4a44f263574649d6ddbc31c2",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/independent-course.md",
@@ -578,7 +578,7 @@
         "MC-48"
       ],
       "inline_prefixes": [],
-      "sha256": "69d3dd2f9666cd4098fac7ff84e961cb2a611f69e6abb12fa47a0ea81a9132b2",
+      "sha256": "6452c4b3ffc9805fa9ded6ece07050c5769c5e910972582382b8e5f54953eb91",
       "owner": "jayleekr",
       "intent": "docs/intents/measurement-core.md",
       "design": "docs/design/measurement-core.md",
@@ -773,7 +773,7 @@
         "CR-84"
       ],
       "inline_prefixes": [],
-      "sha256": "52990af1bed3e94aedeb282d254aaaa152702006cf53a21909205c5e2328503e",
+      "sha256": "136af3fbc84940769f34ac722544aa4d9b31e3e9dc81524990ff0cd35bf7cc3f",
       "owner": "jayleekr",
       "intent": "docs/intents/curriculum-runtime.md",
       "design": "docs/plan/curriculum-runtime.md",

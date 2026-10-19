@@ -49,7 +49,7 @@ for BOTH the evidence gate and the Owner/ETA rule.
 
 USAGE:
     check.py --cycle weekly-2026-07-21
-    check.py --cycle weekly-2026-07-21 --repo jayleekr/sediment
+    check.py --cycle weekly-2026-07-21 --repo hypeproof/sediment
     check.py --cycle weekly-2026-07-21 --issues-json fixtures.json   # offline
     check.py --cycle weekly-2026-07-21 --json                        # machine
     check.py --cycle weekly-2026-07-21 --skip-evidence-gate          # local only
@@ -84,9 +84,9 @@ import sys
 from pathlib import Path
 
 DEFAULT_REPOS = [
-    "jayleekr/hypeprooflab",
-    "jayleekr/hypeproof-studio",
-    "jayleekr/sediment",
+    "hypeproof/hypeprooflab",
+    "hypeproof/hypeproof-studio",
+    "hypeproof/sediment",
 ]
 
 KST = dt.timezone(dt.timedelta(hours=9))

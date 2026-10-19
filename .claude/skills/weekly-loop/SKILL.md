@@ -55,10 +55,10 @@ AI는 실행).
 
    | Item is about | Repo |
    |---|---|
-   | 공개 사이트 · 콘텐츠 · 운영 · 멤버/커뮤니티 | `jayleekr/hypeprooflab` |
-   | Studio 제품 (VSCodium fork · 워크숍 도구 · Worker) | `jayleekr/hypeproof-studio` |
-   | 지식 DB · ingest · SaaS 백엔드/프론트 | `jayleekr/sediment` |
-   | 공유 규약 · 스킬 · 프로세스 자체 | `jayleekr/hypeproof-harness` |
+   | 공개 사이트 · 콘텐츠 · 운영 · 멤버/커뮤니티 | `hypeproof/hypeprooflab` |
+   | Studio 제품 (VSCodium fork · 워크숍 도구 · Worker) | `hypeproof/hypeproof-studio` |
+   | 지식 DB · ingest · SaaS 백엔드/프론트 | `hypeproof/sediment` |
+   | 공유 규약 · 스킬 · 프로세스 자체 | `hypeproof/hypeproof-harness` |
 
    Ambiguous items go to the repo where the deliverable will finally live.
    An item spanning repos becomes one issue per repo.

@@ -32,7 +32,7 @@ v4 가 새로 넣은 것은 전부 **"명령을 돌리고 출력을 붙여라"**
 
 ## 1. 임무와 정본
 
-`jayleekr/hypeproof-studio` 안에서 실행되는 자율 개발 세션이다. 요구사항화된 문서를
+`hypeproof/hypeproof-studio` 안에서 실행되는 자율 개발 세션이다. 요구사항화된 문서를
 **구현·검증·PR** 까지 올린다. 문서를 다시 쓰는 게 아니라 문서대로 만든다.
 
 정본 사슬: philosophy(Lab) → mission(Lab) → intent → requirement → design →
@@ -270,15 +270,15 @@ cd webview-ui && npm run build
 ```bash
 export GH_TOKEN="$(gh auth token)"
 git fetch origin main
-python3 scripts/hype-pr/pr.py inspect --repo jayleekr/hypeproof-studio \
+python3 scripts/hype-pr/pr.py inspect --repo hypeproof/hypeproof-studio \
   --output /tmp/hpr-inspect.json --assessment-template /tmp/hpr-assess.json
 # 평가서를 채운다. 실제로 걸린 함정 넷:
 #   1. fingerprint 는 inspect 마다 바뀐다 → inspect·채움·prepare 를 한 명령에 이어 돌린다
 #   2. evidence 는 **20자 이상** ("Clean on abc1234." 는 탈락)
 #   3. disposition: unknown 은 followups 에 **추적 이슈 URL** 이 있어야 한다
 #   4. implementation 링크는 **requirement 노드와 test 노드가 둘 다** 필요하다 (design 은 안 됨)
-python3 scripts/hype-pr/pr.py prepare --repo jayleekr/hypeproof-studio --assessment /tmp/hpr-assess.json
-python3 scripts/hype-pr/pr.py create --repo jayleekr/hypeproof-studio --head <branch> \
+python3 scripts/hype-pr/pr.py prepare --repo hypeproof/hypeproof-studio --assessment /tmp/hpr-assess.json
+python3 scripts/hype-pr/pr.py create --repo hypeproof/hypeproof-studio --head <branch> \
   --title '…' --body-file /tmp/pr-body.md --author jayleekr --preparation <receipt> --apply
 ```
 

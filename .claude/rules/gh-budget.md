@@ -38,7 +38,7 @@ $ gh api rate_limit --jq '.resources.core'
 보려면 **진짜 읽기를 찔러 본다**:
 
 ```bash
-gh api repos/jayleekr/hypeproof-studio/contents --jq 'length'
+gh api repos/hypeproof/hypeproof-studio/contents --jq 'length'
 ```
 
 ### 3. `HTTP unknown` 을 토큰 문제로 읽지 않는다
@@ -59,7 +59,7 @@ gh api repos/jayleekr/hypeproof-studio/contents --jq 'length'
 루프로 재시도하지 말고 **조건을 감시**한다:
 
 ```bash
-until gh api repos/jayleekr/hypeproof-studio/contents --jq 'length' >/dev/null 2>&1; do
+until gh api repos/hypeproof/hypeproof-studio/contents --jq 'length' >/dev/null 2>&1; do
   sleep 120
 done
 ```
