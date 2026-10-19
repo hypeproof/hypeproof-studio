@@ -44,6 +44,17 @@ turn and retry identity. A recovered message with a different mode remains a
 separate, durable paused item; neither current draft nor mode is overwritten and
 no error recovery silently starts a new run. Reject duplicate pending dispatches.
 
+`REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
+while another message is queued or being drafted remains a separate durable
+recovery item with its original tool mode and images. It never retags or appends
+to later input. Duplicate refusal notices do not duplicate the item. Recovery is
+explicit; its retry sends only that request's attachments, preserves the next
+draft and queue, and returns keyboard focus to the composer. Refused dispatch
+keeps the recovery item. The draft validator and task store preserve these items
+through reopen; no provider capability is granted by the saved preference.
+Verification: `e2e/queued-photo-send.mjs` (real React), `turn-tools.test.mjs`
+(real disk reopen), and separately identified native fixture evidence.
+
 `REQ-C16` queue recovery (UX-QUEUE-01): completing a response removes its parked
 message only after the composer accepts that send. An unready photo or refused
 dispatch leaves the original text and tool mode in a durable paused item with an

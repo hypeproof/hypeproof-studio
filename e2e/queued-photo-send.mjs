@@ -33,7 +33,8 @@ await build({ stdin: { contents: `
   window.reopen=()=>{const draft=window.hostEvents.filter(m=>m.type==='saveActivityDraft').at(-1).draft;
     generation++;props={...props,streaming:false,config:{...base.config,activityDraft:draft}};window.render();};
   window.render();`, resolveDir: ui, loader: 'tsx' }, bundle: true, loader: { '.svg': 'dataurl' },
-  platform: 'browser', jsx: 'automatic', outfile: join(temp, 'ui.js') });
+  platform: 'browser', jsx: 'automatic', outfile: join(temp, 'ui.js'),
+  plugins: process.env.HPS_QUEUE_PANEL_SOURCE ? [{name:'baseline-panel',setup(b){b.onLoad({filter:/ChatPanel\.tsx$/},async()=>({contents:await readFile(process.env.HPS_QUEUE_PANEL_SOURCE,'utf8'),loader:'tsx',resolveDir:join(ui,'src')}));}}] : [] });
 const server = createServer(async (req, res) => {
   const asset = req.url === '/ui.js' ? 'ui.js' : req.url === '/ui.css' ? 'ui.css' : null;
   res.setHeader('content-type', asset === 'ui.js' ? 'text/javascript' : asset === 'ui.css' ? 'text/css' : 'text/html');
@@ -49,10 +50,10 @@ async function scenario(name, run) {
   page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => { window.acquireVsCodeApi = () => ({ postMessage: m => window.hostEvents.push(m), getState: () => undefined, setState: () => {} }); });
   const input = page.locator('.hps-input textarea');
-  const queue = page.locator('.hps-queued');
+  const queue = page.locator('.hps-queued:not(.hps-recovered)');
   const render = over => page.evaluate(over => window.render(over), over);
   const sends = () => page.evaluate(() => window.sends);
-  const snapshot = () => page.evaluate(() => ({ sends: window.sends, saved: window.hostEvents.filter(m => m.type === 'saveActivityDraft').at(-1)?.draft, queue: document.querySelector('.hps-queued')?.textContent, draft: document.querySelector('textarea')?.value }));
+  const snapshot = () => page.evaluate(() => ({ sends: window.sends, saved: window.hostEvents.filter(m => m.type === 'saveActivityDraft').at(-1)?.draft, queue: document.querySelector('.hps-queued:not(.hps-recovered)')?.textContent, draft: document.querySelector('textarea')?.value }));
   const ack = stage => page.evaluate(stage => window.dispatchEvent(new MessageEvent('message', { data: { type: 'imageStagedByHost', stageId: stage.stageId, name: stage.name } })), stage);
   const stage = async () => {
     await page.getByLabel('첨부할 이미지 선택').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: photo });
@@ -62,6 +63,7 @@ async function scenario(name, run) {
   try {
     await page.goto('http://127.0.0.1:' + server.address().port);
     await expect(input).toBeVisible();
+    await page.evaluate(config => window.dispatchEvent(new MessageEvent('message', {data:{type:'config',config}})),fixture.config);
     await render({ streaming: true });
     await expect(input).toHaveAttribute('placeholder', '다음 메시지를 준비하세요');
     await input.fill('대기 메시지 C'); await input.press('Enter');
@@ -78,6 +80,54 @@ async function scenario(name, run) {
   }
 }
 try {
+  await scenario('rejected-search-keeps-existing-queue', async ({ page, input, queue, render, sends }) => {
+    const reject = () => page.evaluate(activityId => window.dispatchEvent(new MessageEvent('message', {data: {
+      type: 'inputRejected', activityId, text: '실패한 검색 요청 A', toolMode: 'web-search', images: ['data:image/png;base64,c3ludGhldGlj']
+    }})), fixture.config.activity.id);
+    await page.evaluate(() => window.dispatchEvent(new MessageEvent('message', {data:{type:'inputRejected',activityId:'other-activity',text:'다른 활동 요청',toolMode:'web-search'}})));
+    await expect(input).toHaveValue('다음 초안 D');
+    await reject(); await reject();
+    await render({streaming: false, error: '합성 검색 요청 거절'});
+    await expect(input).toHaveValue('다음 초안 D');
+    await expect(queue).toContainText('대기 메시지 C');
+    await expect(queue).not.toContainText('실패한 검색 요청 A');
+    await expect(queue).not.toContainText('웹 검색');
+    const recovered = page.locator('.hps-recovered');
+    await expect(recovered).toHaveCount(1);
+    await expect(recovered).toContainText('실패한 검색 요청 A');
+    await expect(recovered).toContainText('웹 검색');
+    assert.equal((await sends()).length, 0, 'recovery never sends automatically');
+    await page.waitForFunction(() => window.hostEvents.filter(m => m.type === 'saveActivityDraft').at(-1)?.draft.recovered?.length === 1);
+    await page.evaluate(() => window.reopen());
+    await expect(recovered).toHaveCount(1); await expect(queue).toContainText('대기 메시지 C');
+    await expect(input).toHaveValue('다음 초안 D');
+    await recovered.getByRole('button',{name:'수정하기',exact:true}).click();
+    await expect(input).toHaveValue('다음 초안 D');await expect(recovered).toHaveCount(1);
+    await page.screenshot({path:join(output,'recovery-separated.png')});
+    await page.evaluate(() => {window.rejectSend=true;});
+    await recovered.getByRole('button', {name:'다시 보내기',exact:true}).click();
+    await expect(recovered).toHaveCount(1);assert.equal((await sends()).length,0);
+    await page.evaluate(() => {window.rejectSend=false;});
+    await recovered.getByRole('button', {name: '다시 보내기', exact: true}).focus();
+    await page.keyboard.press('Enter');
+    await expect(recovered).toHaveCount(0); await expect(input).toBeFocused();
+    let sent = await sends(); assert.equal(sent.length, 1); assert.equal(sent[0][0], '실패한 검색 요청 A'); assert.equal(sent[0][4], 'web-search');
+    assert.deepEqual(sent[0][1], ['data:image/png;base64,c3ludGhldGlj']);
+    await expect(input).toHaveValue('다음 초안 D');
+    await queue.getByRole('button', {name: '보내기', exact: true}).click();
+    sent = await sends(); assert.equal(sent.length, 2); assert.equal(sent[1][0], '대기 메시지 C'); assert.equal(sent[1][4], 'auto');
+    assert.equal(sent[1][1], undefined, 'rejected image cannot leak into the unrelated queued send');
+    await expect(input).toHaveValue('다음 초안 D');
+    await reject();
+    await expect(recovered).toHaveCount(1);
+    await expect(input).toHaveValue('다음 초안 D');
+    await expect(queue).toHaveCount(0);
+    assert.equal((await sends()).length, 2, 'a later refusal also stays separate from the draft');
+    await input.fill('');
+    await recovered.getByRole('button',{name:'수정하기',exact:true}).click();
+    await expect(input).toHaveValue('실패한 검색 요청 A');await expect(recovered).toHaveCount(0);
+    await expect(input).toBeFocused();assert.equal((await sends()).length,2);
+  });
   await scenario('ready-photo-completion', async ({ input, queue, render, stage, ack, sends }) => {
     const photo = await stage(); await ack(photo); await render({ streaming: false });
     await expect(queue).toHaveCount(0); await expect(input).toHaveValue('다음 초안 D');

@@ -434,6 +434,21 @@ test('durable draft, paused queue and user mode survive restart without acceptin
   assert.deepEqual(preservedDraftContent({ ...draft, toolMode: 'web-search' }), preservedDraftContent({ text: 'Recovered search\nNew draft', images: [], queued: null, toolMode: 'web-search' }));
 });
 
+test('recovered requests retain their own text, tool mode and photos across disk reopen', async t => {
+  const root=temporary(t),store=new TaskWorkspaceStore(root,'recovered');await store.initialize();
+  const id=store.getView().activeTaskId;
+  const recovered=[{text:'Failed search A',toolMode:'web-search',images:['data:image/png;base64,c3ludGhldGlj']}];
+  const draft={text:'Next draft D',images:[],queued:'Queued C',queuedPaused:true,toolMode:'auto',queuedToolMode:'auto',recovered};
+  await store.saveDraft(id,draft);
+  const reopened=new TaskWorkspaceStore(root,'recovered');assert.deepEqual(reopened.getDraft(),draft);
+  assert.notDeepEqual(preservedDraftContent(draft),preservedDraftContent({...draft,recovered:[]}), 'recovery text participates in preservation checks');
+  const before=fs.readFileSync(store.filePath,'utf8');
+  for(const bad of [{...recovered[0],toolMode:'force-all-tools'},{...recovered[0],images:['https://untrusted.test/photo']},{...recovered[0],text:42},{...recovered[0],credential:'forbidden'}]){
+    await assert.rejects(reopened.saveDraft(id,{...draft,recovered:[bad]}));
+    assert.equal(fs.readFileSync(store.filePath,'utf8'),before);
+  }
+});
+
 test('actual events distinguish success, failure and no search without reading model claims', () => {
   const observed = new WebSearchActivity();
   assert.match(observed.completion(0).label, /실행하지 않았습니다/);

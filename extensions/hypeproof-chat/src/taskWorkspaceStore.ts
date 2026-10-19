@@ -78,7 +78,7 @@ function validMessage(value: unknown): value is ChatMessage {
 }
 
 function validDraft(value: unknown): value is ActivityDraft {
-  return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused']) && validActivityDraft(value);
+  return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered']) && validActivityDraft(value);
 }
 
 function validSurface(value: unknown): value is TaskSurfaceSelection | null {
@@ -193,7 +193,7 @@ export class TaskWorkspaceStore {
       task.messages = this.mergeMessages([], legacyMessages);
       task.messageCount = task.messages.length;
       task.draft = clone(legacyDraft);
-      task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length;
+      task.importedLegacy = task.messages.length > 0 || !!task.draft.text || !!task.draft.queued || task.draft.images.length > 0 || !!task.draft.imports?.length || !!task.draft.recovered?.length;
       if (task.importedLegacy) { task.title = '이전 대화'; task.titleOrigin = 'manual'; }
       return { version: 1, scope: this.scope, revision: 0, activeTaskId: task.id, tasks: [task] };
     }).catch(error => {
