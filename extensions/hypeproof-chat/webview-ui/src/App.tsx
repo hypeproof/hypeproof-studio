@@ -1,6 +1,6 @@
 import type { TurnToolMode } from '../../src/turnTools';
 import { useEffect, useReducer, useState, useRef } from "react";
-import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage } from "../../src/protocol";
+import type { ChatConfig, ChatMessage, Citation, ElementPreview, HostMessage, TrialEndCardView } from "../../src/protocol";
 import {
   emptyTimeline,
   timelineCitations,
@@ -42,6 +42,8 @@ interface State {
   streamId: string | null;
   error: string | null;
   errorRequestId: string | null;   // S-07 / #49 — surfaced in ErrorBanner
+  /** TUX-COND-07 — the inline end-of-trial card the host sent with this turn's ending (drawn instead of the banner). */
+  trialEndCard: TrialEndCardView | null;
   errorRunbookUrl: string | null;  // #165 — banner renders as clickable link
   errorRetry: boolean;             // REQ-M45 — false when resending cannot help (missing SDK binary)
   pageNotice: string | null;        // #308 — "페이지를 코치에게" 인라인 안내 (토스트 대체)
@@ -102,7 +104,7 @@ type Action =
   | { type: "worldOpened"; id: string }
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
-  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retry?: false }
+  | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retry?: false; trialEndCard?: TrialEndCardView }
   | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
@@ -121,6 +123,7 @@ const initialState: State = {
   errorRequestId: null,
   errorRunbookUrl: null,
   errorRetry: true,
+  trialEndCard: null,
   pageNotice: null,
   elementPreview: null,
   verify: null,
@@ -221,6 +224,7 @@ function reducer(state: State, action: Action): State {
         error: null,
         errorRequestId: null,
         errorRunbookUrl: null,
+        trialEndCard: null,
       };
     case "streamStopped":
       // #497 — 턴이 완주한 게 아니라 사용자가 끊은 것. streamEnd 와 같은 상태
@@ -247,6 +251,7 @@ function reducer(state: State, action: Action): State {
         errorRequestId: action.requestId ?? null,
         errorRunbookUrl: action.runbookUrl ?? null,
         errorRetry: action.retry !== false,
+        trialEndCard: action.trialEndCard ?? null,
       };
     case "attachmentsSaved": {
       const items = [...state.timeline.items];
@@ -351,7 +356,7 @@ export function App() {
         case "publishResult": dispatch({ type: "publishResult", state: msg.state, url: msg.url, message: msg.message }); break;
         case "streamEnd":   dispatch({ type: "streamEnd" }); break;
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
-        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry }); break;
+        case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, trialEndCard: msg.trialEndCard }); break;
         case "actionResult": /* not yet routed to UI */ break;
         case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
@@ -600,6 +605,8 @@ export function App() {
         error={state.error}
         errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}
+        trialEndCard={state.trialEndCard}
+        onTrialEndCardPasses={() => postToHost({ type: "trialEndCardPasses" })}
         canRetryLast={hasLastUserPrompt && !state.streamId && state.errorRetry}
         onSend={send}
         sendPending={sendPending}

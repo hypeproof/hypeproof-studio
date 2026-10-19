@@ -218,3 +218,22 @@ const CODE = 'issued-code-' + 'c'.repeat(40);
   assert.doesNotMatch(other.world.states.at(-1).state.error, /이용권으로 시작하기/);
   console.log('PASS trial expiry on the start page: kept files, the pass entry named only while sold, nothing opened');
 }
+
+// ── TUX-COND-07: the chat card's "이용권 살펴보기" opens the pass list, once, and nothing else ──
+{
+  const { world, page, view } = harness();
+  page.panel.reveal = () => {};
+  // Control: an ordinary visit never carries the focus mark, so the list never opens by itself.
+  await page.handle({ type: 'startReady' });
+  await new Promise(r => setImmediate(r));
+  assert.equal(view().focus, undefined);
+  await page.showPurchase();
+  assert.equal(view().stage, 'choosing');
+  assert.equal(typeof view().focus, 'number');
+  assert.equal(world.opened.length, 0, 'showing the list creates no order and opens no browser');
+  assert.equal(world.calls.filter(c => c.path === '/v1/purchase/orders').length, 0);
+  // Leaving the list clears the mark: a later refresh does not reopen it.
+  await page.handle({ type: 'purchaseCancel' });
+  assert.equal(view().focus, undefined);
+  console.log('PASS end-of-trial card: the pass list opens only on the press, without an order');
+}

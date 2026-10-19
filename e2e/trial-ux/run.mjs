@@ -58,6 +58,19 @@ for (const [name, draft] of [
 for (const [key, value] of [['activityId', 'wrong-activity'], ['nonce', 'wrong-flush']]) {
   assert.equal(containsRequest([{ ...draftControl, [key]: value }], draftControl), false, `wrong ${key} must not match the draft acknowledgement`);
 }
+// TUX-COND-07 — the end-of-trial card is built by the host's own pure helper, so the browser
+// renders what the host sends, not a paraphrase. Fixtures: an open-trial seat (studio-open-trial) and a Service that
+// sells two passes; the turn ended with the observed exhausted sentence.
+const endCardSrc = await build({ entryPoints: [path.join(repo, 'extensions/hypeproof-chat/src/trialEndCard.ts')], bundle: true, write: false, platform: 'node', format: 'esm' });
+const { trialEndCardView } = await import(`data:text/javascript;base64,${Buffer.from(endCardSrc.outputFiles[0].text).toString('base64')}`);
+const endCardPasses = [{ id: 'pass-lite', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200, recommended: true }, { id: 'pass-basic', label: '기본', amount: 55000, durationDays: 30, requestLimit: 350 }];
+const endCardExhausted = new Error('Claude Code returned an error result: API Error: Request rejected (429) · 개인 체험의 총 요청 한도에 도달했습니다.');
+const endCard = trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: endCardExhausted, products: endCardPasses });
+// Controls for the judgment the browser case relies on: open-trial seat → card; code-issued trial or mid-work → none.
+assert.ok(endCard, 'positive control: an open-trial ending yields a card');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial' }, err: endCardExhausted, products: endCardPasses }), null, 'negative control: code-issued trial (flag off)');
+assert.equal(trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-open-trial' }, err: new Error('fetch failed'), products: endCardPasses }), null, 'negative control: mid-work failure');
+const trialActivity = { activity: { id: 'activity-trial', name: '합성 체험', kind: 'trial', workspace: '/synthetic/trial', verified: true } };
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://local');
@@ -412,6 +425,62 @@ try {
     await host(p, { type: 'history', messages: history }); await expect(p.locator('.hps-chips')).toHaveCount(0);
     await host(p, { type: 'config', config: config({ ...native, observation: undefined }) }); await expect(p.getByText('현재 연결은 작업 관찰을 지원하지 않습니다.', { exact: false })).toBeVisible(); await expect(p.locator('.hps-native-observation')).toHaveCount(0);
   });
+  await test('TUX-COND-07', 'Trial limit ends in an inline card: facts, one Primary, an escape; nothing opens by itself', async p => {
+    await draft(p).fill('마지막 요청');
+    await draft(p).press('Enter');
+    await request(p, { type: 'sendMessage' });
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
+    const card = p.locator('.hps-trial-end-card');
+    await expect(card).toHaveCount(1);
+    await expect(card.getByRole('heading')).toHaveText('무료 체험을 모두 사용했습니다');
+    await expect(card).toContainText('만든 파일은 작업 폴더에 그대로 있습니다');
+    // The Service's numbers for the suggested pass, never a hardcoded price.
+    await expect(card).toContainText('라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
+    await expect(card).toContainText('자동으로 다시 결제되지 않습니다');
+    // Exactly one Primary and one escape; the error banner (and its report button) is not drawn.
+    await expect(card.getByRole('button')).toHaveCount(2);
+    await expect(card.locator('.hps-trial-end-card-primary')).toHaveText('이용권 살펴보기');
+    await expect(card.locator('.hps-trial-end-card-escape')).toHaveText('오늘은 여기까지');
+    await expect(p.locator('.hps-error-banner')).toHaveCount(0);
+    await expect(p.getByRole('dialog')).toHaveCount(0);
+    await p.screenshot({ path: path.join(out, 'TUX-COND-07-card.png'), fullPage: true });
+    // No countdown or pressure copy.
+    assert.doesNotMatch(await card.innerText(), /남았|남음|남은|곧|마감|지금 바로|놓치|할인|한정|\d+\s*(초|분)\b/);
+    // Never opens by itself: no purchase request before the person presses the Primary.
+    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+    await btn(p, '이용권 살펴보기').click();
+    await expect.poll(async () => emitted(await requests(p), 'trialEndCardPasses').length).toBe(1);
+    // The escape closes the card and asks for nothing.
+    const before = (await requests(p)).length;
+    await btn(p, '오늘은 여기까지').click();
+    await expect(card).toHaveCount(0);
+    assert.equal((await requests(p)).length, before, 'the escape sends nothing to the host');
+    await expect(draft(p)).toBeVisible();
+  }, { cfg: trialActivity });
+  await test('TUX-COND-07N', 'Card absent mid-work and for ordinary errors (negative control)', async p => {
+    await host(p, { type: 'streamStart', streamId: 'work', messageId: 'a-work' });
+    await host(p, { type: 'streamChunk', streamId: 'work', delta: '페이지를 만들고 있어요' });
+    await expect(p.getByText('페이지를 만들고 있어요')).toBeVisible();
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    await host(p, { type: 'streamEnd', streamId: 'work' });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    // An ordinary failure keeps today's banner and never draws the card.
+    await host(p, { type: 'streamStart', streamId: 'fail', messageId: 'a-fail' });
+    await host(p, { type: 'streamError', streamId: 'fail', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
+    await expect(p.locator('.hps-error-banner')).toHaveCount(1);
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    await expect(btn(p, '이용권 살펴보기')).toHaveCount(0);
+    // A card from an earlier ending does not survive into a later ordinary error.
+    await host(p, { type: 'streamStart', streamId: 'limit', messageId: 'a-limit' });
+    await host(p, { type: 'streamError', streamId: 'limit', error: endCard.text, trialEndCard: endCard });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(1);
+    await host(p, { type: 'streamStart', streamId: 'fail2', messageId: 'a-fail2' });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    await host(p, { type: 'streamError', streamId: 'fail2', error: '연결이 끊겼습니다. 다시 보내 주세요.' });
+    await expect(p.locator('.hps-trial-end-card')).toHaveCount(0);
+    assert.equal(emitted(await requests(p), 'trialEndCardPasses').length, 0);
+  }, { cfg: trialActivity });
   await test('TUX-A11Y-01', 'Visible controls have names and keyboard focus including citation and settings', async p => {
     await expect(p.getByRole('textbox',{name:'코치에게 보낼 메시지'})).toBeVisible();
     await expect(btn(p,'설정')).toBeVisible();

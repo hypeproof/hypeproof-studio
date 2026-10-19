@@ -242,6 +242,8 @@ export async function activate(context: vscode.ExtensionContext) {
   }
   let initialSurfaceReady: Promise<void> = Promise.resolve();
   context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.start", () => startPage.show()));
+  // TUX-COND-07 — only the end-of-trial card's Primary calls this; the person pressed it.
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.showPasses", () => startPage.showPurchase()));
   // "프로젝트 변경": open the picked project's folder as this activity's workspace, the same way
   // the start page enters a folder (activity commit, then ensureWorkspace switches and reloads).
   provider.setProjectOpener(async (folder) => {

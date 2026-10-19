@@ -72,6 +72,8 @@ export class StartPage {
   private order?: PendingOrder;
   private purchaseStage?: PurchaseView["stage"];
   private purchaseMessage?: string;
+  /** TUX-COND-07 — one press of the chat card's "이용권 살펴보기"; cleared with the tab. */
+  private purchaseFocus?: number;
   private purchaseTimer?: ReturnType<typeof setTimeout>;
   /** The code issued for the saved order, while its activity is previewed but not yet entered. */
   private purchaseToken?: string;
@@ -198,7 +200,7 @@ export class StartPage {
     // (retainContextWhenHidden), so re-read the identity whenever it comes back
     // to the front instead of showing the name from before the rename.
     panel.onDidChangeViewState(e => { if (e.webviewPanel.active) void this.refresh(); });
-    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
+    panel.onDidDispose(() => { if (this.panel === panel) { this.panel = undefined; this.candidate = undefined; this.purchaseFocus = undefined; this.stopPurchaseWait(); this.accounts?.cancel(false); } });
     this.context.subscriptions.push(panel);
     void this.resumePurchase();
   }
@@ -215,12 +217,23 @@ export class StartPage {
       ...(this.purchaseStage ? { stage: this.purchaseStage } : {}),
       ...(this.order ? { order: { label: this.order.label, amount: this.order.amount } } : {}),
       ...(this.purchaseMessage ? { message: this.purchaseMessage } : {}),
+      ...(this.purchaseFocus ? { focus: this.purchaseFocus } : {}),
     };
   }
   /** TUX-SP-12 — one credential-free read per window; never `/v1/profile`, which would start a trial clock. */
   private async loadTrialOffer(): Promise<void> {
     if (this.trialOffer !== undefined) return;
     this.trialOffer = await fetchTrialOffer(this.settings().proxyUrl);
+  }
+  /**
+   * TUX-COND-07 — "이용권 살펴보기" on the chat's end-of-trial card. The person pressed it, so
+   * the start page opens on the pass list (REQ-L12 ②). No order is created until they choose.
+   */
+  async showPurchase(): Promise<void> {
+    await this.show();
+    await this.handlePurchase({ type: "purchaseOpen" });
+    this.purchaseFocus = Date.now();
+    await this.refresh();
   }
   /** One unauthenticated read per window. An unreachable or unconfigured Service simply shows no purchase entry. */
   private async loadProducts(force = false): Promise<void> {
@@ -312,14 +325,14 @@ export class StartPage {
     }
     if (msg.type === "purchaseCancel") {
       // Cancelling stops the wait only. A saved paid order is never thrown away from here.
-      this.stopPurchaseWait();
+      this.stopPurchaseWait(); this.purchaseFocus = undefined;
       if (this.order && this.purchaseStage !== "connecting") { this.purchaseStage = "stopped"; this.purchaseMessage = PURCHASE_COPY.cancelled; }
       else if (!this.order) { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
       await this.refresh(); return;
     }
     if (msg.type === "purchaseHide") {
       // Back to the other ways to start. The order stays saved and the choice list offers it again.
-      this.stopPurchaseWait();
+      this.stopPurchaseWait(); this.purchaseFocus = undefined;
       if (this.purchaseStage !== "connecting") { this.purchaseStage = undefined; this.purchaseMessage = undefined; }
       await this.refresh(); return;
     }

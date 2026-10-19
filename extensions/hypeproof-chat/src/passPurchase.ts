@@ -45,6 +45,12 @@ export interface PurchaseView {
   stage?: "choosing" | "waiting" | "connecting" | "stopped";
   order?: { label: string; amount: number };
   message?: string;
+  /**
+   * TUX-COND-07 — set only when the person pressed "이용권 살펴보기" on the chat's end-of-trial
+   * card. The start page switches to the purchase list once per value; it is cleared when the
+   * start tab closes, so a later visit never opens the purchase view by itself (REQ-L12 ①).
+   */
+  focus?: number;
 }
 
 /** Studio keeps waiting this long after the order's payment deadline, for a confirm that was already in flight. */
@@ -182,6 +188,14 @@ export function waitDecision(state: OrderState | null, order: PendingOrder, now:
 }
 
 export const formatWon = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
+/**
+ * TUX-COND-07 — one pass's catalogue facts as a sentence (합니다체, the chat register). Every
+ * number comes from the Service catalogue; nothing here is a default price or count.
+ */
+export function passFacts(product: PassProduct): string {
+  const name = /이용권$/.test(product.label) ? product.label : `${product.label} 이용권`;
+  return `${name}은 ${product.durationDays}일 동안 AI 요청 ${product.requestLimit.toLocaleString("ko-KR")}번이고 ${formatWon(product.amount)}입니다.`;
+}
 /** Requests per day if the count is spread evenly over the period. */
 /** The pass a buyer sees selected first: the one the Service suggests, else the first. */
 export const defaultProduct = (products: PassProduct[]) => products.find(p => p.recommended) ?? products[0];

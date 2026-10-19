@@ -418,6 +418,7 @@
         "TUX-COND-04",
         "TUX-COND-05",
         "TUX-COND-06",
+        "TUX-COND-07",
         "TUX-COPY-01",
         "TUX-HOST-01",
         "TUX-HOST-02",
@@ -453,7 +454,7 @@
       "inline_prefixes": [
         "TUX-COPY"
       ],
-      "sha256": "5e1ca79cbeeb688972b9bef8e2290227e3a5370fdec72224c200cfa697662000",
+      "sha256": "404f528d4a88915a07e7a6e47bad364429d0c92e3c9491644e433fefe641dd46",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/design/trial-conversation-experience.md",
@@ -1986,6 +1987,7 @@
             "TUX-COND-04",
             "TUX-COND-05",
             "TUX-COND-06",
+            "TUX-COND-07",
             "TUX-COPY-01",
             "TUX-HOST-01",
             "TUX-HOST-02",

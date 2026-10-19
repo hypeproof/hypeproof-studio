@@ -1291,6 +1291,7 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-msg-run,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button {
   color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-line);
 }
@@ -1701,3 +1702,29 @@ html, body, #root {
 .hps-evidence-note textarea, .hps-evidence-note input, .hps-evidence-note select { width: 100%; box-sizing: border-box; }
 .hps-evidence-variants { border-collapse: collapse; }
 .hps-evidence-variants td, .hps-evidence-variants th { border: 1px solid var(--vscode-panel-border, #8884); padding: 2px 4px; text-align: left; }
+
+/* TUX-COND-07 — the inline end-of-trial card. Not an error: neutral surface, no alarm colour,
+   facts first, one Primary and a plain-text escape. Wraps at narrow widths. Its Primary takes the
+   theme's button colour only on a seat without a lesson; beside region A's Primary it steps down
+   with Send and the error banner's retry (SX-04, the step-down list above). */
+.hps-trial-end-card {
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+  color: var(--vscode-foreground, inherit);
+}
+.hps-trial-end-card-title { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.hps-trial-end-card-fact { margin: 0 0 4px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.hps-trial-end-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.hps-trial-end-card-primary {
+  border: 0; cursor: pointer; padding: 6px 14px; border-radius: 4px; font-size: 13px; font-weight: 600;
+  background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff);
+}
+.hps-trial-end-card-primary:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+.hps-trial-end-card-escape {
+  border: 0; cursor: pointer; padding: 6px 8px; background: transparent; font-size: 13px;
+  color: var(--vscode-textLink-foreground, #3794ff);
+}
+.hps-trial-end-card-escape:hover { text-decoration: underline; }

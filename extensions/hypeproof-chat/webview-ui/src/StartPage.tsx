@@ -28,6 +28,9 @@ export function StartPage() {
     return off;
   }, []);
   useEffect(() => { if (editing) input.current?.focus(); }, [editing, entry]);
+  // TUX-COND-07 — the person pressed "이용권 살펴보기" on the chat's end-of-trial card: show the pass list once per press.
+  const purchaseFocus = state.purchase?.focus;
+  useEffect(() => { if (purchaseFocus) { setEntry("purchase"); setEditing(true); } }, [purchaseFocus]);
   const connect = (e: React.FormEvent) => {
     e.preventDefault(); if (!token.trim() || state.checking) return;
     setState(s => ({ ...s, checking: true, error: undefined }));
