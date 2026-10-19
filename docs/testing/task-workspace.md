@@ -154,3 +154,7 @@ are not an installed-app check; live account/tool routing and physical-device be
 must be observed separately or marked NOT RUN/BLOCKED.
 
 CC-05 negative controls also feed complete HTML fences, a successful HTML write notification and proxy-loop HTML into the actual provider. Existing index.html and agent.md must survive browser-only turns; an explicit authoring request is the positive control. SDK Write/Bash/delegation and invented destinations are denied before actions, while blank browser opening still needs its existing grant and approval.
+
+- Wide-table reading: scroll horizontally, edit the next draft and append another answer;
+  preserve the table offset and draft, with no unintended send. Existing
+  `e2e/task-workspace/readable-tables.mjs` covers desktop and narrow panes.
