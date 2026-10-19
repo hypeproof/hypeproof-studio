@@ -316,6 +316,7 @@ export function App() {
   const [verdicts, setVerdicts] = useState<VerdictMap>({});
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
   const latestVerdictRequests = useRef(new Map<string, string>());
+  const ownVerdictRequests = useRef(new Set<string>());
   const [shouldCrash, setShouldCrash] = useState(false);
   const [workspace, setWorkspace] = useState<TaskWorkspaceView>();
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -344,6 +345,7 @@ export function App() {
           verifyRequests.current.clear();
           pendingVerdicts.current.clear();
           latestVerdictRequests.current.clear();
+          ownVerdictRequests.current.clear();
           activeStream.current = null;
         }
         scope.current = msg.config.activity?.id;
@@ -369,7 +371,7 @@ export function App() {
       switch (msg.type) {
         case 'taskWorkspaceState': setWorkspace(msg.view); setWorkspaceError(null); return;
         case 'taskWorkspaceError':
-          if (msg.verdictMessageId && msg.verdictRequestId && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
+          if (msg.verdictMessageId && msg.verdictRequestId && ownVerdictRequests.current.has(msg.verdictRequestId) && latestVerdictRequests.current.has(msg.verdictMessageId) && latestVerdictRequests.current.get(msg.verdictMessageId) !== msg.verdictRequestId) return;
           setWorkspaceError(msg.error);
           if (msg.historySaveFailed) setHistorySaveError(msg.error);
           // A list/config refresh is not proof that the current draft reached disk.
@@ -393,7 +395,7 @@ export function App() {
         case "history":     dispatch({ type: "history", messages: msg.messages }); break;
         case "answerVerdicts": {
           const latest = msg.messageId ? latestVerdictRequests.current.get(msg.messageId) : undefined;
-          if (latest && msg.requestId && latest !== msg.requestId) break;
+          if (latest && msg.requestId && ownVerdictRequests.current.has(msg.requestId) && latest !== msg.requestId) break;
           if (msg.messageId && pendingVerdicts.current.get(msg.messageId)?.requestId === msg.requestId) pendingVerdicts.current.delete(msg.messageId);
           const next = { ...msg.verdicts };
           // A saved snapshot must not replace a newer choice whose write is still pending.
@@ -586,6 +588,7 @@ export function App() {
   // CGP-CHAT-R-005 — a verdict is drawn at once and confirmed (or put back) by the host's answer.
   const judgeAnswer = (messageId: string, next: VerdictState | null) => {
     const requestId = crypto.randomUUID();
+    ownVerdictRequests.current.add(requestId);
     latestVerdictRequests.current.set(messageId, requestId);
     pendingVerdicts.current.set(messageId, { requestId, value: next });
     setVerdicts(({ [messageId]: _previous, ...rest }) => next ? { ...rest, [messageId]: next } : rest);
