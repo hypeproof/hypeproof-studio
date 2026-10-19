@@ -1477,3 +1477,7 @@ Each retained image in the prompt editor has a minimum 44×44px non-shrinking ti
 ### Attachment removal clarity and focus (REQ-STUDIO-CHAT-EDIT-RESEND)
 
 Keep the attachment removal glyph readable on a compact opaque, theme-aware backing within its existing 44px hit target. When deleting the last attachment removes the focused control, focus returns to the edit textarea without an extra Tab. Do not move a different focus owner or change either draft.
+
+### Settings above sources: Escape ownership
+
+When conversation settings is open above the desktop sources panel, Escape dismisses only the settings dialog. Preserve the underlying sources panel and composer draft, and retain the native dialog's cancellation and focus restoration. The sources panel keeps its existing dismissal behavior once settings is closed.
