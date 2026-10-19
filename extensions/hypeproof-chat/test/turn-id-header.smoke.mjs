@@ -59,6 +59,17 @@ async function server(handler) {
   for (const bad of ["", "a".repeat(129), "has space", "x\ny", "turn:1", undefined, null, 42]) {
     assert.equal(validClientTurnId(bad), false, `negative: ${JSON.stringify(bad)} is not a turn id`);
   }
+  // The trial turn allowance (Service native-trial-budget, behind HPS_TRIAL_TURN_ALLOWANCE)
+  // is stricter than validTurnId: NATIVE_TURN_ID_PATTERN = /^[a-f0-9-]{36}$/i, else 400
+  // invalid_trial_turn_id. The host's id is crypto.randomUUID(), which satisfies both; a
+  // broader-grammar id would pass this helper yet be refused on a trial seat (negative control).
+  const NATIVE_TURN_ID_PATTERN = /^[a-f0-9-]{36}$/i;
+  for (let i = 0; i < 50; i++) {
+    const id = crypto.randomUUID();
+    assert.ok(validClientTurnId(id) && NATIVE_TURN_ID_PATTERN.test(id), "positive: a host UUID passes both Service grammars");
+  }
+  assert.equal(validClientTurnId("turn_1") && !NATIVE_TURN_ID_PATTERN.test("turn_1"), true,
+    "negative: a non-UUID id is not a trial turn id, so the host must keep minting UUIDs");
   assert.deepEqual(clientTurnIdHeader(uuid), { "x-hps-turn-id": uuid });
   assert.deepEqual(clientTurnIdHeader("x\r\nx-hps-funding-source: other"), {}, "negative: header injection never goes out");
   assert.deepEqual(clientTurnIdHeader(undefined), {});
