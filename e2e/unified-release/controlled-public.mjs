@@ -1,0 +1,24 @@
+import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {createHash} from 'node:crypto';import {spawn} from 'node:child_process';
+import {withReleaseSeat} from './controlled-seat.mjs';import {authorizeActivity} from './controlled-effects.mjs';import {loadAcceptanceBinding} from './verification-context.mjs';import {appIdentity,treeHash} from './artifact.mjs';
+const need=(ok,why)=>{if(!ok)throw Error('BLOCKED: '+why);};
+export function deploymentMapping(raw,serviceSha,now=Date.now()){
+ let value;try{value=JSON.parse(raw);}catch{throw Error('BLOCKED: protected Service deployment acceptance mapping unavailable');}
+ need(value.schema==='hps-service-deployment-acceptance/1'&&value.repository==='hypeproof/hypeproof-service'&&value.serviceSha===serviceSha&&value.origin==='https://api.hypeproof-ai.xyz'&&typeof value.version==='string'&&value.version&&value.version!=='unknown'&&typeof value.deploymentId==='string'&&value.deploymentId&&typeof value.acceptedBy==='string'&&value.acceptedBy&&Date.parse(value.observedAt)<=now&&Date.parse(value.observedAt)>now-86400000&&Date.parse(value.expiresAt)>now&&Date.parse(value.expiresAt)<=now+86400000,'Service deployment mapping does not bind current accepted source/version');
+ return {...value,proofKind:'protected-environment-accepted-mapping',digest:createHash('sha256').update(raw).digest('hex')};
+}
+export async function controlledPublic({app,output,sha,version,root,head,dirty,env=process.env,fetchImpl=fetch,authorize=authorizeActivity,seat=withReleaseSeat,drive}){
+ const binding=loadAcceptanceBinding({candidateSha:sha,head,dirty,env});need(binding.controlled,'controlled context required');
+ const mapping=deploymentMapping(env.HPS_ACCEPTANCE_SERVICE_DEPLOYMENT_JSON,binding.servicePin.sha),identity=appIdentity(app),before=treeHash(app);need(identity.sha===sha&&identity.version===version,'candidate App identity mismatch');
+ const health=async()=>{const response=await fetchImpl(mapping.origin+'/v1/health',{redirect:'error',signal:AbortSignal.timeout(15000)});need(response.ok&&(await response.json()).version===mapping.version,'public Service differs from accepted deployment mapping');};
+ const activities=[];const temp=fs.mkdtempSync(path.join(os.tmpdir(),'hps-owned-public-'));
+ try{for(const kind of ['trial','classroom']){const budget=await authorize(kind,{env,fetchImpl});budget.permit();await health();
+  const proof=await seat({purpose:'public-'+kind,pins:{candidateSha:sha,serviceSha:binding.servicePin.sha,testRevision:binding.testRevision},env,beforeEffect:budget.permit,fetchImpl},async current=>{
+   budget.permit();const response=await fetchImpl(mapping.origin+'/v1/profile',{headers:{authorization:'Bearer '+current.token},redirect:'error',signal:AbortSignal.timeout(15000)});need(response.ok,'owned participant profile refused');const profile=await response.json();need(profile.profile_id===current.profile&&profile.activity_kind===kind&&profile.activity_id===current.activityId,'owned participant activity mismatch');
+   const evidence=path.resolve(output,kind);fs.mkdirSync(evidence,{recursive:true});const token=path.join(temp,kind);fs.writeFileSync(token,current.token,{mode:0o600});
+   const childEnv={...env};for(const name of Object.keys(childEnv))if(/API_KEY|SECRET|PASSWORD|ISSUER|TOKEN$|_CODE$|NODE_OPTIONS/.test(name))delete childEnv[name];Object.assign(childEnv,{HPS_APP_PATH:path.resolve(app),HPS_E2E_TOKEN_FILE:token,HPS_E2E_PROXY_URL:mapping.origin+'/v1',HPS_PUBLIC_ACTIVITY:'1',HPS_NATIVE_MANAGED:kind==='trial'?'1':'0',HPS_NATIVE_EVIDENCE_DIR:evidence,HPS_QUIET_NO_HIDE:'1'});
+   budget.permit();if(drive)await drive({kind,evidence,env:childEnv});else await new Promise((resolve,reject)=>{const child=spawn(process.execPath,['node_modules/@playwright/test/cli.js','test','--config=native-trial.config.ts','--workers=1','--retries=0'],{cwd:path.join(root,'e2e'),env:childEnv,stdio:'pipe',timeout:600000});child.on('error',()=>reject(Error('BLOCKED: native public driver unavailable')));child.on('close',code=>code===0?resolve():reject(Error('Public native driver failed')));});
+   const result=JSON.parse(fs.readFileSync(path.join(evidence,'public-activity.json'),'utf8'));need(result.status==='PASS'&&result.created&&result.revised&&result.originalPreserved,'native public activity incomplete');return {kind,status:'PASS',fileOperations:true,profileId:profile.profile_id};});activities.push({...proof.result,seat:proof.seat,cleanup:proof.cleanup});
+ }
+ await health();need(treeHash(app)===before,'candidate App changed');return {status:'PASS',base:mapping.origin+'/v1',version:mapping.version,serviceSha:binding.servicePin.sha,testRevision:binding.testRevision,credentials:'per-run-owned-scoped-issuer',deployment:{digest:mapping.digest,deploymentId:mapping.deploymentId,proofKind:mapping.proofKind,acceptedBy:mapping.acceptedBy},activities};
+ }finally{fs.rmSync(temp,{recursive:true,force:true});}
+}

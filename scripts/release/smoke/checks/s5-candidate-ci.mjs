@@ -31,9 +31,13 @@ export function judge(all, runId) {
 export default {
   id: 'S5',
   name: 'Candidate CI',
-  async run({repo, sha, env = process.env}) {
-    const raw = execFileSync('gh', ['api', '--paginate', `repos/${repo}/commits/${sha}/check-runs?per_page=100&filter=all`,
+  async run({repo, sha, env = process.env,controlled=false}) {
+    let raw;
+    if(controlled){const lines=[];let complete=false;for(let page=1;page<=20;page++){const result=JSON.parse(execFileSync('gh',['api',`repos/${repo}/commits/${sha}/check-runs?per_page=100&filter=all&page=${page}`],{encoding:'utf8',timeout:15000,maxBuffer:4000000}));if(!Array.isArray(result.check_runs))throw Error('BLOCKED: candidate CI response invalid');for(const r of result.check_runs)lines.push([r.id,r.name,r.status,r.conclusion??'',r.details_url??''].join('\t'));if(result.check_runs.length<100){complete=true;break;}}if(!complete)throw Error('BLOCKED: candidate CI exceeds bounded metadata budget');raw=lines.join('\n');}
+    else {
+    raw = execFileSync('gh', ['api', '--paginate', `repos/${repo}/commits/${sha}/check-runs?per_page=100&filter=all`,
       '--jq', '.check_runs[] | [.id, .name, .status, (.conclusion // ""), (.details_url // "")] | @tsv'], {encoding: 'utf8'});
+    }
     const metadata = new Map();
     const runs = raw.trim().split('\n').filter(Boolean).map(line => {
       const [id, name, status, conclusion, url] = line.split('\t');
@@ -41,7 +45,7 @@ export default {
       let info = {};
       if (match && match[1] !== env.GITHUB_RUN_ID) {
         if (!metadata.has(match[1])) {
-          const action = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/actions/runs/${match[1]}`], {encoding: 'utf8'}));
+          const action = JSON.parse(execFileSync('gh', ['api', `repos/${repo}/actions/runs/${match[1]}`], {encoding: 'utf8',timeout:15000,maxBuffer:1000000}));
           if (action.head_sha !== sha || !action.workflow_id || !action.run_number || !action.run_attempt) throw Error('Candidate CI run identity is incomplete or mismatched');
           metadata.set(match[1], {workflowId: action.workflow_id, runNumber: action.run_number, runAttempt: action.run_attempt});
         }

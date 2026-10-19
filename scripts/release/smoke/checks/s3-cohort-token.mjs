@@ -1,9 +1,19 @@
 // S3. A fresh synthetic classroom token must resolve to the acceptance profile.
 // Never replace an existing session or fall back to the admin password.
 import {randomUUID} from 'node:crypto';
+import {withReleaseSeat} from '../../../../e2e/unified-release/controlled-seat.mjs';
 const COHORT = 'synthetic-release-acceptance';
 
-export async function checkCohort({env, serviceUrl, fetchImpl = fetch, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
+export async function checkCohort({env, serviceUrl, controlled,verification,budget,fetchImpl = fetch, sleep = ms => new Promise(r => setTimeout(r, ms))}) {
+  if(controlled){
+    if(!budget||!verification)throw Error('BLOCKED: scoped smoke budget/context unavailable');
+    const identity=JSON.parse((await import('node:fs')).readFileSync(env.HPS_ENGINE_IDENTITY_FILE,'utf8')).identity;
+    const result=await withReleaseSeat({purpose:'public-classroom',pins:{candidateSha:identity.sourceSha,serviceSha:verification.serviceSha,testRevision:verification.testRevision},env,beforeEffect:budget.permit,fetchImpl},async seat=>{
+      const response=await fetchImpl('https://api.hypeproof-ai.xyz/v1/profile',{headers:{authorization:'Bearer '+seat.token},redirect:'error',signal:AbortSignal.timeout(15000)});
+      if(!response.ok)throw Error('BLOCKED: owned classroom profile rejected');const profile=await response.json();
+      if(profile.profile_id!==seat.profile||profile.activity_kind!=='classroom'||profile.activity_id!==seat.activityId)throw Error('BLOCKED: owned classroom activity binding changed');return {profileId:profile.profile_id,activityId:profile.activity_id};
+    });return {result:'PASS',detail:'owned synthetic classroom authenticated, rostered and active with remaining allowance; cleanup confirmed',seat:result.seat,cleanup:result.cleanup};
+  }
   if (!env.HPS_ACCEPTANCE_ISSUER) return {result: 'NOT_RUN', detail: 'no credential (HPS_ACCEPTANCE_ISSUER); provision the synthetic acceptance cohort scope'};
   const base = serviceUrl.replace(/\/$/, '');
   const user = `synthetic-smoke-${randomUUID()}`;

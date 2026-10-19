@@ -21,9 +21,10 @@ export function treeHash(root) {
  };
  visit('');return digest.digest('hex');
 }
-export function assertReceipt(receipt,{sha,version,platform,assets,requirePublic=true}) {
+export function assertReceipt(receipt,{sha,version,platform,assets,requirePublic=true,testRevision,serviceSha}) {
  const fail=why=>{throw Error('Unified release gate: '+why);};
  if(receipt?.schema!=='hps-unified-acceptance/1'||receipt.status!=='PASS')fail('missing or unsuccessful acceptance');
+ if(testRevision&&(receipt.testRevision!==testRevision||receipt.serviceSha!==serviceSha))fail('canonical verifier/Service pins changed');
  if(receipt.sourceSha!==sha||receipt.sourceDirty!==false)fail('stale or modified verification source');
  if(receipt.platform!==platform||receipt.mode!=='candidate-unmodified')fail('wrong OS or injected bundle');
  if(receipt.app?.sha!==sha||receipt.app?.version!==version||receipt.app?.extensionVersion!==version||receipt.app?.name!=='HypeProof Studio')fail('wrong app identity');
@@ -38,7 +39,7 @@ export function assertReceipt(receipt,{sha,version,platform,assets,requirePublic
  for(const kind of ['trial','classroom']) {
   const row=receipt.activities.find(r=>r.kind===kind),result=row?.result;
   for(const field of ['real_folder_reload','draft_round_trip','attachment_round_trip','process_restart','encrypted_storage','shared_root_blocked','original_files_preserved','live_model'])if(result?.[field]!==true)fail(kind+': '+field+' not observed');
-  if(result.status!=='PASS'||!(Number.isInteger(result.model_calls)&&result.model_calls>0&&result.model_calls<=8)||row.serviceSha!==sha||row.payloadIsolation!==true)fail(kind+': execution incomplete');
+  if(result.status!=='PASS'||!(Number.isInteger(result.model_calls)&&result.model_calls>0&&result.model_calls<=8)||row.serviceSha!==(serviceSha??sha)||row.payloadIsolation!==true)fail(kind+': execution incomplete');
  }
  if(requirePublic){
   const service=receipt.publicService;

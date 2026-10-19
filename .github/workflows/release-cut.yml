@@ -57,6 +57,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Controlled S1–S6 executes only in the canonical native verifier job.
+      # Refuse this legacy dry-run before loading issuer/model credentials.
+      - name: Fence legacy smoke from managed execution
+        run: node --input-type=module -e "import {engineEnabled} from './scripts/release/cloud-executor/workflow-gate.mjs'; if(engineEnabled())throw Error('BLOCKED managed smoke requires canonical installed verifier context and per-effect reservations');"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

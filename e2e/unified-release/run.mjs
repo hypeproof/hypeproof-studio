@@ -7,6 +7,7 @@ import net from 'node:net';
 import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {appIdentity,treeHash,sha256,assertReceipt} from './artifact.mjs';
+import {loadAcceptanceBinding} from './verification-context.mjs';
 import {checkSeededSdk} from './sdk-seed.mjs';
 import {candidateService,assertCandidateServiceUnchanged,redactEvidence,assertServiceActivity} from './candidate-service.mjs';
 import {compatibilityEnvironment,assertCompatibilityOutputBound} from './output-bound.mjs';
@@ -23,7 +24,7 @@ let temporary,gateway,log;
 let activeEvidence,activeLog;
 function preserveGatewayLog(){
  if(!activeEvidence||!activeLog||!fs.existsSync(activeLog))return;
- const secrets=Object.entries(process.env).filter(([name])=>/KEY|SECRET|TOKEN|PASSWORD/.test(name)).map(([,value])=>value);
+ const secrets=Object.entries(process.env).filter(([name])=>/KEY|SECRET|TOKEN|PASSWORD|ISSUER|_CODE$/.test(name)).map(([,value])=>value);
  for(const name of fs.readdirSync(temporary))if(name.includes('-token'))secrets.push(fs.readFileSync(path.join(temporary,name),'utf8'));
  fs.writeFileSync(path.join(activeEvidence,'gateway.log'),redactEvidence(fs.readFileSync(activeLog,'utf8'),secrets),{mode:0o600});
 }
@@ -31,7 +32,7 @@ try{
  if(!platform||!appDirectory||!assetDirectory||!outputDirectory||!sourceSha||!version)throw Error('Usage: run.mjs APP ASSETS OUTPUT SOURCE_SHA VERSION (Mac/Windows only)');
  fs.rmSync(path.join(outputDirectory,'receipt.json'),{force:true});
  if(!process.env.ANTHROPIC_API_KEY)throw Error('BLOCKED: acceptance model credential missing; no skipped PASS');
- if(git('rev-parse','HEAD')!==sourceSha||git('status','--porcelain','--untracked-files=no'))throw Error('Acceptance requires clean pinned source');
+ const binding=loadAcceptanceBinding({candidateSha:sourceSha,head:git('rev-parse','HEAD'),dirty:git('status','--porcelain','--untracked-files=no'),legacyServicePin:()=>JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8'))});
  for(const flag of ['HPS_NATIVE_ISOLATED_KEYCHAIN','HPS_CODEX_REHEARSAL','HPS_MODEL_REHEARSAL'])if(process.env[flag])throw Error('Incompatible acceptance override: '+flag);
  const app=appIdentity(appDirectory),before=treeHash(appDirectory);
  if(app.sha!==(publicAppSha??sourceSha)||app.version!==version||app.extensionVersion!==version||app.name!=='HypeProof Studio')throw Error('Candidate identity mismatch');
@@ -43,7 +44,7 @@ try{
  temporary=fs.mkdtempSync(path.join(os.tmpdir(),'hps-unified-acceptance-'));
  // App acceptance must exercise the same Service implementation as deployment,
  // too. The published testkit predates native request admission serialization.
- const servicePin=JSON.parse(fs.readFileSync(path.join(root,'config/service-deployment.json'),'utf8'));
+ const servicePin=binding.servicePin;
  const candidate=candidateService(process.env.HPS_SERVICE_SOURCE,servicePin);
  const activities=[],servicePackage=candidate.manifest;
  const outputPolicy=Object.fromEntries(['output-bound.mjs','output-bound-preload.mjs'].map(name=>[name,sha256(fileURLToPath(new URL('./'+name,import.meta.url)))]));
@@ -52,7 +53,7 @@ try{
   const evidence=path.resolve(outputDirectory,kind);fs.mkdirSync(evidence,{recursive:true});
   const server=net.createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;await new Promise(resolve=>server.close(resolve));
   const token=path.join(temporary,kind+'-token');
-  const env={...compatibilityEnvironment(process.env),HPS_APP_PATH:path.resolve(appDirectory),HPS_E2E_TOKEN_FILE:token,HPS_E2E_PROXY_URL:`http://127.0.0.1:${port}/v1`,HPS_NATIVE_PORT:String(port),HPS_NATIVE_EVIDENCE_DIR:evidence,HPS_UNIFIED_SWITCH:serviceOnly?'0':'1',HPS_SERVICE_ACCEPTANCE:serviceOnly?'1':'0',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_LIVE:'1',HPS_NATIVE_MANAGED:kind==='trial'?'1':'0',HPS_TEST_REAL_WORKSPACE:'1',HPS_QUIET:'1',HPS_QUIET_NO_HIDE:'1'};
+  const env={...compatibilityEnvironment(process.env),HPS_ACCEPTANCE_ACTIVITY_KIND:kind,HPS_APP_PATH:path.resolve(appDirectory),HPS_E2E_TOKEN_FILE:token,HPS_E2E_PROXY_URL:`http://127.0.0.1:${port}/v1`,HPS_NATIVE_PORT:String(port),HPS_NATIVE_EVIDENCE_DIR:evidence,HPS_UNIFIED_SWITCH:serviceOnly?'0':'1',HPS_SERVICE_ACCEPTANCE:serviceOnly?'1':'0',HPS_UNIFIED_LIVE:'1',HPS_NATIVE_LIVE:'1',HPS_NATIVE_MANAGED:kind==='trial'?'1':'0',HPS_TEST_REAL_WORKSPACE:'1',HPS_QUIET:'1',HPS_QUIET_NO_HIDE:'1'};
   activeEvidence=evidence;activeLog=path.join(temporary,kind+'-gateway.log');
   log=fs.openSync(activeLog,'w',0o600);
   assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
@@ -66,7 +67,7 @@ try{
   }
   if(!ready)throw Error('BLOCKED: synthetic gateway failed to start');
   // Do not pass provider keys to Electron. Only the synthetic gateway has them.
-  const appEnv={...env};for(const name of Object.keys(appEnv))if(/API_KEY|ADMIN_PASSWORD|TOKEN$/.test(name))delete appEnv[name];
+  const appEnv={...env};for(const name of Object.keys(appEnv))if(/API_KEY|SECRET|ISSUER|PASSWORD|TOKEN$|_CODE$/.test(name))delete appEnv[name];
   await command(process.execPath,['node_modules/@playwright/test/cli.js','test','--config=native-trial.config.ts','--workers=1','--retries=0'],{cwd:path.join(root,'e2e'),env:appEnv});
   const result=JSON.parse(fs.readFileSync(path.join(evidence,serviceOnly?'result.json':'unified-switch.json'),'utf8'));
   // Both isolated Anthropic paths enforce the same output cap and independent
@@ -84,14 +85,14 @@ try{
    const {calls}=api;
    assertServiceActivity(result,api);
    // serviceSha is the legacy release gate's acceptance-driver SHA; servicePackage.commit identifies the deployed Service implementation.
-   activities.push({kind,serviceSha:sourceSha,servicePackage,result,modelCalls:calls.length,requestLimit:api.request_limit,attempts:api.attempts,outputBound:boundReceipt});
+   activities.push({kind,serviceSha:binding.controlled?servicePin.sha:sourceSha,testRevision:binding.testRevision,servicePackage,result,modelCalls:calls.length,requestLimit:api.request_limit,attempts:api.attempts,outputBound:boundReceipt});
   }else{
    const turns=JSON.parse(fs.readFileSync(path.join(evidence,'unified-live-turns.json'),'utf8'));
-   activities.push({kind,serviceSha:sourceSha,servicePackage,payloadIsolation:turns.payload_isolation===true,result,outputBound:boundReceipt});
+   activities.push({kind,serviceSha:binding.controlled?servicePin.sha:sourceSha,testRevision:binding.testRevision,servicePackage,payloadIsolation:turns.payload_isolation===true,result,outputBound:boundReceipt});
   }
   const stopped=new Promise(resolve=>gateway.once('exit',resolve));gateway.kill();await stopped;gateway=null;fs.closeSync(log);log=undefined;preserveGatewayLog();
  }
- const receipt={schema:'hps-unified-acceptance/1',status:'PASS',sourceSha,sourceDirty:false,platform,mode:'candidate-unmodified',app,assets,treeBefore:before,treeAfter:treeHash(appDirectory),activities};
+ const receipt={schema:'hps-unified-acceptance/1',status:'PASS',sourceSha,sourceDirty:false,testRevision:binding.testRevision,serviceSha:servicePin.sha,controlled:binding.controlled,platform,mode:'candidate-unmodified',app,assets,treeBefore:before,treeAfter:treeHash(appDirectory),activities};
  if(platform==='win32-x64'&&!serviceOnly){
   const installers=JSON.parse(fs.readFileSync(path.join(assetDirectory,'installer-verification.json'),'utf8'));
   let candidatePayloadVerified=installers.portableTree===before;
@@ -111,7 +112,7 @@ try{
   if(before!==receipt.treeAfter)throw Error('Public App modified');
   assertCandidateServiceUnchanged(process.env.HPS_SERVICE_SOURCE,servicePin,servicePackage);
   receipt.schema='hps-service-compatibility/1';receipt.mode='public-app-unmodified';
- }else assertReceipt(receipt,{sha:sourceSha,version,platform,assets,requirePublic:false});
+ }else assertReceipt(receipt,{sha:sourceSha,version,platform,assets,requirePublic:false,...(binding.controlled?{testRevision:binding.testRevision,serviceSha:servicePin.sha}:{})});
  fs.writeFileSync(path.join(outputDirectory,'receipt.json'),JSON.stringify(receipt,null,2));
  console.log('PASS untouched candidate: both activities; '+platform);
 }catch(error){console.error(error.message);process.exitCode=1;}

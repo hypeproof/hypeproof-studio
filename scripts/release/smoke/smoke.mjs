@@ -10,6 +10,7 @@
 // else any NOT_RUN → NOT_RUN (exit 2), else PASS (exit 0).
 // Every check runs even after an earlier one fails, so one failure does not hide another.
 import fs from 'node:fs';
+import {smokeGuard,controlledInputs} from './controlled.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -19,7 +20,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 
 export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproof/hypeproof-studio', env = process.env}) {
-  const ctx = {sha, repo, studioDir: root, serviceUrl, chalkUrl, env};
+  let inputs,guard,blocked;try{inputs=controlledInputs(env);if(inputs&&(sha!==inputs.identity.sourceSha||repo!==inputs.identity.repository||serviceUrl!=='https://api.hypeproof-ai.xyz'||chalkUrl!=='https://chalk.hypeproof-ai.xyz'))throw Error('BLOCKED: smoke candidate/origins differ from canonical context');guard=smokeGuard(env,{inputs});}catch(error){blocked=error.message;}
+  const ctx = {sha, repo, studioDir: root, serviceUrl, chalkUrl, env,controlled:!!inputs,verification:inputs?.context};
   const checkDir = path.join(here, 'checks');
   const files = fs.readdirSync(checkDir).filter(f => f.endsWith('.mjs')).sort();
   const checks = [];
@@ -28,14 +30,15 @@ export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproo
     const started = Date.now();
     let result;
     try {
-      result = await check.run(ctx);
+      if(blocked)result={result:'BLOCKED',detail:blocked};
+      else{ctx.budget=guard?await guard(check.id):null;ctx.budget?.permit();result=await check.run(ctx);}
     } catch (error) {
-      result = {result: 'FAIL', detail: String(error?.message ?? error)};
+      result = {result: String(error?.message??'').startsWith('BLOCKED:')?'BLOCKED':'FAIL', detail: String(error?.message ?? error)};
     }
     checks.push({id: check.id, name: check.name, ...result, ms: Date.now() - started});
   }
   const overall = checks.some(c => c.result === 'FAIL') ? 'FAIL'
-    : checks.some(c => c.result === 'NOT_RUN') ? 'NOT_RUN' : 'PASS';
+    : checks.some(c => c.result === 'BLOCKED') ? 'BLOCKED' : checks.some(c => c.result === 'NOT_RUN') ? 'NOT_RUN' : 'PASS';
   const report = {
     schema: 'hps-smoke/0',
     candidate: {repo, sha},

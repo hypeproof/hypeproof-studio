@@ -240,6 +240,14 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.HPS_ACCEPTANCE_ANTHROPIC_API_KEY }}
           HPS_SERVICE_SOURCE: ${{ github.workspace }}/.service-source
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
+          HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
+          HPS_ACCEPTANCE_SERVICE_DEPLOYMENT_JSON: ${{ secrets.HPS_ACCEPTANCE_SERVICE_DEPLOYMENT_JSON }}
+          HPS_LAB_TOKEN_READ_ISSUER: ${{ secrets.HPS_LAB_TOKEN_READ_ISSUER }}
+          HPS_LAB_TOKEN_READ_COHORT: ${{ vars.HPS_LAB_TOKEN_READ_COHORT }}
+          HPS_LAB_TOKEN_READ_PROFILE: ${{ vars.HPS_LAB_TOKEN_READ_PROFILE }}
+          HPS_ENGINE_IDENTITY_FILE: ${{ runner.temp }}/managed-assets/collection.json
+          HPS_RELEASE_SEAT_DIR: ${{ runner.temp }}/controlled-release-seats
+          GH_TOKEN: ${{ github.token }}
           HPS_INSTALLED_PORTABLE_REFERENCE: ${{ runner.temp }}/portable-reference
           TARGET: ${{ matrix.target }}
           HPS_VERIFICATION_CONTEXT: ${{ runner.temp }}/verification-context.json
@@ -259,6 +267,14 @@ jobs:
           node --experimental-strip-types scripts/release/cloud-executor/installed-runner.mjs \
             "$RUNNER_TEMP/managed-assets/collection.json" "$RUNNER_TEMP/managed-assets/previous" \
             "$RUNNER_TEMP/managed-assets" "$RUNNER_TEMP/installed-evidence" "$TARGET"
+      - name: Recover and close only this run's owned release seats
+        if: always()
+        shell: bash
+        env:
+          HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
+          HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
+          HPS_RELEASE_SEAT_DIR: ${{ runner.temp }}/controlled-release-seats
+        run: node e2e/unified-release/controlled-seat.mjs cleanup
       - name: Remove temporary synthetic seat credential
         if: always()
         shell: bash

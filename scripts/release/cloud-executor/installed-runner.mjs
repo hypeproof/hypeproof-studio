@@ -10,6 +10,7 @@ import {requireThat,hashBytes} from './provider.mjs';
 import {executeProductUpdate,nativeSigningEvidence} from './native-update.mjs';
 import os from 'node:os';
 import {engineEnabled} from './workflow-gate.mjs';
+import {runSmoke} from '../smoke/smoke.mjs';
 const root=fileURLToPath(new URL('../../../',import.meta.url));
 const command=(exe,args)=>execFileSync(exe,args,{stdio:'pipe',timeout:240000});
 const same=(a,b)=>process.platform==='win32'?path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase():fs.realpathSync(a)===fs.realpathSync(b);
@@ -99,13 +100,17 @@ export async function executeInstalledTarget({collection,policy,pins,previous,as
     requireThat(process.env.ANTHROPIC_API_KEY&&process.env.HPS_SERVICE_SOURCE,'pinned Service/model access unavailable');
     // Existing drivers exercise trial/classroom, isolation, persistence, encrypted
     // storage and public Service on the installed candidate, never browser fixtures.
-    const env={...process.env,HPS_INSTALLED_PORTABLE_REFERENCE:process.env.HPS_INSTALLED_PORTABLE_REFERENCE};
+    const env={...process.env,TARGET:target,HPS_INSTALLED_PORTABLE_REFERENCE:process.env.HPS_INSTALLED_PORTABLE_REFERENCE};
+    if(engineEnabled(env)){
+     const smoke=await runSmoke({sha:collection.identity.sourceSha,out:path.join(outputDirectory,'smoke'),serviceUrl:'https://api.hypeproof-ai.xyz',chalkUrl:'https://chalk.hypeproof-ai.xyz',env});plan.smoke=smoke;
+     requireThat(smoke.result==='PASS'&&smoke.checks.length===6&&smoke.checks.every(c=>c.result==='PASS'),'BLOCKED: canonical managed S1–S6 preflight did not PASS');
+    }
     execFileSync(process.execPath,[path.join(root,'e2e/unified-release/run.mjs'),installedApp,assetsDirectory,path.join(outputDirectory,'activities'),collection.identity.sourceSha,app.version],{env,stdio:'pipe',timeout:1200000});
     execFileSync(process.execPath,[path.join(root,'e2e/unified-release/public.mjs'),installedApp,path.join(outputDirectory,'activities/public'),collection.identity.sourceSha,app.version],{env,stdio:'pipe',timeout:1200000});
     const receipt=JSON.parse(fs.readFileSync(path.join(outputDirectory,'activities/receipt.json'),'utf8'));
-    requireThat(receipt.status==='PASS'&&receipt.sourceSha===collection.identity.sourceSha&&receipt.treeBefore===receipt.treeAfter,'installed activity receipt missing');
+    requireThat(receipt.status==='PASS'&&receipt.sourceSha===collection.identity.sourceSha&&receipt.treeBefore===receipt.treeAfter&&(!engineEnabled(env)||(receipt.testRevision===pins.testRevision&&receipt.serviceSha===pins.serviceSha)),'installed activity receipt missing');
     const publicReceipt=receipt.publicService;
-    requireThat(publicReceipt?.status==='PASS'&&publicReceipt.activities?.length===2,'public Service receipt missing');
+    requireThat(publicReceipt?.status==='PASS'&&publicReceipt.activities?.length===2&&(!engineEnabled(env)||(publicReceipt.serviceSha===pins.serviceSha&&publicReceipt.testRevision===pins.testRevision&&publicReceipt.activities.every(a=>a.cleanup?.closed&&a.cleanup?.revoked&&a.cleanup?.rosterRemoved))),'public Service receipt missing');
     record(check,'PASS','Existing native trial/classroom and public Service drivers passed on actual installed candidate',{app,receipt,publicReceipt});
    }
   } catch(error) {const missing=/^BLOCKED:|unavailable|not available|access|credential store/.test(error.message??'');record(check,missing?'BLOCKED':'FAIL',error.message?.startsWith('Cloud executor:')?error.message:(missing?'Native host, original N−1 updater capability, signing, isolated account seat or pinned Service access unavailable':'Native process failed its installation/update contract'),{nativeProcessExitCode:Number.isInteger(error.status)?error.status:null});}

@@ -24,7 +24,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
+import {engineEnabled} from '../../scripts/release/cloud-executor/workflow-gate.mjs';
+import {controlledPublic} from './controlled-public.mjs';
 import {fileURLToPath} from 'node:url';
 import {appIdentity,treeHash} from './artifact.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -50,6 +52,10 @@ async function admin(method,route,body){
  return json;
 }
 let temp,user,opened,trialMinted=false;
+if(engineEnabled()){try{
+ const publicService=await controlledPublic({app,output,sha,version,root,head:execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),dirty:execFileSync('git',['status','--porcelain','--untracked-files=no'],{cwd:root,encoding:'utf8'}).trim()});
+ const file=path.join(output,'../receipt.json'),receipt=JSON.parse(fs.readFileSync(file,'utf8'));receipt.publicService=publicService;fs.writeFileSync(file,JSON.stringify(receipt,null,2));
+}catch(error){console.error(error.message);process.exitCode=1;}}else{
 try{
  const identity=appIdentity(app),before=treeHash(app);
  if(identity.sha!==sha||identity.version!==version)throw Error('Wrong candidate identity');
@@ -103,4 +109,6 @@ finally{
  // codes expire within the hour and the freeze ignores this cohort's session.
  if(trialMinted)await admin('DELETE','/cohorts/'+COHORT+'/native-trials/'+user).catch(error=>console.error('trial grant not revoked: '+error.message));
  if(opened)await admin('POST','/cohorts/'+COHORT+'/session/close',{jti:opened.jti,exp:opened.exp}).catch(error=>console.error('acceptance session not closed: '+error.message));
+}
+
 }
