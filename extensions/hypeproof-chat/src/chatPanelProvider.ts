@@ -2457,6 +2457,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
     }
     await this.draftWrites;
+    if (this.interruptedHistory) await this.retryInterruptedHistory();
   }
 
   /** #751 — metadata-only observer for remote classroom operations; null unless the learner connected. */

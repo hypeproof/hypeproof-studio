@@ -156,6 +156,9 @@ test('interrupted history survives failed storage and recovers in the same task'
     assert.equal(f.store.getView().activeTaskId, id, 'failed persistence blocks leaving the transcript');
     assert.equal(f.h.connectionChanging, false);
     assert.equal(f.store.getHistory().length, 0);
+    await assert.rejects(f.h.setConnectionChanging(true), /중단한 대화를 저장하지 못했습니다/, 'activity transition must not leave pending history behind');
+    await f.h.setConnectionChanging(false);
+    assert.equal(f.h.connectionChanging, false);
     f.store.append = append;
     await f.handle(f.scoped({ type: 'taskSelect', id }));
     assert.equal(f.store.getView().activeTaskId, id);
