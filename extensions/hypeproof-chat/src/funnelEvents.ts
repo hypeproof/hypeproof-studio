@@ -28,8 +28,8 @@ export const ENTRY_OUTCOMES = ["granted", "reused", "signed_in"] as const;
 export const TOOL_RESULT_KINDS = ["write", "edit", "preview", "publish"] as const;
 export const OFFER_SURFACES = ["end_card", "start_page"] as const;
 export const FUNNEL_OS = ["darwin", "win32", "linux"] as const;
-/** Same bound as the Service (`VERSION_RE` in lib/trial-funnel.ts). */
-export const APP_VERSION_RE = /^\d{1,3}\.\d{1,3}\.\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$/;
+/** Same bound as the Service (`VERSION_RE` in lib/trial-funnel.ts). Releases are calendar versions (`2026.1017.0`). */
+export const APP_VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$/;
 
 export type EntryOutcome = (typeof ENTRY_OUTCOMES)[number];
 export type ToolResultKind = (typeof TOOL_RESULT_KINDS)[number];

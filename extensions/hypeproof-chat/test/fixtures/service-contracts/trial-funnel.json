@@ -2,13 +2,13 @@
   "schema": "studio-consumer-fixture/trial-funnel/1",
   "provenance": {
     "repository": "hypeproof/hypeproof-service",
-    "branch": "fix/trial-ot-funnel-events-20261018",
-    "commit": "981c888",
-    "note": "Captured from the unmerged Service branch commit by running its parseAppEvent (samples[].accepted is the real parser verdict). Regenerate when the Service contract changes.",
+    "branch": "free-start/integration-20261019",
+    "commit": "78ae769",
+    "note": "Captured from the Service branch commit by running its parseAppEvent (samples[].accepted is the real parser verdict). Regenerate when the Service contract changes.",
     "sources": {
-      "worker/src/lib/trial-funnel.ts": "3fa492309b0a32989c0aed87fac6af4a504fc53815ed3f46f7e8d9bde0a98097",
-      "worker/src/routes/trial-events.ts": "8dc886d28d1053d43f747c2582bf3c87fdb48c694de5b799149f9d9185195d3f",
-      "worker/src/index.ts": "458c87ee5a850dd108c106e129dd8f78bdc710ea2fff41247e1a953d30eb4688"
+      "worker/src/lib/trial-funnel.ts": "baf19d0d56133e30b6b9ce6abcf7401f39e9787672d25b93edb4744c9b7266bd",
+      "worker/src/routes/trial-events.ts": "fb638167a562e488e84d968c86701f278a7e74c861eebd75ae8f1434603825aa",
+      "worker/src/index.ts": "f496ca1f4683484e4feb4fbc165e3798ca9d972a72ee83de26b51cd7eaecba9a"
     }
   },
   "route": {
@@ -44,7 +44,7 @@
       }
     }
   },
-  "version_re": "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$",
+  "version_re": "^\\d{1,4}\\.\\d{1,4}\\.\\d{1,5}(?:-[0-9A-Za-z.]{1,16})?$",
   "app_events": {
     "trial_entry": {
       "outcome": {
@@ -211,6 +211,23 @@
       "body": {
         "type": "trial_entry",
         "fields": {
+          "outcome": "granted",
+          "app_version": "2026.1019.0"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "2026.1019.0"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
           "outcome": "reused"
         }
       },
@@ -300,6 +317,23 @@
       "body": {
         "type": "trial_entry",
         "fields": {
+          "outcome": "reused",
+          "app_version": "2026.1019.0"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "reused",
+          "app_version": "2026.1019.0"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
           "outcome": "signed_in"
         }
       },
@@ -382,6 +416,23 @@
         "fields": {
           "outcome": "signed_in",
           "app_version": "0.1.61-rc.2"
+        }
+      }
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "2026.1019.0"
+        }
+      },
+      "accepted": true,
+      "recorded": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "signed_in",
+          "app_version": "2026.1019.0"
         }
       }
     },
@@ -685,6 +736,17 @@
         "fields": {
           "outcome": "granted",
           "app_version": "dev"
+        }
+      },
+      "accepted": false,
+      "message": "invalid field: app_version"
+    },
+    {
+      "body": {
+        "type": "trial_entry",
+        "fields": {
+          "outcome": "granted",
+          "app_version": "20261.1019.0"
         }
       },
       "accepted": false,

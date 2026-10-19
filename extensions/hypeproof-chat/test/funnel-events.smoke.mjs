@@ -70,6 +70,7 @@ function studioInputs() {
     out.push({ type: "trial_entry", outcome });
     for (const os of FUNNEL_OS) out.push({ type: "trial_entry", outcome, app_version: "0.1.60", os });
     out.push({ type: "trial_entry", outcome, app_version: "0.1.61-rc.2" });
+    out.push({ type: "trial_entry", outcome, app_version: "2026.1019.0" }); // shipped calendar version (D1)
   }
   for (const kind of TOOL_RESULT_KINDS) for (const ok of [true, false]) out.push({ type: "trial_tool_result", kind, ok });
   for (const t of ["offer_viewed", "offer_clicked", "offer_dismissed"]) for (const surface of OFFER_SURFACES) out.push({ type: t, surface });

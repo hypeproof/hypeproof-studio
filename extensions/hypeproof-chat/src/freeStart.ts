@@ -71,7 +71,8 @@ export type FreeClaimResult =
 
 const INSTALL_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const isInstallId = (v: unknown): v is string => typeof v === "string" && INSTALL_ID_RE.test(v);
-const VERSION_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,5})(?:-([0-9A-Za-z.]{1,16}))?$/;
+/** Same bound as the Service (`APP_VERSION_RE` in lib/free-start.ts). Releases are calendar versions (`2026.1017.0`). */
+const VERSION_RE = /^(\d{1,4})\.(\d{1,4})\.(\d{1,5})(?:-([0-9A-Za-z.]{1,16}))?$/;
 
 /** Semver order for `x.y.z[-pre]`: a prerelease sorts before its release. `null` when either is malformed. */
 export function compareVersions(a: string, b: string): number | null {

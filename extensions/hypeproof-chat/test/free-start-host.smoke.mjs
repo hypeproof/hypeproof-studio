@@ -178,6 +178,23 @@ try {
   await h.page.handle({ type: 'freeStartUpdate' });
   assert.deepEqual(h.world.commands, ['hypeproof-chat.checkForUpdates']);
 
+  // Calendar-version releases (ST-VER-01): Studio ships 2026.MMDD.N, so the Service floor is one too.
+  // Below a calendar floor → update path, no claim. At the floor → the claim carries the real version.
+  reset(); svc.offer = { status: 200, body: { ...OFFER_FREE, min_app_version: '2026.1019.0' } };
+  h = harness({ version: '2026.1017.0', globals: new Map([['hypeproofChat.freeStart.age.v1', '14+']]) });
+  await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(h.state().freeStart.tooOld, true, '2026.1017.0 is below a 2026.1019.0 floor');
+  await h.page.handle({ type: 'freeStartClaim' });
+  assert.equal(claims().length, 0, 'below a calendar floor: nothing is claimed');
+  reset(); svc.offer = { status: 200, body: { ...OFFER_FREE, min_app_version: '2026.1019.0' } };
+  h = harness({ version: '2026.1019.0', globals: new Map([['hypeproofChat.freeStart.age.v1', '14+']]) });
+  await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(h.state().freeStart.tooOld, undefined, 'at the calendar floor: not too old');
+  await h.page.handle({ type: 'freeStartClaim' }); await h.settle();
+  assert.equal(claims().length, 1, 'at the calendar floor: one claim');
+  assert.equal(claims()[0].body.app_version, '2026.1019.0');
+  assert.equal(h.world.secrets.get('hypeproofChat.workshopToken'), TOKEN_FREE, 'the calendar-version claim is admitted');
+
   // Drained day advertised: the calm state, before any claim.
   reset(); svc.offer = { status: 200, body: { ...OFFER_FREE, available: false, reason: 'daily_cap', resumes_at: '2026-10-19T15:00:00.000Z' } };
   h = harness();
