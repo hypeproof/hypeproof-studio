@@ -2,7 +2,7 @@ import fs from 'node:fs';import {execFileSync} from 'node:child_process';
 import {engineEnabled,authorizeExecution,executionBody} from '../cloud-executor/workflow-gate.mjs';
 const check=(ok,why)=>{if(!ok)throw Error('BLOCKED: '+why);};
 export const smokeResources={S1:['api'],S2:['api'],S3:['service','api'],S4:['model','service','api'],S5:['api'],S6:['service','api']};
-export const smokeScopes={S1:'one-public-health-read',S2:'one-chalk-health-read',S3:'one-owned-classroom-seat-lifecycle',S4:'one-owned-sdk-seat-six-sdk-shapes-max64-tokens',S5:'bounded-candidate-checks-20-pages-2000-run-metadata',S6:'one-owned-seat-lifecycle-and-two-current-product-board-reads'};
+export const smokeScopes={S1:'one-public-health-read',S2:'one-chalk-health-read',S3:'one-owned-classroom-seat-lifecycle',S4:'one-owned-sdk-seat-six-sdk-shapes-max64-tokens',S5:'bounded-candidate-checks-20-pages-2000-run-metadata',S6:'one-owned-seat-lifecycle-and-three-current-product-board-reads'};
 export function controlledInputs(env=process.env,{head=()=>execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()}={}){
  if(!engineEnabled(env))return null;
  check(env.HPS_VERIFICATION_CONTEXT&&env.HPS_ENGINE_IDENTITY_FILE&&['mac','win-user','win-system'].includes(env.TARGET),'canonical verifier context/collection/target required before smoke');
