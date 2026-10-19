@@ -24,7 +24,9 @@ import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type Impor
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
-import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { HeadingSlotContext } from "./headingSlot";
 import type {
   ChatConfig,
   ChatMessage,
@@ -529,6 +531,12 @@ export function ChatPanel(props: Props) {
   // Trial diagnosis D3 — solo seats (trial/pass/personal) get no classroom/operator words.
   const audience: SeatAudience = config?.activity ? seatAudience(config.activity) : profileAudience(config?.profile);
   const viewport = useChatViewport(scrollRef, personalWorkspace, messages);
+  const headingSlot = useContext(HeadingSlotContext);
+  // Personal chat: the usage panel is opened from the header menu, or stays up while a funding
+  // choice is still required (then it opens itself, exactly as before).
+  const [accessOpen, setAccessOpen] = useState(false);
+  const accessRequired = !!config?.access?.view?.required && !config?.access?.selected;
+  useEffect(() => { if (accessRequired) setAccessOpen(true); }, [accessRequired]);
   const composerExpanded = useGrowingComposer(textareaRef, personalWorkspace, draft, pendingImages.length > 0 || stagedPhotos.length > 0 || toolMode === 'web-search');
   const classroomPanels = classroomPanelsShown(config?.profile, personalWorkspace);
   // TUX-SP-13 — a trial seat's personal workspace has no mission header, so its passive remaining
@@ -901,6 +909,8 @@ export function ChatPanel(props: Props) {
     ux.suggestions.follow_up.length > 0;
   // #414 — if a real activity log showed up this turn, the spinner does not invent fake stages.
   const turnHasActivity = hasActivityThisTurn(messages);
+  // Personal chat offers retry on the latest coach answer only.
+  const latestAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id;
 
   // #642 — if the screen is static for the 1–3 minutes the coach is working, a kid
   // reads it as broken (2026-08-20, real device). The runner bar goes above the
@@ -923,9 +933,11 @@ export function ChatPanel(props: Props) {
       {dragActive && (
         <div className="hps-shell-drop-overlay">여기에 놓으면 이미지가 첨부돼요 🖼</div>
       )}
-      <header className="hps-header">
+      {(() => { const header = <header className="hps-header">
         {ux.coach.naming_mode === "fixed"
-          ? <strong title={`이 수업의 AI 이름: ${coachName}`} className="hps-coach-name">{coachName}</strong>
+          // Personal chat: a fixed name is not a control, and the one header row has no room for a
+          // label that names nothing the learner can act on. It stays readable to screen readers.
+          ? <strong title={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
         {trialLine && <span className="hps-trial-left" title={trialLine}>{trialLine}</span>}
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
@@ -976,9 +988,13 @@ export function ChatPanel(props: Props) {
             활동 변경
           </button>
           <button onClick={props.onClear} disabled={props.streaming} title="대화 기록 지우기">대화 지우기</button>
+          {/* Personal chat: usage lives behind the header menu (the remaining line already shows the
+              count); the panel opens above the composer only when the learner asks for it. */}
+          {personalWorkspace && config?.access && <button onClick={() => setAccessOpen(true)} title="이용권과 사용량 확인">이용권 · 사용량</button>}
           <button onClick={props.onSettings} title="설정" aria-label="설정">{personalWorkspace ? "설정" : "⚙"}</button>
         </HeaderActions>
-      </header>
+      </header>;
+      return personalWorkspace && headingSlot ? createPortal(header, headingSlot) : header; })()}
 
       {/* Region A — Mission header. Student-only surface; #1298 hides it for instructor mode. */}
       {!props.instructor && !personalWorkspace && <MissionHeader
@@ -1156,6 +1172,8 @@ export function ChatPanel(props: Props) {
               onRunCode={props.onRunCode}
               onRetry={props.onRetry}
               personal={personalWorkspace}
+              isLatest={m.id === latestAssistantId}
+              freeSeat={!!config?.activity?.free}
             />
           ),
         )}
@@ -1241,8 +1259,13 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
-        {config.profile?.model_selection && <div className="hps-model-selection">
-          <label>모델 <select aria-label="대화 모델" value={config.model}
+        {/* Personal chat: model and thinking depth share one compact row above the composer
+            (Jay 2026-10-19: four stacked control rows read as clutter). Classroom keeps its rows. */}
+        {(() => { const modelHint = config.profile?.model_selection ? (config.profile.model_selection.choices.length === 1
+            ? (config.profile.model_selection.source === 'lesson' ? '이 수업에서 고정한 모델' : '사용 가능한 모델 1개')
+            : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요') : '';
+          const model = config.profile?.model_selection && <div className="hps-model-selection">
+          <label>{personalWorkspace ? <span className="hps-sr-only">모델</span> : '모델 '}<select aria-label="대화 모델" title={personalWorkspace ? modelHint : undefined} value={config.model}
             disabled={config.profile.model_selection.choices.length === 1}
             onChange={e => postToHost({ type: 'selectModel', alias: e.target.value })}
             onKeyDown={e => {
@@ -1260,12 +1283,12 @@ export function ChatPanel(props: Props) {
 
             {config.profile.model_selection.choices.map(c => <option key={c.id} value={c.alias}>{c.label}</option>)}
           </select></label>
-          <small>{config.profile.model_selection.choices.length === 1
-            ? (config.profile.model_selection.source === 'lesson' ? '이 수업에서 고정한 모델' : '사용 가능한 모델 1개')
-            : streaming ? '변경하면 다음 요청부터 적용돼요' : '대화를 유지하며 모델을 바꿀 수 있어요'}</small>
-        </div>}
-        <EffortControl config={config} post={postToHost} />
-        <AccessControl config={config} streaming={streaming} post={postToHost} />
+          <small className={personalWorkspace ? "hps-sr-only" : undefined}>{modelHint}</small>
+        </div>;
+          return personalWorkspace
+            ? <>{(model || config.effort || config.effortResult) && <div className="hps-composer-settings">{model}<EffortControl config={config} post={postToHost} personal /></div>}
+                {(accessOpen || accessRequired) && <AccessControl config={config} streaming={streaming} post={postToHost} defaultOpen focusOnMount={!accessRequired} onClosed={() => { if (!accessRequired) setAccessOpen(false); }} />}</>
+            : <>{model}<EffortControl config={config} post={postToHost} /><AccessControl config={config} streaming={streaming} post={postToHost} /></>; })()}
         {runnerCohort && <RunnerBar face={runnerWho} running={runnerRunning} />}
         {/* The button is in the header; **only the result** appears here. One header row
             has no room for either the link or the failure reason, and a kid cannot read
@@ -1848,6 +1871,8 @@ function MessageItem({
   onRunCode,
   onRetry,
   personal = false,
+  isLatest = false,
+  freeSeat = false,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -1864,6 +1889,13 @@ function MessageItem({
   onRunCode: (html: string) => void;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   personal?: boolean;
+  /** Personal chat: retry is offered on the latest coach answer only (the ChatGPT/Claude pattern). */
+  isLatest?: boolean;
+  /**
+   * Personal chat on the free allowance: no retry. A retry is a new turn (REQ-STUDIO-TURN-ID), so
+   * a "refresh-looking" control would silently spend one of the ten free turns.
+   */
+  freeSeat?: boolean;
 }) {
   const renderable = useMemo(
     () => (message.role === "assistant" ? extractRenderableHtml(message.content) : null),
@@ -1873,19 +1905,22 @@ function MessageItem({
     !streaming &&
     message.role === "assistant" &&
     ux.retry_button.enabled &&
-    message.content.length > 0;
+    message.content.length > 0 &&
+    (!personal || (isLatest && !freeSeat));
   const retryPrompt = canRetry ? userPromptBefore(messages, message.id) : null;
 
   return (
     <div className={`hps-msg hps-msg-${message.role}${personal && isStreamingThis ? ' hps-msg-live' : ''}`}>
-      <div className="hps-msg-role">
+      <div className={personal ? "hps-msg-role hps-sr-only" : "hps-msg-role"}>
         {/*
           * #747 (AE-08) — if a stored name exists, use **that**. If not (rows from
           * before this change, a bubble still streaming) it falls back to the live name.
           * Re-resolving here would make the past change along the moment the name changes.
           */}
-        <span>{personal && message.role === 'assistant' && <span className="hps-assistant-mark" aria-hidden="true">h</span>}{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
-        {renderable && (
+        {/* Personal chat: the speaker is read out, not drawn — the bubble and the column already
+            say who is speaking, and a label on some turns but not others read as inconsistent. */}
+        <span>{message.role === "user" ? "나" : message.assistantName ?? coachName}</span>
+        {!personal && renderable && (
           <button
             className="hps-msg-run"
             onClick={() => onRunCode(renderable)}
@@ -1894,14 +1929,13 @@ function MessageItem({
             ▶ Run
           </button>
         )}
-        {retryPrompt && (
+        {!personal && retryPrompt && (
           <button
             className="hps-msg-retry"
             onClick={() => onRetry(retryPrompt.content, retryPrompt)}
             title="다른 방식으로 한 번 더 만들기"
-            aria-label={personal ? "답변 다시 만들기" : undefined}
           >
-            {personal ? <ChatIcon kind="retry" /> : '🔄'}
+            🔄
           </button>
         )}
       </div>
@@ -1932,7 +1966,10 @@ function MessageItem({
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
-      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer content={message.content} />}
+      {personal && message.role === 'assistant' && !isStreamingThis && message.content.trim() && <CopyAnswer
+        content={message.content}
+        onRun={renderable ? () => onRunCode(renderable) : undefined}
+        onRetry={retryPrompt ? () => onRetry(retryPrompt.content, retryPrompt) : undefined} />}
     </div>
   );
 }
@@ -2052,14 +2089,14 @@ function AssistantContent({
           // Stream ended with the fence still open → render partial + retry note.
           return (
             <div key={i}>
-              <CodePill code={seg.value} />
+              <CodePill code={seg.value} personal={personal} />
               <div className="hps-stream-note">
-                응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요.
+                {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : "응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요."}
               </div>
             </div>
           );
         }
-        return <CodePill key={i} code={seg.value} />;
+        return <CodePill key={i} code={seg.value} personal={personal} />;
       })}
       {personal && streaming && !hasOpenFence && <ResponsePending hasContent />}
       {!personal && streaming && !hasOpenFence && content.length > 0 && (
@@ -2071,14 +2108,18 @@ function AssistantContent({
   );
 }
 
-function CodePill({ code }: { code: string }) {
+function CodePill({ code, personal = false }: { code: string; personal?: boolean }) {
   const [open, setOpen] = useState(false);
   const lines = code.split("\n").length;
   return (
     <div className="hps-codepill">
-      <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
+      {/* Personal chat: a quiet disclosure in the answer's own type size, with a line icon from the
+          chat's icon set instead of a colour emoji (UI audit P0-2). */}
+      {personal ? <button className="hps-codepill-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <ChatIcon kind="code" size={14} /><span>{open ? "코드 숨기기" : `코드 보기 · ${lines}줄`}</span>
+      </button> : <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
         {open ? "▾" : "▸"} 📄 코드 {open ? "숨기기" : `보기 (${lines}줄)`}
-      </button>
+      </button>}
       {open && <pre className="hps-codepill-body">{code}</pre>}
     </div>
   );

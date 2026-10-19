@@ -118,3 +118,18 @@
 .tw-workspace .hps-header .tw-chat-menu-panel > button { color: var(--vscode-foreground, #e1e1e1); }
 .tw-workspace .hps-header .tw-chat-menu-toggle:hover,
 .tw-workspace .hps-header .tw-chat-menu-panel > button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
+
+/* One calm header row: the personal chat's header controls (remaining line, menu) are drawn into
+   the task heading next to 자료, which is a plain header button rather than a bordered square. */
+.tw-heading-slot { display: contents; }
+.tw-heading .hps-header { display: contents; }
+.tw-heading .hps-trial-left { color: var(--tw-muted); margin-inline: 0 4px; }
+.tw-heading .tw-chat-menu { order: 1; }
+.tw-workspace .tw-heading .tw-sources-toggle { border-color: transparent; background: transparent; padding: 0 12px; font-size: 13px; color: var(--vscode-foreground, #e1e1e1); }
+.tw-workspace .tw-heading .tw-sources-toggle[aria-expanded="true"] { background: var(--vscode-list-inactiveSelectionBackground, #30353d); }
+.tw-workspace .tw-heading .tw-sources-toggle:focus-visible { outline-offset: 1px; }
+/* The task title keeps its place; the remaining line gives way (ellipsis, full text in its title). */
+.tw-heading h1 { flex: 1 1 0; min-width: min(120px, 30%); }
+.tw-heading .hps-trial-left { flex: 0 1 auto; min-width: 0; }
+.tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
+.tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }
