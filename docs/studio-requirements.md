@@ -1469,3 +1469,7 @@ changing the original/edited history contract.
 Task navigation and webview reload preserve an open inline edit, its exact text and retained images in the existing task-scoped draft. This is separate from the composer draft and does not change the original transcript or send a request. Explicit Cancel/Escape discards only the inline edit; an accepted resend clears it, while rejected admission keeps it. Restored edit data is bound to the original message ID and cannot be applied to another message. Native installed-app restart and provider acceptance require separate evidence.
 
 If an accepted edited request fails before any answer is saved, retain its text and images through the existing paused input recovery path, separately from a later composer draft. An optimistic message visible on screen is not durable evidence.
+
+### Inline attachment removal targets (REQ-STUDIO-CHAT-EDIT-RESEND)
+
+Each retained image in the prompt editor has a minimum 44×44px non-shrinking tile. Its remove button stays inside that tile, independently clickable even for tiny or mixed-size images at narrow widths. Images keep their aspect ratio; removing an attachment never sends the prompt or changes the separate composer draft.
