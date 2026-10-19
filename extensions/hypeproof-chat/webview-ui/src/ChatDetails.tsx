@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
-export function ChatIcon({ kind }: { kind: 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' }) {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' | 'check' | 'down' | 'plus' | 'globe' | 'image' | 'retry' | 'code' | 'play' | 'chevron'; size?: number }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {kind === 'plus' && <path d="M12 5v14M5 12h14" />}
     {kind === 'globe' && <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18Z" /></>}
     {kind === 'image' && <><rect x="3" y="3" width="18" height="18" rx="4" /><circle cx="8" cy="8" r="1" /><path d="m3 17 5-5 4 4 4-6 5 7" /></>}
@@ -11,10 +11,19 @@ export function ChatIcon({ kind }: { kind: 'send' | 'stop' | 'copy' | 'check' | 
     {kind === 'copy' && <><rect x="8" y="8" width="11" height="12" rx="2" /><path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3" /></>}
     {kind === 'check' && <path d="m5 12 4 4L19 6" />}
     {kind === 'down' && <path d="M12 5v14m-6-6 6 6 6-6" />}
+    {kind === 'code' && <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />}
+    {kind === 'play' && <path d="M8 5.5v13l10.5-6.5L8 5.5Z" />}
+    {kind === 'chevron' && <path d="m9 6 6 6-6 6" />}
   </svg>;
 }
 
-export function CopyAnswer({ content }: { content: string }) {
+/**
+ * The actions under a finished coach answer in the personal chat: copy, then (when offered) open
+ * the answer's page in the preview and ask for the answer again. One row, one size, no boxes —
+ * the answer text leads and these follow it (Jay 2026-10-19: the bordered retry square beside the
+ * speaker label read as an out-of-place "restart").
+ */
+export function CopyAnswer({ content, onRun, onRetry }: { content: string; onRun?: () => void; onRetry?: () => void }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -28,9 +37,15 @@ export function CopyAnswer({ content }: { content: string }) {
     catch { if (mounted.current) setState('failed'); }
   };
   return <div className="hps-answer-actions">
-    <button type="button" className="hps-copy-answer" onClick={copy} aria-label="답변 복사" title="답변 복사">
-      <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
+    <button type="button" className="hps-copy-answer hps-answer-action" onClick={copy} aria-label="답변 복사" title="답변 복사">
+      <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
     </button>
+    {onRun && <button type="button" className="hps-msg-run hps-answer-action" onClick={onRun} title="미리보기 패널에서 실행">
+      <ChatIcon kind="play" size={16} /><span>미리보기</span>
+    </button>}
+    {onRetry && <button type="button" className="hps-msg-retry hps-answer-action" onClick={onRetry} aria-label="답변 다시 받기" title="같은 요청으로 답변을 한 번 더 받아요">
+      <ChatIcon kind="retry" size={16} /><span>다시 받기</span>
+    </button>}
     <span role="status" className="hps-copy-status">{state === 'copied' ? '답변을 복사했습니다' : state === 'failed' ? '복사하지 못했습니다. 답변을 선택해 복사해 주세요.' : ''}</span>
   </div>;
 }

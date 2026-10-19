@@ -1,17 +1,22 @@
-import {useState,useEffect} from 'react';
+import {useState,useEffect,useRef} from 'react';
 import type {ChatConfig,WebviewMessage} from '../../src/protocol';
 const stateLabels:Record<string,string>={ready:'사용 가능',ended:'이용 기간 종료',paused:'일시정지',review_required:'사용량 확인 필요',exhausted:'남은 자원 부족',not_configured:'이용 한도 설정 대기',external_unknown:'외부 공급자 사용량 미확인'};
 const meterLabels:Record<string,string>={'tokens:input':'입력 토큰','tokens:output':'출력 토큰','tokens:cache_read':'캐시 읽기 토큰','tokens:cache_write':'캐시 쓰기 토큰','tokens:cache_write:5m':'5분 캐시 토큰','tokens:cache_write:1h':'1시간 캐시 토큰','requests:count':'요청 수','browser:seconds':'브라우저 초','computer:seconds':'컴퓨터 초','execution:seconds':'실행 초','storage:byte-seconds':'저장 byte·초'};
 const unit=(m:string)=>m.startsWith('currency:')?m.split(':')[1]+' 정산 기준':meterLabels[m]??m;
 const amount=(n:number,m:string)=>m.startsWith('currency:')?(n/1000000).toLocaleString('en-US',{maximumFractionDigits:6}):n.toLocaleString('en-US');
-export function AccessControl({config,streaming,post}:{config:ChatConfig;streaming:boolean;post:(m:WebviewMessage)=>void}){
- const [note,setNote]=useState(''),[expanded,setExpanded]=useState(false);const a=config.access,view=a?.view,choice=view?.choices.find(c=>c.id===a?.selected);
+/**
+ * `defaultOpen`/`onClosed`/`focusOnMount`: the personal chat opens this panel from its header menu
+ * and removes it again when the learner closes it. The classroom renders it as before (closed).
+ */
+export function AccessControl({config,streaming,post,defaultOpen=false,onClosed,focusOnMount=false}:{config:ChatConfig;streaming:boolean;post:(m:WebviewMessage)=>void;defaultOpen?:boolean;onClosed?:()=>void;focusOnMount?:boolean}){
+ const [note,setNote]=useState(''),[expanded,setExpanded]=useState(defaultOpen);const summary=useRef<HTMLElement>(null);
+ useEffect(()=>{if(focusOnMount)summary.current?.focus({preventScroll:true});},[focusOnMount]);const a=config.access,view=a?.view,choice=view?.choices.find(c=>c.id===a?.selected);
  useEffect(()=>{if(view?.required&&!a?.selected)setExpanded(true);},[view?.required,a?.selected]);
  if(!a)return null;
- return <details className="hps-access" open={expanded} onToggle={e=>setExpanded(e.currentTarget.open)}>
-  <summary>이용권 · 사용량 {choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</summary>
+ return <details className="hps-access" open={expanded} onToggle={e=>{const open=e.currentTarget.open;setExpanded(open);if(!open)onClosed?.();}}>
+  <summary ref={summary}>이용권 · 사용량 {choice?'· '+choice.label:a.status==='unknown'?'· 미확인':''}{choice&&<small className="hps-access-summary">{stateLabels[choice.state]??'미확인'}{choice.resources[0]?' · '+unit(choice.resources[0].meter)+' '+amount(choice.resources[0].remaining,choice.resources[0].meter)+' 남음':''}</small>}</summary>
   {a.status==='unknown'&&<p role="status">이용권과 사용량을 확인하지 못했습니다. 이전 잔액으로 실행 가능 여부를 판단하지 않습니다.</p>}
-  {view?.configured===false&&<p>현재 연결은 수업·체험의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.</p>}
+  {view?.configured===false&&<p>{config.activity?.free?'무료 사용의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.':'현재 연결은 수업·체험의 기본 이용 정책을 적용합니다. 별도 이용권 조회는 아직 제공되지 않습니다.'}</p>}
   {view?.configured&&view.choices.length===0&&<p>{view.required?'사용 가능한 이용권이 없습니다. 운영자에게 연결을 확인해 주세요.':'별도 이용권이 배정되지 않았습니다. 현재 수업·체험 정책을 적용합니다.'}</p>}
   {!!view?.choices.length&&<>
    <label>이번 작업의 이용권 <select aria-label="이번 작업의 이용권" value={a.selected??''} disabled={streaming} onChange={e=>post({type:'selectFunding',id:e.target.value})}>

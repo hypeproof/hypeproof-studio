@@ -318,6 +318,70 @@ try {
     assert.equal(native.ux.retry_button.enabled, true); await host(p, { type: 'history', messages: history }); await p.locator('.hps-msg-retry').click(); await request(p, { type: 'retryMessage', prompt: history[0].content });
     await host(p, { type: 'streamStart', streamId: 's1', messageId: 'a2' }); await expect(p.locator('.hps-msg-retry')).toHaveCount(0);
   });
+  // REQ-STUDIO-CHAT-POLISH ① — personal chat: retry sits in the answer-actions row of the LATEST
+  // coach answer only, and a free seat gets none (a retry is a new turn and spends a free turn).
+  // Positive control: a personal non-free seat shows exactly one, under the last answer.
+  // Negative controls: the free seat shows none; the old boxed control beside the label is gone.
+  const twoAnswers = [...history, { id: 'u2', role: 'user', content: '제목을 더 크게 해 주세요.', createdAt: 3 }, { id: 'a2', role: 'assistant', content: '제목을 키웠어요.', createdAt: 4 }];
+  await test('TUX-CHAT-10P', 'Personal chat: retry under the latest answer only, never on a free seat', async p => {
+    assert.equal(native.ux.retry_button.enabled, true);
+    await host(p, { type: 'history', messages: twoAnswers });
+    const retry = p.locator('.hps-msg-retry');
+    await expect(retry).toHaveCount(1);
+    await expect(retry).toHaveAccessibleName('답변 다시 받기');
+    await expect(retry).toHaveText('다시 받기');
+    await expect(p.locator('.hps-msg-assistant').last().locator('.hps-answer-actions .hps-msg-retry')).toHaveCount(1);
+    await expect(p.locator('.hps-msg-role .hps-msg-retry, .hps-msg-role .hps-msg-run')).toHaveCount(0);
+    const [copyBox, retryBox] = [await p.locator('.hps-msg-assistant').last().locator('.hps-copy-answer').boundingBox(), await retry.boundingBox()];
+    assert.equal(Math.round(copyBox.height), Math.round(retryBox.height), 'copy and retry are one size');
+    assert.equal(await retry.evaluate(el => getComputedStyle(el).borderTopWidth), '0px', 'retry has no visible box');
+    await retry.click(); await request(p, { type: 'retryMessage', prompt: '제목을 더 크게 해 주세요.' });
+    // Free seat (studio-open-trial, `activity.free`): the same history offers no retry at all.
+    await host(p, { type: 'config', config: config({ ...native, profile_id: 'studio-open-trial' }, { taskWorkspace, activity: { ...trialActivity(fresh), free: true } }) });
+    await host(p, { type: 'history', messages: twoAnswers });
+    await expect(p.locator('.hps-copy-answer')).toHaveCount(2);
+    await expect(p.locator('.hps-msg-retry')).toHaveCount(0);
+    await p.screenshot({ path: path.join(out, 'TUX-CHAT-10P-free-seat.png') });
+  }, { cfg: { taskWorkspace, activity: trialActivity(fresh) } });
+  // REQ-STUDIO-CHAT-POLISH ⑤⑥ — one header row (task title, remaining line, 자료, menu), one
+  // settings row above the composer, usage only from the menu. Control: the classroom chat (no task
+  // workspace) keeps its own header and its separate Effort/usage rows.
+  await test('TUX-CHAT-17', 'Personal chat: one header row, one settings row, usage from the menu', async p => {
+    await host(p, { type: 'history', messages: history });
+    const heading = p.locator('.tw-heading');
+    await expect(heading.locator('.hps-header .hps-trial-left')).toHaveText(/^AI 요청 40번 남음 · /);
+    await expect(heading.getByRole('button', { name: '대화 메뉴' })).toBeVisible();
+    await expect(p.locator('.hps-shell > .hps-header')).toHaveCount(0);
+    const tops = await Promise.all([heading.locator('h1'), heading.locator('.hps-trial-left'), heading.getByRole('button', { name: '자료' }), heading.getByRole('button', { name: '대화 메뉴' })].map(async l => Math.round((await l.boundingBox()).y + (await l.boundingBox()).height / 2)));
+    assert.ok(Math.max(...tops) - Math.min(...tops) <= 4, `header controls share one row: ${tops}`);
+    const settings = p.locator('.hps-composer-settings');
+    await expect(settings.getByRole('combobox', { name: '대화 모델' })).toHaveCount(native.model_selection ? 1 : 0);
+    await expect(settings.getByRole('combobox', { name: '생각 깊이' })).toBeVisible();
+    await expect(p.getByRole('combobox', { name: 'Effort', exact: true })).toHaveCount(0);
+    await expect(p.locator('.hps-access')).toHaveCount(0);
+    await p.getByRole('button', { name: '대화 메뉴' }).click();
+    await p.getByRole('menuitem', { name: '이용권 · 사용량' }).click();
+    await expect(p.locator('.hps-access')).toHaveAttribute('open', '');
+    await expect(p.locator('.hps-access > summary')).toBeFocused();
+    await expect(p.locator('.hps-access')).toContainText('수업·체험의 기본 이용 정책'); // code-issued seat: unchanged copy (control)
+    await p.locator('.hps-access > summary').click();
+    await expect(p.locator('.hps-access')).toHaveCount(0);
+    // A free seat's usage panel never says 체험 (SPEC iteration 4 ground rule).
+    await host(p, { type: 'config', config: config({ ...native, profile_id: 'studio-open-trial' }, { taskWorkspace, activity: { ...trialActivity(fresh), free: true }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } }) });
+    await p.getByRole('button', { name: '대화 메뉴' }).click();
+    await p.getByRole('menuitem', { name: '이용권 · 사용량' }).click();
+    await expect(p.locator('.hps-access')).toContainText('무료 사용의 기본 이용 정책');
+    await expect(p.locator('.hps-access')).not.toContainText('체험');
+    await p.locator('.hps-access > summary').click();
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'fits 390px');
+    await p.screenshot({ path: path.join(out, 'TUX-CHAT-17-personal.png') });
+    // Control: classroom chat keeps the in-shell header and the separate Effort control.
+    await host(p, { type: 'config', config: config(native, { effort: { value: 'medium', allowed: ['low', 'medium'] }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } }) });
+    await expect(p.locator('.hps-shell > .hps-header')).toHaveCount(1);
+    await expect(p.getByRole('combobox', { name: 'Effort', exact: true })).toBeVisible();
+    await expect(p.locator('.hps-access')).toHaveCount(1);
+    await expect(p.locator('.hps-composer-settings')).toHaveCount(0);
+  }, { cfg: { taskWorkspace, activity: trialActivity(fresh), effort: { value: 'medium', allowed: ['low', 'medium'] }, access: { status: 'ready', view: { schema: 'hps-access-view/1', configured: false, required: false, as_of: new Date().toISOString(), choices: [] } } } });
   await test('TUX-CHAT-11', 'Run emits exact HTML; plain response has no Run', async p => {
     await host(p, { type: 'history', messages: [{ ...history[1], content: '텍스트만 있습니다.' }] }); await expect(p.locator('.hps-msg-run')).toHaveCount(0);
     await host(p, { type: 'history', messages: history }); await p.locator('.hps-msg-run').click(); await request(p, { type: 'runCode', html: '<!doctype html><html><body><h1>합성 초안</h1></body></html>' });
