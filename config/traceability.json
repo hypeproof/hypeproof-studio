@@ -5742,6 +5742,12 @@
         },
         {
           "path": ".github/workflows/pr-ci.yml"
+        },
+        {
+          "path": "scripts/release/engine/package.json"
+        },
+        {
+          "path": "scripts/release/engine/provenance.json"
         }
       ]
     },
@@ -5759,6 +5765,9 @@
         {
           "path": "docs/dev/release-engine.md",
           "section": "## Verification"
+        },
+        {
+          "path": "scripts/release/test/engine-package.test.mjs"
         }
       ]
     },
