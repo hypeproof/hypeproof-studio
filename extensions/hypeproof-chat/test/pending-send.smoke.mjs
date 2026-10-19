@@ -47,13 +47,16 @@ for(const type of ['sendMessage','retryMessage']) for(const toolMode of ['auto',
 for(const fail of [false,true]){
  const h=host(),save=deferred();h.cachedProfile={worlds:[{id:'synthetic',emoji:'',guest:'테스트',chip:'테스트'}]};
  h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ const post=h.post;h.post=async message=>{if(message.type==='streamEnd')assert.equal(h.hasActiveStream(),false,'completion must permit the queued follow-up');return post(message);};
  const pending=proto.handleSend.call(h,'다른 친구도 있어?',[]);
  assert.equal(h.activeStreams.size,0);assert.equal(h.hasActiveStream(),true,'history persistence still owns activity');
+ assert.equal(h.posts.some(message=>message.type==='streamEnd'),false,'saving history is not yet completion');
  if(fail){
   save.reject(new Error('synthetic history failure'));await assert.rejects(pending,/synthetic history failure/);
   assert.equal(h.posts.find(message=>message.type==='inputRejected')?.text,'다른 친구도 있어?');
   assert.equal(h.posts.find(message=>message.type==='inputRejected')?.toolMode,'auto');
   assert.ok(h.posts.some(message=>message.type==='streamError'),'a displayed reply must not hide a failed history write');
+  assert.equal(h.posts.some(message=>message.type==='streamEnd'),false,'failed storage cannot signal successful completion');
  }else{save.resolve();await pending;assert.equal(h.posts.some(message=>message.type==='inputRejected'),false);}
  assert.equal(h.hasActiveStream(),false);
 }

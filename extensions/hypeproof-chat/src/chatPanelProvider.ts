@@ -980,13 +980,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the webview shows it and the next turn's history carries it, so the coach can continue
    * from the button's outcome instead of asking what happened.
    */
-  private async postAppReply(text: string): Promise<void> {
+  private async postAppReply(text: string, deferCompletion?: (streamId: string) => void): Promise<void> {
     const sid = randomId();
     const aid = randomId();
     void this.post({ type: "streamStart", streamId: sid, messageId: aid });
     void this.post({ type: "streamChunk", streamId: sid, delta: text });
-    void this.post({ type: "streamEnd", streamId: sid });
     await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+    if (deferCompletion) deferCompletion(sid);
+    else void this.post({ type: "streamEnd", streamId: sid });
   }
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
@@ -1436,7 +1437,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * and the reply are recorded like the other answers the App writes itself (show intent, guest list),
    * and neither goes to the spool, so the next ingest reads only the class conversation.
    */
-  private async answerBrainCall(text: string, intent: BrainIntent): Promise<void> {
+  private async answerBrainCall(text: string, intent: BrainIntent, deferCompletion: (streamId: string) => void): Promise<void> {
     const name = brainName(this.learningWikiPlan());
     const uid = randomId();
     const aid = randomId();
@@ -1452,12 +1453,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Markdown hard breaks: one short sentence per line in one bubble.
     const reply = run.lines.join("  \n");
     void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-    void this.post({ type: "streamEnd", streamId: uid });
     await this.appendHistory([
       { id: randomId(), role: "user", content: text, createdAt: Date.now() },
       { id: aid, role: "assistant", content: reply, createdAt: Date.now(), assistantName: this.coachDisplayName() },
     ]);
     if (run.open) await this.openBrainFile(run.open);
+    deferCompletion(uid);
   }
 
   /** "팀 브레인에 뭐 있어?": the summary from the wiki state; no model call, nothing opened. */
@@ -4640,6 +4641,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     this.pendingSends++;
     let releaseActivity: (()=>void) | undefined;
+    // streamEnd lets the webview flush its queued follow-up. Announce readiness
+    // only after persistence, stream cleanup and the activity lease have settled.
+    let completedStreamId: string | undefined;
+    let completionSignal: AbortSignal | undefined;
+    const deferCompletion = (streamId: string, signal?: AbortSignal) => { completedStreamId = streamId; completionSignal = signal; };
     let preflightComplete=false;
     try {
     const userId = this.rememberTurnRequest(text, mode, userMessageId, retrySourceId);
@@ -4666,7 +4672,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const wikiSwitch = this.cachedProfile?.learning_wiki;
     const brainCall = mode === 'auto' && wikiSwitch?.enabled === true && !images?.length ? brainIntent(text, brainName(wikiSwitch.plan), sessionLabel(wikiSwitch.plan)) : null;
     if (brainCall) {
-      await this.answerBrainCall(text, brainCall);
+      await this.answerBrainCall(text, brainCall, deferCompletion);
       return;
     }
     // "Show me / open it / run it" — if the kid asks to see the game in plain
@@ -4682,7 +4688,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const aid = randomId();
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
         await this.appendHistory([
           { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
           {
@@ -4696,6 +4701,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             assistantName: this.coachDisplayName(),
           },
         ]);
+        deferCompletion(uid);
         void this.revealBuilt(lastGame, { artifactSource: "existing" });
         return;
       }
@@ -4706,7 +4712,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // the switch commits, pulls and reopens folders, which is the app's job, not the coach's.
     if (mode === 'auto' && isProjectSwitchRequest(text) && (!images || images.length === 0) && this.sitePublisher().available()) {
       await this.appendHistory([{ id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode }]);
-      await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.");
+      await this.postAppReply("GitHub에 있는 프로젝트 목록을 열게요. 위에 뜨는 목록에서 이어서 작업할 프로젝트를 골라 주세요.", deferCompletion);
       // After this send settles: switchProject refuses while a send is pending (idle()).
       setTimeout(() => void this.switchProject(), 0);
       return;
@@ -4724,7 +4730,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         const aid = randomId();
         void this.post({ type: "streamStart", streamId: uid, messageId: aid });
         void this.post({ type: "streamChunk", streamId: uid, delta: reply });
-        void this.post({ type: "streamEnd", streamId: uid });
         await this.appendHistory([
           { id: userId, role: "user", content: text, createdAt: Date.now(), toolMode: mode },
           {
@@ -4735,6 +4740,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             assistantName: this.coachDisplayName(),
           },
         ]);
+        deferCompletion(uid);
         return;
       }
     }
@@ -5585,7 +5591,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
           const completion = webActivity.completion(assistantCitations.length);
           if (completion) this.postToolLog(streamId, { id: `web-search-result-${streamId}`, icon: '🔎', ...completion });
         }
-        void this.post({ type: "streamEnd", streamId });
         // #371 — persist the agent.md handoff fence, if the coach emitted one.
         // #503 — await it **before** the history is frozen. The toolLog line this
         // leaves also has to be in this turn's timeline for it to be visible when the
@@ -5604,6 +5609,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         // Fallback reveal in case the stream completed but the per-chunk
         // probe missed it (e.g. the closing ``` was in the very last delta).
         tryReveal(assistantText);
+        if (!ctrl.signal.aborted) deferCompletion(streamId, ctrl.signal);
       }
     } catch (err) {
       spoolStatus = "error";
@@ -5676,6 +5682,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       this.turnTimelines.delete(streamId);
     }
     } catch (error) {
+      completedStreamId = undefined;
       // A pre-stream storage/profile failure still owns a pending UI request.
       // Restore its captured input before propagating an unexpected host error.
       await this.post({type:"inputRejected",text,images,toolMode:mode});
@@ -5683,6 +5690,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {
       try { releaseActivity?.(); } finally { this.pendingSends--; }
+      if (completedStreamId && !completionSignal?.aborted) await this.post({ type: "streamEnd", streamId: completedStreamId });
     }
   }
 

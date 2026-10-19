@@ -54,6 +54,16 @@ Human judgment stays visible, and exposes OWNERSHIP through explicit recovery; i
 outcome. `e2e/queued-photo-send.mjs` verifies the React component boundary;
 native, full host persistence and live-model acceptance remain separate.
 
+`REQ-C16` host readiness (UX-QUEUE-03): a successful completion may release a
+parked follow-up only after the previous turn's history, observation writes,
+active-stream cleanup and activity lease release have finished. This also applies
+to app-written replies. A failed write cannot announce success, and stopping
+during final persistence must not produce a later successful completion.
+`pending-send.smoke.mjs` and `turn-tools.test.mjs` hold these asynchronous
+boundaries for no-model, proxy and SDK paths; isolated native queue/photo evidence
+checks the actual workspace lease. Synthetic service evidence does not establish
+live-provider, Windows or signed-release acceptance.
+
 A message-level citation opens one contextual preview with its real title,
 hostname and URL. It does not imply sentence-level attribution or fetched page
 content. Previewing another citation leaves an existing pin intact. Native browser

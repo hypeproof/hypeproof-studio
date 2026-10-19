@@ -58,6 +58,54 @@ function fixture(t, { runtimeMode = 'agent-sdk', resolvedProfile = copy(profile)
   return { h, posts, history, runtime, calls, runSdkCoach, SdkUnavailableError, BrowserControl, root, vscode };
 }
 
+// Completion is the UI's permission to submit its queued follow-up. Hold each
+// real host persistence boundary to catch a reply that is displayed too early.
+test('queued follow-up becomes ready only after history and observations settle', async t => {
+  for (const runtimeMode of ['proxy', 'agent-sdk']) {
+    const f = fixture(t, { runtimeMode, resolvedProfile: { ...copy(profile), coach_runtime: runtimeMode } });
+    let releaseSave, enteredSave, releaseObservations;
+    const saving = new Promise(resolve => { enteredSave = resolve; });
+    const saved = new Promise(resolve => { releaseSave = resolve; });
+    f.h.observationWrites = new Promise(resolve => { releaseObservations = resolve; });
+    const appendHistory = f.h.appendHistory;
+    f.h.appendHistory = async items => { enteredSave(); await saved; await appendHistory(items); };
+    const post = f.h.post;
+    f.h.post = async event => {
+      if (event.type === 'streamEnd') assert.equal(f.h.hasActiveStream(), false, 'completion must allow the next request');
+      return post(event);
+    };
+    const pending = f.h.handleMessage({ type: 'sendMessage', text: '일정을 정리해줘', history: [], toolMode: 'auto' });
+    await saving;
+    assert.equal(f.posts.some(event => event.type === 'streamEnd'), false, 'history write is still pending');
+    releaseSave();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.posts.some(event => event.type === 'streamEnd'), false, 'observation write is still pending');
+    releaseObservations();
+    await pending;
+    assert.equal(f.posts.filter(event => event.type === 'streamEnd').length, 1);
+    assert.equal(f.posts.some(event => event.type === 'streamError'), false);
+    assert.equal(f.h.hasActiveStream(), false);
+    assert.equal(f.calls.network, 0);
+  }
+});
+
+test('Stop during final persistence does not later announce a successful completion', async t => {
+  const f = fixture(t);
+  let releaseObservations, saved;
+  f.h.observationWrites = new Promise(resolve => { releaseObservations = resolve; });
+  const historySaved = new Promise(resolve => { saved = resolve; });
+  const appendHistory = f.h.appendHistory;
+  f.h.appendHistory = async items => { await appendHistory(items); saved(); };
+  const pending = f.h.handleMessage({ type: 'sendMessage', text: '작업 정리', history: [], toolMode: 'auto' });
+  await historySaved;
+  await new Promise(resolve => setImmediate(resolve));
+  for (const controller of f.h.activeStreams.values()) controller.abort();
+  releaseObservations();
+  await pending;
+  assert.equal(f.posts.some(event => event.type === 'streamEnd'), false);
+  assert.equal(f.h.hasActiveStream(), false);
+});
+
 const browserOnlyText = '웹브라우저를 열어줘봐 옆에';
 const authoredPageText = '새 웹페이지를 만들어줘';
 const generatedHtml = '<!doctype html><html><head><title>Fixture page</title></head><body><h1>Generated fixture</h1></body></html>';
