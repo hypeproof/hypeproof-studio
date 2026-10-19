@@ -313,3 +313,34 @@ re-checks the bytes when a release carries `sdk-seed.json`. `verify-branding.sh`
 still fails a bundle that carries a native package, and now also one that carries
 a seed tarball. Fetching the seed in the App is a separate, default-off change
 (studio-sdk-seed-on-demand).
+
+## 10. Fetching the seed in the App (studio-sdk-seed-on-demand, REQ-M46)
+
+Default off: `hypeproofChat.sdkSeedOnDemand` (machine scope, restricted in
+untrusted workspaces), or a profile that advertises `sdk_seed: { fetch: true }`.
+The Service sends that field to native trial and pass seats only, and only when
+`HPS_SDK_SEED_OFFER=enabled` (hypeproof-service, default off) — a trial user
+cannot reach a machine-scoped setting, so the Service switch is how a raw-zip
+trial install gets the offer. Either switch opens only the offer: the user
+still confirms and the seed is still verified. When it is on and `resolveSdkBinary` finds nothing
+before an agent-sdk turn, the host asks once per session in a modal. On
+confirmation `fetchSdkSeed` (`src/sdkSeedFetch.ts`) reads `sdk-seed.json` from
+the public release of the App's own tag (`v<extension version>`), downloads the
+platform tarball and installs it only when:
+
+- the manifest schema, SDK version, asset name and size are as expected;
+- the byte count equals the listed size (the download stops as soon as it is
+  exceeded), the sha256 equals the release value, and the sha512 equals the
+  value pinned in `sdkBinaryManifest.ts` — so the release origin carries no
+  trust of its own;
+- `package/claude[.exe]` is a regular file in the tarball and at least
+  `SDK_BINARY_MIN_BYTES`.
+
+The binary is renamed into `seededSdkBinaryPath` first and the `.verified.json`
+marker (`seededBy: studio-sdk-seed-on-demand`) is written last, so an
+interrupted install never looks trusted. Any refusal leaves no binary, marker
+or temp file, and the turn goes on as it did before. Judges are pure in
+`src/sdkSeedHelpers.ts` (including a streaming tar reader, so the ~250 MB
+binary is never buffered); `test/sdk-seed-fetch.smoke.mjs` runs them against a
+local fixture server. A real run needs a clean account: dev machines are
+already seeded.

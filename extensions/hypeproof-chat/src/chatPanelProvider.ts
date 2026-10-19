@@ -42,7 +42,10 @@ import { TOKEN_KEY, resolveWorkspaceRoot } from "./extension";
 import { ISSUER_TOKEN_KEY } from "./mintStudentTokenHelpers";
 import { proxyChat, fetchProfileResult, ProxyAuthError, ProxyTransportError } from "./proxyClient";
 import { TOKEN_MISSING_FRIENDLY, buildProxyHeaders, lessonBindingHeader, paidPassEndNotice, type ProfileFailure } from "./proxyClientHelpers";
-import { runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+import { resolveSdkBinaryForHost, runSdkCoach, SdkGatewayAuthError, SdkUnavailableError, type BrowserMcpHost } from "./sdkCoach";
+import { fetchSdkSeed } from "./sdkSeedFetch";
+import { sdkSeedOfferDecision, sdkSeedOnDemandEnabled, sdkSeedPlatformKey, sdkSeedUrls } from "./sdkSeedHelpers";
+import { SDK_BINARY_MANIFEST } from "./sdkBinaryManifest";
 import { SdkRequiredError, sdkUnavailableOutcome } from "./sdkRequiredHelpers";
 import { acceptFocus, acceptWork, rehearsalReport, turnLesson, workContext, type LessonFocus, type StepWork } from "./lessonFocus";
 import { GOAL_REFUSAL_SENTENCES, STUDENT_GOAL_KEY, acceptGoalSave, goalRequestIdOf, goalViewOf } from "./studentGoal";
@@ -52,6 +55,7 @@ import {
   isAbortError,
   sdkErrorDisplayText,
   sdkToolToActionRequest,
+  seededSdkBinaryPath,
   summarizeToolInput,
   withCoachSeatLock,
 } from "./sdkCoachHelpers";
@@ -558,6 +562,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   private profileGeneration=0;
+  // REQ-M46 — the user declined the seed download this session (asked once,
+  // not every turn), and the one download in flight.
+  private sdkSeedDeclined = false;
+  private sdkSeedInFlight: Promise<void> | null = null;
   // #1298 — instructor-mode state and server calls. Reset in invalidateProfile().
   private _instructorMode = new InstructorModeManager();
   private nativeObservationError: string | null = null;
@@ -4070,6 +4078,98 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   }
 
   /**
+   * REQ-M46 (studio-sdk-seed-on-demand) — offer to fetch the public native SDK
+   * seed when no binary resolves. Default off: `hypeproofChat.sdkSeedOnDemand`
+   * or a profile that advertises `sdk_seed: { fetch: true }`. Nothing is
+   * downloaded without the user's confirmation, and a seed is installed only
+   * when its sha256 matches the release and its sha512 the value pinned in this
+   * App (sdkSeedHelpers). Never throws: the turn goes on either way.
+   */
+  private async maybeOfferSdkSeed(profile: unknown, settingPath: string | undefined, signal: AbortSignal): Promise<void> {
+    try {
+      const cfg = vscode.workspace.getConfiguration("hypeproofChat");
+      const enabled = sdkSeedOnDemandEnabled({ setting: cfg.get<boolean>("sdkSeedOnDemand", false), profile });
+      if (!enabled) return;
+      if (this.sdkSeedInFlight) {
+        await this.sdkSeedInFlight;
+        return;
+      }
+      const platformKey = sdkSeedPlatformKey(process.platform, process.arch);
+      const appVersion = String((this.context.extension.packageJSON as { version?: unknown }).version ?? "");
+      const urls = platformKey ? sdkSeedUrls({ appVersion, platformKey }) : null;
+      const decision = sdkSeedOfferDecision({
+        enabled,
+        resolution: resolveSdkBinaryForHost({ settingPath }),
+        platformKey,
+        urls,
+        declined: this.sdkSeedDeclined,
+        inFlight: false,
+      });
+      if (decision !== "offer" || !platformKey) {
+        if (decision === "unsupported-platform" || decision === "no-release") console.warn(`[coach] SDK seed not offered: ${decision}`);
+        return;
+      }
+      const megabytes = Math.round((SDK_BINARY_MANIFEST[platformKey]?.unpackedSize ?? 0) / (1024 * 1024));
+      const download = "내려받기";
+      const choice = await vscode.window.showInformationMessage(
+        "AI 실행 도구를 내려받을까요?",
+        {
+          modal: true,
+          detail:
+            `이 컴퓨터에는 AI 코치가 쓰는 실행 도구가 아직 없습니다. HypeProof Studio 공개 릴리스에서 내려받아 ` +
+            `파일이 맞는지 확인한 뒤 설치합니다. 디스크 공간이 약 ${megabytes} MB 필요합니다.`,
+        },
+        download,
+      );
+      if (choice !== download) {
+        this.sdkSeedDeclined = true;
+        return;
+      }
+      const destBinary = seededSdkBinaryPath({ platform: process.platform, homeDir: os.homedir(), env: process.env });
+      const run = (async () => {
+        const result = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: "AI 실행 도구를 내려받는 중…" },
+          (progress) => {
+            let reported = 0;
+            return fetchSdkSeed({
+              appVersion,
+              platformKey,
+              destBinary,
+              signal,
+              onProgress: (received, total) => {
+                const pct = Math.floor((received / total) * 100);
+                if (pct > reported) {
+                  progress.report({ increment: pct - reported, message: `${pct}%` });
+                  reported = pct;
+                }
+              },
+            });
+          },
+        );
+        if (result.ok) {
+          console.info(`[coach] SDK seed installed at ${result.path} (${result.size} bytes)`);
+          return;
+        }
+        console.warn(`[coach] SDK seed ${result.stage} failed: ${result.reason}`);
+        if (signal.aborted) return;
+        void vscode.window.showWarningMessage(
+          result.stage === "verify"
+            ? "내려받은 파일이 확인값과 달라 설치하지 않았습니다. 다음 메시지를 보낼 때 다시 시도할 수 있습니다."
+            : "AI 실행 도구를 내려받지 못했습니다. 인터넷 연결을 확인하고 다음 메시지를 보낼 때 다시 시도해 주세요.",
+        );
+      })();
+      this.sdkSeedInFlight = run;
+      try {
+        await run;
+      } finally {
+        this.sdkSeedInFlight = null;
+      }
+    } catch (err) {
+      console.warn("[coach] SDK seed offer failed:", err);
+    }
+  }
+
+  /**
    * #457 — the work folder the coach stands in. The opened folder, then the profile's
    * workspace_root. With neither it returns undefined, but it **does not pass over
    * silently**: that state means the coach cannot find files, and with no log the
@@ -5462,6 +5562,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!token) {
           throw new ProxyAuthError("missing", TOKEN_MISSING_FRIENDLY);
         }
+        // REQ-M46 — default off. With the setting on (or the Service advertising
+        // it) and no binary, ask before this turn; a confirmed, verified download
+        // lands in the seeded location and runSdkCoach then resolves it. Declined
+        // or failed, the turn continues exactly as before.
+        await this.maybeOfferSdkSeed(profile, cfg.get<string>("sdkBinaryPath", "") || undefined, ctrl.signal);
         try {
           const sdkEnd = await runSdkCoach({
             toolMode: mode,
