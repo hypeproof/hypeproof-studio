@@ -80,6 +80,7 @@ try {
     const h = harness({ freeStart: setting });
     await h.page.handle({ type: 'startReady' }); await h.settle();
     assert.equal(h.state().freeStart, undefined, `${name}: no free card`);
+    assert.equal(h.page.freeStartSignal(), false, `${name}: no public-update signal (REQ-I15)`);
     await h.page.handle({ type: 'freeStartAge', answer: '14+' }); await h.page.handle({ type: 'freeStartClaim' });
     assert.equal(claims().length, 0, `${name}: no claim is ever sent`);
     assert.equal(h.world.global.size, 0, `${name}: nothing saved`);
@@ -89,7 +90,9 @@ try {
   reset();
   const shared = new Map();
   let h = harness({ globals: shared });
+  assert.equal(h.page.freeStartSignal(), false, 'no offer read yet: no public-update signal (REQ-I15)');
   await h.page.handle({ type: 'startReady' }); await h.settle();
+  assert.equal(h.page.freeStartSignal(), true, 'advertised free start turns the public-update signal on (REQ-I15)');
   assert.deepEqual({ ...h.state().freeStart }, { allowance: '무료 AI 요청 10번 · 첫 요청부터 24시간' }, 'the one question is asked: no age yet');
   assert.equal(svc.requests.some(r => r.path === '/v1/profile'), false, 'nothing reads /v1/profile before the claim');
   await h.page.handle({ type: 'freeStartAge', answer: '14+' });

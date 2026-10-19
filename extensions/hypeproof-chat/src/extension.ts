@@ -43,6 +43,7 @@ import {
   currentBundleVersion,
   reportManualUpdateCheckFailure,
   reportInstallUpdateFailure,
+  registerPublicUpdateSignal,
 } from "./updateChecker";
 import { openBrowser, captureActivePage, registerPreviewViewport } from "./nativeBrowser";
 import { LiveServer } from "./liveServer";
@@ -228,6 +229,10 @@ export async function activate(context: vscode.ExtensionContext) {
   const startPage = new StartPage(context, provider, async (profile, commit, selectedDirectory) => {
     return ensureWorkspace(profile, context, isTestRun && process.env.HPS_TEST_REAL_WORKSPACE !== "1", commit, selectedDirectory);
   }, provider.githubContinueSource(), accounts);
+  // D19/REQ-I15: the Service's free-start offer turns on the public-release update path for a
+  // Studio without member access. Read at each check; the setting `publicUpdates` still works alone.
+  registerPublicUpdateSignal(() => startPage.freeStartSignal());
+  context.subscriptions.push({ dispose: () => registerPublicUpdateSignal(null) });
   if (accounts) {
     context.subscriptions.push(vscode.window.registerUriHandler({
       handleUri: async uri => {

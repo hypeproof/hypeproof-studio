@@ -256,6 +256,14 @@ export class StartPage {
     const setting = vscode.workspace.getConfiguration("hypeproofChat").get<string>("freeStart", "service");
     return setting !== "off" && freeStartAdvertised(this.trialOffer);
   }
+  /**
+   * D19/REQ-I15 — the free-start signal the update checker reads (`registerPublicUpdateSignal`).
+   * True only once this window has read an offer that advertises free start and the local kill
+   * switch is not "off"; before any offer is read it is false, so members are never rerouted.
+   */
+  freeStartSignal(): boolean {
+    return this.freeStartOn();
+  }
   private ageAnswer(): AgeAnswer | undefined {
     const v = this.context.globalState?.get<unknown>(AGE_KEY);
     return isAgeAnswer(v) ? v : undefined;
