@@ -131,5 +131,10 @@
 /* The task title keeps its place; the remaining line gives way (ellipsis, full text in its title). */
 .tw-heading h1 { flex: 1 1 0; min-width: min(120px, 30%); }
 .tw-heading .hps-trial-left { flex: 0 1 auto; min-width: 0; }
+/* Narrow header (sidebar, 390-560px): the remaining count stays whole; only "· …까지" gives way. */
+@media (max-width: 640px) {
+  .tw-heading h1 { min-width: min(72px, 22%); }
+  .tw-heading .hps-trial-until { display: none; }
+}
 .tw-workspace .tw-heading .tw-rail-toggle { border-color: transparent; }
 .tw-workspace .tw-heading .tw-rail-toggle:hover { background: var(--vscode-list-hoverBackground, #2b3037); }

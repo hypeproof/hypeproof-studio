@@ -939,7 +939,8 @@ export function ChatPanel(props: Props) {
           // label that names nothing the learner can act on. It stays readable to screen readers.
           ? <strong title={`이 수업의 AI 이름: ${coachName}`} className={personalWorkspace ? "hps-coach-name hps-sr-only" : "hps-coach-name"}>{coachName}</strong>
           : <button title="코치 이름 바꾸기" onClick={() => setForceNaming(true)} className="hps-coach-name">{coachName}</button>}
-        {trialLine && <span className="hps-trial-left" title={trialLine}>{trialLine}</span>}
+        {/* The count is the status (it never gives way); the end time yields on a narrow header (title keeps the full line). */}
+        {trialLine && <span className="hps-trial-left" title={trialLine}>{trialLine.split(" · ")[0]}{trialLine.includes(" · ") && <span className="hps-trial-until">{trialLine.slice(trialLine.indexOf(" · "))}</span>}</span>}
         <HeaderActions personal={personalWorkspace} taskId={taskId}>
           {/* Immediately **left** of Token, same size. It inherits the header button
               style (.hps-header button) as-is and differs only in color — giving it its

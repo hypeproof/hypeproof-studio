@@ -227,6 +227,12 @@ try {
     assert.equal(await line.evaluate(el => el.tagName), 'SPAN');
     assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the line fits the 390px header');
     await p.screenshot({ path: path.join(out, 'TUX-SP-13B-personal-header.png') });
+    // POLISH iter4 — at 390px the count is whole (never "AI 요청 3…"); only the end time gives way.
+    const fit = () => line.evaluate(el => ({ text: el.innerText, clipped: el.scrollWidth > el.clientWidth + 1 }));
+    assert.deepEqual(await fit(), { text: 'AI 요청 3번 남음', clipped: false }, 'the remaining count is whole at 390px');
+    await p.setViewportSize({ width: 1280, height: 900 });
+    assert.match((await fit()).text, /^AI 요청 3번 남음 · .+까지$/, 'positive control: a wide header shows the end time too');
+    await p.setViewportSize({ width: 390, height: 900 });
     await host(p, { type: 'config', config: config(native, { taskWorkspace, activity: trialActivity(fresh) }) });
     await expect(line).toHaveText(/^AI 요청 40번 남음 · /);
     // The mission header (a trial without a personal workspace) carries the same line as its detail.
