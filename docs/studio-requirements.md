@@ -154,6 +154,43 @@ read by the pre-change validator `test/fixtures/task-store-validator-before-edit
 negative control, carry-over, composer refusal),
 `test/edit-resend.test.tsx` (where `수정` and the pager render).
 
+`REQ-STUDIO-ANSWER-VERDICT` (CGP-CHAT-R-005, 2026-10-20, DEC-09): in personal task chat each finished
+answer offers the learner's verdict on it. Two ghost buttons, `맞아요` and `고쳐야 해요`, sit at the end
+of the answer action row (`CopyAnswer`, after 복사 · 미리보기 · 다시 받기), 44px targets with text labels
+and `aria-pressed`; the pressed one also shows a check mark, so the state is never colour only.
+They go on the last answer bubble of each finished turn (a turn split by tool lines is judged
+once, under its last bubble), only when it has text, never on a user line and never on the turn
+that is still running; earlier answers stay judgeable while a new one streams. Pressing the pressed
+button removes the verdict. `고쳐야 해요` opens a small labelled group (`고쳐야 할 점`) with one optional
+reason, `틀렸어요` / `내가 원한 게 아니에요` / `너무 어려워요` / `기타`; under a chosen reason an optional note
+(at most 300 characters, saved with `저장`) and the line `이 선택은 AI에게 보내지 않아요.` Changing or
+removing a verdict appends a new event and the latest event per answer wins for display, so the
+history is kept. DEC-09: verdicts are stored only on this device in the task's verdict file; not in
+the session log, not uploaded, not collected, not shown to instructors or Chalk. The verdict file is
+a per-scope sidecar `<scope>.verdicts.json` in the task store's directory, written under the task
+store's lock. It holds the evidence history: one event per change with the time, message id, prompt
+id (the user line the answer replied to), turn id (when this window produced the answer), verdict,
+reason code and the optional note (the note is kept for the learner's own screen; any evidence
+summary uses `verdictEvidence`, which carries only the note's length). The host writes nothing to the
+session spool for a verdict, so neither the session-log upload (`spoolUploader.ts`) nor class record
+snapshots and collections (`evidenceSnapshot.ts`), which read only spool sessions, can carry one;
+nothing reads the verdict file except the task store. Verdicts are not chat messages and never enter
+the model history, and they are not shown as a score or count anywhere. The task file is not
+touched, so an older build opens the task as before and only does not draw verdicts. An unreadable
+verdict file is set aside, never overwritten, and costs only the drawn verdicts; clearing the task's
+conversation drops its verdicts. Reopening a task draws the learner's last choice per answer. Not built in classroom seats or lessons: SX-06 fixes what the classroom coach rail may show
+(questions, hints, checklists, learner requests, instructor messages, AI notices) and SX-07 keeps
+self-evaluation out of work time, so a verdict control there needs an SX design change first. Also
+not built: instructor mode (no controls; the host refuses the message), verdicts on app replies being
+told apart from coach answers, and a verdict on an answer the learner stopped is not marked as
+partial. Tests: `test/answer-verdict.smoke.mjs` (request rules, evidence row without text, append
+and latest-wins, history cap, targets, store round trip, legacy load, task file unchanged and read by
+the pre-change validator, unreadable sidecar, clear; the verdict handler never uses the spool; the
+real class snapshot, class collection and log upload run over a spool plus a verdict file carry no
+verdict data, with an injected `answer_verdict` spool line as the negative control), `test/answer-verdict.test.tsx` (where
+the controls and reasons render, Korean labels, negative controls for streaming, user lines,
+classroom, lesson and instructor).
+
 ### Chat reference interaction (CG-IMPL-R1)
 
 `REQ-STUDIO-CHAT-REFERENCE`: the personal composer starts at 52–64px on a desktop

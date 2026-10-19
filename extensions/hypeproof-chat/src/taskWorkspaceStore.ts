@@ -6,6 +6,7 @@ import { hostname } from 'node:os';
 import { emptyActivityDraft, validActivityDraft } from './activityDraft.ts';
 import { suggestTaskTitle } from './taskTitle.ts';
 import { emptyVersions, joinVersions, splitVersions, validEditOf, type StoredVersions } from './editResend.ts';
+import { appendVerdict, latestVerdicts, validVerdictEvent, type VerdictEvent, type VerdictMap } from './answerVerdict.ts';
 import type { ActivityDraft } from './activityDraft';
 import type { ChatMessage } from './protocol';
 import type {
@@ -22,6 +23,13 @@ interface WorkspaceData {
 
 /** CGP-CHAT-R-002 — the versions sidecar, `<scope>.versions.json`. Earlier builds never read it. */
 interface VersionsData { version: 1; scope: string; tasks: Record<string, StoredVersions> }
+
+/**
+ * CGP-CHAT-R-005 — the answer-verdict sidecar, `<scope>.verdicts.json`: per task, the learner's
+ * verdict events in order (latest per message wins). Earlier builds never read it, and the task
+ * file is not touched by a verdict, so a downgrade only loses the drawn verdicts.
+ */
+interface VerdictsData { version: 1; scope: string; tasks: Record<string, VerdictEvent[]> }
 
 interface LockOwner { version: 1; host: string; pid: number; nonce: string; createdAt: number }
 interface LockRecord { owner: LockOwner; dev: number; ino: number }
@@ -106,6 +114,17 @@ function decodeVersions(text: string, scope: string): VersionsData {
   return data as unknown as VersionsData;
 }
 
+function decodeVerdicts(text: string, scope: string): VerdictsData {
+  let envelope: unknown;
+  try { envelope = JSON.parse(text); } catch { return fail('corrupt', '답변 선택 기록을 읽을 수 없습니다.'); }
+  if (!isRecord(envelope) || !exactKeys(envelope, ['checksum', 'data']) || !isRecord(envelope.data) ||
+      typeof envelope.checksum !== 'string' || envelope.checksum !== hash(JSON.stringify(envelope.data))) return fail('corrupt', '답변 선택 기록의 무결성을 확인할 수 없습니다.');
+  const data = envelope.data;
+  if (!exactKeys(data, ['version', 'scope', 'tasks']) || data.version !== 1 || data.scope !== scope || !isRecord(data.tasks) ||
+      !Object.entries(data.tasks).every(([id, events]) => nonempty(id, 256) && Array.isArray(events) && events.every(validVerdictEvent))) return fail('corrupt', '답변 선택 기록의 형식이 일치하지 않습니다.');
+  return data as unknown as VerdictsData;
+}
+
 function validDraft(value: unknown): value is ActivityDraft {
   return isRecord(value) && exactKeys(value, ['text', 'images', 'queued', 'imports', 'toolMode', 'queuedToolMode', 'queuedPaused', 'recovered', 'inlineEdit']) && validActivityDraft(value);
 }
@@ -162,11 +181,14 @@ export class TaskWorkspaceStore {
   readonly scope: string;
   readonly filePath: string;
   readonly versionsPath: string;
+  readonly verdictsPath: string;
   private readonly directory: string;
   private readonly rootPath: string;
   private data?: WorkspaceData;
   /** Versions sidecar as last read or written. A missing or unreadable sidecar reads as no versions. */
   private versions: VersionsData;
+  /** Answer-verdict sidecar as last read or written. A missing or unreadable one reads as no verdicts. */
+  private verdicts: VerdictsData;
   private loadError?: TaskWorkspaceStoreError;
   private queue: Promise<void> = Promise.resolve();
 
@@ -178,6 +200,8 @@ export class TaskWorkspaceStore {
     this.filePath = join(this.directory, `${this.scope}.json`);
     this.versionsPath = join(this.directory, `${this.scope}.versions.json`);
     this.versions = { version: 1, scope: this.scope, tasks: {} };
+    this.verdictsPath = join(this.directory, `${this.scope}.verdicts.json`);
+    this.verdicts = { version: 1, scope: this.scope, tasks: {} };
     this.load();
   }
 
@@ -191,6 +215,7 @@ export class TaskWorkspaceStore {
       if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '작업 기록 파일의 위치를 확인해야 합니다.');
       this.data = decode(readFileSync(this.filePath, 'utf8'), this.scope);
       this.versions = this.readVersionsSync();
+      this.verdicts = this.readVerdictsSync();
     } catch (error) {
       if (codeOf(error) === 'ENOENT') return;
       this.loadError = error instanceof TaskWorkspaceStoreError ? error :
@@ -204,6 +229,15 @@ export class TaskWorkspaceStore {
       const stat = lstatSync(this.versionsPath);
       if (stat.isFile() && !stat.isSymbolicLink()) return decodeVersions(readFileSync(this.versionsPath, 'utf8'), this.scope);
     } catch { /* missing or unreadable: no versions */ }
+    return { version: 1, scope: this.scope, tasks: {} };
+  }
+
+  /** A lost verdict sidecar costs only the drawn verdicts; the spool still has every event. */
+  private readVerdictsSync(): VerdictsData {
+    try {
+      const stat = lstatSync(this.verdictsPath);
+      if (stat.isFile() && !stat.isSymbolicLink()) return decodeVerdicts(readFileSync(this.verdictsPath, 'utf8'), this.scope);
+    } catch { /* missing or unreadable: no verdicts */ }
     return { version: 1, scope: this.scope, tasks: {} };
   }
 
@@ -229,6 +263,16 @@ export class TaskWorkspaceStore {
   getHistory(taskId = this.data?.activeTaskId): ChatMessage[] {
     const task = this.getTask(taskId);
     return task ? joinVersions(task.messages, taskId ? this.versions.tasks[taskId] : undefined) : [];
+  }
+  /** CGP-CHAT-R-005 — the learner's latest verdict per answer in this task. */
+  getVerdicts(taskId = this.data?.activeTaskId): VerdictMap {
+    if (this.loadError || !taskId) return {};
+    return latestVerdicts(this.verdicts.tasks[taskId] ?? []);
+  }
+  /** Every verdict event of the task, oldest first (history is kept; latest wins for display). */
+  getVerdictHistory(taskId = this.data?.activeTaskId): VerdictEvent[] {
+    if (this.loadError || !taskId) return [];
+    return clone(this.verdicts.tasks[taskId] ?? []);
   }
   getDraft(taskId = this.data?.activeTaskId): ActivityDraft { return this.getTask(taskId)?.draft ?? emptyActivityDraft(); }
 
@@ -319,7 +363,17 @@ export class TaskWorkspaceStore {
     }, true);
   }
   clearHistory(taskId: string): Promise<TaskWorkspaceView> {
-    return this.updateTask(taskId, (task, versions) => { task.messages = []; task.messageCount = 0; delete versions.tasks[taskId]; });
+    const cleared = this.updateTask(taskId, (task, versions) => { task.messages = []; task.messageCount = 0; delete versions.tasks[taskId]; });
+    // CGP-CHAT-R-005 — the answers are gone, so are their drawn verdicts (the spool keeps the events).
+    return cleared.then(view => this.mutateVerdicts(taskId, () => null).then(() => view));
+  }
+  /**
+   * CGP-CHAT-R-005 — append one verdict event for an answer of the ACTIVE task, under the same lock
+   * as the task file, writing only the verdict sidecar. Resolves the task's latest verdicts.
+   */
+  recordVerdict(taskId: string, event: VerdictEvent): Promise<VerdictMap> {
+    if (!validVerdictEvent(event)) return Promise.reject(new TaskWorkspaceStoreError('invalid', '저장할 답변 선택 형식이 올바르지 않습니다.'));
+    return this.mutateVerdicts(taskId, history => appendVerdict(history, clone(event)));
   }
   saveSurface(taskId: string, selection: TaskSurfaceSelection | null): Promise<TaskWorkspaceView> {
     return this.updateTask(taskId, task => {
@@ -410,6 +464,7 @@ export class TaskWorkspaceStore {
       removed = true;
       await unlink(`${this.filePath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
       await unlink(`${this.versionsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
+      await unlink(`${this.verdictsPath}.tmp-${original.owner.nonce}`).catch(error => { if (codeOf(error) !== 'ENOENT') throw error; });
     } finally {
       if (removed) await unlink(claimPath);
       else await rename(claimPath, lease.path);
@@ -475,17 +530,72 @@ export class TaskWorkspaceStore {
     catch { await rename(this.versionsPath, `${this.versionsPath}.unreadable-${nonce}`); return empty; }
   }
 
+  private async prepareDirectory(): Promise<void> {
+    await mkdir(this.rootPath, { recursive: true, mode: 0o700 });
+    const rootStat = await lstat(this.rootPath);
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail('io', '작업 저장 폴더의 위치를 확인해야 합니다.');
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    const directoryStat = await lstat(this.directory);
+    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) fail('io', '작업 저장 폴더의 위치를 확인해야 합니다.');
+    await chmod(this.directory, 0o700);
+  }
+
+  /** The verdict sidecar on disk, read under the lock. An unreadable one is set aside (kept, never overwritten). */
+  private async readVerdictsLocked(nonce: string): Promise<VerdictsData> {
+    const empty: VerdictsData = { version: 1, scope: this.scope, tasks: {} };
+    let text: string;
+    try {
+      const stat = await lstat(this.verdictsPath);
+      if (!stat.isFile() || stat.isSymbolicLink()) fail('corrupt', '답변 선택 기록 파일의 위치를 확인해야 합니다.');
+      text = await readFile(this.verdictsPath, 'utf8');
+    } catch (error) { if (codeOf(error) === 'ENOENT') return empty; throw error; }
+    try { return decodeVerdicts(text, this.scope); }
+    catch { await rename(this.verdictsPath, `${this.verdictsPath}.unreadable-${nonce}`); return empty; }
+  }
+
+  /**
+   * Read-modify-write of one task's verdict events. Only the active task of a loaded store may be
+   * changed; `null` from `change` removes the task's entry. The task file itself is never written.
+   */
+  private mutateVerdicts(taskId: string, change: (history: VerdictEvent[]) => VerdictEvent[] | null): Promise<VerdictMap> {
+    const operation = this.queue.then(async () => {
+      if (this.loadError) throw this.loadError;
+      const current = this.requireData(this.data);
+      if (taskId !== current.activeTaskId) fail('stale', '다른 작업의 저장 요청입니다. 현재 작업에서 다시 시도해 주세요.');
+      this.requireTask(current, taskId);
+      try {
+        await this.prepareDirectory();
+        const lock = await this.acquireLock();
+        try {
+          const disk = await this.readVerdictsLocked(lock.owner.nonce);
+          const next = clone(disk);
+          const events = change(next.tasks[taskId] ?? []);
+          if (events && events.length) next.tasks[taskId] = events;
+          else delete next.tasks[taskId];
+          if (JSON.stringify(next) !== JSON.stringify(disk)) {
+            const content = JSON.stringify({ checksum: hash(JSON.stringify(next)), data: next });
+            decodeVerdicts(content, this.scope);
+            await this.writeAtomic(this.verdictsPath, content, lock.owner.nonce);
+          }
+          this.verdicts = next;
+          return latestVerdicts(next.tasks[taskId] ?? []);
+        } finally {
+          await this.releaseLock(lock);
+        }
+      } catch (error) {
+        if (error instanceof TaskWorkspaceStoreError) throw error;
+        throw new TaskWorkspaceStoreError('io', '답변에 남긴 선택을 저장하지 못했습니다. 다시 시도해 주세요.');
+      }
+    });
+    this.queue = operation.then(() => {}, () => {});
+    return operation;
+  }
+
   private mutate(change: (data: WorkspaceData | undefined, versions: VersionsData) => WorkspaceData, recoverFromDisk = false): Promise<TaskWorkspaceView> {
     const operation = this.queue.then(async () => {
       if (this.loadError) throw this.loadError;
       try {
-        await mkdir(this.rootPath, { recursive: true, mode: 0o700 });
-        const rootStat = await lstat(this.rootPath);
-        if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail('io', '작업 저장 폴더의 위치를 확인해야 합니다.');
-        await mkdir(this.directory, { recursive: true, mode: 0o700 });
-        const directoryStat = await lstat(this.directory);
-        if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) fail('io', '작업 저장 폴더의 위치를 확인해야 합니다.');
-        await chmod(this.directory, 0o700);
+        await this.prepareDirectory();
         const lock = await this.acquireLock();
         try {
           let disk: WorkspaceData | undefined;

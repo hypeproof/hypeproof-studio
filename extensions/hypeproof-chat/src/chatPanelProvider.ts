@@ -196,6 +196,7 @@ import {
   type ToolEntry,
 } from "./chatTimeline";
 import { editResendPayload, latestUserTurn, modelConversation, validEditTarget, versionCount } from "./editResend";
+import { parseVerdictRequest, promptIdFor, verdictTargets, type VerdictEvent } from "./answerVerdict";
 import { capturePageContext } from "./nativeBrowser";
 import { isGeneralBrowserOpenRequest } from "./browserIntent";
 import { validateAndRepairHtml, type HtmlStructureResult } from "./htmlStructure";
@@ -5046,6 +5047,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "clearHistory":
         void this.clearHistory();
         return;
+      case "answerVerdict":
+        await this.handleAnswerVerdict(msg);
+        return;
       case "runCode":
         void this.revealBuilt(msg.html, { artifactSource: "manual_preview" });
         return;
@@ -5473,6 +5477,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
 
     responseStarted(streamId);
     void this.post({ type: "streamStart", streamId, messageId });
+    this.rememberAnswerTurn(messageId, streamId);
     // #503 — this turn's single timeline. It runs the same reducer as the webview, so
     // the history keeps exactly the on-screen order.
     this.turnTimelines.set(streamId, timelineStart(emptyTimeline(), messageId, Date.now()));
@@ -7135,6 +7140,63 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.availableUpdate;
   }
 
+  /**
+   * CGP-CHAT-R-005 — answer bubble id (the turn's base id; later segments are `<id>#n`) → the turn's
+   * id (streamId), for the answers of this window's session, stored on the verdict event. A reopened
+   * task has no entry; its verdict event then carries the message and prompt ids only.
+   */
+  private answerTurns?: Map<string, string>;
+  private rememberAnswerTurn(messageId: string, streamId: string): void {
+    // Created on first use, like turnRequests: tests build the provider without running field initialisers.
+    this.answerTurns ??= new Map();
+    this.answerTurns.set(messageId, streamId);
+    while (this.answerTurns.size > 256) this.answerTurns.delete(this.answerTurns.keys().next().value!);
+  }
+
+  private async postVerdicts(): Promise<void> {
+    const store = this.currentTaskStore?.();
+    const taskId = store?.getView().activeTaskId;
+    if (!store || !taskId || store.getView().error) return;
+    await this.post({ type: "answerVerdicts", taskId, verdicts: store.getVerdicts(taskId) });
+  }
+
+  /**
+   * CGP-CHAT-R-005 (REQ-STUDIO-ANSWER-VERDICT, DEC-09) — the learner's verdict on a finished answer.
+   * Personal task chat only (never a lesson, a classroom seat or instructor mode), and only for an
+   * answer the verdict rules offer one on. DEC-09: the event is stored ONLY in the task's local verdict
+   * file. It is deliberately NOT written to the session spool, because the spool is uploaded and
+   * collected for class records. It never reaches the model: it is not a chat message and is not in
+   * the history.
+   */
+  private async handleAnswerVerdict(msg: unknown): Promise<void> {
+    const store = this.currentTaskStore?.();
+    const taskId = store?.getView().activeTaskId;
+    const request = parseVerdictRequest(msg);
+    if (!store || !taskId || !request || this._instructorMode.isInstructor || this.cachedProfile?.lesson) { await this.postVerdicts(); return; }
+    // The saved conversation holds finished turns only (a turn is saved when it ends), so a running
+    // turn is not in it and an earlier answer stays judgeable while the next one streams.
+    const history = store.getHistory(taskId);
+    if (!verdictTargets(history, false).has(request.messageId)) { await this.postVerdicts(); return; }
+    const promptId = promptIdFor(history, request.messageId);
+    const turnId = this.answerTurns?.get(request.messageId.split("#")[0]);
+    const event: VerdictEvent = {
+      messageId: request.messageId,
+      ...(promptId ? { promptId } : {}),
+      ...(turnId ? { turnId } : {}),
+      verdict: request.verdict,
+      ...(request.reason ? { reason: request.reason } : {}),
+      ...(request.note ? { note: request.note } : {}),
+      at: Date.now(),
+    };
+    try {
+      const verdicts = await store.recordVerdict(taskId, event);
+      await this.post({ type: "answerVerdicts", taskId, verdicts });
+    } catch (error) {
+      await this.postVerdicts();
+      await this.post({ type: 'taskWorkspaceError', error: error instanceof Error ? error.message : '답변에 남긴 선택을 저장하지 못했습니다.' });
+    }
+  }
+
   private async postHistory(): Promise<void> {
     const error = this.currentTaskStore?.()?.getView().error;
     if (error) { await this.post({ type: 'taskWorkspaceError', error: error.message }); return; }
@@ -7143,6 +7205,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const ids = new Set(saved.map(message => message.id));
     const messages = pending ? [...saved, ...pending.messages.filter(message => !ids.has(message.id))] : saved;
     await this.post({ type: "history", messages });
+    await this.postVerdicts();
     if (pending) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: true });
   }
 
