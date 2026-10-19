@@ -212,12 +212,15 @@ const OLD_SCREENS = {
  * branch's rebase base), where they were identical. Two runs on each gave the same digests.
  * The four ChatPanel digests were re-taken for trial diagnosis D9 (REQ-L14): the markup differs
  * from the earlier base only in the send button label, "Send" → "보내기" (diffed with HPS_A5_DUMP_DIR).
+ * Re-taken again for CGP-CHAT-R-001: the only added markup is the empty response-announcer live
+ * region `<div class="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer"></div>`
+ * (diffed with HPS_A5_DUMP_DIR against origin/main).
  */
 const BASE = {
-  "ChatPanel/adult-plain": "4d39854667e9c13436304c44bb2f492ae3d4524bb32335dce69ea2dc3785bf15",
-  "ChatPanel/adult-effort-observed": "36fdeaec05bdf404a7e2e91c6e0bc69b9bcdbc8445fe015609499dd932ffdd9e",
-  "ChatPanel/adult-timeline": "514c17d61edff25f192deed918928c04590e7bde9bc53bbe086ad330e61e961e",
-  "ChatPanel/kids": "660d0ea5222440bfc887deeaf9efed68474671ea4f9ccdd7eb3fe66191873eba",
+  "ChatPanel/adult-plain": "41b6f8557011d74049193cb7f39ba08176321ddd77caa3f79a77190e624883c0",
+  "ChatPanel/adult-effort-observed": "d22fe382c98a007fe2772fef242d127b851910634933bfac4e78be59fe6cc24f",
+  "ChatPanel/adult-timeline": "c9c4bdf5ea4455c3ea354b34c20388ae1f3b2261119ca0956ee223f9e1330189",
+  "ChatPanel/kids": "d270c0f4cd98256951920209269748686c8f6ce2e3b280b8ce7554fa2b7d689d",
   "EffortControl/policy-observed": "caea5b1eab6f88d737a96c6dde5f67369dec99657c24d5b25dca26117cd7b9ba",
   "EffortControl/policy-loading": "5d88d9a6ac8f18b171024b26f107bee0c59db5d31f7c7201b5c079aa37b05598",
   "EffortControl/unknown": "eb4bfdda4154b27954e89c0875b2d1e12f7569c543454a74757f09e68fcf9118",
