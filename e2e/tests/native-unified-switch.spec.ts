@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {launchApp,closeApp,startFrame,chatFrame} from '../fixtures/app';
+import {launchApp,closeApp,startFrame,chatFrame,readAcrossReload} from '../fixtures/app';
 import {chatMenuAction,chooseChatModel} from '../fixtures/chat-actions';
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
@@ -61,8 +61,10 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   await pick(second);
   const oldViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));
   await begin();
-  await expect.poll(async()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,oldViews)).toBe(0);
-  await expect.poll(()=>ctx.win.title()).toContain('activity-b');
+  // begin() reloads the workbench into the new folder. A read inside that reload is
+  // pending, not a failure (rc.2 acceptance run 39269616136 failed exactly there).
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,oldViews),-1)).toBe(0);
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.title(),'')).toContain('activity-b');
   // The pending activity intent resumes B directly after the real folder
   // reload. Do not wait for the transient start page after chat has opened.
   chat=await chatFrame(ctx.win);
@@ -75,8 +77,8 @@ test('actual folder switch A to B to A preserves drafts and rejects a shared roo
   const list=await startFrame(ctx.win);const saved=list.getByRole('navigation',{name:'저장된 활동'}).getByRole('button');
   await expect(saved).toHaveCount(2);await saved.filter({hasText:ctx.wsDir}).click();
   const bViews=await ctx.win.locator('iframe.webview').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('name')));await begin();
-  await expect.poll(async()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,bViews)).toBe(0);
-  await expect.poll(()=>ctx.win.title()).not.toContain('activity-b');
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.locator('iframe.webview').evaluateAll((nodes,old)=>nodes.filter(n=>old.includes(n.getAttribute('name'))).length,bViews),-1)).toBe(0);
+  await expect.poll(()=>readAcrossReload(()=>ctx.win.title(),'activity-b')).not.toContain('activity-b');
   // Choosing saved activity A and 이 활동 시작하기 is the pending intent: like B above, A
   // resumes straight into chat after the folder reload, with no 이어서 하기 step.
   chat=await chatFrame(ctx.win);await expect(chat.getByRole('textbox',{name:/보낼 메시지/})).toHaveValue('A에서 작성 중인 합성 초안');
