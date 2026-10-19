@@ -799,6 +799,10 @@ html, body, #root {
   color: var(--vscode-inputValidation-warningForeground, #d7a05a);
   opacity: 0.9;
 }
+.hps-image-preparing {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #a4aab3);
+}
 .hps-attachments {
   display: flex;
   flex-wrap: wrap;
