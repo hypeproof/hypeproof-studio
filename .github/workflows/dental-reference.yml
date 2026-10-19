@@ -18,6 +18,8 @@ on:
       - 'chalk/**'
       - 'e2e/package*.json'
       - '.github/workflows/dental-reference.yml'
+      - 'scripts/check-artifact-budget.py'
+      - 'scripts/test-artifact-budget.py'
 permissions:
   contents: read
 
@@ -58,8 +60,14 @@ jobs:
         working-directory: e2e
       - run: npm run test:image-edit
         working-directory: e2e
-      - uses: actions/upload-artifact@v4
+      - name: Bound evidence upload (128 MiB, 14 days)
+        id: evidence-budget
         if: always()
+        run: |
+          python3 scripts/test-artifact-budget.py
+          python3 scripts/check-artifact-budget.py e2e/test-results/dental-reference/ e2e/test-results/chalk-authoring/ e2e/test-results/classroom/ e2e/artifacts/reference-design/ e2e/artifacts/image-edit-comparison/
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.evidence-budget.outcome == 'success'
         with:
           name: dental-reference-evidence
           path: |

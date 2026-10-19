@@ -13,6 +13,8 @@ on:
       - 'e2e/curriculum-runtime/fixtures/dental-element-trial/**'
       - 'e2e/package*.json'
       - '.github/workflows/start-page.yml'
+      - 'scripts/check-artifact-budget.py'
+      - 'scripts/test-artifact-budget.py'
 permissions:
   contents: read
 
@@ -59,8 +61,14 @@ jobs:
       - name: Photo-only Send and Enter with host staging gates
         run: npm run test:photo-only-send
         working-directory: e2e
-      - uses: actions/upload-artifact@v4
+      - name: Bound evidence upload (128 MiB, 14 days)
+        id: evidence-budget
         if: always()
+        run: |
+          python3 scripts/test-artifact-budget.py
+          python3 scripts/check-artifact-budget.py e2e/test-results/start-page/ e2e/test-results/trial-ux/ e2e/test-results/voice-popup/ e2e/test-results/goal-browser/ e2e/test-results/workshop-element-trial/ e2e/test-results/photo-only-send/
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.evidence-budget.outcome == 'success'
         with:
           name: start-page-evidence
           path: |
