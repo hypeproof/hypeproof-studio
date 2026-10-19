@@ -7,6 +7,7 @@ import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { imeComposing } from './imeGuard';
+import { scrollBehavior } from './motion';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -654,7 +655,7 @@ export function ChatPanel(props: Props) {
     !config.coach?.configured;
 
   useEffect(() => {
-    if (!personalWorkspace) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    if (!personalWorkspace) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: scrollBehavior() });
   }, [messages.length, streaming, personalWorkspace]);
 
   // NOTE: the early return into the naming card sits **below this component's last
