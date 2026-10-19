@@ -1,3 +1,11 @@
+# Dispatch only since 2026-10-19: Studio releases are Mac only for now
+# (config/release-platforms.json). A v* tag push no longer starts this build,
+# and release-cut dispatches only the configured platforms. Run it by hand:
+#   gh workflow run build-windows.yml --ref <tag>        # attach Windows packages to that release draft
+#   gh workflow run build-windows.yml --ref main         # artifact only, no release upload
+# To ship Windows again, add "win32-x64" to config/release-platforms.json; the
+# unified acceptance and mirror gates then require the Windows packages again.
+# See docs/dev/fast-mac-release.md.
 name: Build Windows
 
 on:
@@ -27,9 +35,6 @@ on:
         description: "Publish even if a class is live (stable tag refs only; recorded in the job summary)"
         type: boolean
         default: false
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write # create/upload the GitHub Release on tag builds

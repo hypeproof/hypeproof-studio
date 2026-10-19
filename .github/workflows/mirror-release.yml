@@ -96,6 +96,13 @@ jobs:
           POLL_SEC: "60"
         run: |
           set -euo pipefail
+          # Which platform packages to wait for comes from the tag's own
+          # config/release-platforms.json (Mac only since 2026-10-19; a tag
+          # without the file requires both). The checkout is shallow, so fetch
+          # the tag first: an unreadable commit would fall back to BOTH and wait
+          # for Windows packages that a Mac-only release never gets.
+          git fetch -q --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          echo "release platforms: $(node scripts/release/platforms.mjs list "$TAG")"
           deadline=$(( $(date +%s) + WAIT_TIMEOUT_MIN * 60 ))
           attempt=0
           while :; do
@@ -107,12 +114,10 @@ jobs:
               echo "::error::$TAG is still a draft in $SOURCE_REPO; publish it through verify-unified-release.yml first"
               exit 1
             fi
-            names="$(jq -r '.assets[].name' source-release.json)"
             missing=()
-            grep -qE '^HypeProof-Studio-darwin-arm64\.zip$'      <<<"$names" || missing+=("macOS zip")
-            grep -qE '^HypeProof\.StudioUserSetup-x64-.*\.exe$'  <<<"$names" || missing+=("Windows UserSetup exe")
-            grep -qE '^HypeProof\.StudioSetup-x64-.*\.exe$'      <<<"$names" || missing+=("Windows Setup exe")
-            grep -qE '^HypeProof\.Studio-win32-x64-.*\.zip$'     <<<"$names" || missing+=("Windows zip")
+            while IFS= read -r label; do
+              [[ -n "$label" ]] && missing+=("$label")
+            done < <(jq -r '.assets[].name' source-release.json | node scripts/release/platforms.mjs missing "$TAG" || true)
 
             if [[ ${#missing[@]} -eq 0 ]]; then
               echo "모든 플랫폼 자산 확인 (시도 ${attempt}회)"
@@ -206,6 +211,9 @@ jobs:
 
           - \`HypeProof-Studio-darwin-arm64.zip\`
 
+          EOF
+          if compgen -G 'dist/*.exe' >/dev/null; then
+            cat >> mirror-release-notes.md <<EOF
           ### Windows
 
           After signing in with GitHub CLI, in PowerShell:
@@ -221,6 +229,17 @@ jobs:
           - \`HypeProof.StudioSetup-x64-*.exe\` — machine installer
           - \`HypeProof.Studio-win32-x64-*.zip\` — portable zip
 
+          EOF
+          else
+            cat >> mirror-release-notes.md <<EOF
+          ### Windows
+
+          This release is macOS only. Windows users keep the newest earlier release
+          that has Windows packages.
+
+          EOF
+          fi
+          cat >> mirror-release-notes.md <<EOF
           ## Assets
           EOF
           sed -i 's/^          //' mirror-release-notes.md

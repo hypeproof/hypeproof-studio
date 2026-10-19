@@ -159,6 +159,37 @@ proxy-only.
 3. Verify it applies cleanly: `cd vscode && git apply --check ../patches/NN-<topic>.patch`.
 4. Document the patch's purpose in a one-line header comment inside the file.
 
+## Fast Mac repack (CI release path, 2026-10-19)
+
+`build-mac.yml` skips the 1–2 h VS Code build when the base is unchanged and only
+rebuilds `extensions/hypeproof-chat`. Details and operator commands:
+[docs/dev/fast-mac-release.md](../../docs/dev/fast-mac-release.md).
+
+- **Base key** = `scripts/mac-base-key.sh`: git objects of the `vscodium-base` pin,
+  `hypeproof-studio.env.example`, `apply-product-overrides.sh`, `install-brand-assets.sh`,
+  `run-build.sh`, `assets/brand/`, plus `MAC_BASE_EPOCH`. **Bump `MAC_BASE_EPOCH`** when a
+  `build-mac.yml` change alters the base (runner, Node pin, env block, brew deps). Add a
+  path to `INPUTS` when a new file starts shaping the base app.
+- **Base source**: Actions cache (unsigned full-build output, saved by the full path) →
+  else a published release with the same key (downloaded, signature stripped) → else full.
+  Cache entries saved on a tag are visible to that tag only; seed from `main` with
+  `full_build=true`.
+- **Shared, not duplicated**: `repack-mac.sh` reuses `inject-builtin-extensions.sh`
+  (`VSCODE_TREE` pointed at the app) and `stamp-mac-app.sh`; sign, verify-branding,
+  package and upload are the same workflow steps for both paths.
+- **Checksums**: product.json `checksums` cover only `out/vs/**` core files, never
+  built-in extensions; `check-mac-checksums.mjs` (verify-branding check 12) proves it per build.
+- **Not rewritten**: `CFBundleVersion` and product.json `.date` are base properties; the
+  full path never changes them per release either.
+- **Notarization**: none exists in either path today (ad-hoc or self-signed only).
+- `full_build=true` on dispatch forces the full path.
+
+## Release platforms (Mac only since 2026-10-19)
+
+`config/release-platforms.json` decides which builders release-cut dispatches and which
+packages acceptance, publish and mirror require (read at the release's own commit; absent
+→ both). `build-windows.yml` is dispatch-only: no `v*` tag trigger.
+
 ## Submodule (`vscodium-base`) bump policy
 
 `vscodium-base` is a submodule → `jayleekr/vscodium` `@hps/main`. **Policy: pin + deliberate bump.** The main repo does NOT auto-follow fork HEAD.
@@ -176,4 +207,4 @@ Rules:
 
 ## CI (Phase 6)
 
-Windows build runs in GitHub Actions only. Local Windows reproduction is out of scope. The workflow file lives at `.github/workflows/build-windows.yml` (Phase 6 — not yet created).
+Windows build runs in GitHub Actions only. Local Windows reproduction is out of scope. The workflow file is `.github/workflows/build-windows.yml`; since 2026-10-19 it runs only on `workflow_dispatch` (see "Release platforms" above).
