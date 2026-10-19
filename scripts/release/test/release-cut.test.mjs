@@ -154,7 +154,24 @@ test('S5 supersedes only the same workflow/job, using run order, not completion 
   assert.equal(judge([current, run(1, 9, 'failure', {name: 'macOS'})]).result, 'FAIL');
   assert.equal(judge([current, run(undefined, 9, 'failure')]).result, 'FAIL');
   assert.equal(judge([current, {...current, id: 12, runAttempt: 2, conclusion: 'failure'}]).result, 'FAIL');
+  // without the workflow id, leaving out only the current run keeps the older run of that job
   assert.equal(judge([old, current], '11').result, 'FAIL');
+});
+
+test('S5 leaves out earlier runs of the release-cut workflow itself (#1845)', () => {
+  const run = (workflowId, runNumber, name, conclusion, status = 'completed') => ({id: runNumber, workflowId, runNumber,
+    runAttempt: 1, name, status, conclusion, url: `https://github.com/o/r/actions/runs/${runNumber}/job/1`});
+  const build = run(5, 3, 'build', 'success');
+  const failedCut = run(7, 6, 'create', 'failure');
+  const self = run(7, 7, 'create', '', 'in_progress');
+  // the bug: run 6 of the same release-cut workflow stayed the latest 'create' after run 7 was left out
+  assert.equal(judge([build, failedCut, self], '7').result, 'FAIL');
+  assert.equal(judge([build, failedCut, self], '7', 7).result, 'PASS');
+  // negative controls: other workflows still block, failed or pending
+  assert.equal(judge([build, failedCut, self, run(5, 2, 'test', 'failure')], '7', 7).result, 'FAIL');
+  assert.equal(judge([build, failedCut, self, run(9, 1, 'macos', '', 'in_progress')], '7', 7).result, 'NOT_RUN');
+  // a check-run without a workflow id is never matched by the workflow filter
+  assert.equal(judge([build, {...failedCut, workflowId: undefined}], '7', 7).result, 'FAIL');
 });
 
 test('S3 binds a fresh synthetic token and requires successful cleanup, without admin or force', async () => {
