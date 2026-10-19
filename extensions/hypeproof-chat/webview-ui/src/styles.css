@@ -135,7 +135,7 @@ html, body, #root {
 .hps-edit-actions .hps-edit-save { background: var(--vscode-button-background, #5b5bff); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
 .hps-edit-actions .hps-edit-save:disabled { opacity: .5; cursor: default; }
 .hps-edit-image { position: relative; display: inline-grid; place-items: center; min-width: 44px; min-height: 44px; flex-shrink: 0; }
-.hps-edit-image button { position: absolute; top: 0; right: 0; min-width: 44px; min-height: 44px; border: 0; background: transparent; color: #fff; text-shadow: 0 0 3px #000; font-size: 18px; cursor: pointer; }
+.hps-edit-image button { position: absolute; top: 0; right: 0; min-width: 44px; min-height: 44px; border: 0; border-radius: 50%; padding: 0; background: radial-gradient(circle, var(--vscode-editor-background, #202226) 11px, transparent 12px); color: var(--vscode-editor-foreground, var(--vscode-foreground, #e1e1e1)); text-shadow: none; font-size: 18px; cursor: pointer; }
 
 /* #173 — Citation chips under assistant messages. 4 trust tiers drive
    the left border + chip background tint. Click → host opens browser. */
