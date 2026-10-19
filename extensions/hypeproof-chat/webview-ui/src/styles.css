@@ -118,6 +118,25 @@ html, body, #root {
   align-self: flex-end;
 }
 
+/* CGP-CHAT-R-002 — "수정" and the version pager under the latest user prompt; the in-place editor.
+   Ghost controls, 44px hit targets, focus ring from the theme. */
+.hps-user-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-height: 44px; align-self: flex-end; color: var(--vscode-descriptionForeground, #9aa0a6); }
+.hps-user-actions button { min-width: 44px; min-height: 44px; padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.hps-user-actions button:hover:not(:disabled) { background: var(--vscode-list-hoverBackground, #2b3037); color: var(--vscode-foreground, #e1e1e1); }
+.hps-user-actions button:disabled { opacity: .4; cursor: default; }
+.hps-user-actions button:focus-visible, .hps-edit-box button:focus-visible, .hps-edit-box textarea:focus-visible { outline: 2px solid var(--vscode-focusBorder, #799ed7); outline-offset: 1px; }
+.hps-version-pager { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; }
+.hps-version-note { margin-left: 4px; font-size: 12px; }
+.hps-edit-box { display: flex; flex-direction: column; gap: 6px; align-self: stretch; }
+.hps-edit-box textarea { min-height: 72px; resize: vertical; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--vscode-input-border, #3c3c3c); background: var(--vscode-input-background, #1e1e1e); color: var(--vscode-input-foreground, inherit); font: inherit; }
+.hps-edit-note { margin: 0; font-size: 12px; color: var(--vscode-descriptionForeground, #9aa0a6); }
+.hps-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.hps-edit-actions button { min-width: 44px; min-height: 44px; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--vscode-button-secondaryBackground, #3a3d41); background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.hps-edit-actions .hps-edit-save { background: var(--vscode-button-background, #5b5bff); color: var(--vscode-button-foreground, #fff); border-color: transparent; }
+.hps-edit-actions .hps-edit-save:disabled { opacity: .5; cursor: default; }
+.hps-edit-image { position: relative; display: inline-block; }
+.hps-edit-image button { position: absolute; top: 0; right: 0; min-width: 44px; min-height: 44px; border: 0; background: transparent; color: #fff; text-shadow: 0 0 3px #000; font-size: 18px; cursor: pointer; }
+
 /* #173 — Citation chips under assistant messages. 4 trust tiers drive
    the left border + chip background tint. Click → host opens browser. */
 .hps-cit-rack {
@@ -1349,7 +1368,8 @@ html, body, #root {
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-error-banner-retry,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-update-banner-install,
 .hps-shell:has(.hp-mission .hp-cta-primary) .hps-trial-end-card-primary,
-.hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button {
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-native-observation button,
+.hps-shell:has(.hp-mission .hp-cta-primary) .hps-edit-actions .hps-edit-save {
   color: var(--hp-ink); background: transparent; border: 1px solid var(--hp-control-line);
 }
 /* ...and the student's own chat bubble, which takes the same theme colour as its background: Lime

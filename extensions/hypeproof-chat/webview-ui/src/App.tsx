@@ -110,7 +110,7 @@ type Action =
   | { type: "publishStart" }
   | { type: "publishResult"; state: "uploading" | "done" | "error"; url?: string; message?: string }
   | { type: "streamError"; error: string; requestId?: string; runbookUrl?: string; retry?: false; retryable?: boolean; trialEndCard?: TrialEndCardView }
-  | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string }
+  | { type: "userSent"; text: string; images?: string[]; toolMode?: TurnToolMode; id?: string; editOf?: string }
   /** D-028 — the host saved this send's attached photos; append their paths to the message. */
   | { type: "attachmentsSaved"; note: string };
 
@@ -289,6 +289,7 @@ function reducer(state: State, action: Action): State {
               role: "user",
               content: action.text,
               ...(action.toolMode ? { toolMode: action.toolMode } : {}),
+              ...(action.editOf ? { editOf: action.editOf } : {}),
               createdAt: Date.now(),
               ...(action.images && action.images.length > 0 ? { images: action.images } : {}),
             },
@@ -547,6 +548,20 @@ export function App() {
     postToHost({ type: "retryMessage", activityId: state.config?.activity?.id, prompt, history: messages, toolMode, sourceMessageId: source?.id, userMessageId, images: source?.images });
   };
 
+  // CGP-CHAT-R-002 — the edited text of the latest prompt goes out as a NEW request: a new id,
+  // the original's tool mode (REQ-STUDIO-CHAT-REFERENCE) and the images the learner kept. The
+  // original stays in the transcript as version 1; the host re-checks the target and the gates.
+  const editResend = (original: ChatMessage, editOf: string, text: string, images: string[]) => {
+    const trimmed = text.trim();
+    if (!trimmed || !beginRequest()) return false;
+    const toolMode = original.toolMode ?? 'auto';
+    const userMessageId = `local-${crypto.randomUUID()}`;
+    const kept = images.length > 0 ? images : undefined;
+    dispatch({ type: "userSent", text: trimmed, images: kept, toolMode, id: userMessageId, editOf });
+    postToHost({ type: "sendMessage", activityId: state.config?.activity?.id, userMessageId, toolMode, text: trimmed, history: messages, images: kept, editOf });
+    return true;
+  };
+
   // S-04 (#48): "다시 보내기" on a stream error reuses the LAST user prompt
   // that's already in history. The worker idempotently writes turn rows so
   // a retry doesn't double-count.
@@ -666,6 +681,7 @@ export function App() {
         sendPending={sendPending}
         onRetry={retry}
         onRetryLast={retryLast}
+        onEditResend={editResend}
         onDismissError={dismissError}
         onCancel={cancel}
         onClear={() => postToHost({ type: "clearHistory" })}

@@ -6242,6 +6242,42 @@
       ]
     },
     {
+      "id": "ST-IMP-EDIT-RESEND",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/editResend.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/EditResend.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-EDIT-RESEND",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-EDIT-RESEND"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/edit-resend.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/edit-resend.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/task-store-validator-before-edit-resend.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

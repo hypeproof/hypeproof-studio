@@ -6,6 +6,8 @@ import { ComposerTools, SelectedTool } from './ComposerTools';
 import { TurnReviewBar } from './TurnReviewBar';
 import { bindComposerFocus } from './composerFocus';
 import { ChatIcon, CopyAnswer, ResponsePending, useChatViewport, useGrowingComposer } from './ChatDetails';
+import { EditAction, EditPrompt, VersionPager } from './EditResend';
+import { composerBlockedByEdit, EDIT_OPEN_NOTE, editableUserId, visibleVersions, type VersionPager as Pager } from '../../src/editResend';
 import { useResponseAnnouncement } from './responseAnnouncer';
 import { imeComposing } from './imeGuard';
 import { scrollBehavior } from './motion';
@@ -121,6 +123,8 @@ interface Props {
   onSend: (text: string, images?: string[], imports?: ImportRef[], attachments?: StagedPhoto[], toolMode?: TurnToolMode) => void | boolean;
   onRetry: (prompt: string, source?: ChatMessage) => void;
   onRetryLast: () => void;
+  /** CGP-CHAT-R-002 — resend an edited copy of the latest prompt. Absent (instructor mode): no "수정". */
+  onEditResend?: (original: ChatMessage, editOf: string, text: string, images: string[]) => boolean | void;
   onDismissError: () => void;
   onCancel: () => void;
   onClear: () => void;
@@ -295,6 +299,9 @@ export function ChatPanel(props: Props) {
   const [recovered, setRecovered] = useState<RecoveredRequest[]>(saved?.recovered ?? []);
   const recoveryAtCapacity = useMemo(() => recoveryFull(recovered), [recovered]);
   const [discardRequest, setDiscardRequest] = useState<RecoveredRequest | null>(null);
+  // CGP-CHAT-R-002 — which version of each edited prompt is drawn (view only), and the line being edited.
+  const [versionChoice, setVersionChoice] = useState<Record<string, number>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   // `usage`: the dialog was opened from "이용권 · 사용량" or the access recovery entry, so its usage
@@ -684,6 +691,8 @@ export function ChatPanel(props: Props) {
     return false;
   };
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
+    // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
     if (imagePreparationBlocksSend()) return false;
     const value = (text ?? draft).trim();
     if ((!value && pendingImages.length === 0 && stagedPhotos.length === 0) || streaming || unavailable || props.sendLocked || props.sendPending) return false;
@@ -991,6 +1000,7 @@ export function ChatPanel(props: Props) {
    */
   const handleWorldPick = (chip: string) => {
     if (busy) return;
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
     if (!reserveRecovery(chip, [], 'auto')) return;
     setWorldPending(true);
     props.onSend(chip);
@@ -1005,6 +1015,7 @@ export function ChatPanel(props: Props) {
   };
 
   const handleRollSend = () => {
+    if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; }
     if (imagePreparationBlocksSend()) return;
     const extra = draft.trim();
     if (!extra || !rollExpand) return;
@@ -1050,6 +1061,21 @@ export function ChatPanel(props: Props) {
   const turnHasActivity = hasActivityThisTurn(messages);
   // Personal chat offers retry on the latest coach answer only.
   const latestAssistantId = [...messages].reverse().find(m => m.role === 'assistant')?.id;
+  // CGP-CHAT-R-002 — one version per prompt is drawn; "수정" sits on the latest prompt only, and
+  // never while a turn runs, a message waits in the queue or recovery list, or in instructor mode.
+  const shown = visibleVersions(messages, versionChoice);
+  const editableId = props.onEditResend ? editableUserId(messages, {
+    streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
+    instructor: props.instructor, locked: unavailable || !!props.sendLocked,
+  }) : null;
+  const editing = editingId !== null && editingId === editableId ? editingId : null;
+  const saveEdit = (original: ChatMessage, text: string, images: string[]) => {
+    const editOf = original.editOf ?? original.id;
+    if (props.onEditResend?.(original, editOf, text, images) === false) return;
+    setEditingId(null);
+    // The new version is drawn: forget a choice that pointed at an older one.
+    setVersionChoice(({ [editOf]: _dropped, ...rest }) => rest);
+  };
 
   // #642 — if the screen is static for the 1–3 minutes the coach is working, a kid
   // reads it as broken (2026-08-20, real device). The runner bar goes above the
@@ -1307,7 +1333,7 @@ export function ChatPanel(props: Props) {
           />
         )}
 
-        {messages.map((m) =>
+        {shown.items.map((m) =>
           m.role === "tool" ? (
             <ToolLine key={m.id} message={m} />
           ) : (
@@ -1329,6 +1355,13 @@ export function ChatPanel(props: Props) {
               freeSeat={!!config?.activity?.free}
               onPickReply={personalWorkspace && !streaming && !frozen && !unavailable && !props.sendLocked && !props.sendPending && m.id === messages.filter(message => message.role !== 'tool').at(-1)?.id ? handleReplyChoice : undefined}
               onWriteReply={() => textareaRef.current?.focus({ preventScroll: true })}
+              pager={shown.pagers[m.id]}
+              onPage={(key, index) => setVersionChoice((all) => ({ ...all, [key]: index }))}
+              onEdit={m.id === editableId ? () => setEditingId(m.id) : undefined}
+              editing={m.id === editing}
+              revertNote={!props.instructor && !!turnReview}
+              onCancelEdit={() => setEditingId(null)}
+              onSaveEdit={(text, images) => saveEdit(m, text, images)}
             />
           ),
         )}
@@ -1423,7 +1456,7 @@ export function ChatPanel(props: Props) {
             requestId={props.errorRequestId}
             runbookUrl={props.errorRunbookUrl}
             canRetry={props.canRetryLast && recovered.length === 0}
-            onRetry={() => recoverToComposer(props.onRetryLast)}
+            onRetry={() => { if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return; } recoverToComposer(props.onRetryLast); }}
             onDismiss={() => recoverToComposer(props.onDismissError)}
             onReport={props.onReportProblem}
             audience={audience}
@@ -2092,6 +2125,13 @@ function MessageItem({
   freeSeat = false,
   onPickReply,
   onWriteReply,
+  pager,
+  onPage,
+  onEdit,
+  editing = false,
+  revertNote = false,
+  onCancelEdit,
+  onSaveEdit,
 }: {
   message: ChatMessage;
   /** Turn-level: any stream in flight. Gates the retry button, not the spinner. */
@@ -2117,6 +2157,15 @@ function MessageItem({
   freeSeat?: boolean;
   onPickReply?: (answer: string) => void;
   onWriteReply?: () => void;
+  /** CGP-CHAT-R-002 — this user line has earlier/later versions. */
+  pager?: Pager;
+  onPage?: (key: string, index: number) => void;
+  /** Present on the one user line that may be edited now. */
+  onEdit?: () => void;
+  editing?: boolean;
+  revertNote?: boolean;
+  onCancelEdit?: () => void;
+  onSaveEdit?: (text: string, images: string[]) => void;
 }) {
   const question = useMemo(() => onPickReply && message.role === "assistant" ? replyChoices(message.content) : null, [message.content, message.role, onPickReply]);
   const renderable = useMemo(
@@ -2162,7 +2211,12 @@ function MessageItem({
         )}
       </div>
       {personal && message.role === 'user' && message.toolMode === 'web-search' && <span className="hps-user-tool"><ChatIcon kind="globe" /> 웹 검색 요청</span>}
-      <div className="hps-msg-body">
+      {message.role === 'user' && editing && onCancelEdit && onSaveEdit ? <EditPrompt
+        text={message.content}
+        images={message.images ?? []}
+        revertNote={revertNote}
+        onCancel={onCancelEdit}
+        onSave={onSaveEdit} /> : <div className="hps-msg-body">
         {question && onPickReply && onWriteReply ? <ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
@@ -2184,7 +2238,11 @@ function MessageItem({
             {message.content}
           </>
         )}
-      </div>
+      </div>}
+      {message.role === 'user' && !editing && (pager || onEdit) && <div className="hps-user-actions">
+        {pager && onPage && <VersionPager pager={pager} onPage={(index) => onPage(pager.key, index)} />}
+        {onEdit && <EditAction onEdit={onEdit} />}
+      </div>}
       {message.role === "assistant" && message.citations && message.citations.length > 0 && (
         personal ? <PersonalCitationRack citations={message.citations} messageId={message.id} /> : <CitationRack citations={message.citations} />
       )}
