@@ -53,6 +53,11 @@ answer and unsent draft without submitting it; the next send is explicit.
 If storage fails after an app-written or model response starts, the host reports
 that response's identity and releases its activity; it must not strand the UI in
 an active state or label a running-turn failure as an uncorrelated preflight error.
+This includes standalone button/command replies from publish, project switching,
+and image editing: history persistence owns the activity until it settles. Each
+reply emits one terminal result after releasing its own ownership, without
+releasing another pending request. A storage error preserves the visible answer
+and unsent draft and permits an explicit next question.
 
 `REQ-C16` rejected-request recovery (UX-QUEUE-02): a rejected request arriving
 while another message is queued or being drafted remains a separate durable

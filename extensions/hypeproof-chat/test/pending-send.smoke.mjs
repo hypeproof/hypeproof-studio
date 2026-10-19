@@ -61,6 +61,36 @@ for(const fail of [false,true]){
  }else{save.resolve();await pending;assert.equal(h.posts.some(message=>message.type==='inputRejected'),false);}
  assert.equal(h.hasActiveStream(),false);
 }
+// App-authored replies outside handleSend (publish/switch/image edit) own the
+// same persistence boundary and must always terminate their displayed stream.
+for(const fail of [false,true]){
+ const h=host(),save=deferred();h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ const post=h.post;h.post=async message=>{
+  if(['streamEnd','streamError'].includes(message.type))assert.equal(h.hasActiveStream(),false,'terminal notification must release standalone reply ownership first');
+  return post(message);
+ };
+ const pending=proto.postAppReply.call(h,'앱에서 작업 결과를 알려드립니다.');
+ assert.equal(h.hasActiveStream(),true,'standalone reply locks while history is being saved');
+ assert.deepEqual(h.posts.map(message=>message.type),['streamStart','streamChunk']);
+ if(fail){save.reject(new Error('synthetic app reply storage failure'));await assert.rejects(pending,/synthetic app reply storage failure/);}
+ else{save.resolve();await pending;}
+ const terminal=h.posts.filter(message=>['streamEnd','streamError','streamStopped'].includes(message.type));
+ assert.equal(terminal.length,1,'exactly one completion or failure for the displayed reply');
+ assert.equal(terminal[0].type,fail?'streamError':'streamEnd');
+ assert.equal(terminal[0].streamId,h.posts[0].streamId);
+ assert.equal(h.hasActiveStream(),false);
+}
+// A standalone reply settling cannot release a different pending request.
+{
+ const h=host(),save=deferred(),auth=deferred();h.coachDisplayName=()=> '코치';h.appendHistory=()=>save.promise;
+ h.context={secrets:{get:()=>auth.promise}};
+ const reply=proto.postAppReply.call(h,'작업 결과');
+ const send=proto.handleSend.call(h,'후속 질문',[]);
+ save.reject(new Error('reply failed'));await assert.rejects(reply,/reply failed/);
+ assert.equal(h.hasActiveStream(),true,'another request retains ownership');
+ auth.reject(new Error('send failed'));await assert.rejects(send,/send failed/);
+ assert.equal(h.hasActiveStream(),false);
+}
 // The inverse ordering: preparation already owns the connection, so no send
 // reaches secrets or history. No provider call is needed by these controls.
 {

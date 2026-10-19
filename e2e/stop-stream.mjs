@@ -99,6 +99,20 @@ try {
  await expect(page.locator('.hps-error-banner')).toContainText('시작 전 활동 연결 오류');
  await expect(page.getByRole('button', { name: '메시지 보내기', exact: true })).toBeEnabled();
  checks.push('A real host-protocol preflight refusal still restores input and displays its error before any streamStart.');
+
+ await emit({ type: 'streamStart', streamId: 'app-reply', messageId: 'app-reply-answer' }, { type: 'streamChunk', streamId: 'app-reply', delta: '앱에서 알려준 작업 결과' });
+ await emit({ type: 'streamError', streamId: 'app-reply', error: '답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요.' });
+ await expect(page.getByText('앱에서 알려준 작업 결과', { exact: true })).toBeVisible();
+ await expect(page.locator('.hps-error-banner')).toContainText('답변을 기록에 저장하지 못했어요.');
+ await expect(input).toHaveValue('세 번째 초안 E');
+ await expect(page.getByRole('button', { name: '메시지 보내기', exact: true })).toBeEnabled();
+ assert.equal((await requests()).length, 4, 'an app reply failure cannot send a user request');
+ await input.fill('저장 오류 후 새 질문'); await input.press('Enter');
+ await expect.poll(async () => (await requests()).length).toBe(5);
+ await emit({ type: 'streamStart', streamId: 'after-app-reply', messageId: 'next-answer' }, { type: 'streamChunk', streamId: 'after-app-reply', delta: '다음 질문의 정상 답변' }, { type: 'streamEnd', streamId: 'after-app-reply' });
+ await expect(page.getByText('다음 질문의 정상 답변', { exact: true })).toBeVisible();
+ await expect(page.locator('.hps-error-banner')).toHaveCount(0);
+ checks.push('An app-authored reply storage error retains its visible text and unsent draft, returns Send, and permits an explicit next question.');
  assert.deepEqual(errors, []);
  await writeFile(join(output, 'result.json'), JSON.stringify({ verdict: 'PASS', checks, requests: await requests(), trace, scope: 'Real React App + composer; injected host-message ordering, not native/provider proof.' }, null, 2));
  console.log(JSON.stringify({ verdict: 'PASS', checks, output }));

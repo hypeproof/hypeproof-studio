@@ -983,12 +983,28 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private async postAppReply(text: string, deferCompletion?: (streamId: string) => void, onStart?: (streamId: string) => void): Promise<void> {
     const sid = randomId();
     const aid = randomId();
-    onStart?.(sid);
-    void this.post({ type: "streamStart", streamId: sid, messageId: aid });
-    void this.post({ type: "streamChunk", streamId: sid, delta: text });
-    await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
-    if (deferCompletion) deferCompletion(sid);
-    else void this.post({ type: "streamEnd", streamId: sid });
+    // handleSend owns deferred replies. Button/command replies must retain
+    // their own ownership until persistence settles, including its failure path.
+    const ownsCompletion = !deferCompletion;
+    if (ownsCompletion) this.pendingSends++;
+    let failed = false;
+    try {
+      onStart?.(sid);
+      void this.post({ type: "streamStart", streamId: sid, messageId: aid });
+      void this.post({ type: "streamChunk", streamId: sid, delta: text });
+      await this.appendHistory([{ id: aid, role: "assistant", content: text, createdAt: Date.now(), assistantName: this.coachDisplayName() }]);
+      deferCompletion?.(sid);
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      if (ownsCompletion) {
+        this.pendingSends--;
+        await this.post(failed
+          ? { type: "streamError", streamId: sid, error: "답변을 기록에 저장하지 못했어요. 화면의 내용을 확인해 주세요." }
+          : { type: "streamEnd", streamId: sid });
+      }
+    }
   }
   /** #751 G2 — the step on screen and the learner's help choice, checked against the lesson; read ONCE per turn at turn start. */
   private lessonFocus: LessonFocus | null = null;
