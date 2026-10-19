@@ -5,6 +5,7 @@ import { resolvedProfile } from '../../extensions/hypeproof-chat/test/sx-screen-
 const browser = await chromium.launch({ headless: true });
 try {
 for (const theme of ['dark', 'light']) {
+for (const failureFirst of [false, true]) {
 const server = await serveTaskWorkspace({ seedHistory: false, profile: resolvedProfile(3, { lesson: undefined, input: { image_paste: true, image_files: false } }) });
 const page = await browser.newPage();
 try {
@@ -45,10 +46,12 @@ try {
   await expect(page.locator('.hps-img-note')).toHaveCount(0);
   expect(server.sent).toHaveLength(0);
   await expect(input).toHaveValue('두 이미지와 이 초안을 함께 보내 주세요');
-  await page.evaluate(() => window.pendingReads.shift()(false));
-  await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(1);
+  await page.evaluate(fail => window.pendingReads.shift()(fail), failureFirst);
+  if (failureFirst) await expect(page.locator('.hps-img-note')).toContainText('이미지를 붙이지 못했어요');
+  else await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(1);
   await expect(send).toBeDisabled();
-  await page.evaluate(() => window.pendingReads.shift()(true));
+  await page.evaluate(fail => window.pendingReads.shift()(fail), !failureFirst);
+  await expect.poll(() => server.fixture.store.getDraft().images.length).toBe(1);
   await expect(send).toBeEnabled();
   await expect(page.locator('.hps-img-note').filter({ hasText: '이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.' })).toBeVisible();
   const failureText = '이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.';
@@ -93,5 +96,6 @@ try {
   console.log('PASS pending images: Enter/pointer blocked, partial completion held, failure preserves draft/image, explicit repaste and send only once');
 } finally { await page.close(); await server.close(); }
 
+}
 }
 } finally { await browser.close(); }

@@ -782,7 +782,7 @@ export function ChatPanel(props: Props) {
               setImgNote(`이미지는 한 번에 최대 ${MAX_IMAGES}장까지 붙일 수 있어요.`);
               return prev;
             }
-            setImgNote(null);
+            // A sibling read may already have failed; a successful image is not recovery.
             return [...prev, url];
           });
         })
@@ -833,7 +833,7 @@ export function ChatPanel(props: Props) {
             setImgNote(`이미지는 한 번에 최대 ${MAX_IMAGES}장까지 붙일 수 있어요.`);
             return prev;
           }
-          setImgNote(null);
+          // Keep failures from other reads in this preparation batch visible.
           return [...prev, url];
         });
       })

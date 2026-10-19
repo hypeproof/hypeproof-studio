@@ -162,6 +162,8 @@ CC-05 negative controls also feed complete HTML fences, a successful HTML write 
   or operating-system clipboard acceptance. The persistent attachment live region
   starts empty, receives async failure text while composer focus stays put, and
   clears on retry; the textarea description follows the same failure lifecycle.
+  A failed sibling read stays visible and announced when another image succeeds,
+  in either completion order; a fresh retry clears the old guidance.
   DOM semantics are not a claim of native screen-reader speech.
 
 - Wide-table reading: scroll horizontally, edit the next draft and append another answer;
