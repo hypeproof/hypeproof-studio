@@ -70,7 +70,10 @@ select, choice card, plan and repository options, lesson-mode Send) is drawn wit
 surface: 3.6:1, 4.0:1 on white). `--hp-line` (#35483A, 1.75:1) stays for decorative dividers
 only. Values are recorded in `docs/design/studio-learning-experience.md` §디자인 시스템. Test:
 `test/control-contrast.smoke.mjs` computes the ratios from `tokens.css` and rejects any control
-rule that borders with the decorative line.
+rule that borders with the decorative line (including `var(--hp-line, …)` with a fallback) and any
+start-page control whose literal border fails 3:1 on its own background. Not yet covered: the
+personal-chat `--tw-line` family (fallback #34383e) and legacy `--vscode-*` fallbacks in
+`styles.css`; tracked as the next DES-11 slice.
 
 ### Chat reference interaction (CG-IMPL-R1)
 

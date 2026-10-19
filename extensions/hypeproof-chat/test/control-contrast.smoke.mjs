@@ -31,7 +31,17 @@ for (const f of ["styles.css", "start.css"]) {
   for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const [selector, body] = [m[1].trim(), m[2]];
     if (!CONTROL.test(selector)) continue;
-    assert.doesNotMatch(body, /border(-color)?:[^;]*var\(--(hp|studio)-line\)/, `${f}: "${selector.slice(0, 80)}" draws a control boundary with the decorative line`);
+    // `var(--hp-line, …)` with a fallback is the same decorative line.
+    assert.doesNotMatch(body, /border(-color)?:[^;]*var\(--(hp|studio)-line\b/, `${f}: "${selector.slice(0, 80)}" draws a control boundary with the decorative line`);
+    // A literal border colour on an hp/studio surface must pass 3:1 against that rule's own
+    // literal background (or the app background when the rule sets none).
+    if (f === "start.css") {
+      const border = /border(-color)?:[^;]*?(#[0-9A-Fa-f]{6})/.exec(body)?.[2];
+      if (border) {
+        const bg = /background(-color)?:\s*(#[0-9A-Fa-f]{6})/.exec(body)?.[2] ?? dark.bg;
+        assert.ok(ratio(border, bg) >= 3, `${f}: "${selector.slice(0, 80)}" border ${border} on ${bg} is ${ratio(border, bg).toFixed(2)}:1`);
+      }
+    }
   }
 }
 console.log("control-contrast smoke OK");
