@@ -1125,7 +1125,25 @@ html, body, #root {
 .hps-turn-review ul { margin: 2px 0 6px; padding-left: 18px; }
 .hps-turn-review code { overflow-wrap: anywhere; }
 .hps-turn-review-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.hps-turn-review-actions button { font-size: 12px; padding: 4px 10px; cursor: pointer; }
+.hps-turn-review-actions button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--vscode-panel-border, #697078);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.hps-turn-review-actions button:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.16));
+}
+.hps-turn-review-actions button:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder, #446b9b);
+  outline-offset: 2px;
+}
+.hps-turn-review-actions button:disabled { opacity: 0.55; cursor: default; }
 
 /*
  * #503 — tool rows now sit one per line on the same timeline as the bubbles (the old
