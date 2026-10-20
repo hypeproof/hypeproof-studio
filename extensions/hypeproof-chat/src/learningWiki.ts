@@ -176,15 +176,31 @@ export function answerProposal(proposal: WikiProposal, turnId: string): WikiProp
 }
 
 /** Limits of the confirmation the learner reads before a one-answer filing (a native modal). */
-export const PREVIEW_ITEMS = 8;
+export const PREVIEW_ITEMS = 12;
+/** Graphemes per item line, its citations included. */
 export const PREVIEW_ITEM_MAX = 200;
+/** Characters for all item lines together; with 200-grapheme lines it binds before PREVIEW_ITEMS. */
 export const PREVIEW_TOTAL_MAX = 2000;
+const PREVIEW_CITES = 2;
+const PREVIEW_CITE_MAX = 60;
+
+/** The user-perceived characters of `t` (a surrogate pair, a ZWJ emoji or an NFD syllable is one). */
+const graphemes = (t: string): string[] => Array.from(new Intl.Segmenter("ko", { granularity: "grapheme" }).segment(t), (x) => x.segment);
+/** `t` cut to at most `n` graphemes, the last one "…" when it was cut. */
+const cutGraphemes = (t: string, n: number): string => {
+  const g = graphemes(t);
+  return g.length > n ? `${g.slice(0, Math.max(0, n - 1)).join("")}…` : t;
+};
+/** One line: every whitespace and line-break class (\r, \n, U+0085, U+2028, U+2029 …) becomes one space. */
+const oneLine = (t: string) => t.replace(/[\s\u0085]+/g, " ").trim();
 
 /**
- * What applying a proposal would add, one line per item with its citations, for the learner to
- * confirm. Model text is flattened to one line (a newline in it cannot draw a separate, fake item),
- * each item's text is cut to PREVIEW_ITEM_MAX characters with "…", and at most PREVIEW_ITEMS items
- * within PREVIEW_TOTAL_MAX characters are listed; the rest are counted in one "외 N개" line.
+ * What applying a proposal would add, one line per item, for the learner to confirm. Model text is
+ * flattened to one line (a line break in it cannot draw a separate, fake item). Each line is at most
+ * PREVIEW_ITEM_MAX graphemes with its citations: those are deduplicated and capped (two shown, the
+ * rest counted, the list itself cut) so they never crowd out the item's content, and the text is cut
+ * by grapheme with "…". At most PREVIEW_ITEMS items within PREVIEW_TOTAL_MAX characters are listed;
+ * the rest are counted in one "외 N개" line.
  */
 export function proposalPreview(prev: WikiState, next: WikiState): string[] {
   const items: Array<{ head: string; text: string; cite: string[] }> = [];
@@ -197,7 +213,12 @@ export function proposalPreview(prev: WikiState, next: WikiState): string[] {
   const out: string[] = [];
   let total = 0;
   for (const item of items) {
-    const line = `${cut(`${item.head}: ${item.text.replace(/\s+/g, " ").trim()}`, PREVIEW_ITEM_MAX)}${cites(item.cite)}`;
+    const unique = [...new Set(item.cite.map((c) => oneLine(String(c))))].filter(Boolean);
+    const list = unique.slice(0, PREVIEW_CITES).join(", ") + (unique.length > PREVIEW_CITES ? ` 외 ${unique.length - PREVIEW_CITES}곳` : "");
+    const cite = unique.length ? ` (${cutGraphemes(list, PREVIEW_CITE_MAX)})` : "";
+    const head = `${item.head}: `;
+    const room = Math.max(1, PREVIEW_ITEM_MAX - graphemes(head).length - graphemes(cite).length);
+    const line = `${head}${cutGraphemes(oneLine(item.text), room)}${cite}`;
     if (out.length >= PREVIEW_ITEMS || total + line.length > PREVIEW_TOTAL_MAX) break;
     out.push(line);
     total += line.length + 1;

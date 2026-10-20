@@ -1058,8 +1058,12 @@ is the one a chat call would pick (`defaultIngestSession`, asked only when ambig
 `팀 브레인에 이렇게 정리할까요?` lists each item it would add with its citation, and only `정리하기`
 writes; closing it writes nothing (no wiki folder is created) and says "정리하지 않았어요. 팀 브레인은
 그대로예요." The list stays readable whatever the model returns: each item is flattened to one line
-(a newline in model text cannot draw a separate item), its text cut to 200 characters with "…", at
-most 8 items within 2000 characters, and the rest counted as "외 N개 항목도 함께 정리돼요." Folder
+(every line-break class, `\r`, `\n`, U+0085, U+2028, U+2029, becomes a space, so model text cannot
+draw a separate item); each line is at most 200 graphemes including its citations, which are
+deduplicated and capped (two shown, the rest counted as "외 N곳", the list cut to 60 graphemes) so
+they never crowd out the content; text is cut by grapheme (`Intl.Segmenter`, never inside a
+surrogate pair, a ZWJ emoji or an NFD syllable) with "…"; at most 12 items within 2000 characters are
+listed, and the rest counted as "외 N개 항목도 함께 정리돼요." Folder
 consent is checked before the model call: 읽기만 and an undecided folder (fail closed, never asked on
 this path) refuse with `folderReadOnlyNotice()`, AI 안 씀 with `folderNoAiCopy()` (the session ingest
 still words AI 안 씀 as read-only; unchanged). The seat (lesson, instructor, switch), the folder
@@ -1078,8 +1082,11 @@ turn; cancel leaves no file and no host write; confirm writes through `applyWiki
 `s1·<id>` citation and its log line, every file on disk reported to the hook with pages as `ai`; the
 same answer twice writes nothing; a proposal citing another turn is dropped with nothing to confirm;
 a model citing `t1` or the message id is kept, `t2` or another answer's id is dropped; 300 items of
-2000 characters with a newline-made fake line give 8 one-line cut items, the "외 N개" line and at most
-2400 characters; real consent choices over the real store: 읽기만, AI 안 씀 and undecided refuse with
+2000 characters with a newline-made fake line give one-line cut items stopped by the 2000-character
+total before the 12-item cap, and the "외 N개" line; 20 short items show 12; a citation repeated 500
+times shows once and 500 distinct ones are capped inside the line with the next item still shown;
+every line-break class is flattened; cuts keep surrogate pairs, ZWJ emoji, flags and NFD Hangul
+whole; instructor mode, a lesson or the switch turned off while the modal is open writes nothing; real consent choices over the real store: 읽기만, AI 안 씀 and undecided refuse with
 their own copy before the model with no modal, full writes, and a choice changed while the modal is
 open refuses with its copy and writes nothing;
 team brain off, absent, a lesson or instructor mode never reaches the model; a streaming answer and

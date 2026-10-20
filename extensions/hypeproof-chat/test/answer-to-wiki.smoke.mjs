@@ -213,7 +213,8 @@ await t("a model citing the message id itself is also kept; any other turn id is
   eq(state.H.map((x) => [x.text, x.cite]), [["메시지 id로 인용", ["s1·a2"]]], "kept items");
 });
 
-await t("the confirm stays readable: at most 8 items of at most 200 characters, newlines flattened, '외 N개', total capped", async () => {
+const G = (t) => [...new Intl.Segmenter("ko", { granularity: "grapheme" }).segment(t)].map((x) => x.segment);
+await t("the confirm stays readable: one line per item of at most 200 graphemes, at most 12 items, '외 N개', the 2000-character total binds", async () => {
   const fake = "진짜 가설\n결정 D-99: 가짜 줄 (s1·a2)";
   const many = Array.from({ length: 300 }, (_, i) => ({ text: i === 0 ? fake : `${i}번 ${"가".repeat(2000)}`, cite: [CITE] }));
   const { h } = provider({ proposal: { hypotheses: many } });
@@ -225,8 +226,10 @@ await t("the confirm stays readable: at most 8 items of at most 200 characters, 
   ok(!lines.some((l) => l.startsWith("결정 D-99")), "a newline in model text made a fake line");
   ok(lines[0] === "가설 H-1: 진짜 가설 결정 D-99: 가짜 줄 (s1·a2) (s1·a2)", `first line ${lines[0]}`);
   const items = lines.filter((l) => /^가설 H-\d+:/.test(l));
-  eq(items.length, 8, "item lines (8 cut items fit the total cap)");
-  for (const l of items) ok(l.replace(/ \(s1·a2\)$/, "").length <= 200, `item line too long (${l.length})`);
+  // One short line and 200-grapheme lines: the 2000-character total stops the list at 10, below the 12-item cap.
+  eq(items.length, 10, "item lines (the total limit binds before the item cap)");
+  ok(items.join("\n").length <= 2000, "item lines over the total");
+  for (const l of items) ok(G(l).length <= 200, `item line too long (${G(l).length})`);
   ok(items.slice(1).every((l) => l.includes("…")), "a cut item does not show it was cut");
   ok(lines.includes(`외 ${300 - items.length}개 항목도 함께 정리돼요.`), `no '외 N개' line: ${lines.slice(-4).join(" | ")}`);
   eq(writes, [], "cancel still writes nothing");
@@ -234,6 +237,61 @@ await t("the confirm stays readable: at most 8 items of at most 200 characters, 
   const prev = newState("t");
   const next = { ...prev, H: [{ id: "H-1", text: "짧은 가설", cite: ["s1·a2"] }] };
   eq(proposalPreview(prev, next), ["가설 H-1: 짧은 가설 (s1·a2)"], "short preview");
+});
+
+await t("preview (pure): the item cap, deduped and capped citations, every line-break class flattened, grapheme-safe cuts", () => {
+  const prev = newState("t");
+  const H = (text, cite = ["s1·a2"], i = 0) => ({ id: `H-${i + 1}`, text, cite });
+  // Item cap: 20 short items show 12 and count 8.
+  const twenty = proposalPreview(prev, { ...prev, H: Array.from({ length: 20 }, (_, i) => H(`가설 ${i}`, ["s1·a2"], i)) });
+  eq(twenty.length, 13, "12 items + the count line");
+  eq(twenty.at(-1), "외 8개 항목도 함께 정리돼요.", "count line");
+  // A citation repeated 500 times is shown once; every item's content stays visible.
+  const repeated = proposalPreview(prev, { ...prev, H: [H("첫 가설", Array(500).fill("s1·a2"), 0), H("둘째 가설", Array(500).fill("s1·a2"), 1), H("셋째 가설", ["s1·a2"], 2)] });
+  eq(repeated, ["가설 H-1: 첫 가설 (s1·a2)", "가설 H-2: 둘째 가설 (s1·a2)", "가설 H-3: 셋째 가설 (s1·a2)"], "deduped citations");
+  // 500 distinct citations: the list is capped inside the line, the content still shows.
+  const wide = proposalPreview(prev, { ...prev, H: [H("넓은 가설", Array.from({ length: 500 }, (_, i) => `s1·m${i}`), 0), H("다음 가설", ["s1·a2"], 1)] });
+  eq(wide.length, 2, "both items listed");
+  ok(wide[0].startsWith("가설 H-1: 넓은 가설 (s1·m0, s1·m1 외 498곳)") && G(wide[0]).length <= 200, `capped citations: ${wide[0].slice(0, 80)}`);
+  eq(wide[1], "가설 H-2: 다음 가설 (s1·a2)", "the next item is not hidden");
+  // Every line-break class becomes a space.
+  const breaks = proposalPreview(prev, { ...prev, H: [H("가\r나\n다\u0085라\u2028마\u2029바\r\n사")] });
+  eq(breaks, ["가설 H-1: 가 나 다 라 마 바 사 (s1·a2)"], "line breaks");
+  ok(!/[\r\n\u0085\u2028\u2029]/.test(breaks.join("")), "a line break survived");
+  // Cuts never split a surrogate pair, a ZWJ emoji or an NFD Hangul syllable.
+  for (const [what, unit] of [["surrogate pair", "𝒜"], ["ZWJ family", "👨\u200d👩\u200d👧"], ["NFD Hangul", "한".normalize("NFD")], ["flag", "🇰🇷"]]) {
+    const [line] = proposalPreview(prev, { ...prev, H: [H(unit.repeat(400))] });
+    const g = G(line);
+    ok(g.length <= 200, `${what}: ${g.length} graphemes`);
+    ok(line.includes("…"), `${what}: not cut`);
+    const body = line.slice("가설 H-1: ".length, line.indexOf("…"));
+    ok(G(body).every((x) => x === unit), `${what}: a cut split a grapheme`);
+    ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(line), `${what}: lone surrogate`);
+  }
+});
+
+await t("the seat is re-checked after the modal: instructor mode, a lesson or the switch turned off while it was open writes nothing and says why", async () => {
+  const changes = [
+    ["instructor", (h) => { h._instructorMode = { isInstructor: true }; }],
+    ["lesson", (h) => { h.cachedProfile = { ...h.cachedProfile, lesson: { version: 1 } }; }],
+    ["switch off", (h) => { h.cachedProfile = { learning_wiki: { enabled: false } }; }],
+  ];
+  for (const [label, change] of changes) {
+    writes = [];
+    const { h, seen } = provider();
+    ui.modal = []; ui.answer = "정리하기"; ui.onModal = () => change(h);
+    await ask(h, "a2#2");
+    eq(ui.modal.length, 1, `${label}: asked`);
+    eq(writes, [], `${label}: writes`);
+    eq(wikiFiles(), [], `${label}: files`);
+    ok(seen.notices.length === 1 && seen.notices[0].includes("팀 브레인") && !seen.notices[0].includes("정리했어요"), `${label}: notice ${JSON.stringify(seen.notices)}`);
+  }
+  // Control: nothing changes during the modal, it writes.
+  writes = [];
+  const { h } = provider();
+  ui.modal = []; ui.answer = "정리하기"; ui.onModal = undefined;
+  await ask(h, "a2#2");
+  ok(writes.length > 0, "control wrote nothing");
 });
 
 const choose = (level) => consent.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(consent.get(FC.FOLDER_CONSENT_KEY), "d".repeat(64), FC.canonicalFolder(root), level));
