@@ -1633,6 +1633,64 @@ bytes unchanged; both fail on the previous code), a deep nested positive control
 states and copy, partial failure never reads as success, default chat render has no bar). Native
 app run: NOT RUN.
 
+## Artifact provenance labels (CGP-KNOW-R-012)
+
+`REQ-STUDIO-ARTIFACT-PROVENANCE` (CGP-KNOW-R-012 / REQ-KNOW-21 of the ChatGPT desktop study,
+`docs/research/chatgpt-desktop-2026-10/domains/projects-library-memory.md`; builds on
+`REQ-STUDIO-TURN-RESTORE`). Product Intent: the learner sees, without a score, which work the AI
+did and which they did themselves (OWNERSHIP may be exposed; no capability is measured). Built:
+
+- **Labels from recorded events only.** Each work-folder file gets one label, derived by
+  `src/artifactProvenance.ts` and never from assistant prose: `AI가 만듦` (the per-turn restore diff of
+  a coach turn names it as added), `AI가 고침` (named as changed), `내가 올림` (the host itself
+  committed it from a learner attachment: a D-028 photo into `images/` or a #421 pasted image into
+  `assets/`), `내가 고침` (its sha256 changed between two observations that were both outside a coach
+  turn), `기록 없음` (no recorded event left exactly the bytes that are there now, including every file
+  that was already there at the first observation). A file touched more than once shows the latest
+  label and a short history, oldest first, consecutive repeats folded, at most four steps
+  ("지금까지: AI가 만듦 → 내가 고침").
+- **Observations.** The restore point taken before each coach turn is an observation outside a turn;
+  the end of the turn records the restore diff against the rescanned folder; opening the panel while
+  no turn, send, revert, task switch or verify run is active rescans the folder and is also an
+  observation. A file deleted and made again loses its old history.
+- **Never guess.** A window that was not measured marks the ledger stale: no restore point (folder
+  too large, store write failed), a rescan past its cap or a read failure after a turn, a ledger save
+  failure, a damaged ledger file, and Studio's own writes into the folder outside a coach turn
+  (`index.html`/`engine.js` preview saves, learning wiki and deck pages). The next observation then
+  records every difference as `기록 없음` (history e.g. "AI가 만듦 → 기록 없음"), never as `내가 고침`,
+  and a coach turn that starts from a stale ledger labels nothing as AI.
+- **되돌리기.** After a revert to a turn's restore point, every event recorded after that point is
+  dropped (the revert discarded those bytes) and the restored folder is compared with the point: a
+  file the revert could not put back reads `기록 없음`.
+- **Local only.** One ledger per work folder (sha256 of its real path) under the extension's global
+  storage (`artifact-provenance/<hash>.json`), never in the work folder and never uploaded: the last
+  observed path → sha256 map and at most 2000 events (oldest dropped first; a file whose only event
+  was dropped reads `기록 없음`). Paths and hashes only, no contents.
+- **Where it shows.** The personal/trial task workspace's 작업 자료 panel (`TaskWorkspace.tsx`), under
+  the citations, as "작업 폴더의 파일": one row per file (≥44px), path, a decorative shape symbol
+  (`✦` `↻` `⇡` `✎` `○`, `aria-hidden`) and the label in words, newest recorded event first and
+  `기록 없음` last, at most 100 rows with a "파일 N개는 더 있어서…" line. This panel was chosen because
+  it is the task workspace's only persistent listing surface; the turn review bar is replaced by the
+  next turn and the publish panel lists one version's files. No score, percentage or capability name.
+
+Not built: the "내 작품" drawer (DES-KNOW-20) and grid view; labels in the classroom chat (it has no
+task workspace), on the turn review bar or in the editor's file explorer; the research doc's wording
+`확인 안 됨` (this slice uses `기록 없음` as requested in CGP-KNOW-R-012); separating a learner's manual
+edit made inside a coach turn's window from the coach's (the restore diff compares the folder, so it
+counts as the turn's, as the review bar already says); attributing changes to shell or subagent tools;
+times of edits (events carry observation time only; none is shown); links to the creating turn
+(REQ-KNOW-29); files the restore scan does not cover (over 20 MB, links, skipped folders such as
+`.git`, `node_modules`, `.hypeproof`, `이전 세상`) are not listed; the instructor surface records nothing.
+Verification: U (`extensions/hypeproof-chat/test/artifact-provenance.smoke.mjs` — synthetic
+manifests and events with a planted answer per label, history order and folding, first observation,
+revert, caps, damaged ledger, and a real temp folder driven through `takeRestorePoint` /
+`diffRestorePoint` and the host recorder; negative controls: an unmeasured window, a coach turn over
+a stale ledger, a diff naming a file the scan does not show, bytes no event explains, a Studio write
+outside a turn; four mutations of the derivation each fail at least one case;
+`extensions/hypeproof-chat/test/artifact-provenance.test.tsx` — row markup, symbol plus words, order,
+empty and loading states, no score or capability words, the closed panel draws no list). Host wiring
+in `chatPanelProvider.ts` is covered by typecheck only. Native app run: NOT RUN.
+
 ## Personal trial interaction coverage (#758)
 
 | ID | Requirement | Verification |

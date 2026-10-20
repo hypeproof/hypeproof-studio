@@ -6783,6 +6783,43 @@
       ]
     },
     {
+      "id": "ST-IMP-ARTIFACT-PROVENANCE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-RESTORE",
+        "ST-REQ-TASK-WORKSPACE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/artifactProvenance.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/artifactProvenanceView.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ArtifactProvenanceList.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ARTIFACT-PROVENANCE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-TURN-RESTORE",
+        "ST-IMP-ARTIFACT-PROVENANCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/artifact-provenance.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/artifact-provenance.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-PAGE-ATTACHMENT",
       "stage": "implementation",
       "owner": "jayleekr",

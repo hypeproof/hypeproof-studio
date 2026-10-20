@@ -8,6 +8,8 @@ import { HeadingSlotContext } from './headingSlot';
 export { useCitationPreview } from './CitationPreview';
 import './taskWorkspace.css';
 import { imeComposing } from './imeGuard';
+import { ArtifactProvenanceList } from './ArtifactProvenanceList';
+import type { ArtifactProvenanceView } from '../../src/artifactProvenanceView';
 
 interface Props {
   view: TaskWorkspaceView;
@@ -60,6 +62,8 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
   const [filter, setFilter] = useState('');
   const [railOpen, setRailOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  // REQ-STUDIO-ARTIFACT-PROVENANCE — undefined until the host answers for this scope.
+  const [artifacts, setArtifacts] = useState<ArtifactProvenanceView | null | undefined>(undefined);
   const [preview, setPreview] = useState<PreviewSelection | null>(null);
   const [headingSlot, setHeadingSlot] = useState<HTMLDivElement | null>(null);
   const [sourceRequest, setSourceRequest] = useState<SourceRequest | null>(null);
@@ -208,6 +212,10 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
     setRailOpen(false);
   }, [scopeKey, clearRequestTimer, updateRequest]);
   useEffect(() => clearRequestTimer, [clearRequestTimer]);
+  useEffect(() => onHostMessage(message => { if (message.type === 'artifactProvenance') setArtifacts(message.view); }), []);
+  useEffect(() => { setArtifacts(undefined); }, [scopeKey]);
+  // Each opening asks again: the host rescans the folder when no turn runs.
+  useEffect(() => { if (sourcesOpen) postToHost({ type: 'artifactProvenanceRequest' }); }, [sourcesOpen, scopeKey]);
   useEffect(() => {
     if (preview && !previewSourceValue) setPreview(null);
     if (request && !sources.some(source => source.url === request.url)) { clearRequestTimer(); updateRequest(null); }
@@ -419,6 +427,7 @@ export function TaskWorkspace({ view, messages, busy, error, unsavedDraft = fals
         <h3 className="tw-source-list-title">이 작업의 출처</h3>
         <ul className="tw-source-list">{sources.map(source => <li key={source.url}><button type="button" aria-pressed={selected.url === source.url} onClick={() => { setPreview({ url: source.url, scopeKey }); pendingFocus.current = 'source-title'; }}><span>{source.title || citationAddress(source.url)?.hostname}</span><small>{citationAddress(source.url)?.hostname}{pinnedSource?.url === source.url ? ' · 고정됨' : ''}</small></button></li>)}</ul>
       </> : <div className="tw-source-empty"><span aria-hidden="true"><SourceIcon kind="source" /></span><h3>출처를 모아 둘 자리</h3><p>대화에서 웹 자료를 찾으면 여기에서 다시 열 수 있습니다.</p></div>}
+      {sourcesOpen && <ArtifactProvenanceList view={artifacts} />}
     </aside>
   </div></CitationPreviewContext.Provider>;
 }

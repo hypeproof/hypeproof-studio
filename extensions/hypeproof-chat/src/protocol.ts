@@ -665,6 +665,8 @@ export type WebviewMessage = (
   | { type: "turnRevert"; turnId: string }
   | { type: "turnKeep"; turnId: string }
   | { type: "turnReviewClose"; turnId: string }
+  // REQ-STUDIO-ARTIFACT-PROVENANCE — the 작업 자료 panel asks for the work folder's provenance list.
+  | { type: "artifactProvenanceRequest" }
   | { type: "inboxOpen"; objectId: string; generation: number }
   | { type: "inboxLink"; objectId: string; url: string; generation: number; action: "open" | "copy" }
   // #751 native help — every message names the learner-in-class key the view was drawn under; the host ignores a mismatch.
@@ -750,6 +752,8 @@ export type HostMessage = (
   | { type: "inboxState"; inbox: import("./classroomInbox").InboxView }
   /** AE-15 / CGP-ART-R-002 — the review bar for the last coach turn's file changes; null removes it. */
   | { type: "turnReviewState"; view: import("./turnReviewView").TurnReviewView | null }
+  /** REQ-STUDIO-ARTIFACT-PROVENANCE — one label per work-folder file, from recorded events only; null when there is no folder. */
+  | { type: "artifactProvenance"; view: import("./artifactProvenanceView").ArtifactProvenanceView | null }
   | { type: "helpState"; help: import("./classroomHelp").HelpView }
   | { type: "history"; messages: ChatMessage[] }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — first saved message the next model call still sends, when older ones are clamped. */
