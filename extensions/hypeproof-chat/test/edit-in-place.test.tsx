@@ -7,6 +7,7 @@ import path from 'node:path';
 import { EditAction, EditPrompt, VersionPager } from '../webview-ui/src/EditResend';
 import { AttemptPager } from '../webview-ui/src/AttemptPager';
 const act=(React as any).act;
+const fireEv=(target:any,type:string,extra:any={})=>{const ev:any={type,bubbles:true,cancelable:true,defaultPrevented:false,timeStamp:Date.now(),isComposing:false,keyCode:0,shiftKey:false,...extra,preventDefault(){ev.defaultPrevented=true;},stopPropagation(){ev._stopped=true;}};target.dispatchEvent(ev);return ev;};
 const fire=(target:any,type:string,extra:any={})=>target.dispatchEvent({type,bubbles:true,cancelable:true,timeStamp:Date.now(),isComposing:false,keyCode:0,shiftKey:false,...extra,preventDefault(){},stopPropagation(){(this as any)._stopped=true;}});
 (async()=>{
  const host:any=mountPoint(); const root=createRoot(host); let edits=0; const saved:any[]=[]; let cancelled=0;
@@ -29,6 +30,35 @@ const fire=(target:any,type:string,extra:any={})=>target.dispatchEvent({type,bub
  await act(async()=>fire(area,'compositionend'));
  await act(async()=>fire(area,'keydown',{key:'Enter',shiftKey:true})); assert.equal(saved.length,0);
  await act(async()=>fire(area,'keydown',{key:'Enter'})); assert.deepEqual(saved,[['한글 질문',[]]]);
+ // Enter on empty or whitespace-only text must not save (the button is disabled; the key path has its own guard).
+ for(const blank of ['','   \n ']){
+  const before=saved.length;
+  await draw(<EditPrompt key={'blank'+blank.length} text={blank} images={[]} revertNote={false} onCancel={()=>cancelled++} onSave={(...args)=>saved.push(args)}/>);
+  const empty=host.querySelector('textarea'); assert.equal(empty.value,blank);
+  assert.ok(host.querySelectorAll('button')[1].hasAttribute('disabled'),'save button disabled on blank text');
+  await act(async()=>{fireEv(empty,'keydown',{key:'Enter'});});
+  assert.equal(saved.length,before,'Enter on blank text must not call onSave');
+ }
+ // A composition key stays with the IME: it must not bubble to panel/workspace handlers.
+ await draw(<EditPrompt key="ime" text="한글 질문" images={[]} revertNote={false} onCancel={()=>cancelled++} onSave={(...args)=>saved.push(args)}/>);
+ const ime=host.querySelector('textarea');
+ for(const [name,extra] of [['isComposing',{isComposing:true}],['keyCode 229',{keyCode:229}]] as const)
+  for(const k of ['Enter','Escape']){let ev:any; await act(async()=>{ev=fireEv(ime,'keydown',{key:k,...extra});}); assert.equal(ev._stopped,true,`${name} ${k} must stopPropagation`);}
+ await act(async()=>fire(ime,'compositionstart'));
+ for(const k of ['Enter','Escape']){let ev:any; await act(async()=>{ev=fireEv(ime,'keydown',{key:k});}); assert.equal(ev._stopped,true,`composition-state ${k} must stopPropagation`);}
+ await act(async()=>fire(ime,'compositionend'));
+ { // control: outside composition the same keys are handled, not swallowed by the IME branch
+  let ev:any; const n=cancelled; await act(async()=>{ev=fireEv(ime,'keydown',{key:'Escape'});}); assert.equal(cancelled,n+1,'Escape cancels once'); assert.equal(ev.defaultPrevented,true);
+ }
+ // Escape cancels exactly once and never saves.
+ { const n=cancelled, sv=saved.length; await draw(<EditPrompt key="esc" text="고칠 글" images={[]} revertNote={false} onCancel={()=>cancelled++} onSave={(...args)=>saved.push(args)}/>);
+  await act(async()=>{fireEv(host.querySelector('textarea'),'keydown',{key:'Escape'});}); assert.equal(cancelled,n+1,'Escape calls onCancel once'); assert.equal(saved.length,sv,'Escape never saves'); }
+ // Opening scrolls the editor box into view with the least movement (classroom at 800px tall).
+ { const proto=Object.getPrototypeOf(host); const orig=proto.scrollIntoView; const calls:any[]=[]; proto.scrollIntoView=function(...a:any[]){calls.push([this,...a]);};
+  try{ await draw(<EditPrompt key="scroll" text="x" images={[]} revertNote={false} onCancel={()=>{}} onSave={()=>{}}/>); }finally{proto.scrollIntoView=orig;}
+  assert.equal(calls.length,1,'scrollIntoView called once on open'); assert.equal(calls[0][0].getAttribute('class'),'hps-edit-box'); assert.deepEqual(calls[0][1],{block:'nearest'}); }
+ await draw(<EditPrompt text="한글 질문" images={[]} revertNote={false} onCancel={()=>cancelled++} onSave={(...args)=>saved.push(args)}/>);
+ cancelled=0;
  await act(async()=>click(host.querySelectorAll('button')[0])); assert.equal(cancelled,1);
  const pages:number[]=[];
  await draw(<VersionPager pager={{key:'u1',index:0,count:2}} onPage={n=>pages.push(n)}/>);

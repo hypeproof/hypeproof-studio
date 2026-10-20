@@ -40,10 +40,15 @@ export function EditPrompt({ text, images, revertNote, onCancel, onSave, onChang
   const [kept, setKept] = useState(images);
   const area = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
-  useEffect(() => { area.current?.focus({ preventScroll: true }); }, []);
+  const box = useRef<HTMLDivElement>(null);
+  // Focus without the browser's own jump, then bring the whole editor (not just the caret line) into
+  // view with the least movement: at short heights it would otherwise sit cut off at the scroll edge.
+  useEffect(() => {
+    area.current?.focus({ preventScroll: true });
+    box.current?.scrollIntoView?.({ block: "nearest" });
+  }, []);
   // REQ-STUDIO-FOCUS-RESTORE: closing returns focus to this message's 수정 (drawn again after the
   // editor goes), or to the composer when the message is gone.
-  const box = useRef<HTMLDivElement>(null);
   const row = useRef<Element | null>(null);
   useLayoutEffect(() => { row.current = box.current?.closest(".hps-msg") ?? null; }, []);
   useDialogFocus(box, { open: true, kind: "inline", initialFocus: false, opener: () => row.current?.isConnected ? row.current.querySelector<HTMLElement>(".hps-edit-prompt") : null });
