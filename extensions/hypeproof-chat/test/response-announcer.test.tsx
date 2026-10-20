@@ -19,13 +19,13 @@ const classroom = { personal: false, stopped: false, failed: false };
 const personal = { personal: true, stopped: false, failed: false };
 
 t("classroom start is announced", () => eq(responseAnnouncement(false, true, classroom), "답변을 시작했어요"));
-t("personal start stays with ResponsePending (no second announcement)", () => eq(responseAnnouncement(false, true, personal), ""));
+t("personal start uses the stable response announcer", () => eq(responseAnnouncement(false, true, personal), "답변을 시작했어요"));
 t("completion is announced in both modes", () => {
   eq(responseAnnouncement(true, false, classroom), "답변이 끝났어요");
   eq(responseAnnouncement(true, false, personal), "답변이 끝났어요");
 });
 t("stop and error are not also announced as completion", () => {
-  eq(responseAnnouncement(true, false, { ...classroom, stopped: true }), "");
+  eq(responseAnnouncement(true, false, { ...classroom, stopped: true }), "답변을 멈췄어요");
   eq(responseAnnouncement(true, false, { ...personal, failed: true }), "");
 });
 t("negative control: no transition, no announcement", () => {

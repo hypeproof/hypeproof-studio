@@ -152,7 +152,7 @@ export function CopyAnswer({ content, onRun, onRetry, verdict, onToWiki }: { con
 }
 
 export function ResponsePending({ hasContent = false }: { hasContent?: boolean }) {
-  return <div className="hps-response-pending" role="status">
+  return <div className="hps-response-pending">
     <span className="hps-response-dots" aria-hidden="true"><i /><i /><i /></span>
     <span>{hasContent ? '답변 작성 중' : '응답을 준비하고 있어요'}</span>
   </div>;
