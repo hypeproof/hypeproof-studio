@@ -1,3 +1,4 @@
+import type { OutboundConfirmation } from "./outboundConsent.ts";
 // #596 — 스풀 업로더 (#580 업로드 계층의 클라이언트 절반).
 //
 // 로컬 스풀 세션 디렉토리를 worker 의 PUT /v1/logs/<sessionId>/<filename>
@@ -145,6 +146,8 @@ export function buildManifest(
 }
 
 export interface UploadSessionArgs {
+  confirm?: OutboundConfirmation;
+  current?(): Promise<boolean>;
   session: UploadableSession;
   /** proxyUrl 설정값 (…/v1 로 끝남) — /logs/… 를 여기에 붙인다. */
   baseUrl: string;
@@ -172,30 +175,43 @@ export interface UploadSessionArgs {
  * 게임이 올라갔는데 로그 스냅샷 때문에 아이 화면에 실패를 띄우지 않는다.
  */
 export async function uploadSessionSnapshot(args: UploadSessionArgs): Promise<SessionUploadResult> {
-  const { session } = args;
-  const fetchFn = args.fetchFn ?? fetch;
+  const read = readSessionSnapshot(args.session);
+  if (!read.ok) return read.fail;
   const base = args.baseUrl.replace(/\/$/, "");
-  const keys: string[] = [];
+  if (!await args.confirm?.({ recipient: snapshotRecipient(base), items: snapshotItems(read.entries) })) return { dir: args.session.dir, ok: false, keys: [], failedAt: "consent", status: 0, message: "보내지 않았어요." };
+  return sendSessionSnapshot(args, read.entries);
+}
 
+/** The bytes a snapshot would send, read once. A caller that shows them for confirmation sends exactly these (REQ-KNOW-09). */
+export type SnapshotEntries = ReadonlyArray<{ name: string; body: Buffer }>;
+export function readSessionSnapshot(session: UploadableSession): { ok: true; entries: SnapshotEntries } | { ok: false; fail: SessionUploadResult } {
   let entries: Array<{ name: string; body: Buffer }>;
   try {
     entries = UPLOAD_FILES_IN_ORDER
       .filter((f) => fs.existsSync(path.join(session.dir, f)))
       .map((name) => ({ name, body: fs.readFileSync(path.join(session.dir, name)) }));
   } catch (err) {
-    return {
-      dir: session.dir, ok: false, keys, failedAt: "read",
-      status: 0, message: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, fail: { dir: session.dir, ok: false, keys: [], failedAt: "read", status: 0, message: err instanceof Error ? err.message : String(err) } };
   }
   if (!entries.some((e) => e.name === "events.jsonl")) {
-    return { dir: session.dir, ok: false, keys, failedAt: "read", status: 0, message: "events.jsonl missing" };
+    return { ok: false, fail: { dir: session.dir, ok: false, keys: [], failedAt: "read", status: 0, message: "events.jsonl missing" } };
   }
+  return { ok: true, entries };
+}
+export const snapshotRecipient = (baseUrl: string) => `수업 기록 운영자 · ${new URL(baseUrl).host}`;
+export const snapshotItems = (entries: SnapshotEntries) => entries.map((e) => ({ name: e.name, bytes: e.body.byteLength }));
 
+/** Sends already-read (and already-confirmed) snapshot bytes. Never reads the spool again. */
+export async function sendSessionSnapshot(args: UploadSessionArgs, entries: SnapshotEntries): Promise<SessionUploadResult> {
+  const { session } = args;
+  const fetchFn = args.fetchFn ?? fetch;
+  const base = args.baseUrl.replace(/\/$/, "");
+  const keys: string[] = [];
   for (const { name, body } of entries) {
     const contentType = name.endsWith(".jsonl") ? "application/x-ndjson" : "application/json";
     const url = `${base}/logs/${session.sessionId}/${name}?day=${session.day}`;
     try {
+      if (args.current && !await args.current()) throw new Error("연결이 바뀌어서 보내지 않았어요.");
       const res = await fetchFn(url, {
         method: "PUT",
         headers: { authorization: `Bearer ${args.token}`, "content-type": contentType },
@@ -222,20 +238,17 @@ export async function uploadSessionSnapshot(args: UploadSessionArgs): Promise<Se
  * 어느 파일에서든 실패하면 거기서 멈춘다 — manifest 가 안 올라갔으므로
  * 서버 기준 미완결, 다음 트리거가 처음부터 다시 올린다(멱등).
  */
-export async function uploadSession(args: UploadSessionArgs): Promise<SessionUploadResult> {
-  const { session } = args;
+function putFileFor(args: UploadSessionArgs, session: UploadableSession, keys: string[]) {
   const fetchFn = args.fetchFn ?? fetch;
-  const now = args.now ?? (() => new Date());
   const base = args.baseUrl.replace(/\/$/, "");
-  const keys: string[] = [];
-
-  const putFile = async (
+  return async (
     name: string,
     body: Uint8Array,
     contentType: string,
   ): Promise<{ ok: true } | { ok: false; status: number; message: string }> => {
     const url = `${base}/logs/${session.sessionId}/${name}?day=${session.day}`;
     try {
+      if (args.current && !await args.current()) throw new Error("연결이 바뀌어서 보내지 않았어요.");
       const res = await fetchFn(url, {
         method: "PUT",
         headers: { authorization: `Bearer ${args.token}`, "content-type": contentType },
@@ -259,7 +272,28 @@ export async function uploadSession(args: UploadSessionArgs): Promise<SessionUpl
       return { ok: false, status: 0, message: err instanceof Error ? err.message : String(err) };
     }
   };
+}
 
+export async function uploadSession(args: UploadSessionArgs): Promise<SessionUploadResult> {
+  const { session } = args;
+  const now = args.now ?? (() => new Date());
+  const base = args.baseUrl.replace(/\/$/, "");
+  const keys: string[] = [];
+  const prepared = prepareSession(session, now);
+  if (!prepared.ok) return prepared.fail;
+  if (!await args.confirm?.({ recipient: sessionRecipient(base), items: preparedItems(prepared) })) return { dir: session.dir, ok: false, keys, failedAt: "consent", status: 0, message: "보내지 않았어요." };
+  return sendPreparedSession(args, prepared);
+}
+
+/** One session's bytes, read once, and the manifest over exactly those bytes. */
+export interface PreparedSession { ok: true; session: UploadableSession; entries: ReadonlyArray<{ name: string; body: Buffer }>; manifestBytes: Buffer }
+export const sessionRecipient = (base: string) => `수업 기록 운영자 · ${new URL(base).host}`;
+/** What each uploaded file is, in the learner's words: the dialog must not leave "events.jsonl" as an opaque file name. */
+const FILE_MEANING: Record<string, string> = { "events.jsonl": "내 대화 기록 (주고받은 말, 만든 HTML, 사용량, 작업 단계)", "session.meta.json": "세션 정보 (내 계정·수업 ID, 앱 버전, OS, 시작 시각)", "manifest.json": "파일 목록" };
+const shownName = (prefix: string, name: string) => `${prefix}${name}${FILE_MEANING[name] ? ` · ${FILE_MEANING[name]}` : ""}`;
+export const preparedItems = (p: PreparedSession, prefix = "") => [...p.entries.map(e => ({ name: shownName(prefix, e.name), bytes: e.body.byteLength })), { name: shownName(prefix, "manifest.json"), bytes: p.manifestBytes.byteLength }];
+export function prepareSession(session: UploadableSession, now: () => Date): PreparedSession | { ok: false; fail: SessionUploadResult } {
+  const keys: string[] = [];
   // 파일 바이트를 **한 번만** 읽고, PUT 도 manifest 해시도 같은 버퍼에서
   // 만든다 — 읽기 두 번 사이에 다른 프로세스가 append 하면 manifest 가
   // "업로드된 적 없는 바이트"를 서술하는 거짓 완결이 된다(1회차 리뷰 F2).
@@ -271,23 +305,12 @@ export async function uploadSession(args: UploadSessionArgs): Promise<SessionUpl
       .filter((f) => fs.existsSync(path.join(session.dir, f)))
       .map((name) => ({ name, body: fs.readFileSync(path.join(session.dir, name)) }));
   } catch (err) {
-    return {
-      dir: session.dir, ok: false, keys, failedAt: "read",
-      status: 0, message: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, fail: { dir: session.dir, ok: false, keys, failedAt: "read", status: 0, message: err instanceof Error ? err.message : String(err) } };
   }
   // events.jsonl 은 세션의 본체 — 스캔과 읽기 사이에 사라졌다면(다른 창의
   // 스윕 등) 빈 manifest 로 "완결"을 주장하면 안 된다.
   if (!entries.some((e) => e.name === "events.jsonl")) {
-    return { dir: session.dir, ok: false, keys, failedAt: "read", status: 0, message: "events.jsonl missing" };
-  }
-
-  for (const { name, body } of entries) {
-    const contentType = name.endsWith(".jsonl") ? "application/x-ndjson" : "application/json";
-    const r = await putFile(name, body, contentType);
-    if (!r.ok) {
-      return { dir: session.dir, ok: false, keys, failedAt: name, status: r.status, message: r.message };
-    }
+    return { ok: false, fail: { dir: session.dir, ok: false, keys, failedAt: "read", status: 0, message: "events.jsonl missing" } };
   }
 
   const manifest = {
@@ -301,6 +324,23 @@ export async function uploadSession(args: UploadSessionArgs): Promise<SessionUpl
     })),
   };
   const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  return { ok: true, session, entries, manifestBytes };
+}
+
+/** Sends already-read (and already-confirmed) session bytes and their manifest. Never reads the spool again for content. */
+export async function sendPreparedSession(args: Omit<UploadSessionArgs, "session">, prepared: PreparedSession): Promise<SessionUploadResult> {
+  const { session, entries, manifestBytes } = prepared;
+  const now = args.now ?? (() => new Date());
+  const keys: string[] = [];
+  const putFile = putFileFor({ ...args, session }, session, keys);
+  for (const { name, body } of entries) {
+    const contentType = name.endsWith(".jsonl") ? "application/x-ndjson" : "application/json";
+    const r = await putFile(name, body, contentType);
+    if (!r.ok) {
+      return { dir: session.dir, ok: false, keys, failedAt: name, status: r.status, message: r.message };
+    }
+  }
+
   const r = await putFile("manifest.json", manifestBytes, "application/json");
   if (!r.ok) {
     return { dir: session.dir, ok: false, keys, failedAt: "manifest.json", status: r.status, message: r.message };
@@ -349,9 +389,30 @@ export async function uploadAllPending(
     now: opts.now,
   });
   const results: SessionUploadResult[] = [];
+  // REQ-KNOW-09 (F7): every pending session is read once and listed in ONE confirmation — one block per session with its
+  // recipient, files and sizes — instead of a dialog per session. Exactly the listed bytes are sent; Cancel sends none.
+  const now = opts.now ?? (() => new Date());
+  const prepared: PreparedSession[] = [];
   for (const session of sessions) {
+    const p = prepareSession(session, now);
+    if (p.ok) prepared.push(p); else results.push(p.fail);
+  }
+  if (!prepared.length) return results;
+  const base = opts.baseUrl.replace(/\/$/, "");
+  const label = (p: PreparedSession, i: number) => `세션 ${i + 1} (${p.session.day} · ${p.session.sessionId.slice(0, 8)}) · `;
+  const [first, ...more] = prepared;
+  const approved = await opts.confirm?.({
+    recipient: sessionRecipient(base), items: preparedItems(first, label(first, 0)),
+    ...(more.length ? { also: more.map((p, i) => ({ recipient: sessionRecipient(base), items: preparedItems(p, label(p, i + 1)) })) } : {}),
+  });
+  if (!approved) {
+    for (const p of prepared) results.push({ dir: p.session.dir, ok: false, keys: [], failedAt: "consent", status: 0, message: "보내지 않았어요." });
+    return results;
+  }
+  for (const p of prepared) {
+    const session = p.session;
     try {
-      results.push(await uploadSession({ ...opts, session }));
+      results.push(await sendPreparedSession(opts, p));
     } catch (err) {
       // uploadSession 은 던지지 않는 계약이지만, 계약이 뚫려도 나머지 세션과
       // 결과 안내는 살아야 한다 (belt-and-suspenders).

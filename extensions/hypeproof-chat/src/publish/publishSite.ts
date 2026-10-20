@@ -10,6 +10,8 @@
 // base), so the smoke tests drive the whole pipeline against a scripted GitHub.
 
 import * as fs from "node:fs";
+import * as path from "node:path";
+import type { OutboundConfirmation } from "../outboundConsent.ts";
 import { createGitHubApi, ghMessage, GitHubTransportError, missingScopes, parseOAuthScopes, type GitHubApi, type GitHubTransport } from "./githubApi.ts";
 import { AuthToolMissingError, type AuthProvider } from "./githubAuth.ts";
 import {
@@ -76,6 +78,9 @@ export const DEFAULT_TIMING: PublishTiming = {
 };
 
 export interface PublishSiteDeps {
+  confirmContent?: OutboundConfirmation;
+  current?(): boolean;
+  privateDirectories?: string[];
   /** Unauthenticated reads of the published site (the live check). Never carries a token. */
   fetch: typeof fetch;
   sleep: (ms: number) => Promise<void>;
@@ -167,14 +172,20 @@ class Steps {
   }
 }
 
-/** Reads files as bytes for the commit. A file that vanished since preflight is dropped. */
+/** Freeze selected bytes before consent. Changed paths refuse; no late file substitution. */
 function readTreeFiles(files: Array<{ path: string; abs: string }>): TreeFile[] {
   const out: TreeFile[] = [];
   for (const f of files) {
     try {
-      out.push({ path: f.path, bytes: fs.readFileSync(f.abs) });
+      let component = path.resolve(f.abs);
+      while (component !== path.dirname(component)) {
+        if (fs.lstatSync(component).isSymbolicLink()) throw new Error("symlink");
+        component = path.dirname(component);
+      }
+      const fd = fs.openSync(f.abs, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      try { out.push({ path: f.path, bytes: fs.readFileSync(fd) }); } finally { fs.closeSync(fd); }
     } catch {
-      /* deleted between preflight and commit: publishing it is impossible anyway */
+      throw new Error("A selected file changed before confirmation");
     }
   }
   return out;
@@ -224,9 +235,10 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
 
   // ── preflight (nothing leaves the machine before this passes) ─────────────
   let siteFiles: Array<{ path: string; abs: string }> = [];
+  let site: TreeFile[] = [];
   if (!checkOnly) {
     if (!deps.workspaceRoot) return fail("no_workspace");
-    const report = preflightSite(deps.workspaceRoot);
+    const report = preflightSite(deps.workspaceRoot, deps.privateDirectories);
     const lines = summarizeIssues(report.issues);
     if (report.blocked) {
       steps.set("preflight", "failed", lines.join(" / "));
@@ -238,6 +250,7 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       report.issues.length ? `파일 ${report.files.length}개 · 확인할 점: ${lines.join(" / ")}` : `파일 ${report.files.length}개를 검사했어요. 문제 없어요.`,
     );
     siteFiles = report.files;
+    try { site = readTreeFiles(siteFiles); } catch { return fail("preflight_blocked"); }
     if (report.markers.length) extra.markers = report.markers;
   } else {
     steps.set("preflight", "skipped", "상태만 확인해요.");
@@ -263,7 +276,11 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       if (!token) {
         needed = ["repo", "workflow"];
       } else {
-        api = createGitHubApi({ transport: deps.transport(token), deps: { sleep: deps.sleep, now: deps.now } });
+        const transport = deps.transport(token), signedToken = token;
+        api = createGitHubApi({ transport: async (method, route, body) => {
+          if (method !== "GET") { const active = await deps.auth.token(); if (active !== signedToken || deps.current?.() === false) return { status: 403, headers: new Headers(), json: { message: "연결이 바뀌어서 보내지 않았어요." } }; }
+          return transport(method, route, body);
+        }, deps: { sleep: deps.sleep, now: deps.now } });
         const u = await api.request("GET", "/user");
         if (u.status === 401) {
           // gh still holds a token GitHub no longer accepts (revoked, expired): log in again.
@@ -345,6 +362,12 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
       steps.set("repo", "skipped", "공개하지 않기로 해서 아무것도 올리지 않았어요.");
       return fail("declined");
     }
+    const nonce = stage === "save" ? "" : deps.nonce();
+    const knownPages = stage === "save" ? null : await readPages(api, `/repos/${login}/${repoName}`);
+    if (knownPages && !knownPages.ok) return fail(knownPages.code, knownPages.detail);
+    const approvedCname = domain ?? (knownPages?.ok ? knownPages.pages?.cname?.toLowerCase() : null) ?? null;
+    const generated: TreeFile[] = [{ path: ".nojekyll", bytes: new Uint8Array() }, ...(stage === "save" ? [] : [{ path: WORKFLOW_PATH, bytes: enc(PAGES_WORKFLOW_YAML) }, { path: NONCE_PATH, bytes: enc(`${nonce}\n`) }, ...(approvedCname ? [{ path: "CNAME", bytes: enc(`${approvedCname}\n`) }] : [])])];
+    if (!await deps.confirmContent?.({ recipient: `GitHub · ${login}/${repoName}`, public: true, items: [...site, ...generated].map(f => ({ name: f.path, bytes: f.bytes.byteLength })) })) return fail("declined");
     const expectedHead = deps.lastPushedSha?.(login, repoName);
 
     // ── repository ──────────────────────────────────────────────────────────
@@ -357,7 +380,6 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     extra.repo_url = repo.htmlUrl;
     steps.set("repo", "ok", repo.created ? `새 저장소 ${repo.htmlUrl} 를 만들었어요.` : `이미 있는 내 저장소 ${repo.htmlUrl} 를 그대로 써요.`);
 
-    const site = readTreeFiles(siteFiles);
     // `.nojekyll` in both stages: meaningless to the Actions build but harmless, and it keeps
     // a later switch to branch publishing (or a participant enabling Pages by hand on a saved
     // repo) from running Jekyll over files with underscores.
@@ -391,8 +413,8 @@ export async function runPublishSite(input: PublishSiteInput, deps: PublishSiteD
     const existingDomainSite = existingCname ? { name: existingCname, https: pagesRes.pages.httpsEnforced } : null;
 
     // ── commit: site + workflow + nonce (+ CNAME) as ONE commit ───────────────
-    const nonce = deps.nonce();
     const cnameForTree = domain ?? existingCname;
+    if (cnameForTree !== approvedCname) return fail("declined", "Domain changed after confirmation");
     const files: TreeFile[] = [
       ...common,
       { path: WORKFLOW_PATH, bytes: enc(PAGES_WORKFLOW_YAML) },

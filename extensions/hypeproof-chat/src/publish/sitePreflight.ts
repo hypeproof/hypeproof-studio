@@ -1,3 +1,4 @@
+import { privateOutboundPath } from "../outboundConsent.ts";
 // Preflight for a GitHub Pages publish: decide, before anything leaves the machine, which
 // workspace files go public and whether the site will work once it is there.
 //
@@ -136,7 +137,7 @@ interface DirEntry {
   isSymlink: boolean;
 }
 
-export function preflightSite(root: string): PreflightReport {
+export function preflightSite(root: string, privateDirectories: string[] = []): PreflightReport {
   const files: SiteFile[] = [];
   const excluded: string[] = [];
   const issues: PreflightIssue[] = [];
@@ -164,7 +165,7 @@ export function preflightSite(root: string): PreflightReport {
   const walk = (dirRel: string) => {
     for (const e of list(dirRel)) {
       const rel = dirRel ? `${dirRel}/${e.name}` : e.name;
-      if (isExcludedName(e.name, e.isDir)) {
+      if (isExcludedName(e.name, e.isDir) || privateOutboundPath(rel) || privateDirectories.some(dir => privateOutboundPath(rel, dir))) {
         excluded.push(rel);
         continue;
       }

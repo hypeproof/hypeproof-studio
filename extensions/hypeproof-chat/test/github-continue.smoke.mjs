@@ -79,6 +79,7 @@ function deps(gh, root, extra = {}) {
   let t = 1_000_000;
   let n = 0;
   return {
+    confirmContent: async () => true,
     fetch: gh.fetch,
     sleep: async (ms) => { t += ms; },
     now: () => t,

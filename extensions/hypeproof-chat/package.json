@@ -627,6 +627,7 @@
     "test:steer-now": "node scripts/run-tsx-tests.mjs steer-now",
     "test:answer-to-wiki": "node scripts/run-tsx-tests.mjs answer-to-wiki",
     "test:edit-resend": "node scripts/run-tsx-tests.mjs edit-resend",
+    "test:outbound-consent-render": "node scripts/run-tsx-tests.mjs outbound-consent-render",
     "test:answer-verdict": "node scripts/run-tsx-tests.mjs answer-verdict",
     "test:code-block-tools": "node scripts/run-tsx-tests.mjs code-block-tools",
     "test:quote-reply": "node scripts/run-tsx-tests.mjs quote-reply",

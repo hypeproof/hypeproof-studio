@@ -1,3 +1,4 @@
+import { confirmOutbound } from "./outboundConsentHost.ts";
 import { restoreInitialSurface } from "./initialSurface";
 export { resolveActivateBranch } from "./initialSurface";
 import { registerExternalSkillCommands } from './externalSkillCommands';
@@ -442,6 +443,8 @@ export async function activate(context: vscode.ExtensionContext) {
             }
             const sealed = await spool.seal();
             const results = await uploadAllPending(spoolRoot, {
+              current: async () => await context.secrets.get(TOKEN_KEY) === token && vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") === proxyUrl,
+              confirm: async (manifest) => await confirmOutbound(manifest) && await context.secrets.get(TOKEN_KEY) === token,
               baseUrl: proxyUrl,
               token,
               currentSessionDir: spool.currentSessionDir(),

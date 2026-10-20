@@ -285,6 +285,9 @@ await check("S3", "restart: a new window restores A's draft and lost-answer requ
   await w3.host.preview(dk("a"), { question: "SOMETHING ELSE (never agreed)", turnId: null, duration: 120 });
   assert.match(w3.last().note ?? "", /아직 확인하는 중/); assert.equal((await shared.envelope("a")).request_id, e.request_id, "a new preview did not replace the consented request");
   await w3.host.retry(dk("a"));
+  assert.deepEqual(S.posts, [], "REQ-KNOW-09: a retry asks again, it does not send on its own");
+  assert.deepEqual([w3.last().envelope?.request_id, w3.last().envelope?.state, w3.last().envelope?.content], [e.request_id, "prepared", e.content], "the same request is shown again for consent");
+  await w3.host.send(dk("a"), e.request_id, true);
   assert.deepEqual(S.posts.map((p) => p.id), [e.request_id], "only the consented request left");
   assert.deepEqual(S.shares.get(e.request_id)?.content, e.content, "the stored content is exactly the consented content");
   assert.equal(await shared.envelope("a"), null); assert.match(w3.last().note ?? "", /강사에게 보냈습니다/);
@@ -296,10 +299,25 @@ await check("S4", "a window that quit with its request `sending` (the POST never
   const h = S.hold((rest, m) => rest === "shares" && m === "POST"), lost = w1.host.send(dk("a"), e.request_id, true); await h.entered;
   const w3 = win(shared, S, "W3", () => "a"); await w3.host.refresh();
   assert.deepEqual([w3.last().envelope?.request_id, w3.last().envelope?.state], [e.request_id, "sending"]);
-  await w3.host.retry(dk("a"));
+  await w3.host.retry(dk("a")); assert.equal(w3.last().envelope?.state, "prepared", "asked again"); await w3.host.send(dk("a"), e.request_id, true);
   assert.deepEqual(S.posts.map((p) => p.id), [e.request_id]); assert.equal(await shared.envelope("a"), null);
   h.release({ status: 503 }); await lost; await tick();
   assert.equal(await shared.envelope("a"), null, "the dead window's late 503 does not bring the stored request back as unknown");
+});
+
+await check("R1", "REQ-KNOW-09 retry: a lost-answer request is shown again with consent unticked; without a new consent nothing leaves, with it the same request leaves once", async (S) => {
+  const shared = sharedStorage(0), w = win(shared, S, "W1", () => "a");
+  await w.host.refresh(); const e = await preview(w, "a", "PRIVATE-A-Q");
+  const h = S.hold((rest, m) => rest === "shares" && m === "POST"), sending = w.host.send(dk("a"), e.request_id, true); await h.entered;
+  h.release({ status: 0 }); await sending; assert.equal(w.last().envelope?.state, "unknown");
+  await w.host.retry(dk("a"));
+  assert.deepEqual(S.posts, [], "retry sent nothing by itself");
+  assert.deepEqual([w.last().envelope?.request_id, w.last().envelope?.state, w.last().envelope?.content], [e.request_id, "prepared", e.content]);
+  assert.match(w.last().note ?? "", /다시 확인하고 동의해야 보냅니다/);
+  await w.host.send(dk("a"), e.request_id, false);
+  assert.deepEqual(S.posts, [], "send without the new consent is refused"); assert.match(w.last().note ?? "", /동의 확인란/);
+  await w.host.send(dk("a"), e.request_id, true);
+  assert.deepEqual(S.posts.map((p) => p.id), [e.request_id]); assert.equal(await shared.envelope("a"), null);
 });
 
 await check("MIG1", "the old globalState store is moved to files once — from two windows at the same instant, and again from a stale copy — and then removed", async (S) => {
@@ -316,7 +334,7 @@ await check("MIG1", "the old globalState store is moved to files once — from t
   await w1.host.draft(dk("a"), { question: "A typed after the move", turnId: null, duration: 30 });
   const stale = win(shared, S, "W3", () => "a"); stale.cache = { ...structuredClone(shared.value), [STORE]: structuredClone(legacy) }; await stale.host.refresh();
   assert.equal((await shared.draft("a"))?.question, "A typed after the move", "a window still holding the old copy does not overwrite a newer draft");
-  await w2.host.retry(dk("b"));
+  await w2.host.retry(dk("b")); assert.equal(w2.last().envelope?.state, "prepared", "asked again"); await w2.host.send(dk("b"), "legacy-b", true);
   assert.deepEqual(S.posts.map((p) => p.id), ["legacy-b"], "the moved request is retried as the same request"); assert.deepEqual(S.shares.get("legacy-b").content, legacyEnv.content);
   for (const l of [...w1.logs, ...w2.logs, ...stale.logs]) assert.ok(!/LEGACY-|PRIVATE-|cohort\|/.test(l), "a log line carries content or a key: " + l);
   assert.ok(w1.logs.concat(w2.logs).some((l) => /imported=\d+ present=\d+ expired=1 failed=0/.test(l)));

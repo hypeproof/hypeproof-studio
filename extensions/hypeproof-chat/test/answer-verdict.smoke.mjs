@@ -248,6 +248,7 @@ async function outbound(inject) {
     const sealed = await spool.seal();
     const bodies = [];
     const results = await uploadAllPending(spoolRoot, {
+      confirm: async () => true,
       baseUrl: "https://example.invalid/v1", token: "t", identity: { u: ident.u, c: ident.c }, allowFresh: sealed ? [sealed] : [],
       now: () => new Date(T + 1000),
       fetchFn: async (url, init) => { bodies.push(`${url}\n${Buffer.from(init.body).toString("utf8")}`); return { ok: true, status: 200, json: async () => ({ key: url }) }; },

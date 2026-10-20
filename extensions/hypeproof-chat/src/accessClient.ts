@@ -1,3 +1,4 @@
+import { contentBytes, type OutboundConfirmation } from "./outboundConsent.ts";
 import type { ResolvedProfile } from './protocol';
 export interface AccessResource {meter:string;limit:number;remaining:number;shared:boolean;spent:number;held:number;overrun:number;unresolved:number}
 export interface AccessChoiceView {id:string;label:string;mode:'included'|'byo';source_kind:string;active:boolean;available:boolean;state:string;ends_at:number;can_request:boolean;
@@ -18,10 +19,14 @@ export async function fetchAccessView(proxyUrl:string,token:string):Promise<Acce
   const r=await fetch(proxyUrl.replace(/\/$/,'')+'/access',{headers:{authorization:'Bearer '+token,'cache-control':'no-store'},signal:AbortSignal.timeout(15000)});
   if(!r.ok)throw Error('이용권을 확인하지 못했습니다.');return parseAccessView(await r.json());
 }
-export async function sendBudgetRequest(proxyUrl:string,token:string,source:string,note:string):Promise<void>{
+/** REQ-KNOW-09: the reason is the learner's own words to the funding owner, so it is listed (recipient, size) and confirmed. Returns false on Cancel. */
+export async function sendBudgetRequest(proxyUrl:string,token:string,source:string,note:string,confirm:OutboundConfirmation|undefined,fetchImpl:typeof fetch=fetch):Promise<boolean>{
   if(!validFundingSource(source)||!note.trim()||note.length>280)throw Error('요청 사유를 280자 이내로 입력해 주세요.');
-  const r=await fetch(proxyUrl.replace(/\/$/,'')+'/access/requests',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({source_id:source,note}),signal:AbortSignal.timeout(15000)});
+  const body=JSON.stringify({source_id:source,note});
+  if(!confirm||!await confirm({recipient:`이용권을 관리하는 강사 · ${new URL(proxyUrl).host}`,items:[{name:'추가 사용이 필요한 이유 (내가 쓴 글)',bytes:contentBytes(note)},{name:'이용권 번호',bytes:contentBytes(source)}]}))return false;
+  const r=await fetchImpl(proxyUrl.replace(/\/$/,'')+'/access/requests',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body,signal:AbortSignal.timeout(15000)});
   if(!r.ok)throw Error('추가 사용 요청을 보내지 못했습니다.');
+  return true;
 }
 /**
  * REQ-STUDIO-DENIAL-SOURCE — the feature keys (REQ-M38: read, write, shell, subagents,

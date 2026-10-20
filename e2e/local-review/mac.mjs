@@ -82,9 +82,9 @@ try {
   await evaluate(`document.querySelector('.capability input[type=checkbox]').click()`);
   await evaluate(`document.querySelector('.capability button').click()`);
   await waitFor(`document.body.textContent.includes('Human review: correct')`);
-  await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Preview submission').click()`);
+  await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='제출할 내용 미리 보기').click()`);
   await waitFor(`!!document.querySelector('.submission-preview')`);
-  await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirm local submission').click()`);
+  await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='확인하고 제출').click()`);
   await waitFor(`!!document.querySelector('.receipt')`);
   await evaluate(`(()=>{const section=[...document.querySelectorAll('section')].find(s=>s.querySelector('h2')?.textContent==='다음 작업에서 바꿀 행동 하나');const el=section.querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Automated acceptance only: record success criteria before the next task');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='개선 행동 저장').click()`);

@@ -1,3 +1,4 @@
+import { privateOutboundPath } from "./outboundConsent.ts";
 // The published file set of a test version (cr-publish #1393; recon R4; CR-17, CR-T17).
 //
 // Not the workspace: the entry HTML and every file it reaches through static references
@@ -84,6 +85,7 @@ export async function buildPublishSet(
   entryUrlPath: string,
   manifest: readonly string[],
   scan: ScanContext,
+  privateDirectories: readonly string[] = [],
 ): Promise<{ ok: true; set: PublishSet } | { ok: false; refusal: PublishSetRefusal }> {
   let version;
   try {
@@ -115,6 +117,7 @@ export async function buildPublishSet(
   const files: PublishFile[] = [];
   let total = 0;
   for (const rel of all) {
+    if (privateOutboundPath(rel) || privateDirectories.some(dir => privateOutboundPath(rel, dir))) return { ok: false, refusal: { code: "excluded_path", file: rel } };
     // Again just before reading: the coach has a shell and can swap a file for a symlink.
     const on = await checkOnDisk(root, realRoot, rel);
     if ("code" in on) return { ok: false, refusal: on };

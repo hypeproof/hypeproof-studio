@@ -564,6 +564,9 @@ const EXTRA_PROBES = [
   { label: "preview recovery 자세히 detail", ctx: shellCtx, chain: ["div.hps-preview-recovery", "details.hps-preview-recovery-detail", "code"] },
   { label: "preview recovery 'did not run' line", ctx: shellCtx, chain: ["div.hps-preview-recovery", "p.hps-preview-recovery-note"] },
   { label: "preview recovery standalone 'did not run' line", ctx: shellCtx, chain: ["p.hps-preview-recovery.hps-preview-recovery-solo"] },
+  // REQ-KNOW-09 (CGP-KNOW-R-006 fix 1) — the classroom help preview's "포함하지 않는 것" line is the disclosure itself:
+  // body size, not the 12px .hp-inbox-meta caption DEC-29 still allows in the classroom.
+  { label: "classroom help preview exclusion line (포함하지 않는 것)", ctx: () => PAGE, chain: ["div.hps-shell", "details.hp-inbox.hp-rail-lesson.hp-help", "section.hp-help-preview", "p.hp-outbound-excluded"] },
 ];
 
 // Learner text in the task heading. `titled` matches the element's own title attribute in its

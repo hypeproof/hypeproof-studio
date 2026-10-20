@@ -1,3 +1,5 @@
+import { confirmOutbound } from "./outboundConsentHost";
+import { contentBytes, observationOutboundItems } from "./outboundConsent";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
@@ -68,7 +70,8 @@ import {
 } from "./sdkCoachHelpers";
 import { describeCommandForApproval, shellApprovalFor } from "./shellPolicy";
 import { shellAllowedByFolderConsent, TASK_COMMAND_ALLOW_LABEL, TaskCommandAllows, taskCommandAllowScopeKey, taskCommandExact } from "./taskCommandAllow";
-import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorld, resolveSiteBase } from "./galleryPublish";
+import { curriculumBase, extractTitle, galleryPublishAllowed, publishWorldConfirmed, resolveSiteBase, type GalleryRecord } from "./galleryPublish";
+import { readSessionSnapshot, sendSessionSnapshot, snapshotItems, snapshotRecipient } from "./spoolUploader";
 import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
@@ -78,7 +81,6 @@ import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPr
 import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { ReviewSession, directorAvailable } from "./reviewSession";
 import { qrDataUrl } from "./testQr";
-import { uploadSessionSnapshot } from "./spoolUploader";
 import {
   originOfUrl,
   planCoachBrowserTabs,
@@ -1534,6 +1536,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   );
   /** "사용자 테스트용으로 공개": the session over the preview's files, the record and the Service. */
   private readonly publishSession = new PublishSession({
+    confirmOutbound,
+    scopeKey: () => String(this.profileGeneration),
+    privateDirectories: () => this.cachedProfile?.learning_wiki?.plan?.dir ? [this.cachedProfile.learning_wiki.plan.dir] : [],
     switchOn: () => this.isCurriculumRuntimeEnabled(),
     audience: () => this.getSeatAudience(),
     token: () => this.crProjectMemory.refresh(),
@@ -3972,7 +3977,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * (`publishResult`). A VS Code toast is not used because the integrated browser
    * stops on a notification (the same reason as #308).
    */
+  private galleryPublishing = false;
   private async publishToGallery(): Promise<void> {
+    if (this.galleryPublishing) return;
+    this.galleryPublishing = true;
+    const generation = this.profileGeneration;
+    try {
     const fail = (message: string) =>
       void this.post({ type: "publishResult", state: "error", message });
 
@@ -4000,8 +4010,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       return fail("아직 만든 세상이 없어요.");
     }
 
-    void this.post({ type: "publishResult", state: "uploading" });
-
     const body = await this.inlineEngineIfNeeded(html);
     const cfg = vscode.workspace.getConfiguration("hypeproofChat");
     // The spool session directory's name IS the session_id (sessionSpool builds it
@@ -4010,14 +4018,42 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const sessionDir = this.spool?.currentSessionDir() ?? null;
     const sessionId = sessionDir ? path.basename(sessionDir) : null;
 
-    const result = await publishWorld({
-      siteBase: resolveSiteBase(cfg.get<string>("siteBase")),
+    const siteBase = resolveSiteBase(cfg.get<string>("siteBase"));
+    const title = extractTitle(body);
+    const current = async () => { const activeToken = await this.context.secrets.get(TOKEN_KEY); return token === activeToken && generation === this.profileGeneration && cwd === this.resolveCoachCwd() && worldId === this.lastPrebuiltWorld && galleryPublishAllowed(this.cachedProfile?.publishing).ok; };
+
+    // Publish succeeded → a log snapshot of the in-flight session goes up **without sealing it** (2026-08-21 operations
+    // decision: guardian pre-survey consent secured). The "this far" at publish time survives on the server even when the
+    // learner misses "기록 보내기"; the complete upload at the end of the lesson overwrites the same key (the header comment
+    // on uploadSessionSnapshot is the canonical one). REQ-KNOW-09 / DEC-KNOW-09: the snapshot is read once here and listed
+    // as its own block (recipient, files, sizes) in the publish confirmation; exactly those bytes are sent afterwards.
+    let record: GalleryRecord | null = null;
+    if (sessionDir && sessionId && this.cachedProfile?.analytics?.upload_session_logs === true) {
+      const read = readSessionSnapshot({ dir: sessionDir, day: path.basename(path.dirname(sessionDir)), sessionId });
+      if (read.ok) {
+        const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
+        const session = { dir: sessionDir, day: path.basename(path.dirname(sessionDir)), sessionId };
+        record = {
+          recipient: snapshotRecipient(proxyUrl),
+          items: snapshotItems(read.entries).map((i) => ({ name: `이번 활동 기록 ${i.name}`, bytes: i.bytes })),
+          send: () => sendSessionSnapshot({ session, baseUrl: proxyUrl, token, current: async () => await this.context.secrets.get(TOKEN_KEY) === token }, read.entries).then((r) => {
+            console.log(
+              r.ok
+                ? `[gallery] 로그 스냅샷 업로드 완료 (${r.keys.length}개 파일)`
+                : `[gallery] 로그 스냅샷 실패 (${r.failedAt}: ${r.message}) — 수업 끝 완결 업로드가 대신한다`,
+            );
+          }),
+        };
+      }
+    }
+    const result = await publishWorldConfirmed({
+      siteBase,
       token,
       worldId,
-      title: extractTitle(body),
+      title,
       html: body,
       sessionId,
-    });
+    }, confirmOutbound, current, record);
 
     if (!result.ok) {
       console.error(`[gallery] 발행 실패 (${result.status}): ${result.message}`);
@@ -4025,32 +4061,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     }
     void this.post({ type: "publishResult", state: "done", url: result.url });
 
-    // Publish succeeded → upload a log snapshot of the in-flight session **without
-    // sealing it** (2026-08-21, operations decision: guardian pre-survey consent
-    // secured). The "this far" at publish time survives on the server, so the raw
-    // material for the report is secured even when the child misses "기록 보내기" at
-    // the end of the lesson. No manifest is uploaded, so it is incomplete — the
-    // complete upload at the end of the lesson overwrites the same key and becomes
-    // canonical (the header comment on uploadSessionSnapshot is the canonical one).
-    //
-    // fire-and-forget: the game is already up. A snapshot failure is not put on the
-    // child's screen — it goes to the console only, and the complete-upload path
-    // overwrites it anyway.
-    if (sessionDir && sessionId && this.cachedProfile?.analytics?.upload_session_logs === true) {
-      const day = path.basename(path.dirname(sessionDir));
-      const proxyUrl = cfg.get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1");
-      void uploadSessionSnapshot({
-        session: { dir: sessionDir, day, sessionId },
-        baseUrl: proxyUrl,
-        token,
-      }).then((r) => {
-        console.log(
-          r.ok
-            ? `[gallery] 로그 스냅샷 업로드 완료 (${r.keys.length}개 파일)`
-            : `[gallery] 로그 스냅샷 실패 (${r.failedAt}: ${r.message}) — 수업 끝 완결 업로드가 대신한다`,
-        );
-      });
-    }
+    } finally { this.galleryPublishing = false; }
   }
 
   /** Saves engine.js into the work folder (beside the world HTML). A failure is rescued by the preview's inlining. */
@@ -5325,6 +5336,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if(JSON.stringify(msg.eventIds)!==JSON.stringify(snapshot.events.map(e=>e.id))){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'새 작업 기록이 추가됐습니다. 보낼 내용을 다시 확인해 주세요.'});return;}
         const controller=new AbortController();this.observationAssessment=controller;
         try{
+          // REQ-KNOW-09: the ticked box in the panel is the learner's choice; the host still lists recipient, items and sizes
+          // for exactly this body and sends nothing on Cancel. `snapshot` is a structuredClone and assessmentBatch is pure,
+          // so the confirmed items and the body below are the same bytes (CR-10 pins the body expression literally).
+          if(!await confirmOutbound({recipient:`관찰 평가 API (원문은 저장하지 않음) · ${new URL(proxy).host}`,items:observationOutboundItems(assessmentBatch(snapshot).events)})||await this.context.secrets.get(TOKEN_KEY)!==token){await this.post({type:'observationState',learningPath:this.nativeLearningPath,batch:snapshot,error:'보내지 않았습니다. 기록은 그대로 있습니다.'});return;}
           const response=await fetch(proxy.replace(/\/$/,'')+'/observations/assess',{method:'POST',headers:{...observationHeaders(token),'content-type':'application/json'},body:JSON.stringify(assessmentBatch(snapshot)),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])});
           if(!response.ok){const failure=await response.json() as {error?:{code?:string}};throw Error(/^[a-z_0-9]{1,80}$/.test(failure.error?.code??'')?failure.error!.code:'assessment_failed');}
           const result=await response.json() as {findings:unknown;capability_model?:unknown};
@@ -5480,7 +5495,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         await this.postConfig();return;
       case 'requestBudget':{
         const token=await this.context.secrets.get(TOKEN_KEY),selected=this.accessState?.selected;
-        if(token&&selected){try{await sendBudgetRequest(vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token,selected,msg.note);await this.loadAccess(true);if(this.accessState)this.accessState.notice='강사에게 추가 사용 요청을 보냈습니다.';}catch(error){if(this.accessState)this.accessState.notice=error instanceof Error?error.message:'요청을 보내지 못했습니다.';}}
+        if(token&&selected){try{const sent=await sendBudgetRequest(vscode.workspace.getConfiguration('hypeproofChat').get<string>('proxyUrl','https://api.hypeproof-ai.xyz/v1'),token,selected,msg.note,async(m)=>await confirmOutbound(m)&&await this.context.secrets.get(TOKEN_KEY)===token&&this.accessState?.selected===selected);await this.loadAccess(true);if(this.accessState)this.accessState.notice=sent?'강사에게 추가 사용 요청을 보냈습니다.':'보내지 않았습니다.';}catch(error){if(this.accessState)this.accessState.notice=error instanceof Error?error.message:'요청을 보내지 못했습니다.';}}
         await this.postConfig();return;
       }
       case "refreshEffort":
