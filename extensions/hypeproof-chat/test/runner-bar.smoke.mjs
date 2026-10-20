@@ -167,7 +167,8 @@ const WORLDS = [
   assert.ok(css.includes("@keyframes hps-runner-hop"), "바운스가 없다");
   assert.ok(/\.hps-runner-dust\b/.test(css), "먼지 점이 없다");
   assert.ok(
-    /animation:\s*hps-runner-run\s+2\.4s/.test(css),
+    /animation:\s*hps-runner-run\s+var\(--hp-dur-runner-run\)/.test(css) &&
+      /--hp-dur-runner-run:\s*2\.4s;/.test(readFileSync(join(here, "..", "webview-ui", "src", "tokens.css"), "utf8")),
     "달리기 주기가 2.4s 가 아니다",
   );
   // 접힌 상태에서도 요소가 남아 있어야 나타남/사라짐이 둘 다 부드럽다.
