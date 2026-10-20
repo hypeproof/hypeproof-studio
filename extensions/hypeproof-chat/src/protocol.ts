@@ -558,6 +558,9 @@ export type WebviewMessage = (
   /** CGP-ART-R-007 — the learner removed the attached page; nothing from the page is sent. */
   | { type: "removePageContext" }
   /** CGP-CHAT-R-011 — open the work-folder file picker (host re-checks the gate). */
+  | { type: "retryAttachment"; id: string }
+  | { type: "repickAttachment"; id: string; name: string }
+  | { type: "discardAttachmentFailure"; id: string }
   | { type: "attachWorkspaceFile" }
   /** CGP-KNOW-R-015 — "이 파일에 대해 묻기" from the 작업 자료 list: attach this work-folder path (relative) through the same checks, then focus the composer. */
   | { type: "askAboutFile"; path: string }
@@ -608,6 +611,7 @@ export type WebviewMessage = (
       /** CGP-CHAT-R-002 — this send is an edited resend of the latest prompt group (its root user-message id). */
       editOf?: string }
   /** D-028 — a photo dropped or pasted into the chat, kept in the host's staging folder until sent. */
+  | { type: "prepareAttachments"; requestId: string; files: Array<{ id: string; stageId?: string; dataUrl?: string }> }
   | { type: "stageImage"; stageId: string; name: string; mime: string; base64: string }
   /** D-028 — the participant removed a staged photo before sending; the host deletes it. */
   | { type: "discardStagedImage"; stageId: string }
@@ -740,7 +744,8 @@ export type HostMessage = (
   | { type: 'taskWorkspaceError'; verdictRequestId?: string; verdictMessageId?: string; error: string | null; draftSaveFailed?: boolean; historySaveFailed?: boolean }
   /** Explicit Focus command targets the existing editor composer, not background restore. */
   | {type:'focusInput'}
-  | {type:'inputRejected';text:string;images?:string[];toolMode?:import('./turnTools').TurnToolMode}
+  | { type: "attachmentsPrepared"; requestId: string; failures: import("./attachmentFailure").AttachmentFailure[] }
+  | {type:'inputRejected';text:string;images?:string[];photos?:Array<{id:string;name:string}>;toolMode?:import('./turnTools').TurnToolMode}
   /** D-028 — the host did not keep a staged photo; the webview drops its chip and says why. */
   | {type:'imageStageRefused';stageId:string;reason:string}
   /** D-028 — a photo dropped from Finder (it opened as a tab) is staged; draw its chip. `dataUrl` only for a drawable photo up to 8 MB. */
@@ -829,6 +834,8 @@ export type HostMessage = (
   /** CGP-ART-R-007 — the page text queued for the next turn, shown in full and removable. */
   | { type: "pageAttachment"; attachment: import("./pageContext").PageAttachmentPreview | null }
   /** CGP-CHAT-R-011 — the work-folder file queued for the next turn (null = none), why a pick was refused, or a one-line notice. The host owns the chip's lifetime. */
+  | { type: "attachmentFailure"; failure: import("./attachmentFailure").AttachmentFailure }
+  | { type: "attachmentFailureResolved"; id: string }
   | { type: "fileAttachment"; attachment: FileAttachmentPreview | null; error?: string; notice?: string }
   // cr-verify — the "Test my product" panel (null = hidden). `sendText`: the student's own
   // sentence the panel sends next through the normal send path (the coach context rides

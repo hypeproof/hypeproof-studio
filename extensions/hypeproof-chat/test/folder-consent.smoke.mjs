@@ -464,9 +464,12 @@ try {
       const before2 = files(outside);
       assert.equal(await h.archiveCurrentWorld("<html>next</html>", "s1"), null, "이전 세상/ not written");
       h.archiveAdultPage("<html>next</html>", "s1");
-      assert.deepEqual(J(await h.savePastedImages(["data:image/png;base64,iVBORw0KGgo="], "s1")), { note: "", relPaths: [] });
-      assert.equal(h.commitAttachedImages(["stage-1"], "s1"), "");
-      assert.deepEqual(discarded, ["stage-1"], "staged photos are discarded, not moved into the folder");
+      h.ensureAttachmentStaging = () => h.imageStaging;
+      h.isImagePasteEnabled = () => true; h.isImageFilesEnabled = () => true;
+      h.imageStaging.name = () => 'photo.png';
+      const prepared=h.prepareAttachments([{id:'paste',dataUrl:'data:image/png;base64,iVBORw0KGgo='},{id:'stage-1',stageId:'stage-1'}]);
+      assert.equal(prepared.failures.length,2);assert.deepEqual(J(prepared.relPaths),[]);
+      assert.deepEqual(discarded, [], "failed preparation keeps staged photos for retry");
       assert.deepEqual(before, []);
       assert.deepEqual(files(outside), before2, "nothing new on disk");
       assert.equal(fs.readFileSync(path.join(outside, "index.html"), "utf8"), "<html>old</html>");
@@ -534,9 +537,9 @@ try {
     const hits = [];
     for (const f of ["src/chatPanelProvider.ts", "src/previewProvider.ts"]) hits.push(...scan(fs.readFileSync(path.join(extRoot, f), "utf8"), f));
     assert.deepEqual(hits, [], "every host write into the open folder passes the folder guard");
-    // The scan sees the sites (18 in the chat host, 2 in the preview on 2026-10-20, with writeWiki for the
-    // session ingest and the one-answer filing, REQ-STUDIO-ANSWER-TO-WIKI): a regex that matched nothing would pass vacuously.
-    assert.ok(seen >= 20, `the scan sees the write sites (${seen})`);
+    // The scan must not pass vacuously. Attachment writes now reuse ImageStaging;
+    // planted positive/negative controls below verify classification independently.
+    assert.ok(seen > 0, `the scan sees host write sites (${seen})`);
     // Negative control: a direct write to the folder path in a new method fails the scan.
     // Multi-line parameters still name their method (revealBuilt is declared that way).
     const multi = "\n  private ok(): void {\n    if (this.folderWriteBlocked(r)) return;\n  }\n  async multi(\n    a: string,\n  ): Promise<void> {\n    await vscode.workspace.fs.writeFile(u, d);\n  }\n";

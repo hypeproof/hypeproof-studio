@@ -1,3 +1,6 @@
+import { useAttachmentSendPreparation } from "./AttachmentSendPreparation";
+import { AttachmentFailures, useAttachmentFailures } from "./AttachmentFailures";
+import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "../../src/attachmentFailure";
 import { CitationRack as PersonalCitationRack } from './CitationPreview';
 import type { RecoveredRequest, InlineEditDraft } from '../../src/activityDraft';
 import { canReserveRecovery, recoveryFull } from '../../src/recoveryCapacity';
@@ -87,7 +90,7 @@ import {
 interface Props {
   config: ChatConfig | null;
   // #384 — image handed from the host (editor-tab image → attach to coach).
-  incomingImage: { dataUrl: string; nonce: number } | null;
+  incomingImage: { dataUrl: string; nonce: number; name?: string } | null;
   /**
    * #503 — a single timeline. user / assistant / tool are interleaved in the order
    * they happened. The `toolLog` prop that used to carry tool logs separately is gone
@@ -258,7 +261,7 @@ async function fitDataUrl(original: string): Promise<string> {
 // the model gets their paths. Limits mirror the host's attachedImages.ts.
 const MAX_FILE_PHOTOS = 10;
 const MAX_FILE_PHOTO_BYTES = 25 * 1024 * 1024;
-interface StagedPhoto { id: string; name: string; thumb: string | null; ready: boolean }
+interface StagedPhoto { id: string; name: string; thumb: string | null; ready: boolean; error?: string; repick?:boolean }
 
 function newStageId(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
@@ -378,7 +381,11 @@ export function ChatPanel(props: Props) {
   const imageNoteId = useId();
   // D-028 — photos staged in the host until this message is sent. Not part of the saved draft:
   // the host deletes staged files when the window closes.
-  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>([]);
+  const photoMetadataKey=`hps.photo-metadata.${JSON.stringify([config?.activity?.id,config?.taskWorkspace?.activeTaskId])}`;
+  const [stagedPhotos, setStagedPhotos] = useState<StagedPhoto[]>(()=>{
+    try { const value=JSON.parse(sessionStorage.getItem(photoMetadataKey) ?? '[]');return Array.isArray(value) ? value.slice(0,10).filter(p=>p && typeof p.id==='string' && /^[A-Za-z0-9_-]{1,64}$/.test(p.id) && typeof p.name==='string').map(p=>({id:p.id,name:attachmentDisplayName(p.name),thumb:null,ready:false,repick:true,error:'다시 열린 화면에서는 사진을 다시 골라 주세요. 작성한 글은 그대로예요.'})) : []; } catch { return []; }
+  });
+  useEffect(()=>{try{sessionStorage.setItem(photoMetadataKey,JSON.stringify(stagedPhotos.map(({id,name})=>({id,name}))));}catch{/* metadata only; no image bytes retained */}},[photoMetadataKey,stagedPhotos]);
   const discardedPhotos = useRef(new Set<string>());
   // #416 — the ONE message parked while a turn is running (null = none).
   const [queued, setQueued] = useState<string | null>(separateQueue ? saved?.queued ?? null : null);
@@ -471,6 +478,21 @@ export function ChatPanel(props: Props) {
   composerHasAttachments.current = !!(pendingImages.length || stagedPhotos.length || imports.length);
   const activityId = config?.activity?.id;
   const taskId = config?.taskWorkspace?.activeTaskId ?? undefined;
+  const attachmentFailures = useAttachmentFailures(JSON.stringify([activityId, taskId]));
+  const attachmentSend = useAttachmentSendPreparation(JSON.stringify([activityId,taskId]));
+  const composerIdentity = [activityId,taskId,draft,pendingImages,stagedPhotos.map(p=>p.id).join("|"),imports,toolMode,queued,streaming,frozen,config?.activity?.verified,props.sendLocked,props.sendPending];
+  const composerIdentityRef = useRef(composerIdentity); composerIdentityRef.current=composerIdentity;
+  const photoSources = useRef(new Map<string, File>());
+  const photoReading = useRef(new Set<string>());
+  const imageCount = useRef(pendingImages.length); imageCount.current = pendingImages.length;
+  useEffect(() => () => {
+    for (const id of photoSources.current.keys()) { discardedPhotos.current.add(id); postToHost({ type: 'discardStagedImage', stageId: id }); }
+    photoSources.current.clear(); photoReading.current.clear();
+  }, [activityId, taskId]);
+  useEffect(() => {
+    if (attachmentFailures.items.length || stagedPhotos.some(p => !!p.error)) imagePreparationFailed.current = true;
+  }, [attachmentFailures.items.length, stagedPhotos]);
+
   const initialDraft = useRef(true);
   useEffect(() => {
     if (initialDraft.current) { initialDraft.current=false; return; }
@@ -478,8 +500,9 @@ export function ChatPanel(props: Props) {
   }, [activityId,taskId,draft,pendingImages,queued,imports,toolMode,queuedToolMode,queuedPaused,recovered,inlineEdit]);
   useEffect(() => {
     const off = onHostMessage(msg => {
-      if (!activityId || msg.activityId !== activityId) return;
+      if (msg.activityId !== activityId || (msg.taskId && msg.taskId !== taskId)) return;
       if (msg.type === "inputRejected") {
+        if(msg.photos?.length) setStagedPhotos(old=>[...old,...msg.photos!.filter(p=>!old.some(own=>own.id===p.id)).map(p=>({id:p.id,name:attachmentDisplayName(p.name),thumb:null,ready:true}))]);
         setSteerMarks(steerMarksRefuse);
         const rejectedMode = msg.toolMode ?? 'auto';
         const current = snapshot.current;
@@ -495,7 +518,7 @@ export function ChatPanel(props: Props) {
         setToolMode(rejectedMode);
         if (msg.images?.length) setPendingImages(images => [...new Set([...images,...msg.images!])]);
       }
-      if (msg.type === "activityFreeze") {
+      if (msg.type === "activityFreeze" && activityId) {
         setFrozen(msg.frozen);
         if (!msg.frozen) { deferredDraftFlush.current = null; imagePreparationFailed.current = false; }
         if (msg.nonce) {
@@ -519,8 +542,9 @@ export function ChatPanel(props: Props) {
   // D-028 — the host did not keep a staged photo: drop its chip and say why. Or the host staged
   // one itself (dropped from Finder, it opened as a tab): draw its chip.
   useEffect(() => onHostMessage((msg) => {
+    if (msg.type === "attachmentFailureResolved") { setStagedPhotos(old=>old.filter(p=>p.id!==msg.id)); return; }
     if (msg.type === "imageStageRefused") {
-      setStagedPhotos((prev) => prev.filter((p) => p.id !== msg.stageId));
+      setStagedPhotos((prev) => prev.map((p) => p.id === msg.stageId ? { ...p, ready: false, error: msg.reason } : p));
       setImgNote(msg.reason);
       return;
     }
@@ -528,7 +552,7 @@ export function ChatPanel(props: Props) {
     const { stageId, name, dataUrl } = msg;
     if (discardedPhotos.current.has(stageId)) return;
     // A sibling acknowledgement does not resolve a refused photo. New attachment attempts clear the note.
-    setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev.map((p) => p.id === stageId ? { ...p, ready: true } : p) : [...prev, { id: stageId, name, thumb: null, ready: true }]));
+    setStagedPhotos((prev) => (prev.some((p) => p.id === stageId) ? prev.map((p) => p.id === stageId ? { ...p, ready: true, error: undefined } : p) : [...prev, { id: stageId, name, thumb: null, ready: true }]));
     if (dataUrl) void photoThumb(dataUrl).then((thumb) => setStagedPhotos((prev) => prev.map((p) => (p.id === stageId ? { ...p, thumb } : p))));
   }), []);
   // SX-14·15·17 — take the learning state the host sent as-is. Why it is not filtered
@@ -834,6 +858,7 @@ export function ChatPanel(props: Props) {
   const submit = (text?: string, mode: TurnToolMode = toolMode) => {
     // CGP-CHAT-R-002 — an open edit box owns the next turn; never drop its text by sending past it.
     if (composerBlockedByEdit(editingId, editableId)) { setImgNote(EDIT_OPEN_NOTE); return false; }
+    if (attachmentFailures.items.length) { setImgNote("첨부 파일을 다시 시도하거나 빼 주세요. 작성한 글은 그대로예요."); return false; }
     if (imagePreparationBlocksSend()) return false;
     // REQ-STUDIO-MISSING-TASK-FOLDER — held while the task's folder is missing; the draft stays. A press
     // asks the host to look again: a folder that is back clears the notice and this draft goes out then.
@@ -851,6 +876,7 @@ export function ChatPanel(props: Props) {
     // waiting is not thrown away with it (observed in the browser run: the parked send took the draft's provenance and
     // emptied the input). Pasted images still ride along with the next turn that goes out, as #416 defined.
     const parked = text !== undefined;
+    const sendPrepared = () => {
     if (!sendWhenOnline(() => props.onSend(value, pendingImages.length > 0 ? pendingImages : undefined, !parked && imports.length ? imports : undefined, stagedPhotos.length > 0 ? stagedPhotos : undefined, mode), parked ? 'kept' : 'draft')) return false;
     if (!parked) { setDraft(""); setImports([]); setLastImport(null); setImportNote(null); }
     setPendingImages([]);
@@ -858,7 +884,23 @@ export function ChatPanel(props: Props) {
     setStagedPhotos([]);
     setImgNote(null);
     setRollExpand(null);
-    return true;
+      if (parked) setQueued(null);
+      return true;
+    };
+    if (pendingImages.length || stagedPhotos.length) {
+      if (attachmentSend.busy) return false;
+      const identity = composerIdentityRef.current;
+      void attachmentSend.prepare([
+        ...stagedPhotos.map(p=>({id:p.id,stageId:p.id})),
+        ...pendingImages.map((dataUrl,index)=>({id:`pasted-${index}`,dataUrl})),
+      ]).then(ok=>{
+        if (!ok) return;
+        if (!identity.every((value,index)=>value===composerIdentityRef.current[index])) { setImgNote("파일을 준비했어요. 작성한 내용을 확인하고 다시 보내 주세요."); return; }
+        sendPrepared();
+      });
+      return false;
+    }
+    return sendPrepared();
   };
 
   // The host answered the re-check of a held send: folder back → the held draft goes out once;
@@ -959,47 +1001,43 @@ export function ChatPanel(props: Props) {
   const attachImageFiles = (imageFiles: File[]) => {
     for (const f of imageFiles) {
       const finish = beginImagePreparation();
-      fitPastedImage(f)
-        .then((url) => {
-          if (!url) return;
-          setPendingImages((prev) => {
-            if (prev.length >= MAX_IMAGES) {
-              setImgNote(`이미지는 한 번에 최대 ${MAX_IMAGES}장까지 붙일 수 있어요.`);
-              return prev;
-            }
-            // A sibling read may already have failed; a successful image is not recovery.
-            return [...prev, url];
-          });
-        })
-        .catch(() => {
-          imagePreparationFailed.current = true;
-          setImgNote("이미지를 붙이지 못했어요. 다시 시도하거나 URL로 참고 화면을 주세요.");
-        })
-        .finally(finish);
+      const id = newStageId();
+      void attachmentFailures.attempt(id, f.name, () => withAttachmentDeadline((async () => {
+        if (!f.size) throw Object.assign(new Error('empty'), { code: 'EMPTY' });
+        return fitPastedImage(f);
+      })()), url => {
+        if (imageCount.current >= MAX_IMAGES) throw Object.assign(new Error('count'), { code: 'COUNT' });
+        imageCount.current++;
+        setPendingImages(prev => [...prev, url]);
+      }).finally(finish);
     }
   };
 
   // D-028 — keep dropped or pasted photos as files in the host until the message is sent.
+  const stagePhoto = (id: string, f: File) => {
+    if (photoReading.current.has(id)) return;
+    setStagedPhotos(prev => prev.map(p => p.id === id ? { ...p, ready: false, error: undefined } : p));
+    const refusal = !isPhotoFile(f) ? ATTACHMENT_FAILURE_COPY.unsupported
+      : !f.size ? ATTACHMENT_FAILURE_COPY.empty
+      : f.size > MAX_FILE_PHOTO_BYTES ? '사진이 너무 커요(25MB까지). 크기를 줄여 다시 붙여 주세요.' : null;
+    if (refusal) { setStagedPhotos(prev => prev.map(p => p.id === id ? { ...p, error: refusal } : p)); return; }
+    photoReading.current.add(id);
+    void withAttachmentDeadline(readAsDataUrl(f)).then(url => {
+      if (discardedPhotos.current.has(id)) return;
+      postToHost({ type: 'stageImage', activityId, taskId, stageId: id, name: f.name, mime: f.type, base64: url.slice(url.indexOf(',') + 1) });
+      void withAttachmentDeadline(photoThumb(url)).then(thumb => setStagedPhotos(prev => prev.map(p => p.id === id ? { ...p, thumb } : p))).catch(() => {});
+    }).catch(error => {
+      setStagedPhotos(prev => prev.map(p => p.id === id ? { ...p, error: attachmentReadFailure(error) } : p));
+    }).finally(() => photoReading.current.delete(id));
+  };
   const stagePhotoFiles = (files: File[]) => {
-    setImgNote(null);
     let count = stagedPhotos.length;
     for (const f of files) {
-      if (count >= MAX_FILE_PHOTOS) { setImgNote(`사진은 한 번에 ${MAX_FILE_PHOTOS}장까지 보낼 수 있어요.`); break; }
-      if (f.size > MAX_FILE_PHOTO_BYTES) { setImgNote("사진이 너무 커요(25MB까지). 휴대폰에서 보통 크기로 다시 보내 주세요."); continue; }
-      count++;
+      if (count++ >= MAX_FILE_PHOTOS) { setImgNote(`사진은 한 번에 ${MAX_FILE_PHOTOS}장까지 보낼 수 있어요.`); break; }
       const id = newStageId();
-      setStagedPhotos((prev) => [...prev, { id, name: f.name, thumb: null, ready: false }]);
-      readAsDataUrl(f)
-        .then(async (url) => {
-          if (discardedPhotos.current.has(id)) return;
-          postToHost({ type: "stageImage", stageId: id, name: f.name, mime: f.type, base64: url.slice(url.indexOf(",") + 1) });
-          const thumb = await photoThumb(url);
-          setStagedPhotos((prev) => prev.map((p) => (p.id === id ? { ...p, thumb } : p)));
-        })
-        .catch(() => {
-          setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
-          setImgNote("사진을 읽지 못했어요. 다시 끌어다 놓아 주세요.");
-        });
+      photoSources.current.set(id, f);
+      setStagedPhotos(prev => [...prev, { id, name: f.name, thumb: null, ready: false }]);
+      stagePhoto(id, f);
     }
   };
 
@@ -1010,20 +1048,11 @@ export function ChatPanel(props: Props) {
   useEffect(() => {
     if (!incomingImage || !imagePasteEnabled) return;
     const finish = beginImagePreparation();
-    fitDataUrl(incomingImage.dataUrl)
-      .then((url) => {
-        if (!url) return;
-        setPendingImages((prev) => {
-          if (prev.length >= MAX_IMAGES) {
-            setImgNote(`이미지는 한 번에 최대 ${MAX_IMAGES}장까지 붙일 수 있어요.`);
-            return prev;
-          }
-          // Keep failures from other reads in this preparation batch visible.
-          return [...prev, url];
-        });
-      })
-      .catch(() => { imagePreparationFailed.current = true; setImgNote(platformizeKeys("이미지를 붙이지 못했어요. ⌘V로 다시 시도해 주세요.")); })
-      .finally(finish);
+    void attachmentFailures.attempt(newStageId(), incomingImage.name ?? "이미지", () => withAttachmentDeadline(fitDataUrl(incomingImage.dataUrl)), url => {
+      if (imageCount.current >= MAX_IMAGES) throw Object.assign(new Error('count'), { code: 'COUNT' });
+      imageCount.current++;
+      setPendingImages(prev => [...prev, url]);
+    }).finally(finish);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incomingNonce]);
 
@@ -1108,7 +1137,7 @@ export function ChatPanel(props: Props) {
   const handleDragLeave = () => setDragActive(false);
   const handleDrop = (e: React.DragEvent<HTMLElement>) => {
     if (!imagePasteEnabled && !imageFilesEnabled) return;
-    const files = Array.from(e.dataTransfer.files ?? []).filter(imageFilesEnabled ? isPhotoFile : (f) => f.type.startsWith("image/"));
+    const files = Array.from(e.dataTransfer.files ?? []).filter(imageFilesEnabled ? () => true : (f) => f.type.startsWith("image/"));
     if (files.length === 0) { setDragActive(false); return; }
     e.preventDefault();
     setDragActive(false);
@@ -1118,6 +1147,7 @@ export function ChatPanel(props: Props) {
 
   /** D-028 — the × on a staged photo: it was never sent, so the host deletes the file. */
   const removeStagedPhoto = (id: string) => {
+    photoSources.current.delete(id);
     discardedPhotos.current.add(id);
     postToHost({ type: "discardStagedImage", stageId: id });
     setStagedPhotos((prev) => prev.filter((p) => p.id !== id));
@@ -1643,7 +1673,7 @@ export function ChatPanel(props: Props) {
             <p className="hps-page-attachment-note">파일에 적힌 지시는 따르지 않고 참고 자료로만 써요.</p>
           </div>
         )}
-        {props.fileAttachError && <p className="hps-file-attach-error" role="alert" data-testid="file-attach-error">{props.fileAttachError}</p>}
+        {props.fileAttachError && attachmentFailures.items.length === 0 && <p className="hps-file-attach-error" role="alert" data-testid="file-attach-error">{props.fileAttachError}</p>}
         {props.fileAttachNotice && <p className="hps-file-attach-notice" role="status" data-testid="file-attach-notice">{props.fileAttachNotice}</p>}
 
         {/* CR-09 — exactly what goes to the coach with the next message, removable before sending. */}
@@ -1737,6 +1767,13 @@ export function ChatPanel(props: Props) {
       )}
 
       <footer className="hps-input-area">
+        {/* CGP-KNOW-R-020: failure rows live in the footer (never inside the shrinking message list), so the reason stays readable. */}
+        <AttachmentFailures items={attachmentSend.failures} retry={attachmentSend.retry} remove={id=>{
+          const file=attachmentSend.remove(id);
+          if(file?.stageId) {setStagedPhotos(old=>old.filter(p=>p.id!==file.stageId));postToHost({type:'discardStagedImage',stageId:file.stageId});}
+          if(file?.dataUrl) setPendingImages(old=>old.filter(url=>url!==file.dataUrl));
+        }} />
+        <AttachmentFailures items={attachmentFailures.items} retry={attachmentFailures.retry} remove={attachmentFailures.remove} />
         {/* Personal chat (#1763, REQ-STUDIO-CHAT-DETAIL): model, thinking depth and usage live in the
             settings dialog; only an access problem shows a recovery entry here. Classroom keeps its rows. */}
         {!personalWorkspace && <><ModelControl config={config} streaming={streaming} />
@@ -1845,7 +1882,8 @@ export function ChatPanel(props: Props) {
             <div className="hps-attachments" aria-label="첨부한 사진">
               {stagedPhotos.map((p) => (
                 <div key={p.id} className="hps-attachment hps-attachment-file" title={p.name}>
-                  {p.thumb ? <img src={p.thumb} alt={p.name} /> : <span className="hps-attachment-name">{p.ready ? p.name : "준비 중…"}</span>}
+                  {p.thumb ? <img src={p.thumb} alt={p.name} /> : <span className="hps-attachment-name">{p.ready || p.error ? p.name : "준비 중…"}</span>}
+                  {p.error && <div className="hps-photo-failure"><p role="alert">{p.error}</p><button type="button" onClick={() => { const file = photoSources.current.get(p.id); if (file && !p.repick) stagePhoto(p.id, file); else postToHost({type:'repickAttachment',id:p.id,name:p.name}); }}>{p.repick ? '이 파일 다시 선택' : '이 파일만 다시 시도'}</button></div>}
                   <button
                     type="button"
                     className="hps-attachment-remove"
@@ -1970,7 +2008,7 @@ export function ChatPanel(props: Props) {
             ) : (
               <button
                 onClick={() => { if (submit() && personalWorkspace) textareaRef.current?.focus({ preventScroll: true }); }}
-                disabled={preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
+                disabled={attachmentSend.busy || attachmentFailures.items.length > 0 || preparingImages > 0 || (!draft.trim() && pendingImages.length === 0 && stagedPhotos.length === 0) || unavailable || props.sendLocked || props.sendPending || stagedPhotos.some((p) => !p.ready)}
                 className="hps-btn-send"
                 aria-label={personalWorkspace ? '메시지 보내기' : undefined}
                 title={personalWorkspace ? '메시지 보내기' : undefined}

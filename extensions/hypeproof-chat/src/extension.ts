@@ -837,17 +837,8 @@ export async function activate(context: vscode.ExtensionContext) {
           "붙이기",
         );
         if (pick !== "붙이기") continue;
-        try {
-          const bytes = await vscode.workspace.fs.readFile(uri);
-          const ext = (uri.path.split(".").pop() ?? "png").toLowerCase();
-          const mime = ext === "jpg" ? "jpeg" : ext;
-          const dataUrl = `data:image/${mime};base64,${Buffer.from(bytes).toString("base64")}`;
-          provider.attachImageDataUrl(dataUrl, name);
-          await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
-        } catch {
-          const pasteKey = process.platform === "darwin" ? "⌘V" : "Ctrl+V";
-          void vscode.window.showWarningMessage(`이미지를 읽지 못했어요. ${pasteKey}로 붙여넣어 주세요.`);
-        }
+        await provider.attachNativeImageFile(uri.fsPath, false);
+        await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
       }
     }),
   );

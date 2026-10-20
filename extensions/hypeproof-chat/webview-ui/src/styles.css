@@ -2109,3 +2109,22 @@ html, body, #root {
 .hps-ai-disclosure .hps-icon { margin-inline-end: 6px; }
 .hps-tool-icon, .hps-tool-mark, .hps-error-banner-icon, .hps-update-banner-icon, .hps-fatal-icon { display: inline-flex; align-items: center; }
 .hps-msg-run, .hps-msg-retry, .hps-codepill-toggle, .hps-error-banner-report, .hps-element-remove { display: inline-flex; align-items: center; gap: 4px; }
+
+/* CGP-KNOW-R-020: failure chips remain next to the unchanged draft. */
+.hps-attachment-failures { min-width: 0; }
+.hps-attachment-failure, .hps-photo-failure { border: 1px solid var(--vscode-inputValidation-errorBorder, #be6672); padding: 12px; margin-block: 8px; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.hps-attachment-failure p, .hps-photo-failure p { margin-block: 8px; }
+.hps-attachment-failure button, .hps-photo-failure button { min-height: 44px; min-width: 44px; font: inherit; margin-inline-end: 8px; }
+.hps-attachment-failure button:focus-visible, .hps-photo-failure button:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
+.hps-attachment:has(.hps-photo-failure) { width: min(100%, 360px); height: auto; min-height: 72px; display: block; padding: 8px; }
+/* The rows live in the footer, so the reason is on screen with the composer. Compact: the name and reason on the left, the actions on the right. */
+.hps-attachment-failures { max-height: 45vh; overflow-y: auto; }
+.hps-attachment-failure { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: 8px; align-items: center; padding: 6px 12px; margin-block: 4px; }
+.hps-attachment-failure strong, .hps-attachment-failure p { grid-column: 1; margin-block: 0; }
+.hps-attachment-failure button { grid-row: 1 / span 2; margin-inline-end: 0; }
+.hps-attachment-failure button:first-of-type { grid-column: 2; }
+.hps-attachment-failure button:last-of-type { grid-column: 3; }
+@media (max-width: 520px) { .hps-attachment-failure { grid-template-columns: minmax(0, 1fr) auto; } .hps-attachment-failure button { grid-row: auto; grid-column: 1 / -1; } }
+/* A classroom lesson makes the shell the scroller: keep the footer (composer and failure rows) at the bottom edge. */
+.hps-shell:has(> .hp-mission .hp-mission-sentence) > .hps-input-area { position: sticky; bottom: 0; z-index: 2; background: var(--vscode-editor-background, #1f1f1f); }
+@media (forced-colors: active) { .hps-attachment-failure, .hps-photo-failure { border-color: CanvasText; } }

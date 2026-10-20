@@ -375,7 +375,7 @@ export function App() {
   };
   // #384 — image handed over from the host (an image opened in an editor tab).
   // nonce forces ChatPanel's effect to re-run even for the same dataUrl.
-  const [incomingImage, setIncomingImage] = useState<{ dataUrl: string; nonce: number } | null>(null);
+  const [incomingImage, setIncomingImage] = useState<{ dataUrl: string; nonce: number; name?: string } | null>(null);
 
   useEffect(() => {
     const off = onHostMessage((msg: HostMessage) => {
@@ -478,7 +478,7 @@ export function App() {
         case "streamStopped": dispatch({ type: "streamStopped", by: msg.by }); break;
         case "streamError": dispatch({ type: "streamError", error: msg.error, requestId: msg.requestId, runbookUrl: msg.runbookUrl, retry: msg.retry, retryable: msg.retryable, trialEndCard: msg.trialEndCard }); break;
         case "actionResult": /* not yet routed to UI */ break;
-        case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now() }); break;
+        case "attachImage": setIncomingImage({ dataUrl: msg.dataUrl, nonce: Date.now(), name: msg.name }); break;
         case "webviewTestCrash": setShouldCrash(true); break;
       }
     });

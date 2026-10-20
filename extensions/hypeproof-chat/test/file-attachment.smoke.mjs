@@ -62,7 +62,7 @@ try {
   assert.equal(readWorkspaceTextFile(root, put(path.join(root, "edge.txt"), "a".repeat(FILE_ATTACH_MAX_CHARS))).ok, true, "exactly at the char cap");
   assert.equal(readWorkspaceTextFile(root, put(path.join(root, "many.txt"), "가".repeat(FILE_ATTACH_MAX_CHARS + 1))).cause, "too-many-chars", "Korean text under the byte cap, over the char cap");
   assert.equal(readWorkspaceTextFile(root, put(path.join(root, "empty.txt"), "")).cause, "empty");
-  assert.equal(readWorkspaceTextFile(root, put(path.join(root, "blank.txt"), "  \n\n")).cause, "empty");
+  assert.equal(readWorkspaceTextFile(root, put(path.join(root, "blank.txt"), "  \n\n")).cause, "empty-text");
 
   // Every cause has its own Korean message, and refusals carry it.
   const messages = Object.values(FILE_REFUSAL_COPY);
