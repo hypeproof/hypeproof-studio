@@ -41,10 +41,15 @@ const PAPER = { bg: HP.paper, panel: hex(paperBlock, "panel"), ring: hex(paperBl
 const ringDecl = /^var\(--vscode-focusBorder,\s*(#[0-9A-Fa-f]{6})\)$/.exec(decl(rootBlock, "ring") ?? "");
 assert.ok(ringDecl, `:root --hp-ring is the theme focusBorder with a literal fallback, got "${decl(rootBlock, "ring")}"`);
 const RING_FALLBACK = ringDecl[1];
-const phDecl = /^color-mix\(in srgb,\s*var\(--vscode-descriptionForeground,\s*(#[0-9A-Fa-f]{6})\)\s+(\d+)%,\s*var\(--vscode-input-foreground,\s*(#[0-9A-Fa-f]{6})\)\)$/.exec(decl(rootBlock, "placeholder") ?? "");
-assert.ok(phDecl, `:root --hp-placeholder mixes descriptionForeground into input-foreground, got "${decl(rootBlock, "placeholder")}"`);
+const phDecl = /^color-mix\(in srgb,\s*var\(--vscode-descriptionForeground,\s*(#[0-9A-Fa-f]{6})\)\s+(\d+)%,\s*var\(--vscode-input-foreground,\s*(#[0-9A-Fa-f]{6})\)\)$/.exec(decl(rootBlock, "placeholder-mix") ?? "");
+assert.ok(phDecl, `:root --hp-placeholder-mix mixes descriptionForeground into input-foreground, got "${decl(rootBlock, "placeholder-mix")}"`);
+assert.equal(decl(rootBlock, "placeholder"), "var(--vscode-input-placeholderForeground, var(--hp-placeholder-mix))", ":root --hp-placeholder is the theme's own placeholder colour first");
 const PH = { descFallback: phDecl[1], share: Number(phDecl[2]) / 100, inFgFallback: phDecl[3] };
 const placeholderOn = (desc, inFg, input, share = PH.share) => mix(flat(desc, input), flat(inFg, input), share);
+// Themes whose own placeholder fails 4.5:1 get the mix instead, keyed by the webview body's theme id.
+const MIX_THEME_IDS = new Set(rulesOfTokens().filter((r) => r.body.replace(/[\s;]+/g, "") === "--hp-placeholder:var(--hp-placeholder-mix)")
+  .flatMap((r) => r.parts.map((p) => /^body\[data-vscode-theme-id="([^"]+)"\]$/.exec(p)?.[1])).filter(Boolean));
+function rulesOfTokens() { return [...tokens.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, sel, body]) => ({ parts: sel.split(",").map((x) => x.trim()), body })); }
 assert.ok(PAPER.ring && PAPER.placeholder && PAPER.panel, "Paper surface defines --hp-ring and --hp-placeholder as literals");
 
 // Surfaces that paint their own HP background fix the token to an HP value.
@@ -59,7 +64,7 @@ assert.ok(mutedScope.includes(".hp-surface") && mutedScope.includes(".studio-sta
 
 // The design doc is the canonical source (tokens.css header): every new declaration is recorded there.
 const doc = readFileSync(new URL("../../../docs/design/studio-learning-experience.md", import.meta.url), "utf8").replace(/\s+/g, " ");
-for (const [block, name] of [[rootBlock, "ring"], [rootBlock, "placeholder"], [paperBlock, "ring"], [paperBlock, "placeholder"]]) {
+for (const [block, name] of [[rootBlock, "ring"], [rootBlock, "placeholder-mix"], [rootBlock, "placeholder"], [paperBlock, "ring"], [paperBlock, "placeholder"]]) {
   const line = `--hp-${name}: ${decl(block, name)};`.replace(/\s+/g, " ");
   assert.ok(doc.includes(line), `design doc §디자인 시스템 records "${line}"`);
 }
@@ -75,16 +80,18 @@ const studioTheme = JSON.parse(readFileSync(new URL("../media/hypeproof-theme.js
 //   descriptionForeground  light #717171, otherwise foreground at 70% (B3)
 //   input.background  dark #3C3C3C  light #FFFFFF  hcDark #000000  hcLight #FFFFFF
 //   input.foreground  = foreground;  sideBar.background dark #252526  light #F3F3F3
+//   input.placeholderForeground  foreground at 50% (dark, light), 70% (hcDark, hcLight)
+// `id` is the theme's settings id, which the webview body carries as data-vscode-theme-id.
 const THEMES = [
-  { name: "HypeProof Studio", kind: "dark", side: studioTheme["sideBar.background"], editor: studioTheme["editor.background"], input: studioTheme["input.background"], focus: studioTheme.focusBorder, desc: studioTheme.descriptionForeground ?? `${studioTheme.foreground}B3`, inFg: studioTheme["input.foreground"] ?? studioTheme.foreground },
-  { name: "Dark Modern", kind: "dark", side: "#181818", editor: "#1F1F1F", input: "#313131", focus: "#0078D4", desc: "#9D9D9D", inFg: "#CCCCCC" },
-  { name: "Light Modern", kind: "light", side: "#F8F8F8", editor: "#FFFFFF", input: "#FFFFFF", focus: "#005FB8", desc: "#3B3B3B", inFg: "#3B3B3B" },
-  { name: "Dark+", kind: "dark", side: "#252526", editor: "#1E1E1E", input: "#3C3C3C", focus: "#007FD4", desc: "#CCCCCCB3", inFg: "#CCCCCC" },
-  { name: "Light+", kind: "light", side: "#F3F3F3", editor: "#FFFFFF", input: "#FFFFFF", focus: "#0090F1", desc: "#717171", inFg: "#616161" },
-  { name: "HC Dark", kind: "hcDark", side: "#000000", editor: "#000000", input: "#000000", focus: "#F38518", desc: "#FFFFFFB3", inFg: "#FFFFFF" },
-  { name: "HC Light", kind: "hcLight", side: "#FFFFFF", editor: "#FFFFFF", input: "#FFFFFF", focus: "#006BBD", desc: "#292929B3", inFg: "#292929" },
-  { name: "2026 Dark", kind: "dark", side: "#191A1B", editor: "#121314", input: "#191A1B", focus: "#3994BCB3", desc: "#8C8C8C", inFg: "#BFBFBF" },
-  { name: "2026 Light", kind: "light", side: "#FAFAFD", editor: "#FFFFFF", input: "#FFFFFF", focus: "#0069CCFF", desc: "#606060", inFg: "#202020" },
+  { name: "HypeProof Studio", id: "HypeProof Studio", kind: "dark", side: studioTheme["sideBar.background"], editor: studioTheme["editor.background"], input: studioTheme["input.background"], focus: studioTheme.focusBorder, desc: studioTheme.descriptionForeground ?? `${studioTheme.foreground}B3`, inFg: studioTheme["input.foreground"] ?? studioTheme.foreground, ph: studioTheme["input.placeholderForeground"] ?? `${studioTheme.foreground}80` },
+  { name: "Dark Modern", id: "Dark Modern", kind: "dark", side: "#181818", editor: "#1F1F1F", input: "#313131", focus: "#0078D4", desc: "#9D9D9D", inFg: "#CCCCCC", ph: "#989898" },
+  { name: "Light Modern", id: "Light Modern", kind: "light", side: "#F8F8F8", editor: "#FFFFFF", input: "#FFFFFF", focus: "#005FB8", desc: "#3B3B3B", inFg: "#3B3B3B", ph: "#767676" },
+  { name: "Dark+", id: "Dark+", kind: "dark", side: "#252526", editor: "#1E1E1E", input: "#3C3C3C", focus: "#007FD4", desc: "#CCCCCCB3", inFg: "#CCCCCC", ph: "#A6A6A6" },
+  { name: "Light+", id: "Light+", kind: "light", side: "#F3F3F3", editor: "#FFFFFF", input: "#FFFFFF", focus: "#0090F1", desc: "#717171", inFg: "#616161", ph: "#767676" },
+  { name: "HC Dark", id: "Default High Contrast", kind: "hcDark", side: "#000000", editor: "#000000", input: "#000000", focus: "#F38518", desc: "#FFFFFFB3", inFg: "#FFFFFF", ph: "#FFFFFFB3" },
+  { name: "HC Light", id: "Default High Contrast Light", kind: "hcLight", side: "#FFFFFF", editor: "#FFFFFF", input: "#FFFFFF", focus: "#006BBD", desc: "#292929B3", inFg: "#292929", ph: "#292929B3" },
+  { name: "2026 Dark", id: "Dark 2026", kind: "dark", side: "#191A1B", editor: "#121314", input: "#191A1B", focus: "#3994BCB3", desc: "#8C8C8C", inFg: "#BFBFBF", ph: "#555555" },
+  { name: "2026 Light", id: "Light 2026", kind: "light", side: "#FAFAFD", editor: "#FFFFFF", input: "#FFFFFF", focus: "#0069CCFF", desc: "#606060", inFg: "#202020", ph: "#999999" },
 ];
 // When the vscodium-base submodule is checked out (or VSCODE_THEME_DEFAULTS_DIR points at a copy), re-derive the explicit theme keys so the table cannot drift.
 const THEME_DIR = process.env.VSCODE_THEME_DEFAULTS_DIR
@@ -109,10 +116,12 @@ if (existsSync(new URL("dark_modern.json", THEME_DIR))) {
     const j = jsonc(readFileSync(url, "utf8"));
     return { ...(j.include ? load(new URL(j.include, url)) : {}), ...(j.colors ?? {}) };
   };
-  const KEYS = { side: "sideBar.background", editor: "editor.background", input: "input.background", focus: "focusBorder", desc: "descriptionForeground", inFg: "input.foreground" };
+  const KEYS = { side: "sideBar.background", editor: "editor.background", input: "input.background", focus: "focusBorder", desc: "descriptionForeground", inFg: "input.foreground", ph: "input.placeholderForeground" };
+  const pkgThemes = jsonc(readFileSync(new URL("../package.json", THEME_DIR), "utf8")).contributes.themes;
   for (const t of THEMES.slice(1)) {
     const c = load(new URL(THEME_FILES[t.name], THEME_DIR));
     for (const [k, key] of Object.entries(KEYS)) if (c[key]) assert.equal(t[k].toUpperCase(), c[key].toUpperCase(), `${t.name} ${key} matches theme-defaults`);
+    assert.equal(pkgThemes.find((x) => x.path === `./themes/${THEME_FILES[t.name]}`)?.id, t.id, `${t.name} settings id matches theme-defaults/package.json`);
   }
   console.log("  theme table re-derived from vscodium-base theme-defaults");
 } else console.log("  vscodium-base not checked out: theme table taken as recorded (sources in the comment above)");
@@ -146,7 +155,26 @@ const placeholderToken = {
   theme: (t) => placeholderOn(t.desc, t.inFg, t.input),
   fallback: (input) => placeholderOn(PH.descFallback, PH.inFgFallback, input),
 };
-for (const t of THEMES) need(`placeholder ${t.name} on input`, placeholderToken.theme(t), t.input, 4.5);
+// The placeholder a theme actually gets: its own input.placeholderForeground, or the mix where tokens.css
+// overrides that theme by id. It must reach 4.5:1 on the input and stay >=1.5:1 apart from typed text.
+// Where the typed text itself is too close to the background for both (text/bg < 4.5 x 1.5), the gap
+// cannot be met by any colour; such a theme must be listed here, so a new one cannot slip in silently.
+const SEPARATION = 1.5;
+const SEPARATION_INFEASIBLE = ["Light+"]; // #616161 text is 6.2:1 on white: at most 1.38:1 of room above 4.5:1
+const effectivePlaceholder = (t) => (MIX_THEME_IDS.has(t.id) ? placeholderToken.theme(t) : flat(t.ph, t.input));
+for (const t of THEMES) {
+  const placeholder = effectivePlaceholder(t), typed = flat(t.inFg, t.input);
+  need(`placeholder ${t.name} on input${MIX_THEME_IDS.has(t.id) ? " (mix override)" : ""}`, placeholder, t.input, 4.5);
+  const gap = ratio(placeholder, typed), room = ratio(typed, t.input) / 4.5;
+  rows.push([`placeholder ${t.name} apart from typed text`, placeholder, typed, gap.toFixed(2)]);
+  if (room < SEPARATION) {
+    assert.ok(SEPARATION_INFEASIBLE.includes(t.name), `${t.name}: only ${room.toFixed(2)}:1 of room between 4.5:1 and the typed text; list it as infeasible`);
+  } else {
+    assert.ok(!SEPARATION_INFEASIBLE.includes(t.name), `${t.name} is listed as infeasible but has ${room.toFixed(2)}:1 of room`);
+    assert.ok(gap >= SEPARATION, `${t.name}: placeholder ${placeholder} is ${gap.toFixed(2)}:1 from typed text ${typed} (< ${SEPARATION}:1)`);
+  }
+}
+for (const id of MIX_THEME_IDS) assert.ok(THEMES.some((t) => t.id === id), `override for unknown theme id "${id}"`);
 need("placeholder (--hp-muted) on --hp-bg field", HP.muted, HP.bg, 4.5);
 need("placeholder on Paper", PAPER.placeholder, PAPER.bg, 4.5);
 need("placeholder on Paper white", PAPER.placeholder, PAPER.panel, 4.5);
@@ -165,10 +193,14 @@ const rulesOf = (css) => [...strip(css).matchAll(/([^{}@]+)\{([^{}]*)\}/g)].map(
 }));
 const isFocus = (part) => /:focus(-visible|-within)?\b/.test(part);
 
-function scanFocus(files) {
+// `geometry` checks need no token (width, style, offset, removal without any 2px ring); `token`
+// checks the colour is --hp-ring. The geometry checks alone fail on origin/main (fixtures below).
+const GEOMETRY = /^2px solid \S.*$/;
+function scanFocus(files, { token = true } = {}) {
   const bad = [];
   const rules = Object.entries(files).flatMap(([f, css]) => rulesOf(css).map((r) => ({ ...r, f })));
-  const ringParts = new Set(rules.filter((r) => r.decls.some(([k, v]) => k === "outline" && v === RING)).flatMap((r) => r.parts));
+  const ringOk = (v) => (token ? v === RING : GEOMETRY.test(v));
+  const ringParts = new Set(rules.filter((r) => r.decls.some(([k, v]) => k === "outline" && ringOk(v))).flatMap((r) => r.parts));
   let ringRules = 0;
   for (const { f, parts, decls } of rules) {
     const focus = parts.some(isFocus);
@@ -187,11 +219,11 @@ function scanFocus(files) {
       }
       if (!focus && parts.every((p) => STATE_OUTLINE_OK.includes(p)) && k === "outline") continue;
       if (!focus) { bad.push(`${f}: "${parts[0]}" sets ${k} outside a focus rule`); continue; }
-      if (k === "outline") { if (v === RING) ringRules++; else bad.push(`${f}: "${parts[0]}" focus ring is "${v}", not "${RING}"`); }
+      if (k === "outline") { if (ringOk(v)) ringRules++; else bad.push(`${f}: "${parts[0]}" focus ring is "${v}", not "${RING}"`); }
       else if (k === "outline-offset") {
         if (v === "-2px") { if (!parts.every((p) => INSET_OK.some((s) => p.includes(s)))) bad.push(`${f}: "${parts[0]}" insets the ring outside a tight scroll row`); }
         else if (v !== "2px") bad.push(`${f}: "${parts[0]}" outline-offset ${v}, not 2px`);
-      } else bad.push(`${f}: "${parts[0]}" sets ${k}; use the outline shorthand with --hp-ring`);
+      } else if (token || k !== "outline-color") bad.push(`${f}: "${parts[0]}" sets ${k}; use the outline shorthand with --hp-ring`);
     }
   }
   return { bad, ringRules };
@@ -213,46 +245,65 @@ function scanPlaceholder(files) {
 const cssFiles = Object.fromEntries(readdirSync(SRC).filter((f) => f.endsWith(".css")).map((f) => [f, read(f)]));
 const focus = scanFocus(cssFiles);
 assert.deepEqual(focus.bad, [], focus.bad.join("\n"));
+assert.deepEqual(scanFocus(cssFiles, { token: false }).bad, [], "geometry-only scan passes too");
 assert.ok(focus.ringRules >= 20, `focus scan saw ${focus.ringRules} ring rules: the scan is not reading the CSS`);
 const ph = scanPlaceholder(cssFiles);
 assert.deepEqual(ph.bad, [], ph.bad.join("\n"));
 
-// The baseline in tokens.css replaces VS Code's injected webview default
-// (`a:focus, input:focus, select:focus, textarea:focus { outline: 1px solid -webkit-focus-ring-color; outline-offset: -1px }`).
-const baseline = rulesOf(tokensRaw).find((r) => r.parts.includes(":focus-visible"));
-assert.ok(baseline, "tokens.css has a :focus-visible baseline");
-for (const el of ["a", "input", "select", "textarea"]) assert.ok(baseline.parts.includes(`${el}:focus-visible`), `baseline covers ${el}:focus-visible`);
-assert.deepEqual(Object.fromEntries(baseline.decls), { outline: RING, "outline-offset": "2px" });
+// The baselines in tokens.css. VS Code's injected webview defaults
+// (`a:focus, input:focus, select:focus, textarea:focus { outline: 1px solid -webkit-focus-ring-color; outline-offset: -1px }`)
+// sit in `@layer vscode-default`; an unlayered rule beats any layered one, so a plain `:focus-visible`
+// replaces them. The baselines must stay unlayered.
+const baselineOf = (css, sel) => rulesOf(css).find((r) => r.parts.length === 1 && r.parts[0] === sel);
+assert.doesNotMatch(tokens, /@layer/, "tokens.css baselines are unlayered");
+assert.deepEqual(Object.fromEntries(baselineOf(tokensRaw, ":focus-visible")?.decls ?? []), { outline: RING, "outline-offset": "2px" }, "tokens.css :focus-visible baseline");
+const placeholderBaseline = (css) => {
+  const d = Object.fromEntries(baselineOf(css, "::placeholder")?.decls ?? []);
+  return d.color === "var(--hp-placeholder)" && d.opacity === "1";
+};
+assert.ok(placeholderBaseline(tokensRaw), "tokens.css ::placeholder baseline gives every field the token at opacity 1");
 
-// Every placeholder rule, measured on the background its field paints. A new placeholder rule
-// has to be added here, with its field, before it can pass.
-const bgFallback = (file, selector) => {
-  const r = rulesOf(cssFiles[file]).find((x) => x.parts.includes(selector));
-  assert.ok(r, `${file}: field rule "${selector}"`);
-  return r.decls.find(([k]) => k === "background" || k === "background-color")?.[1];
-};
+// Every field the CSS paints, measured with the placeholder it gets. Fields that paint their own HP
+// background must sit in the --hp-muted scope; the rest take the theme placeholder (measured above
+// per theme) and, without theme variables, the mix fallback on their literal fallback background.
 const lastHex = (v) => [...(v ?? "").matchAll(/#[0-9A-Fa-f]{6}\b/g)].pop()?.[0];
-const PLACEHOLDERS = {
-  '.hps-shell[data-chat-detail="personal"] .hps-input textarea::placeholder': ["theme", "chatDetails.css", '.hps-shell[data-chat-detail="personal"] .hps-input'],
-  ".hps-verdict-note textarea::placeholder": ["theme", "chatDetails.css", ".hps-verdict-note textarea"],
-  ".hps-input textarea::placeholder": ["theme", "styles.css", ".hps-input textarea"],
-  ".hp-surface textarea::placeholder": ["muted", "styles.css", ".hp-surface textarea"],
-  ".hp-surface input::placeholder": ["muted", "styles.css", ".hp-surface input"],
-  ".studio-connect input::placeholder": ["muted", "start.css", ".studio-connect input"],
-};
-assert.deepEqual([...ph.found].sort(), Object.keys(PLACEHOLDERS).sort(), "every ::placeholder rule is in the measured map");
-for (const [sel, [scope, file, field]] of Object.entries(PLACEHOLDERS)) {
-  const bg = bgFallback(file, field);
-  if (scope === "theme") {
-    assert.match(bg, /var\(--vscode-input-background\b/, `${sel}: field paints the theme input background`);
-    need(`placeholder fallback ${sel}`, placeholderToken.fallback(lastHex(bg)), lastHex(bg), 4.5);
-  } else {
-    assert.ok(mutedScope.some((s) => sel.startsWith(s) || sel.includes(`${s} `)) || (sel.startsWith(".studio-connect") && mutedScope.includes(".studio-start")), `${sel}: inside the --hp-muted placeholder scope`);
-    const literal = bg === "var(--hp-bg)" ? HP.bg : lastHex(bg);
-    assert.ok(literal, `${sel}: field background "${bg}" resolves to a literal`);
-    need(`placeholder (--hp-muted) ${sel}`, HP.muted, literal, 4.5);
+const HP_ANCESTOR = { ".studio-connect": ".studio-start" }; // DOM ancestors the selector does not name
+const inScope = (part) => part.split(/\s+/).some((seg) => mutedScope.some((s) => seg === s || seg.startsWith(`${s}:`) || seg.startsWith(`${s}[`) || HP_ANCESTOR[seg] === s));
+let fields = 0;
+for (const [f, css] of Object.entries(cssFiles)) for (const { parts, decls } of rulesOf(css)) {
+  for (const part of parts) {
+    if (!/\b(input|textarea)\b/.test(part) || /::|:(focus|hover|disabled|active)|type="?(radio|checkbox)/.test(part)) continue;
+    const bg = decls.find(([k]) => k === "background" || k === "background-color")?.[1];
+    if (!bg || /^(transparent|none)$/.test(bg) || /--vscode-(button|foreground)/.test(bg)) continue;
+    fields++;
+    if (/var\(--hp-(bg|panel)\b/.test(bg) || /^#[0-9A-Fa-f]{6}$/.test(bg)) {
+      assert.ok(inScope(part), `${f}: "${part}" paints its own HP background (${bg}) but is outside the --hp-muted placeholder scope`);
+      const literal = /--hp-bg/.test(bg) ? HP.bg : /--hp-panel/.test(bg) ? HP.panel : bg;
+      need(`placeholder (--hp-muted) ${part}`, HP.muted, literal, 4.5);
+    } else {
+      assert.match(bg, /var\(--vscode-input-background\b/, `${f}: "${part}" field background "${bg}" is neither HP nor the theme input`);
+      const fb = lastHex(bg);
+      if (fb) need(`placeholder fallback ${part}`, placeholderToken.fallback(fb), fb, 4.5);
+    }
   }
 }
+assert.ok(fields >= 10, `field scan saw ${fields} fields: the scan is not reading the CSS`);
+
+// ---------- origin/main regression fixtures ----------
+// Rules copied verbatim from origin/main before this change. The token-free checks must reject
+// them on their own merits, not only because they predate --hp-ring.
+const MAIN = {
+  "styles.css": ".hps-input textarea:focus {\n  outline: 1px solid var(--vscode-focusBorder, #007fd4);\n}",
+  "start.css": ".studio-start :focus-visible,.studio-disconnected :focus-visible {\n  outline:2px solid #d8c5a9;\n  outline-offset:4px}",
+  "styles.css#2": ".hps-instructor-model-input:focus-visible { outline: 2px solid var(--hp-accent, #0ea5e9); outline-offset: 1px; }",
+  "localReview.css": ".local-review :focus-visible{outline:2px solid var(--vscode-focusBorder);outline-offset:3px}",
+};
+for (const [f, css] of Object.entries(MAIN)) assert.equal(scanFocus({ [f]: css }, { token: false }).bad.length, 1, `main fixture ${f} fails the geometry check`);
+// main had no ::placeholder baseline: the classroom composer and ~25 other fields drew the browser
+// default, which ignores the theme (#757575 in a light scheme is 2.4:1 on Dark+ input).
+const mainTokens = ":root {\n  --hp-muted: #ACB9A5;\n}\n:root[data-reduced-motion=\"true\"] * {\n  animation-duration: 0.01ms !important;\n}";
+assert.ok(!placeholderBaseline(mainTokens), "main fixture: tokens.css without a ::placeholder baseline fails");
+assert.ok(!meets("#757575", THEMES.find((t) => t.name === "Dark+").input, 4.5), "main fixture: the browser default placeholder fails on Dark+");
 
 // ---------- negative controls ----------
 const neg = (css) => scanFocus({ "neg.css": css }).bad;
@@ -271,8 +322,11 @@ assert.equal(negPh(".f::placeholder { color: #8f8f8f; }").length, 1, "control: a
 assert.ok(!meets("#8F8F8F", "#FFFFFF", 4.5), "control: ChatGPT's tertiary #8f8f8f on white really is below 4.5:1");
 assert.ok(!meets(HP.line, HP.bg, 3), "control: --hp-line would be too faint for a ring");
 assert.ok(!meets(HP.accent, PAPER.bg, 3), "control: the lime ring would vanish on Paper, which is why Paper has its own");
-const darkPlus = THEMES.find((t) => t.name === "Dark+");
-assert.ok(!meets(placeholderOn(darkPlus.desc, darkPlus.inFg, darkPlus.input, 1), darkPlus.input, 4.5), "control: plain descriptionForeground fails Dark+, which is why the token mixes in input text");
+const darkPlus = THEMES.find((t) => t.name === "Dark+"), lightModern = THEMES.find((t) => t.name === "Light Modern");
+assert.ok(!meets(placeholderOn(darkPlus.desc, darkPlus.inFg, darkPlus.input, 1), darkPlus.input, 4.5), "control: plain descriptionForeground fails Dark+, which is why the mix blends in input text");
+assert.ok(ratio(placeholderToken.theme(lightModern), flat(lightModern.inFg, lightModern.input)) < SEPARATION, "control: the mix alone equals typed text in Light Modern, which is why the theme placeholder comes first");
+assert.ok(!meets(flat(THEMES.find((t) => t.id === "Dark 2026").ph, "#191A1B"), "#191A1B", 4.5), "control: Dark 2026's own placeholder fails 4.5:1, which is why it is overridden");
+assert.equal(negPh("::placeholder { color: var(--hp-placeholder); }").length, 0, "control: a baseline-style rule passes");
 
 for (const r of rows) console.log(`  ${r[3].padStart(6)}:1  ${r[0]} (${r[1]} on ${r[2]})`);
-console.log(`focus-placeholder smoke OK (${focus.ringRules} ring rules, ${ph.found.length} placeholder rules)`);
+console.log(`focus-placeholder smoke OK (${focus.ringRules} ring rules, ${ph.found.length} placeholder rules, ${fields} fields)`);

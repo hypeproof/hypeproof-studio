@@ -108,8 +108,10 @@ stylesheet (`webview-ui/src/*.css`: chat panel, personal chat detail, task works
 preview, start page, local review). Focus: one token, `--hp-ring`, drawn as `outline: 2px solid
 var(--hp-ring); outline-offset: 2px` on `:focus-visible` (inputs may use `:focus`, which matches
 the same moments); only tight rows inside the scrolling task and source lists use a -2px inset.
-A baseline in `tokens.css` covers every focusable element and replaces VS Code's injected webview
-default (`a/input/select/textarea:focus`, 1px, -1px offset). `--hp-ring` is
+Unlayered baselines in `tokens.css` (`:focus-visible` and `::placeholder`) cover every focusable
+element and every field. They replace VS Code's injected webview defaults
+(`a/input/select/textarea:focus`, 1px, -1px offset), which sit in `@layer vscode-default`, and
+the browser's default placeholder, which ignores the theme. `--hp-ring` is
 `var(--vscode-focusBorder, #D5F279)` on theme-following surfaces, `--hp-accent` #D5F279 on
 surfaces that paint their own HP dark background (start page, mission header: 13.8:1 on
 `--hp-bg`, 11.6:1 on `--hp-panel`, 12.4:1 on the start gradient) and #4D6B12 on Paper (5.6:1,
@@ -119,23 +121,35 @@ its side bar) to 8.2:1; the fallback #D5F279 is at least 12.4:1 on every literal
 `outline: none` is allowed only with a `--hp-ring` replacement on the same element or an
 ancestor `:focus-within` (the personal composer), plus one programmatic focus target that is not
 a control (`.cp-preview h3`, `tabIndex=-1`). Placeholder: every `::placeholder` rule uses
-`--hp-placeholder` at opacity 1, never a lowered opacity. On theme-following fields it is
+`--hp-placeholder` at opacity 1, never a lowered opacity. It must reach 4.5:1 on the field and
+stay at least 1.5:1 apart from the field's typed text. On theme-following fields it is the theme's
+own `--vscode-input-placeholderForeground`: HypeProof Studio #ACB9A5 7.9:1 (1.8:1 from text), Dark
+Modern 4.5:1 (1.8), Light Modern #767676 4.5:1 (2.5), Dark+ 4.5:1 (1.5), HC Dark 10.0:1 (2.1),
+HC Light 5.5:1 (2.6). VS Code's 2026 themes ship placeholders of 2.3:1 and 2.8:1; for them
+(`body[data-vscode-theme-id]`) and when no theme variables exist, the token is
 `color-mix(in srgb, var(--vscode-descriptionForeground, #ACB9A5) 70%, var(--vscode-input-foreground,
-#F2F4E8))`: 9.6:1 in the HypeProof Studio theme and at least 5.0:1 (Dark+) in VS Code's default
-themes, where plain `descriptionForeground` would be 4.3:1 in Dark+ and the theme's own
-`input.placeholderForeground` 2.3:1 in 2026 Dark; fallback #C1CBB9 at least 8.2:1. Fields that
-paint their own HP background use `--hp-muted` (8.4:1 on `--hp-bg`, 8.2:1 on the start page's
-token field) and Paper uses #4B5A4F (6.7:1, 7.3:1 on white). This covers the personal composer,
-the classroom composer (which used the browser default until now), the verdict note, the lesson
-criterion/decision fields and the start page token field. Values are recorded in
+#F2F4E8))`: Dark 2026 6.3:1 (1.5), Light 2026 8.5:1 (1.9), fallback #C1CBB9 at least 8.2:1. The
+mix alone is not used everywhere because it equals typed text in Light Modern (1.00:1). Light+
+cannot meet both limits: its typed text (#616161) is 6.2:1 on white, so a 4.5:1 placeholder can
+be at most 1.38:1 apart; its own #767676 is 4.5:1 and 1.36:1 apart. Placeholders have no
+non-colour cue to compensate, so Light+ is a recorded exception, not a pass. Fields that
+paint their own HP background (lesson criterion/decision fields, evidence drawer, instructor model
+ID, start page token field) use `--hp-muted` (8.4:1 on `--hp-bg`, 8.2:1 on the start page field)
+and Paper uses #4B5A4F (6.7:1, 7.3:1 on white). Through the baseline this covers every field in
+the webview, including the ~25 that used the browser default until now (task search, evidence
+drawer, panels, naming inputs, trial end card, local review). Values are recorded in
 `docs/design/studio-learning-experience.md` §디자인 시스템. Test:
 `test/focus-placeholder.smoke.mjs` computes the ratios from `tokens.css`, the shipped theme
 `media/hypeproof-theme.json` and a recorded table of VS Code default themes (re-derived from
 `vscodium-base` theme-defaults when it is checked out), rejects any focus rule that is not the
 token ring, any outline removal without a replacement, any placeholder rule with opacity or a
-colour other than the token, and any placeholder rule it has not measured, with negative controls.
+colour other than the token, a missing or layered baseline, and any field painting an HP
+background outside the `--hp-muted` scope. Its token-free geometry check also rejects rules
+copied verbatim from origin/main (1px composer ring, 4px/3px/1px offsets, no placeholder
+baseline), and it has negative controls.
 Not covered: Chalk pages, VS Code's own chrome and native widgets, third-party themes (the ring
-and placeholder follow the theme's own colours), the HP rail cards drawn with `--hp-ink` on the
+and placeholder follow the theme's own colours), the Light+ separation exception above, fields
+whose background is set only by a rule without `input`/`textarea` in its selector, the HP rail cards drawn with `--hp-ink` on the
 theme background under non-HP themes, and a recorded keyboard walk in the built app.
 
 CGP-DS-R-015 (2026-10-19), extending CP-R1's "disabled under reduced motion": an explicit
