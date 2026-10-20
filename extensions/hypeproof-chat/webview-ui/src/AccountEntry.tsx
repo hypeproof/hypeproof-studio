@@ -1,6 +1,7 @@
 import type { AccountView } from '../../src/accountSession';
 import type { StartRequest } from '../../src/startPageProtocol';
 import { ChatIcon } from './ChatDetails';
+import { SIGN_IN_LINK_COPY } from '../../src/signInLink';
 /** Credentials stay in the extension host; this view receives display fields and emits intents. */
 export function AccountEntry({ account, checking, post }: { account: AccountView; checking: boolean; post: (message: StartRequest) => void }) {
   const disabled = checking || account.busy;
@@ -11,6 +12,13 @@ export function AccountEntry({ account, checking, post }: { account: AccountView
       <p className="studio-help">연결 번호 <strong>{account.userCode}</strong></p>
       <p className="studio-help">브라우저에 표시된 번호와 이 번호가 같은지 확인하세요.</p>
       <button className="studio-choice" onClick={() => post({type:'accountReopen'})}>로그인 창 다시 열기 <ChatIcon kind="external" size={16} /></button>
+      {account.link && <div className="studio-signin-copy-row">
+        {/* REQ-L13 ⑧: the host copies the URL; the webview holds it only after a refused copy. */}
+        <button className="studio-choice studio-signin-copy" aria-describedby="studio-signin-copy-hint" onClick={() => post({type:'accountCopyLink'})}>{SIGN_IN_LINK_COPY.label} <ChatIcon kind={account.link === 'copied' ? 'check' : 'copy'} size={16} /></button>
+        <p id="studio-signin-copy-hint" className="studio-signin-copy-hint">{SIGN_IN_LINK_COPY.hint}</p>
+        <p className="studio-signin-copy-status" role="status">{account.link === 'copied' ? SIGN_IN_LINK_COPY.copied : account.link === 'failed' ? SIGN_IN_LINK_COPY.failed : ''}</p>
+        {account.link === 'failed' && account.linkText && <p className="studio-signin-copy-link"><code>{account.linkText}</code></p>}
+      </div>}
       <button className="studio-text-button" onClick={() => post({type:'accountCancel'})}>로그인 취소</button>
     </> : account.status === 'signedIn' ? <>
       <div className="studio-account-identity"><strong>{account.account?.display_name} 님</strong><span>{account.account?.email}</span></div>

@@ -654,6 +654,7 @@ export class StartPage {
         if (msg.type === "accountSignIn") await this.accounts.start();
         else if (msg.type === "accountCancel") this.accounts.cancel();
         else if (msg.type === "accountReopen") await this.accounts.reopen();
+        else if (msg.type === "accountCopyLink") await this.accounts.copyLink(text => vscode.env.clipboard.writeText(text));
         else if (msg.type === "accountRefresh") await this.accounts.refreshView();
         else if (msg.type === "accountManage") await this.accounts.openAccount();
         else if (msg.type === "accountSignOut") { this.candidate = undefined; await this.accounts.signOut(); }

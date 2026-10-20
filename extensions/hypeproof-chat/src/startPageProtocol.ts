@@ -81,7 +81,7 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
-  | { type: "accountSignIn" | "accountCancel" | "accountReopen" | "accountRefresh" | "accountSignOut" | "accountManage" }
+  | { type: "accountSignIn" | "accountCancel" | "accountReopen" | "accountCopyLink" | "accountRefresh" | "accountSignOut" | "accountManage" }
   | { type: "accountActivate"; passId: string }
   | { type: "exportLegacyHistory" }
   | { type: "selectActivity"; ref: string }
