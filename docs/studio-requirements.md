@@ -1366,6 +1366,61 @@ Acceptance CC-01–CC-05 in [the verification contract](testing/task-workspace.m
 uses the actual shipped theme tokens and full personal control profile. Synthetic
 model/tool tests do not establish live inference or installed release behavior.
 
+## Class join link (CGP-SHELL-R-005)
+
+`REQ-STUDIO-JOIN-LINK` (CGP-SHELL-R-005 / REQ-SHELL-05, DES-SHELL-04, P1; built 2026-10-20): a
+Chalk join link `<scheme>://hypeproof.hypeproof-chat/join?class=<id>` brings Studio's ordinary
+class-join form forward with the class named above an empty, focused code field. `<scheme>` is the
+build's `urlProtocol` (`hypeproof-studio` for the shipped app; `vscode.env.uriScheme` is what the
+handler checks). The class id is the Chalk cohort id: exactly one `class` parameter matching
+`[A-Za-z0-9_-]{1,128}` (the Chalk `#cohort` field pattern); the whole query is capped at 1024
+characters. The link carries no code, token, password or learner identity. It is untrusted input:
+any other parameter (`code=`, `token=`, identity, tracking) and any fragment are ignored, never
+used, and only their names (sanitized, ≤32 characters) are logged. The handler never fetches,
+stores, enters a class, starts a turn or changes a setting. The learner types the code and presses
+코드 확인하기 and then 시작 themselves, through the unchanged REQ-B1/B3 path (preview first, then
+explicit entry).
+
+- **Malformed link** (missing, empty, repeated or invalid `class`, oversized query): one non-modal
+  notice, "수업 참여 링크를 열 수 없어요. 링크가 잘렸거나 바뀐 것 같아요. 선생님께 링크를 다시 받아
+  주세요." Nothing opens.
+- **Ask before switching**: during a running turn, or when the seat stored on this machine names
+  another class (or is another kind of seat), a modal asks first ("지금 AI가 대답하고 있어요." /
+  "지금 다른 활동에 연결돼 있어요." + "이 링크의 수업 참여 화면을 열까요?", detail "참여 화면만
+  열려요. 참여 코드를 넣고 직접 시작하기 전까지 지금 하던 것은 그대로예요.", action 참여 화면 열기).
+  Closing it changes nothing. Even after 참여 화면 열기, entry still refuses while a turn runs (the
+  existing "진행 중인 작업을 마치거나 중지한 후 활동을 변경하세요.").
+- **Same class**: a link for the class already stored only says "이미 이 수업에 참여하고 있어요."
+- **Join form**: "참여 링크로 연 수업 <id>" and "링크에는 참여 코드가 들어 있지 않아요. 선생님께 받은
+  코드를 직접 입력해 주세요." above the empty code field (type password, focused; 14px+ text).
+  A later refresh of the start page does not close the form; 링크 닫기 drops the link. Each press
+  of a link refocuses the form.
+- **Wrong class's code**: a code whose unverified payload names another class (`c`) is refused
+  before it is sent anywhere: "이 참여 코드는 링크로 연 수업의 코드가 아니에요. 선생님께 받은 코드를
+  다시 확인해 주세요." A code whose class cannot be read (not that token shape) is left to the
+  Service, as without a link. The Service still decides what a code grants; the unverified read
+  only words the refusal and the switch question.
+- **Wiring**: one URI handler for the extension, registered whether or not accounts are on; the
+  join link is checked first and the `/account-return` check is unchanged. `onUri` wakes the
+  extension.
+
+Seat and flow rules unchanged: codes are still entered only in the code field and stored only in
+SecretStorage (REQ-B1); the credential never returns to the webview; issuer codes are still
+refused (REQ-B6); a candidate still needs explicit 시작. Deviation from the register row:
+REQ-SHELL-05 says a token-looking link is "rejected"; here the link is opened for its class and the
+token-looking parameters are ignored and logged by name, which keeps one rule (only `class` is
+read) and loses nothing a learner sees. Not built: the class *name* (no credential-free class
+lookup exists, so the id is shown); "unknown class → neutral start screen" (Studio cannot tell an
+unknown class from a real one without a code); IME-off for the code field; the code error is
+shown in the card's error area, not directly under the field. Tests:
+`extensions/hypeproof-chat/test/join-link.smoke.mjs` (parse with code=/token=/password=/identity
+ignored and their values never leaving the parser, 13 malformed links, decision, the URI host
+with ask/decline, the real StartPage: class preselected, no fetch, no write, no entry, another
+class's code refused before any Service call, wiring) and `e2e/start-page/join-link.mjs` (built
+start page in Chromium at 390 and 1280: class named, code field empty and focused, refresh-stable,
+링크 닫기, re-press). Chalk side: REQ-CHALK-JOIN-LINK in
+[classroom-admin.md](requirements/classroom-admin.md#join-link-20261020).
+
 ## Curriculum runtime proposal — 2026-09-29
 
 `REQ-STUDIO-CURRICULUM-RUNTIME`: Studio executes the AI for Good v5 loop

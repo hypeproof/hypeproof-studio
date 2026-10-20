@@ -17,6 +17,7 @@ import { isFreeSeat } from "./seatVocabulary";
 import { qrDataUrl } from "./testQr";
 import { randomUUID } from "node:crypto";
 import type { ClassRepo } from "./publish/githubContinue";
+import { JOIN_LINK_COPY, classOfCode, isClassId } from "./joinLink";
 
 /**
  * "GitHub에서 이어하기" for a code being confirmed (user requirement 2026-10-13): look at the
@@ -98,6 +99,8 @@ export class StartPage {
   private guardianCheckout?: { url: string; qr: string };
   /** The first start-page paint waits briefly for the offer, so a newcomer does not see the code choices flash. */
   private offerWaited = false;
+  /** REQ-STUDIO-JOIN-LINK — the class a join link named, until a code is confirmed or the learner drops it. */
+  private joinLink?: { classId: string; seq: number };
   constructor(
     private context: vscode.ExtensionContext,
     private chat: ChatPanelProvider,
@@ -181,6 +184,25 @@ export class StartPage {
     // the served profile: the profile stays what the Service said.
     candidate.workspace = folder;
     await this.handle({ type: "beginCourse" });
+  }
+
+  /**
+   * REQ-STUDIO-JOIN-LINK — a class join link was opened (the URI handler already asked the learner
+   * if a turn was running or another class was in use). Bring the join form forward with the class
+   * named above an empty code field. Nothing is fetched, stored, entered or switched here: the
+   * learner types the code and starts the class themselves, through the ordinary path.
+   */
+  async openJoinLink(classId: string): Promise<void> {
+    if (!isClassId(classId)) return;
+    this.joinLink = { classId, seq: (this.joinLink?.seq ?? 0) + 1 };
+    this.error = undefined;
+    await this.show();
+    await this.refresh();
+  }
+
+  /** The class of the seat stored on this machine (unverified; used only to word the switch question). */
+  async currentClassId(): Promise<string | undefined> {
+    return classOfCode(await this.currentToken());
   }
 
   /** #751 U2 — a card arrived, changed or came down while this tab is open. */
@@ -602,6 +624,7 @@ export class StartPage {
       ...(this.trialOffer ? { trialOffer: this.trialOffer } : {}),
       ...(freeStart ? { freeStart } : {}),
       ...(this.look() ? { github: this.look()!.state } : {}),
+      ...(this.joinLink ? { joinLink: { ...this.joinLink } } : {}),
       ...(p ? { coachName: this.chat.coachDisplayName(p), profile: { kind: p.activity_kind, ...(p.pass ? { pass: p.pass } : {}), ...(p.trial && !p.pass ? { trial: p.trial } : {}), ...(isFreeSeat(p) ? { free: true } : {}), id: p.profile_id, name: p.lesson?.content.title ?? p.display_name,
         // #747 — the row is labelled "AI 이름", so it shows the name the rest of
         // the card uses. A student-named cohort that has not been named yet
@@ -676,6 +699,7 @@ export class StartPage {
       }
       return;
     }
+    if (msg.type === "joinLinkDismiss") { this.joinLink = undefined; this.error = undefined; await this.refresh(); return; }
     if (msg.type === "githubSignIn") { await this.signInToGithub(); return; }
     if (msg.type === "continueFromGithub" || msg.type === "startNew") { await this.startFromGithubChoice(msg); return; }
     if (this.busy) return;
@@ -830,6 +854,12 @@ export class StartPage {
     if (looksLikeIssuerTokenUnverified(token)) {
       this.error = "강사용 코드입니다. 수강생 참여 코드를 입력하세요."; await this.refresh(); return;
     }
+    // REQ-STUDIO-JOIN-LINK — a code that names another class than the link is refused before it is
+    // sent anywhere. A code whose class cannot be read is left to the Service, as without a link.
+    const codeClass = this.joinLink ? classOfCode(token) : undefined;
+    if (this.joinLink && codeClass && codeClass !== this.joinLink.classId) {
+      this.error = JOIN_LINK_COPY.mismatch; await this.refresh(); return;
+    }
     const entryPanel=this.panel;
     this.busy = true; this.error = undefined;
     try {
@@ -847,6 +877,7 @@ export class StartPage {
       const running = await this.chat.ensureProfile(), connections = activityConnections(this.context);
       const workspace = reentryWorkspace({ candidateActivity: p.activity_id, record: connections?.current ?? null, recordServiceMatches: !!connections?.matchesService, openFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, runningActivity: running?.activity_id });
       this.candidate = { token, profile: p, proxyUrl, previousConnected: !!running, ...(workspace ? { workspace } : {}) };
+      this.joinLink = undefined; // the code is confirmed; the preview card takes over
       // GitHub first (user requirement 2026-10-13): the served profile names the class folder.
       const classRoot = this.githubSource?.allowed(p) ? this.githubSource.classRoot(p) : null;
       if (classRoot) this.lookAtGithub(this.candidate, classRoot);
