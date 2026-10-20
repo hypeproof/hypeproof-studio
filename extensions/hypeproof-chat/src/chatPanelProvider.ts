@@ -2,7 +2,7 @@ import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnosti
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
 import { FREE_DAILY_CAP_NOTICE, freeDailyCapReached, passSpentNotice, passesOnSale, trialEndNotice, trialEnding } from "./passPurchase";
-import { catalogueWithin, endCardAdvertised, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
+import { endCardAdvertised, endCardCatalogue, notifyOptinOffered, trialEndCardView, trialEndReason } from "./trialEndCard";
 import { NOTIFY_OPTIN_ERRORS, notifySubmitted, plausibleEmail, setNotifySubmitted, submitNotifyOptin, withdrawNotifyOptin } from "./notifyOptin";
 import { canonicalizeExistingPath, relativeEscapes } from "./workspaceRouting";
 import { InstructorModeManager } from './chalk/instructorMode';
@@ -7419,8 +7419,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // (`profile_id: "studio-open-trial"`, served only behind the Service's default-off
     // HPS_OPEN_TRIAL). The card carries the Service's own pass facts; it never opens the
     // purchase view, and any other turn ending falls through unchanged.
+    // CONV-ENDCARD-R-005 — an unreadable catalogue is read once more; if it still cannot be read the
+    // card is drawn without pass facts. Only a Service that sells no passes falls back to the banner.
     if (current?.proxyUrl && endCardAdvertised(current.profile) && trialEndReason(err, false)) {
-      const card = trialEndCardView({ profile: current.profile, err, products: await catalogueWithin(current.proxyUrl), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
+      const card = trialEndCardView({ profile: current.profile, err, products: await endCardCatalogue(current.proxyUrl, { signal: current.signal }), notifySubmitted: notifySubmitted(this.context?.globalState, current.token) });
       if (current.signal?.aborted) return;
       if (card) {
         void this.post({ type: "streamError", streamId, error: card.text, trialEndCard: card });

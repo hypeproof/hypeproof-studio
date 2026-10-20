@@ -157,6 +157,81 @@ try {
   assert.equal(await c.catalogueWithin('https://service.test/v1', 50), null);
 } finally { globalThis.fetch = realFetch; }
 
+// ── CONV-ENDCARD-R-005: "not sold" and "could not be read" are different answers ───────────
+{
+  const minimal = c.trialEndCardView({ profile: trialProfile(), err: EXHAUSTED, products: 'unreadable' });
+  assert.equal(minimal.title, c.TRIAL_END_CARD_COPY.title);
+  assert.deepEqual(minimal.facts, [c.TRIAL_END_CARD_COPY.continuity, c.TRIAL_END_CARD_COPY.endedExhausted]);
+  assert.equal(minimal.primary, '이용권 살펴보기');
+  assert.equal(minimal.productId, undefined);
+  for (const line of [minimal.title, ...minimal.facts]) {
+    assert.doesNotMatch(line, /\d/);
+    assert.doesNotMatch(line, c.END_CARD_PRESSURE);
+  }
+  assert.deepEqual(c.trialEndCardView({ profile: trialProfile(), err: EXPIRED, products: 'unreadable' }).facts.at(-1), c.TRIAL_END_CARD_COPY.endedExpired);
+  // Not sold: the banner, as before.
+  assert.equal(c.trialEndCardView({ profile: trialProfile(), err: EXHAUSTED, products: 'unsold' }), null);
+  // Negative controls: the minimal card is never drawn mid-work, on a code trial or on a pass.
+  assert.equal(c.trialEndCardView({ profile: trialProfile(), err: NETWORK, products: 'unreadable' }), null);
+  assert.equal(c.trialEndCardView({ profile: { activity_kind: 'trial', profile_id: 'studio-native-trial' }, err: EXHAUSTED, products: 'unreadable' }), null);
+  assert.equal(c.trialEndCardView({ profile: trialProfile({ pass: { request_limit: 200, requests_used: 200 } }), err: EXHAUSTED, products: 'unreadable' }), null);
+}
+{
+  const realFetch = globalThis.fetch;
+  const answers = [];
+  let calls = 0;
+  globalThis.fetch = async (_url, init = {}) => {
+    calls++;
+    const a = answers.length > 1 ? answers.shift() : answers[0];
+    if (a === 'hang') return new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))));
+    if (a === 'throw') throw new Error('offline');
+    return { status: a.status, ok: a.status >= 200 && a.status < 300, json: async () => a.body };
+  };
+  const set = (...xs) => { answers.length = 0; answers.push(...xs); calls = 0; };
+  const good = { status: 200, body: { products: [{ id: 'pass-lite', label: '라이트', amount: 30000, currency: 'KRW', duration_hours: 720, request_limit: 200 }] } };
+  try {
+    set({ status: 404, body: { error: 'not_found' } });
+    assert.equal(await p.readCatalogue('https://service.test/v1'), 'unsold');
+    set({ status: 200, body: { products: [] } });
+    assert.equal(await p.readCatalogue('https://service.test/v1'), 'unsold');
+    for (const a of [{ status: 503, body: {} }, { status: 429, body: {} }, { status: 200, body: { products: 'soon' } }, 'throw']) {
+      set(a);
+      assert.equal(await p.readCatalogue('https://service.test/v1'), 'unreadable', JSON.stringify(a));
+    }
+    set(good);
+    assert.deepEqual((await p.readCatalogue('https://service.test/v1')).map(x => x.id), ['pass-lite']);
+    // endCardCatalogue: one retry on unreadable, none on unsold or success.
+    set({ status: 503, body: {} }, good);
+    assert.deepEqual((await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 50 })).map(x => x.id), ['pass-lite']);
+    assert.equal(calls, 2);
+    set('hang', good);
+    assert.deepEqual((await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 50 })).map(x => x.id), ['pass-lite']);
+    assert.equal(calls, 2);
+    set('throw');
+    assert.equal(await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 50 }), 'unreadable');
+    assert.equal(calls, 2, 'retried exactly once');
+    set('hang');
+    const t0 = Date.now();
+    assert.equal(await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 50 }), 'unreadable');
+    assert.equal(calls, 2);
+    assert.ok(Date.now() - t0 < 1000);
+    // A stopped turn ends the read at once and is not retried.
+    set('hang');
+    const stopTurn = new AbortController();
+    setTimeout(() => stopTurn.abort(), 20);
+    const t1 = Date.now();
+    assert.equal(await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 5000, signal: stopTurn.signal }), 'unreadable');
+    assert.ok(Date.now() - t1 < 1000, `stopped read took ${Date.now() - t1} ms`);
+    assert.equal(calls, 1);
+    set({ status: 404, body: {} });
+    assert.equal(await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 50 }), 'unsold');
+    assert.equal(calls, 1, 'a Service that sells nothing is not asked again');
+    set(good);
+    await c.endCardCatalogue('https://service.test/v1', { timeoutMs: 50 });
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = realFetch; }
+}
+
 // passFacts lives with the other catalogue formatting and never doubles the noun.
 assert.equal(p.passFacts({ id: 'x', label: '라이트', amount: 30000, durationDays: 30, requestLimit: 200 }), '라이트 이용권은 30일 동안 AI 요청 200번이고 30,000원입니다.');
 assert.equal(p.passFacts({ id: 'x', label: '30일 이용권', amount: 50000, durationDays: 30, requestLimit: 600 }), '30일 이용권은 30일 동안 AI 요청 600번이고 50,000원입니다.');
