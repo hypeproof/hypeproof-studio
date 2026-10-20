@@ -9,6 +9,7 @@ import * as path from "node:path";
 import type { ResolvedProfile } from "./protocol";
 import type { StartRequest, StartState } from "./startPageProtocol";
 import { PURCHASE_COPY, POLL_INTERVAL_MS, claimWithRecovery, createOrder, fetchProducts, pollOrder, restorePendingOrder, waitDecision, withTrialPassPointer, type PassProduct, type PendingOrder, type PurchaseView } from "./passPurchase";
+import { isPurchaseReturnOrderId } from "./purchaseReturnHelpers";
 import type { ClassReposOutcome } from "./publish/publishHost";
 import { fetchTrialOffer, freeStartAdvertised, type TrialOffer } from "./trialOffer";
 import { AGE_KEY, FREE_CLAIM_REFUSALS, freeSeatEnding, INSTALL_ID_KEY, PAYER_ADULT_KEY, belowFloor, claimFreeStart, guardianUrl, isAgeAnswer, isInstallId, type AgeAnswer, type FreeClaimRefusal, type FreeClaimResult } from "./freeStart";
@@ -84,6 +85,8 @@ export class StartPage {
   /** TUX-COND-07 — one press of the chat card's "이용권 살펴보기"; cleared with the tab. */
   private purchaseFocus?: number;
   private purchaseTimer?: ReturnType<typeof setTimeout>;
+  /** A check is on the wire; a purchase-return link arriving meanwhile does not start a second one. */
+  private purchaseTickRunning = false;
   /** The code issued for the saved order, while its activity is previewed but not yet entered. */
   private purchaseToken?: string;
   private github?: GithubLook;
@@ -218,6 +221,34 @@ export class StartPage {
     this.error = undefined;
     await this.show();
     await this.refresh();
+  }
+
+  /**
+   * CONV-PURCHASE-R-004 (REQ-L12 ⑤⑥) — the Lab done page's "Studio로 돌아가기" link was opened
+   * (extension.ts already checked the URI shape). The start page comes forward. Only when this
+   * window already holds a pending order with the same id does it run the check `purchaseRetry`
+   * runs, once: a paid answer then takes the ordinary claim path (and CONV-PURCHASE-R-005's in-place
+   * switch from a free seat). Any other id, no held order, or a claimed record only shows the page:
+   * nothing is created, claimed or reissued for a link, and no error is drawn.
+   * Returns whether a check was scheduled.
+   */
+  async purchaseReturned(orderId: string): Promise<boolean> {
+    if (!isPurchaseReturnOrderId(orderId)) return false;
+    const read = this.order ?? await this.savedOrder();
+    // The order may have been set while SecretStorage was read (a fresh page's resumePurchase): keep
+    // that object, so an in-flight check still recognises it and schedules the next one.
+    const held = this.order ?? read;
+    // A claimed record waits for the buyer's own "다시 연결" (replacing a code rotates the credential).
+    if (!held || held.id !== orderId || held.claimed || this.purchaseStage === "connecting") { await this.show(); return false; }
+    this.order = held;
+    this.purchaseStage = "waiting"; this.purchaseMessage = PURCHASE_COPY.waiting;
+    // show() has no await before it returns: a timer its resumePurchase schedules is replaced by the
+    // one below in the same tick, so repeated opens leave one pending check, never two.
+    await this.show();
+    if (this.purchaseTickRunning) return true;
+    this.schedulePurchasePoll(0);
+    await this.refresh();
+    return true;
   }
 
   /** The class of the seat stored on this machine (unverified; used only to word the switch question). */
@@ -501,7 +532,9 @@ export class StartPage {
   private async purchaseTick(): Promise<void> {
     const order = this.order;
     if (!order || !this.panel) return;
-    const state = await pollOrder(order);
+    this.purchaseTickRunning = true;
+    let state: Awaited<ReturnType<typeof pollOrder>>;
+    try { state = await pollOrder(order); } finally { this.purchaseTickRunning = false; }
     if (this.order !== order) return;
     const next = waitDecision(state, order, Date.now());
     if (next === "wait") {

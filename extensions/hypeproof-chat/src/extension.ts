@@ -18,6 +18,7 @@ import * as path from "path";
 import * as os from "os";
 import { StartPage } from "./startPage";
 import { handleJoinLink, type JoinLinkHost } from "./joinLink";
+import { purchaseReturnOrder } from "./purchaseReturnHelpers";
 import { ACCOUNTS_ENABLED_DEFAULT, AccountSession, accountPreviewEnabled, accountProductionEnabled } from "./accountSession";
 import { accountLock } from "./accountLock";
 import { ChatPanelProvider } from "./chatPanelProvider";
@@ -260,6 +261,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.window.registerUriHandler({
     handleUri: async uri => {
       if (await handleJoinLink(joinLinkHost, uri)) return;
+      // CONV-PURCHASE-R-004 — the Lab done page's return link. Non-account orders poll too, so this
+      // sits before the account check. A link of any other shape falls through untouched.
+      const returnedOrder = purchaseReturnOrder(uri, vscode.env.uriScheme);
+      if (returnedOrder) { await startPage.purchaseReturned(returnedOrder); return; }
       if (!accounts) return;
       if (uri.scheme !== vscode.env.uriScheme || uri.authority !== 'hypeproof.hypeproof-chat' || uri.path !== '/account-return' || uri.fragment) return;
       const query = new URLSearchParams(uri.query);
