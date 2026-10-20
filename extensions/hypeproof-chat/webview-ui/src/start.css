@@ -470,6 +470,15 @@
 .studio-account .studio-google:hover:not(:disabled) { background: #f8faff; }
 .studio-account .studio-google:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
 .studio-account .studio-google svg { flex: 0 0 20px; margin: 0!important; }
+/* REQ-L13 ⑧ (CGP-SHELL-R-022, DES-SHELL-21) — 링크 복사 under the waiting sign-in: 44px target, 14px text.
+   The 1px border is a real boundary, so forced colors draw it in ButtonText. */
+.studio-signin-copy-row { margin-top: 8px; }
+.studio-account .studio-signin-copy { min-height: 44px; padding: 10px 15px; border: 1px solid var(--studio-control-line); font-size: 14px!important; }
+.studio-signin-copy-hint { margin: 6px 2px 0; font-size: 14px; line-height: 1.5; color: var(--studio-muted); word-break: keep-all; overflow-wrap: anywhere; }
+.studio-signin-copy-status { margin: 6px 2px 0; font-size: 14px; line-height: 1.5; color: var(--studio-text); word-break: keep-all; overflow-wrap: anywhere; }
+.studio-signin-copy-status:empty { margin: 0; }
+.studio-signin-copy-link { margin: 6px 2px 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; word-break: break-all; }
+.studio-signin-copy-link code { user-select: all; }
 /* TUX-SP-14/15/16 — free start card. Same tokens as the rest of the card; one Primary, quiet links. */
 .studio-free { display:grid; gap:12px; }
 .studio-question { margin:0 0 2px; font-size:15px; line-height:1.5; font-weight:550; color:var(--studio-text); word-break:keep-all; }
