@@ -173,6 +173,68 @@ and instructor negative controls. The first-load, folder, seat, dismiss, same-ca
 access-choice, fallback, current-inputs-baseline and both re-read guards and the card render
 were each removed once and a test failed.
 
+`REQ-STUDIO-DELEGATION-ROW` (CGP-AGENT-R-009 / REQ-CGP-AGENT-12, design CGP-AGENT-D-008,
+P1, 2026-10-20): when the coach delegates to a helper (an agent SDK `Task`/`Agent` tool call
+at the top level, possible only where the profile grants `sdk_tools.subagents`, REQ-M22;
+folder-consent read-only keeps the grant), the timeline draws one collapsed row instead of
+the raw `Task(...)` tool line. The summary shows the helper (`subagent_type`, else "도우미"),
+the task (`description`, else `prompt`, one line, clipped at 60 like a tool line) and a
+status. Each row is bound to the stream (turn) that made it (`delegate-<task id>@<stream id>`):
+"진행 중" only while that stream is the one running, so 다시 시도 after a failed turn (a new
+stream that adds no user line) never revives an old row; "끝남" after a successful result;
+"실패" after an error result, and also when the turn itself ended in an error or ended
+without the helper's answer: the host closes every row its turn left open with "이번 답이
+끝나지 못해서 도우미도 함께 멈췄어요." or "도우미의 답을 받지 못했어요."; "멈춤" only for a row a
+stopped turn (the learner's or the instructor's stop) left open, also after a reload. Opening it shows "도우미의 답" (the first text block of the Task
+result, clipped at 1,200 characters; "아직 답이 없어요." before it arrives; on a failure the
+same short reason a failed tool line shows, or "도우미가 일을 끝내지 못했어요.") and "도우미가
+한 일": the helper's own tool lines, which the SDK marks with `parent_tool_use_id`
+(`extractSdkActivity` now carries it). Those lines leave the main flow and do not touch its
+"다음 단계를 준비하는 중…" notice line. A child whose row is not in the list (cut by the
+history clamp) and a stored `Task(...)` line from before this row stay normal lines; every
+other tool line renders byte for byte as before. **모두 멈추기**: only while the row's own turn runs,
+the row offers it, and it calls the same cancel as the Stop button (`cancelStream` → the
+turn's `AbortController` → the SDK `abortController` option). The helpers run inside that
+turn's CLI process, so aborting the query ends them with the turn; no separate per-helper
+stop is used (the SDK's `stopTask` needs a task id from `task_*` events the host does not
+read). Not met from DES-CGP-AGENT-12: "멈춤" follows the host's `streamStopped`, which is
+posted right after the abort, not after the CLI confirms its exit, so there is no
+"멈추는 중…" state; there is no "도우미 N명 · M명 끝남" roll-up for several rows. Persistence:
+nothing new. Row and children are ordinary tool lines (id, icon, label, state); the
+grouping is read from the id (`delegate-<task id>` and `delegate-<task id>~<child id>`)
+and the final response rides the row's label. Privacy: the header and the final response
+pass `scrubSecrets` and show workspace paths relative to the work folder, as tool lines
+do; a path outside the work folder stays visible, as it does on a tool line. Copy is
+Korean with no capability, score or evaluation words; summary and stop are 44px targets;
+the same row draws in personal and classroom chat. A "summary" tool-activity cohort
+(D-027) gets no row (decision 2026-10-20, conservative): no helper name, no model-written
+task text and no helper answer reach its screen; a delegation and its helper's calls stay
+folded into the one Korean work line exactly as before. Background helpers: a seat that may
+delegate pins `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, as the orchestrator seat already did,
+so helpers run inside the watched turn; if the SDK still reports a launch
+(`tool_use_result.status` async_launched/remote_launched), its placeholder text is never
+shown as 도우미의 답: the row stays open and the turn's end closes it as 실패 ("도우미의 답을
+받지 못했어요."). Not claimed: the SDK 0.3.299 type
+definitions say helper tool events are forwarded with `parent_tool_use_id` by default
+(`forwardSubagentText`), which has not been observed on a real device (an older
+`sdkCoach.ts` note from 0.3.207 says the stream is silent during a helper). Pure grouping
+and line ids: `src/delegationRow.ts`; row: `webview-ui/src/DelegationRow.tsx`; wiring:
+`chatPanelProvider.ts` (`DelegationTracker`) and `ChatPanel.tsx`. Tests:
+`test/delegation-row.smoke.mjs` (SDK parent extraction, line ids, one row with children
+grouped over the real timeline reducer, status transitions, non-Task, near-miss name,
+legacy and orphan negative controls, privacy, host wiring lock) and
+`test/delegation-row.test.tsx` (real ChatPanel in personal and classroom chat, collapsed
+row, children only inside it, plain line markup unchanged, 44px, no capability words, a
+real click on 모두 멈추기 calling `onCancel` once). Hiding children, dropping 멈춤, grouping
+orphans, dropping the scrub (result, and header with a key inside the 60-character cut) were
+each tried once and failed a case; the 다시 시도 render case fails on the first version of
+this row. The A4 byte-identity digests in `test/orchestrator-switch.smoke.mjs` were re-taken:
+the activity the stream hands the host gained `parent` and a tool_result's `content`
+(dropping those two fields reproduces all ten previous digests), and adultSubagents gained
+the background pin (deleting that key on helper seats reproduces its previous digest);
+`test/sdk-gateway.smoke.mjs` names the pin as the second deliberate env change on builds that
+carry `agents`, and its A1-tip digests are unchanged. The A5 render digests did not change.
+
 `REQ-STUDIO-CONTEXT-TRIM-MARKER` (CGP-CHAT-R-010 / CGP-CHAT-D-010, P1, 2026-10-20): when
 older turns stop going to the model, the transcript says so with one quiet line at that
 point. Two real events produce it, nothing else. (1) The history clamp: every model call

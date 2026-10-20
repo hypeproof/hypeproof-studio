@@ -370,6 +370,14 @@ function snapshotEntries({ buildSdkQueryOptions, buildSdkGatewayEnv, profileToAg
     if (env) {
       assert.equal(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW, "200000", `${name}: the compaction pin is the one deliberate env change`);
       delete env.CLAUDE_CODE_AUTO_COMPACT_WINDOW;
+      // REQ-STUDIO-DELEGATION-ROW — a build that may delegate pins helpers to the foreground; the
+      // second deliberate env change, on exactly the builds that carry `agents`.
+      if (value.agents) {
+        assert.equal(env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1", `${name}: helpers stay in the foreground`);
+        delete env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS;
+      } else {
+        assert.equal(env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, undefined, `${name}: no helper pin without helpers`);
+      }
     }
     return value;
   };
@@ -512,7 +520,11 @@ const headerValues = (env, name) =>
   // Negative control — the same seat without a roster gets none of it, and keeps its subagents.
   const legacy = buildSdkQueryOptions(profileToAgentOptions(adult, { model: "claude-sonnet-5-5", systemPrompt: "P" }), SNAPSHOT_FULL_ARGS);
   for (const name of ORCHESTRATOR_HEADER_NAMES) assert.deepEqual(headerValues(legacy.env, name), [], `no ${name} without a roster`);
-  for (const key of ORCHESTRATOR_ENV_PINS) assert.equal(key in legacy.env, false, `no ${key} without a roster`);
+  // REQ-STUDIO-DELEGATION-ROW — the background pin also rides on the legacy helper grant this seat keeps.
+  for (const key of ORCHESTRATOR_ENV_PINS) {
+    if (key === "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" && legacy.agents) assert.equal(legacy.env[key], "1", "helpers stay in the foreground");
+    else assert.equal(key in legacy.env, false, `no ${key} without a roster`);
+  }
   assert.ok("agents" in legacy, "the legacy subagent path is unchanged (REQ-M22)");
   console.log("✓ A2: served roster → x-hps-orchestrator/agent/roster + hint, haiku, foreground pins; none without it");
 }
@@ -549,9 +561,11 @@ const headerValues = (env, name) =>
     const agent = profileToAgentOptions(p, { model: "m", systemPrompt: "", orchestrator: SERVED_ROSTER });
     assert.equal(agent.orchestrator, undefined, `minor/unknown ${JSON.stringify(p)}: no binding`);
     assert.ok(!agent.permittedMcpTools.includes("mcp__hypeproof__consult"), "minors never get consult");
-    const env = buildSdkQueryOptions(agent, SNAPSHOT_MIN_ARGS).env;
+    const built = buildSdkQueryOptions(agent, SNAPSHOT_MIN_ARGS);
+    const env = built.env;
     for (const name of ORCHESTRATOR_HEADER_NAMES) assert.deepEqual(headerValues(env, name), []);
-    for (const key of ORCHESTRATOR_ENV_PINS) assert.equal(key in env, false);
+    // REQ-STUDIO-DELEGATION-ROW — the teen tier's own helper grant brings the background pin, nothing else.
+    for (const key of ORCHESTRATOR_ENV_PINS) assert.equal(key in env, key === "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS" && !!built.agents);
   }
   console.log("✓ A2: unsafe roster identities never bind, forged bindings throw, minors get no orchestrator env");
 }

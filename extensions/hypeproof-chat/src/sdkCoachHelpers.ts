@@ -1421,7 +1421,7 @@ export function buildSdkQueryOptions(
     ...(args.pathToClaudeCodeExecutable
       ? { pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable }
       : {}),
-    env: buildSdkGatewayEnv(args.baseEnv, {
+    env: foregroundHelpers(agentTools, buildSdkGatewayEnv(args.baseEnv, {
       proxyUrl: args.proxyUrl,
       effort: args.effort,
       turnId: args.turnId,
@@ -1436,9 +1436,19 @@ export function buildSdkQueryOptions(
       ...(args.workspaceFiles ? { workspaceFiles: args.workspaceFiles } : {}),
       ...(args.previewUrl ? { previewUrl: args.previewUrl } : {}),
       ...(orchestrator ? { orchestrator } : {}),
-    }),
+    })),
     ...(hooks ? { hooks } : {}),
   };
+}
+
+/**
+ * REQ-STUDIO-DELEGATION-ROW — a seat that may delegate keeps its helpers in the foreground, inside
+ * the turn the learner watches and Stop aborts (the orchestrator seat pins the same variable in
+ * buildSdkGatewayEnv). A backgrounded helper would return a placeholder as its answer.
+ */
+function foregroundHelpers(agentTools: readonly string[], env: Record<string, string | undefined>): Record<string, string | undefined> {
+  if (agentTools.length > 0) env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+  return env;
 }
 
 /**
@@ -1772,10 +1782,18 @@ export type SdkActivity = (
   | { kind: "thinking_tokens"; tokens: number }
   /** A completed thinking block. Raw model text — NOT translated (it is usually English). */
   | { kind: "thinking"; text: string }
-  /** The coach is about to run a tool. `id` pairs with the matching tool_result. */
-  | { kind: "tool_use"; id: string; name: string; input: unknown }
-  /** That tool finished. */
-  | { kind: "tool_result"; id: string; isError: boolean; reason?: string }
+  /**
+   * The coach is about to run a tool. `id` pairs with the matching tool_result. `parent` is the
+   * SDK's parent_tool_use_id: set when a helper started by that Task/Agent call made this call
+   * (REQ-STUDIO-DELEGATION-ROW).
+   */
+  | { kind: "tool_use"; id: string; name: string; input: unknown; parent?: string }
+  /**
+   * That tool finished. `content` is the raw result, read only for a delegation's final response.
+   * `launched` marks a helper the SDK put in the background (`tool_use_result.status`
+   * async_launched / remote_launched): its content is a placeholder, not the helper's answer.
+   */
+  | { kind: "tool_result"; id: string; isError: boolean; reason?: string; parent?: string; content?: unknown; launched?: true }
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the CLI compacted earlier context (`system/compact_boundary`). */
   | { kind: "compaction" }
 ) & {
@@ -1920,6 +1938,11 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
   const content = (msg["message"] as Record<string, unknown> | undefined)?.["content"];
   if (!Array.isArray(content)) return [];
 
+  // REQ-STUDIO-DELEGATION-ROW — a helper's own events carry the Task/Agent call that started it.
+  const parentId = msg["parent_tool_use_id"];
+  const parent = typeof parentId === "string" && parentId ? { parent: parentId } : {};
+  const toolUseStatus = (msg["tool_use_result"] as { status?: unknown } | undefined)?.status;
+  const launched = toolUseStatus === "async_launched" || toolUseStatus === "remote_launched" ? { launched: true as const } : {};
   const out: SdkActivity[] = [];
   for (const raw of content) {
     if (!raw || typeof raw !== "object") continue;
@@ -1933,7 +1956,7 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
       case "tool_use": {
         const id = typeof b["id"] === "string" ? b["id"] : "";
         const name = typeof b["name"] === "string" ? b["name"] : "";
-        if (id && name) out.push(stamp({ kind: "tool_use", id, name, input: b["input"] }));
+        if (id && name) out.push(stamp({ kind: "tool_use", id, name, input: b["input"], ...parent }));
         break;
       }
       case "tool_result": {
@@ -1945,7 +1968,7 @@ export function extractSdkActivity(msg: Record<string, unknown>): SdkActivity[] 
         // 연속 실패했는데 사유를 알 길이 없어 소스를 읽어 추정해야 했다. 짧게 실어
         // 보낸다(성공 결과는 길고 대부분 노이즈이므로 실패일 때만).
         const reason = isError ? toolResultText(b["content"]) : undefined;
-        out.push(stamp({ kind: "tool_result", id, isError, ...(reason ? { reason } : {}) }));
+        out.push(stamp({ kind: "tool_result", id, isError, ...(reason ? { reason } : {}), ...parent, ...(b["content"] !== undefined ? { content: b["content"] } : {}), ...launched }));
         break;
       }
       default:

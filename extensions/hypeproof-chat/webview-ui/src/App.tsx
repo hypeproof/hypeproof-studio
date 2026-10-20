@@ -710,6 +710,7 @@ export function App() {
           }}
           streaming={!!state.streamId}
           streamingId={state.timeline.openId}
+          runningStreamId={state.streamId}
           error={state.error}
           errorRequestId={state.errorRequestId}
           errorRunbookUrl={state.errorRunbookUrl}
@@ -775,6 +776,7 @@ export function App() {
         onSwitchProject={() => postToHost({ type: "switchProject" })}
         streaming={!!state.streamId}
         streamingId={state.timeline.openId}
+        runningStreamId={state.streamId}
         error={state.error}
         errorRequestId={state.errorRequestId}
         errorRunbookUrl={state.errorRunbookUrl}

@@ -60,6 +60,8 @@ import type {
 import type { LearningStatePayload } from "../../src/learningStateHelpers";
 import { onHostMessage, postToHost } from "./vscode";
 import { hasActivityThisTurn } from "../../src/chatTimeline";
+import { groupDelegations } from "../../src/delegationRow";
+import { DelegationRow } from "./DelegationRow";
 import { CONTEXT_COMPACT_NOTE, CONTEXT_TRIM_NOTE, isCompactionLine, trimMarkerIndex } from "../../src/contextTrim";
 import { composerLabel, copulaParticle, resolveCoachIdentity } from "../../src/coachIdentity";
 import { errorIdTitle, profileAudience, reportButtonTitle, seatAudience, type SeatAudience } from "../../src/seatVocabulary";
@@ -148,6 +150,8 @@ interface Props {
   verdicts?: VerdictMap;
   /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id (null: nothing is left out). */
   trimBoundaryId?: string | null;
+  /** REQ-STUDIO-DELEGATION-ROW — the stream running now; a delegation row is live only for it. */
+  runningStreamId?: string | null;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
   onDismissError: () => void;
   onCancel: () => void;
@@ -1148,6 +1152,8 @@ export function ChatPanel(props: Props) {
   const shown = visibleVersions(messages, versionChoice);
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
   const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
+  // REQ-STUDIO-DELEGATION-ROW — a delegation is one row; its helper's tool lines are drawn inside it.
+  const delegations = groupDelegations(shown.items, streaming ? props.runningStreamId ?? null : null);
   const editableId = props.onEditResend ? editableUserId(messages, {
     streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
@@ -1441,8 +1447,15 @@ export function ChatPanel(props: Props) {
         <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m, i) => <Fragment key={m.id}>
           {i === trimAt && <ContextNote text={CONTEXT_TRIM_NOTE} />}
-          {isCompactionLine(m) ? (
+          {delegations.grouped.has(m.id) ? null : isCompactionLine(m) ? (
             <ContextNote text={CONTEXT_COMPACT_NOTE} />
+          ) : m.role === "tool" && delegations.rows.has(m.id) ? (
+            <DelegationRow
+              view={delegations.rows.get(m.id)!}
+              renderChild={(child) => <ToolLine message={child} />}
+              // The same path as the Stop button: aborting the turn ends its helpers too.
+              onStopAll={() => { restoreQueuedToDraft(); props.onCancel(); }}
+            />
           ) : m.role === "tool" ? (
             <ToolLine key={m.id} message={m} />
           ) : (

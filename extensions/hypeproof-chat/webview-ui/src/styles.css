@@ -1208,6 +1208,16 @@ html, body, #root {
 .hps-tool-icon {
   flex: 0 0 auto;
 }
+/* REQ-STUDIO-DELEGATION-ROW — one collapsed row per helper delegation; its tool lines sit inside. */
+.hps-delegation-wrap { margin: 4px 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hps-delegation { border-left: 2px solid var(--vscode-focusBorder, #4a9); background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08)); border-radius: 4px; font-size: 12px; min-width: 0; }
+.hps-delegation-summary { display: flex; align-items: center; gap: 6px; padding: 4px 10px; cursor: pointer; min-width: 0; }
+.hps-delegation-task { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hps-delegation-status { flex: 0 0 auto; font-weight: 600; }
+.hps-delegation-body { padding: 4px 10px 8px 22px; }
+.hps-delegation-heading { margin: 6px 0 2px; font-weight: 600; }
+.hps-delegation-result { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hps-delegation-stop { align-self: flex-start; padding: 4px 14px; border-radius: 8px; border: 1px solid var(--vscode-button-secondaryBackground, #3a3d41); background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 .hps-tool-label {
   flex: 1 1 auto;
   min-width: 0;
