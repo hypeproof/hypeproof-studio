@@ -5,6 +5,7 @@ import { activityFailure, type FailureEvidence } from "./activityAvailability.ts
 import { activityLocalFile } from "./activityLocalFiles.ts";
 import { confirmOutbound } from "./outboundConsentHost";
 import { contentBytes, observationOutboundItems } from "./outboundConsent";
+import { ATTACHMENT_FAILURE_COPY, attachmentDisplayName, attachmentReadFailure, withAttachmentDeadline } from "./attachmentFailure";
 import { focusDiagnosticLine, type FocusDiagnosticPhase } from "./focusDiagnostics";
 import {localRuntimeConfig,localModelSelection,runLocalCoach} from './localRuntime';
 import type { BrowserToolsForLocal } from './localRuntime';
@@ -2529,9 +2530,42 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * CGP-KNOW-R-015 passes `chosen` (a path relative to the work folder, or absolute) instead of
    * opening the picker; everything else is the same path. Resolves true when a file was queued.
    */
-  private async attachWorkspaceFile(chosen?: string): Promise<boolean> {
+  private failedAttachmentReads = new Map<string, { scope: string; root: string; file: string; kind: 'text' | 'photo' | 'image'; reason: string; running?: boolean }>();
+  private failAttachmentRead(file: string, kind: 'text' | 'photo' | 'image', reason: string, id = randomId()): void {
+    this.failedAttachmentReads ??= new Map();
+    for (const [key, value] of this.failedAttachmentReads) if (value.scope !== this.turnRequestScope() || value.root !== (this.resolveCoachCwd() ?? '')) this.failedAttachmentReads.delete(key);
+    if (this.failedAttachmentReads.size >= 10 && !this.failedAttachmentReads.has(id)) return;
+    this.failedAttachmentReads.set(id, { file, kind, root: this.resolveCoachCwd() ?? '', scope: this.turnRequestScope(), reason });
+    void this.post({ type: 'attachmentFailure', failure: { id, name: attachmentDisplayName(path.basename(file)), reason } });
+  }
+  private async repickAttachment(id: string, name: string): Promise<void> {
+    const root=this.resolveCoachCwd(), scope=this.turnRequestScope();
+    const chosen=await vscode.window.showOpenDialog({canSelectFiles:true,canSelectFolders:false,canSelectMany:false,title:`${attachmentDisplayName(name)} 다시 선택`,openLabel:"이 파일로 다시 시도"});
+    if(root!==this.resolveCoachCwd() || scope!==this.turnRequestScope())return;
+    if(!chosen?.[0]) {void this.post({type:'attachmentFailure',failure:{id,name:attachmentDisplayName(name),reason:'파일을 선택하지 않았어요. 다시 선택하거나 첨부에서 빼 주세요.'}});return;}
+    const file=chosen[0].fsPath, image=!!attachedImageExt(path.basename(file),'');
+    const kind=image ? (this.isImageFilesEnabled() ? 'photo' : 'image') : 'text';
+    this.failAttachmentRead(file,kind,'파일을 다시 읽는 중이에요.',id);
+    await this.retryAttachmentRead(id);
+  }
+  private async retryAttachmentRead(id: string): Promise<void> {
+    const failed = this.failedAttachmentReads.get(id);
+    if (!failed || failed.running || failed.root !== (this.resolveCoachCwd() ?? '') || failed.scope !== this.turnRequestScope()) return;
+    failed.running = true;
+    if (failed.kind === 'text') {
+      const ok = await this.attachWorkspaceFile(failed.file, id);
+      if (ok) { this.failedAttachmentReads.delete(id); void this.post({ type: 'attachmentFailureResolved', id }); }
+    } else {
+      await this.attachNativeImageFile(failed.file, failed.kind === 'photo', id);
+    }
+  }
+  private async attachWorkspaceFile(chosen?: string, retryId?: string): Promise<boolean> {
     const profile = this.cachedProfile ? accessProfile(this.cachedProfile, this.accessState?.view?.choices.find(c => c.id === this.accessState?.selected)) : null;
-    const refuse = (error: string) => { void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error }); return false; };
+    const refuse = (error: string) => {
+      if (retryId && chosen) this.failAttachmentRead(chosen, 'text', error, retryId);
+      else void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment?.preview ?? null, error });
+      return false;
+    };
     if (!fileAttachAllowed(profile, this._instructorMode.isInstructor === true)) {
       await this.postDenialNotice("lesson");
       return refuse(denialCopy({ source: "lesson", feature: "작업 폴더 파일 붙이기" }, "neutral"));
@@ -2541,6 +2575,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-STUDIO-FOLDER-CONSENT — "AI 안 씀" here: nothing from this folder is queued for the model.
     const noAi = folderNoAiRefusal(this.context, this.cachedProfile, this.folderConsentOpts());
     if (noAi) return refuse(noAi);
+    const scope = this.turnRequestScope();
     let file = chosen === undefined ? undefined : path.resolve(root, chosen);
     if (file === undefined) {
       const picked = await vscode.window.showOpenDialog({
@@ -2549,11 +2584,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       });
       if (!picked?.[0]) return false;
       // The folder may have changed while the dialog was open.
-      if (this.resolveCoachCwd() !== root) return refuse(FILE_REFUSAL_COPY.changed);
+      if (this.resolveCoachCwd() !== root || this.turnRequestScope() !== scope) return refuse(FILE_REFUSAL_COPY.changed);
       file = picked[0].fsPath;
     }
     const read = readWorkspaceTextFile(root, file);
-    if (!read.ok) return refuse(read.reason);
+    if (!read.ok) { this.failAttachmentRead(file, 'text', read.reason, retryId); return refuse(read.reason); }
     this.pendingFileAttachment = { preview: read.preview, modelText: read.modelText, root };
     void this.post({ type: "fileAttachment", attachment: read.preview });
     return true;
@@ -3756,105 +3791,24 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  /**
-   * #421 — saves a pasted image as a real file under `<work folder>/assets/`.
-   *
-   * Its relation to the approval gate (the item the issue asked to confirm): this is
-   * **not a write the model requested — it is the host keeping material the
-   * participant just attached themselves**. Two precedents of the same kind already
-   * exist — `saveGameToWorkspace` (index.html) and `saveAgentMdIfPresent` (agent.md).
-   * `resolveActionApproval`, which raises the modal, is the gate for
-   * **model-originated actions** (writeFile/executeShell), and the core of that
-   * policy — "refuse an absolute path outside the workspace" — holds structurally
-   * here: the path is assembled only from `resolveCoachCwd()` + a fixed subfolder +
-   * an extension taken from the mime type, and the filename rides on neither the
-   * participant's nor the model's string (#421 · REQ-C10~C13).
-   *
-   * A failure is not swallowed — if the save did not happen but the coach alone
-   * believes it "is there", we are back to the original symptom. In that case the
-   * note is emptied (the coach treats it as absent, as before) and one line is left
-   * for the participant.
-   */
-  private async savePastedImages(
-    images: string[] | undefined,
-    streamId: string,
-  ): Promise<{ note: string; relPaths: string[] }> {
-    const empty = { note: "", relPaths: [] as string[] };
-    if (!images || images.length === 0) return empty;
-    const cwd = this.resolveCoachCwd();
-    if (!cwd) return empty;
-    if (this.folderWriteBlocked(path.join(cwd, PASTED_IMAGE_DIR), streamId)) return empty;
-
-    const dir = vscode.Uri.joinPath(vscode.Uri.file(cwd), PASTED_IMAGE_DIR);
-    const at = new Date();
-    const relPaths: string[] = [];
-    let failed = 0;
-    try {
-      await vscode.workspace.fs.createDirectory(dir);
-    } catch {
-      this.postToolLog(streamId, {
-        id: randomId(),
-        icon: "⚠️",
-        label: pastedImageFailureLabel(images.length),
-        state: "error",
-      });
-      return empty;
-    }
-
-    for (let i = 0; i < images.length; i++) {
-      const parsed = parsePastedImage(images[i]);
-      if (!parsed) {
-        failed++;
-        continue;
-      }
-      try {
-        // When the same index within the same second already exists, walk the name
-        // up until a free slot is found. Overwriting would silently lose a photo the
-        // participant pasted earlier.
-        let name = pastedImageName(at, i + 1, parsed.ext);
-        for (let dedupe = 1; dedupe <= 20; dedupe++) {
-          try {
-            await vscode.workspace.fs.stat(vscode.Uri.joinPath(dir, name));
-          } catch {
-            break; // stat failed = not there = this name is free
-          }
-          name = pastedImageName(at, i + 1, parsed.ext, dedupe);
-        }
-        await vscode.workspace.fs.writeFile(
-          vscode.Uri.joinPath(dir, name),
-          Buffer.from(parsed.base64, "base64"),
-        );
-        relPaths.push(`${PASTED_IMAGE_DIR}/${name}`);
-      } catch {
-        failed++;
-      }
-    }
-
-    if (failed > 0) {
-      this.postToolLog(streamId, {
-        id: randomId(),
-        icon: "⚠️",
-        label: pastedImageFailureLabel(failed),
-        state: "error",
-      });
-    }
-    if (relPaths.length === 0) return empty;
-    this.postToolLog(streamId, {
-      id: randomId(),
-      icon: "🖼️",
-      label: pastedImageSavedLabel(relPaths),
-      state: "done",
-    });
-    return { note: pastedImageNote(relPaths, cwd), relPaths };
-  }
-
   /** D-028 — this panel's staging folder, created on the first attached photo. */
   private imageStaging: ImageStaging | null = null;
+  private imageStagingScope: string | undefined;
+  private ensureAttachmentStaging(): ImageStaging {
+    const scope = `${this.turnRequestScope()}|${this.resolveCoachCwd() ?? ''}`;
+    if (this.imageStaging && this.imageStagingScope !== scope) { this.imageStaging.dispose(); this.imageStaging=null; }
+    if (!this.imageStaging) {
+      const location=stagingRootFor(os.tmpdir(),process.pid,randomId());
+      this.imageStaging=new ImageStaging(location.rootParent,location.root);this.imageStaging.purgeLeftovers();
+    }
+    this.imageStagingScope=scope;return this.imageStaging;
+  }
+
 
   /**
    * D-028 — keep a photo dropped or pasted into the chat until the message is sent. Only a
    * cohort with `input.image_files` takes photos this way; a refusal goes back to the panel
-   * so the chip disappears with the reason instead of the photo vanishing on send.
+   * so a failed chip remains available for targeted retry.
    */
   private async stageAttachedImage(stageId: string, name: string, mime: string, base64: string): Promise<void> {
     const refusal = this.stageImageBytes(stageId, name, mime, Buffer.from(base64, "base64"));
@@ -3865,15 +3819,12 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   /** Keep the bytes in the staging folder; returns the refusal shown to the participant, or null. */
   private stageImageBytes(stageId: string, name: string, mime: string, bytes: Buffer): string | null {
     if (!this.isImageFilesEnabled()) return "이 수업에서는 사진을 붙일 수 없어요.";
-    const refusal = attachedImageRefusal({ name, mime, bytes: bytes.length, alreadyStaged: this.imageStaging?.count() ?? 0 });
+    this.ensureAttachmentStaging();
+    const refusal = attachedImageRefusal({ name, mime, bytes: bytes.length, alreadyStaged: this.imageStaging?.has(stageId) ? 0 : this.imageStaging?.count() ?? 0 });
     if (refusal) return refusal;
     try {
-      if (!this.imageStaging) {
-        const { rootParent, root } = stagingRootFor(os.tmpdir(), process.pid, randomId());
-        this.imageStaging = new ImageStaging(rootParent, root);
-        this.imageStaging.purgeLeftovers();
-      }
-      this.imageStaging.stage(stageId, safeAttachedImageName(name, attachedImageExt(name, mime) ?? "jpg"), bytes);
+      this.ensureAttachmentStaging();
+      this.imageStaging!.stage(stageId, safeAttachedImageName(name, attachedImageExt(name, mime) ?? "jpg"), bytes);
       return null;
     } catch (err) {
       console.warn("[attached-images] staging failed:", err);
@@ -3904,50 +3855,67 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
    * the chat. Returns false when it was not taken (the reason is shown in the chat).
    */
   async stageImageFromFile(fsPath: string): Promise<boolean> {
-    const name = path.basename(fsPath);
-    const ext = attachedImageExt(name, "") ?? "";
-    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext ? `image/${ext}` : "";
-    let bytes: Buffer;
+    return this.attachNativeImageFile(fsPath, true);
+  }
+  async attachNativeImageFile(fsPath: string, asFile: boolean, retryId?: string): Promise<boolean> {
+    const scope = this.turnRequestScope(), root = this.resolveCoachCwd();
+    const allowed = () => asFile ? this.isImageFilesEnabled() : this.isImagePasteEnabled();
+    if (!allowed()) { if (retryId) this.failAttachmentRead(fsPath, asFile ? 'photo' : 'image', '지금은 이 파일을 붙일 수 없어요. 파일을 빼거나 활동 권한을 확인해 주세요.', retryId); return false; }
+    const name = attachmentDisplayName(path.basename(fsPath));
+    const ext = attachedImageExt(name, '') ?? '';
+    const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext ? `image/${ext}` : '';
     try {
-      bytes = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(fsPath)));
-    } catch {
-      void this.post({ type: "imageStageRefused", stageId: "", reason: "사진 파일을 읽지 못했어요. 다시 끌어다 놓아 주세요." });
+      const bytes = Buffer.from(await withAttachmentDeadline(Promise.resolve(vscode.workspace.fs.readFile(vscode.Uri.file(fsPath)))));
+      if (retryId && !this.failedAttachmentReads.has(retryId)) return false;
+      if (scope !== this.turnRequestScope() || root !== this.resolveCoachCwd()) { if (retryId) this.failedAttachmentReads.delete(retryId); return false; }
+      if (!allowed()) { if (retryId) this.failAttachmentRead(fsPath, asFile ? 'photo' : 'image', '권한이 바뀌었어요. 파일을 빼거나 권한을 확인해 주세요.', retryId); return false; }
+      const stageId = randomId().replace(/[^A-Za-z0-9_-]/g, '');
+      const refusal = asFile ? this.stageImageBytes(stageId, name, mime, bytes)
+        : bytes.length === 0 ? FILE_REFUSAL_COPY.empty : null;
+      if (refusal) { this.failAttachmentRead(fsPath, asFile ? 'photo' : 'image', refusal, retryId); return false; }
+      const dataUrl = `data:${mime};base64,${bytes.toString('base64')}`;
+      if (asFile) void this.post({ type: 'imageStagedByHost', stageId, name, ...(bytes.length <= 8 * 1024 * 1024 ? { dataUrl } : {}) });
+      else this.attachImageDataUrl(dataUrl, name);
+      if (retryId) { this.failedAttachmentReads.delete(retryId); void this.post({ type: 'attachmentFailureResolved', id: retryId }); }
+      return true;
+    } catch (error) {
+      if ((!retryId || this.failedAttachmentReads.has(retryId)) && scope === this.turnRequestScope() && root === this.resolveCoachCwd()) this.failAttachmentRead(fsPath, asFile ? 'photo' : 'image', attachmentReadFailure(error), retryId);
       return false;
     }
-    const stageId = randomId().replace(/[^A-Za-z0-9_-]/g, "");
-    const refusal = this.stageImageBytes(stageId, name, mime, bytes);
-    if (refusal) {
-      void this.post({ type: "imageStageRefused", stageId, reason: refusal });
-      return false;
-    }
-    // The preview needs the bytes in the webview; a very large photo goes without one.
-    const preview = bytes.length <= 8 * 1024 * 1024 && mime && !/hei[cf]$/.test(mime) ? `data:${mime};base64,${bytes.toString("base64")}` : undefined;
-    void this.post({ type: "imageStagedByHost", stageId, name, ...(preview ? { dataUrl: preview } : {}) });
-    return true;
   }
 
-  /** D-028 — move this send's staged photos into images/ and return the note for the model. */
-  private commitAttachedImages(ids: string[] | undefined, streamId: string): string {
-    if (!ids?.length || !this.imageStaging) return "";
-    const cwd = this.resolveCoachCwd();
-    if (!cwd) {
-      for (const id of ids) this.imageStaging.discard(id);
-      this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(ids.length), state: "error" });
-      return "";
+  /** Actual safe writes before optimistic UI send; retries use cached successful destinations. */
+  private prepareAttachments(files: Array<{ id: string; stageId?: string; dataUrl?: string }>): { relPaths: string[]; pastedPaths: string[]; failures: import("./attachmentFailure").AttachmentFailure[]; stageIds: string[] } {
+    const relPaths: string[] = [], pastedPaths: string[] = [], failures: import("./attachmentFailure").AttachmentFailure[] = [], stageIds: string[] = [];
+    if (!Array.isArray(files) || files.length > 14 || files.some(f=>!f || typeof f.id!=="string" || f.id.length>128) || files.filter(f=>f.dataUrl!==undefined).length>4 || files.filter(f=>f.stageId!==undefined).length>10) return { relPaths, pastedPaths, failures: [{id:"limit",name:"첨부 파일",reason:ATTACHMENT_FAILURE_COPY.tooMany,final:true}], stageIds };
+    const root = this.resolveCoachCwd();
+    if (files.length) this.ensureAttachmentStaging();
+    for (const file of files) {
+      const name = file.stageId ? this.imageStaging?.name(file.stageId) ?? "사진" : "붙인 이미지";
+      // As on main (savePastedImages): with no work folder a pasted image has no save target and still
+      // rides inline to the model, so it is not a preparation failure. Staged photo files still fail.
+      if (!root && file.dataUrl !== undefined) continue;
+      try {
+        if (!root || this.connectionChanging || this.taskChanging || (file.dataUrl ? !this.isImagePasteEnabled() : !this.isImageFilesEnabled())) throw new Error("attachment_unavailable");
+        const refusal = this.folderWriteRefusalFor(path.join(root, file.dataUrl ? PASTED_IMAGE_DIR : ATTACHED_IMAGE_DIR));
+        if (refusal) { failures.push({id:file.id,name,reason:refusal}); continue; }
+        let stageId = file.stageId;
+        if (file.dataUrl !== undefined) {
+          if (typeof file.dataUrl !== "string" || file.dataUrl.length > 12 * 1024 * 1024) throw new Error("attachment_too_large");
+          const parsed = parsePastedImage(file.dataUrl);
+          if (!parsed) throw new Error("attachment_format");
+          stageId = `paste-${createHash("sha256").update(file.dataUrl).digest("hex").slice(0,40)}`;
+          const staging=this.ensureAttachmentStaging();
+          if (!staging.has(stageId)) staging.stage(stageId, `붙인-이미지.${parsed.ext}`, Buffer.from(parsed.base64,"base64"));
+        }
+        if (!stageId || !this.imageStaging) throw new Error("missing_stage");
+        const result = this.imageStaging.commit([stageId], root, file.dataUrl ? PASTED_IMAGE_DIR : ATTACHED_IMAGE_DIR);
+        stageIds.push(stageId);
+        if (result.failed) failures.push({id:file.id,name,reason:result.failures[0]?.reason ?? "사진을 저장하지 못했어요. 다시 시도해 주세요."});
+        else (file.dataUrl ? pastedPaths : relPaths).push(...result.relPaths);
+      } catch (error) { failures.push({id:file.id,name,reason:attachmentReadFailure(error)}); }
     }
-    if (this.folderWriteBlocked(path.join(cwd, ATTACHED_IMAGE_DIR), streamId)) {
-      for (const id of ids) this.imageStaging.discard(id);
-      return "";
-    }
-    const { relPaths, failed } = this.imageStaging.commit(ids, cwd);
-    if (failed > 0) this.postToolLog(streamId, { id: randomId(), icon: "⚠️", label: attachedImagesFailedLabel(failed), state: "error" });
-    if (relPaths.length === 0) return "";
-    this.postToolLog(streamId, { id: randomId(), icon: "🖼️", label: attachedImagesSavedLabel(relPaths), state: "done" });
-    const note = attachedImagesNote(relPaths);
-    // The sent bubble gets the same lines, so the history the panel sends back next turn
-    // still names the files.
-    void this.post({ type: "attachedImagesSaved", note });
-    return note;
+    return { relPaths, pastedPaths, failures, stageIds };
   }
 
   /** #278 Phase 1 — does this cohort's profile request the native live-server preview? */
@@ -5614,6 +5582,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (this.pendingPageAttachment) void this.post({ type: "pageAttachment", attachment: this.pendingPageAttachment });
         // CGP-CHAT-R-011 — and the work-folder file that is queued to go.
         if (this.pendingFileAttachment) void this.post({ type: "fileAttachment", attachment: this.pendingFileAttachment.preview });
+        for (const [id, failed] of this.failedAttachmentReads ?? []) {
+          if (failed.scope === this.turnRequestScope() && failed.root === (this.resolveCoachCwd() ?? '')) void this.post({ type: 'attachmentFailure', failure: { id, name: attachmentDisplayName(path.basename(failed.file)), reason: failed.reason } });
+          else this.failedAttachmentReads.delete(id);
+        }
         // #320 — AI disclosure at session start (REQ-C14). First "ready" of
         // a session shows the notice; hide/show remounts within the same
         // session return null here and stay silent. A history clear resets
@@ -5722,6 +5694,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (this.turnRestoreBusy) { await this.refuseSendWhileRestoring(msg.text, msg.images, requestedMode); return; }
         await this.handleSend(msg.text, msg.history, msg.images, promptRefs(msg.imports), msg.attachments, requestedMode, msg.userMessageId, undefined, msg.editOf, true); // CGP-CHAT-R-011 — a fresh send may carry the attached file
         return;
+      case "prepareAttachments": {
+        const result = this.prepareAttachments(msg.files);
+        await this.post({type:"attachmentsPrepared",requestId:msg.requestId,failures:result.failures}); return;
+      }
       case "stageImage":
         await this.stageAttachedImage(msg.stageId, msg.name, msg.mime, msg.base64);
         return;
@@ -5810,6 +5786,14 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "saveCoach":
         await this.saveCoachFromWebview(msg.name, msg.personality);
+        return;
+      case "repickAttachment":
+        if(typeof msg.id==='string' && msg.id.length<=128 && typeof msg.name==='string') await this.repickAttachment(msg.id,msg.name); return;
+      case "retryAttachment":
+        if (typeof msg.id === "string") await this.retryAttachmentRead(msg.id);
+        return;
+      case "discardAttachmentFailure":
+        this.failedAttachmentReads.delete(msg.id);
         return;
       case "attachWorkspaceFile":
         await this.attachWorkspaceFile();
@@ -6058,6 +6042,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // REQ-STUDIO-TASK-RUN-STATE — a turn whose stream closed normally but whose result failed (#751 U4) ends as 오류, not 끝남.
     let completionFailed = false;
     const deferCompletion = (streamId: string, signal?: AbortSignal, failed = false) => { completedStreamId = streamId; completionSignal = signal; completionFailed = failed; };
+    const attachmentNames = (attachments ?? []).map(id=>({id,name:this.imageStaging?.name(id) ?? "사진"}));
     let preflightComplete=false;
     try {
     // CGP-CHAT-R-002 — an error retry of an edited prompt (same id) stays a version of its group.
@@ -6079,6 +6064,11 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // switch leaves the turn exactly as it would have been; only "switched but the new profile could not be verified"
     // stops it, and then the learner's text and attachments go straight back into the composer.
     if (this.opsObserver?.switchPendingSetting) await this.lessonBindingPreflight();
+    const preparedAttachments = this.prepareAttachments([
+      ...(attachments ?? []).map(id => ({id,stageId:id})),
+      ...(images ?? []).map((dataUrl,index) => ({id:`pasted-${index}`,dataUrl})),
+    ]);
+    if (preparedAttachments.failures.length) throw new ActivityConnectionError(preparedAttachments.failures[0].reason);
     preflightComplete=true;
     // REQ-STUDIO-FOLDER-CONSENT — decided before anything in this turn calls the model (team brain included).
     if (this.cachedProfile) await folderConsentProfile(this.context, this.cachedProfile, this.folderConsentOpts());
@@ -6355,11 +6345,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     // Only `images` is saved — `pageImage` (#278 "이 페이지를 코치에게") is a browser
     // capture, not material the participant attached in order to keep it, and saving
     // it would fill the work folder with files the participant never asked for.
-    const savedImages = await this.savePastedImages(images, streamId);
+    const savedImages = {note:preparedAttachments.pastedPaths.length ? pastedImageNote(preparedAttachments.pastedPaths, this.resolveCoachCwd()!) : "",relPaths:preparedAttachments.pastedPaths};
     if (savedImages.note) userTextForModel = `${userTextForModel}\n\n${savedImages.note}`;
     // D-028 — photos attached as files move into images/ now, and the message carries their
     // paths. The same lines go into the saved history, so later turns can still name them.
-    const attachedNote = this.commitAttachedImages(attachments, streamId);
+    const attachedNote = attachedImagesNote(preparedAttachments.relPaths);
+    for (const id of preparedAttachments.stageIds) this.imageStaging?.discard(id);
+    if (attachedNote) void this.post({ type:"attachedImagesSaved",note:attachedNote });
     if (attachedNote) userTextForModel = `${userTextForModel}\n\n${attachedNote}`;
     this.recordLearnerUploads(savedImages.relPaths ?? [], attachedNote);
     const historyText = [text, savedImages.note, attachedNote].filter(Boolean).join("\n\n");
@@ -7329,7 +7321,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const activityUnavailable: import("./activityAvailability").ActivityUnavailable | undefined = error instanceof ProxyTransportError ? activityFailure(error.evidence ?? {},profileAudience(this.cachedProfile)) ?? {cause:"unknown",audience:profileAudience(this.cachedProfile)} : undefined;
       // A pre-stream storage/profile failure still owns a pending UI request.
       // Restore its captured input before propagating an unexpected host error.
-      await this.post({type:"inputRejected",text,images,toolMode:mode});
+      await this.post({type:"inputRejected",text,images,toolMode:mode,...(attachmentNames.length ? {photos:attachmentNames} : {})});
       await this.post({type:"streamError",streamId:responseStreamId ?? "activity",activityUnavailable,error:error instanceof ActivityConnectionError || error instanceof ProxyTransportError || error instanceof LessonBindingPreflightError || error instanceof TurnToolModeError ? error.message : "활동 연결 또는 작업 폴더를 확인하지 못했습니다. 연결 상태를 확인한 뒤 다시 보내 주세요."});
       if (preflightComplete && !(error instanceof TurnToolModeError)) throw error;
     } finally {

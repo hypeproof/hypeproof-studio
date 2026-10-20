@@ -643,6 +643,7 @@
     "test:turn-review": "node scripts/run-tsx-tests.mjs turn-review",
     "test:artifact-provenance": "node scripts/run-tsx-tests.mjs artifact-provenance",
     "test:ask-about-file": "node scripts/run-tsx-tests.mjs ask-about-file",
+    "test:attachment-failure-ui": "node scripts/run-tsx-tests.mjs attachment-failure-ui",
     "test:delegation-row": "node scripts/run-tsx-tests.mjs delegation-row",
     "test:reference-transport": "node --experimental-strip-types --test test/reference-transport.test.mjs",
     "test:trial-end-notice": "node --test test/sdk-trial-end-notice.test.mjs",
