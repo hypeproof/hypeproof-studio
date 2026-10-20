@@ -24,19 +24,35 @@ const ok = (name) => { passed++; console.log(`✓ ${name}`); };
 
 const personal = { activity_kind: "personal", welcome: { greeting_md: "안녕" } };
 const files = { ...personal, sdk_tools: { read: true, write: true, shell: true } };
-const seat = (profile, extra = {}) => ({ scope: "tok|a1", profile, runtime: "agent-sdk", ...extra });
+const SDK = { settingRuntime: "agent-sdk", fallback: false };
+const seat = (profile, extra = {}) => ({ scope: "tok|a1", profile, inputs: SDK, ...extra });
+// A pass whose access choice allows only reading (accessClient.ts AccessChoiceView).
+const readOnlyPass = { id: "pass-1", label: "이용권", mode: "included", source_kind: "pass", active: true, available: true, state: "active", ends_at: 0, can_request: false,
+  allowed: { models: [], efforts: [], features: ["read"], runtimes: [] }, resources: [] };
 
 // ── 1. Served keys and diff ──
 {
-  assert.deepEqual(CC.servedCapabilityKeys(files, "agent-sdk"), ["read", "write", "shell"]);
-  assert.deepEqual(CC.servedCapabilityKeys(files, "proxy"), [], "file and command grants do not count on proxy (REQ-M47)");
-  assert.deepEqual(CC.servedCapabilityKeys(null, "agent-sdk"), []);
+  const PROXY = { settingRuntime: "proxy", fallback: false };
+  assert.deepEqual(CC.seatCapabilityKeys(files, SDK), ["read", "write", "shell"]);
+  assert.deepEqual(CC.seatCapabilityKeys(files, PROXY), [], "file and command grants do not count on proxy (REQ-M47)");
+  assert.deepEqual(CC.seatCapabilityKeys(files, { ...SDK, fallback: true }), [], "after a fallback the turns run on proxy");
+  assert.deepEqual(CC.seatCapabilityKeys({ ...files, tools: { web_search: true } }, { ...SDK, choice: readOnlyPass }), ["read"], "the access choice applies (and always strips web_search)");
+  assert.deepEqual(CC.seatCapabilityKeys({ ...files, coach_runtime: "agent-sdk" }, PROXY), ["read", "write", "shell"], "a profile that asks for agent-sdk resolves to it");
+  assert.deepEqual(CC.seatCapabilityKeys(null, SDK), []);
   const narrowed = narrowForFolder(files, "read");
   assert.equal(narrowed.sdk_tools.write, false, "fixture: the folder choice really turned write off");
-  assert.deepEqual(CC.servedCapabilityKeys(narrowed, "agent-sdk"), ["read", "write", "shell"], "folder narrowing is put back");
-  assert.deepEqual(CC.servedCapabilityKeys({ ...personal, sdk_tools: { read: true } }, "agent-sdk"), ["read"], "negative control: an un-narrowed off grant stays off");
+  assert.deepEqual(CC.seatCapabilityKeys(narrowed, SDK), ["read", "write", "shell"], "folder narrowing is put back");
+  assert.deepEqual(CC.seatCapabilityKeys({ ...personal, sdk_tools: { read: true } }, SDK), ["read"], "negative control: an un-narrowed off grant stays off");
   assert.deepEqual(CC.diffCapabilities(["read", "shell"], ["web_search", "read", "write"]), { added: ["write", "web_search"], removed: ["shell"] });
-  ok("served keys follow aiCapabilities and undo only the folder narrowing; diff in REQ-M38 order");
+  // The REQ-M47 card and the change card share one evaluation: it equals the card's former formula.
+  const { aiCapabilities } = await import("../src/aiCapabilities.ts");
+  const { accessProfile } = await import("../src/accessClient.ts");
+  const grantsAll = { ...personal, sdk_tools: { read: true, write: true, shell: true, subagents: true, browser: true }, tools: { web_search: true }, browser_control: { enabled: true } };
+  for (const choice of [undefined, readOnlyPass]) for (const settingRuntime of ["proxy", "agent-sdk"]) for (const fallback of [false, true]) {
+    const runtime = fallback ? "proxy" : settingRuntime;
+    assert.deepEqual(CC.seatAiCapabilities(grantsAll, { choice, settingRuntime, fallback }), aiCapabilities(accessProfile(grantsAll, choice), runtime), JSON.stringify({ choice: !!choice, settingRuntime, fallback }));
+  }
+  ok("seat keys = the REQ-M47 card's evaluation (access choice, runtime, fallback), folder narrowing undone; diff in REQ-M38 order");
 }
 
 // ── 2. Seats: the stricter quiet rule (#2072 / #1890) ──
@@ -53,8 +69,8 @@ const seat = (profile, extra = {}) => ({ scope: "tok|a1", profile, runtime: "age
   assert.equal(t.observe(seat(files)), null, "first load: no card");
   assert.equal(t.observe(seat(files)), null, "same profile again: no card");
 
-  // Invisible fields: greeting, model list, publishing, a proxy-only browser switch under agent-sdk.
-  const invisible = { ...files, welcome: { greeting_md: "다른 인사" }, model_selection: { models: ["x"] }, publishing: { enabled: true }, browser_control: { enabled: true } };
+  // Invisible fields: greeting, prompt, publishing, a proxy-only browser switch under agent-sdk.
+  const invisible = { ...files, welcome: { greeting_md: "다른 인사" }, prompt: "다른 프롬프트", publishing: { enabled: true }, browser_control: { enabled: true } };
   assert.equal(t.observe(seat(invisible)), null, "invisible-field change: no card");
 
   // Added and removed.
@@ -105,7 +121,25 @@ const seat = (profile, extra = {}) => ({ scope: "tok|a1", profile, runtime: "age
   u.observe(seat(files));
   const pending = u.observe(seat({ ...files, sdk_tools: { read: true } }));
   assert.equal(u.observe({ ...seat(null) })?.id, pending.id, "an unresolved refresh keeps the open card and changes nothing");
-  ok("edges: undo clears, classroom and instructor quiet, new scope is a first load, local quiet, unresolved keeps state");
+  // F1 — the learner's access choice masks a profile change: no card for what the card does not show.
+  const p1 = new CC.CapabilityChangeTracker();
+  const pass = { scope: "tok|a1", inputs: { ...SDK, choice: readOnlyPass } };
+  p1.observe({ ...pass, profile: { ...personal, sdk_tools: { read: true } } });
+  assert.equal(p1.observe({ ...pass, profile: { ...personal, sdk_tools: { read: true, write: true }, tools: { web_search: true } } }), null, "access choice ['read'] + profile adds write and web_search: no card");
+  assert.equal(p1.observe({ ...pass, profile: { ...personal, sdk_tools: {} } })?.removed.join(), L.read, "negative control: removing the one allowed key does show");
+  // F1 — after an agent-sdk -> proxy fallback, a profile adding write cannot be used: no card.
+  const f1 = new CC.CapabilityChangeTracker();
+  const fb = { scope: "tok|a1", inputs: { ...SDK, fallback: true } };
+  f1.observe({ ...fb, profile: { ...personal, sdk_tools: { read: true } } });
+  assert.equal(f1.observe({ ...fb, profile: { ...personal, sdk_tools: { read: true, write: true } } }), null, "fallback + profile adds write: no card");
+  assert.ok(f1.observe({ ...fb, profile: { ...personal, sdk_tools: { read: true, write: true }, tools: { web_search: true } } }), "negative control: web_search works on proxy and does show");
+  // Choice, setting or fallback changes alone never make a card (F2 and the inverse of F1).
+  const f2 = new CC.CapabilityChangeTracker();
+  f2.observe(seat(files));
+  assert.equal(f2.observe(seat(files, { inputs: { settingRuntime: "proxy", fallback: false } })), null, "coachRuntime setting flip alone: no card");
+  assert.equal(f2.observe(seat(files, { inputs: { ...SDK, fallback: true } })), null, "fallback alone: no card");
+  assert.equal(f2.observe(seat(files, { inputs: { ...SDK, choice: readOnlyPass } })), null, "access choice alone: no card");
+  ok("edges: access choice, fallback and setting mask or never fire; undo clears, classroom and instructor quiet, new scope is a first load, local quiet, unresolved keeps state");
 }
 
 // ── 5. Wiring ──
@@ -119,16 +153,30 @@ const seat = (profile, extra = {}) => ({ scope: "tok|a1", profile, runtime: "age
   const line = src.slice(observe, src.indexOf("\n", observe));
   assert.match(line, /profile,/, "the served profile (not the access- or folder-narrowed one)");
   assert.doesNotMatch(line, /toolProfile|folderConsentProfile/, "never the narrowed profile");
-  assert.match(line, /runtime: toolRuntime/);
+  assert.match(line, /inputs: seatInputs/, "evaluated under the card's own inputs");
   assert.match(line, /instructor: isInstructor/);
   assert.match(line, /local: !!local/);
   assert.equal(src.split("(this.capChanges ??= new CapabilityChangeTracker()).observe(").length - 1, 1, "one observation site");
   assert.match(src, /capabilityChange && !isInstructor \? \{ capabilityChange \} : \{\}/, "config carries the card");
+  // F1 — the REQ-M47 card is drawn from the same evaluation and the same inputs.
+  assert.match(src, /\{ aiCapabilities: seatAiCapabilities\(profile, seatInputs\) \}/, "REQ-M47 card uses seatAiCapabilities");
+  assert.doesNotMatch(src, /aiCapabilities\(toolProfile/, "no second evaluation of the card");
+  const inputs = src.slice(src.indexOf("const seatInputs: SeatInputs = {", post));
+  const inputsLine = inputs.slice(0, inputs.indexOf("\n"));
+  assert.match(inputsLine, /choice: this\.accessState\?\.view\?\.choices\.find\(choice => choice\.id === this\.accessState\?\.selected\)/);
+  assert.match(inputsLine, /settingRuntime: cfg\.get<'proxy' \| 'agent-sdk'>\('coachRuntime', 'proxy'\)/);
+  assert.match(inputsLine, /fallback: !!this\.fallbackNoticeShown/);
+  // F3 — forced re-reads republish the config before the next model call.
+  assert.match(src, /async refreshProfileAndConfig\(\): Promise<ResolvedProfile \| null> \{\s*const profile = await this\.ensureProfile\(true\);\s*\/\/[^\n]*\n\s*await this\.postConfig\(\)\.catch\([^\n]*\);\s*return profile;/, "refreshProfileAndConfig posts the config (a failed republish does not stop the caller)");
+  assert.match(src, /const profile = await this\.refreshProfileAndConfig\(\);\s*const token = await this\.context\.secrets\.get\(TOKEN_KEY\);\s*const cwd = /, "image edit refresh goes through postConfig");
+  const ext = fs.readFileSync(path.join(extRoot, "src/extension.ts"), "utf8");
+  assert.match(ext, /refreshProfile: async \(\) => !!\(await provider\.refreshProfileAndConfig\(\)\),/, "ops refreshProfile goes through postConfig");
+  assert.doesNotMatch(ext, /refreshProfile: async \(\) => !!\(await provider\.ensureProfile\(true\)\)/);
   assert.match(src, /case "dismissCapabilityChange":\s*\n\s*\(this\.capChanges \?\?= new CapabilityChangeTracker\(\)\)\.dismiss\(msg\.id\);/, "dismiss reaches the tracker");
   const proto = fs.readFileSync(path.join(extRoot, "src/protocol.ts"), "utf8");
   assert.match(proto, /capabilityChange\?: import\(['"]\.\/aiCapabilities['"]\)\.CapabilityChange;/);
   assert.match(proto, /\{ type: "dismissCapabilityChange"; id: string \}/);
-  ok("wiring: one observation in postConfig with the served profile, card in config, dismiss handled");
+  ok("wiring: one observation in postConfig under the REQ-M47 card's inputs, one evaluation for both cards, forced re-reads post the config, dismiss handled");
 }
 
 console.log(`\ncapability-change: ${passed} checks passed`);
