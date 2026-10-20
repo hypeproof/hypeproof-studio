@@ -6,7 +6,7 @@ import type * as vscode from 'vscode';
 import type { AccountPassBinding } from './accountSession';
 import type { ResolvedProfile } from './protocol';
 import type { ActivitySummary } from './startPageProtocol';
-import { isFreeSeat } from './seatVocabulary';
+import { FREE_FOLDER_COUNT, isFreeSeat } from './seatVocabulary';
 export type { ActivitySummary } from './startPageProtocol';
 
 export class ActivityConnectionError extends Error {}
@@ -55,11 +55,10 @@ function isHome(p: Pick<ResolvedProfile, 'workspace_root'>, root: string): boole
   try { return canonicalLoose(home) === canonicalLoose(root); } catch { return false; }
 }
 /** The free seat's home and its numbered siblings (`~/HypeProofTrial-2`, `-3`, …): where a free seat may work. */
-const FREE_SIBLINGS = 20;
 export function freeFolderCandidates(p: Pick<ResolvedProfile, 'workspace_root'>): string[] {
   const home = expandHome(p);
   if (!home) return [];
-  return [home, ...Array.from({ length: FREE_SIBLINGS - 1 }, (_, i) => `${home}-${i + 2}`)];
+  return [home, ...Array.from({ length: FREE_FOLDER_COUNT - 1 }, (_, i) => `${home}-${i + 2}`)];
 }
 function isFreeFolder(p: Pick<ResolvedProfile, 'workspace_root'>, root: string): boolean {
   let r: string;

@@ -28,6 +28,7 @@ import {
   type FolderConsentLevel,
 } from "./folderConsent.ts";
 import type { ResolvedProfile } from "./protocol";
+import { isFreeSeat } from "./seatVocabulary";
 import { TurnToolModeError } from "./turnTools";
 
 /** A refused turn. Extends TurnToolModeError so the send path keeps the input and shows the copy. */
@@ -87,7 +88,7 @@ function decide(context: vscode.ExtensionContext, profile: ResolvedProfile | nul
   const scope = applies && profile ? scopeFor(context, profile, opts.servedRoot, target) : undefined;
   // The store is read only for a seat and folder that can ask.
   if (!scope) return { scope, decision: { kind: "skip" } as const };
-  return { scope, decision: folderConsentDecision({ applies, activityId: scope.activityId, folder: scope.folder, home: scope.home, store: context.globalState.get(FOLDER_CONSENT_KEY) }) };
+  return { scope, decision: folderConsentDecision({ applies, freeSeat: isFreeSeat(profile), activityId: scope.activityId, folder: scope.folder, home: scope.home, store: context.globalState.get(FOLDER_CONSENT_KEY) }) };
 }
 
 /**
@@ -168,7 +169,7 @@ export async function changeFolderConsent(
     void vscode.window.showInformationMessage("지금 열린 폴더에는 따로 정할 AI 권한이 없어요. 개인 활동에서 다른 폴더를 열었을 때 고를 수 있어요.");
     return undefined;
   }
-  const decision = folderConsentDecision({ applies: true, activityId: scope.activityId, folder: scope.folder, home: scope.home, store: undefined });
+  const decision = folderConsentDecision({ applies: true, freeSeat: isFreeSeat(profile), activityId: scope.activityId, folder: scope.folder, home: scope.home, store: undefined });
   if (decision.kind === "skip") {
     void vscode.window.showInformationMessage("이 폴더는 이 활동의 작업 폴더라 AI가 활동 설정대로 일해요.");
     return undefined;

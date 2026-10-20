@@ -31,7 +31,8 @@
 # Options (after `bash -s --` when piped):
 #   --layout app|kit   override the default layout
 #   --system           app layout in /Applications
-#   --no-seed          skip the SDK seed (Studio offers to fetch it on first use, REQ-M46)
+#   --no-seed          skip the SDK seed (the coach cannot start until it is seeded; the
+#                      in-app download offer, REQ-M46, is off by default)
 #   --open             start Studio when done
 #   --from-command     run by the Test Kit's INSTALL-*.command: never touch quarantine
 #                      attributes, pause before closing on error
@@ -78,6 +79,9 @@ fail() {
   exit 1
 }
 
+# The options as given, so a failed seed can print the exact command that repeats this install.
+RETRY_ARGS=""
+for a in "$@"; do RETRY_ARGS="$RETRY_ARGS $a"; done
 while [ $# -gt 0 ]; do
   case "$1" in
     --layout) LAYOUT="${2:-}"; shift 2 || fail "--layout 뒤에 app 또는 kit 를 적어 주세요." ;;
@@ -231,7 +235,16 @@ if [ "$SEED" = 1 ] && [ -n "$HPS_SEED_NAME" ]; then
     seed_ok=1
   fi
   if [ "$seed_ok" = 0 ]; then
-    warn "AI 코치 실행 파일을 준비하지 못했습니다. 앱은 설치됐고, 처음 대화할 때 Studio가 받을지 묻습니다. 다시 시도하려면 같은 명령을 한 번 더 실행하세요."
+    # Studio does not fetch the file by itself: its offer (REQ-M46) is off by default. Name the
+    # one recovery that always works, the same install again.
+    if [ "$FROM_COMMAND" = 1 ]; then
+      retry="받은 폴더의 INSTALL-$HPS_VERSION.command 를 한 번 더 여세요."
+    elif [ -n "$RETRY_ARGS" ]; then
+      retry="인터넷 연결을 확인한 뒤 이 명령을 한 번 더 실행하세요: $ONE_LINER -s --$RETRY_ARGS"
+    else
+      retry="인터넷 연결을 확인한 뒤 이 명령을 한 번 더 실행하세요: $ONE_LINER"
+    fi
+    warn "AI 코치 실행 파일을 준비하지 못했습니다. 앱은 설치됐지만, 이 파일이 없으면 AI 코치가 대답하지 못할 수 있습니다. $retry"
   fi
 fi
 

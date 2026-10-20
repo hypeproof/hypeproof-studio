@@ -27,8 +27,14 @@ gh api repos/hypeproof/hypeproof-studio/contents/scripts/install.sh -H "Accept: 
 
 3. 다 끝나면 응용 프로그램에서 HypeProof Studio를 여세요.
 
-> **첫 실행 경고**가 뜨면:
-> 시스템 설정 → 개인정보 보호 및 보안 → "확인 없이 열기"를 누르세요. (서명 인증서 작업이 아직 진행 중입니다.)
+> **앱이 열리지 않거나 macOS 보안 경고가 뜨면:**
+> HypeProof Studio는 아직 Apple 공증(notarization)을 받지 않았습니다. 그래서 브라우저로 받은 앱은 macOS가 막을 수 있습니다.
+> 보안 설정을 바꾸거나 우회하지 마세요. 대신 터미널에서 설치 명령으로 다시 설치합니다. 터미널(curl)로 받은 앱은 이 경고 없이 열립니다.
+>
+> - 특정 버전: 릴리스 페이지의 한 줄 명령 `curl -fsSL https://github.com/hypeproof/hypeproof-studio/releases/download/<태그>/install-mac.sh | bash`
+> - 참여 코드가 있거나 처음 설치하는 분: `curl -fsSL https://hypeproof-ai.xyz/install/studio/install-mac.sh -o /tmp/hps-install.sh && bash /tmp/hps-install.sh` (https://hypeproof-ai.xyz/studio/install 와 같은 명령)
+>
+> 그래도 열리지 않으면 앱을 지우지 말고 https://github.com/hypeproof/hypeproof-studio/issues 에 알려 주세요.
 
 ---
 
