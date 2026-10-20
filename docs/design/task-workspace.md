@@ -139,7 +139,7 @@ Keep the host-theme palette: the personal workspace reads the `--tw-*` tokens in
 panel #17191d, divider #34383e, muted #a4aab3, focus #799ed7). It does not use the
 forest `--hp-*` lesson tokens. #18231C is only `--hp-ink-on-accent` (text on the lime
 CTA), never a panel. Palette roles are reconciled in
-[studio-learning-experience.md](studio-learning-experience.md) (Palette families, DEC-27).
+[studio-learning-experience.md](studio-learning-experience.md) (§디자인 시스템 → 팔레트 계열 (DEC-27)).
 Body typography is system sans, 16px/1.625; controls 13–14px, metadata 11px.
 Assistant artwork is 18px and action glyphs 16px inside transparent 44px targets.
 Starter suggestions are compact and wrap; settings never reserve transcript height.

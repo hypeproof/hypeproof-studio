@@ -183,9 +183,10 @@ IDs `REQ-KNOW-NN` match the inventory row number.
 
 ## 3. Design requirements (same rows)
 
-Base tokens and rules reused from Studio: personal palette (CC-R1) canvas #151D19, panel
-#18231C, ink #F2F4E8, secondary #ACB9A5, border #35483A, focus/action #D5F279 via VS Code
-variables; body 16px/1.625 system sans; controls 13–14px; metadata 11px; 44px targets;
+Base tokens and rules reused from Studio (corrected 2026-10-20, DEC-27): the personal workspace
+follows the VS Code theme through `--tw-*` (fallbacks canvas #202226, panel #17191d, line #34383e,
+muted #a4aab3, accent #799ed7); HP lesson surfaces use tokens.css (bg #151D19, panel #202C24,
+accent #D5F279; #18231C is only ink on accent); body 16px/1.625 system sans; controls 13–14px; metadata 11px; 44px targets;
 740px reading column; motion 140–180ms, off under reduced-motion (`design/task-workspace.md`).
 Chalk: DES-01–11 (`requirements/classroom-design.md`).
 
