@@ -145,7 +145,7 @@ await t("wiring lock: every GitHub clone, download, pull and sync into a folder 
   }
 });
 
-await t("N5. an instructor turn leaves the folder unconfirmed (the instructor coach's changes never read 내가 고침)", async () => {
+await t("N5. an instructor turn leaves the folder unconfirmed (the instructor coach's changes are not confirmed)", async () => {
   const { loadLedger, provenanceLedgerFile } = await import("../src/artifactProvenance.ts");
   const store = fs.mkdtempSync(path.join(os.tmpdir(), "hps-provenance-store-"));
   const p = Object.create(ChatPanelProvider.prototype);
@@ -169,34 +169,16 @@ await t("wiring lock: the list scan is guarded by the generation", () => {
   if (gen < 0 || scan < gen || !src.includes("view = await recorder.view(root, scan && idle() ? scan : undefined, generation);")) throw new Error("the list scan is not guarded by the generation");
 });
 
-await t("a real editor save through VS Code's document events is recorded as the learner's (watchLearnerSaves)", async () => {
-  captureWrites(); // an earlier case installed a real recorder's sink
-  const listeners = {};
-  const on = (name) => (fn) => { listeners[name] = fn; return { dispose: () => {} }; };
-  Object.assign(vscode.workspace, { onDidChangeTextDocument: on("change"), onWillSaveTextDocument: on("willSave"), onDidSaveTextDocument: on("save"), onDidCloseTextDocument: on("close") });
-  const subscriptions = [];
-  h.watchLearnerSaves({ subscriptions });
-  eq(subscriptions.length, 4, "four subscriptions, disposed with the extension");
-  const doc = (rel, text, isDirty) => ({ uri: { fsPath: path.join(root, rel), scheme: "file" }, isDirty, getText: () => text });
-  fs.writeFileSync(path.join(root, "notes.md"), "typed by the learner");
-  listeners.change({ document: doc("notes.md", "typed by the learner", true), contentChanges: [{ text: "x" }] });
-  listeners.willSave({ document: doc("notes.md", "typed by the learner", true) });
-  listeners.save(doc("notes.md", "typed by the learner", false));
-  eq(writes.map((w) => [w.rel, w.actor, w.data]), [["notes.md", "learner_save", "typed by the learner"]], "save recorded");
-  writes = [];
-  // negative controls: the coach's write reloaded into a clean editor, then saved; a file outside the folder
-  listeners.change({ document: doc("index.html", "AI bytes", false), contentChanges: [{ text: "AI bytes" }] });
-  listeners.willSave({ document: doc("index.html", "AI bytes", false) });
-  listeners.save(doc("index.html", "AI bytes", false));
-  // typed then undone (clean again), then a forced Cmd+S: not the learner's
-  listeners.change({ document: doc("index.html", "AI bytesx", true), contentChanges: [{ text: "x" }] });
-  listeners.change({ document: doc("index.html", "AI bytes", false), contentChanges: [{ text: "" }] });
-  listeners.willSave({ document: doc("index.html", "AI bytes", false) });
-  listeners.save(doc("index.html", "AI bytes", false));
-  listeners.change({ document: { uri: { fsPath: path.join(os.tmpdir(), "elsewhere.md"), scheme: "file" }, isDirty: true, getText: () => "x" }, contentChanges: [{ text: "x" }] });
-  listeners.save({ uri: { fsPath: path.join(os.tmpdir(), "elsewhere.md"), scheme: "file" }, isDirty: false, getText: () => "x" });
-  eq(writes, [], "no learner record without a learner edit in the folder");
-  for (const k of ["onDidChangeTextDocument", "onWillSaveTextDocument", "onDidSaveTextDocument", "onDidCloseTextDocument"]) delete vscode.workspace[k];
+await t("the provider subscribes to no editor save or change events (no learner-change source in this slice)", async () => {
+  const subscribed = [];
+  const spy = (name) => () => { subscribed.push(name); return { dispose: () => {} }; };
+  Object.assign(vscode.workspace, { onDidChangeTextDocument: spy("change"), onWillSaveTextDocument: spy("willSave"), onDidSaveTextDocument: spy("save") });
+  const p = Object.create(ChatPanelProvider.prototype);
+  Object.assign(p, { context: { globalStorageUri: { fsPath: fs.mkdtempSync(path.join(os.tmpdir(), "hps-provenance-store-")) }, subscriptions: [] }, provenance: null });
+  p.provenanceRecorder();
+  eq(typeof p.watchLearnerSaves, "undefined", "no watcher method");
+  eq(subscribed, [], "no subscriptions");
+  for (const k of ["onDidChangeTextDocument", "onWillSaveTextDocument", "onDidSaveTextDocument"]) delete vscode.workspace[k];
 });
 
 setHostWriteSink(null);

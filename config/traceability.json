@@ -6818,6 +6818,12 @@
           "path": "extensions/hypeproof-chat/test/artifact-provenance-host.smoke.mjs"
         },
         {
+          "path": "extensions/hypeproof-chat/test/fixtures/artifact-provenance/vscode-events-1.jsonl"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/artifact-provenance/vscode-events-2.jsonl"
+        },
+        {
           "path": "extensions/hypeproof-chat/test/artifact-provenance.test.tsx"
         }
       ]

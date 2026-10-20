@@ -174,7 +174,7 @@ import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
 import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
-import { ArtifactProvenanceRecorder, LearnerEditTracker, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
+import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import type { StudentGoalView } from "./studentGoal";
 import { CdpSession } from "./cdpSession";
@@ -2055,10 +2055,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     /** #580 — the local session-log spool. Optional: tests and older callers run without recording. */
     private readonly spool?: SessionSpool,
   ) {
-    // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen, and
-    // take 내가 고침 only from the learner's own editor saves (positive evidence).
+    // REQ-STUDIO-ARTIFACT-PROVENANCE — install the host-write hook before any write can happen.
     this.provenanceRecorder();
-    this.watchLearnerSaves(context);
     // cr-publish (CR-11 after a restart): know the signed-in person's published origin from
     // activation on, and follow every change of the stored token.
     void this.crProjectMemory.refresh().catch(() => undefined);
@@ -4563,25 +4561,6 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return this.provenance;
   }
 
-  /** REQ-STUDIO-ARTIFACT-PROVENANCE — a document the learner typed into and saved, inside the work folder, is 내가 고침. */
-  private watchLearnerSaves(context: vscode.ExtensionContext): void {
-    const inFolder = (p: string) => {
-      const cwd = this.resolveCoachCwd();
-      if (!cwd) return false;
-      const rel = path.relative(path.resolve(cwd), path.resolve(p));
-      return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
-    };
-    const tracker = new LearnerEditTracker(inFolder);
-    const ws = vscode.workspace as Partial<typeof vscode.workspace>;
-    const subs = [
-      ws.onDidChangeTextDocument?.((e) => tracker.changed({ fsPath: e.document.uri.fsPath, scheme: e.document.uri.scheme, isDirty: e.document.isDirty }, e.contentChanges.length)),
-      ws.onWillSaveTextDocument?.((e) => tracker.willSave({ fsPath: e.document.uri.fsPath, scheme: e.document.uri.scheme, isDirty: e.document.isDirty })),
-      ws.onDidSaveTextDocument?.((doc) => tracker.saved({ fsPath: doc.uri.fsPath, scheme: doc.uri.scheme, text: doc.getText() })),
-      ws.onDidCloseTextDocument?.((doc) => tracker.closed({ fsPath: doc.uri.fsPath })),
-    ];
-    for (const sub of subs) if (sub) context?.subscriptions?.push(sub);
-  }
-
   /** REQ-STUDIO-ARTIFACT-PROVENANCE — this send's pasted (#421) and attached (D-028) photos, committed by the host, are the learner's uploads. */
   private recordLearnerUploads(pastedRelPaths: readonly string[], attachedNote: string): void {
     const root = this.resolveCoachCwd();
@@ -4626,7 +4605,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     if (this.turnReview) { this.turnReview = null; this.postTurnReview(); }
     if (this._instructorMode?.isInstructor === true) {
       // The instructor surface draws no bar and records no turn; what its coach changes must not
-      // read 내가 고침 if the seat leaves instructor mode in this session (REQ-STUDIO-ARTIFACT-PROVENANCE).
+      // read as confirmed if the seat leaves instructor mode in this session (REQ-STUDIO-ARTIFACT-PROVENANCE).
       const cwd = this.resolveCoachCwd();
       if (cwd) await fs.promises.realpath(cwd).then((root) => this.provenanceRecorder()?.unobserved(root)).catch(() => undefined);
       return null;

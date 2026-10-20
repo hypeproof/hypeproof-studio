@@ -21,14 +21,13 @@ let ledger = observeOutsideTurn(emptyLedger(), [{ path: "notes.md", sha256: h("n
 ledger = recordHostWrite(ledger, [{ path: "images/외관.jpg", sha256: h("p") }], { at: 1.5, actor: "learner_upload" });
 ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }], { at: 2 });
 ledger = recordCoachTurn(ledger, { turnId: "t1", at: 3, startedAt: 2, added: ["index.html"], changed: [], deleted: [] }, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("1") }]);
-ledger = recordHostWrite(ledger, [{ path: "index.html", sha256: h("2") }], { at: 3.5, actor: "learner_save" }); // the learner's editor save
 ledger = observeOutsideTurn(ledger, [{ path: "notes.md", sha256: h("n") }, { path: "images/외관.jpg", sha256: h("p") }, { path: "index.html", sha256: h("2") }], { at: 4 });
 const VIEW = provenanceView(ledger);
 
 t("each file: path, symbol (decorative) and label in words", () => {
   const html = list(VIEW);
   has(html, "작업 폴더의 파일");
-  has(html, '<span>index.html</span><small><span aria-hidden="true" data-provenance-symbol="true">✎</span> <strong>내가 고침</strong> · 지금까지: AI가 만듦 → 내가 고침</small>');
+  has(html, '<span>index.html</span><small><span aria-hidden="true" data-provenance-symbol="true">○</span> <strong>기록 없음</strong> · 지금까지: AI가 만듦 → 기록 없음</small>');
   has(html, '<span>images/외관.jpg</span><small><span aria-hidden="true" data-provenance-symbol="true">⇡</span> <strong>내가 올림</strong></small>');
   has(html, '<span>notes.md</span><small><span aria-hidden="true" data-provenance-symbol="true">○</span> <strong>기록 없음</strong></small>');
   has(html, "기록에 남은 일로만 표시해요.");

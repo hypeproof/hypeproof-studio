@@ -8,13 +8,16 @@
 //   Studio가 만듦 / Studio가 고침  Studio wrote bytes of its own (a prebuilt world, a starter page,
 //                                  a preview action, a wiki template, notes moved into raw/)
 //   내가 올림                      Studio committed it from a learner attachment (D-028 photo, #421 paste)
-//   내가 고침                      positive evidence only: the learner typed into the file in an editor
-//                                  and VS Code reported its save (`LearnerEditTracker` → noteLearnerSave)
-//   기록 없음                      nothing recorded explains its current bytes
+//   기록 없음                      everything else, including the learner's own edits: in this slice
+//                                  no event attributes a change to the learner. VS Code's measured
+//                                  event order (a change reports isDirty from before it, save
+//                                  participants run before onWillSave, Save without Formatting fires
+//                                  no onWillSave) cannot tell a learner's save from a formatter's or a
+//                                  forced save of the AI's bytes, so no "learner changed it" label exists.
 //
-// Scans only detect THAT bytes changed; they never attribute a change to the learner. Any change
-// no hook explains (a background process, git, another editor, a write landing after a scan, a
-// race of any kind) reads 기록 없음. That is the default every race lands in, and it is the safe one.
+// Scans only detect THAT bytes changed; they never attribute a change. Any change no hook explains
+// (the learner, a background process, git, another editor, a write landing after a scan, a race of
+// any kind) reads 기록 없음.
 //
 // The ledger is one JSON file per work folder in the extension's storage (beside the restore
 // stores, never in the work folder, never uploaded). It holds the last observed state of the
@@ -54,7 +57,7 @@ export interface ProvenanceLedger {
 }
 
 /** Who wrote bytes through Studio itself. */
-export type HostWriteActor = "ai" | "studio" | "learner_upload" | "learner_save";
+export type HostWriteActor = "ai" | "studio" | "learner_upload";
 
 /** Events kept per folder; the oldest go first (a file whose only event went shows 기록 없음). */
 export const PROVENANCE_EVENT_CAP = 2000;
@@ -134,12 +137,8 @@ export function recordHostWrite(ledger: ProvenanceLedger, writes: readonly FileH
   const stalePaths = new Set(ledger.stalePaths ?? []);
   for (const w of writes) {
     const live = latestLive(events, w.path);
-    // A learner save whose bytes are exactly what the AI or Studio last wrote there changed nothing
-    // the learner made: the earlier writer keeps the label.
-    if (opts.actor === "learner_save" && live?.sha256 === w.sha256 && /^(ai|studio)_/.test(live.kind)) continue;
     const existed = (baseline?.[w.path] !== undefined) || !!live;
     const kind: ProvenanceEventKind = opts.actor === "learner_upload" ? "learner_uploaded"
-      : opts.actor === "learner_save" ? "learner_changed"
       : opts.actor === "ai" ? (existed ? "ai_changed" : "ai_created")
       : (existed ? "studio_changed" : "studio_created");
     events.push({ path: w.path, kind, at: opts.at, sha256: w.sha256 });
@@ -164,13 +163,9 @@ export function recordCoachTurn(ledger: ProvenanceLedger, turn: { turnId: string
   const record = (p: string, kind: ProvenanceEventKind) => {
     if (!hash[p]) return;
     const latest = latestLive(events, p);
-    // Studio or the learner's save recorded these exact bytes during this turn: that record names
-    // the writer (the later of a save and an AI write wins).
+    // Studio recorded these exact bytes during this turn (a host write): that record names its writer.
     if (latest && latest.sha256 === hash[p] && latest.at >= turn.startedAt) return;
-    // The learner saved this file during the turn and the bytes changed again after: who wrote last
-    // is not known, so no label is claimed.
-    const savedInTurn = events.some((e) => e.path === p && e.kind === "learner_changed" && e.at >= turn.startedAt);
-    events.push({ path: p, kind: savedInTurn ? "unknown" : kind, at: turn.at, sha256: hash[p], turnId: turn.turnId });
+    events.push({ path: p, kind, at: turn.at, sha256: hash[p], turnId: turn.turnId });
   };
   for (const p of turn.added) record(p, "ai_created");
   for (const p of turn.changed) record(p, "ai_changed");
@@ -241,7 +236,7 @@ export function provenanceLedgerFile(base: string, folderRealPath: string): stri
 }
 
 const SHA = /^[a-f0-9]{64}$/;
-const KINDS = new Set<ProvenanceEventKind>(["ai_created", "ai_changed", "studio_created", "studio_changed", "learner_uploaded", "learner_changed", "unknown", "removed"]);
+const KINDS = new Set<ProvenanceEventKind>(["ai_created", "ai_changed", "studio_created", "studio_changed", "learner_uploaded", "unknown", "removed"]);
 
 function validLedger(v: unknown): v is ProvenanceLedger {
   const l = v as ProvenanceLedger;
@@ -451,52 +446,6 @@ export function setHostWriteSink(sink: HostWriteSink | null): void {
  */
 export function noteHostWrite(writes: readonly HostWrite[], actor: HostWriteActor): void {
   try { hostWriteSink?.wrote(writes, actor); } catch { /* provenance never breaks a write */ }
-}
-
-/** The learner saved a document they typed into (`LearnerEditTracker`): the only source of 내가 고침. */
-export function noteLearnerSave(absPath: string, text: string): void {
-  noteHostWrite([{ absPath, data: text }], "learner_save");
-}
-
-/**
- * Positive evidence of a learner edit, from VS Code's document events:
- * - `changed` (onDidChangeTextDocument): a non-empty change that leaves the document dirty marks it
- *   typed; ANY change that leaves it clean (undo back to the saved text, Revert File, a reload from
- *   disk after someone else's write) clears the mark.
- * - `willSave` (onWillSaveTextDocument): the save counts only if the document is typed AND dirty at
- *   this moment, before save participants (format on save, trim whitespace) run. A forced save of a
- *   clean document (Studio binds Cmd+S with force) never counts, even if a participant edits it.
- * - `saved` (onDidSaveTextDocument): records the hash of the saved text. If those bytes are what the
- *   AI or Studio last wrote there, the ledger keeps their label (`recordHostWrite`); if they are not
- *   what is on disk (another encoding, a later write), no event matches and the file reads 기록 없음.
- * Studio never edits documents itself.
- */
-export class LearnerEditTracker {
-  private readonly typed = new Set<string>();
-  private readonly counting = new Set<string>();
-  private readonly inFolder: (absPath: string) => boolean;
-  private readonly record: (absPath: string, text: string) => void;
-  constructor(inFolder: (absPath: string) => boolean, record: (absPath: string, text: string) => void = noteLearnerSave) {
-    this.inFolder = inFolder;
-    this.record = record;
-  }
-  changed(doc: { fsPath: string; isDirty: boolean; scheme: string }, contentChanges: number): void {
-    if (doc.scheme !== "file" || !this.inFolder(doc.fsPath)) return;
-    if (!doc.isDirty) { this.typed.delete(doc.fsPath); return; }
-    if (contentChanges > 0) this.typed.add(doc.fsPath);
-  }
-  willSave(doc: { fsPath: string; isDirty: boolean; scheme: string }): void {
-    if (doc.scheme === "file" && doc.isDirty && this.typed.has(doc.fsPath) && this.inFolder(doc.fsPath)) this.counting.add(doc.fsPath);
-    else this.counting.delete(doc.fsPath);
-  }
-  saved(doc: { fsPath: string; scheme: string; text: string }): void {
-    const counts = this.counting.delete(doc.fsPath);
-    this.typed.delete(doc.fsPath);
-    if (doc.scheme !== "file" || !counts || !this.inFolder(doc.fsPath)) return;
-    this.record(doc.fsPath, doc.text);
-  }
-  /** A closed document's unsaved edits are gone. */
-  closed(doc: { fsPath: string }): void { this.typed.delete(doc.fsPath); this.counting.delete(doc.fsPath); }
 }
 
 /**

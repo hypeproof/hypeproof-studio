@@ -1,7 +1,7 @@
 // REQ-STUDIO-ARTIFACT-PROVENANCE — the provenance list as the webview receives it. Pure and
 // dependency-free, so both the host (artifactProvenance.ts) and the webview import it.
 
-export type ProvenanceEventKind = "ai_created" | "ai_changed" | "studio_created" | "studio_changed" | "learner_uploaded" | "learner_changed" | "unknown" | "removed";
+export type ProvenanceEventKind = "ai_created" | "ai_changed" | "studio_created" | "studio_changed" | "learner_uploaded" | "unknown" | "removed";
 /** The labels a learner sees. */
 export type ProvenanceLabelKind = Exclude<ProvenanceEventKind, "removed"> | "none";
 
@@ -12,7 +12,6 @@ export const PROVENANCE_LABELS: Record<ProvenanceLabelKind, { label: string; sym
   studio_created: { label: "Studio가 만듦", symbol: "▣" },
   studio_changed: { label: "Studio가 고침", symbol: "▤" },
   learner_uploaded: { label: "내가 올림", symbol: "⇡" },
-  learner_changed: { label: "내가 고침", symbol: "✎" },
   unknown: { label: "기록 없음", symbol: "○" },
   none: { label: "기록 없음", symbol: "○" },
 };
@@ -38,7 +37,7 @@ export interface ArtifactProvenanceView {
   unconfirmed: boolean;
 }
 
-/** "AI가 만듦 → 내가 고침"; empty when there is only one step. */
+/** "AI가 만듦 → Studio가 고침"; empty when there is only one step. */
 export function provenanceHistoryText(entry: Pick<ArtifactProvenanceEntry, "history">): string {
   return entry.history.length > 1 ? entry.history.join(" → ") : "";
 }
