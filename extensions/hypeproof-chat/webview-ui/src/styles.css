@@ -1146,6 +1146,11 @@ html, body, #root {
   font-size: 11px;
 }
 
+/* CGP-SHELL-R-024 — the "AI가 할 수 있는 일이 바뀌었어요" system line: same quiet surface, one dismiss. */
+.hps-capability-change > div { flex: 1; min-width: 0; }
+.hps-capability-change p { margin: 0; }
+.hps-capability-change > button { flex: none; align-self: center; }
+
 /* AE-15 / CGP-ART-R-002 — review bar for the last turn's file changes. Neutral surface, no accent:
    neither choice is the "right" one. */
 .hps-turn-review {
@@ -1885,6 +1890,10 @@ html, body, #root {
 .hps-queued-send:disabled { opacity: .5; cursor: default; }
 .hps-queued-send:focus-visible { outline: 2px solid var(--hp-ring); outline-offset: 2px; }
 .hps-recovered { font-size: 12px; }
+/* CGP-CHAT-R-012 — "지금 방향 바꾸기": a secondary action on the parked message, 44px target. */
+.hps-queued-steer { min-width: 44px; min-height: 44px; }
+.hps-queued-steer[aria-disabled="true"] { opacity: .6; cursor: default; }
+.hps-steer-mark { margin-top: 2px; }
 
 /* CGP-DS-R-028: Korean prose wraps at word (eojeol) boundaries; long URLs and tokens still wrap. */
 .hps-msg-body, .hps-prose, .hp-mission-sentence, .hp-mission-acceptance, .hps-error-banner-msg, .hps-stop-notice {

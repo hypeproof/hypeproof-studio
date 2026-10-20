@@ -283,7 +283,8 @@ export async function activate(context: vscode.ExtensionContext) {
       const r = await fetchProfileResult({ token, proxyUrl: vscode.workspace.getConfiguration("hypeproofChat").get<string>("proxyUrl", "https://api.hypeproof-ai.xyz/v1") });
       return r.ok ? { ok: true } : { ok: false, status: r.failure.status, code: r.failure.reason === "expired" ? "expired" : undefined, requestId: r.failure.requestId, network: r.failure.reason === "network" };
     },
-    refreshProfile: async () => !!(await provider.ensureProfile(true)),
+    // CGP-SHELL-R-024 — the re-read also republishes the config, so a capability change shows before the next turn.
+    refreshProfile: async () => !!(await provider.refreshProfileAndConfig()),
     requestStop: () => provider.opsRequestStop(),
     freezeInput: (frozen) => provider.opsFreezeInput(frozen),
     preservation: () => provider.opsPreservation(),
@@ -1106,7 +1107,8 @@ async function openWorkspaceFolder(
   try {
     const prepare=()=>prepareWorkspaceDirectory(dir, !profile || profile.workspace_start === 'empty' ? 'empty' : 'html', () => starterIndexHtml(profile));
     const connections=context && activityConnections(context);
-    if(connections && profile)connections.prepare(dir,profile,prepare);else prepare();
+    // REQ-STUDIO-FREE-START — who holds the folder is read from SecretStorage first; prepare() is synchronous.
+    if(connections && profile)connections.prepare(dir,profile,prepare,await connections.folderOwners(dir));else prepare();
   } catch(error) {
     if(error instanceof ActivityConnectionError)throw error;
     throw new Error('Activity workspace preparation failed');

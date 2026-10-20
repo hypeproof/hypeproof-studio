@@ -136,6 +136,8 @@ export interface FileAttachmentPreview {
 export interface ChatConfig {
   /** CGP-AGENT-R-003: what the AI can do on this seat, one row per REQ-M38 key. */
   aiCapabilities?: import('./aiCapabilities').AiCapability[];
+  /** CGP-SHELL-R-024: what the AI can do changed on a profile refresh; one card until dismissed. */
+  capabilityChange?: import('./aiCapabilities').CapabilityChange;
   /** CGP-DS-R-009: chat text size chosen on this device. */
   textSize?: import('./textSize').TextSize;
   /** CGP-DS-R-015: `workbench.reduceMotion` is "on"; the webview stops nonessential motion. */
@@ -623,6 +625,8 @@ export type WebviewMessage = (
   | { type: "notifyOptinWithdraw" }
   | { type: "installUpdate" }              // #72: user clicked "Install Now" on update banner
   | { type: "dismissUpdate"; version: string }  // #72: user clicked "Later" — silence for 7d
+  /** CGP-SHELL-R-024 — the learner closed the "AI가 할 수 있는 일이 바뀌었어요" card. */
+  | { type: "dismissCapabilityChange"; id: string }
   | { type: "clearHistory" }
   | { type: "namingRitual" }
   | { type: "saveCoach"; name: string; personality: string }
@@ -760,7 +764,8 @@ export type HostMessage = (
   | { type: "contextTrim"; boundaryId: string | null }
   /** CGP-CHAT-R-005 — the active task's latest verdict per answer, read from the local sidecar. */
   | { type: "answerVerdicts"; requestId?: string; messageId?: string; taskId?: string; verdicts: import('./answerVerdict').VerdictMap }
-  | { type: "streamStart"; streamId: string; messageId: string }
+  /** `userMessageId` (REQ-STUDIO-STEER-NOW): the learner request this turn answers; absent for app-initiated replies. */
+  | { type: "streamStart"; streamId: string; messageId: string; userMessageId?: string }
   | { type: "streamChunk"; streamId: string; delta: string }
   | { type: "streamCitations"; streamId: string; citations: Citation[] }  // #173
   // SX-59 — the host message that used to leak capability scores to the webview

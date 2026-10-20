@@ -216,6 +216,11 @@ Smoke check: <smoke_check_prefix 아래 파일 경로, 또는 #후속-이슈>
 - `Smoke: yes`이면 `Smoke check`가 PR 트리에 있는 smoke 파일이거나 같은 repo의 열린 이슈 `#N`이어야 한다.
 - 연결된 이슈 form의 "Smoke needed?" 답이 yes인데 PR이 no이면 `Smoke differs from issue: <이유>` 줄을 더 요구한다. 이슈에 답이 없으면 비교하지 않는다. 이슈 본문 자체는 검사하지 않는다.
 - `<...>` 자리표시나 `<!--`가 남아 있으면 빈 양식으로 판정한다.
+- 계약에 `release_check.manager_check: true`가 있으면, 절의 첫 줄은 `Release manager check: yes|no — <이유>`다.
+  - `yes`: rc App에서 사용자가 바뀐 동작을 보거나 겪는 변경(화면, 응답, 설치 단계 등). 다음 줄에 `How to verify`를 지금처럼 쓴다.
+  - `no`: 그 밖의 변경. 이유를 10자 이상 적고, `How to verify`는 요구하지 않는다. 예: release tooling only, CI only, vendored tooling only, docs only.
+  - `Smoke`는 어느 쪽이든 요구한다. hotfix 경로는 이 줄을 보지 않는다.
+  - 이 키가 없는 repo는 지금과 같다(`How to verify`가 첫 줄이고 항상 요구된다).
 - 판정 코드는 `scripts/hype-pr/body_contract.py`다. 의존성이 없어 consumer CI에서도 그대로 실행할 수 있다.
 
 ### hotfix 경로 (repo 계약에 `hotfix`가 있는 경우만)

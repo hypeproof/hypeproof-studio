@@ -142,7 +142,7 @@ from audit import load_policy, repo_full_name, validate_policy  # noqa: E402
 sys.path.insert(0, str(ROOT / "scripts" / "hype-pr"))
 
 
-DEFAULT_OWNER = "hypeproof"
+DEFAULT_OWNER = "jayleekr"
 DEFAULT_BASE = "main"
 AUTO_MERGE_METHOD = "squash"
 
@@ -569,7 +569,8 @@ def check_release_check(args, lane, body, issue):
     if rule is not None:
         errors = body_contract.check_release_check(
             body, smoke_check_prefix=rule["smoke_check_prefix"], path_exists=lane["path_exists"],
-            issue_body=(issue or {}).get("body"), hotfix=lane["mode"] == "hotfix")
+            issue_body=(issue or {}).get("body"), hotfix=lane["mode"] == "hotfix",
+            manager_check=rule.get("manager_check") is True)
         follow_up = body_contract.smoke_issue_reference(body)
         if args.apply and follow_up is not None and not errors:
             found = fetch_scoped_issue(parse_repo(args.repo), follow_up)
