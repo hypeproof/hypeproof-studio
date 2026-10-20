@@ -6,7 +6,9 @@
 // rides the existing tool-line timeline, which modelHistory already keeps away from the model.
 //
 // 1–3 are pure (contextTrim.ts). 4 is the SDK event extraction. 5 locks the host wiring. 6 renders the
-// real ChatPanel (personal and classroom).
+// real ChatPanel (personal and classroom). 7 runs the real host over a real task store: the boundary
+// comes from the SAVED history, so a failed prompt the webview still shows (never saved, never sent)
+// does not move it.
 //
 // Run: node --experimental-strip-types test/context-trim-marker.smoke.mjs
 
@@ -15,7 +17,10 @@ import * as fs from "node:fs";
 import vm from "node:vm";
 import { createRequire } from "node:module";
 import { build } from "esbuild";
+import * as os from "node:os";
+import * as path from "node:path";
 import { chatPanelProps } from "./sx-screen-fixtures.mjs";
+import { createTaskHarness } from "./task-workspace-harness.mjs";
 
 const CT = await import("../src/contextTrim.ts");
 const { HISTORY_MAX, clampTimeline, modelHistory } = await import("../src/chatTimeline.ts");
@@ -41,7 +46,7 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
   // Negative controls: an empty, short and exactly-full history drop nothing.
   for (const msgs of [[], spoken(3), spoken(HISTORY_MAX), [...spoken(HISTORY_MAX), tool("t1"), tool("t2")]]) {
     assert.equal(CT.trimBoundaryId(msgs), null, `no boundary for ${msgs.length} items`);
-    assert.equal(CT.trimMarkerIndex(msgs, msgs), -1);
+    assert.equal(CT.trimMarkerIndex(msgs, CT.trimBoundaryId(msgs)), -1);
   }
   // Tool lines never count toward the cap (they are not sent): 200 spoken among 50 tool lines is not a clamp.
   const mixed = spoken(HISTORY_MAX).flatMap((m, i) => (i % 4 === 0 ? [tool(`t${i}`), m] : [m]));
@@ -60,10 +65,10 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
   // One spoken message over the cap: the first one is left out; the boundary is the second.
   const over = spoken(HISTORY_MAX + 1);
   assert.equal(CT.trimBoundaryId(over), "m001");
-  assert.equal(CT.trimMarkerIndex(over, over), 1, "the marker sits right before the first message still sent");
+  assert.equal(CT.trimMarkerIndex(over, CT.trimBoundaryId(over)), 1, "the marker sits right before the first message still sent");
   // Tool lines of the dropped turn stay above the marker.
   const withTools = [over[0], tool("t-old"), ...over.slice(1)];
-  assert.equal(CT.trimMarkerIndex(withTools, withTools), 2);
+  assert.equal(CT.trimMarkerIndex(withTools, CT.trimBoundaryId(withTools)), 2);
   ok("a clamp gives exactly one boundary at the first message still sent");
 }
 
@@ -73,11 +78,11 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
   const b = spoken(HISTORY_MAX + 5);
   assert.equal(CT.trimBoundaryId(a), "m001");
   assert.equal(CT.trimBoundaryId(b), "m005", "four more messages move the boundary four places");
-  assert.equal(CT.trimMarkerIndex(b, b), 5);
-  assert.equal(typeof CT.trimMarkerIndex(b, b), "number", "one index: there is never a second clamp marker");
-  // The drawn list can show an older version of a prompt; the marker still lands at a real position.
-  const drawn = b.filter((m) => m.id !== "m002");
-  assert.equal(CT.trimMarkerIndex(drawn, b), 4, "positions are taken from the full list");
+  assert.equal(CT.trimMarkerIndex(b, "m005"), 5);
+  assert.equal(typeof CT.trimMarkerIndex(b, "m005"), "number", "one index: there is never a second clamp marker");
+  // Negative controls: no id, or an id that is not drawn (another task, another version), draws nothing.
+  assert.equal(CT.trimMarkerIndex(b, null), -1);
+  assert.equal(CT.trimMarkerIndex(b.filter((m) => m.id !== "m005"), "m005"), -1, "an id not in view draws nothing");
   ok("the boundary moves with the conversation and is one index");
 }
 
@@ -117,8 +122,15 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
   const branch = src.slice(at, at + 700);
   assert.match(branch, /this\.postToolLog\(streamId, \{ id: compactionLineId\(streamId\)/, "posted through postToolLog, so it is kept in the turn timeline");
   assert.match(branch, /CONTEXT_COMPACT_NOTE/);
+  assert.match(src, /const conversation = activityConnections\(this\.context\) \? this\.getHistory\(\) : rawHistory;/, "the model clamps the saved history");
+  assert.match(src, /type: "contextTrim", boundaryId: trimBoundaryId\(this\.getHistory\(\)\)/, "the host posts the boundary of that same saved history");
+  assert.ok((src.match(/await this\.postContextTrim\(\);/g) ?? []).length >= 3, "posted with the history and after every save (task store and legacy)");
   const panel = fs.readFileSync(new URL("../webview-ui/src/ChatPanel.tsx", import.meta.url), "utf8");
-  assert.match(panel, /trimMarkerIndex\(shown\.items, messages\)/, "the panel derives the marker from what it draws");
+  assert.match(panel, /trimMarkerIndex\(shown\.items, props\.trimBoundaryId\)/, "the panel only places the host's boundary");
+  assert.ok(!/trimBoundaryId\(messages/.test(panel), "the panel never counts its own list");
+  const app = fs.readFileSync(new URL("../webview-ui/src/App.tsx", import.meta.url), "utf8");
+  assert.match(app, /case "contextTrim": setTrimBoundaryId\(msg\.boundaryId\); break;/);
+  assert.equal((app.match(/trimBoundaryId=\{trimBoundaryId\}/g) ?? []).length, 2, "student and instructor panels both get it");
   ok("host and panel wiring");
 }
 
@@ -152,13 +164,14 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
   const count = (html, s) => html.split(s).length - 1;
   const notes = (html) => count(html, 'class="hps-context-note"');
   for (const [seat, config] of [["personal", personal], ["classroom", classroom]]) {
-    const short = render(chatPanelProps({ config, messages: spoken(4) }));
+    const at = (msgs) => CT.trimBoundaryId(msgs);
+    const short = render(chatPanelProps({ config, messages: spoken(4), trimBoundaryId: at(spoken(4)) }));
     assert.equal(notes(short), 0, `${seat}: a short history draws no marker`);
     assert.ok(!short.includes(CT.CONTEXT_TRIM_NOTE));
-    const full = render(chatPanelProps({ config, messages: spoken(HISTORY_MAX) }));
+    const full = render(chatPanelProps({ config, messages: spoken(HISTORY_MAX), trimBoundaryId: at(spoken(HISTORY_MAX)) }));
     assert.equal(notes(full), 0, `${seat}: exactly at the cap draws no marker`);
 
-    const html = render(chatPanelProps({ config, messages: spoken(HISTORY_MAX + 3) }));
+    const html = render(chatPanelProps({ config, messages: spoken(HISTORY_MAX + 3), trimBoundaryId: at(spoken(HISTORY_MAX + 3)) }));
     assert.equal(notes(html), 1, `${seat}: one marker`);
     assert.equal(count(html, CT.CONTEXT_TRIM_NOTE), 1);
     const note = html.indexOf(CT.CONTEXT_TRIM_NOTE);
@@ -172,8 +185,45 @@ const noteTexts = () => [CT.CONTEXT_TRIM_NOTE, CT.CONTEXT_COMPACT_NOTE];
     assert.equal(count(compacted, "hps-tool-log-line"), 0, `${seat}: not drawn as a tool row`);
     const c = compacted.indexOf(CT.CONTEXT_COMPACT_NOTE);
     assert.ok(compacted.indexOf("말-003") < c && c < compacted.indexOf("말-004"), `${seat}: at the point of compaction`);
+
+    // Verifier F1 — a failed prompt is drawn but never saved, so it is never sent. With exactly
+    // HISTORY_MAX saved, the host's boundary is null: the panel must not count the failed bubble.
+    const failed = { id: "failed-u", role: "user", content: "실패한-질문", createdAt: 999 };
+    const savedFull = spoken(HISTORY_MAX);
+    const failedFull = render(chatPanelProps({ config, messages: [...savedFull, failed], trimBoundaryId: at(savedFull) }));
+    assert.equal(notes(failedFull), 0, `${seat}: 200 saved + 1 failed bubble draws no marker`);
+    // Past the cap the marker sits at the saved boundary, not one message later.
+    const savedOver = spoken(HISTORY_MAX + 3);
+    const failedOver = render(chatPanelProps({ config, messages: [...savedOver, failed], trimBoundaryId: at(savedOver) }));
+    assert.equal(notes(failedOver), 1);
+    const f = failedOver.indexOf(CT.CONTEXT_TRIM_NOTE);
+    assert.ok(failedOver.indexOf("말-002") < f && f < failedOver.indexOf("말-003"), `${seat}: a failed bubble does not move the marker`);
   }
   ok("ChatPanel draws one note at the boundary in personal and classroom chat, none without a clamp");
+}
+
+// ── 7. The real host over a real task store ──
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hps-trim-"));
+  try {
+    const { h, store, posts } = await createTaskHarness(root);
+    const taskId = store.getView().activeTaskId;
+    const trims = () => posts.filter((p) => p.type === "contextTrim");
+    await store.append(taskId, spoken(HISTORY_MAX));
+    await h.postHistory();
+    assert.equal(trims().at(-1)?.boundaryId, null, "exactly HISTORY_MAX saved: nothing is left out");
+    // A failed send leaves the store as it was (not saved), so the next post is still null.
+    await h.postHistory();
+    assert.equal(trims().at(-1)?.boundaryId, null, "the host never sees the failed bubble");
+    await h.appendHistory(spoken(3, HISTORY_MAX));
+    assert.equal(trims().at(-1)?.boundaryId, "m003", "after a saved turn the host posts the moved boundary");
+    assert.equal(trims().at(-1)?.taskId, taskId, "scoped to the task, like every host post");
+    const sent = modelHistory(clampTimeline(modelConversation(h.getHistory()), HISTORY_MAX));
+    assert.equal(sent[0].id, trims().at(-1).boundaryId, "the posted id is the first message the next model call sends");
+    ok("the real host posts the boundary of the saved history it sends");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 console.log(`\ncontext-trim-marker: ${passed} checks passed`);

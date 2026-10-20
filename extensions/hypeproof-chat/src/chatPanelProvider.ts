@@ -188,7 +188,7 @@ import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
-import { compactionLineId, CONTEXT_COMPACT_NOTE } from "./contextTrim";
+import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
 import {
   clampTimeline,
   emptyTimeline,
@@ -2851,6 +2851,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // A5 — a new conversation starts the orchestrator session over (A4 report §9).
       this.orchestratorState = undefined;
       void this.post({ type: "history", messages: [] });
+      void this.post({ type: "contextTrim", boundaryId: null });
       // A cleared chat starts a new conversation, not a new trial allowance.
       void this.post({ type: "aiDisclosure", text: this.aiDisclosure.noticeForHistoryClear() });
     } catch {
@@ -7387,8 +7388,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const ids = new Set(saved.map(message => message.id));
     const messages = pending ? [...saved, ...pending.messages.filter(message => !ids.has(message.id))] : saved;
     await this.post({ type: "history", messages });
+    await this.postContextTrim();
     await this.postVerdicts();
     if (pending) await this.post({ type: 'taskWorkspaceError', error: this.interruptedHistoryError(), historySaveFailed: true });
+  }
+
+  /**
+   * REQ-STUDIO-CONTEXT-TRIM-MARKER — the clamp boundary from the SAVED history, the list the next
+   * model call clamps (`conversation` in the turn). The webview's list also holds failed prompts
+   * that were never saved, so only the host can say where the boundary is.
+   */
+  private async postContextTrim(): Promise<void> {
+    await this.post({ type: "contextTrim", boundaryId: trimBoundaryId(this.getHistory()) });
   }
 
   private async appendHistory(msgs: ChatMessage[]): Promise<void> {
@@ -7398,6 +7409,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       if (!taskId) throw new Error('작업 기록을 열지 못했습니다. 저장소 오류를 확인해 주세요.');
       await taskStore.append(taskId, msgs);
       await this.post({ type: 'taskWorkspaceState', view: taskStore.getView() });
+      await this.postContextTrim();
       return;
     }
     const current = this.getHistory();
@@ -7410,6 +7422,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     for (const message of msgs) merged.set(message.id, message);
     const next = clampTimeline([...merged.values()], HISTORY_MAX);
     await this.context.workspaceState.update(this.historyKey(), next);
+    await this.postContextTrim();
   }
 
   /**

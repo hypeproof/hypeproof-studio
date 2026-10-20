@@ -348,6 +348,8 @@ export function App() {
   const pressAction = (key: string) => { const action = verifyPressAction(parkedVerify, key); setParkedVerify(null); lastVerifyKey.current = key; return action; };
   // CGP-CHAT-R-005 — the active task's verdicts as the host last confirmed them (drawn optimistically on click).
   const [verdicts, setVerdicts] = useState<VerdictMap>({});
+  // REQ-STUDIO-CONTEXT-TRIM-MARKER — computed by the host from the saved history it sends.
+  const [trimBoundaryId, setTrimBoundaryId] = useState<string | null>(null);
   const pendingVerdicts = useRef(new Map<string, { requestId: string; value: VerdictState | null }>());
   const latestVerdictRequests = useRef(new Map<string, string>());
   const ownVerdictRequests = useRef(new Set<string>());
@@ -432,7 +434,8 @@ export function App() {
           break;
         }
         case "config":      dispatch({ type: "config", config: msg.config }); break;
-        case "history":     dispatch({ type: "history", messages: msg.messages }); break;
+        case "history":     dispatch({ type: "history", messages: msg.messages }); setTrimBoundaryId(null); break;
+        case "contextTrim": setTrimBoundaryId(msg.boundaryId); break;
         case "answerVerdicts": {
           const latest = msg.messageId ? latestVerdictRequests.current.get(msg.messageId) : undefined;
           if (latest && msg.requestId && ownVerdictRequests.current.has(msg.requestId) && latest !== msg.requestId) break;
@@ -690,6 +693,7 @@ export function App() {
           incomingImage={incomingImage}
           config={state.config}
           messages={messages}
+          trimBoundaryId={trimBoundaryId}
           pageNotice={state.pageNotice}
           aiNotice={state.aiNotice}
           stopNotice={state.stopNotice}
@@ -777,6 +781,7 @@ export function App() {
         onRetryLast={retryLast}
         onEditResend={editResend}
         verdicts={verdicts}
+        trimBoundaryId={trimBoundaryId}
         onVerdict={judgeAnswer}
         onDismissError={dismissError}
         onCancel={cancel}

@@ -5,8 +5,10 @@
 //   1. The history clamp. Every model call takes
 //      modelHistory(clampTimeline(modelConversation(conversation), HISTORY_MAX))
 //      (chatPanelProvider), so spoken messages older than the last HISTORY_MAX are not sent.
-//      That boundary is derived from the transcript on every render: no stored marker, no new data.
-//      When the conversation grows the boundary moves, and there is still exactly one marker.
+//      The HOST computes the boundary from the saved history it actually sends (trimBoundaryId)
+//      and posts only the id; the webview places the line before that id. The webview list cannot
+//      be used: it also holds failed prompts that were never saved, so it counts one too many.
+//      Nothing is stored. When the conversation grows the boundary moves; there is one marker.
 //   2. An agent SDK `system/compact_boundary` event inside a coach turn (the CLI summarized
 //      earlier context). It is recorded as one tool line per turn (compactionLineId), the same
 //      timeline data every tool line already uses; modelHistory never sends tool lines.
@@ -16,7 +18,7 @@ import { clampTimeline, HISTORY_MAX, modelHistory } from "./chatTimeline.ts";
 import { currentVersions } from "./editResend.ts";
 
 /** Clamp marker copy: calm, honest, no blame, no token numbers (CGP-CHAT-R16). */
-export const CONTEXT_TRIM_NOTE = "앞의 대화가 길어서 AI가 처음 부분은 자세히 기억하지 못할 수 있어요. 중요한 건 다시 말해 주세요.";
+export const CONTEXT_TRIM_NOTE = "대화가 길어져서 이 줄 위의 대화는 AI가 기억하지 못해요. 중요한 건 다시 말해 주세요.";
 /** Compaction line copy. */
 export const CONTEXT_COMPACT_NOTE = "대화가 길어져서 AI가 앞 대화를 짧게 줄여서 기억하고 있어요. 중요한 건 다시 말해 주세요.";
 
@@ -40,14 +42,7 @@ export function trimBoundaryId(messages: readonly ChatMessage[], max: number = H
   return sent[0].id;
 }
 
-/**
- * Where the marker goes in the drawn list: the index of the first drawn item at or after the boundary
- * in `messages` (the drawn list can show an older version of a prompt). -1 when there is no marker.
- */
-export function trimMarkerIndex(drawn: readonly ChatMessage[], messages: readonly ChatMessage[], max: number = HISTORY_MAX): number {
-  const id = trimBoundaryId(messages, max);
-  if (id === null) return -1;
-  const position = new Map(messages.map((m, i) => [m.id, i] as const));
-  const boundary = position.get(id) ?? -1;
-  return drawn.findIndex((m) => (position.get(m.id) ?? -1) >= boundary);
+/** Where the marker goes in the drawn list: right before the host's boundary id; -1 when it is not drawn. */
+export function trimMarkerIndex(drawn: readonly Pick<ChatMessage, "id">[], boundaryId: string | null | undefined): number {
+  return boundaryId ? drawn.findIndex((m) => m.id === boundaryId) : -1;
 }

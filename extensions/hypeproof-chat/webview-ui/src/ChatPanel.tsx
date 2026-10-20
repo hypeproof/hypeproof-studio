@@ -140,6 +140,8 @@ interface Props {
   onEditResend?: (original: ChatMessage, editOf: string, text: string, images: string[]) => boolean | void;
   /** CGP-CHAT-R-005 — the learner's verdict per answer, and the setter. Absent: no verdict controls. */
   verdicts?: VerdictMap;
+  /** REQ-STUDIO-CONTEXT-TRIM-MARKER — the host's clamp boundary id (null: nothing is left out). */
+  trimBoundaryId?: string | null;
   onVerdict?: (messageId: string, next: VerdictState | null) => void;
   onDismissError: () => void;
   onCancel: () => void;
@@ -1090,7 +1092,7 @@ export function ChatPanel(props: Props) {
   // never while a turn runs, a message waits in the queue or recovery list, or in instructor mode.
   const shown = visibleVersions(messages, versionChoice);
   // REQ-STUDIO-CONTEXT-TRIM-MARKER — derived from the conversation each render; -1 when nothing is left out.
-  const trimAt = trimMarkerIndex(shown.items, messages);
+  const trimAt = trimMarkerIndex(shown.items, props.trimBoundaryId);
   const editableId = props.onEditResend ? editableUserId(messages, {
     streaming, sendPending: props.sendPending, parked: queued !== null || recovered.length > 0,
     instructor: props.instructor, locked: unavailable || !!props.sendLocked,
