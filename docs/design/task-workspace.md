@@ -67,7 +67,8 @@ not every autonomous browser tool. See [acceptance](../testing/task-workspace.md
 The user's follow-up asks for the conversation's visual finish as well as the
 surrounding workspace. Keep the theme-native six-color palette: canvas #202226,
 panel #17191d, text #e1e1e1, divider #34383e, muted #a4aab3, focus #799ed7 (host
-light/high-contrast theme values override these fallbacks). System sans serves
+light/high-contrast theme values override these fallbacks; the family table in
+[studio-learning-experience.md](studio-learning-experience.md) is the reference). System sans serves
 Korean prose and controls; the existing editor monospace remains for code. This
 is scoped to personal tasks, not a replacement of the learning-surface tokens.
 
@@ -133,8 +134,12 @@ and opted-in observation use the existing controls inside a native dialog; the
 current funding error retains a direct entry above the composer. Escape restores
 the opener. The profile's model/effort restrictions remain authoritative.
 
-Keep the shipped theme palette (canvas #151D19, panel #18231C, ink #F2F4E8,
-secondary #ACB9A5, border #35483A, focus/action #D5F279) through VS Code variables.
+Keep the host-theme palette: the personal workspace reads the `--tw-*` tokens in
+`taskWorkspace.css`, which follow the VS Code theme (dark fallbacks canvas #202226,
+panel #17191d, divider #34383e, muted #a4aab3, focus #799ed7). It does not use the
+forest `--hp-*` lesson tokens. #18231C is only `--hp-ink-on-accent` (text on the lime
+CTA), never a panel. Palette roles are reconciled in
+[studio-learning-experience.md](studio-learning-experience.md) (Palette families, DEC-27).
 Body typography is system sans, 16px/1.625; controls 13–14px, metadata 11px.
 Assistant artwork is 18px and action glyphs 16px inside transparent 44px targets.
 Starter suggestions are compact and wrap; settings never reserve transcript height.
