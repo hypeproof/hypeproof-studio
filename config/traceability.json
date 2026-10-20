@@ -7077,6 +7077,41 @@
       ]
     },
     {
+      "id": "ST-IMP-CHALK-ATTENTION-COPY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-DES-CLASSROOM-ADMIN"
+      ],
+      "sources": [
+        {
+          "path": "chalk/src/ui/manage.html"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CHALK-ATTENTION-COPY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CLASSROOM-ADMIN",
+        "ST-TEST-CLASSROOM-ADMIN",
+        "ST-IMP-CHALK-ATTENTION-COPY"
+      ],
+      "sources": [
+        {
+          "path": "chalk/test/attention-copy.test.mjs"
+        },
+        {
+          "path": "e2e/classroom/attention-copy.mjs"
+        },
+        {
+          "path": "docs/testing/classroom-admin.md"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-ASK-ABOUT-FILE",
       "stage": "implementation",
       "owner": "jayleekr",

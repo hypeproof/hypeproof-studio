@@ -1459,3 +1459,17 @@ local fixture; hosted R2/D1, a released App, Windows, school networks, real lear
 and production deployment are NOT RUN. The change adds no retention duration,
 consent grant or migration. Unrequested bytes are rejected under the existing
 collection contract.
+
+<a id="adm-09-attention-copy-run"></a>
+
+## 주의 항목 문구 · 2026-10-20 (ADM-09 · CGP-AGENT-R-013)
+
+요구: [주의 항목 문구](../requirements/classroom-admin.md#adm-09-attention-copy). 문자열만 바꿨다. 데이터·endpoint·판정은 그대로다.
+
+| 시험 | 무엇을 | 결과 · 증거 |
+|---|---|---|
+| `chalk/test/attention-copy.test.mjs` (`chalk` `npm test`에 포함) | `manage.html`의 `reasonLabels` 21종 제목·요약 전체 목록을 고정한다. 문구 검사: 제목 4–20자, 요약 40자 이하, 내부 코드·HTTP 번호·SDK 없음, 업데이트·완료·참고 없음, ‘~습니다/~십시오’ 없음, ‘확인 불가’는 `stale_signal` 제목에만. 승인 대기 행이 같은 제목을 읽는지, 옛 문구가 남지 않았는지 | PASS. 대조군: 나쁜 문구 8종을 검사기가 모두 잡음. 옛 `manage.html`(`origin/main`)로 돌리면 실패 |
+| `e2e/classroom/attention-copy.mjs` (`npm run test:classroom-attention-copy`) | 실제 Chalk 화면·전달 경로·Service 라우터 + SQLite, Chromium 1280·800px. 21개 좌석에 원인을 하나씩(`/status` 응답만 화면 쪽에서 바꿈) | PASS. 모든 행의 ‘지금 상태’가 그 원인의 제목과 같고 잘리지 않으며 한 줄. 가로 넘침 없음. 공통 장애 줄 `AI 제공자 쪽 장애 · 영향 3명`. 1280px에서 21개 상세 모두 `앱이 보고한 상태: <제목> — <요약>` |
+| 기존 브라우저 시험의 고정 문구 갱신 | `ops.mjs`, `ops-g1-layout.mjs`, `ops-roster.mjs` | PASS (문구만 바꿈, 판정 그대로) |
+
+**NOT RUN**: 실제 강사·실제 학생 기기, Windows, 학교 네트워크, 운영 배포. 상세 화면 요약 줄은 좁은 폭에서 ‘와이파이’처럼 낱말 가운데서 줄이 바뀔 수 있다(잘림은 아님).

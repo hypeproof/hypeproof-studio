@@ -37,12 +37,12 @@ try {
   await local.sync(conn.json.credential, [local.event(1, 'activation', { stage: 'token_rejected', reason: 'auth_signature', http_status: 401 }), local.event(2, 'error', { class: 'auth_signature', code: 'http_401', request_id: 'req-e2e-0001', blocking: true })]);
   await page.locator('#refresh').click(); await page.locator('#ops-seats .stage.blocked').waitFor();
   // G1: the row names the cause; its next step is in the open detail (the row stays one line so the table compares).
-  assert.equal(await page.locator('#ops-seats .stage.blocked').innerText(), '토큰이 올바르지 않습니다'); assert.equal(await page.locator('#ops-seats .stage.blocked').count(), 1); await expand('#ops-cause details');assert.match(await page.locator('#ops-recovery').innerText(), /앱이 보고한 상태: 토큰이 올바르지 않습니다 — .+확인하세요/);
+  assert.equal(await page.locator('#ops-seats .stage.blocked').innerText(), '학생 토큰이 잘못됨'); assert.equal(await page.locator('#ops-seats .stage.blocked').count(), 1); await expand('#ops-cause details');assert.match(await page.locator('#ops-recovery').innerText(), /앱이 보고한 상태: 학생 토큰이 잘못됨 — 토큰이 잘리지 않게 다시 붙여넣게 해 주세요/);
   assert.doesNotMatch(await page.locator('#ops-seats').innerText(), /기한이 지났습니다/, '401 is not rendered as expiry');
   const blocked = await page.locator('#ops-seats .stage.blocked').evaluate((e) => { const s = getComputedStyle(e); return { color: s.color, size: parseFloat(s.fontSize) }; }); assert.ok(blocked.size >= 14);
   // A student on a learning step, waiting for approval, is not an error.
   const c2 = await local.pair('A2', 1, 2); await local.sync(c2.conn.json.credential, [local.event(1, 'activation', { stage: 'runtime_ready' }), local.event(2, 'step', { lesson_version: local.lesson.version, step_id: 'build', status: 'in_progress' }), local.event(3, 'runtime', { status: 'waiting_approval' })], 2);
-  await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A2"]').getByText('학생의 승인을 기다리는 중').waitFor(); assert.match(await page.locator('#ops-seats .ops-seat[data-seat="A2"] td.c-step').innerText(), /승인 대기.*학생의 승인을 기다리는 중/s); assert.equal(await page.locator('#ops-seats .stage.blocked').count(), 1);
+  await page.locator('#refresh').click(); await page.locator('#ops-seats .ops-seat[data-seat="A2"]').getByText('학생 승인 기다리는 중').waitFor(); assert.match(await page.locator('#ops-seats .ops-seat[data-seat="A2"] td.c-step').innerText(), /승인 대기.*학생 승인 기다리는 중/s); assert.equal(await page.locator('#ops-seats .stage.blocked').count(), 1);
   await expand('.detail-evidence');await expand('details.ops-tech-fold');await page.locator('#ops-evidence').getByText(/오류 보고: .*req-e2e-0001/).waitFor(); assert.ok(!(await page.content()).includes(mint.json.token)); assert.ok(!(await page.content()).includes(conn.json.credential));
   // ── R2: browser → Chalk → Service ledger ← the real device client code (sync loop + command runner), in-process ──
   const opsClient = await import('../../extensions/hypeproof-chat/src/classroomOps.ts'); const { CommandRunner } = await import('../../extensions/hypeproof-chat/src/classroomOpsCommands.ts');
@@ -117,7 +117,7 @@ try {
     await page.setViewportSize({ width: 1280, height: 900 }); await page.screenshot({ path: `${process.env.HPS_CLASSROOM_OUT || 'test-results/classroom'}/ops-commands-1280.png`, fullPage: true });
   } finally { clearInterval(pump); deviceLoop.stop(); }
   // Stale signal turns the red row neutral: an old error is not a current confirmed block.
-  local.db.prepare('UPDATE ops_latest_state SET last_received_at=1').run(); await page.locator('#refresh').click(); await page.locator('#ops-seats').getByText(/신호가 끊겼습니다 · 확인 불가/).first().waitFor(); assert.equal(await page.locator('#ops-seats .stage.blocked').count(), 0);
+  local.db.prepare('UPDATE ops_latest_state SET last_received_at=1').run(); await page.locator('#refresh').click(); await page.locator('#ops-seats').getByText(/신호 끊김 · 확인 불가/).first().waitFor(); assert.equal(await page.locator('#ops-seats .stage.blocked').count(), 0);
   const luminance = (rgb) => rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map((x) => x / 255).map((x) => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4).reduce((a, x, i) => a + x * [.2126, .7152, .0722][i], 0);
   const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + .05) / (Math.min(luminance(a), luminance(b)) + .05);
   const bg = await page.locator('#ops').evaluate((e) => getComputedStyle(e).backgroundColor); assert.ok(contrast(blocked.color, bg) >= 4.5, 'DES-11 blocked text contrast');
