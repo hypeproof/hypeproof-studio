@@ -3146,3 +3146,46 @@ negative controls; schedule gate negative controls for no app change, a blocked 
 an override and the pause switch). **Not claimed**: a scheduled run on GitHub, a release PR opened with
 the new body, a real pre-tester run on the Mac, or the cases themselves executed against an installed
 rc; the expected copy is read from source at `f9bde411`, not from a running app.
+
+
+## Artifact version list and single-file restore (CGP-KNOW-R-017)
+
+`REQ-STUDIO-ARTIFACT-HISTORY` traces to REQ-KNOW-30 and Product Intent #1/#2
+(learner control over their work; OWNERSHIP without a score).
+
+The Explorer file menu and command palette offer `이 파일의 이전 버전` for all
+known learner seats, including minors, when machine-default-off
+`hypeproofChat.artifactHistoryEnabled` is explicitly enabled. Unknown/instructor
+profiles and activity transitions cannot enable capture. The native list shows
+recorded time and AI, 나 (an explicit upload, restore or confirmed manual revision),
+or 기록 없음 when authorship is unproven.
+Editor save events are captured but never treated as proof of learner authorship;
+the measured event-order limitation in REQ-STUDIO-ARTIFACT-PROVENANCE still applies.
+Selecting the current unknown version offers “이 내용을 직접 수정했나요?” with
+“내 수정으로 기록”. Confirmation binds exact saved bytes, activity and profile;
+it records learner attestation, not automatic authorship detection. Cancel, dirty
+buffers, changed bytes or changed context leave the attribution unchanged. Existing
+AI attribution cannot be overwritten by a confirmation of identical bytes. Measured
+AI evidence enriches a matching unknown revision even when a save arrived first.
+The picker explains that 나 includes confirmed edits, uploads and restores.
+
+History reuses the turn-restore manifest and content-addressed blob format in
+extension storage, partitioned by real work-folder path and artifact path. Capture
+runs before/after measured coach turns, after recorded host writes and editor saves,
+and when opening this file's list. Capture before a coach turn and capture after it are each capped at 25 files and
+4 MiB in total per turn (files beyond the cap are simply not versioned for that turn
+and so carry no AI version label from it).
+It does not reconstruct unobserved past changes.
+The latest 20 captured versions per file are kept under the existing per-file size
+cap. No upload or model request is introduced.
+
+Restoring requires a separate native confirmation. Cancel does not replace files.
+Before replacement the current bytes and new head are recorded. Only the
+selected file is replaced; all other files remain untouched. A different current
+hash, dirty buffer, changed task/profile, active run or connection transition refuses
+the restore. Stale content says `파일이 바뀌었어요`. Symlinks and escaping paths are
+refused. Concurrent restores share a per-file lock. File history does not broaden
+folder write consent. A failed history capture does not interrupt the original save.
+
+Behavioral checks: `extensions/hypeproof-chat/test/artifact-history.smoke.mjs`.
+Native shell accessibility/visual and installed-device acceptance remain separate.

@@ -300,6 +300,13 @@ export async function activate(context: vscode.ExtensionContext) {
     await vscode.commands.executeCommand("hypeproof-chat.panel.focus");
     await provider.askAboutFile(target.fsPath);
   }));
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(document => {
+    if (document.uri.scheme === "file") void provider.recordArtifactSave(document.uri.fsPath);
+  }));
+  context.subscriptions.push(vscode.commands.registerCommand("hypeproof-chat.artifactHistory", async (uri?: vscode.Uri) => {
+    const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+    if (target?.scheme === "file") await provider.showArtifactHistory(target.fsPath);
+  }));
   // kids-quest — skeleton round result → next-turn context for the coach.
   context.subscriptions.push(preview.onResult((r) => provider.attachQuestResult(r)));
 
