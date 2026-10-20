@@ -5,6 +5,11 @@
 .hps-activity-now { flex: 0 1000 auto; min-width: 0; margin-inline: 8px 0; font-size: var(--hp-text-caption); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* TUX-SP-13 — the trial's passive remaining line: quiet text beside the AI name, never a control. */
 .hps-trial-left { flex: 0 1 auto; min-width: 0; margin-inline: 8px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* CONV-ENDCARD-R-003 — the ended free seat's way back to the pass list: a quiet text link, not a
+   Primary (no fill, no border), and it never shrinks into an ellipsis. */
+.hps-header button.hps-header-passes { flex: 0 0 auto; white-space: nowrap; margin-left: 0; padding: 2px 4px; border-color: transparent; background: transparent; color: var(--vscode-textLink-foreground, #3794ff); text-decoration: underline; text-underline-offset: 2px; }
+.hps-header button.hps-header-passes:hover { background: transparent; color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, #3794ff)); }
+.hps-free-ended-note { margin: 0 0 6px; font-size: var(--hp-text-caption); line-height: 1.5; color: var(--vscode-descriptionForeground, #a4aab3); }
 .hps-shell[data-chat-detail="personal"] .hps-messages {
   min-height: 0; gap: 28px; overscroll-behavior: contain;
   padding: 24px max(20px, calc((100% - var(--chat-column)) / 2)) 32px;

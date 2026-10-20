@@ -110,3 +110,22 @@ export function activityDetail(activity: { pass?: PassStatus; trial?: TrialStatu
   if (activity.pass) return passEnd(activity.pass);
   return trialHeaderLine(activity.trial, now, !!activity.free);
 }
+
+// ── CONV-ENDCARD-R-003 — the way back to the pass list after `오늘은 여기까지` ───────────────────
+// A free seat (TUX-SP-13 free start) whose Service `trial` block says it ended keeps one quiet
+// `이용권 살펴보기` link in the chat header and a line above the composer saying why the AI no
+// longer answers. Neither carries a count. A pass seat, a code-issued trial and a seat still in
+// use get neither (negative controls in test/trial-end-card-dismiss.test.tsx).
+
+/** Why a free seat ended, or null for a pass, a code-issued trial, or a seat still in use. */
+export function freeSeatEnded(activity: { pass?: unknown; trial?: TrialStatus; free?: boolean } | undefined, now = Date.now()): "exhausted" | "expired" | null {
+  if (!activity || activity.pass || !activity.free) return null;
+  return trialEnded(activity.trial, now);
+}
+
+/** The line above the composer on an ended free seat. 해요체, the end card's register; no count. */
+export function freeSeatEndedNote(reason: "exhausted" | "expired"): string {
+  return reason === "exhausted"
+    ? "무료로 쓸 수 있는 AI 요청을 모두 써서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요."
+    : "무료 사용 시간이 끝나서 지금은 AI가 답하지 않아요. 만든 파일과 대화는 그대로 있어요.";
+}
