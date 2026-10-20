@@ -119,6 +119,60 @@ a stale notice settling late does not release a newer one); and the wiring at th
 final status with the turn's own profile, both surfaces watched and the turn-start release. Each guard was removed once and the
 smoke failed.
 
+`REQ-STUDIO-CAPABILITY-CHANGE` (CGP-SHELL-R-024 / CGP-SHELL-D-023, P1, 2026-10-20): when a
+profile refresh changes what the AI can do on the seat, the learner sees one calm card in
+the chat before the next turn, in the words of the REQ-M47 card (`AI_CAPABILITY_LABELS`):
+"이제 AI가 할 수 있는 일이 바뀌었어요", then "새로 생김 — <labels>" and/or "이제 안 됨 —
+<labels>" (a line only when it has entries), and the quiet button "알겠어요". The
+capabilities compared are exactly the six REQ-M38 keys `aiCapabilities` presents (`read ·
+write · shell · subagents · browser · web_search`), evaluated by the one function that also
+draws the REQ-M47 card (`seatAiCapabilities`: the selected access choice applied by
+`accessProfile`, then the runtime the profile resolves to under the `coachRuntime` setting,
+proxy after an agent-sdk → proxy fallback), so the change card never names a row the REQ-M47
+card does not show. The remembered served profile and the new one are both evaluated under
+the current access choice, setting and fallback: a change of those inputs alone never makes a
+card, and a profile change they mask (e.g. a pass allowing only `read` while the profile adds
+write) stays silent. Publishing and images are not keys of that card, so they are not
+reported here. It is a system line
+under the transcript (`role="status"`, the stop-notice surface), never a modal, and never
+disables the composer. No capability names, scores or evaluation sentences (SX-01). Shown
+once per change: the card stays until "알겠어요"; re-posting the same profile keeps the same
+card, and after dismissal the same profile on a later refresh shows nothing; a change undone
+before dismissal clears it. Never: at first load (the first profile in a token + activity
+scope is the baseline, held in memory only, so a new window or another token is a first
+load); for a change to a field the card does not show (greeting, model list, publishing, a
+proxy-only browser switch on the agent-sdk runtime); for the learner's own folder choice
+(REQ-STUDIO-FOLDER-CONSENT has its own question and line: the comparison uses the served
+profile, and grants `narrowForFolder` recorded as removed are put back); for the learner's
+access choice, the machine `coachRuntime` setting or the agent-sdk → proxy fallback (REQ-M7
+has its own notice) changing on their own; in local mode or on the instructor surface. Every
+forced profile re-read that can precede a model call republishes the config
+(`refreshProfileAndConfig`: the image-edit re-read and the classroom-ops `refreshProfile`), so
+the card is on screen before the next turn. Seats: personal work only (activity kind personal or
+trial, or a bought pass); never a classroom seat, a seat with a served lesson or an enforced
+lesson binding, or an unknown seat, where the baseline moves silently. Decision: instructors
+change lessons live, so a card mid-class can be noise; REQ-M47 says nothing about change
+notices, so this follows the stricter existing quiet rule (REQ-STUDIO-FINISH-NOTICE #2072,
+CGP-SHELL-R-001 `classUpdateHold` #1890). In class the closed REQ-M47 card still follows the
+new profile. Limits: the register row's classroom case ("선생님이 도움 방식을 바꿨어요: <before>
+→ <after>" after a U3 settings change) is therefore not met for classroom seats and stays
+open for a separate decision; the card is not persisted, so a change made while Studio was
+closed is not reported. Pure diff, seats and once-only state: `src/capabilityChange.ts`; one
+observation in `postConfig` with the served profile, the card in the panel config
+(`capabilityChange`), dismiss message `dismissCapabilityChange`. Tests:
+`test/capability-change.smoke.mjs` — the shared evaluation equals the card's former formula
+over access choice × setting × fallback; first load, invisible-field, folder-consent (with a
+profile-side negative control), access choice `["read"]` + added write / web_search, fallback +
+added write, setting / fallback / choice flip alone, classroom, instructor, local and new-scope
+negative controls;
+added and removed lists in order; same card while open, no repeat after dismiss, a stale id
+does not dismiss; and the wiring (both cards from `seatAiCapabilities` with the same inputs,
+the two forced re-reads through `postConfig`). `test/ai-can-do.test.tsx` renders the card (status line,
+copy, only non-empty lines, no capability-score labels, composer not disabled) with no-change
+and instructor negative controls. The first-load, folder, seat, dismiss, same-card,
+access-choice, fallback, current-inputs-baseline and both re-read guards and the card render
+were each removed once and a test failed.
+
 `REQ-STUDIO-CONTEXT-TRIM-MARKER` (CGP-CHAT-R-010 / CGP-CHAT-D-010, P1, 2026-10-20): when
 older turns stop going to the model, the transcript says so with one quiet line at that
 point. Two real events produce it, nothing else. (1) The history clamp: every model call

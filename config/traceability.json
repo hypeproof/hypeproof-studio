@@ -6502,6 +6502,37 @@
       ]
     },
     {
+      "id": "ST-IMP-CAPABILITY-CHANGE",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/capabilityChange.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CAPABILITY-CHANGE",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-IMP-CAPABILITY-CHANGE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/capability-change.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/ai-can-do.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-CONTEXT-TRIM-MARKER",
       "stage": "implementation",
       "owner": "jayleekr",

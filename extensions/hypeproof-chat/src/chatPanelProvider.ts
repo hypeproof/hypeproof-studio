@@ -185,7 +185,7 @@ import { BrowserControl, type BrowserToolCall, type CrBrowserOptions } from "./b
 import { linkSafety, resolveBrowserSafety, routeExternalLink } from "./browserSafetyHelpers";
 import { reduceMotionForced, withReducedMotionAttr } from "./motionPreference";
 import { normalizeTextSize, TEXT_SIZE_KEY } from "./textSize";
-import { aiCapabilities } from "./aiCapabilities";
+import { CapabilityChangeTracker, seatAiCapabilities, type SeatInputs } from "./capabilityChange";
 import { buildPageAttachment, type PageAttachmentPreview } from "./pageContext";
 import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY_NOTICE } from "./fileAttachment";
 import { classUpdateHold } from "./updateCheckerHelpers";
@@ -859,6 +859,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // Lazy: fixtures build the provider with Object.create, which skips field initializers.
   private finishNotice?: ReturnType<typeof createFinishNotifier>;
   private get finishNotifier() { return (this.finishNotice ??= createFinishNotifier({ view: () => this.view, editor: () => this.editorChat })); }
+  // CGP-SHELL-R-024 — what the learner was last told the AI can do, per token and activity (memory only).
+  // Inline `??=` at each use, not a getter: some fixtures call postConfig on a plain object that has no prototype getters.
+  private capChanges?: CapabilityChangeTracker;
   private activeStreams = new Map<string, AbortController>();
   // REQ-STUDIO-STEER-NOW — the latest turn until its outer finally released the folder lock (turnSettle.ts);
   // undefined once it has. Fixtures build the provider with Object.create, which skips field initializers.
@@ -3012,6 +3015,17 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     return !!profile?.ux.coach.revisit_on_entry;
   }
 
+  /**
+   * A forced profile re-read that also republishes the panel config, so what the re-read changed
+   * (CGP-SHELL-R-024: what the AI can do) reaches the chat before the next model call.
+   */
+  async refreshProfileAndConfig(): Promise<ResolvedProfile | null> {
+    const profile = await this.ensureProfile(true);
+    // A failed republish must not stop the caller (it did not post before); the next postConfig retries.
+    await this.postConfig().catch((err) => console.warn("[capability-change] config republish after refresh failed:", err));
+    return profile;
+  }
+
   /** Eager profile fetch — called by extension.ts on activation. */
   async ensureProfile(forceRefresh = false): Promise<ResolvedProfile | null> {
     if (forceRefresh) {
@@ -4779,7 +4793,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         if (!token || !connections.current) throw new Error("활동 연결을 먼저 확인해 주세요.");
         await verifyActivity({ token, proxyUrl: connections.current.service }, connections.current.serverId);
       }
-      const profile = await this.ensureProfile(true);
+      const profile = await this.refreshProfileAndConfig();
       const token = await this.context.secrets.get(TOKEN_KEY);
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!profile || !token || !cwd) {
@@ -5186,6 +5200,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       case "dismissUpdate":
         // #72. User clicked "Later" — silence this version for 7 days.
         void vscode.commands.executeCommand("hypeproof-chat.dismissUpdate", msg.version);
+        return;
+      case "dismissCapabilityChange":
+        (this.capChanges ??= new CapabilityChangeTracker()).dismiss(msg.id);
+        void this.postConfig();
         return;
       case "namingRitual":
         void this.runCoachNamingRitual({ force: true });
@@ -7338,13 +7356,18 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const toolRuntime = selection?.source === 'lesson' ? selection.runtime : resolveCoachRuntime({
       settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), profileRuntime: toolProfile?.coach_runtime, minorCohort: toolProfile?.minor_cohort,
     });
+    // REQ-M47 and CGP-SHELL-R-024 evaluate a served profile the same way: this access choice, this runtime setting, this fallback.
+    const seatInputs: SeatInputs = { choice: this.accessState?.view?.choices.find(choice => choice.id === this.accessState?.selected), settingRuntime: cfg.get<'proxy' | 'agent-sdk'>('coachRuntime', 'proxy'), fallback: !!this.fallbackNoticeShown };
+    // CGP-SHELL-R-024 — the remembered and the new served profile are both evaluated under seatInputs, so only a profile change shows.
+    const capabilityChange = (this.capChanges ??= new CapabilityChangeTracker()).observe({ scope: JSON.stringify([token ?? null, scope ?? null]), profile, inputs: seatInputs, instructor: isInstructor, local: !!local });
     await this.post({
       type: "config",
       config: {
         turnTools: turnToolsAvailability({ profile: toolProfile, runtime: toolRuntime, local: !!local, instructor: isInstructor }),
         ...(fileAttachAllowed(toolProfile, isInstructor) ? { fileAttach: true } : {}),
         // After an agent-sdk → proxy fallback this session, turns run on proxy, so the card follows it.
-        ...(toolProfile && !local && !isInstructor ? { aiCapabilities: aiCapabilities(toolProfile, this.fallbackNoticeShown ? 'proxy' : toolRuntime) } : {}),
+        ...(profile && !local && !isInstructor ? { aiCapabilities: seatAiCapabilities(profile, seatInputs) } : {}),
+        ...(capabilityChange && !isInstructor ? { capabilityChange } : {}),
         proxyUrl,
         model:local?.model??model,
         hasToken: !!token,

@@ -18,6 +18,17 @@ export const AI_CAPABILITY_LABELS: Record<AiCapabilityKey, string> = {
   web_search: "웹에서 찾아보기",
 };
 
+/** CGP-SHELL-R-024 card copy (REQ-STUDIO-CAPABILITY-CHANGE). Korean is the product; see CLAUDE.md §Language. */
+export const CAPABILITY_CHANGE_COPY = {
+  title: "이제 AI가 할 수 있는 일이 바뀌었어요",
+  added: "새로 생김",
+  removed: "이제 안 됨",
+  dismiss: "알겠어요",
+} as const;
+
+/** One pending card. `id` changes when the content does, so a stale dismiss cannot clear a newer card. */
+export interface CapabilityChange { id: string; added: string[]; removed: string[] }
+
 export function aiCapabilities(
   profile: Pick<ResolvedProfile, "sdk_tools" | "tools" | "browser_control"> | null | undefined,
   runtime: "proxy" | "agent-sdk",

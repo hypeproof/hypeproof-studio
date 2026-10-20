@@ -18,6 +18,7 @@ import { mergeQuoteIntoDraft, QUOTE_ROW_ATTR, QUOTE_SCOPE_ATTR, type AnswerQuote
 import { steerAtEnd, steerMarksAccept, steerMarksRefuse, steerMarkTarget, steerOffered, steerPress, STEER_LABEL, STEER_OFFLINE_NOTE, STEER_SENDING_MARK, STEER_STOP_FAILED_NOTE, STEER_STOP_TIMEOUT_MS, STEER_STOPPED_MARK, STEER_STOPPING_LABEL, type SteerMark } from './steerNow';
 import { scrollBehavior } from './motion';
 import { TEXT_SIZES, TEXT_SIZE_LABELS, normalizeTextSize } from '../../src/textSize';
+import { CAPABILITY_CHANGE_COPY } from '../../src/aiCapabilities';
 import { AccessControl } from './AccessControl';
 import { EffortControl } from './EffortControl';
 import { ModelControl } from './ModelControl';
@@ -1563,6 +1564,11 @@ export function ChatPanel(props: Props) {
           </div>
         )}
 
+        {/* CGP-SHELL-R-024 — what the AI can do changed on a profile refresh. A system line, not a modal; never blocks sending. */}
+        {!props.instructor && config?.capabilityChange && (
+          <CapabilityChangeCard change={config.capabilityChange} onDismiss={(id) => postToHost({ type: "dismissCapabilityChange", id })} />
+        )}
+
         {/* AE-15 / CGP-ART-R-002 — review of what the last turn changed in the work folder. Never auto-dismissed. */}
         {!props.instructor && turnReview && (
           <TurnReviewBar
@@ -1891,6 +1897,19 @@ function AiCanDo({ items, solo }: { items: NonNullable<ChatConfig['aiCapabilitie
     </ul>
     <p className="hp-rail-lesson-note">{solo ? '지금 쓰는 체험·이용권에서 정해진 범위예요.' : '수업 설정이 정한 범위예요. 바꾸려면 선생님께 이야기해 주세요.'}</p>
   </details>;
+}
+
+/** CGP-SHELL-R-024: one calm line per change, in the REQ-M47 card's words; "알겠어요" closes it for good. */
+function CapabilityChangeCard({ change, onDismiss }: { change: NonNullable<ChatConfig['capabilityChange']>; onDismiss: (id: string) => void }) {
+  return <div className="hps-stop-notice hps-capability-change" role="status" aria-live="polite" data-capability-change={change.id}>
+    <span className="hps-stop-notice-icon" aria-hidden="true">ℹ</span>
+    <div>
+      <p>{CAPABILITY_CHANGE_COPY.title}</p>
+      {change.added.length > 0 && <p data-change="added">{CAPABILITY_CHANGE_COPY.added} — {change.added.join(', ')}</p>}
+      {change.removed.length > 0 && <p data-change="removed">{CAPABILITY_CHANGE_COPY.removed} — {change.removed.join(', ')}</p>}
+    </div>
+    <button type="button" className="hp-cta-quiet" onClick={() => onDismiss(change.id)}>{CAPABILITY_CHANGE_COPY.dismiss}</button>
+  </div>;
 }
 
 /** One world the profile ships down (reuses the host protocol's definition as-is). */

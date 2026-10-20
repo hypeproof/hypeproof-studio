@@ -4,7 +4,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
-import { aiCapabilities } from "../src/aiCapabilities";
+import { AI_CAPABILITY_LABELS, aiCapabilities } from "../src/aiCapabilities";
 import type { ChatConfig } from "../src/protocol";
 
 (globalThis as unknown as Record<string, unknown>).window = { acquireVsCodeApi: undefined };
@@ -62,6 +62,31 @@ t("solo seats get no classroom or teacher words (trial diagnosis D3)", () => {
   const card = /<details class="hp-rail-lesson hp-ai-can-do">[\s\S]*?<\/details>/.exec(html)?.[0] ?? "";
   if (!card.includes("여기서 AI가 할 수 있는 일")) throw new Error("solo title missing");
   for (const word of ["수업", "선생님"]) if (card.includes(word)) throw new Error(`solo card says ${word}`);
+});
+
+// CGP-SHELL-R-024 — the one-time "what the AI can do changed" card (REQ-STUDIO-CAPABILITY-CHANGE).
+const change = { id: "cap-1", added: [AI_CAPABILITY_LABELS.web_search], removed: [AI_CAPABILITY_LABELS.shell] };
+const withChange = (c: object | null) => ({ ...config(aiCapabilities(kidsFiles, "agent-sdk")), ...(c ? { capabilityChange: c } : {}) }) as unknown as ChatConfig;
+t("change card: title, added and removed in the REQ-M47 words, a quiet dismiss, a status line", () => {
+  const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={withChange(change)} instructor={false} />);
+  const card = /<div class="hps-stop-notice hps-capability-change"[\s\S]*?<\/button><\/div>/.exec(html)?.[0] ?? "";
+  if (!card) throw new Error("card missing");
+  if (!card.includes('role="status"') || !card.includes('data-capability-change="cap-1"')) throw new Error("not a status line with its id");
+  if (!card.includes("이제 AI가 할 수 있는 일이 바뀌었어요")) throw new Error("title");
+  if (!card.includes('<p data-change="added">새로 생김 — 웹에서 찾아보기</p>')) throw new Error("added line");
+  if (!card.includes('<p data-change="removed">이제 안 됨 — 명령 실행하기</p>')) throw new Error("removed line");
+  if (!card.includes(">알겠어요</button>")) throw new Error("dismiss");
+  for (const word of ["FRAMING", "JUDGMENT", "ORCHESTRATE", "VERIFY", "ADAPT", "OWNERSHIP", "점수"]) if (card.includes(word)) throw new Error(`capability-score label ${word}`);
+  if (/<textarea[^>]*disabled/.test(html)) throw new Error("composer disabled by the card");
+});
+t("change card: only the lines that have entries", () => {
+  const html = renderToStaticMarkup(<ChatPanel {...PROPS} config={withChange({ ...change, removed: [] })} instructor={false} />);
+  if (html.includes('data-change="removed"')) throw new Error("empty removed line drawn");
+  if (!html.includes('data-change="added"')) throw new Error("added line missing");
+});
+t("negative controls: no change card without a change, or for an instructor", () => {
+  if (renderToStaticMarkup(<ChatPanel {...PROPS} config={withChange(null)} instructor={false} />).includes("hps-capability-change")) throw new Error("card without a change");
+  if (renderToStaticMarkup(<ChatPanel {...PROPS} config={withChange(change)} instructor={true} />).includes("hps-capability-change")) throw new Error("card for an instructor");
 });
 
 if (fail) { console.error(`ai-can-do: ${fail} failed`); process.exit(1); }
