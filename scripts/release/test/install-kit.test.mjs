@@ -195,6 +195,41 @@ test('refuses an Intel Mac, a mismatched app version and a stray option', {skip:
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 });
 
+test('a failed seed names the exact recovery, never an in-app offer that is off by default', {skip: !mac}, () => {
+  const dir = tmp('hps-install-kit-');
+  try {
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    // The asset folder has no seeder and no seed tarball, so the seed step fails after the app is installed.
+    const seeded = {tag: 'v2026.1020.0', zipSha256: sha, assets, seedName: 'claude-agent-sdk-darwin-arm64-0.3.299.tgz', seedSha256: H('b'), seederSha256: H('c')};
+    const run = (args) => {
+      const out = path.join(dir, 'out');
+      fs.rmSync(out, {recursive: true, force: true});
+      writeKit({sourceSha: SRC, ...seeded}, out);
+      const home = path.join(dir, 'home');
+      fs.mkdirSync(home, {recursive: true});
+      return spawnSync('/bin/bash', [path.join(out, 'install-mac.sh'), ...args], {encoding: 'utf8', env: {PATH: process.env.PATH, HOME: home, HPS_INSTALL_ASSET_DIR: assets}});
+    };
+    const oneLiner = 'curl -fsSL https://github.com/hypeproof/hypeproof-studio/releases/download/v2026.1020.0/install-mac.sh | bash';
+    const plain = run([]);
+    assert.equal(plain.status, 0, plain.stderr);
+    assert.match(plain.stderr, /AI 코치 실행 파일을 준비하지 못했습니다/);
+    assert.ok(plain.stderr.includes(`이 명령을 한 번 더 실행하세요: ${oneLiner}\n`), plain.stderr);
+    assert.doesNotMatch(plain.stderr, /받을지 묻습니다|Studio가 받/, 'REQ-M46 is off by default: no promise of an in-app offer');
+    // Options given are repeated, so the retry installs the same way.
+    const kit = run(['--layout', 'kit']);
+    assert.equal(kit.status, 0, kit.stderr);
+    assert.ok(kit.stderr.includes(`${oneLiner} -s -- --layout kit`), kit.stderr);
+    // The Test Kit's double-click path names its own file, not a terminal command.
+    const cmd = run(['--from-command']);
+    assert.equal(cmd.status, 0, cmd.stderr);
+    assert.match(cmd.stderr, /INSTALL-2026\.1020\.0\.command 를 한 번 더 여세요/);
+    // Negative control: a skipped seed says nothing about it.
+    const skipped = run(['--no-seed']);
+    assert.equal(skipped.status, 0, skipped.stderr);
+    assert.doesNotMatch(skipped.stderr, /AI 코치 실행 파일/);
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
 test('generated scripts pass shellcheck', {skip: spawnSync('shellcheck', ['--version']).status !== 0}, () => {
   const dir = tmp('hps-install-kit-');
   try {

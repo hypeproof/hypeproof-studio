@@ -20,6 +20,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { denialCopy, denialToolText, type Denial } from "./denialSource.ts";
+import { FREE_FOLDER_COUNT } from "./seatVocabulary.ts";
 import type { ResolvedProfile } from "./protocol";
 
 export type FolderConsentLevel = "full" | "read" | "none";
@@ -96,12 +97,28 @@ export function folderConsentApplies(
  * exactly the served home folder or a folder inside it. A look-alike sibling
  * (`<home>-taxes`, `<home>Clinic`) is not own, and neither is a sibling Studio created
  * (`<home>-N`, `<home>-<repo>`): those ask once. No served home → no folder is own.
+ * The one exception is the free seat (`isFreeSeatFolder`).
  */
 export function isOwnFolder(folder: string, home: string | null | undefined): boolean {
   if (!home) return false;
   if (folder === home) return true;
   const rel = path.relative(home, folder);
   return !!rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/**
+ * REQ-STUDIO-FREE-START / BB-005 (Jay 2026-10-20: a free start never stops and never asks) —
+ * the folders Studio itself creates for a free seat are that seat's own: the served home and
+ * the numbered siblings free start falls back to when the home is held (`<home>-2` …
+ * `<home>-20`, see `freeFolderCandidates`). Exact names only: `<home>-taxes`, `<home>-21`,
+ * `<home>-02` and every folder the learner picks elsewhere still ask. Both arguments canonical.
+ */
+export function isFreeSeatFolder(folder: string, home: string | null | undefined): boolean {
+  if (!home) return false;
+  for (let n = 1; n <= FREE_FOLDER_COUNT; n++) {
+    if (isOwnFolder(folder, n === 1 ? home : `${home}-${n}`)) return true;
+  }
+  return false;
 }
 
 /** Is `target` the folder itself or inside it? Both canonical. */
@@ -191,6 +208,8 @@ export type FolderConsentDecision =
 /** What the host does before a turn. Pure: the caller passes canonical paths. */
 export function folderConsentDecision(args: {
   applies: boolean;
+  /** A free seat (`isFreeSeat`): its app-created numbered folders count as own too. */
+  freeSeat?: boolean;
   activityId: string | null | undefined;
   folder: string | null | undefined;
   home: string | null | undefined;
@@ -198,6 +217,7 @@ export function folderConsentDecision(args: {
 }): FolderConsentDecision {
   if (!args.applies || !args.folder) return { kind: "skip" };
   if (isOwnFolder(args.folder, args.home)) return { kind: "skip" };
+  if (args.freeSeat && isFreeSeatFolder(args.folder, args.home)) return { kind: "skip" };
   // Fail closed: without an activity id the choice cannot be remembered, so the AI is not used.
   if (!args.activityId) return { kind: "refuse", message: FOLDER_CONSENT_NO_ACTIVITY };
   const level = readFolderConsent(args.store, args.activityId, args.folder);

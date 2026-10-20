@@ -83,3 +83,9 @@ export function isFreeSeat(p?: { profile_id?: string | null; id?: string | null;
   if (!p || p.pass) return false;
   return (p.profile_id ?? p.id) === FREE_PROFILE_ID;
 }
+
+/**
+ * REQ-STUDIO-FREE-START — how many folders a free seat may work in: its served home and the
+ * numbered siblings Studio creates itself when that home is held (`<home>-2` … `<home>-20`).
+ */
+export const FREE_FOLDER_COUNT = 20;

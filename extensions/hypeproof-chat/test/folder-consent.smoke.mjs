@@ -89,7 +89,12 @@ try {
     assert.equal(FC.servedHome("~/HypeProof/studio", "/u"), path.join("/u", "HypeProof/studio"));
     assert.equal(FC.servedHome("relative/dir", "/u"), null);
     assert.equal(FC.servedHome("  ", "/u"), null);
-    ok("own folder: exactly the served home and folders inside it; <home>-taxes, <home>-2, <home>x, the parent and other trees are not");
+    // BB-005: a free seat's own folders also include the numbered siblings Studio creates (<home>-2 … -20).
+    const free = "/u/HypeProofTrial";
+    for (const f of [free, `${free}/site`, `${free}-2`, `${free}-2/site`, `${free}-20`]) assert.equal(FC.isFreeSeatFolder(f, free), true, f);
+    for (const f of [`${free}-1`, `${free}-21`, `${free}-02`, `${free}-taxes`, `${free}-2x`, `${free}x`, "/u/Documents/proj", "/u"]) assert.equal(FC.isFreeSeatFolder(f, free), false, f);
+    assert.equal(FC.isFreeSeatFolder(`${free}-2`, null), false, "no served home → nothing is a free folder");
+    ok("own folder: exactly the served home and folders inside it; <home>-taxes, <home>-2, <home>x, the parent and other trees are not (free seat: <home>-2…-20 are its own)");
   }
 
   // ── 4. The store: per activity, per folder; malformed entries are undecided ──
@@ -128,6 +133,11 @@ try {
     // Fail closed: a personal seat in an outside folder with no activity id is refused, not skipped.
     assert.deepEqual(d({ activityId: undefined }), { kind: "refuse", message: FC.FOLDER_CONSENT_NO_ACTIVITY });
     assert.deepEqual(d({ activityId: undefined, folder: "/u/HypeProof/studio" }), { kind: "skip" }, "own folder needs no activity id");
+    // BB-005: a free seat's app-created sibling is own; the same folder on any other seat still asks.
+    assert.deepEqual(d({ freeSeat: true, folder: "/u/HypeProof/studio-2" }), { kind: "skip" }, "free start into its auto folder never asks");
+    assert.deepEqual(d({ folder: "/u/HypeProof/studio-2" }), { kind: "ask", folder: "/u/HypeProof/studio-2" }, "a non-free seat asks for <home>-2");
+    assert.deepEqual(d({ freeSeat: true, folder: "/u/Documents/other" }), { kind: "ask", folder: "/u/Documents/other" }, "a folder the free learner picked still asks");
+    assert.deepEqual(d({ freeSeat: true, folder: "/u/HypeProof/studio-taxes" }), { kind: "ask", folder: "/u/HypeProof/studio-taxes" }, "a look-alike still asks");
     assert.equal(FC.folderWriteAllowed("full"), true);
     for (const l of ["read", "none", undefined]) assert.equal(FC.folderWriteAllowed(l), false, String(l));
     ok("decision: remembered → apply, new folder or activity → ask, no activity id → refuse (fail closed), own folder / classroom / no folder → skip; only full writes");
@@ -325,6 +335,30 @@ try {
     await assert.rejects(run(noId), (e) => e instanceof host.FolderConsentRefusal && e.message === FC.FOLDER_CONSENT_NO_ACTIVITY);
     assert.equal(W(path.join(outside, "index.html"), noId), FC.FOLDER_CONSENT_NO_ACTIVITY);
     assert.equal(ui.modal.length, 0);
+    // BB-005 / REQ-STUDIO-FREE-START: a free start that fell back to <home>-2 opens it without the question;
+    // a folder the free learner picked, and <home>-2 on a code-issued trial, still ask.
+    ui.answer = undefined; // any question would refuse the turn: proves the free path does not ask
+    ui.modal.length = 0;
+    const freeSeat = { ...personal, profile_id: "studio-open-trial", activity_id: "f".repeat(64), activity_kind: "trial" };
+    const auto = `${home}-2`;
+    fs.mkdirSync(auto, { recursive: true });
+    ws.folder = auto;
+    assert.equal(await run(freeSeat), freeSeat, "free seat in its auto folder: same profile, no question");
+    assert.equal(host.folderWriteRefusal(context, freeSeat, opts, path.join(auto, "index.html")), null, "free seat writes into its auto folder");
+    assert.equal(await host.changeFolderConsent(context, freeSeat, opts), undefined);
+    assert.equal(ui.modal.length, 0, "free start into its auto folder shows no consent prompt");
+    const codeTrial = { ...freeSeat, profile_id: "studio-native-trial" };
+    await assert.rejects(run(codeTrial), (e) => e instanceof host.FolderConsentRefusal);
+    assert.equal(ui.modal.length, 1, "a code-issued trial in <home>-2 still asks");
+    ws.folder = outside;
+    await assert.rejects(run(freeSeat), (e) => e instanceof host.FolderConsentRefusal);
+    assert.equal(ui.modal.length, 2, "a user-picked folder on the free seat still asks");
+    assert.equal(ui.modal[1].message, "이 폴더에서 작업할까요?");
+    const passOnFree = { ...freeSeat, pass: { id: "p" } };
+    ws.folder = auto;
+    await assert.rejects(run(passOnFree), (e) => e instanceof host.FolderConsentRefusal);
+    assert.equal(ui.modal.length, 3, "a bought pass is not a free seat: <home>-2 asks");
+    ui.modal.length = 0;
     // The refusal class is the send path's keep-input error.
     const { TurnToolModeError } = await import("../src/turnTools.ts");
     assert.equal(Object.getPrototypeOf(host.FolderConsentRefusal.prototype).constructor.name, TurnToolModeError.name);
