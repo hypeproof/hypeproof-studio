@@ -6478,6 +6478,12 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/responseAnnouncer.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatPanel.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
         }
       ]
     },
@@ -6492,6 +6498,9 @@
       "sources": [
         {
           "path": "extensions/hypeproof-chat/test/response-announcer.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/response-lifecycle.test.tsx"
         }
       ]
     },
@@ -6508,6 +6517,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/webview-ui/src/EditResend.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AttemptPager.tsx"
         }
       ]
     },
@@ -6525,6 +6537,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/test/edit-resend.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/edit-in-place.test.tsx"
         },
         {
           "path": "extensions/hypeproof-chat/test/fixtures/task-store-validator-before-edit-resend.mjs"

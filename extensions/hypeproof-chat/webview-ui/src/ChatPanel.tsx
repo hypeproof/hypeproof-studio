@@ -719,7 +719,7 @@ export function ChatPanel(props: Props) {
   const recheckSend = useRef(false);
   // CGP-CHAT-R-011 — the host grants it (sdk_tools.read, never instructors); the instructor surface never shows it.
   const fileAttachShown = config?.fileAttach === true && !props.instructor && !!props.onAttachFile;
-  const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error });
+  const responseAnnouncementText = useResponseAnnouncement(streaming, { personal: personalWorkspace, stopped: !!props.stopNotice, failed: !!error, scope: `${activityId ?? ""}/${taskId ?? ""}` });
   // CGP-SHELL-R-011 — offline banner and reconnect line; nothing is sent on reconnect.
   const connectivity = useConnectivity();
   // Malformed signals from the host draw no recovery line (and one report) instead of failing the chat's render.
@@ -1501,6 +1501,9 @@ export function ChatPanel(props: Props) {
         let sent = false;
         try { postToHost({ type: "previewRecoveryAction", action }); sent = true; } finally { if (!sent) setPreviewBusy(false); }
       }} /></PanelBoundary>}
+      {/* CGP-CHAT-D-001: stable, invisible response announcements live outside the scrolling message list. */}
+      <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{liveAnnouncement}</div>
+
       <div className="hps-messages" ref={scrollRef} onScroll={viewport.onScroll}>
         {props.aiNotice && (
           // #320 — AI disclosure (Anthropic Usage Policy / ToS §D.3). Compact
@@ -1666,11 +1669,9 @@ export function ChatPanel(props: Props) {
         {/* #497 — the notice right after Stop. It is not an error, so it is announced as
             a quiet inline status line rather than an error banner. It goes away on the
             next input. */}
-        {/* CGP-CHAT-R-001: one polite line per turn start (classroom) and completion (both modes). */}
-        <div className="hps-sr-only" role="status" aria-live="polite" data-testid="response-announcer">{liveAnnouncement}</div>
 
         {props.stopNotice && (
-          <div className="hps-stop-notice" role="status" aria-live="polite">
+          <div className="hps-stop-notice">
             <span className="hps-stop-notice-icon"><ChatIcon kind="stop" size={16} /></span>
             {props.stopNotice}
           </div>

@@ -456,13 +456,17 @@ feedback stays inside the existing heading so removing it cannot move the
 transcript. Its status still explains that switching tasks requires stopping the
 active work. Draft, selection and explicit latest-message behavior remain intact.
 
-CGP-CHAT-R-001 (2026-10-19): the response lifecycle reaches assistive tech once per turn, in
-personal and classroom chat. One visually hidden polite live region announces "답변을 시작했어요"
-when a classroom turn starts (personal mode keeps `ResponsePending` as its start announcement, so
-nothing is said twice) and "답변이 끝났어요" when any turn completes. A turn ended by Stop or an
-error is not also announced as completed; the stop notice and the error banner speak for it.
-Token chunks are never announced, and opening or reopening the panel announces nothing. Screen
-reader runs (VoiceOver, NVDA) are not yet recorded. Test: `test/response-announcer.test.tsx`.
+CGP-CHAT-R-001, extended by CGP-CHAT-D-001 (2026-10-20): one stable, visually hidden
+polite response live region stays outside the transcript scroll container in personal
+and classroom chat. It announces "답변을 시작했어요", "답변이 끝났어요", or
+"답변을 멈췄어요" once per observed lifecycle transition. Visible pending and stop
+content keeps its appearance without separate live semantics. Errors keep their own
+alert and do not also announce completion. Token/code chunks never repeat lifecycle
+announcements. Opening or switching an activity/task stays quiet and cancels pending
+completion announcements. The region uses the existing sr-only styling; no visible
+layout changes. ARIA properties must pass axe aria rules. VoiceOver/NVDA and installed
+visual acceptance remain separate. Tests: `test/response-announcer.test.tsx` and
+`test/response-lifecycle.test.tsx` (actual DOM text writes, stable node and scroll ancestry).
 
 CGP-DS-R-027 / CGP-DS-R-028 (2026-10-19), extending TUX-CHAT-03 and DES-03 for the chat
 webview in every mode. While an IME composition is open (`isComposing` or legacy `keyCode` 229),
@@ -623,6 +627,16 @@ dialog, so they keep the base size. Since `REQ-STUDIO-TYPE-SCALE` the choice is 
 variable on the shell, so every caption in the personal chat (code pills included) follows it too.
 Test: `test/text-size.test.tsx`.
 
+CGP-CHAT-D-002 (D65, 2026-10-20) extends this edit flow: the latest prompt's
+44px edit control has a 16px pencil and the Korean label `수정`. It remains visible
+and keyboard-focusable, including without hover. The inline composer-style textarea
+keeps `취소` and `다시 보내기` underneath; its width and wrapping actions fit a 320px
+viewport. Native IME signals and composition-event state suppress Enter/Escape until
+composition ends. Prompt versions use the shared `AttemptPager` navigation component
+for D64/D65, with contextual labels. This does not add answer regeneration or selection
+storage; those retain their separate requirement scope. Browser layout and installed
+screen-reader verification remain separate from DOM interaction tests.
+
 `REQ-STUDIO-CHAT-EDIT-RESEND` (CGP-CHAT-R-002, 2026-10-20, DEC-08): the learner can edit their
 latest sent prompt and resend it, in personal task chat and classroom chat. A ghost `수정` button
 (44px target, `aria-label="보낸 메시지 수정"`) sits under the latest user line only, and only while
@@ -633,7 +647,7 @@ not in the composer, so the composer's saved draft, queue and tool mode are unto
 (or Escape outside IME composition) restores the original exactly. While the editor is open the
 composer does not send (send, friend button, idea expansion): it says `고치던 메시지가 열려 있어요. 먼저
 보내거나 취소해 주세요. 입력한 내용은 그대로입니다.` and keeps both texts. The original's in-memory images
-are shown and can be removed one by one. `보내기` sends a new request with a new id that carries
+are shown and can be removed one by one. `다시 보내기` sends a new request with a new id that carries
 the original's tool mode (REQ-STUDIO-CHAT-REFERENCE) and the kept images; the saved user line
 records `editOf` = the root id of its prompt group. The host accepts it only for the latest prompt
 group (the saved transcript plus a newer failed request) and refuses anything else back into the

@@ -84,10 +84,10 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom()]
 }
 t("a prompt that was never edited has no pager (negative control)", () => ok(!render(personal, { messages: plain }).includes('aria-label="메시지 버전"'), "pager on a single version"));
 
-t("editor: original text, Cancel and 보내기, kept images removable", () => {
+t("editor: original text, Cancel and 다시 보내기, kept images removable", () => {
   const html = renderToStaticMarkup(<EditPrompt text="고양이 그려 줘" images={["data:image/png;base64,AAAA"]} revertNote={false} onCancel={noop} onSave={noop} />);
   ok(html.includes(">고양이 그려 줘</textarea>"), "original text not loaded");
-  ok(html.includes(">취소</button>") && html.includes(">보내기</button>"), "actions");
+  ok(html.includes(">취소</button>") && html.includes(">다시 보내기</button>"), "actions");
   ok(html.includes('aria-label="첨부 이미지 1 빼기"'), "image remove");
   ok(!html.includes(REVERT_NOTE), "revert note without a restore bar");
 });
