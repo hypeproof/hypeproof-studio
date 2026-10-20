@@ -1018,6 +1018,23 @@ remove separately collected observation bundles in `test-results/`.
 [디자인 기준](requirements/classroom-design.md), [인수 테스트](testing/classroom-admin.md)를 함께 따른다.
 기존 metadata board와 operator-only 로그 조회 권한을 확대하지 않는다. 개별 구현 범위는 해당 문서의 상태표를 따른다.
 
+**REQ-CHALK-ROW-ACTIONS** (CGP-DS-R-021 / REQ-CGP-DS-23, P0; applies DES-06 and DES-11). Row actions in
+Chalk lists and the sidebar are visible and operable without hover — on touch screens, by keyboard and by
+screen reader. No Chalk page reveals an action on `:hover` or `:focus-within`, hides one with `opacity:0` or
+`visibility:hidden`, or wires mouse/pointer enter/over handlers; no rule removes the focus outline, and
+`/manage` keeps its global 3px `*:focus-visible` ring. The audit before this change found no hover-only
+action on any page (matching `docs/research/chatgpt-desktop-2026-10/verification.md` REQ-CGP-DS-23), but
+three row actions were below the 44px target. Changed: on `/manage` the seat row's 「상세」 button
+(`.ops-seat>td.c-act button`) goes from 32px to 44px and its border from `--ink-line-hi` (1.8:1) to
+`--ink-mute` (4.8:1 on `--ink-panel`); the sidebar links `.flow>a` go from 34px to 44px and the 「더보기」
+links `.flow-more>a` from 32px to 44px. On `/authoring` the step-row buttons (위로·아래로·삭제), the
+completion-criterion and retrospective list buttons get an explicit 44px minimum (they already measured
+about 47px from padding). The help-request list on `/manage` and the 자립 범위 rows on `/sharing` keep the
+44px they inherit from the page button rule. Korean copy, IDs and row heights are unchanged (the seat row
+was already 56px tall from its 44px checkbox cell). The top flow bar on the other pages (32–40px links) is
+navigation rather than a row action and is not changed here. Test: `chalk/test/row-actions.test.mjs`
+(static parse of every `chalk/src/ui/*.html`, with 12 negative controls). The sidebar 「더보기」 toggle (`.flow-more>summary`) is also 44px and no longer dimmed with opacity.
+
 ## Chalk lesson delivery
 
 | ID | Behavior | Acceptance / evidence |
