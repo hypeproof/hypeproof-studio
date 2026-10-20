@@ -53,6 +53,8 @@
     },
     "commands": [
       { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
+      { "command": "hypeproof-chat.trashFile", "title": "파일을 활동 휴지통으로 이동", "enablement": "config.hypeproofChat.activityTrashEnabled" },
+      { "command": "hypeproof-chat.activityTrash", "title": "활동 휴지통 열기", "enablement": "config.hypeproofChat.activityTrashEnabled" },
       {
         "command": "hypeproof-chat.focus",
         "title": "HypeProof Chat: Focus"
@@ -376,6 +378,7 @@
       ],
       "explorer/context": [
         { "command": "hypeproof-chat.artifactHistory", "when": "!explorerResourceIsFolder && resourceScheme == file", "group": "hypeproof@3" },
+        { "command": "hypeproof-chat.trashFile", "when": "config.hypeproofChat.activityTrashEnabled && resourceScheme == file && workspaceFolderCount == 1", "group": "navigation@7" },
         {
           "command": "hypeproof-chat.previewActiveFile",
           "when": "resourceExtname == .html || resourceExtname == .htm",
@@ -466,6 +469,10 @@
           "default": false,
           "scope": "machine",
           "description": "활동 파일의 이전 버전을 이 기기에 보관합니다. 수업·미성년자 활동도 기본은 꺼짐이며, 파일마다 최근 20개를 보관합니다."
+        },
+        "hypeproofChat.activityTrashEnabled": {
+          "type": "boolean", "default": false, "scope": "machine",
+          "description": "Enable local activity trash for learner deletion gestures, including Explorer. Copies are kept encrypted in Studio's own storage, outside the work folder, with the key in the OS keychain, until the activity folder is removed. Off by default for every seat; turning it on for any seat is the owner's decision (DEC-12, not yet confirmed)."
         },
         "hypeproofChat.proxyUrl": {
           "type": "string",

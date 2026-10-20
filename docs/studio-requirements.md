@@ -3223,3 +3223,78 @@ folder write consent. A failed history capture does not interrupt the original s
 
 Behavioral checks: `extensions/hypeproof-chat/test/artifact-history.smoke.mjs`.
 Native shell accessibility/visual and installed-device acceptance remain separate.
+
+### Experimental activity trash — REQ-STUDIO-ACTIVITY-TRASH
+
+CGP-KNOW-R-013 / REQ-KNOW-24, extending AE-15.
+Product Intent #1 and #2: learners can recover deliberate file removal;
+AB (own files kept) and OWNERSHIP are design links, not measured outcomes.
+
+- **Default-off for every seat.** `hypeproofChat.activityTrashEnabled` (machine scope)
+  is `false` and there is no in-product toggle. This is the conservative choice. Turning
+  it on, for adult seats or any other seat, is Jay's decision and is not confirmed
+  (DEC-12, "Confirmed by Jay: no"). When it is on, known personal, trial, pass, classroom
+  and lesson learner profiles are eligible; instructor, unknown profile and a changing
+  activity or connection are denied.
+- **Storage is outside the work folder and encrypted at rest.** The store lives in the
+  extension's global storage, one per activity folder
+  (`<globalStorage>/activity-trash/<sha256(folder realpath + identity)[:24]>/`), never in
+  the work folder. The SDK Read/Glob/Grep, the local runtime's Read/Write and shell
+  commands run on the work folder cannot reach it, by the same workspace containment that
+  keeps the coach in the folder. An auto-allowed shell has no path confinement (#2157,
+  out of scope here) and can find the store with `find ~`; so every trashed file and its
+  metadata (original path included) is sealed with AES-256-GCM under a random key per
+  store that lives in VS Code SecretStorage (the OS keychain), never on disk. Files have
+  opaque names (`<uuid>.blob`, `<uuid>.meta`) that carry no original name or extension.
+  What a shell finds is ciphertext. A missing, malformed or wrong key, or a tampered or
+  swapped file, is refused and logged (the entry counts as unreadable); nothing falls back
+  to plaintext, and a store that holds entries never gets a fresh key. Not claimed: a
+  process that can read the learner's keychain item can decrypt.
+- Each entry keeps original path, deletion time, SHA-256 and file mode, sealed. Restore
+  decrypts into a new file (never overwriting; a suffixed name on collision), verifies
+  identical bytes and removes the file if the tag or hash fails; its notification names
+  the result. Permanent deletion has a separate modal with exactly one Cancel (a
+  close-affordance item, so the workbench adds no second one).
+- **Entry points.** The explicit command (files and folders) and native Explorer /
+  `workspace.applyEdit` deletion events. Native deletion copies first (asynchronously,
+  so the extension host keeps running) and finalizes after deletion. A cancelled or
+  timed-out participant does not stop VS Code's delete, so cancellation never discards
+  a copy: a pending copy stays hidden while its original is intact and is collected
+  after 10 minutes; if the original is gone or changed, the copy appears. Reload
+  recovers the same way. A copy already running when VS Code deletes its original is
+  completed from the open file and kept. Files whose copy had not started when the
+  participant was cancelled are deleted without a copy, and the learner is warned.
+  Limit: `list()` re-verifies every stored blob under the lock, so a very large trash can
+  delay a native snapshot past VS Code's 60-second participant window.
+- **Gesture cap.** One gesture is archived only up to 5,000 files and 200 MB in total, all
+  selected items together (installed packages such as `node_modules` count). Over the
+  cap, a native Explorer delete copies none of the selected items. The explicit command
+  acts on one file or folder. Over the cap, or when a folder holds links,
+  hard-linked or unsafe names, the explicit command asks a plain permanent-delete
+  confirm instead of trashing; a native Explorer delete over the cap copies nothing and
+  warns (the event cannot veto the delete). Links and internal stores are never copied.
+- Traversal, control characters and every bidi control (ALM, LRM, RLM, embeddings,
+  overrides, isolates), symlinks and hard-linked files are refused. Explorer snapshots
+  use the folder write gate per file: a refused file is never copied, the others in the
+  gesture still are, and the learner is warned. The explicit folder command refuses the
+  whole gesture if any file is refused.
+- **Robustness.** A damaged or foreign entry is skipped, logged and counted; the rest stay
+  restorable and its files stay on disk. The cross-window lock records owner pid and time;
+  a lock whose owner process is gone, or that is older than 120 seconds, is free.
+- Explicit dialogs bind the file fingerprint (folders: the file list), activity scope and
+  root; consent and dirty documents are checked again before mutation.
+- **Out of scope: coach deletions.** Files the coach deletes (SDK Bash `rm`, the codex
+  shell) emit no VS Code delete event and do not go to this trash. Studio does not
+  intercept shell `rm`; those deletions stay under turn restore, which keeps one review bar
+  (the next turn replaces it). The owner files the follow-up issue.
+- Retain trash until the activity folder is removed. A store belongs to one folder, by
+  real path and identity (device, inode, birth time): a new folder later created at the
+  same path is a different activity and never lists or restores the old trash. At
+  activation a store whose folder is gone while its parent folder still exists, or whose
+  path now holds a different folder, is marked missing, and removed with its key only
+  after 30 days missing (a folder renamed away and back clears the mark). Limit: a volume
+  that remounts with a different device number counts as a different folder.
+  Disconnecting an activity does not erase it. No timed expiry, server upload or automatic minor retention.
+- Behavioral tests: `activity-trash.smoke.mjs`, `activity-trash-commands.smoke.mjs`,
+  `activity-trash-seat.smoke.mjs` and `activity-trash-reach.smoke.mjs`. Installed-app
+  visual acceptance is separate.

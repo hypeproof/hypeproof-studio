@@ -1049,6 +1049,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   private servedWorkspaceRoot: string | null = null;
   /** The served class folder (REQ-STUDIO-FOLDER-CONSENT: the activity's own folder). */
   get servedClassRoot(): string | null { return this.servedWorkspaceRoot; }
+  /** Local trash is explicit machine opt-in; a resolved learner profile is still required. */
+  get activityTrashBinding(): { root: string; scope: string } | undefined {
+    if (!this.cachedProfile || this.isInstructor !== false || this.taskChanging || this.connectionChanging) return undefined;
+    const root = this.resolveCoachCwd();
+    return root ? { root, scope: this.turnRequestScope() } : undefined;
+  }
+
   private folderConsentOpts() { return { servedRoot: this.servedWorkspaceRoot, instructor: this._instructorMode?.isInstructor === true }; }
   /** REQ-STUDIO-FOLDER-CONSENT — the one write question (also asked by the preview). null = may write. */
   folderWriteRefusalFor(target: string): string | null { return folderWriteRefusal(this.context, this.cachedProfile, this.folderConsentOpts(), target); }
