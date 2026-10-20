@@ -18,7 +18,7 @@ import { webcrypto } from "node:crypto";
 const require = createRequire(import.meta.url);
 const here = fileURLToPath(new URL("..", import.meta.url));
 const bundle = await build({
-  stdin: { contents: "export { ChatPanelProvider } from './src/chatPanelProvider'; export { setHostWriteSink } from './src/artifactProvenance'; export { answerSources } from './src/learningWiki';", resolveDir: here, loader: "ts" },
+  stdin: { contents: "export { ChatPanelProvider } from './src/chatPanelProvider'; export { setHostWriteSink } from './src/artifactProvenance'; export { answerSources, proposalPreview, newState } from './src/learningWiki'; export * as FC from './src/folderConsent';", resolveDir: here, loader: "ts" },
   bundle: true, platform: "node", format: "cjs", external: ["vscode"], write: false, logLevel: "silent",
 });
 
@@ -32,7 +32,7 @@ const vscode = {
   Uri: { file: (p) => ({ fsPath: p }) },
   window: {
     createOutputChannel: () => ({ appendLine: () => {} }),
-    showInformationMessage: async (message, opts, ...items) => { ui.modal.push({ message, opts, items }); return ui.answer; },
+    showInformationMessage: async (message, opts, ...items) => { ui.modal.push({ message, opts, items }); ui.onModal?.(); return ui.answer; },
     showWarningMessage: async (message, opts, ...items) => { ui.modal.push({ message, opts, items }); return ui.answer; },
     showQuickPick: async () => { ui.quickPick++; return undefined; },
     withProgress: async (_o, task) => task({ report() {} }),
@@ -42,7 +42,7 @@ const vscode = {
 };
 const module = { exports: {} };
 vm.runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: (id) => (id === "vscode" ? vscode : require(id)), console, Buffer, process, setTimeout, clearTimeout, setInterval, clearInterval, AbortSignal, URL, TextEncoder, TextDecoder, crypto: webcrypto });
-const { ChatPanelProvider, setHostWriteSink, answerSources } = module.exports;
+const { ChatPanelProvider, setHostWriteSink, answerSources, proposalPreview, newState, FC } = module.exports;
 
 let writes = [];
 setHostWriteSink({ wrote: (w, actor) => { for (const x of w) writes.push({ rel: path.relative(root, x.absPath).split(path.sep).join("/"), actor }); }, replaced: () => {} });
@@ -57,22 +57,29 @@ const HISTORY = [
   u("u3", "다른 이야기"), a("a3", "세 번째 답은 다른 이야기"),
 ];
 
-/** A provider with only the parts this handler reads; everything else is the real prototype. */
-function provider({ profile = { learning_wiki: { enabled: true } }, instructor = false, history = HISTORY, proposal } = {}) {
+/**
+ * A provider with only the parts this handler reads; everything else is the real prototype,
+ * including the folder-consent guard (folderWriteRefusalFor over the real globalState store).
+ * `home`: the activity's own folder; null makes the open folder its own (consent skipped).
+ */
+const consent = new Map();
+function provider({ profile = { learning_wiki: { enabled: true } }, instructor = false, history = HISTORY, proposal, home = null } = {}) {
   const h = Object.create(ChatPanelProvider.prototype);
   const seen = { prompts: [], notices: [] };
   Object.assign(h, {
+    context: { globalState: { get: (k) => consent.get(k), update: async (k, v) => { consent.set(k, v); } }, workspaceState: { get: () => undefined, update: async () => {} }, secrets: { get: async () => "tok" } },
+    servedWorkspaceRoot: home ?? root,
     cachedProfile: profile,
     _instructorMode: { isInstructor: instructor },
     currentTaskStore: () => ({ getView: () => ({ activeTaskId: "task-1" }), getHistory: () => history }),
     getSeatAudience: () => "adult",
-    folderWriteRefusalFor: () => null,
     postPageNotice: (text) => { seen.notices.push(text); },
     completeSkill: async (prompt) => { seen.prompts.push(prompt); return { ok: true, text: JSON.stringify(proposal ?? PROPOSAL) }; },
   });
   return { h, seen };
 }
-const CITE = "a2";
+// The prompt shows the one turn as t1 (the id rule the prompt states); the host maps it back.
+const CITE = "t1";
 const PROPOSAL = {
   hypotheses: [{ id: "nH1", text: "처음 온 사람이 버튼을 10초 안에 찾는다", cite: [CITE] }],
   decisions: [{ id: "nD1", therefore: "버튼을 위로 올린다", ai_choice: "AI가 위로 올리자고 했고 나도 그렇게 고른다", observed: [], cite: [CITE] }],
@@ -81,7 +88,7 @@ const PROPOSAL = {
 let fail = 0;
 const t = async (label, fn) => {
   root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hps-answer-wiki-")));
-  writes = []; ui.modal = []; ui.answer = undefined; ui.quickPick = 0;
+  writes = []; ui.modal = []; ui.answer = undefined; ui.quickPick = 0; ui.onModal = undefined; consent.clear();
   try { await fn(); console.log(`  ok   ${label}`); } catch (e) { console.error(`  FAIL ${label}: ${e?.stack ?? e}`); fail++; }
   fs.rmSync(root, { recursive: true, force: true });
 };
@@ -109,7 +116,8 @@ await t("the action builds a proposal from that answer and its question only, an
   await ask(h, "a2#2");
   eq(seen.prompts.length, 1, "one model call");
   const sources = sourcesIn(seen.prompts[0]);
-  eq(sources, answerSources(HISTORY, "a2#2"), "the prompt's SOURCES are this answer only");
+  const own = answerSources(HISTORY, "a2#2");
+  eq(sources, { turns: [{ ...own.turns[0], id: "t1" }], notes: {} }, "the prompt's SOURCES are this answer only, as turn t1 (the prompt's id rule)");
   for (const other of ["첫 질문은 날씨", "첫 답은 맑음", "다른 이야기", "세 번째 답"]) ok(!seen.prompts[0].includes(other), `another turn leaked into the prompt: ${other}`);
   eq(ui.modal.length, 1, "one confirmation");
   const m = ui.modal[0];
@@ -195,6 +203,74 @@ await t("a streaming answer (not in the saved conversation yet) and a non-answer
   eq(writes, [], "writes");
   await ask(h, "a2#2");
   eq(seen.prompts.length, 1, "control: the finished answer reaches the model");
+});
+
+await t("a model citing the message id itself is also kept; any other turn id is dropped (citation mapping)", async () => {
+  const { h } = provider({ proposal: { hypotheses: [{ text: "메시지 id로 인용", cite: ["a2"] }, { text: "없는 턴", cite: ["t2"] }, { text: "다른 답", cite: ["a1"] }] } });
+  ui.answer = "정리하기";
+  await ask(h, "a2#2");
+  const state = JSON.parse(fs.readFileSync(path.join(root, "wiki", ".wiki-state.json"), "utf8"));
+  eq(state.H.map((x) => [x.text, x.cite]), [["메시지 id로 인용", ["s1·a2"]]], "kept items");
+});
+
+await t("the confirm stays readable: at most 8 items of at most 200 characters, newlines flattened, '외 N개', total capped", async () => {
+  const fake = "진짜 가설\n결정 D-99: 가짜 줄 (s1·a2)";
+  const many = Array.from({ length: 300 }, (_, i) => ({ text: i === 0 ? fake : `${i}번 ${"가".repeat(2000)}`, cite: [CITE] }));
+  const { h } = provider({ proposal: { hypotheses: many } });
+  ui.answer = undefined;
+  await ask(h, "a2#2");
+  const detail = ui.modal[0].opts.detail;
+  ok(detail.length <= 2400, `detail is ${detail.length} characters`);
+  const lines = detail.split("\n");
+  ok(!lines.some((l) => l.startsWith("결정 D-99")), "a newline in model text made a fake line");
+  ok(lines[0] === "가설 H-1: 진짜 가설 결정 D-99: 가짜 줄 (s1·a2) (s1·a2)", `first line ${lines[0]}`);
+  const items = lines.filter((l) => /^가설 H-\d+:/.test(l));
+  eq(items.length, 8, "item lines (8 cut items fit the total cap)");
+  for (const l of items) ok(l.replace(/ \(s1·a2\)$/, "").length <= 200, `item line too long (${l.length})`);
+  ok(items.slice(1).every((l) => l.includes("…")), "a cut item does not show it was cut");
+  ok(lines.includes(`외 ${300 - items.length}개 항목도 함께 정리돼요.`), `no '외 N개' line: ${lines.slice(-4).join(" | ")}`);
+  eq(writes, [], "cancel still writes nothing");
+  // Pure: a short proposal is shown whole (positive control), with no '외' line.
+  const prev = newState("t");
+  const next = { ...prev, H: [{ id: "H-1", text: "짧은 가설", cite: ["s1·a2"] }] };
+  eq(proposalPreview(prev, next), ["가설 H-1: 짧은 가설 (s1·a2)"], "short preview");
+});
+
+const choose = (level) => consent.set(FC.FOLDER_CONSENT_KEY, FC.writeFolderConsent(consent.get(FC.FOLDER_CONSENT_KEY), "d".repeat(64), FC.canonicalFolder(root), level));
+const personalSeat = { profile_id: "p", activity_id: "d".repeat(64), activity_kind: "personal", learning_wiki: { enabled: true } };
+const elsewhere = () => path.join(path.dirname(root), "hps-answer-wiki-home");
+
+await t("folder consent before the model: 읽기만, AI 안 씀 and undecided refuse with their own copy; nothing reaches the model or the disk (control: full)", async () => {
+  for (const [level, copy] of [["read", FC.folderReadOnlyNotice()], ["none", FC.folderNoAiCopy()], [null, FC.folderReadOnlyNotice()]]) {
+    consent.clear();
+    if (level) choose(level);
+    const { h, seen } = provider({ profile: personalSeat, home: elsewhere() });
+    ui.modal = []; ui.answer = "정리하기";
+    await ask(h, "a2#2");
+    eq(seen.prompts.length, 0, `${level}: model called`);
+    eq(ui.modal.length, 0, `${level}: a modal was shown (undecided never asks here)`);
+    eq(seen.notices, [copy], `${level}: refusal copy`);
+    eq(writes, [], `${level}: writes`);
+  }
+  consent.clear(); choose("full");
+  const { h, seen } = provider({ profile: personalSeat, home: elsewhere() });
+  ui.answer = "정리하기";
+  await ask(h, "a2#2");
+  eq(seen.prompts.length, 1, "control: full reaches the model");
+  ok(fs.existsSync(path.join(root, "wiki", ".wiki-state.json")), "control: full writes");
+});
+
+await t("folder consent re-checked after the modal: a choice changed while it was open refuses with its own copy and writes nothing", async () => {
+  for (const [level, copy] of [["read", FC.folderReadOnlyNotice()], ["none", FC.folderNoAiCopy()]]) {
+    consent.clear(); choose("full"); writes = [];
+    const { h, seen } = provider({ profile: personalSeat, home: elsewhere() });
+    ui.modal = []; ui.answer = "정리하기"; ui.onModal = () => choose(level);
+    await ask(h, "a2#2");
+    eq(ui.modal.length, 1, `${level}: asked`);
+    eq(seen.notices, [copy], `${level}: the late refusal says why`);
+    eq(wikiFiles(), [], `${level}: files`);
+    eq(writes, [], `${level}: writes`);
+  }
 });
 
 await t("the handler is wired to the webview message and reuses the session path's builder and writer (no second write path)", () => {

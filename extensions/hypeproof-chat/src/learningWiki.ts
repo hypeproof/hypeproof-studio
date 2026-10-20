@@ -148,15 +148,61 @@ export function answerSources(messages: readonly ChatMessage[], messageId: strin
   return { turns: [{ id: messageId.split("#")[0], student: student.slice(0, ANSWER_SOURCE_MAX), coach: coach.slice(0, ANSWER_SOURCE_MAX) }], notes: {} };
 }
 
-/** What applying a proposal would add, one line per item with its citations, for the learner to confirm. */
+/** The id the one-answer prompt shows its single turn under: the prompt's own rule ("t1, t2 …"). */
+export const ANSWER_PROMPT_TURN = "t1";
+
+/** The one-answer sources as the prompt shows them: the same turn, numbered like a session's. */
+export const answerPromptSources = (sources: Sources): Sources => ({ turns: sources.turns.map((t) => ({ ...t, id: ANSWER_PROMPT_TURN })), notes: {} });
+
+/**
+ * A model proposal for one answer with its "t1" citations mapped back to the answer's message id,
+ * so applyWikiProposal (which keeps only citations of the sources' turn) files them as
+ * `s<session>·<message id>`. A citation of the message id itself is kept as it is; anything else
+ * stays and is dropped by applyWikiProposal.
+ */
+export function answerProposal(proposal: WikiProposal, turnId: string): WikiProposal {
+  const map = (c: unknown) => (Array.isArray(c) ? c.map((x) => (String(x) === ANSWER_PROMPT_TURN ? turnId : x)) : c);
+  const each = <T extends { cite?: unknown }>(items: T[] | undefined) => (Array.isArray(items) ? items.map((i) => (i && typeof i === "object" ? { ...i, cite: map(i.cite) } : i)) : items);
+  const one = <T extends { cite?: unknown }>(item: T | null | undefined) => (item && typeof item === "object" ? { ...item, cite: map(item.cite) } : item);
+  return {
+    ...proposal,
+    problem: one(proposal.problem) as WikiProposal["problem"],
+    hypotheses: each(proposal.hypotheses) as WikiProposal["hypotheses"],
+    evidence: each(proposal.evidence) as WikiProposal["evidence"],
+    decisions: each(proposal.decisions) as WikiProposal["decisions"],
+    changes: each(proposal.changes) as WikiProposal["changes"],
+    next: one(proposal.next) as WikiProposal["next"],
+  };
+}
+
+/** Limits of the confirmation the learner reads before a one-answer filing (a native modal). */
+export const PREVIEW_ITEMS = 8;
+export const PREVIEW_ITEM_MAX = 200;
+export const PREVIEW_TOTAL_MAX = 2000;
+
+/**
+ * What applying a proposal would add, one line per item with its citations, for the learner to
+ * confirm. Model text is flattened to one line (a newline in it cannot draw a separate, fake item),
+ * each item's text is cut to PREVIEW_ITEM_MAX characters with "…", and at most PREVIEW_ITEMS items
+ * within PREVIEW_TOTAL_MAX characters are listed; the rest are counted in one "외 N개" line.
+ */
 export function proposalPreview(prev: WikiState, next: WikiState): string[] {
+  const items: Array<{ head: string; text: string; cite: string[] }> = [];
+  if (!prev.problem && next.problem) items.push({ head: "문제", text: next.problem.text, cite: next.problem.cite });
+  for (const h of next.H.slice(prev.H.length)) items.push({ head: `가설 ${h.id}`, text: h.text, cite: h.cite });
+  for (const e of next.E.slice(prev.E.length)) items.push({ head: `근거 ${e.id}`, text: e.text, cite: e.cite });
+  for (const d of next.D.slice(prev.D.length)) items.push({ head: `결정 ${d.id}`, text: d.therefore, cite: d.cite });
+  for (const c of next.changes.slice(prev.changes.length)) items.push({ head: "바뀐 것", text: c.text, cite: c.cite });
+  if (next.next && JSON.stringify(next.next) !== JSON.stringify(prev.next)) items.push({ head: "다음 행동", text: next.next.text, cite: next.next.cite });
   const out: string[] = [];
-  if (!prev.problem && next.problem) out.push(`문제: ${next.problem.text}${cites(next.problem.cite)}`);
-  for (const h of next.H.slice(prev.H.length)) out.push(`가설 ${h.id}: ${h.text}${cites(h.cite)}`);
-  for (const e of next.E.slice(prev.E.length)) out.push(`근거 ${e.id}: ${e.text}${cites(e.cite)}`);
-  for (const d of next.D.slice(prev.D.length)) out.push(`결정 ${d.id}: ${d.therefore}${cites(d.cite)}`);
-  for (const c of next.changes.slice(prev.changes.length)) out.push(`바뀐 것: ${c.text}${cites(c.cite)}`);
-  if (next.next && JSON.stringify(next.next) !== JSON.stringify(prev.next)) out.push(`다음 행동: ${next.next.text}${cites(next.next.cite)}`);
+  let total = 0;
+  for (const item of items) {
+    const line = `${cut(`${item.head}: ${item.text.replace(/\s+/g, " ").trim()}`, PREVIEW_ITEM_MAX)}${cites(item.cite)}`;
+    if (out.length >= PREVIEW_ITEMS || total + line.length > PREVIEW_TOTAL_MAX) break;
+    out.push(line);
+    total += line.length + 1;
+  }
+  if (items.length > out.length) out.push(`외 ${items.length - out.length}개 항목도 함께 정리돼요.`);
   return out;
 }
 

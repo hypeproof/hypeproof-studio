@@ -1049,13 +1049,22 @@ refusal, narrowed to where the answer row exists (personal task chat; never a le
 seat or instructor mode). With the switch off or absent the action is not drawn, and the host
 re-checks the switch and refuses the message anyway. The proposal is the session ingest's own:
 `wikiPrompt` over a one-turn source holding only that answer (every bubble of its turn) and the
-learner question that prompted it, cut to 4000 characters each, no notes and no other turn, whose
-turn id is the answer's message id, so every kept item cites `s<session>·<message id>`; the session
+learner question that prompted it, cut to 4000 characters each, no notes and no other turn. The
+prompt shows that turn as `t1` (the prompt's own id rule) and the host maps `t1` back to the answer's
+message id before `applyWikiProposal`, so every kept item cites `s<session>·<message id>` (a citation
+of the message id itself is also kept, any other id is dropped); the session
 is the one a chat call would pick (`defaultIngestSession`, asked only when ambiguous).
 `applyWikiProposal` is pure, so its result is shown before anything is written: a modal
 `팀 브레인에 이렇게 정리할까요?` lists each item it would add with its citation, and only `정리하기`
 writes; closing it writes nothing (no wiki folder is created) and says "정리하지 않았어요. 팀 브레인은
-그대로예요." The switch, the folder consent and the wiki state are re-checked after the modal. The
+그대로예요." The list stays readable whatever the model returns: each item is flattened to one line
+(a newline in model text cannot draw a separate item), its text cut to 200 characters with "…", at
+most 8 items within 2000 characters, and the rest counted as "외 N개 항목도 함께 정리돼요." Folder
+consent is checked before the model call: 읽기만 and an undecided folder (fail closed, never asked on
+this path) refuse with `folderReadOnlyNotice()`, AI 안 씀 with `folderNoAiCopy()` (the session ingest
+still words AI 안 씀 as read-only; unchanged). The seat (lesson, instructor, switch), the folder
+consent and the wiki state are re-checked after the modal, and a late refusal says why with the same
+copy. The
 write is the session ingest's writer (`writeWiki`: the state file, then every page as the AI's), so
 each file goes through the provenance hook (`noteHostWrite`, REQ-STUDIO-ARTIFACT-PROVENANCE); there
 is no second write path. A proposal with nothing citing that turn asks nothing and writes nothing.
@@ -1068,6 +1077,11 @@ the prompt's sources are that answer and question only; the modal shows the item
 turn; cancel leaves no file and no host write; confirm writes through `applyWikiProposal` with the
 `s1·<id>` citation and its log line, every file on disk reported to the hook with pages as `ai`; the
 same answer twice writes nothing; a proposal citing another turn is dropped with nothing to confirm;
+a model citing `t1` or the message id is kept, `t2` or another answer's id is dropped; 300 items of
+2000 characters with a newline-made fake line give 8 one-line cut items, the "외 N개" line and at most
+2400 characters; real consent choices over the real store: 읽기만, AI 안 씀 and undecided refuse with
+their own copy before the model with no modal, full writes, and a choice changed while the modal is
+open refuses with its copy and writes nothing;
 team brain off, absent, a lesson or instructor mode never reaches the model; a streaming answer and
 non-answer ids are refused, each with a control) and `test/answer-to-wiki.test.tsx` (the real
 ChatPanel on `fixtures/mini-dom.mjs`: one action per finished answer under its last bubble, a click
