@@ -794,10 +794,11 @@
         "PRA-09",
         "PRA-11",
         "PRA-12",
-        "PRA-13"
+        "PRA-13",
+        "PRA-14"
       ],
       "inline_prefixes": [],
-      "sha256": "4a80f30f36e834fad322d4e2db7079bb3151dd8b9662f63b2a45a8f796149b89",
+      "sha256": "f431a7f10e0feff8859474d7135f42b9c350d5d2201def8f3b60b65191bc3284",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -3990,6 +3991,37 @@
       ],
       "verification_inputs": [
         "scripts/tests/install-posix-shell.Tests.ps1"
+      ]
+    },
+    {
+      "id": "installer-newcomer-output",
+      "title": "macOS installer writes PATH to the login shell rc, speaks to a newcomer and opens Studio at the end",
+      "issue": 2134,
+      "kind": "implementation",
+      "feature_ids": [],
+      "requirements": [
+        {
+          "path": "docs/requirements/private-release-access.md",
+          "ids": [
+            "PRA-14"
+          ]
+        }
+      ],
+      "depends_on": [
+        "installer-korean-copy"
+      ],
+      "next_action": "Ship in the next Studio release, then run one Mac install from the release one-liner on a zsh account and confirm ~/.zprofile gets the PATH line, the output has no class or English status lines, and Studio opens once.",
+      "design_delta": "install.sh reads the account login shell (dscl/getent, $SHELL as fallback) for the PATH rc: zsh -> ${ZDOTDIR:-~}/.zprofile without duplicating a legacy ~/.zshrc line. The kit step is neutral, happy-path and seeder progress lines are Korean, Homebrew runs without auto-update or env hints, the PATH hint appears only after a PATH change, and an interactive macOS run opens Studio unless HPS_NO_OPEN=1, CI or the test seam is set.",
+      "positive_control": "A zsh account run under SHELL=/bin/bash gets ~/.zprofile; a bash account gets ~/.bash_profile whatever $SHELL says; ZDOTDIR is honoured; one PATH line after two runs; an interactive run calls a stub open -a once (scripts/test-installer-rc.sh).",
+      "negative_control": "The old $SHELL-only rule picks ~/.bash_profile for a zsh account (13 expected FAILs against the previous install.sh); unattended, CI, test-seam, HPS_NO_OPEN=1 and missing-app runs never call open; the kit install output has no class wording or old English lines and never calls open (scripts/test-installer-rc.sh, scripts/test-installer-kit.sh).",
+      "evidence_required": "Studio commit and the installer test output. A real Mac install from a published release is required before completion; a stubbed test is not an installed-user result.",
+      "implementation_paths": [
+        "scripts/install.sh",
+        "scripts/seed-sdk-binary.sh"
+      ],
+      "verification_inputs": [
+        "scripts/test-installer-rc.sh",
+        "scripts/test-installer-kit.sh"
       ]
     },
     {
