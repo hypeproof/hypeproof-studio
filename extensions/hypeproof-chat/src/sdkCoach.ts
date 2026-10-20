@@ -19,6 +19,7 @@ import { sdkPromptWithImages } from "./visionInput.ts";
 import { requireTurnTools, toolsForTurn, turnToolMode, turnToolsAvailability, userTextForTurn, type TurnToolMode } from './turnTools';
 import { SdkWebCitations } from './sdkWebCitations';
 import { canonicalizeExistingPath } from "./workspaceRouting.ts";
+import { isWriteToolName, WRITE_SCOPE_CHANGED_MESSAGE, writeScopeCovered, writeScopeKeys } from "./writeApprovalPaths.ts";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
@@ -809,10 +810,15 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
       // doesn't read that (correct) silence as a wedged turn.
       awaitingUser += 1;
       let ok: boolean;
+      // REQ-E1 / CGP-AGENT-R-005 — a write approval covers exactly the paths the modal listed. The approver gets a
+      // copy (it cannot change what runs), and the scope is re-derived after the answer: a path that now resolves
+      // somewhere else (a symlink swapped in while the modal was open) is refused instead of written.
+      const writeScope = isWriteToolName(name) ? writeScopeKeys(name, input, args.cwd) : null;
       try {
         const approval = await args.requestApproval({
           toolName: name,
-          input,
+          // A JSON copy: tool inputs are JSON, and some hosts (vm-bundled tests) have no structuredClone.
+          input: writeScope ? (JSON.parse(JSON.stringify(input)) as typeof input) : input,
           ...(verdict.destructive ? { destructive: true } : {}),
         });
         ok = typeof approval === 'boolean' ? approval : approval.approved;
@@ -823,6 +829,10 @@ export async function runSdkCoach(args: SdkCoachArgs): Promise<SdkTurnEnd> {
         // tool approved after a slow modal (publish_site waits on GitHub for minutes) would
         // lose the modal's time from its stall-watchdog slack and be aborted mid-run.
         lastToolCallAt = Date.now();
+      }
+      if (ok && writeScope && !writeScopeCovered(writeScope, writeScopeKeys(name, input, args.cwd))) {
+        console.warn(`[coach] write refused after approval: ${name} no longer writes the approved path`);
+        return { behavior: "deny" as const, message: WRITE_SCOPE_CHANGED_MESSAGE };
       }
       return ok
         ? { behavior: "allow" as const, updatedInput: input }

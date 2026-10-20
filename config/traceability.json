@@ -7701,6 +7701,59 @@
       ]
     },
     {
+      "id": "ST-REQ-WRITE-APPROVAL-PATHS",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-INT-NATIVE"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## E. Manual-approve modal"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-WRITE-APPROVAL-PATHS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-PATHS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/writeApprovalPaths.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/browserTargetHost.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoach.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-WRITE-APPROVAL-PATHS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-WRITE-APPROVAL-PATHS",
+        "ST-IMP-WRITE-APPROVAL-PATHS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/write-approval-paths.test.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-JOIN-LINK",
       "stage": "requirement",
       "owner": "jayleekr",

@@ -29,6 +29,7 @@ import * as path from "node:path";
 // literally; esbuild + tsc (allowImportingTsExtensions) accept them.
 import { BLANK_BROWSER_URL, browserOpenUrl, isLoopbackUrl } from "./browserControlHelpers.ts";
 import { browserTargetInline, UNKNOWN_HOST_TEXT } from "./browserTargetHost.ts";
+import { writeTargetsOf } from "./writeApprovalPaths.ts";
 import {
   MCP_BROWSER_OPEN,
   MCP_BROWSER_SCREENSHOT,
@@ -2726,7 +2727,8 @@ export function sdkToolToActionRequest(action: CoachToolAction): Omit<ActionRequ
     return {
       kind: "writeFile",
       description: path ? `${action.toolName} ${path}` : `${action.toolName} ${safeStringify(action.input)}`,
-      payload: { path },
+      // REQ-E1 / CGP-AGENT-R-005: every path the call writes, with 새 파일 / 바꿈 when the input says so.
+      payload: { path, paths: writeTargetsOf(action.toolName, action.input) },
     };
   }
   if (READ_TOOLS.has(name)) {
