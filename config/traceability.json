@@ -6564,6 +6564,40 @@
       ]
     },
     {
+      "id": "ST-IMP-DELEGATION-ROW",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/delegationRow.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/DelegationRow.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-DELEGATION-ROW",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-COACH-RUNTIME",
+        "ST-IMP-DELEGATION-ROW"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-row.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/delegation-row.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-IME-GUARD",
       "stage": "implementation",
       "owner": "jayleekr",

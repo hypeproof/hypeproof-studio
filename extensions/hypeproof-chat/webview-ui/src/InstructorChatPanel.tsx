@@ -25,6 +25,8 @@ interface Props {
   onPublish: () => void;
   streaming: boolean;
   streamingId: string | null;
+  /** REQ-STUDIO-DELEGATION-ROW — passed through to ChatPanel. */
+  runningStreamId?: string | null;
   error: string | null;
   errorRequestId: string | null;
   errorRunbookUrl: string | null;

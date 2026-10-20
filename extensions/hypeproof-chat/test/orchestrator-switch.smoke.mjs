@@ -344,19 +344,29 @@ const ok = (name) => {
 // mapping every tagged deny message back to the old sentence (TOOL_DENIED / PATH_ESCAPE /
 // URL_POLICY) reproduced all ten previous digests (e4650ad1dc31c51b … 449ef9ac1a1a11e5), so
 // grants, verdicts, approvals and every other surface are unchanged.
+// REQ-STUDIO-DELEGATION-ROW (2026-10-20) adds two fields to the SDK activity the stream hands
+// the host: `parent` (parent_tool_use_id, absent on top-level events) and `content` on a
+// tool_result (the raw result, read only for a delegation's final response). The scripted
+// stream's tool_result carries `content: "ok"`, so every digest moved. Control: dropping
+// `content` and `parent` from the recorded activities reproduced all ten previous digests
+// (a39253f30e7fad83 … d0ccabd474a89baa), so prompt, options, env, grants, decisions,
+// approvals, deltas and usage are unchanged.
+// Then adultSubagents alone moved again: a seat that may delegate now pins
+// CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1 so helpers stay inside the watched turn (verify F4).
+// Control: deleting that one env key on turns that carry `agents` reproduced 27bd755ac286cb2e.
 const BASE = {
-  kidsChat: "a39253f30e7fad83",
+  kidsChat: "582e3e0804786f9f",
   // #1527 (2026-10-15): age no longer strips the browser grant, so these two minor profiles
   // carry their own browser flag's tools.
-  kidsPolluted: "4e330031a80ad7e3",
-  adultRW: "d2ec92e2f7b94fb3",
-  adultWide: "e23e96370361a71a",
-  adultSubagents: "58f4f04db2157957",
-  adultCR: "100cd77dd58511e9",
-  minorFlagAdultTier: "04a39b2fcca94462",
-  unknownTier: "ef1eaa82003c6321",
-  adultPublishOnly: "d46553b45bc6206c",
-  adultBrowserPublish: "d0ccabd474a89baa",
+  kidsPolluted: "e7f98f066d7810de",
+  adultRW: "6295e410f05b5f13",
+  adultWide: "3545599d2498467d",
+  adultSubagents: "b995c4fa789f806f",
+  adultCR: "cdc79d6719de7555",
+  minorFlagAdultTier: "610234268befcbb9",
+  unknownTier: "f854dfa48639b858",
+  adultPublishOnly: "3fb3dd807365f974",
+  adultBrowserPublish: "a7b8013ce7d9d7d0",
 };
 {
   assert.deepEqual(Object.keys(BASE), Object.keys(PROFILES), "every profile has a base digest");
@@ -408,7 +418,14 @@ function surfacesOf({ call, seen }) {
   const none = { mcpTools: [], hookEvents: [], cliHeaders: [], cliEnv: [], serviceRoutes: [], approvalKinds: [], events: [] };
   for (const c of CASES.filter((x) => !x.on)) {
     const o = observed[c.name];
-    assert.deepEqual(surfacesOf(o), none, `${c.name}: switch off, no orchestrator surface`);
+    // REQ-STUDIO-DELEGATION-ROW — a seat with the legacy helpers pins the background switch too;
+    // that one variable is the helpers', not the orchestrator's.
+    const surf = surfacesOf(o);
+    if (o.call.options.agents) {
+      assert.equal(o.call.options.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1", `${c.name}: helpers stay in the foreground`);
+      surf.cliEnv = surf.cliEnv.filter((k) => k !== "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS");
+    }
+    assert.deepEqual(surf, none, `${c.name}: switch off, no orchestrator surface`);
     // canUseTool denies both tools as ungranted (never asks, never runs them). The deny names
     // its source (REQ-STUDIO-DENIAL-SOURCE): the minor posture closes them whatever the lesson
     // says (안전 규칙); for an adult seat the gate cannot tell the roster, the host and the

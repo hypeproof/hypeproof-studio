@@ -191,6 +191,7 @@ import { fileAttachAllowed, readWorkspaceTextFile, FILE_REFUSAL_COPY, FILE_RETRY
 import { classUpdateHold } from "./updateCheckerHelpers";
 import { extractAgentMd } from "./agentHandoff";
 import { compactionLineId, CONTEXT_COMPACT_NOTE, trimBoundaryId } from "./contextTrim";
+import { DELEGATION_ICON, DelegationTracker, delegationHeader, delegationResultLabel, NO_ANSWER_REASON, TURN_FAILED_REASON } from "./delegationRow";
 import {
   clampTimeline,
   emptyTimeline,
@@ -5855,6 +5856,13 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     } = { current: null };
     // AE-15 / CGP-ART-R-002 — the work folder as it was before this turn; the review bar compares against it.
     const turnRestorePoint = await this.beginTurnRestore(streamId);
+    // REQ-STUDIO-DELEGATION-ROW — rows this turn left open are closed at its end (stop excepted).
+    let delegations: DelegationTracker | null = null;
+    const closeDelegations = (reason: string) => {
+      for (const r of delegations?.takeOpen() ?? []) {
+        this.postToolLog(streamId, { id: r.lineId, icon: DELEGATION_ICON, label: delegationResultLabel(r.header, undefined, { isError: true, reason }), state: "error" });
+      }
+    };
     try {
       if (effectiveImages?.length && profile?.input?.image_paste !== true) {
         throw new Error("이 활동은 이미지 분석을 허용하지 않아요.");
@@ -5945,6 +5953,10 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       const work = toolActivityMode(profile) === "summary"
         ? new WorkLine(PENDING_ID, (entry) => this.postToolLog(streamId, entry))
         : null;
+      // REQ-STUDIO-DELEGATION-ROW — a Task/Agent call draws one row bound to this stream; its
+      // helper's calls group under it. A summary cohort (D-027) gets no row: its line stays as is.
+      const tracker = new DelegationTracker(streamId, { rows: !work });
+      delegations = tracker;
       // Between a tool result and the next tool call the stream is completely silent
       // (a call only arrives once complete, in one lump). On a real device that stretch
       // was 3 minutes and the last line was `Read ✓`, so children and adults alike
@@ -6051,7 +6063,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // Pass the workspace root so the path is shown relative to it. Leaving
             // only the filename makes "normal · relative path refused · outside the
             // workspace" all read as the same characters.
-            if (!work) clearPending();
+            const line = tracker.lineFor(a);
+            // A helper's call lands inside its row, so the main flow's notice line stays as it is.
+            if (!work && line.kind !== "child") clearPending();
             const label = `${a.name}(${summarizeToolInput(a.name, a.input, 60, this.resolveCoachCwd())})`;
             toolLabels.set(a.id, label);
             // 2026-08-19 — when the SDK coach saves a .html with Write/Edit, that
@@ -6072,22 +6086,40 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
                 htmlWrites.set(a.id, fp);
               }
             }
-            if (work) {
+            if (line.kind === "row") {
+              const header = delegationHeader(a.input, this.resolveCoachCwd());
+              tracker.setHeader(a.id, header);
+              log(line.lineId, DELEGATION_ICON, header, "running");
+            } else if (work) {
               pendingShown = true;
               work.show(workPhrase(a.name, a.input));
             } else {
-              log(a.id, "🔧", label, "running");
+              log(line.lineId, "🔧", label, "running");
             }
             break;
           }
-          case "tool_result":
+          case "tool_result": {
+            const line = tracker.lineFor(a);
+            // A backgrounded helper's result is the SDK's placeholder, never its answer: the row
+            // stays open and the turn's end closes it as 실패 (NO_ANSWER_REASON).
+            if (line.kind === "row") {
+              if (!a.launched) {
+                tracker.settle(a.id);
+                log(
+                  line.lineId,
+                  DELEGATION_ICON,
+                  delegationResultLabel(tracker.header(a.id), a.content, { isError: a.isError, reason: a.reason, workspaceRoot: this.resolveCoachCwd() }),
+                  a.isError ? "error" : "done",
+                );
+              }
+            }
             // A failure leaves a mark in the label — an icon alone disappears once the
             // scroll passes it. In real use a Write failure was missed and
             // "저장됐습니다" was believed as it stood (2026-07-26).
             // D-027 — a summary cohort gets no per-call line, failures included: the coach
             // retries on its own, and the turn's own text has to say what did not work (R0).
-            if (!work) log(
-              a.id,
+            else if (!work) log(
+              line.lineId,
               "🔧",
               a.isError
                 ? `${toolLabels.get(a.id) ?? ""} — 실패${a.reason ? `: ${a.reason}` : ""}`
@@ -6101,7 +6133,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
             // When a tool successfully wrote a .html, read that file and show it in
             // the preview (the same revealBuilt as the fence path — identical down to
             // the save, the live server and the native tab).
-            showPending();
+            if (work || line.kind !== "child") showPending();
             if (!a.isError && htmlWrites.has(a.id)) {
               const fp = htmlWrites.get(a.id)!;
               htmlWrites.delete(a.id);
@@ -6120,6 +6152,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
               }
             }
             break;
+          }
           case "compaction":
             // REQ-STUDIO-CONTEXT-TRIM-MARKER — earlier context was summarized in this turn. One line
             // per turn (the id is the turn's), drawn as a quiet note; summary cohorts get it too. As a
@@ -6497,6 +6530,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       // without a successful streamEnd (the proxy path may throw on abort).
       if (!ctrl.signal.aborted) {
         clearPending();
+        closeDelegations(NO_ANSWER_REASON);
         if (mode === 'web-search') {
           const completion = webActivity.completion(assistantCitations.length);
           if (completion) this.postToolLog(streamId, { id: `web-search-result-${streamId}`, icon: '🔎', ...completion });
@@ -6523,6 +6557,8 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       }
     } catch (err) {
       runtimeSettled = true;
+      // A stop leaves its rows open (멈춤); an error closes them as 실패, kept in the history.
+      if (!ctrl.signal.aborted) closeDelegations(TURN_FAILED_REASON);
       // Received text belongs to the conversation even when the transport fails.
       // Keep a visible incomplete marker across reload without treating it as a
       // successful answer or silently retrying the model request.
