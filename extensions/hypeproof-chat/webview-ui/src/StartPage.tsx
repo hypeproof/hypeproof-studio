@@ -7,6 +7,7 @@ import { ChatIcon } from "./ChatDetails";
 import "./start.css";
 
 import { AccountEntry } from "./AccountEntry";
+import { chosenPass } from "./purchaseChoice";
 import { InstructorInbox } from "./InstructorInbox";
 import { activityLabel, passSummary, trialAllowance, trialEndedFacts, trialSummary } from "./activityLabel";
 import { trialEntryNote } from "../../src/trialOffer";
@@ -88,7 +89,10 @@ export function StartPage() {
   const joinClass = entry === "classroom" ? state.joinLink?.classId : undefined;
   const openCode = () => { setToken(""); setEntry("classroom"); setEditing(true); };
   const products = purchase?.products ?? [];
-  const chosen = products.find(p => p.id === picked) ?? products.find(p => p.recommended) ?? products[0];
+  // CONV-PURCHASE-R-002 — back from the purchase-time sign-in, the host gives the chosen pass back.
+  const restored = purchase?.selected;
+  useEffect(() => { if (restored) setPicked(restored); }, [restored]);
+  const chosen = chosenPass(products, picked, restored);
   const purchaseTitle = purchase?.stage === "waiting" ? "브라우저에서 결제를 기다리고 있어요" : purchase?.stage === "connecting" ? "이용권을 넣고 있어요" : purchase?.stage === "stopped" ? "구매를 마치지 못했어요" : "어떤 이용권으로 시작할까요?";
   const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
   // Leaving keeps a saved order: the host stops waiting and the choice list offers it again.
@@ -163,7 +167,7 @@ export function StartPage() {
                 sign-in on this build or Service, a calm notice and no checkout: never an anonymous order. */}
             {purchase?.login === "signIn" && state.account ? <div className="studio-purchase-login" role="group" aria-labelledby="purchase-login-lead">
               <p id="purchase-login-lead" className="studio-question">{PURCHASE_COPY.signInFirst}</p>
-              <AccountEntry account={state.account} checking={state.checking} post={postToHost} />
+              <AccountEntry account={state.account} checking={state.checking} post={postToHost} productId={chosen.id} />
             </div>
             : purchase?.login ? <p className="studio-notice" role="status">{PURCHASE_COPY.loginUnavailable}</p>
             /* SPEC iteration 4 §2.5 — on a free seat, one question before checkout; under 19 a guardian pays. */

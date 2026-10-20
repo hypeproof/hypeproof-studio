@@ -66,6 +66,11 @@ export interface PurchaseView {
    * (a calm notice, never an anonymous checkout). Absent: checkout as before.
    */
   login?: "signIn" | "unavailable";
+  /**
+   * CONV-PURCHASE-R-002 — the pass the person had chosen before the purchase-time sign-in. Sent
+   * only while the list is open (`stage: "choosing"`); the list selects it again on return.
+   */
+  selected?: string;
 }
 
 /** Studio keeps waiting this long after the order's payment deadline, for a confirm that was already in flight. */

@@ -81,7 +81,12 @@ export interface FreeStartView {
 }
 export type StartRequest =
   | { type: "startReady" }
-  | { type: "accountSignIn" | "accountCancel" | "accountReopen" | "accountCopyLink" | "accountRefresh" | "accountSignOut" | "accountManage" }
+  /**
+   * CONV-PURCHASE-R-002 — `productId`: the pass chosen on the list when the sign-in is pressed from
+   * login at purchase. The host keeps it (memory only) and gives it back as `purchase.selected`.
+   */
+  | { type: "accountSignIn"; productId?: string }
+  | { type: "accountCancel" | "accountReopen" | "accountCopyLink" | "accountRefresh" | "accountSignOut" | "accountManage" }
   | { type: "accountActivate"; passId: string }
   | { type: "exportLegacyHistory" }
   | { type: "selectActivity"; ref: string }
