@@ -795,10 +795,11 @@
         "PRA-11",
         "PRA-12",
         "PRA-13",
-        "PRA-14"
+        "PRA-14",
+        "PRA-15"
       ],
       "inline_prefixes": [],
-      "sha256": "f431a7f10e0feff8859474d7135f42b9c350d5d2201def8f3b60b65191bc3284",
+      "sha256": "1ca6952bc8b5ea4bd0a24336b57ab1ee1834ea7f92a3cef764b2a3ed5863078e",
       "owner": "jayleekr",
       "intent": "docs/PRODUCT-INTENT.md",
       "design": "docs/requirements/private-release-access.md",
@@ -4003,7 +4004,8 @@
         {
           "path": "docs/requirements/private-release-access.md",
           "ids": [
-            "PRA-14"
+            "PRA-14",
+            "PRA-15"
           ]
         }
       ],
@@ -4017,11 +4019,13 @@
       "evidence_required": "Studio commit and the installer test output. A real Mac install from a published release is required before completion; a stubbed test is not an installed-user result.",
       "implementation_paths": [
         "scripts/install.sh",
-        "scripts/seed-sdk-binary.sh"
+        "scripts/seed-sdk-binary.sh",
+        "scripts/release/templates/install-mac.sh"
       ],
       "verification_inputs": [
         "scripts/test-installer-rc.sh",
-        "scripts/test-installer-kit.sh"
+        "scripts/test-installer-kit.sh",
+        "scripts/release/test/install-kit.test.mjs"
       ]
     },
     {

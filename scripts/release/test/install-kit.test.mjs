@@ -3,9 +3,10 @@
 // No network. The install runs (macOS only) use a synthetic app zip, a scratch HOME and
 // the HPS_INSTALL_ASSET_DIR seam, so they never touch a real ~/Applications or /Applications.
 import assert from 'node:assert/strict';
-import {execFileSync, spawnSync} from 'node:child_process';
+import {execFileSync, spawn, spawnSync} from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -116,7 +117,7 @@ function install(dir, opts, args = [], env = {}) {
   const home = path.join(dir, 'home');
   fs.mkdirSync(home, {recursive: true});
   const r = spawnSync('/bin/bash', [path.join(out, 'install-mac.sh'), '--no-seed', ...args], {
-    encoding: 'utf8', env: {PATH: process.env.PATH, HOME: home, HPS_INSTALL_ASSET_DIR: opts.assets, ...env},
+    encoding: 'utf8', env: {PATH: process.env.PATH, HOME: home, HPS_INSTALL_ASSET_DIR: opts.assets, HPS_NO_INSTALL_PING: '1', ...env},
   });
   return {...r, home, out};
 }
@@ -164,6 +165,7 @@ test('an -rc tag installs side by side with its own profile and START script', {
     assert.ok(fs.existsSync(path.join(root, `.hps-kit-${v}`)));
     assert.ok(fs.existsSync(path.join(state, `.hps-kit-${v}`)));
     assert.equal(fs.statSync(state).mode & 0o777, 0o700);
+    assert.match(fs.readFileSync(path.join(state, 'User/settings.json'), 'utf8'), /"telemetry\.telemetryLevel": "off"/, 'VS Code telemetry stays off');
     assert.equal(fs.readFileSync(path.join(root, `START-${v}.command`), 'utf8'), renderStart(tag));
     assert.equal(fs.existsSync(path.join(r.home, 'Applications/HypeProof Studio.app')), false, 'the main install is untouched');
     // Re-running over its own kit is allowed.
@@ -207,7 +209,7 @@ test('a failed seed names the exact recovery, never an in-app offer that is off 
       writeKit({sourceSha: SRC, ...seeded}, out);
       const home = path.join(dir, 'home');
       fs.mkdirSync(home, {recursive: true});
-      return spawnSync('/bin/bash', [path.join(out, 'install-mac.sh'), ...args], {encoding: 'utf8', env: {PATH: process.env.PATH, HOME: home, HPS_INSTALL_ASSET_DIR: assets}});
+      return spawnSync('/bin/bash', [path.join(out, 'install-mac.sh'), ...args], {encoding: 'utf8', env: {PATH: process.env.PATH, HOME: home, HPS_INSTALL_ASSET_DIR: assets, HPS_NO_INSTALL_PING: '1'}});
     };
     const oneLiner = 'curl -fsSL https://github.com/hypeproof/hypeproof-studio/releases/download/v2026.1020.0/install-mac.sh | bash';
     const plain = run([]);
@@ -227,6 +229,168 @@ test('a failed seed names the exact recovery, never an in-app offer that is off 
     const skipped = run(['--no-seed']);
     assert.equal(skipped.status, 0, skipped.stderr);
     assert.doesNotMatch(skipped.stderr, /AI 코치 실행 파일/);
+  } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+// ── Install outcome ping (CONV-INSTALL-R-003, PRA-15) ──────────────────────
+// A local stub stands in for POST /v1/install/events. The install runs asynchronously so the
+// stub can answer while the script waits on it.
+const PING_KEYS = ['app_version', 'os', 'result', 'step'];
+const FAIL_STEPS = new Set(['preflight', 'dependencies', 'download', 'verify', 'extract', 'place', 'launch', 'other']);
+
+async function pingStub(mode = 204) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', () => {
+      requests.push({method: req.method, url: req.url, type: req.headers['content-type'], body});
+      if (mode === 'hang') return; // never answers: the script's own timeout must end the wait
+      res.writeHead(mode).end(mode === 204 ? undefined : '{"error":"x"}');
+    });
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${server.address().port}/v1/install/events`;
+  return {requests, url, close: () => { server.closeAllConnections(); return new Promise(r => server.close(r)); }};
+}
+
+function installAsync(dir, opts, args = [], env = {}) {
+  const out = path.join(dir, 'out');
+  fs.rmSync(out, {recursive: true, force: true});
+  writeKit({sourceSha: SRC, ...opts}, out);
+  const home = path.join(dir, 'home');
+  fs.mkdirSync(home, {recursive: true});
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    const child = spawn('/bin/bash', [path.join(out, 'install-mac.sh'), '--no-seed', ...args], {
+      env: {PATH: process.env.PATH, HOME: home, HPS_INSTALL_ASSET_DIR: opts.assets, ...env},
+    });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', d => { stdout += d; });
+    child.stderr.on('data', d => { stderr += d; });
+    child.on('error', reject);
+    child.on('close', status => resolve({status, stdout, stderr, home, ms: Date.now() - started}));
+  });
+}
+
+function assertPing(req, result, step, version) {
+  assert.equal(req.method, 'POST');
+  assert.equal(req.url, '/v1/install/events');
+  assert.equal(req.type, 'application/json');
+  assert.ok(Buffer.byteLength(req.body) <= 256, req.body);
+  const body = JSON.parse(req.body);
+  assert.deepEqual(Object.keys(body).sort(), PING_KEYS, 'exactly the four allowed fields');
+  assert.deepEqual(body, {result, step, os: 'macos', app_version: version});
+}
+
+test('the default ping target is production and nothing else is contacted for it', () => {
+  const script = renderInstaller(base);
+  assert.ok(script.includes('${HPS_INSTALL_PING_URL:-https://api.hypeproof-ai.xyz}'));
+  assert.ok(script.includes('*/v1/install/events) ;; *) url="$url/v1/install/events"'), 'a base URL gets the endpoint path');
+  assert.match(script, /curl -q /, '-q ignores ~\/.curlrc');
+  assert.equal(script.match(/install_ping (ok|fail) /g).length, 3, 'success, fail() and the exit trap');
+  assert.match(script, /--max-time 3/);
+});
+
+test('one ok ping after a successful install, with only the allowed fields', {skip: !mac}, async () => {
+  const dir = tmp('hps-install-ping-');
+  const stub = await pingStub(204);
+  try {
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0-rc.3'});
+    const r = await installAsync(dir, {tag: 'v2026.1020.0-rc.3', zipSha256: sha, assets}, ['--layout', 'app'], {HPS_INSTALL_PING_URL: stub.url});
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(stub.requests.length, 1, JSON.stringify(stub.requests));
+    assertPing(stub.requests[0], 'ok', 'done', '2026.1020.0-rc.3');
+  } finally { await stub.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('a base URL works as well as the full endpoint, and a ~/.curlrc retry adds no request', {skip: !mac}, async () => {
+  const dir = tmp('hps-install-ping-');
+  const stub = await pingStub(500);
+  try {
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    const baseUrl = stub.url.replace(/\/v1\/install\/events$/, '/');
+    // A retrying ~/.curlrc in the scratch HOME: without -q one 500 would become several POSTs.
+    fs.mkdirSync(path.join(dir, 'home'), {recursive: true});
+    fs.writeFileSync(path.join(dir, 'home/.curlrc'), 'retry = 3\nretry-all-errors\nretry-delay = 0\n');
+    const r = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, [], {HPS_INSTALL_PING_URL: baseUrl});
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(stub.requests.length, 1, JSON.stringify(stub.requests));
+    assertPing(stub.requests[0], 'ok', 'done', '2026.1020.0');
+  } finally { await stub.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('one fail ping naming the step where the install stopped', {skip: !mac}, async () => {
+  const dir = tmp('hps-install-ping-');
+  const stub = await pingStub(204);
+  try {
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    const wrong = sha.slice(0, -1) + (sha.endsWith('0') ? '1' : '0');
+    const env = {HPS_INSTALL_PING_URL: stub.url};
+    const cases = [
+      ['verify', () => installAsync(dir, {tag: 'v2026.1020.0', zipSha256: wrong, assets}, [], env)],
+      ['download', () => installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets: path.join(dir, 'missing')}, [], env)],
+      ['preflight', () => installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, [], {...env, HPS_INSTALL_UNAME_M: 'x86_64'})],
+      ['preflight', () => installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, ['--bogus'], env)],
+    ];
+    for (const [step, run] of cases) {
+      stub.requests.length = 0;
+      const r = await run();
+      assert.equal(r.status, 1, `${step}: ${r.stderr}`);
+      assert.equal(stub.requests.length, 1, `${step}: exactly one ping, got ${JSON.stringify(stub.requests)}`);
+      assert.ok(FAIL_STEPS.has(step));
+      assertPing(stub.requests[0], 'fail', step, '2026.1020.0');
+    }
+    // --help is not an install attempt.
+    stub.requests.length = 0;
+    const help = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, ['--help'], env);
+    assert.equal(help.status, 0);
+    assert.equal(stub.requests.length, 0);
+  } finally { await stub.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('HPS_NO_INSTALL_PING=1 sends nothing, on success or failure', {skip: !mac}, async () => {
+  const dir = tmp('hps-install-ping-');
+  const stub = await pingStub(204);
+  try {
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    const env = {HPS_INSTALL_PING_URL: stub.url, HPS_NO_INSTALL_PING: '1'};
+    const ok = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, [], env);
+    assert.equal(ok.status, 0, ok.stderr);
+    const bad = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: 'f'.repeat(64), assets}, [], env);
+    assert.equal(bad.status, 1);
+    assert.equal(stub.requests.length, 0, JSON.stringify(stub.requests));
+    // Positive control: the same stub, without the switch, does receive the ping.
+    const sent = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, [], {HPS_INSTALL_PING_URL: stub.url});
+    assert.equal(sent.status, 0, sent.stderr);
+    assert.equal(stub.requests.length, 1, 'the stub is reachable, so zero above means skipped');
+  } finally { await stub.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('a refused, failing or silent ping never changes the exit code', {skip: !mac}, async () => {
+  const dir = tmp('hps-install-ping-');
+  try {
+    const {assets, sha} = fakeAppZip(dir, {version: '2026.1020.0'});
+    const wrong = 'f'.repeat(64);
+    for (const mode of [404, 500, 'hang']) {
+      const stub = await pingStub(mode);
+      try {
+        const env = {HPS_INSTALL_PING_URL: stub.url};
+        const ok = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, [], env);
+        assert.equal(ok.status, 0, `${mode}: ${ok.stderr}`);
+        assert.match(ok.stdout, /설치를 마쳤습니다/);
+        const bad = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: wrong, assets}, [], env);
+        assert.equal(bad.status, 1, `${mode}: ${bad.stderr}`);
+        assert.equal(stub.requests.length, 2, `${mode}: one ping per run`);
+        if (mode === 'hang') assert.ok(ok.ms < 15000 && bad.ms < 15000, `bounded by --max-time (${ok.ms}, ${bad.ms} ms)`);
+      } finally { await stub.close(); }
+    }
+    // Nothing listening at all.
+    const closed = await pingStub(204);
+    const url = closed.url;
+    await closed.close();
+    const r = await installAsync(dir, {tag: 'v2026.1020.0', zipSha256: sha, assets}, [], {HPS_INSTALL_PING_URL: url});
+    assert.equal(r.status, 0, r.stderr);
   } finally { fs.rmSync(dir, {recursive: true, force: true}); }
 });
 
