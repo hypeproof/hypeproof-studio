@@ -1,0 +1,36 @@
+# 핵심 사용자 여정(CUJ). 블랙박스 케이스(cases.yaml)는 모두 이 중 하나에 매달린다.
+# 절차: README.md. 형식 검사: node --test scripts/release/test/select-cases.test.mjs
+#
+# 근거 (2026-10-20 main 기준):
+#   CUJ-1  REQ-STUDIO-FREE-START, TUX-SP-14/15/16, US-04, US-19 / scripts/release/templates/install-mac.sh
+#   CUJ-2  TUX-SP-17, TUX-COND-07, REQ-L12, AB-13, AB-14
+#   CUJ-3  US-03, US-04, US-09, US-10, US-12, REQ-P4
+#   CUJ-4  REQ-I2, REQ-I3, REQ-I4, REQ-I13 to REQ-I16, US-13, TUX-COND-02
+# 요구사항 문서에 다른 핵심 여정이 있는지도 봤다. Windows 설치(PRA-09, PRA-12, REQ-I9)는 별도 여정이 아니라
+# CUJ-1 의 다른 입구로 둔다: config/release-platforms.json 이 2026-10-20(#2139)부터 win32-x64 를 다시 출시하고,
+# 설치 뒤 시작 화면은 같은 코드다(BB-026). 강사 Chalk 는 별도 표면(chalk.hypeproof-ai.xyz)이라 앱 릴리스 여정이 아니다.
+
+journeys:
+  - id: CUJ-1
+    title: 처음 설치 → 무료로 첫 결과물
+    goal: 처음 쓰는 사람이 한 줄 설치로 Studio 를 깔고, 코드·로그인 없이 바로 시작해 AI 와 함께 첫 페이지를 만든다.
+    entry: 터미널에 릴리스 한 줄 설치 명령을 붙여넣는다.
+    done_when: 채팅에서 만든 페이지가 작업 폴더에 생기고 Studio 안에서 열린다.
+
+  - id: CUJ-2
+    title: 무료 사용량 소진 → Google 로그인으로 이용권 구매
+    goal: 무료 사용이 끝난 사람이 만든 파일을 잃지 않고, Google 로그인 후 이용권을 사서 같은 작업을 이어간다.
+    entry: 무료 좌석에서 무료 사용량이나 시간이 끝난다.
+    done_when: 결제 후 같은 작업 폴더와 대화로 돌아와 다음 요청이 처리된다.
+
+  - id: CUJ-3
+    title: 참여 코드로 수업 입장 → 이어하기
+    goal: 수업 참여자가 받은 코드로 활동에 들어가고, 다시 열었을 때 같은 활동과 파일로 이어서 한다.
+    entry: 시작 화면에서 참여 코드가 있어요 를 누른다.
+    done_when: 앱을 다시 열어 이어서 하기 로 같은 대화와 파일에 돌아온다.
+
+  - id: CUJ-4
+    title: 업데이트해도 작업이 남는다
+    goal: 새 버전이 나왔을 때 사용자가 앱 안에서 업데이트하고, 재시작 뒤에도 활동·파일·대화가 그대로다.
+    entry: 이전 안정 버전이 깔린 Mac 에 새 안정 버전이 공개된다.
+    done_when: 새 버전으로 재시작한 뒤 같은 활동·파일·대화가 보인다.

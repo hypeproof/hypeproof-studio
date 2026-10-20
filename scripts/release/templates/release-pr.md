@@ -1,7 +1,13 @@
 {{DRY_RUN_BANNER}}
 # Release {{VERSION}}
 
-The release manager works through the sections in order.
+**rc install (macOS, side by side — the main install is untouched):**
+
+```bash
+{{INSTALL_ONELINER}}
+```
+
+The release manager works through the sections in order. Black-box process: [release casebook](https://github.com/hypeproof/hypeproof-studio/blob/main/docs/operations/release-casebook/README.md).
 
 ## 1. Candidate
 
@@ -38,6 +44,18 @@ New features and user-visible fixes. Check each on the rc build and mark it `che
 
 {{FEATURE_ITEMS}}
 
+### Changed requirements
+
+Requirement ids in the range's commit messages and requirement-doc diffs.
+
+{{CHANGED_REQUIREMENTS}}
+
+### Black-box cases
+
+Run on the rc install above. An agent pre-test comment (`hps-blackbox-run/1`) may already cover some cases; the release manager runs the rest. Any P0 FAIL means no approval.
+
+{{BLACKBOX_CASES}}
+
 ## 5. Automatic — no manual check
 
 CI, build, docs, test and dependency-update PRs. The automatic checks above cover them.
@@ -57,6 +75,6 @@ PRs after the smoke baseline without a `smoke:` line.
 ## 8. Approval
 
 - Release manager: {{RELEASE_MANAGER}}
-- Conditions: smoke PASS, every box above ticked, an approving review from that member.
+- Conditions: smoke PASS, every box above ticked, no P0 black-box case FAIL, an approving review from that member at the PR's exact head.
 - After the approval the v tag goes on the same commit as `{{RC_TAG}}`; the publish gate checks this.
 - On approval, `{{FINAL_TAG}}` is tagged on `{{CANDIDATE_SHORT}}` and published.

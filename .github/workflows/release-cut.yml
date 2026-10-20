@@ -5,9 +5,19 @@
 # create (mode=create only, write permissions): scripts/release/create.mjs creates what the plan says —
 # the rc tag, the rc builds, branch release/<version> and the release PR, or the smoke-failure issue.
 # The v tag and publication come after a member approves the release PR (approval workflow, follow-up).
+#
+# Daily schedule (docs/operations/release-casebook/README.md): 17:00 KST every day. The gate job
+# (scripts/release/daily-gate.mjs) skips the run when no app path changed since the last stable tag
+# or a class is live (the same check-live-sessions.mjs freeze the app builds use, fail closed), and
+# otherwise cuts with mode=create. A manual dispatch keeps its inputs and defaults to dry-run.
+# Pause the schedule: set the repository variable RELEASE_CUT_DAILY=off
+# (gh variable set RELEASE_CUT_DAILY --body off --repo hypeproof/hypeproof-studio); =dry-run keeps
+# the daily cut as a dry run only; delete the variable or set it to create to resume.
 name: release-cut
 
 on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC = 17:00 KST
   workflow_dispatch:
     inputs:
       mode:
@@ -43,7 +53,43 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      mode: ${{ steps.decide.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Scheduled runs only. A failed or blocked check leaves decision empty or "blocked", and the
+      # gate skips the cut: a class that might be live is never cut over.
+      - name: Live-class freeze (scheduled run)
+        id: live
+        if: github.event_name == 'schedule'
+        env:
+          HPS_ADMIN_PASSWORD: ${{ secrets.HPS_ADMIN_PASSWORD }}
+          HPS_FREEZE_CONTEXT: daily release cut (pre-cut gate)
+        run: node scripts/check-live-sessions.mjs || true
+
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          MODE: ${{ inputs.mode }}
+          DAILY: ${{ vars.RELEASE_CUT_DAILY }}
+          LIVE: ${{ steps.live.outputs.decision }}
+        run: node scripts/release/daily-gate.mjs --event "$EVENT" --mode "${MODE:-dry-run}" --switch "${DAILY:-}" --live "${LIVE:-}"
+
   cut:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -58,7 +104,7 @@ jobs:
           node-version: "22"
 
       - name: Controls
-        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs
+        run: node --test scripts/release/test/release-cut.test.mjs scripts/release/test/create.test.mjs scripts/release/test/select-cases.test.mjs
 
       - name: Release cut
         id: cut
@@ -69,8 +115,8 @@ jobs:
           # Without a secret the check reports NOT_RUN. The admin password is never passed here.
           HPS_CANARY_ISSUER: ${{ secrets.HPS_CANARY_ISSUER }}
           HPS_ACCEPTANCE_ISSUER: ${{ secrets.HPS_ACCEPTANCE_ISSUER }}
-          MODE: ${{ inputs.mode }}
-          CANDIDATE: ${{ inputs.candidate }}
+          MODE: ${{ needs.gate.outputs.mode }}
+          CANDIDATE: ${{ inputs.candidate || 'origin/main' }}
           SINCE: ${{ inputs.since }}
         run: |
           set +e
@@ -122,8 +168,8 @@ jobs:
           retention-days: 14
 
   create:
-    needs: cut
-    if: inputs.mode == 'create' && needs.cut.result == 'success'
+    needs: [gate, cut]
+    if: needs.gate.outputs.mode == 'create' && needs.cut.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

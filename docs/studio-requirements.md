@@ -2836,3 +2836,37 @@ When conversation settings is open above the desktop sources panel, Escape dismi
 ### Reading continuity during text-size changes
 
 Changing conversation text size while reading older output keeps a visible passage in view across reflow, rather than preserving only raw scroll offset or the entire answer's top. Readers following the latest output keep bottom-follow. A newer scroll or explicit Latest action supersedes a pending reading anchor; removed content must not restore a stale position. Preserve the composer draft and focus.
+
+## Release casebook (REQ-STUDIO-RELEASE-CASEBOOK)
+
+`REQ-STUDIO-RELEASE-CASEBOOK` (Jay, 2026-10-20): every release candidate is checked against
+black-box cases that hang under the core user journeys in
+[docs/operations/release-casebook/](operations/release-casebook/README.md) (`journeys.yaml`
+CUJ-1–4, `cases.yaml` BB-nnn with priority, linked requirement ids, steps, verbatim expected
+Korean copy, origin and optional `automated_by`). `scripts/release/select-cases.mjs` selects,
+from local git only, every P0 case, every case linked to a requirement id touched since the last
+stable `v` tag (commit subjects/bodies and changed lines of requirement docs; a touched child id
+reaches its parent case) and every escaped-bug case dated within 14 days; `자동화됨` cases are
+never selected. release-cut puts the rc install one-liner first in the release PR body, lists the
+touched requirement ids and the selected checklist, and the release PR carries the `release` label
+(created when missing, re-applied when a later rc updates the PR). A broken casebook does not stop
+the cut; the body says the selection failed and the manager runs every P0 case. `release-cut.yml`
+also runs at 17:00 KST: `scripts/release/daily-gate.mjs` skips the run when the repository variable
+`RELEASE_CUT_DAILY` is `off` (or unrecognised), when no app path changed since the last stable tag,
+or when the live-class freeze (`scripts/check-live-sessions.mjs`) does not answer `proceed`, and
+otherwise cuts with `mode=create` (`dry-run` when the variable says so); a manual dispatch keeps its
+inputs and defaults to dry-run. Existing smoke, NOT_RUN, publish-gate and freeze gates are
+unchanged. An agent pre-tester ([prompt](operations/release-casebook/pre-tester-prompt.md)) may post
+one `hps-blackbox-run/1` result (`scripts/release/validate-blackbox-run.mjs`: a PASS or FAIL needs a
+screenshot, a FAIL needs one clean-profile retry, any P0 FAIL requires `승인 보류 권장`, every selected
+case has a row); it never approves. Any P0 FAIL means no approval; a production-found bug's fix adds a
+case; a case whose automation has not failed for six months moves to `자동화됨`.
+
+Verification: `scripts/release/test/select-cases.test.mjs` (YAML subset parser with refusal controls
+and a PyYAML cross-check of the real casebook; selection positive controls and negative controls for an
+untouched P1, a 14-day-old escape, an automated P0 and a touched parent; an end-to-end temporary git
+repository whose pre-tag and unchanged-row ids are not selected; results-schema positive and per-rule
+negative controls; schedule gate negative controls for no app change, a blocked or failed freeze check,
+an override and the pause switch). **Not claimed**: a scheduled run on GitHub, a release PR opened with
+the new body, a real pre-tester run on the Mac, or the cases themselves executed against an installed
+rc; the expected copy is read from source at `f9bde411`, not from a running app.

@@ -203,7 +203,16 @@ S2 does not block S3 or S4.
 
 ## Release cut
 
-Run the `release-cut` workflow from the Actions tab. It has two modes.
+The `release-cut` workflow runs every day at 17:00 KST (08:00 UTC). Its `gate` job
+(`scripts/release/daily-gate.mjs`) skips the scheduled run when no app path changed since the last
+stable `v` tag, when the live-class freeze does not answer `proceed`, or when the repository
+variable `RELEASE_CUT_DAILY` is `off`; otherwise it cuts with `create` (`dry-run` when the variable
+is `dry-run`). Pause the schedule with
+`gh variable set RELEASE_CUT_DAILY --body off --repo hypeproof/hypeproof-studio`; delete the variable
+to resume. The release PR also carries the black-box cases selected for this candidate; the process
+is in the [release casebook](../operations/release-casebook/README.md).
+
+You can also run it from the Actions tab. A manual run has two modes.
 
 | Mode | What it does | Permissions |
 |---|---|---|
@@ -223,9 +232,11 @@ The run has two jobs. The `cut` job runs in both modes and has read permissions 
 
 ## Approval
 
-1. Open the release PR. Do the checks on the rc build.
+1. Open the release PR. Install the rc with the one-liner at the top and do the checks on it,
+   including the black-box cases in section 4 that an agent pre-test comment did not already pass.
 2. Mark each item as checked, as not possible with a reason, or as a problem with an issue
-   number.
+   number. Any P0 black-box case FAIL means no approval
+   ([judgement rules](../operations/release-casebook/README.md#판정-규칙)).
 3. Approve the release PR with an account that has write access.
 
 Until the approval workflow exists, also do these steps:

@@ -135,11 +135,12 @@ function main() {
       }
     }
     if (step === 'pr') {
-      try { pr('label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Weekly release PR (release-cut)'); } catch { /* exists */ }
+      try { pr('label', 'create', 'release', '--repo', repo, '--color', '0E8A16', '--description', 'Release PR (release-cut); the black-box pre-tester watches this label'); } catch { /* exists */ }
       const open = JSON.parse(pr('pr', 'list', '--repo', repo, '--head', plan.branch, '--state', 'open', '--json', 'number,url'));
       const body = prBodyFile;
       if (open.length) {
-        pr('pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body);
+        // The label is what the agent pre-tester watches (docs/operations/release-casebook/pre-tester-prompt.md).
+        pr('pr', 'edit', String(open[0].number), '--repo', repo, '--body-file', body, '--add-label', 'release');
         pr('pr', 'comment', String(open[0].number), '--repo', repo, '--body',
           `New candidate ${plan.rcTag} at ${plan.candidate.slice(0, 8)}. Approvals given before this comment were for an earlier candidate; review again.`);
         say(`Updated ${open[0].url} for ${plan.rcTag}.`);
