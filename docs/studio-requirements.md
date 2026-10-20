@@ -539,17 +539,23 @@ theme background under non-HP themes, and a recorded keyboard walk in the built 
 
 `REQ-STUDIO-FOCUS-RESTORE` (CGP-DS-R-023 / REQ-CGP-DS-25, 2026-10-20; extends
 [SX-52](requirements/studio-learning-experience.md) and DES-06), personal and classroom chat
-webview. Every dialog, popover, menu and closable inline surface follows one focus contract,
-implemented once in `webview-ui/src/dialogFocus.ts` (`useDialogFocus`, plus the primitives the task
+webview. The surfaces listed in the table below follow one focus contract (surfaces not listed,
+such as the unmounted `VoicePanel`, are not covered), implemented once in `webview-ui/src/dialogFocus.ts` (`useDialogFocus`, plus the primitives the task
 workspace uses for its own panels). On open, focus moves inside: to an explicit target, else the
 first actionable element, else the heading, else the surface. On close by Escape, by its close
 button or by a press outside, focus returns to the element that opened it. If that element is gone,
 disabled, hidden or inert, focus goes to the surface's own fallback and then to the composer
-(`.hps-input textarea`). Focus never ends on `<body>`. A press outside that lands on a control
-leaves focus on that control, because the learner chose it; a press anywhere else returns focus to
-the opener. A modal keeps Tab inside: it wraps at both ends, and focus that strays outside is pulled
+(`.hps-input textarea`). Focus never ends on `<body>`. A press outside a popover leaves focus
+where the browser puts it for that press: on the control pressed, because the learner chose it, or
+on the focusable region pressed (a press on transcript text focuses the `tabIndex=-1` conversation
+region, `#task-conversation`). Only a press that would leave focus on `<body>` returns it to the
+opener. A press on a modal's backdrop does not move focus at all: its `pointerdown` is
+default-prevented, so the browser's mousedown focus never runs, and focus returns to the opener. A
+modal keeps Tab inside: it wraps at both ends, and focus that strays outside is pulled
 back. A popover lets Tab leave: the popover closes and Tab continues from its opener. Escape during
-an IME composition never closes anything (CGP-DS-R-027). Surfaces:
+an IME composition never closes anything (CGP-DS-R-027, #1880). The settings dialog guards this
+twice: it default-prevents the composing Escape keydown (which stops Chromium's own close request),
+and it refuses a native `cancel` that follows a composing key. Surfaces:
 
 | Surface | Kind | Closes by | Focus returns to |
 |---|---|---|---|
@@ -560,8 +566,9 @@ an IME composition never closes anything (CGP-DS-R-027). Surfaces:
 | Task list, phone (≤700px) | modal | Escape, 작업 목록 닫기, outside press | the list toggle |
 | Edit box (수정) | inline | Escape, 취소 | that message's 수정, else the composer |
 | Rename | inline | Escape, 취소, 저장 | the task title, else the composer |
-| Capability-change card | inline (no opener) | 알겠어요 | the composer |
+| Capability-change card | inline, shown by the system (no opener; the element focused when it appeared is deliberately not used) | 알겠어요 | the composer |
 | Verify panel (내 제품 테스트) | inline, opened by the host | 테스트 창 닫기 | the element focused before it opened, else the composer; it takes focus on open only when nothing holds it |
+| Publish, evidence, memory, skills and review panels (curriculum runtime) | inline, opened by the host | 닫기 | as the verify panel |
 | Quote action (인용하기) | transient button over a selection | Escape | the composer (REQ-STUDIO-QUOTE-REPLY) |
 
 Two browser facts shape the module. First, React puts focus back on an element that is still in the
@@ -580,16 +587,20 @@ modals are outside this webview contract and VS Code restores their focus. The n
 are the external-skill "선택하여 사용" confirmations, the start page's "현재 활동 연결 / 폴더만 열기"
 choice and the update offer; they are listed as SX-52 follow-ups. Approval, consent and delete
 confirmations stay modal (the manual-approve gate). Test: `test/dialog-focus.test.tsx`
-(`npm run test:dialog-focus`) mounts the real ChatPanel, TaskWorkspace and VerifyPanel on
-`test/fixtures/mini-dom.mjs`. The fixture now drops focus to `<body>` when the focused element is
-removed, as a browser does, and models `<dialog>` open/close. For each surface the test opens it,
+(`npm run test:dialog-focus`) mounts the real ChatPanel, TaskWorkspace, VerifyPanel and the five
+curriculum panels on `test/fixtures/mini-dom.mjs`. The fixture now drops focus to `<body>` when the
+focused element is removed, as a browser does, and models `<dialog>` open/close. The test runs a press
+as a browser does: `pointerdown`, then, unless it was default-prevented, `mousedown` and the focus
+of the nearest focusable element under the pointer. For each surface the test opens it,
 closes it by each of its routes and checks where focus is. It also covers an opener that was
 removed (composer, or 자료 for a citation), Tab wrapping in the settings, sources and harness
-modals, and Tab leaving both menus. It has negative controls: a surface without the hook leaves
-focus on `<body>`, and an IME Escape does not close. Not covered: the unmounted `VoicePanel` (a
-non-modal dialog not yet wired into the app); the curriculum-runtime inline panels (publish,
-evidence, memory, skills, review), which still drop focus on close (follow-up); Chalk; VS Code
-native dialogs; a recorded keyboard walk with a screen reader in the built app.
+modals, and Tab leaving both menus. It also covers a composing Escape and a native `cancel` on
+settings, the capability card shown while focus is elsewhere, and an edit box whose message
+disappears. It has negative controls: a surface without the hook leaves focus on `<body>`, an IME
+Escape does not close, a plain `cancel` does close, and the backdrop press is checked to have a
+focusable region under it. Each hook call and guard was removed once, and each removal fails a
+case. Not covered: the unmounted `VoicePanel` (a non-modal dialog not yet wired into the app);
+Chalk; VS Code native dialogs; a recorded keyboard walk with a screen reader in the built app.
 
 CGP-DS-R-015 (2026-10-19), extending CP-R1's "disabled under reduced motion": an explicit
 preference wins over the OS default. With VS Code's `workbench.reduceMotion` set to "on", every

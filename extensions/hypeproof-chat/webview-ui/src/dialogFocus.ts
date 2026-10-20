@@ -107,7 +107,7 @@ export interface DialogFocusOptions {
   kind: DialogKind;
   /** Called for Escape, an outside pointer press and (popover) Tab. Without it the surface keeps its own keys. */
   onDismiss?: (reason: DismissReason) => void;
-  /** The opener, when it is not simply the element focused at open time (or must be re-found later). */
+  /** The opener, when it is not simply the element focused at open time (or must be re-found later). Returning null means there is none. */
   opener?: () => HTMLElement | null | undefined;
   /** Tried after the opener and before the composer. */
   fallback?: () => HTMLElement | null | undefined;
@@ -135,7 +135,8 @@ export function useDialogFocus(container: RefObject<HTMLElement | null>, options
     const node = container.current;
     const active = document.activeElement as HTMLElement | null;
     const captured = active && active !== document.body && !node?.contains(active) ? active : null;
-    const opener = () => latest.current.opener?.() ?? captured;
+    // An explicit opener is authoritative (null means "none": go to the fallback, then the composer).
+    const opener = () => latest.current.opener ? latest.current.opener() : captured;
     released.current = false;
     const initial = latest.current.initialFocus;
     if (node && initial !== false && !(initial === 'idle' && !focusIsLost(node))) focusInto(node, initial === 'idle' ? undefined : initial);
@@ -173,7 +174,11 @@ export function useDialogFocus(container: RefObject<HTMLElement | null>, options
         const box = surface.getBoundingClientRect();
         outside = box.width > 0 && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom);
       }
-      if (outside) dismiss('outside');
+      if (!outside) return;
+      // A press on a modal's backdrop: keep the browser's mousedown from focusing whatever lies
+      // under it (the conversation region), so focus stays on the opener handed back below.
+      if (kind === 'modal') event.preventDefault();
+      dismiss('outside');
     };
     node?.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPointer);

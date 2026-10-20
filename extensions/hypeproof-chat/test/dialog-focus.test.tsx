@@ -12,6 +12,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { ChatPanel } from "../webview-ui/src/ChatPanel";
 import { TaskWorkspaceFrame } from "../webview-ui/src/TaskWorkspace";
 import { VerifyPanel } from "../webview-ui/src/VerifyPanel";
+import { PublishPanel } from "../webview-ui/src/PublishPanel";
+import { EvidencePanel } from "../webview-ui/src/EvidencePanel";
+import { MemoryPanel } from "../webview-ui/src/MemoryPanel";
+import { SkillsPanel } from "../webview-ui/src/SkillsPanel";
+import { ReviewPanel } from "../webview-ui/src/ReviewPanel";
 import { useDialogFocus, type DialogKind } from "../webview-ui/src/dialogFocus";
 import type { ChatConfig, ChatMessage } from "../src/protocol";
 
@@ -41,11 +46,26 @@ const fire = (target: { dispatchEvent(e: object): boolean }, type: string, extra
 };
 // React's act() returns a thenable that does not chain, so await it and return the event after.
 const key = async (target: El, k: string, extra: object = {}) => { let e = { defaultPrevented: false }; await act(async () => { e = fire(target, "keydown", { key: k, keyCode: k === "Escape" ? 27 : k === "Tab" ? 9 : 0, ...extra }); }); return e; };
+const FOCUSABLE_ON_PRESS = new Set(["button", "input", "textarea", "select", "summary"]);
+/** What a browser's mousedown focuses: the nearest focusable element at or above the target, else <body>. */
+const pressFocusTarget = (target: El): El | null => {
+  for (let n: El | null = target; n && n.nodeType === 1; n = n.parentNode) {
+    if ((FOCUSABLE_ON_PRESS.has(n.localName) && !n.hasAttribute("disabled")) || n.hasAttribute("tabindex") || (n.localName === "a" && n.hasAttribute("href"))) return n;
+  }
+  return null;
+};
 /**
- * A pointer press on something that cannot take focus: the outside-close listeners run on
- * pointerdown, then (same task, before any frame) the browser's mousedown moves focus to <body>.
+ * A pointer press, as a browser runs it in one task: pointerdown (the outside-close listeners),
+ * then, unless pointerdown was default-prevented, the compatibility mousedown whose default
+ * action focuses the nearest focusable element under the pointer, or <body>.
  */
-const pressAt = (target: El, extra: object = {}) => act(async () => { fire(target, "pointerdown", extra); doc.body.focus(); });
+const pressAt = (target: El, extra: object = {}) => act(async () => {
+  const down = fire(target, "pointerdown", extra);
+  if (down.defaultPrevented) return;
+  fire(target, "mousedown", extra);
+  const under = pressFocusTarget(target);
+  if (under && under.isConnected) under.focus(); else doc.body.focus();
+});
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 8)); });
 const press = async (el: El) => { el.focus(); await act(async () => { click(el); }); await settle(); };
 const active = () => doc.activeElement as unknown as El;
@@ -254,10 +274,17 @@ for (const [mode, config] of [["personal", personal], ["classroom", classroom]] 
     ok(!menu(), "Escape did not close");
     focusIs(trigger(), "after Escape");
     await press(trigger());
-    await pressAt(one(byClass(v.host, "hps-messages"), "messages"));
+    await pressAt(doc.body as unknown as El);
     await settle();
     ok(!menu(), "outside press did not close");
-    focusIs(trigger(), "after outside press");
+    focusIs(trigger(), "after an outside press on nothing focusable");
+    await press(trigger());
+    const transcript = one(byClass(v.host, "hps-messages"), "messages");
+    await pressAt(transcript);
+    await settle();
+    ok(!menu(), "transcript press did not close");
+    notBody("after a transcript press");
+    focusIs(pressFocusTarget(transcript) ?? trigger(), "after a transcript press: the region pressed, else the trigger");
     await press(trigger());
     const tab = await key(active(), "Tab");
     ok(!menu(), "Tab did not close");
@@ -278,10 +305,17 @@ t("personal: task menu (대화 메뉴) — Escape, outside press and Tab return 
   ok(!panel(), "Escape did not close");
   focusIs(toggle(), "after Escape");
   await press(toggle());
-  await pressAt(one(byClass(v.host, "hps-messages"), "messages"));
+  await pressAt(doc.body as unknown as El);
   await settle();
   ok(!panel(), "outside press did not close");
-  focusIs(toggle(), "after outside press");
+  focusIs(toggle(), "after an outside press on nothing focusable");
+  await press(toggle());
+  const transcript = one(byClass(v.host, "hps-messages"), "messages");
+  await pressAt(transcript);
+  await settle();
+  ok(!panel(), "transcript press did not close");
+  notBody("after a transcript press");
+  focusIs(pressFocusTarget(transcript) ?? toggle(), "after a transcript press: the region pressed, else the toggle");
   await press(toggle());
   const tab = await key(active(), "Tab");
   ok(!panel(), "Tab did not close");
@@ -313,6 +347,8 @@ t("personal: settings dialog — focus inside on open; Escape, × and a backdrop
   await openSettings();
   const d = dialog();
   d.getBoundingClientRect = () => ({ left: 100, right: 500, top: 100, bottom: 400, width: 400, height: 300 });
+  // Negative control on the instrument: without preventDefault, this press would focus the region under the backdrop.
+  ok(pressFocusTarget(d), "the backdrop has no focusable region under it; the check would prove nothing");
   await pressAt(d, { clientX: 20, clientY: 20 });
   await settle();
   ok(!dialog().open, "backdrop press did not close");
@@ -473,6 +509,94 @@ t("verify panel: opened while nothing has focus → focus moves in; closing retu
   focusIs(byClass(host, "v-opener")[0], "back on the opener");
   await act(async () => { root.unmount(); });
 });
+
+t("personal: settings dialog — an Escape that ends an IME composition does not close it (keydown and native cancel)", async () => {
+  const v = await mountChat(personal);
+  const toggle = () => one(byLabel(v.host, "대화 메뉴").filter((e) => e.localName === "button"), "menu toggle");
+  const dialog = () => one(byClass(v.host, "hps-preferences"), "settings dialog") as El & { open?: boolean };
+  await press(toggle());
+  await press(one(byText(v.host, "button", "설정").filter((e) => e.getAttribute("role") === "menuitem"), "설정 item"));
+  ok(dialog().open, "dialog did not open");
+  const inside = active();
+  const down = await key(inside, "Escape", { isComposing: true, keyCode: 229 });
+  ok(down.defaultPrevented, "a composing Escape must stop the dialog's own close request");
+  // Chromium may still send a close request: the cancel that follows a composing key is refused.
+  let cancel = { defaultPrevented: false };
+  await act(async () => { cancel = fire(dialog(), "cancel", { bubbles: false }); });
+  await settle();
+  ok(cancel.defaultPrevented, "cancel after a composing key was not refused");
+  ok(dialog().open, "dialog closed during composition");
+  // Positive control, as in Chromium after the composing field went away: focus is on <body> inside
+  // the modal, a plain Escape reaches only the document, and the close request that follows closes it.
+  doc.body.focus();
+  await key(doc.body as unknown as El, "Escape");
+  await act(async () => { fire(dialog(), "cancel", { bubbles: false }); });
+  await settle();
+  ok(!dialog().open, "a plain cancel did not close");
+  await v.unmount();
+});
+
+t("personal: capability-change card shown while focus is elsewhere — 알겠어요 still goes to the composer", async () => {
+  const v = await mountChat(personal);
+  const toggle = one(byLabel(v.host, "대화 메뉴").filter((e) => e.localName === "button"), "menu toggle");
+  toggle.focus();
+  await v.rerender({ config: { ...personal, capabilityChange: CHANGE } as unknown as ChatConfig });
+  focusIs(toggle, "the card takes no focus when it appears");
+  const dismiss = one(byText(v.host, "button", "알겠어요"), "알겠어요");
+  dismiss.focus();
+  await act(async () => { click(dismiss); });
+  await v.rerender({ config: personal });
+  ok(!byClass(v.host, "hps-capability-change").length, "card still there");
+  focusIs(v.composer(), "after 알겠어요 (not the element focused when the card appeared)");
+  await v.unmount();
+});
+
+t("personal: edit box — when its message disappears while editing (host refresh), focus goes to the composer", async () => {
+  await setWidth(1420);
+  const v = await mountChat(personal);
+  await press(one(byClass(v.host, "hps-edit-prompt"), "수정"));
+  ok(byClass(v.host, "hps-edit-box").length, "edit box did not open");
+  ok(one(byClass(v.host, "hps-edit-box"), "box").contains(active()), "editor not focused");
+  await v.rerender({ messages: [u("u7", "다른 질문"), a("a7", "다른 답")] });
+  ok(!byClass(v.host, "hps-edit-box").length, "edit box still open");
+  focusIs(v.composer(), "message gone");
+  await v.unmount();
+});
+
+// ---------- Curriculum-runtime inline panels (host-opened, like the verify panel) ----------
+
+const NOTICE = "이 수업에서는 쓰지 않도록 정해져 있어요.";
+const PANELS: [string, (show: boolean) => React.ReactNode][] = [
+  ["publish", (show) => show && <PublishPanel view={{ available: false, reason: NOTICE, project: { id: "prj-1", title: "키오스크" }, version: { id: null, files: [], manifest_added: [], refusal: null, refusal_lines: [] }, verification: { state: "not_verified", open: [] }, hypotheses: [], experiments: [], timing: null, notice: null } as never} error={null} errorLines={[]} shareUrl={null} busy={false} onManifest={noop} onSubmit={noop} onLink={noop} onRevoke={noop} onClose={noop} />],
+  ["evidence", (show) => show && <EvidencePanel view={{ available: false, experiments: [], selected: null, sessions: [], notes: [], drafts: [], returns: { status: "not_measured" }, variants: [], bursts: [], notice: NOTICE } as never} error={null} done={null} busy={false} onSelect={noop} onNote={noop} onDraft={noop} onReview={noop} onDelete={noop} onClose={noop} />],
+  ["memory", (show) => show && <MemoryPanel view={{ available: false, memory: null, diff: null, notice: NOTICE } as never} error={null} done={null} busy={false} onRefresh={noop} onDiff={noop} onDecide={noop} onClose={noop} />],
+  ["skills", (show) => show && <SkillsPanel view={{ available: false, notice: NOTICE, week: null, skills: [], pickers: { experiments: [], decisions: [], evidence: [] }, result: null } as never} error={null} done={null} running={false} onRefresh={noop} onRun={noop} onClose={noop} />],
+  ["review", (show) => show && <ReviewPanel view={{ mode: "student", available: false, notice: NOTICE, review: null, teams: null, running: false, timing: null, refused: null } as never} error={null} done={null} busy={false} onRefresh={noop} onPrepare={noop} onOpenTeam={noop} onDecide={noop} onClose={noop} />],
+];
+for (const [name, render] of PANELS) {
+  t(`${name} panel: opened while nothing has focus → focus moves in; closing returns it to the opener, or to the composer`, async () => {
+    const host = mountPoint() as unknown as El;
+    const root = createRoot(host as unknown as HTMLElement);
+    mounted.push(root);
+    const draw = (show: boolean) => <div className="hps-input"><button type="button" className="p-opener">열기</button><textarea className="p-composer" />{render(show)}</div>;
+    await act(async () => { root.render(draw(false)); });
+    doc.body.focus();
+    await act(async () => { root.render(draw(true)); });
+    const panel = one(host.findAll((e) => e.localName === "section" && e.hasAttribute("data-testid")), `${name} panel`);
+    ok(panel.contains(active()), `focus not moved in: ${describe(active())}`);
+    await act(async () => { root.render(draw(false)); });
+    await settle();
+    focusIs(byClass(host, "p-composer")[0], "no opener → composer");
+    byClass(host, "p-opener")[0].focus();
+    await act(async () => { root.render(draw(true)); });
+    focusIs(byClass(host, "p-opener")[0], "a focused opener keeps focus while the host opens the panel");
+    one(byLabel(host, "닫기"), "close").focus();
+    await act(async () => { root.render(draw(false)); });
+    await settle();
+    focusIs(byClass(host, "p-opener")[0], "back on the opener");
+    await act(async () => { root.unmount(); });
+  });
+}
 
 (async () => {
   for (const [label, fn] of tests) {

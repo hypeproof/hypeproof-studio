@@ -4,8 +4,9 @@
 // decides nothing: whether the version is verified (CR-81), what is in the published set,
 // the refusal of a file, the links and their QR codes are the host's and the Service's. A
 // disabled button here is a picture, not a lock (the host and the Service refuse by name).
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChatIcon } from "./ChatDetails";
+import { useDialogFocus } from "./dialogFocus";
 import type { PublishForm, PublishView } from "../../src/publishView";
 import { EXPIRY_CHOICES, METHOD_CHOICES } from "../../src/publishView";
 
@@ -45,6 +46,9 @@ export function PublishPanel(props: {
   onRevoke(linkId: string): void;
   onClose(): void;
 }) {
+  // REQ-STUDIO-FOCUS-RESTORE: host-opened inline panel; closing returns focus, never to <body>.
+  const panel = useRef<HTMLElement>(null);
+  useDialogFocus(panel, { open: true, kind: "inline", initialFocus: "idle" });
   const { view } = props;
   const [hypothesisId, setHypothesisId] = useState<string>("");
   const [hypothesis, setHypothesis] = useState("");
@@ -77,7 +81,7 @@ export function PublishPanel(props: {
     });
 
   return (
-    <section className="hps-publish" data-testid="publish-panel" aria-label="사용자 테스트용으로 공개">
+    <section ref={panel} className="hps-publish" data-testid="publish-panel" aria-label="사용자 테스트용으로 공개">
       <header>
         <strong>사용자 테스트용으로 공개</strong>
         <button type="button" onClick={props.onClose} aria-label="닫기"><ChatIcon kind="close" size={16} /></button>

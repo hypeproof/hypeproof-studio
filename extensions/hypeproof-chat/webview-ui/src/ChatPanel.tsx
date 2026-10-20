@@ -2019,7 +2019,7 @@ function CapabilityChangeCard({ change, onDismiss }: { change: NonNullable<ChatC
   // REQ-STUDIO-FOCUS-RESTORE: the system shows it (no opener, no focus taken); when 알겠어요 removes
   // it, focus goes to the composer instead of <body>.
   const card = useRef<HTMLDivElement>(null);
-  useDialogFocus(card, { open: true, kind: 'inline', initialFocus: false });
+  useDialogFocus(card, { open: true, kind: 'inline', initialFocus: false, opener: () => null });
   return <div ref={card} className="hps-stop-notice hps-capability-change" role="status" aria-live="polite" data-capability-change={change.id}>
     <span className="hps-stop-notice-icon"><ChatIcon kind="info" size={16} /></span>
     <div>
