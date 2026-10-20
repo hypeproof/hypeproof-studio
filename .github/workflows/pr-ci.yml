@@ -67,6 +67,7 @@ jobs:
           python3 scripts/test-check-installer-korean.py
           python3 scripts/check-installer-korean.py
           bash scripts/test-installer-answers.sh
+          bash scripts/test-installer-rc.sh
       - name: Workflow shells declare bash on Windows runners
         if: ${{ !cancelled() }}
         run: python3 scripts/check-workflow-shells.py

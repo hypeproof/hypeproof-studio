@@ -21,6 +21,7 @@ People outside the organization install from a class kit (PRA-08, #1617).
 | PRA-11 | The macOS installer (`install.sh` on darwin) fails closed on a missing SDK seed, as `install.ps1` does: when the seeder cannot be obtained, exits non-zero, or leaves no `claude.verified.json`, the doctor exits non-zero with a Korean stop message naming the stage (fetch, run with exit code, or marker) and the recovery command (the kit's own `install.sh --kit` in kit mode, the member one-liner otherwise). Members and class kits behave the same. On Linux, where `install.sh` installs no Studio app and the doctor has no SDK check, a missing seed stays a warning and no installer text says the install will stop. No installer text promises that Studio repairs the SDK on first launch while the app has no in-app fetch. |
 | PRA-12 | The Windows installer (`install.ps1`) accepts Git Bash in any install scope as the POSIX shell: Program Files, `%LOCALAPPDATA%\Programs\Git` (winget user scope, which the installer requests first) or the Git root of the `git.exe` on PATH. A user-scope Git therefore never reaches the WSL install offer. WSL counts only when `wsl -l -q` exits 0 and lists a distribution; the inbox `wsl.exe` stub alone does not pass the doctor. `C:\Windows\System32\bash.exe` (the WSL launcher) is never treated as Git Bash. Trial diagnosis I11. |
 | PRA-13 | Learner-facing installer copy is Korean on both installers (`install.sh`, `install.ps1`): every question a learner answers (Homebrew consent, nvm fallback, WSL fallback) with its answer hint, every step header, and the doctor verdict and final line. Tool names may stay inside a Korean sentence; package-manager output and diagnostic/log lines are not translated. A static check rejects any `confirm`/`Confirm-Or`/`Read-Host`/step-header literal without Hangul. Because the questions are Korean, both installers read a Korean or Korean-IME answer the way the learner meant it: an explicit no (`아니요`, `ㄴ`, `ㅜ` for n, `n`/`no`) is no, an explicit yes (`네`, `예`, `ㅇ`, `ㅛ` for y, `y`/`yes`) or Enter on a default-yes question is yes, and an answer that is not understood is asked again and, after three tries, taken as no. |
+| PRA-14 | The macOS installer (`install.sh`) serves a person who only uses the app. PATH edits go to the account's login shell from the account database (`dscl` on macOS, `getent` on Linux, `$SHELL` only as a fallback), not to the shell running the script: zsh gets `${ZDOTDIR:-~}/.zprofile` (a line an older installer left in `~/.zshrc` is not duplicated), bash keeps `~/.bash_profile` on macOS and `~/.bashrc` on Linux. The kit step header is neutral (`설치 파일 확인`, no class wording), happy-path status lines and the seeder's progress lines are Korean, and Homebrew runs with `HOMEBREW_NO_AUTO_UPDATE=1` and `HOMEBREW_NO_ENV_HINTS=1`. At the end an interactive install opens Studio with `open -a` and says `Studio를 열었습니다. 시작 화면에서 바로 시작하세요.`; an unattended run, CI, the `HPS_APPS_DIR` test seam and `HPS_NO_OPEN=1` (the Lab one-liner, which opens the app itself) never open it. A new terminal is mentioned only when this run changed a PATH file, and as optional. |
 
 ## Validation
 
@@ -55,6 +56,16 @@ number of literals, so an extractor that matches nothing fails),
 `scripts/test-installer-answers.sh` (the shipped answer parsers of both installers:
 every Korean, IME-jamo and English "no" is read as no and a not-understood answer is
 never read as yes; every "yes" and Enter on a default-yes question is read as yes).
+
+PRA-14 controls: `scripts/test-installer-rc.sh` (negative control: the old `$SHELL`-only
+rule picks `~/.bash_profile` for a zsh account run under `SHELL=/bin/bash`; the current
+rule picks `~/.zprofile` for that account, `~/.bash_profile` for a bash account whatever
+`$SHELL` says, falls back to `$SHELL` without an account record, honours `ZDOTDIR`, writes
+one PATH line per directory and none when `~/.zshrc` already holds it; the closing step
+calls a stub `open -a` only for an interactive run and never for unattended, CI, test-seam,
+`HPS_NO_OPEN=1` or a missing app, and mentions a new terminal only after a PATH change) and
+`scripts/test-installer-kit.sh` (the kit install output has no class wording and none of the
+English status lines it used to print, and a stub `open` is never called).
 
 PRA-08 controls: `scripts/test-installer-kit.sh` (macOS: kit built and installed
 without GitHub, damaged kits refused) and `scripts/tests/install-kit-fixture.ps1`
