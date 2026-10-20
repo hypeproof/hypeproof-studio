@@ -1033,7 +1033,7 @@ about 47px from padding). The help-request list on `/manage` and the 자립 범�
 44px they inherit from the page button rule. Korean copy, IDs and row heights are unchanged (the seat row
 was already 56px tall from its 44px checkbox cell). The top flow bar on the other pages (32–40px links) is
 navigation rather than a row action and is not changed here. Test: `chalk/test/row-actions.test.mjs`
-(static parse of every `chalk/src/ui/*.html`, with 12 negative controls).
+(static parse of every `chalk/src/ui/*.html`, with 12 negative controls). The sidebar 「더보기」 toggle (`.flow-more>summary`) is also 44px and no longer dimmed with opacity.
 
 ## Chalk lesson delivery
 

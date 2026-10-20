@@ -82,6 +82,7 @@ const TARGETS = [
   { page: 'authoring.html', name: '완료 기준 행 버튼', own: /#learning-completion\s+button$/ },
   { page: 'authoring.html', name: '회고 목록 행 버튼', own: /#retro-(?:sources|findings|decisions)\s+button$/ },
   { page: 'sharing.html', name: '자립 범위 행 삭제 버튼', own: /#reliance-rows\s+button$/, base: /^button$/ },
+  { page: 'manage.html', name: '사이드바 더보기 토글', own: /\.flow-more\s*>\s*summary$/ },
 ];
 
 function check(all) {
