@@ -422,7 +422,8 @@ const profile = (tier, extra = {}) => ({ game: tier ? { template_tier: tier } : 
     input: { url: "https://example.com" },
   });
   assert.equal(req.kind, "openBrowser", "browser_open → openBrowser (modal-gated by default)");
-  assert.ok(req.description.includes("https://example.com"), "modal shows the target URL");
+  // REQ-E3 / CGP-AGENT-R-006: the description names the host and its label, never the full URL.
+  assert.equal(req.description, "브라우저 열기: example.com · 인터넷", "approval names the target host");
   assert.deepEqual(req.payload, { url: "https://example.com" });
   const blank = sdkToolToActionRequest({ toolName: MCP_BROWSER_OPEN, input: {} });
   assert.equal(blank.kind, "openBrowser");

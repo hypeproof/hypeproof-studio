@@ -7380,6 +7380,9 @@
         },
         {
           "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/sdkCoachHelpers.ts"
         }
       ]
     },

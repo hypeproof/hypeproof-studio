@@ -1,58 +1,84 @@
 // REQ-E3 / CGP-AGENT-R-006 — where a browser action goes, in two plain words. Pure: no vscode.
 //
-// A browser-open approval names the destination HOST on its own line (never the full URL: a query or path can carry
-// tokens, and userinfo can make `localhost@evil.com` read like the learner's own machine) plus one label:
-//   내 미리보기 — the learner's own loopback preview, decided by `isLoopbackPreview` and nothing looser;
-//   인터넷     — everything else, including every loopback lookalike (`localhost.evil.com`, `127.0.0.1.nip.io`,
-//                `[::ffff:127.0.0.1]`, decimal/hex/octal IPv4 spellings, userinfo tricks, file: URLs).
-// The host is the WHATWG-parsed hostname, so an IDN host shows as punycode (ASCII) and cannot pass as a known site.
+// Every learner-facing surface that names a browser or network target (the openBrowser approval body, its
+// "항상 허용" button, the request description, the detailed tool line) shows the HOST only, never the full URL:
+// a query or path can carry tokens, and userinfo can make `localhost@evil.com` read like the learner's machine.
+//
+// One normalization feeds all of them: the WHATWG `URL.hostname`. So an IDN host is punycode (ASCII) and cannot
+// pass as a known site, and `http://2130706433/` shows as `127.0.0.1` in the line AND in the button.
+// The label is decided from that same normalized host:
+//   내 미리보기    — the host is loopback AND `isLoopbackPreview` accepts the URL as written (the learner's preview
+//                   server: plain `127.0.0.1` / `localhost`, a port, a path). A numeric or bracketed spelling that
+//                   only normalizes to loopback (`2130706433`, `0x7f000001`, `0177.0.0.1`, `127.1`,
+//                   `[::ffff:127.0.0.1]`) is not how Studio's preview is addressed, so it stays 인터넷;
+//   내 컴퓨터 파일 — a `file:` URL, shown by its file name only (never the folder path);
+//   인터넷         — everything else, including `localhost.evil.com`, `127.0.0.1.nip.io`, `localhost@evil.com`.
 
 import { isLoopbackPreview } from "./previewRecovery.ts";
 
-export type BrowserTargetPlace = "preview" | "internet";
-export const BROWSER_TARGET_LABELS: Record<BrowserTargetPlace, string> = { preview: "내 미리보기", internet: "인터넷" };
+export type BrowserTargetPlace = "preview" | "internet" | "file";
+export const BROWSER_TARGET_LABELS: Record<BrowserTargetPlace, string> = {
+  preview: "내 미리보기",
+  internet: "인터넷",
+  file: "내 컴퓨터 파일",
+};
 export const BLANK_TARGET_TEXT = "빈 브라우저";
 export const UNKNOWN_HOST_TEXT = "알 수 없는 주소";
+const UNNAMED_FILE_TEXT = "이름 없는 파일";
 
 export interface BrowserTarget {
-  /** ASCII host only: no scheme, userinfo, port, path, query or fragment. Null when there is no web host. */
+  /** Normalized ASCII host (no scheme, userinfo, port, path, query, fragment), or a file's name. Null when none. */
   host: string | null;
   place: BrowserTargetPlace;
   label: string;
+  /** True for http(s) targets: the only ones a site-wide "항상 허용" can name. */
+  web: boolean;
 }
 
-const DOTTED_IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
-const NUMERIC_HOST_SPELLING = /^[0-9a-fx.]+$/i;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+// Control and bidirectional-override characters could reorder a file name on screen (`gpj.exe` → `exe.jpg`).
+const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f؜‎‏‪-‮⁦-⁩]/g;
 
-/** The host exactly as written in the URL (after userinfo, before port); "" when it cannot be found. */
-function writtenHost(raw: string): string {
-  const m = /^[a-z][a-z0-9+.-]*:\/\/([^/\\?#]*)/i.exec(raw.trim());
-  if (!m) return "";
-  const authority = m[1].slice(m[1].lastIndexOf("@") + 1);
-  return authority.startsWith("[") ? authority.slice(0, authority.indexOf("]") + 1) : authority.replace(/:\d*$/, "");
+function fileName(url: URL): string {
+  const last = url.pathname.split("/").filter(Boolean).pop() ?? "";
+  let name = last;
+  try { name = decodeURIComponent(last); } catch { /* keep the encoded form */ }
+  name = name.replace(UNSAFE_NAME_CHARS, "").trim();
+  return name || UNNAMED_FILE_TEXT;
 }
 
-function displayHost(raw: string): string | null {
-  let url: URL;
-  try { url = new URL(raw.trim()); } catch { return null; }
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) return null;
-  const host = url.hostname;
-  // `http://2130706433/` parses to 127.0.0.1. Showing the canonical form next to 인터넷 would read like a mistake,
-  // so a numeric spelling the parser rewrote is shown as the learner's coach wrote it (it is ASCII by construction).
-  const written = writtenHost(raw).toLowerCase();
-  if (DOTTED_IPV4.test(host) && written && written !== host && NUMERIC_HOST_SPELLING.test(written)) return written;
-  return host;
-}
+const target = (host: string | null, place: BrowserTargetPlace, web: boolean): BrowserTarget =>
+  ({ host, place, label: BROWSER_TARGET_LABELS[place], web });
 
 export function browserTarget(rawUrl: string | undefined): BrowserTarget {
-  const raw = rawUrl ?? "";
-  const place: BrowserTargetPlace = isLoopbackPreview(raw) ? "preview" : "internet";
-  return { host: displayHost(raw), place, label: BROWSER_TARGET_LABELS[place] };
+  const raw = (rawUrl ?? "").trim();
+  let url: URL;
+  try { url = new URL(raw); } catch { return target(null, "internet", false); }
+  if (url.protocol === "file:") return target(fileName(url), "file", false);
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname) return target(null, "internet", false);
+  const host = url.hostname;
+  const preview = LOOPBACK_HOSTS.has(host) && isLoopbackPreview(raw);
+  return target(host, preview ? "preview" : "internet", true);
 }
+
+const isBlank = (rawUrl: string | undefined): boolean => (rawUrl ?? "").trim() === "about:blank";
 
 /** The approval body: the host on its own line, the label on the next. `about:blank` names no target. */
 export function browserTargetDetail(rawUrl: string | undefined): string {
-  if ((rawUrl ?? "").trim() === "about:blank") return BLANK_TARGET_TEXT;
+  if (isBlank(rawUrl)) return BLANK_TARGET_TEXT;
   const t = browserTarget(rawUrl);
   return `${t.host ?? UNKNOWN_HOST_TEXT}\n${t.label}`;
+}
+
+/** One-line form for tool lines and request descriptions: `host · label`. */
+export function browserTargetInline(rawUrl: string | undefined): string {
+  if (isBlank(rawUrl)) return BLANK_TARGET_TEXT;
+  const t = browserTarget(rawUrl);
+  return `${t.host ?? UNKNOWN_HOST_TEXT} · ${t.label}`;
+}
+
+/** The "remember this site" button, naming the same normalized host as the body. Null for non-web targets. */
+export function browserRememberLabel(rawUrl: string | undefined): string | null {
+  const t = browserTarget(rawUrl);
+  return t.web && t.host ? `이 사이트는 항상 허용 (${t.host})` : null;
 }
