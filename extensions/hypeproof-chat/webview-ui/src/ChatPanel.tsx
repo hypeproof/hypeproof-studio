@@ -37,6 +37,7 @@ import { HelpRequest } from './HelpRequest';
 import { acceptHelp } from '../../src/classroomHelp';
 import { addImportRef, canUndoImport, dropImportRef, importIntoDraft, type ImportRef, type LastImport } from './draftImport';
 import { isObservationFormat, showsObservationResults } from '../../src/nativeObservationContract';
+import { CodeBlock, CodeBlockScope } from "./CodeBlock";
 import { MarkdownText } from './MarkdownText';
 import { DisconnectedChat } from "./StartPage";
 import { Children, cloneElement, isValidElement, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -1369,6 +1370,8 @@ export function ChatPanel(props: Props) {
           />
         )}
 
+        {/* CGP-CHAT-R-008: code-block wrap choices are scoped to this conversation. */}
+        <CodeBlockScope root id={`${activityId ?? ""}/${taskId ?? ""}`}>
         {shown.items.map((m) =>
           m.role === "tool" ? (
             <ToolLine key={m.id} message={m} />
@@ -1405,6 +1408,7 @@ export function ChatPanel(props: Props) {
             />
           ),
         )}
+        </CodeBlockScope>
 
         {props.pageNotice && (
           <div className="hps-page-notice" role="status" aria-live="polite">
@@ -2286,7 +2290,7 @@ function MessageItem({
         revertNote={revertNote}
         onCancel={onCancelEdit}
         onSave={onSaveEdit} /> : <div className="hps-msg-body">
-        {question && onPickReply && onWriteReply ? <ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /> : message.role === "assistant" ? (
+        {question && onPickReply && onWriteReply ? <CodeBlockScope id={message.id}><ReplyChoices question={question} onPick={onPickReply} onWrite={onWriteReply} /></CodeBlockScope> : message.role === "assistant" ? (
           <AssistantContent
             content={message.content}
             streaming={isStreamingThis}
@@ -2294,6 +2298,7 @@ function MessageItem({
             tone={tone}
             hasActivity={hasActivity}
             personal={personal}
+            messageId={message.id}
           />
         ) : (
           <>
@@ -2407,6 +2412,7 @@ function AssistantContent({
   tone,
   hasActivity = false,
   personal = false,
+  messageId,
 }: {
   content: string;
   streaming: boolean;
@@ -2415,6 +2421,8 @@ function AssistantContent({
   /** #414 — the tool/activity log below carries the real state of the turn. */
   hasActivity?: boolean;
   personal?: boolean;
+  /** CGP-CHAT-R-008: scopes this answer's code-block wrap choices. */
+  messageId?: string;
 }) {
   const segments = useMemo(() => splitFences(content), [content]);
   const hasOpenFence = segments.some((s) => s.type === "code-open");
@@ -2424,10 +2432,10 @@ function AssistantContent({
   }
 
   return (
-    <>
+    <CodeBlockScope id={messageId}>
       {segments.map((seg, i) => {
         if (seg.type === "text") {
-          return <MarkdownText key={i} text={seg.value} />;
+          return <CodeBlockScope key={i} id={`seg${i}`}><MarkdownText text={seg.value} /></CodeBlockScope>;
         }
         if (seg.type === "code-open") {
           if (streaming) {
@@ -2442,14 +2450,14 @@ function AssistantContent({
           // Stream ended with the fence still open → render partial + retry note.
           return (
             <div key={i}>
-              <CodePill code={seg.value} personal={personal} />
+              <CodePill code={seg.value} personal={personal} blockKey={`seg${i}`} />
               <div className="hps-stream-note">
                 {personal ? "응답이 도중에 끊겼어요. 같은 요청을 한 번 더 보내 주세요." : "응답이 도중에 끊겼어요. 위의 🔄 버튼으로 다시 시도해주세요."}
               </div>
             </div>
           );
         }
-        return <CodePill key={i} code={seg.value} personal={personal} />;
+        return <CodePill key={i} code={seg.value} personal={personal} blockKey={`seg${i}`} />;
       })}
       {personal && streaming && !hasOpenFence && <ResponsePending hasContent />}
       {!personal && streaming && !hasOpenFence && content.length > 0 && (
@@ -2457,11 +2465,11 @@ function AssistantContent({
           🛠️ {buildStageText(buildingLabel, content, false, tone, hasActivity)}… <span className="hps-dots">✨</span>
         </div>
       )}
-    </>
+    </CodeBlockScope>
   );
 }
 
-function CodePill({ code, personal = false }: { code: string; personal?: boolean }) {
+function CodePill({ code, personal = false, blockKey }: { code: string; personal?: boolean; blockKey?: string }) {
   const [open, setOpen] = useState(false);
   const lines = code.split("\n").length;
   return (
@@ -2473,7 +2481,8 @@ function CodePill({ code, personal = false }: { code: string; personal?: boolean
       </button> : <button className="hps-codepill-toggle" onClick={() => setOpen((v) => !v)}>
         {open ? "▾" : "▸"} 📄 코드 {open ? "숨기기" : `보기 (${lines}줄)`}
       </button>}
-      {open && <pre className="hps-codepill-body">{code}</pre>}
+      {/* CGP-CHAT-R-008: the open block carries its own copy and wrap tools; collapsed stays as is (#159). */}
+      {open && <CodeBlock code={code} defaultWrap={false} blockKey={blockKey} preClassName="hps-codepill-body" />}
     </div>
   );
 }

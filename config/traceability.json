@@ -6311,6 +6311,39 @@
       ]
     },
     {
+      "id": "ST-IMP-CODE-BLOCK-TOOLS",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/CodeBlock.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/codeBlock.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-CODE-BLOCK-TOOLS",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-DETAIL",
+        "ST-IMP-CODE-BLOCK-TOOLS"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/code-block-tools.test.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/fixtures/mini-dom.mjs"
+        }
+      ]
+    },
+    {
       "id": "ST-IMP-TASK-RUN-STATE",
       "stage": "implementation",
       "owner": "jayleekr",

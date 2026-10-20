@@ -24,8 +24,24 @@ export function ChatIcon({ kind, size = 18 }: { kind: 'send' | 'stop' | 'copy' |
  * the answer text leads and these follow it (Jay 2026-10-19: the bordered retry square beside the
  * speaker label read as an out-of-place "restart").
  */
-export function CopyAnswer({ content, onRun, onRetry, verdict }: { content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode }) {
-  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+export type CopyState = 'idle' | 'copied' | 'failed';
+
+/** Write `text` to `clipboard` and report the outcome. "copied" only after the write resolves. */
+export async function writeClipboard(text: string, clipboard: Pick<Clipboard, 'writeText'> | undefined = globalThis.navigator?.clipboard): Promise<Exclude<CopyState, 'idle'>> {
+  try {
+    if (!clipboard) throw new Error('no clipboard');
+    await clipboard.writeText(text);
+    return 'copied';
+  } catch { return 'failed'; }
+}
+
+/**
+ * Confirmed copy feedback shared by the answer copy and every code block (CP-R1, CGP-CHAT-R-008):
+ * the confirmation appears only after the clipboard write succeeds, a failure is stated, and the
+ * state returns to idle after 2.4s.
+ */
+export function useConfirmedCopy(text: string): [CopyState, () => Promise<void>] {
+  const [state, setState] = useState<CopyState>('idle');
   const mounted = useRef(true);
   const copyAttempt = useRef(0);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -38,9 +54,14 @@ export function CopyAnswer({ content, onRun, onRetry, verdict }: { content: stri
     const attempt = ++copyAttempt.current;
     setState('idle');
     // Older clipboard completions must not replace the latest attempt's feedback.
-    try { await navigator.clipboard.writeText(content); if (mounted.current && attempt === copyAttempt.current) setState('copied'); }
-    catch { if (mounted.current && attempt === copyAttempt.current) setState('failed'); }
+    const result = await writeClipboard(text);
+    if (mounted.current && attempt === copyAttempt.current) setState(result);
   };
+  return [state, copy];
+}
+
+export function CopyAnswer({ content, onRun, onRetry, verdict }: { content: string; onRun?: () => void; onRetry?: () => void; /** CGP-CHAT-R-005 — the verdict buttons, last in the row. */ verdict?: ReactNode }) {
+  const [state, copy] = useConfirmedCopy(content);
   return <div className="hps-answer-actions">
     <button type="button" className="hps-copy-answer hps-answer-action" onClick={copy} aria-label="답변 복사" title="답변 복사">
       <ChatIcon kind={state === 'copied' ? 'check' : 'copy'} size={16} /><span>{state === 'copied' ? '복사됨' : '복사'}</span>
