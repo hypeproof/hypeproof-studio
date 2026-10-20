@@ -6315,6 +6315,63 @@
       ]
     },
     {
+      "id": "ST-REQ-SIGNIN-COPY",
+      "stage": "requirement",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-PERSONAL-ACCOUNT"
+      ],
+      "sources": [
+        {
+          "path": "docs/studio-requirements.md",
+          "section": "## Sign-in link copy (CGP-SHELL-R-022)"
+        }
+      ]
+    },
+    {
+      "id": "ST-IMP-SIGNIN-COPY",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SIGNIN-COPY",
+        "ST-IMP-PERSONAL-ACCOUNT"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/signInLink.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/accountSession.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/startPage.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/AccountEntry.tsx"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/start.css"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-SIGNIN-COPY",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-SIGNIN-COPY",
+        "ST-IMP-SIGNIN-COPY"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/signin-copy-link.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/signin-copy-link.test.tsx"
+        }
+      ]
+    },
+    {
       "id": "ST-REQ-NATIVE-BROWSER",
       "stage": "requirement",
       "owner": "jayleekr",
