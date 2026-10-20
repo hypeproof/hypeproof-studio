@@ -181,6 +181,14 @@ result of the smoke.
 | S4 | Chat API through `scripts/run-sdk-contract.sh` | `HPS_CANARY_ISSUER` |
 | S5 | CI check-runs on the candidate commit | — |
 
+The runner executes checks in this order:
+
+1. S1, S2, S5 — read-only. These checks do not open a session.
+2. S3, S4 — these checks open a live session.
+
+If S1 or S5 is `FAIL`, the runner marks S3 and S4 as `NOT_RUN` and does not open a session.
+S2 does not block S3 or S4.
+
 - `NOT_RUN` means that the check could not run. It is not a pass.
 - A smoke credential must have the smallest scope. For S4, use an issuer token for the
   `canary-internal` cohort and the `canary-sdk-contract` profile only. Never use a token

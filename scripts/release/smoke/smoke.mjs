@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Release smoke runner (#1608).
-// Runs every checks/*.mjs in name order. A new check is one new file that
-// default-exports {id, name, run(ctx)} and returns {result, detail}.
+// Runs read-only checks first (S1, S2, S5), then session-opening checks (S3, S4), then the rest.
+// A new check is one new file that default-exports {id, name, run(ctx)} and returns {result, detail}.
 //
 //   node scripts/release/smoke/smoke.mjs --sha <candidate> [--out DIR]
 //   node scripts/release/smoke/smoke.mjs --service-url https://example.invalid   # forced failure
 //
 // Verdict per check: PASS / FAIL / NOT_RUN. Overall: any FAIL → FAIL (exit 1),
 // else any NOT_RUN → NOT_RUN (exit 2), else PASS (exit 0).
-// Every check runs even after an earlier one fails, so one failure does not hide another.
+// If S1 or S5 fails, S3 and S4 are marked NOT_RUN and do not open a session.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,13 +18,25 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 
-export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproof/hypeproof-studio', env = process.env}) {
-  const ctx = {sha, repo, studioDir: root, serviceUrl, chalkUrl, env};
-  const checkDir = path.join(here, 'checks');
-  const files = fs.readdirSync(checkDir).filter(f => f.endsWith('.mjs')).sort();
-  const checks = [];
-  for (const file of files) {
-    const check = (await import(pathToFileURL(path.join(checkDir, file)).href)).default;
+// S1 and S5 are read-only and must pass before session-opening checks run.
+const READ_ONLY_FIRST = new Set(['S1', 'S2', 'S5']);
+const SESSION_CHECKS = new Set(['S3', 'S4']);
+const SKIP_TRIGGERS = new Set(['S1', 'S5']);
+
+function phaseOf(id) {
+  return READ_ONLY_FIRST.has(id) ? 0 : SESSION_CHECKS.has(id) ? 1 : 2;
+}
+
+// Exported so tests can inject stub check objects without file I/O.
+export async function runSmokeChecks(checkModules, ctx) {
+  const sorted = [...checkModules].sort((a, b) => phaseOf(a.id) - phaseOf(b.id));
+  const results = [];
+  const failedTriggers = [];
+  for (const check of sorted) {
+    if (SESSION_CHECKS.has(check.id) && failedTriggers.length > 0) {
+      results.push({id: check.id, name: check.name, result: 'NOT_RUN', detail: `skipped: ${failedTriggers[0]} failed`, ms: 0});
+      continue;
+    }
     const started = Date.now();
     let result;
     try {
@@ -32,8 +44,21 @@ export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproo
     } catch (error) {
       result = {result: 'FAIL', detail: String(error?.message ?? error)};
     }
-    checks.push({id: check.id, name: check.name, ...result, ms: Date.now() - started});
+    results.push({id: check.id, name: check.name, ...result, ms: Date.now() - started});
+    if (SKIP_TRIGGERS.has(check.id) && result.result === 'FAIL') failedTriggers.push(check.id);
   }
+  return results;
+}
+
+export async function runSmoke({sha, out, serviceUrl, chalkUrl, repo = 'hypeproof/hypeproof-studio', env = process.env}) {
+  const ctx = {sha, repo, studioDir: root, serviceUrl, chalkUrl, env};
+  const checkDir = path.join(here, 'checks');
+  const files = fs.readdirSync(checkDir).filter(f => f.endsWith('.mjs')).sort();
+  const checkModules = [];
+  for (const file of files) {
+    checkModules.push((await import(pathToFileURL(path.join(checkDir, file)).href)).default);
+  }
+  const checks = await runSmokeChecks(checkModules, ctx);
   const overall = checks.some(c => c.result === 'FAIL') ? 'FAIL'
     : checks.some(c => c.result === 'NOT_RUN') ? 'NOT_RUN' : 'PASS';
   const report = {
