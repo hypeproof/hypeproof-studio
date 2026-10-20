@@ -25,6 +25,8 @@
 //   3. `scrubSecrets` — coach output travels through the gateway to the model.
 //      A `cat ~/.git-credentials` would otherwise put a live PAT in the prompt.
 
+import { parseShell, shellQuote, type ShellRedirect, type ShellWord } from "./shellWords.ts";
+
 /**
  * Shell metacharacters. Their presence means the string is not ONE command:
  * it chains, substitutes, pipes, or redirects. Such a command may still run
@@ -125,12 +127,23 @@ function head(word: string): string {
  * Checks the command word of EVERY segment, because `git status && rm -rf ~`
  * is destructive even though it starts with `git`.
  *
- * The Unix rules decide first and are unchanged since v0.1.56. Only a command
- * they pass reaches the Windows rules, which can add a flag and never remove
- * one (`isWindowsDestructiveCommand`).
+ * Three passes, each of which can only add a flag:
+ *   1. the raw-word Unix rules, unchanged since v0.1.56;
+ *   2. the same verbs read from shell-normalised words (REQ-M4a): quotes and
+ *      escapes removed, env assignments and wrappers dropped, nested shells
+ *      and substitutions classified, and anything the tokeniser cannot read
+ *      treated as destructive (`isDestructiveByNormalisedWords`);
+ *   3. the PowerShell and cmd rules (`isWindowsDestructiveCommand`).
  */
 export function isDestructiveCommand(command: string): boolean {
   if (!command || !command.trim()) return false;
+  if (isLegacyUnixDestructive(command)) return true;
+  if (isDestructiveByNormalisedWords(command)) return true;
+  return isWindowsDestructiveCommand(command);
+}
+
+/** The v0.1.56 Unix rules over raw words. Kept as pass 1 so no old flag can disappear. */
+function isLegacyUnixDestructive(command: string): boolean {
 
   // Quoted text is data, not shell syntax: `git commit -m "rm the header"` must
   // not trip the scan. Strip quoted runs BEFORE anything else looks at the
@@ -186,7 +199,301 @@ export function isDestructiveCommand(command: string): boolean {
       expectCommand = false;
     }
   }
-  return isWindowsDestructiveCommand(command);
+  return false;
+}
+
+// ─── Shell-normalised words (REQ-M4a) ────────────────────────────────────────
+//
+// Pass 1 reads raw words, so the shell's own spelling rules hid the verb from
+// it: `\rm`, `'rm'`, `r''m`, `FOO=1 rm`, `git push '--force'`, `bash -c "…"`
+// and `echo "$(rm …)"` all ran without the strong confirm on the SDK path
+// (independent verifier, 2026-10-20). This pass reads the words the shell
+// will actually run (shellWords.parseShell), then applies the same verb list.
+//
+// Fail closed: anything the tokeniser or this classifier cannot read (an
+// unbalanced quote, an unterminated substitution or heredoc, `eval`, a
+// command word that is a variable or a glob, nesting deeper than
+// NORMALISED_MAX_DEPTH) is destructive. The cost is one extra confirm; the
+// risk it closes is silent deletion.
+
+/** Nested scripts (`bash -c`, `$(…)`) deeper than this are flagged rather than read. */
+const NORMALISED_MAX_DEPTH = 6;
+
+/** Shells whose `-c` argument is a script and whose bare stdin is one too. */
+const POSIX_SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish", "csh", "tcsh"]);
+
+/** Reserved words that introduce a command rather than being one. */
+const SHELL_KEYWORDS = new Set(["if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}"]);
+
+/** Reserved words after which the rest of the simple command is not a command. */
+const SHELL_NON_COMMAND_KEYWORDS = new Set(["for", "case", "select", "function", "esac", "in"]);
+
+/** Wrapper options that take a value, so the value is not read as the command. */
+const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, ReadonlySet<string>>> = {
+  env: new Set(["-u", "--unset", "-C", "--chdir", "-P"]),
+  exec: new Set(["-a"]),
+  time: new Set(["-o", "--output", "-f", "--format"]),
+  nice: new Set(["-n", "--adjustment"]),
+  timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+  caffeinate: new Set(["-t", "-w"]),
+  xargs: new Set(["-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "-J", "-R", "-S", "--max-args", "--max-procs", "--max-chars", "--delimiter", "--arg-file", "--eof", "--replace", "--max-lines"]),
+  git: new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"]),
+  stdbuf: new Set(["-i", "-o", "-e", "--input", "--output", "--error"]),
+  ionice: new Set(["-c", "-n", "-p", "-P", "-u", "--class", "--classdata"]),
+  watch: new Set(["-n", "--interval", "-q", "--equexit"]),
+};
+
+/** Wrappers that run the words after their options as a command. */
+const COMMAND_WRAPPERS = new Set([
+  "env", "command", "builtin", "exec", "time", "nice", "nohup", "timeout", "caffeinate", "xargs", "busybox",
+  "stdbuf", "ionice", "unbuffer", "chronic",
+]);
+
+/** Redirection targets that hold nothing worth keeping (same as the `>` rule above). */
+function isScratchTarget(target: ShellWord): boolean {
+  if (target.dynamic) return false;
+  if (target.text === "/dev/null") return true;
+  return target.text.startsWith("/tmp/") && !target.text.split("/").includes("..");
+}
+
+/** A redirection that replaces a file's contents. `>>` appends; `2>` is stderr. */
+function clobbers(r: ShellRedirect): boolean {
+  if (r.fd !== undefined && r.fd !== "1") return false;
+  if (r.op === ">&") {
+    // `>&2` duplicates a descriptor; `>& file` is bash's `&> file`.
+    if (!r.target.dynamic && /^(?:\d+|-)$/.test(r.target.text)) return false;
+  } else if (r.op !== ">" && r.op !== ">|" && r.op !== "&>") {
+    return false;
+  }
+  return !isScratchTarget(r.target);
+}
+
+/** `/bin/rm` → `rm`, `RM` → `rm` (macOS file systems are case-insensitive). */
+function commandName(word: ShellWord): string {
+  return word.text.replace(/^.*\//, "").toLowerCase();
+}
+
+/** Index of the first word after `name`'s options, starting at `from`. */
+function skipOptions(words: readonly ShellWord[], from: number, name: string): number {
+  const valued = WRAPPER_VALUE_OPTIONS[name] ?? new Set<string>();
+  let j = from;
+  while (j < words.length) {
+    const t = words[j].text;
+    if (t === "--") return j + 1;
+    if (!t.startsWith("-") || t === "-") return j;
+    if (valued.has(t)) j += 2;
+    else j += 1;
+  }
+  return j;
+}
+
+function isDestructiveGit(args: readonly string[]): boolean {
+  const sub = args[0];
+  const rest = args.slice(1);
+  const shortCluster = (a: string, letters: RegExp) => /^-[A-Za-z]+$/.test(a) && letters.test(a.slice(1));
+  switch (sub) {
+    case "push":
+      return rest.some((a) =>
+        a === "--force" || a.startsWith("--force-with-lease") || a === "--mirror" || a === "--delete" ||
+        shortCluster(a, /[fd]/) || /^\+./.test(a) || /^:./.test(a));
+    case "reset":
+      return rest.includes("--hard") || rest.includes("--merge");
+    case "clean":
+      return rest.some((a) => a === "--force" || shortCluster(a, /[fdxX]/));
+    case "checkout":
+      return rest.some((a) => a === "--" || a === "." || a === "--force" || shortCluster(a, /f/));
+    case "restore": {
+      const staged = rest.some((a) => a === "--staged" || shortCluster(a, /S/));
+      const worktree = rest.some((a) => a === "--worktree" || shortCluster(a, /W/));
+      return !staged || worktree;
+    }
+    case "switch":
+      return rest.some((a) => a === "--force" || a === "--discard-changes" || shortCluster(a, /f/));
+    case "branch": {
+      if (rest.some((a) => shortCluster(a, /D/))) return true;
+      const del = rest.some((a) => a === "--delete" || shortCluster(a, /d/));
+      const force = rest.some((a) => a === "--force" || shortCluster(a, /f/));
+      return del && force;
+    }
+    case "stash":
+      return rest[0] === "drop" || rest[0] === "clear";
+    default:
+      return false;
+  }
+}
+
+/**
+ * Classify one simple command's words from `from`. `stdinIsScript` is true
+ * when its standard input is a pipe, heredoc or here-string, which a shell
+ * reading stdin runs as commands.
+ */
+function isDestructiveWords(words: readonly ShellWord[], from: number, stdinIsScript: boolean, depth: number): boolean {
+  let i = from;
+  for (let guard = 0; guard < 32; guard++) {
+    while (i < words.length && (words[i].assignment || (!words[i].quoted && SHELL_KEYWORDS.has(words[i].text)))) i++;
+    if (i >= words.length) return false;
+    const word = words[i];
+    if (!word.quoted && SHELL_NON_COMMAND_KEYWORDS.has(word.text)) return false;
+    // A command word only known at run time (`$CMD`, `$'\x72m'`) or one the
+    // shell expands (`/bin/r?`) could be any command.
+    // `[` and `[[` are the test command and keyword, not bracket globs.
+    if (!word.quoted && (word.text === "[" || word.text === "[[")) return false;
+    if ((word.dynamic || word.glob) && !word.staticBasename) return true;
+    const name = commandName(word);
+    if (!name) return false;
+    const args = words.slice(i + 1);
+    const texts = args.map((a) => a.text);
+
+    if (DESTRUCTIVE_COMMANDS.has(name)) {
+      if (DESTRUCTIVE_EXCEPTIONS.has(`${name} ${texts[0] ?? ""}`.trim())) return false;
+      return true;
+    }
+    if (name.startsWith("mkfs") || name.startsWith("newfs") || name === "eval" || name === "run0" || name === "pkexec") return true;
+
+    if (POSIX_SHELLS.has(name)) {
+      let j = i + 1;
+      let script = false;
+      let stdin = false;
+      while (j < words.length) {
+        const t = words[j].text;
+        if (t === "--" || t === "-") {
+          j++;
+          break;
+        }
+        if (!/^[-+]/.test(t)) break;
+        if (!t.startsWith("--")) {
+          if (t.slice(1).includes("c")) script = true;
+          if (t.slice(1).includes("s")) stdin = true;
+        }
+        j += t === "-o" || t === "+o" || t === "-O" || t === "+O" || t === "--rcfile" || t === "--init-file" ? 2 : 1;
+      }
+      if (script) {
+        const body = words[j];
+        if (!body) return false;
+        return body.dynamic || isDestructiveNormalised(body.text, depth + 1);
+      }
+      // No script operand (or -s): the shell runs whatever stdin holds.
+      if (stdin || j >= words.length) return stdinIsScript;
+      return false; // a script file: its contents are not visible here
+    }
+
+    if (name === "source" || name === ".") {
+      const file = args[0];
+      return !!file && (file.dynamic || (stdinIsScript && /^\/dev\/(?:stdin|fd\/0)$/.test(file.text)));
+    }
+
+    if (name === "find") {
+      for (let k = 0; k < args.length; k++) {
+        const t = texts[k];
+        if (t === "-delete") return true;
+        if (t === "-exec" || t === "-execdir" || t === "-ok" || t === "-okdir") {
+          let end = k + 1;
+          while (end < args.length && texts[end] !== ";" && texts[end] !== "+") end++;
+          if (isDestructiveWords(args.slice(k + 1, end), 0, false, depth)) return true;
+          k = end;
+        }
+      }
+      return false;
+    }
+
+    if (name === "git") {
+      const j = skipOptions(words, i + 1, "git");
+      if (j < words.length && words[j].dynamic) return true;
+      return isDestructiveGit(words.slice(j).map((a) => a.text));
+    }
+
+    if (name === "command") {
+      // `command -v rm` only looks the name up.
+      let j = i + 1;
+      while (j < words.length && words[j].text.startsWith("-") && words[j].text !== "--") {
+        if (/[vV]/.test(words[j].text)) return false;
+        j++;
+      }
+      if (words[j]?.text === "--") j++;
+      i = j;
+      continue;
+    }
+
+    if (name === "env") {
+      let j = i + 1;
+      while (j < words.length) {
+        const t = words[j].text;
+        if (words[j].dynamic) return true;
+        if (t === "-S" || t === "--split-string" || t.startsWith("-S") || t.startsWith("--split-string=")) {
+          const inline = t === "-S" || t === "--split-string" ? null : t.replace(/^(?:-S|--split-string=)/, "");
+          const rest = words.slice(inline === null ? j + 2 : j + 1).map((a) => shellQuote(a.text));
+          const split = inline ?? words[j + 1]?.text ?? "";
+          return isDestructiveNormalised([split, ...rest].join(" "), depth + 1);
+        }
+        if (t === "--") {
+          j++;
+          continue;
+        }
+        if (t.startsWith("-") && t !== "-") {
+          j += WRAPPER_VALUE_OPTIONS.env.has(t) ? 2 : 1;
+          continue;
+        }
+        // env reads NAME=value itself, quoted or not.
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
+          j++;
+          continue;
+        }
+        break;
+      }
+      i = j;
+      continue;
+    }
+
+    if (name === "watch") {
+      // watch hands its arguments, joined, to `sh -c`.
+      const j = skipOptions(words, i + 1, name);
+      if (words.slice(j).some((a) => a.dynamic)) return true;
+      return isDestructiveNormalised(words.slice(j).map((a) => a.text).join(" "), depth + 1);
+    }
+    if (name === "timeout") {
+      i = skipOptions(words, i + 1, name) + 1; // the duration
+      continue;
+    }
+    if (name === "busybox") {
+      if (words[i + 1]?.text.startsWith("-")) return false;
+      i++;
+      continue;
+    }
+    if (COMMAND_WRAPPERS.has(name)) {
+      i = skipOptions(words, i + 1, name);
+      continue;
+    }
+    // An ordinary command: what follows is its arguments.
+    return false;
+  }
+  return true; // more wrappers than any real command line has
+}
+
+function isDestructiveNormalised(command: string, depth: number): boolean {
+  if (depth > NORMALISED_MAX_DEPTH) return true;
+  const parsed = parseShell(command);
+  if (parsed.uncertain) return true;
+  for (const nested of parsed.nested) {
+    if (isDestructiveNormalised(nested, depth + 1)) return true;
+  }
+  for (const cmd of parsed.commands) {
+    if (cmd.redirects.some(clobbers)) return true;
+    // An unquoted heredoc delimiter expands `$(…)` and backticks in the body.
+    if (cmd.heredocs.some((h) => !h.quoted && /\$\(|`/.test(h.body))) return true;
+    const stdinIsScript = cmd.piped || cmd.heredocs.length > 0 || cmd.herestrings.length > 0;
+    if (isDestructiveWords(cmd.words, 0, stdinIsScript, depth)) return true;
+  }
+  return false;
+}
+
+/**
+ * Pass 2 of isDestructiveCommand: the destructive-verb rules over the words
+ * the shell will run, failing closed on anything it cannot read. Exported for
+ * the smoke tests, which hold every other pass to "may only add a flag".
+ */
+export function isDestructiveByNormalisedWords(command: string): boolean {
+  if (!command || !command.trim()) return false;
+  return isDestructiveNormalised(command, 0);
 }
 
 // ─── Windows shells: PowerShell and cmd (FO-11, orchestrator spec §6.4) ─────
@@ -547,6 +854,18 @@ export function commandSignature(command: string): string | null {
   // A bare flag ("-m") is not a subcommand; a word is.
   if (second && /^[A-Za-z0-9]/.test(second)) return `${head} ${second}`;
   return head;
+}
+
+/**
+ * What the approval modal shows for a shell command (REQ-M4a). The modal
+ * re-derives the destructive flag from the command and ORs it with the flag
+ * the caller carried, so a request that arrives without the SDK verdict's
+ * flag still gets the strong confirm, and a flag is never dropped. A
+ * destructive command has no signature, so "항상 허용" can never remember it.
+ */
+export function shellApprovalFor(command: string, flagged: boolean): { destructive: boolean; signature: string | null } {
+  const destructive = flagged || isDestructiveCommand(command ?? "");
+  return { destructive, signature: destructive ? null : commandSignature(command ?? "") };
 }
 
 /**

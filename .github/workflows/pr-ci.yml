@@ -272,6 +272,8 @@ jobs:
   # job needs no npm install and no Service secret. It costs one Windows
   # minute, about two Linux minutes, per run.
   #   shell-policy      shell-gate controls (WP A3 adds the PowerShell verbs)
+  #   shell-normalise   REQ-M4a bypass table (quoted, escaped, env-prefixed,
+  #                     wrapped and nested forms) through every shell gate
   #   absolutize-paths  relative-path absolutizing and the workspace
   #                     containment deny under Windows path rules
   #   sdk-binary        both seed scripts against the manifest and lockfile,
@@ -297,7 +299,7 @@ jobs:
         working-directory: extensions/hypeproof-chat
         run: |
           failed=0
-          for f in test/shell-policy.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs test/consult-tool.smoke.mjs; do
+          for f in test/shell-policy.smoke.mjs test/shell-normalise.smoke.mjs test/absolutize-paths.smoke.mjs test/sdk-binary.smoke.mjs test/sdk-vendor.smoke.mjs test/consult-tool.smoke.mjs; do
             echo "— $f"
             node --experimental-strip-types "$f" || { echo "::error file=extensions/hypeproof-chat/$f::smoke failed on Windows"; failed=1; }
           done
