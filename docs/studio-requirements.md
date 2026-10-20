@@ -3100,3 +3100,35 @@ negative controls; schedule gate negative controls for no app change, a blocked 
 an override and the pause switch). **Not claimed**: a scheduled run on GitHub, a release PR opened with
 the new body, a real pre-tester run on the Mac, or the cases themselves executed against an installed
 rc; the expected copy is read from source at `f9bde411`, not from a running app.
+
+
+## Artifact version list and single-file restore (CGP-KNOW-R-017)
+
+`REQ-STUDIO-ARTIFACT-HISTORY` traces to REQ-KNOW-30 and Product Intent #1/#2
+(learner control over their work; OWNERSHIP without a score).
+
+The Explorer file menu and command palette offer `이 파일의 이전 버전` for all
+learner seats, including minors. The native list shows recorded time and AI, 나
+(for an explicit upload or restore), or 기록 없음 when authorship is unproven.
+Editor save events are captured but never treated as proof of learner authorship;
+the measured event-order limitation in REQ-STUDIO-ARTIFACT-PROVENANCE still applies.
+Thus the research row's literal AI/나 attribution for every manual edit remains
+partial; no blanket authorship claim is made.
+
+History reuses the turn-restore manifest and content-addressed blob format in
+extension storage, partitioned by real work-folder path and artifact path. Capture
+runs before/after measured coach turns, after recorded host writes and editor saves,
+and when opening this file's list. It does not reconstruct unobserved past changes.
+The latest 20 captured versions per file are kept under the existing per-file size
+cap. No upload or model request is introduced.
+
+Restoring requires a separate native confirmation. Cancel does not replace files.
+Before replacement the current bytes and new head are recorded. Only the
+selected file is replaced; all other files remain untouched. A different current
+hash, dirty buffer, changed task/profile, active run or connection transition refuses
+the restore. Stale content says `파일이 바뀌었어요`. Symlinks and escaping paths are
+refused. Concurrent restores share a per-file lock. File history does not broaden
+folder write consent. A failed history capture does not interrupt the original save.
+
+Behavioral checks: `extensions/hypeproof-chat/test/artifact-history.smoke.mjs`.
+Native shell accessibility/visual and installed-device acceptance remain separate.

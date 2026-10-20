@@ -176,7 +176,7 @@ import { resolveOrchestrator, type OrchestratorEvent, type OrchestratorHostArgs 
 import { agentLabel, rosterAgent, type ServedRoster } from "./agentRoster";
 import { OrchestratorSession } from "./consultTool";
 import { adultArchiveTimelineLabel, archiveBeforeOverwrite } from "./adultArchive";
-import { changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
+import { artifactHistoryStore, captureArtifactVersion, listRestorePoints, restoreArtifactVersion, changeCount, diffRestorePoint, dropRestorePoint, restoreToPoint, scanFolder, takeRestorePoint, turnRestoreStoreDir, type RestoreManifest } from "./turnRestore";
 import { ArtifactProvenanceRecorder, noteHostWrite, setHostWriteSink, type HostWriteActor } from "./artifactProvenance";
 import type { TurnReviewView } from "./turnReviewView";
 import { buildPageCard, handlePageCardAction, PageCardRegistry, type PageCardMessage } from "./pageCardHost";
@@ -4822,6 +4822,44 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
   // seat (minors too) gets them. One review bar at a time: the next turn replaces it.
   private turnReview: { view: TurnReviewView; store: string; root: string; point: RestoreManifest; taskKey: string } | null = null;
   private turnRestoreBusy = false;
+  /** Capture an observed editor save without guessing whether a learner, formatter or tool authored it. */
+  async recordArtifactSave(abs: string): Promise<void> {
+    const cwd = this.resolveCoachCwd();
+    if (!cwd || this._instructorMode?.isInstructor === true || this.connectionChanging) return;
+    try {
+      const root = await fs.promises.realpath(cwd), rel = path.relative(root, abs).split(path.sep).join("/");
+      await captureArtifactVersion(artifactHistoryStore(this.context.globalStorageUri.fsPath, root, rel), root, rel, "unknown");
+    } catch { /* A history failure never interrupts the editor save. */ }
+  }
+
+  /** REQ-KNOW-30: native history works for every learner seat, including class seats without TaskWorkspace. */
+  async showArtifactHistory(abs: string): Promise<void> {
+    const cwd = this.resolveCoachCwd();
+    if (!cwd || this._instructorMode?.isInstructor === true || this.turnRestoreBusy) return;
+    const idle = () => !this.hasActiveStream() && this.pendingSends === 0 && !this.taskChanging && !this.connectionChanging && !this.clearingHistory && !this.verifySession?.running;
+    if (!idle()) { void vscode.window.showInformationMessage("진행 중인 작업이 끝난 뒤에 이전 버전을 볼 수 있어요."); return; }
+    const task = this.turnRestoreTaskKey(), generation = this.profileGeneration;
+    this.turnRestoreBusy = true;
+    try {
+      const root = await fs.promises.realpath(cwd), rel = path.relative(root, abs).split(path.sep).join("/");
+      const store = artifactHistoryStore(this.context.globalStorageUri.fsPath, root, rel);
+      const current = await captureArtifactVersion(store, root, rel, "unknown");
+      if (!current) { void vscode.window.showInformationMessage("이 파일은 이전 버전을 보관할 수 없어요."); return; }
+      const expected = current.files[0].sha256;
+      const points = await listRestorePoints(store);
+      const selected = await vscode.window.showQuickPick(points.map(p => ({ label: `${p.turnId === "artifact-ai" ? "AI" : p.turnId === "artifact-learner" ? "나" : "기록 없음"} · ${new Date(p.createdAt).toLocaleString("ko-KR")}`, description: p.id === current.id ? "현재 버전" : "보관된 버전", point: p })), { title: `${path.basename(abs).replace(/[\u0000-\u001f\u007f\u2028-\u202e\u2066-\u2069]/g, "�").slice(0, 120)} · 이전 버전`, placeHolder: "복원할 버전을 골라 주세요. 현재 내용도 보관해요." });
+      if (!selected || selected.point.id === current.id) return;
+      const answer = await vscode.window.showWarningMessage("선택한 버전으로 복원할까요?", { modal: true, detail: "현재 파일을 먼저 보관한 뒤 이 파일만 바꿔요." }, "복원하기");
+      if (answer !== "복원하기") return;
+      const stillCurrent = () => idle() && this.profileGeneration === generation && this._instructorMode?.isInstructor !== true && this.resolveCoachCwd() === cwd && this.turnRestoreTaskKey() === task && !vscode.workspace.textDocuments.some(d => d.uri.scheme === "file" && d.uri.fsPath === abs && d.isDirty);
+      if (!stillCurrent() || this.folderWriteRefusalFor(abs)) { void vscode.window.showInformationMessage("파일이 바뀌었어요"); return; }
+      const result = await restoreArtifactVersion({ store, root, rel, id: selected.point.id, expected, stillCurrent });
+      if (result.ok) { await this.provenanceRecorder()?.unobserved(root); }
+      void vscode.window.showInformationMessage(result.ok ? "이전 버전을 복원했어요. 복원 전 내용도 보관했어요." : result.reason === "changed" ? "파일이 바뀌었어요" : "파일을 복원하지 못했어요. 이전 버전을 다시 확인해 주세요.");
+    } catch { void vscode.window.showInformationMessage("이전 버전을 읽지 못했어요."); }
+    finally { this.turnRestoreBusy = false; }
+  }
+
   // REQ-STUDIO-ARTIFACT-PROVENANCE — per-file provenance ledger beside the restore stores (artifactProvenance.ts).
   private provenance: ArtifactProvenanceRecorder | null = null;
   private provenanceRecorder(): ArtifactProvenanceRecorder | null {

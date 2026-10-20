@@ -26,6 +26,7 @@
 // restore point, a failed scan or save, a new session, a pull) marks the ledger stale; the list
 // then confirms no label until the next complete observation.
 
+import { artifactHistoryStore, captureArtifactVersion } from "./turnRestore.ts";
 import { createHash, randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -364,6 +365,7 @@ export class ArtifactProvenanceRecorder {
         let sha = w.sha256;
         if (!sha) { try { sha = sha256Of(await fs.readFile(w.absPath)); } catch { continue; } }
         out.push({ path: rel, sha256: sha });
+        await captureArtifactVersion(artifactHistoryStore(this.base, root, rel), root, rel, actor === "ai" ? "ai" : actor === "learner_upload" ? "learner" : "unknown", sha).catch(() => null);
       }
       if (!out.length) return null;
       return this.apply(root, (l) => recordHostWrite(l, out, { at, actor }));
@@ -373,14 +375,20 @@ export class ArtifactProvenanceRecorder {
   /** Before a coach turn, with the restore point just taken. */
   turnStart(root: string, point: PointLike): Promise<unknown> {
     this.bump();
-    return this.run(() => this.observe(root, point, point.createdAt));
+    return this.run(async () => {
+      for (const f of point.files) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "unknown", f.sha256).catch(() => null);
+      return this.observe(root, point, point.createdAt);
+    });
   }
 
   /** After a coach turn whose start was observed; `after` is the scan the diff came from. */
   turnEnd(root: string, point: PointLike, diff: TurnDiff, after: ScanLike): Promise<ProvenanceLedger | null> {
     this.bump();
     const at = Math.max(this.now(), point.createdAt + 1);
-    return this.run(() => this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after)));
+    return this.run(async () => {
+      for (const f of filesOf(after)) if (diff.added.includes(f.path) || diff.changed.includes(f.path)) await captureArtifactVersion(artifactHistoryStore(this.base, root, f.path), root, f.path, "ai", f.sha256).catch(() => null);
+      return this.apply(root, (l) => recordCoachTurn(l, { turnId: point.turnId, at, startedAt: point.createdAt, ...diff }, after));
+    });
   }
 
   /** Studio replaced files of `folder` wholesale (a GitHub pull or clone): nothing in it is confirmed until observed again. */

@@ -52,6 +52,7 @@
       ]
     },
     "commands": [
+      { "command": "hypeproof-chat.artifactHistory", "title": "이 파일의 이전 버전", "category": "HypeProof" },
       {
         "command": "hypeproof-chat.focus",
         "title": "HypeProof Chat: Focus"
@@ -374,6 +375,7 @@
         }
       ],
       "explorer/context": [
+        { "command": "hypeproof-chat.artifactHistory", "when": "!explorerResourceIsFolder && resourceScheme == file", "group": "hypeproof@3" },
         {
           "command": "hypeproof-chat.previewActiveFile",
           "when": "resourceExtname == .html || resourceExtname == .htm",
