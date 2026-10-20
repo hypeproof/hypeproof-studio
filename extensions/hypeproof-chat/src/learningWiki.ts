@@ -16,6 +16,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { createHash } from "crypto";
 import { noteHostWrite, type HostWriteActor } from "./artifactProvenance.ts";
+import { verdictTargets } from "./answerVerdict.ts";
+import type { ChatMessage } from "./protocol";
 
 /** The cohort's specialization, as /v1/profile serves it under `learning_wiki.plan`. Every field is optional. */
 // The plan shape lives in protocol.ts (the webview build imports protocol.ts and has no Node types).
@@ -122,6 +124,40 @@ export function turnsFromEvents(eventsJsonl: string): Turn[] {
     else t.coach = e.text.slice(0, 700);
   }
   return order.map((k, i) => ({ ...byTurn.get(k)!, id: `t${i + 1}` })).filter((t) => t.student || t.coach);
+}
+
+/** Characters kept per side when one answer is filed (the whole-session ingest keeps 700 per turn). */
+const ANSWER_SOURCE_MAX = 4000;
+
+/**
+ * CGP-KNOW-R-004 (REQ-STUDIO-ANSWER-TO-WIKI) — the sources for filing ONE finished answer: the
+ * learner's question that prompted it and that answer (every bubble of the turn, so a turn split by
+ * tool lines stays whole), as one turn whose id is the answer's message id (the turn's base id, so
+ * every citation reads `s<session>·<message id>`). No notes. Null when `messageId` is not the last
+ * bubble of a finished answer (verdictTargets, the same rule the answer's other actions use) or when
+ * there is no question above it.
+ */
+export function answerSources(messages: readonly ChatMessage[], messageId: string): Sources | null {
+  if (!verdictTargets(messages, false).has(messageId)) return null;
+  const end = messages.findIndex((m) => m.id === messageId);
+  let start = end;
+  while (start > 0 && messages[start - 1].role !== "user") start--;
+  const student = start > 0 ? messages[start - 1].content.trim() : "";
+  const coach = messages.slice(start, end + 1).filter((m) => m.role === "assistant").map((m) => m.content.trim()).filter(Boolean).join("\n\n");
+  if (!student || !coach) return null;
+  return { turns: [{ id: messageId.split("#")[0], student: student.slice(0, ANSWER_SOURCE_MAX), coach: coach.slice(0, ANSWER_SOURCE_MAX) }], notes: {} };
+}
+
+/** What applying a proposal would add, one line per item with its citations, for the learner to confirm. */
+export function proposalPreview(prev: WikiState, next: WikiState): string[] {
+  const out: string[] = [];
+  if (!prev.problem && next.problem) out.push(`문제: ${next.problem.text}${cites(next.problem.cite)}`);
+  for (const h of next.H.slice(prev.H.length)) out.push(`가설 ${h.id}: ${h.text}${cites(h.cite)}`);
+  for (const e of next.E.slice(prev.E.length)) out.push(`근거 ${e.id}: ${e.text}${cites(e.cite)}`);
+  for (const d of next.D.slice(prev.D.length)) out.push(`결정 ${d.id}: ${d.therefore}${cites(d.cite)}`);
+  for (const c of next.changes.slice(prev.changes.length)) out.push(`바뀐 것: ${c.text}${cites(c.cite)}`);
+  if (next.next && JSON.stringify(next.next) !== JSON.stringify(prev.next)) out.push(`다음 행동: ${next.next.text}${cites(next.next.cite)}`);
+  return out;
 }
 
 /** A stable id for "this conversation and these notes in this session", so it is not ingested twice. */
@@ -474,6 +510,15 @@ export function writeFiles(dir: string, files: Record<string, string>, writer: H
     fs.writeFileSync(path.join(dir, rel), content, "utf8");
     noteHostWrite([{ absPath: path.join(dir, rel), data: content }], writer);
   }
+}
+
+/**
+ * The one write of a model's wiki proposal: the state file, then every page as the AI's
+ * (REQ-STUDIO-ARTIFACT-PROVENANCE). Shared by the session ingest and the one-answer filing.
+ */
+export function writeWiki(dir: string, s: WikiState, plan?: LearningWikiPlan): void {
+  saveState(dir, s);
+  writeFiles(dir, renderWikiPages(s, plan), "ai");
 }
 
 /** Creates the wiki folder (pages, notes/, raw/) once; an existing wiki is left as it is. */

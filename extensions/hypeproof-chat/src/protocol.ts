@@ -614,6 +614,8 @@ export type WebviewMessage = (
    * personal task; `verdict: null` removes it. Stored locally and recorded in the spool (DEC-09).
    */
   | { type: "answerVerdict"; requestId?: string; messageId: string; verdict: import('./answerVerdict').AnswerVerdict | null; reason?: import('./answerVerdict').VerdictReason; note?: string }
+  /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer; the host builds, confirms and writes. */
+  | { type: "answerToWiki"; messageId: string }
   | { type: "requestAction"; action: ActionRequest }
   | { type: "openSettings" }
   /** CGP-DS-R-009 — the learner picked a chat text size; the host stores it for this device. */

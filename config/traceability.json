@@ -7155,6 +7155,42 @@
           "path": "extensions/hypeproof-chat/test/fixtures/vscode-api-capture.mjs"
         }
       ]
+    },
+    {
+      "id": "ST-IMP-ANSWER-TO-WIKI",
+      "stage": "implementation",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/src/learningWiki.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/src/chatPanelProvider.ts"
+        },
+        {
+          "path": "extensions/hypeproof-chat/webview-ui/src/ChatDetails.tsx"
+        }
+      ]
+    },
+    {
+      "id": "ST-TEST-ANSWER-TO-WIKI",
+      "stage": "test",
+      "owner": "jayleekr",
+      "depends_on": [
+        "ST-REQ-CHAT-REFERENCE",
+        "ST-IMP-ANSWER-TO-WIKI"
+      ],
+      "sources": [
+        {
+          "path": "extensions/hypeproof-chat/test/answer-to-wiki.smoke.mjs"
+        },
+        {
+          "path": "extensions/hypeproof-chat/test/answer-to-wiki.test.tsx"
+        }
+      ]
     }
   ]
 }

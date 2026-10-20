@@ -541,6 +541,7 @@ const EXTRA_PROBES = [
   { label: "personal assistant prose paragraph (inherits the body)", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.hps-msg-body.hps-prose", "p"] },
   { label: "personal user bubble", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-user", "div.hps-msg-body"] },
   { label: "personal composer textarea", ctx: shellCtx, chain: ["footer.hps-input-area", "div.hps-input", "textarea"] },
+  { label: "팀 브레인에 정리하기 answer action (CGP-KNOW-R-004)", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.hps-answer-actions", "button.hps-answer-wiki.hps-answer-action", "span"] },
   { label: "citation chip in an answer (cp-citation, inherits)", ctx: shellCtx, chain: ["div.hps-messages", "div.hps-msg.hps-msg-assistant", "div.cp-rack", "span", "button.cp-citation"] },
   { label: "tools menu item in the expanded composer", ctx: shellCtx, chain: ['div.hps-input[data-expanded="true"]', "div.hps-composer-tools", "div.hps-tools-menu", "button"] },
   { label: "text-size picker label in 대화 설정", ctx: shellCtx, chain: ["dialog.hps-preferences", "div.hps-preferences-body", "fieldset.hps-text-size", "label", "span"] },

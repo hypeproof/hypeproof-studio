@@ -791,6 +791,7 @@ export function App() {
         verdicts={verdicts}
         trimBoundaryId={trimBoundaryId}
         onVerdict={judgeAnswer}
+        onAnswerToWiki={(messageId) => postToHost({ type: "answerToWiki", messageId })}
         onDismissError={dismissError}
         onCancel={cancel}
         onClear={() => postToHost({ type: "clearHistory" })}

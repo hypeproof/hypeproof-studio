@@ -471,7 +471,7 @@ try {
 
   // ── 11. Source scan: every host write into the open folder passes the guard ──
   {
-    const WRITE = /vscode\.workspace\.fs\.(?:writeFile|createDirectory|rename|delete|copy)\(|\b(?:writeFiles|saveState|archiveNotes|initWiki|archiveBeforeOverwrite|runImageEdit|prepareWorkspaceDirectory)\(|imageStaging\.commit\(|\bfs\.(?:writeFileSync|mkdirSync|renameSync|appendFileSync|copyFileSync|rmSync|unlinkSync)\(|\bfs\.promises\.(?:writeFile|mkdir|rename)\(/g;
+    const WRITE = /vscode\.workspace\.fs\.(?:writeFile|createDirectory|rename|delete|copy)\(|\b(?:writeFiles|writeWiki|saveState|archiveNotes|initWiki|archiveBeforeOverwrite|runImageEdit|prepareWorkspaceDirectory)\(|imageStaging\.commit\(|\bfs\.(?:writeFileSync|mkdirSync|renameSync|appendFileSync|copyFileSync|rmSync|unlinkSync)\(|\bfs\.promises\.(?:writeFile|mkdir|rename)\(/g;
     const GUARD = /folderWriteBlocked\(|folderWriteRefusalFor\(|this\.writeRefusal\(/;
     // A class member header: exactly two spaces, optional modifiers, a name, then "(" (parameters may span lines).
     const HEADER = /\n  (?:(?:private|public|protected|static|readonly) )*(?:async )?(?:get )?([A-Za-z_$][\w$]*)\s*(?:<[^>\n]*>)?\(/g;
@@ -500,8 +500,9 @@ try {
     const hits = [];
     for (const f of ["src/chatPanelProvider.ts", "src/previewProvider.ts"]) hits.push(...scan(fs.readFileSync(path.join(extRoot, f), "utf8"), f));
     assert.deepEqual(hits, [], "every host write into the open folder passes the folder guard");
-    // The scan sees the sites (17 in the chat host, 2 in the preview on 2026-10-20): a regex that matched nothing would pass vacuously.
-    assert.ok(seen >= 19, `the scan sees the write sites (${seen})`);
+    // The scan sees the sites (18 in the chat host, 2 in the preview on 2026-10-20, with writeWiki for the
+    // session ingest and the one-answer filing, REQ-STUDIO-ANSWER-TO-WIKI): a regex that matched nothing would pass vacuously.
+    assert.ok(seen >= 20, `the scan sees the write sites (${seen})`);
     // Negative control: a direct write to the folder path in a new method fails the scan.
     // Multi-line parameters still name their method (revealBuilt is declared that way).
     const multi = "\n  private ok(): void {\n    if (this.folderWriteBlocked(r)) return;\n  }\n  async multi(\n    a: string,\n  ): Promise<void> {\n    await vscode.workspace.fs.writeFile(u, d);\n  }\n";

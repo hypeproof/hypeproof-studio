@@ -70,7 +70,7 @@ import { PublishSession } from "./publishSession";
 import { EvidenceSession } from "./evidenceSession";
 import { MemorySession } from "./memorySession";
 import { SkillSession, completeSkillRequest, type SkillCompletion } from "./skillSession";
-import { applyWikiProposal, archiveNotes, brainIntent, brainIntro, brainName, brainSummary, coachContext, defaultIngestSession, firstCoachTurn, ingestReport, initWiki, josa, jsonFromText, loadState, productTitle, readNotes, renderWikiPages, ro, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, type BrainIntent, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
+import { answerSources, applyWikiProposal, archiveNotes, brainIntent, brainIntro, brainName, brainSummary, coachContext, defaultIngestSession, firstCoachTurn, ingestReport, initWiki, josa, jsonFromText, loadState, newState, productTitle, proposalPreview, readNotes, renderWikiPages, ro, saveState, sessionCount, sessionFocus, sessionHash, sessionLabel, turnsFromEvents, wikiDir, wikiPrompt, writeFiles, writeWiki, type BrainIntent, type LearningWikiPlan, type WikiProposal, type WikiState } from "./learningWiki";
 import { applyDeckProposal, applySlideText, deckPrompt, deckReport, deckRepairPrompt, refusedSlides, renderDeck, slideTextItems, type DeckProposal, type DeckRun } from "./deckGenerator";
 import { applyHumanized, humanizePrompt, type HumanizeProposal } from "./humanizer";
 import { ReviewSession, directorAvailable } from "./reviewSession";
@@ -1674,8 +1674,7 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
     const proposal = answer.ok ? jsonFromText<WikiProposal>(answer.text) : null;
     if (!proposal) return { lines: [`정리하지 못했어요. ${josa(name, "은", "는")} 그대로예요. 잠시 뒤 다시 해 주세요.`] };
     const r = applyWikiProposal(state, session, sources, proposal, sid, today, plan);
-    saveState(dir, r.state);
-    writeFiles(dir, renderWikiPages(r.state, plan), "ai");
+    writeWiki(dir, r.state, plan);
     archiveNotes(dir, sources.notes);
     const focus = sessionFocus(plan, session);
     const deck = plan?.deck && focus.length ? await this.draftDeck(dir, r.state, plan, focus, session) : null;
@@ -1684,6 +1683,79 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
       lines: ingestReport(state, r, info, plan, { deck: deck ? deckReport(deck) : undefined, opened: plan?.deck ? "덱 미리보기를 열었어요." : "index.md를 열었어요." }),
       open: path.join(dir, plan?.deck ? "deck.html" : "index.md"),
     };
+  }
+
+  /** CGP-KNOW-R-004 — "팀 브레인에 정리하기" on one finished answer; the result is an in-chat notice like the command's. */
+  private async handleAnswerToWiki(msg: unknown): Promise<void> {
+    if (this.answerToWikiBusy) return;
+    this.answerToWikiBusy = true;
+    try {
+      const run = await this.runAnswerToWiki(msg);
+      if (run) await this.showBrainRun(run);
+    } catch (err) {
+      this.logChannel?.appendLine(`[learning-wiki] ${err instanceof Error ? err.message : String(err)}`);
+      this.postPageNotice(`${brainName(this.learningWikiPlan())} 작업이 중간에 멈췄어요. 잠시 뒤 다시 해 주세요.`);
+    } finally {
+      this.answerToWikiBusy = false;
+    }
+  }
+  private answerToWikiBusy?: boolean;
+
+  /**
+   * CGP-KNOW-R-004 (REQ-STUDIO-ANSWER-TO-WIKI) — files ONE finished answer and the question that
+   * prompted it. The seat gate is the session ingest's (the served learning_wiki switch and the folder
+   * consent), narrowed to where the answer's action row exists: personal task chat, never a lesson or
+   * instructor mode (as handleAnswerVerdict). The proposal is the session ingest's (wikiPrompt and
+   * applyWikiProposal over a one-turn source citing the answer's message id); applyWikiProposal is
+   * pure, so the learner sees exactly what it would add and nothing is written until they confirm.
+   * The write is the session ingest's writer (writeWiki), which reports every file to the
+   * provenance hook. Undefined: nothing to say (a request the action row would not have offered).
+   */
+  private async runAnswerToWiki(msg: unknown): Promise<BrainRun | undefined> {
+    const messageId = (msg as { messageId?: unknown } | null)?.messageId;
+    const store = this.currentTaskStore?.();
+    const taskId = store?.getView().activeTaskId;
+    if (typeof messageId !== "string" || !store || !taskId || this._instructorMode.isInstructor || this.cachedProfile?.lesson) return undefined;
+    const plan = this.learningWikiPlan();
+    const name = brainName(plan);
+    if (!this.isLearningWikiEnabled()) return { lines: [lessonFeatureOff(name, this.getSeatAudience())] };
+    // The saved conversation holds finished turns only, so a streaming answer is not found here.
+    const sources = answerSources(store.getHistory(taskId), messageId);
+    if (!sources) return undefined;
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return { lines: ["작업 폴더를 먼저 열어 주세요."] };
+    const dir = wikiDir(folder.uri.fsPath, plan);
+    const folderBlocked = this.folderWriteRefusalFor(dir);
+    if (folderBlocked) return { lines: [folderBlocked] };
+    // No initWiki before the confirmation: it would create the folder and its pages.
+    const existing = loadState(dir);
+    const state = existing ?? newState(productTitle(folder.uri.fsPath) ?? folder.name);
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+    const session = await this.ingestSession(state, plan, today, { ask: false });
+    if (session === undefined) return undefined;
+    const sid = sessionHash(session, sources);
+    if (state.sessions_ingested.includes(sid)) return { lines: [`이 답은 이미 ${name}에 정리했어요.`] };
+    const answer = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: `HypeProof: ${name}에 정리하는 중` },
+      () => this.completeSkill(wikiPrompt(state, session, sources, plan), {}),
+    );
+    const proposal = answer.ok ? jsonFromText<WikiProposal>(answer.text) : null;
+    if (!proposal) return { lines: [`정리하지 못했어요. ${josa(name, "은", "는")} 그대로예요. 잠시 뒤 다시 해 주세요.`] };
+    const r = applyWikiProposal(state, session, sources, proposal, sid, today, plan);
+    const preview = proposalPreview(state, r.state);
+    if (!preview.length) return { lines: [`이 답에서 새로 정리할 내용을 찾지 못했어요. ${josa(name, "은", "는")} 그대로예요.`] };
+    const pick = await vscode.window.showInformationMessage(
+      `${name}에 이렇게 정리할까요?`,
+      { modal: true, detail: [...preview, "", `이 답과 질문만 읽었어요 (${session}${sessionLabel(plan)}).`].join("\n") },
+      "정리하기",
+    );
+    if (pick !== "정리하기") return { lines: [`정리하지 않았어요. ${josa(name, "은", "는")} 그대로예요.`] };
+    // Re-checked after the modal: the seat or the folder may have changed, or another run filed meanwhile.
+    if (!this.isLearningWikiEnabled() || this.folderWriteRefusalFor(dir)) return { lines: [`정리하지 않았어요. ${josa(name, "은", "는")} 그대로예요.`] };
+    if (JSON.stringify(loadState(dir)) !== JSON.stringify(existing)) return { lines: [`그사이 ${josa(name, "이", "가")} 바뀌었어요. 다시 해 주세요.`] };
+    if (!existing) initWiki(dir, state.team, plan);
+    writeWiki(dir, r.state, plan);
+    return { lines: ingestReport(state, r, { session, turns: 1, notes: 0 }, plan) };
   }
 
   /**
@@ -5338,6 +5410,9 @@ export class ChatPanelProvider implements vscode.WebviewViewProvider {
         return;
       case "answerVerdict":
         await this.handleAnswerVerdict(msg);
+        return;
+      case "answerToWiki":
+        await this.handleAnswerToWiki(msg);
         return;
       case "runCode":
         void this.revealBuilt(msg.html, { artifactSource: "manual_preview" });
