@@ -85,6 +85,7 @@
   .foot { color: var(--muted); font-size: 11px; margin-top: 14px; }
   .scroll { overflow-x: auto; }
   @media (max-width: 520px) { .hide-s { display: none; } }
+/* BOARD_STATUS_CSS */
 </style>
 </head>
 <body>
@@ -104,12 +105,14 @@
   </fieldset>
 
   <div id="banners"></div>
-  <div id="summary" class="summary"></div>
+  <div id="summary" class="cgp-filters"></div>
   <div class="scroll"><table id="tbl"></table></div>
   <div class="foot" id="foot"></div>
 </div>
 
 <script>
+// BOARD_STATUS_SCRIPT
+
 const $ = (id) => document.getElementById(id);
 const POLL_MS = 10000;   // §4: polling. No SSE, no Durable Objects.
 
@@ -156,8 +159,10 @@ $("forget").onclick = () => {
   stop(); $("banners").innerHTML = $("summary").innerHTML = $("tbl").innerHTML = $("foot").innerHTML = "";
 };
 
-let timer = null;
-function stop() { if (timer) { clearInterval(timer); timer = null; } }
+let timer = null, readGeneration = 0;
+function stop() {
+  readGeneration++;
+  statusBoard=null;statusFilter="all";$("summary").replaceChildren();$("tbl").replaceChildren(); if (timer) { clearInterval(timer); timer = null; } }
 
 function mapServerError(raw) {
   const e = String(raw || "").toLowerCase();
@@ -170,10 +175,12 @@ function mapServerError(raw) {
 }
 
 async function load() {
+  const generation=++readGeneration;
   const token = sanitizeToken($("issuer").value);
   const cohort = $("cohort").value.trim();
   const prefix = $("prefix").value.trim();
-  if (!token || !cohort) { $("banners").innerHTML = '<div class="banner err">토큰과 cohort id를 채워주세요.</div>'; return; }
+  const current=()=>generation===readGeneration && token===sanitizeToken($("issuer").value) && cohort===$("cohort").value.trim() && prefix===$("prefix").value.trim();
+  if (!token || !cohort) { stop(); $("banners").innerHTML = '<div class="banner err">토큰과 cohort id를 채워주세요.</div>'; return; }
   sessionStorage.setItem(KEY, token);
   sessionStorage.setItem(CKEY, cohort);
   sessionStorage.setItem(PKEY, prefix);
@@ -184,19 +191,24 @@ async function load() {
   try {
     const res = await fetch(url, { headers: { authorization: "Bearer " + token } });
     body = await res.json();
+    if (!current()) return;
     if (!res.ok) {
       stop();
       $("banners").innerHTML = '<div class="banner err">' + esc(mapServerError(body && (body.error && body.error.message || body.error))) + "</div>";
       return;
     }
   } catch (e) {
+    if (!current()) return;
+    statusBoard=null;statusFilter="all";$("summary").replaceChildren();$("tbl").replaceChildren();
     $("banners").innerHTML = '<div class="banner err">보드를 불러오지 못했어요 (네트워크). 다시 시도 중…</div>';
     return;
   }
   render(body);
 }
 
+let statusFilter="all", statusBoard=null;
 function render(b) {
+  statusBoard=b;
   // Announce every lost capability. No silent fallback — a column that quietly
   // reads "fine" because the data isn't there is the exact defect this plan
   // spent seven tasks removing (spec §5, REQ-M30).
@@ -205,26 +217,20 @@ function render(b) {
     .join("");
 
   const seats = b.seats || [];
-  const n = (sev) => seats.filter((s) => s.severity === sev).length;
-  $("summary").innerHTML =
-    '<span class="pill alert">주의 ' + n("alert") + "</span>" +
-    '<span class="pill watch">관찰 ' + n("watch") + "</span>" +
-    '<span class="pill ok">정상 ' + n("ok") + "</span>" +
-    '<span class="pill">좌석 ' + seats.length + "</span>";
-
+  boardStatus.filters($("summary"),seats.map(boardStatus.legacy),statusFilter,key=>{if(!statusBoard)return;statusFilter=key;render(statusBoard);});
   const errUnknown = b.error_signal !== "observed";
   const head =
     "<tr><th class='seat'>좌석</th><th>마지막 턴</th><th>상태</th>" +
     "<th class='hide-s'>평균 대기</th><th class='hide-s'>호출 15분</th>" +
     "<th class='hide-s'>오류</th><th class='hide-s'>하트비트</th><th class='hide-s'>산출물</th></tr>";
 
-  const rows = seats.map((s) => {
+  const rows = seats.filter(s=>statusFilter==="all"||boardStatus.legacy(s)===statusFilter).map((s) => {
     const idle = dur(s.idle_ms);
     return (
       '<tr class="' + esc(s.severity) + '">' +
       '<td class="seat"><b>' + esc(s.user_id) + "</b></td>" +
       '<td><span class="idle ' + esc(s.severity) + '">' + (idle === null ? "없음" : esc(idle)) + "</span></td>" +
-      '<td><span class="state ' + esc(s.severity) + '">' + esc(s.state) + "</span></td>" +
+      '<td>' + boardStatus.chip(boardStatus.legacy(s)).outerHTML + '</td>' +
       "<td class='hide-s'>" + (s.mean_wait_ms === null ? unk : esc(dur(s.mean_wait_ms))) + "</td>" +
       "<td class='hide-s'>" + s.calls_in_window + "</td>" +
       "<td class='hide-s'>" + (errUnknown || s.failures_in_window === null ? unk : s.failures_in_window) + "</td>" +
@@ -233,7 +239,7 @@ function render(b) {
       "</tr>"
     );
   });
-  $("tbl").innerHTML = head + rows.join("");
+  $("tbl").innerHTML = head + rows.join("") + (rows.length?"":"<tr><td colspan=8>조건에 맞는 학생이 없습니다. 전체를 눌러 보세요.</td></tr>");
 
   const th = b.thresholds || {};
   $("foot").innerHTML =
