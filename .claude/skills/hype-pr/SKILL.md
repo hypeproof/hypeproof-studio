@@ -99,6 +99,14 @@ uncommitted text. Read working changes directly when developing.
    `Smoke differs from issue: <reason>`. `create --apply` refuses a body that is
    missing any of these, keeps a placeholder, or has fewer than three verify parts.
 
+   When the contract also sets `release_check.manager_check: true`, the section
+   starts with `Release manager check: yes|no — <reason>`:
+   - `yes` only when a user sees or meets changed behavior in the rc App (a screen,
+     a reply, an install step). `How to verify` follows on the next line.
+   - `no` otherwise, with the reason; `How to verify` is then not asked. Examples:
+     release tooling only, CI only, vendored tooling only, docs only.
+   - `Smoke` is answered either way. A hotfix ignores this line.
+
    If the contract on the default branch declares a `hotfix` lane, a PR whose
    `--base` starts with its `base_prefix` (for example `hotfix/v2026.1013.0`, cut
    from the last v tag) is a hotfix: `create` adds the `hotfix` label, refuses

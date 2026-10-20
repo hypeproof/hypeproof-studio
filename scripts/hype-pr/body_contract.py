@@ -19,6 +19,14 @@ The release manager reads the first line of the section, so How to verify comes 
 Issues are never checked: the issue's own "Smoke needed?" answer is only compared with
 the PR's, and skipped when the issue has no answer.
 
+With `"manager_check": true` under release_check, the section starts with
+
+    Release manager check: yes|no — <reason>
+
+`yes` means a user sees or meets changed behavior in the rc App; How to verify is then
+required on the next line. `no` needs a reason and How to verify is not asked. Smoke is
+asked either way. The hotfix lane ignores this line.
+
 A contract may also declare a hotfix lane:
 
     "hotfix": {"base_prefix": "hotfix/", "label": "hotfix", "forward_label": "hotfix-forward"}
@@ -67,11 +75,13 @@ def issue_smoke(issue_body: str | None) -> str | None:
 
 def check_release_check(body: str, *, smoke_check_prefix: str,
                         path_exists: Callable[[str], bool],
-                        issue_body: str | None = None, hotfix: bool = False) -> list[str]:
+                        issue_body: str | None = None, hotfix: bool = False,
+                        manager_check: bool = False) -> list[str]:
     """Return what is missing or malformed; an empty list means the body passes.
 
     A hotfix skips the release manager's checklist, so How to verify is not asked
-    for; the smoke decision still is.
+    for; the smoke decision still is. With manager_check the author first says
+    whether the release manager must check the PR at all; only yes asks How to verify.
     """
     section_match = SECTION.search(body or "")
     if not section_match or not section_match.group("body").strip():
@@ -83,13 +93,27 @@ def check_release_check(body: str, *, smoke_check_prefix: str,
     first = next((line.strip() for line in section.splitlines() if line.strip()), "")
     verify = field(section, "How to verify")
     steps = [s for s in ARROW.split(verify or "") if s.strip()]
-    if hotfix:
+    verify_first, skip_verify = True, hotfix
+    if manager_check and not hotfix:
+        manager = re.match(r"(yes|no)\b\s*(?:[—–:-]+\s*)?(.*)$", field(section, "Release manager check") or "", re.I)
+        if not manager:
+            errors.append("add `Release manager check: yes — <reason>` or `Release manager check: no — <reason>`")
+            skip_verify = True  # without the answer, do not also demand How to verify
+        elif not re.match(r"(?:[-*]\s*)?Release manager check\s*:", first, re.I):
+            errors.append("put `Release manager check` on the first line of the section")
+        if manager and manager.group(1).lower() == "no":
+            if not is_filled(manager.group(2).strip(), MIN_REASON):
+                errors.append(f"say why no release manager check is needed, in at least {MIN_REASON} characters "
+                              "(e.g. release tooling only, CI only, docs only)")
+            skip_verify = True  # nothing for the release manager to verify
+        verify_first = False  # the answer line comes first
+    if skip_verify:
         pass
     elif verify is None:
         errors.append("add `How to verify: <where> → <what to click or run> → <expected result>`")
     elif PLACEHOLDER.search(verify) or len(steps) < 3 or any(len(s.strip()) < MIN_STEP for s in steps):
         errors.append("`How to verify` needs three filled parts: where → what to click or run → expected result")
-    elif not re.match(r"(?:[-*]\s*)?How to verify\s*:", first, re.I):
+    elif verify_first and not re.match(r"(?:[-*]\s*)?How to verify\s*:", first, re.I):
         errors.append("put `How to verify` on the first line of the section; the release manager reads that line")
 
     smoke = field(section, "Smoke")
@@ -161,6 +185,8 @@ def enforced_release_check(contract: dict | None) -> dict | None:
     rule = contract.get("release_check") or {}
     if not rule.get("enforced"):
         return None
+    if not isinstance(rule.get("manager_check", False), bool):
+        raise ValueError(f"{CONTRACT_PATH}: release_check.manager_check must be true or false")
     if not isinstance(rule.get("smoke_check_prefix"), str) or not rule["smoke_check_prefix"]:
         raise ValueError(f"{CONTRACT_PATH}: release_check.smoke_check_prefix is required")
     return rule
